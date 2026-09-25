@@ -1,8 +1,8 @@
-// canary.h — public C API for nvidia/canary-1b-v2 ggml runtime
+// canary.h — public C API for NVIDIA Canary AED ggml runtimes
 //
-// Multilingual ASR + speech translation across 25 European languages,
-// with explicit source_lang / target_lang task tokens (the fix for the
-// auto-language-ID problem we hit with parakeet on German audio).
+// Supports both the legacy cstr/canary-1b-v2 GGUF layout and the
+// transcribe.cpp Canary GGUF schema (including Canary 180M Flash's split
+// 512-wide encoder, 1024-wide decoder, and trained projection).
 //
 // ASR mode:        source_lang == target_lang  (e.g. "de" → "de")
 // Translation:     source_lang != target_lang  (e.g. "de" → "en")
@@ -77,15 +77,14 @@ struct canary_result* canary_transcribe_ex(struct canary_context* ctx, const flo
                                            const char* source_lang, const char* target_lang, bool punctuation,
                                            int64_t t_offset_cs);
 
-// PLAN #114 P3 second half — parakeet-style long-audio entry. Same
-// semantics as canary_transcribe_ex but computes mel for the full audio
-// (so PerFeatureZ uses global statistics — the NeMo convention) and
-// encodes in overlapping mel chunks of `chunk_seconds` with
-// `overlap_seconds` on each side, concatenating encoder outputs and
-// running a single AED decode over the concat. Use this entry for
-// audio longer than ~30 s; the encoder's bidirectional attention
-// amplifies acoustic noise past that window in the single-pass path.
-// chunk_seconds <= 0 → 8 (parakeet's default); overlap_seconds < 0 → 2.
+// Variant-aware offline long-audio entry. Legacy canary-1b-v2 keeps its
+// NeMo dynamic 30..40 s / 1 s-overlap token-LCS blueprint. New-schema
+// canary-180m-flash uses direct inference through 40 s, then fixed 20 s
+// windows / 6 s overlap with centered time-core stitching; every window
+// receives a fresh task prompt. Positive chunk/overlap arguments override
+// the variant defaults. This is external-style offline chunking, not native
+// model streaming. Returned timings are runtime DTW estimates, not Canary's
+// upstream auxiliary CTC timestamps.
 struct canary_result* canary_transcribe_streamed(struct canary_context* ctx, const float* samples, int n_samples,
                                                  const char* source_lang, const char* target_lang, bool punctuation,
                                                  int64_t t_offset_cs, int chunk_seconds, int overlap_seconds);
@@ -116,9 +115,10 @@ int canary_sample_rate(struct canary_context* ctx);
 float* canary_compute_mel(struct canary_context* ctx, const float* samples, int n_samples, int* out_n_mels,
                           int* out_T_mel);
 
-// Run just the audio encoder on a mel spectrogram. Output layout
-// row-major (T_enc, d_model). Same output as what the internal
-// encoder pass produces before the decoder sees it.
+// Run just the native audio encoder on a mel spectrogram. Output layout
+// row-major (T_enc, encoder_d_model). For split-width variants this is the
+// pre-projection output; the normal transcription path applies the trained
+// encoder-to-decoder projection before cross-attention.
 float* canary_run_encoder(struct canary_context* ctx, const float* mel, int n_mels, int T_mel, int* out_T_enc,
                           int* out_d_model);
 

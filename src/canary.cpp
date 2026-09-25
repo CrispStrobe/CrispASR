@@ -1,22 +1,20 @@
-// canary.cpp — nvidia/canary-1b-v2 ggml runtime
+// canary.cpp — NVIDIA Canary AED ggml runtime
 //
-// First iteration: loader + public C API skeleton.
-// Encoder forward (FastConformer with biases), Transformer decoder
-// (self-attn + cross-attn + FFN with KV cache), task-token prompt and
-// greedy decode loop will land in subsequent commits.
+// Supports the legacy cstr/canary-1b-v2 layout and the metadata-driven
+// transcribe.cpp Canary GGUF schema, including Canary 180M Flash.
 //
-// Architecture:
+// Shared architecture:
 //   Mel:           128 mels @ 16 kHz, n_fft=512, win=400, hop=160 (Hann)
-//   Encoder:       32× FastConformer block (use_bias=True), d_model=1024,
-//                  8 heads, head_dim=128, ff_dim=4096, conv kernel=9,
-//                  8× temporal subsampling via dw_striding
-//   Decoder:       8× pre-LN Transformer block (SA + CA + FFN),
-//                  d_model=1024, 8 heads, head_dim=128, ff_dim=4096
-//   Embedding:     token (16384, 1024) + learned pos_enc (1024, 1024) + LN
-//   Output head:   linear (1024 → 16384)
+//   Encoder:       FastConformer with biased linears and 8× dw_striding
+//                  subsampling; dimensions/layer count come from GGUF metadata
+//   Bridge:        optional trained encoder→decoder projection (180M: 512→1024)
+//   Decoder:       pre-LN Transformer (self-attn + cross-attn + FFN) with
+//                  self/cross KV caches and an untied output head
 //
-// Decoder prompt format (mirrors Cohere — same vocab):
-//   <|startoftranscript|> <|src|> <|tgt|> <|pnc|> <|notimestamp|> <|nodiarize|> ...
+// Prompt formats:
+//   legacy cstr: fixed Canary-1B-v2 control-token sequence
+//   canary2: metadata token ids for context, transcript, emotion, source,
+//            target, PNC, no-ITN, no-timestamp and no-diarization
 
 #include "canary.h"
 #include "core/crispasr_env.h"
@@ -41,6 +39,7 @@
 #include "core/crispasr_lcs.h"
 #include "core/asr_overlap_trim.h"
 #include "core/fastconformer.h"
+#include "core/mel.h"
 
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
@@ -53,6 +52,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <initializer_list>
 #include <map>
 #include <random>
 #include <string>
@@ -95,23 +95,50 @@ struct canary_bench_stage {
 // ===========================================================================
 
 struct canary_hparams {
+    bool new_schema = false;
+    bool has_encoder_decoder_proj = false;
+    bool tokenizer_single_sp = false;
     uint32_t sample_rate = 16000;
     uint32_t n_mels = 128;
     uint32_t n_fft = 512;
     uint32_t win_length = 400;
     uint32_t hop_length = 160;
-    uint32_t d_model = 1024;
     uint32_t enc_n_layers = 32;
-    uint32_t dec_n_layers = 8;
-    uint32_t n_heads = 8;
-    uint32_t head_dim = 128;
-    uint32_t ff_dim = 4096;
+    uint32_t enc_d_model = 1024;
+    uint32_t enc_n_heads = 8;
+    uint32_t enc_head_dim = 128;
+    uint32_t enc_ff_dim = 4096;
     uint32_t subsampling_factor = 8;
     uint32_t subsampling_channels = 256;
     uint32_t conv_kernel = 9;
+    uint32_t enc_pos_emb_max_len = 5000;
+    uint32_t dec_n_layers = 8;
+    uint32_t dec_d_model = 1024;
+    uint32_t dec_n_heads = 8;
+    uint32_t dec_head_dim = 128;
+    uint32_t dec_ff_dim = 4096;
     uint32_t vocab_size = 16384;
     uint32_t max_dec_ctx = 1024;
     uint32_t frame_dur_cs = 8;
+    float frontend_dither = 0.0f;
+    float frontend_preemph = 0.97f;
+    float frontend_f_min = 0.0f;
+    float frontend_f_max = 8000.0f;
+    std::string variant;
+    std::string decoder_activation = "relu";
+    std::string prompt_format;
+    std::vector<std::string> languages;
+    std::vector<int> language_ids;
+    std::vector<std::string> translation_pairs;
+    int startofcontext_id = -1;
+    int startoftranscript_id = -1;
+    int endoftext_id = -1;
+    int pad_id = -1;
+    int pnc_id = -1;
+    int nopnc_id = -1;
+    int noitn_id = -1;
+    int notimestamp_id = -1;
+    int nodiarize_id = -1;
 };
 
 // ===========================================================================
@@ -160,10 +187,14 @@ struct canary_model {
 
     ggml_tensor* mel_fb = nullptr;
     ggml_tensor* mel_window = nullptr;
+    std::vector<float> generated_mel_fb;
+    std::vector<float> generated_mel_window;
 
     canary_pre_encode pre_encode;
     std::vector<canary_enc_layer> enc;
     std::vector<canary_dec_layer> dec;
+    ggml_tensor* enc_proj_w = nullptr;
+    ggml_tensor* enc_proj_b = nullptr;
 
     // Decoder embeddings + final norm + output head
     ggml_tensor* dec_embed_w = nullptr; // (vocab, d_model)
@@ -275,6 +306,254 @@ static ggml_tensor* require(canary_model& m, const char* name) {
     return core_gguf::require(m.tensors, name, "canary");
 }
 
+static bool canary_metadata_error(const char* key, const char* detail) {
+    fprintf(stderr, "canary: invalid new-schema metadata '%s': %s\n", key, detail);
+    return false;
+}
+
+static bool canary_read_required_u32(gguf_context* gctx, const char* key, uint32_t& out) {
+    const int k = gguf_find_key(gctx, key);
+    if (k < 0)
+        return canary_metadata_error(key, "required key is missing");
+    if (gguf_get_kv_type(gctx, k) != GGUF_TYPE_UINT32)
+        return canary_metadata_error(key, "expected uint32");
+    out = gguf_get_val_u32(gctx, k);
+    return true;
+}
+
+static bool canary_read_required_token_id(gguf_context* gctx, const char* key, int& out) {
+    uint32_t value = 0;
+    if (!canary_read_required_u32(gctx, key, value))
+        return false;
+    if (value > INT32_MAX)
+        return canary_metadata_error(key, "token id exceeds int32 range");
+    out = (int)value;
+    return true;
+}
+
+static bool canary_read_required_f32(gguf_context* gctx, const char* key, float& out) {
+    const int k = gguf_find_key(gctx, key);
+    if (k < 0)
+        return canary_metadata_error(key, "required key is missing");
+    if (gguf_get_kv_type(gctx, k) != GGUF_TYPE_FLOAT32)
+        return canary_metadata_error(key, "expected float32");
+    out = gguf_get_val_f32(gctx, k);
+    return true;
+}
+
+static bool canary_read_required_bool(gguf_context* gctx, const char* key, bool& out) {
+    const int k = gguf_find_key(gctx, key);
+    if (k < 0)
+        return canary_metadata_error(key, "required key is missing");
+    if (gguf_get_kv_type(gctx, k) != GGUF_TYPE_BOOL)
+        return canary_metadata_error(key, "expected bool");
+    out = gguf_get_val_bool(gctx, k);
+    return true;
+}
+
+static bool canary_read_required_string(gguf_context* gctx, const char* key, std::string& out) {
+    const int k = gguf_find_key(gctx, key);
+    if (k < 0)
+        return canary_metadata_error(key, "required key is missing");
+    if (gguf_get_kv_type(gctx, k) != GGUF_TYPE_STRING)
+        return canary_metadata_error(key, "expected string");
+    const char* value = gguf_get_val_str(gctx, k);
+    if (!value || !*value)
+        return canary_metadata_error(key, "value must not be empty");
+    out = value;
+    return true;
+}
+
+static bool canary_read_required_string_array(gguf_context* gctx, const char* key, std::vector<std::string>& out,
+                                              bool allow_empty) {
+    const int k = gguf_find_key(gctx, key);
+    if (k < 0)
+        return canary_metadata_error(key, "required key is missing");
+    if (gguf_get_kv_type(gctx, k) != GGUF_TYPE_ARRAY || gguf_get_arr_type(gctx, k) != GGUF_TYPE_STRING)
+        return canary_metadata_error(key, "expected string array");
+    const size_t n = gguf_get_arr_n(gctx, k);
+    if (!allow_empty && n == 0)
+        return canary_metadata_error(key, "array must not be empty");
+    out.clear();
+    out.reserve(n);
+    for (size_t i = 0; i < n; i++) {
+        const char* value = gguf_get_arr_str(gctx, k, i);
+        if (!value || !*value)
+            return canary_metadata_error(key, "array contains an empty string");
+        out.emplace_back(value);
+    }
+    return true;
+}
+
+static bool canary_has_partial_new_schema(gguf_context* gctx) {
+    for (int64_t i = 0; i < gguf_get_n_kv(gctx); i++) {
+        const char* key = gguf_get_key(gctx, i);
+        if (!key)
+            continue;
+        if (strcmp(key, "stt.variant") == 0 || strncmp(key, "stt.canary.", 11) == 0 ||
+            strncmp(key, "stt.frontend.", 13) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool canary_load_new_hparams(gguf_context* gctx, canary_hparams& hp) {
+    hp.new_schema = true;
+
+    bool enc_use_bias = false;
+    bool dec_pre_ln = false;
+    bool dec_learn_pos = false;
+    bool frontend_log = false;
+    std::string frontend_type;
+    std::string frontend_window;
+    std::string frontend_normalize;
+
+    if (!canary_read_required_string(gctx, "stt.variant", hp.variant) ||
+        !canary_read_required_u32(gctx, "stt.canary.encoder.n_layers", hp.enc_n_layers) ||
+        !canary_read_required_u32(gctx, "stt.canary.encoder.d_model", hp.enc_d_model) ||
+        !canary_read_required_u32(gctx, "stt.canary.encoder.n_heads", hp.enc_n_heads) ||
+        !canary_read_required_u32(gctx, "stt.canary.encoder.d_ff", hp.enc_ff_dim) ||
+        !canary_read_required_u32(gctx, "stt.canary.encoder.conv_kernel", hp.conv_kernel) ||
+        !canary_read_required_u32(gctx, "stt.canary.encoder.subsampling_factor", hp.subsampling_factor) ||
+        !canary_read_required_u32(gctx, "stt.canary.encoder.subsampling_channels", hp.subsampling_channels) ||
+        !canary_read_required_u32(gctx, "stt.canary.encoder.pos_emb_max_len", hp.enc_pos_emb_max_len) ||
+        !canary_read_required_bool(gctx, "stt.canary.encoder.use_bias", enc_use_bias) ||
+        !canary_read_required_u32(gctx, "stt.canary.decoder.n_layers", hp.dec_n_layers) ||
+        !canary_read_required_u32(gctx, "stt.canary.decoder.d_model", hp.dec_d_model) ||
+        !canary_read_required_u32(gctx, "stt.canary.decoder.n_heads", hp.dec_n_heads) ||
+        !canary_read_required_u32(gctx, "stt.canary.decoder.d_ff", hp.dec_ff_dim) ||
+        !canary_read_required_u32(gctx, "stt.canary.decoder.max_position", hp.max_dec_ctx) ||
+        !canary_read_required_u32(gctx, "stt.canary.decoder.vocab_size", hp.vocab_size) ||
+        !canary_read_required_string(gctx, "stt.canary.decoder.activation", hp.decoder_activation) ||
+        !canary_read_required_bool(gctx, "stt.canary.decoder.pre_ln", dec_pre_ln) ||
+        !canary_read_required_bool(gctx, "stt.canary.decoder.learn_positional_encodings", dec_learn_pos) ||
+        !canary_read_required_bool(gctx, "stt.canary.decoder.encoder_decoder_proj", hp.has_encoder_decoder_proj) ||
+        !canary_read_required_string(gctx, "stt.canary.tokenizer.prompt_format", hp.prompt_format) ||
+        !canary_read_required_bool(gctx, "stt.canary.tokenizer.single_sp", hp.tokenizer_single_sp) ||
+        !canary_read_required_string(gctx, "stt.frontend.type", frontend_type) ||
+        !canary_read_required_u32(gctx, "stt.frontend.num_mels", hp.n_mels) ||
+        !canary_read_required_u32(gctx, "stt.frontend.sample_rate", hp.sample_rate) ||
+        !canary_read_required_u32(gctx, "stt.frontend.n_fft", hp.n_fft) ||
+        !canary_read_required_u32(gctx, "stt.frontend.win_length", hp.win_length) ||
+        !canary_read_required_u32(gctx, "stt.frontend.hop_length", hp.hop_length) ||
+        !canary_read_required_string(gctx, "stt.frontend.window", frontend_window) ||
+        !canary_read_required_string(gctx, "stt.frontend.normalize", frontend_normalize) ||
+        !canary_read_required_f32(gctx, "stt.frontend.dither", hp.frontend_dither) ||
+        !canary_read_required_f32(gctx, "stt.frontend.pre_emphasis", hp.frontend_preemph) ||
+        !canary_read_required_f32(gctx, "stt.frontend.f_min", hp.frontend_f_min) ||
+        !canary_read_required_f32(gctx, "stt.frontend.f_max", hp.frontend_f_max) ||
+        !canary_read_required_bool(gctx, "stt.frontend.log", frontend_log) ||
+        !canary_read_required_string_array(gctx, "general.languages", hp.languages, false) ||
+        !canary_read_required_string_array(gctx, "stt.translation.pairs", hp.translation_pairs, true) ||
+        !canary_read_required_token_id(gctx, "stt.canary.special.startofcontext_id", hp.startofcontext_id) ||
+        !canary_read_required_token_id(gctx, "stt.canary.special.startoftranscript_id", hp.startoftranscript_id) ||
+        !canary_read_required_token_id(gctx, "stt.canary.special.endoftext_id", hp.endoftext_id) ||
+        !canary_read_required_token_id(gctx, "stt.canary.special.pad_id", hp.pad_id) ||
+        !canary_read_required_token_id(gctx, "stt.canary.special.pnc_id", hp.pnc_id) ||
+        !canary_read_required_token_id(gctx, "stt.canary.special.nopnc_id", hp.nopnc_id) ||
+        !canary_read_required_token_id(gctx, "stt.canary.special.noitn_id", hp.noitn_id) ||
+        !canary_read_required_token_id(gctx, "stt.canary.special.notimestamp_id", hp.notimestamp_id) ||
+        !canary_read_required_token_id(gctx, "stt.canary.special.nodiarize_id", hp.nodiarize_id)) {
+        return false;
+    }
+
+    hp.language_ids.clear();
+    hp.language_ids.reserve(hp.languages.size());
+    for (const std::string& language : hp.languages) {
+        const std::string key = "stt.canary.special.lang." + language + "_id";
+        int id = -1;
+        if (!canary_read_required_token_id(gctx, key.c_str(), id))
+            return false;
+        hp.language_ids.push_back(id);
+    }
+
+    hp.enc_head_dim = hp.enc_n_heads > 0 ? hp.enc_d_model / hp.enc_n_heads : 0;
+    hp.dec_head_dim = hp.dec_n_heads > 0 ? hp.dec_d_model / hp.dec_n_heads : 0;
+    if (hp.sample_rate > 0)
+        hp.frame_dur_cs = hp.subsampling_factor * hp.hop_length * 100 / hp.sample_rate;
+
+    if (!enc_use_bias)
+        return canary_metadata_error("stt.canary.encoder.use_bias", "bias-free Canary is not supported");
+    if (!dec_pre_ln)
+        return canary_metadata_error("stt.canary.decoder.pre_ln", "only pre-LN decoders are supported");
+    if (frontend_type != "mel")
+        return canary_metadata_error("stt.frontend.type", "only 'mel' is supported");
+    if (frontend_window != "hann")
+        return canary_metadata_error("stt.frontend.window", "only 'hann' is supported");
+    if (frontend_normalize != "per_feature")
+        return canary_metadata_error("stt.frontend.normalize", "only 'per_feature' is supported");
+    if (!frontend_log)
+        return canary_metadata_error("stt.frontend.log", "log-mel frontend is required");
+    if (hp.prompt_format != "canary2")
+        return canary_metadata_error("stt.canary.tokenizer.prompt_format", "only 'canary2' is supported");
+    if (hp.decoder_activation != "relu" && hp.decoder_activation != "silu" && hp.decoder_activation != "swish")
+        return canary_metadata_error("stt.canary.decoder.activation", "expected relu, silu, or swish");
+    if (hp.enc_n_layers == 0 || hp.enc_d_model == 0 || hp.enc_n_heads == 0 || hp.enc_ff_dim == 0 ||
+        hp.enc_d_model % hp.enc_n_heads != 0 || hp.dec_n_layers == 0 || hp.dec_d_model == 0 || hp.dec_n_heads == 0 ||
+        hp.dec_ff_dim == 0 || hp.dec_d_model % hp.dec_n_heads != 0 || hp.vocab_size == 0 || hp.max_dec_ctx == 0)
+        return canary_metadata_error("stt.canary", "invalid zero/divisibility invariant");
+    if (hp.n_fft == 0 || (hp.n_fft & (hp.n_fft - 1)) != 0 || hp.win_length == 0 || hp.win_length > hp.n_fft ||
+        hp.hop_length == 0 || hp.n_mels == 0 || hp.sample_rate == 0)
+        return canary_metadata_error("stt.frontend", "invalid FFT/window/rate invariant");
+    if (hp.subsampling_factor != 8 || hp.n_mels != 128)
+        return canary_metadata_error("stt.canary.encoder", "runtime requires subsampling_factor=8 and num_mels=128");
+    if ((hp.enc_d_model != hp.dec_d_model) != hp.has_encoder_decoder_proj)
+        return canary_metadata_error("stt.canary.decoder.encoder_decoder_proj",
+                                     "projection flag must match encoder/decoder width split");
+    (void)dec_learn_pos;
+    return true;
+}
+
+static bool canary_tensor_type_supported(const ggml_tensor* tensor, bool require_f32) {
+    if (!tensor)
+        return false;
+    if (require_f32)
+        return tensor->type == GGML_TYPE_F32;
+    return tensor->type == GGML_TYPE_F32 || tensor->type == GGML_TYPE_F16 || tensor->type == GGML_TYPE_BF16 ||
+           ggml_is_quantized(tensor->type);
+}
+
+static bool canary_validate_tensor(const ggml_tensor* tensor, const char* name, std::initializer_list<int64_t> shape,
+                                   bool require_f32) {
+    if (!tensor)
+        return false;
+    if (!canary_tensor_type_supported(tensor, require_f32)) {
+        fprintf(stderr, "canary: tensor '%s' has unsupported type %s%s\n", name, ggml_type_name(tensor->type),
+                require_f32 ? " (expected F32)" : "");
+        return false;
+    }
+    size_t dim = 0;
+    bool shape_ok = true;
+    for (int64_t expected : shape) {
+        if (dim >= GGML_MAX_DIMS || tensor->ne[dim] != expected)
+            shape_ok = false;
+        dim++;
+    }
+    for (; dim < GGML_MAX_DIMS; dim++) {
+        if (tensor->ne[dim] != 1)
+            shape_ok = false;
+    }
+    if (!shape_ok) {
+        fprintf(stderr, "canary: tensor '%s' has shape [%lld,%lld,%lld,%lld], expected [", name,
+                (long long)tensor->ne[0], (long long)tensor->ne[1], (long long)tensor->ne[2], (long long)tensor->ne[3]);
+        size_t i = 0;
+        for (int64_t expected : shape)
+            fprintf(stderr, "%s%lld", i++ ? "," : "", (long long)expected);
+        fprintf(stderr, "]\n");
+        return false;
+    }
+    return true;
+}
+
+static ggml_tensor* canary_bind_tensor(canary_model& model, const char* legacy_name, const char* new_name,
+                                       std::initializer_list<int64_t> shape, bool require_f32, bool& ok) {
+    const char* name = model.hparams.new_schema ? new_name : legacy_name;
+    ggml_tensor* tensor = require(model, name);
+    if (!tensor || !canary_validate_tensor(tensor, name, shape, require_f32))
+        ok = false;
+    return tensor;
+}
+
 // ===========================================================================
 // Model loading
 // ===========================================================================
@@ -287,23 +566,41 @@ static bool canary_load_model(canary_model& model, canary_vocab& vocab, const ch
             return false;
 
         auto& hp = model.hparams;
-        hp.sample_rate = core_gguf::kv_u32(gctx, "canary.sample_rate", hp.sample_rate);
-        hp.n_mels = core_gguf::kv_u32(gctx, "canary.n_mels", hp.n_mels);
-        hp.n_fft = core_gguf::kv_u32(gctx, "canary.n_fft", hp.n_fft);
-        hp.win_length = core_gguf::kv_u32(gctx, "canary.win_length", hp.win_length);
-        hp.hop_length = core_gguf::kv_u32(gctx, "canary.hop_length", hp.hop_length);
-        hp.d_model = core_gguf::kv_u32(gctx, "canary.d_model", hp.d_model);
-        hp.enc_n_layers = core_gguf::kv_u32(gctx, "canary.enc_n_layers", hp.enc_n_layers);
-        hp.dec_n_layers = core_gguf::kv_u32(gctx, "canary.dec_n_layers", hp.dec_n_layers);
-        hp.n_heads = core_gguf::kv_u32(gctx, "canary.n_heads", hp.n_heads);
-        hp.head_dim = core_gguf::kv_u32(gctx, "canary.head_dim", hp.head_dim);
-        hp.ff_dim = core_gguf::kv_u32(gctx, "canary.ff_dim", hp.ff_dim);
-        hp.subsampling_factor = core_gguf::kv_u32(gctx, "canary.subsampling_factor", hp.subsampling_factor);
-        hp.subsampling_channels = core_gguf::kv_u32(gctx, "canary.subsampling_channels", hp.subsampling_channels);
-        hp.conv_kernel = core_gguf::kv_u32(gctx, "canary.conv_kernel", hp.conv_kernel);
-        hp.vocab_size = core_gguf::kv_u32(gctx, "canary.vocab_size", hp.vocab_size);
-        hp.max_dec_ctx = core_gguf::kv_u32(gctx, "canary.max_dec_ctx", hp.max_dec_ctx);
-        hp.frame_dur_cs = core_gguf::kv_u32(gctx, "canary.frame_dur_cs", hp.frame_dur_cs);
+        const bool has_sentinel = gguf_find_key(gctx, "stt.canary.encoder.d_model") >= 0;
+        if (has_sentinel) {
+            if (!canary_load_new_hparams(gctx, hp)) {
+                core_gguf::free_metadata(gctx);
+                return false;
+            }
+        } else {
+            if (canary_has_partial_new_schema(gctx)) {
+                fprintf(stderr, "canary: partial/mixed transcribe.cpp schema detected without "
+                                "stt.canary.encoder.d_model; refusing legacy defaults\n");
+                core_gguf::free_metadata(gctx);
+                return false;
+            }
+            hp.sample_rate = core_gguf::kv_u32(gctx, "canary.sample_rate", hp.sample_rate);
+            hp.n_mels = core_gguf::kv_u32(gctx, "canary.n_mels", hp.n_mels);
+            hp.n_fft = core_gguf::kv_u32(gctx, "canary.n_fft", hp.n_fft);
+            hp.win_length = core_gguf::kv_u32(gctx, "canary.win_length", hp.win_length);
+            hp.hop_length = core_gguf::kv_u32(gctx, "canary.hop_length", hp.hop_length);
+            hp.enc_d_model = core_gguf::kv_u32(gctx, "canary.d_model", hp.enc_d_model);
+            hp.dec_d_model = hp.enc_d_model;
+            hp.enc_n_layers = core_gguf::kv_u32(gctx, "canary.enc_n_layers", hp.enc_n_layers);
+            hp.dec_n_layers = core_gguf::kv_u32(gctx, "canary.dec_n_layers", hp.dec_n_layers);
+            hp.enc_n_heads = core_gguf::kv_u32(gctx, "canary.n_heads", hp.enc_n_heads);
+            hp.dec_n_heads = hp.enc_n_heads;
+            hp.enc_head_dim = core_gguf::kv_u32(gctx, "canary.head_dim", hp.enc_head_dim);
+            hp.dec_head_dim = hp.enc_head_dim;
+            hp.enc_ff_dim = core_gguf::kv_u32(gctx, "canary.ff_dim", hp.enc_ff_dim);
+            hp.dec_ff_dim = hp.enc_ff_dim;
+            hp.subsampling_factor = core_gguf::kv_u32(gctx, "canary.subsampling_factor", hp.subsampling_factor);
+            hp.subsampling_channels = core_gguf::kv_u32(gctx, "canary.subsampling_channels", hp.subsampling_channels);
+            hp.conv_kernel = core_gguf::kv_u32(gctx, "canary.conv_kernel", hp.conv_kernel);
+            hp.vocab_size = core_gguf::kv_u32(gctx, "canary.vocab_size", hp.vocab_size);
+            hp.max_dec_ctx = core_gguf::kv_u32(gctx, "canary.max_dec_ctx", hp.max_dec_ctx);
+            hp.frame_dur_cs = core_gguf::kv_u32(gctx, "canary.frame_dur_cs", hp.frame_dur_cs);
+        }
 
         auto tokens = core_gguf::kv_str_array(gctx, "tokenizer.ggml.tokens");
         if (!tokens.empty()) {
@@ -335,6 +632,36 @@ static bool canary_load_model(canary_model& model, canary_vocab& vocab, const ch
                 }
             }
         }
+        if (hp.new_schema && vocab.id_to_token.size() != hp.vocab_size) {
+            fprintf(stderr, "canary: tokenizer vocab has %zu entries; metadata declares %u\n", vocab.id_to_token.size(),
+                    hp.vocab_size);
+            core_gguf::free_metadata(gctx);
+            return false;
+        }
+        if (hp.new_schema) {
+            auto token_id_valid = [&](int id, const char* key) {
+                if (id >= 0 && id < (int)vocab.id_to_token.size())
+                    return true;
+                fprintf(stderr, "canary: metadata token id '%s'=%d is outside vocab size %zu\n", key, id,
+                        vocab.id_to_token.size());
+                return false;
+            };
+            if (!token_id_valid(hp.startofcontext_id, "startofcontext") ||
+                !token_id_valid(hp.startoftranscript_id, "startoftranscript") ||
+                !token_id_valid(hp.endoftext_id, "endoftext") || !token_id_valid(hp.pad_id, "pad") ||
+                !token_id_valid(hp.pnc_id, "pnc") || !token_id_valid(hp.nopnc_id, "nopnc") ||
+                !token_id_valid(hp.noitn_id, "noitn") || !token_id_valid(hp.notimestamp_id, "notimestamp") ||
+                !token_id_valid(hp.nodiarize_id, "nodiarize")) {
+                core_gguf::free_metadata(gctx);
+                return false;
+            }
+            for (size_t i = 0; i < hp.language_ids.size(); i++) {
+                if (!token_id_valid(hp.language_ids[i], hp.languages[i].c_str())) {
+                    core_gguf::free_metadata(gctx);
+                    return false;
+                }
+            }
+        }
 
         core_gguf::free_metadata(gctx);
     }
@@ -349,133 +676,221 @@ static bool canary_load_model(canary_model& model, canary_vocab& vocab, const ch
     model.tensors = std::move(wl.tensors);
 
     // ---- bind named tensors ----
+    bool bindings_ok = true;
+    const auto& hp = model.hparams;
+    const int64_t enc_d = hp.enc_d_model;
+    const int64_t dec_d = hp.dec_d_model;
+    const int64_t enc_ff = hp.enc_ff_dim;
+    const int64_t dec_ff = hp.dec_ff_dim;
+    const int64_t enc_heads = hp.enc_n_heads;
+    const int64_t enc_head_dim = hp.enc_head_dim;
+    const int64_t channels = hp.subsampling_channels;
+    const int64_t pre_encode_in = channels * (hp.n_mels / hp.subsampling_factor);
 
     // Mel preprocessor
-    model.mel_fb = try_get(model, "preprocessor.fb");
-    model.mel_window = try_get(model, "preprocessor.window");
+    if (hp.new_schema) {
+        model.mel_fb = try_get(model, "frontend.mel_filterbank");
+        model.mel_window = try_get(model, "frontend.window");
+        if ((model.mel_fb == nullptr) != (model.mel_window == nullptr)) {
+            fprintf(stderr, "canary: new-schema frontend tensors are incomplete; "
+                            "frontend.mel_filterbank and frontend.window must appear together\n");
+            bindings_ok = false;
+        } else if (model.mel_fb) {
+            const size_t fb_elems = (size_t)hp.n_mels * (hp.n_fft / 2 + 1);
+            if (model.mel_fb->type != GGML_TYPE_F32 || (size_t)ggml_nelements(model.mel_fb) != fb_elems) {
+                fprintf(stderr, "canary: frontend.mel_filterbank must be F32 with %zu elements (got %s, %lld)\n",
+                        fb_elems, ggml_type_name(model.mel_fb->type), (long long)ggml_nelements(model.mel_fb));
+                bindings_ok = false;
+            }
+            if (model.mel_window->type != GGML_TYPE_F32 || (size_t)ggml_nelements(model.mel_window) != hp.win_length) {
+                fprintf(stderr, "canary: frontend.window must be F32 with %u elements (got %s, %lld)\n", hp.win_length,
+                        ggml_type_name(model.mel_window->type), (long long)ggml_nelements(model.mel_window));
+                bindings_ok = false;
+            }
+        } else {
+            model.generated_mel_fb =
+                core_mel::build_slaney_fb((int)hp.sample_rate, (int)hp.n_fft, (int)hp.n_mels, hp.frontend_f_min,
+                                          hp.frontend_f_max, core_mel::FbLayout::MelsFreqs);
+            model.generated_mel_window.resize(hp.win_length);
+            const float denom = hp.win_length > 1 ? (float)(hp.win_length - 1) : 1.0f;
+            for (uint32_t i = 0; i < hp.win_length; i++)
+                model.generated_mel_window[i] = 0.5f - 0.5f * cosf(2.0f * (float)M_PI * (float)i / denom);
+        }
+    } else {
+        model.mel_fb = try_get(model, "preprocessor.fb");
+        model.mel_window = try_get(model, "preprocessor.window");
+        if (!model.mel_fb || !model.mel_window) {
+            fprintf(stderr, "canary: legacy GGUF is missing preprocessor.fb / preprocessor.window\n");
+            bindings_ok = false;
+        }
+    }
 
     // Pre-encode
-    model.pre_encode.conv0_w = require(model, "encoder.pre.conv.0.weight");
-    model.pre_encode.conv0_b = require(model, "encoder.pre.conv.0.bias");
-    model.pre_encode.conv2_w = require(model, "encoder.pre.conv.2.weight");
-    model.pre_encode.conv2_b = require(model, "encoder.pre.conv.2.bias");
-    model.pre_encode.conv3_w = require(model, "encoder.pre.conv.3.weight");
-    model.pre_encode.conv3_b = require(model, "encoder.pre.conv.3.bias");
-    model.pre_encode.conv5_w = require(model, "encoder.pre.conv.5.weight");
-    model.pre_encode.conv5_b = require(model, "encoder.pre.conv.5.bias");
-    model.pre_encode.conv6_w = require(model, "encoder.pre.conv.6.weight");
-    model.pre_encode.conv6_b = require(model, "encoder.pre.conv.6.bias");
-    model.pre_encode.out_w = require(model, "encoder.pre.out.weight");
-    model.pre_encode.out_b = require(model, "encoder.pre.out.bias");
+    model.pre_encode.conv0_w = canary_bind_tensor(model, "encoder.pre.conv.0.weight", "enc.pre_encode.conv.0.weight",
+                                                  {3, 3, 1, channels}, false, bindings_ok);
+    model.pre_encode.conv0_b = canary_bind_tensor(model, "encoder.pre.conv.0.bias", "enc.pre_encode.conv.0.bias",
+                                                  {channels}, true, bindings_ok);
+    model.pre_encode.conv2_w = canary_bind_tensor(model, "encoder.pre.conv.2.weight", "enc.pre_encode.conv.2.weight",
+                                                  {3, 3, 1, channels}, false, bindings_ok);
+    model.pre_encode.conv2_b = canary_bind_tensor(model, "encoder.pre.conv.2.bias", "enc.pre_encode.conv.2.bias",
+                                                  {channels}, true, bindings_ok);
+    model.pre_encode.conv3_w = canary_bind_tensor(model, "encoder.pre.conv.3.weight", "enc.pre_encode.conv.3.weight",
+                                                  {1, 1, channels, channels}, false, bindings_ok);
+    model.pre_encode.conv3_b = canary_bind_tensor(model, "encoder.pre.conv.3.bias", "enc.pre_encode.conv.3.bias",
+                                                  {channels}, true, bindings_ok);
+    model.pre_encode.conv5_w = canary_bind_tensor(model, "encoder.pre.conv.5.weight", "enc.pre_encode.conv.5.weight",
+                                                  {3, 3, 1, channels}, false, bindings_ok);
+    model.pre_encode.conv5_b = canary_bind_tensor(model, "encoder.pre.conv.5.bias", "enc.pre_encode.conv.5.bias",
+                                                  {channels}, true, bindings_ok);
+    model.pre_encode.conv6_w = canary_bind_tensor(model, "encoder.pre.conv.6.weight", "enc.pre_encode.conv.6.weight",
+                                                  {1, 1, channels, channels}, false, bindings_ok);
+    model.pre_encode.conv6_b = canary_bind_tensor(model, "encoder.pre.conv.6.bias", "enc.pre_encode.conv.6.bias",
+                                                  {channels}, true, bindings_ok);
+    model.pre_encode.out_w = canary_bind_tensor(model, "encoder.pre.out.weight", "enc.pre_encode.out.weight",
+                                                {pre_encode_in, enc_d}, false, bindings_ok);
+    model.pre_encode.out_b =
+        canary_bind_tensor(model, "encoder.pre.out.bias", "enc.pre_encode.out.bias", {enc_d}, true, bindings_ok);
 
     // Encoder layers
     model.enc.resize(model.hparams.enc_n_layers);
     for (uint32_t i = 0; i < model.hparams.enc_n_layers; i++) {
-        char buf[128];
+        char legacy[128];
+        char current[128];
         auto& e = model.enc[i];
-        auto get = [&](const char* suf) {
-            snprintf(buf, sizeof(buf), "encoder.layers.%u.%s", i, suf);
-            return require(model, buf);
+        auto get = [&](const char* legacy_suffix, const char* current_suffix, std::initializer_list<int64_t> shape,
+                       bool require_f32) {
+            snprintf(legacy, sizeof(legacy), "encoder.layers.%u.%s", i, legacy_suffix);
+            snprintf(current, sizeof(current), "enc.blocks.%u.%s", i, current_suffix);
+            return canary_bind_tensor(model, legacy, current, shape, require_f32, bindings_ok);
         };
 
-        e.norm_ff1_w = get("norm_ff1.weight");
-        e.norm_ff1_b = get("norm_ff1.bias");
-        e.ff1_l1_w = get("ff1.linear1.weight");
-        e.ff1_l1_b = get("ff1.linear1.bias");
-        e.ff1_l2_w = get("ff1.linear2.weight");
-        e.ff1_l2_b = get("ff1.linear2.bias");
+        e.norm_ff1_w = get("norm_ff1.weight", "norm_ff1.weight", {enc_d}, true);
+        e.norm_ff1_b = get("norm_ff1.bias", "norm_ff1.bias", {enc_d}, true);
+        e.ff1_l1_w = get("ff1.linear1.weight", "ff1.linear1.weight", {enc_d, enc_ff}, false);
+        e.ff1_l1_b = get("ff1.linear1.bias", "ff1.linear1.bias", {enc_ff}, true);
+        e.ff1_l2_w = get("ff1.linear2.weight", "ff1.linear2.weight", {enc_ff, enc_d}, false);
+        e.ff1_l2_b = get("ff1.linear2.bias", "ff1.linear2.bias", {enc_d}, true);
 
-        e.norm_attn_w = get("norm_attn.weight");
-        e.norm_attn_b = get("norm_attn.bias");
-        e.attn_q_w = get("attn.q.weight");
-        e.attn_q_b = get("attn.q.bias");
-        e.attn_k_w = get("attn.k.weight");
-        e.attn_k_b = get("attn.k.bias");
-        e.attn_v_w = get("attn.v.weight");
-        e.attn_v_b = get("attn.v.bias");
-        e.attn_out_w = get("attn.out.weight");
-        e.attn_out_b = get("attn.out.bias");
-        e.attn_pos_w = get("attn.pos.weight");
-        e.pos_bias_u = get("attn.pos_bias_u");
-        e.pos_bias_v = get("attn.pos_bias_v");
+        e.norm_attn_w = get("norm_attn.weight", "norm_attn.weight", {enc_d}, true);
+        e.norm_attn_b = get("norm_attn.bias", "norm_attn.bias", {enc_d}, true);
+        e.attn_q_w = get("attn.q.weight", "attn.linear_q.weight", {enc_d, enc_d}, false);
+        e.attn_q_b = get("attn.q.bias", "attn.linear_q.bias", {enc_d}, true);
+        e.attn_k_w = get("attn.k.weight", "attn.linear_k.weight", {enc_d, enc_d}, false);
+        e.attn_k_b = get("attn.k.bias", "attn.linear_k.bias", {enc_d}, true);
+        e.attn_v_w = get("attn.v.weight", "attn.linear_v.weight", {enc_d, enc_d}, false);
+        e.attn_v_b = get("attn.v.bias", "attn.linear_v.bias", {enc_d}, true);
+        e.attn_out_w = get("attn.out.weight", "attn.linear_out.weight", {enc_d, enc_d}, false);
+        e.attn_out_b = get("attn.out.bias", "attn.linear_out.bias", {enc_d}, true);
+        e.attn_pos_w = get("attn.pos.weight", "attn.linear_pos.weight", {enc_d, enc_d}, false);
+        e.pos_bias_u = get("attn.pos_bias_u", "attn.pos_bias_u", {enc_head_dim, enc_heads}, true);
+        e.pos_bias_v = get("attn.pos_bias_v", "attn.pos_bias_v", {enc_head_dim, enc_heads}, true);
 
-        e.norm_conv_w = get("norm_conv.weight");
-        e.norm_conv_b = get("norm_conv.bias");
-        e.conv_pw1_w = get("conv.pw1.weight");
-        e.conv_pw1_b = get("conv.pw1.bias");
-        e.conv_dw_w = get("conv.dw.weight");
-        e.conv_dw_b = get("conv.dw.bias");
-        e.conv_pw2_w = get("conv.pw2.weight");
-        e.conv_pw2_b = get("conv.pw2.bias");
-        e.conv_bn_w = get("conv.bn.weight");
-        e.conv_bn_b = get("conv.bn.bias");
-        e.conv_bn_rm = get("conv.bn.running_mean");
-        e.conv_bn_rv = get("conv.bn.running_var");
+        e.norm_conv_w = get("norm_conv.weight", "norm_conv.weight", {enc_d}, true);
+        e.norm_conv_b = get("norm_conv.bias", "norm_conv.bias", {enc_d}, true);
+        // The converters preserve different harmless singleton-axis layouts:
+        // legacy cstr stores pointwise Conv1d as [in,out,1,1], while the
+        // transcribe.cpp schema stores [1,in,out]. Both feed the existing
+        // reshape-based compute path unchanged; validate each exact catalog
+        // shape instead of weakening validation for unrelated tensors.
+        e.conv_pw1_w = hp.new_schema ? get("conv.pw1.weight", "conv.pointwise1.weight", {1, enc_d, 2 * enc_d}, false)
+                                     : get("conv.pw1.weight", "conv.pointwise1.weight", {enc_d, 2 * enc_d}, false);
+        e.conv_pw1_b = get("conv.pw1.bias", "conv.pointwise1.bias", {2 * enc_d}, true);
+        e.conv_dw_w = get("conv.dw.weight", "conv.depthwise.weight", {hp.conv_kernel, 1, enc_d}, false);
+        e.conv_dw_b = get("conv.dw.bias", "conv.depthwise.bias", {enc_d}, true);
+        e.conv_pw2_w = hp.new_schema ? get("conv.pw2.weight", "conv.pointwise2.weight", {1, enc_d, enc_d}, false)
+                                     : get("conv.pw2.weight", "conv.pointwise2.weight", {enc_d, enc_d}, false);
+        e.conv_pw2_b = get("conv.pw2.bias", "conv.pointwise2.bias", {enc_d}, true);
+        e.conv_bn_w = get("conv.bn.weight", "conv.bn.weight", {enc_d}, true);
+        e.conv_bn_b = get("conv.bn.bias", "conv.bn.bias", {enc_d}, true);
+        e.conv_bn_rm = get("conv.bn.running_mean", "conv.bn.running_mean", {enc_d}, true);
+        e.conv_bn_rv = get("conv.bn.running_var", "conv.bn.running_var", {enc_d}, true);
 
-        e.norm_ff2_w = get("norm_ff2.weight");
-        e.norm_ff2_b = get("norm_ff2.bias");
-        e.ff2_l1_w = get("ff2.linear1.weight");
-        e.ff2_l1_b = get("ff2.linear1.bias");
-        e.ff2_l2_w = get("ff2.linear2.weight");
-        e.ff2_l2_b = get("ff2.linear2.bias");
+        e.norm_ff2_w = get("norm_ff2.weight", "norm_ff2.weight", {enc_d}, true);
+        e.norm_ff2_b = get("norm_ff2.bias", "norm_ff2.bias", {enc_d}, true);
+        e.ff2_l1_w = get("ff2.linear1.weight", "ff2.linear1.weight", {enc_d, enc_ff}, false);
+        e.ff2_l1_b = get("ff2.linear1.bias", "ff2.linear1.bias", {enc_ff}, true);
+        e.ff2_l2_w = get("ff2.linear2.weight", "ff2.linear2.weight", {enc_ff, enc_d}, false);
+        e.ff2_l2_b = get("ff2.linear2.bias", "ff2.linear2.bias", {enc_d}, true);
 
-        e.norm_out_w = get("norm_out.weight");
-        e.norm_out_b = get("norm_out.bias");
+        e.norm_out_w = get("norm_out.weight", "norm_out.weight", {enc_d}, true);
+        e.norm_out_b = get("norm_out.bias", "norm_out.bias", {enc_d}, true);
+    }
+
+    if (hp.has_encoder_decoder_proj) {
+        model.enc_proj_w = canary_bind_tensor(model, nullptr, "enc.proj.weight", {enc_d, dec_d}, false, bindings_ok);
+        model.enc_proj_b = canary_bind_tensor(model, nullptr, "enc.proj.bias", {dec_d}, true, bindings_ok);
     }
 
     // Decoder
     model.dec.resize(model.hparams.dec_n_layers);
     for (uint32_t i = 0; i < model.hparams.dec_n_layers; i++) {
-        char buf[128];
+        char legacy[128];
+        char current[128];
         auto& d = model.dec[i];
-        auto get = [&](const char* suf) {
-            snprintf(buf, sizeof(buf), "decoder.layers.%u.%s", i, suf);
-            return require(model, buf);
+        auto get = [&](const char* legacy_suffix, const char* current_suffix, std::initializer_list<int64_t> shape,
+                       bool require_f32) {
+            snprintf(legacy, sizeof(legacy), "decoder.layers.%u.%s", i, legacy_suffix);
+            snprintf(current, sizeof(current), "dec.layer.%u.%s", i, current_suffix);
+            return canary_bind_tensor(model, legacy, current, shape, require_f32, bindings_ok);
         };
 
-        d.norm_sa_w = get("norm_sa.weight");
-        d.norm_sa_b = get("norm_sa.bias");
-        d.sa_q_w = get("sa_q.weight");
-        d.sa_q_b = get("sa_q.bias");
-        d.sa_k_w = get("sa_k.weight");
-        d.sa_k_b = get("sa_k.bias");
-        d.sa_v_w = get("sa_v.weight");
-        d.sa_v_b = get("sa_v.bias");
-        d.sa_out_w = get("sa_out.weight");
-        d.sa_out_b = get("sa_out.bias");
+        d.norm_sa_w = get("norm_sa.weight", "norm1.weight", {dec_d}, true);
+        d.norm_sa_b = get("norm_sa.bias", "norm1.bias", {dec_d}, true);
+        d.sa_q_w = get("sa_q.weight", "self_attn.q.weight", {dec_d, dec_d}, false);
+        d.sa_q_b = get("sa_q.bias", "self_attn.q.bias", {dec_d}, true);
+        d.sa_k_w = get("sa_k.weight", "self_attn.k.weight", {dec_d, dec_d}, false);
+        d.sa_k_b = get("sa_k.bias", "self_attn.k.bias", {dec_d}, true);
+        d.sa_v_w = get("sa_v.weight", "self_attn.v.weight", {dec_d, dec_d}, false);
+        d.sa_v_b = get("sa_v.bias", "self_attn.v.bias", {dec_d}, true);
+        d.sa_out_w = get("sa_out.weight", "self_attn.o.weight", {dec_d, dec_d}, false);
+        d.sa_out_b = get("sa_out.bias", "self_attn.o.bias", {dec_d}, true);
 
-        d.norm_ca_w = get("norm_ca.weight");
-        d.norm_ca_b = get("norm_ca.bias");
-        d.ca_q_w = get("ca_q.weight");
-        d.ca_q_b = get("ca_q.bias");
-        d.ca_k_w = get("ca_k.weight");
-        d.ca_k_b = get("ca_k.bias");
-        d.ca_v_w = get("ca_v.weight");
-        d.ca_v_b = get("ca_v.bias");
-        d.ca_out_w = get("ca_out.weight");
-        d.ca_out_b = get("ca_out.bias");
+        d.norm_ca_w = get("norm_ca.weight", "norm2.weight", {dec_d}, true);
+        d.norm_ca_b = get("norm_ca.bias", "norm2.bias", {dec_d}, true);
+        d.ca_q_w = get("ca_q.weight", "cross_attn.q.weight", {dec_d, dec_d}, false);
+        d.ca_q_b = get("ca_q.bias", "cross_attn.q.bias", {dec_d}, true);
+        d.ca_k_w = get("ca_k.weight", "cross_attn.k.weight", {dec_d, dec_d}, false);
+        d.ca_k_b = get("ca_k.bias", "cross_attn.k.bias", {dec_d}, true);
+        d.ca_v_w = get("ca_v.weight", "cross_attn.v.weight", {dec_d, dec_d}, false);
+        d.ca_v_b = get("ca_v.bias", "cross_attn.v.bias", {dec_d}, true);
+        d.ca_out_w = get("ca_out.weight", "cross_attn.o.weight", {dec_d, dec_d}, false);
+        d.ca_out_b = get("ca_out.bias", "cross_attn.o.bias", {dec_d}, true);
 
-        d.norm_ff_w = get("norm_ff.weight");
-        d.norm_ff_b = get("norm_ff.bias");
-        d.ff_in_w = get("ff_in.weight");
-        d.ff_in_b = get("ff_in.bias");
-        d.ff_out_w = get("ff_out.weight");
-        d.ff_out_b = get("ff_out.bias");
+        d.norm_ff_w = get("norm_ff.weight", "norm3.weight", {dec_d}, true);
+        d.norm_ff_b = get("norm_ff.bias", "norm3.bias", {dec_d}, true);
+        d.ff_in_w = get("ff_in.weight", "ffn.up.weight", {dec_d, dec_ff}, false);
+        d.ff_in_b = get("ff_in.bias", "ffn.up.bias", {dec_ff}, true);
+        d.ff_out_w = get("ff_out.weight", "ffn.down.weight", {dec_ff, dec_d}, false);
+        d.ff_out_b = get("ff_out.bias", "ffn.down.bias", {dec_d}, true);
     }
 
     // Decoder embeddings + output head
-    model.dec_embed_w = require(model, "decoder.embed.weight");
-    model.dec_pos_enc = require(model, "decoder.pos_enc");
-    model.dec_embed_ln_w = require(model, "decoder.embed_ln.weight");
-    model.dec_embed_ln_b = require(model, "decoder.embed_ln.bias");
-    model.dec_final_ln_w = require(model, "decoder.final_norm.weight");
-    model.dec_final_ln_b = require(model, "decoder.final_norm.bias");
-    model.dec_head_w = require(model, "decoder.head.weight");
-    model.dec_head_b = require(model, "decoder.head.bias");
+    model.dec_embed_w = canary_bind_tensor(model, "decoder.embed.weight", "dec.embed.token.weight",
+                                           {dec_d, hp.vocab_size}, false, bindings_ok);
+    model.dec_pos_enc =
+        canary_bind_tensor(model, "decoder.pos_enc", "dec.embed.pos_enc", {dec_d, hp.max_dec_ctx}, true, bindings_ok);
+    model.dec_embed_ln_w =
+        canary_bind_tensor(model, "decoder.embed_ln.weight", "dec.embed.norm.weight", {dec_d}, true, bindings_ok);
+    model.dec_embed_ln_b =
+        canary_bind_tensor(model, "decoder.embed_ln.bias", "dec.embed.norm.bias", {dec_d}, true, bindings_ok);
+    model.dec_final_ln_w =
+        canary_bind_tensor(model, "decoder.final_norm.weight", "dec.norm.weight", {dec_d}, true, bindings_ok);
+    model.dec_final_ln_b =
+        canary_bind_tensor(model, "decoder.final_norm.bias", "dec.norm.bias", {dec_d}, true, bindings_ok);
+    model.dec_head_w =
+        canary_bind_tensor(model, "decoder.head.weight", "dec.head.weight", {dec_d, hp.vocab_size}, false, bindings_ok);
+    model.dec_head_b =
+        canary_bind_tensor(model, "decoder.head.bias", "dec.head.bias", {hp.vocab_size}, true, bindings_ok);
 
-    fprintf(stderr, "canary: vocab=%u  d_model=%u  enc_layers=%u  dec_layers=%u  heads=%u  ff=%u  max_ctx=%u\n",
-            model.hparams.vocab_size, model.hparams.d_model, model.hparams.enc_n_layers, model.hparams.dec_n_layers,
-            model.hparams.n_heads, model.hparams.ff_dim, model.hparams.max_dec_ctx);
+    if (!bindings_ok)
+        return false;
+
+    fprintf(stderr,
+            "canary: schema=%s variant=%s vocab=%u encoder=%uL/%u/%uH/%uFF "
+            "decoder=%uL/%u/%uH/%uFF max_ctx=%u projection=%s\n",
+            hp.new_schema ? "transcribe.cpp" : "legacy", hp.variant.empty() ? "canary-1b-v2" : hp.variant.c_str(),
+            hp.vocab_size, hp.enc_n_layers, hp.enc_d_model, hp.enc_n_heads, hp.enc_ff_dim, hp.dec_n_layers,
+            hp.dec_d_model, hp.dec_n_heads, hp.dec_ff_dim, hp.max_dec_ctx, hp.has_encoder_decoder_proj ? "yes" : "no");
     return true;
 }
 
@@ -519,7 +934,6 @@ static void canary_fft_r2c(const float* in, int N, float* out) {
 // NeMo-style mel: same as parakeet (128 mel, 16 kHz, n_fft=512, win=400, hop=160).
 // Delegates to core_mel::compute() with the NeMo cluster's parameters; only
 // the FFT function pointer differs between parakeet/canary/canary_ctc/cohere.
-#include "core/mel.h"
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/ggml_cpu_backend.h"
 
@@ -535,16 +949,23 @@ static std::vector<float> canary_compute_mel_impl(canary_context* ctx, const flo
     const int n_freqs = n_fft / 2 + 1;
     const int n_mels = (int)hp.n_mels;
 
-    if (!ctx->model.mel_fb || !ctx->model.mel_window) {
-        fprintf(stderr, "canary: missing preprocessor.fb / window\n");
+    if ((!ctx->model.mel_fb || !ctx->model.mel_window) &&
+        (ctx->model.generated_mel_fb.empty() || ctx->model.generated_mel_window.empty())) {
+        fprintf(stderr, "canary: missing frontend filterbank/window\n");
         return {};
     }
 
-    std::vector<float> window_raw((size_t)win);
-    ggml_backend_tensor_get(ctx->model.mel_window, window_raw.data(), 0, win * sizeof(float));
-
-    std::vector<float> mel_fb((size_t)n_mels * n_freqs);
-    ggml_backend_tensor_get(ctx->model.mel_fb, mel_fb.data(), 0, mel_fb.size() * sizeof(float));
+    std::vector<float> window_raw;
+    std::vector<float> mel_fb;
+    if (ctx->model.mel_window) {
+        window_raw.resize((size_t)win);
+        ggml_backend_tensor_get(ctx->model.mel_window, window_raw.data(), 0, window_raw.size() * sizeof(float));
+        mel_fb.resize((size_t)n_mels * n_freqs);
+        ggml_backend_tensor_get(ctx->model.mel_fb, mel_fb.data(), 0, mel_fb.size() * sizeof(float));
+    } else {
+        window_raw = ctx->model.generated_mel_window;
+        mel_fb = ctx->model.generated_mel_fb;
+    }
 
     core_mel::Params p;
     p.n_fft = n_fft;
@@ -556,8 +977,11 @@ static std::vector<float> canary_compute_mel_impl(canary_context* ctx, const flo
     p.layout = core_mel::Layout::TimeMels;
     p.log_eps = (float)(1.0 / (1 << 24));
     p.center_pad = true;
-    p.drop_last_frame = true; // NeMo returns feat_len = floor(n_samples/hop) frames
-    p.preemph = 0.97f;        // NeMo AudioToMelSpectrogramPreprocessor default (#37)
+    p.center_pad_reflect = hp.new_schema;
+    p.drop_last_frame = !hp.new_schema; // Preserve the baked cstr frontend's historical frame contract.
+    p.preemph = hp.new_schema ? hp.frontend_preemph : 0.97f;
+    // Dither is a training/preprocessing knob in the published metadata.
+    // Inference stays deterministic and intentionally does not apply it.
 
     return core_mel::compute(samples, n_samples, window_raw.data(), win, mel_fb.data(), n_freqs, canary_fft_r2c, p,
                              T_out);
@@ -602,13 +1026,13 @@ static ggml_cgraph* canary_build_graph_encoder(canary_context* ctx, int T_mel, g
     ggml_tensor* cur = core_conformer::build_pre_encode(ctx0, mel, m.pre_encode, (int)hp.subsampling_channels, &T);
 
     // ----- Sinusoidal rel-pos table -----
-    ggml_tensor* pos_enc = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, (int)hp.d_model, 2 * T - 1);
+    ggml_tensor* pos_enc = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, (int)hp.enc_d_model, 2 * T - 1);
     ggml_set_name(pos_enc, "pos_enc");
     ggml_set_input(pos_enc);
 
     // ----- 32× FastConformer block (with biases) -----
     core_conformer::BlockParams bp = {
-        (int)hp.d_model, (int)hp.n_heads, (int)hp.head_dim, (int)hp.conv_kernel, kLayerNormEps,
+        (int)hp.enc_d_model, (int)hp.enc_n_heads, (int)hp.enc_head_dim, (int)hp.conv_kernel, kLayerNormEps,
     };
     for (uint32_t il = 0; il < hp.enc_n_layers; il++) {
         cur = core_conformer::build_block(ctx0, cur, pos_enc, T, m.enc[il], bp);
@@ -652,12 +1076,12 @@ static ggml_cgraph* canary_build_graph_encoder_staged(canary_context* ctx, int T
         ggml_build_forward_expand(gf, snap);
     }
 
-    ggml_tensor* pos_enc = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, (int)hp.d_model, 2 * T - 1);
+    ggml_tensor* pos_enc = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, (int)hp.enc_d_model, 2 * T - 1);
     ggml_set_name(pos_enc, "pos_enc");
     ggml_set_input(pos_enc);
 
     core_conformer::BlockParams bp = {
-        (int)hp.d_model, (int)hp.n_heads, (int)hp.head_dim, (int)hp.conv_kernel, kLayerNormEps,
+        (int)hp.enc_d_model, (int)hp.enc_n_heads, (int)hp.enc_head_dim, (int)hp.conv_kernel, kLayerNormEps,
     };
     char lbuf[32];
     for (uint32_t il = 0; il < hp.enc_n_layers; il++) {
@@ -720,7 +1144,7 @@ static std::vector<float> canary_encode_mel(canary_context* ctx, const float* me
     ggml_tensor* pos_in = ggml_graph_get_tensor(gf, "pos_enc");
     int T_enc = (int)pos_in->ne[1];
     T_enc = (T_enc + 1) / 2;
-    auto pe = core_conformer::make_pos_enc((int)ctx->model.hparams.d_model, T_enc);
+    auto pe = core_conformer::make_pos_enc((int)ctx->model.hparams.enc_d_model, T_enc);
     ggml_backend_tensor_set(pos_in, pe.data(), 0, pe.size() * sizeof(float));
 
     if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
@@ -741,6 +1165,45 @@ static std::vector<float> canary_encode_mel(canary_context* ctx, const float* me
     return result;
 }
 
+static std::vector<float> canary_project_encoder(canary_context* ctx, const float* enc_data, int T_enc) {
+    const auto& model = ctx->model;
+    const auto& hp = model.hparams;
+    if (!hp.has_encoder_decoder_proj)
+        return {};
+
+    ggml_init_params ip = {
+        /*mem_size=*/ctx->compute_meta.size(),
+        /*mem_buffer=*/ctx->compute_meta.data(),
+        /*no_alloc=*/true,
+    };
+    ggml_context* ctx0 = ggml_init(ip);
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 64, false);
+    ggml_tensor* enc = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, hp.enc_d_model, T_enc);
+    ggml_set_name(enc, "enc_native");
+    ggml_set_input(enc);
+    ggml_tensor* projected = ggml_add(ctx0, ggml_mul_mat(ctx0, model.enc_proj_w, enc), model.enc_proj_b);
+    ggml_set_name(projected, "enc_projected");
+    ggml_build_forward_expand(gf, projected);
+    ggml_free(ctx0);
+
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        fprintf(stderr, "canary: encoder projection alloc failed\n");
+        return {};
+    }
+    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "enc_native"), enc_data, 0,
+                            (size_t)hp.enc_d_model * T_enc * sizeof(float));
+    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "canary: encoder projection compute failed\n");
+        return {};
+    }
+
+    ggml_tensor* out = ggml_graph_get_tensor(gf, "enc_projected");
+    std::vector<float> result((size_t)hp.dec_d_model * T_enc);
+    ggml_backend_tensor_get(out, result.data(), 0, result.size() * sizeof(float));
+    return result;
+}
+
 // ===========================================================================
 // Decoder KV cache + cross-KV allocation
 // ===========================================================================
@@ -749,8 +1212,8 @@ static void canary_alloc_kv(canary_context* ctx) {
     if (ctx->kv_buf)
         return;
     const auto& hp = ctx->model.hparams;
-    const int head_dim = (int)hp.head_dim;
-    const int n_heads = (int)hp.n_heads;
+    const int head_dim = (int)hp.dec_head_dim;
+    const int n_heads = (int)hp.dec_n_heads;
     const int max_ctx = (int)hp.max_dec_ctx;
     const int n_layers = (int)hp.dec_n_layers;
 
@@ -782,9 +1245,9 @@ static void canary_alloc_kv(canary_context* ctx) {
 static void canary_build_cross_kv(canary_context* ctx, const float* enc_data, int T_enc) {
     const auto& m = ctx->model;
     const auto& hp = m.hparams;
-    const int d = (int)hp.d_model;
-    const int head_dim = (int)hp.head_dim;
-    const int n_heads = (int)hp.n_heads;
+    const int d = (int)hp.dec_d_model;
+    const int head_dim = (int)hp.dec_head_dim;
+    const int n_heads = (int)hp.dec_n_heads;
     const int n_layers = (int)hp.dec_n_layers;
 
     // Allocate cross_kv tensors on a CPU buffer (small, ~1 MB per layer for T_enc≈100)
@@ -884,9 +1347,9 @@ static void canary_build_cross_kv(canary_context* ctx, const float* enc_data, in
 static ggml_cgraph* canary_build_graph_decoder(canary_context* ctx, int n_tokens, int offset) {
     const auto& m = ctx->model;
     const auto& hp = m.hparams;
-    const int d = (int)hp.d_model;
-    const int n_heads = (int)hp.n_heads;
-    const int head_dim = (int)hp.head_dim;
+    const int d = (int)hp.dec_d_model;
+    const int n_heads = (int)hp.dec_n_heads;
+    const int head_dim = (int)hp.dec_head_dim;
 
     ggml_init_params ip = {
         /*mem_size=*/ctx->compute_meta.size(),
@@ -1017,7 +1480,7 @@ static ggml_cgraph* canary_build_graph_decoder(canary_context* ctx, int n_tokens
         cur = ggml_add(ctx0, cur, dl.norm_ff_b);
 
         cur = ggml_add(ctx0, ggml_mul_mat(ctx0, dl.ff_in_w, cur), dl.ff_in_b);
-        cur = ggml_relu(ctx0, cur);
+        cur = hp.decoder_activation == "relu" ? ggml_relu(ctx0, cur) : ggml_silu(ctx0, cur);
         cur = ggml_add(ctx0, ggml_mul_mat(ctx0, dl.ff_out_w, cur), dl.ff_out_b);
         cur = ggml_add(ctx0, cur, inpFF);
     }
@@ -1107,6 +1570,41 @@ static std::vector<float> canary_decode_step(canary_context* ctx, const int* tok
 
 static std::vector<int> canary_build_prompt(canary_context* ctx, const std::string& src, const std::string& tgt,
                                             bool punctuation) {
+    const auto& hp = ctx->model.hparams;
+    if (hp.new_schema) {
+        auto language_id = [&](const std::string& language) {
+            for (size_t i = 0; i < hp.languages.size(); i++)
+                if (hp.languages[i] == language)
+                    return hp.language_ids[i];
+            return -1;
+        };
+
+        std::vector<int> prompt;
+        prompt.reserve(hp.tokenizer_single_sp ? 10 : 9);
+        if (hp.tokenizer_single_sp)
+            prompt.push_back(canary_str_to_token(ctx, "\xE2\x96\x81"));
+        prompt.push_back(hp.startofcontext_id);
+        prompt.push_back(hp.startoftranscript_id);
+        prompt.push_back(canary_str_to_token(ctx, "<|emo:undefined|>"));
+        prompt.push_back(language_id(src));
+        prompt.push_back(language_id(tgt));
+        prompt.push_back(punctuation ? hp.pnc_id : hp.nopnc_id);
+        prompt.push_back(hp.noitn_id);
+        prompt.push_back(hp.notimestamp_id);
+        prompt.push_back(hp.nodiarize_id);
+
+        for (int id : prompt) {
+            if (id < 0 || id >= (int)ctx->vocab.id_to_token.size()) {
+                fprintf(stderr,
+                        "canary: failed to build metadata-driven canary2 prompt "
+                        "(src='%s', tgt='%s', pnc=%d, single_sp=%d)\n",
+                        src.c_str(), tgt.c_str(), (int)punctuation, (int)hp.tokenizer_single_sp);
+                return {};
+            }
+        }
+        return prompt;
+    }
+
     auto tok = [&](const char* s) { return canary_str_to_token(ctx, s); };
     std::string src_tok = "<|" + src + "|>";
     std::string tgt_tok = "<|" + tgt + "|>";
@@ -1162,7 +1660,7 @@ static std::string spiece_to_text(const std::string& piece) {
 // ===========================================================================
 
 static void canary_fold_batchnorm(canary_model& model) {
-    const int d = (int)model.hparams.d_model;
+    const int d = (int)model.hparams.enc_d_model;
     const int K = (int)model.hparams.conv_kernel;
     const float eps = 1e-5f;
 
@@ -1257,7 +1755,7 @@ extern "C" float* canary_run_encoder(struct canary_context* ctx, const float* me
     auto enc = canary_encode_mel(ctx, mel, n_mels, T_mel, &T_enc);
     if (enc.empty())
         return nullptr;
-    const int d = (int)ctx->model.hparams.d_model;
+    const int d = (int)ctx->model.hparams.enc_d_model;
     if (out_T_enc)
         *out_T_enc = T_enc;
     if (out_d_model)
@@ -1302,7 +1800,7 @@ extern "C" int canary_run_encoder_staged(struct canary_context* ctx, const float
     ggml_tensor* pos_in = ggml_graph_get_tensor(gf, "pos_enc");
     int T_enc = (int)pos_in->ne[1];
     T_enc = (T_enc + 1) / 2;
-    auto pe = core_conformer::make_pos_enc((int)ctx->model.hparams.d_model, T_enc);
+    auto pe = core_conformer::make_pos_enc((int)ctx->model.hparams.enc_d_model, T_enc);
     ggml_backend_tensor_set(pos_in, pe.data(), 0, pe.size() * sizeof(float));
 
     if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
@@ -1310,7 +1808,7 @@ extern "C" int canary_run_encoder_staged(struct canary_context* ctx, const float
         return -1;
     }
 
-    const int d = (int)ctx->model.hparams.d_model;
+    const int d = (int)ctx->model.hparams.enc_d_model;
 
     // Retrieve and deliver each named snapshot in order.
     // deliver() assumes ne[0]=d_model (standard encoder output format).
@@ -1475,23 +1973,29 @@ extern "C" int canary_str_to_token(struct canary_context* ctx, const char* str) 
 }
 
 extern "C" int canary_test_load(struct canary_context* ctx) {
-    fprintf(stderr,
-            "canary: load test OK\n"
-            "  vocab_size  = %d\n"
-            "  d_model     = %d\n"
-            "  enc_layers  = %d\n"
-            "  dec_layers  = %d\n"
-            "  n_heads     = %d\n"
-            "  head_dim    = %d\n"
-            "  ff_dim      = %d\n"
-            "  max_dec_ctx = %d\n"
-            "  n_mels      = %d\n"
-            "  sample_rate = %d\n"
-            "  frame_dur_cs= %d\n",
-            (int)ctx->model.hparams.vocab_size, (int)ctx->model.hparams.d_model, (int)ctx->model.hparams.enc_n_layers,
-            (int)ctx->model.hparams.dec_n_layers, (int)ctx->model.hparams.n_heads, (int)ctx->model.hparams.head_dim,
-            (int)ctx->model.hparams.ff_dim, (int)ctx->model.hparams.max_dec_ctx, (int)ctx->model.hparams.n_mels,
-            (int)ctx->model.hparams.sample_rate, (int)ctx->model.hparams.frame_dur_cs);
+    fprintf(
+        stderr,
+        "canary: load test OK\n"
+        "  vocab_size  = %d\n"
+        "  enc_layers  = %d\n"
+        "  enc_d_model = %d\n"
+        "  enc_heads   = %d\n"
+        "  enc_head_dim= %d\n"
+        "  enc_ff_dim  = %d\n"
+        "  dec_layers  = %d\n"
+        "  dec_d_model = %d\n"
+        "  dec_heads   = %d\n"
+        "  dec_head_dim= %d\n"
+        "  dec_ff_dim  = %d\n"
+        "  max_dec_ctx = %d\n"
+        "  n_mels      = %d\n"
+        "  sample_rate = %d\n"
+        "  frame_dur_cs= %d\n",
+        (int)ctx->model.hparams.vocab_size, (int)ctx->model.hparams.enc_n_layers, (int)ctx->model.hparams.enc_d_model,
+        (int)ctx->model.hparams.enc_n_heads, (int)ctx->model.hparams.enc_head_dim, (int)ctx->model.hparams.enc_ff_dim,
+        (int)ctx->model.hparams.dec_n_layers, (int)ctx->model.hparams.dec_d_model, (int)ctx->model.hparams.dec_n_heads,
+        (int)ctx->model.hparams.dec_head_dim, (int)ctx->model.hparams.dec_ff_dim, (int)ctx->model.hparams.max_dec_ctx,
+        (int)ctx->model.hparams.n_mels, (int)ctx->model.hparams.sample_rate, (int)ctx->model.hparams.frame_dur_cs);
 
     // Confirm a few special tokens resolve
     const char* specials[] = {
@@ -1513,7 +2017,7 @@ extern "C" int canary_test_encoder(struct canary_context* ctx, int T_mel) {
     if (out.empty())
         return -1;
     fprintf(stderr, "canary: encoder OK — T_mel=%d → T_enc=%d  d=%d  out[0..3]=%g %g %g %g\n", T_mel, T_enc,
-            (int)ctx->model.hparams.d_model, (double)out[0], (double)out[1], (double)out[2], (double)out[3]);
+            (int)ctx->model.hparams.enc_d_model, (double)out[0], (double)out[1], (double)out[2], (double)out[3]);
     return T_enc;
 }
 
@@ -1943,6 +2447,219 @@ static struct canary_result* canary_transcribe_streamed_legacy(struct canary_con
     return r;
 }
 
+static canary_result* canary_result_from_merged_tokens(std::vector<canary_token_data>& merged, bool clear_timings,
+                                                       int64_t audio_start_cs, int64_t audio_end_cs) {
+    if (clear_timings) {
+        for (auto& token : merged)
+            token.t0 = token.t1 = 0;
+    } else {
+        // Chunk-local DTW is only a runtime estimate (not Canary's upstream
+        // CTC timestamp model). Clamp overlap-boundary spans into one monotonic
+        // sequence before exposing them through the existing result ABI.
+        int64_t cursor = audio_start_cs;
+        for (auto& token : merged) {
+            token.t0 = std::min(audio_end_cs, std::max(cursor, std::max(audio_start_cs, token.t0)));
+            token.t1 = std::max(token.t0, std::min(audio_end_cs, token.t1));
+            cursor = token.t1;
+        }
+    }
+
+    std::string full_text;
+    for (const auto& token : merged)
+        full_text += token.text;
+    if (!full_text.empty() && full_text[0] == ' ')
+        full_text.erase(0, 1);
+    auto words = canary_words_from_tokens(merged.data(), (int)merged.size());
+
+    canary_result* result = (canary_result*)calloc(1, sizeof(canary_result));
+    if (!result)
+        return nullptr;
+    result->text = strdup(full_text.c_str());
+    if (!result->text) {
+        canary_result_free(result);
+        return nullptr;
+    }
+    result->n_tokens = (int)merged.size();
+    result->tokens =
+        (canary_token_data*)calloc(result->n_tokens > 0 ? (size_t)result->n_tokens : 1, sizeof(canary_token_data));
+    if (!result->tokens) {
+        canary_result_free(result);
+        return nullptr;
+    }
+    for (int i = 0; i < result->n_tokens; i++)
+        result->tokens[i] = merged[(size_t)i];
+
+    result->n_words = (int)words.size();
+    result->words =
+        (canary_word_data*)calloc(result->n_words > 0 ? (size_t)result->n_words : 1, sizeof(canary_word_data));
+    if (!result->words) {
+        canary_result_free(result);
+        return nullptr;
+    }
+    for (int i = 0; i < result->n_words; i++)
+        result->words[i] = words[(size_t)i];
+    return result;
+}
+
+static bool canary_chunk_times_valid(const canary_result* part, int64_t chunk_start_cs, int64_t chunk_end_cs,
+                                     int frame_dur_cs) {
+    int64_t prev_t0 = chunk_start_cs - frame_dur_cs;
+    int64_t prev_t1 = chunk_start_cs - frame_dur_cs;
+    for (int i = 0; i < part->n_tokens; i++) {
+        const auto& token = part->tokens[i];
+        if (token.t0 < chunk_start_cs - frame_dur_cs || token.t1 > chunk_end_cs + frame_dur_cs || token.t1 < token.t0 ||
+            token.t0 < prev_t0 || token.t1 < prev_t1)
+            return false;
+        prev_t0 = token.t0;
+        prev_t1 = token.t1;
+    }
+    return true;
+}
+
+// Canary 180M Flash is a hard-cap/offline model: NVIDIA documents direct
+// inference only up to 40 s and an external chunker above that. The
+// canary-1b-v2 dynamic 30..40 s / 1 s-overlap blueprint is a different
+// variant contract, and quantized 180M decoders can EOS before those long
+// windows end. Use shorter fixed windows with enough overlap to keep each
+// stitch seam away from both chunk edges. Chunks still decode independently
+// (and therefore each receive the complete metadata-driven prompt).
+//
+// Defaults were selected by measured Q4_K_M/Q5_K_M A/B on four repeated JFK
+// utterances: 20 s windows / 6 s overlap recovered all four repetitions on
+// both quants. The old dynamic path recovered only 2 / 3 respectively.
+// We keep the centered non-overlapping core from each decoded window:
+// overlap supplies acoustic context, while no token-LCS can collapse valid
+// repeated speech. This is offline chunked inference, not streaming.
+static canary_result* canary_transcribe_streamed_180m(canary_context* ctx, const float* samples, int n_samples,
+                                                      const char* source_lang, const char* target_lang,
+                                                      bool punctuation, int64_t t_offset_cs, int chunk_seconds,
+                                                      int overlap_seconds) {
+    const auto& hp = ctx->model.hparams;
+    const int sample_rate = (int)hp.sample_rate;
+    constexpr int kDirectLimitSeconds = 40;
+    constexpr int kDefaultChunkSeconds = 20;
+    constexpr int kDefaultOverlapSeconds = 6;
+
+    if (n_samples <= kDirectLimitSeconds * sample_rate)
+        return canary_transcribe_ex(ctx, samples, n_samples, source_lang, target_lang, punctuation, t_offset_cs);
+
+    if (chunk_seconds <= 0)
+        chunk_seconds = kDefaultChunkSeconds;
+    if (overlap_seconds < 0)
+        overlap_seconds = kDefaultOverlapSeconds;
+    if (overlap_seconds >= chunk_seconds)
+        overlap_seconds = std::max(1, chunk_seconds / 3);
+
+    const int chunk_samples = chunk_seconds * sample_rate;
+    const int overlap_samples = overlap_seconds * sample_rate;
+    const int step_samples = chunk_samples - overlap_samples;
+    if (chunk_samples <= 0 || step_samples <= 0)
+        return nullptr;
+
+    const int64_t audio_end_cs = t_offset_cs + (int64_t)n_samples * 100 / sample_rate;
+    const int64_t half_overlap_cs = (int64_t)overlap_samples * 50 / sample_rate;
+    std::vector<canary_token_data> merged;
+    bool clear_timings = false;
+    bool warned_bad_times = false;
+    int chunks_decoded = 0;
+
+    for (int start = 0; start + overlap_samples < n_samples; start += step_samples) {
+        const int end = std::min(start + chunk_samples, n_samples);
+        const bool first_chunk = start == 0;
+        const bool last_chunk = end == n_samples;
+        const int64_t chunk_start_cs = t_offset_cs + (int64_t)start * 100 / sample_rate;
+        const int64_t chunk_end_cs = t_offset_cs + (int64_t)end * 100 / sample_rate;
+        const int64_t core_start_cs = first_chunk ? t_offset_cs : chunk_start_cs + half_overlap_cs;
+        const int64_t core_end_cs =
+            last_chunk ? audio_end_cs
+                       : t_offset_cs + (int64_t)(start + step_samples) * 100 / sample_rate + half_overlap_cs;
+
+        canary_result* part = canary_transcribe_ex(ctx, samples + start, end - start, source_lang, target_lang,
+                                                   punctuation, chunk_start_cs);
+        if (!part) {
+            // Do not silently skip a failed overlap window. Retry exactly its
+            // assigned core (at most 17 s with the defaults), which removes
+            // overlap/merge dependence and gives the AED a shorter input.
+            const int core_start = (int)((core_start_cs - t_offset_cs) * sample_rate / 100);
+            const int core_end = (int)((core_end_cs - t_offset_cs) * sample_rate / 100);
+            fprintf(stderr,
+                    "canary: WARNING: 180M long-form chunk %.2f..%.2f s failed; "
+                    "retrying its %.2f..%.2f s core\n",
+                    (double)(chunk_start_cs - t_offset_cs) / 100.0, (double)(chunk_end_cs - t_offset_cs) / 100.0,
+                    (double)(core_start_cs - t_offset_cs) / 100.0, (double)(core_end_cs - t_offset_cs) / 100.0);
+            if (core_end > core_start) {
+                part = canary_transcribe_ex(ctx, samples + core_start, core_end - core_start, source_lang, target_lang,
+                                            punctuation, core_start_cs);
+            }
+            if (!part) {
+                fprintf(stderr,
+                        "canary: ERROR: 180M long-form core %.2f..%.2f s also failed; "
+                        "that interval could not be decoded\n",
+                        (double)(core_start_cs - t_offset_cs) / 100.0, (double)(core_end_cs - t_offset_cs) / 100.0);
+                if (last_chunk)
+                    break;
+                continue;
+            }
+            for (int i = 0; i < part->n_tokens; i++)
+                merged.push_back(part->tokens[i]);
+            chunks_decoded++;
+            canary_result_free(part);
+            if (last_chunk)
+                break;
+            continue;
+        }
+
+        chunks_decoded++;
+        const bool valid_times = canary_chunk_times_valid(part, chunk_start_cs, chunk_end_cs, (int)hp.frame_dur_cs);
+        if (!valid_times) {
+            clear_timings = true;
+            if (!warned_bad_times) {
+                warned_bad_times = true;
+                fprintf(stderr, "canary: WARNING: non-monotonic 180M chunk DTW timings; "
+                                "using deterministic token-position stitching and clearing merged timings\n");
+            }
+        }
+
+        size_t before = merged.size();
+        for (int i = 0; i < part->n_tokens; i++) {
+            int64_t midpoint_cs;
+            if (valid_times) {
+                midpoint_cs = part->tokens[i].t0 + (part->tokens[i].t1 - part->tokens[i].t0) / 2;
+            } else {
+                midpoint_cs = chunk_start_cs + (int64_t)(2 * i + 1) * (chunk_end_cs - chunk_start_cs) /
+                                                   (2 * std::max(1, part->n_tokens));
+            }
+            if (midpoint_cs >= core_start_cs && midpoint_cs < core_end_cs)
+                merged.push_back(part->tokens[i]);
+        }
+
+        // Valid DTW can still be unusable for a pathological chunk (all token
+        // mass outside its assigned core). Fall back to deterministic token
+        // positions rather than silently dropping the whole interval.
+        if (merged.size() == before && part->n_tokens > 0) {
+            clear_timings = true;
+            fprintf(stderr,
+                    "canary: WARNING: 180M chunk %.2f..%.2f s had no tokens in its "
+                    "assigned core; using token-position fallback and clearing merged timings\n",
+                    (double)(chunk_start_cs - t_offset_cs) / 100.0, (double)(chunk_end_cs - t_offset_cs) / 100.0);
+            for (int i = 0; i < part->n_tokens; i++) {
+                const int64_t midpoint_cs = chunk_start_cs + (int64_t)(2 * i + 1) * (chunk_end_cs - chunk_start_cs) /
+                                                                 (2 * std::max(1, part->n_tokens));
+                if (midpoint_cs >= core_start_cs && midpoint_cs < core_end_cs)
+                    merged.push_back(part->tokens[i]);
+            }
+        }
+
+        canary_result_free(part);
+        if (last_chunk)
+            break;
+    }
+
+    if (chunks_decoded == 0)
+        return nullptr;
+    return canary_result_from_merged_tokens(merged, clear_timings, t_offset_cs, audio_end_cs);
+}
+
 // Long-form transcription, following canary-1b-v2's own `.transcribe()`
 // dynamic chunking (see the blueprint block above). chunk_seconds <= 0 picks
 // the reference's dynamic 30..40 s size; overlap_seconds < 0 uses the
@@ -1955,6 +2672,10 @@ extern "C" struct canary_result* canary_transcribe_streamed(struct canary_contex
                                                             int overlap_seconds) {
     if (!ctx || !samples || n_samples <= 0 || !source_lang || !target_lang)
         return nullptr;
+    if (ctx->model.hparams.new_schema && ctx->model.hparams.variant == "canary-180m-flash") {
+        return canary_transcribe_streamed_180m(ctx, samples, n_samples, source_lang, target_lang, punctuation,
+                                               t_offset_cs, chunk_seconds, overlap_seconds);
+    }
     {
         static const bool legacy = [] {
             const char* e = crispasr_env::get("CRISPASR_CANARY_LEGACY_STREAM");
@@ -2075,13 +2796,50 @@ extern "C" struct canary_result* canary_transcribe_streamed(struct canary_contex
 static canary_result* canary_finish_from_encoder(canary_context* ctx, const float* enc_data, int T_enc,
                                                  const char* source_lang, const char* target_lang, bool punctuation,
                                                  int64_t t_offset_cs) {
-    // 3. Pre-compute cross-attention K/V
-    canary_build_cross_kv(ctx, enc_data, T_enc);
+    const auto& hp = ctx->model.hparams;
+    if (hp.new_schema) {
+        auto supports_language = [&](const char* language) {
+            return std::find(hp.languages.begin(), hp.languages.end(), language) != hp.languages.end();
+        };
+        if (!supports_language(source_lang)) {
+            fprintf(stderr, "canary: source language '%s' is not advertised by variant '%s'\n", source_lang,
+                    hp.variant.c_str());
+            return nullptr;
+        }
+        if (!supports_language(target_lang)) {
+            fprintf(stderr, "canary: target language '%s' is not advertised by variant '%s'\n", target_lang,
+                    hp.variant.c_str());
+            return nullptr;
+        }
+        if (strcmp(source_lang, target_lang) != 0) {
+            const std::string pair = std::string(source_lang) + ">" + target_lang;
+            if (std::find(hp.translation_pairs.begin(), hp.translation_pairs.end(), pair) ==
+                hp.translation_pairs.end()) {
+                fprintf(stderr, "canary: translation pair '%s' is not advertised by variant '%s'\n", pair.c_str(),
+                        hp.variant.c_str());
+                return nullptr;
+            }
+        }
+    }
 
-    // 4. Build prompt
+    // 3. Build the per-chunk prompt before any decoder-side work.
     std::vector<int> prompt = canary_build_prompt(ctx, source_lang, target_lang, punctuation);
     if (prompt.empty())
         return nullptr;
+
+    // 4. Project the native encoder width to the decoder width when the model
+    // carries a trained bridge (Canary 180M Flash: 512 -> 1024).
+    const float* decoder_enc_data = enc_data;
+    std::vector<float> projected;
+    if (hp.has_encoder_decoder_proj) {
+        projected = canary_project_encoder(ctx, enc_data, T_enc);
+        if (projected.empty())
+            return nullptr;
+        decoder_enc_data = projected.data();
+    }
+
+    // 5. Pre-compute decoder-width cross-attention K/V.
+    canary_build_cross_kv(ctx, decoder_enc_data, T_enc);
 
     // Reset DTW state and enable cross-attn capture for the upcoming greedy loop.
     // Each per-step decode call will append one entry to ctx->step_attn (one
@@ -2089,8 +2847,8 @@ static canary_result* canary_finish_from_encoder(canary_context* ctx, const floa
     ctx->collect_attn = true;
     ctx->step_attn.clear();
 
-    // 5. Greedy decode
-    const int eos = canary_str_to_token(ctx, "<|endoftext|>");
+    // 6. Greedy decode
+    const int eos = hp.new_schema ? hp.endoftext_id : canary_str_to_token(ctx, "<|endoftext|>");
     const int max_ctx = (int)ctx->model.hparams.max_dec_ctx;
     // #292: honor --max-new-tokens, clamped to the model's decoder context so a
     // large value can't run past the trained window / KV allocation.
