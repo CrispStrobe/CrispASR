@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.37
+
+* **Phrase scoring:** `CrispasrSession.scoreTexts(pcm, texts, language:,
+  prompt:)` returns log P(text | audio) and a token count for each candidate
+  (whisper sessions), for picking the likeliest of a known set of phrases.
+  All candidates are decoded in one batch.
+* **Strict grammars:** `setGrammarStrict(true)` forbids end-of-text until the
+  grammar can be complete, so a constrained decode no longer stops
+  mid-phrase. Off by default.
+* **New in the bundled native library:** Raon-Speech-9B speech-to-text,
+  parakeet-ultra / parakeet-redux, and Nemotron-3-Diarization
+  (`sortformer`) with streaming presets.
+* **TTS:** letters followed by digits ("d4", "B52") keep their number in
+  every language; German reads a lone letter by its name.
+
 ## 0.8.36
 
 * **New ASR backends in the bundled native library:** Dolphin CN-Dialect

@@ -1,6 +1,6 @@
 # CrispASR — Pending work
 
-## CLAIMED 2026-09-25 — whisper: strict grammar end + candidate scoring (voice chess moves)
+## DONE 2026-09-25 — whisper: strict grammar end + candidate scoring (voice chess moves)
 
 Worktree `.claude/worktrees/feat-whisper-score-texts`, branch `feat/whisper-score-texts`.
 For CrispChess voice moves: the set of legal moves is known, so recognition is a
@@ -25,10 +25,11 @@ choice among ~20-150 short phrases per position.
   free transcript 11-14, strict grammar 32-33, summed logprob 30-32,
   per-token logprob 39-42 (base 42/52: EN 23/26, DE 19/26). Priming helps EN
   (base 24/26) and hurts DE (15/26). small is no better than base.
-NEW BUG found on the way: kokoro drops squares - "d4" synthesises silence,
-"knight f3" is heard as "Night." (the g2p loses letter+digit tokens; "e4"
-phonemises to just `ˈɛ`). Seen with kokoro-82m (af_heart) and kokoro-de-hui
-(df_victoria, dm_martin); piper says them fine. Not yet investigated.
+FIXED (f6a41815): kokoro dropped squares ("d4" silent, "knight f3" -> "Night.")
+- every num2words_* skipped digits after a letter; core_g2p_alnum splits such
+tokens in all five G2Ps (English now equals misaki on d4/B52/x64/Win10), and
+German reads a lone letter by its espeak name (was `t` for "d").
+DONE: merged to main (7bf34f2b, 93d10a59, f6a41815); v0.8.37 carries it.
 
 ## CLAIMED 2026-09-20 — #444 forced-aligner timing regression
 
