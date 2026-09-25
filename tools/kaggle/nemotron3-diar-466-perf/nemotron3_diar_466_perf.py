@@ -18,6 +18,8 @@ REPO = WORK / "CrispASR"
 BRANCH = os.environ.get("CRISPASR_REF", "feat/466-nemotron3-diar")
 G = Path("/tmp/n3d"); G.mkdir(exist_ok=True)
 res = {"steps": {}, "errors": [], "runs": {}, "der": {}}
+GPU = shutil.which("nvidia-smi") is not None  # the -gpu bootstrap: CUDA build, GPU arms
+res["gpu"] = GPU
 
 def save(): (OUT / "perf.json").write_text(json.dumps(res, indent=1))
 def run(cmd, log, timeout=None, env=None):
@@ -68,6 +70,8 @@ try:
     kh.install_build_toolchain()
     flags = kh.cache_and_link_flags()
     builds = {"native": [], "blas": ["-DGGML_BLAS=ON", "-DGGML_BLAS_VENDOR=OpenBLAS"]}
+    if GPU:
+        builds = {"cuda": kh.cuda_build_flags()}
     bins = {}
     for name, extra in builds.items():
         b = REPO / f"build-{name}"
@@ -112,6 +116,8 @@ try:
         ("blas", "f32", "manual", True), ("blas", "f16", "manual", True), ("blas", "nvidia_q8_0", "manual", True),
         ("blas", "f32", "manual", False),  # BLAS build, accel off: same as native? (control)
     ]
+    if GPU:
+        ARMS = [("cuda", w, a, False) for w in ("f32", "f16", "nvidia_q8_0") for a in ("manual", "cont", "flash")]
     for mode, ref in refs.items():
         for bname, wname, attn, accel in ARMS:
             if bname not in bins or wname not in arts:

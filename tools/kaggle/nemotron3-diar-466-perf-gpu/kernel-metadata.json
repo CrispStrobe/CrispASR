@@ -1,0 +1,3 @@
+{"id": "chr1s4/crispasr-nemotron3-diar-466-perf-gpu", "title": "CrispASR nemotron3 diar 466 perf gpu", "code_file": "nemotron3_diar_466_perf_gpu.py",
+ "language": "python", "kernel_type": "script", "is_private": "true", "enable_gpu": "true", "enable_internet": "true",
+ "dataset_sources": ["chr1s4/crispasr-hf-token", "chr1s4/crispasr-ccache"], "competition_sources": [], "kernel_sources": []}
