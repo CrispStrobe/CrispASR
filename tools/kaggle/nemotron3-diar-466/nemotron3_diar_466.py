@@ -14,10 +14,14 @@ from pathlib import Path
 
 WORK = Path("/kaggle/working"); OUT = WORK / "out"; OUT.mkdir(parents=True, exist_ok=True)
 REPO = WORK / "CrispASR"; BUILD = REPO / "build"
-BRANCH = os.environ.get("CRISPASR_REF", "feat/466-nemotron3-diar")
+BRANCH = os.environ.get("CRISPASR_REF", "main")
 HF_MODEL = "nvidia/Nemotron-3-Diarization"
 G = Path("/tmp/n3d"); G.mkdir(exist_ok=True)
 res = {"steps": {}, "errors": []}
+# GPU arm (the -gpu bootstrap kernel): CUDA build, offline + low_latency only,
+# every arm timed on the GPU and, for the q8_0 GGUF, on the CPU as well.
+GPU = shutil.which("nvidia-smi") is not None
+res["gpu"] = GPU
 
 def save(): (OUT / "pipeline.json").write_text(json.dumps(res, indent=1, ensure_ascii=False))
 def run(cmd, log, timeout=None, env=None):
@@ -83,6 +87,8 @@ try:
     kh.install_build_toolchain()
     flags = kh.cache_and_link_flags()
     with kh.build_heartbeat("cmake.configure"):
+        if GPU:
+            flags = flags + kh.cuda_build_flags()
         kh.sh(f"cmake -S {REPO} -B {BUILD} -G Ninja -DCMAKE_BUILD_TYPE=Release -DCRISPASR_OPUS=OFF -DCRISPASR_AMR=OFF " + " ".join(flags))
     with kh.build_heartbeat("cmake.build"):
         kh.sh(f"cmake --build {BUILD} -j$(nproc) --target crispasr crispasr-diff")
@@ -110,7 +116,7 @@ try:
             if ami.with_suffix(suf).exists(): shutil.copy(ami.with_suffix(suf), OUT / ("ami" + suf))
     res["clips"] = {k: str(v) for k, v in clips.items()}; save()
 
-    MODES = ["offline", "low_latency", "very_low_latency", "ultra_low_latency"]
+    MODES = ["offline", "low_latency"] if GPU else ["offline", "low_latency", "very_low_latency", "ultra_low_latency"]
     rttm = read_rttm(ami.with_suffix(".rttm")) if "ami" in clips and ami.with_suffix(".rttm").exists() else None
     res["diff"] = {}; res["der"] = {}
     import gguf
@@ -125,16 +131,22 @@ try:
             res["steps"][f"ref_{mode}_{c}"] = {"rc": rc, "s": s_}; save()
             if rc == 0: refs[c] = ref
         # quantized arm only offline: parity there already bounds it
-        for name, p in arts.items():
-            if mode != "offline" and name == "nvidia_q8_0":
+        arms = [(n, p, False) for n, p in arts.items()]
+        if GPU and "nvidia_q8_0" in arts:
+            arms.append(("nvidia_q8_0-cpu", arts["nvidia_q8_0"], True))
+        for name, p, force_cpu in arms:
+            if mode != "offline" and name == "nvidia_q8_0" and not GPU:
                 continue
             for c, ref in refs.items():
                 env = dict(os.environ); seg_out = G / f"seg-{mode}-{name}-{c}.txt"
+                if force_cpu: env["CRISPASR_DIFF_NO_GPU"] = "1"
                 env["CRISPASR_DIFF_SEGMENTS_OUT"] = str(seg_out); env["CRISPASR_NEMOTRON3_DIAR_BENCH"] = "1"
                 if mode != "offline": env["CRISPASR_NEMOTRON3_DIAR_MODE"] = mode
                 rc, s_, out = run([str(bin_ / "crispasr-diff"), "nemotron3-diar", str(p), str(ref), str(clips[c])],
                                   f"diff-{mode}-{name}-{c}.log", timeout=3600, env=env)
-                res["diff"][f"{mode}/{name}/{c}"] = {"rc": rc, "s": s_,
+                bench = [l.strip() for l in (OUT / f"diff-{mode}-{name}-{c}.log").read_text().splitlines()
+                         if "nemotron3_diar_bench" in l]
+                res["diff"][f"{mode}/{name}/{c}"] = {"rc": rc, "s": s_, "bench": bench,
                     "rows": [l for l in out.splitlines() if l.startswith(("[", "  "))][:40]}
                 if seg_out.exists(): shutil.copy(seg_out, OUT / seg_out.name)
                 if c == "ami" and rttm and seg_out.exists():
