@@ -6,6 +6,22 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## DONE 2026-09-25 — Canary 180M Flash direct GGUF compatibility
+
+The existing `canary` backend now loads handy-computer's transcribe.cpp GGUFs
+directly while preserving the legacy cstr Canary 1B-v2 layout. The runtime reads
+split encoder/decoder dimensions, applies the trained 512→1024 projection,
+reconstructs the metadata-only NeMo frontend, builds the aggregate `canary2`
+prompt, enforces advertised language/translation pairs, and uses a
+checkpoint-specific offline long-form path above 40 seconds.
+
+Verified locally: Q4 English ASR/no-PNC, Q5 EN→DE translation, 17×512 staged
+encoder geometry, session C-ABI auto-detection, legacy 1B-v2 loading, and a
+44-second four-repeat long-form/timing regression (1,341 assertions). CPU and
+Vulkan produced matching transcripts; Android arm64 cross-compiles and packages.
+Physical-device RTx/OOM testing, full NeMo/F32 stage parity, and corpus-level WER
+remain external hardware/data gates. Branch: `feat/canary-180m-flash`.
+
 ## Session ABI TTS sample-rate bugs (from CrisperWeaver), fixed 2026-09-23
 
 Three session-ABI defects, all invisible to the CLI, found by a downstream
