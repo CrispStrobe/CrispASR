@@ -986,7 +986,17 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
   that streaming preset (dump the reference with `NEMOTRON3_DIAR_MODE` set to
   the same value) and also check that 100 ms pushes through the live session
   API reproduce the one-shot rows
-- `CRISPASR_NEMOTRON3_DIAR_BENCH` — per-stage timings (mel, per-chunk encoder
+- `CRISPASR_SORTFORMER_CATCHUP=N` — live sessions (`nemotron3_diar_stream_*`)
+  only: when a `push()` finds several complete chunks already buffered (the
+  caller fell behind), run up to N of them as one forward — about one chunk's
+  compute. Default 1 = the strict preset. Measured with 3 s pushes and N = 8:
+  ~4x fewer forwards, 99.2 % of decisions as the strict preset, AMI DER 34.5 %
+  vs 33.5 %. Whole-file runs (`--sortformer-mode`) ignore it
+- `CRISPASR_NEMOTRON3_DIAR_ATTN=flash|manual` — attention kernel. Default:
+  flash on the CPU (exact, 11-13 % faster), manual on GPUs (flash is exact
+  offline on a T4 but flips a few borderline frames in streaming)
+- `CRISPASR_NEMOTRON3_DIAR_BENCH` — per-stage timings (streaming: graph
+  build / encoder compute / mel / embed / cache update) (mel, per-chunk encoder
   graph, speaker-cache updates)
 - `CRISPASR_DIFF_SEGMENTS_OUT` — `crispasr-diff nemotron3-diar` only: also
   write the C++ segment list (`start end speaker` per line) to this path, for

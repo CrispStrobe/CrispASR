@@ -1371,6 +1371,13 @@ overlapping speech included. Weights are OpenMDW-1.1 (commercial use allowed).
   fp32 / MKL on the same box: ~57 s for `low_latency`), i.e. slower than real
   time: live streaming wants a GPU or a much larger CPU. NVIDIA's q8_0 on the
   CPU: 6.6 s offline, 105 s `low_latency` (decisions 99.9 % vs transformers).
+- Measured optimisations (Kaggle A/B, AMI clip, `low_latency`): flash attention
+  is the CPU default (exact, 162 -> 137 s); the mel FFT caches its twiddles
+  (bit-identical; it was 1.2 s of the T4's 4.2 s — 14 ms per chunk); contiguous
+  Q/K and an OpenBLAS/ACCEL device gave nothing and were dropped. For a live
+  session that cannot keep up, `nemotron3_diar_stream_set_catchup()` /
+  `CRISPASR_SORTFORMER_CATCHUP` merges the chunks that backed up into one
+  forward (~one chunk's compute; +1 DER point at 8 chunks per forward).
 - GPU (Tesla T4, CUDA): the 60 s AMI clip takes 0.27 s offline and 3.8 s in
   `low_latency` (F32; 46 ms per chunk, ~16x faster than real time), with the same
   parity as on the CPU. The converter keeps `encoder.pre_encode.proj` in F32:

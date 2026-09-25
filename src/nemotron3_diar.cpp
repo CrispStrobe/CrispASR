@@ -57,15 +57,21 @@ bool n3d_bench() {
     return v != 0;
 }
 
-// CRISPASR_NEMOTRON3_DIAR_ATTN=flash: ggml_flash_attn_ext instead of the
-// manual softmax(QK^T)V. Measured on the 60 s AMI clip (#466): CPU exact and
-// -11 % in low_latency; T4 -15 % but not exact (F16 accumulation flips a few
-// borderline frames). Opt-in for that reason; manual is the default.
-// (Contiguous Q/K and a BLAS/ACCEL device measured no gain and were dropped.)
-bool n3d_flash_attn() {
-    static const bool v = [] {
+// Attention: ggml_flash_attn_ext or the manual softmax(QK^T)V. Measured on the
+// 60 s AMI clip (#466): on the CPU flash is exact in every mode and 11-13 %
+// faster, so it is the CPU default; on a T4 it is exact offline (-42 % encoder
+// time) but flips a few borderline frames in streaming (F16 accumulation), and
+// GPUs differ in honouring GGML_PREC_F32, so GPU runs keep the manual path.
+// CRISPASR_NEMOTRON3_DIAR_ATTN=flash|manual overrides. (Contiguous Q/K and a
+// BLAS/ACCEL device measured no gain and were dropped.)
+int n3d_attn_override() { // -1 unset, 0 manual, 1 flash
+    static const int v = [] {
         const char* e = crispasr_env::get("CRISPASR_NEMOTRON3_DIAR_ATTN");
-        return e && !std::strcmp(e, "flash");
+        if (e && !std::strcmp(e, "flash"))
+            return 1;
+        if (e && !std::strcmp(e, "manual"))
+            return 0;
+        return -1;
     }();
     return v;
 }
@@ -145,11 +151,27 @@ void fft_r2c(const float* in, int N, float* out) {
         out[2 * rev] = in[i];
         out[2 * rev + 1] = 0.0f;
     }
+    // Twiddles per stage, cached: recomputing cos/sin in every butterfly cost
+    // 14 ms per streaming chunk (#466, T4 low_latency: 1.2 s of 4.2 s). Same
+    // expressions as before, so the values - and the spectrum - are bit-identical.
+    thread_local int tw_n = 0;
+    thread_local std::vector<double> tw; // stage len at offset len/2 - 1: (cos, sin) pairs
+    if (tw_n != N) {
+        tw.assign((size_t)2 * N, 0.0);
+        for (int len = 2; len <= N; len <<= 1) {
+            const double ang = -2.0 * M_PI / (double)len;
+            for (int j = 0; j < len / 2; j++) {
+                tw[(size_t)2 * (len / 2 - 1 + j)] = std::cos(ang * j);
+                tw[(size_t)2 * (len / 2 - 1 + j) + 1] = std::sin(ang * j);
+            }
+        }
+        tw_n = N;
+    }
     for (int len = 2; len <= N; len <<= 1) {
-        const double ang = -2.0 * M_PI / (double)len;
+        const double* w = tw.data() + (size_t)2 * (len / 2 - 1);
         for (int i = 0; i < N; i += len) {
             for (int j = 0; j < len / 2; j++) {
-                const double wre = std::cos(ang * j), wim = std::sin(ang * j);
+                const double wre = w[2 * j], wim = w[2 * j + 1];
                 const int a = i + j, b = i + j + len / 2;
                 const float bre = out[2 * b], bim = out[2 * b + 1];
                 const float tre = (float)(wre * bre - wim * bim), tim = (float)(wre * bim + wim * bre);
@@ -497,7 +519,7 @@ bool run_chunk(nemotron3_diar_context* c, const std::vector<float>& x_rows, int 
     ggml_set_name(pos, "pos");
     ggml_set_input(pos);
     const bool use_mask = std::find(mask.begin(), mask.end(), 0) != mask.end();
-    const bool flash = n3d_flash_attn();
+    const bool flash = n3d_attn_override() >= 0 ? n3d_attn_override() == 1 : c->backend == c->backend_cpu;
     ggml_tensor* kq_mask = nullptr;
     if (use_mask && !flash) {
         kq_mask = ggml_new_tensor_2d(g, GGML_TYPE_F32, N, N);
