@@ -2518,6 +2518,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     //     "voice":           "<name in --voice-dir>",    (optional)
     //     "instructions":    "<voice direction prose>",  (optional, applied via params.tts_instruct)
     //     "speed":           0.25 .. 4.0,                (optional, default 1.0)
+    //     "duration":        seconds, 0 .. 600,          (optional; TTS exact target length, omnivoice)
     //     "response_format": "wav"|"pcm"|"f32"|"mp3"|"aac"|"opus" (optional, default "wav")
     //     "consent_attestation":  "<text>",              (REQUIRED when `voice` is a .wav clone)
     //     "spoken_disclaimer":    true|false,            (optional, default true)
@@ -2802,6 +2803,17 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             return;
         }
 
+        // Exact TTS target duration in seconds (omnivoice today; upstream
+        // OmniVoice `duration` parity). 0 = let the backend estimate. NOT the
+        // same as `duration_ms`, which is the ASR transcription window on
+        // /inference and /v1/audio/transcriptions.
+        float duration_s = body.value("duration", 0.0f);
+        if (!(duration_s >= 0.0f && duration_s <= 600.0f)) {
+            json_error(res, 400, "'duration' must be between 0 and 600 seconds (got " + std::to_string(duration_s) + ")",
+                       "invalid_duration", "duration");
+            return;
+        }
+
         // Per-request param overrides — copy then mutate. The voice
         // string is passed through verbatim; the backend adapter owns
         // the interpretation (speaker name, preset, path, or bare name
@@ -2909,6 +2921,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         // (CAP_TTS_SPEED, e.g. kokoro) can use it directly.
         // The post-synth resampler below applies as a fallback for backends without native speed.
         rp.tts_speed = speed;
+        // Exact duration wins over speed for backends that honour it (omnivoice).
+        rp.tts_duration = duration_s;
 
         bool stream = body.value("stream", false);
 

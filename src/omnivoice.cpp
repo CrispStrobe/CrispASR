@@ -385,6 +385,11 @@ struct omnivoice_context {
     // Speaking-rate multiplier for the target-length estimate (>1 faster/shorter).
     float speed = 1.0f;
 
+    // Exact target duration in seconds. 0 = derive the length from the text (and
+    // the reference's rate). Upstream OmniVoice takes a `duration` outright;
+    // this is that knob. Read live by generate_iterative().
+    float target_duration_s = 0.0f;
+
     // Audio tokenizer path (separate GGUF)
     std::string tokenizer_path;
 };
@@ -1478,6 +1483,19 @@ static ov_gen_result generate_iterative(omnivoice_context* ctx, const std::strin
     //    reference (ref_text → ref_T frames) so it tracks the reference speaker's
     //    actual rate; otherwise use the built-in speaking-rate anchor.
     int T_target = estimate_target_tokens(text, ctx->ref_text, ctx->ref_T, ctx->speed);
+
+    // Exact-duration override (upstream OmniVoice `duration` parity). When set it
+    // WINS over the estimate — the caller dubbing into a known window knows the
+    // length better than the estimator does. It also removes the estimator's two
+    // failure modes: a ref_text that does not match the reference audio, and an
+    // under-estimate that truncates the tail (the generator is masked-iterative
+    // and cannot ask for more room, #363).
+    // Frames are 40 ms (24 kHz / hop 960) => 25 frames per second.
+    if (ctx->target_duration_s > 0.0f) {
+        const int frames = (int)std::lround((double)ctx->target_duration_s * 25.0);
+        if (frames >= 1)
+            T_target = frames;
+    }
     result.T = T_target;
 
     if (debug) {
@@ -3293,6 +3311,13 @@ struct omnivoice_context* omnivoice_init_from_file(const char* path_model, struc
         if (n > 0)
             ctx->gen.num_steps = n;
     }
+    // Exact target duration in seconds (upstream `duration` parity). 0/unset =
+    // text-based estimate. Setter: omnivoice_set_target_duration().
+    if (const char* e = crispasr_env::get("CRISPASR_OMNIVOICE_TARGET_DURATION")) {
+        float v = (float)atof(e);
+        if (v > 0.0f)
+            ctx->target_duration_s = v;
+    }
 
     if (!load_model(ctx, path_model)) {
         delete ctx;
@@ -3502,6 +3527,16 @@ int omnivoice_set_speed(struct omnivoice_context* ctx, float speed) {
     if (!ctx)
         return -1;
     ctx->speed = (speed > 0.0f) ? speed : 1.0f;
+    return 0;
+}
+
+int omnivoice_set_target_duration(struct omnivoice_context* ctx, float seconds) {
+    if (!ctx)
+        return -1;
+    // 0 / negative = back to the estimate. The target is materialised as a real
+    // frame buffer, so a typo must not ask for millions of frames — clamp to the
+    // same 600 s ceiling the CLI and server validate against.
+    ctx->target_duration_s = (seconds > 0.0f) ? std::min(seconds, 600.0f) : 0.0f;
     return 0;
 }
 

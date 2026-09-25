@@ -164,6 +164,13 @@ public:
             omnivoice_set_num_steps(ctx_, params.tts_num_steps);
         }
 
+        // Exact target duration in seconds (upstream OmniVoice `duration` parity).
+        // Applied UNCONDITIONALLY, including when 0: the server reuses ONE context
+        // across requests, so a later request must CLEAR a duration set by an
+        // earlier one rather than inherit it — the same per-request-state rule the
+        // voice/language/seed knobs above follow.
+        omnivoice_set_target_duration(ctx_, params.tts_duration);
+
         // #13273: and the target language, for the same reason. The server owns
         // ONE backend instance for the whole session and passes the per-request
         // language in `params`, so applying it only in init() meant
