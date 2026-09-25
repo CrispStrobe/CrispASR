@@ -369,6 +369,10 @@ constexpr Entry k_registry[] = {
     {"hojo-asr", "hojo-asr-multi-v1-q4_k.gguf",
      "https://huggingface.co/cstr/Hojo-ASR-Multi-V1-GGUF/resolve/main/hojo-asr-multi-v1-q4_k.gguf",
      "~4.4 GB", nullptr, nullptr},
+    // #438: HojoAI/Hojo-ASR-V1 (Apache-2.0), the English-capable sibling; same runtime
+    {"hojo-asr-v1", "hojo-asr-v1-q4_k.gguf",
+     "https://huggingface.co/cstr/Hojo-ASR-V1-GGUF/resolve/main/hojo-asr-v1-q4_k.gguf", "~4.1 GB", nullptr,
+     nullptr},
     {"moss-audio", "moss-audio-4b-instruct-q4_k.gguf",
      "https://huggingface.co/cstr/MOSS-Audio-4B-Instruct-GGUF/resolve/main/moss-audio-4b-instruct-q4_k.gguf", "~3.8 GB",
      nullptr, nullptr},

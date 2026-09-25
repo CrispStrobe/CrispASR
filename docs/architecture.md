@@ -719,6 +719,33 @@ transformers' `RepetitionPenaltyLogitsProcessor` — generating from
 `inputs_embeds` means the speech frames and the BOS are not tokens and are
 never penalised.
 
+**Beam search (#438).** Beam 4 is the default, as upstream: greedy drops whole
+phrases on these checkpoints (the #438 clip, and upstream's own greedy output
+on jfk with Hojo-ASR-V1), so `-bs 1` is opt-in. `hojo_asr_beam_hf` reproduces
+transformers 4.57 `_beam_search` as `HOJO_ASR.infer` calls it: `log_softmax`,
+*then* the repetition penalty on those log-probs (logits processors run after
+`log_softmax` in beam search), top-2B over beams x vocab, only the top-B
+candidates may finish (score `sum / len^length_penalty`), the best B unfinished
+keep running, the sticky early-stop heuristic, best finished wins. The decoder
+prompt length is 0 (inputs_embeds), so `min_length: 1` bans nothing. Each beam
+owns a KV slot: B forwards per step, a parent's slot passes to its first child
+and extra children copy it. The penalty hits each *distinct* token once
+(gather/scatter), not once per occurrence. Measured (Kaggle CPU, F16): beam
+output identical to the package's beam-4 text on jfk / a 28 s English clip /
+the demo German + French clips for both checkpoints; greedy identical on 7 of
+8 (one near-tie word at F16); beam costs ~2-2.4x greedy wall time.
+
+The default token cap scales with the audio (`max(200, 8 tokens/s * seconds +
+10)`, `CRISPASR_HOJO_TOKENS_PER_SEC`, 0 = upstream's flat 200) and ending on
+the cap prints a warning. Upstream additionally truncates input at 40 s (its
+Whisper feature extractor runs with `chunk_length=40`); CrispASR does not.
+
+**Hojo-ASR-V1** (`-m hojo-asr-v1`, [`cstr/Hojo-ASR-V1-GGUF`](https://huggingface.co/cstr/Hojo-ASR-V1-GGUF)),
+the English-capable sibling, uses the same runtime. Its audio tower is more
+sensitive to F16 than Multi-V1's: at F16 one encoder channel reaches only cos
+0.997 against the fp32 reference (transcripts still identical), at F32 every
+stage is cos 1.000000.
+
 **Runtime notes.** Attention runs per chunk rather than over one flat
 sequence with a block-diagonal mask (identical result; avoids a 112 MB mask
 for ten minutes of audio), and the conv stem is tiled along time with an
