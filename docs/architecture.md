@@ -369,7 +369,7 @@ corpus-level long-form accuracy.
 
 The 180M checkpoint is especially attractive for mobile packaging because of
 its model size. The Android arm64 APK path uses the same metadata-driven
-runtime and has been exercised on-device by the requester.
+runtime, and the APK has been exercised on a real Android device.
 
 ### granite / granite-4.1 / granite-4.1-plus / granite-4.1-nar
 
