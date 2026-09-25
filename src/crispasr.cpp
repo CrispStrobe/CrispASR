@@ -6614,6 +6614,108 @@ int whisper_score_texts(struct whisper_context* ctx, const float* samples, int n
     }
     std::sort(order.begin(), order.end(), [&](int x, int y) { return seqs[x] < seqs[y]; });
 
+    // Batched path (default; CRISPASR_WHISPER_SCORE_SEQUENTIAL=1 restores the
+    // one-token-per-call path below): the candidates' tokens form a prefix
+    // tree, and every node of it is decoded in ONE batch. Tree attention comes
+    // from sequence ids: candidate t is sequence t + 1, a node's cell carries
+    // every candidate that passes through it, and a token attends with one of
+    // its own candidates - so it sees exactly the prompt and its ancestors (a
+    // cell off its path shares no candidate with it). A/B on 30 Piper/Kokoro
+    // utterances, whisper tiny: same best candidate 30/30, 1.8x faster overall;
+    // log-probabilities differ by batched-matmul rounding (a single phrase with
+    // no tree already moves 0.03-0.09).
+    const char* sequential_env = getenv("CRISPASR_WHISPER_SCORE_SEQUENTIAL");
+    if (!(sequential_env && sequential_env[0] == '1')) {
+        struct tree_node {
+            whisper_token tok;
+            int depth;
+        };
+        std::vector<tree_node> nodes;
+        std::map<std::pair<int, whisper_token>, int> child_of;
+        std::vector<std::vector<int>> node_path(n_texts);
+        for (int t = 0; t < n_texts; ++t) {
+            int parent = -1;
+            for (size_t i = 0; i < seqs[t].size(); ++i) {
+                const auto key = std::make_pair(parent, seqs[t][i]);
+                auto it = child_of.find(key);
+                if (it == child_of.end()) {
+                    it = child_of.emplace(key, (int)nodes.size()).first;
+                    nodes.push_back({seqs[t][i], (int)i});
+                }
+                node_path[t].push_back(it->second);
+                parent = it->second;
+            }
+        }
+        const int n_nodes = (int)nodes.size();
+        if (n_nodes > 0 && n_nodes <= n_ctx && n_prompt + n_nodes <= (int)state->kv_self.size) {
+            std::vector<std::vector<whisper_seq_id>> members(n_nodes);
+            for (int t = 0; t < n_texts; ++t) {
+                for (int id : node_path[t]) {
+                    members[id].push_back(t + 1);
+                }
+                whisper_kv_cache_seq_cp(state->kv_self, 0, t + 1, -1, -1); // the prompt, for every candidate
+            }
+            whisper_batch tree = whisper_batch_init(n_nodes, n_texts);
+            tree.n_tokens = n_nodes;
+            for (int i = 0; i < n_nodes; ++i) { // parents precede children: creation order
+                tree.token[i] = nodes[i].tok;
+                tree.pos[i] = n_prompt + nodes[i].depth;
+                tree.n_seq_id[i] = (int32_t)members[i].size();
+                std::copy(members[i].begin(), members[i].end(), tree.seq_id[i]);
+                tree.logits[i] = 1;
+            }
+            const auto t0 = now();
+            const bool ok = whisper_decode_internal(*ctx, *state, tree, n_threads, false, nullptr, nullptr);
+            whisper_batch_free(tree);
+            for (int t = 0; t < n_texts; ++t) {
+                whisper_kv_cache_seq_rm(state->kv_self, t + 1, -1, -1);
+            }
+            if (!ok) {
+                return -6;
+            }
+            t_dec += ms(t0, now());
+            n_steps = 1;
+            const auto t1 = now();
+            // log-softmax(x)[v] = x[v] - logsumexp(x): one logsumexp per node.
+            std::vector<double> lse(n_nodes);
+            for (int i = 0; i < n_nodes; ++i) {
+                const float* row = state->logits.data() + (size_t)i * n_vocab;
+                const float mx = *std::max_element(row, row + n_vocab);
+                double sum = 0.0;
+                for (int v = 0; v < n_vocab; ++v) {
+                    sum += std::exp((double)(row[v] - mx));
+                }
+                lse[i] = mx + std::log(sum);
+            }
+            for (int t = 0; t < n_texts; ++t) {
+                const auto& seq = seqs[t];
+                if (seq.empty()) {
+                    continue;
+                }
+                double logprob = log_softmax_at(prompt_logits.data(), seq[0]);
+                for (size_t i = 0; i < seq.size(); ++i) {
+                    const int id = node_path[t][i];
+                    const whisper_token target = i + 1 < seq.size() ? seq[i + 1] : eot;
+                    logprob += state->logits[(size_t)id * n_vocab + target] - lse[id];
+                }
+                out_logprobs[t] = (float)logprob;
+                if (out_n_tokens) {
+                    out_n_tokens[t] = (int)seq.size() + 1;
+                }
+            }
+            t_sm += ms(t1, now());
+            if (prof) {
+                fprintf(stderr,
+                        "score_texts (batched): %d texts, %d tree nodes, encode %.0f ms, prompt(%d) %.0f ms, "
+                        "decode %.0f ms, softmax %.0f ms, total %.0f ms\n",
+                        n_texts, n_nodes, ms(t_mel, t_enc), n_prompt, ms(t_enc, t_prompt), t_dec, t_sm,
+                        ms(t_start, now()));
+            }
+            return 0;
+        }
+        // Too many nodes for one batch or the cache: score one token at a time.
+    }
+
     // path[i] = token i of the candidate whose tokens are in the cache;
     // lp_after[i] = log-probabilities (full row) after path[0..i].
     std::vector<whisper_token> path;

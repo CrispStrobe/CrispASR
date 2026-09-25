@@ -16,8 +16,19 @@ choice among ~20-150 short phrases per position.
 - Threads: each candidate token is a tiny decoder step; at 4 threads on a loaded
   4-core box a step took 345 ms, at 2 threads 18 ms (ggml barrier stalls).
   `CRISPASR_WHISPER_SCORE_PROFILE=1` prints the breakdown.
-NOW: Kaggle eval `chr1s4/crispchess-voice-score` (Piper + Kokoro voices, EN/DE,
-tiny/base/small: free vs strict vs scored, with and without priming) running.
+- Batched scoring (default; `CRISPASR_WHISPER_SCORE_SEQUENTIAL=1` = one token
+  per call): all candidates as one prefix tree in ONE decoder batch, tree
+  attention via sequence ids. A/B, 30 utterances, tiny: same pick 30/30, 1.8x
+  faster; logprobs differ by batched-matmul rounding only.
+- Kaggle `chr1s4/crispchess-voice-score` (CPU, 13 chess moves x Piper voices
+  lessac/cori EN + thorsten/kerstin DE = 52 utterances; picks of the legal move):
+  free transcript 11-14, strict grammar 32-33, summed logprob 30-32,
+  per-token logprob 39-42 (base 42/52: EN 23/26, DE 19/26). Priming helps EN
+  (base 24/26) and hurts DE (15/26). small is no better than base.
+NEW BUG found on the way: kokoro drops squares - "d4" synthesises silence,
+"knight f3" is heard as "Night." (the g2p loses letter+digit tokens; "e4"
+phonemises to just `ˈɛ`). Seen with kokoro-82m (af_heart) and kokoro-de-hui
+(df_victoria, dm_martin); piper says them fine. Not yet investigated.
 
 ## CLAIMED 2026-09-20 — #444 forced-aligner timing regression
 

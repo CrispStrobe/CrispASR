@@ -598,6 +598,8 @@ CRISPASR_API struct whisper_context* whisper_init_from_file_with_params_no_state
 // Each candidate token is one small decoder step, so on a busy CPU fewer
 // threads are faster: ggml's workers stall on every per-op barrier (measured
 // on a loaded 4-core box, whisper tiny: 345 ms/step at 4 threads, 18 ms at 2).
+// All candidates are decoded in one batch as a prefix tree when they fit the
+// context (CRISPASR_WHISPER_SCORE_SEQUENTIAL=1: one token per decoder call).
 // Set CRISPASR_WHISPER_SCORE_PROFILE=1 to print where the time goes.
 CRISPASR_API int whisper_score_texts(struct whisper_context* ctx, const float* samples, int n_samples,
                                      const char* language, const char* initial_prompt, const char** texts, int n_texts,
