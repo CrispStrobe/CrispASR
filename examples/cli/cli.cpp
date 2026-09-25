@@ -639,6 +639,13 @@ static bool whisper_params_parse_arg_streaming_tts(int argc, char** argv, int& i
             params.tts_speed = 1.0f;
         if (params.tts_speed > 4.0f)
             params.tts_speed = 4.0f;
+    } else if (arg == "--tts-duration") {
+        // Exact target duration in seconds (omnivoice; upstream `duration` parity).
+        params.tts_duration = std::stof(ARGV_NEXT);
+        if (params.tts_duration < 0.0f)
+            params.tts_duration = 0.0f;
+        if (params.tts_duration > 600.0f)
+            params.tts_duration = 600.0f;
     } else if (arg == "--codec-model") {
         params.tts_codec_model = ARGV_NEXT;
         std::string auto_base;
@@ -1488,6 +1495,10 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
         "             --tts-speed X            [%-7.2f] speaking-rate multiplier (kokoro/omnivoice/f5/piper/melotts/"
         "fastpitch): >1 faster/shorter, <1 slower/longer\n",
         params.tts_speed);
+    fprintf(out,
+            "             --tts-duration X         [%-7s] EXACT target duration in seconds (omnivoice): wins over the "
+            "text/rate estimate; 0 = estimate\n",
+            "0");
     fprintf(out, "             --tts-trim-silence       [%-7s] trim leading silence from TTS output\n",
             params.tts_trim_silence ? "true" : "false");
     fprintf(out,

@@ -609,6 +609,11 @@ struct whisper_params {
     // this; only the server route reads it.
     float tts_speed = 1.0f;
 
+    // Exact target duration in seconds for backends with native length control
+    // (omnivoice; upstream OmniVoice `duration` parity). 0 = use the backend's
+    // own estimate. CLI: --tts-duration; server: the `duration` body field.
+    float tts_duration = 0.0f;
+
     // 75c-opt-2: per-request TTS backend knobs exposed via /v1/audio/speech.
     // Negative sentinel = "use backend default". The server route parses
     // these from JSON and each backend adapter applies them via native

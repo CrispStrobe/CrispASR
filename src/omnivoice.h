@@ -68,6 +68,17 @@ int omnivoice_set_instruct(struct omnivoice_context* ctx, const char* instruct);
 // Useful when a reference voice yields an over- or under-long estimate.
 int omnivoice_set_speed(struct omnivoice_context* ctx, float speed);
 
+// Set an EXACT target duration, in seconds (upstream OmniVoice's `duration`
+// argument; parity). When > 0 it overrides the text/speaking-rate estimate
+// outright for subsequent synthesis calls. 0 (or negative) restores the
+// estimate. Read live per synthesize; clamped to a sane maximum (600 s).
+//
+// This is the escape hatch for the two failure modes of the estimate: a
+// `ref_text` that does not match the reference audio, and an under-estimate
+// that truncates the tail (the generator is masked-iterative and cannot ask
+// for more room — #363). A caller dubbing into a known window should pass it.
+int omnivoice_set_target_duration(struct omnivoice_context* ctx, float seconds);
+
 // Set the number of masked-iterative (diffusion) steps. Stage0 cost is
 // num_steps × 2 backbone forwards, so this is the dominant speed/quality lever:
 // lower = faster, fewer refinement passes. Default 32; ASR-clean down to ~16.
