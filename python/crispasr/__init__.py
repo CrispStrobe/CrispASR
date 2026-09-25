@@ -81,4 +81,4 @@ __all__ = [
     "watermark_embed",
     "watermark_load_model",
 ]
-__version__ = "0.8.36"
+__version__ = "0.8.37"
