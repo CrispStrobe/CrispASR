@@ -15,7 +15,7 @@ from pathlib import Path
 
 WORK = Path("/kaggle/working"); OUT = WORK / "out"; OUT.mkdir(parents=True, exist_ok=True)
 REPO = WORK / "CrispASR"
-BRANCH = os.environ.get("CRISPASR_REF", "feat/466-nemotron3-diar")
+BRANCH = os.environ.get("CRISPASR_REF", "main")
 G = Path("/tmp/n3d"); G.mkdir(exist_ok=True)
 res = {"steps": {}, "errors": [], "runs": {}, "der": {}}
 GPU = shutil.which("nvidia-smi") is not None  # the -gpu bootstrap: CUDA build, GPU arms
@@ -112,16 +112,19 @@ try:
 
     # run 2: the flash offline crash fixed; manual vs flash, plus the finer
     # streaming overhead split (mel / embed / cache update)
-    ARMS = [("native", "f32", a, False) for a in ("manual", "flash")]
+    # run 3: the shipped defaults ("default" sets no attention env var) plus the
+    # q8_0 users actually download
+    ARMS = [("native", w, "default", False) for w in ("f32", "nvidia_q8_0")]
     if GPU:
-        ARMS = [("cuda", "f32", a, False) for a in ("manual", "flash")]
+        ARMS = [("cuda", w, "default", False) for w in ("f32", "nvidia_q8_0")]
     for mode, ref in refs.items():
         for bname, wname, attn, accel in ARMS:
             if bname not in bins or wname not in arts:
                 continue
             key = f"{mode}/{bname}/{wname}/{attn}/{'accel' if accel else 'cpu'}"
             env = dict(os.environ)
-            env["CRISPASR_NEMOTRON3_DIAR_BENCH"] = "1"; env["CRISPASR_NEMOTRON3_DIAR_ATTN"] = attn
+            env["CRISPASR_NEMOTRON3_DIAR_BENCH"] = "1"
+            if attn != "default": env["CRISPASR_NEMOTRON3_DIAR_ATTN"] = attn
             if accel: env["CRISPASR_NEMOTRON3_DIAR_ACCEL"] = "1"
             if mode != "offline": env["CRISPASR_NEMOTRON3_DIAR_MODE"] = mode
             cu = G / f"catchup-{key.replace('/', '_')}.txt"
