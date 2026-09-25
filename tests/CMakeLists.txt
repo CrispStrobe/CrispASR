@@ -1320,6 +1320,39 @@ catch_discover_tests(test-canary-qwen-live
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 
+# ─── test-canary-180m-live — Canary 180M Flash Q4 ASR acceptance plus
+# optional Q5+ translation. Needs CRISPASR_MODEL_CANARY_180M; translation is
+# separately gated by CRISPASR_MODEL_CANARY_180M_TRANSLATE.
+add_executable(test-canary-180m-live
+    test_canary_180m_live.cpp
+)
+target_include_directories(test-canary-180m-live PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/ggml/include
+)
+target_link_libraries(test-canary-180m-live PRIVATE
+    Catch2::Catch2WithMain
+    canary
+    crispasr-lib
+)
+catch_discover_tests(test-canary-180m-live
+    TEST_SPEC "[canary-180m]"
+    PROPERTIES
+        LABELS live
+        SKIP_RETURN_CODE 4
+        TIMEOUT 900
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+add_test(NAME test-canary-source-contract
+    COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/test_canary_lang_whitelist.py
+    WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}
+)
+set_tests_properties(test-canary-source-contract PROPERTIES
+    LABELS "unit;canary;source-contract"
+    TIMEOUT 30
+)
+
 # ─── test - lfm2-audio — live integration tests for LFM2-Audio ASR + TTS
 add_executable(test-lfm2-audio
     test_lfm2_audio_live.cpp
