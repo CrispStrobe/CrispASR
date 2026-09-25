@@ -3323,7 +3323,17 @@ int omnivoice_set_voice_prompt(struct omnivoice_context* ctx, const char* wav_pa
         ctx->ref_text.clear();
         return 0;
     }
-    ctx->ref_text = ref_text ? ref_text : "";
+    // Fail closed. A new reference was requested, so invalidate the previously
+    // loaded one BEFORE any failure path below can return. Those paths used to
+    // return -1 while leaving ref_audio_codes / ref_T from the PREVIOUS request
+    // in place; the caller then synthesised anyway, so a reference that could
+    // not be read (deleted/renamed file, wrong path, unreadable WAV) silently
+    // rendered the line in the previous speaker's voice. `ref_text` is stored
+    // only on success, at the end of this function.
+    ctx->ref_audio_codes.clear();
+    ctx->ref_T = 0;
+    ctx->ref_rms = 0.0f;
+    ctx->ref_text.clear();
     if (!ctx->tokenizer.loaded) {
         fprintf(stderr, "omnivoice: voice cloning requires the audio tokenizer — call "
                         "omnivoice_set_tokenizer_path first\n");
@@ -3428,6 +3438,7 @@ int omnivoice_set_voice_prompt(struct omnivoice_context* ctx, const char* wav_pa
     ctx->ref_audio_codes = std::move(codes);
     ctx->ref_T = T_ref;
     ctx->ref_rms = rms;
+    ctx->ref_text = ref_text ? ref_text : "";
     return 0;
 }
 
