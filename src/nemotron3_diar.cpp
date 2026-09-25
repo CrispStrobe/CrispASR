@@ -45,12 +45,42 @@
 
 namespace {
 
+double now_ms() {
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
+}
+
 bool n3d_bench() {
     static const int v = [] {
         const char* e = crispasr_env::get("CRISPASR_NEMOTRON3_DIAR_BENCH");
         return (e && *e && *e != '0') ? 1 : 0;
     }();
     return v != 0;
+}
+
+// Attention variant (#466 perf A/B): 0 manual (default), 1 manual with
+// contiguous Q/K for the KQ matmul, 2 ggml_flash_attn_ext.
+int n3d_attn_mode() {
+    static const int v = [] {
+        const char* e = crispasr_env::get("CRISPASR_NEMOTRON3_DIAR_ATTN");
+        if (!e || !*e)
+            return 0;
+        if (!std::strcmp(e, "cont"))
+            return 1;
+        if (!std::strcmp(e, "flash"))
+            return 2;
+        return 0;
+    }();
+    return v;
+}
+
+// Bench accumulators: graph build + alloc vs compute, summed over chunks.
+struct n3d_bench_acc {
+    double build_ms = 0, compute_ms = 0;
+    int n = 0;
+};
+n3d_bench_acc& n3d_acc() {
+    static n3d_bench_acc a;
+    return a;
 }
 
 struct n3d_layer {
@@ -86,6 +116,7 @@ struct nemotron3_diar_context {
     n3d_hparams hp;
     int mode = -1; // -1 offline, else index into hp.s_modes
     ggml_backend_t backend = nullptr, backend_cpu = nullptr;
+    ggml_backend_t backend_accel = nullptr; // BLAS etc. (CRISPASR_NEMOTRON3_DIAR_ACCEL=1, CPU runs)
     ggml_backend_sched_t sched = nullptr;
     core_gguf::WeightLoad wl;
     std::vector<uint8_t> meta;
@@ -457,6 +488,7 @@ bool run_chunk(nemotron3_diar_context* c, const std::vector<float>& x_rows, int 
                std::vector<float>& logits) {
     const auto& hp = c->hp;
     const int d = hp.d, H = hp.n_heads, hd = d / H, S = hp.n_spk, F = hp.subsample, Hh = hp.head_hidden;
+    const double t_start = n3d_bench() ? now_ms() : 0.0;
     ggml_init_params ip = {c->meta.size(), c->meta.data(), true};
     ggml_context* g = ggml_init(ip);
     ggml_cgraph* gf = ggml_new_graph_custom(g, 8192, false);
@@ -475,6 +507,15 @@ bool run_chunk(nemotron3_diar_context* c, const std::vector<float>& x_rows, int 
         ggml_set_input(kq_mask);
     }
 
+    // flash attention takes an F16 mask [n_kv, n_batch]
+    const int attn_mode = n3d_attn_mode();
+    ggml_tensor* kq_mask_fa = nullptr;
+    if (attn_mode == 2 && use_mask) {
+        kq_mask_fa = ggml_new_tensor_2d(g, GGML_TYPE_F16, N, N);
+        ggml_set_name(kq_mask_fa, "kq_mask_fa");
+        ggml_set_input(kq_mask_fa);
+    }
+
     ggml_tensor* cur = layer_norm(g, x, c->embed_norm_w, c->embed_norm_b);
     const float scale = 1.0f / std::sqrt((float)hd);
     for (int il = 0; il < hp.n_layers; il++) {
@@ -489,14 +530,26 @@ bool run_chunk(nemotron3_diar_context* c, const std::vector<float>& x_rows, int 
                           0.0f, 0.0f);
         K = ggml_rope_ext(g, ggml_cont(g, K), pos, nullptr, hd, GGML_ROPE_TYPE_NEOX, 0, hp.rope_base, 1.0f, 0.0f, 1.0f,
                           0.0f, 0.0f);
-        Q = ggml_permute(g, Q, 0, 2, 1, 3);                             // [hd, N, H]
-        K = ggml_permute(g, K, 0, 2, 1, 3);                             // [hd, N, H]
-        ggml_tensor* Vt = ggml_cont(g, ggml_permute(g, V, 1, 2, 0, 3)); // [N, hd, H]
-        ggml_tensor* kq = ggml_mul_mat(g, K, Q);                        // [N_k, N_q, H]
-        kq = ggml_soft_max_ext(g, kq, kq_mask, scale, 0.0f);
-        ggml_tensor* o = ggml_mul_mat(g, Vt, kq);         // [hd, N_q, H]
-        o = ggml_cont(g, ggml_permute(g, o, 0, 2, 1, 3)); // [hd, H, N]
-        o = ggml_reshape_2d(g, o, d, N);
+        Q = ggml_permute(g, Q, 0, 2, 1, 3); // [hd, N, H]
+        K = ggml_permute(g, K, 0, 2, 1, 3); // [hd, N, H]
+        ggml_tensor* o = nullptr;
+        if (attn_mode == 2) {
+            ggml_tensor* Vp = ggml_permute(g, V, 0, 2, 1, 3); // [hd, N, H]
+            o = ggml_flash_attn_ext(g, Q, K, Vp, kq_mask_fa, scale, 0.0f, 0.0f);
+            ggml_flash_attn_ext_set_prec(o, GGML_PREC_F32);
+            o = ggml_reshape_2d(g, o, d, N); // result [hd, H, N]
+        } else {
+            if (attn_mode == 1) {
+                Q = ggml_cont(g, Q);
+                K = ggml_cont(g, K);
+            }
+            ggml_tensor* Vt = ggml_cont(g, ggml_permute(g, V, 1, 2, 0, 3)); // [N, hd, H]
+            ggml_tensor* kq = ggml_mul_mat(g, K, Q);                        // [N_k, N_q, H]
+            kq = ggml_soft_max_ext(g, kq, kq_mask, scale, 0.0f);
+            o = ggml_mul_mat(g, Vt, kq);                      // [hd, N_q, H]
+            o = ggml_cont(g, ggml_permute(g, o, 0, 2, 1, 3)); // [hd, H, N]
+            o = ggml_reshape_2d(g, o, d, N);
+        }
         o = ggml_add(g, ggml_mul_mat(g, L.o_w, o), L.o_b);
         cur = ggml_add(g, cur, o);
         h = layer_norm(g, cur, L.norm2_w, L.norm2_b);
@@ -533,11 +586,12 @@ bool run_chunk(nemotron3_diar_context* c, const std::vector<float>& x_rows, int 
         fprintf(stderr, "nemotron3_diar: graph alloc failed (N=%d)\n", N);
         return false;
     }
+    const double t_built = n3d_bench() ? now_ms() : 0.0;
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "x_in"), x_rows.data(), 0, (size_t)d * N * sizeof(float));
     std::vector<int32_t> p(N);
     std::iota(p.begin(), p.end(), 0);
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "pos"), p.data(), 0, p.size() * sizeof(int32_t));
-    if (use_mask) {
+    if (use_mask && kq_mask) {
         std::vector<float> m((size_t)N * N, 0.0f);
         for (int q = 0; q < N; q++)
             for (int k = 0; k < N; k++)
@@ -545,9 +599,24 @@ bool run_chunk(nemotron3_diar_context* c, const std::vector<float>& x_rows, int 
                     m[(size_t)q * N + k] = -INFINITY;
         ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "kq_mask"), m.data(), 0, m.size() * sizeof(float));
     }
+    if (kq_mask_fa) {
+        std::vector<ggml_fp16_t> m((size_t)N * N, ggml_fp32_to_fp16(0.0f));
+        const ggml_fp16_t ninf = ggml_fp32_to_fp16(-INFINITY);
+        for (int q = 0; q < N; q++)
+            for (int k = 0; k < N; k++)
+                if (!mask[k])
+                    m[(size_t)q * N + k] = ninf;
+        ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "kq_mask_fa"), m.data(), 0, m.size() * sizeof(ggml_fp16_t));
+    }
     if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "nemotron3_diar: graph compute failed\n");
         return false;
+    }
+    if (n3d_bench()) {
+        auto& a = n3d_acc();
+        a.build_ms += t_built - t_start;
+        a.compute_ms += now_ms() - t_built;
+        a.n++;
     }
     ggml_tensor* lo = ggml_graph_get_tensor(gf, "logits");
     logits.resize((size_t)S * N * F);
@@ -584,9 +653,6 @@ bool embed(nemotron3_diar_context* c, const std::vector<float>& mel, int T, std:
     return true;
 }
 
-double now_ms() {
-    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now().time_since_epoch()).count();
-}
 
 } // namespace
 
@@ -610,9 +676,31 @@ extern "C" nemotron3_diar_context* nemotron3_diar_init_from_file(const char* pat
         nemotron3_diar_free(c);
         return nullptr;
     }
-    ggml_backend_t be[2] = {c->backend, c->backend_cpu};
-    const int n_be = c->backend == c->backend_cpu ? 1 : 2;
-    c->sched = ggml_backend_sched_new(be + (n_be == 1 ? 1 : 0), nullptr, n_be, 8192, false, false);
+    // CPU runs may hand the large matmuls to an ACCEL device (a GGML_BLAS
+    // build registers one) - opt-in while it is being measured (#466 perf).
+    if (c->backend == c->backend_cpu) {
+        const char* e = crispasr_env::get("CRISPASR_NEMOTRON3_DIAR_ACCEL");
+        if (e && *e && *e != '0') {
+            for (size_t i = 0; i < ggml_backend_dev_count() && !c->backend_accel; ++i) {
+                ggml_backend_dev_t dev = ggml_backend_dev_get(i);
+                if (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_ACCEL) {
+                    c->backend_accel = ggml_backend_dev_init(dev, nullptr);
+                    if (c->backend_accel && params.verbosity >= 1)
+                        fprintf(stderr, "nemotron3_diar: using %s\n", ggml_backend_dev_name(dev));
+                }
+            }
+            if (!c->backend_accel)
+                fprintf(stderr, "nemotron3_diar: CRISPASR_NEMOTRON3_DIAR_ACCEL set but no ACCEL device registered\n");
+        }
+    }
+    ggml_backend_t be[3];
+    int n_be = 0;
+    if (c->backend != c->backend_cpu)
+        be[n_be++] = c->backend;
+    if (c->backend_accel)
+        be[n_be++] = c->backend_accel;
+    be[n_be++] = c->backend_cpu;
+    c->sched = ggml_backend_sched_new(be, nullptr, n_be, 8192, false, false);
     c->meta.resize(ggml_tensor_overhead() * 8192 + ggml_graph_overhead_custom(8192, false));
     if (params.verbosity >= 1)
         fprintf(stderr, "nemotron3_diar: %d layers d=%d, %d speakers, chunk %d+%d (fifo %d, cache %d), %s\n",
@@ -627,6 +715,8 @@ extern "C" void nemotron3_diar_free(nemotron3_diar_context* c) {
     if (c->sched)
         ggml_backend_sched_free(c->sched);
     core_gguf::free_weights(c->wl);
+    if (c->backend_accel)
+        ggml_backend_free(c->backend_accel);
     if (c->backend && c->backend != c->backend_cpu)
         ggml_backend_free(c->backend);
     if (c->backend_cpu)
@@ -748,6 +838,7 @@ struct nemotron3_diar_stream {
     long audio_base = 0, n_total = 0;
     long mel_idx = 0; // first mel frame of the next chunk
     bool started = false, ended = false;
+    int max_catchup = 1; // chunks one forward may merge when audio backs up (1 = strict preset)
     // stage captures for the diff harness (scored rows only)
     bool capture = false;
     std::vector<float> cap_mel, cap_emb, cap_logits;
@@ -791,21 +882,29 @@ bool n3d_stream_step(nemotron3_diar_stream* st, const std::vector<float>& mel, i
 }
 
 // Runs every chunk the buffered audio completes; `last` also runs the final one.
+// With max_catchup > 1, up to that many complete chunks that are already
+// buffered run as ONE forward (a chunk of k * chunk_len frames, same look-ahead)
+// - the compute of a single step, so a session that fell behind catches up
+// instead of falling further behind. transformers' streaming forward takes a
+// chunk of any length; the labels then differ slightly from the strict preset.
 bool n3d_stream_drain(nemotron3_diar_stream* st, bool last, std::vector<float>& out) {
     const auto& hp = st->c->hp;
-    const int F = hp.subsample, M = hp.n_mels;
-    const int n_chunk_mel = (st->cl + st->rc) * F;
-    const long first_samples = (long)(n_chunk_mel - 1) * hp.hop + hp.win / 2;
-    const long per_chunk_samples = (long)n_chunk_mel * hp.hop + hp.win;
-    (void)M;
+    const int F = hp.subsample;
+    auto chunk_mel = [&](int k) { return (k * st->cl + st->rc) * F; };
+    auto first_samples = [&](int k) { return (long)(chunk_mel(k) - 1) * hp.hop + hp.win / 2; };
+    auto later_samples = [&](int k) { return (long)chunk_mel(k) * hp.hop + hp.win; };
+    const int kmax = std::max(1, st->max_catchup);
     if (!st->started) {
-        if (st->n_total >= first_samples) {
-            // first chunk: centred windows over the first first_samples samples
-            std::vector<float> mel = n3d_mel(st->c, st->audio.data(), (int)first_samples, true, n_chunk_mel);
-            if (mel.empty() || !n3d_stream_step(st, mel, n_chunk_mel, st->cl, st->cl * F, out))
+        if (st->n_total >= first_samples(1)) {
+            // first chunk(s): centred windows
+            int k = 1;
+            while (k < kmax && st->n_total >= first_samples(k + 1))
+                k++;
+            std::vector<float> mel = n3d_mel(st->c, st->audio.data(), (int)first_samples(k), true, chunk_mel(k));
+            if (mel.empty() || !n3d_stream_step(st, mel, chunk_mel(k), k * st->cl, k * st->cl * F, out))
                 return false;
             st->started = true;
-            st->mel_idx = (long)st->cl * F;
+            st->mel_idx = (long)k * st->cl * F;
         } else if (last) {
             // the whole session is one (last) chunk
             const int T = (int)(st->n_total / hp.hop);
@@ -822,11 +921,14 @@ bool n3d_stream_drain(nemotron3_diar_stream* st, bool last, std::vector<float>& 
     for (;;) {
         const long start = st->mel_idx * hp.hop - hp.n_fft / 2; // absolute sample
         const long off = start - st->audio_base;
-        if (start + per_chunk_samples <= st->n_total) {
-            std::vector<float> mel = n3d_mel(st->c, st->audio.data() + off, (int)per_chunk_samples, false, n_chunk_mel);
-            if (mel.empty() || !n3d_stream_step(st, mel, n_chunk_mel, st->cl, st->cl * F, out))
+        if (start + later_samples(1) <= st->n_total) {
+            int k = 1;
+            while (k < kmax && start + later_samples(k + 1) <= st->n_total)
+                k++;
+            std::vector<float> mel = n3d_mel(st->c, st->audio.data() + off, (int)later_samples(k), false, chunk_mel(k));
+            if (mel.empty() || !n3d_stream_step(st, mel, chunk_mel(k), k * st->cl, k * st->cl * F, out))
                 return false;
-            st->mel_idx += (long)st->cl * F;
+            st->mel_idx += (long)k * st->cl * F;
             continue;
         }
         if (last) {
@@ -879,7 +981,14 @@ extern "C" nemotron3_diar_stream* nemotron3_diar_stream_begin(nemotron3_diar_con
     st->cl = c->hp.s_modes[m][0];
     st->rc = c->hp.s_modes[m][1];
     st->cache.init(c->hp, c->hp.s_fifo_len, c->hp.s_update_period);
+    if (const char* e = crispasr_env::get("CRISPASR_SORTFORMER_CATCHUP"))
+        st->max_catchup = std::max(1, std::atoi(e));
     return st;
+}
+
+extern "C" void nemotron3_diar_stream_set_catchup(nemotron3_diar_stream* st, int max_chunks) {
+    if (st)
+        st->max_catchup = std::max(1, max_chunks);
 }
 
 extern "C" float* nemotron3_diar_stream_push(nemotron3_diar_stream* st, const float* pcm, int n_samples,
@@ -929,6 +1038,7 @@ extern "C" float* nemotron3_diar_probs_stages(nemotron3_diar_context* c, const f
         if (!st)
             return nullptr;
         st->capture = out_mel || out_embeds || out_logits;
+        st->max_catchup = 1; // a whole recording is not a backlog: keep the strict preset
         int r1 = 0, r2 = 0;
         float* p1 = nemotron3_diar_stream_push(st, pcm, n_samples, &r1);
         float* p2 = st->ended ? nullptr : nemotron3_diar_stream_end(st, &r2);
@@ -966,9 +1076,14 @@ extern "C" float* nemotron3_diar_probs_stages(nemotron3_diar_context* c, const f
         std::free(p1);
         std::free(p2);
         nemotron3_diar_stream_free(st);
-        if (bench)
-            fprintf(stderr, "  nemotron3_diar_bench: streaming %s, %.1f ms, %d frames\n", k_modes[c->mode],
-                    now_ms() - t0, r1 + r2);
+        if (bench) {
+            auto& a = n3d_acc();
+            fprintf(stderr,
+                    "  nemotron3_diar_bench: streaming %s, %.1f ms (%d chunks: build+alloc %.1f, compute %.1f), %d "
+                    "frames\n",
+                    k_modes[c->mode], now_ms() - t0, a.n, a.build_ms, a.compute_ms, r1 + r2);
+            a = {};
+        }
         return probs;
     }
 
@@ -1038,9 +1153,14 @@ extern "C" float* nemotron3_diar_probs_stages(nemotron3_diar_context* c, const f
         n_chunks++;
     }
     all_logits.resize((size_t)T * S); // the stacking pad frames past T are dropped
-    if (bench)
-        fprintf(stderr, "  nemotron3_diar_bench: mel %.1f ms, encoder %d chunk(s) %.1f ms, %d frames\n", t_mel - t0,
-                n_chunks, now_ms() - t_mel, T);
+    if (bench) {
+        auto& a = n3d_acc();
+        fprintf(stderr,
+                "  nemotron3_diar_bench: mel %.1f ms, encoder %d chunk(s) %.1f ms (build+alloc %.1f, compute %.1f), "
+                "%d frames\n",
+                t_mel - t0, n_chunks, now_ms() - t_mel, a.build_ms, a.compute_ms, T);
+        a = {};
+    }
 
     float* probs = (float*)malloc(all_logits.size() * sizeof(float));
     for (size_t i = 0; i < all_logits.size(); i++)

@@ -2784,6 +2784,50 @@ int main(int argc, char** argv) {
             printf("%s live 100 ms pushes     %zu rows vs %d one-shot, max_abs %.3g\n", ok ? "[PASS]" : "[FAIL]",
                    live.size() / (size_t)std::max(S, 1), T, max_abs);
             ok ? n_pass++ : n_fail++;
+            // Catch-up: a consumer 3 s behind, merging up to 8 chunks per forward.
+            // Not the strict preset, so agreement is reported, not gated; the
+            // row count and timeline must still match exactly.
+            nemotron3_diar_stream* cu = nemotron3_diar_stream_begin(ctx, std::getenv("CRISPASR_NEMOTRON3_DIAR_MODE"));
+            nemotron3_diar_stream_set_catchup(cu, 8);
+            std::vector<float> caught;
+            const int block = 48000;
+            for (size_t off = 0; cu && off <= samples.size(); off += block) {
+                const int n = (int)std::min<size_t>(block, samples.size() - std::min(off, samples.size()));
+                int rows = 0;
+                float* q = off < samples.size() ? nemotron3_diar_stream_push(cu, samples.data() + off, n, &rows)
+                                                : nemotron3_diar_stream_end(cu, &rows);
+                if (q)
+                    caught.insert(caught.end(), q, q + (size_t)rows * S);
+                free(q);
+                if (off >= samples.size())
+                    break;
+            }
+            nemotron3_diar_stream_free(cu);
+            const bool rows_ok = caught.size() == (size_t)T * S;
+            size_t agree = 0;
+            for (size_t i = 0; rows_ok && i < caught.size(); i++)
+                agree += (caught[i] > 0.5f) == (pr[i] > 0.5f);
+            printf("%s catch-up (3 s blocks)  %zu rows vs %d; decisions agree %.3f%% with the strict preset\n",
+                   rows_ok ? "[PASS]" : "[FAIL]", caught.size() / (size_t)std::max(S, 1), T,
+                   rows_ok ? 100.0 * agree / std::max<size_t>(caught.size(), 1) : 0.0);
+            rows_ok ? n_pass++ : n_fail++;
+            if (const char* seg_out = std::getenv("CRISPASR_DIFF_CATCHUP_SEGMENTS_OUT")) {
+                if (FILE* f = fopen(seg_out, "w")) {
+                    for (int sp = 0; sp < S && rows_ok; sp++) {
+                        int st0 = -1;
+                        for (int t = 0; t <= T; t++) {
+                            const bool on = t < T && caught[(size_t)t * S + sp] > 0.5f;
+                            if (on && st0 < 0)
+                                st0 = t;
+                            if (!on && st0 >= 0) {
+                                fprintf(f, "%.2f %.2f %d\n", st0 * 0.01, t * 0.01, sp);
+                                st0 = -1;
+                            }
+                        }
+                    }
+                    fclose(f);
+                }
+            }
         }
         free(mel);
         free(emb);

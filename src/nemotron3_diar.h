@@ -52,6 +52,12 @@ struct nemotron3_diar_stream* nemotron3_diar_stream_begin(struct nemotron3_diar_
 float* nemotron3_diar_stream_push(struct nemotron3_diar_stream* st, const float* pcm, int n_samples, int* out_rows);
 float* nemotron3_diar_stream_end(struct nemotron3_diar_stream* st, int* out_rows);
 void nemotron3_diar_stream_free(struct nemotron3_diar_stream* st);
+// Catch-up: when push() finds several complete chunks already buffered (the
+// caller fell behind), run up to max_chunks of them as ONE forward - one step's
+// compute - instead of one forward each. 1 (default) keeps the strict preset;
+// the labels then match transformers exactly. Default from
+// CRISPASR_SORTFORMER_CATCHUP.
+void nemotron3_diar_stream_set_catchup(struct nemotron3_diar_stream* st, int max_chunks);
 
 // Frames of an n_samples recording that hold audio. Offline: floor(n_samples /
 // hop); the probability matrices have one more row (the centred STFT's last
