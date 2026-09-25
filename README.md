@@ -782,13 +782,12 @@ huggingface-cli download handy-computer/canary-180m-flash-gguf \
 Canary 180M Flash supports ASR in `en`, `de`, `es`, and `fr`, plus only the
 English-pivot translation pairs EN↔DE/ES/FR. It requires an explicit source
 language and does not provide language detection or native streaming. Its small
-GGUFs are especially suitable for mobile packaging, but Android performance is
-not claimed until the device gate passes. Inputs through 40 seconds run
-directly; longer files use checkpoint-specific offline 20-second windows with
-6-second overlap and centered stitching. That path preserves four repeated JFK
-utterances and monotonic runtime timings in the current regression fixture, but
-is not native model streaming or a broad long-audio quality benchmark. See the
-[CLI guide](docs/cli.md#canary-180m-flash) for quantization, long-form, and
+GGUFs are especially suitable for mobile packaging. Inputs through 40 seconds
+run directly; longer files use checkpoint-specific offline 20-second windows
+with 6-second overlap and centered stitching. That path preserves four repeated
+JFK utterances and monotonic runtime timings in the current regression fixture,
+but is not native model streaming or a broad long-audio quality benchmark. See
+the [CLI guide](docs/cli.md#canary-180m-flash) for quantization, long-form, and
 timestamp caveats.
 
 ### Voxtral (speech-LLM with auto-download)

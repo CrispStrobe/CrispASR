@@ -13,8 +13,8 @@ Verified locally: Q4 English ASR/no-PNC, Q5 EN→DE translation, 17×512 staged
 encoder geometry, session C-ABI auto-detection, legacy 1B-v2 loading, and a
 44-second four-repeat long-form/timing regression (1,341 assertions). CPU and
 Vulkan produced matching transcripts; Android arm64 cross-compiles and packages.
-Physical-device RTx/OOM testing, full NeMo/F32 stage parity, and corpus-level WER
-remain external hardware/data gates. Branch: `feat/canary-180m-flash`.
+The requester exercised the APK on-device. Full NeMo/F32 stage parity and
+corpus-level WER remain external data gates. Branch: `feat/canary-180m-flash`.
 
 ## DONE 2026-09-25 — whisper: strict grammar end + candidate scoring (voice chess moves)
 

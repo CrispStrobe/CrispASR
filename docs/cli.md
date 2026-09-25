@@ -649,8 +649,8 @@ quant-sensitivity gate, not a broad WER or translation-quality benchmark.
 - CrispASR can still expose runtime-derived cross-attention DTW timing, and
   `-am <aligner.gguf>` can run an optional external forced aligner. Those are
   CrispASR facilities, not native upstream timestamp support from this GGUF.
-- The 180M size is especially suitable for mobile packaging, but no Android
-  performance claim is made until the device gate passes.
+- The 180M size is especially suitable for mobile packaging; the Android arm64
+  APK uses this same backend and model contract.
 
 Canary 1B v2 remains supported and remains the registry default for
 `--backend canary -m auto`; adding direct 180M Flash compatibility does not
