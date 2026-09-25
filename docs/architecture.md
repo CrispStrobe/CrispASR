@@ -1358,6 +1358,24 @@ overlapping speech included. Weights are OpenMDW-1.1 (commercial use allowed).
   (chunk, look-ahead) in 80 ms frames: `low_latency` (9, 4), `very_low_latency`
   (6, 2), `ultra_low_latency` (3, 1). `--sortformer-mode` /
   `CRISPASR_SORTFORMER_MODE` run a whole file through one session.
+- Streaming parity (Kaggle CPU, both clips, all three presets, F32 and F16):
+  mel / embeddings / logits / probabilities cos 1.000000, 100 % of decisions
+  and identical segment lists vs the model card's streaming driver, and 100 ms
+  pushes through the live API reproduce the one-shot rows. Frame DER on the AMI
+  clip, C++ = transformers in every mode: offline 29.5 %, `low_latency` 33.5 %,
+  `very_low_latency` 32.7 %, `ultra_low_latency` 33.0 %.
+- Streaming cost: every chunk re-encodes the whole speaker cache + FIFO
+  (264 + 264 frames) to score 9 / 6 / 3 new ones, so compute per second of audio
+  grows as the chunk shrinks. On a 4-vCPU Kaggle CPU (F32) the 60 s AMI clip
+  takes 8 s offline but 138 s / 202 s / 406 s in the three presets (transformers
+  fp32 / MKL on the same box: ~57 s for `low_latency`), i.e. slower than real
+  time: live streaming wants a GPU or a much larger CPU. NVIDIA's q8_0 on the
+  CPU: 6.6 s offline, 105 s `low_latency` (decisions 99.9 % vs transformers).
+- GPU (Tesla T4, CUDA): the 60 s AMI clip takes 0.27 s offline and 3.8 s in
+  `low_latency` (F32; 46 ms per chunk, ~16x faster than real time), with the same
+  parity as on the CPU. The converter keeps `encoder.pre_encode.proj` in F32:
+  in streaming it projects only 13 rows per chunk, and CUDA's small-batch F16
+  path otherwise flips a few borderline decisions.
 
 ### gigaam
 

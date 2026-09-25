@@ -150,7 +150,10 @@ def main() -> None:
 
     put("preprocessor.fb", slaney_mel(sr, n_fft, fe.get("feature_size", 128)), force_f32=True)
     A = "model.audio_tower."
-    put("encoder.pre_encode.proj.weight", sd[A + "embedder.projection.weight"])
+    # (512, 1024), kept F32: streaming projects only chunk + look-ahead (13 rows),
+    # and CUDA's small-batch F16 matmul rounds the activations to F16 -> embeds
+    # off by 5e-2 and a few flipped decisions vs transformers (T4, #466)
+    put("encoder.pre_encode.proj.weight", sd[A + "embedder.projection.weight"], force_f32=True)
     put("encoder.embed_norm.weight", sd[A + "input_layer_norm.weight"])
     put("encoder.embed_norm.bias", sd[A + "input_layer_norm.bias"])
     put("encoder.final_norm.weight", sd[A + "layer_norm.weight"])
