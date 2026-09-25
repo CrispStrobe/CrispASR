@@ -232,6 +232,18 @@ TEST_CASE("hojo repetition penalty matches transformers", "[hojo]") {
         REQUIRE(logits[(size_t)t] == before[(size_t)t]); // untouched tokens are untouched
 }
 
+TEST_CASE("hojo repetition penalty hits a repeated token once, like transformers", "[hojo]") {
+    // RepetitionPenaltyLogitsProcessor gathers every position's ORIGINAL score
+    // and scatters it back, so a token generated three times is penalised once.
+    const int V = 4;
+    std::vector<float> logits = {2.0f, -2.0f, 1.0f, 1.0f};
+    const std::vector<int32_t> gen = {0, 1, 0, 1, 0};
+    apply_repetition_penalty(logits.data(), V, gen.data(), (int)gen.size(), 2.0f);
+    REQUIRE(logits[0] == 1.0f);  // not 2 / 2^3
+    REQUIRE(logits[1] == -4.0f); // not -2 * 2^2
+    REQUIRE(logits[2] == 1.0f);
+}
+
 TEST_CASE("hojo repetition penalty of 1.0 is the identity", "[hojo]") {
     const int V = 4;
     std::vector<float> logits = {1.5f, -1.5f, 0.0f, 9.0f};

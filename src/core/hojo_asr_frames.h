@@ -14,6 +14,7 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cstddef>
 #include <cstdint>
 #include <vector>
@@ -154,8 +155,13 @@ inline void apply_repetition_penalty(float* logits, int vocab, const int32_t* ge
                                      float penalty) {
     if (!logits || penalty == 1.0f || n_generated <= 0)
         return;
-    for (int i = 0; i < n_generated; i++) {
-        const int t = generated[i];
+    // Once per DISTINCT token: transformers' RepetitionPenaltyLogitsProcessor
+    // gathers the original score for every position and scatters it back, so a
+    // token generated twice is still penalised once (#438 - this applied p^n).
+    std::vector<int32_t> uniq(generated, generated + n_generated);
+    std::sort(uniq.begin(), uniq.end());
+    uniq.erase(std::unique(uniq.begin(), uniq.end()), uniq.end());
+    for (const int t : uniq) {
         if (t < 0 || t >= vocab)
             continue;
         const float s = logits[t];

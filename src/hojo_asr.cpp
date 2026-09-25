@@ -266,6 +266,13 @@ struct hojo_asr_context {
     ggml_tensor* kv_v = nullptr;
     int kv_max_ctx = 0;
     int kv_n_used = 0;
+    // Beam search (#438): one KV cache per beam. Slot 0 is kv_k/kv_v above;
+    // slots 1..B-1 live here, same shape. hojo_asr_run_llm_kv reads
+    // ctx->kv_k/kv_v, so a beam runs by pointing those at its slot.
+    ggml_context* beam_kv_ctx = nullptr;
+    ggml_backend_buffer_t beam_kv_buf = nullptr;
+    std::vector<ggml_tensor*> beam_k, beam_v; // index 0 unused (slot 0 = kv_k/kv_v)
+    int beam_kv_slots = 0, beam_kv_max_ctx = 0;
 
     // Conv-stem graph, rebuilt per encoder invocation (see the note in
     // hojo_asr_run_encoder — caching it across invocations is a use-after-free).
@@ -1642,6 +1649,252 @@ static void hojo_asr_apply_repetition_penalty(float* logits, int vocab, const in
     core_hojo_frames::apply_repetition_penalty(logits, vocab, generated, n_generated, penalty);
 }
 
+// ---------------------------------------------------------------------------
+// Beam search, transformers 4.57 GenerationMixin._beam_search as HOJO_ASR.infer
+// calls it: batch 1, one EOS id, do_sample=False, early_stopping=False, and a
+// decoder prompt length of 0 (the prompt goes in as inputs_embeds, so
+// input_ids starts empty; min_length=1 therefore becomes 0 - no EOS ban).
+// Per step, for every running beam: log_softmax(logits) in float32, THEN the
+// repetition penalty on those log-probs over the beam's own generated tokens
+// (processors run after log_softmax in beam search), plus the beam's running
+// score. Top 2B candidates over beams x vocab; a candidate that is EOS or
+// reaches max_length "hits"; only the top B candidates may finish, scored
+// sum / generated_len^length_penalty; the best B non-hit candidates keep
+// running. Stop when the early-stop heuristic (best running / cur_len vs the
+// worst finished score) says no running beam can improve, or every candidate
+// hit. Returns the best finished hypothesis.
+//
+// Unlike core_beam_decode (replays each beam's suffix: O(B*T^2) forwards), each
+// beam owns a KV slot and feeds one token per step: B forwards per step. On a
+// reorder a parent's slot passes to its first child; extra children copy it
+// into a slot freed by a childless beam.
+// ---------------------------------------------------------------------------
+static bool hojo_asr_beam_kv_slots(hojo_asr_context* ctx, int B) {
+    if (B <= 1)
+        return true;
+    if (ctx->beam_kv_slots >= B && ctx->beam_kv_max_ctx == ctx->kv_max_ctx)
+        return true;
+    if (ctx->beam_kv_buf)
+        ggml_backend_buffer_free(ctx->beam_kv_buf);
+    if (ctx->beam_kv_ctx)
+        ggml_free(ctx->beam_kv_ctx);
+    ctx->beam_kv_buf = nullptr;
+    ctx->beam_k.assign(B, nullptr);
+    ctx->beam_v.assign(B, nullptr);
+    struct ggml_init_params ip = {(size_t)2 * B * ggml_tensor_overhead(), nullptr, true};
+    ctx->beam_kv_ctx = ggml_init(ip);
+    for (int s = 1; s < B; s++) {
+        ctx->beam_k[s] = ggml_dup_tensor(ctx->beam_kv_ctx, ctx->kv_k);
+        ctx->beam_v[s] = ggml_dup_tensor(ctx->beam_kv_ctx, ctx->kv_v);
+    }
+    ctx->beam_kv_buf = ggml_backend_alloc_ctx_tensors(ctx->beam_kv_ctx, ctx->backend);
+    if (!ctx->beam_kv_buf) {
+        fprintf(stderr, "hojo_asr: beam kv alloc failed (%d slots)\n", B);
+        ctx->beam_kv_slots = 0;
+        return false;
+    }
+    ctx->beam_kv_slots = B;
+    ctx->beam_kv_max_ctx = ctx->kv_max_ctx;
+    return true;
+}
+
+static float* hojo_asr_beam_forward(hojo_asr_context* ctx, int slot, int32_t tok, int pos, int* vocab) {
+    ggml_tensor* k0 = ctx->kv_k;
+    ggml_tensor* v0 = ctx->kv_v;
+    if (slot > 0) {
+        ctx->kv_k = ctx->beam_k[slot];
+        ctx->kv_v = ctx->beam_v[slot];
+    }
+    float* emb = hojo_asr_embed_tokens(ctx, &tok, 1);
+    float* lg = nullptr;
+    if (emb) {
+        int dummy = 0;
+        lg = hojo_asr_run_llm_kv(ctx, emb, 1, pos, &dummy, vocab);
+        std::free(emb);
+    }
+    ctx->kv_k = k0;
+    ctx->kv_v = v0;
+    return lg;
+}
+
+static void hojo_asr_beam_copy_slot(hojo_asr_context* ctx, int src, int dst) {
+    ggml_tensor* sk = src == 0 ? ctx->kv_k : ctx->beam_k[src];
+    ggml_tensor* sv = src == 0 ? ctx->kv_v : ctx->beam_v[src];
+    ggml_tensor* dk = dst == 0 ? ctx->kv_k : ctx->beam_k[dst];
+    ggml_tensor* dv = dst == 0 ? ctx->kv_v : ctx->beam_v[dst];
+    ggml_backend_tensor_copy(sk, dk);
+    ggml_backend_tensor_copy(sv, dv);
+}
+
+struct hojo_beam_hyp {
+    std::vector<int32_t> toks;
+    std::vector<float> probs; // softmax prob of each token in its beam (for the token callback)
+    float score = -1.0e9f;
+    int slot = -1;
+    bool finished = false;
+};
+
+// logits0: prefill logits (slot 0 holds the prompt). Frees nothing it did not allocate.
+static bool hojo_asr_beam_hf(hojo_asr_context* ctx, const float* logits0, int vocab, int n_prompt, int max_new, int B,
+                             float length_penalty, float rep_penalty, int eos, std::vector<int32_t>& out,
+                             std::vector<float>& out_probs) {
+    const int K = 2 * B; // max(2, 1 + n_eos) * num_beams with one EOS id
+    if (!hojo_asr_beam_kv_slots(ctx, B))
+        return false;
+    auto lp_div = [&](int len) { return (float)std::pow((double)len, (double)length_penalty); };
+
+    std::vector<hojo_beam_hyp> running(1); // step 0: beams 1..B-1 sit at -1e9 and never win a top-K slot
+    running[0].score = 0.0f;
+    running[0].slot = 0;
+    std::vector<std::vector<float>> logits(1, std::vector<float>(logits0, logits0 + vocab));
+    std::vector<hojo_beam_hyp> finished(B); // score -1e9, finished=false
+    bool heur_unsat = true;
+
+    struct cand {
+        float s;
+        int beam, tok;
+        float prob;
+    };
+    for (int cur = 0;; cur++) {
+        // 1. accumulated log-probs, top-K over beams x vocab
+        std::vector<cand> top; // kept sorted descending, size <= K
+        top.reserve(K + 1);
+        for (size_t b = 0; b < running.size(); b++) {
+            std::vector<float>& lg = logits[b];
+            float mx = -INFINITY;
+            for (int v = 0; v < vocab; v++)
+                mx = std::max(mx, lg[v]);
+            double sum = 0.0;
+            for (int v = 0; v < vocab; v++)
+                sum += std::exp((double)(lg[v] - mx));
+            const float lse = mx + (float)std::log(sum);
+            for (int v = 0; v < vocab; v++)
+                lg[v] -= lse; // log_softmax
+            core_hojo_frames::apply_repetition_penalty(lg.data(), vocab, running[b].toks.data(),
+                                                       (int)running[b].toks.size(), rep_penalty);
+            const float base = running[b].score;
+            for (int v = 0; v < vocab; v++) {
+                const float sc = lg[v] + base;
+                if ((int)top.size() == K && !(sc > top.back().s))
+                    continue; // ties keep the earlier (lower flat index) candidate
+                cand c{sc, (int)b, v, 0.0f};
+                auto it =
+                    std::upper_bound(top.begin(), top.end(), c, [](const cand& a, const cand& x) { return a.s > x.s; });
+                top.insert(it, c);
+                if ((int)top.size() > K)
+                    top.pop_back();
+            }
+        }
+        for (auto& c : top) // p(token) for the callback: exp of its (penalised) log-prob in its beam
+            c.prob = std::exp(logits[c.beam][c.tok]);
+        const int nk = (int)top.size();
+        std::vector<bool> hits(nk);
+        bool all_hit = true;
+        for (int k = 0; k < nk; k++) {
+            hits[k] = top[k].tok == eos || cur + 1 >= max_new;
+            all_hit = all_hit && hits[k];
+        }
+
+        // 2. finished beams: only the top-B candidates may finish
+        std::vector<hojo_beam_hyp> merged = finished;
+        for (int k = 0; k < nk; k++) {
+            hojo_beam_hyp h;
+            h.toks = running[top[k].beam].toks;
+            h.toks.push_back(top[k].tok);
+            h.probs = running[top[k].beam].probs;
+            h.probs.push_back(top[k].prob);
+            const bool fin = k < B && hits[k];
+            float sc = top[k].s / lp_div(cur + 1);
+            if (!heur_unsat)
+                sc += -1.0e9f;
+            if (!fin)
+                sc += -1.0e9f;
+            h.score = sc;
+            h.finished = fin;
+            merged.push_back(std::move(h));
+        }
+        std::stable_sort(merged.begin(), merged.end(),
+                         [](const hojo_beam_hyp& a, const hojo_beam_hyp& b) { return a.score > b.score; });
+        merged.resize(B);
+        finished = std::move(merged);
+
+        // 3. next running beams: the best B candidates that did not hit
+        std::vector<int> order(nk);
+        for (int k = 0; k < nk; k++)
+            order[k] = k;
+        std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
+            const float sa = top[a].s + (hits[a] ? -1.0e9f : 0.0f), sb = top[b].s + (hits[b] ? -1.0e9f : 0.0f);
+            return sa > sb;
+        });
+        const int nb = std::min(B, nk);
+        std::vector<hojo_beam_hyp> next(nb);
+        // KV slots: a parent's slot goes to its first child; later children copy it
+        std::vector<int> children(running.size(), 0);
+        for (int i = 0; i < nb; i++)
+            children[top[order[i]].beam]++;
+        std::vector<int> free_slots;
+        std::vector<bool> used(B, false);
+        for (size_t b = 0; b < running.size(); b++)
+            if (children[b] > 0)
+                used[running[b].slot] = true;
+        for (int s = 0; s < B; s++)
+            if (!used[s])
+                free_slots.push_back(s);
+        std::vector<bool> slot_taken(running.size(), false);
+        for (int i = 0; i < nb; i++) {
+            const cand& c = top[order[i]];
+            const hojo_beam_hyp& par = running[c.beam];
+            next[i].toks = par.toks;
+            next[i].toks.push_back(c.tok);
+            next[i].probs = par.probs;
+            next[i].probs.push_back(c.prob);
+            next[i].score = c.s + (hits[order[i]] ? -1.0e9f : 0.0f);
+            if (!slot_taken[c.beam]) {
+                slot_taken[c.beam] = true;
+                next[i].slot = par.slot;
+            } else {
+                next[i].slot = free_slots.back();
+                free_slots.pop_back();
+                hojo_asr_beam_copy_slot(ctx, par.slot, next[i].slot);
+            }
+        }
+        running = std::move(next);
+
+        // 4. early-stop heuristic (sticky), stop conditions
+        const int cur_len = cur + 1;
+        const float best_running = running.empty() ? -1.0e9f : running[0].score / lp_div(cur_len);
+        float min_fin = finished[0].score;
+        for (const auto& f : finished)
+            min_fin = std::min(min_fin, f.score);
+        bool any = false;
+        for (const auto& f : finished)
+            any = any || best_running > (f.finished ? min_fin : -1.0e9f);
+        heur_unsat = heur_unsat && any;
+        if (!heur_unsat || all_hit || running.empty())
+            break;
+
+        // 5. one forward per running beam: its newest token into its own slot
+        logits.assign(running.size(), {});
+        for (size_t b = 0; b < running.size(); b++) {
+            int v = 0;
+            float* lg = hojo_asr_beam_forward(ctx, running[b].slot, running[b].toks.back(),
+                                              n_prompt + (int)running[b].toks.size() - 1, &v);
+            if (!lg)
+                return false;
+            logits[b].assign(lg, lg + vocab);
+            std::free(lg);
+        }
+    }
+    const hojo_beam_hyp& best = finished[0];
+    out = best.toks;
+    out_probs = best.probs;
+    if (!out.empty() && out.back() == eos) {
+        out.pop_back();
+        out_probs.pop_back();
+    }
+    return true;
+}
+
 static char* hojo_asr_impl(struct hojo_asr_context* ctx, const float* samples, int n_samples, hojo_asr_token_cb on_tok,
                            void* userdata) {
     if (!ctx || !samples || n_samples <= 0)
@@ -1741,59 +1994,30 @@ static char* hojo_asr_impl(struct hojo_asr_context* ctx, const float* samples, i
         return nullptr;
 
     const float rep_penalty = hp.gen_repetition_penalty;
-    // The checkpoint's recipe is num_beams=4, but `core_beam_decode` rebuilds
-    // each beam's KV by REPLAYING its whole suffix every step, so beam search
-    // costs O(B*T^2) token-forwards against greedy's O(T). On this 4.4 B
-    // decoder that is 80,400 forwards vs 200 for a 9-second clip -- hours
-    // rather than minutes. A default nobody can afford to run is not a
-    // faithful default, so greedy is the default and `-bs 4` selects the
-    // checkpoint's recipe explicitly.
-    const int beam = ctx->beam_size > 0 ? ctx->beam_size : 1;
+    // #438: the checkpoint's recipe (config.yaml generate: num_beams 4) is the
+    // default again, now that beam search keeps a KV slot per beam - B forwards
+    // per step instead of core_beam_decode's O(B*T^2) replays. Greedy drops whole
+    // phrases on this model (the reporter's tt.wav, jfk with Hojo-ASR-V1) where
+    // the reference beam-4 transcript keeps them. -bs 1 selects greedy.
+    const int beam = ctx->beam_size > 0 ? ctx->beam_size : std::max(1, (int)hp.gen_num_beams);
 
     // 6. Decode
     std::vector<int32_t> generated;
     {
         hojo_asr_bench_stage _b("decode");
         if (beam > 1) {
-            // Say what this is about to cost before spending it.
-            const long long fwd = (long long)beam * max_new * (max_new + 1) / 2;
-            fprintf(stderr,
-                    "hojo_asr: beam=%d over <=%d tokens -> %lld token-forwards "
-                    "(replay-from-prefix, O(B*T^2)); greedy would be %d. Use -bs 1 "
-                    "if this is too slow.\n",
-                    beam, max_new, fwd, max_new);
-            // The repetition penalty is applied INSIDE replay_fn, over that
-            // beam's own suffix — which is exactly the per-beam `input_ids`
-            // transformers penalises. Step 0 is unpenalised in both (the
-            // sequence is still empty), so the prefill logits pass through.
-            auto replay = [&vocab, rep_penalty](hojo_asr_context* c, const int32_t* toks, int n,
-                                                int prompt_len) -> float* {
-                float* emb = hojo_asr_embed_tokens(c, toks, n);
-                if (!emb)
-                    return nullptr;
-                int dummy = 0;
-                float* lg = hojo_asr_run_llm_kv(c, emb, n, prompt_len, &dummy, &vocab);
-                std::free(emb);
-                if (lg)
-                    hojo_asr_apply_repetition_penalty(lg, vocab, toks, n, rep_penalty);
-                return lg;
-            };
-            core_beam_decode::Config cfg;
-            cfg.max_new_tokens = max_new;
-            cfg.eos_id = (int)hp.eos_token_id;
-            cfg.vocab_size = vocab;
-            cfg.beam_size = beam;
-            cfg.prompt_len = n_prompt;
-            auto br = core_beam_decode::run_with_probs(ctx, logits, replay, cfg);
-            generated = std::move(br.tokens);
+            std::vector<float> probs;
+            const bool ok = hojo_asr_beam_hf(ctx, logits, vocab, n_prompt, max_new, beam, hp.gen_length_penalty,
+                                             rep_penalty, (int)hp.eos_token_id, generated, probs);
             free(logits);
             logits = nullptr;
+            if (!ok) {
+                fprintf(stderr, "hojo_asr: beam search failed\n");
+                return nullptr;
+            }
             if (on_tok)
-                for (size_t i = 0; i < generated.size() && i < br.probs.size(); i++)
-                    if (generated[i] != (int)hp.eos_token_id)
-                        on_tok(generated[i], br.probs[i], userdata);
-            if (!generated.empty() && generated.back() == (int)hp.eos_token_id)
-                generated.pop_back();
+                for (size_t i = 0; i < generated.size(); i++)
+                    on_tok(generated[i], i < probs.size() ? probs[i] : 0.0f, userdata);
         } else {
             const bool trace = [] {
                 const char* e = crispasr_env::get("CRISPASR_HOJO_ASR_LOGIT_TRACE");
@@ -2025,6 +2249,10 @@ extern "C" void hojo_asr_free(struct hojo_asr_context* ctx) {
         ggml_backend_buffer_free(ctx->kv_buf);
     if (ctx->kv_ctx)
         ggml_free(ctx->kv_ctx);
+    if (ctx->beam_kv_buf)
+        ggml_backend_buffer_free(ctx->beam_kv_buf);
+    if (ctx->beam_kv_ctx)
+        ggml_free(ctx->beam_kv_ctx);
     if (ctx->sched)
         ggml_backend_sched_free(ctx->sched);
     if (ctx->model.buf)
