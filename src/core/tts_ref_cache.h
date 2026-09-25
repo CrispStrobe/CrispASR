@@ -27,17 +27,23 @@
 
 #pragma once
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 #include <ctime>
+#include <filesystem>
 #include <string>
+#include <system_error>
 #include <sys/stat.h>
 #include <vector>
 
 #ifdef _WIN32
-#include <direct.h> // _mkdir
+#include <direct.h>  // _mkdir
+#include <process.h> // _getpid
+#else
+#include <unistd.h> // getpid
 #endif
 
 namespace crispasr_ref_cache {
@@ -113,9 +119,29 @@ inline bool load(const std::string& cache_path, const std::string& voice_path, c
     return ok;
 }
 
+// Process id, for the unique temp-file name the atomic save needs.
+inline int cache_pid() {
+#ifdef _WIN32
+    return _getpid();
+#else
+    return (int)getpid();
+#endif
+}
+
+// Write to a unique sibling temp file and rename it into place. rename() is
+// atomic within one filesystem, so a concurrent reader sees either the previous
+// complete file or the new complete file — never a half-written one.
+//
+// The previous plain fopen("wb") allowed two processes to interleave writes on
+// the same content-addressed path (two servers sharing a cache dir and encoding
+// the same reference at the same moment), and a truncated blob is only detected
+// on read-back, after the work that would have used it.
 inline void save(const std::string& cache_path, const char* tag, const std::vector<uint32_t>& shape,
                  const void* payload, size_t nbytes) {
-    FILE* f = std::fopen(cache_path.c_str(), "wb");
+    static std::atomic<uint64_t> seq{0};
+    const std::string tmp = cache_path + ".tmp-" + std::to_string((unsigned long long)cache_pid()) + "-" +
+                            std::to_string((unsigned long long)seq.fetch_add(1));
+    FILE* f = std::fopen(tmp.c_str(), "wb");
     if (!f)
         return;
     auto wr = [&](const void* p, size_t n) { std::fwrite(p, 1, n, f); };
@@ -130,7 +156,17 @@ inline void save(const std::string& cache_path, const char* tag, const std::vect
         wru32(d);
     wru32((uint32_t)nbytes);
     wr(payload, nbytes);
-    std::fclose(f);
+    const bool flushed = (std::fclose(f) == 0);
+    if (!flushed) {
+        std::remove(tmp.c_str());
+        return;
+    }
+    // Replaces an existing target on both platforms (POSIX rename(2); MSVC
+    // uses MOVEFILE_REPLACE_EXISTING). Failure leaves the old entry intact.
+    std::error_code ec;
+    std::filesystem::rename(tmp, cache_path, ec);
+    if (ec)
+        std::remove(tmp.c_str());
 }
 
 // ── float-blob convenience (latents / conditioning) ──
