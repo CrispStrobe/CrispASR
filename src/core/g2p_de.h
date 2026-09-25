@@ -12,6 +12,7 @@
 
 #include "core/g2p_de_unstressed.h"
 #include "core/num2words_de.h" // #316: spell digits out before phonemizing
+#include "core/g2p_alnum.h"
 
 #include <cstdio>
 #include <cstring>
@@ -680,8 +681,30 @@ inline std::vector<std::string> tokenize(const std::string& text) {
 
 // ── Main API ────────────────────────────────────────────────────────
 
+// A single letter on its own is read by its NAME, as espeak-ng (the model's
+// training phonemizer) reads it: chess squares ("d4" -> "d vier" after the
+// digit split), grades, list items. The espeak_de dictionary was generated one
+// word at a time and has no single letters, so they used to fall through to
+// the letter-to-sound rules - "d" came out `t` (final devoicing), "f" as `f`.
+// Values: `espeak-ng -v de -q --ipa <letter>`.
+inline const char* letter_name_de(const std::string& lower) {
+    static const std::map<std::string, const char*> names = {
+        {"a", "ˈɑː"},       {"b", "bˈeː"},  {"c", "tsˈeː"}, {"d", "dˈeː"}, {"e", "ˈeː"},  {"f", "ˈɛf"},
+        {"g", "ɡˈeː"},      {"h", "hˈɑː"},  {"i", "ˈiː"},   {"j", "jˈɔt"}, {"k", "kˈɑː"}, {"l", "ˈɛl"},
+        {"m", "ˈɛm"},       {"n", "ˈɛn"},   {"o", "ˈoː"},   {"p", "pˈeː"}, {"q", "kˈuː"}, {"r", "ˈɛɾ"},
+        {"s", "ˈɛs"},       {"t", "tˈeː"},  {"u", "ˈuː"},   {"v", "fˈaʊ"}, {"w", "vˈeː"}, {"x", "ˈɪks"},
+        {"y", "ˈʏpsɪlˌɔn"}, {"z", "tsˈɛt"}, {"ä", "ˈɛː"},   {"ö", "ˈøː"},  {"ü", "ˈyː"},
+    };
+    auto it = names.find(lower);
+    return it == names.end() ? nullptr : it->second;
+}
+
 inline std::string word_to_ipa(const context& ctx, const std::string& word) {
     std::string lower = to_lower_de(word);
+
+    // Tier 0: a lone letter
+    if (const char* name = letter_name_de(lower))
+        return name;
 
     // Tier 1: full-word dictionary lookup
     if (ctx.dict.loaded) {
@@ -724,7 +747,7 @@ inline std::string text_to_ipa(const context& ctx, const std::string& text) {
     // This must run before tokenize(), which splits on ',' and '.' — the two
     // characters German uses as decimal mark and thousands separator. Expanding
     // afterwards would already have "3,14" torn into "3", "," and "14".
-    auto words = tokenize(core_num2words_de::expand(text));
+    auto words = tokenize(core_num2words_de::expand(core_g2p_alnum::split_letters_digits(text)));
     // A mark that the consumer wants goes flush against the word before it and
     // is followed by a space, the way misaki emits English. A mark it does not
     // want still separates its neighbours — with ONE space, not the two the old

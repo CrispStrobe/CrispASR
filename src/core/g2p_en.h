@@ -26,6 +26,7 @@
 
 #include "core/g2p_ctxwords.h"
 #include "core/num2words_en.h"
+#include "core/g2p_alnum.h"
 
 namespace g2p_en {
 
@@ -1182,7 +1183,9 @@ inline std::string normalize_technical_tokens(const std::string& text) {
         if (!matched)
             result += expanded[i++];
     }
-    return result;
+    // After the rules (which own "OAuth2", "D3.js"): split what is left of
+    // letters-then-digits ("d4", "B52") and spell the freed digits.
+    return core_num2words_en::expand(core_g2p_alnum::split_letters_digits(result));
 }
 
 // ── Tokenizer ───────────────────────────────────────────────────────

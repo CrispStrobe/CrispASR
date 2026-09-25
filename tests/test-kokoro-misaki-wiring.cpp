@@ -36,7 +36,13 @@ const char* kLexicon = R"({
   "I": "ˈI",
   "box": "bˈɑks",
   "apple": "ˈæpᵊl",
-  "dramatic": "dɹəmˈæɾɪk"
+  "dramatic": "dɹəmˈæɾɪk",
+  "d": "dˈi",
+  "f": "ˈɛf",
+  "knight": "nˈIt",
+  "three": "θɹˈi",
+  "four": "fˈɔɹ",
+  "eight": "ˈAt"
 })";
 
 std::string phonemize(const char* text) {
@@ -77,6 +83,18 @@ TEST_CASE("phonemize_misaki_en applies misaki's rules, not just loads its words"
         // Every one of these is in Kokoro's 178-symbol vocabulary and is how it
         // knows to pause.
         CHECK(phonemize("the box, the apple.") == "ðə bˈɑks, ði ˈæpᵊl.");
+    }
+
+    SECTION("letters followed by digits keep the digits") {
+        // Chess squares, "B52", "Win10": the number speller skipped digits
+        // after a letter (to leave "mp3" to other rules) and nothing else
+        // read them, so "d4" phonemized to `d` - the square was silent and
+        // the letter read as a sound. misaki splits the token: the letter
+        // by its name, the digits as a number.
+        CHECK(phonemize("d4") == "dˈi fˈɔɹ");
+        CHECK(phonemize("knight f3") == "nˈIt ˈɛf θɹˈi");
+        // misaki reads a lone "a" before digits as the article, and so do we.
+        CHECK(phonemize("a8") == "ɐ ˈAt");
     }
 
     SECTION("a quoted word is looked up without its quotes") {

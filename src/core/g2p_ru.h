@@ -121,6 +121,7 @@
 #pragma once
 
 #include "core/num2words_ru.h" // digits are in no dictionary and no rule
+#include "core/g2p_alnum.h"
 
 #include <cstdint>
 #include <cstdio>
@@ -1258,7 +1259,8 @@ inline std::string text_to_ipa(const context& ctx, const std::string& text) {
     // inventory has no digit symbols either, so an unexpanded number is dropped
     // twice over without a word. Must run before tokenize(), which splits on
     // ',' — the Russian decimal mark.
-    const std::vector<std::string> words = tokenize(core_num2words_ru::expand(text));
+    const std::vector<std::string> words =
+        tokenize(core_num2words_ru::expand(core_g2p_alnum::split_letters_digits(text)));
     std::string ipa;
     bool pending_space = false;
     for (const std::string& w : words) {

@@ -376,3 +376,18 @@ TEST_CASE("de: the misaki tied-sequence collapse is a separate, opt-in step", "[
     // ...and DeVocab leaves the diphthongs alone.
     CHECK(core_phoneme::convert("tsvˈaɪ", core_phoneme::Dialect::DeVocab) == "tsvˈaɪ");
 }
+
+TEST_CASE("de: a single letter is read by its name, digits after it are kept", "[g2p_de][unit][letters]") {
+    // Chess squares and moves: "d4", "Springer f3". The dictionary was built
+    // one word at a time and has no single letters, so "d" fell through to the
+    // letter-to-sound rules and came out `t` (final devoicing), and the digits
+    // were dropped. espeak-ng, which the model was trained on, reads the name.
+    g2p_de::context ctx; // no dictionary: tier 0 must not depend on it
+    CHECK(g2p_de::word_to_ipa(ctx, "d") == "dˈeː");
+    CHECK(g2p_de::word_to_ipa(ctx, "F") == "ˈɛf");
+    CHECK(g2p_de::word_to_ipa(ctx, "ä") == "ˈɛː");
+    const std::string d4 = g2p_de::text_to_ipa(ctx, "d4");
+    CHECK(d4.rfind("dˈeː ", 0) == 0); // the letter's name, then the number
+    CHECK(d4.size() > std::string("dˈeː ").size());
+    CHECK(g2p_de::text_to_ipa(ctx, "f3").rfind("ˈɛf ", 0) == 0);
+}

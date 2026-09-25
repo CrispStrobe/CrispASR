@@ -9,6 +9,7 @@
 #pragma once
 
 #include "core/num2words_fr.h" // #316: spell digits out before phonemizing
+#include "core/g2p_alnum.h"
 
 #include <cstdio>
 #include <cstring>
@@ -581,7 +582,7 @@ inline std::string text_to_ipa(const context& ctx, const std::string& text) {
     // and no letter-to-sound rule, so a numeric token phonemized to the EMPTY
     // string and vanished from the audio. Must run before tokenize(), which
     // splits on ',' and '.' — the decimal mark and thousands separator.
-    auto words = tokenize(core_num2words_fr::expand(text));
+    auto words = tokenize(core_num2words_fr::expand(core_g2p_alnum::split_letters_digits(text)));
     // A mark that the consumer wants goes flush against the word before it and
     // is followed by a space, the way misaki emits English. A mark it does not
     // want still separates its neighbours — with ONE space, not the two the old
