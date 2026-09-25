@@ -101,12 +101,26 @@
 #include <cmath>
 #include <cstdint>
 #include <cstdlib>
+#include <cstring>
+#include <functional>
 #include <memory>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
 namespace core_beam_decode {
+
+// Search semantics.
+//   Legacy: the original loop - per-beam top-B, rank by raw cumulative
+//           log-prob, stop when the best beam has finished.
+//   HF:     transformers GenerationMixin._beam_search (4.57): top 2B over
+//           beams x vocab, only the top-B candidates may finish, finished
+//           hypotheses scored sum / len^length_penalty, B unfinished beams
+//           keep running, early_stopping heuristic, best finished wins.
+// Default Legacy while the per-backend Kaggle A/B runs; CRISPASR_BEAM_SEMANTICS
+// = hf | legacy overrides every caller (the A/B switch).
+enum class Semantics { Legacy, HF };
+enum class EarlyStopping { False, True, Never }; // transformers' early_stopping = False | True | "never"
 
 struct Config {
     int max_new_tokens = 512; // hard cap on generated tokens
@@ -115,7 +129,30 @@ struct Config {
     int vocab_size = 0;       // required
     int beam_size = 1;        // 1 = degenerate to greedy-via-beam (still works, just expensive)
     int prompt_len = 0;       // n_past after prompt prefill (replay anchor)
+    // --- HF semantics only (generation_config.json of the upstream checkpoint) ---
+    Semantics semantics = Semantics::Legacy;
+    float length_penalty = 1.0f;                         // transformers default
+    EarlyStopping early_stopping = EarlyStopping::False; // transformers default
+    int min_new_tokens = 0; // EOS banned while fewer tokens were generated (MinNewTokensLengthLogitsProcessor)
+    // Tokens transformers counts as GENERATED that the caller's prompt already
+    // holds - e.g. m2m100's forced target-language BOS, which HF emits at step 1
+    // via ForcedBOSTokenLogitsProcessor. Shifts every length in the finished
+    // score and the early-stop heuristic, exactly as HF sees them.
+    int length_offset = 0;
+    // Logits processors that run AFTER log_softmax in beam search (e.g. the
+    // repetition penalty): log_probs[vocab], the beam's generated tokens.
+    std::function<void(float*, const int32_t*, int)> logprob_processor;
 };
+
+inline Semantics resolve_semantics(const Config& cfg) {
+    if (const char* e = std::getenv("CRISPASR_BEAM_SEMANTICS")) {
+        if (!std::strcmp(e, "hf"))
+            return Semantics::HF;
+        if (!std::strcmp(e, "legacy"))
+            return Semantics::Legacy;
+    }
+    return cfg.semantics;
+}
 
 struct Result {
     std::vector<int32_t> tokens; // generated tokens of the winning beam
@@ -190,6 +227,185 @@ inline void top_k_log_softmax(const float* logits, int vocab, int K, std::vector
     }
 }
 
+// transformers 4.57 GenerationMixin._beam_search for batch 1 (see Semantics).
+// Generic over the KV strategy: `expand(beam)` returns the malloc'd next-token
+// logits of a running beam (nullptr = drop it) and may set beam.child, the
+// per-beam state its children inherit as their `state`. The seed beam gets
+// `seed_child` and `prefill_logits` without an expand call.
+template <typename State> struct HfBeam {
+    std::vector<int32_t> tokens;
+    std::vector<float> probs; // softmax prob of each token (unprocessed), for the callers' callbacks
+    float score = 0.0f;
+    State state{}; // e.g. the KV snapshot right BEFORE feeding tokens.back()
+    State child{}; // the state after feeding it: inherited by this beam's children
+};
+
+template <typename State, typename ExpandFn>
+inline Result hf_search(const float* prefill_logits, const Config& cfg, State seed_child, ExpandFn expand) {
+    Result result;
+    const int B = std::max(1, cfg.beam_size), V = cfg.vocab_size;
+    std::vector<int> eos = cfg.eos_ids;
+    if (eos.empty())
+        eos.push_back(cfg.eos_id);
+    auto is_eos = [&](int id) { return std::find(eos.begin(), eos.end(), id) != eos.end(); };
+    const int K = std::max(2, 1 + (int)eos.size()) * B;
+    const float NEG = -1.0e9f;
+    auto lp_div = [&](int len) { return (float)std::pow((double)len, (double)cfg.length_penalty); };
+    const int max_len = cfg.max_new_tokens;
+
+    std::vector<HfBeam<State>> running(1);
+    running[0].child = seed_child;
+    std::vector<std::vector<float>> logits(1, std::vector<float>(prefill_logits, prefill_logits + V));
+    std::vector<HfBeam<State>> fin(B); // HF `sequences` / `beam_scores`: score -1e9, not finished
+    for (auto& f : fin)
+        f.score = NEG;
+    std::vector<bool> fin_done(B, false);
+    bool heur_unsat = true;
+    struct Cand {
+        float s;
+        int beam, tok;
+        float prob;
+    };
+    for (int cur = 0; cur < max_len; cur++) {
+        // 1. log_softmax, processors, + running score; top-K over beams x vocab
+        std::vector<Cand> top;
+        top.reserve((size_t)K + 1);
+        std::vector<float> lsm;
+        for (size_t b = 0; b < running.size(); b++) {
+            if (logits[b].empty())
+                continue; // dropped / at -1e9: can never reach the top K (see below)
+            const std::vector<float>& lg = logits[b];
+            const double logZ = compute_logZ(lg.data(), V);
+            lsm.resize((size_t)V);
+            for (int v = 0; v < V; v++)
+                lsm[(size_t)v] = (float)((double)lg[(size_t)v] - logZ);
+            std::vector<float> raw = lsm; // for the per-token probs
+            if (cur < cfg.min_new_tokens)
+                for (int e : eos)
+                    if (e >= 0 && e < V)
+                        lsm[(size_t)e] = -INFINITY;
+            if (cfg.logprob_processor)
+                cfg.logprob_processor(lsm.data(), running[b].tokens.data(), (int)running[b].tokens.size());
+            const float base = running[b].score;
+            for (int v = 0; v < V; v++) {
+                const float sc = lsm[(size_t)v] + base;
+                if ((int)top.size() == K && !(sc > top.back().s))
+                    continue; // equal scores keep the lower flat index first
+                Cand c{sc, (int)b, v, std::exp(raw[(size_t)v])};
+                auto it =
+                    std::upper_bound(top.begin(), top.end(), c, [](const Cand& a, const Cand& x) { return a.s > x.s; });
+                top.insert(it, c);
+                if ((int)top.size() > K)
+                    top.pop_back();
+            }
+        }
+        const int nk = (int)top.size();
+        if (nk == 0)
+            break;
+        std::vector<char> hits((size_t)nk);
+        bool all_hit = true;
+        for (int k = 0; k < nk; k++) {
+            hits[(size_t)k] = is_eos(top[(size_t)k].tok) || cur + 1 >= max_len;
+            all_hit = all_hit && hits[(size_t)k];
+        }
+        auto make = [&](const Cand& c) {
+            HfBeam<State> h;
+            const HfBeam<State>& par = running[(size_t)c.beam];
+            h.tokens = par.tokens;
+            h.tokens.push_back(c.tok);
+            h.probs = par.probs;
+            h.probs.push_back(c.prob);
+            h.state = par.child;
+            return h;
+        };
+        // 2. finished: only the top-B candidates may finish
+        {
+            const bool full = cfg.early_stopping == EarlyStopping::True &&
+                              std::all_of(fin_done.begin(), fin_done.end(), [](bool d) { return d; });
+            std::vector<std::pair<float, int>> merged; // (score, index): < B = old finished, >= B = candidate
+            for (int i = 0; i < B; i++)
+                merged.push_back({fin[(size_t)i].score, i});
+            for (int k = 0; k < nk; k++) {
+                float sc = top[(size_t)k].s / lp_div(cur + 1 + cfg.length_offset);
+                if (full)
+                    sc += NEG;
+                if (!heur_unsat)
+                    sc += NEG;
+                if (!(k < B && hits[(size_t)k]))
+                    sc += NEG;
+                merged.push_back({sc, B + k});
+            }
+            std::stable_sort(
+                merged.begin(), merged.end(),
+                [](const std::pair<float, int>& a, const std::pair<float, int>& b) { return a.first > b.first; });
+            std::vector<HfBeam<State>> nf(B);
+            std::vector<bool> nd(B);
+            for (int i = 0; i < B; i++) {
+                const int idx = merged[(size_t)i].second;
+                if (idx < B) {
+                    nf[(size_t)i] = fin[(size_t)idx];
+                    nd[(size_t)i] = fin_done[(size_t)idx];
+                } else {
+                    const int k = idx - B;
+                    nf[(size_t)i] = make(top[(size_t)k]);
+                    nd[(size_t)i] = k < B && hits[(size_t)k];
+                }
+                nf[(size_t)i].score = merged[(size_t)i].first;
+            }
+            fin = std::move(nf);
+            fin_done = std::move(nd);
+        }
+        // 3. running: the best B candidates that did not hit
+        std::vector<int> order((size_t)nk);
+        for (int k = 0; k < nk; k++)
+            order[(size_t)k] = k;
+        std::stable_sort(order.begin(), order.end(), [&](int a, int b) {
+            return top[(size_t)a].s + (hits[(size_t)a] ? NEG : 0.0f) >
+                   top[(size_t)b].s + (hits[(size_t)b] ? NEG : 0.0f);
+        });
+        std::vector<HfBeam<State>> next;
+        for (int i = 0; i < std::min(B, nk); i++) {
+            const int k = order[(size_t)i];
+            HfBeam<State> h = make(top[(size_t)k]);
+            h.score = top[(size_t)k].s + (hits[(size_t)k] ? NEG : 0.0f);
+            next.push_back(std::move(h));
+        }
+        running = std::move(next);
+        // 4. early-stop heuristic (sticky) and the loop conditions
+        const int cur_len = cur + 1 + cfg.length_offset;
+        const int best_len = (cfg.early_stopping == EarlyStopping::Never && cfg.length_penalty > 0.0f)
+                                 ? max_len + cfg.length_offset
+                                 : cur_len;
+        const float best_running = running.empty() ? NEG : running[0].score / lp_div(best_len);
+        float worst = fin[0].score;
+        for (const auto& f : fin)
+            worst = std::min(worst, f.score);
+        bool any = false;
+        for (int i = 0; i < B; i++)
+            any = any || best_running > (fin_done[(size_t)i] ? worst : NEG);
+        heur_unsat = heur_unsat && any;
+        const bool open = !(cfg.early_stopping == EarlyStopping::True &&
+                            std::all_of(fin_done.begin(), fin_done.end(), [](bool d) { return d; }));
+        if (!heur_unsat || !open || all_hit)
+            break;
+        // 5. next-token logits for every running beam
+        logits.assign(running.size(), {});
+        for (size_t b = 0; b < running.size(); b++) {
+            if (running[b].score <= 0.5f * NEG)
+                continue; // a hit beam kept only to fill B: never selectable again
+            float* lg = expand(running[b]);
+            if (lg) {
+                logits[b].assign(lg, lg + V);
+                std::free(lg);
+            }
+        }
+    }
+    const HfBeam<State>& best = fin[0];
+    result.tokens = best.tokens;
+    result.probs = best.probs;
+    return result;
+}
+
 } // namespace detail
 
 // Run the beam decode loop.
@@ -219,6 +435,13 @@ inline Result run_with_probs(Ctx* ctx, const float* prefill_logits, ReplayFn rep
 
     const int B = (cfg.beam_size > 0) ? cfg.beam_size : 1;
     const int V = cfg.vocab_size;
+
+    if (resolve_semantics(cfg) == Semantics::HF) {
+        struct NoState {};
+        return detail::hf_search<NoState>(prefill_logits, cfg, NoState{}, [&](detail::HfBeam<NoState>& b) -> float* {
+            return replay_fn(ctx, b.tokens.data(), (int)b.tokens.size(), cfg.prompt_len);
+        });
+    }
 
     auto is_eos = [&](int id) {
         if (!cfg.eos_ids.empty()) {
@@ -394,6 +617,21 @@ inline Result run_with_probs_branched(Ctx* ctx, const float* prefill_logits, Sav
         // post-step snap. Restored at the start of each per-beam expand.
         std::shared_ptr<Holder> snap;
     };
+
+    if (resolve_semantics(cfg) == Semantics::HF) {
+        // state = KV snapshot right before feeding tokens.back(); a beam's
+        // expand restores it, steps that token and snapshots the result for
+        // its children. The seed's children start from the prompt snapshot.
+        using SP = std::shared_ptr<Holder>;
+        SP prompt = wrap(save_fn(ctx));
+        return detail::hf_search<SP>(prefill_logits, cfg, prompt, [&](detail::HfBeam<SP>& b) -> float* {
+            restore_fn(ctx, b.state->snap);
+            float* lg = step_fn(ctx, b.tokens.back(), cfg.prompt_len + (int)b.tokens.size() - 1);
+            if (lg)
+                b.child = wrap(save_fn(ctx));
+            return lg;
+        });
+    }
 
     // 1. Snapshot the post-prefill prompt KV; seed initial beams from
     // top-K of prefill_logits. No step_fn calls happen during seeding —

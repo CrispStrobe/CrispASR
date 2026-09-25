@@ -500,6 +500,10 @@ def convert(input_dir: Path, out_path: Path) -> None:
     writer.add_uint32("m2m100.eos_token_id",             eos_id)
     writer.add_uint32("m2m100.pad_token_id",             pad_id)
     writer.add_uint32("m2m100.decoder_start_token_id",   dec_start_id)
+    # beam-search stopping rule (core_beam_decode HF semantics): generation_config.json
+    gen_path = input_dir / "generation_config.json"
+    gen_cfg = json.loads(gen_path.read_text()) if gen_path.exists() else {}
+    writer.add_uint32("m2m100.gen.early_stopping",       1 if gen_cfg.get("early_stopping") is True else 0)
 
     # Tokenizer
     writer.add_string("tokenizer.ggml.model", "m2m100")

@@ -5475,6 +5475,17 @@ catch_discover_tests(test-btc-vocab
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
 
+# ─── test-beam-hf — core_beam_decode HF semantics vs real transformers generate() (hermetic, unit)
+add_executable(test-beam-hf test-beam-hf.cpp)
+target_include_directories(test-beam-hf PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test-beam-hf PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-beam-hf
+    TEST_SPEC "[beam]"
+    PROPERTIES
+        LABELS unit
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
 # ─── test-hojo-asr-frames — #438 Hojo-ASR frame schedule (hermetic, unit)
 add_executable(test-hojo-asr-frames test-hojo-asr-frames.cpp)
 target_include_directories(test-hojo-asr-frames PRIVATE ${PROJECT_SOURCE_DIR}/src)

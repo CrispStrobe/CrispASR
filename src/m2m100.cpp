@@ -80,6 +80,10 @@ struct m2m100_hparams {
     bool scale_embedding = true;
     int bos_token_id = 0;
     int eos_token_id = 2;
+    // generation_config.json early_stopping (HF beam semantics only): m2m100
+    // 418M/1.2B and wmt21 x-en declare true, wmt21 en-x does not (false).
+    // GGUFs predating the key: the 2048-wide wmt21 we ship is en-x -> false.
+    bool early_stopping = true;
     int pad_token_id = 1;
     int dec_start_token = 2;
     int head_dim() const { return d_model / enc_n_heads; }
@@ -243,6 +247,7 @@ static void load_metadata(m2m100_context* c, gguf_context* g) {
     };
     hp.vocab_size = get_u32("m2m100.vocab_size", 128112);
     hp.d_model = get_u32("m2m100.d_model", 1024);
+    hp.early_stopping = get_u32("m2m100.gen.early_stopping", hp.d_model == 2048 ? 0 : 1) != 0;
     hp.enc_n_layers = get_u32("m2m100.encoder.n_layers", 12);
     hp.enc_n_heads = get_u32("m2m100.encoder.n_heads", 16);
     hp.enc_ffn_dim = get_u32("m2m100.encoder.ffn_dim", 4096);
@@ -1159,6 +1164,10 @@ extern "C" char* m2m100_translate(struct m2m100_context* ctx, const char* text, 
         bcfg.vocab_size = hp.vocab_size;
         bcfg.beam_size = ctx->beam_size;
         bcfg.prompt_len = prompt_len;
+        // generation_config.json: length_penalty 1.0 (default), early_stopping per checkpoint
+        bcfg.early_stopping =
+            hp.early_stopping ? core_beam_decode::EarlyStopping::True : core_beam_decode::EarlyStopping::False;
+        bcfg.length_offset = 1; // the forced target-language BOS: HF generates it, we prompt with it
         auto br = core_beam_decode::run_with_probs(ctx, logits.data(), replay, bcfg);
         for (int32_t t : br.tokens) {
             if (t == hp.eos_token_id)
