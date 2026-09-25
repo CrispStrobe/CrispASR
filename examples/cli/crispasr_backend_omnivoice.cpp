@@ -149,7 +149,12 @@ public:
         // below: the server copies the request's `voice` into
         // params.tts_voice, so re-apply the reference prompt here whenever it
         // changes (an empty value clears the prompt -> plain TTS).
-        prepare_voice(params);
+        // Fail closed: if a NON-EMPTY voice was requested and could not be
+        // applied, return an empty result so the request errors instead of
+        // synthesising in whatever voice happens to be loaded. See
+        // prepare_voice().
+        if (!prepare_voice(params))
+            return {};
 
         // Apply the diffusion step count PER CALL, not just at init: the server
         // reuses one backend instance and passes tts_num_steps per request, so a
@@ -223,15 +228,22 @@ private:
     // disk-cached inside omnivoice.cpp, so re-calling it for the same ref is
     // cheap. last_voice_ dedupes identical consecutive voices so a repeated
     // request never pays the encode again.
-    void prepare_voice(const whisper_params& params) {
+    // Returns false when a NON-EMPTY voice was requested and could not be
+    // applied. The caller must then fail the request: the runtime has already
+    // dropped the previous reference (fail-closed in omnivoice_set_voice_prompt),
+    // so synthesising anyway would render in the wrong (default) voice — and
+    // before that change, in the previous speaker's.
+    bool prepare_voice(const whisper_params& params) {
         if (params.tts_voice == last_voice_)
-            return;
+            return true;
         last_voice_ = params.tts_voice;
         std::string ref_text = params.tts_ref_text;
         if (omnivoice_set_voice_prompt(ctx_, params.tts_voice.c_str(), ref_text.c_str()) != 0) {
             fprintf(stderr, "crispasr[omnivoice]: failed to set voice prompt '%s'\n", params.tts_voice.c_str());
-            last_voice_.clear();
+            last_voice_.clear(); // force a re-apply on the next request
+            return params.tts_voice.empty();
         }
+        return true;
     }
 
     omnivoice_context* ctx_ = nullptr;
