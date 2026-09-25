@@ -319,6 +319,58 @@ Detailed architecture notes for backends whose design warrants more than
 a one-line summary. The [README backend table](../README.md#asr-backends)
 links here for each entry.
 
+### Canary
+
+`canary` is one metadata-driven encoder-decoder backend, not a backend per
+checkpoint. It continues to load the legacy CrispASR
+[`canary-1b-v2`](https://huggingface.co/nvidia/canary-1b-v2) layout and now also
+loads the published
+[`handy-computer/canary-180m-flash-gguf`](https://huggingface.co/handy-computer/canary-180m-flash-gguf)
+transcribe.cpp GGUF schema directly. Canary 180M Flash does not need a
+CrispASR conversion or republished copy. The NVIDIA base model and its weights
+are CC-BY-4.0; handy-computer is the canonical GGUF source.
+
+For a transcribe.cpp-schema file, the runtime reads dimensions, frontend
+parameters, languages, translation pairs, special-token IDs, and prompt format
+from GGUF metadata instead of applying Canary 1B defaults. Canary 180M Flash
+contains:
+
+- a 17-layer FastConformer encoder (`d_model=512`, 8 heads, FFN 2048,
+  8× subsampling);
+- a trained 512→1024 encoder-to-decoder projection;
+- a 4-layer pre-LN Transformer decoder (`d_model=1024`, 8 heads, FFN 4096);
+- a flattened 5,248-token aggregate SentencePiece vocabulary;
+- the metadata-defined `canary2` prompt, including explicit source/target
+  language and PNC/no-PNC task tokens; and
+- a 16 kHz, 128-mel frontend. Because the published GGUFs omit filterbank and
+  window tensors, CrispASR generates them from the frontend metadata at load
+  time.
+
+The model supports ASR with optional punctuation/capitalization in English,
+German, Spanish, and French. Translation is limited to the metadata-advertised
+English-pivot pairs EN↔DE/ES/FR. The runtime rejects unadvertised languages and
+pairs; there is no model-native language detection or streaming.
+
+The `canary2` prompt selects no timestamps. NVIDIA's upstream experimental
+word/segment timestamp feature depends on a separate auxiliary CTC aligner that
+is not present in the handy-computer GGUFs. CrispASR may expose
+cross-attention-DTW timing derived by its runtime and can optionally run an
+external aligner with `-am`; neither should be described as native upstream
+timestamp support for Canary 180M Flash.
+
+The checkpoint remains an offline model. CrispASR sends inputs through 40
+seconds directly and handles longer files with independent 20-second windows,
+6-second overlap, and centered time-core stitching. Every window receives the
+complete `canary2` prompt. This avoids both Q4 early-EOS gaps and token-LCS
+collapse of legitimate repeated speech; a four-repeat 44-second JFK fixture
+retains all 88 words with monotonic runtime-DTW estimates. That focused
+regression validates the stitching contract, not native streaming or
+corpus-level long-form accuracy.
+
+The 180M checkpoint is especially attractive for mobile packaging because of
+its model size. That is a size/fit observation, not an Android performance
+claim; it has not yet passed the Android device gate.
+
 ### granite / granite-4.1 / granite-4.1-plus / granite-4.1-nar
 
 **granite** (`granite-speech-{3.2-8b, 3.3-2b, 3.3-8b}`, `granite-4.0-1b-speech`):
