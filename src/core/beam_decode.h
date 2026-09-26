@@ -266,9 +266,9 @@ inline Result hf_search(const float* prefill_logits, const Config& cfg, State se
     std::vector<bool> fin_done(B, false);
     bool heur_unsat = true;
     struct Cand {
-        float s;
-        int beam, tok;
-        float prob;
+        float s = 0.0f;
+        int beam = 0, tok = 0;
+        float prob = 0.0f;
     };
     for (int cur = 0; cur < max_len; cur++) {
         // 1. log_softmax, processors, + running score; top-K over beams x vocab
