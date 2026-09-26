@@ -121,6 +121,7 @@ These are not tied to a single backend.
 | `CRISPASR_SESSION_CHUNK_SECONDS` | Chunk length (seconds) for session auto-chunking. |
 | `CRISPASR_SESSION_PERBACKEND_CHUNK` | Use per-backend chunk-window tuning instead of a flat window. |
 | `CRISPASR_SESSION_UNIFIED_DISPATCH` | Route surfaces through the unified library dispatch path. |
+| `CRISPASR_ENERGY_SILENCE_GATE` | `0` disables the speech-free-slice gate (issue #471). On by default: when audio is split without VAD (energy chunking at `--chunk-seconds`, and session auto-chunking), a slice whose loudest 100 ms stays within 12 dB of the recording's own noise floor *and* in the bottom fifth of its dynamic range — or is digital silence — is not transcribed, because LLM backends hallucinate on it (qwen3 returned the `--hotwords` list). Audio that is never split, and noise-only recordings, are unaffected. |
 | `CRISPASR_SLICE_PIPELINE` | Force the CLI's encode ∥ decode slice pipeline on/off. The override may only turn it OFF, or ON where it is *already* safe — it can never switch off one of the safety conditions (`-p N`, `--return-logits`, gap-fill re-entry, single slice). |
 
 ### Post-decode hygiene (PLAN.md §W2–W7)
