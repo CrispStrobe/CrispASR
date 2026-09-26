@@ -31,6 +31,7 @@
 #include <string>
 #include <vector>
 #include "core/ggml_cpu_backend.h"
+#include "core/sched_prof.h"
 
 // ===========================================================================
 // Bench instrumentation — `PARAFORMER_BENCH=1` for per-stage timings.
@@ -732,7 +733,7 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
         fprintf(stderr, "paraformer: running encoder graph...\n");
     {
         paraformer_bench_stage _b("encoder");
-        if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        if (core_sched_prof::compute(ctx->sched, gf, "paraformer") != GGML_STATUS_SUCCESS) {
             fprintf(stderr, "paraformer: encoder graph compute failed\n");
             ggml_free(ctx0);
             return "";
@@ -874,7 +875,7 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
     ggml_backend_tensor_set(enc_tensor, enc_out.data(), 0, enc_out.size() * sizeof(float));
     {
         paraformer_bench_stage _b("decoder");
-        if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        if (core_sched_prof::compute(ctx->sched, gf, "paraformer") != GGML_STATUS_SUCCESS) {
             fprintf(stderr, "paraformer: decoder graph compute failed\n");
             ggml_free(ctx0);
             return "";

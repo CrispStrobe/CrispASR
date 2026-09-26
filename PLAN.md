@@ -31,7 +31,10 @@ Qwen3-TTS (#337) are on `main` with model or hardware proof. The remaining
 sequence is strict:
 
 1. move the FastConformer scheduler callback into `src/core/sched_prof.h` and
-   expose one opt-in profiler usable by scheduler-based runtimes;
+   expose one opt-in profiler usable by scheduler-based runtimes — **DONE**:
+   `CRISPASR_SCHED_PROFILE=1` is wired through Canary CTC, Cohere, FireRed-ASR,
+   Granite Speech, Moonshine, Moonshine Streaming and Paraformer; the legacy
+   `CRISPASR_FC_PROFILE` switch still works;
 2. run the profiler/metadata audit over quantized GGUF families, fix the largest
    hidden-F16 matmul offenders one at a time, and prove each A/B before defaulting.
 
@@ -3562,9 +3565,11 @@ canary, canary_ctc, canary_qwen, lfm2_audio, nemotron); roll each out where it a
   side, not storage). Fix: quantizer carve-out (+Q8_0 floor + idempotency) + load-time
   repack via `core_conformer::repack_conv_pw_q8` + fleet requant kernel
   (`tools/kaggle/fc-pw-requant`).
-- [ ] **(2) Generalize the per-node profiler**: move `cc_prof_cb` (sched eval callback,
+- [x] **(2) Generalize the per-node profiler**: move `cc_prof_cb` (sched eval callback,
   aggregates by op+src-type+shape, `CRISPASR_FC_PROFILE=1`) to `src/core/sched_prof.h` so
-  every sched-based runtime gets it.
+  the audit targets share it. `CRISPASR_SCHED_PROFILE=1` now covers Canary CTC,
+  Cohere, FireRed-ASR, Granite Speech, Moonshine, Moonshine Streaming and Paraformer;
+  the callback reports relative shares because forcing one split per node adds dispatch overhead.
 - [ ] **(3) Fused QKV** (`core_conformer::fuse_qkv` is tensor-generic): bit-identical ~free
   win wherever Q/K/V share an input. Already deployed on ~10 backends
   (parakeet/canary/canary_qwen/canary_ctc/lfm2_audio via `core_conformer::fuse_qkv`

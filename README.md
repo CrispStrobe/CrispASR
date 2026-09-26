@@ -1071,6 +1071,7 @@ reference (see [Debug a new backend against PyTorch ground truth](docs/contribut
 | Env var | Purpose |
 | --- | --- |
 | `CRISPASR_VERBOSE=1` | Forces verbose mode for any backend (parallel to the `-v` flag). |
+| `CRISPASR_SCHED_PROFILE=1` | Forces per-node scheduler splits and reports wall time by op, source dtype and shape for Canary CTC, Cohere, FireRed-ASR, Granite Speech, Moonshine, Moonshine Streaming and Paraformer. Use relative shares; the forced splits add dispatch overhead. |
 | `CRISPASR_DUMP_DIR=path/` | Generic per-stage F32 tensor dump for the `crispasr-diff` harness. |
 | `GEMMA4_E2B_BENCH=1` | Per-stage timings for the Gemma-4-E2B backend. |
 | `COHERE_BENCH=1` / `COHERE_DEBUG=1` | Cohere transcribe per-stage timings / per-step diagnostics. |

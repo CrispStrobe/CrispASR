@@ -34,6 +34,7 @@
 #include <string>
 #include <vector>
 #include "core/ggml_cpu_backend.h"
+#include "core/sched_prof.h"
 
 // ===========================================================================
 // Bench instrumentation — `MOONSHINE_STREAM_BENCH=1` for per-stage timings.
@@ -723,7 +724,7 @@ static int run_encoder(moonshine_streaming_context* ctx, const float* frontend_o
             ggml_backend_tensor_set(mt, mask_data.data(), 0, mask_sz * sizeof(ggml_fp16_t));
     }
 
-    if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+    if (core_sched_prof::compute(ctx->sched, gf, "moonshine-streaming") != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "moonshine_streaming: encoder compute failed\n");
         ggml_free(ctx0);
         return -1;
@@ -928,7 +929,7 @@ static char* moonshine_streaming_transcribe_impl(struct moonshine_streaming_cont
                 ggml_backend_tensor_set(pt, pos_data.data(), 0, T_enc * sizeof(int32_t));
         }
 
-        ggml_backend_sched_graph_compute(ctx->sched, xgf);
+        core_sched_prof::compute(ctx->sched, xgf, "moonshine-streaming");
 
         size_t kv_bytes = (size_t)dec_head_dim * T_enc * dec_kv_heads * sizeof(float);
         for (int i = 0; i < dec_layers; i++) {
@@ -1034,7 +1035,7 @@ static char* moonshine_streaming_transcribe_impl(struct moonshine_streaming_cont
         int32_t pos_val = pos;
         ggml_backend_tensor_set(ggml_graph_get_tensor(dgf, "pos"), &pos_val, 0, sizeof(int32_t));
 
-        if (ggml_backend_sched_graph_compute(ctx->sched, dgf) != GGML_STATUS_SUCCESS) {
+        if (core_sched_prof::compute(ctx->sched, dgf, "moonshine-streaming") != GGML_STATUS_SUCCESS) {
             ggml_free(dctx);
             return {};
         }
