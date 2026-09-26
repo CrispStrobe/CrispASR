@@ -5269,10 +5269,16 @@ static crispasr_session_result* transcribe_autochunk(crispasr_session* s, const 
                                                     already_chunking))
         return transcribe_single(s, pcm, n_samples, language);
 
-    const auto ranges =
+    auto ranges =
         audio_chunking::split_at_energy_minima(pcm, (size_t)n_samples, (size_t)chunk_s * SR, (size_t)(5 * SR));
-    if (ranges.size() <= 1)
+    // Issue #471: never transcribe a speech-free remainder on its own (LLM
+    // backends hallucinate on it). No-op for a single range.
+    if (audio_chunking::speechless_gate_enabled())
+        ranges = audio_chunking::drop_speechless_ranges(pcm, (size_t)n_samples, ranges, (size_t)(SR / 10));
+    if (ranges.size() == 1 && ranges[0].first == 0 && (int)ranges[0].second == n_samples)
         return transcribe_single(s, pcm, n_samples, language);
+    if (ranges.empty()) // every slice was digital silence: nothing to transcribe
+        return new crispasr_session_result();
 
     auto* merged = new crispasr_session_result();
     for (const auto& range : ranges) {
