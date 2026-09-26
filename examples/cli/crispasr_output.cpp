@@ -633,10 +633,75 @@ bool crispasr_write_csv(const std::string& path, const std::vector<crispasr_disp
 // Minimal JSON escape (RFC 8259): backslash, quote, control chars.
 // Exposed publicly as crispasr_json_escape(); the static alias keeps
 // call sites in this file short.
+// Length of one well-formed UTF-8 sequence at s[i] (RFC 3629: no overlongs, no
+// surrogates, nothing above U+10FFFF), or 0 when the bytes there are not one.
+static size_t utf8_seq_len(const std::string& s, size_t i) {
+    const unsigned char c = (unsigned char)s[i];
+    if (c < 0x80)
+        return 1;
+    size_t n;
+    unsigned char lo = 0x80, hi = 0xBF; // allowed range of the SECOND byte
+    if (c >= 0xC2 && c <= 0xDF)
+        n = 2;
+    else if (c >= 0xE0 && c <= 0xEF) {
+        n = 3;
+        if (c == 0xE0)
+            lo = 0xA0; // overlong
+        else if (c == 0xED)
+            hi = 0x9F; // UTF-16 surrogates
+    } else if (c >= 0xF0 && c <= 0xF4) {
+        n = 4;
+        if (c == 0xF0)
+            lo = 0x90; // overlong
+        else if (c == 0xF4)
+            hi = 0x8F; // > U+10FFFF
+    } else
+        return 0; // continuation byte, C0/C1, F5..FF
+    if (i + n > s.size())
+        return 0;
+    for (size_t k = 1; k < n; k++) {
+        const unsigned char b = (unsigned char)s[i + k];
+        if (k == 1 ? (b < lo || b > hi) : (b < 0x80 || b > 0xBF))
+            return 0;
+    }
+    return n;
+}
+
+// #475: byte-level BPE tokens can hold PART of a character. Length of the
+// longest prefix of `s` that does not end inside a UTF-8 sequence (a trailing
+// lead byte whose continuation bytes are still missing).
+static size_t utf8_complete_prefix_len(const std::string& s) {
+    const size_t n = s.size();
+    for (size_t back = 1; back <= 3 && back <= n; back++) {
+        const unsigned char c = (unsigned char)s[n - back];
+        if ((c & 0xC0) == 0x80)
+            continue; // a continuation byte: keep walking back to its lead byte
+        const size_t need = c >= 0xF0 ? 4 : c >= 0xE0 ? 3 : c >= 0xC0 ? 2 : 1;
+        return need > back ? n - back : n; // lead byte still waiting for bytes -> cut before it
+    }
+    return n;
+}
+
+// JSON text must be UTF-8 (RFC 8259): anything that is not a well-formed
+// sequence becomes U+FFFD instead of passing through (#475 - a split BPE
+// token made strict parsers reject the whole -ojf file).
 std::string crispasr_json_escape(const std::string& s) {
     std::string out;
     out.reserve(s.size() + 2);
-    for (unsigned char c : s) {
+    for (size_t i = 0; i < s.size();) {
+        const unsigned char c = (unsigned char)s[i];
+        if (c >= 0x80) {
+            const size_t n = utf8_seq_len(s, i);
+            if (n == 0) {
+                out += "\xEF\xBF\xBD"; // U+FFFD
+                i += 1;
+            } else {
+                out.append(s, i, n);
+                i += n;
+            }
+            continue;
+        }
+        i += 1;
         switch (c) {
         case '"':
             out += "\\\"";
@@ -740,9 +805,21 @@ bool crispasr_write_json(const std::string& path, const std::vector<crispasr_seg
         }
         if (full && !s.tokens.empty()) {
             f << ",\n      \"tokens\": [\n";
+            // #475: a byte-level BPE token may end inside a character (" \xeb",
+            // "\x91", "\x98" = " 둘"). Carry the incomplete tail into the next
+            // token so every token's text is whole characters; the token count,
+            // ids and timings are unchanged and the concatenation is too.
+            std::string carry;
             for (size_t j = 0; j < s.tokens.size(); j++) {
                 const auto& t = s.tokens[j];
-                f << "        { \"text\": \"" << json_escape(t.text) << "\", \"p\": " << t.confidence
+                std::string text = carry + t.text;
+                carry.clear();
+                if (j + 1 < s.tokens.size()) {
+                    const size_t k = utf8_complete_prefix_len(text);
+                    carry = text.substr(k);
+                    text.resize(k);
+                }
+                f << "        { \"text\": \"" << json_escape(text) << "\", \"p\": " << t.confidence
                   << ", \"t0\": " << t.t0 << ", \"t1\": " << t.t1 << ", \"offsets\": { \"from\": " << (t.t0 * 10)
                   << ", \"to\": " << (t.t1 * 10) << " } }" << (j + 1 < s.tokens.size() ? "," : "") << "\n";
             }

@@ -3058,6 +3058,23 @@ catch_discover_tests(test-issue-465-hangul-spaces
     PROPERTIES LABELS "unit;output;issue-465"
 )
 
+# ─── test-issue-475-json-utf8 — -ojf stays valid UTF-8 with split BPE tokens (hermetic, unit)
+add_executable(test-issue-475-json-utf8
+    test-issue-475-json-utf8.cpp
+    ${PROJECT_SOURCE_DIR}/examples/cli/crispasr_output.cpp
+)
+target_include_directories(test-issue-475-json-utf8 PRIVATE
+    ${PROJECT_SOURCE_DIR}/examples/cli
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-issue-475-json-utf8 PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-issue-475-json-utf8
+    TEST_SPEC "[issue-475]"
+    PROPERTIES LABELS "unit;output;issue-475"
+)
+
 # ─── test-internal-chunking-gate — CAP_INTERNAL_CHUNKING regression guard
 #
 # Pins the auto-chunk fallback skip for backends that declare
