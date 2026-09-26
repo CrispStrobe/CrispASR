@@ -13,6 +13,7 @@
 #include <cstdint>
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace {
@@ -168,4 +169,115 @@ TEST_CASE("truncated and empty blobs decode without running off the end", "[unit
     st = decode_blob({}, 0, {}, 100, id_to_piece, piece_to_id);
     REQUIRE(st.n_active == 0);
     REQUIRE(id_to_piece.empty());
+}
+
+// ---------------------------------------------------------------------------
+// #472 — the Voxtral Mini 3B runtime (src/voxtral.cpp). It does not use
+// decode_blob(): it keeps a rank table (id = rank + n_specials) and a
+// tiktoken-style lowest-rank merge, and #338 never reached it. These cases run
+// that exact path through the header functions voxtral.cpp now calls.
+// ---------------------------------------------------------------------------
+
+namespace {
+
+// All 256 single bytes, then `extra` merges. Rank r <-> id r + n_specials.
+std::vector<std::string> byte_base_plus(const std::vector<std::string>& extra) {
+    std::vector<std::string> v;
+    for (int b = 0; b < 256; b++)
+        v.push_back(std::string(1, (char)b));
+    v.insert(v.end(), extra.begin(), extra.end());
+    return v;
+}
+
+std::vector<int32_t> encode_3b(const std::vector<uint8_t>& blob, int max_ranks, int active_limit, int n_specials,
+                               const std::string& text, int* n_inactive = nullptr) {
+    using namespace voxtral_tekken;
+    std::vector<uint32_t> off, len;
+    index_blob_ranks(blob, max_ranks, off, len);
+    std::unordered_map<std::string, int32_t> b2r;
+    const int ni = build_rank_map(blob, off, len, active_limit, b2r);
+    if (n_inactive)
+        *n_inactive = ni;
+    std::vector<int32_t> ids;
+    for (const auto& pt : pre_tokenize(text))
+        bpe_encode_ranked(b2r, n_specials, (const uint8_t*)pt.data(), pt.size(), ids);
+    return ids;
+}
+
+} // namespace
+
+// Shaped like the issue: ` epigastric` -> ` ep` + `ig` + `astric`, where
+// `astric` is a tail rank (146371 in the real 3B GGUF). Here the table has
+// 256 + 3 active ranks and `astric` sits in the inert tail.
+TEST_CASE("3B rank merge cannot reach a tail rank (#472)", "[unit][voxtral]") {
+    using namespace voxtral_tekken;
+    constexpr int kSpecials = 10;
+    // Active: bytes, " e", " ep", "ig". Tail: "as", "ast", "astr", "astri", "astric".
+    const auto pieces = byte_base_plus({" e", " ep", "ig", "as", "ast", "astr", "astri", "astric"});
+    const auto blob = pack(pieces);
+    const int kActive = 256 + 3;
+    const int kVocab = kSpecials + kActive; // embedding rows
+    const int kSerialized = (int)pieces.size();
+    REQUIRE(active_bpe_count(kVocab, kSpecials) == kActive);
+
+    // Positive control: the pre-#472 behaviour (every serialized rank in the
+    // merge map) DOES produce the out-of-range id, so the bounded arm below is
+    // measuring something.
+    const auto bad = encode_3b(blob, kSerialized, /*active_limit*/ 0, kSpecials, " epigastric");
+    bool any_oob = false;
+    for (int32_t id : bad)
+        any_oob |= !token_id_in_range(id, kVocab);
+    REQUIRE(any_oob);
+    REQUIRE(bad.back() == kSpecials + 256 + 7); // `astric`
+
+    int n_inactive = -1;
+    const auto ids =
+        encode_3b(blob, kSerialized, active_bpe_count(kVocab, kSpecials), kSpecials, " epigastric", &n_inactive);
+    REQUIRE(n_inactive == 5);
+    for (int32_t id : ids)
+        REQUIRE(token_id_in_range(id, kVocab));
+    // Active merges are unaffected: ` ep` and `ig` still merge; `astric` falls
+    // back to bytes.
+    REQUIRE(ids.size() == 2 + 6);
+    REQUIRE(ids[0] == kSpecials + 256 + 1); // " ep"
+    REQUIRE(ids[1] == kSpecials + 256 + 2); // "ig"
+    REQUIRE(ids[2] == kSpecials + (int)'a');
+}
+
+// The 3B checkpoint's real shape: 150000 serialized ranks, 131072 rows, 1000
+// specials. The id -> text table stays complete; only the merge map is capped.
+TEST_CASE("3B rank tables keep the full vocab for id->text, bound only the merge map", "[unit][voxtral]") {
+    using namespace voxtral_tekken;
+    const auto blob = pack(synth_pieces(150000));
+    std::vector<uint32_t> off, len;
+    index_blob_ranks(blob, 150000, off, len);
+    REQUIRE(off.size() == 150000);
+
+    std::unordered_map<std::string, int32_t> b2r;
+    const int n_inactive = build_rank_map(blob, off, len, active_bpe_count(131072, 1000), b2r);
+    REQUIRE(n_inactive == 150000 - 130072);
+    REQUIRE(b2r.size() == 130072);
+    REQUIRE(b2r.count("p130071") == 1);
+    REQUIRE(b2r.count("p130072") == 0);
+    int32_t max_rank = -1;
+    for (const auto& kv : b2r)
+        max_rank = kv.second > max_rank ? kv.second : max_rank;
+    REQUIRE(token_id_in_range(max_rank + 1000, 131072));
+    REQUIRE_FALSE(token_id_in_range(max_rank + 1 + 1000, 131072));
+
+    // index_blob_ranks honours the serialized count and a truncated tail.
+    index_blob_ranks(blob, 10, off, len);
+    REQUIRE(off.size() == 10);
+    std::vector<uint8_t> trunc = {0x01, 0x00, 'a', 0x05, 0x00, 'b'};
+    index_blob_ranks(trunc, 100, off, len);
+    REQUIRE(off.size() == 1);
+}
+
+// The 3B hotword suffix goes through the header pre-tokenizer now: a word keeps
+// its leading space (mistral-common), which the old voxtral.cpp copy split off.
+TEST_CASE("3B hotword suffix pre-tokenizes like mistral-common", "[unit][voxtral]") {
+    const auto pt = voxtral_tekken::pre_tokenize("lang:en The following words may appear: epigastric,syncopal.");
+    const std::vector<std::string> want = {"lang",    ":en", " The",        " following", " words", " may",
+                                           " appear", ":",   " epigastric", ",syncopal",  "."};
+    REQUIRE(pt == want);
 }
