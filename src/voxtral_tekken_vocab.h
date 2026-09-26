@@ -26,10 +26,13 @@
 
 #pragma once
 
+#include <climits>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <map>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace voxtral_tekken {
@@ -102,6 +105,98 @@ inline DecodeStats decode_blob(const std::vector<uint8_t>& blob, int n_specials,
         bpe_id++;
     }
     return st;
+}
+
+// ---------------------------------------------------------------------------
+// Rank-indexed form (#472) — what the Voxtral Mini 3B runtime (src/voxtral.cpp)
+// uses. It keeps per-rank offsets into the blob for id -> text and a
+// bytes -> rank map for the tiktoken-style merge, with token id
+// `rank + n_specials`. #338 bounded the other two runtimes; this one kept
+// putting every serialized rank into the merge map, so `--hotwords epigastric`
+// merged to rank 145371 (id 146371 against a 131072-row token_embd).
+// ---------------------------------------------------------------------------
+
+// Walk the length-prefixed blob into per-rank offset/length tables. Stops at
+// `max_ranks` (the serialized `tokenizer.tekken.n_vocab`) or at the first
+// truncated entry. The tables stay COMPLETE — the tail is inert, not invalid,
+// and keeping it lets id -> text still render it in a debug dump.
+inline void index_blob_ranks(const std::vector<uint8_t>& blob, int max_ranks, std::vector<uint32_t>& rank_offset,
+                             std::vector<uint32_t>& rank_length) {
+    rank_offset.clear();
+    rank_length.clear();
+    if (max_ranks > 0) {
+        rank_offset.reserve(max_ranks);
+        rank_length.reserve(max_ranks);
+    }
+    const size_t n = blob.size();
+    size_t pos = 0;
+    for (int r = 0; max_ranks <= 0 || r < max_ranks; r++) {
+        if (pos + 2 > n)
+            break;
+        uint16_t len = 0;
+        std::memcpy(&len, blob.data() + pos, 2);
+        pos += 2;
+        if (pos + len > n)
+            break;
+        rank_offset.push_back((uint32_t)pos);
+        rank_length.push_back(len);
+        pos += len;
+    }
+}
+
+// Build the map the merge searches, admitting only the first `active_limit`
+// ranks (`active_bpe_count(llm_vocab_size, n_specials)`; 0 admits everything,
+// which is only correct with no embedding table to overrun). Returns the number
+// of ranks left out.
+inline int build_rank_map(const std::vector<uint8_t>& blob, const std::vector<uint32_t>& rank_offset,
+                          const std::vector<uint32_t>& rank_length, int active_limit,
+                          std::unordered_map<std::string, int32_t>& bytes_to_rank) {
+    bytes_to_rank.clear();
+    const size_t n_ranks = rank_offset.size();
+    const size_t n_admit = (active_limit > 0 && (size_t)active_limit < n_ranks) ? (size_t)active_limit : n_ranks;
+    bytes_to_rank.reserve(n_admit);
+    for (size_t r = 0; r < n_admit; r++)
+        bytes_to_rank[std::string((const char*)blob.data() + rank_offset[r], rank_length[r])] = (int32_t)r;
+    return (int)(n_ranks - n_admit);
+}
+
+// tiktoken merge over one pre-token: start from single bytes and repeatedly
+// merge the adjacent pair with the lowest rank. Appends `rank + n_specials`
+// per final piece, or 0 (`<unk>`) for a piece with no rank.
+inline void bpe_encode_ranked(const std::unordered_map<std::string, int32_t>& bytes_to_rank, int n_specials,
+                              const uint8_t* data, size_t len, std::vector<int32_t>& out) {
+    auto rank_of = [&](size_t start, size_t l) -> int32_t {
+        auto it = bytes_to_rank.find(std::string((const char*)data + start, l));
+        return it != bytes_to_rank.end() ? it->second : -1;
+    };
+    if (len == 0)
+        return;
+    struct piece {
+        size_t start;
+        size_t len;
+    };
+    std::vector<piece> pieces(len);
+    for (size_t i = 0; i < len; i++)
+        pieces[i] = {i, 1};
+    while (pieces.size() > 1) {
+        int32_t best_rank = INT32_MAX;
+        size_t best_idx = SIZE_MAX;
+        for (size_t i = 0; i + 1 < pieces.size(); i++) {
+            const int32_t r = rank_of(pieces[i].start, pieces[i].len + pieces[i + 1].len);
+            if (r >= 0 && r < best_rank) {
+                best_rank = r;
+                best_idx = i;
+            }
+        }
+        if (best_idx == SIZE_MAX)
+            break;
+        pieces[best_idx].len += pieces[best_idx + 1].len;
+        pieces.erase(pieces.begin() + best_idx + 1);
+    }
+    for (const auto& p : pieces) {
+        const int32_t r = rank_of(p.start, p.len);
+        out.push_back(r >= 0 ? r + n_specials : 0);
+    }
 }
 
 // Tekken regex pre-tokenizer, hand-rolled. The tekken.json pattern

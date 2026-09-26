@@ -11,6 +11,8 @@
 // vocab=131072). No biases anywhere.
 
 #include "voxtral.h"
+
+#include "voxtral_tekken_vocab.h" // #338/#472 active-vocabulary bound + pre-tokenizer
 #include "core/crispasr_env.h"
 
 #ifndef M_PI
@@ -400,22 +402,11 @@ static bool voxtral_load_model(voxtral_model& model, voxtral_vocab& vocab, const
             for (size_t i = 0; i < n; i++)
                 vocab.tekken_vocab_blob[i] = (uint8_t)(int)f32[i];
 
-            // Build per-rank offset/length tables by walking length prefixes
-            vocab.rank_offset.reserve(vocab.n_vocab);
-            vocab.rank_length.reserve(vocab.n_vocab);
-            size_t pos = 0;
-            for (int r = 0; r < vocab.n_vocab; r++) {
-                if (pos + 2 > n)
-                    break;
-                uint16_t len;
-                std::memcpy(&len, vocab.tekken_vocab_blob.data() + pos, 2);
-                pos += 2;
-                if (pos + len > n)
-                    break;
-                vocab.rank_offset.push_back((uint32_t)pos);
-                vocab.rank_length.push_back(len);
-                pos += len;
-            }
+            // Per-rank offset/length tables over the WHOLE serialized vocab
+            // (n_vocab = 150000), for id -> text. The merge map built from
+            // them is bounded separately (#472), see tekken_build_reverse().
+            voxtral_tekken::index_blob_ranks(vocab.tekken_vocab_blob, vocab.n_vocab, vocab.rank_offset,
+                                             vocab.rank_length);
         }
     }
 
@@ -1202,8 +1193,25 @@ extern "C" void voxtral_kv_reset(voxtral_context* ctx) {
         ctx->kv_n_used = 0;
 }
 
+// #472: every caller-supplied id becomes a row index into token_embd. Refuse
+// the whole batch rather than let ggml_get_rows read past the table (CPU
+// asserts; CUDA silently decodes <unk>).
+static bool voxtral_ids_in_range(const voxtral_context* ctx, const int32_t* ids, int n, const char* who) {
+    const int vs = (int)ctx->model.hparams.llm_vocab_size;
+    for (int i = 0; i < n; i++) {
+        if (!voxtral_tekken::token_id_in_range(ids[i], vs)) {
+            fprintf(stderr, "voxtral: %s: token id %d at position %d is outside [0, %d); refusing embedding lookup\n",
+                    who, (int)ids[i], i, vs);
+            return false;
+        }
+    }
+    return true;
+}
+
 extern "C" float* voxtral_embed_tokens(voxtral_context* ctx, const int32_t* input_ids, int n_tokens) {
     if (!ctx || !input_ids || n_tokens <= 0)
+        return nullptr;
+    if (!voxtral_ids_in_range(ctx, input_ids, n_tokens, "embed_tokens"))
         return nullptr;
     const int d = (int)ctx->model.hparams.llm_d_model;
     ggml_cgraph* gf = voxtral_build_graph_embed(ctx, n_tokens);
@@ -1378,124 +1386,24 @@ extern "C" float* voxtral_run_encoder(voxtral_context* ctx, const float* mel_fea
 // ---------------------------------------------------------------------------
 
 // Build reverse lookup table on first use.
-static void tekken_build_reverse(voxtral_vocab& v) {
+//
+// #472: the GGUF serializes tokenizer.tekken.n_vocab = 150000 ranks, but only
+// llm_vocab_size - n_specials = 130072 of them have a token_embd row. Admitting
+// the tail let the merge emit ids up to 150999 (` epigastric` -> `astric`,
+// id 146371), which ggml_get_rows then read out of bounds: <unk> until
+// max_new_tokens on CUDA, a GGML_ASSERT on CPU. Same bound as #338.
+static void tekken_build_reverse(voxtral_vocab& v, int llm_vocab_size, int verbosity) {
     if (v.reverse_built)
         return;
-    v.bytes_to_rank.reserve(v.rank_offset.size());
-    for (size_t r = 0; r < v.rank_offset.size(); r++) {
-        std::string key((const char*)v.tekken_vocab_blob.data() + v.rank_offset[r], v.rank_length[r]);
-        v.bytes_to_rank[key] = (int32_t)r;
-    }
+    const int active_limit = voxtral_tekken::active_bpe_count(llm_vocab_size, v.n_specials);
+    const int n_inactive = voxtral_tekken::build_rank_map(v.tekken_vocab_blob, v.rank_offset, v.rank_length,
+                                                          active_limit, v.bytes_to_rank);
+    if (n_inactive > 0 && verbosity >= 1)
+        fprintf(stderr,
+                "voxtral: tekken vocab: %d active BPE ranks, %d inactive tail entries ignored "
+                "(llm_vocab_size=%d, %d specials)\n",
+                (int)v.bytes_to_rank.size(), n_inactive, llm_vocab_size, v.n_specials);
     v.reverse_built = true;
-}
-
-// Look up rank for a byte sequence. Returns -1 if not found.
-static int32_t tekken_rank(const voxtral_vocab& v, const uint8_t* data, size_t len) {
-    auto it = v.bytes_to_rank.find(std::string((const char*)data, len));
-    return it != v.bytes_to_rank.end() ? it->second : -1;
-}
-
-// Encode a single pre-token (byte sequence) into BPE token IDs.
-// tiktoken algorithm: start with individual bytes, repeatedly merge the
-// adjacent pair with the lowest rank until no more merges are possible.
-static void tekken_bpe_encode(const voxtral_vocab& v, const uint8_t* data, size_t len, std::vector<int32_t>& out) {
-    if (len == 0)
-        return;
-    if (len == 1) {
-        int32_t r = tekken_rank(v, data, 1);
-        out.push_back(r >= 0 ? r + v.n_specials : 0);
-        return;
-    }
-
-    // Start with individual bytes as "pieces"
-    struct piece {
-        size_t start;
-        size_t len;
-    };
-    std::vector<piece> pieces(len);
-    for (size_t i = 0; i < len; i++)
-        pieces[i] = {i, 1};
-
-    while (pieces.size() > 1) {
-        // Find the pair with the lowest merge rank
-        int32_t best_rank = INT32_MAX;
-        size_t best_idx = SIZE_MAX;
-        for (size_t i = 0; i + 1 < pieces.size(); i++) {
-            size_t merged_len = pieces[i].len + pieces[i + 1].len;
-            int32_t r = tekken_rank(v, data + pieces[i].start, merged_len);
-            if (r >= 0 && r < best_rank) {
-                best_rank = r;
-                best_idx = i;
-            }
-        }
-        if (best_idx == SIZE_MAX)
-            break; // no more merges
-        // Merge pieces[best_idx] and pieces[best_idx+1]
-        pieces[best_idx].len += pieces[best_idx + 1].len;
-        pieces.erase(pieces.begin() + best_idx + 1);
-    }
-
-    // Convert pieces to token IDs
-    for (const auto& p : pieces) {
-        int32_t r = tekken_rank(v, data + p.start, p.len);
-        out.push_back(r >= 0 ? r + v.n_specials : 0);
-    }
-}
-
-// Simple pre-tokenizer: split on whitespace boundaries in a way compatible
-// with tiktoken's regex. For the transcription use case we primarily need to
-// handle special tokens like [INST], [BEGIN_AUDIO] and simple text.
-// This is a simplified version that handles: letters+digits as words,
-// whitespace chunks, punctuation individually, and special bracket tokens.
-static std::vector<std::string> tekken_pre_tokenize(const std::string& text) {
-    std::vector<std::string> out;
-    size_t i = 0;
-    while (i < text.size()) {
-        unsigned char c = text[i];
-        // Whitespace: group consecutive whitespace
-        if (c == ' ' || c == '\t' || c == '\n' || c == '\r') {
-            size_t j = i;
-            while (j < text.size() && (text[j] == ' ' || text[j] == '\t' || text[j] == '\n' || text[j] == '\r'))
-                j++;
-            out.push_back(text.substr(i, j - i));
-            i = j;
-        }
-        // ASCII letter or digit: group with following letters/digits
-        else if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9')) {
-            // Prepend leading space if previous char was space (tiktoken style)
-            size_t j = i;
-            while (j < text.size()) {
-                unsigned char d = text[j];
-                if ((d >= 'A' && d <= 'Z') || (d >= 'a' && d <= 'z') || (d >= '0' && d <= '9'))
-                    j++;
-                else
-                    break;
-            }
-            out.push_back(text.substr(i, j - i));
-            i = j;
-        }
-        // UTF-8 multibyte: group entire codepoint
-        else if (c >= 0x80) {
-            size_t j = i + 1;
-            while (j < text.size() && (text[j] & 0xC0) == 0x80)
-                j++;
-            // Keep grouping continuation letters (for CJK, accented, etc.)
-            while (j < text.size() && ((unsigned char)text[j]) >= 0x80) {
-                size_t k = j + 1;
-                while (k < text.size() && (text[k] & 0xC0) == 0x80)
-                    k++;
-                j = k;
-            }
-            out.push_back(text.substr(i, j - i));
-            i = j;
-        }
-        // Other (punctuation): single char
-        else {
-            out.push_back(text.substr(i, 1));
-            i++;
-        }
-    }
-    return out;
 }
 
 extern "C" int32_t* voxtral_tokenize(voxtral_context* ctx, const char* text, int* out_n_tokens) {
@@ -1505,7 +1413,8 @@ extern "C" int32_t* voxtral_tokenize(voxtral_context* ctx, const char* text, int
         return nullptr;
     }
     auto& v = ctx->vocab;
-    tekken_build_reverse(v);
+    const int llm_vocab_size = (int)ctx->model.hparams.llm_vocab_size;
+    tekken_build_reverse(v, llm_vocab_size, ctx->params.verbosity);
 
     std::string input(text);
     std::vector<int32_t> ids;
@@ -1542,11 +1451,37 @@ extern "C" int32_t* voxtral_tokenize(voxtral_context* ctx, const char* text, int
 
         // Pre-tokenize + BPE the non-special text segment
         std::string segment = input.substr(pos, next_special - pos);
-        auto pre_tokens = tekken_pre_tokenize(segment);
-        for (const auto& pt : pre_tokens) {
-            tekken_bpe_encode(v, (const uint8_t*)pt.data(), pt.size(), ids);
-        }
+        // The header's pre-tokenizer: mistral-common parity (c69ac61b). The 3B
+        // GGUF carries the byte-identical tokenizer.tekken.pattern to the 4B-TTS
+        // one it was measured on; the local copy this replaces split " word"
+        // into " " + "word" and so merged differently from training (#472).
+        for (const auto& pt : voxtral_tekken::pre_tokenize(segment))
+            voxtral_tekken::bpe_encode_ranked(v.bytes_to_rank, v.n_specials, (const uint8_t*)pt.data(), pt.size(), ids);
         pos = next_special;
+    }
+
+    // #472 belt-and-braces: the bounded map above should make this unreachable,
+    // but an out-of-range id becomes an out-of-bounds row in
+    // ggml_get_rows(token_embd, ...). Drop it loudly instead: a missing token
+    // mangles one word, a bad row index takes down the process or the whole
+    // transcript.
+    {
+        size_t n_bad = 0;
+        std::vector<int32_t> kept;
+        kept.reserve(ids.size());
+        for (int32_t id : ids) {
+            if (voxtral_tekken::token_id_in_range(id, llm_vocab_size))
+                kept.push_back(id);
+            else
+                n_bad++;
+        }
+        if (n_bad > 0) {
+            fprintf(stderr,
+                    "voxtral: dropped %zu token id(s) outside [0, %d) before embedding lookup - the tokenizer "
+                    "produced an id this checkpoint cannot address (please report with the input text)\n",
+                    n_bad, llm_vocab_size);
+            ids.swap(kept);
+        }
     }
 
     if (ids.empty()) {
@@ -1565,6 +1500,8 @@ extern "C" int32_t* voxtral_tokenize(voxtral_context* ctx, const char* text, int
 extern "C" float* voxtral_run_llm(voxtral_context* ctx, const int32_t* input_ids, int n_tokens, int* out_n_tokens,
                                   int* out_vocab_size) {
     if (!ctx || !input_ids || n_tokens <= 0)
+        return nullptr;
+    if (!voxtral_ids_in_range(ctx, input_ids, n_tokens, "run_llm"))
         return nullptr;
     voxtral_bench_stage _b("llm");
     const auto& hp = ctx->model.hparams;
