@@ -22,6 +22,8 @@ REPO = Path("/tmp/CrispASR")
 TEMP = Path("/tmp/ab"); TEMP.mkdir(parents=True, exist_ok=True)
 BRANCH = os.environ.get("CRISPASR_REF", "feat/beam-hf-semantics")
 res = {"errors": [], "cases": {}, "summary": {}}
+# run 1 settled m2m100 (hf 6/6 vs legacy 5/6) and madlad (4/4 vs 3/4); run 2 = the two arms the harness broke
+GROUPS = set(os.environ.get("AB_GROUPS", "moonshine,granite").split(","))
 TEXTS = [
     ("en", "de", "Hello world, how are you today?"),
     ("en", "de", "The president said he would not attend the meeting on Thursday."),
@@ -107,6 +109,8 @@ try:
 
     # ---- m2m100-418m: default beam 5
     try:
+        if "m2m100" not in GROUPS:
+            raise StopIteration
         from transformers import M2M100ForConditionalGeneration, M2M100Tokenizer
         g = hf_hub_download("cstr/m2m100-418m-GGUF", "m2m100-418m-f16.gguf", cache_dir=str(TEMP / "g"))
         tk = M2M100Tokenizer.from_pretrained("facebook/m2m100_418M")
@@ -119,13 +123,18 @@ try:
             args = ["--backend", "m2m100", "-m", g, "--text", text, "-sl", sl, "-tl", tl]
             record("m2m100", f"t{i}", ref, cli(args, "legacy"), cli(args, "hf"))
         del md
+    except StopIteration:
+        pass
     except Exception:
         res["errors"].append("m2m100: " + traceback.format_exc()[-1500:]); save()
 
     # ---- moonshine-tiny: -bs 4
     try:
+        if "moonshine" not in GROUPS:
+            raise StopIteration
         from transformers import AutoProcessor, MoonshineForConditionalGeneration
         g = hf_hub_download("cstr/moonshine-tiny-GGUF", "moonshine-tiny.gguf", cache_dir=str(TEMP / "g"))
+        hf_hub_download("cstr/moonshine-tiny-GGUF", "tokenizer.bin", cache_dir=str(TEMP / "g"))  # read next to the GGUF
         pr = AutoProcessor.from_pretrained("UsefulSensors/moonshine-tiny")
         md = MoonshineForConditionalGeneration.from_pretrained("UsefulSensors/moonshine-tiny",
                                                                torch_dtype=torch.float32).eval()
@@ -138,15 +147,19 @@ try:
             args = ["--backend", "moonshine", "-m", g, "-f", str(p), "-bs", "4"]
             record("moonshine-tiny", key, ref, cli(args, "legacy"), cli(args, "hf"), {"truth": truth})
         del md
+    except StopIteration:
+        pass
     except Exception:
         res["errors"].append("moonshine: " + traceback.format_exc()[-1500:]); save()
 
     # ---- granite-speech-4.0-1b: -bs 4
     try:
+        if "granite" not in GROUPS:
+            raise StopIteration
         from transformers import AutoProcessor, GraniteSpeechForConditionalGeneration
         g = hf_hub_download("cstr/granite-speech-4.0-1b-GGUF", "granite-speech-4.0-1b-f16.gguf",
                             cache_dir=str(TEMP / "g"))
-        rid = "ibm-granite/granite-speech-4.0-1b"
+        rid = "ibm-granite/granite-4.0-1b-speech"
         pr = AutoProcessor.from_pretrained(rid)
         md = GraniteSpeechForConditionalGeneration.from_pretrained(rid, torch_dtype=torch.float32).eval()
         chat = [{"role": "user", "content": "<|audio|>can you transcribe the speech into a written format?"}]
@@ -160,11 +173,15 @@ try:
             args = ["--backend", "granite", "-m", g, "-f", str(p), "-bs", "4"]
             record("granite-4.0-1b", key, ref, cli(args, "legacy"), cli(args, "hf"), {"truth": truth})
         del md
+    except StopIteration:
+        pass
     except Exception:
         res["errors"].append("granite: " + traceback.format_exc()[-1500:]); save()
 
     # ---- madlad-3b: -bs 4, 64 tokens (heaviest last)
     try:
+        if "madlad" not in GROUPS:
+            raise StopIteration
         from transformers import T5ForConditionalGeneration, T5Tokenizer
         g = hf_hub_download("cstr/madlad400-3b-mt-GGUF", "madlad400-3b-mt-f16.gguf", cache_dir=str(TEMP / "g"))
         tk = T5Tokenizer.from_pretrained("google/madlad400-3b-mt")
@@ -177,6 +194,8 @@ try:
                     "--translate-max-tokens", "64"]
             record("madlad-3b", f"t{i}", ref, cli(args, "legacy"), cli(args, "hf"))
         del md
+    except StopIteration:
+        pass
     except Exception:
         res["errors"].append("madlad: " + traceback.format_exc()[-1500:]); save()
 except BaseException:
