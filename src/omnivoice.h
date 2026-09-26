@@ -71,7 +71,8 @@ int omnivoice_set_speed(struct omnivoice_context* ctx, float speed);
 // Set an EXACT target duration, in seconds (upstream OmniVoice's `duration`
 // argument; parity). When > 0 it overrides the text/speaking-rate estimate
 // outright for subsequent synthesis calls. 0 (or negative) restores the
-// estimate. Read live per synthesize; clamped to a sane maximum (600 s).
+// estimate (or CRISPASR_OMNIVOICE_TARGET_DURATION when that is set). Read live
+// per synthesize; clamped to a sane maximum (600 s).
 //
 // This is the escape hatch for the two failure modes of the estimate: a
 // `ref_text` that does not match the reference audio, and an under-estimate

@@ -145,6 +145,7 @@ crispasr --list-backends
 | `--tts-steps N` | Diffusion / ODE step count (default 20). VibeVoice DPM-Solver++ takes 10–20; also read by irodori (40), chatterbox, f5-tts and tada |
 | `--tts-cfg-scale X` | CFG guidance scale (vibevoice / chatterbox / f5-tts / tada / irodori). Unset = backend default |
 | `--tts-speed X` | Speaking-rate multiplier (omnivoice / f5-tts / piper / melotts / fastpitch): `>1` faster, `<1` slower (default 1.0) |
+| `--tts-duration SECONDS` | Exact output length (omnivoice; upstream `duration`): wins over the estimate and over `--tts-speed`. `0` = estimate (default), max 600 |
 | `--tts-min-speech-tokens N` | Floor on generated audio length in AR decode steps — one codec frame each (12.5 Hz ⇒ 80 ms, so `25` ≈ 2 s). moss-tts / moss-tts-local; `-1` = model default |
 | `--tts-trim-silence` | Trim leading silence from TTS output |
 | `--tts-pad-silence-ms N` | Prepend N ms of silence to the output (default 0; works around the VLC C2PA buffer drop) |

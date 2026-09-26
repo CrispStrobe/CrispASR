@@ -1137,6 +1137,10 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `CRISPASR_OMNIVOICE_PERSISTENT_GRAPH`
 - `CRISPASR_OMNIVOICE_POS_TEMP`
 - `CRISPASR_OMNIVOICE_REF_RATE_CHECK`
+- `CRISPASR_OMNIVOICE_TARGET_DURATION` — exact output length in seconds
+  (upstream OmniVoice's `duration`; wins over the text/rate estimate and over
+  `--tts-speed`). The default that `--tts-duration` / the server's `duration`
+  field fall back to when they are 0. Clamped to 600 s
 - `CRISPASR_OMNIVOICE_TOKENIZER_GGUF`
 - `CRISPASR_OMNIVOICE_UNIFIED_CFG`
 - `CRISPASR_OMNIVOICE_UPSTREAM_WEIGHTS`

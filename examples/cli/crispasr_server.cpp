@@ -2809,7 +2809,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         // /inference and /v1/audio/transcriptions.
         float duration_s = body.value("duration", 0.0f);
         if (!(duration_s >= 0.0f && duration_s <= 600.0f)) {
-            json_error(res, 400, "'duration' must be between 0 and 600 seconds (got " + std::to_string(duration_s) + ")",
+            json_error(res, 400,
+                       "'duration' must be between 0 and 600 seconds (got " + std::to_string(duration_s) + ")",
                        "invalid_duration", "duration");
             return;
         }

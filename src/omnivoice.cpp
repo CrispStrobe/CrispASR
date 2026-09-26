@@ -389,6 +389,9 @@ struct omnivoice_context {
     // the reference's rate). Upstream OmniVoice takes a `duration` outright;
     // this is that knob. Read live by generate_iterative().
     float target_duration_s = 0.0f;
+    // CRISPASR_OMNIVOICE_TARGET_DURATION: what a setter call with 0 restores, so
+    // the per-request reset the server/CLI do does not silently discard it.
+    float env_target_duration_s = 0.0f;
 
     // Audio tokenizer path (separate GGUF)
     std::string tokenizer_path;
@@ -3316,7 +3319,7 @@ struct omnivoice_context* omnivoice_init_from_file(const char* path_model, struc
     if (const char* e = crispasr_env::get("CRISPASR_OMNIVOICE_TARGET_DURATION")) {
         float v = (float)atof(e);
         if (v > 0.0f)
-            ctx->target_duration_s = v;
+            ctx->target_duration_s = ctx->env_target_duration_s = std::min(v, 600.0f);
     }
 
     if (!load_model(ctx, path_model)) {
@@ -3533,10 +3536,11 @@ int omnivoice_set_speed(struct omnivoice_context* ctx, float speed) {
 int omnivoice_set_target_duration(struct omnivoice_context* ctx, float seconds) {
     if (!ctx)
         return -1;
-    // 0 / negative = back to the estimate. The target is materialised as a real
-    // frame buffer, so a typo must not ask for millions of frames — clamp to the
-    // same 600 s ceiling the CLI and server validate against.
-    ctx->target_duration_s = (seconds > 0.0f) ? std::min(seconds, 600.0f) : 0.0f;
+    // 0 / negative = back to the default: CRISPASR_OMNIVOICE_TARGET_DURATION if
+    // set, else the estimate. The target is materialised as a real frame buffer,
+    // so a typo must not ask for millions of frames — clamp to the same 600 s
+    // ceiling the CLI and server validate against.
+    ctx->target_duration_s = (seconds > 0.0f) ? std::min(seconds, 600.0f) : ctx->env_target_duration_s;
     return 0;
 }
 
