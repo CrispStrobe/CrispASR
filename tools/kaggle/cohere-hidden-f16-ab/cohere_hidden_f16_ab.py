@@ -20,13 +20,13 @@ SHA = "06f0ce7b"
 subprocess.check_call(["git", "clone", "--filter=blob:none", "--no-checkout",
                        "https://github.com/CrispStrobe/CrispASR.git", str(REPO)])
 subprocess.check_call(["git", "checkout", SHA], cwd=REPO)
-subprocess.check_call(["git", "submodule", "update", "--init", "ggml"], cwd=REPO)
+subprocess.check_call(["git", "submodule", "update", "--init", "--recursive"], cwd=REPO)
 sys.path.insert(0, str(REPO / "tools" / "kaggle"))
 import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress(hf_progress_repo="cstr/crispasr-kaggle-progress")
 step = kh.step
-step("script.start", sha=SHA, run="v1")
+step("script.start", sha=SHA, run="v2")
 token = kh.resolve_hf_token("HF_TOKEN")
 subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet", "huggingface_hub"])
 from huggingface_hub import hf_hub_download  # noqa: E402
