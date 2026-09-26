@@ -7,6 +7,7 @@
 #include "core/asr_time_order.h"
 
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -465,6 +466,10 @@ std::vector<crispasr_disp_segment> crispasr_make_disp_segments(const std::vector
         cur.speaker = seg.speaker;
 
         auto flush = [&]() {
+            // A line may open on a word that carries its leading space
+            // (whisper's " word", the aligner's Hangul " 오", #465).
+            if (!cur.text.empty() && cur.text[0] == ' ')
+                cur.text.erase(0, 1);
             if (!cur.text.empty())
                 out.push_back(cur);
             cur = {};
@@ -488,9 +493,35 @@ std::vector<crispasr_disp_segment> crispasr_make_disp_segments(const std::vector
                 unsigned char b = (unsigned char)w.text[0];
                 cur_is_cjk = (b >= 0xE0); // 3+ byte UTF-8 = likely CJK
             }
-            const std::string sep = cur.text.empty() ? "" : (prev_is_cjk || cur_is_cjk) ? "" : " ";
+            // A word that carries its own leading space (whisper " word", the
+            // aligner's Hangul " 오") needs no separator - like the other
+            // rebuild sites' already_spaced (this one doubled it: "hello  world").
+            const bool already_spaced = !w.text.empty() && w.text[0] == ' ';
+            const std::string sep = (cur.text.empty() || already_spaced) ? "" : (prev_is_cjk || cur_is_cjk) ? "" : " ";
+            // -ml counts CHARACTERS, not bytes (#465: -ml 10 held ~3 Hangul
+            // syllables). And a Hangul syllable without a leading space
+            // continues the previous word, so do not break there - unless the
+            // line has already run to twice the limit (one enormous word).
+            auto n_chars = [](const std::string& s) {
+                int n = 0;
+                for (unsigned char c : s)
+                    n += (c & 0xC0) != 0x80;
+                return n;
+            };
+            auto is_hangul_first = [](const std::string& s) {
+                if (s.size() < 3)
+                    return false;
+                const unsigned char b0 = (unsigned char)s[0], b1 = (unsigned char)s[1], b2 = (unsigned char)s[2];
+                if ((b0 & 0xF0) != 0xE0)
+                    return false;
+                const uint32_t cp = ((b0 & 0x0Fu) << 12) | ((b1 & 0x3Fu) << 6) | (b2 & 0x3Fu);
+                return (cp >= 0xAC00 && cp <= 0xD7AF) || (cp >= 0x1100 && cp <= 0x11FF) ||
+                       (cp >= 0x3130 && cp <= 0x318F);
+            };
+            const int line_chars = n_chars(cur.text) + n_chars(sep) + n_chars(w.text);
+            const bool mid_word = is_hangul_first(w.text) && prev_is_cjk;
             const bool would_overflow =
-                max_len > 1 && !cur.text.empty() && (int)(cur.text.size() + sep.size() + w.text.size()) > max_len;
+                max_len > 1 && !cur.text.empty() && line_chars > max_len && (!mid_word || line_chars > 2 * max_len);
 
             // Split at sentence-ending punctuation. Check BEFORE updating
             // cur.t1 so the flushed sentence keeps its last word's end time,

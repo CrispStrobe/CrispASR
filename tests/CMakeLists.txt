@@ -3041,6 +3041,23 @@ catch_discover_tests(test-issue-150-cjk-fallback
     PROPERTIES LABELS "unit;output;issue-150"
 )
 
+# ─── test-issue-465-hangul-spaces — Korean keeps word spaces in display segments (hermetic, unit)
+add_executable(test-issue-465-hangul-spaces
+    test-issue-465-hangul-spaces.cpp
+    ${PROJECT_SOURCE_DIR}/examples/cli/crispasr_output.cpp
+)
+target_include_directories(test-issue-465-hangul-spaces PRIVATE
+    ${PROJECT_SOURCE_DIR}/examples/cli
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-issue-465-hangul-spaces PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-issue-465-hangul-spaces
+    TEST_SPEC "[issue-465]"
+    PROPERTIES LABELS "unit;output;issue-465"
+)
+
 # ─── test-internal-chunking-gate — CAP_INTERNAL_CHUNKING regression guard
 #
 # Pins the auto-chunk fallback skip for backends that declare

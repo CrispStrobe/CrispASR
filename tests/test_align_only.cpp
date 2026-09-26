@@ -240,6 +240,25 @@ TEST_CASE("align-only: display units restore punctuation without adding timestam
         CHECK(display[3] == "case.");
     }
 
+    SECTION("#465: a Hangul syllable after a space keeps that space; the labels do not") {
+        const std::string ko = "내일 오전에 회의 자료를 보내주세요.";
+        const auto labels = crispasr_tokenise_align_words(ko);
+        const auto display = crispasr_tokenise_align_display_words(ko);
+        REQUIRE(display.size() == labels.size());
+        CHECK(labels[2] == "오"); // alignment slots stay space-free
+        REQUIRE(display == std::vector<std::string>{"내", "일", " 오", "전", "에", " 회", "의", " 자", "료", "를",
+                                                    " 보", "내", "주", "세", "요."});
+        std::string joined;
+        for (const auto& w : display)
+            joined += w; // the rebuild sites append a spaced word as-is and glue CJK units
+        CHECK(joined == ko);
+    }
+
+    SECTION("#465: unspaced CJK text and Latin words are unchanged") {
+        CHECK(crispasr_tokenise_align_display_words("你好世界") == std::vector<std::string>{"你", "好", "世", "界"});
+        CHECK(crispasr_tokenise_align_display_words("hello world") == std::vector<std::string>{"hello", "world"});
+    }
+
     SECTION("an opening quote after whitespace attaches to the following word") {
         const auto labels = crispasr_tokenise_align_words("hello “world”");
         const auto display = crispasr_tokenise_align_display_words("hello “world”");

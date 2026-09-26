@@ -164,16 +164,25 @@ std::vector<std::string> tokenise_words(const std::string& text) {
 // timestamps. Without it, crispasr_make_disp_segments treats otherwise-useful
 // CJK character timings as unusable and interpolates every sentence across the
 // enclosing VAD segment (#444's v0.8.34 timing-accuracy regression).
+//
+// #465: a per-character unit (CJK / Hangul) that follows whitespace in the text
+// keeps it as a LEADING SPACE - the convention whisper's own words use (" 오전에").
+// Hangul is split into syllables for alignment, and without this marker every
+// site that rebuilds text from words (the >= 0xE0 "no inter-word space" rule)
+// glued 내일 오전에 into 내일오전에. Latin words need no marker: the rebuild
+// sites already put a space between them.
 std::vector<std::string> tokenise_display_words(const std::string& text) {
     std::vector<std::string> out;
     std::string current;
     std::string prefix;
+    bool space_before = false; // whitespace seen since the last emitted unit
     const auto flush = [&]() {
         if (current.empty())
             return;
         out.push_back(prefix + current);
         prefix.clear();
         current.clear();
+        space_before = false;
     };
 
     for (size_t i = 0; i < text.size();) {
@@ -181,6 +190,7 @@ std::vector<std::string> tokenise_display_words(const std::string& text) {
         const std::string bytes = text.substr(i, len);
         if (cp == ' ' || cp == '\n' || cp == '\t' || cp == '\r') {
             flush();
+            space_before = !out.empty() || !prefix.empty();
         } else if (is_alignment_punctuation(cp)) {
             flush();
             if (is_opening_punctuation(cp))
@@ -191,8 +201,9 @@ std::vector<std::string> tokenise_display_words(const std::string& text) {
                 prefix += bytes;
         } else if (is_cjk_codepoint(cp)) {
             flush();
-            out.push_back(prefix + bytes);
+            out.push_back((space_before && !out.empty() ? " " : "") + prefix + bytes);
             prefix.clear();
+            space_before = false;
         } else {
             current += bytes;
         }
