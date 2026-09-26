@@ -40,9 +40,11 @@ sequence is strict:
    **NOW:** remote-header audit found Cohere's published Q4 retains 96 F16
    pointwise matrices (~450 MiB) and FireRed-ASR retains 32 (~300 MiB). Granite
    and Moonshine have no large F16 residuals; Paraformer's are mostly tiny FSMN
-   kernels. Cohere is first: load-time Q8_0 repack is implemented with
-   `CRISPASR_COHERE_PW_Q8=0` as the control; CPU transcript/per-node/runtime A/B
-   on the published model is the gate before the default is accepted.
+   kernels. Cohere CPU A/B preserved the transcript and cut the two pointwise
+   op groups from 1663 ms to 638 ms (encoder profile 9658 to 8593 ms), but
+   load-time conversion made a one-shot CLI run 10.06 to 11.09 s. Do not ship
+   the runtime repack; requantize the published artifacts once so users get the
+   inference win without paying conversion on every process start.
 
 ## CLAIMED 2026-09-15 — #412 Breeze TTS 2 (backend key `bt2-tts`)
 

@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (305 lessons)
+## Index by topic (306 lessons)
 
 **Security & untrusted input** (2)
 
@@ -228,7 +228,7 @@ cross-reference when you already know which model you are touching.
 - L14237 — Sub-8-bit quantization of an audio tower fails as BEHAVIORAL collapse (loops, empty output) — and there is no per-block cliff to bisect
 - L17873 — imatrix quant SHIPPED
 
-**Perf measurement & A/B discipline** (8)
+**Perf measurement & A/B discipline** (9)
 
 - L1850 — Per-step matvec dispatch overhead is LOAD-DEPENDENT — a "win" measured on a busy box is mostly a contention artifact
 - L2320 — Best-of-N only helps if the scorer measures what you care about — TADA's reconstruction scorer is blind to duration outliers (#192)
@@ -238,6 +238,7 @@ cross-reference when you already know which model you are touching.
 - L11418 — Distinguishing "slow run" from "hung run" — CPU time ≪ wall time is the signal
 - L11553 — Cross-backend bug-sweep methodology — pair the cap survey with an empirical A/B
 - L13491 — §176 runtime optimization audit methodology
+- L19157 — 2026-09-26 — a faster weight dtype can still lose when converted at every model load
 
 **Long-form audio, VAD & chunking** (8)
 
