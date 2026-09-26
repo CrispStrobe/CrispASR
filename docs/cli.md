@@ -585,6 +585,78 @@ crispasr --backend parakeet -m parakeet.gguf -f long_audio.wav \
   frame-synchronous and avoids TDT emission-frame-shift artifacts
   at chunk boundaries.
 
+## Canary 180M Flash
+
+CrispASR's existing `canary` backend loads the GGUFs published by
+[`handy-computer/canary-180m-flash-gguf`](https://huggingface.co/handy-computer/canary-180m-flash-gguf)
+directly. These are the canonical transcribe.cpp artifacts; do not convert or
+republish them for CrispASR. The base
+[`nvidia/canary-180m-flash`](https://huggingface.co/nvidia/canary-180m-flash)
+model is CC-BY-4.0.
+
+Download Q5_K_M for the smallest locally validated combination of ASR and
+translation:
+
+```bash
+huggingface-cli download handy-computer/canary-180m-flash-gguf \
+  canary-180m-flash-Q5_K_M.gguf --local-dir .
+
+# ASR with punctuation and capitalization (PNC)
+crispasr --backend canary -m canary-180m-flash-Q5_K_M.gguf \
+  -f samples/jfk.wav -sl en -tl en
+
+# ASR without punctuation/capitalization
+crispasr --backend canary -m canary-180m-flash-Q5_K_M.gguf \
+  -f samples/jfk.wav -sl en -tl en --no-punctuation
+
+# English speech → German text; use Q5_K_M, Q6_K, or Q8_0
+crispasr --backend canary -m canary-180m-flash-Q5_K_M.gguf \
+  -f samples/jfk.wav -sl en -tl de
+```
+
+The source language is mandatory: use `-sl en|de|es|fr` and set `-tl` to
+the same code for ASR. Translation supports only EN↔DE, EN↔ES, and EN↔FR.
+The checkpoint has no language detection and is not a streaming model.
+`--no-punctuation` selects the model's no-PNC prompt rather than stripping a
+separately generated transcript.
+
+### Quant choice
+
+A local quant-sensitivity gate used the exact `samples/jfk.wav` clip:
+
+| Quant | Exact file size | Local result |
+|---|---:|---|
+| Q4_K_M | 139,223,744 bytes | Exact expected English ASR output in both PNC and no-PNC modes, but EN→DE emitted immediate EOS |
+| Q5_K_M | 158,704,320 bytes | Preserved expected English ASR and German translation; smallest locally validated full ASR+translation choice |
+| Q6_K / Q8_0 | — | Preserved expected German translation |
+
+The tested Q4_K_M file's SHA-256 is
+`c8ae5758d7d4dc59c48d816474a33544e362ca52c635f96ee0b4b95e1b48f90c`.
+Use Q4_K_M only when the smallest ASR-only artifact is the priority; use
+Q5_K_M or higher when translation matters. This is a one-clip
+quant-sensitivity gate, not a broad WER or translation-quality benchmark.
+
+### Limits, timestamps, and long-form audio
+
+- Inputs through approximately 40 seconds run directly. Longer files use a
+  Canary-180M-specific offline path: independent 20-second windows, 6-second
+  overlap, a fresh prompt per window, and centered time-core stitching. The
+  regression gate retains all 88 words and four repeated phrases in a
+  44-second four-JFK fixture. This is not native streaming, and one synthetic
+  fixture does not establish broad long-form accuracy.
+- The published GGUF carries the `canary2` no-timestamp prompt. Upstream's
+  experimental word/segment timestamp feature requires a separate auxiliary
+  CTC aligner that is absent from this artifact.
+- CrispASR can still expose runtime-derived cross-attention DTW timing, and
+  `-am <aligner.gguf>` can run an optional external forced aligner. Those are
+  CrispASR facilities, not native upstream timestamp support from this GGUF.
+- The 180M size is especially suitable for mobile packaging; the Android arm64
+  APK uses this same backend and model contract.
+
+Canary 1B v2 remains supported and remains the registry default for
+`--backend canary -m auto`; adding direct 180M Flash compatibility does not
+change that default.
+
 ## Word-level timestamps via CTC alignment
 
 The LLM-based backends (`qwen3`, `voxtral`, `voxtral4b`, `granite`)

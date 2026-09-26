@@ -173,6 +173,7 @@ from the GGUF metadata. Jump to the [TTS table](#text-to-speech-models) for the 
 | **fastconformer-ctc** | [`nvidia/parakeet-ctc-1.1b`](https://huggingface.co/cstr/parakeet-ctc-1.1b-GGUF) | 42L FastConformer + CTC, 80 mels | en | CC-BY-4.0 |
 | **fastconformer-ctc** | [`grider-transwithai/parakeet-ctc-1.1b-ja`](https://huggingface.co/cstr/parakeet-ctc-1.1b-ja-GGUF) | 42L FastConformer + CTC, 80 mels, Japanese fine-tune | Japanese | Apache-2.0 |
 | **canary** | [`nvidia/canary-1b-v2`](https://huggingface.co/nvidia/canary-1b-v2) | FastConformer + Transformer decoder | 25 EU (explicit `-sl/-tl`) | CC-BY-4.0 |
+| **canary** | [`handy-computer/canary-180m-flash-gguf`](https://huggingface.co/handy-computer/canary-180m-flash-gguf) (base [`nvidia/canary-180m-flash`](https://huggingface.co/nvidia/canary-180m-flash)) | 17L FastConformer (d=512) + trained 512→1024 projection + 4L Transformer decoder; existing transcribe.cpp GGUFs load directly ([more](docs/architecture.md#canary)) | en, de, es, fr (explicit); EN↔DE/ES/FR translation | CC-BY-4.0 |
 | **canary-qwen** | [`nvidia/canary-qwen-2.5b`](https://huggingface.co/nvidia/canary-qwen-2.5b) | FastConformer + Qwen3-1.7B SALM | en | CC-BY-4.0 |
 | **lfm2-audio** | [`LiquidAI/LFM2.5-Audio-1.5B`](https://huggingface.co/cstr/lfm2-audio-1.5b-GGUF) | FastConformer + LFM2 hybrid conv+attention backbone (ASR+TTS) | en | LFM Open v1.0 |
 | **lfm2-audio** | [`LiquidAI/LFM2.5-Audio-1.5B-JP`](https://huggingface.co/cstr/lfm2-audio-1.5b-jp-GGUF) | FastConformer + LFM2 hybrid conv+attention backbone (ASR+TTS) | ja | LFM Open v1.0 |
@@ -750,6 +751,25 @@ curl -L -o parakeet.gguf \
 ### Canary (explicit language, speech translation)
 
 ```bash
+# Canary 180M Flash: use the existing handy-computer transcribe.cpp GGUF directly.
+# Q5_K_M is the smallest quant locally validated for both ASR and translation.
+huggingface-cli download handy-computer/canary-180m-flash-gguf \
+    canary-180m-flash-Q5_K_M.gguf --local-dir .
+
+# English ASR with punctuation and capitalization
+./build/bin/crispasr --backend canary \
+    -m canary-180m-flash-Q5_K_M.gguf -f samples/jfk.wav -sl en -tl en
+
+# English ASR without punctuation/capitalization
+./build/bin/crispasr --backend canary \
+    -m canary-180m-flash-Q5_K_M.gguf -f samples/jfk.wav \
+    -sl en -tl en --no-punctuation
+
+# English speech → German text (use Q5_K_M or higher)
+./build/bin/crispasr --backend canary \
+    -m canary-180m-flash-Q5_K_M.gguf -f samples/jfk.wav -sl en -tl de
+
+# Legacy Canary 1B v2 remains supported and is the canary registry default.
 # Transcription (source == target)
 ./build/bin/crispasr --backend canary -m canary-1b-v2-q5_0.gguf -f audio.de.wav -sl de -tl de
 
@@ -759,6 +779,17 @@ curl -L -o parakeet.gguf \
 # ...or use the familiar crispasr flag:
 ./build/bin/crispasr --backend canary -m canary-1b-v2-q5_0.gguf -f audio.de.wav -l de --translate
 ```
+
+Canary 180M Flash supports ASR in `en`, `de`, `es`, and `fr`, plus only the
+English-pivot translation pairs EN↔DE/ES/FR. It requires an explicit source
+language and does not provide language detection or native streaming. Its small
+GGUFs are especially suitable for mobile packaging. Inputs through 40 seconds
+run directly; longer files use checkpoint-specific offline 20-second windows
+with 6-second overlap and centered stitching. That path preserves four repeated
+JFK utterances and monotonic runtime timings in the current regression fixture,
+but is not native model streaming or a broad long-audio quality benchmark. See
+the [CLI guide](docs/cli.md#canary-180m-flash) for quantization, long-form, and
+timestamp caveats.
 
 ### Voxtral (speech-LLM with auto-download)
 
@@ -1118,7 +1149,7 @@ downloads (in that order).
 
 - **[whisper.cpp](https://github.com/ggml-org/whisper.cpp)** — the original ggml inference engine and Whisper runtime this fork is built on
 - **[ggml](https://github.com/ggml-org/ggml)** — the tensor library everything runs on
-- **NVIDIA NeMo** — parakeet-tdt-{0.6b-v2,0.6b-v3,1.1b}, parakeet-tdt_ctc-{110m,1.1b,0.6b-ja}, parakeet-ctc-{0.6b,1.1b}, canary-1b-v2, canary-ctc aligner, and the FastConformer-CTC family (stt_en_fastconformer_ctc_{large,xlarge,xxlarge} plus CTC branches of the stt_*_fastconformer_hybrid_large[_pc] fleet: en-pc, de, es, fr, it, nl, pl, ru, ua, hr, be, ar, fa, ka, hy, uz, kk-ru — all usable both as ASR backends and as compact ~82 MB `-am` forced aligners)
+- **NVIDIA NeMo** — parakeet-tdt-{0.6b-v2,0.6b-v3,1.1b}, parakeet-tdt_ctc-{110m,1.1b,0.6b-ja}, parakeet-ctc-{0.6b,1.1b}, canary-{1b-v2,180m-flash}, canary-ctc aligner, and the FastConformer-CTC family (stt_en_fastconformer_ctc_{large,xlarge,xxlarge} plus CTC branches of the stt_*_fastconformer_hybrid_large[_pc] fleet: en-pc, de, es, fr, it, nl, pl, ru, ua, hr, be, ar, fa, ka, hy, uz, kk-ru — all usable both as ASR backends and as compact ~82 MB `-am` forced aligners)
 - **Cohere** — cohere-transcribe-03-2026
 - **Qwen team (Alibaba)** — Qwen3-ASR-0.6B, Qwen3-ASR-1.7B, Qwen3-ForcedAligner-0.6B
 - **Mistral AI** — Voxtral Mini 3B and 4B Realtime

@@ -4,6 +4,28 @@ Test audio: jfk.wav (11.0s), Q4_K quantization, greedy decode (`-bs 1`).
 
 ---
 
+## Canary 180M Flash Q4_K_M — Linux CPU/Vulkan bring-up (AMD Ryzen AI MAX+ 395 / Radeon 8060S, 2026-09-25)
+
+Directly loaded
+`handy-computer/canary-180m-flash-gguf/canary-180m-flash-Q4_K_M.gguf`
+(139,223,744 bytes). CPU and Vulkan produced the same English transcript; Q5_K_M
+also produced the same EN→DE translation on both backends.
+
+| Input | Backend | Wall | RTx | Phase detail |
+|---|---|---:|---:|---|
+| JFK 11.0 s | CPU | 1.96 s | 5.6× | mel 17 ms, encoder 1476 ms, decoder 357 ms |
+| JFK 11.0 s | Vulkan (warm) | 0.55 s | 20.0× | first profiled run: mel 18 ms, encoder 502 ms, decoder 490 ms |
+| JFK repeat 35.0 s | CPU | 6.20 s | 5.6× | mel 19 ms, encoder 4937 ms, decoder 1108 ms |
+| JFK repeat 35.0 s | Vulkan | 0.77 s | 45.5× | mel 17 ms, encoder 195 ms, decoder 188 ms |
+| JFK ×4 44.0 s | CPU, offline chunking | 9.37 s | 4.7× | three 20 s / 6 s-overlap windows |
+| JFK ×4 44.0 s | Vulkan, offline chunking | 1.13 s | 38.9× | all four repetitions retained |
+
+GNU `time -v` peak RSS on JFK was 353,568 KiB CPU and 224,628 KiB Vulkan.
+These are desktop bring-up numbers; Android arm64 compiles, packages, and uses
+the same validated runtime path.
+
+---
+
 ## Metal im2col: the v0.17 sync silently dropped the batch-1 occupancy win — restored as kernel_im2col_flat, melotts hifigan back to ~1.85x (Apple M1, 2026-08-06)
 
 The v0.17 ggml sync removed `CRISPASR_METAL_IM2COL_OCC` (upstream reworked
