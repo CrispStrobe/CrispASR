@@ -9,6 +9,7 @@
 
 #include "cohere.h"
 #include "core/crispasr_env.h"
+#include "core/fastconformer.h"
 #include "core/sched_prof.h"
 #include "cohere-arch.h"
 #include "cohere_lang.h"
@@ -485,6 +486,7 @@ struct cohere_model {
     // ggml bookkeeping
     ggml_context* ctx = nullptr;
     ggml_backend_buffer_t buf = nullptr;
+    core_conformer::PwRepackBuf pw_q8;
     std::map<std::string, ggml_tensor*> tensors;
 };
 
@@ -2028,6 +2030,25 @@ struct cohere_context* cohere_init_from_file(const char* path_model, struct cohe
         return nullptr;
     }
 
+    // Published quantized Cohere GGUFs predate the 3D pointwise-conv rule in
+    // crispasr-quantize: 96 weights remained F16 even though each is consumed
+    // as a 2D matmul. Repack those weights once at load so old files use the
+    // optimized Q8_0 matmul kernels. CRISPASR_COHERE_PW_Q8=0 is the A/B escape
+    // hatch; pure F16/F32 models retain their original weights.
+    const bool model_quantized = std::any_of(ctx->model.tensors.begin(), ctx->model.tensors.end(),
+                                             [](const auto& item) { return ggml_is_quantized(item.second->type); });
+    const char* pw_q8_env = crispasr_env::get("CRISPASR_COHERE_PW_Q8");
+    const bool pw_q8 = pw_q8_env ? *pw_q8_env != '0' : model_quantized;
+    if (pw_q8) {
+        std::vector<ggml_tensor**> slots;
+        slots.reserve(ctx->model.enc_layers.size() * 2);
+        for (auto& layer : ctx->model.enc_layers) {
+            slots.push_back(&layer.conv_pw1_w);
+            slots.push_back(&layer.conv_pw2_w);
+        }
+        core_conformer::repack_f16_matmuls_q8(slots, ctx->ggml_backend, ctx->model.pw_q8, "cohere");
+    }
+
     // Fold inference BN into depthwise conv weights — removes 6 graph nodes × 48 layers
     cohere_fold_batchnorm(ctx->model, params.verbosity);
 
@@ -2110,6 +2131,7 @@ void cohere_free(struct cohere_context* ctx) {
         ggml_backend_buffer_free(ctx->cross_kv_buf);
     if (ctx->kv_buf)
         ggml_backend_buffer_free(ctx->kv_buf);
+    ctx->model.pw_q8.free();
     if (ctx->model.buf)
         core_gguf::release_weight_buffer(ctx->model.buf);
     if (ctx->ggml_backend)

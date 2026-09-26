@@ -37,6 +37,12 @@ sequence is strict:
    `CRISPASR_FC_PROFILE` switch still works;
 2. run the profiler/metadata audit over quantized GGUF families, fix the largest
    hidden-F16 matmul offenders one at a time, and prove each A/B before defaulting.
+   **NOW:** remote-header audit found Cohere's published Q4 retains 96 F16
+   pointwise matrices (~450 MiB) and FireRed-ASR retains 32 (~300 MiB). Granite
+   and Moonshine have no large F16 residuals; Paraformer's are mostly tiny FSMN
+   kernels. Cohere is first: load-time Q8_0 repack is implemented with
+   `CRISPASR_COHERE_PW_Q8=0` as the control; CPU transcript/per-node/runtime A/B
+   on the published model is the gate before the default is accepted.
 
 ## CLAIMED 2026-09-15 — #412 Breeze TTS 2 (backend key `bt2-tts`)
 
