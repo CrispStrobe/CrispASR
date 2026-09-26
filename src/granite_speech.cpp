@@ -650,7 +650,16 @@ extern "C" int32_t* granite_speech_tokenize(struct granite_speech_context* ctx, 
         if (end <= plain_start)
             return;
         std::string seg = input.substr(plain_start, end - plain_start);
-        auto ids = core_bpe::tokenize_simple(ctx->token_to_id, ctx->merge_rank, seg);
+        // granite-4.x (audio token >= 50000) uses the Llama-3 pre-tokenizer
+        // (\p{N}{1,3}, punctuation keeps its trailing newlines: "?\n" is ONE
+        // token). tokenize_simple split on whitespace and dropped the "\n"
+        // entirely, so every non-default prompt (-l, --hotwords, --ask,
+        // translate) differed from transformers' apply_chat_template ids.
+        // Verified id-for-id against the HF tokenizer on the backend's prompt
+        // shapes. granite-3.x keeps its GPT-2 path (different regex; unverified).
+        auto ids = ctx->model.hparams.audio_token_index >= 50000
+                       ? core_bpe::tokenize_qwen(ctx->token_to_id, ctx->merge_rank, seg, 3)
+                       : core_bpe::tokenize_simple(ctx->token_to_id, ctx->merge_rank, seg);
         out_ids.insert(out_ids.end(), ids.begin(), ids.end());
     };
 

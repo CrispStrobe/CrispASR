@@ -46,9 +46,13 @@ namespace {
 // future release dispatches through the tokenizer path.
 constexpr int32_t kPrefix4[] = {6584, 25, 220}; // "USER: "
 constexpr int kNumPrefix4 = 3;
-constexpr int32_t kSuffix4[] = { // "can you transcribe..."
-    4919, 499, 1380, 3191, 279, 8982, 1139, 264, 5439, 3645, 30, 198, 36660, 3931, 2891, 25};
-constexpr int kNumSuffix4 = 16;
+// "can you transcribe the speech into a written format?\n ASSISTANT:" exactly as
+// transformers' apply_chat_template tokenizes it for ibm-granite/granite-4.0-1b-
+// speech: "?\n" is ONE token (5380). This list had "?" (30) + "\n" (198), a
+// prompt the model never saw in training - found by the beam A/B, where the
+// output style (punctuation, "mr.") differed from upstream generate().
+constexpr int32_t kSuffix4[] = {4919, 499, 1380, 3191, 279, 8982, 1139, 264, 5439, 3645, 5380, 36660, 3931, 2891, 25};
+constexpr int kNumSuffix4 = 15;
 
 // Legacy token ids for granite-4.0-1b. Only used when the GGUF doesn't
 // export granite_speech.llm.audio_token_index / eos_token_id (i.e. it

@@ -335,7 +335,9 @@ inline std::vector<int32_t> tokenize_spm_bpe(const std::unordered_map<std::strin
 // Qwen2/3's GPT-2 regex pre-tokenizer, with non-ASCII UTF-8 bytes kept in
 // letter runs. Unlike tokenize_simple(), this preserves terminal newlines and
 // splits punctuation/digits exactly where Qwen's tokenizer does.
-inline std::vector<std::string> qwen_pretokenize(const std::string& text) {
+// max_digit_run: Qwen's \p{N} takes one digit (1); the Llama-3 regex that
+// granite-4 uses is \p{N}{1,3} (3). Otherwise the two patterns are the same.
+inline std::vector<std::string> qwen_pretokenize(const std::string& text, int max_digit_run = 1) {
     std::vector<std::string> out;
     const size_t n = text.size();
     auto is_letter = [](unsigned char c) { return std::isalpha(c) != 0 || c >= 0x80; };
@@ -383,8 +385,11 @@ inline std::vector<std::string> qwen_pretokenize(const std::string& text) {
             }
         }
         if (is_digit(c)) {
-            out.push_back(text.substr(i, 1));
-            ++i;
+            size_t j = i + 1;
+            while (j < n && (int)(j - i) < max_digit_run && is_digit((unsigned char)text[j]))
+                ++j;
+            out.push_back(text.substr(i, j - i));
+            i = j;
             continue;
         }
         {
@@ -419,6 +424,11 @@ inline std::vector<std::string> qwen_pretokenize(const std::string& text) {
             size_t j = i;
             while (j < n && is_space((unsigned char)text[j]))
                 ++j;
+            // \s+(?!\S): a whitespace run followed by a non-space leaves its last
+            // space to the next piece ("  these" -> " ", " these"), as the
+            // Qwen2 / Llama-3 regex does. A lone space before a digit stays alone.
+            if (j < n && j - i >= 2)
+                --j;
             out.push_back(text.substr(i, j - i));
             i = j;
             continue;
@@ -431,9 +441,9 @@ inline std::vector<std::string> qwen_pretokenize(const std::string& text) {
 
 inline std::vector<int32_t> tokenize_qwen(const std::unordered_map<std::string, int32_t>& token_to_id,
                                           const std::unordered_map<std::string, int32_t>& merge_rank,
-                                          const std::string& text) {
+                                          const std::string& text, int max_digit_run = 1) {
     std::vector<int32_t> result;
-    for (const std::string& pretoken : qwen_pretokenize(text)) {
+    for (const std::string& pretoken : qwen_pretokenize(text, max_digit_run)) {
         const std::string encoded = bytes_to_unicode(pretoken.data(), pretoken.size());
         bpe_one(token_to_id, merge_rank, encoded, result);
     }
