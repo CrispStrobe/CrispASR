@@ -971,6 +971,10 @@ loader, FastConformer / Conformer / Granite-LLM blocks, etc.).
 - **[`docs/regression-matrix.md`](docs/regression-matrix.md)** —
   `tools/test-all-backends.py` capability tiers, cache modes
   (`keep` / `ephemeral`), `--skip-missing` for CI.
+- **[`PLAN.md`](PLAN.md)** — current work and ordered follow-ups. Completed
+  investigations are removed from this file rather than left as stale tasks.
+- **[`HISTORY.md`](HISTORY.md)** — shipped work and the archived reasoning
+  behind earlier roadmap decisions.
 
 **Shared libraries** (cross-repo with CrispEmbed):
 - `crisp_audio/` — Whisper-shape audio encoder (Conv-stem + Transformer)
