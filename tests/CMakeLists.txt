@@ -4645,6 +4645,26 @@ catch_discover_tests(test-audio-chunking
     PROPERTIES LABELS "unit;chunking"
 )
 
+# ─── test-issue-471-energy-silent-slice — issue #471 regression guard
+#
+# Without VAD, the energy chunker could leave a slice holding only the silence
+# (or room noise) after the last word; LLM backends then returned the hotword
+# list or invented text for it. Pins audio_chunking::drop_speechless_ranges on
+# synthesized audio (speech + digital silence / room noise), with positive
+# controls that the ungated split reproduces the bug and negative controls that
+# ordinary speech is split unchanged. Header-only, pure CPU, no model load.
+add_executable(test-issue-471-energy-silent-slice test-issue-471-energy-silent-slice.cpp)
+target_include_directories(test-issue-471-energy-silent-slice PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-issue-471-energy-silent-slice PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-issue-471-energy-silent-slice
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;chunking"
+)
+
 # ─── test_slice_timestamps — Catch2 unit tests for crispasr_fixed_chunk_slices
 # t0_cs / t1_cs timestamp math.  Pins the invariant that PR #96 depends on:
 # each slice's t0_cs = start_sample / SR * 100, with no gaps between adjacent

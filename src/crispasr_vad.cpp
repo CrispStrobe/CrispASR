@@ -485,6 +485,19 @@ std::vector<crispasr_audio_slice> crispasr_energy_chunk_slices(const float* samp
 
     auto ranges = audio_chunking::split_at_energy_minima(samples, (size_t)n_samples, chunk_samples,
                                                          search_window_samples, energy_win_samples);
+    // Issue #471: a cut placed in the silence after the last word leaves a
+    // remainder with no speech; LLM backends hallucinate on it (qwen3 returns
+    // the --hotwords list). Drop such slices, as the VAD path does (#213).
+    if (audio_chunking::speechless_gate_enabled()) {
+        size_t n_dropped = 0;
+        ranges =
+            audio_chunking::drop_speechless_ranges(samples, (size_t)n_samples, ranges, energy_win_samples, &n_dropped);
+        if (n_dropped > 0)
+            fprintf(stderr,
+                    "crispasr: skipped %zu energy-chunk slice(s) with no speech above the noise floor "
+                    "(CRISPASR_ENERGY_SILENCE_GATE=0 keeps them)\n",
+                    n_dropped);
+    }
     slices.reserve(ranges.size());
     for (auto& r : ranges) {
         const int s = (int)r.first;

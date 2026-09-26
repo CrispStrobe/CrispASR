@@ -225,7 +225,7 @@ document (issue #228).
 | `--vad-import FILE` | Read segment boundaries from `FILE` instead of running VAD — reuse boundaries across backends without recomputing VAD (issue #227). Implies `--vad` |
 | `--vad-import-strict` | With `--vad-import`, refuse (rather than warn) if the file's chunk length differs from this run |
 | `--vad-export-raw FILE` | Like `--vad-export`, but writes raw VAD **speech segments** (chunk-length-independent). Imports at any `--chunk-seconds`, re-chunked per run. Implies `--vad` |
-| `-ck N`, `--chunk-seconds N` | Fallback chunk size when VAD is off (default 30 s). Backends declaring `CAP_UNBOUNDED_INPUT` / `CAP_INTERNAL_CHUNKING` handle long audio themselves and ignore it unless you pass it explicitly |
+| `-ck N`, `--chunk-seconds N` | Fallback chunk size when VAD is off (default 30 s). Backends declaring `CAP_UNBOUNDED_INPUT` / `CAP_INTERNAL_CHUNKING` handle long audio themselves and ignore it unless you pass it explicitly. Cuts land at the quietest 100 ms in the last 5 s of each window; a resulting slice with no speech above the recording's noise floor is skipped rather than transcribed (#471; `CRISPASR_ENERGY_SILENCE_GATE=0` keeps it) |
 | `--chunk-overlap F` | Overlap context (seconds) at chunk boundaries (default 3.0) |
 | `--lcs-dedup auto\|on\|off` | NeMo-style sub-word LCS dedup across chunk boundaries (default `auto` — fires when chunking with overlap) |
 | `--lcs-min-length N` | Minimum LCS length to act on (default 1; raise to 3-4 on long-silence audio where blank tokens dominate boundaries) |
