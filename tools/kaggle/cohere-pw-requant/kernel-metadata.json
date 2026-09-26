@@ -1,5 +1,5 @@
 {
-  "id": "chr1s4/crispasr-cohere-pw-requant",
+  "id": "chr1str/crispasr-cohere-pw-requant",
   "title": "crispasr-cohere-pw-requant",
   "code_file": "cohere_pw_requant.py",
   "language": "python",
@@ -8,7 +8,10 @@
   "enable_gpu": "true",
   "enable_internet": "true",
   "competition_sources": [],
-  "dataset_sources": ["chr1s4/crispasr-hf-token", "chr1s4/crispasr-ccache"],
+  "dataset_sources": [
+    "chr1str/crispasr-hf-token",
+    "chr1str/crispasr-ccache"
+  ],
   "kernel_sources": [],
   "model_sources": []
 }
