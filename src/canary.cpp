@@ -2144,6 +2144,8 @@ static canary_result* canary_finish_from_encoder(canary_context* ctx, const floa
 
         const int vocab = (int)logits.size();
         core_beam_decode::Config bcfg;
+        bcfg.semantics =
+            core_beam_decode::Semantics::Legacy; // upstream = NeMo beam search, not transformers generate()
         bcfg.max_new_tokens = max_steps;
         bcfg.eos_id = eos;
         bcfg.vocab_size = vocab;

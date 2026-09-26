@@ -2147,6 +2147,8 @@ static std::string funasr_transcribe_impl(funasr_context* ctx, const float* pcm,
             return out;
         };
         core_beam_decode::Config bcfg;
+        bcfg.semantics =
+            core_beam_decode::Semantics::Legacy; // upstream = FunASR beam search, not transformers generate()
         bcfg.max_new_tokens = max_new_tokens;
         bcfg.eos_id = (int)hp.eos_token_id;
         bcfg.vocab_size = (int)hp.llm_vocab_size;

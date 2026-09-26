@@ -157,6 +157,7 @@ surviving artifact. Applied on both the CLI and the session C-ABI.
 
 | Variable | Purpose |
 |----------|---------|
+| `CRISPASR_BEAM_SEMANTICS` | `hf` / `legacy`: search semantics of the shared LLM beam decoder (`-bs N` on the autoregressive backends; m2m100/wmt21's default beam 5). **Default `hf`** — transformers `generate(num_beams)`: length-normalised finished hypotheses, a top-2B candidate pool, its early-stopping rule. `legacy` is the original raw-cumulative-log-prob loop, still the default for canary / cohere (NeMo), omniasr (fairseq2) and funasr, whose upstreams run their own beam search. A/B vs each upstream's `generate()`: m2m100 6/6 vs 5/6, madlad 4/4 vs 3/4, moonshine 8/8 vs 7/8. |
 | `CRISPASR_MAES_BETA` / `_MAES_GAMMA` / `_MAES_NUM_STEPS` | MAES beam-search parameters. |
 | `CRISPASR_TDT_BATCH` / `CRISPASR_RNNT_BATCH` | Batch the TDT / RNNT joint decode. |
 | `CRISPASR_RNNT_GGML_PERSTEP` | Per-step (vs. persistent-graph) ggml RNNT decode. |

@@ -2879,6 +2879,8 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
         const float* last_logits = logits.data() + ((int)prompt.size() - 1) * vocab;
 
         core_beam_decode::Config bcfg;
+        bcfg.semantics =
+            core_beam_decode::Semantics::Legacy; // upstream = NeMo beam search, not transformers generate()
         bcfg.max_new_tokens = max_gen;
         bcfg.eos_id = eos_id;
         bcfg.vocab_size = vocab;

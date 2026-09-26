@@ -1607,6 +1607,8 @@ static char* omniasr_transcribe_llm(omniasr_context* ctx, const std::vector<floa
             };
 
             core_beam_decode::Config cfg;
+            cfg.semantics =
+                core_beam_decode::Semantics::Legacy; // upstream = fairseq2 beam search, not transformers generate()
             cfg.max_new_tokens = max_gen;
             cfg.eos_id = hp.eos_id;
             cfg.vocab_size = (int)step_logits.size();

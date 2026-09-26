@@ -117,8 +117,12 @@ namespace core_beam_decode {
 //           beams x vocab, only the top-B candidates may finish, finished
 //           hypotheses scored sum / len^length_penalty, B unfinished beams
 //           keep running, early_stopping heuristic, best finished wins.
-// Default Legacy while the per-backend Kaggle A/B runs; CRISPASR_BEAM_SEMANTICS
-// = hf | legacy overrides every caller (the A/B switch).
+// Default HF: the Kaggle A/B against each upstream's own generate(num_beams)
+// (tools/kaggle/beam-semantics-ab) had HF >= Legacy everywhere - m2m100 6/6 vs
+// 5/6, madlad 4/4 vs 3/4, moonshine 8/8 vs 7/8, granite equal. Callers whose
+// upstream runs its OWN beam search (NeMo: canary/cohere; fairseq2: omniasr;
+// FunASR) set Legacy explicitly until theirs is matched.
+// CRISPASR_BEAM_SEMANTICS = hf | legacy overrides every caller.
 enum class Semantics { Legacy, HF };
 enum class EarlyStopping { False, True, Never }; // transformers' early_stopping = False | True | "never"
 
@@ -130,7 +134,7 @@ struct Config {
     int beam_size = 1;        // 1 = degenerate to greedy-via-beam (still works, just expensive)
     int prompt_len = 0;       // n_past after prompt prefill (replay anchor)
     // --- HF semantics only (generation_config.json of the upstream checkpoint) ---
-    Semantics semantics = Semantics::Legacy;
+    Semantics semantics = Semantics::HF;
     float length_penalty = 1.0f;                         // transformers default
     EarlyStopping early_stopping = EarlyStopping::False; // transformers default
     int min_new_tokens = 0; // EOS banned while fewer tokens were generated (MinNewTokensLengthLogitsProcessor)
