@@ -9,6 +9,7 @@
 
 #include "cohere.h"
 #include "core/crispasr_env.h"
+#include "core/sched_prof.h"
 #include "cohere-arch.h"
 #include "cohere_lang.h"
 #include "core/lid_probe.h"
@@ -343,7 +344,7 @@ static bool cohere_sched_graph_compute(ggml_backend_sched_t sched, struct ggml_c
                 fn(backend, n_threads);
         }
     }
-    return ggml_backend_sched_graph_compute(sched, gf) == GGML_STATUS_SUCCESS;
+    return core_sched_prof::compute(sched, gf, "cohere") == GGML_STATUS_SUCCESS;
 }
 
 // ---------------------------------------------------------------------------
@@ -2422,7 +2423,7 @@ struct cohere_result* cohere_transcribe_ex(struct cohere_context* ctx, const flo
 
     // Optional per-op profiling (COHERE_PROF=1, single-chunk only)
     cohere_prof_state prof_state;
-    bool do_prof = !do_chunked && (crispasr_env::get("CRISPASR_COHERE_PROF") != nullptr);
+    bool do_prof = !do_chunked && !core_sched_prof::enabled() && (crispasr_env::get("CRISPASR_COHERE_PROF") != nullptr);
 
     if (!reuse_enc) {
         cohere_bench_stage _b_enc("encoder (all chunks)");

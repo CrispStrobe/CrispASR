@@ -25,6 +25,7 @@
 #include <string>
 #include <vector>
 #include "core/ggml_cpu_backend.h"
+#include "core/sched_prof.h"
 
 // ===========================================================================
 // Bench instrumentation — `MOONSHINE_BENCH=1` for per-stage timings.
@@ -684,7 +685,7 @@ static int moonshine_run_encoder(struct moonshine_context* ctx, const float* aud
     }
     ggml_backend_tensor_set(pos, pos_data.data(), 0, seq_len * sizeof(int32_t));
 
-    if (ggml_backend_sched_graph_compute(ctx->sched, graph) != GGML_STATUS_SUCCESS) {
+    if (core_sched_prof::compute(ctx->sched, graph, "moonshine") != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "%s: graph compute failed\n", __func__);
         if (transient_ctx)
             ggml_free(transient_ctx);
@@ -805,7 +806,7 @@ static int moonshine_precompute_cross_kv(struct moonshine_context* ctx) {
 
     ggml_backend_tensor_set(enc_out, ctx->encoder_out.data(), 0, (size_t)hidden * enc_len * sizeof(float));
 
-    if (ggml_backend_sched_graph_compute(ctx->sched, graph) != GGML_STATUS_SUCCESS) {
+    if (core_sched_prof::compute(ctx->sched, graph, "moonshine") != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "%s: graph compute failed\n", __func__);
         ggml_free(ctx0);
         return -1;
@@ -1004,7 +1005,7 @@ static int moonshine_decode_step_greedy(struct moonshine_context* ctx, int32_t t
     int32_t pos_val = cur_pos;
     ggml_backend_tensor_set(inp_pos, &pos_val, 0, sizeof(int32_t));
 
-    if (ggml_backend_sched_graph_compute(ctx->sched, graph) != GGML_STATUS_SUCCESS) {
+    if (core_sched_prof::compute(ctx->sched, graph, "moonshine") != GGML_STATUS_SUCCESS) {
         ggml_free(ctx0);
         return -1;
     }
@@ -1061,7 +1062,7 @@ static int moonshine_decode_step(struct moonshine_context* ctx, int32_t token_id
     int32_t pos_val = cur_pos;
     ggml_backend_tensor_set(inp_pos, &pos_val, 0, sizeof(int32_t));
 
-    if (ggml_backend_sched_graph_compute(ctx->sched, graph) != GGML_STATUS_SUCCESS) {
+    if (core_sched_prof::compute(ctx->sched, graph, "moonshine") != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "%s: graph compute failed\n", __func__);
         ggml_free(ctx0);
         return -1;

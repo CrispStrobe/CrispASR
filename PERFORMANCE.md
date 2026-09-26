@@ -969,7 +969,10 @@ Gates: `CRISPASR_FC_PW_Q8` (auto-on for quantized models) ·
 `CRISPASR_FC_FUSED_QKV` (on) · `CRISPASR_FC_ATTN_CONT=1` legacy conts ·
 `CRISPASR_FC_GPU_MANUAL_ATTN` (auto = CUDA only) · `CRISPASR_FC_BUCKET`
 (opt-in bucketed persistent graph, output-equivalent) ·
-`CRISPASR_FC_PROFILE=1` per-node profiler · `CRISPASR_FC_MAX_LAYERS=N`
+`CRISPASR_FC_PROFILE=1` FastConformer-compatible per-node profiler ·
+`CRISPASR_SCHED_PROFILE=1` shared per-node profiler (Canary CTC, Cohere,
+FireRed-ASR, Granite Speech, Moonshine, Moonshine Streaming and Paraformer) ·
+`CRISPASR_FC_MAX_LAYERS=N`
 bisection. Kernels: `tools/kaggle/fc-unified-graph-ab` (CUDA A/B),
 `tools/kaggle/fc-pw-requant` (fleet requant),
 `tools/kaggle/issue81-onnx-bench` (onnx head-to-head).
