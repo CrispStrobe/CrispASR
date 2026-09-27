@@ -10,6 +10,9 @@
 // Optional legacy load regression:
 //   CRISPASR_MODEL_CANARY_LEGACY=/path/to/canary-1b-v2-q4_k.gguf
 //   (falls back to CRISPASR_MODEL_CANARY)
+//   CRISPASR_MODEL_CANARY_LEGACY_F16=/path/to/canary-1b-v2.gguf
+//   (the unquantised cstr file stores pointwise convs as [1,in,out], the
+//   quantised ones as [in,out]; both layouts must load - #470 follow-up)
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -419,6 +422,35 @@ TEST_CASE("legacy Canary Q4 still loads and transcribes JFK", "[canary-180m][can
     REQUIRE(transcript != nullptr);
     const std::string words = normalize_words(transcript);
     INFO("Legacy Canary JFK: " << transcript);
+    std::free(transcript);
+    CHECK(words == kEnglishNoPnc);
+    canary_free(ctx);
+}
+
+// The unquantised legacy file is the one `-m auto` and the regression suite
+// use. Its pointwise Conv1d weights carry the kernel axis ([1,in,out]), unlike
+// the quantised files ([in,out]); the first #470 loader rejected it.
+TEST_CASE("legacy Canary F16 (singleton pointwise layout) loads and transcribes JFK",
+          "[canary-180m][canary-legacy][.live]") {
+    const std::string model = env("CRISPASR_MODEL_CANARY_LEGACY_F16");
+    if (model.empty())
+        SKIP("CRISPASR_MODEL_CANARY_LEGACY_F16 not set");
+    if (!file_exists(model))
+        SKIP("CRISPASR_MODEL_CANARY_LEGACY_F16 does not exist");
+    const std::string audio_path = env("CRISPASR_AUDIO_CANARY_180M");
+    if (audio_path.empty())
+        SKIP("CRISPASR_AUDIO_CANARY_180M not set");
+    if (!file_exists(audio_path))
+        SKIP("CRISPASR_AUDIO_CANARY_180M does not exist");
+    const std::vector<float> pcm = load_wav_16k_mono(audio_path);
+    REQUIRE(!pcm.empty());
+
+    canary_context* ctx = open_canary(model);
+    REQUIRE(ctx != nullptr);
+    char* transcript = canary_transcribe(ctx, pcm.data(), (int)pcm.size(), "en", "en", true);
+    REQUIRE(transcript != nullptr);
+    const std::string words = normalize_words(transcript);
+    INFO("Legacy Canary F16 JFK: " << transcript);
     std::free(transcript);
     CHECK(words == kEnglishNoPnc);
     canary_free(ctx);

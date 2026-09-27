@@ -3108,6 +3108,15 @@ catch_discover_tests(test-issue-475-json-utf8
     PROPERTIES LABELS "unit;output;issue-475"
 )
 
+# ─── test-canary-layout — canary loader's pointwise Conv1d layouts (#470 follow-up; hermetic, unit)
+add_executable(test-canary-layout test-canary-layout.cpp)
+target_include_directories(test-canary-layout PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-canary-layout PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-canary-layout
+    TEST_SPEC "[layout]"
+    PROPERTIES LABELS "unit;canary"
+)
+
 # ─── test-internal-chunking-gate — CAP_INTERNAL_CHUNKING regression guard
 #
 # Pins the auto-chunk fallback skip for backends that declare

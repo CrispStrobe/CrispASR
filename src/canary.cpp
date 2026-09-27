@@ -17,6 +17,7 @@
 //            target, PNC, no-ITN, no-timestamp and no-diarization
 
 #include "canary.h"
+#include "canary_layout.h"
 #include "core/crispasr_env.h"
 
 #ifndef M_PI
@@ -787,18 +788,25 @@ static bool canary_load_model(canary_model& model, canary_vocab& vocab, const ch
 
         e.norm_conv_w = get("norm_conv.weight", "norm_conv.weight", {enc_d}, true);
         e.norm_conv_b = get("norm_conv.bias", "norm_conv.bias", {enc_d}, true);
-        // The converters preserve different harmless singleton-axis layouts:
-        // legacy cstr stores pointwise Conv1d as [in,out,1,1], while the
-        // transcribe.cpp schema stores [1,in,out]. Both feed the existing
-        // reshape-based compute path unchanged; validate each exact catalog
-        // shape instead of weakening validation for unrelated tensors.
-        e.conv_pw1_w = hp.new_schema ? get("conv.pw1.weight", "conv.pointwise1.weight", {1, enc_d, 2 * enc_d}, false)
-                                     : get("conv.pw1.weight", "conv.pointwise1.weight", {enc_d, 2 * enc_d}, false);
+        // Pointwise Conv1d weights arrive flat [in,out] (quantised legacy) or
+        // with the kernel axis [1,in,out] (F16/F32 legacy and the transcribe.cpp
+        // schema); both feed the reshape-based compute path unchanged. Validate
+        // against whichever of the two exact layouts the file holds - see
+        // canary_layout.h (#470: the F16 canary-1b-v2 failed a flat-only check).
+        auto pointwise = [&](const char* legacy_suffix, const char* current_suffix, int64_t in, int64_t out) {
+            snprintf(legacy, sizeof(legacy), "encoder.layers.%u.%s", i, legacy_suffix);
+            snprintf(current, sizeof(current), "enc.blocks.%u.%s", i, current_suffix);
+            const ggml_tensor* t = try_get(model, hp.new_schema ? current : legacy);
+            const bool singleton =
+                t && canary_layout::pointwise_layout(t->ne, in, out) == canary_layout::Pointwise::Singleton;
+            return singleton ? get(legacy_suffix, current_suffix, {1, in, out}, false)
+                             : get(legacy_suffix, current_suffix, {in, out}, false);
+        };
+        e.conv_pw1_w = pointwise("conv.pw1.weight", "conv.pointwise1.weight", enc_d, 2 * enc_d);
         e.conv_pw1_b = get("conv.pw1.bias", "conv.pointwise1.bias", {2 * enc_d}, true);
         e.conv_dw_w = get("conv.dw.weight", "conv.depthwise.weight", {hp.conv_kernel, 1, enc_d}, false);
         e.conv_dw_b = get("conv.dw.bias", "conv.depthwise.bias", {enc_d}, true);
-        e.conv_pw2_w = hp.new_schema ? get("conv.pw2.weight", "conv.pointwise2.weight", {1, enc_d, enc_d}, false)
-                                     : get("conv.pw2.weight", "conv.pointwise2.weight", {enc_d, enc_d}, false);
+        e.conv_pw2_w = pointwise("conv.pw2.weight", "conv.pointwise2.weight", enc_d, enc_d);
         e.conv_pw2_b = get("conv.pw2.bias", "conv.pointwise2.bias", {enc_d}, true);
         e.conv_bn_w = get("conv.bn.weight", "conv.bn.weight", {enc_d}, true);
         e.conv_bn_b = get("conv.bn.bias", "conv.bn.bias", {enc_d}, true);
