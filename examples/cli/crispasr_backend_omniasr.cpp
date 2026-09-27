@@ -2,6 +2,7 @@
 
 #include "crispasr_backend.h"
 #include "crispasr_backend_utils.h"
+#include "crispasr_ctc_stitch.h"
 #include "omniasr.h"
 #include "whisper_params.h"
 
@@ -13,8 +14,12 @@
 #include <vector>
 #include "core/crispasr_env.h"
 
-// CTC split window (seconds). Kept at the historical 7 s ("300M positional
-// encoding degrades beyond ~7 s", 339f6d19) until the window A/B measures it.
+// CTC split window (seconds). Measured 2026-09-27: the official fairseq2
+// pipeline and this port agree frame by frame (logits cos >= 0.99996 on
+// omniASR CTC 300M-v2 / 1B-v2 at 11 s and 33 s) and BOTH degrade on long
+// unsplit input - 300M-v2 already on 11 s jfk, 1B-v2 at 33 s. Across the window
+// A/B (0 / 7 / 15 / 30 s x jfk, jfk x2, jfk x3, 31 s speech) 7 s was the most
+// robust, so it stays the default.
 static constexpr float kCtcDefaultWindowSec = 7.0f;
 
 class OmniasrBackend : public CrispasrBackend {
@@ -66,7 +71,8 @@ public:
             return out;
 
         // CTC variant: split long input into overlapping windows, stitch the
-        // per-window logit grids at the overlap midpoints, and CTC-decode the
+        // per-window logit grids inside each overlap (at a frame both windows
+        // call blank, else the midpoint - crispasr_ctc_stitch.h), and CTC-decode the
         // stitched grid ONCE. The old loop concatenated each window's TEXT —
         // overlap words came out twice, and fixed 5 s steps left a tiny tail
         // window (jfk 11 s -> 0-5, 4.5-9.5, 9-11 s) that decodes as garbage
@@ -85,29 +91,29 @@ public:
             const int overlap = std::min(SR, win / 4);
             const int n_chunks = (n_samples - overlap + (win - overlap) - 1) / (win - overlap);
             const int step = (n_samples - overlap + n_chunks - 1) / n_chunks; // equal windows of step+overlap
-            crispasr_ctc_logits stitched;
+            std::vector<crispasr_ctc_stitch::Window> wins;
+            int V = 0;
             for (int c = 0; c < n_chunks; c++) {
                 const int off = c * step;
                 const int end = (c == n_chunks - 1) ? n_samples : std::min(n_samples, off + step + overlap);
                 float* lg = nullptr;
-                int V = 0, T = 0;
-                char* t = omniasr_transcribe_with_logits(ctx_, samples + off, end - off, &lg, &V, &T);
+                int Vc = 0, T = 0;
+                char* t = omniasr_transcribe_with_logits(ctx_, samples + off, end - off, &lg, &Vc, &T);
                 free(t);
-                if (!lg || V <= 0 || T <= 0 || (stitched.n_vocab && V != stitched.n_vocab)) {
-                    free(lg);
-                    continue;
-                }
-                // keep this window's frames between the overlap midpoints
-                const double fps = (double)T / (end - off);
-                const int lo = (c == 0) ? 0 : (int)std::lround(overlap / 2 * fps);
-                const int hi = (c == n_chunks - 1) ? T : std::min(T, (int)std::lround((step + overlap / 2) * fps));
-                if (hi > lo) {
-                    stitched.n_vocab = V;
-                    stitched.data.insert(stitched.data.end(), lg + (size_t)lo * V, lg + (size_t)hi * V);
-                    stitched.n_frames += hi - lo;
+                if (lg && Vc > 0 && T > 0 && (V == 0 || Vc == V)) {
+                    V = Vc;
+                    crispasr_ctc_stitch::Window w;
+                    w.off = off;
+                    w.end = end;
+                    w.T = T;
+                    w.lg.assign(lg, lg + (size_t)T * Vc);
+                    wins.push_back(std::move(w));
                 }
                 free(lg);
             }
+            crispasr_ctc_logits stitched;
+            stitched.n_vocab = V;
+            stitched.data = crispasr_ctc_stitch::stitch(wins, V, /*blank_id=*/0, &stitched.n_frames);
             if (stitched.n_frames == 0)
                 return out;
             crispasr_segment seg;

@@ -1103,6 +1103,10 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 
 - `CRISPASR_OMNIASR_BENCH`
 - `CRISPASR_OMNIASR_DEBUG`
+- `CRISPASR_OMNIASR_CTC_CHUNK_SEC` — CTC models: split input longer than this
+  many seconds into equal overlapping windows whose logit grids are stitched
+  and decoded once (default `7`; `0` = never split). The official pipeline
+  degrades on long unsplit input the same way, so keep it on.
 - `CRISPASR_OMNIASR_DUMP_DIR`
 - `CRISPASR_OMNIASR_KEEP_F16_HEAD`
 - `CRISPASR_OMNIASR_KEEP_F16_TAIL`

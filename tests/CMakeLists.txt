@@ -6021,3 +6021,9 @@ catch_discover_tests(test-torchaudio-resample
     TEST_SPEC "[unit]"
     PROPERTIES LABELS "unit;resample"
 )
+
+# ─── test-ctc-stitch — overlapping-window CTC grid stitching (omniASR CTC chunking; hermetic, unit)
+add_executable(test-ctc-stitch test-ctc-stitch.cpp)
+target_include_directories(test-ctc-stitch PRIVATE ${PROJECT_SOURCE_DIR}/examples/cli)
+target_link_libraries(test-ctc-stitch PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-ctc-stitch TEST_SPEC "[ctc-stitch]" PROPERTIES LABELS "unit;omniasr")
