@@ -358,11 +358,19 @@ def kaggle_token_from_dataset(filename: str = "hf_token.txt") -> str | None:
     ]
     input_root = Path("/kaggle/input")
     if input_root.exists():
-        for sub in input_root.iterdir():
-            if "hf-token" in sub.name or "hf_token" in sub.name:
-                p = sub / filename
-                if p not in candidates:
-                    candidates.append(p)
+        # Classic mounts (/kaggle/input/<slug>/) AND the newer nested layout
+        # (/kaggle/input/datasets/<owner>/<slug>/). This inline copy only knew
+        # the classic one, so on current workers every run printed "HF auth:
+        # anonymous" and a rebake could not upload (2026-09-27). Probe the
+        # file in every dataset dir, like kaggle_harness.kaggle_token_from_dataset.
+        dirs = sorted(d for d in input_root.iterdir() if d.is_dir() and d.name != "datasets")
+        nested = input_root / "datasets"
+        if nested.is_dir():
+            dirs += sorted(d for o in nested.iterdir() if o.is_dir() for d in o.iterdir() if d.is_dir())
+        for sub in dirs:
+            p = sub / filename
+            if p not in candidates:
+                candidates.append(p)
     for p in candidates:
         if p.exists():
             try:
@@ -916,7 +924,11 @@ def run_rebake() -> list[dict]:
         # LM) and fail on a bare HF id - rebake 2026-09-27. Hand them a full
         # local snapshot; an id that is already a path is used as-is.
         model_dir = source
-        if not Path(source).exists() and re.fullmatch(r"[\w.-]+/[\w.-]+", source):
+        # NeMo-family dumpers take the bare id (from_pretrained / restore_from
+        # on a .nemo) and break on a directory (batch 3: parakeet tarfile
+        # IsADirectoryError, nemotron HFValidationError) - so only these get one.
+        needs_snapshot = entry["backend_id"] in ("granite", "granite-4.1", "kyutai-stt", "mini-omni2")
+        if needs_snapshot and not Path(source).exists() and re.fullmatch(r"[\w.-]+/[\w.-]+", source):
             # In a FRESH interpreter: the rebake pip installs replace
             # huggingface_hub after this process imported it, and an in-process
             # snapshot_download then dies on a half-old module
@@ -943,6 +955,10 @@ def run_rebake() -> list[dict]:
             if not mo_dir.exists():
                 subprocess.call(["git", "clone", "--depth", "1", "https://github.com/gpt-omni/mini-omni2.git", str(mo_dir)])
             ref_env["MINI_OMNI2_REPO"] = str(mo_dir)
+        if entry["backend_id"] == "kyutai-stt":
+            # LM stages import `moshi`; its own torch pin would replace the
+            # stack every other dumper runs on, so code only (batch 3).
+            subprocess.call([sys.executable, "-m", "pip", "install", "--quiet", "--no-deps", "moshi"])
         cmd = [
             sys.executable, "-u", str(REPO / "tools" / "dump_reference.py"),
             "--backend", entry["backend_id"],
