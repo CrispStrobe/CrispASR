@@ -59,10 +59,14 @@ def dump(model_dir: str, audio, stages=None, max_new_tokens: int = 0, verbose: b
 
         # 2. Pre-encoder (causal subsampling)
         if hasattr(model.encoder, "pre_encode"):
-            pre_enc, pre_len = model.encoder.pre_encode(processed_signal, processed_length)
+            # pre_encode takes (B, T, n_mels) - ConformerEncoder.forward transposes
+            # the preprocessor's (B, n_mels, T) before calling it - and returns
+            # (B, T_enc, d_model), already the (T_enc, d_model) C++ compares
+            # against. Feeding (B, n_mels, T) raised "mat1 and mat2 shapes cannot
+            # be multiplied (17x35584 and 4352x1024)" (rebake 2026-09-27).
+            pre_enc, pre_len = model.encoder.pre_encode(processed_signal.transpose(1, 2), processed_length)
             if "pre_encode_output" in stages:
-                # Transpose to (T, d_model) to match C++ ggml expectation (T_enc, d_model)
-                tensors["pre_encode_output"] = pre_enc[0].transpose(0, 1).cpu().numpy()
+                tensors["pre_encode_output"] = pre_enc[0].cpu().numpy()
                 if verbose:
                     print(f"  pre_encode_output: {tensors['pre_encode_output'].shape}")
         else:

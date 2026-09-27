@@ -908,12 +908,32 @@ def run_rebake() -> list[dict]:
         # local snapshot; an id that is already a path is used as-is.
         model_dir = source
         if not Path(source).exists() and re.fullmatch(r"[\w.-]+/[\w.-]+", source):
-            try:
-                from huggingface_hub import snapshot_download
-                with build_heartbeat(f"snapshot.{name}"):
-                    model_dir = snapshot_download(repo_id=source)
-            except Exception as _e:
-                print(f"  snapshot_download({source}) failed ({type(_e).__name__}: {_e}); passing the id", flush=True)
+            # In a FRESH interpreter: the rebake pip installs replace
+            # huggingface_hub after this process imported it, and an in-process
+            # snapshot_download then dies on a half-old module
+            # (AttributeError: ...HF_HUB_ENABLE_HF_TRANSFER, batch 2).
+            with build_heartbeat(f"snapshot.{name}"):
+                _r = subprocess.run(
+                    [sys.executable, "-c",
+                     "import sys; from huggingface_hub import snapshot_download; "
+                     "print('@@' + snapshot_download(repo_id=sys.argv[1]))", source],
+                    capture_output=True, text=True)
+            _m = re.search(r"^@@(.+)$", _r.stdout, re.M)
+            if _m and Path(_m.group(1)).is_dir():
+                model_dir = _m.group(1)
+            else:
+                print(f"  snapshot_download({source}) failed rc={_r.returncode}: "
+                      f"{(_r.stderr or _r.stdout)[-400:]}; passing the id", flush=True)
+        # Per-backend reference prerequisites that are not pip packages.
+        # mini-omni2's reference imports the MODIFIED litgpt vendored in the
+        # upstream repo (post_adapter / whisper_adapter do not exist in PyPI
+        # litgpt): "No module named 'litgpt'" in batch 1.
+        ref_env = dict(os.environ)
+        if entry["backend_id"] == "mini-omni2":
+            mo_dir = WORK / "_mini-omni2"
+            if not mo_dir.exists():
+                subprocess.call(["git", "clone", "--depth", "1", "https://github.com/gpt-omni/mini-omni2.git", str(mo_dir)])
+            ref_env["MINI_OMNI2_REPO"] = str(mo_dir)
         cmd = [
             sys.executable, "-u", str(REPO / "tools" / "dump_reference.py"),
             "--backend", entry["backend_id"],
@@ -922,7 +942,7 @@ def run_rebake() -> list[dict]:
             "--output", str(out_path),
         ]
         try:
-            subprocess.check_call(cmd, cwd=str(REPO))
+            subprocess.check_call(cmd, cwd=str(REPO), env=ref_env)
             results.append({
                 "backend": name,
                 "mode": "rebake",

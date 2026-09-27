@@ -50,10 +50,11 @@ os.environ["CRISPASR_REF_DEVICE"] = "cpu"
 # three whose failures the harness now handles): one kernel run per group keeps a failure or a
 # timeout from costing the whole set. Batch 1 = nightly skip_diff entries that
 # have both a reference module and a crispasr-diff entry.
-BATCH = ["granite-speech-4.1-2b", "kyutai-stt-1b", "qwen3-asr-0.6b"]
+BATCH = ["granite-speech-4.1-2b", "kyutai-stt-1b", "mini-omni2", "nemotron-3.5-asr-streaming-0.6b",
+         "parakeet-tdt-0.6b-en"]
 os.environ["CRISPASR_REGRESSION_BACKENDS"] = os.environ.get("CRISPASR_REGRESSION_BACKENDS", ",".join(BATCH))
 
-SCRIPT_VERSION = "2026-09-27-rebake-6-batch2"
+SCRIPT_VERSION = "2026-09-27-rebake-7-batch3"
 WORK = pathlib.Path("/kaggle/working")
 
 # Clone into a SEPARATE bootstrap dir: the canonical script manages its own
