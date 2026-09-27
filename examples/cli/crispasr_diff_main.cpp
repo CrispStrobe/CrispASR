@@ -78,6 +78,7 @@
 #include "lid_fasttext.h"
 #include "moonshine.h"
 #include "omniasr.h"
+#include "canary_ctc.h"
 #include "wav2vec2-ggml.h"
 #include "moonshine_streaming.h"
 #include "glm_asr.h"
@@ -6091,6 +6092,28 @@ int main(int argc, char** argv) {
             printf("[ERR ] ctc_logits              wav2vec2_compute_logits failed\n");
             n_fail++;
         }
+    } else if (backend_name == "fastconformer-ctc") {
+        // NeMo FastConformer CTC on the canary_ctc runtime: the per-frame
+        // log P(v | t) grid vs NeMo's CTC decoder (fastconformer_ctc.py).
+        canary_ctc_context_params cp = canary_ctc_context_default_params();
+        cp.n_threads = 4;
+        canary_ctc_context* ctx = canary_ctc_init_from_file(model_path.c_str(), cp);
+        if (!ctx) {
+            fprintf(stderr, "failed to load fastconformer-ctc model '%s'\n", model_path.c_str());
+            return 4;
+        }
+        float* lg = nullptr;
+        int T = 0, V = 0;
+        if (canary_ctc_compute_logits(ctx, samples.data(), (int)samples.size(), &lg, &T, &V) == 0 && lg) {
+            auto rep = ref.compare("ctc_logits", lg, (size_t)T * V);
+            print_row("ctc_logits", rep, COS_THRESHOLD);
+            record(rep);
+        } else {
+            printf("[ERR ] ctc_logits              canary_ctc_compute_logits failed\n");
+            n_fail++;
+        }
+        free(lg);
+        canary_ctc_free(ctx);
     } else if (backend_name == "omniasr") {
         // omniASR CTC (Wav2Vec2ForCTC conversions; hf_ctc.py): one unsplit
         // forward - the library call does not chunk, the CLI does.

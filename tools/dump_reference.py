@@ -256,6 +256,9 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     "hubert":          "reference_backends.wav2vec2",
     "data2vec":        "reference_backends.wav2vec2",
     "omniasr":         "reference_backends.hf_ctc",
+    # NeMo FastConformer CTC (stt_en_fastconformer_ctc_large): mel, pre-encode,
+    # per-layer, encoder_output and the CTC log-prob grid (canary_ctc runtime).
+    "fastconformer-ctc": "reference_backends.fastconformer_ctc",
     "moonshine":       "reference_backends.moonshine",
     "moonshine-base":  "reference_backends.moonshine",
     # Moonshine-Streaming (ONNX variant from usefulsensors/moonshine).

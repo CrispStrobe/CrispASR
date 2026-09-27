@@ -35,6 +35,7 @@ DEFAULT_STAGES = [
     "mel_spectrogram",
     "pre_encode_output",
     "encoder_output",
+    "ctc_logits",
 ] + [f"encoder_layer_{i}" for i in range(24)]
 
 
@@ -187,6 +188,20 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
             T_enc = int(enc_len.item())
             e = encf[0, :, :T_enc].transpose(0, 1).contiguous()
             out["encoder_output"] = e.detach().cpu().float().numpy()
+
+        # CTC head: NeMo's ConvASRDecoder returns log-probs (B, T_enc, V+1,
+        # blank last) - the same log P(v | t) grid canary_ctc_compute_logits()
+        # returns. A hybrid TDT/CTC model keeps it as ctc_decoder; a pure
+        # CTC model as decoder. Pure TDT/RNNT models have none (their
+        # `decoder` is the prediction net), so the stage is skipped there -
+        # this file is shared with fastconformer_ctc.py via a symlink.
+        dec = getattr(model, "ctc_decoder", None)
+        if dec is None and type(getattr(model, "decoder", None)).__name__ == "ConvASRDecoder":
+            dec = model.decoder
+        if "ctc_logits" in stages and dec is not None:
+            lp = dec(encoder_output=encf)
+            T_enc = int(enc_len.item())
+            out["ctc_logits"] = lp[0, :T_enc].detach().cpu().float().numpy().copy()
 
     _hooks.drop_hooks(handles)
     out.update(_hooks.finalize(captured, T_max=int(enc_len.item())))

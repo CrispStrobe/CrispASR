@@ -293,6 +293,7 @@ target_link_libraries(crispasr-diff PRIVATE
     crepe
     omniasr
     wav2vec2-ggml
+    canary_ctc
     crispasr-diff-lib
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
