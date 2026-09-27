@@ -291,6 +291,8 @@ target_link_libraries(crispasr-diff PRIVATE
     miocodec
     breeze_tts_2
     crepe
+    omniasr
+    wav2vec2-ggml
     crispasr-diff-lib
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}

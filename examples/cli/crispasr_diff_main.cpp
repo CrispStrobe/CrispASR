@@ -77,6 +77,8 @@
 #include "lid_cld3.h"
 #include "lid_fasttext.h"
 #include "moonshine.h"
+#include "omniasr.h"
+#include "wav2vec2-ggml.h"
 #include "moonshine_streaming.h"
 #include "glm_asr.h"
 #include "firered_asr.h"
@@ -6072,6 +6074,53 @@ int main(int argc, char** argv) {
         if (codes)
             free(codes);
         orpheus_free(octx);
+    } else if (backend_name == "wav2vec2" || backend_name == "hubert" || backend_name == "data2vec") {
+        // transformers *ForCTC family (tools/reference_backends/hf_ctc.py):
+        // the CTC grid, frame-major [T x V], vs wav2vec2_compute_logits().
+        wav2vec2_model m;
+        if (!wav2vec2_load(model_path.c_str(), m)) {
+            fprintf(stderr, "failed to load %s model '%s'\n", backend_name.c_str(), model_path.c_str());
+            return 4;
+        }
+        std::vector<float> lg = wav2vec2_compute_logits(m, samples.data(), (int)samples.size(), 4);
+        if (!lg.empty()) {
+            auto rep = ref.compare("ctc_logits", lg.data(), lg.size());
+            print_row("ctc_logits", rep, COS_THRESHOLD);
+            record(rep);
+        } else {
+            printf("[ERR ] ctc_logits              wav2vec2_compute_logits failed\n");
+            n_fail++;
+        }
+    } else if (backend_name == "omniasr") {
+        // omniASR CTC (Wav2Vec2ForCTC conversions; hf_ctc.py): one unsplit
+        // forward - the library call does not chunk, the CLI does.
+        omniasr_context_params cp = omniasr_context_default_params();
+        cp.n_threads = 4;
+        cp.use_gpu = false;
+        omniasr_context* ctx = omniasr_init_from_file(model_path.c_str(), cp);
+        if (!ctx) {
+            fprintf(stderr, "failed to load omniasr model '%s'\n", model_path.c_str());
+            return 4;
+        }
+        if (!omniasr_is_ctc(ctx)) {
+            printf("[ERR ] ctc_logits              not a CTC omniasr model (LLM variant has no dense grid)\n");
+            n_fail++;
+        } else {
+            float* lg = nullptr;
+            int V = 0, T = 0;
+            char* text = omniasr_transcribe_with_logits(ctx, samples.data(), (int)samples.size(), &lg, &V, &T);
+            free(text);
+            if (lg && V > 0 && T > 0) {
+                auto rep = ref.compare("ctc_logits", lg, (size_t)V * T);
+                print_row("ctc_logits", rep, COS_THRESHOLD);
+                record(rep);
+            } else {
+                printf("[ERR ] ctc_logits              omniasr_transcribe_with_logits returned no grid\n");
+                n_fail++;
+            }
+            free(lg);
+        }
+        omniasr_free(ctx);
     } else if (backend_name == "moonshine") {
         // Moonshine (UsefulSensors tiny/base). Non-streaming variant.
         moonshine_init_params mp{};

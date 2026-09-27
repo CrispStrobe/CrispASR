@@ -249,6 +249,13 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # Moonshine (UsefulSensors tiny/base). model_dir = usefulsensors/moonshine-tiny
     # or usefulsensors/moonshine-base (or a local snapshot). Audio arg is a 16 kHz
     # mono WAV. Captures encoder_output (T_enc, hidden_dim) matching moonshine_encode().
+    # transformers *ForCTC checkpoints (Wav2Vec2 / Hubert / Data2VecAudio, and the
+    # omniASR-CTC Wav2Vec2ForCTC conversions). Captures ctc_logits (T, V), the
+    # grid wav2vec2_compute_logits() / omniasr_transcribe_with_logits() return.
+    "wav2vec2":        "reference_backends.wav2vec2",
+    "hubert":          "reference_backends.wav2vec2",
+    "data2vec":        "reference_backends.wav2vec2",
+    "omniasr":         "reference_backends.hf_ctc",
     "moonshine":       "reference_backends.moonshine",
     "moonshine-base":  "reference_backends.moonshine",
     # Moonshine-Streaming (ONNX variant from usefulsensors/moonshine).
