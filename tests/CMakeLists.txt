@@ -3117,6 +3117,15 @@ catch_discover_tests(test-canary-layout
     PROPERTIES LABELS "unit;canary"
 )
 
+# ─── test-fastconformer-snap-layout — diff-harness conv snapshot layout vs the reference dumpers (hermetic, unit)
+add_executable(test-fastconformer-snap-layout test-fastconformer-snap-layout.cpp)
+target_include_directories(test-fastconformer-snap-layout PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-fastconformer-snap-layout PRIVATE Catch2::Catch2WithMain ggml ggml-base crispasr_link_ggml_cpu)
+catch_discover_tests(test-fastconformer-snap-layout
+    TEST_SPEC "[unit][fastconformer]"
+    PROPERTIES LABELS "unit;core"
+)
+
 # ─── test-internal-chunking-gate — CAP_INTERNAL_CHUNKING regression guard
 #
 # Pins the auto-chunk fallback skip for backends that declare

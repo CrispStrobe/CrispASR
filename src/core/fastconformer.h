@@ -209,8 +209,14 @@ struct PreEncodeWeights {
 // staged comparison.  Feature ordering: k = oc*(OW) + ow  (matches Python's
 // x.transpose(1,2).reshape(T, C*Freq) convention).
 static inline void snap_conv4d(ggml_context* ctx0, ggml_cgraph* gf, ggml_tensor* t, const char* name) {
-    // permute(1, 2, 0, 3): (OW,OH,OC,N) → (OH,OC,OW,N)
-    ggml_tensor* p = ggml_cont(ctx0, ggml_permute(ctx0, t, 1, 2, 0, 3));
+    // ggml_permute sends source dim i to position axes[i]: (0, 2, 1, 3) turns
+    // (OW,OH,OC,N) into (OW,OC,OH,N) - frequency fastest, then channel, then
+    // time - i.e. feature k = oc*OW + ow per time row, exactly what
+    // tools/reference_backends/*.py dump ((C,T,F) -> permute(1,0,2) -> (T, C*F)).
+    // The old (1, 2, 0, 3) made the CHANNEL fastest; the diff harness then
+    // compared reordered numbers (canary pre_enc_c*: cos -0.16..-0.32) while
+    // pre_encode_output, which does not go through this snap, matched 0.999999.
+    ggml_tensor* p = ggml_cont(ctx0, ggml_permute(ctx0, t, 0, 2, 1, 3));
     // reshape to (OC*OW, OH): ne[0]=OC*OW fastest, ne[1]=OH (T_enc)
     const int64_t C_Freq = t->ne[2] * t->ne[0]; // OC * OW
     const int64_t T_enc = t->ne[1];             // OH
