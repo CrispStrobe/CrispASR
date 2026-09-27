@@ -605,13 +605,9 @@
         "approx_size_mb": 660
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "And so my fellow americans ask not. What your country can do for you? Ask what you can do for your country.",
-      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav",
-      "transcript_tolerance": {
-        "cer_max": 0.05,
-        "wer_max": 0.05
-      },
-      "transcript_tolerance_note": "Was wer_max 0.25 'GH runner diverges from T4'. It did not diverge: the CLI joined the TEXT of fixed 5 s windows (duplicated overlap words, 2 s garbage tail) identically on every device/quant. With logit stitching the 7 s-window output is at most one misspelt word off (Kaggle A/B 2026-09-27), so the gate is one word in 22. C++ matches the official fairseq2 pipeline frame by frame (logits cos >= 0.99996).",
+      "expected_transcript": "And so my fellow americans, ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-09-27 GH ubuntu-latest CPU (Regression run 36351488823) after the logit-stitching fix d7a78776, samples/jfk.wav",
+      "transcript_tolerance_note": "No tolerance (default WER 0). Was wer_max 0.25 'GH runner diverges from T4': it did not diverge - the CLI joined the TEXT of fixed 5 s windows (duplicated overlap words, garbage 2 s tail) on every device/quant. With logit stitching GH CPU is WER 0. C++ matches the official fairseq2 pipeline frame by frame (logits cos >= 0.99996).",
       "source_model": "aadel4/omniASR-CTC-1B-v2",
       "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
     },
