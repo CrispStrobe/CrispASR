@@ -48,6 +48,12 @@ char* omniasr_transcribe(struct omniasr_context* ctx, const float* samples, int 
 char* omniasr_transcribe_with_logits(struct omniasr_context* ctx, const float* samples, int n_samples,
                                      float** out_logits, int* out_n_vocab, int* out_n_frames);
 
+// Greedy CTC decode of a frame-major logit grid as returned by
+// omniasr_transcribe_with_logits (logits[t*n_vocab + v]) — lets a caller stitch
+// the grids of overlapping chunks and decode once. CTC models only; returns a
+// malloc'd string (free()) or NULL when empty / not CTC.
+char* omniasr_ctc_decode_logits(struct omniasr_context* ctx, const float* logits, int n_vocab, int n_frames);
+
 // Variant for the LLM model variant: returns text plus per-token ids and
 // softmax probabilities (CPU-side argmax + softmax). Returns nullptr for the
 // CTC variant — use omniasr_transcribe instead. Free with omniasr_result_free.

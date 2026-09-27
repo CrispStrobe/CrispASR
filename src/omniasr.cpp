@@ -264,6 +264,57 @@ static ggml_tensor* build_ln(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, 
 // OmniASR/Wav2Vec2 positional convolution: grouped Conv1d + GELU + residual.
 // ggml has no grouped conv op, so build it as one conv branch per group.
 // h: [C, T], w: [K, C_per_group, C], b: [C].
+// Greedy CTC decode of a frame-major [T, V] logit grid (logits[t * V + v]):
+// argmax per frame, collapse repeats, drop blanks, SentencePiece detokenize
+// (U+2581 -> space), trim. Blank is always index 0: fairseq2 uses <s>=0, HF
+// uses <pad>=0, both trained with PyTorch CTC loss (blank=0 default).
+static std::string ctc_greedy_text(const omniasr_context* ctx, const float* logits, int V, int T) {
+    const auto& hp = ctx->model.hp;
+    const auto& m = ctx->model;
+    const int blank_id = 0;
+    std::vector<int> tokens;
+    int prev_id = -1;
+    for (int t = 0; t < T; t++) {
+        int best = 0;
+        float best_val = logits[(size_t)t * V];
+        for (int v = 1; v < V; v++) {
+            if (logits[(size_t)t * V + v] > best_val) {
+                best_val = logits[(size_t)t * V + v];
+                best = v;
+            }
+        }
+        if (best != blank_id && best != prev_id)
+            tokens.push_back(best);
+        prev_id = best;
+    }
+
+    std::string result;
+    for (int tid : tokens) {
+        if (tid == hp.bos_id || tid == hp.eos_id || tid == hp.pad_id || tid == hp.unk_id)
+            continue;
+        if (tid < (int)m.vocab.size()) {
+            const std::string& piece = m.vocab[tid];
+            for (size_t i = 0; i < piece.size(); i++) {
+                if ((unsigned char)piece[i] == 0xE2 && i + 2 < piece.size() && (unsigned char)piece[i + 1] == 0x96 &&
+                    (unsigned char)piece[i + 2] == 0x81) {
+                    result += ' ';
+                    i += 2;
+                } else {
+                    result += piece[i];
+                }
+            }
+        }
+    }
+    if (ctx->params.verbosity >= 1)
+        fprintf(stderr, "omniasr: decoded %d tokens → %zu chars\n", (int)tokens.size(), result.size());
+
+    while (!result.empty() && result.front() == ' ')
+        result.erase(result.begin());
+    while (!result.empty() && result.back() == ' ')
+        result.pop_back();
+    return result;
+}
+
 static ggml_tensor* build_grouped_pos_conv(ggml_context* ctx, ggml_tensor* h, ggml_tensor* w, ggml_tensor* b) {
     const int64_t K = w->ne[0];
     const int64_t C_per_group = w->ne[1];
@@ -949,55 +1000,7 @@ extern "C" char* omniasr_transcribe(struct omniasr_context* ctx, const float* sa
     if (ctx->params.verbosity >= 1)
         fprintf(stderr, "omniasr: logits [%d, %d], CTC decoding...\n", V, T);
 
-    // Greedy CTC decode: argmax per frame, collapse repeats, remove blanks
-    // CTC blank is always index 0: fairseq2 uses <s>=0, HF uses <pad>=0.
-    // Both trained with PyTorch CTC loss (blank=0 default).
-    int blank_id = 0;
-    std::vector<int> tokens;
-    int prev_id = -1;
-    for (int t = 0; t < T; t++) {
-        // logits layout: [V, T] col-major → logits[t * V + v]
-        int best = 0;
-        float best_val = logits[t * V];
-        for (int v = 1; v < V; v++) {
-            if (logits[t * V + v] > best_val) {
-                best_val = logits[t * V + v];
-                best = v;
-            }
-        }
-        if (best != blank_id && best != prev_id) {
-            tokens.push_back(best);
-        }
-        prev_id = best;
-    }
-
-    // Detokenize: SentencePiece convention — ▁ (U+2581) = space
-    std::string result;
-    for (int tid : tokens) {
-        if (tid == hp.bos_id || tid == hp.eos_id || tid == hp.pad_id || tid == hp.unk_id)
-            continue;
-        if (tid < (int)m.vocab.size()) {
-            std::string piece = m.vocab[tid];
-            for (size_t i = 0; i < piece.size(); i++) {
-                if ((unsigned char)piece[i] == 0xE2 && i + 2 < piece.size() && (unsigned char)piece[i + 1] == 0x96 &&
-                    (unsigned char)piece[i + 2] == 0x81) {
-                    result += ' ';
-                    i += 2;
-                } else {
-                    result += piece[i];
-                }
-            }
-        }
-    }
-
-    if (ctx->params.verbosity >= 1)
-        fprintf(stderr, "omniasr: decoded %d tokens → %zu chars\n", (int)tokens.size(), result.size());
-
-    // Trim
-    while (!result.empty() && result.front() == ' ')
-        result.erase(result.begin());
-    while (!result.empty() && result.back() == ' ')
-        result.pop_back();
+    std::string result = ctc_greedy_text(ctx, logits.data(), V, T);
 
     if (result.empty())
         return nullptr;
@@ -1762,6 +1765,20 @@ extern "C" void omniasr_result_free(struct omniasr_result* r) {
     free(r->token_ids);
     free(r->token_probs);
     free(r);
+}
+
+extern "C" char* omniasr_ctc_decode_logits(struct omniasr_context* ctx, const float* logits, int n_vocab,
+                                           int n_frames) {
+    if (!ctx || !logits || n_vocab <= 0 || n_frames <= 0 || ctx->model.hp.model_type != 0)
+        return nullptr;
+    std::string text = ctc_greedy_text(ctx, logits, n_vocab, n_frames);
+    if (text.empty())
+        return nullptr;
+    char* out = (char*)malloc(text.size() + 1);
+    if (!out)
+        return nullptr;
+    memcpy(out, text.c_str(), text.size() + 1);
+    return out;
 }
 
 extern "C" const char* omniasr_token_text(struct omniasr_context* ctx, int id) {
