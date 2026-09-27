@@ -763,7 +763,7 @@ def run_validate() -> list[dict]:
                 stages = run_one.run_diff(
                     diff_bin, entry["backend_id"], gguf_local, ref_local, sample)
                 passes, fails, missing, extras = run_one.evaluate_stage_thresholds(
-                    stages, entry["diff_thresholds"])
+                    stages, entry["diff_thresholds"], **run_one.stage_gate_kwargs(entry))
                 ok = transcript_ok and not fails and not missing
             results.append({
                 "backend": name,

@@ -241,14 +241,22 @@ def parse_diff_stdout(stdout: str) -> dict[str, float]:
 
 def evaluate_stage_thresholds(
     stages: dict[str, float], thresholds: dict[str, float],
+    default: float | None = None, advisory: tuple[str, ...] | list[str] = (),
 ) -> tuple[list[tuple[str, float, float]], list[tuple[str, float, float]], list[str], list[tuple[str, float]]]:
     """Apply manifest thresholds to parsed cos_min map.
+
+    `default` (manifest `stage_threshold_default`) gates every captured stage
+    that has no explicit threshold — per-layer / conv-snapshot stages used to be
+    INFO-only and could drift arbitrarily without failing anything. Stages whose
+    name starts with a prefix in `advisory` (manifest `advisory_stages`) stay
+    ungated extras. Without `default`, all unlisted stages are extras (old
+    behaviour).
 
     Returns (passes, fails, missing, extras):
       passes  — [(stage, cos_min, threshold)] above threshold
       fails   — [(stage, cos_min, threshold)] below threshold
       missing — [stage] in thresholds but not in stages
-      extras  — [(stage, cos_min)] in stages but not in thresholds
+      extras  — [(stage, cos_min)] captured but not gated
     """
     passes: list[tuple[str, float, float]] = []
     fails: list[tuple[str, float, float]] = []
@@ -259,10 +267,20 @@ def evaluate_stage_thresholds(
             continue
         v = stages[stage]
         (passes if v >= threshold else fails).append((stage, v, threshold))
-    extras = sorted(
-        (s, stages[s]) for s in set(stages) - set(thresholds)
-    )
+    extras: list[tuple[str, float]] = []
+    for s in sorted(set(stages) - set(thresholds)):
+        v = stages[s]
+        if default is None or s.startswith(tuple(advisory)):
+            extras.append((s, v))
+        else:
+            (passes if v >= default else fails).append((s, v, default))
     return passes, fails, missing, extras
+
+
+def stage_gate_kwargs(entry: dict) -> dict:
+    """Manifest entry -> the default/advisory kwargs of evaluate_stage_thresholds."""
+    d = entry.get("stage_threshold_default")
+    return {"default": None if d is None else float(d), "advisory": tuple(entry.get("advisory_stages", []))}
 
 
 def run_diff(diff_bin: Path, backend_id: str, gguf: Path, ref: Path, sample: Path) -> dict:
@@ -411,22 +429,19 @@ def regression_for(name: str, manifest: dict, work_dir: Path,
     print(f"\n[diff-harness] {name}")
     stages = run_diff(diff_bin, entry["backend_id"], gguf_local, ref_local, sample)
     thresholds = entry["diff_thresholds"]
-    for stage, threshold in thresholds.items():
-        if stage not in stages:
-            print(f"\033[33m  SKIP\033[0m {stage}  (not captured by diff harness)")
-            continue
-        cos_min = stages[stage]
-        ok = cos_min >= threshold
-        verdict = "\033[32m  PASS\033[0m" if ok else "\033[31m  FAIL\033[0m"
-        print(f"{verdict} {stage:24s} cos_min={cos_min:.6f}  threshold={threshold}")
-        if not ok:
-            failures += 1
-    # Surface any stages that came back but aren't in thresholds — these
-    # are new captures that should be added to manifest.json.
-    extra = set(stages) - set(thresholds)
-    for stage in sorted(extra):
-        print(f"\033[33m  INFO\033[0m {stage} cos_min={stages[stage]:.6f} "
-              f"(not in manifest thresholds; add it if intentional)")
+    passes, fails, missing, extras = evaluate_stage_thresholds(stages, thresholds, **stage_gate_kwargs(entry))
+    for stage in missing:
+        print(f"\033[33m  SKIP\033[0m {stage}  (not captured by diff harness)")
+    for stage, cos_min, threshold in passes:
+        print(f"\033[32m  PASS\033[0m {stage:24s} cos_min={cos_min:.6f}  threshold={threshold}")
+    for stage, cos_min, threshold in fails:
+        print(f"\033[31m  FAIL\033[0m {stage:24s} cos_min={cos_min:.6f}  threshold={threshold}")
+    failures += len(fails)
+    # Captured but ungated: no stage_threshold_default, or listed in
+    # advisory_stages. Add a threshold (or a default) if the stage is meant to hold.
+    for stage, cos_min in extras:
+        print(f"\033[33m  INFO\033[0m {stage} cos_min={cos_min:.6f} "
+              f"(ungated: not in diff_thresholds / advisory_stages)")
 
     return failures
 

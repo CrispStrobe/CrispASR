@@ -284,6 +284,38 @@ class ThresholdEvaluationTests(unittest.TestCase):
         p, f, m, e = run_one.evaluate_stage_thresholds(stages, self.THRESHOLDS)
         self.assertEqual(e, [("some_new_stage", 0.42)])
 
+    def test_default_gates_unlisted_stages(self):
+        """stage_threshold_default turns ungated extras into real gates; an
+        advisory_stages prefix keeps a stage INFO-only."""
+        stages = {
+            "encoder_output": 0.9999,
+            "encoder_output_ref_mel": 0.9999,
+            "mel_spectrogram": 0.96,
+            "encoder_layer_3": 0.9999,
+            "encoder_layer_18": 0.2,   # drifted -> must FAIL under the default
+            "pre_enc_c0": -0.16,       # advisory -> extra, not a failure
+        }
+        p, f, m, e = run_one.evaluate_stage_thresholds(
+            stages, self.THRESHOLDS, default=0.998, advisory=("pre_enc_c",))
+        self.assertEqual(f, [("encoder_layer_18", 0.2, 0.998)])
+        self.assertIn(("encoder_layer_3", 0.9999, 0.998), p)
+        self.assertEqual(e, [("pre_enc_c0", -0.16)])
+        # Without a default the same drift is only an extra (old behaviour).
+        p, f, m, e = run_one.evaluate_stage_thresholds(stages, self.THRESHOLDS)
+        self.assertEqual(f, [])
+        self.assertEqual(len(e), 3)
+
+    def test_manifest_gate_kwargs(self):
+        """Every stage_threshold_default in the manifest is a sane cosine, and
+        stage_gate_kwargs reads it."""
+        manifest = json.loads((Path(run_one.__file__).parent / "manifest.json").read_text())
+        gated = [b for b in manifest["backends"] if "stage_threshold_default" in b]
+        self.assertTrue(gated)
+        for b in gated:
+            kw = run_one.stage_gate_kwargs(b)
+            self.assertTrue(0.9 <= kw["default"] <= 1.0, b["name"])
+        self.assertEqual(run_one.stage_gate_kwargs({}), {"default": None, "advisory": ()})
+
     def test_end_to_end_against_canned_diff_output(self):
         """Wire parse_diff_stdout → evaluate_stage_thresholds against
         the canned sample; assert the partition matches what the

@@ -34,7 +34,9 @@
         "wer_max": 1.0,
         "transcript_tolerance_note": "CJK: WER is degenerate (no whitespace) so the gate is CER. cer_max=0.10 tolerates minor kanji/punct decode variance. KEEP IT TIGHT — 0.30 was a prior band-aid that masked a real defect, and 0.10 is what surfaced it. That defect is now FIXED, not tolerated: JA clips in the 12-30 s gap skipped the #89 auto-VAD safeguard (gated on the unrelated 30 s long-audio constant) and ran a degraded full single pass, which hallucinated a leading sentence and misread '6対3' as '0失点' (cer 0.68). crispasr_run.cpp now gates auto-VAD on the backend's own vad_slice_cap_seconds(); the fixture decodes at cer 0.00 against the re-baked reference."
       },
-      "transcript_tolerance_note": "Wide tolerance — GH runner decode diverges significantly from Kaggle T4"
+      "transcript_tolerance_note": "Wide tolerance — GH runner decode diverges significantly from Kaggle T4",
+      "stage_threshold_default": 0.9995,
+      "stage_threshold_note": "Gates encoder_layer_* / pre_encode_output. GH CPU Sep 24-26: every stage >= 0.999997."
     },
     {
       "name": "moonshine-tiny",
@@ -150,7 +152,9 @@
         "cer_max": 0.12,
         "wer_max": 0.15
       },
-      "transcript_tolerance_note": "Widened — GH runner decode drift exceeds narrow tolerance"
+      "transcript_tolerance_note": "Widened — GH runner decode drift exceeds narrow tolerance",
+      "stage_threshold_default": 0.998,
+      "stage_threshold_note": "Gates every captured stage without an explicit threshold (encoder_layer_*, pre_enc_c*, encoder_output_ref_mel). GH CPU Sep 24-26: layers 0-17 >= 0.999996, 18-31 dip to 0.998967 (layer 18) - F16 accumulation through the deep stack, stable across nights. pre_enc_c* were negative before the harness layout fix 3bc9f1ac."
     },
     {
       "name": "firered-asr2-aed",

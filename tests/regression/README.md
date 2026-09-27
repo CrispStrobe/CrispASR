@@ -113,6 +113,24 @@ test enforces their absence. The nightly matrix will run the transcript
 check immediately; once the Kaggle rebake produces a `ref.gguf`, remove
 `skip_diff` and fill in the full fields.
 
+## Gating every captured stage (`stage_threshold_default`)
+
+`diff_thresholds` gates the stages it names. crispasr-diff also captures
+per-layer and conv-snapshot stages (`encoder_layer_*`, `pre_enc_c*`, …);
+without a default these only print `INFO` and can drift arbitrarily.
+Set `"stage_threshold_default": 0.998` to gate every captured stage that
+has no explicit threshold, and `"advisory_stages": ["pre_enc_c"]` (name
+prefixes) to keep specific stages ungated while they are being fixed.
+Pick the default from measured nightly minima, with some margin, and
+record them in `stage_threshold_note`.
+
+## Which backends run when
+
+`tests/regression/nightly_matrix.json` is the nightly/dispatch list.
+Push to main and PRs run only the backends the changed files can affect
+(`tools/regression_select.py`); shared code (src/core, ggml, CLI plumbing,
+this directory) selects a small core set, and docs-only changes select none.
+
 ## Transcript tolerance (`transcript_tolerance`) — opt-in WER/CER
 
 By default the transcript check is byte-for-byte exact — no tolerance.
