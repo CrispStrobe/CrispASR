@@ -3,8 +3,8 @@
   "version": 1,
   "fixtures": {
     "repo": "cstr/crispasr-regression-fixtures",
-    "revision": "b61b03014bc99ecce18ac8f99988d5110c83f2d2",
-    "_note": "Pinned. To re-bake, run `tools/kaggle-regression.py` with MODE=rebake UPLOAD=1; the new commit SHA gets pasted here as a reviewable diff. Previous: 99f005d59a0f7f4915dea5faea4d2e17b2120268 (2026-05-17). Bumped 2026-05-25 after Kaggle rebake v13 published 9 ref archives — adds parakeet-tdt-1.1b, parakeet-tdt_ctc-1.1b, parakeet-rnnt-0.6b, parakeet-rnnt-1.1b (all NEW from handover-prompts/extend-coverage-via-kaggle.md realistic goal); refreshes canary-1b-v2, moonshine-tiny/base, parakeet-tdt-0.6b-{en,ja}."
+    "revision": "e5781ed4f8c2186326ebc18c5971886e881d2ca4",
+    "_note": "Pinned. To re-bake, run `tools/kaggle-regression.py` with MODE=rebake UPLOAD=1; the new commit SHA gets pasted here as a reviewable diff. Previous: 99f005d59a0f7f4915dea5faea4d2e17b2120268 (2026-05-17). Bumped 2026-05-25 after Kaggle rebake v13 published 9 ref archives — adds parakeet-tdt-1.1b, parakeet-tdt_ctc-1.1b, parakeet-rnnt-0.6b, parakeet-rnnt-1.1b (all NEW from handover-prompts/extend-coverage-via-kaggle.md realistic goal); refreshes canary-1b-v2, moonshine-tiny/base, parakeet-tdt-0.6b-{en,ja}. Bumped 2026-09-27 from b61b03014b: adds sensevoice-small, paraformer-zh, funasr-nano jfk_11s refs (copied from the #436 final rebake in the dataset repo of the same name). Nothing removed."
   },
   "backends": [
     {
@@ -339,10 +339,7 @@
     {
       "name": "paraformer-zh",
       "backend_id": "paraformer",
-      "skip_diff": true,
-      "_skip_diff_note": "Added 2026-05-25 — rebake-pending. Chinese paraformer; needs a Chinese sample WAV — TODO confirm which sample to use (samples/zh/ may not exist; could store in cstr/crispasr-regression-fixtures and reference via fixture_sample_path).",
-      "skip_preflight": true,
-      "_skip_preflight_note": "Rebake-pending — GGUF revision is a TODO placeholder. Remove skip_preflight once the rebake fills in the real 40-char SHA and the file lands on HF.",
+      "skip_diff": false,
       "source_model": "funasr/paraformer-zh",
       "source_model_note": "HF id for tools/reference_backends/paraformer.py. Loaded via funasr's automodel.",
       "gguf": {
@@ -360,7 +357,17 @@
         "cer_max": 0.1,
         "wer_max": 0.15
       },
-      "transcript_tolerance_note": "Wide tolerance — GH runner decode diverges significantly from Kaggle T4"
+      "transcript_tolerance_note": "Wide tolerance — GH runner decode diverges significantly from Kaggle T4",
+      "fixture_ref_path": "paraformer-zh/jfk_11s/ref.gguf",
+      "diff_gguf": {
+        "file": "paraformer-zh-f16.gguf"
+      },
+      "diff_thresholds": {
+        "mel_features": 0.999,
+        "encoder_output": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Ref = #436 final rebake (real FunASR front-end). Every captured stage gated at 0.999 on the F16 GGUF; tune from the Kaggle validate numbers."
     },
     {
       "name": "voxtral-mini-3b-2507",
@@ -536,8 +543,7 @@
     {
       "name": "sensevoice-small",
       "backend_id": "sensevoice",
-      "skip_diff": true,
-      "skip_preflight": true,
+      "skip_diff": false,
       "gguf": {
         "repo": "cstr/sensevoice-small-GGUF",
         "revision": "abbeaf54fdae72fc6034e23edc0efd8f8e1cc982",
@@ -553,7 +559,17 @@
       },
       "transcript_tolerance_note": "Cross-platform decode drift",
       "source_model": "FunAudioLLM/SenseVoiceSmall",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "fixture_ref_path": "sensevoice-small/jfk_11s/ref.gguf",
+      "diff_gguf": {
+        "file": "sensevoice-small-f16.gguf"
+      },
+      "diff_thresholds": {
+        "mel_features": 0.999,
+        "encoder_output": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Ref = #436 final rebake (real FunASR front-end). Every captured stage gated at 0.999 on the F16 GGUF; tune from the Kaggle validate numbers."
     },
     {
       "name": "qwen3-asr-0.6b",
@@ -658,8 +674,7 @@
     {
       "name": "funasr-nano",
       "backend_id": "funasr",
-      "skip_diff": true,
-      "skip_preflight": true,
+      "skip_diff": false,
       "gguf": {
         "repo": "cstr/funasr-nano-GGUF",
         "revision": "5d4346e47c268ba91a332a148a1fd39b766408ac",
@@ -670,7 +685,17 @@
       "expected_transcript": "AND SO MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
       "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav",
       "source_model": "FunAudioLLM/Fun-ASR-Nano-2512",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "fixture_ref_path": "funasr-nano/jfk_11s/ref.gguf",
+      "diff_gguf": {
+        "file": "funasr-nano-2512-f16.gguf"
+      },
+      "diff_thresholds": {
+        "mel_features": 0.999,
+        "encoder_output": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Ref = #436 final rebake (real FunASR front-end). Every captured stage gated at 0.999 on the F16 GGUF; tune from the Kaggle validate numbers."
     },
     {
       "name": "funasr-mlt-nano",
