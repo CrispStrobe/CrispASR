@@ -317,6 +317,39 @@ def run_diff(diff_bin: Path, backend_id: str, gguf: Path, ref: Path, sample: Pat
     return result
 
 
+def transcript_gate(entry: dict, actual: str) -> tuple[bool, list[str]]:
+    """The transcript pass/fail rule, shared by run_one.py and the Kaggle suite
+    (which used to compare byte-exact and so failed entries GH passes).
+
+    DEFAULT is a zero-tolerance metric gate, not byte-equal: a space-delimited
+    transcript that differs ONLY in punctuation/case has WER=0 and passes, even
+    with no explicit tolerance block — otherwise every byte-equal backend flaps
+    red the moment CI flips a comma (fastconformer / wav2vec2 / mini-omni2 flip
+    run-to-run). An explicit transcript_tolerance widens the bound (e.g. TTS
+    roundtrips). Gating metric by language:
+      * space-delimited: WER (invariant to punctuation/case decode ties); CER
+        is reported as advisory only. The diff-harness stages catch drift.
+      * CJK / no-whitespace: CER (whitespace-split WER is degenerate there).
+    Returns (ok, printable lines).
+    """
+    expected = entry["expected_transcript"]
+    if actual == expected:
+        return True, ["\033[32m  PASS\033[0m  (byte-equal)", f"    {actual!r}"]
+    tol = entry.get("transcript_tolerance") or {"cer_max": 0.0, "wer_max": 0.0}
+    cer, wer = compute_transcript_metrics(expected, actual)
+    cer_max = float(tol.get("cer_max", 0.0))
+    wer_max = float(tol.get("wer_max", 0.0))
+    if " " in expected.strip():
+        ok = wer <= wer_max
+        gate = f"wer={wer:.4f} (max {wer_max}) [gate]  cer={cer:.4f} [advisory]"
+    else:
+        ok = cer <= cer_max
+        gate = f"cer={cer:.4f} (max {cer_max}) [gate, CJK]  wer={wer:.4f} [advisory]"
+    verdict = "\033[32m  PASS\033[0m" if ok else "\033[31m  FAIL\033[0m"
+    suffix = " (within tolerance)" if ok else " (over tolerance)"
+    return ok, [f"{verdict}  {gate}{suffix}", f"    expected: {expected!r}", f"    actual:   {actual!r}"]
+
+
 def regression_for(name: str, manifest: dict, work_dir: Path,
                    crispasr_bin: Path, diff_bin: Path) -> int:
     """Run one backend's regression. Return number of failures."""
@@ -378,48 +411,12 @@ def regression_for(name: str, manifest: dict, work_dir: Path,
     # ----- 1. Transcript -----
     print(f"\n[transcript] {name}")
     actual = run_transcript(crispasr_bin, gguf_local, sample)
-    expected = entry["expected_transcript"]
-    # DEFAULT to a zero-tolerance metric gate (not immediate byte-equal FAIL):
-    # a space-delimited transcript that differs ONLY in the punctuation/case
-    # decode tie has WER=0 and must pass, even with no explicit tolerance block —
-    # otherwise every byte-equal backend flaps red the moment CI flips a comma
-    # (empirically fastconformer / wav2vec2 / mini-omni2 flip run-to-run). An
-    # explicit transcript_tolerance widens the bound further (e.g. TTS roundtrips);
-    # its absence just means the tight wer_max=0 / cer_max=0 default.
-    tol = entry.get("transcript_tolerance") or {"cer_max": 0.0, "wer_max": 0.0}
-    if actual == expected:
-        print("\033[32m  PASS\033[0m  (byte-equal)")
-        print(f"    {actual!r}")
-    else:
-        # Pass if within tolerance on the language-appropriate metric. Reflects
-        # the ASR-regression contract users care about: meaning preservation, not
-        # byte equality.
-        cer, wer = compute_transcript_metrics(expected, actual)
-        cer_max = float(tol.get("cer_max", 0.0))
-        wer_max = float(tol.get("wer_max", 0.0))
-        # Pick the GATING metric by language:
-        #  * Space-delimited (Latin etc.): gate on WER. WER is invariant to the
-        #    punctuation/case decode ties that flip *non-deterministically between
-        #    CI runs* (empirically the comma after "americans" flips run-to-run for
-        #    mini-omni2 / wav2vec2 at WER=0), so a CER gate flaps red forever while
-        #    the words are identical. WER still catches real word errors, and the
-        #    diff-harness cos stages catch model-weight drift. CER stays advisory.
-        #  * CJK / no-whitespace: WER is degenerate (whitespace split yields one
-        #    token, so any diff → WER≈1), so gate on CER instead.
-        is_space_delimited = " " in expected.strip()
-        if is_space_delimited:
-            ok = wer <= wer_max
-            gate = f"wer={wer:.4f} (max {wer_max}) [gate]  cer={cer:.4f} (max {cer_max}) [advisory]"
-        else:
-            ok = cer <= cer_max
-            gate = f"cer={cer:.4f} (max {cer_max}) [gate, CJK]  wer={wer:.4f} (advisory)"
-        verdict = "\033[32m  PASS\033[0m" if ok else "\033[31m  FAIL\033[0m"
-        suffix = " (within tolerance)" if ok else " (over tolerance)"
-        print(f"{verdict}  {gate}{suffix}")
-        print(f"    expected: {expected!r}")
-        print(f"    actual:   {actual!r}")
-        if not ok:
-            failures += 1
+    # WER-normalised gate, shared with the Kaggle suite; see transcript_gate.
+    ok, lines = transcript_gate(entry, actual)
+    for ln in lines:
+        print(ln)
+    if not ok:
+        failures += 1
 
     # ----- 2. Diff harness -----
     if skip_diff:

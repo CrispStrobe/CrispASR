@@ -305,6 +305,17 @@ class ThresholdEvaluationTests(unittest.TestCase):
         self.assertEqual(f, [])
         self.assertEqual(len(e), 3)
 
+    def test_transcript_gate(self):
+        """Shared by GH and the Kaggle suite: case/punctuation-only diffs pass
+        at the default zero tolerance; a word error fails; CJK gates on CER."""
+        e = {"expected_transcript": "And so, my fellow Americans, ask not."}
+        self.assertTrue(run_one.transcript_gate(e, "and so my fellow americans ask not")[0])
+        self.assertFalse(run_one.transcript_gate(e, "and so my fellow americas ask not")[0])
+        self.assertTrue(run_one.transcript_gate(dict(e, transcript_tolerance={"wer_max": 0.25}),
+                                                "and so my fellow americas ask not")[0])
+        zh = {"expected_transcript": "我们都是好朋友"}
+        self.assertFalse(run_one.transcript_gate(zh, "我们都是好朋")[0])
+
     def test_manifest_gate_kwargs(self):
         """Every stage_threshold_default in the manifest is a sane cosine, and
         stage_gate_kwargs reads it."""

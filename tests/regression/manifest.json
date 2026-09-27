@@ -113,7 +113,7 @@
     {
       "name": "parakeet-tdt-0.6b-en",
       "backend_id": "parakeet",
-      "skip_diff": false,
+      "skip_diff": true,
       "source_model": "nvidia/parakeet-tdt-0.6b-v3",
       "gguf": {
         "repo": "cstr/parakeet-tdt-0.6b-v3-GGUF",
@@ -124,17 +124,7 @@
       "sample": "samples/jfk.wav",
       "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
       "expected_transcript_source": "captured 2026-05-15 with HF revision 815cc1b, CPU-only, samples/jfk.wav",
-      "fixture_ref_path": "parakeet-tdt-0.6b-v3/jfk_11s/ref.gguf",
-      "diff_gguf": {
-        "file": "parakeet-tdt-0.6b-v3.gguf"
-      },
-      "diff_thresholds": {
-        "mel_spectrogram": 0.999,
-        "pre_encode_output": 0.999,
-        "encoder_output": 0.999
-      },
-      "stage_threshold_default": 0.999,
-      "stage_threshold_note": "parakeet-tdt-0.6b-en/ref.gguf does not match this model (F16 encoder cos 0.59); the v3 ref is used instead, diffed on the full-precision GGUF."
+      "_skip_diff_note": "Neither parakeet-tdt-0.6b-en/ref.gguf nor parakeet-tdt-0.6b-v3/jfk_11s/ref.gguf matches this GGUF: F16 encoder cos 0.59 (Kaggle diff probe 2026-09-27) and 26 stages under 0.999 (Kaggle validate 2026-09-27). Needs a fresh bake from nvidia/parakeet-tdt-0.6b-v3."
     },
     {
       "name": "canary-1b-v2",

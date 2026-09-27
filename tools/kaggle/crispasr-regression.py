@@ -755,7 +755,11 @@ def run_validate() -> list[dict]:
             diff_bin = BUILD / "bin" / "crispasr-diff"
 
             actual = run_one.run_transcript(crispasr_bin, gguf_local, sample)
-            transcript_ok = (actual == entry["expected_transcript"])
+            # Same rule as GH (run_one.transcript_gate): WER-normalised, not
+            # byte-exact, honouring transcript_tolerance.
+            transcript_ok, _tlines = run_one.transcript_gate(entry, actual)
+            for _l in _tlines:
+                print(_l)
             if skip_diff:
                 stages, passes, fails, missing, extras = {}, [], [], [], {}
                 ok = transcript_ok
