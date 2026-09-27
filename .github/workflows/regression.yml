@@ -37,22 +37,43 @@ on:
   schedule:
     - cron: '0 4 * * *'  # 04:00 UTC daily
   workflow_dispatch:
-  # PR-time: only run the cheap smoke + dry-run checks. The full
-  # per-backend matrix is gated on `event_name != 'pull_request'`
-  # below so PRs don't burn 30 min of runner time. Paths are
-  # whitelisted so unrelated PRs don't trigger this at all.
+  # PR / push: smoke + unit + preflight, plus the per-backend regression for
+  # only the backends the change can affect (tools/regression_select.py; shared
+  # code selects a small core set). Docs-only changes do not trigger it.
   pull_request:
     paths:
       - 'tests/regression/**'
       - 'tests/test_python_diarize_turns.py'
       - 'python/crispasr/**'
       - '.github/workflows/regression.yml'
+      - 'src/**'
+      - 'examples/cli/**'
+      - 'models/**'
+      - 'CMakeLists.txt'
+      - 'ggml'
+      - 'tools/regression_select.py'
+  # Push to main: the backends the change can touch run right away instead of
+  # waiting for the nightly - e.g. #470's legacy canary load break would have
+  # shown on the push, not the next morning.
+  push:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'examples/cli/**'
+      - 'models/**'
+      - 'CMakeLists.txt'
+      - 'ggml'
+      - 'tests/regression/**'
+      - 'tools/regression_select.py'
+      - '.github/workflows/regression.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  # event_name in the key: a push to main must never cancel the nightly run
+  # (same ref), and vice versa. Consecutive pushes still supersede each other.
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -106,11 +127,37 @@ jobs:
           python tests/test_python_diarize_turns.py -v
       # Perf-regression compare logic (docs/perf-sweep/PLAN.md TODO-4). Model-free —
       # guards the hard/soft-gate logic used by the nightly perf snapshot step below.
+      # Regression matrix picker: nightly list vs manifest, per-file selection.
+      - name: Run regression-select unit tests
+        run: |
+          python -m pytest tests/test_regression_select.py -v || \
+          python tests/test_regression_select.py -v
       - name: Run perf-baseline compare unit tests
         run: |
           python tools/perf_baseline_compare.py --selftest
           python -m pytest tests/test_perf_baseline_compare.py -v || \
           python tests/test_perf_baseline_compare.py -v
+
+  # Which backends this run tests: nightly/dispatch = the full list in
+  # tests/regression/nightly_matrix.json; push/PR = the subset the changed
+  # files can affect (empty -> the regression job is skipped).
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - id: pick
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+        run: |
+          m=$(python3 tools/regression_select.py --event "$EVENT" --base "$BASE" --head HEAD)
+          echo "matrix=$m" >> "$GITHUB_OUTPUT"
+          echo "selected: $m"
 
   # Dry-run preflight: confirm every pinned HF artifact in the
   # manifest actually exists (GGUF + fixture ref.gguf + fixture
@@ -143,7 +190,9 @@ jobs:
   # on GH immediately; graduate them to full diff entries once the
   # Kaggle rebake lands in cstr/crispasr-regression-fixtures.
   #
-  # Skipped on `pull_request` — PRs only get smoke + unit-tests +
+  # Nightly / dispatch run every backend in tests/regression/nightly_matrix.json;
+  # push / PR run only the affected subset chosen by the `select` job.
+  # (Previously skipped on `pull_request` — PRs only got smoke + unit-tests +
   # preflight, which run in <5 minutes total. Full matrix runs
   # nightly + on manual workflow_dispatch.
   #
@@ -154,62 +203,21 @@ jobs:
   # 14 GB ubuntu-latest scratch should go through the weekly Kaggle
   # full-sweep job (`tools/test-all-backends.py` on a Kaggle kernel) instead.
   regression:
-    if: github.event_name != 'pull_request'
-    needs: preflight
+    # NOT `needs: preflight`: one transient HF/GitHub-storage error in the
+    # preflight used to skip every backend (Sep 13, 15, 16, 17 tested nothing).
+    # Preflight still runs and reports on its own; each backend job fails on
+    # its own download if an artifact is really gone.
+    needs: [smoke, unit-tests, select]
+    if: needs.select.outputs.matrix != '[]' && needs.select.outputs.matrix != ''
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       max-parallel: 4
       matrix:
-        backend:
-          # Full diff entry (GGUF + ref dump + crispasr-diff cosine checks)
-          - parakeet-tdt-0.6b-ja
-          # Transcript-only entries (skip_diff=true; ref dumps pending Kaggle rebake)
-          - moonshine-tiny
-          - moonshine-base
-          - moonshine-streaming-tiny
-          - parakeet-tdt-0.6b-en
-          - canary-1b-v2
-          - firered-asr2-aed
-          - glm-asr-nano
-          # cohere-transcribe: removed from matrix — cstr/cohere-transcribe-GGUF
-          # is hitting HF private-repo storage limit (403). Re-add once the
-          # repo is made public or space is freed on the HF account.
-          - granite-speech-4.1-2b
-          # Small/medium ASR backends (fit on GH free-tier 14 GB scratch)
-          - wav2vec2-xlsr-en
-          - hubert-large
-          - data2vec-base
-          - fastconformer-ctc-large
-          - sensevoice-small
-          - paraformer-zh
-          - nemotron-3.5-asr-streaming-0.6b
-          - parakeet-rnnt-0.6b
-          - qwen3-asr-0.6b
-          - omniasr-ctc-1b-v2
-          - kyutai-stt-1b
-          - funasr-nano
-          - mini-omni2
-          - omniasr-llm-300m
-          # TTS->ASR roundtrip entries (manifest.tts_backends). Each
-          # synthesises a fixed phrase via the TTS backend, transcribes
-          # it back with parakeet, and asserts WER under the manifest's
-          # wer_max. Catches silent decode regressions the diff harness
-          # can miss (e.g. the voxcpm2 BF16 noise bug).
-          #
-          # Cheap tier (<1.5 GB per slot including parakeet):
-          - kokoro-82m-en
-          - qwen3-tts-0.6b-customvoice-eric
-          - speecht5-tts-en
-          - piper-lessac-en
-          - pocket-tts-en
-          - bark-small
-          - csm-1b
-          # Heavier TTS backends (orpheus 3B at 3.5 GB; dia 1.6 GB;
-          # parler 1 GB; f5-tts 1 GB; vibevoice 7 GB; voxcpm2 ~3 GB)
-          # stay manual or Kaggle-only. They need 2+ GB per slot once
-          # you add parakeet on top.
+        # Full list: tests/regression/nightly_matrix.json (heavy backends go
+        # through the Kaggle full sweep instead). Push/PR get the affected subset.
+        backend: ${{ fromJSON(needs.select.outputs.matrix) }}
     steps:
       - uses: actions/checkout@v6
         with:
