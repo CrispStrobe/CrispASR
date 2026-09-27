@@ -426,8 +426,17 @@ def regression_for(name: str, manifest: dict, work_dir: Path,
         print(f"\n[diff-harness] {name}  \033[33mSKIP\033[0m (skip_diff=true; no ref dump baked yet)")
         return failures
 
-    print(f"\n[diff-harness] {name}")
-    stages = run_diff(diff_bin, entry["backend_id"], gguf_local, ref_local, sample)
+    # `diff_gguf` (optional): run the stage diff on a full-precision GGUF while
+    # the transcript above stays on the shipped quant. A q4_k encoder sits at
+    # cos ~0.95 against an F32 reference, so a gate on it can only be loose;
+    # the F16 file of the same model matches at >= 0.99999 and can be gated tight.
+    diff_gguf = gguf_local
+    if entry.get("diff_gguf"):
+        dg = entry["diff_gguf"]
+        diff_gguf = hf_download(dg.get("repo", entry["gguf"]["repo"]), dg["file"],
+                                dg.get("revision", entry["gguf"]["revision"]), work_dir)
+    print(f"\n[diff-harness] {name}  ({diff_gguf.name})")
+    stages = run_diff(diff_bin, entry["backend_id"], diff_gguf, ref_local, sample)
     thresholds = entry["diff_thresholds"]
     passes, fails, missing, extras = evaluate_stage_thresholds(stages, thresholds, **stage_gate_kwargs(entry))
     for stage in missing:
@@ -752,6 +761,19 @@ def dry_run(manifest: dict, backend_filter: str | None = None) -> int:
                   f"{gguf_rev[:8]}::{gguf_file} not found")
             failures += 1
             continue
+
+        dg = entry.get("diff_gguf")
+        if dg and not entry.get("skip_diff", False):
+            dg_repo, dg_rev = dg.get("repo", gguf_repo), dg.get("revision", gguf_rev)
+            try:
+                dg_ok = api.file_exists(repo_id=dg_repo, repo_type="model", revision=dg_rev, filename=dg["file"])
+            except HfHubHTTPError as exc:
+                dg_ok = False
+                print(f"  {exc}")
+            if not dg_ok:
+                print(f"  \033[31mFAIL\033[0m {name}: diff_gguf {dg_repo}@{dg_rev[:8]}::{dg['file']} not found")
+                failures += 1
+                continue
 
         # Fixture ref.gguf — membership check against the listing.
         # Skipped for transcript-only entries (skip_diff: true).

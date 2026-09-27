@@ -760,8 +760,17 @@ def run_validate() -> list[dict]:
                 stages, passes, fails, missing, extras = {}, [], [], [], {}
                 ok = transcript_ok
             else:
+                # diff_gguf: full-precision file for the stage diff (run_one.py).
+                # Same repo as the quant by default, so the per-backend
+                # models--* eviction below frees it too.
+                diff_gguf = gguf_local
+                if entry.get("diff_gguf"):
+                    dg = entry["diff_gguf"]
+                    diff_gguf = Path(hf_hub_download(
+                        repo_id=dg.get("repo", entry["gguf"]["repo"]), filename=dg["file"],
+                        revision=dg.get("revision", entry["gguf"]["revision"])))
                 stages = run_one.run_diff(
-                    diff_bin, entry["backend_id"], gguf_local, ref_local, sample)
+                    diff_bin, entry["backend_id"], diff_gguf, ref_local, sample)
                 passes, fails, missing, extras = run_one.evaluate_stage_thresholds(
                     stages, entry["diff_thresholds"], **run_one.stage_gate_kwargs(entry))
                 ok = transcript_ok and not fails and not missing

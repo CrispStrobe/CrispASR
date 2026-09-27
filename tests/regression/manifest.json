@@ -113,8 +113,7 @@
     {
       "name": "parakeet-tdt-0.6b-en",
       "backend_id": "parakeet",
-      "skip_diff": true,
-      "_skip_diff_note": "Q4K model diverges from F16/F32 NeMo reference (all encoder layers cos_min<0.9). The V3 reference needs an F16 GGUF; q4_k is too coarse for diff.",
+      "skip_diff": false,
       "source_model": "nvidia/parakeet-tdt-0.6b-v3",
       "gguf": {
         "repo": "cstr/parakeet-tdt-0.6b-v3-GGUF",
@@ -124,7 +123,18 @@
       },
       "sample": "samples/jfk.wav",
       "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
-      "expected_transcript_source": "captured 2026-05-15 with HF revision 815cc1b, CPU-only, samples/jfk.wav"
+      "expected_transcript_source": "captured 2026-05-15 with HF revision 815cc1b, CPU-only, samples/jfk.wav",
+      "fixture_ref_path": "parakeet-tdt-0.6b-v3/jfk_11s/ref.gguf",
+      "diff_gguf": {
+        "file": "parakeet-tdt-0.6b-v3.gguf"
+      },
+      "diff_thresholds": {
+        "mel_spectrogram": 0.999,
+        "pre_encode_output": 0.999,
+        "encoder_output": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "parakeet-tdt-0.6b-en/ref.gguf does not match this model (F16 encoder cos 0.59); the v3 ref is used instead, diffed on the full-precision GGUF."
     },
     {
       "name": "canary-1b-v2",
@@ -244,19 +254,28 @@
     {
       "name": "parakeet-tdt-1.1b",
       "backend_id": "parakeet",
-      "skip_diff": true,
-      "_skip_diff_note": "Rebake-pending for diff; transcript captured 2026-06-15.",
-      "skip_preflight": true,
+      "skip_diff": false,
       "source_model": "nvidia/parakeet-tdt-1.1b",
       "gguf": {
         "repo": "cstr/parakeet-tdt-1.1b-GGUF",
-        "revision": "1d406d87367c4e537ce29bf2e85ad1bcc3e1c98e",
+        "revision": "1eeefb7d078c63d3afc62972d34fc9fe07415663",
         "file": "parakeet-tdt-1.1b-q8_0.gguf",
         "approx_size_mb": 1213
       },
       "sample": "samples/jfk.wav",
       "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
-      "expected_transcript_source": "captured 2026-06-15 VPS CPU with parakeet-tdt-1.1b-q8_0"
+      "expected_transcript_source": "captured 2026-06-15 VPS CPU with parakeet-tdt-1.1b-q8_0",
+      "fixture_ref_path": "parakeet-tdt-1.1b/ref.gguf",
+      "diff_gguf": {
+        "file": "parakeet-tdt-1.1b.gguf"
+      },
+      "diff_thresholds": {
+        "mel_spectrogram": 0.999,
+        "pre_encode_output": 0.999,
+        "encoder_output": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Diff on the full-precision GGUF; Kaggle CPU 2026-09-27: every stage >= 0.99999. Revision repinned: the old pin 1d406d87 predates the q8_0 file (added by the 2026-07-11 requantize), so the entry could never download."
     },
     {
       "name": "parakeet-tdt_ctc-1.1b",
@@ -278,8 +297,7 @@
     {
       "name": "parakeet-rnnt-0.6b",
       "backend_id": "parakeet",
-      "skip_diff": true,
-      "_skip_diff_note": "Rebake-pending for diff; transcript captured 2026-06-15.",
+      "skip_diff": false,
       "source_model": "nvidia/parakeet-rnnt-0.6b",
       "gguf": {
         "repo": "cstr/parakeet-rnnt-0.6b-GGUF",
@@ -289,24 +307,44 @@
       },
       "sample": "samples/jfk.wav",
       "expected_transcript": "and so my fellow americans ask not what your country can do for you ask what you can do for your country",
-      "expected_transcript_source": "captured 2026-06-15 VPS CPU with parakeet-rnnt-0.6b-q4_k"
+      "expected_transcript_source": "captured 2026-06-15 VPS CPU with parakeet-rnnt-0.6b-q4_k",
+      "fixture_ref_path": "parakeet-rnnt-0.6b/ref.gguf",
+      "diff_gguf": {
+        "file": "parakeet-rnnt-0.6b-f16.gguf"
+      },
+      "diff_thresholds": {
+        "mel_spectrogram": 0.999,
+        "pre_encode_output": 0.999,
+        "encoder_output": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Diff on the F16 GGUF (diff_gguf); Kaggle CPU 2026-09-27: every stage >= 0.99999 on F16, vs 0.95 on the pinned q4_k."
     },
     {
       "name": "parakeet-rnnt-1.1b",
       "backend_id": "parakeet",
-      "skip_diff": true,
-      "_skip_diff_note": "Rebake-pending for diff; transcript captured 2026-06-15.",
-      "skip_preflight": true,
+      "skip_diff": false,
       "source_model": "nvidia/parakeet-rnnt-1.1b",
       "gguf": {
         "repo": "cstr/parakeet-rnnt-1.1b-GGUF",
-        "revision": "fb4ceb7e1187a4e2d6a8a3f4a0f4f4d34c5b7a78",
+        "revision": "2bd1750f552b3a327f36f98c22096f91fa744c7b",
         "file": "parakeet-rnnt-1.1b-q4_k.gguf",
         "approx_size_mb": 770
       },
       "sample": "samples/jfk.wav",
       "expected_transcript": "and so my fellow americans ask not what your country can do for you ask what you can do for your country",
-      "expected_transcript_source": "captured 2026-06-15 VPS CPU with parakeet-rnnt-1.1b-q4_k"
+      "expected_transcript_source": "captured 2026-06-15 VPS CPU with parakeet-rnnt-1.1b-q4_k",
+      "fixture_ref_path": "parakeet-rnnt-1.1b/ref.gguf",
+      "diff_gguf": {
+        "file": "parakeet-rnnt-1.1b-f16.gguf"
+      },
+      "diff_thresholds": {
+        "mel_spectrogram": 0.999,
+        "pre_encode_output": 0.999,
+        "encoder_output": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Diff on the F16 GGUF; Kaggle CPU 2026-09-27: every stage >= 0.99998. Revision repinned: the old pin fb4ceb7e's q4_k was replaced by the 2026-07-11 requantize (404 at the old pin)."
     },
     {
       "name": "paraformer-zh",
