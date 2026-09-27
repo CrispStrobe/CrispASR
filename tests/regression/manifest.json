@@ -543,10 +543,10 @@
     {
       "name": "sensevoice-small",
       "backend_id": "sensevoice",
-      "skip_diff": true,
+      "skip_diff": false,
       "gguf": {
         "repo": "cstr/sensevoice-small-GGUF",
-        "revision": "abbeaf54fdae72fc6034e23edc0efd8f8e1cc982",
+        "revision": "e1ad67de9d05137a6a0b02beba1fd66e28df6ae4",
         "file": "sensevoice-small-q4_k.gguf",
         "approx_size_mb": 470
       },
@@ -560,7 +560,16 @@
       "transcript_tolerance_note": "Cross-platform decode drift",
       "source_model": "FunAudioLLM/SenseVoiceSmall",
       "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
-      "_skip_diff_note": "sensevoice-small/jfk_11s/ref.gguf (the #436 final ref) is on the fixtures revision, but the F16 diff failed all 75 stages in the Kaggle validate of 2026-09-27 while paraformer-zh / funasr-nano refs from the same rebake pass - under investigation."
+      "fixture_ref_path": "sensevoice-small/jfk_11s/ref.gguf",
+      "diff_gguf": {
+        "file": "sensevoice-small-f16.gguf"
+      },
+      "diff_thresholds": {
+        "mel_features": 0.999,
+        "encoder_output": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Repinned abbeaf54 -> e1ad67de (2026-09-23 re-convert WITH the am.mvn CMVN tensors, #436 follow-up). The old pin predates it: the diff failed from mel_features on (cos -0.60) against the #436 ref, which was made with CMVN."
     },
     {
       "name": "qwen3-asr-0.6b",
