@@ -246,6 +246,12 @@ enum DiarizeMethod {
   /// Mono-friendly, ML-based (#324): WeSpeaker embeddings + spectral
   /// clustering (the FoxNose recipe). Requires [foxnoseEmbedderPath].
   foxNose,
+
+  /// Mono-friendly, ML-based (#466): NVIDIA Nemotron-3-Diarization, a
+  /// streaming Sortformer v3 that derives speaker turns from the audio.
+  /// Requires [sortformerModelPath]. Index 5 = the C ABI's method number,
+  /// which is what this enum's order encodes — append only.
+  sortformer,
 }
 
 /// Assign a speaker index to each of [segs], based on the selected
@@ -256,8 +262,8 @@ enum DiarizeMethod {
 /// right channel. All PCM is 16 kHz float32.
 ///
 /// Returns `true` on success. The only failure cases are the
-/// model-backed methods ([DiarizeMethod.pyannote], [DiarizeMethod.foxNose])
-/// when their GGUF model can't be loaded — all other methods always
+/// model-backed methods ([DiarizeMethod.pyannote], [DiarizeMethod.foxNose],
+/// [DiarizeMethod.sortformer]) when their GGUF model can't be loaded — all other methods always
 /// succeed (they may leave individual segments with `speaker = -1` when
 /// they had no information to decide).
 ///
@@ -270,9 +276,13 @@ enum DiarizeMethod {
 /// automatic speaker-count estimation (0 keeps the library defaults 1 / 8)
 /// and [numSpeakers] > 0 pins the count and skips estimation.
 ///
+/// [sortformerModelPath] (required for [DiarizeMethod.sortformer]) is the
+/// Nemotron-3-Diarization GGUF. The C ABI reads it from the same struct
+/// field as the pyannote model, so the 48-byte layout is unchanged.
+///
 /// When [outTurns] is supplied, the function calls the CrispASR 0.8.30+
-/// turn-returning ABI and replaces that list with FoxNose's audio-derived
-/// turns. Other methods leave it empty.
+/// turn-returning ABI and replaces that list with the audio-derived turns
+/// of FoxNose or Sortformer. Other methods leave it empty.
 bool diarizeSegments({
   required List<DiarizeSegment> segs,
   required Float32List left,
@@ -283,6 +293,7 @@ bool diarizeSegments({
   int nThreads = 4,
   double sliceT0 = 0.0,
   String? foxnoseEmbedderPath,
+  String? sortformerModelPath,
   int minSpeakers = 0,
   int maxSpeakers = 0,
   int numSpeakers = 0,
@@ -329,10 +340,14 @@ bool diarizeSegments({
   optsPtr.cast<Int32>().value = method.index;
   (optsPtr + 4).cast<Int32>().value = nThreads;
   (optsPtr + 8).cast<Int64>().value = (sliceT0 * 100).round();
-  final pathPtr = (method == DiarizeMethod.pyannote &&
-          pyannoteModelPath != null &&
-          pyannoteModelPath.isNotEmpty)
-      ? pyannoteModelPath.toNativeUtf8()
+  // One model-path slot serves pyannote (method 3) and sortformer (5).
+  final modelPath = switch (method) {
+    DiarizeMethod.pyannote => pyannoteModelPath,
+    DiarizeMethod.sortformer => sortformerModelPath,
+    _ => null,
+  };
+  final pathPtr = (modelPath != null && modelPath.isNotEmpty)
+      ? modelPath.toNativeUtf8()
       : nullptr;
   (optsPtr + 16).cast<IntPtr>().value = pathPtr.address;
   final foxPathPtr = (method == DiarizeMethod.foxNose &&

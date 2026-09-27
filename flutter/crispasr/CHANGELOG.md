@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+* **`DiarizeMethod.sortformer`** (C ABI method 5, #466) with a
+  `sortformerModelPath` argument to `diarizeSegments`, which also returns
+  Sortformer's audio-derived turns through `outTurns`. 0.8.37 shipped the
+  method in the native library, but the Dart enum stopped at `foxNose`, so
+  Dart callers could not select it.
+
 ## 0.8.37
 
 * **Phrase scoring:** `CrispasrSession.scoreTexts(pcm, texts, language:,

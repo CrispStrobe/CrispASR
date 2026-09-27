@@ -330,7 +330,8 @@ void main() {
   test('DiarizeMethod enum indexes match the C-side CrispasrDiarizeMethod', () {
     // diarizeSegments dispatches on `method.index`; the C side's
     // `enum class CrispasrDiarizeMethod` hard-codes Energy=0, Xcorr=1,
-    // VadTurns=2, Pyannote=3, FoxNose=4 (see src/crispasr_diarize.h).
+    // VadTurns=2, Pyannote=3, FoxNose=4, Sortformer=5 (see
+    // src/crispasr_diarize.h; Sortformer is #466).
     // Same trap as LidMethod above: a reorder or mid-enum insertion
     // silently routes calls to the wrong diarizer (#332).
     expect(DiarizeMethod.energy.index, 0);
@@ -338,7 +339,8 @@ void main() {
     expect(DiarizeMethod.vadTurns.index, 2);
     expect(DiarizeMethod.pyannote.index, 3);
     expect(DiarizeMethod.foxNose.index, 4);
-    expect(DiarizeMethod.values.length, 5,
+    expect(DiarizeMethod.sortformer.index, 5);
+    expect(DiarizeMethod.values.length, 6,
         reason: 'extending DiarizeMethod without bumping the C-side enum '
             'will silently drop the new variant');
   });

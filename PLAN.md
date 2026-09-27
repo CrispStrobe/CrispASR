@@ -11,6 +11,9 @@ diff harness) and NVIDIA's Apache-2.0 NeMo-Speech.cpp (sortformer_model.cpp,
 aosc_state.cpp; uses ggml patches, so port to stock ops). DER on its AMI clip.
 Order: converter -> offline backend -> --diarize integration -> C-ABI/registry ->
 streaming AOSC presets.
+Dart binding (2026-09-27): `DiarizeMethod.sortformer` (index 5) + `sortformerModelPath`
+on `diarizeSegments`, verified from CrisperWeaver on samples/multispeaker.wav
+(2 speakers, 7 turns). Other bindings still pass method 5 only via raw ints.
 
 ## DEFERRED 2026-09-24 — #456 nyra-forced-aligner
 
