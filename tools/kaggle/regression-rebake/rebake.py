@@ -40,7 +40,14 @@ os.environ["CRISPASR_REGRESSION_BUILD"] = os.environ.get("CRISPASR_REGRESSION_BU
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 os.environ["CRISPASR_REF_DEVICE"] = "cpu"
 
-SCRIPT_VERSION = "2026-09-07-rebake-4-refdeps"
+# Bake in batches (2026-09-27): one kernel run per group keeps a failure or a
+# timeout from costing the whole set. Batch 1 = nightly skip_diff entries that
+# have both a reference module and a crispasr-diff entry.
+BATCH = ["nemotron-3.5-asr-streaming-0.6b", "qwen3-asr-0.6b", "kyutai-stt-1b", "mini-omni2",
+         "sensevoice-small", "paraformer-zh", "funasr-nano", "granite-speech-4.1-2b"]
+os.environ["CRISPASR_REGRESSION_BACKENDS"] = os.environ.get("CRISPASR_REGRESSION_BACKENDS", ",".join(BATCH))
+
+SCRIPT_VERSION = "2026-09-27-rebake-5-batch1"
 WORK = pathlib.Path("/kaggle/working")
 
 # Clone into a SEPARATE bootstrap dir: the canonical script manages its own
