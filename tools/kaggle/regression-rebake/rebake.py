@@ -22,7 +22,13 @@ import os, subprocess, sys, pathlib, time
 # chr1s4 token dataset (see gotcha #13: private datasets are per-account, so
 # this kernel MUST be pushed by chr1s4 and reference chr1s4's copies).
 os.environ["CRISPASR_REGRESSION_MODE"] = "rebake"
-os.environ["CRISPASR_REGRESSION_UPLOAD"] = "1"
+# UPLOAD off: the suite's HF token resolution came back anonymous on both
+# accounts (2026-09-27), so refs stage to /kaggle/working/rebake-stage/ and are
+# pulled with `kaggle kernels output --file-pattern 'rebake-stage'` and uploaded
+# from a machine with write auth, after they are checked.
+os.environ["CRISPASR_REGRESSION_UPLOAD"] = "0"
+# Ref for both the bootstrap clone and the suite's own checkout.
+os.environ["CRISPASR_REF"] = os.environ.get("CRISPASR_REF", "main")
 os.environ["CRISPASR_REGRESSION_BUILD"] = os.environ.get("CRISPASR_REGRESSION_BUILD", "cpu")
 
 # HIDE THE GPU FROM TORCH. v2 lost 8 backends to
@@ -40,14 +46,14 @@ os.environ["CRISPASR_REGRESSION_BUILD"] = os.environ.get("CRISPASR_REGRESSION_BU
 os.environ["CUDA_VISIBLE_DEVICES"] = ""
 os.environ["CRISPASR_REF_DEVICE"] = "cpu"
 
-# Bake in batches (2026-09-27): one kernel run per group keeps a failure or a
+# Bake in batches (2026-09-27; batch 1 baked funasr-nano, batch 2 retries the
+# three whose failures the harness now handles): one kernel run per group keeps a failure or a
 # timeout from costing the whole set. Batch 1 = nightly skip_diff entries that
 # have both a reference module and a crispasr-diff entry.
-BATCH = ["nemotron-3.5-asr-streaming-0.6b", "qwen3-asr-0.6b", "kyutai-stt-1b", "mini-omni2",
-         "sensevoice-small", "paraformer-zh", "funasr-nano", "granite-speech-4.1-2b"]
+BATCH = ["granite-speech-4.1-2b", "kyutai-stt-1b", "qwen3-asr-0.6b"]
 os.environ["CRISPASR_REGRESSION_BACKENDS"] = os.environ.get("CRISPASR_REGRESSION_BACKENDS", ",".join(BATCH))
 
-SCRIPT_VERSION = "2026-09-27-rebake-5-batch1"
+SCRIPT_VERSION = "2026-09-27-rebake-6-batch2"
 WORK = pathlib.Path("/kaggle/working")
 
 # Clone into a SEPARATE bootstrap dir: the canonical script manages its own
@@ -55,7 +61,7 @@ WORK = pathlib.Path("/kaggle/working")
 # two owners for one directory.
 BOOT = WORK / "_bootstrap"
 if not BOOT.exists():
-    subprocess.check_call(["git", "clone", "--depth", "1",
+    subprocess.check_call(["git", "clone", "--depth", "1", "-b", os.environ["CRISPASR_REF"],
                            "https://github.com/CrispStrobe/CrispASR.git", str(BOOT)])
 
 sha = "unknown"

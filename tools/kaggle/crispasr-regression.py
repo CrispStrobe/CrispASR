@@ -554,10 +554,17 @@ if MODE == "rebake":
     # is separate from the list above because it MUTATES an existing pin that
     # the NeMo stack also depends on, so a failure here is worth seeing rather
     # than silently tolerated alongside the optional installs.
-    with build_heartbeat("pip.install.transformers_upgrade"):
-        rc = subprocess.call([sys.executable, "-m", "pip", "install", "--quiet",
-                              "--upgrade", "transformers"])
-        print("  transformers upgrade: %s" % ("ok" if rc == 0 else "FAILED rc=%d" % rc), flush=True)
+    # Only when a voxtral entry is in the batch: the upgrade breaks qwen_asr
+    # (TypeError: check_model_inputs() missing 'func' - rebake 2026-09-27), so
+    # an unconditional upgrade trades qwen3-asr for a backend not being baked.
+    _batch = [b.strip() for b in os.environ.get("CRISPASR_REGRESSION_BACKENDS", "").split(",") if b.strip()]
+    if not _batch or any("voxtral" in b for b in _batch):
+        with build_heartbeat("pip.install.transformers_upgrade"):
+            rc = subprocess.call([sys.executable, "-m", "pip", "install", "--quiet",
+                                  "--upgrade", "transformers"])
+            print("  transformers upgrade: %s" % ("ok" if rc == 0 else "FAILED rc=%d" % rc), flush=True)
+    else:
+        print("  transformers upgrade: skipped (no voxtral entry in this batch)", flush=True)
     # mimo_audio_tokenizer is NOT on PyPI (checked: 404). mimo-asr and
     # mimo-audio-tokenizer stay unbakeable until their reference module vendors
     # it or points at a source checkout. Recorded so the gap is a known one.
@@ -895,10 +902,22 @@ def run_rebake() -> list[dict]:
         else:
             sample = REPO / entry["sample"]
 
+        # Several reference modules read files straight from --model-dir
+        # (granite: <dir>/config.json; kyutai: the mimi safetensors next to the
+        # LM) and fail on a bare HF id - rebake 2026-09-27. Hand them a full
+        # local snapshot; an id that is already a path is used as-is.
+        model_dir = source
+        if not Path(source).exists() and re.fullmatch(r"[\w.-]+/[\w.-]+", source):
+            try:
+                from huggingface_hub import snapshot_download
+                with build_heartbeat(f"snapshot.{name}"):
+                    model_dir = snapshot_download(repo_id=source)
+            except Exception as _e:
+                print(f"  snapshot_download({source}) failed ({type(_e).__name__}: {_e}); passing the id", flush=True)
         cmd = [
             sys.executable, "-u", str(REPO / "tools" / "dump_reference.py"),
             "--backend", entry["backend_id"],
-            "--model-dir", source,
+            "--model-dir", model_dir,
             "--audio", str(sample),
             "--output", str(out_path),
         ]
