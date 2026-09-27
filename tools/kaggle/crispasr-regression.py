@@ -784,6 +784,15 @@ def run_validate() -> list[dict]:
                     diff_bin, entry["backend_id"], diff_gguf, ref_local, sample)
                 passes, fails, missing, extras = run_one.evaluate_stage_thresholds(
                     stages, entry["diff_thresholds"], **run_one.stage_gate_kwargs(entry))
+                # Print every stage: the counts alone ("fails=75") said nothing
+                # about WHICH stage broke first, and the results jsonl is not
+                # always retrievable (kernels output 429s).
+                for _st, _v, _th in sorted(passes + fails, key=lambda x: x[0]):
+                    print(f"    {'PASS' if _v >= _th else 'FAIL'} {_st:32s} cos_min={_v:.6f} (>= {_th})")
+                for _st, _v in extras:
+                    print(f"    INFO {_st:32s} cos_min={_v:.6f}")
+                for _st in missing:
+                    print(f"    MISSING {_st}")
                 ok = transcript_ok and not fails and not missing
             results.append({
                 "backend": name,
