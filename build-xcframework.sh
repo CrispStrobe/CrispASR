@@ -1,10 +1,17 @@
 #!/bin/bash
 #
-# Options
-IOS_MIN_OS_VERSION=16.4
-MACOS_MIN_OS_VERSION=13.3
-VISIONOS_MIN_OS_VERSION=1.0
-TVOS_MIN_OS_VERSION=16.4
+# Options (each can be overridden from the environment)
+#
+# iOS 15.0, not the 16.4 inherited from upstream whisper.cpp: an app may not
+# embed a framework that needs a newer iOS than the app itself (App Store
+# Connect rejects it, ITMS-90208, and dyld refuses it on older devices), so
+# 16.4 forced every consumer to drop iOS 15-16.3. The sources build for iOS 13
+# (CrisperWeaver ships its own slim build at 13.0), CoreML needs 14, and
+# Metal features newer than the deployment target are checked at run time.
+IOS_MIN_OS_VERSION=${IOS_MIN_OS_VERSION:-15.0}
+MACOS_MIN_OS_VERSION=${MACOS_MIN_OS_VERSION:-13.3}
+VISIONOS_MIN_OS_VERSION=${VISIONOS_MIN_OS_VERSION:-1.0}
+TVOS_MIN_OS_VERSION=${TVOS_MIN_OS_VERSION:-16.4}
 
 BUILD_SHARED_LIBS=OFF
 CRISPASR_BUILD_EXAMPLES=OFF
@@ -591,6 +598,30 @@ combine_static_libraries "build-tvos-device" "Release-appletvos" "tvos" "false"
 # Create XCFramework with correct debug symbols paths
 echo "Creating XCFramework..."
 
+# The iOS slices must declare exactly IOS_MIN_OS_VERSION, both in the binary's
+# LC_BUILD_VERSION (what dyld checks) and in the framework's Info.plist (what
+# App Store Connect compares with the app). A slice that silently kept a
+# different value is what made consumers raise their own deployment target.
+check_ios_min_os() {
+    local static="$1" slice plist got bin minos
+    for slice in ios-arm64 ios-arm64_x86_64-simulator; do
+        plist="build-apple/crispasr.xcframework/${slice}/crispasr.framework/Info.plist"
+        got=$(/usr/libexec/PlistBuddy -c 'Print :MinimumOSVersion' "$plist")
+        if [[ "$got" != "$IOS_MIN_OS_VERSION" ]]; then
+            echo "::error::${slice} Info.plist MinimumOSVersion is ${got}, expected ${IOS_MIN_OS_VERSION}"
+            exit 1
+        fi
+        [[ "$static" == "ON" ]] && continue
+        bin="build-apple/crispasr.xcframework/${slice}/crispasr.framework/crispasr"
+        minos=$(xcrun vtool -show-build "$bin" | awk '/minos/ {print $2}' | sort -u | tr '\n' ' ')
+        if [[ "$minos" != "${IOS_MIN_OS_VERSION} " ]]; then
+            echo "::error::${slice} binary minos is '${minos}', expected ${IOS_MIN_OS_VERSION}"
+            exit 1
+        fi
+        echo "${slice}: minimum iOS ${IOS_MIN_OS_VERSION} (plist and binary)"
+    done
+}
+
 if [[ "${BUILD_STATIC_XCFRAMEWORK}" == "ON" ]]; then
     xcodebuild -create-xcframework \
         -framework $(pwd)/build-ios-sim/framework/crispasr.framework \
@@ -601,6 +632,7 @@ if [[ "${BUILD_STATIC_XCFRAMEWORK}" == "ON" ]]; then
         -framework $(pwd)/build-tvos-device/framework/crispasr.framework \
         -framework $(pwd)/build-tvos-sim/framework/crispasr.framework \
         -output $(pwd)/build-apple/crispasr.xcframework
+    check_ios_min_os ON
     exit 0
 fi
 
@@ -620,3 +652,5 @@ xcodebuild -create-xcframework \
     -framework $(pwd)/build-tvos-sim/framework/crispasr.framework \
     -debug-symbols $(pwd)/build-tvos-sim/dSYMs/crispasr.dSYM \
     -output $(pwd)/build-apple/crispasr.xcframework
+
+check_ios_min_os OFF
