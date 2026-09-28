@@ -144,6 +144,9 @@ jobs:
   select:
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
     outputs:
       matrix: ${{ steps.pick.outputs.matrix }}
     steps:
@@ -154,7 +157,21 @@ jobs:
         env:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          GH_TOKEN: ${{ github.token }}
         run: |
+          # Push: diff against the head of the newest SUCCESSFUL Regression run
+          # on main that is an ancestor of this commit, not just the previous
+          # push. Consecutive pushes cancel each other (concurrency), and a
+          # cancelled run's changes were otherwise never selected again: on
+          # 2026-09-28 the parakeet + wav2vec2 fixes landed in cancelled runs and
+          # the surviving run selected only the diff-tool change.
+          if [ "$EVENT" = push ]; then
+            for sha in $(gh run list -R "$GITHUB_REPOSITORY" --workflow regression.yml --branch main \
+                           --status success --limit 30 --json headSha --jq '.[].headSha' 2>/dev/null); do
+              if git merge-base --is-ancestor "$sha" HEAD 2>/dev/null; then BASE="$sha"; break; fi
+            done
+          fi
+          echo "base: $BASE"
           m=$(python3 tools/regression_select.py --event "$EVENT" --base "$BASE" --head HEAD)
           echo "matrix=$m" >> "$GITHUB_OUTPUT"
           echo "selected: $m"
