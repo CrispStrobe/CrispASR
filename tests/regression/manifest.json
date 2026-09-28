@@ -209,12 +209,10 @@
       "name": "cohere-transcribe",
       "backend_id": "cohere",
       "skip_diff": true,
-      "_skip_diff_note": "mel passes (cos=0.999638) after transpose + drop_last_frame fix, but encoder_output fails (cos_min=-0.253) — 48-layer conformer diverges, needs investigation.",
-      "skip_preflight": true,
-      "_skip_preflight_note": "cstr/cohere-transcribe-GGUF is private and HF account has hit private-repo storage limit (403). Remove skip_preflight once repo is made public or space freed.",
+      "_skip_diff_note": "Repinned 2026-09-28: the old repo cstr/cohere-transcribe-GGUF is gone (404); the model now lives in cstr/cohere-transcribe-03-2026-GGUF (public, what the model registry uses). Ref rebake pending.",
       "gguf": {
-        "repo": "cstr/cohere-transcribe-GGUF",
-        "revision": "b9bcdb1a4f54d4224c0b862a75683843f8e3cfab",
+        "repo": "cstr/cohere-transcribe-03-2026-GGUF",
+        "revision": "77234fcd7f77d271e5fc57f14fb05f260275558c",
         "file": "cohere-transcribe-q4_k.gguf",
         "approx_size_mb": 1500
       },
