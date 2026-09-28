@@ -6,6 +6,23 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## DONE 2026-09-28 — Cohere Q4 hidden-F16 pointwise matrices
+
+The published `cohere-transcribe-q4_k.gguf` retained 96 large Conformer
+pointwise weights as F16 because their GGUF shape is three-dimensional even
+though inference consumes them as matrix multiplications. Runtime repacking
+made those operations 2.6x faster but regressed one-shot startup, so it was
+rejected. The artifact was instead requantized once and republished.
+
+Kaggle v2 proved that exactly those 96 tensors changed from F16 to Q8_0 and no
+others changed, with identical JFK text. The scheduler-profiled encoder improved
+from 10242.59 to 9447.52 ms and total process wall time from 10.93 to 10.16 s.
+An independent HTTP range-read of the published artifact reconstructed its full
+1,289,178,240-byte size and reported `Q8_0=96`; the refreshed build cache was
+uploaded to `chr1str/crispasr-ccache`. The failed v1 log is retained separately:
+its shallow clone could not resolve a pre-squash commit, so it performed no
+build, validation, or upload.
+
 ## DONE 2026-09-25 — Canary 180M Flash direct GGUF compatibility
 
 The existing `canary` backend now loads handy-computer's transcribe.cpp GGUFs

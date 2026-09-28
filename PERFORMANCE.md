@@ -999,6 +999,14 @@ bisection. Kernels: `tools/kaggle/fc-unified-graph-ab` (CUDA A/B),
 `tools/kaggle/fc-pw-requant` (fleet requant),
 `tools/kaggle/issue81-onnx-bench` (onnx head-to-head).
 
+**Cohere artifact-time pointwise requantization (2026-09-28):** the published
+Q4 retained 96 F16 Conformer pointwise matrices. Rewriting only those tensors
+to Q8_0 preserved the JFK transcript and reduced the scheduler-profiled encoder
+from 10242.59 to 9447.52 ms; process wall time fell from 10.93 to 10.16 s. The
+published 1.20 GiB GGUF was range-read after upload and contains exactly 96
+Q8_0 tensors. A load-time conversion was rejected earlier because its startup
+cost outweighed the inference gain; the artifact carries the optimization now.
+
 ---
 
 ## Long-audio coverage — 2026-07-04 final state (issue #89 closed out)

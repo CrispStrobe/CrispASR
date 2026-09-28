@@ -53,19 +53,15 @@ sequence is strict:
    `CRISPASR_FC_PROFILE` switch still works;
 2. run the profiler/metadata audit over quantized GGUF families, fix the largest
    hidden-F16 matmul offenders one at a time, and prove each A/B before defaulting.
-   **NOW:** remote-header audit found Cohere's published Q4 retains 96 F16
-   pointwise matrices (~450 MiB) and FireRed-ASR retains 32 (~300 MiB). Granite
-   and Moonshine have no large F16 residuals; Paraformer's are mostly tiny FSMN
-   kernels. Cohere CPU A/B preserved the transcript and cut the two pointwise
-   op groups from 1663 ms to 638 ms (encoder profile 9658 to 8593 ms), but
-   load-time conversion made a one-shot CLI run 10.06 to 11.09 s. Do not ship
-   the runtime repack; requantize the published artifacts once so users get the
-   inference win without paying conversion on every process start.
-   **CLAIMED 2026-09-28 (Codex):** the first artifact job failed before building
-   because its shallow clone could no longer resolve pre-squash commit
-   `5159c3c1`. Its terminal log is preserved locally. Re-run from current main,
-   then verify the 96-tensor structural gate, transcript identity, encoder
-   profile, HF upload and refreshed warm-ccache dataset before closing this item.
+   **Cohere DONE 2026-09-28:** the published Q4 artifact was requantized once;
+   all 96 pointwise weights changed F16 -> Q8_0, no other tensor changed, the
+   JFK transcript stayed identical, encoder profile improved 10242.59 ->
+   9447.52 ms and process wall time improved 10.93 -> 10.16 s. A remote range
+   read reconstructed the complete 1,289,178,240-byte GGUF and confirmed
+   Q8_0=96. The successful build also refreshed `chr1str/crispasr-ccache`.
+   **NOW:** apply the same artifact-time audit to FireRed-ASR's 32 retained F16
+   pointwise matrices (~300 MiB). Granite and Moonshine have no large F16
+   residuals; Paraformer's are mostly tiny FSMN kernels.
 
 ## CLAIMED 2026-09-15 — #412 Breeze TTS 2 (backend key `bt2-tts`)
 
