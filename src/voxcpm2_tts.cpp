@@ -2661,7 +2661,8 @@ static ggml_cgraph* get_or_build_locdit_graph(voxcpm2_context* ctx) {
     // Dedicated arena — `ctx->compute_meta` is shared with other graphs
     // (e.g. dynamic-path TSLM step) that would otherwise stomp on the
     // cached LocDiT tensor metadata.
-    ctx->locdit_arena_meta.assign(ctx->compute_meta.size(), 0);
+    ctx->locdit_arena_meta.assign(
+        std::max(ctx->compute_meta.size(), ggml_tensor_overhead() * 4096 + ggml_graph_overhead_custom(4096, false)), 0);
     ggml_init_params ip = {ctx->locdit_arena_meta.size(), ctx->locdit_arena_meta.data(), /*no_alloc=*/true};
     ctx->locdit_arena_ctx = ggml_init(ip);
     if (!ctx->locdit_arena_ctx) {
@@ -2771,7 +2772,10 @@ static ggml_cgraph* get_or_build_locdit_graph_b2(voxcpm2_context* ctx) {
         return ctx->locdit2_gf;
     if (!ctx->backend)
         return nullptr;
-    ctx->locdit2_arena_meta.assign(ctx->compute_meta.size(), 0);
+    // compute_meta is sized for the plain graph; the MM_SPLIT variant needs
+    // ~3x the tensor metadata.
+    ctx->locdit2_arena_meta.assign(
+        std::max(ctx->compute_meta.size(), ggml_tensor_overhead() * 4096 + ggml_graph_overhead_custom(4096, false)), 0);
     ggml_init_params ip = {ctx->locdit2_arena_meta.size(), ctx->locdit2_arena_meta.data(), /*no_alloc=*/true};
     ctx->locdit2_arena_ctx = ggml_init(ip);
     if (!ctx->locdit2_arena_ctx)
@@ -2925,8 +2929,9 @@ static bool cfm_fused_solve(voxcpm2_context* ctx, std::vector<float>& x_ct, cons
         ctx->cfm_fused_ctx = nullptr;
         ctx->cfm_fused_gf = nullptr;
         // Tensor metadata only (no_alloc): ~350 tensors per LocDiT body + the
-        // CFG/Euler ops; 1024 per step is a generous bound.
-        ctx->cfm_fused_meta.assign(ggml_tensor_overhead() * (1024 * (size_t)n_active + 64) +
+        // CFG/Euler ops, ~+750 with CRISPASR_VOXCPM2_MM_SPLIT (views + pieces +
+        // concats); 4096 per step bounds both.
+        ctx->cfm_fused_meta.assign(ggml_tensor_overhead() * (4096 * (size_t)n_active + 64) +
                                        ggml_graph_overhead_custom(4096 * (size_t)n_active, false),
                                    0);
         ggml_init_params ip = {ctx->cfm_fused_meta.size(), ctx->cfm_fused_meta.data(), /*no_alloc=*/true};
