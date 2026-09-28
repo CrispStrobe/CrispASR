@@ -57,19 +57,16 @@ public:
         // first word ("Hello" -> "HEllo") and appended a spurious full stop.
         // This matches the historical no-`--backend` path, which never
         // post-punctuates whisper output.
-        uint32_t caps = CAP_TIMESTAMPS_NATIVE | CAP_WORD_TIMESTAMPS | CAP_TOKEN_CONFIDENCE | CAP_LANGUAGE_DETECT |
-                        CAP_TRANSLATE | CAP_TEMPERATURE | CAP_BEAM_SEARCH | CAP_GRAMMAR | CAP_FLASH_ATTN |
-                        CAP_VAD_INTERNAL | CAP_PARALLEL_PROCESSORS | CAP_DIARIZE | CAP_AUTO_DOWNLOAD |
-                        CAP_PUNCTUATION_NATIVE;
-        // Tiron (#295) needs its OWN non-overlapping fixed 30 s windowing (in the
-        // whisper seek loop, with the per-speaker timestamps + onset pad + silent-
-        // window gate). The CLI's overlap-save slicing would double-chunk it and
-        // duplicate the overlap; declare internal chunking so the CLI passes the
-        // whole audio through in one call.
-        if (ctx_ && whisper_has_speaker_tokens(ctx_)) {
-            caps |= CAP_INTERNAL_CHUNKING;
-        }
-        return caps;
+        // Every Whisper model already handles long recordings in whisper_full's
+        // native seek/window loop. Without CAP_INTERNAL_CHUNKING the unified
+        // `--backend whisper` path first cut ordinary models with CrispASR's
+        // generic energy chunker, so no-VAD output differed from the legacy
+        // byte-identical path (#463). Tiron additionally uses its own
+        // non-overlapping 30 s speaker-token windows inside that same loop.
+        return CAP_TIMESTAMPS_NATIVE | CAP_WORD_TIMESTAMPS | CAP_TOKEN_CONFIDENCE | CAP_LANGUAGE_DETECT |
+               CAP_TRANSLATE | CAP_TEMPERATURE | CAP_BEAM_SEARCH | CAP_GRAMMAR | CAP_FLASH_ATTN | CAP_VAD_INTERNAL |
+               CAP_PARALLEL_PROCESSORS | CAP_DIARIZE | CAP_AUTO_DOWNLOAD | CAP_PUNCTUATION_NATIVE |
+               CAP_INTERNAL_CHUNKING;
     }
 
     bool init(const whisper_params& p) override {
