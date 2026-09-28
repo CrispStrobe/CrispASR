@@ -6105,6 +6105,22 @@ int main(int argc, char** argv) {
         float* lg = nullptr;
         int T = 0, V = 0;
         if (canary_ctc_compute_logits(ctx, samples.data(), (int)samples.size(), &lg, &T, &V) == 0 && lg) {
+            // NeMo's CTC decoder emits log_softmax; bring the C++ grid to the
+            // same per-row normalisation (idempotent if it already is). A raw
+            // logit row and its log-softmax differ by a per-row constant, which
+            // cosine is not invariant to: cos -0.19 before (Kaggle 2026-09-28).
+            for (int t = 0; t < T; t++) {
+                float* row = lg + (size_t)t * V;
+                float mx = row[0];
+                for (int v = 1; v < V; v++)
+                    mx = std::max(mx, row[v]);
+                double se = 0.0;
+                for (int v = 0; v < V; v++)
+                    se += std::exp((double)row[v] - mx);
+                const float lse = mx + (float)std::log(se);
+                for (int v = 0; v < V; v++)
+                    row[v] -= lse;
+            }
             auto rep = ref.compare("ctc_logits", lg, (size_t)T * V);
             print_row("ctc_logits", rep, COS_THRESHOLD);
             record(rep);

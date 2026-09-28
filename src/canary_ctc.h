@@ -37,12 +37,14 @@ struct canary_ctc_context* canary_ctc_init_from_file(const char* path_model, str
 
 void canary_ctc_free(struct canary_ctc_context* ctx);
 
-// Compute per-frame log-probabilities. Caller passes raw 16 kHz mono PCM.
+// Compute per-frame CTC head outputs - RAW logits (the graph ends at the
+// linear ctc head; no log-softmax). Caller passes raw 16 kHz mono PCM.
 // Returns a flat row-major float array of length T_enc * vocab_total written
 // into `out_logits` (caller-allocated). T_enc and vocab_total are returned by
 // reference. Returns 0 on success, non-zero on error.
 //
-// Layout: out_logits[t * vocab_total + v] = log P(token v | frame t).
+// Layout: out_logits[t * vocab_total + v] = logit of token v at frame t
+// (argmax-equivalent to log P; canary_ctc_align_words log-softmaxes itself).
 int canary_ctc_compute_logits(struct canary_ctc_context* ctx, const float* samples, int n_samples,
                               float** out_logits, // newly malloc'd, caller frees
                               int* out_T_enc, int* out_vocab_total);
