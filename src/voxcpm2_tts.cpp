@@ -422,6 +422,14 @@ struct voxcpm2_context {
     ggml_context* locdit2_arena_ctx = nullptr;
     ggml_cgraph* locdit2_gf = nullptr;
     ggml_gallocr_t locdit2_galloc = nullptr;
+    // #461 fused CFM Euler loop (one graph per patch), cached per (steps, cfg).
+    std::vector<uint8_t> cfm_fused_meta;
+    ggml_context* cfm_fused_ctx = nullptr;
+    ggml_cgraph* cfm_fused_gf = nullptr;
+    ggml_gallocr_t cfm_fused_galloc = nullptr;
+    int cfm_fused_steps = -1;
+    int cfm_fused_zero = -1;
+    float cfm_fused_cfg = 0.0f;
 
     // Cached LocEnc cgraph. Same constant-topology trick — LocEnc takes
     // a single patch [feat_dim, P] and emits a CLS hidden state [d_enc].
@@ -2397,7 +2405,13 @@ static std::vector<float> locdit_forward(voxcpm2_context* ctx, const float* x_ra
 // every op broadcasts over the batch dim (flash-attn over ne[3]), so each
 // sample's arithmetic is the single-sample graph's. Halves the dispatches and
 // weight reads of the 18 LocDiT forwards per AR step (dispatch-bound on iGPUs).
-static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena_ctx = nullptr, int B = 1) {
+// LocDiT forward body on caller-supplied input nodes: time/delta-time MLPs,
+// in/cond projections, 12 bidirectional layers, final norm + out_proj.
+// Returns vel [feat_dim, P, B]. Shared by build_locdit_graph (one forward per
+// graph) and build_cfm_fused_graph (the whole Euler loop in one graph, #461).
+static ggml_tensor* build_locdit_body(voxcpm2_context* ctx, ggml_context* ctx0, ggml_tensor* x_in, ggml_tensor* cond_in,
+                                      ggml_tensor* mu_in, ggml_tensor* t_sin, ggml_tensor* dt_sin,
+                                      ggml_tensor* positions, int B) {
     const vox_hparams& hp = ctx->hp;
     const vox_weights& W = ctx->graph_weights();
     const int d = (int)hp.locdit_d_model;
@@ -2407,41 +2421,10 @@ static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena
     const int n_kv_grp = n_q / n_kv;
     const float eps = hp.rms_norm_eps;
     const float ascale = 1.0f / std::sqrt((float)hd);
-    const int feat_dim = 64;
     const int P = (int)hp.patch_frames; // 4
     const int mu_toks = 2;
     const int T = mu_toks + 1 + P + P; // 11
     const int x_offset = mu_toks + 1 + P;
-
-    // When arena_ctx is supplied, build into the caller's persistent arena
-    // (the graph + tensor metadata outlive this call); otherwise fall back
-    // to the shared compute_meta (last-write-wins, single-call lifetime).
-    ggml_context* ctx0 = arena_ctx;
-    if (!ctx0) {
-        ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), /*no_alloc=*/true};
-        ctx0 = ggml_init(ip);
-    }
-    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
-
-    // ── Inputs ───────────────────────────────────────────────────
-    ggml_tensor* x_in = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, feat_dim, P);
-    ggml_set_name(x_in, "x_in");
-    ggml_set_input(x_in);
-    ggml_tensor* cond_in = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, feat_dim, P);
-    ggml_set_name(cond_in, "cond_in");
-    ggml_set_input(cond_in);
-    ggml_tensor* mu_in = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, d, mu_toks, B);
-    ggml_set_name(mu_in, "mu_in");
-    ggml_set_input(mu_in);
-    ggml_tensor* t_sin = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, d);
-    ggml_set_name(t_sin, "t_sin");
-    ggml_set_input(t_sin);
-    ggml_tensor* dt_sin = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, d);
-    ggml_set_name(dt_sin, "dt_sin");
-    ggml_set_input(dt_sin);
-    ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
-    ggml_set_name(positions, "positions");
-    ggml_set_input(positions);
 
     // ── time_mlp + delta_time_mlp ────────────────────────────────
     // Each MLP: Linear → SiLU → Linear, both with bias. Sum the two MLPs.
@@ -2586,6 +2569,48 @@ static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena
     }
     ggml_tensor* vel = ggml_mul_mat(ctx0, W.locdit_out_proj_w, normed); // [feat_dim, P, B]
     vel = ggml_add(ctx0, vel, W.locdit_out_proj_b);
+    return vel;
+}
+
+static ggml_cgraph* build_locdit_graph(voxcpm2_context* ctx, ggml_context* arena_ctx = nullptr, int B = 1) {
+    const vox_hparams& hp = ctx->hp;
+    const int d = (int)hp.locdit_d_model;
+    const int feat_dim = 64;
+    const int P = (int)hp.patch_frames; // 4
+    const int mu_toks = 2;
+    const int T = mu_toks + 1 + P + P; // 11
+
+    // When arena_ctx is supplied, build into the caller's persistent arena
+    // (the graph + tensor metadata outlive this call); otherwise fall back
+    // to the shared compute_meta (last-write-wins, single-call lifetime).
+    ggml_context* ctx0 = arena_ctx;
+    if (!ctx0) {
+        ggml_init_params ip = {ctx->compute_meta.size(), ctx->compute_meta.data(), /*no_alloc=*/true};
+        ctx0 = ggml_init(ip);
+    }
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096, false);
+
+    // ── Inputs ───────────────────────────────────────────────────
+    ggml_tensor* x_in = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, feat_dim, P);
+    ggml_set_name(x_in, "x_in");
+    ggml_set_input(x_in);
+    ggml_tensor* cond_in = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, feat_dim, P);
+    ggml_set_name(cond_in, "cond_in");
+    ggml_set_input(cond_in);
+    ggml_tensor* mu_in = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, d, mu_toks, B);
+    ggml_set_name(mu_in, "mu_in");
+    ggml_set_input(mu_in);
+    ggml_tensor* t_sin = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, d);
+    ggml_set_name(t_sin, "t_sin");
+    ggml_set_input(t_sin);
+    ggml_tensor* dt_sin = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, d);
+    ggml_set_name(dt_sin, "dt_sin");
+    ggml_set_input(dt_sin);
+    ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
+    ggml_set_name(positions, "positions");
+    ggml_set_input(positions);
+
+    ggml_tensor* vel = build_locdit_body(ctx, ctx0, x_in, cond_in, mu_in, t_sin, dt_sin, positions, B);
     ggml_set_name(vel, "vel");
     ggml_set_output(vel);
     ggml_build_forward_expand(gf, vel);
@@ -2790,6 +2815,162 @@ static bool locdit_forward_graph_cfg(voxcpm2_context* ctx, const float* x_raw, c
 }
 
 // ---------------------------------------------------------------------------
+// #461: the whole CFG Euler loop as ONE graph. Per denoise step it chains the
+// batch-2 LocDiT forward (cond row on mu, uncond row on zeros), CFG-zero-star
+// (st = <v_c,v_u> / (|v_u|^2 + 1e-8); dphi = v_u*st + cfg*(v_c - v_u*st)) and
+// the Euler update x -= dt*dphi, so a patch costs one submit + one readback
+// instead of one per step with host-side mixing in between. The step
+// schedule (t_span, dt) and cfg are baked in; the graph is cached per
+// (steps, cfg). Layout: x/cond are [feat_dim, P] (= the host's [T, C]).
+// ---------------------------------------------------------------------------
+static ggml_cgraph* build_cfm_fused_graph(voxcpm2_context* ctx, ggml_context* ctx0, const std::vector<float>& t_span,
+                                          int zero_init_steps, float cfg) {
+    const vox_hparams& hp = ctx->hp;
+    const int d = (int)hp.locdit_d_model;
+    const int feat_dim = 64;
+    const int P = (int)hp.patch_frames;
+    const int mu_toks = 2;
+    const int T = mu_toks + 1 + P + P;
+    const int steps = (int)t_span.size() - 1;
+    const int n_active = steps - std::min(steps, zero_init_steps);
+
+    ggml_cgraph* gf = ggml_new_graph_custom(ctx0, 4096 * (size_t)std::max(1, n_active), false);
+    ggml_tensor* x = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, feat_dim, P);
+    ggml_set_name(x, "x0");
+    ggml_set_input(x);
+    ggml_tensor* cond_in = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, feat_dim, P);
+    ggml_set_name(cond_in, "cond_in");
+    ggml_set_input(cond_in);
+    ggml_tensor* mu_in = ggml_new_tensor_3d(ctx0, GGML_TYPE_F32, d, mu_toks, 2);
+    ggml_set_name(mu_in, "mu_in");
+    ggml_set_input(mu_in);
+    ggml_tensor* t_sin_all = ggml_new_tensor_2d(ctx0, GGML_TYPE_F32, d, std::max(1, n_active));
+    ggml_set_name(t_sin_all, "t_sin_all");
+    ggml_set_input(t_sin_all);
+    ggml_tensor* dt_sin = ggml_new_tensor_1d(ctx0, GGML_TYPE_F32, d);
+    ggml_set_name(dt_sin, "dt_sin");
+    ggml_set_input(dt_sin);
+    ggml_tensor* positions = ggml_new_tensor_1d(ctx0, GGML_TYPE_I32, T);
+    ggml_set_name(positions, "positions");
+    ggml_set_input(positions);
+
+    int k = 0;
+    for (int step = zero_init_steps + 1; step <= steps; step++, k++) {
+        // step <= zero_init_steps: zero velocity (CFG zero-star), x unchanged.
+        const float dt_val = t_span[step - 1] - t_span[step];
+        ggml_tensor* t_sin = ggml_view_1d(ctx0, t_sin_all, d, (size_t)k * t_sin_all->nb[1]);
+        ggml_tensor* vel = build_locdit_body(ctx, ctx0, x, cond_in, mu_in, t_sin, dt_sin, positions, /*B=*/2);
+        ggml_tensor* v_c = ggml_view_2d(ctx0, vel, feat_dim, P, vel->nb[1], 0);
+        ggml_tensor* v_u = ggml_view_2d(ctx0, vel, feat_dim, P, vel->nb[1], vel->nb[2]);
+        ggml_tensor* dot = ggml_sum(ctx0, ggml_mul(ctx0, v_c, v_u));
+        ggml_tensor* nsq = ggml_scale_bias(ctx0, ggml_sum(ctx0, ggml_mul(ctx0, v_u, v_u)), 1.0f, 1e-8f);
+        ggml_tensor* st = ggml_div(ctx0, dot, nsq);
+        ggml_tensor* neg = ggml_mul(ctx0, v_u, st); // [1] broadcast
+        ggml_tensor* dphi = ggml_add(ctx0, neg, ggml_scale(ctx0, ggml_sub(ctx0, v_c, neg), cfg));
+        x = ggml_add(ctx0, x, ggml_scale(ctx0, dphi, -dt_val));
+    }
+    ggml_set_name(x, "x_out");
+    ggml_set_output(x);
+    ggml_build_forward_expand(gf, x);
+    return gf;
+}
+
+// Runs the fused solve. x_ct: in/out state [C=feat_dim, T=P] channels-first
+// (the cfm_euler_solve layout). Returns false (caller uses the per-step path)
+// when the graph cannot be built/allocated/computed.
+static bool cfm_fused_solve(voxcpm2_context* ctx, std::vector<float>& x_ct, const float* mu, const float* cond_raw,
+                            const std::vector<float>& t_span, int zero_init_steps, float cfg) {
+    const vox_hparams& hp = ctx->hp;
+    const int d = (int)hp.locdit_d_model;
+    const int feat_dim = 64;
+    const int P = (int)hp.patch_frames;
+    const int mu_toks = 2;
+    const int T = mu_toks + 1 + P + P;
+    const int steps = (int)t_span.size() - 1;
+    const int n_active = steps - std::min(steps, zero_init_steps);
+    if (n_active <= 0)
+        return false;
+    if (!ctx->cfm_fused_gf || ctx->cfm_fused_steps != steps || ctx->cfm_fused_cfg != cfg ||
+        ctx->cfm_fused_zero != zero_init_steps) {
+        if (ctx->cfm_fused_galloc)
+            ggml_gallocr_free(ctx->cfm_fused_galloc);
+        if (ctx->cfm_fused_ctx)
+            ggml_free(ctx->cfm_fused_ctx);
+        ctx->cfm_fused_galloc = nullptr;
+        ctx->cfm_fused_ctx = nullptr;
+        ctx->cfm_fused_gf = nullptr;
+        // Tensor metadata only (no_alloc): ~350 tensors per LocDiT body + the
+        // CFG/Euler ops; 1024 per step is a generous bound.
+        ctx->cfm_fused_meta.assign(ggml_tensor_overhead() * (1024 * (size_t)n_active + 64) +
+                                       ggml_graph_overhead_custom(4096 * (size_t)n_active, false),
+                                   0);
+        ggml_init_params ip = {ctx->cfm_fused_meta.size(), ctx->cfm_fused_meta.data(), /*no_alloc=*/true};
+        ctx->cfm_fused_ctx = ggml_init(ip);
+        if (!ctx->cfm_fused_ctx)
+            return false;
+        ctx->cfm_fused_gf = build_cfm_fused_graph(ctx, ctx->cfm_fused_ctx, t_span, zero_init_steps, cfg);
+        ctx->cfm_fused_galloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(ctx->backend));
+        if (!ctx->cfm_fused_gf || !ctx->cfm_fused_galloc ||
+            !ggml_gallocr_reserve(ctx->cfm_fused_galloc, ctx->cfm_fused_gf)) {
+            if (ctx->cfm_fused_galloc)
+                ggml_gallocr_free(ctx->cfm_fused_galloc);
+            ggml_free(ctx->cfm_fused_ctx);
+            ctx->cfm_fused_galloc = nullptr;
+            ctx->cfm_fused_ctx = nullptr;
+            ctx->cfm_fused_gf = nullptr;
+            return false;
+        }
+        ctx->cfm_fused_steps = steps;
+        ctx->cfm_fused_cfg = cfg;
+        ctx->cfm_fused_zero = zero_init_steps;
+    }
+    ggml_cgraph* gf = ctx->cfm_fused_gf;
+    if (!ggml_gallocr_alloc_graph(ctx->cfm_fused_galloc, gf))
+        return false;
+
+    std::vector<float> x_tc((size_t)feat_dim * P);
+    for (int t = 0; t < P; t++)
+        for (int c = 0; c < feat_dim; c++)
+            x_tc[(size_t)t * feat_dim + c] = x_ct[(size_t)c * P + t];
+    std::vector<float> mu_buf((size_t)d * mu_toks * 2, 0.0f); // row 1 = zero mu (uncond)
+    std::memcpy(mu_buf.data(), mu, (size_t)d * mu_toks * sizeof(float));
+    std::vector<float> t_all((size_t)d * n_active);
+    for (int k = 0, step = zero_init_steps + 1; step <= steps; step++, k++) {
+        std::vector<float> e = sinusoidal_time_emb(t_span[step - 1], d);
+        std::memcpy(t_all.data() + (size_t)k * d, e.data(), (size_t)d * sizeof(float));
+    }
+    std::vector<float> dt_sin = sinusoidal_time_emb(0.0f, d); // non-mean mode: dt = 0
+    std::vector<int32_t> positions(T);
+    for (int i = 0; i < T; i++)
+        positions[i] = i;
+
+    ggml_tensor* in_x = ggml_graph_get_tensor(gf, "x0");
+    ggml_tensor* in_c = ggml_graph_get_tensor(gf, "cond_in");
+    ggml_tensor* in_mu = ggml_graph_get_tensor(gf, "mu_in");
+    ggml_tensor* in_t = ggml_graph_get_tensor(gf, "t_sin_all");
+    ggml_tensor* in_dt = ggml_graph_get_tensor(gf, "dt_sin");
+    ggml_tensor* in_pos = ggml_graph_get_tensor(gf, "positions");
+    ggml_tensor* out = ggml_graph_get_tensor(gf, "x_out");
+    if (!in_x || !in_c || !in_mu || !in_t || !in_dt || !in_pos || !out)
+        return false;
+    ggml_backend_tensor_set(in_x, x_tc.data(), 0, x_tc.size() * sizeof(float));
+    ggml_backend_tensor_set(in_c, cond_raw, 0, (size_t)feat_dim * P * sizeof(float));
+    ggml_backend_tensor_set(in_mu, mu_buf.data(), 0, mu_buf.size() * sizeof(float));
+    ggml_backend_tensor_set(in_t, t_all.data(), 0, t_all.size() * sizeof(float));
+    ggml_backend_tensor_set(in_dt, dt_sin.data(), 0, dt_sin.size() * sizeof(float));
+    ggml_backend_tensor_set(in_pos, positions.data(), 0, positions.size() * sizeof(int32_t));
+    if (core_cpu_backend::is_cpu(ctx->backend))
+        core_cpu_backend::set_n_threads(ctx->backend, ctx->n_threads);
+    if (ggml_backend_graph_compute(ctx->backend, gf) != GGML_STATUS_SUCCESS)
+        return false;
+    ggml_backend_tensor_get(out, x_tc.data(), 0, x_tc.size() * sizeof(float));
+    for (int t = 0; t < P; t++)
+        for (int c = 0; c < feat_dim; c++)
+            x_ct[(size_t)c * P + t] = x_tc[(size_t)t * feat_dim + c];
+    return true;
+}
+
+// ---------------------------------------------------------------------------
 // CFM Euler solve — sway schedule (t: 1->0), CFG-zero-star
 //
 // mu:       [tslm_d_model=2048] conditioning from TSLM+RALM
@@ -2871,6 +3052,25 @@ static std::vector<float> cfm_euler_solve(voxcpm2_context* ctx, const float* mu,
                 cfg_interval, cfg_interval);
 
     float dt_scalar = 0.0f; // non-mean-mode
+
+    // #461: the whole Euler loop in one graph (one submit per patch instead of
+    // one per denoise step). Same eligibility as the batch-2 CFG path; the
+    // per-step loop below stays as the fallback and for interval-CFG.
+    // CRISPASR_VOXCPM2_CFM_FUSED=0 -> per-step path.
+    static const bool cfm_fused = vox_env_bool_default_on("CRISPASR_VOXCPM2_CFM_FUSED");
+    if (cfm_fused && cfg > 1.0f && cfg_batch && use_graph && !fa_cpu && !interval_on) {
+        double tl = bench ? vox_now_ms() : 0;
+        if (cfm_fused_solve(ctx, x, mu, cond_raw, t_span, zero_init_steps, cfg)) {
+            if (bench) {
+                sum_locdit += vox_now_ms() - tl;
+                double total = vox_now_ms() - t_cfm0;
+                fprintf(stderr,
+                        "voxcpm2[bench]:   cfm.locdit_fwd %.1f ms total (%.1f%% of cfm)  cfm.total=%.1f ms [fused]\n",
+                        sum_locdit, total > 0 ? 100.0 * sum_locdit / total : 0.0, total);
+            }
+            return x;
+        }
+    }
 
     for (int step = 1; step <= steps; step++) {
         float t_cur = t_span[step - 1];
@@ -6876,6 +7076,14 @@ void voxcpm2_free(struct voxcpm2_context* ctx) {
     if (ctx->locdit2_galloc) {
         ggml_gallocr_free(ctx->locdit2_galloc);
         ctx->locdit2_galloc = nullptr;
+    }
+    if (ctx->cfm_fused_galloc) {
+        ggml_gallocr_free(ctx->cfm_fused_galloc);
+        ctx->cfm_fused_galloc = nullptr;
+    }
+    if (ctx->cfm_fused_ctx) {
+        ggml_free(ctx->cfm_fused_ctx);
+        ctx->cfm_fused_ctx = nullptr;
     }
     if (ctx->locdit2_arena_ctx) {
         ggml_free(ctx->locdit2_arena_ctx);
