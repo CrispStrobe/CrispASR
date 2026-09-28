@@ -14,7 +14,7 @@ TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else Path("/tmp")
 REPO = TEMP / "CrispASR"
 BUILD = TEMP / "build"
 MODELS = TEMP / "models"
-SHA = "5159c3c1"
+SHA = "391fe51b"
 HF_REPO = "cstr/cohere-transcribe-03-2026-GGUF"
 NAME = "cohere-transcribe-q4_k.gguf"
 
@@ -27,7 +27,7 @@ import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress(hf_progress_repo="cstr/crispasr-kaggle-progress")
 step = kh.step
-step("script.start", sha=SHA, run="v1")
+step("script.start", sha=SHA, run="v2")
 token = kh.resolve_hf_token("HF_TOKEN")
 subprocess.check_call([sys.executable, "-m", "pip", "install", "--quiet",
                        "huggingface_hub", "hf_transfer", "gguf"])

@@ -61,6 +61,11 @@ sequence is strict:
    load-time conversion made a one-shot CLI run 10.06 to 11.09 s. Do not ship
    the runtime repack; requantize the published artifacts once so users get the
    inference win without paying conversion on every process start.
+   **CLAIMED 2026-09-28 (Codex):** the first artifact job failed before building
+   because its shallow clone could no longer resolve pre-squash commit
+   `5159c3c1`. Its terminal log is preserved locally. Re-run from current main,
+   then verify the 96-tensor structural gate, transcript identity, encoder
+   profile, HF upload and refreshed warm-ccache dataset before closing this item.
 
 ## CLAIMED 2026-09-15 — #412 Breeze TTS 2 (backend key `bt2-tts`)
 
