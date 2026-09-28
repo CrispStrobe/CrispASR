@@ -17,9 +17,9 @@ FIX = TEMP / "fix"
 BASE_BUILD = TEMP / "build-base"
 FIX_BUILD = TEMP / "build-fix"
 MODEL_DIR = TEMP / "models"
-BASE_SHA = "d1b0684a"
+BASE_SHA = "d1b0684a45d4afc39f274a2812faa003b5165ef2"
 FIX_BRANCH = "fix/463-whisper-internal-chunking"
-SCRIPT_VERSION = "v1"
+SCRIPT_VERSION = "v2"
 
 
 def run(cmd, **kwargs):
@@ -31,7 +31,7 @@ run(["git", "clone", "--depth", "1", "--branch", "main", "--recurse-submodules",
      "https://github.com/CrispStrobe/CrispASR.git", str(BASE)])
 run(["git", "clone", "--depth", "1", "--branch", FIX_BRANCH, "--recurse-submodules",
      "https://github.com/CrispStrobe/CrispASR.git", str(FIX)])
-assert run(["git", "rev-parse", "--short", "HEAD"], cwd=BASE, capture_output=True).stdout.strip() == BASE_SHA
+assert run(["git", "rev-parse", "HEAD"], cwd=BASE, capture_output=True).stdout.strip() == BASE_SHA
 fix_sha = run(["git", "rev-parse", "--short", "HEAD"], cwd=FIX, capture_output=True).stdout.strip()
 
 sys.path.insert(0, str(FIX / "tools" / "kaggle"))
