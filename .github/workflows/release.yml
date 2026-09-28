@@ -1101,6 +1101,9 @@ jobs:
       - name: Package
         run: |
           TAG="${{ inputs.tag || github.ref_name }}"
+          # A dry run from a branch names the zip after the branch, and
+          # "feat/x" would make zip look for a directory "crispasr-feat".
+          TAG="${TAG//\//-}"
           test -d build-apple/crispasr.xcframework  # fail loudly if the build produced nothing
           mkdir -p release-ios
           # --symlinks: the .framework Versions/Current symlinks must survive the
