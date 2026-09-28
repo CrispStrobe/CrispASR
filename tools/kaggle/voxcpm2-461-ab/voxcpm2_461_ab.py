@@ -10,7 +10,7 @@ import json, os, re, subprocess, sys, time, traceback, wave, array, math
 from pathlib import Path
 OUT = Path("/kaggle/working/out"); OUT.mkdir(parents=True, exist_ok=True)
 REPO = Path("/tmp/CrispASR"); G = Path("/tmp/g"); G.mkdir(exist_ok=True)
-REF = os.environ.get("CRISPASR_REF", "perf/voxcpm2-cfm-fused")
+REF = os.environ.get("CRISPASR_REF", "perf/voxcpm2-cfm-fused")  # MM_SPLIT A/B + doubled-sentence check
 TEXT = "Hello, this is a short test sentence."
 res = {"errors": [], "runs": {}, "diff": {}, "asr": {}, "wavcmp": {}}
 def save(): (OUT / "result.json").write_text(json.dumps(res, indent=1))
@@ -84,24 +84,62 @@ try:
             txt = " ".join(asr.stdout.split()); res["asr"][tag] = {"text": txt, "wer": round(wer(TEXT, txt), 3)}
         res["runs"][tag] = ent; save()
         print(tag, {k: ent.get(k) for k in ("wall_s", "cfm_median_ms", "fused_lines", "dur_s", "rtf")}, res["asr"].get(tag), flush=True)
-    for tag, extra, env in (("vk_fused", [], {}), ("vk_perstep", [], {"CRISPASR_VOXCPM2_CFM_FUSED": "0"}),
-                            ("cpu_fused", ["-ng"], {}), ("cpu_perstep", ["-ng"], {"CRISPASR_VOXCPM2_CFM_FUSED": "0"})):
+    synth("vk_warmup", [], {})  # compiles every Vulkan pipeline once; not compared
+    ARMS = (("vk_split0", [], {"CRISPASR_VOXCPM2_MM_SPLIT": "0"}), ("vk_split8", [], {"CRISPASR_VOXCPM2_MM_SPLIT": "8"}),
+            ("vk_split4", [], {"CRISPASR_VOXCPM2_MM_SPLIT": "4"}),
+            ("cpu_split0", ["-ng"], {"CRISPASR_VOXCPM2_MM_SPLIT": "0"}), ("cpu_split8", ["-ng"], {"CRISPASR_VOXCPM2_MM_SPLIT": "8"}))
+    for tag, extra, env in ARMS:
         synth(tag, extra, env)
-    for a_, b_ in (("cpu_fused", "cpu_perstep"), ("vk_fused", "vk_perstep")):
+    for a_, b_ in (("vk_split8", "vk_split0"), ("vk_split4", "vk_split0"), ("cpu_split8", "cpu_split0")):
         pa, pb = OUT / f"{a_}.wav", OUT / f"{b_}.wav"
         if pa.exists() and pb.exists():
             x, _ = read_wav(pa); y, _ = read_wav(pb); n = min(len(x), len(y))
             dot = sum(x[i] * y[i] for i in range(n)); nx = math.sqrt(sum(v * v for v in x[:n])); ny = math.sqrt(sum(v * v for v in y[:n]))
-            res["wavcmp"][f"{a_}~{b_}"] = {"len": [len(x), len(y)], "identical": x == y, "cos": round(dot / (nx * ny + 1e-12), 6),
-                                           "max_abs": round(max(abs(x[i] - y[i]) for i in range(n)), 6)}
+            res["wavcmp"][f"{a_}~{b_}"] = {"len": [len(x), len(y)], "identical": x == y, "cos": round(dot / (nx * ny + 1e-12), 6)}
     save()
-    # diff harness vs the Python reference (cfm_step0_result = cfm_euler_solve on reference noise)
-    for tag, env in (("cpu_fused", {"CRISPASR_VOXCPM2_CPU_ONLY": "1"}), ("cpu_perstep", {"CRISPASR_VOXCPM2_CPU_ONLY": "1", "CRISPASR_VOXCPM2_CFM_FUSED": "0"}),
-                     ("vk_fused", {}), ("vk_perstep", {"CRISPASR_VOXCPM2_CFM_FUSED": "0"})):
-        r = subprocess.run([str(D), "voxcpm2-tts", q8, refg, str(REPO / "samples/jfk.wav")], capture_output=True, text=True,
-                           env=dict(os.environ, **env), timeout=3600)
-        res["diff"][tag] = [l.strip() for l in r.stdout.splitlines() if re.search(r"^\[(PASS|FAIL|SKIP|ERR)", l.strip())][:40]
-        save(); print("diff", tag, [l for l in res["diff"][tag] if "cfm" in l], flush=True)
+    # the doubled-sentence question: C++ over several seeds (Vulkan, fast) ...
+    res["seeds_cpp"] = {}
+    for sd in (1, 2, 3, 4, 5):
+        wav = OUT / f"seed{sd}.wav"
+        r = subprocess.run([str(B), "--backend", "voxcpm2", "-m", q8, "--tts", TEXT, "--tts-output", str(wav), "--seed", str(sd), "-v"],
+                           capture_output=True, text=True, timeout=1200)
+        steps = re.findall(r"stopped at step (\d+)", r.stderr)
+        txt = ""
+        if wav.exists():
+            asr = subprocess.run([str(B), "-m", str(wtiny), "-f", str(wav), "-np", "-ng"], capture_output=True, text=True, timeout=600)
+            txt = re.sub(r"\[[^\]]*\]", "", asr.stdout); txt = " ".join(txt.split())
+        res["seeds_cpp"][sd] = {"steps": steps, "dur_s": round(len(read_wav(wav)[0]) / 48000, 2) if wav.exists() else None, "asr": txt}
+        save(); print("seed", sd, res["seeds_cpp"][sd], flush=True)
+    # ... and the official VoxCPM2 pipeline (own uv venv, cu128 torch) on the same text + seeds
+    try:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-q", "uv"])
+        V = G / "venv"; subprocess.check_call([sys.executable, "-m", "uv", "venv", "--python", "3.11", str(V)])
+        py = str(V / "bin" / "python")
+        r = subprocess.run([sys.executable, "-m", "uv", "pip", "install", "--python", py, "voxcpm", "soundfile", "torch==2.8.0", "torchaudio==2.8.0",
+                            "--extra-index-url", "https://download.pytorch.org/whl/cu128", "--index-strategy", "unsafe-best-match"],
+                           capture_output=True, text=True, timeout=2400)
+        res["up_install"] = (r.stdout + r.stderr)[-800:]
+        (G / "up.py").write_text(
+            "import sys, json, soundfile as sf, torch\nfrom voxcpm import VoxCPM\n"
+            "m = VoxCPM.from_pretrained('openbmb/VoxCPM2')\nout = {}\n"
+            "for sd in [1,2,3,4,5,42]:\n"
+            "    torch.manual_seed(sd)\n"
+            "    w = m.generate(text=sys.argv[1], cfg_value=2.0, inference_timesteps=10)\n"
+            "    p = f'/tmp/g/up_seed{sd}.wav'; sf.write(p, w, m.tts_model.sample_rate); out[sd] = [p, len(w) / m.tts_model.sample_rate]\n"
+            "print('@@' + json.dumps(out))\n")
+        r = subprocess.run([py, str(G / "up.py"), TEXT], capture_output=True, text=True, timeout=3600)
+        m = re.search(r"^@@(.*)$", r.stdout, re.M)
+        res["seeds_upstream"] = {}
+        if m:
+            for sd, (p, dur) in json.loads(m.group(1)).items():
+                asr = subprocess.run([str(B), "-m", str(wtiny), "-f", p, "-np", "-ng"], capture_output=True, text=True, timeout=600)
+                txt = " ".join(re.sub(r"\[[^\]]*\]", "", asr.stdout).split())
+                res["seeds_upstream"][sd] = {"dur_s": round(dur, 2), "asr": txt}
+        else:
+            res["seeds_upstream"] = {"error": (r.stdout + r.stderr)[-2500:]}
+        save(); print("upstream", res["seeds_upstream"], flush=True)
+    except Exception:
+        res["errors"].append("upstream: " + traceback.format_exc()[-1500:])
 except BaseException:
     res["errors"].append(traceback.format_exc())
 finally:
