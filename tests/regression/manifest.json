@@ -3,8 +3,8 @@
   "version": 1,
   "fixtures": {
     "repo": "cstr/crispasr-regression-fixtures",
-    "revision": "cafce827fc85e53415ebb5b201cc2a9516047ccc",
-    "_note": "Pinned. To re-bake, run `tools/kaggle-regression.py` with MODE=rebake UPLOAD=1; the new commit SHA gets pasted here as a reviewable diff. Previous: 99f005d59a0f7f4915dea5faea4d2e17b2120268 (2026-05-17). Bumped 2026-05-25 after Kaggle rebake v13 published 9 ref archives — adds parakeet-tdt-1.1b, parakeet-tdt_ctc-1.1b, parakeet-rnnt-0.6b, parakeet-rnnt-1.1b (all NEW from handover-prompts/extend-coverage-via-kaggle.md realistic goal); refreshes canary-1b-v2, moonshine-tiny/base, parakeet-tdt-0.6b-{en,ja}. Bumped 2026-09-27 from b61b03014b: adds sensevoice-small, paraformer-zh, funasr-nano jfk_11s refs (copied from the #436 final rebake in the dataset repo of the same name). Nothing removed. Bumped 2026-09-28 from e5781ed4f8: Kaggle rebake batches 4-6 (parakeet-tdt-0.6b-en, parakeet-tdt_ctc-1.1b, granite-speech-4.1-2b, qwen3-asr-0.6b, kyutai-stt-1b, mini-omni2, nemotron-3.5-asr-streaming-0.6b, wav2vec2-xlsr-en, hubert-large, data2vec-base, omniasr-ctc-1b-v2, fastconformer-ctc-large)."
+    "revision": "fe509cca96436bce3c48d97f0cdf9be85af853a3",
+    "_note": "Pinned. To re-bake, run `tools/kaggle-regression.py` with MODE=rebake UPLOAD=1; the new commit SHA gets pasted here as a reviewable diff. Previous: 99f005d59a0f7f4915dea5faea4d2e17b2120268 (2026-05-17). Bumped 2026-05-25 after Kaggle rebake v13 published 9 ref archives — adds parakeet-tdt-1.1b, parakeet-tdt_ctc-1.1b, parakeet-rnnt-0.6b, parakeet-rnnt-1.1b (all NEW from handover-prompts/extend-coverage-via-kaggle.md realistic goal); refreshes canary-1b-v2, moonshine-tiny/base, parakeet-tdt-0.6b-{en,ja}. Bumped 2026-09-27 from b61b03014b: adds sensevoice-small, paraformer-zh, funasr-nano jfk_11s refs (copied from the #436 final rebake in the dataset repo of the same name). Nothing removed. Bumped 2026-09-28 from e5781ed4f8: Kaggle rebake batches 4-6 (parakeet-tdt-0.6b-en, parakeet-tdt_ctc-1.1b, granite-speech-4.1-2b, qwen3-asr-0.6b, kyutai-stt-1b, mini-omni2, nemotron-3.5-asr-streaming-0.6b, wav2vec2-xlsr-en, hubert-large, data2vec-base, omniasr-ctc-1b-v2, fastconformer-ctc-large). Bumped 2026-09-28 from cafce827fc: adds cohere-transcribe/jfk_11s/ref.gguf (fresh rebake)."
   },
   "backends": [
     {
@@ -113,7 +113,7 @@
     {
       "name": "parakeet-tdt-0.6b-en",
       "backend_id": "parakeet",
-      "skip_diff": true,
+      "skip_diff": false,
       "source_model": "nvidia/parakeet-tdt-0.6b-v3",
       "gguf": {
         "repo": "cstr/parakeet-tdt-0.6b-v3-GGUF",
@@ -124,7 +124,16 @@
       "sample": "samples/jfk.wav",
       "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
       "expected_transcript_source": "captured 2026-05-15 with HF revision 815cc1b, CPU-only, samples/jfk.wav",
-      "_skip_diff_note": "Neither parakeet-tdt-0.6b-en/ref.gguf nor parakeet-tdt-0.6b-v3/jfk_11s/ref.gguf matches this GGUF: F16 encoder cos 0.59 (Kaggle diff probe 2026-09-27) and 26 stages under 0.999 (Kaggle validate 2026-09-27). Needs a fresh bake from nvidia/parakeet-tdt-0.6b-v3."
+      "fixture_ref_path": "parakeet-tdt-0.6b-en/ref.gguf",
+      "diff_gguf": {
+        "file": "parakeet-tdt-0.6b-v3.gguf"
+      },
+      "diff_thresholds": {
+        "mel_spectrogram": 0.999,
+        "encoder_output": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Kaggle validate 2026-09-28: all 28 stages >= 0.999914 after the absent-xscaling fix 6814698f (encoder was 0.594)."
     },
     {
       "name": "canary-1b-v2",
@@ -472,8 +481,7 @@
     {
       "name": "wav2vec2-xlsr-en",
       "backend_id": "wav2vec2",
-      "skip_diff": true,
-      "skip_preflight": true,
+      "skip_diff": false,
       "gguf": {
         "repo": "cstr/wav2vec2-large-xlsr-53-english-GGUF",
         "revision": "3de5f69700e163286eaae85952fba9bf4ab761f6",
@@ -489,13 +497,21 @@
       },
       "transcript_tolerance_note": "CTC decoder is byte-equal-fragile to the punctuation decode tie (the comma after 'americans' flips run-to-run on CI at WER=0). Route through the WER gate (space-delimited → WER is the gate, CER advisory): wer_max=0.0 keeps words exact while absorbing the punctuation flip. Added 2026-07-13 after runs 29238328963 / 29242753343 flipped this model pass/fail on the comma alone.",
       "source_model": "jonatasgrosman/wav2vec2-large-xlsr-53-english",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "fixture_ref_path": "wav2vec2-xlsr-en/ref.gguf",
+      "diff_gguf": {
+        "file": "wav2vec2-xlsr-en.gguf"
+      },
+      "diff_thresholds": {
+        "ctc_logits": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Kaggle validate 2026-09-28: ctc_logits >= 0.999958 vs transformers after the even-K pos-conv padding fix 3f00eaef (was 0.908)."
     },
     {
       "name": "hubert-large",
       "backend_id": "hubert",
-      "skip_diff": true,
-      "skip_preflight": true,
+      "skip_diff": false,
       "gguf": {
         "repo": "cstr/hubert-large-ls960-ft-GGUF",
         "revision": "fa24754efea02b7b2f8616c3b149c74d3cb8491a",
@@ -506,7 +522,16 @@
       "expected_transcript": "AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
       "expected_transcript_source": "re-baked 2026-07-13 from nightly run 29232149677 (ubuntu-x86 OpenBLAS CI); word-identical to the prior CPU capture (WER=0), differs only in decode-tie punctuation/case",
       "source_model": "facebook/hubert-large-ls960-ft",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "fixture_ref_path": "hubert-large/ref.gguf",
+      "diff_gguf": {
+        "file": "hubert-large-ls960-ft-f16.gguf"
+      },
+      "diff_thresholds": {
+        "ctc_logits": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Kaggle validate 2026-09-28: ctc_logits >= 0.999917 vs transformers after the even-K pos-conv padding fix 3f00eaef (was 0.955)."
     },
     {
       "name": "data2vec-base",
@@ -536,8 +561,7 @@
     {
       "name": "fastconformer-ctc-large",
       "backend_id": "fastconformer-ctc",
-      "skip_diff": true,
-      "skip_preflight": true,
+      "skip_diff": false,
       "gguf": {
         "repo": "cstr/stt-en-fastconformer-ctc-large-GGUF",
         "revision": "bc24257f571edd7ea58d807d408e0254d0c6bcab",
@@ -553,7 +577,16 @@
       },
       "transcript_tolerance_note": "CTC decoder is byte-equal-fragile to the punctuation decode tie (the comma after 'americans' flips run-to-run on CI at WER=0). Route through the WER gate (space-delimited → WER is the gate, CER advisory): wer_max=0.0 keeps words exact while absorbing the punctuation flip. Added 2026-07-13 after runs 29238328963 / 29242753343 flipped this model pass/fail on the comma alone.",
       "source_model": "nvidia/stt_en_fastconformer_ctc_large",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "fixture_ref_path": "fastconformer-ctc-large/ref.gguf",
+      "diff_gguf": {
+        "file": "stt-en-fastconformer-ctc-large-f16.gguf"
+      },
+      "diff_thresholds": {
+        "ctc_logits": 0.99
+      },
+      "stage_threshold_default": 0.99,
+      "stage_threshold_note": "Kaggle validate 2026-09-28: ctc_logits per-frame cos (log-softmax both sides) >= 0.995 on F16; gated at 0.99. Was -0.19 before the diff normalised the raw C++ logits (1836168a)."
     },
     {
       "name": "sensevoice-small",
@@ -910,9 +943,18 @@
       "sample": "samples/jfk.wav",
       "expected_transcript": "And so my fellow americans, ask not what your country can do for you, ask what you can do for your country.",
       "expected_transcript_source": "re-baked 2026-07-13 from nightly run 29232149677 (ubuntu-x86 OpenBLAS CI); word-identical to the prior CPU capture (WER=0), differs only in decode-tie punctuation/case",
-      "skip_diff": true,
+      "skip_diff": false,
       "source_model": "gpt-omni/mini-omni2",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "fixture_ref_path": "mini-omni2/ref.gguf",
+      "diff_gguf": {
+        "file": "mini-omni2-f16.gguf"
+      },
+      "diff_thresholds": {
+        "whisper_encoder_output": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Kaggle validate 2026-09-28 (CPU, F16 diff): every stage 1.0000."
     },
     {
       "name": "lfm2-audio-1.5b",
@@ -935,8 +977,7 @@
     {
       "name": "nemotron-3.5-asr-streaming-0.6b",
       "backend_id": "nemotron",
-      "skip_diff": true,
-      "_skip_diff_note": "Added 2026-06-15. Transcript-only regression for now; diff harness needs NeMo ref dump integration.",
+      "skip_diff": false,
       "gguf": {
         "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
         "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
@@ -953,7 +994,16 @@
       },
       "transcript_tolerance_note": "Nemotron inserts <en-US> language tags; CER/WER tolerance handles potential cosmetic differences in tag placement.",
       "source_model": "nvidia/nemotron-3.5-asr-streaming-0.6b",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "fixture_ref_path": "nemotron-3.5-asr-streaming-0.6b/ref.gguf",
+      "diff_gguf": {
+        "file": "nemotron-3.5-asr-streaming-0.6b-f16.gguf"
+      },
+      "diff_thresholds": {
+        "encoder_output": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Kaggle validate 2026-09-28 (CPU, F16 diff): encoder_output 0.999982. crispasr-diff's nemotron branch emits no mel stage."
     }
   ],
   "tts_backends_note": "TTS->ASR roundtrip regression. Each entry synthesises tts_phrase via the TTS backend, transcribes the output with the pinned ASR backend (parakeet by default — high-accuracy English ground truth), and asserts WER <= wer_max. Catches silent decode regressions like the voxcpm2 BF16 noise bug that the encoder/mel diff harness can miss. WER ignores punctuation and case after normalisation, so a kokoro tts_phrase that comes back as 'the quick brown fox jumps over the lazy dog.' is still WER=0.",

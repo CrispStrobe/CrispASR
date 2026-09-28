@@ -6,7 +6,8 @@ a kernel push cannot set env vars, so they are set here. CPU build, like GH.
 """
 import os, subprocess, sys, pathlib
 REF = "ci/regression-hardening"
-BACKENDS = ["sensevoice-small"]
+BACKENDS = ["wav2vec2-xlsr-en", "hubert-large", "parakeet-tdt-0.6b-en", "mini-omni2",
+            "nemotron-3.5-asr-streaming-0.6b"]
 os.environ["CRISPASR_REGRESSION_MODE"] = "validate"
 os.environ["CRISPASR_REGRESSION_BUILD"] = "cpu"
 os.environ["CRISPASR_REF"] = os.environ.get("CRISPASR_REF", REF)
