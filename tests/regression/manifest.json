@@ -561,8 +561,7 @@
     {
       "name": "fastconformer-ctc-large",
       "backend_id": "fastconformer-ctc",
-      "skip_diff": true,
-      "skip_preflight": true,
+      "skip_diff": false,
       "gguf": {
         "repo": "cstr/stt-en-fastconformer-ctc-large-GGUF",
         "revision": "bc24257f571edd7ea58d807d408e0254d0c6bcab",
@@ -578,7 +577,16 @@
       },
       "transcript_tolerance_note": "CTC decoder is byte-equal-fragile to the punctuation decode tie (the comma after 'americans' flips run-to-run on CI at WER=0). Route through the WER gate (space-delimited → WER is the gate, CER advisory): wer_max=0.0 keeps words exact while absorbing the punctuation flip. Added 2026-07-13 after runs 29238328963 / 29242753343 flipped this model pass/fail on the comma alone.",
       "source_model": "nvidia/stt_en_fastconformer_ctc_large",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "fixture_ref_path": "fastconformer-ctc-large/ref.gguf",
+      "diff_gguf": {
+        "file": "stt-en-fastconformer-ctc-large-f16.gguf"
+      },
+      "diff_thresholds": {
+        "ctc_logits": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "ctc_logits (log-softmax-normalised both sides) vs NeMo EncDecCTCModelBPE; the fastconformer-ctc diff branch emits only this stage."
     },
     {
       "name": "sensevoice-small",
