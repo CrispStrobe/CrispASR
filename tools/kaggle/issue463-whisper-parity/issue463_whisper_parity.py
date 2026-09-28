@@ -19,7 +19,7 @@ FIX_BUILD = TEMP / "build-fix"
 MODEL_DIR = TEMP / "models"
 BASE_SHA = "d1b0684a45d4afc39f274a2812faa003b5165ef2"
 FIX_BRANCH = "fix/463-whisper-internal-chunking"
-SCRIPT_VERSION = "v2"
+SCRIPT_VERSION = "v3"
 
 
 def run(cmd, **kwargs):
@@ -29,6 +29,9 @@ def run(cmd, **kwargs):
 
 run(["git", "clone", "--depth", "1", "--branch", "main", "--recurse-submodules",
      "https://github.com/CrispStrobe/CrispASR.git", str(BASE)])
+run(["git", "fetch", "--depth", "1", "origin", BASE_SHA], cwd=BASE)
+run(["git", "checkout", "--detach", BASE_SHA], cwd=BASE)
+run(["git", "submodule", "update", "--init", "--recursive"], cwd=BASE)
 run(["git", "clone", "--depth", "1", "--branch", FIX_BRANCH, "--recurse-submodules",
      "https://github.com/CrispStrobe/CrispASR.git", str(FIX)])
 assert run(["git", "rev-parse", "HEAD"], cwd=BASE, capture_output=True).stdout.strip() == BASE_SHA
