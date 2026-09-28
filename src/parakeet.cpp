@@ -332,7 +332,20 @@ static bool parakeet_load_model(parakeet_model& model, parakeet_vocab& vocab, co
         hp.subsampling_factor = core_gguf::kv_u32(gctx, "parakeet.subsampling_factor", hp.subsampling_factor);
         hp.subsampling_channels = core_gguf::kv_u32(gctx, "parakeet.subsampling_channels", hp.subsampling_channels);
         hp.conv_kernel = core_gguf::kv_u32(gctx, "parakeet.conv_kernel", hp.conv_kernel);
-        hp.xscaling = core_gguf::kv_bool(gctx, "parakeet.xscaling", hp.xscaling);
+        // parakeet.xscaling ABSENT means false. The only published GGUFs without
+        // the key (parakeet-tdt-0.6b-v3, parakeet_de_med = v3's frozen encoder)
+        // were converted before it was written, and NeMo runs that encoder with
+        // xscaling: false. The old fallback (true) scaled their encoder input
+        // by sqrt(d_model) = 32: crispasr-diff vs NeMo, v3 F16, jfk: encoder
+        // cos 0.594 with the fallback, 0.99995 without (Kaggle 2026-09-28).
+        // Every other published parakeet GGUF records the key explicitly.
+        if (gguf_find_key(gctx, "parakeet.xscaling") >= 0) {
+            hp.xscaling = core_gguf::kv_bool(gctx, "parakeet.xscaling", hp.xscaling);
+        } else {
+            hp.xscaling = false;
+            fprintf(stderr, "parakeet: GGUF has no parakeet.xscaling key - assuming false (pre-key conversions are "
+                            "parakeet-tdt-0.6b-v3 lineage); CRISPASR_PARAKEET_XSCALING=1 overrides\n");
+        }
         hp.pred_hidden = core_gguf::kv_u32(gctx, "parakeet.pred_hidden", hp.pred_hidden);
         hp.pred_layers = core_gguf::kv_u32(gctx, "parakeet.pred_layers", hp.pred_layers);
         hp.joint_hidden = core_gguf::kv_u32(gctx, "parakeet.joint_hidden", hp.joint_hidden);
@@ -358,6 +371,15 @@ static bool parakeet_load_model(parakeet_model& model, parakeet_vocab& vocab, co
                 hp.att_context_right = r;
             }
         }
+
+        // Overrides for GGUFs converted before these keys were written: an
+        // absent parakeet.xscaling falls back to true, which is wrong for
+        // e.g. parakeet-tdt-0.6b-v3 (NeMo encoder.xscaling: false).
+        // CRISPASR_PARAKEET_XSCALING=0|1, CRISPASR_PARAKEET_GLOBAL_TOKENS=N.
+        if (const char* e = getenv("CRISPASR_PARAKEET_XSCALING"))
+            hp.xscaling = atoi(e) != 0;
+        if (const char* e = getenv("CRISPASR_PARAKEET_GLOBAL_TOKENS"))
+            hp.global_tokens = (uint32_t)atoi(e);
 
         // CTC head metadata (hybrid TDT+CTC models).
         model.has_ctc = core_gguf::kv_bool(gctx, "parakeet.has_ctc", false);
@@ -836,7 +858,8 @@ static ggml_cgraph* parakeet_build_graph_encoder(parakeet_context* ctx, int T_me
 
     // ----- xscaling: NeMo's RelPositionalEncoding multiplies the encoder
     // input by sqrt(d_model) before the conformer layers when the model's
-    // `encoder.xscaling: true` (default for parakeet-tdt-0.6b-v3 and -ja).
+    // `encoder.xscaling: true` (e.g. parakeet-rnnt-0.6b; NOT
+    // parakeet-tdt-0.6b-v3 or the 1.1b family, whose configs say false).
     // Without it, every layer's input is 32× too small, the rel-pos
     // sinusoid is the same scale, and the model produces near-random
     // activations downstream.

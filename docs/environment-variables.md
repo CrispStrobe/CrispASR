@@ -1190,6 +1190,12 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 ### Parakeet
 
 - `CRISPASR_PARAKEET_ATT_CONTEXT`
+- `CRISPASR_PARAKEET_GLOBAL_TOKENS` — override the GGUF's local-attention
+  global-token count (`parakeet.global_tokens`).
+- `CRISPASR_PARAKEET_XSCALING` — `0`/`1` overrides `parakeet.xscaling` (scale
+  the encoder input by sqrt(d_model)). A GGUF without the key is treated as
+  `0`: the only published ones are parakeet-tdt-0.6b-v3 lineage, whose NeMo
+  encoder does not scale.
 - `CRISPASR_PARAKEET_BENCH`
 - `CRISPASR_PARAKEET_CHUNK_OVERLAP`
 - `CRISPASR_PARAKEET_CHUNK_SECONDS`
