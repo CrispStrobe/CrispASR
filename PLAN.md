@@ -1,17 +1,5 @@
 # CrispASR — Pending work
 
-## CLAIMED 2026-09-28 — #463 Whisper no-VAD path parity
-
-Worktree `.claude/worktrees/fix-463`, branch
-`fix/463-whisper-internal-chunking`. The explicit unified
-`--backend whisper` adapter only advertised `CAP_INTERNAL_CHUNKING` for Tiron
-speaker-token models, so ordinary Whisper recordings over the dispatcher
-threshold were cut by CrispASR's generic energy chunker instead of being passed
-whole to Whisper's native seek/window loop. That directly contradicts the
-native path and fits the reported no-VAD mangling. Make the capability
-unconditional, then prove legacy and unified transcripts match on a >30 s
-fixture with the same model.
-
 ## DONE 2026-09-28 — xcframework iOS slices for iOS 15.0 (was 16.4)
 
 Branch `feat/ios15-xcframework`, worktree `.claude/worktrees/feat-ios15`.

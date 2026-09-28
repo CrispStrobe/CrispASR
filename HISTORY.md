@@ -6,6 +6,22 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## DONE 2026-09-28 — #463 Whisper no-VAD long-form parity
+
+The explicit unified `--backend whisper` adapter advertised internal chunking
+only for Tiron speaker-token models. Ordinary Whisper recordings longer than
+the dispatcher threshold were therefore split by CrispASR's generic energy
+chunker before reaching Whisper, unlike the legacy path which passes the whole
+recording to Whisper's native seek/window loop. The capability is now declared
+for every Whisper model.
+
+A pinned Kaggle A/B used four copies of `jfk.wav` (44 seconds). Before the fix,
+the unified path reported two generic slices and returned empty text while the
+legacy path returned all four sentences. After the fix, neither path used the
+generic slicer and their whitespace-normalized transcripts matched. The four
+arms built and ran from commits `d1b0684a` and `639329a7`; the terminal v3 log
+and summary are retained under `kaggle-out/whisper-463-parity-v3`.
+
 ## DONE 2026-09-28 — Cohere Q4 hidden-F16 pointwise matrices
 
 The published `cohere-transcribe-q4_k.gguf` retained 96 large Conformer
