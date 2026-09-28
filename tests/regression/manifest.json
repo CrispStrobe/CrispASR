@@ -3,8 +3,8 @@
   "version": 1,
   "fixtures": {
     "repo": "cstr/crispasr-regression-fixtures",
-    "revision": "e5781ed4f8c2186326ebc18c5971886e881d2ca4",
-    "_note": "Pinned. To re-bake, run `tools/kaggle-regression.py` with MODE=rebake UPLOAD=1; the new commit SHA gets pasted here as a reviewable diff. Previous: 99f005d59a0f7f4915dea5faea4d2e17b2120268 (2026-05-17). Bumped 2026-05-25 after Kaggle rebake v13 published 9 ref archives — adds parakeet-tdt-1.1b, parakeet-tdt_ctc-1.1b, parakeet-rnnt-0.6b, parakeet-rnnt-1.1b (all NEW from handover-prompts/extend-coverage-via-kaggle.md realistic goal); refreshes canary-1b-v2, moonshine-tiny/base, parakeet-tdt-0.6b-{en,ja}. Bumped 2026-09-27 from b61b03014b: adds sensevoice-small, paraformer-zh, funasr-nano jfk_11s refs (copied from the #436 final rebake in the dataset repo of the same name). Nothing removed."
+    "revision": "cafce827fc85e53415ebb5b201cc2a9516047ccc",
+    "_note": "Pinned. To re-bake, run `tools/kaggle-regression.py` with MODE=rebake UPLOAD=1; the new commit SHA gets pasted here as a reviewable diff. Previous: 99f005d59a0f7f4915dea5faea4d2e17b2120268 (2026-05-17). Bumped 2026-05-25 after Kaggle rebake v13 published 9 ref archives — adds parakeet-tdt-1.1b, parakeet-tdt_ctc-1.1b, parakeet-rnnt-0.6b, parakeet-rnnt-1.1b (all NEW from handover-prompts/extend-coverage-via-kaggle.md realistic goal); refreshes canary-1b-v2, moonshine-tiny/base, parakeet-tdt-0.6b-{en,ja}. Bumped 2026-09-27 from b61b03014b: adds sensevoice-small, paraformer-zh, funasr-nano jfk_11s refs (copied from the #436 final rebake in the dataset repo of the same name). Nothing removed. Bumped 2026-09-28 from e5781ed4f8: Kaggle rebake batches 4-6 (parakeet-tdt-0.6b-en, parakeet-tdt_ctc-1.1b, granite-speech-4.1-2b, qwen3-asr-0.6b, kyutai-stt-1b, mini-omni2, nemotron-3.5-asr-streaming-0.6b, wav2vec2-xlsr-en, hubert-large, data2vec-base, omniasr-ctc-1b-v2, fastconformer-ctc-large)."
   },
   "backends": [
     {
@@ -225,8 +225,7 @@
     {
       "name": "granite-speech-4.1-2b",
       "backend_id": "granite",
-      "skip_diff": true,
-      "_skip_diff_note": "mel passes (cos=0.999997) but encoder diverges (cos_min=-0.077, all 16 conformer layers fail). Needs per-layer investigation. Granite NLE outputs lowercase without punctuation.",
+      "skip_diff": false,
       "gguf": {
         "repo": "cstr/granite-speech-4.1-2b-GGUF",
         "revision": "7ee888f67b68fd6a25af5903ca5b3829ca32c215",
@@ -237,7 +236,17 @@
       "expected_transcript": "and so, my fellow americans, ask not what your country can do for you, ask what you can do for your country.",
       "expected_transcript_source": "re-baked 2026-07-13 from nightly run 29232149677 (ubuntu-x86 OpenBLAS CI); word-identical to the prior CPU capture (WER=0), differs only in decode-tie punctuation/case",
       "source_model": "ibm-granite/granite-speech-4.1-2b",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "fixture_ref_path": "granite-speech-4.1-2b/ref.gguf",
+      "diff_gguf": {
+        "file": "granite-speech-4.1-2b-f16.gguf"
+      },
+      "diff_thresholds": {
+        "mel_spectrogram": 0.999,
+        "encoder_out": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Kaggle validate 2026-09-28 (CPU, F16 diff): transcript + every stage >= 0.99973."
     },
     {
       "name": "parakeet-tdt-1.1b",
@@ -502,8 +511,7 @@
     {
       "name": "data2vec-base",
       "backend_id": "data2vec",
-      "skip_diff": true,
-      "skip_preflight": true,
+      "skip_diff": false,
       "gguf": {
         "repo": "cstr/data2vec-audio-960h-GGUF",
         "revision": "97d798574af55a3b861d323c2222f3d6cbbf1048",
@@ -514,7 +522,16 @@
       "expected_transcript": "AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
       "expected_transcript_source": "re-baked 2026-07-13 from nightly run 29232149677 (ubuntu-x86 OpenBLAS CI); word-identical to the prior CPU capture (WER=0), differs only in decode-tie punctuation/case",
       "source_model": "facebook/data2vec-audio-base-960h",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "fixture_ref_path": "data2vec-base/ref.gguf",
+      "diff_gguf": {
+        "file": "data2vec-audio-base-960h-f16.gguf"
+      },
+      "diff_thresholds": {
+        "ctc_logits": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Kaggle validate 2026-09-28 (CPU, F16 diff): ctc_logits per-frame cos >= 0.99916 vs transformers Data2VecAudioForCTC."
     },
     {
       "name": "fastconformer-ctc-large",
@@ -567,13 +584,12 @@
         "encoder_output": 0.999
       },
       "stage_threshold_default": 0.999,
-      "stage_threshold_note": "Repinned abbeaf54 -> e1ad67de (2026-09-23 re-convert WITH the am.mvn CMVN tensors, #436 follow-up). The old pin predates it: the diff failed from mel_features on (cos -0.60) against the #436 ref, which was made with CMVN."
+      "stage_threshold_note": "Repinned abbeaf54 -> e1ad67de (2026-09-23 re-convert WITH the am.mvn CMVN tensors, #436 follow-up); the old pin diverged from mel_features on (cos -0.60). Kaggle validate 2026-09-28: all 75 stages >= 0.999895."
     },
     {
       "name": "qwen3-asr-0.6b",
       "backend_id": "qwen3",
-      "skip_diff": true,
-      "skip_preflight": true,
+      "skip_diff": false,
       "gguf": {
         "repo": "cstr/qwen3-asr-0.6b-GGUF",
         "revision": "ad086c22597ed47af05cc159dd61c98bd6e945f9",
@@ -589,13 +605,22 @@
       },
       "transcript_tolerance_note": "Punctuation/decode drift across platforms — WER tolerance instead of byte-exact",
       "source_model": "Qwen/Qwen3-ASR-0.6B",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "fixture_ref_path": "qwen3-asr-0.6b/ref.gguf",
+      "diff_gguf": {
+        "file": "qwen3-asr-0.6b.gguf"
+      },
+      "diff_thresholds": {
+        "mel_spectrogram": 0.999,
+        "encoder_output(own_mel)": 0.99
+      },
+      "stage_threshold_default": 0.98,
+      "stage_threshold_note": "Kaggle validate 2026-09-28 (CPU, F16 diff): early stages >= 0.9996, then drift through the last encoder blocks - enc_blk16 0.9983, enc_blk17 0.9955, ln_post 0.9915, proj1 0.9856, encoder_output 0.9929 (both mel arms); transcript exact. Gates are the measured floor minus margin, so a regression still trips them; whether the late-block drift is F16 accumulation or a port gap is an open question."
     },
     {
       "name": "omniasr-ctc-1b-v2",
       "backend_id": "omniasr",
-      "skip_diff": true,
-      "skip_preflight": true,
+      "skip_diff": false,
       "gguf": {
         "repo": "cstr/omniASR-CTC-1B-v2-GGUF",
         "revision": "e05a1d261ca3f0dfe6932ee9d50794860d849ea0",
@@ -607,7 +632,16 @@
       "expected_transcript_source": "captured 2026-09-27 GH ubuntu-latest CPU (Regression run 36351488823) after the logit-stitching fix d7a78776, samples/jfk.wav",
       "transcript_tolerance_note": "No tolerance (default WER 0). Was wer_max 0.25 'GH runner diverges from T4': it did not diverge - the CLI joined the TEXT of fixed 5 s windows (duplicated overlap words, garbage 2 s tail) on every device/quant. With logit stitching GH CPU is WER 0. C++ matches the official fairseq2 pipeline frame by frame (logits cos >= 0.99996).",
       "source_model": "aadel4/omniASR-CTC-1B-v2",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "fixture_ref_path": "omniasr-ctc-1b-v2/ref.gguf",
+      "diff_gguf": {
+        "file": "omniasr-ctc-1b-v2.gguf"
+      },
+      "diff_thresholds": {
+        "ctc_logits": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Kaggle validate 2026-09-28 (CPU, full-precision diff): ctc_logits per-frame cos >= 0.99999 vs transformers Wav2Vec2ForCTC (aadel4 conversion)."
     },
     {
       "name": "omniasr-llm-300m",
@@ -646,7 +680,8 @@
       "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
       "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU (chr1s4) on samples/jfk.wav",
       "source_model": "kyutai/stt-1b-en_fr",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "_skip_diff_note": "kyutai-stt-1b/ref.gguf is on the fixtures revision (rebake 2026-09-28), but crispasr-diff's kyutai branch only exact-matches generated_text: seanet_output / enc_tfm_output / rvq_codes are 'stage API pending'. Transcript-only until those land."
     },
     {
       "name": "gemma4-e2b-it",
