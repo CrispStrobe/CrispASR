@@ -19,7 +19,7 @@ FIX_BUILD = TEMP / "build-fix"
 MODEL_DIR = TEMP / "models"
 BASE_SHA = "d1b0684a45d4afc39f274a2812faa003b5165ef2"
 FIX_BRANCH = "fix/463-whisper-internal-chunking"
-SCRIPT_VERSION = "v3"
+SCRIPT_VERSION = "v4"
 
 
 def run(cmd, **kwargs):
@@ -98,7 +98,7 @@ def transcribe(cli, unified):
     p = subprocess.run(cmd, text=True, capture_output=True, timeout=900)
     if p.returncode:
         raise RuntimeError(p.stderr[-5000:])
-    text = " ".join(line.strip() for line in p.stdout.splitlines() if line.strip())
+    text = " ".join(p.stdout.split())
     return {"text": text, "seconds": time.perf_counter() - t0,
             "generic_slices": "processing " in p.stderr and " slice(s)" in p.stderr,
             "stderr_tail": p.stderr[-2000:]}
