@@ -390,9 +390,14 @@ static void grouped_conv1d_same(const float* x, const float* w, const float* b, 
     assert(C_in % groups == 0 && C_out % groups == 0);
     int cin_pg = C_in / groups;
     int cout_pg = C_out / groups;
-    int pad_total = K - 1;
-    int pad_l = pad_total / 2;
-    int pad_r = pad_total - pad_l;
+    // HF Wav2Vec2PositionalConvEmbedding: Conv1d(padding=K/2) then SamePad drops
+    // the LAST frame when K is even - i.e. pad_l = K/2, pad_r = K-1-pad_l.
+    // (K-1)/2 put the extra pad on the right for even K (K=128: 63/64 instead
+    // of 64/63), shifting the positional signal one frame early: wav2vec2-large
+    // / XLS-R / HuBERT-large ctc_logits cos 0.908 / 0.955 vs transformers while
+    // odd-K data2vec matched (Kaggle 2026-09-28). Odd K is unchanged.
+    int pad_l = K / 2;
+    int pad_r = K - 1 - pad_l;
     int L_pad = L + pad_l + pad_r;
 
     std::vector<float> padded(C_in * L_pad, 0.f);
@@ -432,8 +437,13 @@ static void grouped_conv1d_same(const float* x, const float* w, const float* b, 
 static bool ggml_grouped_conv1d_same(const float* x_cf, float* y_cf, int C, int K, int G, int T, const float* w_f32,
                                      const float* b_f32, ggml_backend_t backend) {
     int cpg = C / G;
-    // Asymmetric "same" padding: pad_l + pad_r = K-1, output length = T
-    int pad_l = (K - 1) / 2;
+    // HF Wav2Vec2PositionalConvEmbedding: Conv1d(padding=K/2) then SamePad drops
+    // the LAST frame when K is even - i.e. pad_l = K/2, pad_r = K-1-pad_l.
+    // (K-1)/2 put the extra pad on the right for even K (K=128: 63/64 instead
+    // of 64/63), shifting the positional signal one frame early: wav2vec2-large
+    // / XLS-R / HuBERT-large ctc_logits cos 0.908 / 0.955 vs transformers while
+    // odd-K data2vec matched (Kaggle 2026-09-28). Odd K is unchanged.
+    int pad_l = K / 2;
     int pad_r = K - 1 - pad_l;
     int T_pad = T + pad_l + pad_r;
 
@@ -626,7 +636,7 @@ static ggml_tensor* build_pos_conv_graph(ggml_context* ctx0, ggml_cgraph* gf, gg
                                          ggml_tensor* /*w_tensor_unused*/, ggml_tensor* /*b_tensor_unused*/, int H,
                                          int T, int K, int G) {
     int cpg = H / G;
-    int pad_l = (K - 1) / 2;
+    int pad_l = K / 2; // HF pads K/2 and drops the last frame for even K (see grouped_conv1d_same)
     int pad_r = K - 1 - pad_l;
 
     // Pad: [H, T] → [H, T+pad_l+pad_r]
