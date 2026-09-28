@@ -166,6 +166,13 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     # bf16→f32 path (we load in f32 here so this is a no-op).
     if "input_features" in inputs:
         inputs["input_features"] = inputs["input_features"].to(torch.float32)
+    # Newer transformers' generate() extends every *attention_mask key it is
+    # handed ("'NoneType' object has no attribute 'new_ones'", rebake
+    # 2026-09-28): drop None-valued entries and give a decoder prompt an
+    # explicit all-ones mask, which is what an absent one meant before.
+    inputs = {k: v for k, v in dict(inputs).items() if v is not None}
+    if "decoder_input_ids" in inputs and "decoder_attention_mask" not in inputs:
+        inputs["decoder_attention_mask"] = torch.ones_like(inputs["decoder_input_ids"])
 
     out: Dict[str, np.ndarray] = {}
     if "mel_spectrogram" in stages and "input_features" in inputs:

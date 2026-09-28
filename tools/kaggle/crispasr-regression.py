@@ -815,7 +815,9 @@ def run_validate() -> list[dict]:
             })
             print(f"  -> ok={ok}  transcript={transcript_ok}  "
                   f"passes={len(passes)}  fails={len(fails)}  missing={len(missing)}")
-        except Exception as exc:
+        # SystemExit too: run_one.die() raises it (kyutai: "crispasr-diff produced no
+        # parseable stage lines") and it ended the whole run, skipping every later entry.
+        except (Exception, SystemExit) as exc:
             results.append({
                 "backend": name,
                 "mode": "validate",
