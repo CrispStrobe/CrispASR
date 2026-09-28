@@ -10,7 +10,7 @@ threshold were cut by CrispASR's generic energy chunker instead of being passed
 whole to Whisper's native seek/window loop. That directly contradicts the
 native path and fits the reported no-VAD mangling. Make the capability
 unconditional, then prove legacy and unified transcripts match on a >30 s
-fixture with the same model; preserve an explicit `--chunk-seconds` override.
+fixture with the same model.
 
 ## DONE 2026-09-28 — xcframework iOS slices for iOS 15.0 (was 16.4)
 
