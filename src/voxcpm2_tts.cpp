@@ -2426,30 +2426,6 @@ static ggml_tensor* build_locdit_body(voxcpm2_context* ctx, ggml_context* ctx0, 
     const int T = mu_toks + 1 + P + P; // 11
     const int x_offset = mu_toks + 1 + P;
 
-    // #461: ggml-vulkan runs its bandwidth-efficient mat-vec kernels only for
-    // <= 8 columns of a 2-D src1; the LocDiT's 22-column (11 tokens x CFG
-    // batch 2) products fall to the tiled mat-mat kernel, which on Vulkan
-    // reaches ~15 GB/s of weight traffic (T4 and the reporter's Arc B390
-    // alike). CRISPASR_VOXCPM2_MM_SPLIT=N splits each product into <= N-column
-    // pieces. 0 (default) = one ggml_mul_mat.
-    static const int mm_split = [] {
-        const char* e = std::getenv("CRISPASR_VOXCPM2_MM_SPLIT");
-        return e ? std::max(0, atoi(e)) : 0;
-    }();
-    auto MM = [&](ggml_tensor* w, ggml_tensor* a) -> ggml_tensor* {
-        const int64_t K = a->ne[0];
-        const int64_t N = a->ne[1] * a->ne[2] * a->ne[3];
-        if (mm_split <= 0 || (N <= mm_split && a->ne[2] * a->ne[3] == 1))
-            return ggml_mul_mat(ctx0, w, a);
-        ggml_tensor* a2 = ggml_reshape_2d(ctx0, ggml_is_contiguous(a) ? a : ggml_cont(ctx0, a), K, N);
-        ggml_tensor* out = nullptr;
-        for (int64_t c0 = 0; c0 < N; c0 += mm_split) {
-            const int64_t n = std::min<int64_t>(mm_split, N - c0);
-            ggml_tensor* y = ggml_mul_mat(ctx0, w, ggml_view_2d(ctx0, a2, K, n, a2->nb[1], (size_t)c0 * a2->nb[1]));
-            out = out ? ggml_concat(ctx0, out, y, 1) : y;
-        }
-        return ggml_reshape_4d(ctx0, out, w->ne[1], a->ne[1], a->ne[2], a->ne[3]);
-    };
 
     // ── time_mlp + delta_time_mlp ────────────────────────────────
     // Each MLP: Linear → SiLU → Linear, both with bias. Sum the two MLPs.
@@ -2522,9 +2498,9 @@ static ggml_tensor* build_locdit_body(voxcpm2_context* ctx, ggml_context* ctx0, 
         x = ggml_mul(ctx0, x, L.norm1_w);
 
         // Q/K/V projections (no biases on LocDiT/LocEnc attn)
-        ggml_tensor* Q = MM(L.attn_q_w, x);
-        ggml_tensor* K = MM(L.attn_k_w, x);
-        ggml_tensor* V = MM(L.attn_v_w, x);
+        ggml_tensor* Q = ggml_mul_mat(ctx0, L.attn_q_w, x);
+        ggml_tensor* K = ggml_mul_mat(ctx0, L.attn_k_w, x);
+        ggml_tensor* V = ggml_mul_mat(ctx0, L.attn_v_w, x);
 
         Q = ggml_reshape_4d(ctx0, Q, hd, n_q, T, B);
         K = ggml_reshape_4d(ctx0, K, hd, n_kv, T, B);
@@ -2570,14 +2546,14 @@ static ggml_tensor* build_locdit_body(voxcpm2_context* ctx, ggml_context* ctx0, 
         attn = ggml_reshape_3d(ctx0, attn, hd * n_q, T, B);
 
         // Output projection (no bias on attn)
-        attn = MM(L.attn_o_w, attn);
+        attn = ggml_mul_mat(ctx0, L.attn_o_w, attn);
         cur = ggml_add(ctx0, residual, attn);
 
         // Pre-FFN norm + scale, SwiGLU, residual
         residual = cur;
         x = ggml_rms_norm(ctx0, cur, eps);
         x = ggml_mul(ctx0, x, L.norm2_w);
-        ggml_tensor* mlp = MM(L.ffn_down_w, ggml_mul(ctx0, ggml_silu(ctx0, MM(L.ffn_gate_w, x)), MM(L.ffn_up_w, x)));
+        ggml_tensor* mlp = core_ffn::swiglu(ctx0, x, L.ffn_gate_w, L.ffn_up_w, L.ffn_down_w);
         cur = ggml_add(ctx0, residual, mlp);
     }
 
@@ -2592,7 +2568,7 @@ static ggml_tensor* build_locdit_body(voxcpm2_context* ctx, ggml_context* ctx0, 
     if (W.locdit_norm_w) {
         normed = ggml_mul(ctx0, normed, W.locdit_norm_w);
     }
-    ggml_tensor* vel = MM(W.locdit_out_proj_w, normed); // [feat_dim, P, B]
+    ggml_tensor* vel = ggml_mul_mat(ctx0, W.locdit_out_proj_w, normed); // [feat_dim, P, B]
     vel = ggml_add(ctx0, vel, W.locdit_out_proj_b);
     return vel;
 }
@@ -2661,8 +2637,7 @@ static ggml_cgraph* get_or_build_locdit_graph(voxcpm2_context* ctx) {
     // Dedicated arena — `ctx->compute_meta` is shared with other graphs
     // (e.g. dynamic-path TSLM step) that would otherwise stomp on the
     // cached LocDiT tensor metadata.
-    ctx->locdit_arena_meta.assign(
-        std::max(ctx->compute_meta.size(), ggml_tensor_overhead() * 4096 + ggml_graph_overhead_custom(4096, false)), 0);
+    ctx->locdit_arena_meta.assign(ctx->compute_meta.size(), 0);
     ggml_init_params ip = {ctx->locdit_arena_meta.size(), ctx->locdit_arena_meta.data(), /*no_alloc=*/true};
     ctx->locdit_arena_ctx = ggml_init(ip);
     if (!ctx->locdit_arena_ctx) {
@@ -2772,10 +2747,7 @@ static ggml_cgraph* get_or_build_locdit_graph_b2(voxcpm2_context* ctx) {
         return ctx->locdit2_gf;
     if (!ctx->backend)
         return nullptr;
-    // compute_meta is sized for the plain graph; the MM_SPLIT variant needs
-    // ~3x the tensor metadata.
-    ctx->locdit2_arena_meta.assign(
-        std::max(ctx->compute_meta.size(), ggml_tensor_overhead() * 4096 + ggml_graph_overhead_custom(4096, false)), 0);
+    ctx->locdit2_arena_meta.assign(ctx->compute_meta.size(), 0);
     ggml_init_params ip = {ctx->locdit2_arena_meta.size(), ctx->locdit2_arena_meta.data(), /*no_alloc=*/true};
     ctx->locdit2_arena_ctx = ggml_init(ip);
     if (!ctx->locdit2_arena_ctx)
@@ -2929,9 +2901,8 @@ static bool cfm_fused_solve(voxcpm2_context* ctx, std::vector<float>& x_ct, cons
         ctx->cfm_fused_ctx = nullptr;
         ctx->cfm_fused_gf = nullptr;
         // Tensor metadata only (no_alloc): ~350 tensors per LocDiT body + the
-        // CFG/Euler ops, ~+750 with CRISPASR_VOXCPM2_MM_SPLIT (views + pieces +
-        // concats); 4096 per step bounds both.
-        ctx->cfm_fused_meta.assign(ggml_tensor_overhead() * (4096 * (size_t)n_active + 64) +
+        // CFG/Euler ops; 1024 per step is a generous bound.
+        ctx->cfm_fused_meta.assign(ggml_tensor_overhead() * (1024 * (size_t)n_active + 64) +
                                        ggml_graph_overhead_custom(4096 * (size_t)n_active, false),
                                    0);
         ggml_init_params ip = {ctx->cfm_fused_meta.size(), ctx->cfm_fused_meta.data(), /*no_alloc=*/true};

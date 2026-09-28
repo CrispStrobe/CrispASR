@@ -53,7 +53,10 @@ try:
     res["vk_devices"] = [l.split("=")[-1].strip() for l in sh("vulkaninfo --summary 2>/dev/null").stdout.splitlines() if "deviceName" in l]
     save()
     kh.install_build_toolchain()
-    flags = ["-DGGML_VULKAN=ON", "-DCMAKE_BUILD_TYPE=Release", "-DCRISPASR_OPUS=OFF", "-DCRISPASR_AMR=OFF"] + kh.cache_and_link_flags()
+    FLAV = os.environ.get("AB_BUILD", "vulkan")
+    res["build"] = FLAV
+    gpu_flags = ["-DGGML_VULKAN=ON"] if FLAV == "vulkan" else kh.cuda_build_flags(kh.detect_cuda_arch())
+    flags = gpu_flags + ["-DCMAKE_BUILD_TYPE=Release", "-DCRISPASR_OPUS=OFF", "-DCRISPASR_AMR=OFF"] + kh.cache_and_link_flags()
     if glslc: flags.append(f"-DVulkan_GLSLC_EXECUTABLE={glslc}")
     kh.sh(f"cmake -S {REPO} -B {REPO}/build -G Ninja " + " ".join(flags))
     with kh.build_heartbeat("cmake.build"):
@@ -65,7 +68,7 @@ try:
     sh(f"wget -q -O {wtiny} https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.en.bin")
     def synth(tag, extra, env):
         wav = OUT / f"{tag}.wav"; t0 = time.time()
-        r = subprocess.run([str(B), "--backend", "voxcpm2", "-m", q8, "--tts", TEXT, "--tts-output", str(wav), "--seed", "42", "-v"] + extra,
+        r = subprocess.run([str(B), "--backend", "voxcpm2", "-m", q8, "--tts", TEXT, "--tts-output", str(wav), "-v"] + extra,
                            capture_output=True, text=True, env=dict(os.environ, CRISPASR_VOXCPM2_BENCH="1", **env), timeout=3600)
         e = r.stderr
         grab = lambda pat: [float(x) for x in re.findall(pat, e)]
@@ -81,18 +84,22 @@ try:
             a, sr = read_wav(wav); ent["dur_s"] = round(len(a) / sr, 3)
             ent["rtf"] = round(float(re.findall(r"total ([\d.]+) ms", " ".join(ent["total"]))[0]) / 1000 / ent["dur_s"], 3) if ent["total"] else None
             asr = subprocess.run([str(B), "-m", str(wtiny), "-f", str(wav), "-np", "-ng"], capture_output=True, text=True, timeout=600)
-            txt = " ".join(asr.stdout.split()); res["asr"][tag] = {"text": txt, "wer": round(wer(TEXT, txt), 3)}
+            txt = " ".join(re.sub(r"\[[^\]]*\]", "", asr.stdout).split()); res["asr"][tag] = {"text": txt, "wer": round(wer(TEXT, txt), 3)}
         res["runs"][tag] = ent; save()
         print(tag, {k: ent.get(k) for k in ("wall_s", "cfm_median_ms", "fused_lines", "dur_s", "rtf")}, res["asr"].get(tag), flush=True)
-    synth("vk_warmup", [], {})  # compiles every Vulkan pipeline once; not compared
-    ARMS = (("vk_split0", [], {"CRISPASR_VOXCPM2_MM_SPLIT": "0"}), ("vk_split8", [], {"CRISPASR_VOXCPM2_MM_SPLIT": "8"}),
-            ("vk_split4", [], {"CRISPASR_VOXCPM2_MM_SPLIT": "4"}),
-            ("vk_split0_s2", ["--seed", "2"], {"CRISPASR_VOXCPM2_MM_SPLIT": "0"}),
-            ("vk_split8_s2", ["--seed", "2"], {"CRISPASR_VOXCPM2_MM_SPLIT": "8"}),
-            ("cpu_split0", ["-ng"], {"CRISPASR_VOXCPM2_MM_SPLIT": "0"}), ("cpu_split8", ["-ng"], {"CRISPASR_VOXCPM2_MM_SPLIT": "8"}))
+    synth("warmup", [], {})  # pipelines / kernels compiled once; not compared
+    if FLAV == "vulkan":
+        ARMS = [(f"st{st}_s{sd}", ["--seed", str(sd)], {"CRISPASR_VOXCPM2_INFERENCE_STEPS": str(st)})
+                for st in (10, 8, 6, 4) for sd in (2, 3, 4, 42)]
+        ARMS += [(f"st10_s{sd}_perstep", ["--seed", str(sd)], {"CRISPASR_VOXCPM2_CFM_FUSED": "0"}) for sd in (2, 3)]
+        PAIRS = [(f"st10_s{sd}", f"st10_s{sd}_perstep") for sd in (2, 3)]
+    else:
+        ARMS = [(f"{m}_s{sd}", ["--seed", str(sd)], {} if m == "fused" else {"CRISPASR_VOXCPM2_CFM_FUSED": "0"})
+                for sd in (2, 42) for m in ("fused", "perstep")]
+        PAIRS = [(f"fused_s{sd}", f"perstep_s{sd}") for sd in (2, 42)]
     for tag, extra, env in ARMS:
         synth(tag, extra, env)
-    for a_, b_ in (("vk_split8", "vk_split0"), ("vk_split4", "vk_split0"), ("vk_split8_s2", "vk_split0_s2"), ("cpu_split8", "cpu_split0")):
+    for a_, b_ in PAIRS:
         pa, pb = OUT / f"{a_}.wav", OUT / f"{b_}.wav"
         if pa.exists() and pb.exists():
             x, _ = read_wav(pa); y, _ = read_wav(pb); n = min(len(x), len(y))
