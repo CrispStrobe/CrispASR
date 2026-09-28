@@ -1,5 +1,15 @@
 # CrispASR — Pending work
 
+## CLAIMED 2026-09-28 — xcframework iOS slices for iOS 15.0 (was 16.4)
+
+Branch `feat/ios15-xcframework`, worktree `.claude/worktrees/feat-ios15`.
+build-xcframework.sh inherited IOS_MIN_OS_VERSION=16.4 from whisper.cpp; an
+app cannot embed a framework needing a newer iOS than itself (ITMS-90208), so
+consumers (CrispChess voice moves) had to drop iOS 15-16.3. Default now 15.0,
+all minimums env-overridable, and the script checks both iOS slices' binary
+minos and plist MinimumOSVersion.
+NOW: release.yml dry run `only=build-xcframework` on the branch (36391459351).
+
 ## CLAIMED 2026-09-24 — #466 NVIDIA Nemotron-3-Diarization (streaming Sortformer v3)
 
 Worktree `.claude/worktrees/feat-466-nemotron3-diar`, branch `feat/466-nemotron3-diar`.
