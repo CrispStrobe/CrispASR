@@ -1,0 +1,74 @@
+name: T3 Vulkan scheduler fix build
+
+on:
+  push:
+    branches:
+      - t3-vulkan-scheduler-fix
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-vulkan:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.ref }}
+          submodules: recursive
+
+      - name: Verify scheduler fix is present
+        shell: pwsh
+        run: |
+          $p = "ggml/src/ggml-backend.cpp"
+          $s = Get-Content $p -Raw
+          if ($s -notmatch "copy_src" -or $s -notmatch "ggml_backend_sched_apply_src_mutations") {
+            throw "T3 scheduler rewire fix is missing"
+          }
+
+      - name: Install Vulkan SDK
+        shell: pwsh
+        run: |
+          $ver = (Invoke-RestMethod -Uri "https://vulkan.lunarg.com/sdk/latest.json").windows
+          $url = "https://sdk.lunarg.com/sdk/download/$ver/windows/vulkan_sdk.exe"
+          Invoke-WebRequest -Uri $url -OutFile vulkan_sdk.exe
+          Start-Process -FilePath .\vulkan_sdk.exe -ArgumentList "--accept-licenses","--default-answer","--confirm-command","install" -Wait
+          $sdk = "C:\VulkanSDK\$ver"
+          "VULKAN_SDK=$sdk" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          "$sdk\Bin" | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
+
+      - name: Build
+        shell: cmd
+        run: |
+          for /f "tokens=*" %%i in ('"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath') do set VSINSTALL=%%i
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat"
+          cmake -S . -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release ^
+            -DGGML_VULKAN=ON ^
+            -DGGML_CUDA=OFF ^
+            -DGGML_NATIVE=OFF ^
+            -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON ^
+            -DCRISPASR_BUILD_TESTS=OFF
+          cmake --build build --target crispasr-cli -j %NUMBER_OF_PROCESSORS%
+
+      - name: Package and hash
+        shell: pwsh
+        run: |
+          $out = "release\crispasr-windows-x86_64-vulkan-t3fix"
+          New-Item -ItemType Directory -Force $out | Out-Null
+          Copy-Item build\bin\crispasr.exe $out\
+          Get-ChildItem build\bin\*.dll | Where-Object { $_.Name -notlike 'Catch2*' } | Copy-Item -Destination $out\
+          Push-Location $out
+          Get-ChildItem -File | ForEach-Object {
+            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash
+            "$h  $($_.Name)"
+          } | Set-Content SHA256SUMS.txt
+          Pop-Location
+          Compress-Archive -Path $out -DestinationPath release\crispasr-windows-x86_64-vulkan-t3fix.zip -CompressionLevel Optimal
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crispasr-windows-x86_64-vulkan-t3fix
+          path: release/crispasr-windows-x86_64-vulkan-t3fix.zip
+          if-no-files-found: error
