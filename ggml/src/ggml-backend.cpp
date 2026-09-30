@@ -784,10 +784,13 @@ struct ggml_backend_sched_split {
 struct ggml_backend_sched_src_mutation {
     struct ggml_tensor * node;
     struct ggml_tensor * orig_src;
+    struct ggml_tensor * copy_src;
     int j;
 };
 
+static void ggml_backend_sched_apply_src_mutations(ggml_backend_sched_t sched);
 static void ggml_backend_sched_restore_src_mutations(ggml_backend_sched_t sched);
+static void ggml_backend_sched_discard_src_mutations(ggml_backend_sched_t sched);
 
 struct ggml_backend_sched {
     bool is_reset; // true if the scheduler has been reset since the last graph split
@@ -1042,10 +1045,9 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
     sched->n_graph_inputs = 0;
     sched->is_reset = false;
 
-    // Drop any src[j] rewires still recorded from a prior compute that
-    // returned early. Restoring writes to the user's gf, not to
-    // sched->ctx, so it is safe to call before ggml_free(sched->ctx).
-    ggml_backend_sched_restore_src_mutations(sched);
+    // The mutation records point into sched->ctx. Before rebuilding that
+    // context, restore the user's graph and discard the old records.
+    ggml_backend_sched_discard_src_mutations(sched);
 
     struct ggml_init_params params = {
         /* .mem_size =   */ sched->context_buffer_size,
@@ -1409,12 +1411,15 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
                         sched->src_mutations = resized;
                         sched->src_mutations_capacity = new_capacity;
                     }
+                    struct ggml_tensor * copy_src =
+                        tensor_id_copy(src_id, cur_backend_id, sched->cur_copy);
                     sched->src_mutations[sched->n_src_mutations].node = node;
                     sched->src_mutations[sched->n_src_mutations].orig_src = src;
+                    sched->src_mutations[sched->n_src_mutations].copy_src = copy_src;
                     sched->src_mutations[sched->n_src_mutations].j = j;
                     sched->n_src_mutations++;
 
-                    node->src[j] = tensor_id_copy(src_id, cur_backend_id, sched->cur_copy);
+                    node->src[j] = copy_src;
                 }
             }
         }
@@ -1585,21 +1590,36 @@ static bool ggml_backend_sched_alloc_splits(ggml_backend_sched_t sched) {
     return true;
 }
 
-// Roll back the src[j] rewires recorded during split_graph so the user's
-// gf is left in its original state. Idempotent. MUST run on every exit
-// path of compute_splits (success or early error) and defensively at the
-// start of split_graph + in sched_reset to drop any entries left over by
-// a previous aborted compute.
+// Re-apply the cross-backend src[j] rewires recorded by split_graph.
+// Cached graphs keep their split input copies allocated across computes,
+// so every compute must point the node back at those copies before any
+// backend kernel runs.
+static void ggml_backend_sched_apply_src_mutations(ggml_backend_sched_t sched) {
+    for (int i = 0; i < sched->n_src_mutations; i++) {
+        const struct ggml_backend_sched_src_mutation * m = &sched->src_mutations[i];
+        m->node->src[m->j] = m->copy_src;
+    }
+}
+
+// Restore the user's graph after a compute without forgetting the rewire
+// records. This keeps cached alloc-once/compute-many graphs valid.
 static void ggml_backend_sched_restore_src_mutations(ggml_backend_sched_t sched) {
     for (int i = 0; i < sched->n_src_mutations; i++) {
         const struct ggml_backend_sched_src_mutation * m = &sched->src_mutations[i];
         m->node->src[m->j] = m->orig_src;
     }
+}
+
+// Restore and forget rewires only when their backing scheduler context is
+// about to be rebuilt or reset.
+static void ggml_backend_sched_discard_src_mutations(ggml_backend_sched_t sched) {
+    ggml_backend_sched_restore_src_mutations(sched);
     sched->n_src_mutations = 0;
 }
 
 static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t sched) {
     GGML_ASSERT(sched);
+    ggml_backend_sched_apply_src_mutations(sched);
     struct ggml_backend_sched_split * splits = sched->splits;
 
     ggml_tensor * prev_ids_tensor = nullptr;
@@ -1890,7 +1910,7 @@ void ggml_backend_sched_reset(ggml_backend_sched_t sched) {
         ggml_hash_set_reset(&sched->hash_set);
         memset(sched->hv_tensor_backend_ids, -1, sched->hash_set.size * sizeof(sched->hv_tensor_backend_ids[0]));
         memset(sched->hv_tensor_copies,       0, sched->hash_set.size * sched->n_backends * sched->n_copies * sizeof(struct ggml_tensor *));
-        ggml_backend_sched_restore_src_mutations(sched);
+        ggml_backend_sched_discard_src_mutations(sched);
         sched->is_reset = true;
     }
     sched->is_alloc = false;
