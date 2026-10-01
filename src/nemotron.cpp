@@ -3442,7 +3442,13 @@ extern "C" bool nemotron_stream_append(struct nemotron_stream* stream, const flo
     // A layer graph is rebuilt for each append because scheduler allocations
     // cannot safely outlive sched_reset (#215e). Amortize that fixed cost on
     // CPU while retaining the model's native single-chunk cadence on GPU.
-    const int chunks_per_step = core_cpu_backend::is_cpu(ctx->backend) ? 4 : 1;
+    // CRISPASR_NEMOTRON_STREAM_CHUNKS_PER_STEP sets how many chunks are gathered per step.
+    int chunks_per_step = core_cpu_backend::is_cpu(ctx->backend) ? 4 : 1;
+    if (const char* v = crispasr_env::get("CRISPASR_NEMOTRON_STREAM_CHUNKS_PER_STEP")) {
+        int n = atoi(v);
+        if (n >= 1)
+            chunks_per_step = n;
+    }
     const size_t raw_chunk_samples = (size_t)hp.hop_length * 8 * chunk_size * chunks_per_step;
     if (!flush && stream->audio.size() - stream->frontend_checked_samples < raw_chunk_samples)
         return true;

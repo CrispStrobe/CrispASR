@@ -175,7 +175,9 @@ TEST_CASE("nemotron: persistent stream matches one-shot chunked decode", "[nemot
     nemotron_context* ctx = nemotron_init_from_file(model.c_str(), cp);
     REQUIRE(ctx != nullptr);
 
+    nemotron_set_context_preset(ctx, 0);
     scoped_env streaming_env("CRISPASR_NEMOTRON_STREAMING", "1");
+    scoped_env step_env("CRISPASR_NEMOTRON_STREAM_CHUNKS_PER_STEP", "4");
     char* expected_raw = nemotron_transcribe(ctx, pcm.data(), (int)pcm.size());
     REQUIRE(expected_raw != nullptr);
     std::string expected(expected_raw);
@@ -203,8 +205,8 @@ TEST_CASE("nemotron: persistent stream matches one-shot chunked decode", "[nemot
         REQUIRE(nemotron_stream_append(stream, pcm.data() + offset, count, false, cb, &state));
         const int current_frames = nemotron_stream_processed_frames(stream);
         REQUIRE(current_frames >= previous_frames);
-        // CPU amortizes four native chunks per inference step. Growth is
-        // bounded; a growing-prefix implementation would jump by total T.
+        // Four native chunks per step (pinned above). Growth is bounded; a
+        // growing-prefix implementation would jump by total T.
         REQUIRE(current_frames - previous_frames <= 16);
         previous_frames = current_frames;
         if (offset + count < pcm.size())

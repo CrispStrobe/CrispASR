@@ -1097,6 +1097,10 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `CRISPASR_NEMOTRON_MAES`
 - `CRISPASR_NEMOTRON_NO_WINDOW_MASK`
 - `CRISPASR_NEMOTRON_STREAMING`
+- `CRISPASR_NEMOTRON_STREAM_CHUNKS_PER_STEP` — how many audio chunks the
+  realtime session gathers before it processes them and sends new text. Default
+  4 on CPU and 1 on GPU. `1` updates the text after every chunk (320 ms at
+  context preset 0, 1.12 s at preset 3) and costs more CPU.
 - `CRISPASR_NEMOTRON_STREAM_DEBUG`
 
 ### OmniASR
