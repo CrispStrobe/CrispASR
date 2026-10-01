@@ -75,6 +75,45 @@ def ws_frame(payload, opcode=0x1):
     return bytes(b)
 
 
+def read_one_frame(sock, timeout=4.0):
+    """Return (opcode, payload) of the next small server frame (under 126 bytes, like a pong),
+    or (None, b"") on timeout or a larger frame."""
+    sock.settimeout(timeout)
+    buf = b""
+    try:
+        while True:
+            if len(buf) >= 2:
+                ln = buf[1] & 0x7F
+                if ln >= 126:
+                    return None, b""
+                if len(buf) >= 2 + ln:
+                    return buf[0] & 0x0F, buf[2:2 + ln]
+            chunk = sock.recv(1)
+            if not chunk:
+                return None, b""
+            buf += chunk
+    except socket.timeout:
+        return None, b""
+
+
+def handshake(port, key_header="Sec-WebSocket-Key"):
+    key = base64.b64encode(os.urandom(16)).decode()
+    req = ("GET /v1/realtime HTTP/1.1\r\nHost: 127.0.0.1:%d\r\nUpgrade: websocket\r\n"
+           "Connection: Upgrade\r\n%s: %s\r\n"
+           "Sec-WebSocket-Version: 13\r\n\r\n" % (port, key_header, key))
+    s = socket.create_connection(("127.0.0.1", port), timeout=5)
+    s.sendall(req.encode())
+    resp = b""
+    while b"\r\n\r\n" not in resp:
+        chunk = s.recv(1)
+        if not chunk:
+            break
+        resp += chunk
+    expected = base64.b64encode(hashlib.sha1((key + GUID).encode()).digest()).decode()
+    ok = resp.startswith(b"HTTP/1.1 101") and ("Sec-WebSocket-Accept: " + expected).encode() in resp
+    return s, ok
+
+
 def read_server_frames(sock, timeout=4.0):
     sock.settimeout(timeout)
     buf = b""
@@ -240,6 +279,26 @@ def main():
             passed += 1
         else:
             print("  ✗ session did not declare its turn/VAD contract: %r" % session_contract)
+            failed += 1
+
+        # A Ping must get a Pong with the same payload.
+        s.sendall(ws_frame(b"abcd", opcode=0x9))
+        opcode, payload = read_one_frame(s, timeout=5.0)
+        if opcode == 0xA and payload == b"abcd":
+            print("  ✓ ping answered with matching pong")
+            passed += 1
+        else:
+            print("  ✗ no pong for ping: opcode=%r payload=%r" % (opcode, payload))
+            failed += 1
+
+        # Proxies may send the key header in another case.
+        s2, ok = handshake(rt_port, "Sec-Websocket-Key")
+        s2.close()
+        if ok:
+            print("  ✓ handshake accepts the key header spelled Sec-Websocket-Key")
+            passed += 1
+        else:
+            print("  ✗ handshake rejected Sec-Websocket-Key")
             failed += 1
 
         # 2. Stream PCM, collect text frames.

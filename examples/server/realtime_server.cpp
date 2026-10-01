@@ -1,7 +1,9 @@
 #include "realtime_server.h"
 #include "core/realtime_turn_buffer.h"
 #include "crispasr_vad.h"
+#include <algorithm>
 #include <atomic>
+#include <cctype>
 #include <chrono>
 #include <thread>
 #include <vector>
@@ -203,6 +205,14 @@ static bool ws_send_text(socket_t fd, const std::string& text) {
 static void ws_send_close(socket_t fd) {
     uint8_t f[2] = {0x88, 0x00};
     send_all(fd, f, 2);
+}
+
+// Answer a Ping with a Pong that carries the same payload.
+static bool ws_send_pong(socket_t fd, const std::vector<uint8_t>& payload) {
+    uint8_t head[2] = {0x8A, (uint8_t)payload.size()};
+    if (!send_all(fd, head, 2))
+        return false;
+    return payload.empty() || send_all(fd, payload.data(), payload.size());
 }
 
 static int ws_read_frame(socket_t fd, std::vector<uint8_t>& payload, uint8_t* out_opcode) {
@@ -476,11 +486,13 @@ static void rt_handle_connection(rt_session* sess) {
 
     std::string req(req_buf);
     std::string ws_key;
-    auto pos = req.find("Sec-WebSocket-Key:");
-    if (pos == std::string::npos)
-        pos = req.find("sec-websocket-key:");
+    std::string req_lower = req;
+    std::transform(req_lower.begin(), req_lower.end(), req_lower.begin(),
+                   [](unsigned char c) { return (char)std::tolower(c); });
+    const std::string key_header = "\r\nsec-websocket-key:";
+    auto pos = req_lower.find(key_header);
     if (pos != std::string::npos) {
-        auto start = req.find_first_not_of(" \t", pos + 18);
+        auto start = req.find_first_not_of(" \t", pos + key_header.size());
         auto end = req.find("\r\n", start);
         if (start != std::string::npos && end != std::string::npos)
             ws_key = req.substr(start, end - start);
@@ -521,6 +533,12 @@ static void rt_handle_connection(rt_session* sess) {
             break;
         if (opcode == 0x08)
             break; // close
+        if (opcode == 0x09) {
+            if (payload.size() > 125)
+                break; // a Ping carries at most 125 bytes
+            ws_send_pong(sess->client_fd, payload);
+            continue;
+        }
 
         if (opcode == 0x01 && len > 0) { // text
             std::string msg(payload.begin(), payload.end());
