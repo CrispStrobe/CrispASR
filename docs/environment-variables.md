@@ -1102,6 +1102,10 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
   4 on CPU and 1 on GPU. `1` updates the text after every chunk (320 ms at
   context preset 0, 1.12 s at preset 3) and costs more CPU.
 - `CRISPASR_NEMOTRON_STREAM_DEBUG`
+- `CRISPASR_NEMOTRON_STREAM_FULL_RECOMPUTE` — `1` makes the realtime session
+  redo mel and pre-encode for the whole turn on every update, instead of only
+  for the newest audio. Same output, slower on long turns. Read when a turn
+  starts; useful to check the default against.
 
 ### OmniASR
 

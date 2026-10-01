@@ -3105,6 +3105,8 @@ static void nemotron_apply_prompt(nemotron_context* ctx, std::vector<float>& enc
 struct nemotron_stream {
     nemotron_context* ctx = nullptr;
     std::vector<float> audio;
+    size_t audio_offset = 0;
+    bool full_recompute = false; // CRISPASR_NEMOTRON_STREAM_FULL_RECOMPUTE, read when a turn starts
     size_t frontend_checked_samples = 0;
     int processed_pre_frames = 0;
     int encoder_frames_computed = 0;
@@ -3171,6 +3173,8 @@ static bool nemotron_stream_decode(nemotron_stream* stream, const float* enc, in
 
 static void nemotron_stream_clear(nemotron_stream* stream) {
     stream->audio.clear();
+    stream->audio_offset = 0;
+    stream->full_recompute = crispasr_env::truthy("CRISPASR_NEMOTRON_STREAM_FULL_RECOMPUTE");
     stream->processed_pre_frames = 0;
     stream->encoder_frames_computed = 0;
     stream->frontend_checked_samples = 0;
@@ -3411,6 +3415,7 @@ extern "C" struct nemotron_stream* nemotron_stream_create(struct nemotron_contex
         return nullptr;
     auto* stream = new nemotron_stream;
     stream->ctx = ctx;
+    stream->full_recompute = crispasr_env::truthy("CRISPASR_NEMOTRON_STREAM_FULL_RECOMPUTE");
     return stream;
 }
 
@@ -3439,6 +3444,9 @@ extern "C" bool nemotron_stream_append(struct nemotron_stream* stream, const flo
     auto* ctx = stream->ctx;
     const auto& hp = ctx->model.hparams;
     const int chunk_size = hp.att_context_right[ctx->att_context_preset] + 1;
+    // nemotron_build_pre_encode is three stride-2 causal convs: 8x in time.
+    constexpr int kPreEncodeSubsampling = 8;
+    const size_t frame_samples = (size_t)hp.hop_length * kPreEncodeSubsampling;
     // A layer graph is rebuilt for each append because scheduler allocations
     // cannot safely outlive sched_reset (#215e). Amortize that fixed cost on
     // CPU while retaining the model's native single-chunk cadence on GPU.
@@ -3449,18 +3457,35 @@ extern "C" bool nemotron_stream_append(struct nemotron_stream* stream, const flo
         if (n >= 1)
             chunks_per_step = n;
     }
-    const size_t raw_chunk_samples = (size_t)hp.hop_length * 8 * chunk_size * chunks_per_step;
-    if (!flush && stream->audio.size() - stream->frontend_checked_samples < raw_chunk_samples)
+    const size_t raw_chunk_samples = frame_samples * chunk_size * chunks_per_step;
+    const size_t total_samples = stream->audio_offset + stream->audio.size();
+    if (!flush && total_samples - stream->frontend_checked_samples < raw_chunk_samples)
         return true;
-    stream->frontend_checked_samples = stream->audio.size();
+    stream->frontend_checked_samples = total_samples;
+
+    // Only redo mel and pre-encode for the newest audio; the earlier frames
+    // don't change. Start 4 frames early so the window's edges (STFT padding,
+    // pre-emphasis, the convs looking back) stay out of the frames we keep, and
+    // start on a multiple of 4 frames so the math library picks the same routine
+    // as for the whole turn: it has a fast one only for sizes that are a multiple
+    // of 4, the two round differently, and that can flip a word.
+    constexpr int kFrontendMarginFrames = 4;
+    constexpr int kFrontendAlignFrames = 4;
+    auto window_start = [&](int frame) {
+        return std::max(0, frame - kFrontendMarginFrames) / kFrontendAlignFrames * kFrontendAlignFrames;
+    };
+    const int window_frame = stream->full_recompute ? 0 : window_start(stream->processed_pre_frames);
+    const size_t window_sample = (size_t)window_frame * frame_samples;
     int T_mel = 0;
-    auto mel = nemotron_compute_mel_impl(ctx, stream->audio.data(), (int)stream->audio.size(), T_mel);
+    auto mel = nemotron_compute_mel_impl(ctx, stream->audio.data() + (window_sample - stream->audio_offset),
+                                         (int)(total_samples - window_sample), T_mel);
     if (mel.empty() || T_mel <= 0)
         return false;
     std::vector<float> pre_enc;
-    int T_pre = 0, d_model = 0;
-    if (!nemotron_run_preencode(ctx, mel.data(), T_mel, pre_enc, T_pre, d_model))
+    int T_window = 0, d_model = 0;
+    if (!nemotron_run_preencode(ctx, mel.data(), T_mel, pre_enc, T_window, d_model))
         return false;
+    const int T_pre = window_frame + T_window;
 
     // Centered STFT tail frames change when more PCM arrives. Hold one encoder
     // chunk until the next append; a commit flushes the final short chunk.
@@ -3472,7 +3497,7 @@ extern "C" bool nemotron_stream_append(struct nemotron_stream* stream, const flo
 
     const int n_new = target - stream->processed_pre_frames;
     std::vector<float> enc_out;
-    const float* new_pre = pre_enc.data() + (size_t)stream->processed_pre_frames * d_model;
+    const float* new_pre = pre_enc.data() + (size_t)(stream->processed_pre_frames - window_frame) * d_model;
     const bool first = stream->processed_pre_frames == 0;
     if (!nemotron_run_encoder_chunked(ctx, new_pre, n_new, d_model, enc_out, &stream->enc_cache, first))
         return false;
@@ -3481,6 +3506,13 @@ extern "C" bool nemotron_stream_append(struct nemotron_stream* stream, const flo
         return false;
     stream->processed_pre_frames = target;
     stream->encoder_frames_computed += n_new;
+
+    // Forget audio that later windows won't need.
+    const size_t keep_from = stream->full_recompute ? 0 : (size_t)window_start(target) * frame_samples;
+    if (keep_from > stream->audio_offset) {
+        stream->audio.erase(stream->audio.begin(), stream->audio.begin() + (keep_from - stream->audio_offset));
+        stream->audio_offset = keep_from;
+    }
     if (crispasr_env::get("CRISPASR_NEMOTRON_STREAM_DEBUG"))
         fprintf(stderr, "nemotron: stream advanced %d new encoder frames (computed_total=%d)\n", n_new,
                 stream->encoder_frames_computed);
