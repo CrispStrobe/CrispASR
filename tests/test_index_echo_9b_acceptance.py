@@ -51,6 +51,8 @@ class NineBOracleGuards(unittest.TestCase):
         with self.assertRaises(ValueError):audit.stage_report(report([n for n in names if n!='llm_block_31']))
         with self.assertRaises(ValueError):audit.stage_report(report(names)+'[SKIP] missing activation\n')
         with self.assertRaises(ValueError):audit.stage_report(report(names).replace('(16/16)','(15/16)'))
+        with self.assertRaises(ValueError):audit.stage_report(report(names).replace('cos_min=1.000000','cos_min=0.997000',1))
+        with self.assertRaises(ValueError):audit.stage_report(report(names).replace('relative_l2=0.000000','relative_l2=0.021000',1))
 
 
 if __name__=='__main__':unittest.main()
