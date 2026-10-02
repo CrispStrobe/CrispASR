@@ -32,9 +32,9 @@ args = parser.parse_args()
 run('cmake', '-S', ROOT, '-B', BUILD, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
     '-DBUILD_SHARED_LIBS=ON', '-DCRISPASR_BUILD_SERVER=OFF', '-DGGML_NATIVE=OFF')
 run('cmake', '--build', BUILD, '--target', 'crispasr-cli', 'crispasr-lib', 'crispasr-diff',
-    'test-index-echo-windows', 'test-index-echo-batch', 'test-session-autochunk', 'test-arch-backend-map',
+    'test-index-echo-windows', 'test-index-echo-batch', 'test-index-echo-connector', 'test-session-autochunk', 'test-arch-backend-map',
     'test-crispasr-diff-compare', 'test-registry', 'test-index-echo-live', '-j', '4')
-for test in ['test-index-echo-windows', 'test-index-echo-batch', 'test-session-autochunk', 'test-arch-backend-map',
+for test in ['test-index-echo-windows', 'test-index-echo-batch', 'test-index-echo-connector', 'test-session-autochunk', 'test-arch-backend-map',
              'test-crispasr-diff-compare', 'test-registry']:
     run(BUILD / 'bin' / test)
 run(sys.executable, ROOT / 'tools/gen-feature-matrix.py', '--crispasr', BUILD / 'bin/crispasr')
