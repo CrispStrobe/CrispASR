@@ -15,9 +15,10 @@ import time
 
 from huggingface_hub import HfApi, snapshot_download
 
-from index_echo_produce_constants import SOURCE, REVISION, LLAMA_REVISION, DESTINATION
+from index_echo_produce_constants import MODELS, LLAMA_REVISION, LICENSE_URL
 ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
+parser.add_argument('--size', choices=['2b', '9b'], default='2b')
 parser.add_argument('--fp32-decoder', action='store_true', help='Fully F32 diagnostic oracle; original blueprint retains nested BF16')
 parser.add_argument('--reference-only', action='store_true')
 parser.add_argument('--convert-only', action='store_true')
@@ -27,6 +28,8 @@ parser.add_argument('--quant-only', action='store_true', help='Reuse the validat
 parser.add_argument('--quants', nargs='+', choices=['q8_0', 'q4_k', 'q4_k_selective'], default=['q8_0', 'q4_k'])
 parser.add_argument('--clips', nargs='+', choices=['jfk', 'zh', 'jfk-tail'], default=['jfk', 'zh', 'jfk-tail'])
 args = parser.parse_args()
+SOURCE, REVISION, DESTINATION = MODELS[args.size]
+PREFIX = 'index-echo-' + args.size
 if sum([args.reference_only, args.convert_only, args.quant_only, args.pipeline_only, args.audit_only]) > 1:
     parser.error('--reference-only, --convert-only and --quant-only and --pipeline-only are mutually exclusive')
 if args.fp32_decoder and not (args.reference_only or args.pipeline_only):
@@ -63,9 +66,9 @@ api = HfApi(token=os.environ['HF_TOKEN'])
 if not api.repo_info(DESTINATION).private:
     raise RuntimeError('Producer destination must be private until validated')
 # Verify publishing rights before downloading or converting multi-GB weights.
-api.upload_file(path_or_fileobj=b'---\nlicense: apache-2.0\n---\n\n# Index-Echo S2TT 2B\n\n'
-                b'Private development artifacts for CrispASR issue #485. '
-                b'Runtime parity and decoded-output validation are pending.\n',
+api.upload_file(path_or_fileobj=('---\nlicense: apache-2.0\n---\n\n# Index-Echo S2TT ' + args.size.upper() + '\n\n'
+                'Private development artifacts for CrispASR issue #485. '
+                'Runtime parity and decoded-output validation are pending.\n').encode(),
                 path_in_repo='README.md', repo_id=DESTINATION)
 
 
@@ -88,10 +91,17 @@ try:
     source = Path(snapshot_download(SOURCE, revision=REVISION, local_dir=SCRATCH / 'source',
         allow_patterns=['audio_config.json', 'audio_tower.safetensors', 'connector.safetensors',
                         'llm/config.json', 'llm/LICENSE'] if args.quant_only else None))
-    upload(source / 'llm' / 'LICENSE', 'LICENSE')
+    license_file = source / 'llm' / 'LICENSE'
+    if not license_file.exists():
+        from urllib.request import urlopen
+        license_file = SCRATCH / 'LICENSE'
+        with urlopen(LICENSE_URL, timeout=60) as response:
+            license_file.write_bytes(response.read())
+        receipt['license_source'] = LICENSE_URL
+    upload(license_file, 'LICENSE')
     if not args.reference_only and not args.pipeline_only and not args.audit_only:
-        audio = SCRATCH / 'index-echo-2b-f16.gguf'
-        decoder = SCRATCH / 'index-echo-2b-decoder-f16.gguf'
+        audio = SCRATCH / f'{PREFIX}-f16.gguf'
+        decoder = SCRATCH / f'{PREFIX}-decoder-f16.gguf'
         if args.quant_only:
             base_revision = api.model_info(DESTINATION).sha
             receipt['f16_base_revision'] = base_revision
@@ -103,18 +113,19 @@ try:
             run('git', 'fetch', '--depth=1', 'origin', LLAMA_REVISION, cwd=llama)
             run('git', 'checkout', 'FETCH_HEAD', cwd=llama)
             run(sys.executable, ROOT / 'models/convert-index-echo-to-gguf.py',
-                '--model', source, '--output', audio)
+                '--model', source, '--output', audio, '--decoder-name', decoder.name)
             upload(audio)
             run(sys.executable, llama / 'convert_hf_to_gguf.py', source / 'llm',
                 '--outfile', decoder, '--outtype', 'f16', '--no-mtp')
-            # The released inference class uses only the 24 text layers. The HF
-            # config retains an MTP layer declaration without its weights; exporting
-            # that declaration creates an unloadable, fictitious 25th layer.
+            # Both speech exports omit MTP weights despite their config declaration.
             upload(decoder)
         import gguf
         converted_decoder = gguf.GGUFReader(str(decoder))
-        assert int(converted_decoder.fields['qwen35.block_count'].contents()) == 24
-        assert not any(t.name.startswith('blk.24.') for t in converted_decoder.tensors)
+        config = json.loads((source / 'llm/config.json').read_text())
+        blocks = config.get('text_config', config)['num_hidden_layers']
+        assert int(converted_decoder.fields['qwen35.block_count'].contents()) == blocks
+        assert not any(t.name.startswith(f'blk.{blocks}.') for t in converted_decoder.tensors)
+        receipt['decoder_blocks'] = blocks
         del converted_decoder
         build = SCRATCH / 'build'
         run('cmake', '-S', ROOT, '-B', build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
@@ -123,10 +134,10 @@ try:
         quantizer = build / 'bin/crispasr-quantize'
         for quant in args.quants:
             # Each audio file points to its own quantized decoder companion.
-            companion = f'index-echo-2b-decoder-{quant}.gguf'
+            companion = f'{PREFIX}-decoder-{quant}.gguf'
             run(sys.executable, ROOT / 'models/convert-index-echo-to-gguf.py', '--model', source,
                 '--output', audio, '--decoder-name', companion)
-            for original, filename in [(audio, f'index-echo-2b-{quant}.gguf'), (decoder, companion)]:
+            for original, filename in [(audio, f'{PREFIX}-{quant}.gguf'), (decoder, companion)]:
                 converted = SCRATCH / filename
                 overrides = []
                 if quant == 'q4_k_selective':
@@ -160,7 +171,7 @@ try:
             with wave.open(str(audio_path), 'wb') as wav:
                 wav.setparams(params); wav.writeframes(pcm)
             upload(audio_path, REFERENCE_DIR + '/jfk-tail.wav')
-        ref = OUT / f'index-echo-2b-{clip}-ref.gguf'
+        ref = OUT / f'{PREFIX}-{clip}-ref.gguf'
         run(sys.executable, ROOT / 'tools/dump_reference.py', '--backend', 'index-echo',
             '--model-dir', source, '--audio', audio_path, '--output', ref)
         upload(ref, f'{REFERENCE_DIR}/{clip}-ref.gguf')
@@ -184,7 +195,7 @@ try:
         (OUT / 'precision-audit.json').write_text(json.dumps(audit, indent=2) + '\n')
         print(json.dumps(audit, indent=2), flush=True)
     event('producer complete; runtime parity pending')
-    (OUT / 'summary.md').write_text('Index-Echo 2B pinned conversion and Python reference complete. '
+    (OUT / 'summary.md').write_text(f'Index-Echo {args.size.upper()} pinned conversion and Python reference complete. '
                                    'Artifacts are private and runtime parity is pending.\n')
 except Exception:
     event('producer failed; inspect Actions log')
