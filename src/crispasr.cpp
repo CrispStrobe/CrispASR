@@ -5361,6 +5361,10 @@ struct whisper_vad_context* whisper_vad_init_with_params(struct whisper_model_lo
 
     whisper_vad_context* vctx = new whisper_vad_context;
     vctx->n_threads = params.n_threads;
+    // The VAD scheduler currently runs on CPU (whisper_vad_init_context).
+    // Place its weights on the same backend even when the caller enables
+    // GPU inference for ASR; CUDA weights in a CPU-only scheduler abort.
+    params.use_gpu = false;
     vctx->params.use_gpu = params.use_gpu;
     vctx->params.gpu_device = params.gpu_device;
 
