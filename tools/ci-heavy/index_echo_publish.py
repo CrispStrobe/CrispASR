@@ -83,8 +83,8 @@ for commit in api.list_repo_commits(a.destination):
         raise RuntimeError('Publication target contains experimental history')
 for attempt in range(8):
     try:
-        api.upload_large_folder(a.destination, folder_path=str(folder), repo_type='model',
-                                allow_patterns=list(expected) + ['README.md', 'acceptance.json'], print_report=False)
+        api.upload_folder(repo_id=a.destination, folder_path=str(folder), repo_type='model',
+                          allow_patterns=list(expected) + ['README.md', 'acceptance.json'])
         break
     except Exception:
         if attempt == 7:
