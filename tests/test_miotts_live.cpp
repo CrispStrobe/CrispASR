@@ -5,6 +5,8 @@
 
 #include "miotts.h"
 #include "gguf.h"
+#include "crispasr_backend.h"
+#include "whisper_params.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -88,4 +90,41 @@ TEST_CASE("miotts: FSQ dequant exact", "[miotts][live]") {
     REQUIRE(dim > 0);
     miotts_free_audio(emb);
     miotts_free(ctx);
+}
+
+// Test the same adapter a resident HTTP server calls with per-request params.
+std::unique_ptr<CrispasrBackend> crispasr_create_miotts_backend();
+
+TEST_CASE("miotts: resident adapter restores startup voice", "[miotts][live]") {
+    const char* model = std::getenv("CRISPASR_MODEL_MIOTTS");
+    const char* voice_dir = std::getenv("CRISPASR_MIOTTS_VOICE_DIR");
+    if (!model || !*model || !voice_dir || !*voice_dir) {
+        SKIP("CRISPASR_MODEL_MIOTTS / CRISPASR_MIOTTS_VOICE_DIR not set");
+        return;
+    }
+    whisper_params startup;
+    startup.model = model;
+    startup.use_gpu = false;
+    startup.n_threads = 4;
+    startup.temperature = 0;
+    startup.tts_voice_dir = voice_dir;
+    startup.tts_voice = "en_female.emb.gguf";
+    auto backend = crispasr_create_miotts_backend();
+    REQUIRE(backend->init(startup));
+    REQUIRE(backend->tts_sample_rate() == 44100);
+    const auto first = backend->synthesize("Hello world", startup);
+    REQUIRE_FALSE(first.empty());
+    auto request = startup;
+    request.tts_voice = "en_male";
+    const auto alternate = backend->synthesize("Hello world", request);
+    REQUIRE_FALSE(alternate.empty());
+    REQUIRE(alternate != first);
+    request.tts_voice.clear();
+    const auto restored = backend->synthesize("Hello world", request);
+    REQUIRE(restored == first);
+    request.tts_voice = "missing-preset.emb.gguf";
+    REQUIRE(backend->synthesize("Hello world", request).empty());
+    request.tts_voice.clear();
+    REQUIRE(backend->synthesize("Hello world", request) == first);
+    backend->shutdown();
 }
