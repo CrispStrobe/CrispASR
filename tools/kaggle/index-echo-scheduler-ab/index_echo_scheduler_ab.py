@@ -17,11 +17,11 @@ import wave
 
 SCRIPT_VERSION = '2026-10-02.1'
 # Fill from the successful CI build and private transfer receipt before launch.
-SOURCE_COMMIT = 'PENDING'
-BUILD_COMMIT = '722f54ba4'  # replace with full immutable build SHA
+SOURCE_COMMIT = '2d890f1612d079aed0562cbb39c108376118ba1b'
+BUILD_COMMIT = '722f54ba4eae46936bf5c115f713a7d28388a971'
 BUILD_RUN = 37030248844
-BUNDLE_REVISION = 'PENDING'
-BUNDLE_SHA256 = 'PENDING'
+BUNDLE_REVISION = '7242ecaa666572b6220184701f325f3d0bcd81dc'
+BUNDLE_SHA256 = 'f1717702dfd35deb977974b49f3cad7696291a1dd072bfd9f8cad26a9d9282ab'
 SDK = Path('/kaggle/temp/index-echo-scheduler-sdk')
 TEMP = Path('/kaggle/temp/index-echo-validation')
 OUT = Path('/kaggle/working')
