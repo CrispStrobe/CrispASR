@@ -11,8 +11,8 @@ import subprocess
 import sys
 import torch
 
-SCRIPT_VERSION = '2026-10-02.1'
-SOURCE_COMMIT = 'c07ec1d8d082f6a7318bcd9f706b5a1193103d8f'
+SCRIPT_VERSION = '2026-10-02.2'
+SOURCE_COMMIT = 'e56353137b967acbc00ffbedeb6b55429c0add4b'
 SOURCE_REVISION = 'b8ac6fb7d3dc17cee48a52201bd3d93dc86b0dba'
 TEMP = Path('/kaggle/temp/index-echo-default-source')
 OUT = Path('/kaggle/working')
@@ -53,8 +53,12 @@ os.environ.update(INDEX_ECHO_REF_DEVICE='cuda:0',INDEX_ECHO_REF_DTYPE='bfloat16'
 source=Path(snapshot_download('IndexTeam/Index-Echo-S2TT-9B',revision=SOURCE_REVISION,local_dir=TEMP/'source'))
 sys.path.insert(0,str(ROOT/'tools'))
 from reference_backends.index_echo import dump_pipeline
+def checkpoint(pipeline,multi):
+    api.upload_file(path_or_fileobj=pipeline,path_in_repo='index-echo-9b-bf16-default-zh-context/pipeline/partial.json',repo_id='cstr/crispasr-regression-fixtures')
+    kh.step('source.case.checkpoint',cases=list(json.loads(pipeline.read_text())['cases']))
+
 with kh.build_heartbeat('released.default-bf16.pipeline',interval_s=30):
-    pipeline,multi=dump_pipeline(source,OUT,ROOT/'samples')
+    pipeline,multi=dump_pipeline(source,OUT,ROOT/'samples',checkpoint=checkpoint,context_audio='zh-pause')
 r=json.loads(pipeline.read_text())
 assert len(r['cases'])==5
 assert all(case['segments'] and not any(row.get('parse_warn',0) for row in case['rows']) for case in r['cases'].values())
@@ -62,7 +66,7 @@ assert isinstance(r['reference_placement'],dict) and not any(v in ['cpu','disk']
 for module in ['tower','connector','llm']:
     assert list(r['parameter_dtypes'][module]['parameter_elements'])==['torch.bfloat16']
 receipt=dict(script_version=SCRIPT_VERSION,source_commit=SOURCE_COMMIT,source_revision=SOURCE_REVISION,hardware=hardware,torch=torch.__version__,memory=memory,validated=False,source_control_passed=True,source_pipeline=r)
-for path,remote in [(pipeline,'index-echo-9b-bf16-default/pipeline/reference.json'),(multi,'index-echo-9b/pipeline/audio.wav')]:
+for path,remote in [(pipeline,'index-echo-9b-bf16-default-zh-context/pipeline/reference.json'),(multi,'index-echo-9b/pipeline-zh-context/audio.wav')]:
     api.upload_file(path_or_fileobj=path,path_in_repo=remote,repo_id='cstr/crispasr-regression-fixtures')
 receipt['fixture_revision']=api.model_info('cstr/crispasr-regression-fixtures').sha
 (OUT/'default-source-receipt.json').write_text(json.dumps(receipt,indent=2,ensure_ascii=False)+'\n')
