@@ -17,7 +17,7 @@ def audit(root, source, output, clips):
     torch.set_num_threads(4)
     torch.set_grad_enabled(False)
     module, model = load_blueprint(source)
-    result = dict(torch=torch.__version__, transformers=__import__('transformers').__version__,
+    result = dict(validated=False, torch=torch.__version__, transformers=__import__('transformers').__version__,
                   device=model.device, parameter_dtypes=precision_audit(model),
                   placement=getattr(model.llm, 'hf_device_map', model.device),
                   generation_config=model.llm.generation_config.to_dict(),
@@ -58,7 +58,8 @@ def audit(root, source, output, clips):
         print('fresh released source', clip, json.dumps(result['cases'][clip], ensure_ascii=False), flush=True)
         # A small immutable diagnostic is available before later clips finish.
         from huggingface_hub import HfApi
-        remote = 'audits/' + output.parent.name + '-' + output.name
+        stamp = os.getenv('GITHUB_RUN_ID') or time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())
+        remote = 'audits/' + stamp + '-' + str(model.dtype).removeprefix('torch.') + '-' + output.name
         HfApi(token=os.environ['HF_TOKEN']).upload_file(path_or_fileobj=output, path_in_repo=remote,
                                                        repo_id='cstr/index-echo-9b-GGUF')
     return result
