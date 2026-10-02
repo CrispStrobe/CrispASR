@@ -30,7 +30,7 @@ with (out / "build.log").open("w") as log:
          "-DCRISPASR_BUILD_TESTS=OFF", "-DCRISPASR_BUILD_SERVER=OFF",
          "-DCMAKE_C_COMPILER_LAUNCHER=ccache", "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
          "-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache"],
-        ["cmake", "--build", str(build), "--target", "crispasr-cli", "crispasr-lib", "crispasr-diff", "-j2"],
+        ["cmake", "--build", str(build), "--target", "crispasr-cli", "crispasr-lib", "crispasr-diff", "crispasr-quantize", "-j2"],
     ):
         print(command, flush=True)
         process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
@@ -43,7 +43,7 @@ with (out / "build.log").open("w") as log:
 
 bundle = out / "bundle"
 bundle.mkdir(exist_ok=True)
-for executable in ["crispasr", "crispasr-diff"]:
+for executable in ["crispasr", "crispasr-diff", "crispasr-quantize"]:
     shutil.copy2(build / "bin" / executable, bundle)
 for source in build.rglob("*.so*"):
     if source.is_file() and not source.name.startswith("libcuda.so"):

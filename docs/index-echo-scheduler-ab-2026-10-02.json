@@ -1,0 +1,3026 @@
+{
+  "script_version": "2026-10-02.1",
+  "hardware": "Tesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB",
+  "config": {
+    "source_commit": "2d890f1612d079aed0562cbb39c108376118ba1b",
+    "build_commit": "722f54ba4eae46936bf5c115f713a7d28388a971",
+    "build_run": 37030248844,
+    "bundle_revision": "7242ecaa666572b6220184701f325f3d0bcd81dc",
+    "bundle_sha256": "f1717702dfd35deb977974b49f3cad7696291a1dd072bfd9f8cad26a9d9282ab",
+    "keep_models": true
+  },
+  "orders": {
+    "AB": {
+      "control": {
+        "arm": "control",
+        "order": "AB",
+        "clips": {
+          "jfk": {
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 12.670854727000005,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 12.474134056000025,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 12.508533602999933,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 12.410418762000063,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              }
+            ],
+            "first_seconds": 12.670854727000005,
+            "warm_median_seconds": 12.474134056000025,
+            "warm_stages_ms": {
+              "mel": 118.33,
+              "audio_encode": 121.0,
+              "connector": 2.61,
+              "decoder_prefill": 1672.46,
+              "decoder_generate": 10559.08
+            }
+          },
+          "zh": {
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 14.188595201999988,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 14.17106224400004,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 14.18746334900004,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 14.220559210999909,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              }
+            ],
+            "first_seconds": 14.188595201999988,
+            "warm_median_seconds": 14.18746334900004,
+            "warm_stages_ms": {
+              "mel": 139.02,
+              "audio_encode": 131.09,
+              "connector": 2.65,
+              "decoder_prefill": 1681.15,
+              "decoder_generate": 12247.58
+            }
+          },
+          "jfk-tail": {
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 3.7757979990000194,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 3.7706254480000325,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 3.7587713830000666,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 3.753552127000148,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              }
+            ],
+            "first_seconds": 3.7757979990000194,
+            "warm_median_seconds": 3.7587713830000666,
+            "warm_stages_ms": {
+              "mel": 33.7,
+              "audio_encode": 53.31,
+              "connector": 1.12,
+              "decoder_prefill": 1121.77,
+              "decoder_generate": 2543.09
+            }
+          }
+        },
+        "graphs_reused": [
+          0
+        ]
+      },
+      "candidate": {
+        "arm": "candidate",
+        "order": "AB",
+        "clips": {
+          "jfk": {
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 12.201919763999967,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 11.982489701000077,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 12.040664246999995,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 12.052249066000059,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              }
+            ],
+            "first_seconds": 12.201919763999967,
+            "warm_median_seconds": 12.040664246999995,
+            "warm_stages_ms": {
+              "mel": 119.3,
+              "audio_encode": 117.75,
+              "connector": 2.49,
+              "decoder_prefill": 1654.17,
+              "decoder_generate": 10144.35
+            }
+          },
+          "zh": {
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 13.71539497599997,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 13.694110537000142,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 13.696083320999833,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 13.707390272000112,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              }
+            ],
+            "first_seconds": 13.71539497599997,
+            "warm_median_seconds": 13.696083320999833,
+            "warm_stages_ms": {
+              "mel": 140.83,
+              "audio_encode": 127.76,
+              "connector": 2.71,
+              "decoder_prefill": 1650.66,
+              "decoder_generate": 11775.42
+            }
+          },
+          "jfk-tail": {
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 3.664084839999987,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 3.67343213800018,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 3.6657639239999753,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 3.6556553699999768,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              }
+            ],
+            "first_seconds": 3.664084839999987,
+            "warm_median_seconds": 3.6657639239999753,
+            "warm_stages_ms": {
+              "mel": 33.29,
+              "audio_encode": 52.89,
+              "connector": 1.06,
+              "decoder_prefill": 1128.63,
+              "decoder_generate": 2446.04
+            }
+          }
+        },
+        "graphs_reused": [
+          1536
+        ]
+      }
+    },
+    "BA": {
+      "candidate": {
+        "arm": "candidate",
+        "order": "BA",
+        "clips": {
+          "jfk": {
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 12.230038108000144,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 11.984767619999957,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 12.044650740999941,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 12.00593433999984,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              }
+            ],
+            "first_seconds": 12.230038108000144,
+            "warm_median_seconds": 12.00593433999984,
+            "warm_stages_ms": {
+              "mel": 118.14,
+              "audio_encode": 118.87,
+              "connector": 2.57,
+              "decoder_prefill": 1623.86,
+              "decoder_generate": 10142.0
+            }
+          },
+          "zh": {
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 13.707880107999927,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 13.677051956000014,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 13.697694957999829,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 13.71713535999993,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              }
+            ],
+            "first_seconds": 13.707880107999927,
+            "warm_median_seconds": 13.697694957999829,
+            "warm_stages_ms": {
+              "mel": 138.78,
+              "audio_encode": 130.54,
+              "connector": 2.64,
+              "decoder_prefill": 1664.22,
+              "decoder_generate": 11765.01
+            }
+          },
+          "jfk-tail": {
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 3.659214112999962,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 3.668404426000052,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 3.6580604410000888,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 3.649695212000097,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              }
+            ],
+            "first_seconds": 3.659214112999962,
+            "warm_median_seconds": 3.6580604410000888,
+            "warm_stages_ms": {
+              "mel": 32.92,
+              "audio_encode": 53.06,
+              "connector": 1.06,
+              "decoder_prefill": 1122.33,
+              "decoder_generate": 2445.61
+            }
+          }
+        },
+        "graphs_reused": [
+          1536
+        ]
+      },
+      "control": {
+        "arm": "control",
+        "order": "BA",
+        "clips": {
+          "jfk": {
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 12.588886381000066,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 12.386385462000135,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 12.432893172999911,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 12.426848113999995,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              }
+            ],
+            "first_seconds": 12.588886381000066,
+            "warm_median_seconds": 12.426848113999995,
+            "warm_stages_ms": {
+              "mel": 117.0,
+              "audio_encode": 117.34,
+              "connector": 2.48,
+              "decoder_prefill": 1632.31,
+              "decoder_generate": 10553.23
+            }
+          },
+          "zh": {
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 14.186304411000037,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 14.167876411999941,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 14.184152971999993,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 14.195011023999996,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              }
+            ],
+            "first_seconds": 14.186304411000037,
+            "warm_median_seconds": 14.184152971999993,
+            "warm_stages_ms": {
+              "mel": 142.72,
+              "audio_encode": 128.2,
+              "connector": 2.87,
+              "decoder_prefill": 1657.02,
+              "decoder_generate": 12251.57
+            }
+          },
+          "jfk-tail": {
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 3.758680522000077,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 3.7655413540001064,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 3.7497611139999663,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 3.7645366720000766,
+                "segments": [
+                  {
+                    "start": 0.17,
+                    "end": 2.64,
+                    "text": "ask what you can do for your country.\nask what you can do for your country."
+                  }
+                ]
+              }
+            ],
+            "first_seconds": 3.758680522000077,
+            "warm_median_seconds": 3.7645366720000766,
+            "warm_stages_ms": {
+              "mel": 32.47,
+              "audio_encode": 52.96,
+              "connector": 1.1,
+              "decoder_prefill": 1127.53,
+              "decoder_generate": 2541.98
+            }
+          }
+        },
+        "graphs_reused": [
+          0
+        ]
+      }
+    }
+  },
+  "control_over_candidate": {
+    "AB": {
+      "jfk": 1.0360004896829536,
+      "zh": 1.035877412285218,
+      "jfk-tail": 1.0253719172670028
+    },
+    "BA": {
+      "jfk": 1.0350588102583411,
+      "zh": 1.0355138594845157,
+      "jfk-tail": 1.0291072913412218
+    }
+  },
+  "output_passed": true,
+  "acceptance": {
+    "script_version": "2026-10-02.4",
+    "source_commit": "2d890f1612d079aed0562cbb39c108376118ba1b",
+    "model_revision": "dffbadf0f173446fee0364a0807803d2b2fb6f49",
+    "reference_revision": "cb678dfd4806778aa55c39fe7b7a710a54cdc153",
+    "audio_revision": "d0a7d7a8be318a5841dfdbe6ad37d3acf75523e3",
+    "pipeline_reference_dtype": "independently forced all-float32",
+    "direct_reference_dtype": "float32",
+    "build_commit": "722f54ba4eae46936bf5c115f713a7d28388a971",
+    "build_run": 37030248844,
+    "bundle_revision": "7242ecaa666572b6220184701f325f3d0bcd81dc",
+    "bundle_sha256": "f1717702dfd35deb977974b49f3cad7696291a1dd072bfd9f8cad26a9d9282ab",
+    "hardware": "Tesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB",
+    "cuda_arch": "75",
+    "full_pipeline_checked": true,
+    "cohorts": {
+      "f16": {
+        "stages": {
+          "jfk": {
+            "rc": 0,
+            "cuda_used": true
+          },
+          "zh": {
+            "rc": 0,
+            "cuda_used": true
+          },
+          "jfk-tail": {
+            "rc": 0,
+            "cuda_used": true
+          }
+        },
+        "c_abi": {
+          "jfk": {
+            "actual": [
+              {
+                "start": 0.0,
+                "end": 2.48,
+                "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+              },
+              {
+                "start": 3.12,
+                "end": 4.56,
+                "text": "ask not\nask not"
+              },
+              {
+                "start": 5.16,
+                "end": 7.52,
+                "text": "what your country can do for you,\nwhat your country can do for you,"
+              },
+              {
+                "start": 8.0,
+                "end": 10.0,
+                "text": "ask what you can do for\nask what you can do for"
+              },
+              {
+                "start": 9.8,
+                "end": 11.0,
+                "text": "your country.。\nyour country."
+              }
+            ],
+            "expected": [
+              {
+                "start": 0.0,
+                "end": 2.48,
+                "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+              },
+              {
+                "start": 3.12,
+                "end": 4.56,
+                "text": "ask not\nask not"
+              },
+              {
+                "start": 5.16,
+                "end": 7.52,
+                "text": "what your country can do for you,\nwhat your country can do for you,"
+              },
+              {
+                "start": 8.0,
+                "end": 10.0,
+                "text": "ask what you can do for\nask what you can do for"
+              },
+              {
+                "start": 9.8,
+                "end": 11.0,
+                "text": "your country.。\nyour country."
+              }
+            ],
+            "passed": true,
+            "anonymous_metadata": true
+          },
+          "zh": {
+            "actual": [
+              {
+                "start": 0.43,
+                "end": 2.25,
+                "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+              },
+              {
+                "start": 2.27,
+                "end": 4.57,
+                "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+              },
+              {
+                "start": 5.23,
+                "end": 7.47,
+                "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+              },
+              {
+                "start": 7.47,
+                "end": 9.99,
+                "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+              },
+              {
+                "start": 10.51,
+                "end": 12.92,
+                "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+              }
+            ],
+            "expected": [
+              {
+                "start": 0.43,
+                "end": 2.25,
+                "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+              },
+              {
+                "start": 2.27,
+                "end": 4.57,
+                "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+              },
+              {
+                "start": 5.23,
+                "end": 7.47,
+                "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+              },
+              {
+                "start": 7.47,
+                "end": 9.99,
+                "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+              },
+              {
+                "start": 10.51,
+                "end": 12.92,
+                "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+              }
+            ],
+            "passed": true,
+            "anonymous_metadata": true
+          },
+          "jfk-tail": {
+            "actual": [
+              {
+                "start": 0.17,
+                "end": 2.64,
+                "text": "ask what you can do for your country.\nask what you can do for your country."
+              }
+            ],
+            "expected": [
+              {
+                "start": 0.17,
+                "end": 2.64,
+                "text": "ask what you can do for your country.\nask what you can do for your country."
+              }
+            ],
+            "passed": true,
+            "anonymous_metadata": true
+          }
+        },
+        "cli": {
+          "jfk": {
+            "rc": 0,
+            "actual": [
+              {
+                "start": 0.0,
+                "end": 2.48,
+                "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+              },
+              {
+                "start": 3.12,
+                "end": 4.5600000000000005,
+                "text": "ask not\nask not"
+              },
+              {
+                "start": 5.16,
+                "end": 7.52,
+                "text": "what your country can do for you,\nwhat your country can do for you,"
+              },
+              {
+                "start": 8.0,
+                "end": 10.0,
+                "text": "ask what you can do for\nask what you can do for"
+              },
+              {
+                "start": 9.8,
+                "end": 11.0,
+                "text": "your country.。\nyour country."
+              }
+            ],
+            "expected": [
+              {
+                "start": 0.0,
+                "end": 2.48,
+                "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+              },
+              {
+                "start": 3.12,
+                "end": 4.56,
+                "text": "ask not\nask not"
+              },
+              {
+                "start": 5.16,
+                "end": 7.52,
+                "text": "what your country can do for you,\nwhat your country can do for you,"
+              },
+              {
+                "start": 8.0,
+                "end": 10.0,
+                "text": "ask what you can do for\nask what you can do for"
+              },
+              {
+                "start": 9.8,
+                "end": 11.0,
+                "text": "your country.。\nyour country."
+              }
+            ],
+            "passed": true
+          },
+          "zh": {
+            "rc": 0,
+            "actual": [
+              {
+                "start": 0.43,
+                "end": 2.25,
+                "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+              },
+              {
+                "start": 2.27,
+                "end": 4.57,
+                "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+              },
+              {
+                "start": 5.23,
+                "end": 7.47,
+                "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+              },
+              {
+                "start": 7.47,
+                "end": 9.99,
+                "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+              },
+              {
+                "start": 10.51,
+                "end": 12.92,
+                "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+              }
+            ],
+            "expected": [
+              {
+                "start": 0.43,
+                "end": 2.25,
+                "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+              },
+              {
+                "start": 2.27,
+                "end": 4.57,
+                "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+              },
+              {
+                "start": 5.23,
+                "end": 7.47,
+                "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+              },
+              {
+                "start": 7.47,
+                "end": 9.99,
+                "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+              },
+              {
+                "start": 10.51,
+                "end": 12.92,
+                "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+              }
+            ],
+            "passed": true
+          },
+          "jfk-tail": {
+            "rc": 0,
+            "actual": [
+              {
+                "start": 0.17,
+                "end": 2.64,
+                "text": "ask what you can do for your country.\nask what you can do for your country."
+              }
+            ],
+            "expected": [
+              {
+                "start": 0.17,
+                "end": 2.64,
+                "text": "ask what you can do for your country.\nask what you can do for your country."
+              }
+            ],
+            "passed": true
+          }
+        },
+        "pipeline_cli": {
+          "actual": [
+            {
+              "start": 0.0,
+              "end": 2.48,
+              "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+            },
+            {
+              "start": 3.12,
+              "end": 4.5600000000000005,
+              "text": "ask not\nask not"
+            },
+            {
+              "start": 5.16,
+              "end": 7.52,
+              "text": "what your country can do for you,\nwhat your country can do for you,"
+            },
+            {
+              "start": 8.0,
+              "end": 10.0,
+              "text": "ask what you can do for\nask what you can do for"
+            },
+            {
+              "start": 9.8,
+              "end": 11.0,
+              "text": "your country.。\nyour country."
+            }
+          ],
+          "expected": [
+            {
+              "start": 0.0,
+              "end": 2.48,
+              "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+            },
+            {
+              "start": 3.12,
+              "end": 4.56,
+              "text": "ask not\nask not"
+            },
+            {
+              "start": 5.16,
+              "end": 7.52,
+              "text": "what your country can do for you,\nwhat your country can do for you,"
+            },
+            {
+              "start": 8.0,
+              "end": 10.0,
+              "text": "ask what you can do for\nask what you can do for"
+            },
+            {
+              "start": 9.8,
+              "end": 11.0,
+              "text": "your country.。\nyour country."
+            }
+          ]
+        },
+        "pipeline_failures": [],
+        "roundtrip_failures": []
+      }
+    },
+    "validated": true,
+    "runtime_config": {
+      "source_commit": "2d890f1612d079aed0562cbb39c108376118ba1b",
+      "build_commit": "722f54ba4eae46936bf5c115f713a7d28388a971",
+      "build_run": 37030248844,
+      "bundle_revision": "7242ecaa666572b6220184701f325f3d0bcd81dc",
+      "bundle_sha256": "f1717702dfd35deb977974b49f3cad7696291a1dd072bfd9f8cad26a9d9282ab",
+      "keep_models": true
+    },
+    "pipeline_disable": "1",
+    "failed": []
+  },
+  "faster_in_every_order_and_clip": true,
+  "default_changed": false,
+  "parity": {
+    "jfk": {
+      "numeric_rows": 75,
+      "minimum_cosine": 0.999995,
+      "maximum_relative_l2": 0.00099121,
+      "cached_tokens_exact": 16,
+      "rows": [
+        {
+          "stage": "mel_spectrogram",
+          "cosine_min": 1.0,
+          "relative_l2": 5.12e-06
+        },
+        {
+          "stage": "connector_output",
+          "cosine_min": 0.999999,
+          "relative_l2": 0.00019994
+        },
+        {
+          "stage": "conv1_out",
+          "cosine_min": 1.0,
+          "relative_l2": 1.054e-05
+        },
+        {
+          "stage": "conv2_out",
+          "cosine_min": 1.0,
+          "relative_l2": 8.85e-06
+        },
+        {
+          "stage": "conv3_out",
+          "cosine_min": 1.0,
+          "relative_l2": 5.9e-06
+        },
+        {
+          "stage": "encoder_input",
+          "cosine_min": 1.0,
+          "relative_l2": 4.672e-05
+        },
+        {
+          "stage": "ln_post_out",
+          "cosine_min": 0.999999,
+          "relative_l2": 0.00030391
+        },
+        {
+          "stage": "proj1_out",
+          "cosine_min": 0.999997,
+          "relative_l2": 0.00027319
+        },
+        {
+          "stage": "encoder_output",
+          "cosine_min": 0.999999,
+          "relative_l2": 0.0002067
+        },
+        {
+          "stage": "encoder_layer_0",
+          "cosine_min": 1.0,
+          "relative_l2": 3.448e-05
+        },
+        {
+          "stage": "encoder_layer_1",
+          "cosine_min": 1.0,
+          "relative_l2": 3.379e-05
+        },
+        {
+          "stage": "encoder_layer_2",
+          "cosine_min": 1.0,
+          "relative_l2": 3.607e-05
+        },
+        {
+          "stage": "encoder_layer_3",
+          "cosine_min": 1.0,
+          "relative_l2": 4.327e-05
+        },
+        {
+          "stage": "encoder_layer_4",
+          "cosine_min": 1.0,
+          "relative_l2": 4.744e-05
+        },
+        {
+          "stage": "encoder_layer_5",
+          "cosine_min": 1.0,
+          "relative_l2": 5.167e-05
+        },
+        {
+          "stage": "encoder_layer_6",
+          "cosine_min": 1.0,
+          "relative_l2": 5.338e-05
+        },
+        {
+          "stage": "encoder_layer_7",
+          "cosine_min": 1.0,
+          "relative_l2": 5.871e-05
+        },
+        {
+          "stage": "encoder_layer_8",
+          "cosine_min": 1.0,
+          "relative_l2": 6.224e-05
+        },
+        {
+          "stage": "encoder_layer_9",
+          "cosine_min": 1.0,
+          "relative_l2": 6.479e-05
+        },
+        {
+          "stage": "encoder_layer_10",
+          "cosine_min": 1.0,
+          "relative_l2": 6.867e-05
+        },
+        {
+          "stage": "encoder_layer_11",
+          "cosine_min": 1.0,
+          "relative_l2": 6.988e-05
+        },
+        {
+          "stage": "encoder_layer_12",
+          "cosine_min": 1.0,
+          "relative_l2": 7.192e-05
+        },
+        {
+          "stage": "encoder_layer_13",
+          "cosine_min": 1.0,
+          "relative_l2": 7.342e-05
+        },
+        {
+          "stage": "encoder_layer_14",
+          "cosine_min": 1.0,
+          "relative_l2": 7.357e-05
+        },
+        {
+          "stage": "encoder_layer_15",
+          "cosine_min": 1.0,
+          "relative_l2": 7.261e-05
+        },
+        {
+          "stage": "encoder_layer_16",
+          "cosine_min": 1.0,
+          "relative_l2": 7.335e-05
+        },
+        {
+          "stage": "encoder_layer_17",
+          "cosine_min": 1.0,
+          "relative_l2": 7.099e-05
+        },
+        {
+          "stage": "encoder_layer_18",
+          "cosine_min": 1.0,
+          "relative_l2": 6.941e-05
+        },
+        {
+          "stage": "encoder_layer_19",
+          "cosine_min": 1.0,
+          "relative_l2": 6.889e-05
+        },
+        {
+          "stage": "encoder_layer_20",
+          "cosine_min": 1.0,
+          "relative_l2": 6.796e-05
+        },
+        {
+          "stage": "encoder_layer_21",
+          "cosine_min": 1.0,
+          "relative_l2": 6.596e-05
+        },
+        {
+          "stage": "encoder_layer_22",
+          "cosine_min": 1.0,
+          "relative_l2": 6.883e-05
+        },
+        {
+          "stage": "encoder_layer_23",
+          "cosine_min": 1.0,
+          "relative_l2": 7.174e-05
+        },
+        {
+          "stage": "encoder_layer_24",
+          "cosine_min": 1.0,
+          "relative_l2": 8.714e-05
+        },
+        {
+          "stage": "encoder_layer_25",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00016703
+        },
+        {
+          "stage": "encoder_layer_26",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00039697
+        },
+        {
+          "stage": "encoder_layer_27",
+          "cosine_min": 1.0,
+          "relative_l2": 0.0004518
+        },
+        {
+          "stage": "encoder_layer_28",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00052423
+        },
+        {
+          "stage": "encoder_layer_29",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00053329
+        },
+        {
+          "stage": "encoder_layer_30",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00051294
+        },
+        {
+          "stage": "encoder_layer_31",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00011353
+        },
+        {
+          "stage": "llm_logits",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00044778
+        },
+        {
+          "stage": "llm_block_0",
+          "cosine_min": 1.0,
+          "relative_l2": 2.44e-06
+        },
+        {
+          "stage": "llm_block_1",
+          "cosine_min": 1.0,
+          "relative_l2": 4.8e-06
+        },
+        {
+          "stage": "llm_block_2",
+          "cosine_min": 1.0,
+          "relative_l2": 6.59e-06
+        },
+        {
+          "stage": "llm_block_3",
+          "cosine_min": 1.0,
+          "relative_l2": 0.0001004
+        },
+        {
+          "stage": "llm_block_4",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00010482
+        },
+        {
+          "stage": "llm_block_5",
+          "cosine_min": 1.0,
+          "relative_l2": 8.299e-05
+        },
+        {
+          "stage": "llm_block_6",
+          "cosine_min": 1.0,
+          "relative_l2": 8.442e-05
+        },
+        {
+          "stage": "llm_block_7",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00011699
+        },
+        {
+          "stage": "llm_block_8",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00012976
+        },
+        {
+          "stage": "llm_block_9",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00012661
+        },
+        {
+          "stage": "llm_block_10",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00012212
+        },
+        {
+          "stage": "llm_block_11",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00016476
+        },
+        {
+          "stage": "llm_block_12",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00017158
+        },
+        {
+          "stage": "llm_block_13",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00017075
+        },
+        {
+          "stage": "llm_block_14",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00016308
+        },
+        {
+          "stage": "llm_block_15",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00021229
+        },
+        {
+          "stage": "llm_block_16",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00022778
+        },
+        {
+          "stage": "llm_block_17",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00022262
+        },
+        {
+          "stage": "llm_block_18",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00021694
+        },
+        {
+          "stage": "llm_block_19",
+          "cosine_min": 1.0,
+          "relative_l2": 0.0003479
+        },
+        {
+          "stage": "llm_block_20",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00032987
+        },
+        {
+          "stage": "llm_block_21",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00031558
+        },
+        {
+          "stage": "llm_block_22",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00029956
+        },
+        {
+          "stage": "llm_block_23",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00031752
+        },
+        {
+          "stage": "llm_block_24",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00031153
+        },
+        {
+          "stage": "llm_block_25",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00029681
+        },
+        {
+          "stage": "llm_block_26",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00029042
+        },
+        {
+          "stage": "llm_block_27",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00032267
+        },
+        {
+          "stage": "llm_block_28",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00026816
+        },
+        {
+          "stage": "llm_block_29",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00024166
+        },
+        {
+          "stage": "llm_block_30",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00022677
+        },
+        {
+          "stage": "llm_block_31",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00099121
+        },
+        {
+          "stage": "teacherforced_logits",
+          "cosine_min": 0.999995,
+          "relative_l2": 0.00089645
+        }
+      ]
+    },
+    "zh": {
+      "numeric_rows": 75,
+      "minimum_cosine": 0.999998,
+      "maximum_relative_l2": 0.00100007,
+      "cached_tokens_exact": 16,
+      "rows": [
+        {
+          "stage": "mel_spectrogram",
+          "cosine_min": 1.0,
+          "relative_l2": 9.2e-06
+        },
+        {
+          "stage": "connector_output",
+          "cosine_min": 1.0,
+          "relative_l2": 4.951e-05
+        },
+        {
+          "stage": "conv1_out",
+          "cosine_min": 1.0,
+          "relative_l2": 1.709e-05
+        },
+        {
+          "stage": "conv2_out",
+          "cosine_min": 1.0,
+          "relative_l2": 1.46e-05
+        },
+        {
+          "stage": "conv3_out",
+          "cosine_min": 1.0,
+          "relative_l2": 9.56e-06
+        },
+        {
+          "stage": "encoder_input",
+          "cosine_min": 1.0,
+          "relative_l2": 4.885e-05
+        },
+        {
+          "stage": "ln_post_out",
+          "cosine_min": 1.0,
+          "relative_l2": 5.985e-05
+        },
+        {
+          "stage": "proj1_out",
+          "cosine_min": 1.0,
+          "relative_l2": 5.724e-05
+        },
+        {
+          "stage": "encoder_output",
+          "cosine_min": 1.0,
+          "relative_l2": 5.107e-05
+        },
+        {
+          "stage": "encoder_layer_0",
+          "cosine_min": 1.0,
+          "relative_l2": 3.385e-05
+        },
+        {
+          "stage": "encoder_layer_1",
+          "cosine_min": 1.0,
+          "relative_l2": 3.241e-05
+        },
+        {
+          "stage": "encoder_layer_2",
+          "cosine_min": 1.0,
+          "relative_l2": 3.406e-05
+        },
+        {
+          "stage": "encoder_layer_3",
+          "cosine_min": 1.0,
+          "relative_l2": 4.013e-05
+        },
+        {
+          "stage": "encoder_layer_4",
+          "cosine_min": 1.0,
+          "relative_l2": 4.357e-05
+        },
+        {
+          "stage": "encoder_layer_5",
+          "cosine_min": 1.0,
+          "relative_l2": 4.7e-05
+        },
+        {
+          "stage": "encoder_layer_6",
+          "cosine_min": 1.0,
+          "relative_l2": 4.878e-05
+        },
+        {
+          "stage": "encoder_layer_7",
+          "cosine_min": 1.0,
+          "relative_l2": 5.294e-05
+        },
+        {
+          "stage": "encoder_layer_8",
+          "cosine_min": 1.0,
+          "relative_l2": 5.625e-05
+        },
+        {
+          "stage": "encoder_layer_9",
+          "cosine_min": 1.0,
+          "relative_l2": 5.865e-05
+        },
+        {
+          "stage": "encoder_layer_10",
+          "cosine_min": 1.0,
+          "relative_l2": 6.213e-05
+        },
+        {
+          "stage": "encoder_layer_11",
+          "cosine_min": 1.0,
+          "relative_l2": 6.311e-05
+        },
+        {
+          "stage": "encoder_layer_12",
+          "cosine_min": 1.0,
+          "relative_l2": 6.483e-05
+        },
+        {
+          "stage": "encoder_layer_13",
+          "cosine_min": 1.0,
+          "relative_l2": 6.563e-05
+        },
+        {
+          "stage": "encoder_layer_14",
+          "cosine_min": 1.0,
+          "relative_l2": 6.642e-05
+        },
+        {
+          "stage": "encoder_layer_15",
+          "cosine_min": 1.0,
+          "relative_l2": 6.555e-05
+        },
+        {
+          "stage": "encoder_layer_16",
+          "cosine_min": 1.0,
+          "relative_l2": 6.633e-05
+        },
+        {
+          "stage": "encoder_layer_17",
+          "cosine_min": 1.0,
+          "relative_l2": 6.319e-05
+        },
+        {
+          "stage": "encoder_layer_18",
+          "cosine_min": 1.0,
+          "relative_l2": 6.136e-05
+        },
+        {
+          "stage": "encoder_layer_19",
+          "cosine_min": 1.0,
+          "relative_l2": 6.1e-05
+        },
+        {
+          "stage": "encoder_layer_20",
+          "cosine_min": 1.0,
+          "relative_l2": 5.722e-05
+        },
+        {
+          "stage": "encoder_layer_21",
+          "cosine_min": 1.0,
+          "relative_l2": 5.421e-05
+        },
+        {
+          "stage": "encoder_layer_22",
+          "cosine_min": 1.0,
+          "relative_l2": 5.474e-05
+        },
+        {
+          "stage": "encoder_layer_23",
+          "cosine_min": 1.0,
+          "relative_l2": 5.059e-05
+        },
+        {
+          "stage": "encoder_layer_24",
+          "cosine_min": 1.0,
+          "relative_l2": 5.062e-05
+        },
+        {
+          "stage": "encoder_layer_25",
+          "cosine_min": 1.0,
+          "relative_l2": 4.881e-05
+        },
+        {
+          "stage": "encoder_layer_26",
+          "cosine_min": 1.0,
+          "relative_l2": 5.022e-05
+        },
+        {
+          "stage": "encoder_layer_27",
+          "cosine_min": 1.0,
+          "relative_l2": 5.123e-05
+        },
+        {
+          "stage": "encoder_layer_28",
+          "cosine_min": 1.0,
+          "relative_l2": 5.469e-05
+        },
+        {
+          "stage": "encoder_layer_29",
+          "cosine_min": 1.0,
+          "relative_l2": 5.533e-05
+        },
+        {
+          "stage": "encoder_layer_30",
+          "cosine_min": 1.0,
+          "relative_l2": 5.505e-05
+        },
+        {
+          "stage": "encoder_layer_31",
+          "cosine_min": 1.0,
+          "relative_l2": 1.88e-05
+        },
+        {
+          "stage": "llm_logits",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00055667
+        },
+        {
+          "stage": "llm_block_0",
+          "cosine_min": 1.0,
+          "relative_l2": 9.5e-07
+        },
+        {
+          "stage": "llm_block_1",
+          "cosine_min": 1.0,
+          "relative_l2": 3.73e-06
+        },
+        {
+          "stage": "llm_block_2",
+          "cosine_min": 1.0,
+          "relative_l2": 5.13e-06
+        },
+        {
+          "stage": "llm_block_3",
+          "cosine_min": 1.0,
+          "relative_l2": 8.135e-05
+        },
+        {
+          "stage": "llm_block_4",
+          "cosine_min": 1.0,
+          "relative_l2": 8.156e-05
+        },
+        {
+          "stage": "llm_block_5",
+          "cosine_min": 1.0,
+          "relative_l2": 6.343e-05
+        },
+        {
+          "stage": "llm_block_6",
+          "cosine_min": 1.0,
+          "relative_l2": 5.749e-05
+        },
+        {
+          "stage": "llm_block_7",
+          "cosine_min": 1.0,
+          "relative_l2": 9.32e-05
+        },
+        {
+          "stage": "llm_block_8",
+          "cosine_min": 1.0,
+          "relative_l2": 8.737e-05
+        },
+        {
+          "stage": "llm_block_9",
+          "cosine_min": 1.0,
+          "relative_l2": 8.143e-05
+        },
+        {
+          "stage": "llm_block_10",
+          "cosine_min": 1.0,
+          "relative_l2": 7.559e-05
+        },
+        {
+          "stage": "llm_block_11",
+          "cosine_min": 1.0,
+          "relative_l2": 0.0001286
+        },
+        {
+          "stage": "llm_block_12",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00013064
+        },
+        {
+          "stage": "llm_block_13",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00013275
+        },
+        {
+          "stage": "llm_block_14",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00012557
+        },
+        {
+          "stage": "llm_block_15",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00024677
+        },
+        {
+          "stage": "llm_block_16",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00026207
+        },
+        {
+          "stage": "llm_block_17",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00025501
+        },
+        {
+          "stage": "llm_block_18",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00025139
+        },
+        {
+          "stage": "llm_block_19",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00026888
+        },
+        {
+          "stage": "llm_block_20",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00025927
+        },
+        {
+          "stage": "llm_block_21",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00025112
+        },
+        {
+          "stage": "llm_block_22",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00024885
+        },
+        {
+          "stage": "llm_block_23",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00032495
+        },
+        {
+          "stage": "llm_block_24",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00031278
+        },
+        {
+          "stage": "llm_block_25",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00031455
+        },
+        {
+          "stage": "llm_block_26",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00031074
+        },
+        {
+          "stage": "llm_block_27",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00034608
+        },
+        {
+          "stage": "llm_block_28",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00033881
+        },
+        {
+          "stage": "llm_block_29",
+          "cosine_min": 1.0,
+          "relative_l2": 0.0003421
+        },
+        {
+          "stage": "llm_block_30",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00032191
+        },
+        {
+          "stage": "llm_block_31",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00083627
+        },
+        {
+          "stage": "teacherforced_logits",
+          "cosine_min": 0.999998,
+          "relative_l2": 0.00100007
+        }
+      ]
+    },
+    "jfk-tail": {
+      "numeric_rows": 75,
+      "minimum_cosine": 0.999979,
+      "maximum_relative_l2": 0.0019022,
+      "cached_tokens_exact": 16,
+      "rows": [
+        {
+          "stage": "mel_spectrogram",
+          "cosine_min": 1.0,
+          "relative_l2": 4.35e-06
+        },
+        {
+          "stage": "connector_output",
+          "cosine_min": 0.999992,
+          "relative_l2": 0.00080997
+        },
+        {
+          "stage": "conv1_out",
+          "cosine_min": 1.0,
+          "relative_l2": 9.44e-06
+        },
+        {
+          "stage": "conv2_out",
+          "cosine_min": 1.0,
+          "relative_l2": 7.85e-06
+        },
+        {
+          "stage": "conv3_out",
+          "cosine_min": 1.0,
+          "relative_l2": 5.26e-06
+        },
+        {
+          "stage": "encoder_input",
+          "cosine_min": 1.0,
+          "relative_l2": 4.55e-05
+        },
+        {
+          "stage": "ln_post_out",
+          "cosine_min": 0.999979,
+          "relative_l2": 0.0015167
+        },
+        {
+          "stage": "proj1_out",
+          "cosine_min": 0.999984,
+          "relative_l2": 0.0010884
+        },
+        {
+          "stage": "encoder_output",
+          "cosine_min": 0.999991,
+          "relative_l2": 0.0008409
+        },
+        {
+          "stage": "encoder_layer_0",
+          "cosine_min": 1.0,
+          "relative_l2": 3.402e-05
+        },
+        {
+          "stage": "encoder_layer_1",
+          "cosine_min": 1.0,
+          "relative_l2": 3.33e-05
+        },
+        {
+          "stage": "encoder_layer_2",
+          "cosine_min": 1.0,
+          "relative_l2": 3.564e-05
+        },
+        {
+          "stage": "encoder_layer_3",
+          "cosine_min": 1.0,
+          "relative_l2": 4.286e-05
+        },
+        {
+          "stage": "encoder_layer_4",
+          "cosine_min": 1.0,
+          "relative_l2": 4.675e-05
+        },
+        {
+          "stage": "encoder_layer_5",
+          "cosine_min": 1.0,
+          "relative_l2": 5.005e-05
+        },
+        {
+          "stage": "encoder_layer_6",
+          "cosine_min": 1.0,
+          "relative_l2": 5.195e-05
+        },
+        {
+          "stage": "encoder_layer_7",
+          "cosine_min": 1.0,
+          "relative_l2": 5.677e-05
+        },
+        {
+          "stage": "encoder_layer_8",
+          "cosine_min": 1.0,
+          "relative_l2": 6.028e-05
+        },
+        {
+          "stage": "encoder_layer_9",
+          "cosine_min": 1.0,
+          "relative_l2": 6.275e-05
+        },
+        {
+          "stage": "encoder_layer_10",
+          "cosine_min": 1.0,
+          "relative_l2": 6.499e-05
+        },
+        {
+          "stage": "encoder_layer_11",
+          "cosine_min": 1.0,
+          "relative_l2": 6.517e-05
+        },
+        {
+          "stage": "encoder_layer_12",
+          "cosine_min": 1.0,
+          "relative_l2": 6.531e-05
+        },
+        {
+          "stage": "encoder_layer_13",
+          "cosine_min": 1.0,
+          "relative_l2": 6.538e-05
+        },
+        {
+          "stage": "encoder_layer_14",
+          "cosine_min": 1.0,
+          "relative_l2": 6.522e-05
+        },
+        {
+          "stage": "encoder_layer_15",
+          "cosine_min": 1.0,
+          "relative_l2": 6.42e-05
+        },
+        {
+          "stage": "encoder_layer_16",
+          "cosine_min": 1.0,
+          "relative_l2": 6.424e-05
+        },
+        {
+          "stage": "encoder_layer_17",
+          "cosine_min": 1.0,
+          "relative_l2": 6.239e-05
+        },
+        {
+          "stage": "encoder_layer_18",
+          "cosine_min": 1.0,
+          "relative_l2": 6.096e-05
+        },
+        {
+          "stage": "encoder_layer_19",
+          "cosine_min": 1.0,
+          "relative_l2": 6.105e-05
+        },
+        {
+          "stage": "encoder_layer_20",
+          "cosine_min": 1.0,
+          "relative_l2": 5.92e-05
+        },
+        {
+          "stage": "encoder_layer_21",
+          "cosine_min": 1.0,
+          "relative_l2": 5.583e-05
+        },
+        {
+          "stage": "encoder_layer_22",
+          "cosine_min": 1.0,
+          "relative_l2": 5.744e-05
+        },
+        {
+          "stage": "encoder_layer_23",
+          "cosine_min": 1.0,
+          "relative_l2": 5.583e-05
+        },
+        {
+          "stage": "encoder_layer_24",
+          "cosine_min": 1.0,
+          "relative_l2": 6.55e-05
+        },
+        {
+          "stage": "encoder_layer_25",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00023644
+        },
+        {
+          "stage": "encoder_layer_26",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00106976
+        },
+        {
+          "stage": "encoder_layer_27",
+          "cosine_min": 0.999999,
+          "relative_l2": 0.00142629
+        },
+        {
+          "stage": "encoder_layer_28",
+          "cosine_min": 0.999996,
+          "relative_l2": 0.0019022
+        },
+        {
+          "stage": "encoder_layer_29",
+          "cosine_min": 0.999995,
+          "relative_l2": 0.00166
+        },
+        {
+          "stage": "encoder_layer_30",
+          "cosine_min": 0.999994,
+          "relative_l2": 0.00141354
+        },
+        {
+          "stage": "encoder_layer_31",
+          "cosine_min": 0.999997,
+          "relative_l2": 0.00028882
+        },
+        {
+          "stage": "llm_logits",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00070054
+        },
+        {
+          "stage": "llm_block_0",
+          "cosine_min": 1.0,
+          "relative_l2": 1.269e-05
+        },
+        {
+          "stage": "llm_block_1",
+          "cosine_min": 1.0,
+          "relative_l2": 1.305e-05
+        },
+        {
+          "stage": "llm_block_2",
+          "cosine_min": 1.0,
+          "relative_l2": 1.533e-05
+        },
+        {
+          "stage": "llm_block_3",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00012598
+        },
+        {
+          "stage": "llm_block_4",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00011337
+        },
+        {
+          "stage": "llm_block_5",
+          "cosine_min": 1.0,
+          "relative_l2": 8.3e-05
+        },
+        {
+          "stage": "llm_block_6",
+          "cosine_min": 1.0,
+          "relative_l2": 8.242e-05
+        },
+        {
+          "stage": "llm_block_7",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00013076
+        },
+        {
+          "stage": "llm_block_8",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00014392
+        },
+        {
+          "stage": "llm_block_9",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00013566
+        },
+        {
+          "stage": "llm_block_10",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00013091
+        },
+        {
+          "stage": "llm_block_11",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00014879
+        },
+        {
+          "stage": "llm_block_12",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00016099
+        },
+        {
+          "stage": "llm_block_13",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00016706
+        },
+        {
+          "stage": "llm_block_14",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00016212
+        },
+        {
+          "stage": "llm_block_15",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00021254
+        },
+        {
+          "stage": "llm_block_16",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00022531
+        },
+        {
+          "stage": "llm_block_17",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00024042
+        },
+        {
+          "stage": "llm_block_18",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00024182
+        },
+        {
+          "stage": "llm_block_19",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00030542
+        },
+        {
+          "stage": "llm_block_20",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00030774
+        },
+        {
+          "stage": "llm_block_21",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00029813
+        },
+        {
+          "stage": "llm_block_22",
+          "cosine_min": 1.0,
+          "relative_l2": 0.0002895
+        },
+        {
+          "stage": "llm_block_23",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00030684
+        },
+        {
+          "stage": "llm_block_24",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00028883
+        },
+        {
+          "stage": "llm_block_25",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00026153
+        },
+        {
+          "stage": "llm_block_26",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00026267
+        },
+        {
+          "stage": "llm_block_27",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00027196
+        },
+        {
+          "stage": "llm_block_28",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00024262
+        },
+        {
+          "stage": "llm_block_29",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00022868
+        },
+        {
+          "stage": "llm_block_30",
+          "cosine_min": 1.0,
+          "relative_l2": 0.00021624
+        },
+        {
+          "stage": "llm_block_31",
+          "cosine_min": 0.999999,
+          "relative_l2": 0.00113634
+        },
+        {
+          "stage": "teacherforced_logits",
+          "cosine_min": 0.999998,
+          "relative_l2": 0.00107096
+        }
+      ]
+    }
+  },
+  "roundtrips": {
+    "model": "index-echo-9b-f16.gguf",
+    "gpu": true,
+    "cases": {
+      "fox": {
+        "expected": "The quick brown fox jumps over the lazy dog.",
+        "english": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "wer_max": 0.1,
+        "segments": [
+          {
+            "start": 0.05,
+            "end": 2.52,
+            "text": "The quick brown fox jumps over the lazy dog.。\nThe quick brown fox jumps over the lazy dog."
+          }
+        ],
+        "valid_segments": true,
+        "audio_sha256": "2922b7cd5360b373a650d8bf1ea39de16aa3d49e7a44cdec5f350d46c15556ff",
+        "seconds": 2.67025,
+        "elapsed_seconds": 3.946726498999965,
+        "cli_rc": 0,
+        "cli_abi_text_match": true,
+        "passed": true
+      },
+      "window": {
+        "expected": "Please close the window before you leave the room.",
+        "english": "Please close the window before you leave the room.",
+        "wer": 0.0,
+        "wer_max": 0.1,
+        "segments": [
+          {
+            "start": 0.05,
+            "end": 2.4,
+            "text": "Please close the window before you leave the room.。\nPlease close the window before you leave the room."
+          }
+        ],
+        "valid_segments": true,
+        "audio_sha256": "6a46a4c0c5b0cd48dfd71d600bcec1b4f44701500b6f3e749cde7fb73f140fa1",
+        "seconds": 2.6006875,
+        "elapsed_seconds": 3.8263999339999373,
+        "cli_rc": 0,
+        "cli_abi_text_match": true,
+        "passed": true
+      },
+      "station": {
+        "expected": "We will meet at the train station tomorrow morning.",
+        "english": "We will meet at the train station tomorrow morning.",
+        "wer": 0.0,
+        "wer_max": 0.1,
+        "segments": [
+          {
+            "start": 0.05,
+            "end": 2.34,
+            "text": "We will meet at the train station tomorrow morning.\nWe will meet at the train station tomorrow morning."
+          }
+        ],
+        "valid_segments": true,
+        "audio_sha256": "3171272c57adafaf73c746322a64240300d7d40f7f42dbfca8c1a9fcc335e32a",
+        "seconds": 2.4729375,
+        "elapsed_seconds": 3.677851650999969,
+        "cli_rc": 0,
+        "cli_abi_text_match": true,
+        "passed": true
+      }
+    },
+    "failed": [],
+    "source_stage_parity_checked": false,
+    "roundtrip_passed": true
+  },
+  "scope": "Same pinned native F16 runtime/weights on two actual T4s; pipeline scheduling versus existing GGML graph reuse. Both orders, initial + three warm calls per clip, all 48 outputs exact against independent F32 source text/timestamp bounds. Full stage/cache/magnitude, five-file, CLI/ABI and three Piper checks pass. These counters do not establish CUDA graph capture, and this is not a broad accuracy corpus or proof on other GPU types. Current default retained.",
+  "artifact_sha256": {
+    "index-echo-9b-f16-roundtrip.json": "2d5ffb80c6e07a47d08a07ca872a765479dcda3fc5fc39bbfc2574cc1c3d3ca8",
+    "AB-control.json": "2a55630ff45a86310e99102a5d2c81c36c0648a1cf2f7da00d1abc25a32105e9",
+    "f16-jfk-tail-diff.log": "d0cf5532726e3b5b3138e5b72f28cb5623d4742bbd94e846b4f716e27c264586",
+    "index-echo-9b-f16-window.srt": "411b36997e679a3bbc2f6934e3ca770d79d57aca3e6b77d311c94735d166e88d",
+    "index-echo-9b-f16-fox.log": "8bd59118fb8252a118e2d5db1f7e6b85bc356b95b2f0789a320b94e9e7e05fc1",
+    "f16-jfk-tail-cli.log": "147f854725327fb026c11038588443e6ab19ed8fd464ce76eb5d5e7508b985a7",
+    "cuda-validation.json": "09e3bd1a3c46dac843cb43e9c8f5fe2b2de6dd17e85d69cb20cb1f43ec75ca8c",
+    "BA-control.log": "250140b1e37eb3e50816b0feb3eaa72bc516b2c8b27b2a8cac02438bb98bf088",
+    "index-echo-9b-f16-station.log": "7cef195ac35845d1cad709cfcdb0b7d3235bd7e10b65b223cec61bfe0656b746",
+    "f16-jfk-cli.srt": "86034af0ee155f3c7876cdf4ce977ff8a2debd80aff58ef741644292a4444c31",
+    "crispasr-index-echo-scheduler-ab.log": "ef656c007ef748a9640057ad487225a3caed08254d1863892c161ed213e56d78",
+    "pipeline-f16-cli.srt": "86034af0ee155f3c7876cdf4ce977ff8a2debd80aff58ef741644292a4444c31",
+    "f16-zh-cli.srt": "d0f6b82f252455784a93e20ca6e680f2d2b5525123f027e8ab03d07a49cd2cf1",
+    "BA-candidate.json": "15a203fdcec3de043018335886d6e34e7a3a5f20a83fca1fe98343449d3c4994",
+    "index-echo-9b-f16-window.log": "5901c7b62b60d1cdd063cf981f44679abdc30ba93cbf20e39c75dea7a6a06c8b",
+    "BA-control.json": "9b8bbd8e35049362baf54514dcf60980b752120f18085b4d1db26cd522e86a40",
+    "pipeline-f16.json": "5791dff15b1d57b5eb7db7733636b6f19ad7fc27b4b18bfe673a6bd61dd66a64",
+    "AB-control.log": "b1793abdf495dd969c6b2d45f9721b3137eecd98f5e5fcabda0e632df28d4a91",
+    "AB-candidate.json": "7e715c5b95371f78127bd67e93d3fdb972dcb76fd2e40f19aff22d460d8f8a01",
+    "pipeline-f16-partial.json": "796a1638da35c904762e5d7f3e45a661024b0f36592b2a077237a7338abfaa52",
+    "f16-jfk-diff.log": "4891d8a5eed8437acb1988aef8798a497f8cb911fa9e46d8a42540d47741366c",
+    "f16-jfk-tail-cli.srt": "58205707ece0e7078379068daa525a7dc712cc155fee90ed7539b309b780a5c5",
+    "index-echo-9b-f16-fox.srt": "1c7b7ab90a7a5f86472692ff79baa73752b781fd2d732d5c056fa59411646872",
+    "pipeline-f16-cli.log": "6efcc526a584bab2495616746717f5f988f2b18c3d92217a0004be465684e6f9",
+    "status.json": "f4e119e33336000b001a435a9c090393d6f3331ca552d495b1eb63202969292d",
+    "f16-zh-diff.log": "9282f592f3b27b4273dd0d331ae9f4f46f96c1b728cbea5ae1894097ed7b86e1",
+    "runtime-config.json": "5c2dffdc54d3cd9ebf9e463a0ff1b905ffde533d4522541502543f63af6fdb63",
+    "f16-jfk-cli.log": "64130aa6fe0000e60e44ee5f62454896daa9c0edf708e9d0c688ddbd08afc777",
+    "index-echo-9b-f16-station.srt": "b00a0d879cfda9c8093c2afa061e82d5b5664ec28fa309c2f455b3ede4b8fd5f",
+    "BA-candidate.log": "526320f4c7b918f3b3f3d0cfed39a0be7363d67b0ac7f3aa9455c5b0175b1f6d",
+    "scheduler-ab.json": "74e6c6724c40ae0a9b6c1413e7c59aca3875c674e787479f13dee40dc0f56b11",
+    "logs.json": "121cdfae47ffbcbd4892f5c47adc66813e5a2c95fabcee7043c82a1c429940e8",
+    "AB-candidate.log": "803bd330479f9178352958b72a8e401e869dcfcb7930353d906c0edf9a2556f8",
+    "f16-zh-cli.log": "7ee0afa16c7131e9c2d7dd0f22e2fce95b5bcb7bdbc31d5a088962fc2e57638f",
+    "candidate-acceptance.log": "1d5dfc09c034160e040bf0cced6e807f5556a910f0652311e55710dc3c2219a2"
+  }
+}
