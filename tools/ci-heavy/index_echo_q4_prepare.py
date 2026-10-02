@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -58,6 +59,11 @@ def sha256(path):
 receipt['primary_sha256'] = sha256(primary)
 receipt['decoder_source_sha256'] = sha256(decoder)
 for name, rules in RECIPES.items():
+    # Recurrent convolution matrices are F32 in the original decoder. Broad
+    # F16 guards must be a precision floor, never a downcast of those weights.
+    source_f32 = [re.escape(t) for t, kind in source_types.items() if kind == 'F32']
+    if source_f32:
+        rules = ['^('+'|'.join(source_f32)+')$=f32'] + rules
     target = TEMP/(name+'.gguf')
     args = [build/'bin/crispasr-quantize',decoder,target,'q4_k']
     for rule in rules:args += ['--tensor-type',rule]
@@ -67,6 +73,7 @@ for name, rules in RECIPES.items():
     tensors = [dict(name=t.name,type=t.tensor_type.name,shape=list(map(int,t.shape)),bytes=int(t.n_bytes)) for t in reader.tensors]
     del reader
     assert all(t['type']==source_types[t['name']] for t in tensors if len(t['shape'])<2), 'Small tensors must retain source types'
+    assert all(t['type']=='F32' for t in tensors if source_types[t['name']]=='F32'), 'Source-F32 tensors must remain F32'
     recipe = dict(overrides=rules,tensors=tensors,q4_k_bytes=audit(tensors,name),
                   decoder_bytes=target.stat().st_size,primary_bytes=primary.stat().st_size,
                   decoder_sha256=sha256(target),source_revision=SOURCE_REVISION,
