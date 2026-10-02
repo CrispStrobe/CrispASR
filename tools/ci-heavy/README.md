@@ -34,3 +34,9 @@ gh run download <run-id>           # the $HEAVY_OUT artifact
 - **Exit code**: non-zero when the check fails, so the run shows red. A readout that prints the same thing whether it passed or failed isn't a check.
 - **Paths**: the workflow only accepts `.py` / `.sh` files under `tools/ci-heavy/`.
 - **Porting a Kaggle kernel**: replace `/kaggle/working` with `$HEAVY_OUT` and `/kaggle/input/...` with a download into `$HEAVY_SCRATCH`. Drop the GPU and ccache datasets.
+
+`miotts_sample_rate.py` checks the pinned MioCodec-v2 model through the native
+live test, session rate getter, CLI WAV header and both TTS→ASR roundtrips.
+It also checks 24 kHz and missing-key metadata dispatch using temporary copies;
+those copies are not claimed to be legacy codec speech models. Run with
+`-f pip="numpy gguf huggingface_hub"` on Linux x86 or ARM.

@@ -842,11 +842,12 @@ constexpr Entry k_registry[] = {
     {"miocodec", "miocodec-v2-44k-q8_0.gguf",
      "https://huggingface.co/cstr/miocodec-v2-44k-GGUF/resolve/main/miocodec-v2-44k-q8_0.gguf",
      "~155 MB"},
-    // MioTTS-0.6B (Qwen3 LLM + MioCodec-25Hz-24kHz, Apache-2.0).
+    // MioTTS-0.6B (Qwen3 LLM + MioCodec-v2, 44.1 kHz, Apache-2.0).
     // Single GGUF, tokenizer.json loaded at runtime.
     {"miotts", "miotts-0.6b-q8_0.gguf",
      "https://huggingface.co/cstr/miotts-0.6b-GGUF/resolve/main/miotts-0.6b-q8_0.gguf",
-     "~723 MB"},
+     "~793 MB", "tokenizer.json",
+     "https://huggingface.co/cstr/miotts-0.6b-GGUF/resolve/main/tokenizer.json", "~14 MB"},
     // Onsets & Frames (Hawthorne et al. 2018, MIT): piano note events, from
     // the ddPn08/onsets-and-frames checkpoint's ONNX export. q8_0 rather than
     // f16 or q4_0 deliberately — measured on all ten MusicNet test pieces it

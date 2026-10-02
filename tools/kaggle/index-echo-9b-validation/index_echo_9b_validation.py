@@ -21,6 +21,17 @@ AUDIO_REVISION = 'd0a7d7a8be318a5841dfdbe6ad37d3acf75523e3'
 BUILD_RUN = 36997586995
 BUNDLE_REVISION = '9ffaeaab43fece5ec5c0baeb4884e2db87625f6f'
 BUNDLE_SHA256 = '166e8741738827fd0b997551bf27bfa93b5dcf04c898056fdedade87ba5c9f3e'
+# An experiment may reuse these exact acceptance gates with a different pinned
+# CI runtime. Defaults retain the published proof; configuration is recorded.
+config_path = os.environ.get('INDEX_ECHO_VALIDATION_CONFIG')
+config = json.loads(Path(config_path).read_text()) if config_path else {}
+SOURCE_COMMIT = config.get('source_commit', SOURCE_COMMIT)
+BUILD_COMMIT = config.get('build_commit', BUILD_COMMIT)
+BUILD_RUN = config.get('build_run', BUILD_RUN)
+BUNDLE_REVISION = config.get('bundle_revision', BUNDLE_REVISION)
+BUNDLE_SHA256 = config.get('bundle_sha256', BUNDLE_SHA256)
+if len(SOURCE_COMMIT) != 40 or len(BUILD_COMMIT) != 40:
+    raise RuntimeError('Source and build pins must be immutable commits')
 if len(REFERENCE_REVISION) != 40 or len(BUNDLE_REVISION) != 40 or len(BUNDLE_SHA256) != 64:
     raise RuntimeError('Independent reference and CI bundle pins must be set before launch')
 ROOT = Path('/kaggle/temp/index-echo-validation-repo')
@@ -123,7 +134,8 @@ clips = [('jfk', ROOT / 'samples/jfk.wav'), ('zh', ROOT / 'samples/paraformer_zh
 receipt = dict(script_version=SCRIPT_VERSION, source_commit=SOURCE_COMMIT,
                model_revision=MODEL_REVISION, reference_revision=REFERENCE_REVISION,
                audio_revision=AUDIO_REVISION, pipeline_reference_dtype='independently forced all-float32', direct_reference_dtype='float32', build_commit=BUILD_COMMIT, build_run=BUILD_RUN, bundle_revision=BUNDLE_REVISION, bundle_sha256=BUNDLE_SHA256, hardware=hardware, cuda_arch=arch,
-               full_pipeline_checked=False, cohorts={}, validated=False)
+               full_pipeline_checked=False, cohorts={}, validated=False, runtime_config=config,
+               pipeline_disable=os.environ.get('CRISPASR_LLAMA_PIPELINE_DISABLE', '0'))
 failed = []
 
 
@@ -227,8 +239,9 @@ for cohort in ['f16']:
     result['roundtrip_failures'] = roundtrip_failures
     failed.extend(cohort+':roundtrip:'+item for item in roundtrip_failures)
     save()
-    primary.unlink()
-    (models / f'index-echo-9b-decoder-{cohort}.gguf').unlink()
+    if not config.get('keep_models', False):
+        primary.unlink()
+        (models / f'index-echo-9b-decoder-{cohort}.gguf').unlink()
 receipt['validated'] = not failed
 save()
 if failed:
