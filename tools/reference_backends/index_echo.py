@@ -194,7 +194,7 @@ def dump(model_dir, audio, stages, **kwargs):
     return values
 
 
-def dump_pipeline(model_dir, output_dir, sample_dir, checkpoint=None):
+def dump_pipeline(model_dir, output_dir, sample_dir, checkpoint=None, context_audio='jfk-repeat'):
     """Run the released file entry point, including real Silero and context.
 
     Keep raw rows and probabilities so native windowing and classifier drift
@@ -215,7 +215,18 @@ def dump_pipeline(model_dir, output_dir, sample_dir, checkpoint=None):
     jfk, rate = sf.read(sample_dir / 'jfk.wav', dtype='float32')
     assert rate == 16000
     multi = output_dir / 'pipeline-multi.wav'
-    sf.write(multi, np.concatenate([jfk, np.zeros(61 * rate, dtype=np.float32), jfk]), rate, subtype='PCM_16')
+    if context_audio == 'jfk-repeat':
+        parts = [jfk, np.zeros(61 * rate, dtype=np.float32), jfk]
+    elif context_audio == 'zh-pause':
+        # Continue distinct phrases across a real pause in the source sample.
+        # Keep the repeated-JFK stress fixture separate: released 9B itself
+        # hallucinates and hits its token cap on that adversarial repetition.
+        zh, zh_rate = sf.read(sample_dir / 'paraformer_zh.wav', dtype='float32')
+        assert zh_rate == rate and len(zh) > 5 * rate
+        parts = [zh[:5 * rate], np.zeros(61 * rate, dtype=np.float32), zh[5 * rate:]]
+    else:
+        raise ValueError('Unknown independent context fixture: ' + context_audio)
+    sf.write(multi, np.concatenate(parts), rate, subtype='PCM_16')
     cases = [('jfk-en', sample_dir / 'jfk.wav', 'en'),
              ('zh-en', sample_dir / 'paraformer_zh.wav', 'en'),
              ('zh-ja', sample_dir / 'paraformer_zh.wav', 'ja'),
@@ -239,7 +250,7 @@ def dump_pipeline(model_dir, output_dir, sample_dir, checkpoint=None):
     silero_vad.load_silero_vad = lambda *a, **kw: RecordingVAD(original_loader(*a, **kw))
     result = dict(precision=f'requested {model.device} {model.dtype}', parameter_dtypes=precision_audit(model),
                   reference_placement=getattr(model.llm, 'hf_device_map', model.device),
-                  model_load_seconds=load_seconds, complete=False, cases={})
+                  model_load_seconds=load_seconds, context_audio=context_audio, complete=False, cases={})
     try:
         for name, audio, lang in cases:
             probabilities.clear()
