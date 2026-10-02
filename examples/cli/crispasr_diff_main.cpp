@@ -2014,7 +2014,7 @@ int main(int argc, char** argv) {
             ++n_pass;
         else
             ++n_fail;
-        for (int i = 0; i < 24; ++i) {
+        for (int i = 0; i < index_echo_decoder_layers(ctx.get()); ++i) {
             std::string name = "llm_block_" + std::to_string(i);
             const float* data = index_echo_stage(ctx.get(), name.c_str(), &count);
             check(name, data, data ? count : 0);

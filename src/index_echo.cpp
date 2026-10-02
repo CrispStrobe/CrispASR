@@ -5,6 +5,7 @@
 #include "core/index_echo_windows.h"
 #include "core/silero_context.h"
 #include "core/index_echo_batch.h"
+#include "core/index_echo_connector.h"
 #include "crispasr.h"
 #include "ggml-alloc.h"
 #include "llama.h"
@@ -43,6 +44,7 @@ struct index_echo_context {
     int position = 0;
     llama_token audio_pad = LLAMA_TOKEN_NULL, im_end = LLAMA_TOKEN_NULL;
     bool capture = false;
+    bool projection = false;
     std::map<std::string, std::vector<float>> stages;
     std::vector<int32_t> prompt_ids;
 };
@@ -285,13 +287,16 @@ index_echo_context* index_echo_init_from_file(const char* path, index_echo_conte
         return nullptr;
     std::string arch = core_gguf::kv_str(meta, "general.architecture", "");
     std::string companion = core_gguf::kv_str(meta, "index_echo.decoder_file", "");
+    std::string connector = core_gguf::kv_str(meta, "index_echo.connector_type", "residual");
     std::string vad_file = core_gguf::kv_str(meta, "index_echo.vad_file", "ggml-silero-v6.2.0.bin");
     core_gguf::free_metadata(meta);
-    if (arch != "index_echo" || companion.empty() || std::filesystem::path(companion).is_absolute() ||
+    if (arch != "index_echo" || (connector != "residual" && connector != "projection") || companion.empty() ||
+        std::filesystem::path(companion).is_absolute() ||
         companion != std::filesystem::path(companion).filename().string()) {
         fprintf(stderr, "index-echo: invalid architecture or decoder companion metadata\n");
         return nullptr;
     }
+    ctx->projection = connector == "projection";
     auto decoder_path = std::filesystem::path(path).parent_path() / companion;
     auto ap = crisp_audio_params_default();
     ap.n_threads = params.n_threads;
@@ -306,8 +311,6 @@ index_echo_context* index_echo_init_from_file(const char* path, index_echo_conte
     if (!ctx->model)
         return nullptr;
     ctx->vocab = llama_model_get_vocab(ctx->model);
-    if (llama_model_n_embd_inp(ctx->model) != crisp_audio_output_dim(ctx->audio))
-        return nullptr;
     ctx->decoder = create_decoder(ctx.get(), 8192);
     if (!ctx->decoder)
         return nullptr;
@@ -331,20 +334,11 @@ index_echo_context* index_echo_init_from_file(const char* path, index_echo_conte
     core_cpu_backend::set_n_threads(ctx->cpu ? ctx->cpu : ctx->backend, params.n_threads);
     if (!core_gguf::load_weights_filtered(path, ctx->backend, connector_tensor, nullptr, "index-echo", ctx->weights))
         return nullptr;
-    for (const char* name : {"connector.w1.weight", "connector.w2.weight", "connector.log_alpha", "connector.beta"})
-        if (!core_gguf::require(ctx->weights.tensors, name, "index-echo"))
-            return nullptr;
-    const int dim = crisp_audio_output_dim(ctx->audio);
-    for (const char* name : {"connector.w1.weight", "connector.w2.weight"}) {
-        const auto* tensor = ctx->weights.tensors.at(name);
-        if (tensor->ne[0] != dim || tensor->ne[1] != dim || tensor->ne[2] != 1 || tensor->ne[3] != 1) {
-            fprintf(stderr, "index-echo: invalid connector matrix dimensions\n");
-            return nullptr;
-        }
+    if (!core_index_echo::connector_matches(ctx->weights.tensors, ctx->projection, crisp_audio_output_dim(ctx->audio),
+                                            llama_model_n_embd_inp(ctx->model))) {
+        fprintf(stderr, "index-echo: invalid %s connector weights/dimensions\n", connector.c_str());
+        return nullptr;
     }
-    for (const char* name : {"connector.log_alpha", "connector.beta"})
-        if (ggml_nelements(ctx->weights.tensors.at(name)) != 1)
-            return nullptr;
     ggml_backend_t backends[] = {ctx->backend, ctx->cpu};
     ctx->sched = ggml_backend_sched_new(backends, nullptr, ctx->cpu ? 2 : 1, 64, false, false);
     if (!ctx->sched)
@@ -497,13 +491,7 @@ float* index_echo_run_encoder(index_echo_context* ctx, const float* mel, int mel
     auto* input = ggml_new_tensor_2d(graph_ctx, GGML_TYPE_F32, *dim, *rows);
     ggml_set_name(input, "connector_input");
     ggml_set_input(input);
-    const auto& w = ctx->weights.tensors;
-    auto* hidden = ggml_mul_mat(graph_ctx, w.at("connector.w1.weight"), input);
-    hidden = ggml_gelu_erf(graph_ctx, hidden);
-    hidden = ggml_mul_mat(graph_ctx, w.at("connector.w2.weight"), hidden);
-    hidden = ggml_mul(graph_ctx, hidden, w.at("connector.beta"));
-    hidden = ggml_add(graph_ctx, input, hidden);
-    auto* output = ggml_mul(graph_ctx, hidden, ggml_exp(graph_ctx, w.at("connector.log_alpha")));
+    auto* output = core_index_echo::connector_graph(graph_ctx, input, ctx->weights.tensors, ctx->projection);
     ggml_set_output(output);
     auto* graph = ggml_new_graph_custom(graph_ctx, 64, false);
     ggml_build_forward_expand(graph, output);
@@ -513,13 +501,19 @@ float* index_echo_run_encoder(index_echo_context* ctx, const float* mel, int mel
         ggml_backend_tensor_set(input, encoded.get(), 0, ggml_nbytes(input));
         if (ggml_backend_sched_graph_compute(ctx->sched, graph) == GGML_STATUS_SUCCESS) {
             result = (float*)malloc(ggml_nbytes(output));
-            if (result)
+            if (result) {
                 ggml_backend_tensor_get(output, result, 0, ggml_nbytes(output));
+                *dim = (int)output->ne[0];
+            }
         }
     }
     ggml_backend_sched_reset(ctx->sched);
     ggml_free(graph_ctx);
     return result;
+}
+
+int index_echo_decoder_layers(index_echo_context* ctx) {
+    return ctx && ctx->model ? llama_model_n_layer(ctx->model) : 0;
 }
 
 float* index_echo_prefill(index_echo_context* ctx, const float* audio, int rows, int dim, int* n_vocab) {

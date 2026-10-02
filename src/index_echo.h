@@ -49,6 +49,7 @@ float* index_echo_prefill(struct index_echo_context*, const float* audio_embd, i
 float* index_echo_decode_token(struct index_echo_context*, int32_t token, int* n_vocab);
 const float* index_echo_stage(struct index_echo_context*, const char* name, int* count);
 const int32_t* index_echo_prompt_ids(struct index_echo_context*, int* count);
+int index_echo_decoder_layers(struct index_echo_context*);
 
 #ifdef __cplusplus
 }
