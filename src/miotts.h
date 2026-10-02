@@ -3,12 +3,12 @@
 // MioTTS public C ABI.
 //
 // Aratako/MioTTS-{0.6B,1.7B} — LLM-based TTS (Qwen3 backbone) that generates
-// speech tokens from text, decoded by MioCodec into 24kHz waveform.
+// speech tokens from text, decoded by MioCodec at the sample rate stored in the GGUF.
 //
 // Architecture (0.6B):
 //   LLM: Qwen3ForCausalLM, 28 layers, 1024 hidden, GQA 16/8, vocab 164480
 //        (Qwen3 BPE text tokens + 12800 speech tokens <|s_0|>..<|s_12799|>)
-//   Codec: MioCodec-25Hz-24kHz — FSQ(levels=[8,8,8,5,5]) dequant → wave_prenet
+//   Codec: MioCodec (25 Hz tokens, 24 kHz or v2 44.1 kHz audio) — FSQ(levels=[8,8,8,5,5]) dequant → wave_prenet
 //        transformer → conv_upsample → ResNet → wave_decoder transformer
 //        (AdaLN-Zero conditioned on 128-d speaker embedding) → ResNet → iSTFT
 //
@@ -54,8 +54,12 @@ int miotts_set_reference(struct miotts_context* ctx, const float* audio_24k, int
 // Load a preset speaker embedding from a .emb.gguf or raw binary file.
 int miotts_load_preset_embedding(struct miotts_context* ctx, const char* emb_path);
 
+// Output sample rate from miotts.codec.sample_rate (legacy models default to
+// 24000 Hz). A null context returns the legacy default.
+int miotts_get_sample_rate(const struct miotts_context* ctx);
+
 // Synthesize speech from text. Returns a freshly allocated float buffer of
-// 24kHz mono PCM (caller must free with miotts_free_audio). *out_n receives
+// mono PCM at miotts_get_sample_rate(ctx) (caller must free with miotts_free_audio). *out_n receives
 // the sample count. Returns nullptr on failure.
 float* miotts_synthesize(struct miotts_context* ctx, const char* text, int* out_n);
 
@@ -75,8 +79,8 @@ float* miotts_fsq_dequant(struct miotts_context* ctx, const int32_t* indices, in
 float* miotts_wave_prenet_forward(struct miotts_context* ctx, const float* fsq_emb, int T, int* out_dim);
 
 // Run the full codec decode: wave_prenet output → conv_upsample → ResNet →
-// wave_decoder (AdaLN-Zero) → ResNet → iSTFT → 24kHz PCM.
-// Input: prenet_out is (T * 512) floats. Output: PCM samples at 24kHz.
+// wave_decoder (AdaLN-Zero) → ResNet → iSTFT → model-rate PCM.
+// Input: prenet_out is (T * 512) floats. Output: PCM samples at miotts_get_sample_rate(ctx).
 float* miotts_codec_decode(struct miotts_context* ctx, const float* prenet_out, int T_prenet, int* out_n);
 
 #ifdef __cplusplus

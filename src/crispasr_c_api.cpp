@@ -4612,7 +4612,7 @@ CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
 #endif
 #ifdef CA_HAVE_MIOTTS
     if (s->miotts_ctx)
-        return 24000;
+        return miotts_get_sample_rate(s->miotts_ctx);
 #endif
 #ifdef CA_HAVE_CONFUCIUS4_TTS
     if (s->confucius4_ctx)
@@ -9090,6 +9090,10 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
                 "the integrator affirms they have the speaker's consent)\n",
                 ts, safe.c_str());
     }
+#ifdef CA_HAVE_MIOTTS
+    if (s->miotts_ctx)
+        return miotts_load_preset_embedding(s->miotts_ctx, path);
+#endif
 #ifdef CA_HAVE_VOXTRAL_TTS
     if (s->voxtral_tts_ctx) {
         // `path` is a preset voice name (e.g. "fr_female"); applied at synthesize.

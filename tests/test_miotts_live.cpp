@@ -4,6 +4,7 @@
 // Generates speech from text and verifies non-empty PCM output.
 
 #include "miotts.h"
+#include "gguf.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -23,6 +24,12 @@ TEST_CASE("miotts: init from GGUF", "[miotts][live]") {
     p.temperature = 0.0f;
     auto* ctx = miotts_init_from_file(model, p);
     REQUIRE(ctx != nullptr);
+    auto* gguf = gguf_init_from_file(model, {true, nullptr});
+    REQUIRE(gguf != nullptr);
+    const int64_t key = gguf_find_key(gguf, "miotts.codec.sample_rate");
+    const int expected = key < 0 ? 24000 : static_cast<int>(gguf_get_val_u32(gguf, key));
+    REQUIRE(miotts_get_sample_rate(ctx) == expected);
+    gguf_free(gguf);
     miotts_free(ctx);
 }
 
@@ -44,7 +51,8 @@ TEST_CASE("miotts: synthesize produces audio", "[miotts][live]") {
     float* pcm = miotts_synthesize(ctx, "Hello", &n);
     // With zero embedding the audio may not be intelligible,
     // but PCM should be non-empty and non-silent.
-    if (pcm) {
+    REQUIRE(pcm != nullptr);
+    {
         REQUIRE(n > 0);
         // Check non-silent: at least one sample with abs > 0.001
         bool has_audio = false;
