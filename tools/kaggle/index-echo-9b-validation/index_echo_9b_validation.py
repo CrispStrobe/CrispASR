@@ -12,15 +12,15 @@ import subprocess
 import sys
 import tarfile
 
-SCRIPT_VERSION = '2026-10-02.1'
-SOURCE_COMMIT = 'e56353137b967acbc00ffbedeb6b55429c0add4b'
-BUILD_COMMIT = 'c07ec1d8d082f6a7318bcd9f706b5a1193103d8f'
+SCRIPT_VERSION = '2026-10-02.2'
+SOURCE_COMMIT = '324c10b9f8612198c2cd29afeeb8442dfc912373'
+BUILD_COMMIT = '9503bec6f9b2d5ad59239369ab16b6a1e6400e78'
 MODEL_REVISION = 'dca128e0da2c86819347b79f63da610c0b8bd472'
 REFERENCE_REVISION = '86ec7245cf53b78d8d2442f6f919b9215104609b'
 AUDIO_REVISION = 'd0a7d7a8be318a5841dfdbe6ad37d3acf75523e3'
-BUILD_RUN = 36988187315
-BUNDLE_REVISION = 'c51cb08c50d6997e2bbb3efc75fc73d0c5d1cda4'
-BUNDLE_SHA256 = 'e47a46bb7ff780f286686a7239f1c1806cb1b5c7451a07fb9706a630a15bf0da'
+BUILD_RUN = 36994683144
+BUNDLE_REVISION = 'cdd447a34651ecd757f2c38df2dee486ab2502d9'
+BUNDLE_SHA256 = 'beb116b33ae08836e6dafa8c6414073622bfb72befaaefb71c93445dad67cd4e'
 if len(REFERENCE_REVISION) != 40 or len(BUNDLE_REVISION) != 40 or len(BUNDLE_SHA256) != 64:
     raise RuntimeError('Independent reference and CI bundle pins must be set before launch')
 ROOT = Path('/kaggle/temp/index-echo-validation-repo')
@@ -123,7 +123,7 @@ clips = [('jfk', ROOT / 'samples/jfk.wav'), ('zh', ROOT / 'samples/paraformer_zh
 receipt = dict(script_version=SCRIPT_VERSION, source_commit=SOURCE_COMMIT,
                model_revision=MODEL_REVISION, reference_revision=REFERENCE_REVISION,
                audio_revision=AUDIO_REVISION, pipeline_reference_dtype='released-default bfloat16', direct_reference_dtype='float32', build_commit=BUILD_COMMIT, build_run=BUILD_RUN, bundle_revision=BUNDLE_REVISION, bundle_sha256=BUNDLE_SHA256, hardware=hardware, cuda_arch=arch,
-               full_pipeline_checked=True, cohorts={}, validated=False)
+               full_pipeline_checked=False, cohorts={}, validated=False)
 failed = []
 
 
@@ -220,6 +220,7 @@ for cohort in ['f16', 'q8_0_ffn']:
     if not cues_match(pipeline_cli, pipeline_expected): pipeline_failures.append('real CLI exact subtitle/timestamp mismatch')
     result['pipeline_cli'] = dict(actual=pipeline_cli, expected=pipeline_expected)
     result['pipeline_failures'] = pipeline_failures
+    receipt['full_pipeline_checked'] = all('pipeline_failures' in item for item in receipt['cohorts'].values())
     failed.extend(cohort+':pipeline:'+item for item in pipeline_failures)
     with kh.build_heartbeat(cohort+'.roundtrip', interval_s=30):
         roundtrip_failures = check_roundtrips(ROOT, OUT, build / 'bin/crispasr', library, primary, manifest, use_gpu=True)
