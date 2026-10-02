@@ -41,17 +41,6 @@ at cstr/index-echo-9b-GGUF@dffbadf0f173446fee0364a0807803d2b2fb6f49;
 protected 2B regression and feature integration remain the other agent’s work; latest release v0.8.40. No bump/tag until Index accepted and
 integrated-main CI green.
 
-## OPEN 2026-10-02 — full-tree cppcheck: Index-Echo destructor
-
-Separate Index-Echo agent owns this finding. Main baseline cppcheck
-`36969566590` fails only `virtualCallInConstructor` at
-`examples/cli/crispasr_backend_index_echo.cpp:12/63`: the destructor calls
-virtual `shutdown()`. The same pattern remains in main; no suppression or
-Index-Echo runtime edit was made here. Current full-tree run `36986270785`
-is queued behind `36984635206`. Dia/Nemotron's seven changed CI-covered files
-pass pinned cppcheck 2.7 (`36992014618`); see
-`docs/dia-nemotron-cppcheck-2026-10-02.json`. Other completed gates are in HISTORY.
-
 ## CLAIMED 2026-10-02 — #485 Index-Echo S2TT 9B
 
 Worktree `/mnt/volume1/wt-index-echo-9b`, branch `feat/index-echo-9b`.

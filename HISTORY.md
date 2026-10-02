@@ -6,6 +6,52 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## DONE 2026-10-02 — Index-Echo S2TT 9B (#485)
+
+Native Index-Echo now accepts the released 9B single 2048→4096 connector and
+flat 32-layer Qwen3.5 decoder, alongside the unchanged 2B residual connector.
+All learned stages use ggml; existing session C ABI and bindings detect anonymous
+model filenames from metadata. Registry wiring offers explicit 9B F16 plus its
+matching decoder; 2B Q8 remains the default. Fixed Silero CPU-scheduler weight
+placement for GPU-requested file inference and the nonvirtual destructor cleanup
+that blocked full-tree cppcheck. Conversion excludes nonexistent MTP weights.
+
+Published Apache-2.0 F16-only `cstr/index-echo-9b-GGUF` at immutable weight pin
+`dffbadf0f173446fee0364a0807803d2b2fb6f49`: 19,234,545,728 bytes (17.914 GiB).
+Clean publication `37005611122` verifies both hashes, card/license and every
+history entry. Experimental plain/selective/FFN Q8 remain private: numerical
+parity alone did not preserve decoded punctuation. No acceptance bar relaxed.
+Original model-history pins survive in `cstr/index-echo-9b-staging-GGUF`.
+
+Independent original-class F32 source captures audit actual parameter dtypes,
+prompt/cache behavior, complete output and prior-window context. ARM CPU
+`37002813123` and real two-T4 CUDA v3 pass all three direct clips, 225 numerical
+stages plus three prompt checks, 48 cached predictions per device, anonymous
+C ABI and independent CLI exact decoding. CUDA minimum cosine .999979. Five
+whole-file language/VAD/context cases match at unchanged 5.1 ms F16 bounds;
+GPU-requested VAD equals CPU bitwise. Actual Piper→9B roundtrips pass 3/3 on
+both devices with WER 0 and exact CLI/C ABI agreement. Raw BF16 timing failures,
+rejected quant recipes and upstream repeated-English stress failure stay in
+receipts; the stress case is outside this accepted corpus.
+
+Protected 2B Q8 actual nightly `37006905046` and the new public 9B F16 actual
+nightly `37008624536` pass. Anonymous pinned-artifact preflight passes both.
+Weekly large ARM regression includes all three stage clips, five whole-file
+cases, Piper and the real manifest driver. CI `37003844831` passes 13/13, lint
+`37003842265` 10/10, full-tree cppcheck `36995998244` passes. Original tested
+commits remain reachable on archived proof branches through final rebasing.
+
+Resident original-default BF16 versus native F16 AB/BA on two T4 yields warm
+JFK ~16.2→12.2 s (1.33x), Chinese ~18.9→13.9 s (1.36x), with every timed
+output checked against independent source. Activation precision and default
+layer placement differ; order-dependent first-load time prevents a cold-load
+speed claim. Generation accounts for ~86%; hybrid cache, Flash Attention and
+fused GDN run, but multi-GPU graph reuse is disabled and T4 CUDA graph capture
+is not established. Exact pins, per-stage cosines/norms, complete cues, actual
+dtypes, failed controls and profile samples are in
+`docs/index-echo-9b-acceptance-2026-10-02.json` and
+`docs/index-echo-9b-profile-2026-10-02.json`.
+
 ## DONE 2026-10-02 — asynchronous browser pthread ASR/TTS
 
 Browser bindings expose callback-based model-open and transcription on the
