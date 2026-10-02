@@ -349,8 +349,9 @@ become text context. Each new transcription call starts with empty history.
 
 The primary `index_echo` GGUF contains the tower, frontend constants and
 connector. `index_echo.decoder_file` names a sibling standard Qwen3.5 GGUF;
-both files must be present. The shipped F16 and Q8_0 cohorts have matching
-companion names; both Q4 experiments are rejected. A sibling `ggml-silero-v6.2.0.bin`, or an explicit `--vad-model`, enables
+both files must be present. The 2B F16 and Q8_0 cohorts have matching companion names; its Q4 experiments
+are rejected. The 9B publication contains F16 only: all three Q8 candidates
+change exact output and remain private. A sibling `ggml-silero-v6.2.0.bin`, or an explicit `--vad-model`, enables
 the released speech-window merge recipe (300 ms silence, 300/500 ms padding,
 60 s maximum, short-tail merge). Without that companion, inference uses
 bounded 60 s windows. The shared native Silero classifier feeds the released
@@ -367,7 +368,7 @@ count, including partial final hops. The released Transformers 5.6.0 CPU
 encoder does not apply its constructed window mask; the conversion explicitly
 records full attention. The independent 9B GPU reference checks the released encoder behavior separately.
 
-CPU validation against the pinned released inference class (F32 tower/connector,
+2B CPU validation against the pinned released inference class (F32 tower/connector,
 BF16 decoder) reproduces
 all decoded text and timestamps with F16 and Q8_0 on English JFK, Chinese,
 and a partial-hop JFK clip. Plain Q4_K changes decoded output and is rejected.
@@ -385,6 +386,18 @@ learned stages require cosine >= .99 and relative L2 <= 5%. Frontend stages
 retain the strict gates. Exact prompt IDs, cached greedy IDs and complete
 decoded cues are required separately. `INDEX_ECHO_BENCH=1` prints stage
 timings; speed measurements follow correctness validation.
+
+9B F16 independently passes CPU and real CUDA validation across JFK, Chinese
+and a short tail: 225 numerical stage rows plus three prompt checks per device,
+all 32 encoder and 32 decoder layers, 48 cached greedy predictions and complete
+direct decoded cues. All five complete F32-source file cases match at the
+existing 5.1 ms timestamp bound, including target selection and previous-window
+context; three real Piper roundtrips produce WER 0 with CLI/C ABI agreement.
+The [9B receipt](index-echo-9b-acceptance-2026-10-02.json) preserves each stage
+cosine/magnitude metric and the original failed BF16 timing diagnostics.
+No mixed-source cue alternatives or wider timestamp bound are used. The released
+source itself fails a separately retained repeated-English context stress;
+focused parity does not establish broad language accuracy.
 
 ### Canary
 
