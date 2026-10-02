@@ -88,6 +88,8 @@ def precision_audit(model):
 
 
 def dump(model_dir, audio, stages, **kwargs):
+    if os.getenv('INDEX_ECHO_REF_CAPTURE_GENERATION') == '1':
+        return dump_generation(model_dir, audio, stages, **kwargs)
     import soundfile as sf
     import torch
     torch.set_num_threads(int(os.getenv('INDEX_ECHO_REF_THREADS', '4')))
@@ -227,3 +229,99 @@ def dump_pipeline(model_dir, output_dir, sample_dir):
     assert len(result['cases']['multi-en']['rows']) == 3, 'Fixture must exercise two windows plus summary'
     assert result['cases']['multi-en']['rows'][1]['has_ctx'], 'Second window must exercise prior-output context'
     return output_dir / 'pipeline.json', multi
+
+
+def dump_generation(model_dir, audio, stages, **kwargs):
+    """Capture the released generation call itself, without a preceding prefill.
+
+    Hooks observe the original translate_window frontend, prompt, generation
+    and cache. The trace is the original generator's raw per-step logits; no
+    cache object survives another generation call or is replayed afterwards.
+    Keep the historical 2B dump recipe independent and opt into this explicitly.
+    """
+    import soundfile as sf
+    import torch
+    torch.set_num_threads(int(os.getenv('INDEX_ECHO_REF_THREADS', '4')))
+    torch.set_grad_enabled(False)
+    module, model = load_blueprint(model_dir)
+    values = dict(parameter_dtypes=json.dumps(precision_audit(model), sort_keys=True),
+                  reference_placement=json.dumps(getattr(model.llm, 'hf_device_map', model.device), sort_keys=True),
+                  cache_trace_recipe='actual released translate_window generation forwards; no diagnostic prefill')
+    handles, trace = [], []
+
+    def capture(name, last=False, transform=None):
+        def hook(_, inputs, output):
+            if name in values:
+                return
+            v = output[0] if isinstance(output, tuple) else output
+            if last:
+                v = v[:, -1, :]
+            if transform:
+                v = transform(v)
+            values[name] = v.detach().float().cpu().numpy().copy()
+        return hook
+
+    for i, layer in enumerate(model.tower.layers):
+        handles.append(layer.register_forward_hook(capture(f'encoder_layer_{i}')))
+
+    def first_input(_, inputs):
+        values['encoder_input'] = inputs[0].detach().float().cpu().numpy().copy()
+
+    handles.append(model.tower.layers[0].register_forward_pre_hook(first_input))
+    for name, target in [('ln_post_out', model.tower.ln_post), ('proj1_out', model.tower.proj1),
+                         ('encoder_output', model.tower.proj2), ('connector_output', model.connector)]:
+        handles.append(target.register_forward_hook(capture(name)))
+    for i in range(1, 4):
+        handles.append(getattr(model.tower, f'conv2d{i}').register_forward_hook(
+            capture(f'conv{i}_out', transform=torch.nn.functional.gelu)))
+    for i, layer in enumerate(model.llm.model.layers):
+        handles.append(layer.register_forward_hook(capture(f'llm_block_{i}', last=True)))
+
+    def generation_forward(_, inputs, output):
+        logits = output.logits[0, -1].detach().float().cpu().numpy().copy()
+        if not trace:
+            values['llm_logits'] = logits
+        if len(trace) < int(os.getenv('INDEX_ECHO_TRACE_TOKENS', '16')):
+            trace.append(logits)
+
+    handles.append(model.llm.register_forward_hook(generation_forward))
+    original_fe, original_tok, original_generate = model.fe, model.tok, model.llm.generate
+
+    def frontend(*args, **kw):
+        f = original_fe(*args, **kw)
+        frames = int(f.attention_mask.sum(-1)[0])
+        values['mel_spectrogram'] = f.input_features[0][:, :frames].float().cpu().numpy().copy()
+        return f
+
+    class TokenizerCapture:
+        def __getattr__(self, name):
+            return getattr(original_tok, name)
+
+        def __call__(self, *args, **kw):
+            ids = original_tok(*args, **kw)
+            values['prompt_ids'] = ids.input_ids.cpu().numpy().astype(np.int32)
+            return ids
+
+    def generate(*args, **kw):
+        out = original_generate(*args, **kw)
+        values['generated_ids'] = out.detach().cpu().numpy().astype(np.int32)
+        return out
+
+    model.fe, model.tok, model.llm.generate = frontend, TokenizerCapture(), generate
+    try:
+        with tempfile.TemporaryDirectory(dir=os.getenv('TMPDIR')) as tmp:
+            wav = Path(tmp) / 'input.wav'
+            sf.write(wav, audio, 16000, subtype='FLOAT')
+            lang = os.getenv('INDEX_ECHO_TARGET_LANG', 'en')
+            text, context = model.translate_window(str(wav), [], lang=lang,
+                max_new_tokens=int(os.getenv('INDEX_ECHO_REF_MAX_TOKENS', '2000')))
+        assert not context
+        values['generated_text'], values['target_lang'] = text, lang
+        values['teacherforced_logits'] = np.stack(trace)
+        ids = values['generated_ids'][0]
+        values['raw_greedy_alignment'] = str(np.array_equal(np.argmax(values['teacherforced_logits'], axis=-1), ids[:len(trace)]))
+    finally:
+        model.fe, model.tok, model.llm.generate = original_fe, original_tok, original_generate
+        for handle in handles:
+            handle.remove()
+    return values

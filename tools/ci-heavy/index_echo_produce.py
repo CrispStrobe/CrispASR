@@ -47,6 +47,8 @@ os.environ['TMPDIR'] = str(SCRATCH)
 os.environ['OMP_NUM_THREADS'] = '4'
 os.environ['INDEX_ECHO_REF_THREADS'] = '4'
 os.environ['INDEX_ECHO_REF_DTYPE'] = args.reference_dtype
+if args.size == '9b':
+    os.environ['INDEX_ECHO_REF_CAPTURE_GENERATION'] = '1'
 if args.reference_memory:
     if not (args.reference_only or args.pipeline_only or args.oracle_audit):
         parser.error('--reference-memory requires reference-only or pipeline-only')
