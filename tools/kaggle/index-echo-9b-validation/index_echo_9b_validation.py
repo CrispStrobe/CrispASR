@@ -12,7 +12,7 @@ import subprocess
 import sys
 import tarfile
 
-SCRIPT_VERSION = '2026-10-02.4'
+SCRIPT_VERSION = '2026-10-02.5'
 SOURCE_COMMIT = '4584fc035c3655e3826d5796b3756e47f68c25e4'
 BUILD_COMMIT = 'f91a31da8d586157043639d0e6039c778d2571dc'
 MODEL_REVISION = 'dffbadf0f173446fee0364a0807803d2b2fb6f49'
@@ -224,12 +224,14 @@ for cohort in config.get('cohorts', ['f16']):
         srt = prefix.with_suffix('.srt')
         actual = read_srt(srt)
         expected = result['c_abi'][clip]['expected']
-        match = decoded.returncode==0 and cues_match(actual, expected)
-        result['cli'][clip] = dict(rc=decoded.returncode, actual=actual, expected=expected, passed=match)
+        cli_log = (OUT / f'{cohort}-{clip}-cli.log').read_text()
+        cuda_used = 'load_tensors: layer' in cli_log and 'assigned to device CUDA' in cli_log
+        match = decoded.returncode==0 and cuda_used and cues_match(actual, expected)
+        result['cli'][clip] = dict(rc=decoded.returncode, actual=actual, expected=expected, cuda_used=cuda_used, passed=match)
         if not match: failed.append(cohort+':'+clip+':cli')
         save()
     with kh.build_heartbeat(cohort+'.pipeline', interval_s=30):
-        pipeline_failures = check_pipeline(ROOT, OUT, build, library, models, cohort, 'reference-f32', model_prefix='index-echo-9b')
+        pipeline_failures = check_pipeline(ROOT, OUT, build, library, models, cohort, 'reference-f32', model_prefix='index-echo-9b', use_gpu=True)
     pipeline_cli = read_srt(OUT / f'pipeline-{cohort}-cli.srt')
     pipeline_expected = json.loads((refs / 'pipeline.json').read_text())['cases']['jfk-en']['segments']
     if not cues_match(pipeline_cli, pipeline_expected): pipeline_failures.append('real CLI exact subtitle/timestamp mismatch')

@@ -8,7 +8,7 @@ import time
 import wave
 
 
-def check_pipeline(root, out, build, library, models, cohort, reference_subdir, model_prefix='index-echo-2b'):
+def check_pipeline(root, out, build, library, models, cohort, reference_subdir, model_prefix='index-echo-2b', use_gpu=False):
     import numpy as np
     from huggingface_hub import hf_hub_download
     from crispasr import Session
@@ -107,18 +107,23 @@ def check_pipeline(root, out, build, library, models, cohort, reference_subdir, 
     try:
         with (out / f'pipeline-{cohort}-cli.log').open('w') as log:
             result = subprocess.run([str(build / 'bin/crispasr'), '-m', str(models / f'{model_prefix}-{cohort}.gguf'),
-                '-f', str(root / 'samples/jfk.wav'), '-l', 'auto', '-osrt', '-of', str(prefix), '-t', '4', '-ng'],
+                '-f', str(root / 'samples/jfk.wav'), '-l', 'auto', '-osrt', '-of', str(prefix), '-t', '4'] +
+                ([] if use_gpu else ['-ng']),
                 cwd=root, stdout=log, stderr=subprocess.STDOUT, timeout=3600)
     finally:
         companion.unlink()
     srt = prefix.with_suffix('.srt')
+    cli_log = prefix.with_suffix('.log').read_text()
+    cli_cuda_used = 'load_tensors: layer' in cli_log and 'assigned to device CUDA' in cli_log
+    if use_gpu and not cli_cuda_used:
+        failures.append('real CLI did not assign decoder layers to CUDA')
     if result.returncode or not srt.exists():
         failures.append('real CLI failed')
     else:
         text = srt.read_text()
         for segment in oracle['cases']['jfk-en']['segments']:
             if segment['text'] not in text: failures.append('real CLI decoded text mismatch')
-    receipt = dict(cohort=cohort, failed=failures, cases=decoded,
+    receipt = dict(cohort=cohort, failed=failures, cases=decoded, cli_use_gpu=use_gpu, cli_cuda_used=cli_cuda_used,
                    vad_file=vad_path.name, vad_revision=vad_revision, vad_sha256=hashlib.sha256(vad_path.read_bytes()).hexdigest())
     (out / f'pipeline-{cohort}.json').write_text(json.dumps(receipt, indent=2, ensure_ascii=False) + '\n')
     return failures
