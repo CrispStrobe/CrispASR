@@ -19,6 +19,23 @@
 name: Heavy CPU job
 
 on:
+  workflow_call:
+    inputs:
+      script:
+        required: true
+        type: string
+      args:
+        default: ''
+        type: string
+      pip:
+        default: ''
+        type: string
+      runner:
+        default: 'ubuntu-latest'
+        type: string
+      timeout_minutes:
+        default: '300'
+        type: string
   workflow_dispatch:
     inputs:
       script:

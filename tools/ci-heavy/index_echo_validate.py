@@ -27,6 +27,7 @@ parser.add_argument('--stage-diagnostic', action='store_true', help='Numerical i
 parser.add_argument('--fixture-prefix', help='Explicit independent capture recipe namespace')
 parser.add_argument('--size', choices=['2b', '9b'], default='2b')
 parser.add_argument('--model-revision', help='Immutable staging pin (required for unregistered 9B)')
+parser.add_argument('--model-repo', help='Explicit private staging repository or registered publication')
 parser.add_argument('--fixture-revision', help='Immutable independent reference pin')
 parser.add_argument('--regression', action='store_true', help='Run the actual pinned nightly driver after native validation')
 parser.add_argument('--reference-subdir', choices=['reference', 'reference-f32'], default='reference')
@@ -37,7 +38,9 @@ parser.add_argument('--cohorts', nargs='+', choices=['f16', 'q8_0', 'q8_0_select
 parser.add_argument('--clips', nargs='+', choices=['jfk', 'zh', 'jfk-tail'], default=['jfk', 'zh', 'jfk-tail'])
 args = parser.parse_args()
 prefix = 'index-echo-' + args.size
-if args.size == '9b' and not args.build_only and not (args.model_revision and args.fixture_revision):
+manifest = json.loads((ROOT / 'tests/regression/manifest.json').read_text())
+entry = next((e for e in manifest['backends'] if e['name'] == prefix), None)
+if args.size == '9b' and not args.build_only and entry is None and not (args.model_revision and args.fixture_revision):
     parser.error('9B validation requires immutable model and fixture revisions')
 run('cmake', '-S', ROOT, '-B', BUILD, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
     '-DBUILD_SHARED_LIBS=ON', '-DCRISPASR_BUILD_SERVER=OFF', '-DGGML_NATIVE=OFF')
@@ -61,9 +64,7 @@ if args.build_only:
                                    'Model parity remains pending.\n')
     sys.exit(0)
 from huggingface_hub import hf_hub_download, snapshot_download
-manifest = json.loads((ROOT / 'tests/regression/manifest.json').read_text())
-entry = next((e for e in manifest['backends'] if e['name'] == prefix), None)
-destination = entry['gguf']['repo'] if entry else 'cstr/' + prefix + '-GGUF'
+destination = args.model_repo or (entry['gguf']['repo'] if entry else 'cstr/' + prefix + '-GGUF')
 model_revision = args.model_revision or entry['gguf']['revision']
 fixtures = dict(manifest['fixtures'])
 if args.fixture_revision: fixtures['revision'] = args.fixture_revision
