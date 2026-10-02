@@ -1,0 +1,16 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-index-echo-9b-default-source",
+  "title": "CrispASR Index Echo 9B Default Source",
+  "code_file": "index_echo_9b_default_source.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [
+    "${KAGGLE_ACCOUNT}/crispasr-hf-token"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
