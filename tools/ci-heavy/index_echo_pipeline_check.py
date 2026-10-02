@@ -8,7 +8,7 @@ import time
 import wave
 
 
-def check_pipeline(root, out, build, library, models, cohort, reference_subdir):
+def check_pipeline(root, out, build, library, models, cohort, reference_subdir, model_prefix='index-echo-2b'):
     import numpy as np
     from huggingface_hub import HfApi, hf_hub_download
     from crispasr import Session
@@ -41,7 +41,7 @@ def check_pipeline(root, out, build, library, models, cohort, reference_subdir):
     assert not companion.exists(), 'Direct-window fixtures must not autoload VAD'
     companion.symlink_to(vad_path)
     try:
-        with Session(str(models / f'index-echo-2b-{cohort}.gguf'), lib_path=str(library), n_threads=4) as session:
+        with Session(str(models / f'{model_prefix}-{cohort}.gguf'), lib_path=str(library), n_threads=4) as session:
             for name, expected in oracle['cases'].items():
                 audio = (models / reference_subdir if expected['audio'] == 'pipeline-multi.wav' else root / 'samples') / expected['audio']
                 with wave.open(str(audio), 'rb') as wav:
@@ -78,7 +78,7 @@ def check_pipeline(root, out, build, library, models, cohort, reference_subdir):
     companion.symlink_to(vad_path)
     try:
         with (out / f'pipeline-{cohort}-cli.log').open('w') as log:
-            result = subprocess.run([str(build / 'bin/crispasr'), '-m', str(models / f'index-echo-2b-{cohort}.gguf'),
+            result = subprocess.run([str(build / 'bin/crispasr'), '-m', str(models / f'{model_prefix}-{cohort}.gguf'),
                 '-f', str(root / 'samples/jfk.wav'), '-l', 'auto', '-osrt', '-of', str(prefix), '-t', '4', '-ng'],
                 cwd=root, stdout=log, stderr=subprocess.STDOUT, timeout=3600)
     finally:
