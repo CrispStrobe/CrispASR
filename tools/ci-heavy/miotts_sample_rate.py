@@ -54,6 +54,13 @@ run(['cmake', '-S', ROOT, '-B', build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Releas
      '-DCRISPASR_BUILD_SERVER=OFF', '-DCRISPASR_BUILD_TESTS=ON'], 'configure')
 run(['cmake', '--build', build, '--target', 'crispasr-cli', 'crispasr-lib',
      'test-miotts-live', '-j4'], 'build')
+# Capture generated capability/feature tables from the actual new CLI, then
+# rebuild the ABI so bindings observe the same declarations.
+run([sys.executable, ROOT / 'tools/gen-feature-matrix.py', '--crispasr', build / 'bin/crispasr'], 'feature-matrix')
+run([sys.executable, ROOT / 'tools/gen-backend-caps-table.py', '--crispasr', build / 'bin/crispasr'], 'capabilities')
+for source in (ROOT / 'docs/feature-matrix.md', ROOT / 'docs/feature-matrix.html', ROOT / 'src/core/backend_caps_table.h'):
+    shutil.copy2(source, OUT / source.name)
+run(['cmake', '--build', build, '--target', 'crispasr-lib', '-j4'], 'abi-capabilities-build')
 from huggingface_hub import hf_hub_download
 from gguf import GGUFReader
 import numpy as np

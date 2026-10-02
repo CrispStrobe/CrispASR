@@ -60,13 +60,15 @@ public:
     }
 
     const char* name() const override { return "miotts"; }
-    uint32_t capabilities() const override { return CAP_TTS; }
+    uint32_t capabilities() const override { return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE; }
     int input_sample_rate() const override { return 16000; }
     int tts_sample_rate() const override { return miotts_get_sample_rate(ctx_); }
 
     std::vector<float> synthesize(const std::string& text, const whisper_params& p) override {
         if (!ctx_)
             return {};
+        miotts_set_temperature(ctx_, p.temperature);
+        miotts_set_seed(ctx_, p.seed);
         // A resident server passes voice overrides per request. An empty
         // override restores the startup preset rather than retaining another
         // request's speaker embedding.
