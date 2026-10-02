@@ -15,7 +15,7 @@ import time
 SCRIPT_VERSION = '2026-10-02.2'
 SOURCE_COMMIT = 'b1e4443ddf2871e8db1b24d344691b2fab6f2924'
 SOURCE_REVISION = 'b8ac6fb7d3dc17cee48a52201bd3d93dc86b0dba'
-MODEL_REPO = 'cstr/index-echo-9b-GGUF'
+MODEL_REPO = 'cstr/index-echo-9b-staging-GGUF'
 FIXTURE_REPO = 'cstr/crispasr-regression-fixtures'
 ROOT = Path('/kaggle/temp/index-echo-9b-repo')
 TEMP = Path('/kaggle/temp/index-echo-9b')
