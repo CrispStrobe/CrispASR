@@ -4,6 +4,7 @@ Pin the source package; do not run a GGUF reconstruction as the oracle.
 Capture full audio stages, last prompt-token decoder states, logits and text.
 """
 import importlib.util
+import functools
 import json
 import os
 import tempfile
@@ -43,10 +44,23 @@ def load_blueprint(root):
         memory = {int(k) if k.isdigit() else k: v for k, v in memory.items()}
 
         def placed_loader(*args, **kwargs):
-            llm = factory(*args, **kwargs,
-                          device_map=json.loads(placement) if placement.startswith('{') else placement,
-                          max_memory=memory, offload_folder=os.environ['INDEX_ECHO_REF_OFFLOAD_DIR'],
-                          offload_buffers=True)
+            # Cached GDN reads conv1d.weight directly instead of calling the
+            # child module. Accelerate must preload that parent's children;
+            # otherwise the cached functional convolution sees meta weights.
+            from transformers.integrations import accelerate as hf_accelerate
+            dispatch = hf_accelerate.dispatch_model
+
+            @functools.wraps(dispatch)
+            def preload_dispatch(*a, **kw):
+                kw['preload_module_classes'] = ['Qwen3_5GatedDeltaNet']
+                return dispatch(*a, **kw)
+
+            with patch.object(hf_accelerate, 'dispatch_model', new=preload_dispatch):
+                llm = factory(*args, **kwargs,
+                              device_map=json.loads(placement) if placement.startswith('{') else placement,
+                              max_memory=memory, offload_folder=os.environ['INDEX_ECHO_REF_OFFLOAD_DIR'],
+                              offload_buffers=True)
+            llm._crispasr_ref_preload_classes = ['Qwen3_5GatedDeltaNet']
             original_to.append(llm.to)
 
             def constructor_to(destination):
@@ -68,6 +82,7 @@ def load_blueprint(root):
                 raise RuntimeError('An offloaded F32 diagnostic must load F32 initially')
         else:
             model.llm.to(torch.float32)
+    print('reference offload preload:', getattr(model.llm, '_crispasr_ref_preload_classes', []), flush=True)
     print('reference placement:', getattr(model.llm, 'hf_device_map', device), flush=True)
     print('reference parameter dtypes:', json.dumps(precision_audit(model), sort_keys=True), flush=True)
     return module, model
@@ -97,6 +112,7 @@ def dump(model_dir, audio, stages, **kwargs):
     root = Path(model_dir)
     module, model = load_blueprint(root)
     values = {'parameter_dtypes': json.dumps(precision_audit(model), sort_keys=True)}
+    values['reference_preload_classes'] = json.dumps(getattr(model.llm, '_crispasr_ref_preload_classes', []))
     values['reference_placement'] = json.dumps(getattr(model.llm, 'hf_device_map', model.device), sort_keys=True)
     handles = []
     def hook(name, last=False, transform=None):
@@ -246,6 +262,7 @@ def dump_generation(model_dir, audio, stages, **kwargs):
     module, model = load_blueprint(model_dir)
     values = dict(parameter_dtypes=json.dumps(precision_audit(model), sort_keys=True),
                   reference_placement=json.dumps(getattr(model.llm, 'hf_device_map', model.device), sort_keys=True),
+                  reference_preload_classes=json.dumps(getattr(model.llm, '_crispasr_ref_preload_classes', [])),
                   cache_trace_recipe='actual released translate_window generation forwards; no diagnostic prefill')
     handles, trace = [], []
 
