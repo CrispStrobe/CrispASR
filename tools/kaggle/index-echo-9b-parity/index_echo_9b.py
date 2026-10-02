@@ -36,8 +36,8 @@ print('actual GPU:', hardware, 'torch:', torch.__version__, flush=True)
 if not torch.cuda.is_available() or any(torch.cuda.get_device_capability(i)[0] < 7
                                        for i in range(torch.cuda.device_count())):
     raise RuntimeError('Inconclusive: actual GPU unsupported by installed PyTorch; no weight pull')
-if torch.cuda.device_count() < 2:
-    raise RuntimeError('Inconclusive: F16 native validation requires two 16-GiB GPUs; no weight pull')
+if sum(torch.cuda.get_device_properties(i).total_memory for i in range(torch.cuda.device_count())) < 24 * 2**30:
+    raise RuntimeError('Inconclusive: F16 native validation requires at least 24 GiB aggregate VRAM; no weight pull')
 run('git', 'init', ROOT)
 run('git', '-C', ROOT, 'remote', 'add', 'origin', 'https://github.com/CrispStrobe/CrispASR.git')
 run('git', '-C', ROOT, 'fetch', '--depth=1', 'origin', SOURCE_COMMIT)
@@ -59,7 +59,7 @@ from huggingface_hub import HfApi, snapshot_download, hf_hub_download
 import psutil
 api = HfApi(token=kh.resolve_hf_token(require=True))
 os.environ['HF_TOKEN'] = api.token
-model_revision = api.model_info(MODEL_REPO).sha
+model_revision = 'd1cc752e82bb97842052f2a5cd335512da984f96'
 files = api.list_repo_files(MODEL_REPO, revision=model_revision)
 for cohort in ['f16', 'q8_0']:
     for suffix in [f'{cohort}.gguf', f'decoder-{cohort}.gguf']:
