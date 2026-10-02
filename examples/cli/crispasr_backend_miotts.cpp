@@ -34,6 +34,7 @@ public:
         cp.verbosity = p.no_prints ? 0 : (p.verbose ? 2 : 1);
         cp.use_gpu = p.use_gpu;
         cp.temperature = p.temperature;
+        cp.seed = p.seed;
         cp.max_tokens = 750;
         ctx_ = miotts_init_from_file(p.model.c_str(), cp);
         if (!ctx_)

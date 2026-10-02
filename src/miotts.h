@@ -58,6 +58,11 @@ int miotts_load_preset_embedding(struct miotts_context* ctx, const char* emb_pat
 // 24000 Hz). A null context returns the legacy default.
 int miotts_get_sample_rate(const struct miotts_context* ctx);
 
+// Runtime sampling controls used by the session ABI as well as native callers.
+// Temperature <= 0 selects greedy decode; seed 0 preserves the default 42.
+void miotts_set_temperature(struct miotts_context* ctx, float temperature);
+void miotts_set_seed(struct miotts_context* ctx, uint64_t seed);
+
 // Synthesize speech from text. Returns a freshly allocated float buffer of
 // mono PCM at miotts_get_sample_rate(ctx) (caller must free with miotts_free_audio). *out_n receives
 // the sample count. Returns nullptr on failure.

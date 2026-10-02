@@ -2055,6 +2055,16 @@ float* miotts_synthesize(miotts_context* ctx, const char* text, int* out_n) {
     return audio;
 }
 
+void miotts_set_temperature(miotts_context* ctx, float temperature) {
+    if (ctx)
+        ctx->params.temperature = temperature;
+}
+
+void miotts_set_seed(miotts_context* ctx, uint64_t seed) {
+    if (ctx)
+        ctx->params.seed = seed;
+}
+
 int miotts_get_sample_rate(const miotts_context* ctx) {
     return ctx ? static_cast<int>(ctx->hp.codec_sample_rate) : 24000;
 }
