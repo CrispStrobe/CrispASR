@@ -7,6 +7,7 @@ on:
     paths:
       - '.github/workflows/index-echo-cuda-validation.yml'
       - 'tools/ci-heavy/index_echo_cuda_bundle.py'
+      - 'src/crispasr.cpp'
 
 permissions:
   contents: read
