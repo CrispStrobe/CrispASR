@@ -19,6 +19,7 @@ from index_echo_produce_constants import MODELS, LLAMA_REVISION, LICENSE_URL
 ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
 parser.add_argument('--size', choices=['2b', '9b'], default='2b')
+parser.add_argument('--reference-memory', help='JSON HF max_memory for placement-only CPU/disk reference offload')
 parser.add_argument('--fp32-decoder', action='store_true', help='Fully F32 diagnostic oracle; original blueprint retains nested BF16')
 parser.add_argument('--reference-only', action='store_true')
 parser.add_argument('--convert-only', action='store_true')
@@ -43,9 +44,19 @@ OUT.mkdir(parents=True, exist_ok=True)
 os.environ['TMPDIR'] = str(SCRATCH)
 os.environ['OMP_NUM_THREADS'] = '4'
 os.environ['INDEX_ECHO_REF_THREADS'] = '4'
+if args.reference_memory:
+    if not (args.reference_only or args.pipeline_only):
+        parser.error('--reference-memory requires reference-only or pipeline-only')
+    memory = json.loads(args.reference_memory)
+    if set(memory) != {'cpu'}:
+        parser.error('Hosted CPU reference offload accepts only a cpu memory budget')
+    os.environ['INDEX_ECHO_REF_DEVICE_MAP'] = 'auto'
+    os.environ['INDEX_ECHO_REF_MAX_MEMORY'] = json.dumps(memory)
+    os.environ['INDEX_ECHO_REF_OFFLOAD_DIR'] = str(SCRATCH / 'reference-offload')
 
 receipt = dict(source=SOURCE, revision=REVISION, converter_revision=LLAMA_REVISION,
-               destination=DESTINATION, validated=False, artifacts=[], events=[])
+               destination=DESTINATION, validated=False, artifacts=[], events=[],
+               reference_memory=json.loads(args.reference_memory) if args.reference_memory else None)
 
 
 def event(name):
