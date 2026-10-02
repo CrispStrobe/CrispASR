@@ -40,3 +40,4 @@ jobs:
         --pipeline-audio-path index-echo-9b/pipeline-zh-context/audio.wav --roundtrips --regression
       pip: huggingface_hub gguf numpy
       timeout_minutes: '180'
+      validation_group: index-echo-9b

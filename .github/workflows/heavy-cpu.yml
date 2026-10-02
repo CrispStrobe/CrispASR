@@ -36,6 +36,9 @@ on:
       timeout_minutes:
         default: '300'
         type: string
+      validation_group:
+        default: ''
+        type: string
   workflow_dispatch:
     inputs:
       script:
@@ -63,6 +66,10 @@ on:
         required: false
         default: '300'
         type: string
+      validation_group:
+        description: 'Optional concurrency group for read-only Index-Echo validation'
+        default: ''
+        type: string
 
 permissions:
   contents: read
@@ -70,7 +77,7 @@ permissions:
 
 # One run per script at a time; a second dispatch queues instead of racing.
 concurrency:
-  group: heavy-cpu-${{ inputs.script }}
+  group: heavy-cpu-${{ inputs.script == 'tools/ci-heavy/index_echo_validate.py' && inputs.validation_group || inputs.script }}
   cancel-in-progress: false
 
 jobs:
