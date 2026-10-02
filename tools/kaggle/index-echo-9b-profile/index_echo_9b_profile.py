@@ -17,7 +17,7 @@ import sys
 import time
 import wave
 
-SCRIPT_VERSION = '2026-10-02.1'
+SCRIPT_VERSION = '2026-10-02.2'
 SOURCE_COMMIT = 'f91a31da8d586157043639d0e6039c778d2571dc'
 SOURCE_REVISION = 'b8ac6fb7d3dc17cee48a52201bd3d93dc86b0dba'
 MODEL_REPO = 'cstr/index-echo-9b-GGUF'
@@ -86,7 +86,7 @@ if not a.worker:
 
 import numpy as np
 from gguf import GGUFReader
-sys.path.insert(0,str(ROOT/'tools'));from reference_backends.index_echo import _model,precision_audit
+sys.path.insert(0,str(ROOT/'tools'));from reference_backends.index_echo import load_blueprint,precision_audit
 sys.path.insert(0,str(ROOT/'python'));from crispasr import Session
 # Reuse the existing exact-source comparison without accepting any variants.
 sys.path.insert(0,str(ROOT/'tools'));from index_echo_acceptance import compare_case
@@ -107,7 +107,7 @@ if a.worker=='python':
     torch.set_num_threads(4);torch.set_grad_enabled(False)
     memory={str(i):f'{int(torch.cuda.mem_get_info(i)[0]/2**30)-(2 if i==0 else 1)}GiB' for i in range(torch.cuda.device_count())};memory['cpu']='0GiB'
     os.environ.update(INDEX_ECHO_REF_DEVICE='cuda:0',INDEX_ECHO_REF_DTYPE='bfloat16',INDEX_ECHO_REF_DEVICE_MAP='auto',INDEX_ECHO_REF_MAX_MEMORY=json.dumps(memory),INDEX_ECHO_REF_OFFLOAD_DIR=str(TEMP/'offload'))
-    model=_model(TEMP/'source');result['parameter_dtypes']=precision_audit(model);result['placement']=dict(model.llm.hf_device_map)
+    _,model=load_blueprint(TEMP/'source');result['parameter_dtypes']=precision_audit(model);result['placement']=dict(model.llm.hf_device_map)
     assert not any(v in ['cpu','disk'] for v in result['placement'].values())
     for name in ['tower','connector','llm']:assert list(result['parameter_dtypes'][name]['parameter_elements'])==['torch.bfloat16']
     result['torch']=torch.__version__
