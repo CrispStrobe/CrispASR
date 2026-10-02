@@ -23,12 +23,18 @@ def run(*args):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--build-only', action='store_true')
+parser.add_argument('--size', choices=['2b', '9b'], default='2b')
+parser.add_argument('--model-revision', help='Immutable staging pin (required for unregistered 9B)')
+parser.add_argument('--fixture-revision', help='Immutable independent reference pin')
 parser.add_argument('--regression', action='store_true', help='Run the actual pinned nightly driver after native validation')
 parser.add_argument('--reference-subdir', choices=['reference', 'reference-f32'], default='reference')
 parser.add_argument('--pipeline', action='store_true', help='Validate released file/VAD/target/context oracle')
 parser.add_argument('--cohorts', nargs='+', choices=['f16', 'q8_0', 'q4_k', 'q4_k_selective'], default=['f16'])
 parser.add_argument('--clips', nargs='+', choices=['jfk', 'zh', 'jfk-tail'], default=['jfk', 'zh', 'jfk-tail'])
 args = parser.parse_args()
+prefix = 'index-echo-' + args.size
+if args.size == '9b' and not args.build_only and not (args.model_revision and args.fixture_revision):
+    parser.error('9B validation requires immutable model and fixture revisions')
 run('cmake', '-S', ROOT, '-B', BUILD, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
     '-DBUILD_SHARED_LIBS=ON', '-DCRISPASR_BUILD_SERVER=OFF', '-DGGML_NATIVE=OFF')
 run('cmake', '--build', BUILD, '--target', 'crispasr-cli', 'crispasr-lib', 'crispasr-diff',
@@ -52,11 +58,12 @@ if args.build_only:
     sys.exit(0)
 from huggingface_hub import hf_hub_download, snapshot_download
 manifest = json.loads((ROOT / 'tests/regression/manifest.json').read_text())
-entry = next(e for e in manifest['backends'] if e['name'] == 'index-echo-2b')
-destination = entry['gguf']['repo']
-model_revision = entry['gguf']['revision']
-fixtures = manifest['fixtures']
-fixture_prefix = 'index-echo-2b-f32' if args.reference_subdir == 'reference-f32' else 'index-echo-2b'
+entry = next((e for e in manifest['backends'] if e['name'] == prefix), None)
+destination = entry['gguf']['repo'] if entry else 'cstr/' + prefix + '-GGUF'
+model_revision = args.model_revision or entry['gguf']['revision']
+fixtures = dict(manifest['fixtures'])
+if args.fixture_revision: fixtures['revision'] = args.fixture_revision
+fixture_prefix = prefix + ('-f32' if args.reference_subdir == 'reference-f32' else '')
 
 
 def download_references(models):
@@ -68,7 +75,7 @@ def download_references(models):
         paths['jfk-tail.wav'] = f'{fixture_prefix}/jfk_tail/audio.wav'
     if args.pipeline:
         paths['pipeline.json'] = f'{fixture_prefix}/pipeline/reference.json'
-        paths['pipeline-multi.wav'] = 'index-echo-2b/pipeline/audio.wav'
+        paths['pipeline-multi.wav'] = f'{prefix}/pipeline/audio.wav'
     folder = models / args.reference_subdir
     folder.mkdir(parents=True, exist_ok=True)
     for name, remote in paths.items():
@@ -87,14 +94,14 @@ def download_references(models):
 
 def validate_cohort(cohort):
     models = Path(snapshot_download(destination, revision=model_revision, local_dir=Path(os.environ['HEAVY_SCRATCH']) / 'index-echo-models',
-        allow_patterns=[f'index-echo-2b-{cohort}.gguf', f'index-echo-2b-decoder-{cohort}.gguf']))
+        allow_patterns=[f'{prefix}-{cohort}.gguf', f'{prefix}-decoder-{cohort}.gguf']))
     download_references(models)
     os.environ['TMPDIR'] = os.environ['HEAVY_SCRATCH']
     failures = []
     for clip in args.clips:
         audio = models / args.reference_subdir / 'jfk-tail.wav' if clip == 'jfk-tail' else ROOT / 'samples' / ('paraformer_zh.wav' if clip == 'zh' else 'jfk.wav')
         log_path = OUT / f'{cohort}-{clip}-diff.log'
-        command = [str(BUILD / 'bin/crispasr-diff'), 'index-echo', str(models / f'index-echo-2b-{cohort}.gguf'),
+        command = [str(BUILD / 'bin/crispasr-diff'), 'index-echo', str(models / f'{prefix}-{cohort}.gguf'),
                    str(models / f'{args.reference_subdir}/{clip}-ref.gguf'), str(audio)]
         with log_path.open('w') as log:
             result = subprocess.run(command, env=dict(os.environ, CRISPASR_DIFF_NO_GPU='1'),
@@ -103,8 +110,11 @@ def validate_cohort(cohort):
         if result.returncode: failures.append(clip)
     (OUT / f'stage-results-{cohort}.json').write_text(json.dumps(dict(failed=list(failures)), indent=2))
 
-    subprocess.run([str(BUILD / 'bin/test-index-echo-live')], cwd=ROOT, check=True,
-                   env=dict(os.environ, CRISPASR_MODEL_INDEX_ECHO=str(models / f'index-echo-2b-{cohort}.gguf')))
+    # This live test embeds 2B source transcripts. 9B uses its own independent
+    # transcript oracle through the real C ABI below, never a 2B expectation.
+    if args.size == '2b':
+        subprocess.run([str(BUILD / 'bin/test-index-echo-live')], cwd=ROOT, check=True,
+                       env=dict(os.environ, CRISPASR_MODEL_INDEX_ECHO=str(models / f'{prefix}-{cohort}.gguf')))
 
     # Open a model with an arbitrary filename through the actual Python Session,
     # which tests shared metadata detection and the shipped C ABI, not CLI heuristics.
@@ -115,7 +125,7 @@ def validate_cohort(cohort):
     from crispasr import Session
     assert 'index-echo' in Session.available_backends(lib_path=str(library))
     renamed = models / f'model-without-backend-hint-{cohort}.gguf'
-    renamed.symlink_to(models / f'index-echo-2b-{cohort}.gguf')
+    renamed.symlink_to(models / f'{prefix}-{cohort}.gguf')
     decoded = {}
 
 
@@ -160,7 +170,7 @@ def validate_cohort(cohort):
     (OUT / f'decoded-{cohort}.json').write_text(json.dumps(decoded, indent=2, ensure_ascii=False))
     if args.pipeline:
         from index_echo_pipeline_check import check_pipeline
-        failures.extend(check_pipeline(ROOT, OUT, BUILD, library, models, cohort, args.reference_subdir))
+        failures.extend(check_pipeline(ROOT, OUT, BUILD, library, models, cohort, args.reference_subdir, model_prefix=prefix))
     return failures
 
 
@@ -170,12 +180,12 @@ for cohort in args.cohorts:
         results[cohort] = validate_cohort(cohort)
     finally:
         # Only one paired cohort coexists on the runner's temporary disk.
-        for name in (f'index-echo-2b-{cohort}.gguf', f'index-echo-2b-decoder-{cohort}.gguf'):
+        for name in (f'{prefix}-{cohort}.gguf', f'{prefix}-decoder-{cohort}.gguf'):
             (Path(os.environ['HEAVY_SCRATCH']) / 'index-echo-models' / name).unlink(missing_ok=True)
 if args.regression:
     sys.path.insert(0, str(ROOT / 'tests/regression'))
     import run_one
-    failed = run_one.regression_for('index-echo-2b', manifest,
+    failed = run_one.regression_for(prefix, manifest,
         Path(os.environ['HEAVY_SCRATCH']) / 'index-echo-nightly', BUILD / 'bin/crispasr', BUILD / 'bin/crispasr-diff')
     results['nightly_regression'] = ['Pinned nightly regression failed'] if failed else []
 
