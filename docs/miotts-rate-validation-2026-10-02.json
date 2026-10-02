@@ -44,5 +44,41 @@
   "model": "miotts-0.6b-q4_k.gguf",
   "voice": "en_female.emb.gguf",
   "generated_capabilities_sha256": "99415545c228b31cf425e1bd360c1bf955450079e738bc98f43f2a7c7e57c5fc",
-  "scope": "Native getter, loaded metadata dispatch, CLI WAV, session C ABI, native resident adapter preset switching/restoration and real speech readback. Metadata copies do not prove legacy codec audio; one English phrase is not a corpus or GPU proof."
+  "scope": "Native getter, loaded metadata dispatch, CLI WAV, session C ABI, native resident adapter preset switching/restoration and real speech readback. Metadata copies do not prove legacy codec audio; one English phrase is not a corpus or GPU proof.",
+  "additional_platforms": {
+    "x86_64": {
+      "passed": true,
+      "source_commit": "7fe94eb7eeba3e3034f7dd836feeb496ca18e5dc",
+      "model_revision": "fab3cdbef802fb5f1047708c27378c6e34ec230f",
+      "metadata_rates": {
+        "public-v2": 44100,
+        "metadata-24k": 24000,
+        "metadata-missing": 24000
+      },
+      "roundtrips": {
+        "session": {
+          "transcript": "The quick brown Fox jumps over the lazy dog. <en-US>",
+          "wer": 0.0,
+          "samples": 132300,
+          "sample_rate": 44100,
+          "duration_seconds": 3.0
+        },
+        "cli": {
+          "transcript": "The quick brown Fox jumps over the lazy dog. <en-US>",
+          "wer": 0.0,
+          "samples": 132300,
+          "sample_rate": 44100,
+          "duration_seconds": 3.0
+        }
+      },
+      "baseline": null,
+      "metadata_copy_scope": "dispatch only; no legacy codec speech claim",
+      "platform": "linux",
+      "run": 37036548868,
+      "run_url": "https://github.com/CrispStrobe/CrispASR/actions/runs/37036548868",
+      "runner": "ubuntu-24.04",
+      "native_assertions": 18,
+      "native_test_cases": 4
+    }
+  }
 }

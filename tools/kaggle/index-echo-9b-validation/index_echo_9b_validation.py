@@ -34,9 +34,9 @@ if len(SOURCE_COMMIT) != 40 or len(BUILD_COMMIT) != 40:
     raise RuntimeError('Source and build pins must be immutable commits')
 if len(REFERENCE_REVISION) != 40 or len(BUNDLE_REVISION) != 40 or len(BUNDLE_SHA256) != 64:
     raise RuntimeError('Independent reference and CI bundle pins must be set before launch')
-ROOT = Path('/kaggle/temp/index-echo-validation-repo')
-TEMP = Path('/kaggle/temp/index-echo-validation')
-OUT = Path('/kaggle/working')
+ROOT = Path(config.get('repo_dir', '/kaggle/temp/index-echo-validation-repo'))
+TEMP = Path(config.get('temp_dir', '/kaggle/temp/index-echo-validation'))
+OUT = Path(config.get('output_dir', '/kaggle/working'))
 TEMP.mkdir(parents=True, exist_ok=True)
 OUT.mkdir(parents=True, exist_ok=True)
 os.environ['TMPDIR'] = str(TEMP)
@@ -52,11 +52,14 @@ print('actual GPU:', hardware, flush=True)
 rows = [line.split(',') for line in hardware.splitlines()]
 if any(row[1].strip() != '7.5' for row in rows) or sum(int(row[-1].strip().split()[0]) for row in rows) < 24 * 1024:
     raise RuntimeError('Inconclusive: CI bundle targets SM75 and F16 requires 24 GiB aggregate VRAM; no model pull')
-run('git', 'init', ROOT)
-run('git', '-C', ROOT, 'remote', 'add', 'origin', 'https://github.com/CrispStrobe/CrispASR.git')
-run('git', '-C', ROOT, 'fetch', '--depth=1', 'origin', SOURCE_COMMIT)
-run('git', '-C', ROOT, 'checkout', 'FETCH_HEAD')
-run('git', '-C', ROOT, 'submodule', 'update', '--init', '--recursive', '--depth=1')
+if not (ROOT / '.git').exists():
+    run('git', 'init', ROOT)
+    run('git', '-C', ROOT, 'remote', 'add', 'origin', 'https://github.com/CrispStrobe/CrispASR.git')
+    run('git', '-C', ROOT, 'fetch', '--depth=1', 'origin', SOURCE_COMMIT)
+    run('git', '-C', ROOT, 'checkout', 'FETCH_HEAD')
+actual_source = subprocess.check_output(['git', '-C', str(ROOT), 'rev-parse', 'HEAD'], text=True).strip()
+if actual_source != SOURCE_COMMIT:
+    raise RuntimeError('Validation SDK source mismatch')
 sys.path.insert(0, str(ROOT / 'tools/kaggle'))
 import kaggle_harness as kh
 kh.init_progress()
@@ -135,7 +138,7 @@ receipt = dict(script_version=SCRIPT_VERSION, source_commit=SOURCE_COMMIT,
                model_revision=MODEL_REVISION, reference_revision=REFERENCE_REVISION,
                audio_revision=AUDIO_REVISION, pipeline_reference_dtype='independently forced all-float32', direct_reference_dtype='float32', build_commit=BUILD_COMMIT, build_run=BUILD_RUN, bundle_revision=BUNDLE_REVISION, bundle_sha256=BUNDLE_SHA256, hardware=hardware, cuda_arch=arch,
                full_pipeline_checked=False, cohorts={}, validated=False, runtime_config=config,
-               pipeline_disable=os.environ.get('CRISPASR_LLAMA_PIPELINE_DISABLE', '0'))
+               pipeline_disable=os.environ.get('CRISPASR_LLAMA_PIPELINE_DISABLE', '0'), model_recipe=config.get('model_recipe'))
 failed = []
 
 
@@ -176,8 +179,8 @@ def cues_match(actual, expected):
     return len(actual)==len(expected) and all(a['text']==e['text'] and abs(a['start']-e['start'])<=.0051 and abs(a['end']-e['end'])<=.0051 for a,e in zip(actual,expected))
 
 
-for cohort in ['f16']:
-    models = Path(snapshot_download('cstr/index-echo-9b-GGUF', revision=MODEL_REVISION,
+for cohort in config.get('cohorts', ['f16']):
+    models = Path(config['local_models']) if config.get('local_models') else Path(snapshot_download('cstr/index-echo-9b-GGUF', revision=MODEL_REVISION,
                   local_dir=TEMP / 'models', allow_patterns=[f'index-echo-9b-{cohort}.gguf', f'index-echo-9b-decoder-{cohort}.gguf']))
     (models / 'reference-f32').mkdir(exist_ok=True)
     for name in ['pipeline.json', 'pipeline-multi.wav']:
