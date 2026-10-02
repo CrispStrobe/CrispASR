@@ -28,11 +28,13 @@ parser.add_argument('--convert-only', action='store_true')
 parser.add_argument('--audit-only', action='store_true', help='Audit effective blueprint dtypes without generation')
 parser.add_argument('--pipeline-only', action='store_true', help='Released file/VAD/context reference')
 parser.add_argument('--quant-only', action='store_true', help='Reuse the validated F16 decoder; skip references')
-parser.add_argument('--quants', nargs='+', choices=['q8_0', 'q4_k', 'q4_k_selective'], default=['q8_0', 'q4_k'])
+parser.add_argument('--quants', nargs='+', choices=['q8_0', 'q8_0_selective', 'q4_k', 'q4_k_selective'], default=['q8_0', 'q4_k'])
 parser.add_argument('--clips', nargs='+', choices=['jfk', 'zh', 'jfk-tail'], default=['jfk', 'zh', 'jfk-tail'])
 args = parser.parse_args()
 SOURCE, REVISION, DESTINATION = MODELS[args.size]
 PREFIX = 'index-echo-' + args.size
+if 'q8_0_selective' in args.quants and args.size != '9b':
+    parser.error('The selective Q8 A/B is scoped to the 9B projection model')
 if sum([args.reference_only, args.convert_only, args.quant_only, args.pipeline_only, args.audit_only, args.oracle_audit]) > 1:
     parser.error('--reference-only, --convert-only and --quant-only and --pipeline-only are mutually exclusive')
 if args.fp32_decoder and not (args.reference_only or args.pipeline_only):
@@ -156,6 +158,19 @@ try:
             for original, filename in [(audio, f'{PREFIX}-{quant}.gguf'), (decoder, companion)]:
                 converted = SCRATCH / filename
                 overrides = []
+                if quant == 'q8_0_selective' and original == audio:
+                    # Short-tail encoder failures require a full-precision
+                    # acoustic control, not a wider numerical gate. Keep its
+                    # original F16 converter output, including the projection.
+                    shutil.copy2(original, converted)
+                    receipt.setdefault('quant_recipes', {})[filename] = ['audio and connector: original F16']
+                    upload(converted)
+                    converted.unlink()
+                    continue
+                if quant == 'q8_0_selective':
+                    rules = [r'^(token_embd|output)\.weight$=f16']
+                    overrides = [arg for rule in rules for arg in ['--tensor-type', rule]]
+                    receipt.setdefault('quant_recipes', {})[filename] = rules
                 if quant == 'q4_k_selective':
                     # Existing per-tensor overrides keep this A/B isolated from
                     # other Qwen3.5 users. Never dequantize Q8 into a fake F16 base.
@@ -166,7 +181,8 @@ try:
                               r'\.(ssm_.*|attn_qkv|attn_gate)\.weight$=q8_0'])
                     overrides = [arg for rule in rules for arg in ['--tensor-type', rule]]
                     receipt.setdefault('quant_recipes', {})[filename] = rules
-                run(quantizer, original, converted, 'q4_k' if quant == 'q4_k_selective' else quant, *overrides)
+                base_quant = {'q4_k_selective': 'q4_k', 'q8_0_selective': 'q8_0'}.get(quant, quant)
+                run(quantizer, original, converted, base_quant, *overrides)
                 upload(converted)
                 converted.unlink()
         audio.unlink()
