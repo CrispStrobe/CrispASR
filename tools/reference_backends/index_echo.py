@@ -194,7 +194,7 @@ def dump(model_dir, audio, stages, **kwargs):
     return values
 
 
-def dump_pipeline(model_dir, output_dir, sample_dir):
+def dump_pipeline(model_dir, output_dir, sample_dir, checkpoint=None):
     """Run the released file entry point, including real Silero and context.
 
     Keep raw rows and probabilities so native windowing and classifier drift
@@ -239,7 +239,7 @@ def dump_pipeline(model_dir, output_dir, sample_dir):
     silero_vad.load_silero_vad = lambda *a, **kw: RecordingVAD(original_loader(*a, **kw))
     result = dict(precision=f'requested {model.device} {model.dtype}', parameter_dtypes=precision_audit(model),
                   reference_placement=getattr(model.llm, 'hf_device_map', model.device),
-                  model_load_seconds=load_seconds, cases={})
+                  model_load_seconds=load_seconds, complete=False, cases={})
     try:
         for name, audio, lang in cases:
             probabilities.clear()
@@ -251,11 +251,17 @@ def dump_pipeline(model_dir, output_dir, sample_dir):
             result['cases'][name] = dict(audio=audio.name, target=lang, rows=rows,
                                         segments=cues, vad_probabilities=list(probabilities), elapsed_seconds=elapsed)
             (output_dir / 'pipeline.json').write_text(json.dumps(result, indent=2, ensure_ascii=False) + '\n')
+            if checkpoint:
+                checkpoint(output_dir / 'pipeline.json', multi)
             print('released full pipeline', name, elapsed, json.dumps(cues, ensure_ascii=False), flush=True)
     finally:
         silero_vad.load_silero_vad = original_loader
     assert len(result['cases']['multi-en']['rows']) == 3, 'Fixture must exercise two windows plus summary'
     assert result['cases']['multi-en']['rows'][1]['has_ctx'], 'Second window must exercise prior-output context'
+    result['complete'] = True
+    (output_dir / 'pipeline.json').write_text(json.dumps(result, indent=2, ensure_ascii=False) + '\n')
+    if checkpoint:
+        checkpoint(output_dir / 'pipeline.json', multi)
     return output_dir / 'pipeline.json', multi
 
 
