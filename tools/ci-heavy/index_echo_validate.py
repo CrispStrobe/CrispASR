@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Build Index-Echo's shared ABI, CLI and stage diff on a hosted CPU runner."""
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -34,9 +35,12 @@ parser.add_argument('--reference-subdir', choices=['reference', 'reference-f32']
 parser.add_argument('--pipeline', action='store_true', help='Validate released file/VAD/target/context oracle')
 parser.add_argument('--pipeline-fixture-prefix', help='Independent file oracle namespace, when different from stage captures')
 parser.add_argument('--pipeline-audio-path', help='Exact companion audio path in the pinned fixture repository')
+parser.add_argument('--roundtrips', action='store_true', help='Recognize pinned real Piper WAVs through the CLI and shared ABI (9B)')
 parser.add_argument('--cohorts', nargs='+', choices=['f16', 'q8_0', 'q8_0_selective', 'q8_0_ffn', 'q4_k', 'q4_k_selective'], default=['f16'])
 parser.add_argument('--clips', nargs='+', choices=['jfk', 'zh', 'jfk-tail'], default=['jfk', 'zh', 'jfk-tail'])
 args = parser.parse_args()
+if args.roundtrips and args.size != '9b':
+    parser.error('The pinned Piper roundtrip fixture is scoped to 9B')
 prefix = 'index-echo-' + args.size
 manifest = json.loads((ROOT / 'tests/regression/manifest.json').read_text())
 entry = next((e for e in manifest['backends'] if e['name'] == prefix), None)
@@ -182,6 +186,20 @@ def validate_cohort(cohort):
     if args.pipeline:
         from index_echo_pipeline_check import check_pipeline
         failures.extend(check_pipeline(ROOT, OUT, BUILD, library, models, cohort, args.reference_subdir, model_prefix=prefix))
+    if args.roundtrips:
+        from index_echo_roundtrip import check_roundtrips
+        audio_prefix = 'index-echo-9b/roundtrip-piper/'
+        audio_manifest = Path(hf_hub_download(fixtures['repo'], audio_prefix + 'roundtrip-audio.json',
+            revision=fixtures['revision'], local_dir=OUT / 'roundtrip-input'))
+        roundtrip = json.loads(audio_manifest.read_text())
+        for case in roundtrip['cases'].values():
+            audio = Path(hf_hub_download(fixtures['repo'], audio_prefix + case['audio'],
+                revision=fixtures['revision'], local_dir=OUT / 'roundtrip-input'))
+            if hashlib.sha256(audio.read_bytes()).hexdigest() != case['sha256']:
+                raise RuntimeError('Pinned Piper fixture hash mismatch')
+            shutil.copy2(audio, OUT / case['audio'])
+        failures.extend(check_roundtrips(ROOT, OUT, BUILD / 'bin/crispasr', library,
+            models / f'{prefix}-{cohort}.gguf', roundtrip, use_gpu=False))
     return failures
 
 
