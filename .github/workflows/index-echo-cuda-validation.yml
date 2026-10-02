@@ -2,6 +2,11 @@ name: Index Echo CUDA validation bundle
 
 on:
   workflow_dispatch:
+  push:
+    branches: [feat/index-echo-9b]
+    paths:
+      - '.github/workflows/index-echo-cuda-validation.yml'
+      - 'tools/ci-heavy/index_echo_cuda_bundle.py'
 
 permissions:
   contents: read
