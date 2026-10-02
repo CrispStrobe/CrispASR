@@ -1194,8 +1194,8 @@
   },
   "cuda": {
     "passed": true,
-    "build_commit": "9503bec6f9b2d5ad59239369ab16b6a1e6400e78",
-    "build_run": 36994683144,
+    "build_commit": "f91a31da8d586157043639d0e6039c778d2571dc",
+    "build_run": 36997586995,
     "hardware": "Tesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB",
     "clips": {
       "jfk": {
@@ -2415,7 +2415,7 @@
           "exact_text": true,
           "vad_max_abs": 0.002839803695678711,
           "vad_cosine": 0.9999999554856016,
-          "elapsed_seconds": 12.771001567999974
+          "elapsed_seconds": 12.618506820999983
         },
         "zh-en": {
           "source_variant": "independent-all-f32",
@@ -2424,7 +2424,7 @@
           "exact_text": true,
           "vad_max_abs": 0.0010026991367340088,
           "vad_cosine": 0.9999999964061769,
-          "elapsed_seconds": 13.23389290700004
+          "elapsed_seconds": 12.956765109000003
         },
         "zh-ja": {
           "source_variant": "independent-all-f32",
@@ -2433,7 +2433,7 @@
           "exact_text": true,
           "vad_max_abs": 0.0010026991367340088,
           "vad_cosine": 0.9999999964061769,
-          "elapsed_seconds": 13.684027939999964
+          "elapsed_seconds": 13.387546455000006
         },
         "zh-es": {
           "source_variant": "independent-all-f32",
@@ -2442,7 +2442,7 @@
           "exact_text": true,
           "vad_max_abs": 0.0010026991367340088,
           "vad_cosine": 0.9999999964061769,
-          "elapsed_seconds": 12.647854793999954
+          "elapsed_seconds": 12.488135858999954
         },
         "multi-en": {
           "source_variant": "independent-all-f32",
@@ -2451,7 +2451,7 @@
           "exact_text": true,
           "vad_max_abs": 0.0010026991367340088,
           "vad_cosine": 0.9999999948773856,
-          "elapsed_seconds": 16.316456863999974
+          "elapsed_seconds": 16.30695636900009
         }
       }
     },
@@ -2460,10 +2460,7 @@
         "zh-en: full-pipeline decoded mismatch",
         "zh-es: full-pipeline decoded mismatch"
       ],
-      "cuda": [
-        "zh-en: full-pipeline decoded mismatch",
-        "zh-es: full-pipeline decoded mismatch"
-      ]
+      "cuda": []
     }
   },
   "roundtrip": {
@@ -2486,7 +2483,7 @@
         "valid_segments": true,
         "audio_sha256": "2922b7cd5360b373a650d8bf1ea39de16aa3d49e7a44cdec5f350d46c15556ff",
         "seconds": 2.67025,
-        "elapsed_seconds": 4.156793767999943,
+        "elapsed_seconds": 4.104690304999963,
         "cli_rc": 0,
         "cli_abi_text_match": true,
         "passed": true
@@ -2506,7 +2503,7 @@
         "valid_segments": true,
         "audio_sha256": "6a46a4c0c5b0cd48dfd71d600bcec1b4f44701500b6f3e749cde7fb73f140fa1",
         "seconds": 2.6006875,
-        "elapsed_seconds": 4.044608132999997,
+        "elapsed_seconds": 3.9997923690000334,
         "cli_rc": 0,
         "cli_abi_text_match": true,
         "passed": true
@@ -2526,7 +2523,7 @@
         "valid_segments": true,
         "audio_sha256": "3171272c57adafaf73c746322a64240300d7d40f7f42dbfca8c1a9fcc335e32a",
         "seconds": 2.4729375,
-        "elapsed_seconds": 3.895973091999963,
+        "elapsed_seconds": 3.838113700000008,
         "cli_rc": 0,
         "cli_abi_text_match": true,
         "passed": true
@@ -2555,8 +2552,8 @@
       "sha256": "b538315968772ddcc70cbd1d8cbb4411d26ee23aa8bef8bd0b8a35a1741674bc"
     },
     {
-      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v2-terminal/cuda-validation.json",
-      "sha256": "ebd05bdd551a186795e49e68896252c07053bfa6b0696bc333ac19b248869f01"
+      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v3-terminal/cuda-validation.json",
+      "sha256": "f36fefaf7f57c2cb93f319de9e4e899fee109926cc179cdd2c95d00a653e7332"
     },
     {
       "path": "/mnt/storage/crispasr/issue485-9b/f16-bf16-pipeline-36994533773/heavy-36994533773/f16-jfk-diff.log",
@@ -2571,28 +2568,28 @@
       "sha256": "b077607825919a8d878ccabf5f770e97f83b568fb3c0e3f16b6f4ef9b140960b"
     },
     {
-      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v2-terminal/f16-jfk-diff.log",
-      "sha256": "f2921f8a97d3d08f524e3bc585990770d017abab97388e9e3c9b4e392ee536b7"
+      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v3-terminal/f16-jfk-diff.log",
+      "sha256": "64b8afecb2c521e2d7f3f7bad450cdf3c9557428a214441672e5f8666bd58ba7"
     },
     {
-      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v2-terminal/f16-jfk-tail-diff.log",
-      "sha256": "a7d21742c218e5051cb22ff1cbe97afe1d0aaef6061bff8a71db512fd089ecba"
+      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v3-terminal/f16-jfk-tail-diff.log",
+      "sha256": "dce08bbaa31520dae168b12d5772662361d562227266ec28b8d674d3deb7dbc1"
     },
     {
-      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v2-terminal/f16-zh-diff.log",
-      "sha256": "2860ddd5d16f2f7a8932cfa6718b5fde83e4a375b89b0b74ca6a2f0ef304cec9"
+      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v3-terminal/f16-zh-diff.log",
+      "sha256": "1433a424cc1af67e524a0e903134869dc5608898432435dc2b8bf09696c100ba"
     },
     {
       "path": "/mnt/storage/crispasr/issue485-9b/f16-bf16-pipeline-36994533773/heavy-36994533773/pipeline-f16.json",
       "sha256": "9b985a10677417cb645cac4f16c708b787dc9814f0f38d48ab10ace3efb7199d"
     },
     {
-      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v2-terminal/pipeline-f16.json",
-      "sha256": "ab5a28326c13fca47cdbf7a615fccadbe00134cbf792ed89f2a6a50250de07f0"
+      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v3-terminal/pipeline-f16.json",
+      "sha256": "2dd945db3992cce698b89cf4b9c19df308dc3551e7e1fba5179fa20337f4549a"
     },
     {
-      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v2-terminal/index-echo-9b-f16-roundtrip.json",
-      "sha256": "1b281209cdaa59d2b13527287ecd06238d5fa7a6683965a6c278ba2bedeef245"
+      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v3-terminal/index-echo-9b-f16-roundtrip.json",
+      "sha256": "64b90f40ab135a112c61cbe84398226ce968ca8776ae74898669d2b149670828"
     },
     {
       "path": "/mnt/storage/crispasr/issue485-9b/conversion/conversion-receipt.json",
@@ -2602,5 +2599,15 @@
       "path": "/mnt/storage/crispasr/issue485-9b/f16-bf16-pipeline-36994533773/heavy-36994533773/cohort-results.json",
       "sha256": "b538315968772ddcc70cbd1d8cbb4411d26ee23aa8bef8bd0b8a35a1741674bc"
     }
-  ]
+  ],
+  "retained_controls": {
+    "cuda_bf16": {
+      "script_version": "2026-10-02.2",
+      "accepted": false,
+      "failures": [
+        "zh-en: full-pipeline decoded mismatch",
+        "zh-es: full-pipeline decoded mismatch"
+      ]
+    }
+  }
 }
