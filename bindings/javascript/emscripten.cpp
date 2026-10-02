@@ -344,7 +344,7 @@ int main() {
 template <typename T>
 static void browser_dispatch(std::function<T()> work, std::function<emscripten::val(T&)> encode,
                              emscripten::val callback) {
-    if (!g_compute_thread_set.load()) {
+    if (!g_compute_thread_set.load() || g_compute_thread == pthread_self()) {
         emscripten::val error = emscripten::val::object();
         error.set("error", std::string("Proxied compute thread is not ready"));
         callback(error);
@@ -375,8 +375,9 @@ struct browser_asr_segment {
 
 EMSCRIPTEN_BINDINGS(whisper) {
 #ifdef __EMSCRIPTEN_PTHREADS__
-    emscripten::function("browserComputeReady",
-                         emscripten::optional_override([]() { return g_compute_thread_set.load(); }));
+    emscripten::function("browserComputeReady", emscripten::optional_override([]() {
+                             return g_compute_thread_set.load() && g_compute_thread != pthread_self();
+                         }));
     emscripten::function(
         "asrOpenAsync", emscripten::optional_override([](const std::string& path, const std::string& backend,
                                                          int threads, emscripten::val cb) {
@@ -794,20 +795,10 @@ EMSCRIPTEN_BINDINGS(whisper) {
         "ttsSynthesizeAsync", emscripten::optional_override([](const std::string& text, emscripten::val cb) {
             auto* text_copy = new std::string(text);
             auto* cbp = new emscripten::val(cb);
-            if (!g_compute_thread_set) {
-                // No proxied runtime thread (shouldn't happen once
-                // the factory has resolved) — run inline as fallback.
-                int n = 0;
-                float* pcm =
-                    g_tts_session ? crispasr_session_synthesize(g_tts_session, text_copy->c_str(), &n) : nullptr;
-                emscripten::val out = emscripten::val::array();
-                if (pcm && n > 0) {
-                    out = emscripten::val::global("Float32Array").new_(n);
-                    out.call<void>("set", emscripten::val(emscripten::typed_memory_view(n, pcm)));
-                }
-                if (pcm)
-                    crispasr_pcm_free(pcm);
-                (*cbp)(out);
+            if (!g_compute_thread_set.load() || g_compute_thread == pthread_self()) {
+                emscripten::val error = emscripten::val::object();
+                error.set("error", "Threaded browser compute is not ready; use PROXY_TO_PTHREAD");
+                (*cbp)(error);
                 delete text_copy;
                 delete cbp;
                 return;
