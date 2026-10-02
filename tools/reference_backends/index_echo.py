@@ -4,6 +4,7 @@ Pin the source package; do not run a GGUF reconstruction as the oracle.
 Capture full audio stages, last prompt-token decoder states, logits and text.
 """
 import importlib.util
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -12,6 +13,64 @@ import numpy as np
 
 DEFAULT_STAGES = ['mel_spectrogram', 'encoder_input', 'encoder_output', 'connector_output',
                   'prompt_ids', 'llm_logits', 'generated_ids']
+
+
+def load_blueprint(root):
+    """Execute the released constructor; optional Accelerate changes placement only.
+
+    The 9B F32 decoder cannot fit on a standard CPU runner or one T4. Let the
+    official HF loader dispatch layers across devices/disk, and bypass only the
+    constructor's subsequent homogeneous .to(device). Forward, cache, prompt
+    and generation remain the original Python implementations.
+    """
+    import torch
+    from transformers import AutoModelForCausalLM
+    from unittest.mock import patch
+    root = Path(root)
+    spec = importlib.util.spec_from_file_location('index_echo_blueprint', root / 'infer.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    device = os.getenv('INDEX_ECHO_REF_DEVICE', 'cpu')
+    dtype = getattr(torch, os.getenv('INDEX_ECHO_REF_DTYPE', 'float32'))
+    placement = os.getenv('INDEX_ECHO_REF_DEVICE_MAP')
+    original_to = []
+    if device.startswith('cuda'):
+        torch.backends.cuda.matmul.allow_tf32 = False
+        torch.backends.cudnn.allow_tf32 = False
+    if placement:
+        factory = AutoModelForCausalLM.from_pretrained
+        memory = json.loads(os.environ['INDEX_ECHO_REF_MAX_MEMORY'])
+        memory = {int(k) if k.isdigit() else k: v for k, v in memory.items()}
+
+        def placed_loader(*args, **kwargs):
+            llm = factory(*args, **kwargs,
+                          device_map=json.loads(placement) if placement.startswith('{') else placement,
+                          max_memory=memory, offload_folder=os.environ['INDEX_ECHO_REF_OFFLOAD_DIR'],
+                          offload_buffers=True)
+            original_to.append(llm.to)
+
+            def constructor_to(destination):
+                if str(destination) != device:
+                    raise RuntimeError('Only the released constructor device move may be bypassed')
+                return llm
+
+            llm.to = constructor_to
+            return llm
+
+        with patch.object(AutoModelForCausalLM, 'from_pretrained', new=staticmethod(placed_loader)):
+            model = module.AudioTransModel(str(root), device=device, dtype=dtype)
+        model.llm.to = original_to[0]
+    else:
+        model = module.AudioTransModel(str(root), device=device, dtype=dtype)
+    if os.getenv('INDEX_ECHO_REF_FP32_DECODER') == '1':
+        if placement:
+            if any(p.dtype != torch.float32 for p in model.llm.parameters()):
+                raise RuntimeError('An offloaded F32 diagnostic must load F32 initially')
+        else:
+            model.llm.to(torch.float32)
+    print('reference placement:', getattr(model.llm, 'hf_device_map', device), flush=True)
+    print('reference parameter dtypes:', json.dumps(precision_audit(model), sort_keys=True), flush=True)
+    return module, model
 
 
 def precision_audit(model):
@@ -34,14 +93,9 @@ def dump(model_dir, audio, stages, **kwargs):
     torch.set_num_threads(int(os.getenv('INDEX_ECHO_REF_THREADS', '4')))
     torch.set_grad_enabled(False)
     root = Path(model_dir)
-    spec = importlib.util.spec_from_file_location('index_echo_blueprint', root / 'infer.py')
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    model = module.AudioTransModel(str(root), device='cpu', dtype=torch.float32)
-    if os.getenv('INDEX_ECHO_REF_FP32_DECODER') == '1':
-        model.llm.to(torch.float32)
-    import json
+    module, model = load_blueprint(root)
     values = {'parameter_dtypes': json.dumps(precision_audit(model), sort_keys=True)}
+    values['reference_placement'] = json.dumps(getattr(model.llm, 'hf_device_map', model.device), sort_keys=True)
     handles = []
     def hook(name, last=False, transform=None):
         def capture(mod, inputs, output):
@@ -71,24 +125,24 @@ def dump(model_dir, audio, stages, **kwargs):
         frames = int(f.attention_mask.sum(-1)[0])
         values['mel_spectrogram'] = f.input_features[0][:, :frames].float().numpy().copy()
         emb = model.encode_audio(str(wav))
-    values['connector_output'] = emb.float().numpy().copy()
+    values['connector_output'] = emb.float().cpu().numpy().copy()
     for h in handles:
         h.remove()
     handles = []
     lang = os.getenv('INDEX_ECHO_TARGET_LANG', 'en')
     content = module.AUDIO_START + module.AUDIO_PAD * emb.shape[0] + module.AUDIO_END + '\n' + module.INSTR[lang]
     prompt = f'<|im_start|>user\n{content}<|im_end|>\n<|im_start|>assistant\n<think>\n\n</think>\n\n'
-    ids = model.tok(prompt, return_tensors='pt').input_ids
+    ids = model.tok(prompt, return_tensors='pt').input_ids.to(model.device)
     x = model.llm.get_input_embeddings()(ids).clone()
     mask = ids == model.pad_id
     assert int(mask.sum()) == emb.shape[0]
     x[mask] = emb.to(x.dtype)
     values['target_lang'] = lang
-    values['prompt_ids'] = ids.numpy().astype(np.int32)
+    values['prompt_ids'] = ids.cpu().numpy().astype(np.int32)
     for i, layer in enumerate(model.llm.model.layers):
         handles.append(layer.register_forward_hook(hook(f'llm_block_{i}', last=True)))
     out = model.llm(inputs_embeds=x, attention_mask=torch.ones_like(ids), use_cache=True, logits_to_keep=1)
-    values['llm_logits'] = out.logits[0, -1].float().numpy().copy()
+    values['llm_logits'] = out.logits[0, -1].float().cpu().numpy().copy()
     for h in handles:
         h.remove()
     trace_cache = out.past_key_values
@@ -96,7 +150,7 @@ def dump(model_dir, audio, stages, **kwargs):
     generated = model.llm.generate(inputs_embeds=x, attention_mask=torch.ones_like(ids),
         max_new_tokens=int(os.getenv('INDEX_ECHO_REF_MAX_TOKENS', '2000')), do_sample=False,
         eos_token_id=[model.tok.eos_token_id, model.im_end], pad_token_id=model.tok.eos_token_id)
-    values['generated_ids'] = generated.numpy().astype(np.int32)
+    values['generated_ids'] = generated.cpu().numpy().astype(np.int32)
     values['generated_text'] = model.tok.decode(generated[0], skip_special_tokens=True).strip()
     # Replay the reference's own greedy IDs through the saved initial cache.
     # This separates recurrent/KV errors from divergent sampling decisions.
@@ -105,7 +159,7 @@ def dump(model_dir, audio, stages, **kwargs):
         step = model.llm(input_ids=generated[:, i:i + 1], past_key_values=trace_cache,
                          use_cache=True, logits_to_keep=1)
         trace_cache = step.past_key_values
-        trace.append(step.logits[0, -1].float().numpy().copy())
+        trace.append(step.logits[0, -1].float().cpu().numpy().copy())
     values['teacherforced_logits'] = np.stack(trace)
     return values
 
@@ -125,13 +179,8 @@ def dump_pipeline(model_dir, output_dir, sample_dir):
     torch.set_num_threads(int(os.getenv('INDEX_ECHO_REF_THREADS', '4')))
     torch.set_grad_enabled(False)
     output_dir, sample_dir = Path(output_dir), Path(sample_dir)
-    spec = importlib.util.spec_from_file_location('index_echo_pipeline_blueprint', Path(model_dir) / 'infer.py')
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
     started = time.perf_counter()
-    model = module.AudioTransModel(str(model_dir), device='cpu', dtype=torch.float32)
-    if os.getenv('INDEX_ECHO_REF_FP32_DECODER') == '1':
-        model.llm.to(torch.float32)
+    module, model = load_blueprint(model_dir)
     load_seconds = time.perf_counter() - started
     jfk, rate = sf.read(sample_dir / 'jfk.wav', dtype='float32')
     assert rate == 16000
@@ -158,7 +207,8 @@ def dump_pipeline(model_dir, output_dir, sample_dir):
             return value
 
     silero_vad.load_silero_vad = lambda *a, **kw: RecordingVAD(original_loader(*a, **kw))
-    result = dict(precision='requested CPU F32', parameter_dtypes=precision_audit(model),
+    result = dict(precision=f'requested {model.device} {model.dtype}', parameter_dtypes=precision_audit(model),
+                  reference_placement=getattr(model.llm, 'hf_device_map', model.device),
                   model_load_seconds=load_seconds, cases={})
     try:
         for name, audio, lang in cases:
