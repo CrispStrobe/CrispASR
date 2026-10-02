@@ -1,0 +1,1235 @@
+{
+  "script_version": "2026-10-02.2",
+  "hardware": "Tesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB",
+  "source_revision": "b8ac6fb7d3dc17cee48a52201bd3d93dc86b0dba",
+  "model_repo": "cstr/index-echo-9b-GGUF",
+  "model_revision": "dca128e0da2c86819347b79f63da610c0b8bd472",
+  "acceptance_revision": "2648560bb4b9104e1b0a2068dffb6846f1792553",
+  "reference_revision": "cb678dfd4806778aa55c39fe7b7a710a54cdc153",
+  "bundle_revision": "9ffaeaab43fece5ec5c0baeb4884e2db87625f6f",
+  "build_commit": "f91a31da8d586157043639d0e6039c778d2571dc",
+  "threads": 4,
+  "orders": {
+    "AB": {
+      "python": {
+        "arm": "python",
+        "order": "AB",
+        "clips": {
+          "jfk": {
+            "audio_seconds": 11.0,
+            "first_seconds": 30.737751118999995,
+            "warm_median_seconds": 16.209720945999948,
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 30.737751118999995,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 16.33261869499995,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 16.136801582999965,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 16.209720945999948,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              }
+            ]
+          },
+          "zh": {
+            "audio_seconds": 13.052,
+            "first_seconds": 18.94821881900009,
+            "warm_median_seconds": 18.964068531000066,
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 18.94821881900009,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 18.964068531000066,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 18.932572492999952,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 18.972073037999962,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "parameter_dtypes": {
+          "tower": {
+            "parameter_elements": {
+              "torch.bfloat16": 647927168
+            },
+            "module_class": "Qwen3OmniMoeAudioEncoder"
+          },
+          "connector": {
+            "parameter_elements": {
+              "torch.bfloat16": 8388608
+            },
+            "module_class": "AudioConnectorProj"
+          },
+          "llm": {
+            "parameter_elements": {
+              "torch.bfloat16": 8953803264
+            },
+            "module_class": "Qwen3_5ForCausalLM"
+          },
+          "embedding_dtype": "torch.bfloat16"
+        },
+        "placement": {
+          "model.embed_tokens": 0,
+          "model.layers.0": 0,
+          "model.layers.1": 0,
+          "model.layers.2": 0,
+          "model.layers.3": 0,
+          "model.layers.4": 0,
+          "model.layers.5": 0,
+          "model.layers.6": 0,
+          "model.layers.7": 0,
+          "model.layers.8": 0,
+          "model.layers.9": 0,
+          "model.layers.10": 0,
+          "model.layers.11": 0,
+          "model.layers.12": 1,
+          "model.layers.13": 1,
+          "model.layers.14": 1,
+          "model.layers.15": 1,
+          "model.layers.16": 1,
+          "model.layers.17": 1,
+          "model.layers.18": 1,
+          "model.layers.19": 1,
+          "model.layers.20": 1,
+          "model.layers.21": 1,
+          "model.layers.22": 1,
+          "model.layers.23": 1,
+          "model.layers.24": 1,
+          "model.layers.25": 1,
+          "model.layers.26": 1,
+          "model.layers.27": 1,
+          "model.layers.28": 1,
+          "model.layers.29": 1,
+          "model.layers.30": 1,
+          "model.layers.31": 1,
+          "model.norm": 1,
+          "model.rotary_emb": 1,
+          "lm_head": 1
+        },
+        "torch": "2.10.0+cu128",
+        "load_seconds": 116.036465195
+      },
+      "f16": {
+        "arm": "f16",
+        "order": "AB",
+        "clips": {
+          "jfk": {
+            "audio_seconds": 11.0,
+            "first_seconds": 12.514635797999972,
+            "warm_median_seconds": 12.196553408,
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 12.514635797999972,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 12.116962810999894,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 12.198737087999916,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 12.196553408,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              }
+            ]
+          },
+          "zh": {
+            "audio_seconds": 13.052,
+            "first_seconds": 13.884548425000048,
+            "warm_median_seconds": 13.95986321800001,
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 13.884548425000048,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 13.889968980000049,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 13.95986321800001,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 14.00176318900003,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "load_seconds": 81.52558297700011
+      }
+    },
+    "BA": {
+      "f16": {
+        "arm": "f16",
+        "order": "BA",
+        "clips": {
+          "jfk": {
+            "audio_seconds": 11.0,
+            "first_seconds": 12.479064862000087,
+            "warm_median_seconds": 12.243098926999892,
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 12.479064862000087,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 12.255372536000095,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 12.243098926999892,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 12.24221296099995,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              }
+            ]
+          },
+          "zh": {
+            "audio_seconds": 13.052,
+            "first_seconds": 13.892903065999917,
+            "warm_median_seconds": 13.870997106000004,
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 13.892903065999917,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 13.868042718999959,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 13.870997106000004,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 13.92309331499996,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "load_seconds": 10.898881301000074
+      },
+      "python": {
+        "arm": "python",
+        "order": "BA",
+        "clips": {
+          "jfk": {
+            "audio_seconds": 11.0,
+            "first_seconds": 20.67283100999998,
+            "warm_median_seconds": 16.240506904999847,
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 20.67283100999998,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 16.18817990399998,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 16.28573081500008,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 16.240506904999847,
+                "segments": [
+                  {
+                    "start": 0.0,
+                    "end": 2.48,
+                    "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+                  },
+                  {
+                    "start": 3.12,
+                    "end": 4.56,
+                    "text": "ask not\nask not"
+                  },
+                  {
+                    "start": 5.16,
+                    "end": 7.52,
+                    "text": "what your country can do for you,\nwhat your country can do for you,"
+                  },
+                  {
+                    "start": 8.0,
+                    "end": 10.0,
+                    "text": "ask what you can do for\nask what you can do for"
+                  },
+                  {
+                    "start": 9.8,
+                    "end": 11.0,
+                    "text": "your country.。\nyour country."
+                  }
+                ]
+              }
+            ]
+          },
+          "zh": {
+            "audio_seconds": 13.052,
+            "first_seconds": 18.903835188999892,
+            "warm_median_seconds": 18.864045026999975,
+            "iterations": [
+              {
+                "iteration": 0,
+                "seconds": 18.903835188999892,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 1,
+                "seconds": 18.91700967299994,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 2,
+                "seconds": 18.864045026999975,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              },
+              {
+                "iteration": 3,
+                "seconds": 18.82495486699986,
+                "segments": [
+                  {
+                    "start": 0.43,
+                    "end": 2.25,
+                    "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+                  },
+                  {
+                    "start": 2.27,
+                    "end": 4.57,
+                    "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+                  },
+                  {
+                    "start": 5.23,
+                    "end": 7.47,
+                    "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+                  },
+                  {
+                    "start": 7.47,
+                    "end": 9.99,
+                    "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+                  },
+                  {
+                    "start": 10.51,
+                    "end": 12.92,
+                    "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+                  }
+                ]
+              }
+            ]
+          }
+        },
+        "parameter_dtypes": {
+          "tower": {
+            "parameter_elements": {
+              "torch.bfloat16": 647927168
+            },
+            "module_class": "Qwen3OmniMoeAudioEncoder"
+          },
+          "connector": {
+            "parameter_elements": {
+              "torch.bfloat16": 8388608
+            },
+            "module_class": "AudioConnectorProj"
+          },
+          "llm": {
+            "parameter_elements": {
+              "torch.bfloat16": 8953803264
+            },
+            "module_class": "Qwen3_5ForCausalLM"
+          },
+          "embedding_dtype": "torch.bfloat16"
+        },
+        "placement": {
+          "model.embed_tokens": 0,
+          "model.layers.0": 0,
+          "model.layers.1": 0,
+          "model.layers.2": 0,
+          "model.layers.3": 0,
+          "model.layers.4": 0,
+          "model.layers.5": 0,
+          "model.layers.6": 0,
+          "model.layers.7": 0,
+          "model.layers.8": 0,
+          "model.layers.9": 0,
+          "model.layers.10": 0,
+          "model.layers.11": 0,
+          "model.layers.12": 1,
+          "model.layers.13": 1,
+          "model.layers.14": 1,
+          "model.layers.15": 1,
+          "model.layers.16": 1,
+          "model.layers.17": 1,
+          "model.layers.18": 1,
+          "model.layers.19": 1,
+          "model.layers.20": 1,
+          "model.layers.21": 1,
+          "model.layers.22": 1,
+          "model.layers.23": 1,
+          "model.layers.24": 1,
+          "model.layers.25": 1,
+          "model.layers.26": 1,
+          "model.layers.27": 1,
+          "model.layers.28": 1,
+          "model.layers.29": 1,
+          "model.layers.30": 1,
+          "model.layers.31": 1,
+          "model.norm": 1,
+          "model.rotary_emb": 1,
+          "lm_head": 1
+        },
+        "torch": "2.10.0+cu128",
+        "load_seconds": 96.65025864199993
+      }
+    }
+  },
+  "validated": true,
+  "scope": "Original resident BF16 versus native F16; different activation precision and recorded default layer placement. First call separate; three warm calls per clip and both execution orders. Exact independent output required.",
+  "evidence": [
+    {
+      "path": "profile-AB-f16.log",
+      "sha256": "affcc6dc57aeef24fc02b3f5ba07cc49b5e10411b21bca8d885eb843662bd269"
+    },
+    {
+      "path": "profile-AB-python.log",
+      "sha256": "a8b04631c320564a9fd8300c277a90d3e29744f4858df5f8f31fe18a7723f8ee"
+    },
+    {
+      "path": "profile-BA-f16.log",
+      "sha256": "2f1999c42b030eaff7d46c4bb7ca2bc1633e07004219eaa0388a65bce133d069"
+    },
+    {
+      "path": "profile-BA-python.log",
+      "sha256": "7ea859b398b2a4ef193563aebd1bc931be83ffd60e84c59f389a91483e7ab222"
+    }
+  ],
+  "native_cuda_execution_verified": true
+}
