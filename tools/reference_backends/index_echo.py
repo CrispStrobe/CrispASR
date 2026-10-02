@@ -61,6 +61,18 @@ def load_blueprint(root):
                               max_memory=memory, offload_folder=os.environ['INDEX_ECHO_REF_OFFLOAD_DIR'],
                               offload_buffers=True)
             llm._crispasr_ref_preload_classes = ['Qwen3_5GatedDeltaNet']
+            for layer in llm.modules():
+                if type(layer).__name__ != 'Qwen3_5GatedDeltaNet':
+                    continue
+                original_update = layer.causal_conv1d_update
+
+                @functools.wraps(original_update)
+                def checked_update(*a, _original=original_update, **kw):
+                    if a[2].is_meta:
+                        raise RuntimeError('Offloaded cached GDN convolution weight was not materialized')
+                    return _original(*a, **kw)
+
+                layer.causal_conv1d_update = checked_update
             original_to.append(llm.to)
 
             def constructor_to(destination):
