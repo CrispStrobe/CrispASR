@@ -76,7 +76,7 @@ receipt = dict(script_version=SCRIPT_VERSION, source_commit=SOURCE_COMMIT,
                full_pipeline_checked=False, cohorts={})
 failed = []
 for cohort in ['f16', 'q8_0']:
-    models = Path(snapshot_download('cstr/index-echo-9b-GGUF', revision=MODEL_REVISION,
+    models = Path(snapshot_download('cstr/index-echo-9b-staging-GGUF', revision=MODEL_REVISION,
                   local_dir=TEMP / 'models', allow_patterns=[f'index-echo-9b-{cohort}.gguf', f'index-echo-9b-decoder-{cohort}.gguf']))
     primary = models / f'index-echo-9b-{cohort}.gguf'
     with (OUT / f'{cohort}-jfk-diff.log').open('w') as log, kh.build_heartbeat(cohort + '.diff', interval_s=30):
