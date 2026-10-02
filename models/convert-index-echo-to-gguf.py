@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Convert the Index-Echo AuT tower and residual connector to GGUF.
+"""Convert the Index-Echo AuT tower and residual/projection connector to GGUF.
 
 The Qwen3.5 text decoder is a separate standard llama.cpp GGUF. No vision
 weights are needed by the speech path. Load safetensors one tensor at a time.
