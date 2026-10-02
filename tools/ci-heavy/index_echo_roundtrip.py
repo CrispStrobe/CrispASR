@@ -69,29 +69,35 @@ def check_roundtrips(root, out, cli, library, primary, audio_manifest, use_gpu=F
                 # separate lines. Score the requested English target only.
                 heard = ' '.join(s.text.strip().splitlines()[-1] for s in segments if s.text.strip())
                 wer = word_error_rate(item['text'], heard)
-                prefix = out / (primary.stem + '-' + name)
-                command = [str(cli), '-m', str(primary), '-f', str(audio), '-l', 'auto',
-                           '-t', '4', '-osrt', '-of', str(prefix)]
-                if not use_gpu:
-                    command.append('-ng')
-                with prefix.with_suffix('.log').open('w') as log:
-                    result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=3600)
-                srt = prefix.with_suffix('.srt')
-                cli_lines = [line.strip() for line in srt.read_text().splitlines()
-                             if line.strip() and not line.strip().isdigit() and '-->' not in line] if srt.exists() else []
-                abi_lines = [line.strip() for s in segments for line in s.text.splitlines() if line.strip()]
                 valid_segments = bool(segments) and all(0 <= s.start < s.end <= len(pcm) / 16000 + .1 for s in segments)
-                passed = valid_segments and wer <= .10 and result.returncode == 0 and cli_lines == abi_lines
                 results[name] = dict(expected=item['text'], english=heard, wer=wer, wer_max=.10,
                                      segments=[dict(start=s.start, end=s.end, text=s.text) for s in segments],
-                                     cli_rc=result.returncode, cli_abi_text_match=cli_lines == abi_lines,
+                                     valid_segments=valid_segments,
                                      audio_sha256=hashlib.sha256(audio.read_bytes()).hexdigest(),
-                                     seconds=len(pcm) / 16000, elapsed_seconds=elapsed, passed=passed)
-                print('roundtrip', primary.stem, name, json.dumps(results[name], ensure_ascii=False), flush=True)
-                if not passed:
-                    failures.append(name)
+                                     seconds=len(pcm) / 16000, elapsed_seconds=elapsed)
+                print('roundtrip ABI', name, heard, 'WER', wer, flush=True)
     finally:
         anonymous.unlink()
+    # Release the resident ABI model before the CLI loads another copy. This
+    # matters for hosted RAM and is essential for the F16 CUDA VRAM budget.
+    for name, item in audio_manifest['cases'].items():
+        prefix = out / (primary.stem + '-' + name)
+        command = [str(cli), '-m', str(primary), '-f', str(out / item['audio']), '-l', 'auto',
+                   '-t', '4', '-osrt', '-of', str(prefix)]
+        if not use_gpu:
+            command.append('-ng')
+        with prefix.with_suffix('.log').open('w') as log:
+            result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, timeout=3600)
+        srt = prefix.with_suffix('.srt')
+        cli_lines = [line.strip() for line in srt.read_text().splitlines()
+                     if line.strip() and not line.strip().isdigit() and '-->' not in line] if srt.exists() else []
+        case = results[name]
+        abi_lines = [line.strip() for s in case['segments'] for line in s['text'].splitlines() if line.strip()]
+        passed = case['valid_segments'] and case['wer'] <= .10 and result.returncode == 0 and cli_lines == abi_lines
+        case.update(cli_rc=result.returncode, cli_abi_text_match=cli_lines == abi_lines, passed=passed)
+        print('roundtrip', primary.stem, name, json.dumps(case, ensure_ascii=False), flush=True)
+        if not passed:
+            failures.append(name)
     receipt = dict(model=primary.name, gpu=use_gpu, cases=results, failed=failures,
                    source_stage_parity_checked=False, roundtrip_passed=not failures)
     (out / (primary.stem + '-roundtrip.json')).write_text(json.dumps(receipt, indent=2, ensure_ascii=False) + '\n')
