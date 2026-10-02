@@ -93,8 +93,10 @@ def check_roundtrips(root, out, cli, library, primary, audio_manifest, use_gpu=F
                      if line.strip() and not line.strip().isdigit() and '-->' not in line] if srt.exists() else []
         case = results[name]
         abi_lines = [line.strip() for s in case['segments'] for line in s['text'].splitlines() if line.strip()]
-        passed = case['valid_segments'] and case['wer'] <= .10 and result.returncode == 0 and cli_lines == abi_lines
-        case.update(cli_rc=result.returncode, cli_abi_text_match=cli_lines == abi_lines, passed=passed)
+        cli_log = prefix.with_suffix('.log').read_text()
+        cli_cuda_used = 'load_tensors: layer' in cli_log and 'assigned to device CUDA' in cli_log
+        passed = case['valid_segments'] and case['wer'] <= .10 and result.returncode == 0 and cli_lines == abi_lines and (not use_gpu or cli_cuda_used)
+        case.update(cli_rc=result.returncode, cli_abi_text_match=cli_lines == abi_lines, cli_cuda_used=cli_cuda_used, passed=passed)
         print('roundtrip', primary.stem, name, json.dumps(case, ensure_ascii=False), flush=True)
         if not passed:
             failures.append(name)

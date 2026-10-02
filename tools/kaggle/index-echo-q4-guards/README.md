@@ -1,8 +1,11 @@
 # Index-Echo 9B mixed Q4_K investigation
 
-Build the CUDA bundle (including `crispasr-quantize`) on GitHub; pin its
-successful build SHA, HF dataset revision and SHA256 before pushing this
-kernel with `../kpush.py`. No GPU-less build counts as hardware acceptance.
+Build the CUDA bundle on GitHub. Run `tools/ci-heavy/index_echo_q4_prepare.py`
+through `heavy-cpu.yml` with the dedicated Index-Echo staging credential;
+quantization, physical audits and private uploads all run on that CPU runner.
+Pin its preparation revision/checksum as well as the successful CUDA build
+SHA, HF dataset revision and SHA256 before pushing with `../kpush.py`.
+No GPU-less build counts as hardware acceptance.
 The kernel requires two actual SM75 GPUs and exits inconclusive before model
 downloads if that hardware is absent. Never repush to fish for hardware.
 
@@ -21,9 +24,18 @@ punctuation, timestamps, cosine, magnitude or cache/token criteria:
 Per-tensor inventory and actual Q4 byte counts prevent a nominal Q4 artifact
 from silently remaining F16. Separate candidate directories resolve the
 unchanged primary's original companion basename to the tested mixed decoder.
-Each decoder is uploaded immediately to a private experiment repository;
-its receipt/log is retained even after rejection and local weights are
-released after testing. No public weights or default quantization changes.
+Each decoder is uploaded immediately to the existing private staging repository
+on GitHub and local runner weights are released. Kaggle downloads one candidate
+at a time and releases it after actual GPU acceptance. Its receipt/log is
+retained even after rejection. All CLI checks must log actual CUDA layer
+assignment; the small CPU VAD companion is part of the real file pipeline.
+No compilation, quantization, CPU-only CLI pass, TTS synthesis, public weights
+or default quantization changes occur in the GPU kernel.
+
+The original v1 GPU F16 control passed every acceptance gate but stopped before
+any quantization: its Kaggle token could not create model repositories (403).
+All terminal logs and outputs were saved before preparing v2. This is a
+preparation/auth failure, not evidence for or against any Q4 recipe.
 
 These guards follow the existing quantizer's acoustic/adapter/output-head
 precision floors for Hojo, MOSS, Qwen3-ASR, Canary-Qwen and TTS models, plus
