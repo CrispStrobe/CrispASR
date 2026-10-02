@@ -9,7 +9,7 @@
 namespace {
 class IndexEchoBackend : public CrispasrBackend {
 public:
-    ~IndexEchoBackend() override { shutdown(); }
+    ~IndexEchoBackend() override { release_context(); }
     const char* name() const override { return "index-echo"; }
     uint32_t capabilities() const override {
         return CAP_TIMESTAMPS_NATIVE | CAP_TRANSLATE | CAP_SRC_TGT_LANGUAGE | CAP_TEMPERATURE | CAP_FLASH_ATTN |
@@ -60,12 +60,13 @@ public:
         index_echo_result_free(result);
         return out;
     }
-    void shutdown() override {
+    void shutdown() override { release_context(); }
+
+private:
+    void release_context() {
         index_echo_free(ctx_);
         ctx_ = nullptr;
     }
-
-private:
     index_echo_context* ctx_ = nullptr;
 };
 } // namespace
