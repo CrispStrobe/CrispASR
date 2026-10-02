@@ -1893,13 +1893,27 @@ int main(int argc, char** argv) {
         gguf_context* metadata = gguf_init_from_file(model_path.c_str(), metadata_params);
         if (!metadata)
             return 4;
-        bool quantized = false;
+        bool audio_quantized = false;
         for (int64_t i = 0; i < gguf_get_n_tensors(metadata); ++i)
-            quantized |= ggml_is_quantized(gguf_get_tensor_type(metadata, i));
+            audio_quantized |= ggml_is_quantized(gguf_get_tensor_type(metadata, i));
+        const int64_t decoder_key = gguf_find_key(metadata, "index_echo.decoder_file");
+        const std::string companion = decoder_key >= 0 && gguf_get_kv_type(metadata, decoder_key) == GGUF_TYPE_STRING
+                                          ? gguf_get_val_str(metadata, decoder_key)
+                                          : "";
         gguf_free(metadata);
-        printf("Index-Echo precision: %s; cosine >= %g, relative L2 <= %g; "
-               "unquantized frontend keeps F16 gates\n",
-               quantized ? "quantized" : "F16", quantized ? 0.99 : 0.999, quantized ? 0.05 : 0.02);
+        if (companion.empty() || std::filesystem::path(companion).is_absolute() ||
+            companion != std::filesystem::path(companion).filename().string())
+            return 4;
+        const auto decoder_path = std::filesystem::path(model_path).parent_path() / companion;
+        metadata = gguf_init_from_file(decoder_path.string().c_str(), metadata_params);
+        if (!metadata)
+            return 4;
+        bool decoder_quantized = false;
+        for (int64_t i = 0; i < gguf_get_n_tensors(metadata); ++i)
+            decoder_quantized |= ggml_is_quantized(gguf_get_tensor_type(metadata, i));
+        gguf_free(metadata);
+        printf("Index-Echo precision: audio=%s decoder=%s; unquantized stages retain F16 gates\n",
+               audio_quantized ? "quantized" : "F16", decoder_quantized ? "quantized" : "F16");
         auto cp = index_echo_context_default_params();
         cp.n_threads = 4;
         cp.verbosity = 0;
@@ -1922,6 +1936,10 @@ int main(int argc, char** argv) {
             auto report = ref.compare(name, data, count, crispasr_diff::Ref::COS_FIRST_DIM);
             const bool frontend =
                 name == "mel_spectrogram" || name == "conv1_out" || name == "conv2_out" || name == "conv3_out";
+            const bool decoder_stage =
+                name == "llm_logits" || name == "teacherforced_logits" || name.compare(0, 10, "llm_block_") == 0;
+            // Decoder stages also inherit error from quantized audio inputs.
+            const bool quantized = audio_quantized || (decoder_stage && decoder_quantized);
             // The guide's F16-vs-F32 range is .998-.999. Cached weak logits
             // reach .99846 against the released nested-BF16 decoder; all
             // greedy IDs and complete direct-window decoded cues agree.
