@@ -331,7 +331,16 @@ Chinese transcription with English, Japanese or Spanish translation.
 English JFK transcription with English translation matches the released
 Python model in CPU validation; broader source-language accuracy is unmeasured.
 
-The encoder uses `crisp_audio`; the residual connector is a ggml graph.
+The 9B checkpoint uses the same AuT dimensions and a single 2048→4096
+linear connector, followed by a 32-block Qwen3.5 decoder (24 gated delta
+network and eight full-attention blocks). Its flat decoder has untied
+248,320-token input/output matrices and no MTP weights. Connector dimensions
+and architecture metadata choose the graph; filename detection is not required
+by the shared C ABI. The primary and companion F16 GGUFs total 17.914 GiB.
+The default auto-download remains the 2B Q8 pair; the 9B F16 filename selects
+its own matching decoder and the same Silero companion.
+
+The encoder uses `crisp_audio`; both connector forms are ggml graphs.
 The decoder uses CrispASR's private llama core, including its hybrid KV and
 recurrent-state cache. Prefix tokens, audio embeddings and suffix tokens are
 prefilled into one sequence at consecutive positions. Each window clears the
@@ -356,7 +365,7 @@ must retain the three-line subtitle format if parsed cues are desired.
 The frontend pads before centered STFT and keeps the attention-mask frame
 count, including partial final hops. The released Transformers 5.6.0 CPU
 encoder does not apply its constructed window mask; the conversion explicitly
-records full attention. GPU reference behavior remains to be checked.
+records full attention. The independent 9B GPU reference checks the released encoder behavior separately.
 
 CPU validation against the pinned released inference class (F32 tower/connector,
 BF16 decoder) reproduces

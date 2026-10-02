@@ -604,4 +604,11 @@ TEST_CASE("registry: Index-Echo downloads a matching pair and source VAD", "[uni
     REQUIRE(crispasr_registry_lookup("index-echo", entry, "f16"));
     REQUIRE(entry.filename == "index-echo-2b-f16.gguf");
     REQUIRE(entry.companion_filename == "index-echo-2b-decoder-f16.gguf");
+    REQUIRE(crispasr_registry_lookup_by_filename("index-echo-9b-f16.gguf", entry));
+    REQUIRE(entry.backend == "index-echo");
+    REQUIRE(entry.filename == "index-echo-9b-f16.gguf");
+    REQUIRE(entry.companion_filename == "index-echo-9b-decoder-f16.gguf");
+    REQUIRE(entry.url.find("/index-echo-9b-GGUF/") != std::string::npos);
+    REQUIRE(entry.companion_url.find("/index-echo-9b-GGUF/") != std::string::npos);
+    REQUIRE_FALSE(crispasr_license_requires_acceptance(entry.license));
 }

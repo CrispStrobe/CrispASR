@@ -913,7 +913,11 @@ transcript, translation three-line format. It supports greedy or temperature
 sampling, seed and explicit `--max-new-tokens` (default 2000), with its own
 bounded windows and context history. The tower GGUF needs the decoder named
 in its metadata beside it; a Silero companion enables speech-boundary windows.
-Development artifacts are private until parity and decoded-output checks pass.
+The 9B F16 pair needs 17.914 GiB of weight storage. Select it explicitly with
+`-m index-echo-9b-f16.gguf --auto-download`; `-m auto --backend index-echo`
+selects the smaller 2B Q8 pair. Silero currently executes on CPU even when the
+speech encoder and decoder use CUDA. Experimental model cohorts remain private
+until parity and decoded-output checks pass.
 
 | Flag | Meaning |
 |---|---|
