@@ -4,6 +4,43 @@ Test audio: jfk.wav (11.0s), Q4_K quantization, greedy decode (`-bs 1`).
 
 ---
 
+## Index-Echo S2TT 9B CUDA — 2026-10-02 (#485)
+
+On two actual Tesla T4 GPUs (SM75, 15 GiB each), the accepted F16 port is
+1.33× faster on JFK and 1.36× on Chinese than the fully resident original
+Python implementation. Both execution orders pass exact independent decoded
+text and timestamps for every timed call. Each arm runs in an isolated process,
+with model loading and first calls separate from three warm calls per clip.
+The [complete receipt](docs/index-echo-9b-profile-2026-10-02.json) retains all
+iterations, output cues, dtype audits, placement and runtime provenance.
+
+| Clip | Python BF16 warm, AB / BA | Native F16 warm, AB / BA | Speedup, AB / BA |
+|---|---:|---:|---:|
+| JFK, 11.0 s | 16.210 / 16.241 s | 12.197 / 12.243 s | 1.329× / 1.327× |
+| Chinese, 13.052 s | 18.964 / 18.864 s | 13.960 / 13.871 s | 1.358× / 1.360× |
+
+This compares the actual implementations at different activation precision
+and their recorded default layer distributions, rather than isolating an
+algorithmic optimization. Python uses actual BF16 parameters with 12 decoder
+layers on GPU0 and 20 on GPU1; native F16 uses its private llama core's default
+split. Both native arms show real CUDA tensor placement. The F32 source parity
+captures use offload and are not a performance baseline. Native runs here are
+slightly slower than realtime; the smaller 2B Q8 pair remains the default.
+
+First JFK calls are 30.738 / 20.673 s for Python and 12.515 / 12.479 s for native
+(AB / BA). Model loading is 116.036 / 96.650 s and 81.526 / 10.899 s, respectively;
+the large order-dependent native load difference makes a single cold end-to-end
+speedup claim unsuitable. Warm Chinese native stages are approximately 0.14 s
+mel, 0.13 s encoder, 0.003 s connector, 1.65 s decoder prefill and 12.0 s decoder
+generation. Generation accounts for roughly 86% of inference time.
+
+The encoder and connector execute native ggml graphs. The decoder uses batched
+prefill, hybrid KV/recurrent-state caches, Flash Attention and fused GatedDeltaNet
+AR/chunked kernels, confirmed in the validation runtime logs. Its multi-GPU
+pipeline disables graph reuse; CUDA graph capture is not established by these
+T4 measurements. Speed work should start with decoder generation. Rejected
+plain/selective/FFN-only Q8 variants remain private because they change output.
+
 ## Index-Echo S2TT 2B CPU — 2026-10-01 (#485)
 
 [Same-host profile](https://github.com/CrispStrobe/CrispASR/actions/runs/36907737439)
