@@ -47,7 +47,7 @@ from crispasr import Session
 model_dir = SCRATCH / 'model'
 model = Path(hf_hub_download('cstr/miotts-0.6b-GGUF', 'miotts-0.6b-q4_k.gguf',
                            revision=REVISION, local_dir=model_dir))
-for name in ('tokenizer.json', 'en_female.emb.gguf'):
+for name in ('tokenizer.json', 'en_female.emb.gguf', 'en_male.emb.gguf'):
     hf_hub_download('cstr/miotts-0.6b-GGUF', name, revision=REVISION, local_dir=model_dir)
 reader = GGUFReader(str(model))
 field = reader.fields['miotts.codec.sample_rate']
@@ -60,6 +60,7 @@ assert bytes(key_part) == b'miotts.codec.sample_rate'
 del value, key_part, field, reader
 lib = next(build.rglob('libcrispasr.dylib' if sys.platform == 'darwin' else 'libcrispasr.so'))
 os.environ['CRISPASR_MODEL_MIOTTS'] = str(model)
+os.environ['CRISPASR_MIOTTS_VOICE_DIR'] = str(model_dir)
 run([build / 'bin/test-miotts-live', '[miotts]'], 'native-live')
 # Native null context is defined independently of loaded metadata.
 abi = ctypes.CDLL(str(lib))

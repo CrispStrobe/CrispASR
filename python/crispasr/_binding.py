@@ -2928,7 +2928,9 @@ class Session:
         ``csm``, ``dia``, ``fastpitch``, ``bananamind-tts``, ``speecht5``,
         ``melotts``, ``piper``, ``parler-tts``, ``outetts``, ``cosyvoice3-tts``,
         ``pocket-tts``, ``f5-tts``, ``irodori-tts``, ``supertonic``, ``bark``, ``kugelaudio``, ``tada``,
-        ``lfm2-audio``, ``voxtral-tts``, ``dots-tts``, ``fireredtts3``, ``omnivoice``.
+        ``lfm2-audio``, ``voxtral-tts``, ``dots-tts``, ``fireredtts3``, ``omnivoice``, ``miotts``.
+        For MioTTS, call :meth:`set_voice` with a preset embedding GGUF and
+        use :meth:`output_sample_rate` (44.1 kHz for MioCodec-v2).
         For qwen3-tts call :meth:`set_codec_path` and one of:
 
         * :meth:`set_voice` — Base variants (WAV + ref_text, or voice-pack GGUF)

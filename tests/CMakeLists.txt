@@ -1242,6 +1242,7 @@ endif()
 # ─── test-miotts-live — live integration tests for MioTTS backend
 add_executable(test-miotts-live
     test_miotts_live.cpp
+    ${PROJECT_SOURCE_DIR}/examples/cli/crispasr_backend_miotts.cpp
 )
 target_include_directories(test-miotts-live PRIVATE
     ${PROJECT_SOURCE_DIR}/include
