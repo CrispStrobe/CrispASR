@@ -150,8 +150,21 @@ def audit(cpu, cuda, source_path, model_revision, reference_revision, conversion
             evidence.append(path)
             stages[device][clip] = stage_report(path.read_text())
     pipelines = {}
+    captures = dict(direct=dict(cpu=direct, cuda_cli=native_gpu['cli'],
+                               cuda_c_abi=native_gpu['c_abi']),
+                    file=dict(source={}, cpu={}, cuda={}),
+                    source_parameter_dtypes=source['parameter_dtypes'])
+    # Keep complete cues portable after hosted artifacts expire. Raw VAD
+    # arrays remain in the hashed evidence and pinned independent fixture.
+    for name, case in source['cases'].items():
+        captures['file']['source'][name] = dict(target=case['target'],
+                                               segments=case['segments'], rows=case['rows'])
     for device, folder in [('cpu',cpu),('cuda',cuda)]:
-        pipelines[device] = pipeline_report(read(folder / 'pipeline-f16.json'), source, gpu=device=='cuda')
+        native = read(folder / 'pipeline-f16.json')
+        pipelines[device] = pipeline_report(native, source, gpu=device=='cuda')
+        for name, case in native['cases'].items():
+            captures['file'][device][name] = dict(segments=case['segments'],
+                                                  elapsed_seconds=case['elapsed_seconds'])
     roundtrip = read(cuda / 'index-echo-9b-f16-roundtrip.json')
     if not roundtrip['roundtrip_passed'] or roundtrip['failed'] or set(roundtrip['cases']) != {'fox','window','station'}:
         raise ValueError('Real Piper roundtrip evidence incomplete')
@@ -164,6 +177,7 @@ def audit(cpu, cuda, source_path, model_revision, reference_revision, conversion
     return dict(validated=True, accepted_cohort='f16', source_model=conversion['source'],
         source_revision=conversion['revision'], model_revision=model_revision,
         reference_revision=reference_revision, artifacts=artifacts,
+        captures=captures,
         cpu=dict(passed=True, provenance=provenance, clips=stages['cpu']),
         cuda=dict(passed=True, build_commit=gpu['build_commit'], build_run=gpu['build_run'],
                   hardware=gpu['hardware'], clips=stages['cuda']),

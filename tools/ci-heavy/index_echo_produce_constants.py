@@ -7,6 +7,6 @@ DESTINATION = 'cstr/index-echo-2b-GGUF'
 MODELS = {
     '2b': (SOURCE, REVISION, DESTINATION),
     '9b': ('IndexTeam/Index-Echo-S2TT-9B', 'b8ac6fb7d3dc17cee48a52201bd3d93dc86b0dba',
-           'cstr/index-echo-9b-GGUF'),
+           'cstr/index-echo-9b-staging-GGUF'),
 }
 LICENSE_URL = 'https://raw.githubusercontent.com/bilibili/Index-Translate/8168c799051b4180c32c4c0469d255e80fdb2b2d/LICENSE'
