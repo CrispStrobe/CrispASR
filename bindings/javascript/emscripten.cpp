@@ -12,6 +12,9 @@
 #include <emscripten.h>
 #include <emscripten/bind.h>
 
+#include <atomic>
+#include <functional>
+#include <memory>
 #include <thread>
 #include <vector>
 
@@ -28,7 +31,7 @@
 #include <pthread.h>
 static emscripten::ProxyingQueue g_proxy_queue;
 static pthread_t g_compute_thread; // pthread-0 under PROXY_TO_PTHREAD
-static bool g_compute_thread_set = false;
+static std::atomic<bool> g_compute_thread_set{false};
 #endif
 
 // The unified Session C-ABI is declared in crispasr.h (included above)
@@ -335,7 +338,112 @@ int main() {
 }
 #endif
 
+#ifdef __EMSCRIPTEN_PTHREADS__
+// JS values stay on their creating servicer thread. Only native inputs/results
+// cross the compute queue, leaving the servicer available for pthread startup.
+template <typename T>
+static void browser_dispatch(std::function<T()> work, std::function<emscripten::val(T&)> encode,
+                             emscripten::val callback) {
+    if (!g_compute_thread_set.load()) {
+        emscripten::val error = emscripten::val::object();
+        error.set("error", std::string("Proxied compute thread is not ready"));
+        callback(error);
+        return;
+    }
+    auto* cb = new emscripten::val(callback);
+    const pthread_t servicer = pthread_self();
+    if (!g_proxy_queue.proxyAsync(g_compute_thread, [work, encode, cb, servicer]() {
+            auto* result = new T(work());
+            g_proxy_queue.proxyAsync(servicer, [result, encode, cb]() {
+                emscripten::val output = encode(*result);
+                delete result;
+                (*cb)(output);
+                delete cb;
+            });
+        })) {
+        emscripten::val error = emscripten::val::object();
+        error.set("error", std::string("Could not dispatch browser compute"));
+        (*cb)(error);
+        delete cb;
+    }
+}
+struct browser_asr_segment {
+    double t0, t1;
+    std::string text;
+};
+#endif
+
 EMSCRIPTEN_BINDINGS(whisper) {
+#ifdef __EMSCRIPTEN_PTHREADS__
+    emscripten::function("browserComputeReady",
+                         emscripten::optional_override([]() { return g_compute_thread_set.load(); }));
+    emscripten::function(
+        "asrOpenAsync", emscripten::optional_override([](const std::string& path, const std::string& backend,
+                                                         int threads, emscripten::val cb) {
+            browser_dispatch<bool>(
+                [path, backend, threads]() {
+                    if (g_asr_session)
+                        crispasr_session_close(g_asr_session);
+                    g_asr_session = backend.empty()
+                                        ? crispasr_session_open(path.c_str(), threads)
+                                        : crispasr_session_open_explicit(path.c_str(), backend.c_str(), threads);
+                    return g_asr_session != nullptr;
+                },
+                [](bool& value) { return emscripten::val(value); }, cb);
+        }));
+    emscripten::function(
+        "ttsOpenExplicitAsync", emscripten::optional_override([](const std::string& path, const std::string& backend,
+                                                                 int threads, emscripten::val cb) {
+            browser_dispatch<bool>(
+                [path, backend, threads]() {
+                    if (g_tts_session)
+                        crispasr_session_close(g_tts_session);
+                    g_tts_session = crispasr_session_open_explicit(path.c_str(), backend.c_str(), threads);
+                    return g_tts_session != nullptr;
+                },
+                [](bool& value) { return emscripten::val(value); }, cb);
+        }));
+    emscripten::function(
+        "asrTranscribeAsync",
+        emscripten::optional_override([](const emscripten::val& audio, const std::string& lang, emscripten::val cb) {
+            const int n = audio["length"].as<int>();
+            auto pcm = std::make_shared<std::vector<float>>(n);
+            emscripten::val heap = emscripten::val::module_property("HEAPU8");
+            emscripten::val view = emscripten::val::global("Float32Array")
+                                       .new_(heap["buffer"], reinterpret_cast<uintptr_t>(pcm->data()), n);
+            view.call<void>("set", audio);
+            browser_dispatch<std::vector<browser_asr_segment>>(
+                [pcm, lang]() {
+                    std::vector<browser_asr_segment> segments;
+                    crispasr_session_result* result =
+                        g_asr_session ? crispasr_session_transcribe_lang(g_asr_session, pcm->data(), (int)pcm->size(),
+                                                                         lang.empty() ? nullptr : lang.c_str())
+                                      : nullptr;
+                    if (result) {
+                        for (int i = 0; i < crispasr_session_result_n_segments(result); ++i) {
+                            const char* text = crispasr_session_result_segment_text(result, i);
+                            segments.push_back({(double)crispasr_session_result_segment_t0(result, i),
+                                                (double)crispasr_session_result_segment_t1(result, i),
+                                                text ? text : ""});
+                        }
+                        crispasr_session_result_free(result);
+                    }
+                    return segments;
+                },
+                [](std::vector<browser_asr_segment>& segments) {
+                    emscripten::val out = emscripten::val::array();
+                    for (const auto& segment : segments) {
+                        emscripten::val value = emscripten::val::object();
+                        value.set("t0", segment.t0);
+                        value.set("t1", segment.t1);
+                        value.set("text", segment.text);
+                        out.call<void>("push", value);
+                    }
+                    return out;
+                },
+                cb);
+        }));
+#endif
     emscripten::function("init", emscripten::optional_override([](const std::string& path_model) {
                              if (g_context == nullptr) {
                                  g_context = whisper_init_from_file_with_params(path_model.c_str(),

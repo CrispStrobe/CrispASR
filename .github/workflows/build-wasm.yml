@@ -33,6 +33,10 @@ jobs:
           # proxied pthread; the servicer worker never blocks). The one to host.
           - name: proxy-to-pthread
             flag: '--proxy-to-pthread'
+          - name: single-thread-lowheap
+            flag: '--single-thread -- -DCRISPASR_WASM_INITIAL_MEMORY=128MB -DEMSCRIPTEN_SYSTEM_PROCESSOR=wasm'
+          - name: proxy-to-pthread-lowheap
+            flag: '--proxy-to-pthread -- -DCRISPASR_WASM_INITIAL_MEMORY=128MB -DCRISPASR_WASM_THREAD_POOL=4 -DEMSCRIPTEN_SYSTEM_PROCESSOR=wasm'
     name: build-wasm (${{ matrix.name }})
     steps:
       - name: Checkout
@@ -86,9 +90,14 @@ jobs:
           [ "$(wc -c < build-wasm/bin/libwhisper.wasm)" -lt 12582912 ] || (echo "WASM exceeds 12 MiB budget" && exit 1)
           [ "$(wc -c < build-wasm/bin/libwhisper.js)" -lt 204800 ] || (echo "JS exceeds 200 KiB budget" && exit 1)
           # The proxy build must export the async, deadlock-free synth entry.
-          if [ "${{ matrix.name }}" = "proxy-to-pthread" ]; then
+          if [[ "${{ matrix.name }}" == proxy-to-pthread* ]]; then
             grep -q "ttsSynthesizeAsync" build-wasm/bin/libwhisper.wasm || \
               (echo "proxy build missing ttsSynthesizeAsync export" && exit 1)
+          fi
+          if [[ "${{ matrix.name }}" == proxy-to-pthread* ]]; then
+            for symbol in browserComputeReady asrOpenAsync asrTranscribeAsync ttsOpenExplicitAsync; do
+              grep -q "$symbol" build-wasm/bin/libwhisper.wasm || exit 1
+            done
           fi
           # §166 build-verify: the backend-agnostic ASR session surface
           # (asrOpen/asrClose/asrSet*) must actually compile + export in the
