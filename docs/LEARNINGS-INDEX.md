@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (317 lessons)
+## Index by topic (318 lessons)
 
 **Security & untrusted input** (2)
 
@@ -142,7 +142,7 @@ cross-reference when you already know which model you are touching.
 - L18945 — Device-side argmax can cost more than the readback it removes, and an unused graph output still runs
 - L19362 — 314. Index-Echo 9B: preload functional child weights before trusting offloaded cache references
 
-**ggml graphs, allocation & caching** (47)
+**ggml graphs, allocation & caching** (48)
 
 - L77 — A float `--tensor-type` override must not reach 1-D tensors (2026-09-29, #461)
 - L1254 — Reusing a cached scheduler graph across `sched_reset`/`alloc` cycles is CPU-safe but SIGSEGVs on GPU — the reused input tensor is bound to the prior cycle's freed buffer
@@ -191,6 +191,7 @@ cross-reference when you already know which model you are touching.
 - L18705 — A binary-broadcast op with a non-F32 weight is a latent abort on EVERY ggml backend — and a graph port extended layer-by-layer silently outgrows its old verification
 - L19282 — 2026-10-01 — Phonon-2 FFN: verify scheduler placement, magnitude and whole-model cost
 - L19343 — 2026-10-02 — Scheduler disposal must distinguish restored graphs from live rewires (PR #480)
+- L19395 — 315. Index-Echo 9B: VAD scheduler placement and whole-case F32 acceptance
 
 **GPU portability — Metal / CUDA / Vulkan** (25)
 
