@@ -52,8 +52,9 @@ def check_roundtrips(root, out, cli, library, primary, audio_manifest, use_gpu=F
     anonymous = primary.parent / 'roundtrip-opaque.gguf'
     anonymous.symlink_to(primary)
     try:
-        with Session(str(anonymous), lib_path=str(library), n_threads=4,
-                     use_gpu=use_gpu) as session:
+        # Session opens with the library's default device policy. The hosted
+        # CPU job builds without CUDA; a CUDA caller supplies its CUDA library.
+        with Session(str(anonymous), lib_path=str(library), n_threads=4) as session:
             assert session.backend == 'index-echo', session.backend
             session.set_target_language('en')
             for name, item in audio_manifest['cases'].items():
