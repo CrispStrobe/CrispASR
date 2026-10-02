@@ -19,6 +19,1118 @@
       "sha256": "98acd9b753295cdc9a9b8773317ab046bf83e466b1ebfc775d59ac8dab9d177a"
     }
   },
+  "captures": {
+    "direct": {
+      "cpu": {
+        "jfk": {
+          "reference": "[00:00.00-00:02.48]\nAnd so, my fellow Americans,\nAnd so, my fellow Americans,\n[00:03.12-00:04.56]\nask not\nask not\n[00:05.16-00:07.52]\nwhat your country can do for you,\nwhat your country can do for you,\n[00:08.00-00:10.00]\nask what you can do for\nask what you can do for\n[00:09.80-00:11.00]\nyour country.。\nyour country.",
+          "segments": [
+            {
+              "start": 0.0,
+              "end": 2.48,
+              "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+            },
+            {
+              "start": 3.12,
+              "end": 4.56,
+              "text": "ask not\nask not"
+            },
+            {
+              "start": 5.16,
+              "end": 7.52,
+              "text": "what your country can do for you,\nwhat your country can do for you,"
+            },
+            {
+              "start": 8.0,
+              "end": 10.0,
+              "text": "ask what you can do for\nask what you can do for"
+            },
+            {
+              "start": 9.8,
+              "end": 11.0,
+              "text": "your country.。\nyour country."
+            }
+          ]
+        },
+        "zh": {
+          "reference": "[00:00.43-00:02.25]\n正是因为存在绝对正义，\nIt is precisely because absolute justice exists\n[00:02.27-00:04.57]\n所以我们接受现实的相对正义。\nthat we accept the relative justice of reality.\n[00:05.23-00:07.47]\n但是不要因为现实的相对正义，\nBut don't let the relative justice of reality\n[00:07.47-00:09.99]\n我们就认为这个世界没有正义。\nmake us believe there is no justice in this world.\n[00:10.51-00:12.92]\n因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,",
+          "segments": [
+            {
+              "start": 0.43,
+              "end": 2.25,
+              "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+            },
+            {
+              "start": 2.27,
+              "end": 4.57,
+              "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+            },
+            {
+              "start": 5.23,
+              "end": 7.47,
+              "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+            },
+            {
+              "start": 7.47,
+              "end": 9.99,
+              "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+            },
+            {
+              "start": 10.51,
+              "end": 12.92,
+              "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+            }
+          ]
+        },
+        "jfk-tail": {
+          "reference": "[00:00.17-00:02.64]\nask what you can do for your country.\nask what you can do for your country.",
+          "segments": [
+            {
+              "start": 0.17,
+              "end": 2.64,
+              "text": "ask what you can do for your country.\nask what you can do for your country."
+            }
+          ]
+        }
+      },
+      "cuda_cli": {
+        "jfk": {
+          "rc": 0,
+          "actual": [
+            {
+              "start": 0.0,
+              "end": 2.48,
+              "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+            },
+            {
+              "start": 3.12,
+              "end": 4.5600000000000005,
+              "text": "ask not\nask not"
+            },
+            {
+              "start": 5.16,
+              "end": 7.52,
+              "text": "what your country can do for you,\nwhat your country can do for you,"
+            },
+            {
+              "start": 8.0,
+              "end": 10.0,
+              "text": "ask what you can do for\nask what you can do for"
+            },
+            {
+              "start": 9.8,
+              "end": 11.0,
+              "text": "your country.。\nyour country."
+            }
+          ],
+          "expected": [
+            {
+              "start": 0.0,
+              "end": 2.48,
+              "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+            },
+            {
+              "start": 3.12,
+              "end": 4.56,
+              "text": "ask not\nask not"
+            },
+            {
+              "start": 5.16,
+              "end": 7.52,
+              "text": "what your country can do for you,\nwhat your country can do for you,"
+            },
+            {
+              "start": 8.0,
+              "end": 10.0,
+              "text": "ask what you can do for\nask what you can do for"
+            },
+            {
+              "start": 9.8,
+              "end": 11.0,
+              "text": "your country.。\nyour country."
+            }
+          ],
+          "passed": true
+        },
+        "zh": {
+          "rc": 0,
+          "actual": [
+            {
+              "start": 0.43,
+              "end": 2.25,
+              "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+            },
+            {
+              "start": 2.27,
+              "end": 4.57,
+              "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+            },
+            {
+              "start": 5.23,
+              "end": 7.47,
+              "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+            },
+            {
+              "start": 7.47,
+              "end": 9.99,
+              "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+            },
+            {
+              "start": 10.51,
+              "end": 12.92,
+              "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+            }
+          ],
+          "expected": [
+            {
+              "start": 0.43,
+              "end": 2.25,
+              "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+            },
+            {
+              "start": 2.27,
+              "end": 4.57,
+              "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+            },
+            {
+              "start": 5.23,
+              "end": 7.47,
+              "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+            },
+            {
+              "start": 7.47,
+              "end": 9.99,
+              "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+            },
+            {
+              "start": 10.51,
+              "end": 12.92,
+              "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+            }
+          ],
+          "passed": true
+        },
+        "jfk-tail": {
+          "rc": 0,
+          "actual": [
+            {
+              "start": 0.17,
+              "end": 2.64,
+              "text": "ask what you can do for your country.\nask what you can do for your country."
+            }
+          ],
+          "expected": [
+            {
+              "start": 0.17,
+              "end": 2.64,
+              "text": "ask what you can do for your country.\nask what you can do for your country."
+            }
+          ],
+          "passed": true
+        }
+      },
+      "cuda_c_abi": {
+        "jfk": {
+          "actual": [
+            {
+              "start": 0.0,
+              "end": 2.48,
+              "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+            },
+            {
+              "start": 3.12,
+              "end": 4.56,
+              "text": "ask not\nask not"
+            },
+            {
+              "start": 5.16,
+              "end": 7.52,
+              "text": "what your country can do for you,\nwhat your country can do for you,"
+            },
+            {
+              "start": 8.0,
+              "end": 10.0,
+              "text": "ask what you can do for\nask what you can do for"
+            },
+            {
+              "start": 9.8,
+              "end": 11.0,
+              "text": "your country.。\nyour country."
+            }
+          ],
+          "expected": [
+            {
+              "start": 0.0,
+              "end": 2.48,
+              "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+            },
+            {
+              "start": 3.12,
+              "end": 4.56,
+              "text": "ask not\nask not"
+            },
+            {
+              "start": 5.16,
+              "end": 7.52,
+              "text": "what your country can do for you,\nwhat your country can do for you,"
+            },
+            {
+              "start": 8.0,
+              "end": 10.0,
+              "text": "ask what you can do for\nask what you can do for"
+            },
+            {
+              "start": 9.8,
+              "end": 11.0,
+              "text": "your country.。\nyour country."
+            }
+          ],
+          "passed": true,
+          "anonymous_metadata": true
+        },
+        "zh": {
+          "actual": [
+            {
+              "start": 0.43,
+              "end": 2.25,
+              "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+            },
+            {
+              "start": 2.27,
+              "end": 4.57,
+              "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+            },
+            {
+              "start": 5.23,
+              "end": 7.47,
+              "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+            },
+            {
+              "start": 7.47,
+              "end": 9.99,
+              "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+            },
+            {
+              "start": 10.51,
+              "end": 12.92,
+              "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+            }
+          ],
+          "expected": [
+            {
+              "start": 0.43,
+              "end": 2.25,
+              "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+            },
+            {
+              "start": 2.27,
+              "end": 4.57,
+              "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+            },
+            {
+              "start": 5.23,
+              "end": 7.47,
+              "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+            },
+            {
+              "start": 7.47,
+              "end": 9.99,
+              "text": "我们就认为这个世界没有正义。\nmake us believe there is no justice in this world."
+            },
+            {
+              "start": 10.51,
+              "end": 12.92,
+              "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+            }
+          ],
+          "passed": true,
+          "anonymous_metadata": true
+        },
+        "jfk-tail": {
+          "actual": [
+            {
+              "start": 0.17,
+              "end": 2.64,
+              "text": "ask what you can do for your country.\nask what you can do for your country."
+            }
+          ],
+          "expected": [
+            {
+              "start": 0.17,
+              "end": 2.64,
+              "text": "ask what you can do for your country.\nask what you can do for your country."
+            }
+          ],
+          "passed": true,
+          "anonymous_metadata": true
+        }
+      }
+    },
+    "file": {
+      "source": {
+        "jfk-en": {
+          "target": "en",
+          "segments": [
+            {
+              "start": 0.0,
+              "end": 2.48,
+              "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+            },
+            {
+              "start": 3.12,
+              "end": 4.56,
+              "text": "ask not\nask not"
+            },
+            {
+              "start": 5.16,
+              "end": 7.52,
+              "text": "what your country can do for you,\nwhat your country can do for you,"
+            },
+            {
+              "start": 8.0,
+              "end": 10.0,
+              "text": "ask what you can do for\nask what you can do for"
+            },
+            {
+              "start": 9.8,
+              "end": 11.0,
+              "text": "your country.。\nyour country."
+            }
+          ],
+          "rows": [
+            {
+              "win_idx": 0,
+              "n_win": 1,
+              "offset": 0.0,
+              "dur": 11.0,
+              "hard_cut": false,
+              "has_ctx": false,
+              "prompt_ctx": "",
+              "hyp": "[00:00.00-00:02.48]\nAnd so, my fellow Americans,\nAnd so, my fellow Americans,\n[00:03.12-00:04.56]\nask not\nask not\n[00:05.16-00:07.52]\nwhat your country can do for you,\nwhat your country can do for you,\n[00:08.00-00:10.00]\nask what you can do for\nask what you can do for\n[00:09.80-00:11.00]\nyour country.。\nyour country.",
+              "cues": [
+                {
+                  "st": 0.0,
+                  "et": 2.48,
+                  "zh": "And so, my fellow Americans,",
+                  "en": "And so, my fellow Americans,",
+                  "g_st": 0.0,
+                  "g_et": 2.48
+                },
+                {
+                  "st": 3.12,
+                  "et": 4.56,
+                  "zh": "ask not",
+                  "en": "ask not",
+                  "g_st": 3.12,
+                  "g_et": 4.56
+                },
+                {
+                  "st": 5.16,
+                  "et": 7.52,
+                  "zh": "what your country can do for you,",
+                  "en": "what your country can do for you,",
+                  "g_st": 5.16,
+                  "g_et": 7.52
+                },
+                {
+                  "st": 8.0,
+                  "et": 10.0,
+                  "zh": "ask what you can do for",
+                  "en": "ask what you can do for",
+                  "g_st": 8.0,
+                  "g_et": 10.0
+                },
+                {
+                  "st": 9.8,
+                  "et": 11.0,
+                  "zh": "your country.。",
+                  "en": "your country.",
+                  "g_st": 9.8,
+                  "g_et": 11.0
+                }
+              ],
+              "parse_warn": 0,
+              "gen_sec": 691.8
+            },
+            {
+              "__summary__": {
+                "input": "/kaggle/temp/index-echo-f32-file-source/repo/samples/jfk.wav",
+                "target_lang": "en",
+                "temperature": 0.0,
+                "glossary": [],
+                "n_win": 1,
+                "n_cues": 5,
+                "parse_warn": 0,
+                "total_sec": 693.1
+              }
+            }
+          ]
+        },
+        "zh-en": {
+          "target": "en",
+          "segments": [
+            {
+              "start": 0.43000000000000005,
+              "end": 4.55,
+              "text": "正是因为存在绝对正义，所以我们接受现实的相对正义。\nIt is precisely because absolute justice exists that we accept relative justice in reality."
+            },
+            {
+              "start": 5.2299999999999995,
+              "end": 7.489999999999999,
+              "text": "但是不要因为现实的相对正义，\nBut we shouldn't, because of this relative justice in reality,"
+            },
+            {
+              "start": 7.489999999999999,
+              "end": 10.049999999999999,
+              "text": "我们就认为这个世界没有正义。\nassume there is no justice in this world."
+            },
+            {
+              "start": 10.51,
+              "end": 12.94,
+              "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+            }
+          ],
+          "rows": [
+            {
+              "win_idx": 0,
+              "n_win": 1,
+              "offset": 0.1,
+              "dur": 12.952,
+              "hard_cut": false,
+              "has_ctx": false,
+              "prompt_ctx": "",
+              "hyp": "[00:00.33-00:04.45]\n正是因为存在绝对正义，所以我们接受现实的相对正义。\nIt is precisely because absolute justice exists that we accept relative justice in reality.\n[00:05.13-00:07.39]\n但是不要因为现实的相对正义，\nBut we shouldn't, because of this relative justice in reality,\n[00:07.39-00:09.95]\n我们就认为这个世界没有正义。\nassume there is no justice in this world.\n[00:10.41-00:12.84]\n因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,",
+              "cues": [
+                {
+                  "st": 0.33,
+                  "et": 4.45,
+                  "zh": "正是因为存在绝对正义，所以我们接受现实的相对正义。",
+                  "en": "It is precisely because absolute justice exists that we accept relative justice in reality.",
+                  "g_st": 0.43000000000000005,
+                  "g_et": 4.55
+                },
+                {
+                  "st": 5.13,
+                  "et": 7.39,
+                  "zh": "但是不要因为现实的相对正义，",
+                  "en": "But we shouldn't, because of this relative justice in reality,",
+                  "g_st": 5.2299999999999995,
+                  "g_et": 7.489999999999999
+                },
+                {
+                  "st": 7.39,
+                  "et": 9.95,
+                  "zh": "我们就认为这个世界没有正义。",
+                  "en": "assume there is no justice in this world.",
+                  "g_st": 7.489999999999999,
+                  "g_et": 10.049999999999999
+                },
+                {
+                  "st": 10.41,
+                  "et": 12.84,
+                  "zh": "因为如果当你认为这个世界没有正义，",
+                  "en": "Because if you believe there is no justice in this world,",
+                  "g_st": 10.51,
+                  "g_et": 12.94
+                }
+              ],
+              "parse_warn": 0,
+              "gen_sec": 700.7
+            },
+            {
+              "__summary__": {
+                "input": "/kaggle/temp/index-echo-f32-file-source/repo/samples/paraformer_zh.wav",
+                "target_lang": "en",
+                "temperature": 0.0,
+                "glossary": [],
+                "n_win": 1,
+                "n_cues": 4,
+                "parse_warn": 0,
+                "total_sec": 701.3
+              }
+            }
+          ]
+        },
+        "zh-ja": {
+          "target": "ja",
+          "segments": [
+            {
+              "start": 0.43000000000000005,
+              "end": 4.55,
+              "text": "正是因为存在绝对正义，所以我们接受现实的相对正义。\n絶対的な正義が存在するからこそ、私たちは現実の相対的な正義を受け入れるのです。"
+            },
+            {
+              "start": 5.2299999999999995,
+              "end": 7.489999999999999,
+              "text": "但是不要因为现实的相对正义，\nしかし、現実の相対的な正義があるからといって、"
+            },
+            {
+              "start": 7.489999999999999,
+              "end": 10.049999999999999,
+              "text": "我们就认为这个世界没有正义。\nこの世界に正義がない、と考えるべきではありません。"
+            },
+            {
+              "start": 10.49,
+              "end": 12.9,
+              "text": "因为如果当你认为这个世界没有正义，\nなぜなら、もしこの世界に正義がないと考えるようになったら、"
+            }
+          ],
+          "rows": [
+            {
+              "win_idx": 0,
+              "n_win": 1,
+              "offset": 0.1,
+              "dur": 12.952,
+              "hard_cut": false,
+              "has_ctx": false,
+              "prompt_ctx": "",
+              "hyp": "[00:00.33-00:04.45]\n正是因为存在绝对正义，所以我们接受现实的相对正义。\n絶対的な正義が存在するからこそ、私たちは現実の相対的な正義を受け入れるのです。\n[00:05.13-00:07.39]\n但是不要因为现实的相对正义，\nしかし、現実の相対的な正義があるからといって、\n[00:07.39-00:09.95]\n我们就认为这个世界没有正义。\nこの世界に正義がない、と考えるべきではありません。\n[00:10.39-00:12.80]\n因为如果当你认为这个世界没有正义，\nなぜなら、もしこの世界に正義がないと考えるようになったら、",
+              "cues": [
+                {
+                  "st": 0.33,
+                  "et": 4.45,
+                  "zh": "正是因为存在绝对正义，所以我们接受现实的相对正义。",
+                  "en": "絶対的な正義が存在するからこそ、私たちは現実の相対的な正義を受け入れるのです。",
+                  "g_st": 0.43000000000000005,
+                  "g_et": 4.55
+                },
+                {
+                  "st": 5.13,
+                  "et": 7.39,
+                  "zh": "但是不要因为现实的相对正义，",
+                  "en": "しかし、現実の相対的な正義があるからといって、",
+                  "g_st": 5.2299999999999995,
+                  "g_et": 7.489999999999999
+                },
+                {
+                  "st": 7.39,
+                  "et": 9.95,
+                  "zh": "我们就认为这个世界没有正义。",
+                  "en": "この世界に正義がない、と考えるべきではありません。",
+                  "g_st": 7.489999999999999,
+                  "g_et": 10.049999999999999
+                },
+                {
+                  "st": 10.39,
+                  "et": 12.8,
+                  "zh": "因为如果当你认为这个世界没有正义，",
+                  "en": "なぜなら、もしこの世界に正義がないと考えるようになったら、",
+                  "g_st": 10.49,
+                  "g_et": 12.9
+                }
+              ],
+              "parse_warn": 0,
+              "gen_sec": 723.8
+            },
+            {
+              "__summary__": {
+                "input": "/kaggle/temp/index-echo-f32-file-source/repo/samples/paraformer_zh.wav",
+                "target_lang": "ja",
+                "temperature": 0.0,
+                "glossary": [],
+                "n_win": 1,
+                "n_cues": 4,
+                "parse_warn": 0,
+                "total_sec": 724.4
+              }
+            }
+          ]
+        },
+        "zh-es": {
+          "target": "es",
+          "segments": [
+            {
+              "start": 0.43000000000000005,
+              "end": 4.55,
+              "text": "正是因为存在绝对正义，所以我们接受现实的相对正义。\nPrecisamente porque existe la justicia absoluta,"
+            },
+            {
+              "start": 5.2299999999999995,
+              "end": 7.489999999999999,
+              "text": "但是不要因为现实的相对正义，\naceptamos la justicia relativa de la realidad."
+            },
+            {
+              "start": 7.489999999999999,
+              "end": 10.049999999999999,
+              "text": "我们就认为这个世界没有正义。\nPero no debemos pensar que no hay justicia en este mundo"
+            },
+            {
+              "start": 10.51,
+              "end": 12.94,
+              "text": "因为如果当你认为这个世界没有正义，\nporque si crees que no hay justicia en este mundo,"
+            }
+          ],
+          "rows": [
+            {
+              "win_idx": 0,
+              "n_win": 1,
+              "offset": 0.1,
+              "dur": 12.952,
+              "hard_cut": false,
+              "has_ctx": false,
+              "prompt_ctx": "",
+              "hyp": "[00:00.33-00:04.45]\n正是因为存在绝对正义，所以我们接受现实的相对正义。\nPrecisamente porque existe la justicia absoluta,\n[00:05.13-00:07.39]\n但是不要因为现实的相对正义，\naceptamos la justicia relativa de la realidad.\n[00:07.39-00:09.95]\n我们就认为这个世界没有正义。\nPero no debemos pensar que no hay justicia en este mundo\n[00:10.41-00:12.84]\n因为如果当你认为这个世界没有正义，\nporque si crees que no hay justicia en este mundo,",
+              "cues": [
+                {
+                  "st": 0.33,
+                  "et": 4.45,
+                  "zh": "正是因为存在绝对正义，所以我们接受现实的相对正义。",
+                  "en": "Precisamente porque existe la justicia absoluta,",
+                  "g_st": 0.43000000000000005,
+                  "g_et": 4.55
+                },
+                {
+                  "st": 5.13,
+                  "et": 7.39,
+                  "zh": "但是不要因为现实的相对正义，",
+                  "en": "aceptamos la justicia relativa de la realidad.",
+                  "g_st": 5.2299999999999995,
+                  "g_et": 7.489999999999999
+                },
+                {
+                  "st": 7.39,
+                  "et": 9.95,
+                  "zh": "我们就认为这个世界没有正义。",
+                  "en": "Pero no debemos pensar que no hay justicia en este mundo",
+                  "g_st": 7.489999999999999,
+                  "g_et": 10.049999999999999
+                },
+                {
+                  "st": 10.41,
+                  "et": 12.84,
+                  "zh": "因为如果当你认为这个世界没有正义，",
+                  "en": "porque si crees que no hay justicia en este mundo,",
+                  "g_st": 10.51,
+                  "g_et": 12.94
+                }
+              ],
+              "parse_warn": 0,
+              "gen_sec": 668.8
+            },
+            {
+              "__summary__": {
+                "input": "/kaggle/temp/index-echo-f32-file-source/repo/samples/paraformer_zh.wav",
+                "target_lang": "es",
+                "temperature": 0.0,
+                "glossary": [],
+                "n_win": 1,
+                "n_cues": 4,
+                "parse_warn": 0,
+                "total_sec": 669.3
+              }
+            }
+          ]
+        },
+        "multi-en": {
+          "target": "en",
+          "segments": [
+            {
+              "start": 0.43000000000000005,
+              "end": 2.21,
+              "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+            },
+            {
+              "start": 2.29,
+              "end": 4.659999999999999,
+              "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+            },
+            {
+              "start": 66.29,
+              "end": 68.49,
+              "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+            },
+            {
+              "start": 68.49,
+              "end": 70.97,
+              "text": "我们就认为这个世界没有正义。\nmake us believe there's no justice in this world."
+            },
+            {
+              "start": 71.51,
+              "end": 73.92,
+              "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there's no justice in this world,"
+            }
+          ],
+          "rows": [
+            {
+              "win_idx": 0,
+              "n_win": 2,
+              "offset": 0.1,
+              "dur": 4.8,
+              "hard_cut": false,
+              "has_ctx": false,
+              "prompt_ctx": "",
+              "hyp": "[00:00.33-00:02.11]\n正是因为存在绝对正义，\nIt is precisely because absolute justice exists\n[00:02.19-00:04.56]\n所以我们接受现实的相对正义。\nthat we accept the relative justice of reality.",
+              "cues": [
+                {
+                  "st": 0.33,
+                  "et": 2.11,
+                  "zh": "正是因为存在绝对正义，",
+                  "en": "It is precisely because absolute justice exists",
+                  "g_st": 0.43000000000000005,
+                  "g_et": 2.21
+                },
+                {
+                  "st": 2.19,
+                  "et": 4.56,
+                  "zh": "所以我们接受现实的相对正义。",
+                  "en": "that we accept the relative justice of reality.",
+                  "g_st": 2.29,
+                  "g_et": 4.659999999999999
+                }
+              ],
+              "parse_warn": 0,
+              "gen_sec": 293.4
+            },
+            {
+              "win_idx": 1,
+              "n_win": 2,
+              "offset": 66.0,
+              "dur": 8.052,
+              "hard_cut": false,
+              "has_ctx": true,
+              "prompt_ctx": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists\n所以我们接受现实的相对正义。\nthat we accept the relative justice of reality.",
+              "hyp": "[00:00.29-00:02.49]\n但是不要因为现实的相对正义，\nBut don't let the relative justice of reality\n[00:02.49-00:04.97]\n我们就认为这个世界没有正义。\nmake us believe there's no justice in this world.\n[00:05.51-00:07.92]\n因为如果当你认为这个世界没有正义，\nBecause if you believe there's no justice in this world,",
+              "cues": [
+                {
+                  "st": 0.29,
+                  "et": 2.49,
+                  "zh": "但是不要因为现实的相对正义，",
+                  "en": "But don't let the relative justice of reality",
+                  "g_st": 66.29,
+                  "g_et": 68.49
+                },
+                {
+                  "st": 2.49,
+                  "et": 4.97,
+                  "zh": "我们就认为这个世界没有正义。",
+                  "en": "make us believe there's no justice in this world.",
+                  "g_st": 68.49,
+                  "g_et": 70.97
+                },
+                {
+                  "st": 5.51,
+                  "et": 7.92,
+                  "zh": "因为如果当你认为这个世界没有正义，",
+                  "en": "Because if you believe there's no justice in this world,",
+                  "g_st": 71.51,
+                  "g_et": 73.92
+                }
+              ],
+              "parse_warn": 0,
+              "gen_sec": 487.1
+            },
+            {
+              "__summary__": {
+                "input": "/kaggle/working/pipeline-multi.wav",
+                "target_lang": "en",
+                "temperature": 0.0,
+                "glossary": [],
+                "n_win": 2,
+                "n_cues": 5,
+                "parse_warn": 0,
+                "total_sec": 782.4
+              }
+            }
+          ]
+        }
+      },
+      "cpu": {
+        "jfk-en": {
+          "segments": [
+            {
+              "start": 0.0,
+              "end": 2.48,
+              "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+            },
+            {
+              "start": 3.12,
+              "end": 4.56,
+              "text": "ask not\nask not"
+            },
+            {
+              "start": 5.16,
+              "end": 7.52,
+              "text": "what your country can do for you,\nwhat your country can do for you,"
+            },
+            {
+              "start": 8.0,
+              "end": 10.0,
+              "text": "ask what you can do for\nask what you can do for"
+            },
+            {
+              "start": 9.8,
+              "end": 11.0,
+              "text": "your country.。\nyour country."
+            }
+          ],
+          "elapsed_seconds": 167.94905885899993
+        },
+        "zh-en": {
+          "segments": [
+            {
+              "start": 0.43,
+              "end": 4.55,
+              "text": "正是因为存在绝对正义，所以我们接受现实的相对正义。\nIt is precisely because absolute justice exists that we accept relative justice in reality."
+            },
+            {
+              "start": 5.23,
+              "end": 7.49,
+              "text": "但是不要因为现实的相对正义，\nBut we shouldn't, because of this relative justice in reality,"
+            },
+            {
+              "start": 7.49,
+              "end": 10.05,
+              "text": "我们就认为这个世界没有正义。\nassume there is no justice in this world."
+            },
+            {
+              "start": 10.51,
+              "end": 12.94,
+              "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+            }
+          ],
+          "elapsed_seconds": 179.7374709459998
+        },
+        "zh-ja": {
+          "segments": [
+            {
+              "start": 0.43,
+              "end": 4.55,
+              "text": "正是因为存在绝对正义，所以我们接受现实的相对正义。\n絶対的な正義が存在するからこそ、私たちは現実の相対的な正義を受け入れるのです。"
+            },
+            {
+              "start": 5.23,
+              "end": 7.49,
+              "text": "但是不要因为现实的相对正义，\nしかし、現実の相対的な正義があるからといって、"
+            },
+            {
+              "start": 7.49,
+              "end": 10.05,
+              "text": "我们就认为这个世界没有正义。\nこの世界に正義がない、と考えるべきではありません。"
+            },
+            {
+              "start": 10.49,
+              "end": 12.9,
+              "text": "因为如果当你认为这个世界没有正义，\nなぜなら、もしこの世界に正義がないと考えるようになったら、"
+            }
+          ],
+          "elapsed_seconds": 181.7045416599999
+        },
+        "zh-es": {
+          "segments": [
+            {
+              "start": 0.43,
+              "end": 4.55,
+              "text": "正是因为存在绝对正义，所以我们接受现实的相对正义。\nPrecisamente porque existe la justicia absoluta,"
+            },
+            {
+              "start": 5.23,
+              "end": 7.49,
+              "text": "但是不要因为现实的相对正义，\naceptamos la justicia relativa de la realidad."
+            },
+            {
+              "start": 7.49,
+              "end": 10.05,
+              "text": "我们就认为这个世界没有正义。\nPero no debemos pensar que no hay justicia en este mundo"
+            },
+            {
+              "start": 10.51,
+              "end": 12.94,
+              "text": "因为如果当你认为这个世界没有正义，\nporque si crees que no hay justicia en este mundo,"
+            }
+          ],
+          "elapsed_seconds": 189.25306531399997
+        },
+        "multi-en": {
+          "segments": [
+            {
+              "start": 0.43,
+              "end": 2.21,
+              "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+            },
+            {
+              "start": 2.29,
+              "end": 4.66,
+              "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+            },
+            {
+              "start": 66.29,
+              "end": 68.49,
+              "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+            },
+            {
+              "start": 68.49,
+              "end": 70.97,
+              "text": "我们就认为这个世界没有正义。\nmake us believe there's no justice in this world."
+            },
+            {
+              "start": 71.51,
+              "end": 73.92,
+              "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there's no justice in this world,"
+            }
+          ],
+          "elapsed_seconds": 240.23608816399974
+        }
+      },
+      "cuda": {
+        "jfk-en": {
+          "segments": [
+            {
+              "start": 0.0,
+              "end": 2.48,
+              "text": "And so, my fellow Americans,\nAnd so, my fellow Americans,"
+            },
+            {
+              "start": 3.12,
+              "end": 4.56,
+              "text": "ask not\nask not"
+            },
+            {
+              "start": 5.16,
+              "end": 7.52,
+              "text": "what your country can do for you,\nwhat your country can do for you,"
+            },
+            {
+              "start": 8.0,
+              "end": 10.0,
+              "text": "ask what you can do for\nask what you can do for"
+            },
+            {
+              "start": 9.8,
+              "end": 11.0,
+              "text": "your country.。\nyour country."
+            }
+          ],
+          "elapsed_seconds": 12.618506820999983
+        },
+        "zh-en": {
+          "segments": [
+            {
+              "start": 0.43,
+              "end": 4.55,
+              "text": "正是因为存在绝对正义，所以我们接受现实的相对正义。\nIt is precisely because absolute justice exists that we accept relative justice in reality."
+            },
+            {
+              "start": 5.23,
+              "end": 7.49,
+              "text": "但是不要因为现实的相对正义，\nBut we shouldn't, because of this relative justice in reality,"
+            },
+            {
+              "start": 7.49,
+              "end": 10.05,
+              "text": "我们就认为这个世界没有正义。\nassume there is no justice in this world."
+            },
+            {
+              "start": 10.51,
+              "end": 12.94,
+              "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there is no justice in this world,"
+            }
+          ],
+          "elapsed_seconds": 12.956765109000003
+        },
+        "zh-ja": {
+          "segments": [
+            {
+              "start": 0.43,
+              "end": 4.55,
+              "text": "正是因为存在绝对正义，所以我们接受现实的相对正义。\n絶対的な正義が存在するからこそ、私たちは現実の相対的な正義を受け入れるのです。"
+            },
+            {
+              "start": 5.23,
+              "end": 7.49,
+              "text": "但是不要因为现实的相对正义，\nしかし、現実の相対的な正義があるからといって、"
+            },
+            {
+              "start": 7.49,
+              "end": 10.05,
+              "text": "我们就认为这个世界没有正义。\nこの世界に正義がない、と考えるべきではありません。"
+            },
+            {
+              "start": 10.49,
+              "end": 12.9,
+              "text": "因为如果当你认为这个世界没有正义，\nなぜなら、もしこの世界に正義がないと考えるようになったら、"
+            }
+          ],
+          "elapsed_seconds": 13.387546455000006
+        },
+        "zh-es": {
+          "segments": [
+            {
+              "start": 0.43,
+              "end": 4.55,
+              "text": "正是因为存在绝对正义，所以我们接受现实的相对正义。\nPrecisamente porque existe la justicia absoluta,"
+            },
+            {
+              "start": 5.23,
+              "end": 7.49,
+              "text": "但是不要因为现实的相对正义，\naceptamos la justicia relativa de la realidad."
+            },
+            {
+              "start": 7.49,
+              "end": 10.05,
+              "text": "我们就认为这个世界没有正义。\nPero no debemos pensar que no hay justicia en este mundo"
+            },
+            {
+              "start": 10.51,
+              "end": 12.94,
+              "text": "因为如果当你认为这个世界没有正义，\nporque si crees que no hay justicia en este mundo,"
+            }
+          ],
+          "elapsed_seconds": 12.488135858999954
+        },
+        "multi-en": {
+          "segments": [
+            {
+              "start": 0.43,
+              "end": 2.21,
+              "text": "正是因为存在绝对正义，\nIt is precisely because absolute justice exists"
+            },
+            {
+              "start": 2.29,
+              "end": 4.66,
+              "text": "所以我们接受现实的相对正义。\nthat we accept the relative justice of reality."
+            },
+            {
+              "start": 66.29,
+              "end": 68.49,
+              "text": "但是不要因为现实的相对正义，\nBut don't let the relative justice of reality"
+            },
+            {
+              "start": 68.49,
+              "end": 70.97,
+              "text": "我们就认为这个世界没有正义。\nmake us believe there's no justice in this world."
+            },
+            {
+              "start": 71.51,
+              "end": 73.92,
+              "text": "因为如果当你认为这个世界没有正义，\nBecause if you believe there's no justice in this world,"
+            }
+          ],
+          "elapsed_seconds": 16.30695636900009
+        }
+      }
+    },
+    "source_parameter_dtypes": {
+      "tower": {
+        "parameter_elements": {
+          "torch.float32": 647927168
+        },
+        "module_class": "Qwen3OmniMoeAudioEncoder"
+      },
+      "connector": {
+        "parameter_elements": {
+          "torch.float32": 8388608
+        },
+        "module_class": "AudioConnectorProj"
+      },
+      "llm": {
+        "parameter_elements": {
+          "torch.float32": 8953803264
+        },
+        "module_class": "Qwen3_5ForCausalLM"
+      },
+      "embedding_dtype": "torch.float32"
+    }
+  },
   "cpu": {
     "passed": true,
     "provenance": {
@@ -2598,6 +3710,10 @@
     {
       "path": "/mnt/storage/crispasr/issue485-9b/f16-bf16-pipeline-36994533773/heavy-36994533773/cohort-results.json",
       "sha256": "b538315968772ddcc70cbd1d8cbb4411d26ee23aa8bef8bd0b8a35a1741674bc"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v2-terminal/cuda-validation.json",
+      "sha256": "ebd05bdd551a186795e49e68896252c07053bfa6b0696bc333ac19b248869f01"
     }
   ],
   "retained_controls": {
