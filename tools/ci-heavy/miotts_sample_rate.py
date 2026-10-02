@@ -115,6 +115,7 @@ for name, rate in [('public-v2', 44100), ('metadata-24k', 24000), ('metadata-mis
         if name == 'public-v2':
             session.set_voice(str(model_dir / 'en_female.emb.gguf'))
             # Require a real sampling setter rather than Python's soft no-op.
+            session.set_temperature(0, seed=42)
             assert session._lib.crispasr_session_set_temperature(session._handle, 0, 42) == 0
             pcm = session.synthesize(TEXT)
             assert np.isfinite(pcm).all() and len(pcm) / rate > 1
