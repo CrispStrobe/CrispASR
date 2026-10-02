@@ -361,8 +361,12 @@ void index_echo_free(index_echo_context* ctx) {
         ggml_backend_free(ctx->backend);
     if (ctx->cpu)
         ggml_backend_free(ctx->cpu);
-    if (ctx->decoder)
+    if (ctx->decoder) {
+        const char* bench = std::getenv("INDEX_ECHO_BENCH");
+        if (bench && *bench && *bench != '0')
+            llama_perf_context_print(ctx->decoder);
         llama_free(ctx->decoder);
+    }
     if (ctx->model)
         llama_model_free(ctx->model);
     if (ctx->audio)

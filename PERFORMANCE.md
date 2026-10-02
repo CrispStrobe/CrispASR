@@ -3033,3 +3033,16 @@ Ordered by estimated breadth × depth of impact across the project:
 | | flow_inverse | 2579 |
 | | hifigan_decode | 17947 |
 | | **total** | **26272** |
+
+## Index-Echo decoder scheduler experiment — pending validation
+
+`CRISPASR_LLAMA_PIPELINE_DISABLE=1` disables multi-device pipeline scheduling
+in the embedded llama runtime, allowing its existing graph-reuse path to operate.
+The default is unchanged. This trades pipeline overlap for graph construction
+and allocation reuse; it can affect batched prefill as well as generation and
+must be compared on the same actual GPUs. The flag applies to embedded llama
+contexts, so set it only for the process being measured. `INDEX_ECHO_BENCH=1`
+prints per-stage timing and decoder graph-reuse counters at context destruction.
+A successful build is not a performance or hardware proof. Acceptance requires
+independent stage/cache/magnitude checks, complete decoded output and roundtrips,
+plus both execution orders with at least three warm calls per arm.
