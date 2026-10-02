@@ -17,6 +17,8 @@ def check_pipeline(root, out, build, library, models, cohort, reference_subdir, 
     vad_path = Path(hf_hub_download('ggml-org/whisper-vad', 'ggml-silero-v6.2.0.bin',
                                   revision=vad_revision, local_dir=models / 'vad-companion'))
     oracle = json.loads((models / reference_subdir / 'pipeline.json').read_text())
+    if model_prefix == 'index-echo-9b' and oracle.get('complete') is not True:
+        raise RuntimeError('9B acceptance requires a completed independent source capture')
     required = {'jfk-en': 'en', 'zh-en': 'en', 'zh-ja': 'ja', 'zh-es': 'es', 'multi-en': 'en'}
     if oracle.get('complete') is False or set(oracle['cases']) != set(required):
         raise RuntimeError('Full-file acceptance requires the complete independent five-case source oracle')

@@ -1,0 +1,28 @@
+name: Index Echo 9B large CPU regression
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '40 4 * * 0'
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: index-echo-9b-large-regression
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    uses: ./.github/workflows/heavy-cpu.yml
+    secrets: inherit
+    with:
+      script: tools/ci-heavy/index_echo_validate.py
+      args: >-
+        --size 9b --cohorts f16 --fixture-prefix index-echo-9b-f32-generation
+        --reference-subdir reference-f32 --pipeline
+        --pipeline-fixture-prefix index-echo-9b-f32-zh-context
+        --pipeline-audio-path index-echo-9b/pipeline-zh-context/audio.wav --regression
+      pip: huggingface_hub gguf numpy
+      timeout_minutes: '180'
