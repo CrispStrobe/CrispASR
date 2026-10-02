@@ -48,6 +48,7 @@ class NineBOracleGuards(unittest.TestCase):
             return ''.join(f'[PASS] {n} shape=[1] cos_min=1.000000\n relative_l2=0.000000\n' for n in selected)+'[PASS] first greedy token parity (1/1)\n[PASS] prompt_ids byte parity\n[PASS] cached greedy token parity (16/16)\n'
         audit.stage_report(report(names))
         audit.stage_report(report(names).replace('shape=[1] cos_min=', 'shape=[1]~llama_context: buffer stats\n cos_min='))
+        audit.stage_report(report(names).replace('shape=[1]', 'shape~llama_context: buffer stats\n=[1]', 1))
         with self.assertRaises(ValueError):audit.stage_report(report([n for n in names if n!='llm_block_31']))
         with self.assertRaises(ValueError):audit.stage_report(report(names)+'[SKIP] missing activation\n')
         with self.assertRaises(ValueError):audit.stage_report(report(names).replace('(16/16)','(15/16)'))

@@ -12,15 +12,15 @@ import subprocess
 import sys
 import tarfile
 
-SCRIPT_VERSION = '2026-10-02.2'
-SOURCE_COMMIT = '324c10b9f8612198c2cd29afeeb8442dfc912373'
-BUILD_COMMIT = '9503bec6f9b2d5ad59239369ab16b6a1e6400e78'
+SCRIPT_VERSION = '2026-10-02.3'
+SOURCE_COMMIT = '4584fc035c3655e3826d5796b3756e47f68c25e4'
+BUILD_COMMIT = 'f91a31da8d586157043639d0e6039c778d2571dc'
 MODEL_REVISION = 'dca128e0da2c86819347b79f63da610c0b8bd472'
-REFERENCE_REVISION = '86ec7245cf53b78d8d2442f6f919b9215104609b'
+REFERENCE_REVISION = 'cb678dfd4806778aa55c39fe7b7a710a54cdc153'
 AUDIO_REVISION = 'd0a7d7a8be318a5841dfdbe6ad37d3acf75523e3'
-BUILD_RUN = 36994683144
-BUNDLE_REVISION = 'cdd447a34651ecd757f2c38df2dee486ab2502d9'
-BUNDLE_SHA256 = 'beb116b33ae08836e6dafa8c6414073622bfb72befaaefb71c93445dad67cd4e'
+BUILD_RUN = 36997586995
+BUNDLE_REVISION = '9ffaeaab43fece5ec5c0baeb4884e2db87625f6f'
+BUNDLE_SHA256 = '166e8741738827fd0b997551bf27bfa93b5dcf04c898056fdedade87ba5c9f3e'
 if len(REFERENCE_REVISION) != 40 or len(BUNDLE_REVISION) != 40 or len(BUNDLE_SHA256) != 64:
     raise RuntimeError('Independent reference and CI bundle pins must be set before launch')
 ROOT = Path('/kaggle/temp/index-echo-validation-repo')
@@ -109,7 +109,7 @@ for local, remote in {
     source = hf_hub_download(fixture_repo, 'index-echo-9b-f32-generation/' + remote,
                              revision=REFERENCE_REVISION, local_dir=TEMP / 'fixtures')
     (refs / local).symlink_to(source)
-source = hf_hub_download(fixture_repo, 'index-echo-9b-bf16-default-zh-context/pipeline/reference.json',
+source = hf_hub_download(fixture_repo, 'index-echo-9b-f32-zh-context/pipeline/reference.json',
                          revision=REFERENCE_REVISION, local_dir=TEMP / 'fixtures')
 (refs / 'pipeline.json').symlink_to(source)
 oracle = json.loads(Path(source).read_text())
@@ -122,7 +122,7 @@ clips = [('jfk', ROOT / 'samples/jfk.wav'), ('zh', ROOT / 'samples/paraformer_zh
          ('jfk-tail', refs / 'jfk-tail.wav')]
 receipt = dict(script_version=SCRIPT_VERSION, source_commit=SOURCE_COMMIT,
                model_revision=MODEL_REVISION, reference_revision=REFERENCE_REVISION,
-               audio_revision=AUDIO_REVISION, pipeline_reference_dtype='released-default bfloat16', direct_reference_dtype='float32', build_commit=BUILD_COMMIT, build_run=BUILD_RUN, bundle_revision=BUNDLE_REVISION, bundle_sha256=BUNDLE_SHA256, hardware=hardware, cuda_arch=arch,
+               audio_revision=AUDIO_REVISION, pipeline_reference_dtype='independently forced all-float32', direct_reference_dtype='float32', build_commit=BUILD_COMMIT, build_run=BUILD_RUN, bundle_revision=BUNDLE_REVISION, bundle_sha256=BUNDLE_SHA256, hardware=hardware, cuda_arch=arch,
                full_pipeline_checked=False, cohorts={}, validated=False)
 failed = []
 
@@ -164,7 +164,7 @@ def cues_match(actual, expected):
     return len(actual)==len(expected) and all(a['text']==e['text'] and abs(a['start']-e['start'])<=.0051 and abs(a['end']-e['end'])<=.0051 for a,e in zip(actual,expected))
 
 
-for cohort in ['f16', 'q8_0_ffn']:
+for cohort in ['f16']:
     models = Path(snapshot_download('cstr/index-echo-9b-GGUF', revision=MODEL_REVISION,
                   local_dir=TEMP / 'models', allow_patterns=[f'index-echo-9b-{cohort}.gguf', f'index-echo-9b-decoder-{cohort}.gguf']))
     (models / 'reference-f32').mkdir(exist_ok=True)

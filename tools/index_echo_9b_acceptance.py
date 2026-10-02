@@ -59,7 +59,7 @@ def stage_report(text):
     # one from a different stage.
     rows = []
     for block in re.split(r'(?=\[(?:PASS|FAIL|SKIP)\])', text):
-        name = re.match(r'\[PASS\]\s+(\S+)\s+shape=', block)
+        name = re.match(r'\[PASS\]\s+(\S+)\s+shape\b', block)
         if not name:
             continue
         cosine = re.search(r'cos_min=([\d.]+)', block)
