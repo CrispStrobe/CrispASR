@@ -2,6 +2,20 @@ name: Index Echo 9B large CPU regression
 
 on:
   workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'src/index_echo*'
+      - 'src/crisp_audio*'
+      - 'src/crispasr.cpp'
+      - 'examples/cli/crispasr_backend_index_echo.cpp'
+      - 'models/convert-index-echo-to-gguf.py'
+      - 'tools/reference_backends/index_echo.py'
+      - 'tools/ci-heavy/index_echo_validate.py'
+      - 'tools/ci-heavy/index_echo_pipeline_check.py'
+      - 'tools/ci-heavy/index_echo_roundtrip.py'
+      - 'tools/index_echo_9b_acceptance.py'
+      - '.github/workflows/index-echo-9b-regression.yml'
   schedule:
     - cron: '40 4 * * 0'
 
