@@ -1,0 +1,2606 @@
+{
+  "validated": true,
+  "accepted_cohort": "f16",
+  "source_model": "IndexTeam/Index-Echo-S2TT-9B",
+  "source_revision": "b8ac6fb7d3dc17cee48a52201bd3d93dc86b0dba",
+  "model_revision": "dca128e0da2c86819347b79f63da610c0b8bd472",
+  "reference_revision": "cb678dfd4806778aa55c39fe7b7a710a54cdc153",
+  "artifacts": {
+    "LICENSE": {
+      "bytes": 11358,
+      "sha256": "c95bae1d1ce0235ecccd3560b772ec1efb97f348a79f0fbe0a634f0c2ccefe2c"
+    },
+    "index-echo-9b-f16.gguf": {
+      "bytes": 1313848736,
+      "sha256": "e4b1dd177211ba5d8eb0ea7140ac2f813ddc68b55381f050ecf7ddab3e83172f"
+    },
+    "index-echo-9b-decoder-f16.gguf": {
+      "bytes": 17920696992,
+      "sha256": "98acd9b753295cdc9a9b8773317ab046bf83e466b1ebfc775d59ac8dab9d177a"
+    }
+  },
+  "cpu": {
+    "passed": true,
+    "provenance": {
+      "model_repo": "cstr/index-echo-9b-GGUF",
+      "model_revision": "dca128e0da2c86819347b79f63da610c0b8bd472",
+      "fixture_repo": "cstr/crispasr-regression-fixtures",
+      "fixture_revision": "86ec7245cf53b78d8d2442f6f919b9215104609b",
+      "stage_fixture_prefix": "index-echo-9b-f32-generation",
+      "pipeline_fixture_prefix": "index-echo-9b-bf16-default-zh-context",
+      "pipeline_audio_path": "index-echo-9b/pipeline-zh-context/audio.wav",
+      "source_commit": "0004c1a4402a48b64fd93fa65976c76b35206ca7",
+      "ggml_commit": "2f5a80d258c46e6ac8eee95f1328c0f58376d7ee",
+      "threads": 4,
+      "cpu": "x86_64"
+    },
+    "clips": {
+      "jfk": {
+        "passed": true,
+        "reported_checks": 76,
+        "numerical_checks": 75,
+        "cached_predictions": 16,
+        "cosine_min": 0.999998,
+        "relative_l2_max": 0.00188179,
+        "stages": [
+          {
+            "stage": "mel_spectrogram",
+            "cosine_min": 1.0,
+            "relative_l2": 5.12e-06
+          },
+          {
+            "stage": "connector_output",
+            "cosine_min": 1.0,
+            "relative_l2": 2.56e-06
+          },
+          {
+            "stage": "conv1_out",
+            "cosine_min": 1.0,
+            "relative_l2": 1.054e-05
+          },
+          {
+            "stage": "conv2_out",
+            "cosine_min": 1.0,
+            "relative_l2": 8.9e-06
+          },
+          {
+            "stage": "conv3_out",
+            "cosine_min": 1.0,
+            "relative_l2": 5.91e-06
+          },
+          {
+            "stage": "encoder_input",
+            "cosine_min": 1.0,
+            "relative_l2": 1.99e-06
+          },
+          {
+            "stage": "ln_post_out",
+            "cosine_min": 1.0,
+            "relative_l2": 3.68e-06
+          },
+          {
+            "stage": "proj1_out",
+            "cosine_min": 1.0,
+            "relative_l2": 3.39e-06
+          },
+          {
+            "stage": "encoder_output",
+            "cosine_min": 1.0,
+            "relative_l2": 2.6e-06
+          },
+          {
+            "stage": "encoder_layer_0",
+            "cosine_min": 1.0,
+            "relative_l2": 1.49e-06
+          },
+          {
+            "stage": "encoder_layer_1",
+            "cosine_min": 1.0,
+            "relative_l2": 1.44e-06
+          },
+          {
+            "stage": "encoder_layer_2",
+            "cosine_min": 1.0,
+            "relative_l2": 1.48e-06
+          },
+          {
+            "stage": "encoder_layer_3",
+            "cosine_min": 1.0,
+            "relative_l2": 1.74e-06
+          },
+          {
+            "stage": "encoder_layer_4",
+            "cosine_min": 1.0,
+            "relative_l2": 1.84e-06
+          },
+          {
+            "stage": "encoder_layer_5",
+            "cosine_min": 1.0,
+            "relative_l2": 1.9e-06
+          },
+          {
+            "stage": "encoder_layer_6",
+            "cosine_min": 1.0,
+            "relative_l2": 1.86e-06
+          },
+          {
+            "stage": "encoder_layer_7",
+            "cosine_min": 1.0,
+            "relative_l2": 1.93e-06
+          },
+          {
+            "stage": "encoder_layer_8",
+            "cosine_min": 1.0,
+            "relative_l2": 1.94e-06
+          },
+          {
+            "stage": "encoder_layer_9",
+            "cosine_min": 1.0,
+            "relative_l2": 1.93e-06
+          },
+          {
+            "stage": "encoder_layer_10",
+            "cosine_min": 1.0,
+            "relative_l2": 1.94e-06
+          },
+          {
+            "stage": "encoder_layer_11",
+            "cosine_min": 1.0,
+            "relative_l2": 1.88e-06
+          },
+          {
+            "stage": "encoder_layer_12",
+            "cosine_min": 1.0,
+            "relative_l2": 1.84e-06
+          },
+          {
+            "stage": "encoder_layer_13",
+            "cosine_min": 1.0,
+            "relative_l2": 1.77e-06
+          },
+          {
+            "stage": "encoder_layer_14",
+            "cosine_min": 1.0,
+            "relative_l2": 1.71e-06
+          },
+          {
+            "stage": "encoder_layer_15",
+            "cosine_min": 1.0,
+            "relative_l2": 1.62e-06
+          },
+          {
+            "stage": "encoder_layer_16",
+            "cosine_min": 1.0,
+            "relative_l2": 1.59e-06
+          },
+          {
+            "stage": "encoder_layer_17",
+            "cosine_min": 1.0,
+            "relative_l2": 1.49e-06
+          },
+          {
+            "stage": "encoder_layer_18",
+            "cosine_min": 1.0,
+            "relative_l2": 1.41e-06
+          },
+          {
+            "stage": "encoder_layer_19",
+            "cosine_min": 1.0,
+            "relative_l2": 1.38e-06
+          },
+          {
+            "stage": "encoder_layer_20",
+            "cosine_min": 1.0,
+            "relative_l2": 1.32e-06
+          },
+          {
+            "stage": "encoder_layer_21",
+            "cosine_min": 1.0,
+            "relative_l2": 1.24e-06
+          },
+          {
+            "stage": "encoder_layer_22",
+            "cosine_min": 1.0,
+            "relative_l2": 1.24e-06
+          },
+          {
+            "stage": "encoder_layer_23",
+            "cosine_min": 1.0,
+            "relative_l2": 1.22e-06
+          },
+          {
+            "stage": "encoder_layer_24",
+            "cosine_min": 1.0,
+            "relative_l2": 1.28e-06
+          },
+          {
+            "stage": "encoder_layer_25",
+            "cosine_min": 1.0,
+            "relative_l2": 2.24e-06
+          },
+          {
+            "stage": "encoder_layer_26",
+            "cosine_min": 1.0,
+            "relative_l2": 4.84e-06
+          },
+          {
+            "stage": "encoder_layer_27",
+            "cosine_min": 1.0,
+            "relative_l2": 5.42e-06
+          },
+          {
+            "stage": "encoder_layer_28",
+            "cosine_min": 1.0,
+            "relative_l2": 6.2e-06
+          },
+          {
+            "stage": "encoder_layer_29",
+            "cosine_min": 1.0,
+            "relative_l2": 6.33e-06
+          },
+          {
+            "stage": "encoder_layer_30",
+            "cosine_min": 1.0,
+            "relative_l2": 6.11e-06
+          },
+          {
+            "stage": "encoder_layer_31",
+            "cosine_min": 1.0,
+            "relative_l2": 1.43e-06
+          },
+          {
+            "stage": "llm_logits",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00036836
+          },
+          {
+            "stage": "llm_block_0",
+            "cosine_min": 1.0,
+            "relative_l2": 2.1e-07
+          },
+          {
+            "stage": "llm_block_1",
+            "cosine_min": 1.0,
+            "relative_l2": 2.7e-07
+          },
+          {
+            "stage": "llm_block_2",
+            "cosine_min": 1.0,
+            "relative_l2": 3.5e-07
+          },
+          {
+            "stage": "llm_block_3",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00062119
+          },
+          {
+            "stage": "llm_block_4",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00066152
+          },
+          {
+            "stage": "llm_block_5",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00058861
+          },
+          {
+            "stage": "llm_block_6",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00058271
+          },
+          {
+            "stage": "llm_block_7",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00087669
+          },
+          {
+            "stage": "llm_block_8",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00085625
+          },
+          {
+            "stage": "llm_block_9",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00079375
+          },
+          {
+            "stage": "llm_block_10",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00076226
+          },
+          {
+            "stage": "llm_block_11",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00100393
+          },
+          {
+            "stage": "llm_block_12",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00099807
+          },
+          {
+            "stage": "llm_block_13",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00104835
+          },
+          {
+            "stage": "llm_block_14",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0009927
+          },
+          {
+            "stage": "llm_block_15",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00145544
+          },
+          {
+            "stage": "llm_block_16",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00150519
+          },
+          {
+            "stage": "llm_block_17",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00152097
+          },
+          {
+            "stage": "llm_block_18",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00159043
+          },
+          {
+            "stage": "llm_block_19",
+            "cosine_min": 0.999998,
+            "relative_l2": 0.00177265
+          },
+          {
+            "stage": "llm_block_20",
+            "cosine_min": 0.999998,
+            "relative_l2": 0.0017687
+          },
+          {
+            "stage": "llm_block_21",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00171369
+          },
+          {
+            "stage": "llm_block_22",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.0017262
+          },
+          {
+            "stage": "llm_block_23",
+            "cosine_min": 0.999998,
+            "relative_l2": 0.00188179
+          },
+          {
+            "stage": "llm_block_24",
+            "cosine_min": 0.999998,
+            "relative_l2": 0.00184727
+          },
+          {
+            "stage": "llm_block_25",
+            "cosine_min": 0.999998,
+            "relative_l2": 0.00176647
+          },
+          {
+            "stage": "llm_block_26",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00171205
+          },
+          {
+            "stage": "llm_block_27",
+            "cosine_min": 0.999998,
+            "relative_l2": 0.00186194
+          },
+          {
+            "stage": "llm_block_28",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00157244
+          },
+          {
+            "stage": "llm_block_29",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00144711
+          },
+          {
+            "stage": "llm_block_30",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00131996
+          },
+          {
+            "stage": "llm_block_31",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00090135
+          },
+          {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.999998,
+            "relative_l2": 0.00100252
+          }
+        ]
+      },
+      "jfk-tail": {
+        "passed": true,
+        "reported_checks": 76,
+        "numerical_checks": 75,
+        "cached_predictions": 16,
+        "cosine_min": 0.999998,
+        "relative_l2_max": 0.00107878,
+        "stages": [
+          {
+            "stage": "mel_spectrogram",
+            "cosine_min": 1.0,
+            "relative_l2": 4.35e-06
+          },
+          {
+            "stage": "connector_output",
+            "cosine_min": 1.0,
+            "relative_l2": 1.581e-05
+          },
+          {
+            "stage": "conv1_out",
+            "cosine_min": 1.0,
+            "relative_l2": 9.44e-06
+          },
+          {
+            "stage": "conv2_out",
+            "cosine_min": 1.0,
+            "relative_l2": 7.91e-06
+          },
+          {
+            "stage": "conv3_out",
+            "cosine_min": 1.0,
+            "relative_l2": 5.28e-06
+          },
+          {
+            "stage": "encoder_input",
+            "cosine_min": 1.0,
+            "relative_l2": 1.81e-06
+          },
+          {
+            "stage": "ln_post_out",
+            "cosine_min": 1.0,
+            "relative_l2": 2.968e-05
+          },
+          {
+            "stage": "proj1_out",
+            "cosine_min": 1.0,
+            "relative_l2": 2.115e-05
+          },
+          {
+            "stage": "encoder_output",
+            "cosine_min": 1.0,
+            "relative_l2": 1.64e-05
+          },
+          {
+            "stage": "encoder_layer_0",
+            "cosine_min": 1.0,
+            "relative_l2": 1.38e-06
+          },
+          {
+            "stage": "encoder_layer_1",
+            "cosine_min": 1.0,
+            "relative_l2": 1.33e-06
+          },
+          {
+            "stage": "encoder_layer_2",
+            "cosine_min": 1.0,
+            "relative_l2": 1.37e-06
+          },
+          {
+            "stage": "encoder_layer_3",
+            "cosine_min": 1.0,
+            "relative_l2": 1.61e-06
+          },
+          {
+            "stage": "encoder_layer_4",
+            "cosine_min": 1.0,
+            "relative_l2": 1.71e-06
+          },
+          {
+            "stage": "encoder_layer_5",
+            "cosine_min": 1.0,
+            "relative_l2": 1.74e-06
+          },
+          {
+            "stage": "encoder_layer_6",
+            "cosine_min": 1.0,
+            "relative_l2": 1.71e-06
+          },
+          {
+            "stage": "encoder_layer_7",
+            "cosine_min": 1.0,
+            "relative_l2": 1.76e-06
+          },
+          {
+            "stage": "encoder_layer_8",
+            "cosine_min": 1.0,
+            "relative_l2": 1.78e-06
+          },
+          {
+            "stage": "encoder_layer_9",
+            "cosine_min": 1.0,
+            "relative_l2": 1.78e-06
+          },
+          {
+            "stage": "encoder_layer_10",
+            "cosine_min": 1.0,
+            "relative_l2": 1.78e-06
+          },
+          {
+            "stage": "encoder_layer_11",
+            "cosine_min": 1.0,
+            "relative_l2": 1.72e-06
+          },
+          {
+            "stage": "encoder_layer_12",
+            "cosine_min": 1.0,
+            "relative_l2": 1.68e-06
+          },
+          {
+            "stage": "encoder_layer_13",
+            "cosine_min": 1.0,
+            "relative_l2": 1.63e-06
+          },
+          {
+            "stage": "encoder_layer_14",
+            "cosine_min": 1.0,
+            "relative_l2": 1.58e-06
+          },
+          {
+            "stage": "encoder_layer_15",
+            "cosine_min": 1.0,
+            "relative_l2": 1.52e-06
+          },
+          {
+            "stage": "encoder_layer_16",
+            "cosine_min": 1.0,
+            "relative_l2": 1.49e-06
+          },
+          {
+            "stage": "encoder_layer_17",
+            "cosine_min": 1.0,
+            "relative_l2": 1.43e-06
+          },
+          {
+            "stage": "encoder_layer_18",
+            "cosine_min": 1.0,
+            "relative_l2": 1.37e-06
+          },
+          {
+            "stage": "encoder_layer_19",
+            "cosine_min": 1.0,
+            "relative_l2": 1.38e-06
+          },
+          {
+            "stage": "encoder_layer_20",
+            "cosine_min": 1.0,
+            "relative_l2": 1.34e-06
+          },
+          {
+            "stage": "encoder_layer_21",
+            "cosine_min": 1.0,
+            "relative_l2": 1.28e-06
+          },
+          {
+            "stage": "encoder_layer_22",
+            "cosine_min": 1.0,
+            "relative_l2": 1.33e-06
+          },
+          {
+            "stage": "encoder_layer_23",
+            "cosine_min": 1.0,
+            "relative_l2": 1.36e-06
+          },
+          {
+            "stage": "encoder_layer_24",
+            "cosine_min": 1.0,
+            "relative_l2": 1.57e-06
+          },
+          {
+            "stage": "encoder_layer_25",
+            "cosine_min": 1.0,
+            "relative_l2": 4.9e-06
+          },
+          {
+            "stage": "encoder_layer_26",
+            "cosine_min": 1.0,
+            "relative_l2": 2.085e-05
+          },
+          {
+            "stage": "encoder_layer_27",
+            "cosine_min": 1.0,
+            "relative_l2": 2.779e-05
+          },
+          {
+            "stage": "encoder_layer_28",
+            "cosine_min": 1.0,
+            "relative_l2": 3.701e-05
+          },
+          {
+            "stage": "encoder_layer_29",
+            "cosine_min": 1.0,
+            "relative_l2": 3.235e-05
+          },
+          {
+            "stage": "encoder_layer_30",
+            "cosine_min": 1.0,
+            "relative_l2": 2.758e-05
+          },
+          {
+            "stage": "encoder_layer_31",
+            "cosine_min": 1.0,
+            "relative_l2": 5.67e-06
+          },
+          {
+            "stage": "llm_logits",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00047188
+          },
+          {
+            "stage": "llm_block_0",
+            "cosine_min": 1.0,
+            "relative_l2": 3.8e-07
+          },
+          {
+            "stage": "llm_block_1",
+            "cosine_min": 1.0,
+            "relative_l2": 4.5e-07
+          },
+          {
+            "stage": "llm_block_2",
+            "cosine_min": 1.0,
+            "relative_l2": 5.7e-07
+          },
+          {
+            "stage": "llm_block_3",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00042386
+          },
+          {
+            "stage": "llm_block_4",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00040449
+          },
+          {
+            "stage": "llm_block_5",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00031692
+          },
+          {
+            "stage": "llm_block_6",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00029638
+          },
+          {
+            "stage": "llm_block_7",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00040903
+          },
+          {
+            "stage": "llm_block_8",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0004004
+          },
+          {
+            "stage": "llm_block_9",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00036575
+          },
+          {
+            "stage": "llm_block_10",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00034899
+          },
+          {
+            "stage": "llm_block_11",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00048505
+          },
+          {
+            "stage": "llm_block_12",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0005097
+          },
+          {
+            "stage": "llm_block_13",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00053233
+          },
+          {
+            "stage": "llm_block_14",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0005106
+          },
+          {
+            "stage": "llm_block_15",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0006793
+          },
+          {
+            "stage": "llm_block_16",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00070704
+          },
+          {
+            "stage": "llm_block_17",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00070269
+          },
+          {
+            "stage": "llm_block_18",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0006572
+          },
+          {
+            "stage": "llm_block_19",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00099439
+          },
+          {
+            "stage": "llm_block_20",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00098381
+          },
+          {
+            "stage": "llm_block_21",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00098437
+          },
+          {
+            "stage": "llm_block_22",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0009359
+          },
+          {
+            "stage": "llm_block_23",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00107878
+          },
+          {
+            "stage": "llm_block_24",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00105982
+          },
+          {
+            "stage": "llm_block_25",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00098158
+          },
+          {
+            "stage": "llm_block_26",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00093945
+          },
+          {
+            "stage": "llm_block_27",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0009741
+          },
+          {
+            "stage": "llm_block_28",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00083594
+          },
+          {
+            "stage": "llm_block_29",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00077436
+          },
+          {
+            "stage": "llm_block_30",
+            "cosine_min": 1.0,
+            "relative_l2": 0.000703
+          },
+          {
+            "stage": "llm_block_31",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00060737
+          },
+          {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.999998,
+            "relative_l2": 0.00072558
+          }
+        ]
+      },
+      "zh": {
+        "passed": true,
+        "reported_checks": 76,
+        "numerical_checks": 75,
+        "cached_predictions": 16,
+        "cosine_min": 0.999998,
+        "relative_l2_max": 0.00176951,
+        "stages": [
+          {
+            "stage": "mel_spectrogram",
+            "cosine_min": 1.0,
+            "relative_l2": 9.2e-06
+          },
+          {
+            "stage": "connector_output",
+            "cosine_min": 1.0,
+            "relative_l2": 2.9e-06
+          },
+          {
+            "stage": "conv1_out",
+            "cosine_min": 1.0,
+            "relative_l2": 1.709e-05
+          },
+          {
+            "stage": "conv2_out",
+            "cosine_min": 1.0,
+            "relative_l2": 1.463e-05
+          },
+          {
+            "stage": "conv3_out",
+            "cosine_min": 1.0,
+            "relative_l2": 9.58e-06
+          },
+          {
+            "stage": "encoder_input",
+            "cosine_min": 1.0,
+            "relative_l2": 2.79e-06
+          },
+          {
+            "stage": "ln_post_out",
+            "cosine_min": 1.0,
+            "relative_l2": 5.7e-06
+          },
+          {
+            "stage": "proj1_out",
+            "cosine_min": 1.0,
+            "relative_l2": 3.86e-06
+          },
+          {
+            "stage": "encoder_output",
+            "cosine_min": 1.0,
+            "relative_l2": 2.98e-06
+          },
+          {
+            "stage": "encoder_layer_0",
+            "cosine_min": 1.0,
+            "relative_l2": 1.96e-06
+          },
+          {
+            "stage": "encoder_layer_1",
+            "cosine_min": 1.0,
+            "relative_l2": 1.87e-06
+          },
+          {
+            "stage": "encoder_layer_2",
+            "cosine_min": 1.0,
+            "relative_l2": 1.91e-06
+          },
+          {
+            "stage": "encoder_layer_3",
+            "cosine_min": 1.0,
+            "relative_l2": 2.17e-06
+          },
+          {
+            "stage": "encoder_layer_4",
+            "cosine_min": 1.0,
+            "relative_l2": 2.29e-06
+          },
+          {
+            "stage": "encoder_layer_5",
+            "cosine_min": 1.0,
+            "relative_l2": 2.34e-06
+          },
+          {
+            "stage": "encoder_layer_6",
+            "cosine_min": 1.0,
+            "relative_l2": 2.35e-06
+          },
+          {
+            "stage": "encoder_layer_7",
+            "cosine_min": 1.0,
+            "relative_l2": 2.43e-06
+          },
+          {
+            "stage": "encoder_layer_8",
+            "cosine_min": 1.0,
+            "relative_l2": 2.48e-06
+          },
+          {
+            "stage": "encoder_layer_9",
+            "cosine_min": 1.0,
+            "relative_l2": 2.48e-06
+          },
+          {
+            "stage": "encoder_layer_10",
+            "cosine_min": 1.0,
+            "relative_l2": 2.51e-06
+          },
+          {
+            "stage": "encoder_layer_11",
+            "cosine_min": 1.0,
+            "relative_l2": 2.46e-06
+          },
+          {
+            "stage": "encoder_layer_12",
+            "cosine_min": 1.0,
+            "relative_l2": 2.43e-06
+          },
+          {
+            "stage": "encoder_layer_13",
+            "cosine_min": 1.0,
+            "relative_l2": 2.36e-06
+          },
+          {
+            "stage": "encoder_layer_14",
+            "cosine_min": 1.0,
+            "relative_l2": 2.31e-06
+          },
+          {
+            "stage": "encoder_layer_15",
+            "cosine_min": 1.0,
+            "relative_l2": 2.22e-06
+          },
+          {
+            "stage": "encoder_layer_16",
+            "cosine_min": 1.0,
+            "relative_l2": 2.2e-06
+          },
+          {
+            "stage": "encoder_layer_17",
+            "cosine_min": 1.0,
+            "relative_l2": 2.1e-06
+          },
+          {
+            "stage": "encoder_layer_18",
+            "cosine_min": 1.0,
+            "relative_l2": 2.03e-06
+          },
+          {
+            "stage": "encoder_layer_19",
+            "cosine_min": 1.0,
+            "relative_l2": 2.01e-06
+          },
+          {
+            "stage": "encoder_layer_20",
+            "cosine_min": 1.0,
+            "relative_l2": 1.91e-06
+          },
+          {
+            "stage": "encoder_layer_21",
+            "cosine_min": 1.0,
+            "relative_l2": 1.82e-06
+          },
+          {
+            "stage": "encoder_layer_22",
+            "cosine_min": 1.0,
+            "relative_l2": 1.87e-06
+          },
+          {
+            "stage": "encoder_layer_23",
+            "cosine_min": 1.0,
+            "relative_l2": 1.86e-06
+          },
+          {
+            "stage": "encoder_layer_24",
+            "cosine_min": 1.0,
+            "relative_l2": 1.89e-06
+          },
+          {
+            "stage": "encoder_layer_25",
+            "cosine_min": 1.0,
+            "relative_l2": 2.65e-06
+          },
+          {
+            "stage": "encoder_layer_26",
+            "cosine_min": 1.0,
+            "relative_l2": 6.1e-06
+          },
+          {
+            "stage": "encoder_layer_27",
+            "cosine_min": 1.0,
+            "relative_l2": 7.1e-06
+          },
+          {
+            "stage": "encoder_layer_28",
+            "cosine_min": 1.0,
+            "relative_l2": 8.31e-06
+          },
+          {
+            "stage": "encoder_layer_29",
+            "cosine_min": 1.0,
+            "relative_l2": 8.16e-06
+          },
+          {
+            "stage": "encoder_layer_30",
+            "cosine_min": 1.0,
+            "relative_l2": 7.66e-06
+          },
+          {
+            "stage": "encoder_layer_31",
+            "cosine_min": 1.0,
+            "relative_l2": 1.3e-06
+          },
+          {
+            "stage": "llm_logits",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00126147
+          },
+          {
+            "stage": "llm_block_0",
+            "cosine_min": 1.0,
+            "relative_l2": 3.5e-07
+          },
+          {
+            "stage": "llm_block_1",
+            "cosine_min": 1.0,
+            "relative_l2": 2.9e-07
+          },
+          {
+            "stage": "llm_block_2",
+            "cosine_min": 1.0,
+            "relative_l2": 3.9e-07
+          },
+          {
+            "stage": "llm_block_3",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00073004
+          },
+          {
+            "stage": "llm_block_4",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00082297
+          },
+          {
+            "stage": "llm_block_5",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00063975
+          },
+          {
+            "stage": "llm_block_6",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00057584
+          },
+          {
+            "stage": "llm_block_7",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00086213
+          },
+          {
+            "stage": "llm_block_8",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00084286
+          },
+          {
+            "stage": "llm_block_9",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00075227
+          },
+          {
+            "stage": "llm_block_10",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00067489
+          },
+          {
+            "stage": "llm_block_11",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00097021
+          },
+          {
+            "stage": "llm_block_12",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00098201
+          },
+          {
+            "stage": "llm_block_13",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00097018
+          },
+          {
+            "stage": "llm_block_14",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00091267
+          },
+          {
+            "stage": "llm_block_15",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00140139
+          },
+          {
+            "stage": "llm_block_16",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00144907
+          },
+          {
+            "stage": "llm_block_17",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00141741
+          },
+          {
+            "stage": "llm_block_18",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00137205
+          },
+          {
+            "stage": "llm_block_19",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00157931
+          },
+          {
+            "stage": "llm_block_20",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00145096
+          },
+          {
+            "stage": "llm_block_21",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00140884
+          },
+          {
+            "stage": "llm_block_22",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00137983
+          },
+          {
+            "stage": "llm_block_23",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00154802
+          },
+          {
+            "stage": "llm_block_24",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00156679
+          },
+          {
+            "stage": "llm_block_25",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00155071
+          },
+          {
+            "stage": "llm_block_26",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00142128
+          },
+          {
+            "stage": "llm_block_27",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00176951
+          },
+          {
+            "stage": "llm_block_28",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00174212
+          },
+          {
+            "stage": "llm_block_29",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00174823
+          },
+          {
+            "stage": "llm_block_30",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00157918
+          },
+          {
+            "stage": "llm_block_31",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00152614
+          },
+          {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.999998,
+            "relative_l2": 0.00128359
+          }
+        ]
+      }
+    }
+  },
+  "cuda": {
+    "passed": true,
+    "build_commit": "9503bec6f9b2d5ad59239369ab16b6a1e6400e78",
+    "build_run": 36994683144,
+    "hardware": "Tesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB",
+    "clips": {
+      "jfk": {
+        "passed": true,
+        "reported_checks": 76,
+        "numerical_checks": 75,
+        "cached_predictions": 16,
+        "cosine_min": 0.999995,
+        "relative_l2_max": 0.00099121,
+        "stages": [
+          {
+            "stage": "mel_spectrogram",
+            "cosine_min": 1.0,
+            "relative_l2": 5.12e-06
+          },
+          {
+            "stage": "connector_output",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00019994
+          },
+          {
+            "stage": "conv1_out",
+            "cosine_min": 1.0,
+            "relative_l2": 1.054e-05
+          },
+          {
+            "stage": "conv2_out",
+            "cosine_min": 1.0,
+            "relative_l2": 8.85e-06
+          },
+          {
+            "stage": "conv3_out",
+            "cosine_min": 1.0,
+            "relative_l2": 5.9e-06
+          },
+          {
+            "stage": "encoder_input",
+            "cosine_min": 1.0,
+            "relative_l2": 4.672e-05
+          },
+          {
+            "stage": "ln_post_out",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00030391
+          },
+          {
+            "stage": "proj1_out",
+            "cosine_min": 0.999997,
+            "relative_l2": 0.00027319
+          },
+          {
+            "stage": "encoder_output",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.0002067
+          },
+          {
+            "stage": "encoder_layer_0",
+            "cosine_min": 1.0,
+            "relative_l2": 3.448e-05
+          },
+          {
+            "stage": "encoder_layer_1",
+            "cosine_min": 1.0,
+            "relative_l2": 3.379e-05
+          },
+          {
+            "stage": "encoder_layer_2",
+            "cosine_min": 1.0,
+            "relative_l2": 3.607e-05
+          },
+          {
+            "stage": "encoder_layer_3",
+            "cosine_min": 1.0,
+            "relative_l2": 4.327e-05
+          },
+          {
+            "stage": "encoder_layer_4",
+            "cosine_min": 1.0,
+            "relative_l2": 4.744e-05
+          },
+          {
+            "stage": "encoder_layer_5",
+            "cosine_min": 1.0,
+            "relative_l2": 5.167e-05
+          },
+          {
+            "stage": "encoder_layer_6",
+            "cosine_min": 1.0,
+            "relative_l2": 5.338e-05
+          },
+          {
+            "stage": "encoder_layer_7",
+            "cosine_min": 1.0,
+            "relative_l2": 5.871e-05
+          },
+          {
+            "stage": "encoder_layer_8",
+            "cosine_min": 1.0,
+            "relative_l2": 6.224e-05
+          },
+          {
+            "stage": "encoder_layer_9",
+            "cosine_min": 1.0,
+            "relative_l2": 6.479e-05
+          },
+          {
+            "stage": "encoder_layer_10",
+            "cosine_min": 1.0,
+            "relative_l2": 6.867e-05
+          },
+          {
+            "stage": "encoder_layer_11",
+            "cosine_min": 1.0,
+            "relative_l2": 6.988e-05
+          },
+          {
+            "stage": "encoder_layer_12",
+            "cosine_min": 1.0,
+            "relative_l2": 7.192e-05
+          },
+          {
+            "stage": "encoder_layer_13",
+            "cosine_min": 1.0,
+            "relative_l2": 7.342e-05
+          },
+          {
+            "stage": "encoder_layer_14",
+            "cosine_min": 1.0,
+            "relative_l2": 7.357e-05
+          },
+          {
+            "stage": "encoder_layer_15",
+            "cosine_min": 1.0,
+            "relative_l2": 7.261e-05
+          },
+          {
+            "stage": "encoder_layer_16",
+            "cosine_min": 1.0,
+            "relative_l2": 7.335e-05
+          },
+          {
+            "stage": "encoder_layer_17",
+            "cosine_min": 1.0,
+            "relative_l2": 7.099e-05
+          },
+          {
+            "stage": "encoder_layer_18",
+            "cosine_min": 1.0,
+            "relative_l2": 6.941e-05
+          },
+          {
+            "stage": "encoder_layer_19",
+            "cosine_min": 1.0,
+            "relative_l2": 6.889e-05
+          },
+          {
+            "stage": "encoder_layer_20",
+            "cosine_min": 1.0,
+            "relative_l2": 6.796e-05
+          },
+          {
+            "stage": "encoder_layer_21",
+            "cosine_min": 1.0,
+            "relative_l2": 6.596e-05
+          },
+          {
+            "stage": "encoder_layer_22",
+            "cosine_min": 1.0,
+            "relative_l2": 6.883e-05
+          },
+          {
+            "stage": "encoder_layer_23",
+            "cosine_min": 1.0,
+            "relative_l2": 7.174e-05
+          },
+          {
+            "stage": "encoder_layer_24",
+            "cosine_min": 1.0,
+            "relative_l2": 8.714e-05
+          },
+          {
+            "stage": "encoder_layer_25",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00016703
+          },
+          {
+            "stage": "encoder_layer_26",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00039697
+          },
+          {
+            "stage": "encoder_layer_27",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0004518
+          },
+          {
+            "stage": "encoder_layer_28",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00052423
+          },
+          {
+            "stage": "encoder_layer_29",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00053329
+          },
+          {
+            "stage": "encoder_layer_30",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00051294
+          },
+          {
+            "stage": "encoder_layer_31",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00011353
+          },
+          {
+            "stage": "llm_logits",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00044778
+          },
+          {
+            "stage": "llm_block_0",
+            "cosine_min": 1.0,
+            "relative_l2": 2.44e-06
+          },
+          {
+            "stage": "llm_block_1",
+            "cosine_min": 1.0,
+            "relative_l2": 4.8e-06
+          },
+          {
+            "stage": "llm_block_2",
+            "cosine_min": 1.0,
+            "relative_l2": 6.59e-06
+          },
+          {
+            "stage": "llm_block_3",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0001004
+          },
+          {
+            "stage": "llm_block_4",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00010482
+          },
+          {
+            "stage": "llm_block_5",
+            "cosine_min": 1.0,
+            "relative_l2": 8.299e-05
+          },
+          {
+            "stage": "llm_block_6",
+            "cosine_min": 1.0,
+            "relative_l2": 8.442e-05
+          },
+          {
+            "stage": "llm_block_7",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00011699
+          },
+          {
+            "stage": "llm_block_8",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00012976
+          },
+          {
+            "stage": "llm_block_9",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00012661
+          },
+          {
+            "stage": "llm_block_10",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00012212
+          },
+          {
+            "stage": "llm_block_11",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00016476
+          },
+          {
+            "stage": "llm_block_12",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00017158
+          },
+          {
+            "stage": "llm_block_13",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00017075
+          },
+          {
+            "stage": "llm_block_14",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00016308
+          },
+          {
+            "stage": "llm_block_15",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00021229
+          },
+          {
+            "stage": "llm_block_16",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00022778
+          },
+          {
+            "stage": "llm_block_17",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00022262
+          },
+          {
+            "stage": "llm_block_18",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00021694
+          },
+          {
+            "stage": "llm_block_19",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0003479
+          },
+          {
+            "stage": "llm_block_20",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00032987
+          },
+          {
+            "stage": "llm_block_21",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00031558
+          },
+          {
+            "stage": "llm_block_22",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00029956
+          },
+          {
+            "stage": "llm_block_23",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00031752
+          },
+          {
+            "stage": "llm_block_24",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00031153
+          },
+          {
+            "stage": "llm_block_25",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00029681
+          },
+          {
+            "stage": "llm_block_26",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00029042
+          },
+          {
+            "stage": "llm_block_27",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00032267
+          },
+          {
+            "stage": "llm_block_28",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00026816
+          },
+          {
+            "stage": "llm_block_29",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00024166
+          },
+          {
+            "stage": "llm_block_30",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00022677
+          },
+          {
+            "stage": "llm_block_31",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00099121
+          },
+          {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.999995,
+            "relative_l2": 0.00089645
+          }
+        ]
+      },
+      "jfk-tail": {
+        "passed": true,
+        "reported_checks": 76,
+        "numerical_checks": 75,
+        "cached_predictions": 16,
+        "cosine_min": 0.999979,
+        "relative_l2_max": 0.0019022,
+        "stages": [
+          {
+            "stage": "mel_spectrogram",
+            "cosine_min": 1.0,
+            "relative_l2": 4.35e-06
+          },
+          {
+            "stage": "connector_output",
+            "cosine_min": 0.999992,
+            "relative_l2": 0.00080997
+          },
+          {
+            "stage": "conv1_out",
+            "cosine_min": 1.0,
+            "relative_l2": 9.44e-06
+          },
+          {
+            "stage": "conv2_out",
+            "cosine_min": 1.0,
+            "relative_l2": 7.85e-06
+          },
+          {
+            "stage": "conv3_out",
+            "cosine_min": 1.0,
+            "relative_l2": 5.26e-06
+          },
+          {
+            "stage": "encoder_input",
+            "cosine_min": 1.0,
+            "relative_l2": 4.55e-05
+          },
+          {
+            "stage": "ln_post_out",
+            "cosine_min": 0.999979,
+            "relative_l2": 0.0015167
+          },
+          {
+            "stage": "proj1_out",
+            "cosine_min": 0.999984,
+            "relative_l2": 0.0010884
+          },
+          {
+            "stage": "encoder_output",
+            "cosine_min": 0.999991,
+            "relative_l2": 0.0008409
+          },
+          {
+            "stage": "encoder_layer_0",
+            "cosine_min": 1.0,
+            "relative_l2": 3.402e-05
+          },
+          {
+            "stage": "encoder_layer_1",
+            "cosine_min": 1.0,
+            "relative_l2": 3.33e-05
+          },
+          {
+            "stage": "encoder_layer_2",
+            "cosine_min": 1.0,
+            "relative_l2": 3.564e-05
+          },
+          {
+            "stage": "encoder_layer_3",
+            "cosine_min": 1.0,
+            "relative_l2": 4.286e-05
+          },
+          {
+            "stage": "encoder_layer_4",
+            "cosine_min": 1.0,
+            "relative_l2": 4.675e-05
+          },
+          {
+            "stage": "encoder_layer_5",
+            "cosine_min": 1.0,
+            "relative_l2": 5.005e-05
+          },
+          {
+            "stage": "encoder_layer_6",
+            "cosine_min": 1.0,
+            "relative_l2": 5.195e-05
+          },
+          {
+            "stage": "encoder_layer_7",
+            "cosine_min": 1.0,
+            "relative_l2": 5.677e-05
+          },
+          {
+            "stage": "encoder_layer_8",
+            "cosine_min": 1.0,
+            "relative_l2": 6.028e-05
+          },
+          {
+            "stage": "encoder_layer_9",
+            "cosine_min": 1.0,
+            "relative_l2": 6.275e-05
+          },
+          {
+            "stage": "encoder_layer_10",
+            "cosine_min": 1.0,
+            "relative_l2": 6.499e-05
+          },
+          {
+            "stage": "encoder_layer_11",
+            "cosine_min": 1.0,
+            "relative_l2": 6.517e-05
+          },
+          {
+            "stage": "encoder_layer_12",
+            "cosine_min": 1.0,
+            "relative_l2": 6.531e-05
+          },
+          {
+            "stage": "encoder_layer_13",
+            "cosine_min": 1.0,
+            "relative_l2": 6.538e-05
+          },
+          {
+            "stage": "encoder_layer_14",
+            "cosine_min": 1.0,
+            "relative_l2": 6.522e-05
+          },
+          {
+            "stage": "encoder_layer_15",
+            "cosine_min": 1.0,
+            "relative_l2": 6.42e-05
+          },
+          {
+            "stage": "encoder_layer_16",
+            "cosine_min": 1.0,
+            "relative_l2": 6.424e-05
+          },
+          {
+            "stage": "encoder_layer_17",
+            "cosine_min": 1.0,
+            "relative_l2": 6.239e-05
+          },
+          {
+            "stage": "encoder_layer_18",
+            "cosine_min": 1.0,
+            "relative_l2": 6.096e-05
+          },
+          {
+            "stage": "encoder_layer_19",
+            "cosine_min": 1.0,
+            "relative_l2": 6.105e-05
+          },
+          {
+            "stage": "encoder_layer_20",
+            "cosine_min": 1.0,
+            "relative_l2": 5.92e-05
+          },
+          {
+            "stage": "encoder_layer_21",
+            "cosine_min": 1.0,
+            "relative_l2": 5.583e-05
+          },
+          {
+            "stage": "encoder_layer_22",
+            "cosine_min": 1.0,
+            "relative_l2": 5.744e-05
+          },
+          {
+            "stage": "encoder_layer_23",
+            "cosine_min": 1.0,
+            "relative_l2": 5.583e-05
+          },
+          {
+            "stage": "encoder_layer_24",
+            "cosine_min": 1.0,
+            "relative_l2": 6.55e-05
+          },
+          {
+            "stage": "encoder_layer_25",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00023644
+          },
+          {
+            "stage": "encoder_layer_26",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00106976
+          },
+          {
+            "stage": "encoder_layer_27",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00142629
+          },
+          {
+            "stage": "encoder_layer_28",
+            "cosine_min": 0.999996,
+            "relative_l2": 0.0019022
+          },
+          {
+            "stage": "encoder_layer_29",
+            "cosine_min": 0.999995,
+            "relative_l2": 0.00166
+          },
+          {
+            "stage": "encoder_layer_30",
+            "cosine_min": 0.999994,
+            "relative_l2": 0.00141354
+          },
+          {
+            "stage": "encoder_layer_31",
+            "cosine_min": 0.999997,
+            "relative_l2": 0.00028882
+          },
+          {
+            "stage": "llm_logits",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00070054
+          },
+          {
+            "stage": "llm_block_0",
+            "cosine_min": 1.0,
+            "relative_l2": 1.269e-05
+          },
+          {
+            "stage": "llm_block_1",
+            "cosine_min": 1.0,
+            "relative_l2": 1.305e-05
+          },
+          {
+            "stage": "llm_block_2",
+            "cosine_min": 1.0,
+            "relative_l2": 1.533e-05
+          },
+          {
+            "stage": "llm_block_3",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00012598
+          },
+          {
+            "stage": "llm_block_4",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00011337
+          },
+          {
+            "stage": "llm_block_5",
+            "cosine_min": 1.0,
+            "relative_l2": 8.3e-05
+          },
+          {
+            "stage": "llm_block_6",
+            "cosine_min": 1.0,
+            "relative_l2": 8.242e-05
+          },
+          {
+            "stage": "llm_block_7",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00013076
+          },
+          {
+            "stage": "llm_block_8",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00014392
+          },
+          {
+            "stage": "llm_block_9",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00013566
+          },
+          {
+            "stage": "llm_block_10",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00013091
+          },
+          {
+            "stage": "llm_block_11",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00014879
+          },
+          {
+            "stage": "llm_block_12",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00016099
+          },
+          {
+            "stage": "llm_block_13",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00016706
+          },
+          {
+            "stage": "llm_block_14",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00016212
+          },
+          {
+            "stage": "llm_block_15",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00021254
+          },
+          {
+            "stage": "llm_block_16",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00022531
+          },
+          {
+            "stage": "llm_block_17",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00024042
+          },
+          {
+            "stage": "llm_block_18",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00024182
+          },
+          {
+            "stage": "llm_block_19",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00030542
+          },
+          {
+            "stage": "llm_block_20",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00030774
+          },
+          {
+            "stage": "llm_block_21",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00029813
+          },
+          {
+            "stage": "llm_block_22",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0002895
+          },
+          {
+            "stage": "llm_block_23",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00030684
+          },
+          {
+            "stage": "llm_block_24",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00028883
+          },
+          {
+            "stage": "llm_block_25",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00026153
+          },
+          {
+            "stage": "llm_block_26",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00026267
+          },
+          {
+            "stage": "llm_block_27",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00027196
+          },
+          {
+            "stage": "llm_block_28",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00024262
+          },
+          {
+            "stage": "llm_block_29",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00022868
+          },
+          {
+            "stage": "llm_block_30",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00021624
+          },
+          {
+            "stage": "llm_block_31",
+            "cosine_min": 0.999999,
+            "relative_l2": 0.00113634
+          },
+          {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.999998,
+            "relative_l2": 0.00107096
+          }
+        ]
+      },
+      "zh": {
+        "passed": true,
+        "reported_checks": 76,
+        "numerical_checks": 75,
+        "cached_predictions": 16,
+        "cosine_min": 0.999998,
+        "relative_l2_max": 0.00100007,
+        "stages": [
+          {
+            "stage": "mel_spectrogram",
+            "cosine_min": 1.0,
+            "relative_l2": 9.2e-06
+          },
+          {
+            "stage": "connector_output",
+            "cosine_min": 1.0,
+            "relative_l2": 4.951e-05
+          },
+          {
+            "stage": "conv1_out",
+            "cosine_min": 1.0,
+            "relative_l2": 1.709e-05
+          },
+          {
+            "stage": "conv2_out",
+            "cosine_min": 1.0,
+            "relative_l2": 1.46e-05
+          },
+          {
+            "stage": "conv3_out",
+            "cosine_min": 1.0,
+            "relative_l2": 9.56e-06
+          },
+          {
+            "stage": "encoder_input",
+            "cosine_min": 1.0,
+            "relative_l2": 4.885e-05
+          },
+          {
+            "stage": "ln_post_out",
+            "cosine_min": 1.0,
+            "relative_l2": 5.985e-05
+          },
+          {
+            "stage": "proj1_out",
+            "cosine_min": 1.0,
+            "relative_l2": 5.724e-05
+          },
+          {
+            "stage": "encoder_output",
+            "cosine_min": 1.0,
+            "relative_l2": 5.107e-05
+          },
+          {
+            "stage": "encoder_layer_0",
+            "cosine_min": 1.0,
+            "relative_l2": 3.385e-05
+          },
+          {
+            "stage": "encoder_layer_1",
+            "cosine_min": 1.0,
+            "relative_l2": 3.241e-05
+          },
+          {
+            "stage": "encoder_layer_2",
+            "cosine_min": 1.0,
+            "relative_l2": 3.406e-05
+          },
+          {
+            "stage": "encoder_layer_3",
+            "cosine_min": 1.0,
+            "relative_l2": 4.013e-05
+          },
+          {
+            "stage": "encoder_layer_4",
+            "cosine_min": 1.0,
+            "relative_l2": 4.357e-05
+          },
+          {
+            "stage": "encoder_layer_5",
+            "cosine_min": 1.0,
+            "relative_l2": 4.7e-05
+          },
+          {
+            "stage": "encoder_layer_6",
+            "cosine_min": 1.0,
+            "relative_l2": 4.878e-05
+          },
+          {
+            "stage": "encoder_layer_7",
+            "cosine_min": 1.0,
+            "relative_l2": 5.294e-05
+          },
+          {
+            "stage": "encoder_layer_8",
+            "cosine_min": 1.0,
+            "relative_l2": 5.625e-05
+          },
+          {
+            "stage": "encoder_layer_9",
+            "cosine_min": 1.0,
+            "relative_l2": 5.865e-05
+          },
+          {
+            "stage": "encoder_layer_10",
+            "cosine_min": 1.0,
+            "relative_l2": 6.213e-05
+          },
+          {
+            "stage": "encoder_layer_11",
+            "cosine_min": 1.0,
+            "relative_l2": 6.311e-05
+          },
+          {
+            "stage": "encoder_layer_12",
+            "cosine_min": 1.0,
+            "relative_l2": 6.483e-05
+          },
+          {
+            "stage": "encoder_layer_13",
+            "cosine_min": 1.0,
+            "relative_l2": 6.563e-05
+          },
+          {
+            "stage": "encoder_layer_14",
+            "cosine_min": 1.0,
+            "relative_l2": 6.642e-05
+          },
+          {
+            "stage": "encoder_layer_15",
+            "cosine_min": 1.0,
+            "relative_l2": 6.555e-05
+          },
+          {
+            "stage": "encoder_layer_16",
+            "cosine_min": 1.0,
+            "relative_l2": 6.633e-05
+          },
+          {
+            "stage": "encoder_layer_17",
+            "cosine_min": 1.0,
+            "relative_l2": 6.319e-05
+          },
+          {
+            "stage": "encoder_layer_18",
+            "cosine_min": 1.0,
+            "relative_l2": 6.136e-05
+          },
+          {
+            "stage": "encoder_layer_19",
+            "cosine_min": 1.0,
+            "relative_l2": 6.1e-05
+          },
+          {
+            "stage": "encoder_layer_20",
+            "cosine_min": 1.0,
+            "relative_l2": 5.722e-05
+          },
+          {
+            "stage": "encoder_layer_21",
+            "cosine_min": 1.0,
+            "relative_l2": 5.421e-05
+          },
+          {
+            "stage": "encoder_layer_22",
+            "cosine_min": 1.0,
+            "relative_l2": 5.474e-05
+          },
+          {
+            "stage": "encoder_layer_23",
+            "cosine_min": 1.0,
+            "relative_l2": 5.059e-05
+          },
+          {
+            "stage": "encoder_layer_24",
+            "cosine_min": 1.0,
+            "relative_l2": 5.062e-05
+          },
+          {
+            "stage": "encoder_layer_25",
+            "cosine_min": 1.0,
+            "relative_l2": 4.881e-05
+          },
+          {
+            "stage": "encoder_layer_26",
+            "cosine_min": 1.0,
+            "relative_l2": 5.022e-05
+          },
+          {
+            "stage": "encoder_layer_27",
+            "cosine_min": 1.0,
+            "relative_l2": 5.123e-05
+          },
+          {
+            "stage": "encoder_layer_28",
+            "cosine_min": 1.0,
+            "relative_l2": 5.469e-05
+          },
+          {
+            "stage": "encoder_layer_29",
+            "cosine_min": 1.0,
+            "relative_l2": 5.533e-05
+          },
+          {
+            "stage": "encoder_layer_30",
+            "cosine_min": 1.0,
+            "relative_l2": 5.505e-05
+          },
+          {
+            "stage": "encoder_layer_31",
+            "cosine_min": 1.0,
+            "relative_l2": 1.88e-05
+          },
+          {
+            "stage": "llm_logits",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00055667
+          },
+          {
+            "stage": "llm_block_0",
+            "cosine_min": 1.0,
+            "relative_l2": 9.5e-07
+          },
+          {
+            "stage": "llm_block_1",
+            "cosine_min": 1.0,
+            "relative_l2": 3.73e-06
+          },
+          {
+            "stage": "llm_block_2",
+            "cosine_min": 1.0,
+            "relative_l2": 5.13e-06
+          },
+          {
+            "stage": "llm_block_3",
+            "cosine_min": 1.0,
+            "relative_l2": 8.135e-05
+          },
+          {
+            "stage": "llm_block_4",
+            "cosine_min": 1.0,
+            "relative_l2": 8.156e-05
+          },
+          {
+            "stage": "llm_block_5",
+            "cosine_min": 1.0,
+            "relative_l2": 6.343e-05
+          },
+          {
+            "stage": "llm_block_6",
+            "cosine_min": 1.0,
+            "relative_l2": 5.749e-05
+          },
+          {
+            "stage": "llm_block_7",
+            "cosine_min": 1.0,
+            "relative_l2": 9.32e-05
+          },
+          {
+            "stage": "llm_block_8",
+            "cosine_min": 1.0,
+            "relative_l2": 8.737e-05
+          },
+          {
+            "stage": "llm_block_9",
+            "cosine_min": 1.0,
+            "relative_l2": 8.143e-05
+          },
+          {
+            "stage": "llm_block_10",
+            "cosine_min": 1.0,
+            "relative_l2": 7.559e-05
+          },
+          {
+            "stage": "llm_block_11",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0001286
+          },
+          {
+            "stage": "llm_block_12",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00013064
+          },
+          {
+            "stage": "llm_block_13",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00013275
+          },
+          {
+            "stage": "llm_block_14",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00012557
+          },
+          {
+            "stage": "llm_block_15",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00024677
+          },
+          {
+            "stage": "llm_block_16",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00026207
+          },
+          {
+            "stage": "llm_block_17",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00025501
+          },
+          {
+            "stage": "llm_block_18",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00025139
+          },
+          {
+            "stage": "llm_block_19",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00026888
+          },
+          {
+            "stage": "llm_block_20",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00025927
+          },
+          {
+            "stage": "llm_block_21",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00025112
+          },
+          {
+            "stage": "llm_block_22",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00024885
+          },
+          {
+            "stage": "llm_block_23",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00032495
+          },
+          {
+            "stage": "llm_block_24",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00031278
+          },
+          {
+            "stage": "llm_block_25",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00031455
+          },
+          {
+            "stage": "llm_block_26",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00031074
+          },
+          {
+            "stage": "llm_block_27",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00034608
+          },
+          {
+            "stage": "llm_block_28",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00033881
+          },
+          {
+            "stage": "llm_block_29",
+            "cosine_min": 1.0,
+            "relative_l2": 0.0003421
+          },
+          {
+            "stage": "llm_block_30",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00032191
+          },
+          {
+            "stage": "llm_block_31",
+            "cosine_min": 1.0,
+            "relative_l2": 0.00083627
+          },
+          {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.999998,
+            "relative_l2": 0.00100007
+          }
+        ]
+      }
+    }
+  },
+  "pipeline": {
+    "passed": true,
+    "source_precision": "independently forced all-F32",
+    "timestamp_tolerance_seconds": 0.0051,
+    "cases": {
+      "cpu": {
+        "jfk-en": {
+          "source_variant": "independent-all-f32",
+          "max_timestamp_error_seconds": 0.0,
+          "timestamp_tolerance_seconds": 0.0051,
+          "exact_text": true,
+          "vad_max_abs": 0.002839803695678711,
+          "vad_cosine": 0.9999999554856016,
+          "elapsed_seconds": 167.94905885899993
+        },
+        "zh-en": {
+          "source_variant": "independent-all-f32",
+          "max_timestamp_error_seconds": 1.7763568394002505e-15,
+          "timestamp_tolerance_seconds": 0.0051,
+          "exact_text": true,
+          "vad_max_abs": 0.0010026991367340088,
+          "vad_cosine": 0.9999999964061769,
+          "elapsed_seconds": 179.7374709459998
+        },
+        "zh-ja": {
+          "source_variant": "independent-all-f32",
+          "max_timestamp_error_seconds": 1.7763568394002505e-15,
+          "timestamp_tolerance_seconds": 0.0051,
+          "exact_text": true,
+          "vad_max_abs": 0.0010026991367340088,
+          "vad_cosine": 0.9999999964061769,
+          "elapsed_seconds": 181.7045416599999
+        },
+        "zh-es": {
+          "source_variant": "independent-all-f32",
+          "max_timestamp_error_seconds": 1.7763568394002505e-15,
+          "timestamp_tolerance_seconds": 0.0051,
+          "exact_text": true,
+          "vad_max_abs": 0.0010026991367340088,
+          "vad_cosine": 0.9999999964061769,
+          "elapsed_seconds": 189.25306531399997
+        },
+        "multi-en": {
+          "source_variant": "independent-all-f32",
+          "max_timestamp_error_seconds": 8.881784197001252e-16,
+          "timestamp_tolerance_seconds": 0.0051,
+          "exact_text": true,
+          "vad_max_abs": 0.0010026991367340088,
+          "vad_cosine": 0.9999999948773856,
+          "elapsed_seconds": 240.23608816399974
+        }
+      },
+      "cuda": {
+        "jfk-en": {
+          "source_variant": "independent-all-f32",
+          "max_timestamp_error_seconds": 0.0,
+          "timestamp_tolerance_seconds": 0.0051,
+          "exact_text": true,
+          "vad_max_abs": 0.002839803695678711,
+          "vad_cosine": 0.9999999554856016,
+          "elapsed_seconds": 12.771001567999974
+        },
+        "zh-en": {
+          "source_variant": "independent-all-f32",
+          "max_timestamp_error_seconds": 1.7763568394002505e-15,
+          "timestamp_tolerance_seconds": 0.0051,
+          "exact_text": true,
+          "vad_max_abs": 0.0010026991367340088,
+          "vad_cosine": 0.9999999964061769,
+          "elapsed_seconds": 13.23389290700004
+        },
+        "zh-ja": {
+          "source_variant": "independent-all-f32",
+          "max_timestamp_error_seconds": 1.7763568394002505e-15,
+          "timestamp_tolerance_seconds": 0.0051,
+          "exact_text": true,
+          "vad_max_abs": 0.0010026991367340088,
+          "vad_cosine": 0.9999999964061769,
+          "elapsed_seconds": 13.684027939999964
+        },
+        "zh-es": {
+          "source_variant": "independent-all-f32",
+          "max_timestamp_error_seconds": 1.7763568394002505e-15,
+          "timestamp_tolerance_seconds": 0.0051,
+          "exact_text": true,
+          "vad_max_abs": 0.0010026991367340088,
+          "vad_cosine": 0.9999999964061769,
+          "elapsed_seconds": 12.647854793999954
+        },
+        "multi-en": {
+          "source_variant": "independent-all-f32",
+          "max_timestamp_error_seconds": 8.881784197001252e-16,
+          "timestamp_tolerance_seconds": 0.0051,
+          "exact_text": true,
+          "vad_max_abs": 0.0010026991367340088,
+          "vad_cosine": 0.9999999948773856,
+          "elapsed_seconds": 16.316456863999974
+        }
+      }
+    },
+    "original_bf16_diagnostics": {
+      "cpu": [
+        "zh-en: full-pipeline decoded mismatch",
+        "zh-es: full-pipeline decoded mismatch"
+      ],
+      "cuda": [
+        "zh-en: full-pipeline decoded mismatch",
+        "zh-es: full-pipeline decoded mismatch"
+      ]
+    }
+  },
+  "roundtrip": {
+    "passed": true,
+    "device": "CUDA",
+    "english_wer": 0.0,
+    "cases": {
+      "fox": {
+        "expected": "The quick brown fox jumps over the lazy dog.",
+        "english": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "wer_max": 0.1,
+        "segments": [
+          {
+            "start": 0.05,
+            "end": 2.52,
+            "text": "The quick brown fox jumps over the lazy dog.。\nThe quick brown fox jumps over the lazy dog."
+          }
+        ],
+        "valid_segments": true,
+        "audio_sha256": "2922b7cd5360b373a650d8bf1ea39de16aa3d49e7a44cdec5f350d46c15556ff",
+        "seconds": 2.67025,
+        "elapsed_seconds": 4.156793767999943,
+        "cli_rc": 0,
+        "cli_abi_text_match": true,
+        "passed": true
+      },
+      "window": {
+        "expected": "Please close the window before you leave the room.",
+        "english": "Please close the window before you leave the room.",
+        "wer": 0.0,
+        "wer_max": 0.1,
+        "segments": [
+          {
+            "start": 0.05,
+            "end": 2.4,
+            "text": "Please close the window before you leave the room.。\nPlease close the window before you leave the room."
+          }
+        ],
+        "valid_segments": true,
+        "audio_sha256": "6a46a4c0c5b0cd48dfd71d600bcec1b4f44701500b6f3e749cde7fb73f140fa1",
+        "seconds": 2.6006875,
+        "elapsed_seconds": 4.044608132999997,
+        "cli_rc": 0,
+        "cli_abi_text_match": true,
+        "passed": true
+      },
+      "station": {
+        "expected": "We will meet at the train station tomorrow morning.",
+        "english": "We will meet at the train station tomorrow morning.",
+        "wer": 0.0,
+        "wer_max": 0.1,
+        "segments": [
+          {
+            "start": 0.05,
+            "end": 2.34,
+            "text": "We will meet at the train station tomorrow morning.\nWe will meet at the train station tomorrow morning."
+          }
+        ],
+        "valid_segments": true,
+        "audio_sha256": "3171272c57adafaf73c746322a64240300d7d40f7f42dbfca8c1a9fcc335e32a",
+        "seconds": 2.4729375,
+        "elapsed_seconds": 3.895973091999963,
+        "cli_rc": 0,
+        "cli_abi_text_match": true,
+        "passed": true
+      }
+    }
+  },
+  "evidence": [
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/source-f32-natural-control/index-echo-9b-f32-zh-context/pipeline/reference.json",
+      "sha256": "fd4ee7d219dd5d6243c6994261493dc6e7fa8827f06f130d3ab0143b7ae6b9d5"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/f16-bf16-pipeline-36994533773/heavy-36994533773/validation-provenance.json",
+      "sha256": "8319b83fc9de55596cbe9bfa79398213eeaaf86617d40afe1de3cb018981ca90"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/f16-bf16-pipeline-36994533773/heavy-36994533773/stage-results-f16.json",
+      "sha256": "539db208b8bb3dae7b105d67a638e4fb04dfa39b6c3889859c7e1cde9564703b"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/f16-bf16-pipeline-36994533773/heavy-36994533773/decoded-f16.json",
+      "sha256": "432ea4ab9061fa4897ec5cc697d9339cb093fba9504f257023ac72aa1c64a616"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/f16-bf16-pipeline-36994533773/heavy-36994533773/cohort-results.json",
+      "sha256": "b538315968772ddcc70cbd1d8cbb4411d26ee23aa8bef8bd0b8a35a1741674bc"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v2-terminal/cuda-validation.json",
+      "sha256": "ebd05bdd551a186795e49e68896252c07053bfa6b0696bc333ac19b248869f01"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/f16-bf16-pipeline-36994533773/heavy-36994533773/f16-jfk-diff.log",
+      "sha256": "0b80b61ca9a7305682b97041da5d6de242d310e88970d2bb9a02cbd1fc5b2bc4"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/f16-bf16-pipeline-36994533773/heavy-36994533773/f16-jfk-tail-diff.log",
+      "sha256": "02bb3517a9ac0fa799f747175c77c007b309f12639231abe62b24867fb00df90"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/f16-bf16-pipeline-36994533773/heavy-36994533773/f16-zh-diff.log",
+      "sha256": "b077607825919a8d878ccabf5f770e97f83b568fb3c0e3f16b6f4ef9b140960b"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v2-terminal/f16-jfk-diff.log",
+      "sha256": "f2921f8a97d3d08f524e3bc585990770d017abab97388e9e3c9b4e392ee536b7"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v2-terminal/f16-jfk-tail-diff.log",
+      "sha256": "a7d21742c218e5051cb22ff1cbe97afe1d0aaef6061bff8a71db512fd089ecba"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v2-terminal/f16-zh-diff.log",
+      "sha256": "2860ddd5d16f2f7a8932cfa6718b5fde83e4a375b89b0b74ca6a2f0ef304cec9"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/f16-bf16-pipeline-36994533773/heavy-36994533773/pipeline-f16.json",
+      "sha256": "9b985a10677417cb645cac4f16c708b787dc9814f0f38d48ab10ace3efb7199d"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v2-terminal/pipeline-f16.json",
+      "sha256": "ab5a28326c13fca47cdbf7a615fccadbe00134cbf792ed89f2a6a50250de07f0"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/kaggle-validation-v2-terminal/index-echo-9b-f16-roundtrip.json",
+      "sha256": "1b281209cdaa59d2b13527287ecd06238d5fa7a6683965a6c278ba2bedeef245"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/conversion/conversion-receipt.json",
+      "sha256": "982ce812635993aafec5ec0810571d5879fb386eb839d7ebda2e48201af21c6b"
+    },
+    {
+      "path": "/mnt/storage/crispasr/issue485-9b/f16-bf16-pipeline-36994533773/heavy-36994533773/cohort-results.json",
+      "sha256": "b538315968772ddcc70cbd1d8cbb4411d26ee23aa8bef8bd0b8a35a1741674bc"
+    }
+  ]
+}
