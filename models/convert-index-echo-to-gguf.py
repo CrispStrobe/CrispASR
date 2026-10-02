@@ -20,16 +20,24 @@ def convert(root, output, decoder_name):
     text = text.get('text_config', text)
     if cfg['model_type'] != 'qwen3_omni_moe_audio_encoder' or text['model_type'] != 'qwen3_5_text':
         raise ValueError('Expected Index-Echo Qwen-Omni tower and Qwen3.5 text decoder')
-    if cfg['output_dim'] != text['hidden_size']:
-        raise ValueError('Audio/connector/decoder dimensions differ')
+    with safe_open(root / 'connector.safetensors', framework='pt', device='cpu') as source:
+        projection = 'proj.weight' in source.keys()
+        if projection:
+            if list(source.get_slice('proj.weight').get_shape()) != [text['hidden_size'], cfg['output_dim']]:
+                raise ValueError('Projection connector dimensions differ from audio/decoder')
+        elif cfg['output_dim'] != text['hidden_size']:
+            raise ValueError('Residual connector requires equal audio/decoder dimensions')
+    size = '9b' if projection else '2b'
+    decoder_name = decoder_name or f'index-echo-{size}-decoder-f16.gguf'
     spec = importlib.util.spec_from_file_location('qwen_converter', Path(__file__).with_name('convert-qwen3-asr-to-gguf.py'))
     shared = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(shared)
     remap = shared.build_remap('thinker')
     writer = gguf.GGUFWriter(str(output), 'index_echo', use_temp_file=True)
-    writer.add_name('Index-Echo S2TT 2B')
+    writer.add_name(f'Index-Echo S2TT {size.upper()}')
     writer.add_string('general.license', 'apache-2.0')
     writer.add_string('index_echo.decoder_file', decoder_name)
+    writer.add_string('index_echo.connector_type', 'projection' if projection else 'residual')
     writer.add_uint32('index_echo.embedding_length', text['hidden_size'])
     writer.add_string('crisp_audio.dialect', 'qwen_omni')
     scalars = {'sample_rate': 16000, 'n_mels': cfg['num_mel_bins'], 'n_fft': 400,
@@ -73,6 +81,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--model', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--decoder-name', default='index-echo-2b-decoder-f16.gguf')
+    parser.add_argument('--decoder-name', help='Matching decoder companion; inferred from connector by default')
     args = parser.parse_args()
     convert(args.model, args.output, args.decoder_name)
