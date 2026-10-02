@@ -31,7 +31,7 @@ parser.add_argument('--fixture-revision', help='Immutable independent reference 
 parser.add_argument('--regression', action='store_true', help='Run the actual pinned nightly driver after native validation')
 parser.add_argument('--reference-subdir', choices=['reference', 'reference-f32'], default='reference')
 parser.add_argument('--pipeline', action='store_true', help='Validate released file/VAD/target/context oracle')
-parser.add_argument('--cohorts', nargs='+', choices=['f16', 'q8_0', 'q4_k', 'q4_k_selective'], default=['f16'])
+parser.add_argument('--cohorts', nargs='+', choices=['f16', 'q8_0', 'q8_0_selective', 'q4_k', 'q4_k_selective'], default=['f16'])
 parser.add_argument('--clips', nargs='+', choices=['jfk', 'zh', 'jfk-tail'], default=['jfk', 'zh', 'jfk-tail'])
 args = parser.parse_args()
 prefix = 'index-echo-' + args.size
