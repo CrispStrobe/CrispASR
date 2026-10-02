@@ -23,6 +23,8 @@ def run(*args):
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--build-only', action='store_true')
+parser.add_argument('--stage-diagnostic', action='store_true', help='Numerical investigation only; never model/decoded acceptance')
+parser.add_argument('--fixture-prefix', help='Explicit independent capture recipe namespace')
 parser.add_argument('--size', choices=['2b', '9b'], default='2b')
 parser.add_argument('--model-revision', help='Immutable staging pin (required for unregistered 9B)')
 parser.add_argument('--fixture-revision', help='Immutable independent reference pin')
@@ -63,7 +65,7 @@ destination = entry['gguf']['repo'] if entry else 'cstr/' + prefix + '-GGUF'
 model_revision = args.model_revision or entry['gguf']['revision']
 fixtures = dict(manifest['fixtures'])
 if args.fixture_revision: fixtures['revision'] = args.fixture_revision
-fixture_prefix = prefix + ('-f32' if args.reference_subdir == 'reference-f32' else '')
+fixture_prefix = args.fixture_prefix or prefix + ('-f32' if args.reference_subdir == 'reference-f32' else '')
 
 
 def download_references(models):
@@ -109,6 +111,9 @@ def validate_cohort(cohort):
         print(clip, 'stage diff rc:', result.returncode, log_path.read_text()[-16000:], flush=True)
         if result.returncode: failures.append(clip)
     (OUT / f'stage-results-{cohort}.json').write_text(json.dumps(dict(failed=list(failures)), indent=2))
+
+    if args.stage_diagnostic:
+        return failures
 
     # This live test embeds 2B source transcripts. 9B uses its own independent
     # transcript oracle through the real C ABI below, never a 2B expectation.
@@ -189,8 +194,14 @@ if args.regression:
         Path(os.environ['HEAVY_SCRATCH']) / 'index-echo-nightly', BUILD / 'bin/crispasr', BUILD / 'bin/crispasr-diff')
     results['nightly_regression'] = ['Pinned nightly regression failed'] if failed else []
 
+if args.stage_diagnostic:
+    (OUT / 'diagnostic-status.json').write_text(json.dumps(dict(validated=False, decoded_output_checked=False,
+        reason='Numerical diagnostic; source capture behavior is under investigation'), indent=2)+'\n')
 (OUT / 'cohort-results.json').write_text(json.dumps(results, indent=2))
 if any(results.values()):
     raise RuntimeError('Cohort validation failed: ' + json.dumps(results))
+if args.stage_diagnostic:
+    (OUT / 'summary.md').write_text('Numerical diagnostic passed; source/decoded acceptance remains pending.\n')
+    sys.exit(0)
 (OUT / 'summary.md').write_text(', '.join(args.cohorts) + ': stage/magnitude/prompt/cache parity and '
     'Python Session metadata autodetection / exact decoded text/timestamp parity passed.\n')
