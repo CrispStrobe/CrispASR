@@ -43,7 +43,7 @@ All 133 backends compiled into the `crispasr` binary, with their declared capabi
 | `vibevoice-bitnet` | ✓ |  |  |  |  | ✓ |  | ✓ |  |  |  |  |  | ✓ | ✓ |  |  |  |  |  |  |  | ✓ |  |  |  |  |  |
 | `kugelaudio` | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `qwen3-tts` | ✓ | ✓ |  | ✓ |  | ✓ |  |  |  |  | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |
-| `miotts` | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| `miotts` | ✓ |  |  |  |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `bt2-tts` | ✓ | ✓ |  |  |  | ✓ |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `piano-transcription` |  |  |  |  |  | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |
 | `basic-pitch` |  |  |  |  |  | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |

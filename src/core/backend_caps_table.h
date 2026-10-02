@@ -113,7 +113,7 @@ static const BackendCaps k_backend_caps[] = {
      "timestamps-ctc,token-confidence,language-detect,diarize,temperature,beam-search,flash-attn,punctuation-native,"
      "auto-download"},
     {"mini-omni2", 2171136u, "temperature,auto-download,tts,s2s"},
-    {"miotts", 65536u, "tts"},
+    {"miotts", 73984u, "temperature,auto-download,tts"},
     {"moonshine", 12106u,
      "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,auto-download"},
     {"moonshine-streaming", 272202u,
