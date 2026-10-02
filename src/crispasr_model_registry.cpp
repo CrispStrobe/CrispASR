@@ -187,6 +187,10 @@ constexpr Entry k_registry[] = {
      "https://huggingface.co/cstr/index-echo-2b-GGUF/resolve/main/index-echo-2b-f16.gguf", "~1.22 GiB",
      "index-echo-2b-decoder-f16.gguf",
      "https://huggingface.co/cstr/index-echo-2b-GGUF/resolve/main/index-echo-2b-decoder-f16.gguf", "~3.63 GiB"},
+    {"index-echo", "index-echo-9b-f16.gguf",
+     "https://huggingface.co/cstr/index-echo-9b-GGUF/resolve/main/index-echo-9b-f16.gguf", "~1.22 GiB",
+     "index-echo-9b-decoder-f16.gguf",
+     "https://huggingface.co/cstr/index-echo-9b-GGUF/resolve/main/index-echo-9b-decoder-f16.gguf", "~16.69 GiB"},
 
     {"qwen3", "qwen3-asr-0.6b-q4_k.gguf",
      "https://huggingface.co/cstr/qwen3-asr-0.6b-GGUF/resolve/main/qwen3-asr-0.6b-q4_k.gguf", "~500 MB", nullptr, nullptr},
