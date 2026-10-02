@@ -26,6 +26,40 @@ the tagged notes. Actual full CUDA 12.6/12.8 CLI/runtime/library archive pairing
 Wheel pipeline `37044712965` PASS 11/11, including index and PyPI publishing.
 Distribution receipt: `docs/release-v0.8.41-distribution.json`. Physical
 MX150/GTX1660 performance remains a reporter check; no forced-MMQ binary ships.
+## DONE 2026-10-02 — MioTTS metadata rate, preset voices and request controls
+
+The public MioTTS v2 codec is 44.1 kHz; the CLI adapter and session ABI had
+reported 24 kHz. Both now use the loaded native codec rate, with 24 kHz retained
+only for missing legacy metadata. Preset voice paths/aliases work at startup
+and per request, and empty overrides restore the configured startup preset.
+Previously ignored native temperature/seed requests are wired through both
+interfaces; capability/feature tables were regenerated from the hosted CLI.
+The registry now fetches the required tokenizer companion.
+
+[Native ARM proof](https://github.com/CrispStrobe/CrispASR/actions/runs/37034738840)
+and [x86 proof](https://github.com/CrispStrobe/CrispASR/actions/runs/37036548868)
+pass 18 assertions across four native/live adapter tests. Both CLI and session
+produce 132300 samples at 44100 Hz (3.000 seconds), and both Nemotron readbacks
+have 0% WER with explicit greedy/seed42 settings. ARM's published v0.8.41
+negative control reports 24000 and is rejected by the new metadata guard.
+The original sampled/scorer failures and WAVs remain cold; no speech threshold
+was widened. Metadata-copy checks establish dispatch, not legacy audio quality.
+[Structured receipt](docs/miotts-rate-validation-2026-10-02.json).
+
+## DONE 2026-10-02 — Index-Echo graph reuse A/B on two T4s
+
+Opt-in `CRISPASR_LLAMA_PIPELINE_DISABLE=1` disables embedded llama's multi-device
+pipeline policy so its existing compatible graph-reuse path can operate.
+`INDEX_ECHO_BENCH=1` prints stage timings and native reuse counters.
+Two actual T4s pass strict independent stage/cache/magnitude, exact CLI/ABI,
+five-file translation/context and three Piper roundtrip checks. AB/BA with
+initial plus three warm calls per clip produces 48 accepted timed outputs and
+2.5–3.6% speed gains; each candidate process reuses 1536 GGML graphs and each
+control reuses zero. Default stays unchanged given the modest scoped benefit.
+GGML reuse counters do not establish CUDA graph capture or other GPU behavior.
+[Full receipt](docs/index-echo-scheduler-ab-2026-10-02.json), with stage timings,
+individual iterations, parity rows, build/model/reference pins and log hashes.
+Q4_K mixed precision remains separate live work until its own acceptance.
 
 ## DONE 2026-10-02 — authorized GitHub issue and PR replies
 
