@@ -19,6 +19,8 @@ from index_echo_produce_constants import MODELS, LLAMA_REVISION, LICENSE_URL
 ROOT = Path(__file__).resolve().parents[2]
 parser = argparse.ArgumentParser()
 parser.add_argument('--size', choices=['2b', '9b'], default='2b')
+parser.add_argument('--oracle-audit', action='store_true', help='Fresh released generation, without diagnostic decoder prefill')
+parser.add_argument('--reference-dtype', choices=['float32', 'bfloat16'], default='float32')
 parser.add_argument('--reference-memory', help='JSON HF max_memory for placement-only CPU/disk reference offload')
 parser.add_argument('--fp32-decoder', action='store_true', help='Fully F32 diagnostic oracle; original blueprint retains nested BF16')
 parser.add_argument('--reference-only', action='store_true')
@@ -31,7 +33,7 @@ parser.add_argument('--clips', nargs='+', choices=['jfk', 'zh', 'jfk-tail'], def
 args = parser.parse_args()
 SOURCE, REVISION, DESTINATION = MODELS[args.size]
 PREFIX = 'index-echo-' + args.size
-if sum([args.reference_only, args.convert_only, args.quant_only, args.pipeline_only, args.audit_only]) > 1:
+if sum([args.reference_only, args.convert_only, args.quant_only, args.pipeline_only, args.audit_only, args.oracle_audit]) > 1:
     parser.error('--reference-only, --convert-only and --quant-only and --pipeline-only are mutually exclusive')
 if args.fp32_decoder and not (args.reference_only or args.pipeline_only):
     parser.error('--fp32-decoder requires --reference-only or --pipeline-only')
@@ -44,8 +46,9 @@ OUT.mkdir(parents=True, exist_ok=True)
 os.environ['TMPDIR'] = str(SCRATCH)
 os.environ['OMP_NUM_THREADS'] = '4'
 os.environ['INDEX_ECHO_REF_THREADS'] = '4'
+os.environ['INDEX_ECHO_REF_DTYPE'] = args.reference_dtype
 if args.reference_memory:
-    if not (args.reference_only or args.pipeline_only):
+    if not (args.reference_only or args.pipeline_only or args.oracle_audit):
         parser.error('--reference-memory requires reference-only or pipeline-only')
     memory = json.loads(args.reference_memory)
     if set(memory) != {'cpu'}:
@@ -110,7 +113,7 @@ try:
             license_file.write_bytes(response.read())
         receipt['license_source'] = LICENSE_URL
     upload(license_file, 'LICENSE')
-    if not args.reference_only and not args.pipeline_only and not args.audit_only:
+    if not args.reference_only and not args.pipeline_only and not args.audit_only and not args.oracle_audit:
         audio = SCRATCH / f'{PREFIX}-f16.gguf'
         decoder = SCRATCH / f'{PREFIX}-decoder-f16.gguf'
         if args.quant_only:
@@ -169,7 +172,7 @@ try:
         receipt['decoder_no_mtp'] = True
         event('requested conversion cohorts complete')
         upload(OUT / 'receipt.json', 'quant-receipt.json' if args.quant_only else 'conversion-receipt.json')
-    for clip in ([] if args.convert_only or args.quant_only or args.pipeline_only or args.audit_only else args.clips):
+    for clip in ([] if args.convert_only or args.quant_only or args.pipeline_only or args.audit_only or args.oracle_audit else args.clips):
         event('independent released Python class: CPU F32 ' + clip)
         audio_path = ROOT / 'samples' / ('paraformer_zh.wav' if clip == 'zh' else 'jfk.wav')
         if clip == 'jfk-tail':
@@ -192,6 +195,9 @@ try:
         pipeline, multi = dump_pipeline(source, OUT, ROOT / 'samples')
         upload(multi, REFERENCE_DIR + '/' + multi.name)
         upload(pipeline, REFERENCE_DIR + '/' + pipeline.name)
+    if args.oracle_audit:
+        from index_echo_oracle_audit import audit
+        audit(ROOT, source, OUT / 'oracle-audit.json', args.clips)
     if args.audit_only:
         import importlib.util
         import torch
