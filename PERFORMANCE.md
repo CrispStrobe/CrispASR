@@ -3034,7 +3034,7 @@ Ordered by estimated breadth × depth of impact across the project:
 | | hifigan_decode | 17947 |
 | | **total** | **26272** |
 
-## Index-Echo decoder scheduler experiment — pending validation
+## Index-Echo decoder scheduler experiment — two T4s, 2026-10-02
 
 `CRISPASR_LLAMA_PIPELINE_DISABLE=1` disables multi-device pipeline scheduling
 in the embedded llama runtime, allowing its existing graph-reuse path to operate.
@@ -3046,3 +3046,20 @@ prints per-stage timing and decoder graph-reuse counters at context destruction.
 A successful build is not a performance or hardware proof. Acceptance requires
 independent stage/cache/magnitude checks, complete decoded output and roundtrips,
 plus both execution orders with at least three warm calls per arm.
+
+The [complete A/B receipt](docs/index-echo-scheduler-ab-2026-10-02.json)
+records all 48 outputs passing the independent F32 text/timestamp bounds,
+three strict stage/cache/magnitude checks, five complete file cases and three
+Piper roundtrips (WER 0). Each candidate process reused 1,536 GGML graphs;
+each control reused zero. These counters do not establish CUDA graph capture.
+
+| Clip | Control warm seconds (AB / BA) | Candidate warm seconds (AB / BA) | Speedup (AB / BA) |
+|---|---|---|---|
+| JFK, 11 s | 12.474 / 12.427 | 12.041 / 12.006 | 1.036 / 1.035 |
+| Chinese, 13.052 s | 14.187 / 14.184 | 13.696 / 13.698 | 1.036 / 1.036 |
+| JFK tail, 10.988 s | 3.759 / 3.765 | 3.666 / 3.658 | 1.025 / 1.029 |
+
+This is a modest 2.5–3.6% speed gain on this pair of actual Tesla T4s, with
+same native F16 weights/runtime and initial + three warm calls per clip in
+both orders. Decoder generation accounts for most of the saving. The gate
+remains opt-in; other hardware and batched workloads need their own evidence.
