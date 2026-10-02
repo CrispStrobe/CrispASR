@@ -33,6 +33,7 @@ jobs:
     secrets: inherit
     with:
       script: tools/ci-heavy/index_echo_validate.py
+      runner: ubuntu-24.04-arm
       args: >-
         --size 9b --cohorts f16 --fixture-prefix index-echo-9b-f32-generation
         --reference-subdir reference-f32 --pipeline
