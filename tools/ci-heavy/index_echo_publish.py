@@ -21,7 +21,11 @@ p.add_argument('--acceptance-revision', required=True)
 p.add_argument('--destination', default='cstr/index-echo-9b-GGUF')
 p.add_argument('--keep-private', action='store_true',
                help='Verify a clean private copy before retiring the active staging name')
+p.add_argument('--public-upload', action='store_true',
+               help='Upload already accepted, hash-verified files publicly when private storage is full')
 a = p.parse_args()
+if a.keep_private and a.public_upload:
+    p.error('--keep-private and --public-upload are mutually exclusive')
 for pin in [a.staging_revision, a.acceptance_revision]:
     if len(pin) != 40 or any(c not in '0123456789abcdef' for c in pin):
         p.error('Immutable source and acceptance revisions are required')
@@ -73,20 +77,27 @@ for name in ['README.md', 'acceptance.json']:
     shutil.copy2(source, folder / name)
 # Only this clean history can become public. Interrupted uploads remain private.
 api.create_repo(a.destination, private=True, exist_ok=True)
-if not api.model_info(a.destination).private:
-    raise RuntimeError('Initial publication target must be private')
+if not api.model_info(a.destination).private and not a.public_upload:
+    raise RuntimeError('Public upload must be explicitly selected')
 allowed = set(expected) | {'README.md', 'acceptance.json', '.gitattributes'}
 # An interrupted clean upload can resume. Audit history too: deleting rejected
 # files at HEAD would still expose them through their earlier public commits.
 for commit in api.list_repo_commits(a.destination):
     if set(api.list_repo_files(a.destination, revision=commit.commit_id)) - allowed:
         raise RuntimeError('Publication target contains experimental history')
+if a.public_upload:
+    # All acceptance gates and local hashes passed above. Only the clean,
+    # whitelisted history becomes public; the experimental repo stays private.
+    api.update_repo_settings(a.destination, private=False)
 for attempt in range(8):
     try:
         api.upload_folder(repo_id=a.destination, folder_path=str(folder), repo_type='model',
                           allow_patterns=list(expected) + ['README.md', 'acceptance.json'])
         break
-    except Exception:
+    except Exception as error:
+        status = getattr(getattr(error, 'response', None), 'status_code', None)
+        if (status and 400 <= status < 500 and status != 429) or isinstance(error, (AttributeError, TypeError, ValueError)):
+            raise
         if attempt == 7:
             raise
         print('Retrying resumable validated upload', attempt + 1, flush=True)
