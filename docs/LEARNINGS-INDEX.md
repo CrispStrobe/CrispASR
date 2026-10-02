@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (313 lessons)
+## Index by topic (314 lessons)
 
 **Security & untrusted input** (2)
 
@@ -94,7 +94,7 @@ cross-reference when you already know which model you are touching.
 - L19122 — Fused ggml_flash_attn_ext accumulates KQ in F16 and set_prec is silently ignored on P100/sm_60 — a repo-wide latent class, but fix by SENSITIVITY not by count
 - L19159 — The session ABI re-implements every backend — a rate the CLI resamples is a constant there, and a runtime probe turns a 2-hour check into 4 seconds
 
-**Parity, the diff harness & ground truth** (42)
+**Parity, the diff harness & ground truth** (43)
 
 - L74 — The long-form recipe is part of the blueprint — and a comment citing the blueprint is not the blueprint
 - L204 — A model family's per-size behaviour lives in the reference RUNTIME, not the modelling code
@@ -138,6 +138,7 @@ cross-reference when you already know which model you are touching.
 - L16919 — chatterbox hift_pcm(ref_mel) cos≈0.879 was a diff-harness layout bug (source_stft fed transposed), not a…
 - L18549 — Chatterbox Multilingual V3: checkpoint names, quant hashes, and a non-silent clone are not parity
 - L18898 — Device-side argmax can cost more than the readback it removes, and an unused graph output still runs
+- L19296 — 314. Index-Echo 9B: preload functional child weights before trusting offloaded cache references
 
 **ggml graphs, allocation & caching** (46)
 
