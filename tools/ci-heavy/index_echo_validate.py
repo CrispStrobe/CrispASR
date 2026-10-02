@@ -31,6 +31,8 @@ parser.add_argument('--fixture-revision', help='Immutable independent reference 
 parser.add_argument('--regression', action='store_true', help='Run the actual pinned nightly driver after native validation')
 parser.add_argument('--reference-subdir', choices=['reference', 'reference-f32'], default='reference')
 parser.add_argument('--pipeline', action='store_true', help='Validate released file/VAD/target/context oracle')
+parser.add_argument('--pipeline-fixture-prefix', help='Independent file oracle namespace, when different from stage captures')
+parser.add_argument('--pipeline-audio-path', help='Exact companion audio path in the pinned fixture repository')
 parser.add_argument('--cohorts', nargs='+', choices=['f16', 'q8_0', 'q8_0_selective', 'q8_0_ffn', 'q4_k', 'q4_k_selective'], default=['f16'])
 parser.add_argument('--clips', nargs='+', choices=['jfk', 'zh', 'jfk-tail'], default=['jfk', 'zh', 'jfk-tail'])
 args = parser.parse_args()
@@ -76,8 +78,8 @@ def download_references(models):
     if 'jfk-tail' in args.clips:
         paths['jfk-tail.wav'] = f'{fixture_prefix}/jfk_tail/audio.wav'
     if args.pipeline:
-        paths['pipeline.json'] = f'{fixture_prefix}/pipeline/reference.json'
-        paths['pipeline-multi.wav'] = f'{prefix}/pipeline/audio.wav'
+        paths['pipeline.json'] = f'{args.pipeline_fixture_prefix or fixture_prefix}/pipeline/reference.json'
+        paths['pipeline-multi.wav'] = args.pipeline_audio_path or f'{prefix}/pipeline/audio.wav'
     folder = models / args.reference_subdir
     folder.mkdir(parents=True, exist_ok=True)
     for name, remote in paths.items():
@@ -90,6 +92,9 @@ def download_references(models):
 (OUT / 'validation-provenance.json').write_text(json.dumps(dict(
     model_repo=destination, model_revision=model_revision,
     fixture_repo=fixtures["repo"], fixture_revision=fixtures["revision"],
+    stage_fixture_prefix=fixture_prefix,
+    pipeline_fixture_prefix=args.pipeline_fixture_prefix or fixture_prefix,
+    pipeline_audio_path=args.pipeline_audio_path or f'{prefix}/pipeline/audio.wav',
     source_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
     ggml_commit=subprocess.check_output(['git', '-C', 'ggml', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
     threads=4, cpu=subprocess.check_output(['uname', '-m'], text=True).strip()), indent=2) + '\n')
