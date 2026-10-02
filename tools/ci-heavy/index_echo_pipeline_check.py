@@ -47,6 +47,12 @@ def check_pipeline(root, out, build, library, models, cohort, reference_subdir, 
     lib.crispasr_silero_enable_context.restype = ctypes.c_bool
     if not vad or not lib.crispasr_silero_enable_context(vad):
         raise RuntimeError('Native Silero companion could not load')
+    # A GPU-enabled caller must still load VAD weights on the CPU scheduler.
+    # Exercise both policies with the real model, not a mocked device list.
+    vad_gpu_request = lib.whisper_vad_init_from_file_with_params(str(vad_path).encode(), VADParams(1, True, 0))
+    if not vad_gpu_request or not lib.crispasr_silero_enable_context(vad_gpu_request):
+        lib.whisper_vad_free(vad)
+        raise RuntimeError('GPU-enabled caller could not load the CPU VAD companion')
     companion = models / vad_path.name
     assert not companion.exists(), 'Direct-window fixtures must not autoload VAD'
     companion.symlink_to(vad_path)
@@ -60,6 +66,11 @@ def check_pipeline(root, out, build, library, models, cohort, reference_subdir, 
                 assert lib.whisper_vad_detect_speech(vad, pcm.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), len(pcm))
                 n = lib.whisper_vad_n_probs(vad)
                 probs = np.ctypeslib.as_array(lib.whisper_vad_probs(vad), shape=(n,)).copy()
+                assert lib.whisper_vad_detect_speech(vad_gpu_request, pcm.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), len(pcm))
+                requested_n = lib.whisper_vad_n_probs(vad_gpu_request)
+                requested_probs = np.ctypeslib.as_array(lib.whisper_vad_probs(vad_gpu_request), shape=(requested_n,)).copy()
+                if not np.array_equal(probs, requested_probs):
+                    failures.append(name + ': GPU-requested VAD differs from CPU VAD')
                 reference_probs = np.array(expected['vad_probabilities'], dtype=np.float32)
                 if probs.shape != reference_probs.shape:
                     raise RuntimeError('VAD frame count differs from source: ' + name)
@@ -78,10 +89,15 @@ def check_pipeline(root, out, build, library, models, cohort, reference_subdir, 
                         abs(a['end'] - e['end']) > .0051 for a, e in zip(actual, golden)):
                     failures.append(name + ': full-pipeline decoded mismatch')
                 decoded[name] = dict(segments=actual, reference=golden, elapsed_seconds=elapsed,
+                                     vad_gpu_request_equal=bool(np.array_equal(probs, requested_probs)),
                                      vad_cosine=cosine, vad_max_abs=delta, vad_probabilities=probs.tolist())
+                (out / f'pipeline-{cohort}-partial.json').write_text(json.dumps(
+                    dict(cohort=cohort, complete=False, failed=failures, cases=decoded),
+                    indent=2, ensure_ascii=False) + '\n')
                 print('full pipeline', cohort, name, json.dumps({k:v for k,v in decoded[name].items() if k != 'vad_probabilities'}, ensure_ascii=False), flush=True)
     finally:
         lib.whisper_vad_free(vad)
+        lib.whisper_vad_free(vad_gpu_request)
         companion.unlink()
     # Real CLI default language flow: metadata/caps must avoid unrelated LID.
     prefix = out / f'pipeline-{cohort}-cli'
