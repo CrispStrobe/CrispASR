@@ -72,6 +72,10 @@ def stage_report(text):
         raise ValueError('Every encoder/decoder layer and all 75 numerical rows are mandatory')
     if '[PASS] cached greedy token parity (16/16)' not in text or '[PASS] first greedy token parity (1/1)' not in text or not re.search(r'\[PASS\].*prompt', text):
         raise ValueError('Exact prompt and cached greedy IDs are mandatory')
+    for row in rows:
+        threshold = .998 if row['stage'] == 'teacherforced_logits' else .999
+        if row['cosine_min'] < threshold or row['relative_l2'] > .02:
+            raise ValueError('F16 numerical bounds exceeded: ' + row['stage'])
     return dict(passed=True, reported_checks=76, numerical_checks=75, cached_predictions=16,
                 cosine_min=min(r['cosine_min'] for r in rows),
                 relative_l2_max=max(r['relative_l2'] for r in rows), stages=rows)
