@@ -143,6 +143,7 @@ try:
         blocks = config.get('text_config', config)['num_hidden_layers']
         assert int(converted_decoder.fields['qwen35.block_count'].contents()) == blocks
         assert not any(t.name.startswith(f'blk.{blocks}.') for t in converted_decoder.tensors)
+        decoder_tensor_types = {t.name: t.tensor_type for t in converted_decoder.tensors}
         receipt['decoder_blocks'] = blocks
         del converted_decoder
         build = SCRATCH / 'build'
@@ -174,7 +175,13 @@ try:
                 if quant == 'q8_0_ffn':
                     # Isolate feed-forward quantization from recurrent state,
                     # attention and vocabulary weights; start from genuine F16.
-                    rules = [r'^blk\.[0-9]+\.ffn_(gate|up|down)\.weight$=q8_0']
+                    import re
+                    ffn_names = {f'blk.{i}.ffn_{part}.weight' for i in range(blocks) for part in ['gate', 'up', 'down']}
+                    rules = []
+                    for tensor_type, label in [(gguf.GGMLQuantizationType.F16, 'f16'), (gguf.GGMLQuantizationType.F32, 'f32')]:
+                        names = [re.escape(name) for name, kind in decoder_tensor_types.items()
+                                 if name not in ffn_names and kind == tensor_type]
+                        if names: rules.append('^(' + '|'.join(names) + ')$=' + label)
                     overrides = [arg for rule in rules for arg in ['--tensor-type', rule]]
                     receipt.setdefault('quant_recipes', {})[filename] = rules
                 if quant == 'q4_k_selective':
@@ -187,16 +194,16 @@ try:
                               r'\.(ssm_.*|attn_qkv|attn_gate)\.weight$=q8_0'])
                     overrides = [arg for rule in rules for arg in ['--tensor-type', rule]]
                     receipt.setdefault('quant_recipes', {})[filename] = rules
-                base_quant = {'q4_k_selective': 'q4_k', 'q8_0_selective': 'q8_0', 'q8_0_ffn': 'f16'}.get(quant, quant)
+                base_quant = {'q4_k_selective': 'q4_k', 'q8_0_selective': 'q8_0', 'q8_0_ffn': 'q8_0'}.get(quant, quant)
                 run(quantizer, original, converted, base_quant, *overrides)
                 if quant == 'q8_0_ffn':
-                    import re
                     reader = gguf.GGUFReader(str(converted))
                     quantized_names = [t.name for t in reader.tensors if t.tensor_type == gguf.GGMLQuantizationType.Q8_0]
                     expected_names = [f'blk.{i}.ffn_{part}.weight' for i in range(blocks) for part in ['gate', 'up', 'down']]
                     assert sorted(quantized_names) == sorted(expected_names), 'FFN-only recipe must match every block'
-                    assert all(not re.fullmatch(r'blk\.[0-9]+\.ffn_(gate|up|down)\.weight', t.name) or
-                               t.tensor_type == gguf.GGMLQuantizationType.Q8_0 for t in reader.tensors)
+                    assert {t.name: t.tensor_type for t in reader.tensors} == {
+                        name: gguf.GGMLQuantizationType.Q8_0 if name in ffn_names else kind
+                        for name, kind in decoder_tensor_types.items()}, 'Non-FFN tensors must retain original precision'
                     receipt['ffn_quantized_tensors'] = len(quantized_names)
                     del reader
                 upload(converted)
