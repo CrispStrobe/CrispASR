@@ -67,7 +67,7 @@ jobs:
       TIMEOUT_MIN: ${{ inputs.timeout_minutes }}
       # Index-Echo's private staging producer needs publishing access; the
       # standard CI token can read models but cannot upload its Xet weights.
-      HF_TOKEN: ${{ inputs.script == 'tools/ci-heavy/index_echo_produce.py' && secrets.INDEX_ECHO_HF_TOKEN || secrets.HF_TOKEN }}
+      HF_TOKEN: ${{ (inputs.script == 'tools/ci-heavy/index_echo_produce.py' || inputs.script == 'tools/ci-heavy/index_echo_publish.py') && secrets.INDEX_ECHO_HF_TOKEN || secrets.HF_TOKEN }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
