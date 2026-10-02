@@ -6,13 +6,17 @@ not represent valid legacy codec audio. Speech acceptance uses the unmodified,
 immutable public 44.1 kHz model and its actual English speaker preset.
 """
 import ctypes
+import hashlib
 import json
 import os
+import platform
 from pathlib import Path
 import re
 import shutil
 import subprocess
 import sys
+import tarfile
+import urllib.request
 import wave
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -23,6 +27,17 @@ SCRATCH.mkdir(parents=True, exist_ok=True)
 os.environ['TMPDIR'] = str(SCRATCH)
 TEXT = 'The quick brown fox jumps over the lazy dog.'
 REVISION = 'fab3cdbef802fb5f1047708c27378c6e34ec230f'
+
+# This child deliberately fails the same guard against the published old ABI.
+# Keep it in a separate process to avoid loading two GGML library versions.
+if len(sys.argv) > 1 and sys.argv[1] == '--baseline-rate':
+    sys.path.insert(0, str(ROOT / 'python'))
+    from crispasr import Session
+    with Session(sys.argv[3], lib_path=sys.argv[2], backend='miotts', n_threads=4) as session:
+        rate = session.output_sample_rate()
+    print('BASELINE_RATE_JSON=' + json.dumps(dict(actual_rate=rate, expected_rate=44100)), flush=True)
+    assert rate == 44100, f'MioCodec-v2 ABI rate: {rate} != 44100'
+    raise SystemExit(0)
 
 
 def run(command, tag):
@@ -59,6 +74,25 @@ key_offset = key_part.ctypes.data - reader.data.ctypes.data
 assert bytes(key_part) == b'miotts.codec.sample_rate'
 del value, key_part, field, reader
 lib = next(build.rglob('libcrispasr.dylib' if sys.platform == 'darwin' else 'libcrispasr.so'))
+baseline = None
+if sys.platform == 'linux' and platform.machine() in ('aarch64', 'arm64'):
+    archive = SCRATCH / 'baseline-v0.8.41-arm64.tar.gz'
+    urllib.request.urlretrieve('https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.41/libcrispasr-linux-arm64.tar.gz', archive)
+    assert hashlib.sha256(archive.read_bytes()).hexdigest() == '3b149b06a165c177ae9424563b1819246475e2fd2a1b330df333c34c24ab14fd'
+    baseline_dir = SCRATCH / 'baseline'
+    baseline_dir.mkdir(exist_ok=True)
+    with tarfile.open(archive) as tar:
+        tar.extractall(baseline_dir, filter='data')
+    baseline_lib = next(baseline_dir.rglob('libcrispasr.so'))
+    with (OUT / 'baseline-rate.log').open('w') as log:
+        old = subprocess.run([sys.executable, __file__, '--baseline-rate', str(baseline_lib), str(model)],
+                             stdout=log, stderr=subprocess.STDOUT, timeout=180)
+    log = (OUT / 'baseline-rate.log').read_text()
+    match = re.search(r'BASELINE_RATE_JSON=(.*)', log)
+    assert match is not None, 'Baseline did not reach the rate guard; inspect baseline-rate.log'
+    baseline = json.loads(match[1])
+    assert old.returncode != 0 and baseline['actual_rate'] == 24000, 'Guard did not catch the published rate defect'
+    baseline.update(release='v0.8.41', guard_failed_as_expected=True)
 os.environ['CRISPASR_MODEL_MIOTTS'] = str(model)
 os.environ['CRISPASR_MIOTTS_VOICE_DIR'] = str(model_dir)
 run([build / 'bin/test-miotts-live', '[miotts]'], 'native-live')
@@ -113,7 +147,7 @@ with Session(asr, lib_path=str(lib), backend='nemotron', n_threads=4) as session
         (OUT / 'roundtrips.json').write_text(json.dumps(results, indent=2) + '\n')
         assert results[name]['wer'] <= .2, results[name]
 receipt = dict(passed=True, source_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
-               model_revision=REVISION, metadata_rates=rates, roundtrips=results,
+               model_revision=REVISION, metadata_rates=rates, roundtrips=results, baseline=baseline,
                metadata_copy_scope='dispatch only; no legacy codec speech claim', platform=sys.platform)
 (OUT / 'acceptance.json').write_text(json.dumps(receipt, indent=2) + '\n')
 (OUT / 'summary.md').write_text('MioTTS native rate, session ABI metadata dispatch, 44.1 kHz CLI WAV and both speech roundtrips PASS.\n')
