@@ -12387,6 +12387,13 @@ CA_EXPORT int crispasr_session_set_temperature(crispasr_session* s, float temper
     s->temperature = temperature;
     s->seed = seed;
     int touched = 0;
+#ifdef CA_HAVE_MIOTTS
+    if (s->miotts_ctx) {
+        miotts_set_temperature(s->miotts_ctx, temperature);
+        miotts_set_seed(s->miotts_ctx, seed);
+        touched++;
+    }
+#endif
 #ifdef CA_HAVE_CANARY
     if (s->canary_ctx) {
         canary_set_temperature(s->canary_ctx, temperature, seed);
@@ -12509,6 +12516,12 @@ CA_EXPORT int crispasr_session_set_tts_seed(crispasr_session* s, uint64_t seed) 
     if (!s)
         return -1;
     int touched = 0;
+#ifdef CA_HAVE_MIOTTS
+    if (s->miotts_ctx) {
+        miotts_set_seed(s->miotts_ctx, seed);
+        touched++;
+    }
+#endif
 #ifdef CA_HAVE_VOXTRAL_TTS
     if (s->voxtral_tts_ctx) {
         voxtral_tts_set_seed(s->voxtral_tts_ctx, seed);

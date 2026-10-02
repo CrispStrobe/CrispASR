@@ -114,6 +114,8 @@ for name, rate in [('public-v2', 44100), ('metadata-24k', 24000), ('metadata-mis
         assert rates[name] == rate, (name, rates[name], rate)
         if name == 'public-v2':
             session.set_voice(str(model_dir / 'en_female.emb.gguf'))
+            # Require a real sampling setter rather than Python's soft no-op.
+            assert session._lib.crispasr_session_set_temperature(session._handle, 0, 42) == 0
             pcm = session.synthesize(TEXT)
             assert np.isfinite(pcm).all() and len(pcm) / rate > 1
             np.save(OUT / 'session.npy', pcm)
@@ -145,7 +147,7 @@ with Session(asr, lib_path=str(lib), backend='nemotron', n_threads=4) as session
         results[name] = dict(transcript=actual, wer=row[-1] / len(ref), samples=len(pcm),
                              sample_rate=44100, duration_seconds=len(pcm) / 44100)
         (OUT / 'roundtrips.json').write_text(json.dumps(results, indent=2) + '\n')
-        assert results[name]['wer'] <= .2, results[name]
+assert all(case['wer'] <= .2 for case in results.values()), results
 receipt = dict(passed=True, source_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
                model_revision=REVISION, metadata_rates=rates, roundtrips=results, baseline=baseline,
                metadata_copy_scope='dispatch only; no legacy codec speech claim', platform=sys.platform)
