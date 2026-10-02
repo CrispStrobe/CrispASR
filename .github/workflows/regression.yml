@@ -58,6 +58,8 @@ on:
       - 'tools/reference_backends/index_echo.py'
       - 'tools/index_echo_acceptance.py'
       - 'tests/test_index_echo_acceptance.py'
+      - 'tools/index_echo_9b_acceptance.py'
+      - 'tests/test_index_echo_9b_acceptance.py'
   # Push to main: the backends the change can touch run right away instead of
   # waiting for the nightly - e.g. #470's legacy canary load break would have
   # shown on the push, not the next morning.
@@ -77,6 +79,8 @@ on:
       - 'tools/reference_backends/index_echo.py'
       - 'tools/index_echo_acceptance.py'
       - 'tests/test_index_echo_acceptance.py'
+      - 'tools/index_echo_9b_acceptance.py'
+      - 'tests/test_index_echo_9b_acceptance.py'
       - '.github/workflows/regression.yml'
 
 permissions:
@@ -126,7 +130,7 @@ jobs:
       - name: Phonon-2 container format tests
         run: python -m unittest discover -s tests -p test_phonon2_container.py -v
       - name: Index-Echo numerical acceptance bounds
-        run: python -m unittest discover -s tests -p test_index_echo_acceptance.py -v
+        run: python -m unittest discover -s tests -p 'test_index_echo*acceptance.py' -v
       # Chat binding (#362). 891 lines of tests that nothing invoked: this file
       # is not named by any workflow and regression.yml pytests two files by
       # name rather than a directory, so it could only ever run by hand. With
