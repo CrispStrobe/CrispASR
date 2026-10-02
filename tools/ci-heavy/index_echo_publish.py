@@ -19,6 +19,8 @@ p.add_argument('--staging-repo', required=True)
 p.add_argument('--staging-revision', required=True)
 p.add_argument('--acceptance-revision', required=True)
 p.add_argument('--destination', default='cstr/index-echo-9b-GGUF')
+p.add_argument('--keep-private', action='store_true',
+               help='Verify a clean private copy before retiring the active staging name')
 a = p.parse_args()
 for pin in [a.staging_revision, a.acceptance_revision]:
     if len(pin) != 40 or any(c not in '0123456789abcdef' for c in pin):
@@ -100,10 +102,12 @@ for item in info.siblings:
         size, digest = expected[item.rfilename]
         if item.size != size or (item.lfs and item.lfs.sha256 != digest):
             raise RuntimeError('Remote artifact metadata mismatch: ' + item.rfilename)
-api.update_repo_settings(a.destination, private=False)
-if api.model_info(a.destination).private or not api.model_info(a.staging_repo).private:
+if not a.keep_private:
+    api.update_repo_settings(a.destination, private=False)
+if api.model_info(a.destination).private != a.keep_private or not api.model_info(a.staging_repo).private:
     raise RuntimeError('Publication visibility verification failed')
 result = dict(validated=True, repository=a.destination, revision=info.sha,
+              private=a.keep_private,
               staging_repository=a.staging_repo, staging_revision=a.staging_revision,
               acceptance_revision=a.acceptance_revision, artifacts=expected)
 (out / 'publication.json').write_text(json.dumps(result, indent=2) + '\n')
