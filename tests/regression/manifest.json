@@ -3,8 +3,8 @@
   "version": 1,
   "fixtures": {
     "repo": "cstr/crispasr-regression-fixtures",
-    "revision": "374efe4d7f5c4ff5dce32deffb14e23865fa8493",
-    "_note": "Pinned. To re-bake, run `tools/kaggle-regression.py` with MODE=rebake UPLOAD=1; the new commit SHA gets pasted here as a reviewable diff. Previous: 99f005d59a0f7f4915dea5faea4d2e17b2120268 (2026-05-17). Bumped 2026-05-25 after Kaggle rebake v13 published 9 ref archives — adds parakeet-tdt-1.1b, parakeet-tdt_ctc-1.1b, parakeet-rnnt-0.6b, parakeet-rnnt-1.1b (all NEW from handover-prompts/extend-coverage-via-kaggle.md realistic goal); refreshes canary-1b-v2, moonshine-tiny/base, parakeet-tdt-0.6b-{en,ja}. Bumped 2026-09-27 from b61b03014b: adds sensevoice-small, paraformer-zh, funasr-nano jfk_11s refs (copied from the #436 final rebake in the dataset repo of the same name). Nothing removed. Bumped 2026-09-28 from e5781ed4f8: Kaggle rebake batches 4-6 (parakeet-tdt-0.6b-en, parakeet-tdt_ctc-1.1b, granite-speech-4.1-2b, qwen3-asr-0.6b, kyutai-stt-1b, mini-omni2, nemotron-3.5-asr-streaming-0.6b, wav2vec2-xlsr-en, hubert-large, data2vec-base, omniasr-ctc-1b-v2, fastconformer-ctc-large). Bumped 2026-09-28 from cafce827fc: adds cohere-transcribe/jfk_11s/ref.gguf (fresh rebake). Bumped 2026-09-30 from fe509cca: adds Phonon-2 JFK and LibriSpeech reference/audio fixtures only; no existing fixture changed. Bumped 2026-10-01 from cf16f45941: adds independent Index-Echo 2B CPU F32-tower/BF16-decoder JFK, Chinese and partial-hop stage/cache references; no existing fixture changed. Bumped 2026-10-01 from 0f4ac3b0c0: adds separate explicitly F32-decoder Index-Echo diagnostic refs and both source full-pipeline captures/dtype audit; original mixed-precision refs unchanged."
+    "revision": "cb678dfd4806778aa55c39fe7b7a710a54cdc153",
+    "_note": "Pinned. To re-bake, run `tools/kaggle-regression.py` with MODE=rebake UPLOAD=1; the new commit SHA gets pasted here as a reviewable diff. Previous: 99f005d59a0f7f4915dea5faea4d2e17b2120268 (2026-05-17). Bumped 2026-05-25 after Kaggle rebake v13 published 9 ref archives — adds parakeet-tdt-1.1b, parakeet-tdt_ctc-1.1b, parakeet-rnnt-0.6b, parakeet-rnnt-1.1b (all NEW from handover-prompts/extend-coverage-via-kaggle.md realistic goal); refreshes canary-1b-v2, moonshine-tiny/base, parakeet-tdt-0.6b-{en,ja}. Bumped 2026-09-27 from b61b03014b: adds sensevoice-small, paraformer-zh, funasr-nano jfk_11s refs (copied from the #436 final rebake in the dataset repo of the same name). Nothing removed. Bumped 2026-09-28 from e5781ed4f8: Kaggle rebake batches 4-6 (parakeet-tdt-0.6b-en, parakeet-tdt_ctc-1.1b, granite-speech-4.1-2b, qwen3-asr-0.6b, kyutai-stt-1b, mini-omni2, nemotron-3.5-asr-streaming-0.6b, wav2vec2-xlsr-en, hubert-large, data2vec-base, omniasr-ctc-1b-v2, fastconformer-ctc-large). Bumped 2026-09-28 from cafce827fc: adds cohere-transcribe/jfk_11s/ref.gguf (fresh rebake). Bumped 2026-09-30 from fe509cca: adds Phonon-2 JFK and LibriSpeech reference/audio fixtures only; no existing fixture changed. Bumped 2026-10-01 from cf16f45941: adds independent Index-Echo 2B CPU F32-tower/BF16-decoder JFK, Chinese and partial-hop stage/cache references; no existing fixture changed. Bumped 2026-10-01 from 0f4ac3b0c0: adds separate explicitly F32-decoder Index-Echo diagnostic refs and both source full-pipeline captures/dtype audit; original mixed-precision refs unchanged. Bumped 2026-10-02: corrected independent original-generation 9B F32 stage/cache references, complete natural Chinese-context F32 file oracle and pinned real Piper roundtrip WAVs. Existing 2B and other backend fixtures retained; rejected stress remains separate."
   },
   "backends": [
     {
@@ -1056,6 +1056,32 @@
       },
       "stage_threshold_default": 0.99,
       "stage_threshold_note": "Native diff also enforces magnitude <=5%, strict frontend/prompt/cache IDs and mandatory exit status. Forced-F32 source validation 36915483750: Q8 minimum stage-row cosine .997150, maximum relative L2 3.094%; direct decoded text/timestamps exact. The released mixed F32/BF16 golden remains separately retained."
+    },
+    {
+      "name": "index-echo-9b",
+      "backend_id": "index-echo",
+      "source_model": "IndexTeam/Index-Echo-S2TT-9B",
+      "source_model_note": "Pinned b8ac6fb7d3dc17cee48a52201bd3d93dc86b0dba; actual released parameters BF16, independent all-F32 source parity also captured.",
+      "gguf": {
+        "repo": "cstr/index-echo-9b-GGUF",
+        "revision": "dffbadf0f173446fee0364a0807803d2b2fb6f49",
+        "file": "index-echo-9b-f16.gguf",
+        "approx_size_mb": 1314,
+        "companion_files": [
+          "index-echo-9b-decoder-f16.gguf"
+        ]
+      },
+      "sample": "samples/jfk.wav",
+      "transcript_format": "srt",
+      "expected_transcript": "And so, my fellow Americans, And so, my fellow Americans, ask not ask not what your country can do for you, what your country can do for you, ask what you can do for ask what you can do for your country.。 your country.",
+      "expected_transcript_source": "Independent original translate_window F32 capture; exact CPU/CUDA complete cues and timestamps, 2026-10-02 (#485). No VAD companion in this direct-window fixture.",
+      "fixture_ref_path": "index-echo-9b-f32-generation/jfk_11s/ref.gguf",
+      "diff_thresholds": {
+        "mel_spectrogram": 0.999,
+        "teacherforced_logits": 0.998
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "F16 magnitude <=2%, all32 encoder+32 decoder blocks, exact prompt and all16 cached greedy IDs. Weekly index-echo-9b-regression.yml performs five complete file cases and real Piper roundtrips on hosted scratch; not the 14GB daily matrix."
     }
   ],
   "tts_backends_note": "TTS->ASR roundtrip regression. Each entry synthesises tts_phrase via the TTS backend, transcribes the output with the pinned ASR backend (parakeet by default — high-accuracy English ground truth), and asserts WER <= wer_max. Catches silent decode regressions like the voxcpm2 BF16 noise bug that the encoder/mel diff harness can miss. WER ignores punctuation and case after normalisation, so a kokoro tts_phrase that comes back as 'the quick brown fox jumps over the lazy dog.' is still WER=0.",
