@@ -134,7 +134,7 @@ results = {}
 with Session(asr, lib_path=str(lib), backend='nemotron', n_threads=4) as session:
     for name, pcm in [('session', np.load(OUT / 'session.npy')), ('cli', cli_pcm)]:
         actual = ' '.join(seg.text for seg in session.transcribe(pcm, sample_rate=44100, language='en'))
-        words = lambda s: re.findall('[a-z]+', s.lower())
+        words = lambda s: re.findall('[a-z]+', re.sub(r'<[^>]*>', '', s).lower())
         ref, hyp = words(TEXT), words(actual)
         row = list(range(len(hyp) + 1))
         for i, word in enumerate(ref, 1):
