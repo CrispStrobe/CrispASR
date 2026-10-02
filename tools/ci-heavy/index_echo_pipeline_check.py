@@ -10,13 +10,23 @@ import wave
 
 def check_pipeline(root, out, build, library, models, cohort, reference_subdir, model_prefix='index-echo-2b'):
     import numpy as np
-    from huggingface_hub import HfApi, hf_hub_download
+    from huggingface_hub import hf_hub_download
     from crispasr import Session
     # Keep the third companion beside the primary, exercising runtime autoload.
-    vad_revision = HfApi().model_info('ggml-org/whisper-vad').sha
+    vad_revision = '9ffd54a1e1ee413ddf265af9913beaf518d1639b'
     vad_path = Path(hf_hub_download('ggml-org/whisper-vad', 'ggml-silero-v6.2.0.bin',
                                   revision=vad_revision, local_dir=models / 'vad-companion'))
     oracle = json.loads((models / reference_subdir / 'pipeline.json').read_text())
+    required = {'jfk-en': 'en', 'zh-en': 'en', 'zh-ja': 'ja', 'zh-es': 'es', 'multi-en': 'en'}
+    if oracle.get('complete') is False or set(oracle['cases']) != set(required):
+        raise RuntimeError('Full-file acceptance requires the complete independent five-case source oracle')
+    for name, target in required.items():
+        case = oracle['cases'][name]
+        if case['target'] != target or not case['segments'] or any(row.get('parse_warn', 0) for row in case['rows']):
+            raise RuntimeError('Invalid independent source case: ' + name)
+    multi_rows = oracle['cases']['multi-en']['rows']
+    if len(multi_rows) != 3 or not multi_rows[1].get('has_ctx'):
+        raise RuntimeError('Independent source oracle must exercise a second window with prior context')
     failures, decoded = [], {}
 
     class VADParams(ctypes.Structure):
