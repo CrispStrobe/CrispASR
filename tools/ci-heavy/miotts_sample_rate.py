@@ -79,7 +79,6 @@ for name, rate in [('public-v2', 44100), ('metadata-24k', 24000), ('metadata-mis
         assert rates[name] == rate, (name, rates[name], rate)
         if name == 'public-v2':
             session.set_voice(str(model_dir / 'en_female.emb.gguf'))
-            session.set_temperature(0, seed=42)
             pcm = session.synthesize(TEXT)
             assert np.isfinite(pcm).all() and len(pcm) / rate > 1
             np.save(OUT / 'session.npy', pcm)

@@ -1117,9 +1117,9 @@ much the most expensive to run. See
 generating speech tokens decoded by **MioCodec** (25 Hz tokens, FSQ + transformer +
 iSTFT → model-derived rate: 44.1 kHz for v2, 24 kHz for legacy codecs). Single GGUF, tokenizer.json loaded at runtime.
 
-- Zero-shot voice cloning via 128-d global embedding (codec-side conditioning)
+- Preset voices via 128-d global embedding (`--voice preset.emb.gguf`)
 - 0.6B/1.7B variants (Apache-2.0 license on Qwen3-based models)
-- Q8_0: 723 MB, Q4_K: 397 MB (fits 8 GB VPS)
+- Q8_0: 793 MB, Q4_K: 502 MB; tokenizer.json is a registry companion
 - `--backend miotts -m miotts-0.6b-q8_0.gguf --tts "Hello world"`
 
 ### moss-tts
