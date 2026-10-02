@@ -81,7 +81,7 @@ all consume the same symbols.
 |---|---|
 | `cli.cpp` | crispasr entry point, extended with `--backend` dispatch branch. |
 | `crispasr_backend.{h,cpp}` | `CrispasrBackend` abstract class, capability bitmask, factory, GGUF auto-detect (`crispasr_detect_backend_from_gguf`). |
-| `crispasr_backend_*.cpp` (75 files) | Per-backend thin wrapper over each model's C API — one file per backend, e.g. `crispasr_backend_parakeet.cpp`, `crispasr_backend_crispasr.cpp` (the whisper adapter). ASR backends emit `crispasr_segment`s; TTS backends (`vibevoice`, `qwen3_tts`, `orpheus`, `kokoro`, `chatterbox`, `moss_tts`, `miotts`, …) implement `synthesize(text)` instead and write 24 kHz mono WAV via `--tts-output`; the translation backends (`m2m100` for facebook m2m100 + WMT21, `t5` for MADLAD-400 / future T5 translation) implement `translate_text(text, src, tgt)` and write UTF-8 to stdout; non-transcribe task backends (`htdemucs`, `mel_band_roformer`, `crepe`, `btc`, `tabcnn`, `beat_this`, `piano_transcription`) go through their own early CLI dispatchers (see below). `ls examples/cli/crispasr_backend_*.cpp` is the live list. |
+| `crispasr_backend_*.cpp` (75 files) | Per-backend thin wrapper over each model's C API — one file per backend, e.g. `crispasr_backend_parakeet.cpp`, `crispasr_backend_crispasr.cpp` (the whisper adapter). ASR backends emit `crispasr_segment`s; TTS backends (`vibevoice`, `qwen3_tts`, `orpheus`, `kokoro`, `chatterbox`, `moss_tts`, `miotts`, …) implement `synthesize(text)` instead and write mono WAV at the backend output rate via `--tts-output`; the translation backends (`m2m100` for facebook m2m100 + WMT21, `t5` for MADLAD-400 / future T5 translation) implement `translate_text(text, src, tgt)` and write UTF-8 to stdout; non-transcribe task backends (`htdemucs`, `mel_band_roformer`, `crepe`, `btc`, `tabcnn`, `beat_this`, `piano_transcription`) go through their own early CLI dispatchers (see below). `ls examples/cli/crispasr_backend_*.cpp` is the live list. |
 | `whisper_params.h` | Shared params struct (extracted from cli.cpp, extended). |
 | `crispasr_output.{h,cpp}` | TXT / SRT / VTT / CSV / JSON / LRC writers on `crispasr_segment`. |
 | `crispasr_vad_cli.{h,cpp}` | Delegates to `src/crispasr_vad`; adds auto-download for the Silero GGUF. |
@@ -1108,8 +1108,8 @@ much the most expensive to run. See
 ### miotts
 
 `Aratako/MioTTS-0.6B` (Apache-2.0) — **Qwen3** (28L, 1024d, GQA 16/8)
-generating speech tokens decoded by **MioCodec-25Hz-24kHz** (FSQ + transformer +
-iSTFT → 24kHz). Single GGUF, tokenizer.json loaded at runtime.
+generating speech tokens decoded by **MioCodec** (25 Hz tokens, FSQ + transformer +
+iSTFT → model-derived rate: 44.1 kHz for v2, 24 kHz for legacy codecs). Single GGUF, tokenizer.json loaded at runtime.
 
 - Zero-shot voice cloning via 128-d global embedding (codec-side conditioning)
 - 0.6B/1.7B variants (Apache-2.0 license on Qwen3-based models)
