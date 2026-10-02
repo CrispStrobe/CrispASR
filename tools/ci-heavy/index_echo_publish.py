@@ -38,6 +38,10 @@ acceptance = Path(hf_hub_download(a.staging_repo, 'acceptance.json', revision=a.
 receipt = json.loads(acceptance.read_text())
 if receipt.get('validated') is not True or receipt.get('accepted_cohort') != 'f16':
     raise RuntimeError('Independent model acceptance has not passed')
+if receipt.get('model_revision') != a.staging_revision:
+    raise RuntimeError('Acceptance does not identify the requested immutable model revision')
+if receipt.get('source_model') != 'IndexTeam/Index-Echo-S2TT-9B':
+    raise RuntimeError('Acceptance belongs to a different source model')
 for gate in ['cpu', 'cuda', 'pipeline', 'roundtrip']:
     if receipt.get(gate, {}).get('passed') is not True:
         raise RuntimeError('Mandatory acceptance gate missing: ' + gate)
@@ -46,6 +50,10 @@ expected = {
     'index-echo-9b-decoder-f16.gguf': (17920696992, '98acd9b753295cdc9a9b8773317ab046bf83e466b1ebfc775d59ac8dab9d177a'),
     'LICENSE': (11358, 'c95bae1d1ce0235ecccd3560b772ec1efb97f348a79f0fbe0a634f0c2ccefe2c'),
 }
+for name, (size, digest) in expected.items():
+    artifact = receipt.get('artifacts', {}).get(name, {})
+    if artifact.get('bytes') != size or artifact.get('sha256') != digest:
+        raise RuntimeError('Acceptance does not cover the exact published artifact: ' + name)
 folder = scratch / 'clean'
 folder.mkdir(exist_ok=True)
 for name, (size, digest) in expected.items():
