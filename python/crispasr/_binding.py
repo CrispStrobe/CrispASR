@@ -2252,7 +2252,9 @@ class Session:
         """Contextual biasing: comma-separated words/phrases to boost during
         decoding. Parakeet CTC/TDT use an Aho-Corasick trie; LLM backends inject
         them into the prompt (vibevoice splices the raw string into its
-        "with extra info:" prompt slot, same as the CLI's --context). Empty
+        "with extra info:" prompt slot, same as the CLI's --context). Qwen3
+        puts the hint in the system turn, preserving the selected language
+        prefill independently of an explicit question. Empty
         string clears."""
         if not hasattr(self._lib, "crispasr_session_set_hotwords"):
             raise RuntimeError("session-state API not present in this libcrispasr build")
