@@ -5,6 +5,8 @@
 #include <catch2/catch_test_macros.hpp>
 #include "mimo_asr.h"
 
+#include <string>
+
 TEST_CASE("mimo_asr_params: default values are sensible", "[unit][mimo_asr]") {
     struct mimo_asr_context_params p = mimo_asr_context_default_params();
 
@@ -36,4 +38,12 @@ TEST_CASE("mimo_asr_init_from_file: empty path returns nullptr", "[unit][mimo_as
 TEST_CASE("mimo_asr_free: NULL context is a no-op", "[unit][mimo_asr]") {
     mimo_asr_free(nullptr);
     SUCCEED("mimo_asr_free tolerated a NULL ctx.");
+}
+
+TEST_CASE("mimo_asr language tags match the upstream prompt contract", "[unit][mimo_asr]") {
+    REQUIRE(std::string(mimo_asr_language_tag(nullptr)).empty());
+    REQUIRE(std::string(mimo_asr_language_tag("")) == "");
+    REQUIRE(std::string(mimo_asr_language_tag("auto")) == "");
+    REQUIRE(std::string(mimo_asr_language_tag("en")) == "<english>");
+    REQUIRE(std::string(mimo_asr_language_tag("zh")) == "<chinese>");
 }

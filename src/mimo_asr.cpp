@@ -238,7 +238,8 @@ struct mimo_asr_context {
     int32_t id_eot = 151653;      // <|eot|>
     int32_t id_eostm = 151654;    // <|eostm|>
 
-    std::string ask; // custom instruction (empty = use default)
+    std::string ask;      // custom instruction (empty = use default)
+    std::string language; // en/zh bias; empty/auto = model-side detection
 
     int beam_size = 1; // 1 = greedy (default); >1 = beam search (§167f)
 };
@@ -1765,7 +1766,7 @@ static char* mimo_asr_transcribe_impl(struct mimo_asr_context* ctx, const float*
     add_text(!ctx->ask.empty() ? ctx->ask : std::string("Please transcribe this audio file"));
     add_text("<|im_end|>\n");
     add_text("<|im_start|>assistant\n");
-    add_text("<think>\n\n</think>\n<english>");
+    add_text(std::string("<think>\n\n</think>\n") + mimo_asr_language_tag(ctx->language.c_str()));
 
     std::vector<int> seg_lens;
     auto input_ids = mimo_asr_concat_segments(channels + 1, segments, seg_lens);
@@ -2001,6 +2002,21 @@ extern "C" void mimo_asr_set_n_threads(struct mimo_asr_context* ctx, int n_threa
 extern "C" void mimo_asr_set_ask(struct mimo_asr_context* ctx, const char* prompt) {
     if (ctx)
         ctx->ask = (prompt && prompt[0]) ? prompt : "";
+}
+
+extern "C" const char* mimo_asr_language_tag(const char* language) {
+    if (!language)
+        return "";
+    if (strcmp(language, "en") == 0)
+        return "<english>";
+    if (strcmp(language, "zh") == 0)
+        return "<chinese>";
+    return "";
+}
+
+extern "C" void mimo_asr_set_language(struct mimo_asr_context* ctx, const char* language) {
+    if (ctx)
+        ctx->language = (language && language[0]) ? language : "";
 }
 
 extern "C" void mimo_asr_set_beam_size(struct mimo_asr_context* ctx, int beam_size) {
