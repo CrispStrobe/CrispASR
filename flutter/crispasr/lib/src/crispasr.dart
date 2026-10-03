@@ -3998,6 +3998,7 @@ class CrispasrSession {
   ///
   /// For qwen3-tts a WAV reference requires [refText] (the transcription of
   /// the reference audio). For vibevoice only GGUF voice packs are supported.
+  /// For MioTTS pass a preset embedding GGUF; save PCM at [outputSampleRate].
   /// For orpheus voice selection is BY NAME — use [setSpeakerName] instead.
   void setVoice(String path, {String? refText}) {
     if (_closed) throw StateError('CrispasrSession is closed');

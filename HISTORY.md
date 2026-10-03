@@ -26,6 +26,7 @@ the tagged notes. Actual full CUDA 12.6/12.8 CLI/runtime/library archive pairing
 Wheel pipeline `37044712965` PASS 11/11, including index and PyPI publishing.
 Distribution receipt: `docs/release-v0.8.41-distribution.json`. Physical
 MX150/GTX1660 performance remains a reporter check; no forced-MMQ binary ships.
+
 ## DONE 2026-10-02 — MioTTS metadata rate, preset voices and request controls
 
 The public MioTTS v2 codec is 44.1 kHz; the CLI adapter and session ABI had

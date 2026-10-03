@@ -977,6 +977,7 @@ func (s *CrispasrSession) SetCodecPath(path string) error {
 // `refText` is required for qwen3-tts when `path` is a WAV; pass an empty
 // string otherwise.
 //
+// For MioTTS pass a preset embedding GGUF; save PCM at OutputSampleRate().
 // For orpheus voice selection is BY NAME — use SetSpeakerName instead.
 func (s *CrispasrSession) SetVoice(path, refText string) error {
 	cpath := C.CString(path)

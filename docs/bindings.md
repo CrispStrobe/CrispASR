@@ -22,6 +22,14 @@ All return `0` on a NULL/invalid session. Exposed as `output_sample_rate` /
 `inputChannels()` / `outputChannels()` (Java, C# `OutputSampleRate()` etc.),
 and `sessionOutputSampleRate()` etc. in the WASM/JS binding.
 
+For MioTTS, the output getter reads the loaded codec metadata: public MioCodec-v2
+models return 44100 Hz; missing legacy metadata defaults to 24000 Hz. Use the
+returned rate when saving or playing synthesized PCM. Load a preset embedding
+GGUF with `set_voice` / `SetVoice` / `setVoice`; sampling temperature and seed
+are forwarded to the native runtime. The Python getter is
+`session.output_sample_rate()`, Go uses `OutputSampleRate()`, and Dart exposes
+`outputSampleRate`.
+
 ## Session setter reference
 
 All generation-control setters are available in every binding. Each
