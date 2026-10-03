@@ -1,5 +1,14 @@
 # Index-Echo 9B mixed Q4_K investigation
 
+**Preparation is blocked; no Q4 candidate has passed GPU acceptance.** Corrected
+CPU run [37046153440](https://github.com/CrispStrobe/CrispASR/actions/runs/37046153440)
+produced a 5.05 GB plain decoder, then its upload commit failed with HTTP 400
+(private HF storage quota). Run 37044026371 was cancelled to correct source-F32
+guards. Private staging is a transfer choice, not a runtime requirement; do not
+retry the quota-limited route unchanged. GPU-only v2 has not been pushed. Its
+preparation revision/checksum remain unset until a successful producer run and
+artifact transfer.
+
 Build the CUDA bundle on GitHub. Run `tools/ci-heavy/index_echo_q4_prepare.py`
 through `heavy-cpu.yml` with the dedicated Index-Echo staging credential;
 quantization, physical audits and private uploads all run on that CPU runner.
@@ -21,7 +30,8 @@ punctuation, timestamps, cosine, magnitude or cache/token criteria:
 | `q4_k_ffn_guarded` | Q4 FFN gate/up, Q8 FFN down; all other matrices F16 |
 | `q4_k_middle` | Only FFN gate/up in layers 4–27 at Q4; all other matrices F16 |
 
-Per-tensor inventory and actual Q4 byte counts prevent a nominal Q4 artifact
+All 177 original F32 tensors, including 24 recurrent convolution matrices, must
+retain F32. Per-tensor inventory and actual Q4 byte counts prevent a nominal Q4 artifact
 from silently remaining F16. Separate candidate directories resolve the
 unchanged primary's original companion basename to the tested mixed decoder.
 Each decoder is uploaded immediately to the existing private staging repository
