@@ -7893,18 +7893,16 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             // mimo_asr returns null + logs to stderr if the tokenizer companion
             // wasn't set via crispasr_session_set_codec_path. We surface a clean
             // "no transcription" rather than hanging.
-            // ask > language instruction > default (mirrors crispasr_backend_mimo_asr.cpp).
+            // The user instruction and assistant language tag are independent,
+            // matching upstream MiMo's asr_sft prompt contract.
+            const std::string eff_lang = lang_set ? lang : s->source_language;
+            mimo_asr_set_language(s->mimo_asr_ctx, eff_lang.c_str());
             if (!s->ask.empty()) {
                 mimo_asr_set_ask(s->mimo_asr_ctx, s->ask.c_str());
+            } else if (eff_lang == "zh") {
+                mimo_asr_set_ask(s->mimo_asr_ctx, "请将这段语音转换为文字");
             } else {
-                const std::string eff_lang = lang_set ? lang : s->source_language;
-                if (!eff_lang.empty() && eff_lang != "auto") {
-                    const std::string instr =
-                        "Please transcribe this audio in " + ca_iso_to_english_lang(eff_lang) + ".";
-                    mimo_asr_set_ask(s->mimo_asr_ctx, instr.c_str());
-                } else {
-                    mimo_asr_set_ask(s->mimo_asr_ctx, nullptr);
-                }
+                mimo_asr_set_ask(s->mimo_asr_ctx, nullptr);
             }
             mimo_asr_set_max_new_tokens(s->mimo_asr_ctx, s->max_new_tokens); // #292
             mimo_asr_result* mr = mimo_asr_transcribe_with_probs(s->mimo_asr_ctx, pcm, n_samples);

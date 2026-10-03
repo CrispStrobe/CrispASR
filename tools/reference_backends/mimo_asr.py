@@ -11,8 +11,8 @@ Pipeline (see ref/mimo/github/src/mimo_audio/modeling_mimo_audio.py):
     → MiMo-Audio-Tokenizer encoder → 8-channel RVQ codes [T_a, 8] @ 25 fps
     → pad-to-multiple-of-group_size
     → asr_sft prompt template builder (process_speechdata.InputSegment):
-      [<|im_start|>user\\n] [audio segment] [asr_en_template] [<|im_end|>\\n]
-      [<|im_start|>assistant\\n] [<think>\\n\\n</think>\\n<english>]
+      [<|im_start|>user\\n] [audio segment] [ASR template] [<|im_end|>\\n]
+      [<|im_start|>assistant\\n] [<think>\\n\\n</think>\\n{optional language tag}]
       → input_ids [9, T_total] = (channel 0: text mostly <|empty|>;
                                   channels 1..8: audio codes per channel)
     → _prepare_input_embeds:
@@ -55,7 +55,7 @@ from MIMO_ASR_DIR (or `model_dir`).
 Environment:
   MIMO_TOKENIZER_DIR  — MiMo-Audio-Tokenizer HF snapshot (if not auto)
   MIMO_ASR_DIR        — MiMo-V2.5-ASR HF snapshot (defaults to model_dir)
-  MIMO_ASR_AUDIO_TAG  — language tag, default "<english>"
+  MIMO_ASR_AUDIO_TAG  — language tag, default empty (automatic detection)
   MIMO_ASR_MAX_NEW    — generated_text max_new_tokens (default 64)
 """
 
@@ -360,7 +360,7 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         if not tok_dir.is_dir():
             tok_dir = asr_dir
 
-    audio_tag = os.environ.get("MIMO_ASR_AUDIO_TAG", "<english>")
+    audio_tag = os.environ.get("MIMO_ASR_AUDIO_TAG", "")
     max_new = int(os.environ.get("MIMO_ASR_MAX_NEW", max_new_tokens or 64))
 
     print(f"  loading MiMo-V2.5-ASR LM from {asr_dir}")
@@ -430,11 +430,11 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
 
     # ---- 2. Build the asr_sft prompt and capture input_ids ----
     # Mirror the upstream `get_asr_sft_prompt` exactly. The only difference:
-    # we pin the template to `asr_en_templates[0]` for determinism (the
+    # we pin the matching template list to element 0 for determinism (the
     # upstream picks one at random, which would change the input_ids every
     # run). The C++ harness uses the same fixed template.
-    from src.mimo_audio.templates import asr_en_templates
-    template_str = asr_en_templates[0]
+    from src.mimo_audio.templates import asr_en_templates, asr_zh_templates
+    template_str = asr_zh_templates[0] if audio_tag == "<chinese>" else asr_en_templates[0]
 
     lm_prompt = [
         InputSegment(
