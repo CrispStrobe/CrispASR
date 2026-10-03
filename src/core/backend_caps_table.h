@@ -109,8 +109,9 @@ static const BackendCaps k_backend_caps[] = {
      "language,auto-download,parallel-processors"},
     {"mel-band-roformer", 5251072u, "auto-download,separate"},
     {"melotts", 65536u, "tts"},
-    {"mimo-asr", 272202u,
-     "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-native,auto-download"},
+    {"mimo-asr", 272218u,
+     "timestamps-ctc,token-confidence,language-detect,diarize,temperature,beam-search,flash-attn,punctuation-native,"
+     "auto-download"},
     {"mini-omni2", 2171136u, "temperature,auto-download,tts,s2s"},
     {"miotts", 65536u, "tts"},
     {"moonshine", 12106u,

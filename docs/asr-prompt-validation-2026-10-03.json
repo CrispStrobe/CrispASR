@@ -1,0 +1,108 @@
+{
+  "passed": true,
+  "source_commit": "6f27e8d36b73401b1b46fa6c16eed4e0b08dcd6e",
+  "model_pins": {
+    "qwen": [
+      "cstr/qwen3-asr-1.7b-GGUF",
+      "674df5d44b50a63e7102a18895ed20e3f91de301",
+      "qwen3-asr-1.7b-q8_0.gguf"
+    ],
+    "mimo": [
+      "cstr/mimo-asr-GGUF",
+      "e2d7dfebf0afd8076771903e92958039c5074eab",
+      "mimo-asr-q4_k.gguf"
+    ],
+    "codec": [
+      "cstr/mimo-tokenizer-GGUF",
+      "fa380f4c49a8e8c62c02c00d0da5e263fc5b0dcf",
+      "mimo-tokenizer-q4_k.gguf"
+    ],
+    "piper": [
+      "cstr/piper-en_US-lessac-medium-GGUF",
+      "6b3d385695cd2e91c1af9d37ca5684ee649e2e3d",
+      "piper-en_US-lessac-medium-f16.gguf"
+    ]
+  },
+  "qwen": {
+    "hello": {
+      "expected": "Hello.",
+      "transcripts": {
+        "off": "Hello.",
+        "on": "Hello.",
+        "cleared": "Hello."
+      },
+      "audio_sha256": "473057696b2a24a04c2698c1ab859e11d244a6ef83c9c811c55721e1ad6b1693",
+      "cli": "Hello."
+    },
+    "thanks": {
+      "expected": "Thank you.",
+      "transcripts": {
+        "off": "Thank you.",
+        "on": "Thank you.",
+        "cleared": "Thank you."
+      },
+      "audio_sha256": "e40c6e10898b2ceff3b64a1cf537d8e72cdf3612ef6afe9b1b1bf26643947873",
+      "cli": "Thank you."
+    },
+    "fox": {
+      "expected": "The quick brown fox jumps over the lazy dog.",
+      "transcripts": {
+        "off": "The quick brown fox jumps over the lazy dog.",
+        "on": "The quick brown fox jumps over the lazy dog.",
+        "cleared": "The quick brown fox jumps over the lazy dog."
+      },
+      "audio_sha256": "2922b7cd5360b373a650d8bf1ea39de16aa3d49e7a44cdec5f350d46c15556ff",
+      "cli": "The quick brown fox jumps over the lazy dog."
+    }
+  },
+  "mimo": {
+    "jfk-en": {
+      "abi": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+      "language": "en",
+      "audio_sha256": "71614bdbf09447be92877b4629b12d9e7c915775af963886dc36e1f6d31693ce",
+      "cli": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
+    },
+    "jfk-auto": {
+      "abi": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+      "language": "auto",
+      "audio_sha256": "71614bdbf09447be92877b4629b12d9e7c915775af963886dc36e1f6d31693ce",
+      "cli": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
+    },
+    "zh-zh": {
+      "abi": "开放时间早上九点至下午五点",
+      "language": "zh",
+      "audio_sha256": "9606d246ae977781b16ec8cf99be3c1347407b29c443cfb8fbd086280d588f90",
+      "cli": "开放时间早上九点至下午五点"
+    },
+    "zh-auto": {
+      "abi": "开放时间早上九点至下午五点",
+      "language": "auto",
+      "audio_sha256": "9606d246ae977781b16ec8cf99be3c1347407b29c443cfb8fbd086280d588f90",
+      "cli": "开放时间早上九点至下午五点"
+    }
+  },
+  "scope": "CPU; synthetic short clips, JFK and SenseVoice Chinese sample; no Vulkan claim",
+  "run_url": "https://github.com/CrispStrobe/CrispASR/actions/runs/37120330648",
+  "unit_tests": {
+    "prompt_contract": {
+      "assertions": 17,
+      "cases": 3
+    },
+    "mimo_params": {
+      "assertions": 12,
+      "cases": 6
+    }
+  },
+  "glint": {
+    "dry_run_url": "https://github.com/CrispStrobe/CrispASR/actions/runs/37120211560",
+    "upstream_sha": "77738f3ed9b15f627196cc5bbd7f6406814ba2fb",
+    "provenance_assertions": 48,
+    "provenance_cases": 13,
+    "log_sha256": "20de65a6b33abd6b3a50beaee3c71bedaa6b908ab405499e3108a40399439088"
+  },
+  "limitations": [
+    "Reporter six Windows/Vulkan recordings were unavailable; CPU synthetic short clips cover the ABI regression.",
+    "MiMo numeric layers unchanged; this receipt covers prompt and decoded-output parity, not new stage cosine measurements.",
+    "Glint dry run proves authentication, sync and provenance; no changed upstream files required a push or CI dispatch."
+  ]
+}
