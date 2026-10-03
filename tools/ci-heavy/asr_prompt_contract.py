@@ -21,7 +21,7 @@ PINS = {
     'qwen': ('cstr/qwen3-asr-1.7b-GGUF', '674df5d44b50a63e7102a18895ed20e3f91de301', 'qwen3-asr-1.7b-q8_0.gguf'),
     'mimo': ('cstr/mimo-asr-GGUF', 'e2d7dfebf0afd8076771903e92958039c5074eab', 'mimo-asr-q4_k.gguf'),
     'codec': ('cstr/mimo-tokenizer-GGUF', 'fa380f4c49a8e8c62c02c00d0da5e263fc5b0dcf', 'mimo-tokenizer-q4_k.gguf'),
-    'piper': ('cstr/piper-en_US-lessac-medium-GGUF', '6b3d385695cd2e91c1af9d37ca5684ee649e2e3d', 'piper-en_US-lessac-medium.gguf'),
+    'piper': ('cstr/piper-en_US-lessac-medium-GGUF', '6b3d385695cd2e91c1af9d37ca5684ee649e2e3d', 'piper-en_US-lessac-medium-f16.gguf'),
 }
 
 
@@ -50,7 +50,7 @@ for source in ['docs/feature-matrix.md', 'docs/feature-matrix.html', 'src/core/b
     shutil.copy2(ROOT / source, OUT / Path(source).name)
 run(['cmake', '--build', build, '--target', 'crispasr-lib', '-j4'], 'abi-capabilities')
 run(['sudo', 'apt-get', 'update'], 'apt-update')
-run(['sudo', 'apt-get', 'install', '-y', 'ffmpeg'], 'ffmpeg-install')
+run(['sudo', 'apt-get', 'install', '-y', 'ffmpeg', 'espeak-ng'], 'ffmpeg-install')
 from huggingface_hub import hf_hub_download
 import numpy as np
 sys.path.insert(0, str(ROOT / 'python'))
@@ -84,7 +84,8 @@ piper = download('piper')
 shorts = {'hello': 'Hello.', 'thanks': 'Thank you.', 'fox': 'The quick brown fox jumps over the lazy dog.'}
 for name, text in shorts.items():
     raw, audio = OUT / (name + '-raw.wav'), OUT / (name + '.wav')
-    run([cli, '--backend', 'piper', '-m', piper, '-ng', '--tts', text, '--tts-output', raw], 'piper-' + name)
+    run([cli, '--backend', 'piper', '-m', piper, '-ng', '-l', 'en', '--seed', '1234', '--no-spoken-disclaimer',
+         '--accept-marking-responsibility', '--tts', text, '--tts-output', raw], 'piper-' + name)
     run(['ffmpeg', '-y', '-i', raw, '-ar', '16000', '-ac', '1', audio], 'resample-' + name)
 qwen = download('qwen')
 with Session(str(qwen), lib_path=str(lib), backend='qwen3', n_threads=4) as session:

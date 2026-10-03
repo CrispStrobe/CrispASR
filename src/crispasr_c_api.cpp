@@ -5814,6 +5814,8 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
     // up through the existing ask-prompt injection. Parakeet CTC/TDT
     // hotwords are applied directly via parakeet_set_hotwords() in
     // crispasr_session_set_hotwords() — no ask-prompt injection needed.
+    // Qwen3 follows the CLI system-turn hint so hotwords never suppress its
+    // forced-language assistant prefill (#488).
     const bool qwen3_system_hotwords = s->backend == "qwen3";
     const bool hotwords_in_ask = !s->hotwords.empty() && !qwen3_system_hotwords;
     std::string saved_ask;
