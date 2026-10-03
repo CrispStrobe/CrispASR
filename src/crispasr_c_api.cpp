@@ -48,6 +48,7 @@
 #include <vector>
 
 #include "crispasr.h"
+#include "core/qwen3_prompt.h"
 #include "core/backend_caps_table.h" // #433: backend -> verb lookup
 #include "crispasr_vad.h"            // VAD slicing + stitching (shared with CLI)
 #include "crispasr_diarize.h"        // Speaker diarization (shared with CLI)
@@ -5813,8 +5814,10 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
     // up through the existing ask-prompt injection. Parakeet CTC/TDT
     // hotwords are applied directly via parakeet_set_hotwords() in
     // crispasr_session_set_hotwords() — no ask-prompt injection needed.
+    const bool qwen3_system_hotwords = s->backend == "qwen3";
+    const bool hotwords_in_ask = !s->hotwords.empty() && !qwen3_system_hotwords;
     std::string saved_ask;
-    if (!s->hotwords.empty()) {
+    if (hotwords_in_ask) {
         saved_ask = s->ask;
         const std::string hw_hint = "The following words may appear in the audio: " + s->hotwords + ". ";
         s->ask = s->ask.empty() ? hw_hint : hw_hint + s->ask;
@@ -5828,7 +5831,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             if (active)
                 s->ask = std::move(*saved);
         }
-    } ask_guard{s, &saved_ask, !s->hotwords.empty()};
+    } ask_guard{s, &saved_ask, hotwords_in_ask};
 
     auto* r = new crispasr_session_result();
     r->backend = s->backend;
@@ -6726,17 +6729,8 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
                     assistant_prefill = "language " + ca_iso_to_english_lang(eff_lang) + "<asr_text>";
             }
         }
-        std::string text = "<|im_start|>system\n" + sys_instruction + "<|im_end|>\n<|im_start|>user\n<|audio_start|>";
-        text.reserve(text.size() + (size_t)N_enc * 13 + 64 + s->ask.size());
-        for (int i = 0; i < N_enc; i++)
-            text += "<|audio_pad|>";
-        text += "<|audio_end|>";
-        if (!s->ask.empty()) {
-            text += '\n';
-            text += s->ask;
-        }
-        text += "<|im_end|>\n<|im_start|>assistant\n";
-        text += assistant_prefill;
+        std::string text = core_qwen3_prompt::build(N_enc, sys_instruction, s->ask, assistant_prefill,
+                                                    qwen3_system_hotwords ? s->hotwords : "");
         if (raon) { // RaonPipeline.stt; --ask replaces the instruction
             const std::string eff_lang = lang_set ? lang : s->source_language;
             static bool warned = false;
@@ -7897,13 +7891,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             // matching upstream MiMo's asr_sft prompt contract.
             const std::string eff_lang = lang_set ? lang : s->source_language;
             mimo_asr_set_language(s->mimo_asr_ctx, eff_lang.c_str());
-            if (!s->ask.empty()) {
-                mimo_asr_set_ask(s->mimo_asr_ctx, s->ask.c_str());
-            } else if (eff_lang == "zh") {
-                mimo_asr_set_ask(s->mimo_asr_ctx, "请将这段语音转换为文字");
-            } else {
-                mimo_asr_set_ask(s->mimo_asr_ctx, nullptr);
-            }
+            mimo_asr_set_ask(s->mimo_asr_ctx, s->ask.c_str());
             mimo_asr_set_max_new_tokens(s->mimo_asr_ctx, s->max_new_tokens); // #292
             mimo_asr_result* mr = mimo_asr_transcribe_with_probs(s->mimo_asr_ctx, pcm, n_samples);
             if (mr && mr->text) {

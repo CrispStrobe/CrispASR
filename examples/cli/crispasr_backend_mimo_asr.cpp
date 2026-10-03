@@ -53,13 +53,7 @@ std::string discover_audio_tokenizer(const std::string& model_path) {
 
 void configure_prompt(mimo_asr_context* ctx, const whisper_params& params) {
     mimo_asr_set_language(ctx, params.language.c_str());
-    if (!params.ask.empty()) {
-        mimo_asr_set_ask(ctx, params.ask.c_str());
-    } else if (params.language == "zh") {
-        mimo_asr_set_ask(ctx, "请将这段语音转换为文字");
-    } else {
-        mimo_asr_set_ask(ctx, nullptr);
-    }
+    mimo_asr_set_ask(ctx, params.ask.c_str());
 }
 
 class MimoAsrBackend : public CrispasrBackend {

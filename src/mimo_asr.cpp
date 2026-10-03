@@ -37,6 +37,7 @@
 //     qwen3-asr / gemma4-e2b.
 
 #include "mimo_asr.h"
+#include "core/mimo_prompt.h"
 
 #include "core/attention.h"
 #include "core/bpe.h"
@@ -1763,7 +1764,7 @@ static char* mimo_asr_transcribe_impl(struct mimo_asr_context* ctx, const float*
     add_text("<|im_start|>user\n");
     segments.push_back(mimo_asr_build_audio_segment(ctx, codes, n_frames));
     free(codes);
-    add_text(!ctx->ask.empty() ? ctx->ask : std::string("Please transcribe this audio file"));
+    add_text(core_mimo_prompt::instruction(ctx->language, ctx->ask));
     add_text("<|im_end|>\n");
     add_text("<|im_start|>assistant\n");
     add_text(std::string("<think>\n\n</think>\n") + mimo_asr_language_tag(ctx->language.c_str()));
@@ -2005,13 +2006,7 @@ extern "C" void mimo_asr_set_ask(struct mimo_asr_context* ctx, const char* promp
 }
 
 extern "C" const char* mimo_asr_language_tag(const char* language) {
-    if (!language)
-        return "";
-    if (strcmp(language, "en") == 0)
-        return "<english>";
-    if (strcmp(language, "zh") == 0)
-        return "<chinese>";
-    return "";
+    return core_mimo_prompt::language_tag(language);
 }
 
 extern "C" void mimo_asr_set_language(struct mimo_asr_context* ctx, const char* language) {

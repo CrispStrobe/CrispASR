@@ -11,8 +11,8 @@ name: Sync glint
 #
 # A sync commit is only pushed after the MP3/AAC provenance unit tests
 # pass against the new sources. Note: pushes made with the default
-# GITHUB_TOKEN do not trigger the full CI workflow — set a GLINT_SYNC_PAT
-# secret in this repo if you want sync commits to run CI too.
+# GITHUB_TOKEN do not trigger push workflows; dispatch CI explicitly after
+# pushing. Checkout and push use the built-in token, independent of old PATs.
 
 on:
   repository_dispatch:
@@ -20,6 +20,11 @@ on:
   schedule:
     - cron: '17 4 * * *'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Sync and test without committing or pushing"
+        type: boolean
+        default: false
 
 concurrency:
   group: ${{ github.workflow }}
@@ -27,6 +32,7 @@ concurrency:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   sync:
@@ -35,8 +41,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: main
-          token: ${{ secrets.GLINT_SYNC_PAT || github.token }}
+          ref: ${{ github.event_name == 'workflow_dispatch' && github.ref || 'refs/heads/main' }}
 
       - name: Sync glint/ from upstream committed state
         run: ./tools/sync-glint.sh
@@ -52,18 +57,18 @@ jobs:
           fi
 
       - name: Install dependencies
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.diff.outputs.changed == 'true' || inputs.dry_run
         run: sudo apt-get update && sudo apt-get install -y cmake g++
 
       - name: Build + run MP3/AAC provenance tests
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.diff.outputs.changed == 'true' || inputs.dry_run
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_NATIVE=OFF
           cmake --build build --target test_tts_provenance -j $(nproc)
           ./build/bin/test_tts_provenance "[mp3],[aac]"
 
       - name: Commit and push
-        if: steps.diff.outputs.changed == 'true'
+        if: steps.diff.outputs.changed == 'true' && !inputs.dry_run
         run: |
           sha="$(sed -n 's/.*Synced at upstream commit: `\([0-9a-f]*\)`.*/\1/p' glint/README.md)"
           subject="$(sed -n 's/.*Synced at upstream commit: `[0-9a-f]*` (\(.*\))\..*/\1/p' glint/README.md)"
@@ -77,3 +82,9 @@ jobs:
           # "cannot pull with rebase: You have unstaged changes".
           git pull --rebase --autostash origin main
           git push origin main
+
+      - name: Run CI on the synced commit
+        if: steps.diff.outputs.changed == 'true' && !inputs.dry_run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run ci.yml --ref main

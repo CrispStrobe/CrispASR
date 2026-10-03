@@ -11,6 +11,7 @@
 // CrispasrBackend interface.
 
 #include "crispasr_backend.h"
+#include "core/qwen3_prompt.h"
 #include "crispasr_backend_utils.h"
 #include "whisper_params.h"
 #include "core/bpe.h"
@@ -184,22 +185,7 @@ public:
                 assistant_prefill = "language " + crispasr_iso_to_english_lang(params.language) + "<asr_text>";
         }
         // PLAN #98 Phase B: hotword prompt injection
-        if (!params.hotwords.empty()) {
-            if (!sys_instruction.empty() && sys_instruction.back() != ' ')
-                sys_instruction += ' ';
-            sys_instruction += "The following words may appear in the audio: " + params.hotwords + ".";
-        }
-
-        std::string text = "<|im_start|>system\n" + sys_instruction +
-                           "<|im_end|>\n"
-                           "<|im_start|>user\n"
-                           "<|audio_start|>";
-        text.reserve(text.size() + (size_t)N_enc * 13 + 64);
-        for (int i = 0; i < N_enc; i++)
-            text += "<|audio_pad|>";
-        text += "<|audio_end|><|im_end|>\n"
-                "<|im_start|>assistant\n";
-        text += assistant_prefill;
+        std::string text = core_qwen3_prompt::build(N_enc, sys_instruction, "", assistant_prefill, params.hotwords);
         if (raon_) {
             warn_raon_ignored_flags(params);
             text = raon_prompt(N_enc, params.ask);
@@ -582,20 +568,7 @@ public:
             else
                 assistant_prefill = "language " + crispasr_iso_to_english_lang(params.language) + "<asr_text>";
         }
-        if (!params.hotwords.empty()) {
-            if (!sys_instruction.empty() && sys_instruction.back() != ' ')
-                sys_instruction += ' ';
-            sys_instruction += "The following words may appear in the audio: " + params.hotwords + ".";
-        }
-
-        std::string text = "<|im_start|>system\n" + sys_instruction +
-                           "<|im_end|>\n"
-                           "<|im_start|>user\n"
-                           "<|audio_start|>";
-        for (int i = 0; i < N_enc; i++)
-            text += "<|audio_pad|>";
-        text += "<|audio_end|><|im_end|>\n<|im_start|>assistant\n";
-        text += assistant_prefill;
+        std::string text = core_qwen3_prompt::build(N_enc, sys_instruction, "", assistant_prefill, params.hotwords);
         if (raon_) {
             warn_raon_ignored_flags(params);
             text = raon_prompt(N_enc, params.ask);

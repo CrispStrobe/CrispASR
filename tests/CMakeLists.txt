@@ -6102,3 +6102,9 @@ if (Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES AND BUILD_SHARED_LIBS
     set_tests_properties(phonon2-live PROPERTIES LABELS live SKIP_RETURN_CODE 77
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}" TIMEOUT 600)
 endif()
+
+# Weight-free guards for the prompt contracts used by the ABI and CLI.
+add_executable(test-asr-prompt-contract test-asr-prompt-contract.cpp)
+target_include_directories(test-asr-prompt-contract PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-asr-prompt-contract PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-asr-prompt-contract TEST_SPEC "[unit]" PROPERTIES LABELS "unit;asr-prompt")

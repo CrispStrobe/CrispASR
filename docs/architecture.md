@@ -692,6 +692,12 @@ into `~/.cache/crispasr/`; the runtime auto-discovers
 `mimo-tokenizer-q4_k.gguf` next to the LM. Override with `--codec-model
 PATH/mimo-tokenizer-q4_k.gguf` if you keep the tokenizer elsewhere.
 
+MiMo uses its own language detection for `-l auto`, without an external
+Whisper language detector. `-l en` and `-l zh` select the upstream English
+and Chinese instructions and assistant tags. `--ask` replaces the instruction
+while preserving an explicitly selected language bias. Native callers use
+`mimo_asr_set_language()` and `mimo_asr_set_ask()` independently.
+
 ### ark-asr
 
 > ⚠️ **Experimental / WIP.** Validated verbatim on English + German (Q8_0, on
