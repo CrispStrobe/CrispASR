@@ -31,6 +31,8 @@ struct mimo_tokenizer_context_params {
     int n_threads;
     int verbosity; // 0=silent, 1=normal, 2=verbose
     bool use_gpu;
+    // Mirrored from the owning MiMo-ASR context. false selects eager attention.
+    bool flash_attn;
 };
 
 struct mimo_tokenizer_context_params mimo_tokenizer_context_default_params(void);

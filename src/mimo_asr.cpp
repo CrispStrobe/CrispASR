@@ -254,12 +254,26 @@ static float mimo_kv_f32(gguf_context* ctx, const char* key, float def) {
     return id >= 0 ? gguf_get_val_f32(ctx, id) : def;
 }
 
+static bool mimo_embed_tensors_are_f16(gguf_context* gctx) {
+    static const char* const names[] = {
+        "llm.embed.weight",   "audio.emb.0.weight", "audio.emb.1.weight", "audio.emb.2.weight", "audio.emb.3.weight",
+        "audio.emb.4.weight", "audio.emb.5.weight", "audio.emb.6.weight", "audio.emb.7.weight",
+    };
+    for (const char* name : names) {
+        const int64_t id = gguf_find_tensor(gctx, name);
+        if (id < 0 || gguf_get_tensor_type(gctx, id) != GGML_TYPE_F16)
+            return false;
+    }
+    return true;
+}
+
 extern "C" struct mimo_asr_context_params mimo_asr_context_default_params(void) {
     mimo_asr_context_params p{};
     p.n_threads = 4;
     p.verbosity = 1;
     p.use_gpu = true;
     p.temperature = 0.0f;
+    p.flash_attn = true;
     return p;
 }
 
@@ -326,6 +340,7 @@ extern "C" struct mimo_asr_context* mimo_asr_init_from_file(const char* path_mod
                 ctx->merge_rank.emplace(s, (int32_t)i);
         }
     }
+    const bool f16_embed_tensors = mimo_embed_tensors_are_f16(gctx);
     gguf_free(gctx);
 
     // Resolve special-token ids from the vocab. Defaults match MiMo's
@@ -420,18 +435,19 @@ extern "C" struct mimo_asr_context* mimo_asr_init_from_file(const char* path_mod
         }
         fprintf(stderr, "mimo_asr: layer offload requested but pinned to CPU (PLAN #115 — GPU path broken)\n");
     } else if (ctx->backend && ctx->backend != ctx->backend_cpu) {
-        // PLAN #115 option C: CUDA's get_rows cannot gather Q4_K (ggml-cuda
-        // GET_ROWS supports_op lists F16/F32/Q4_0/Q5_0/Q8_0 — NOT Q4_K), and
-        // mimo's `llm.embed.weight` + `audio.emb.*` are Q4_K. If those sit on
-        // the GPU, the sched routes their get_rows to the CPU backend, which
-        // dequantizes a GPU pointer → SIGSEGV (`dequantize_row_q4_K`, the P100
-        // crash). So keep exactly those get_rows'd embedding tables on CPU;
-        // every other (matmul) weight stays GPU-resident for the speedup. The
-        // small embed output is copied GPU-ward by the sched.
-        auto is_gpu_weight = [](const char* n, void*) -> bool {
-            return !(std::strstr(n, "embed") || std::strstr(n, "audio.emb"));
+        // Q4_K embedding tables stay on CPU: CUDA cannot gather them, and the
+        // scheduler then tries to dequantize a GPU pointer on the CPU. CANN
+        // supports F16 GET_ROWS, so the nine MiMo embedding tables are placed
+        // on CANN only when metadata proves every one is F16. The explicit
+        // override keeps the CPU split available for recovery and A/B testing.
+        const char* backend_name = ggml_backend_name(ctx->backend);
+        bool cann_f16_embeds = backend_name && std::strstr(backend_name, "CANN") && f16_embed_tensors &&
+                               !crispasr_env::truthy("CRISPASR_MIMO_EMBED_CPU");
+        auto is_gpu_weight = [](const char* n, void* user) -> bool {
+            const bool keep_f16_embeds_on_gpu = *static_cast<const bool*>(user);
+            return keep_f16_embeds_on_gpu || !(std::strstr(n, "embed") || std::strstr(n, "audio.emb"));
         };
-        if (!core_gguf::load_weights_split(path_model, ctx->backend, ctx->backend_cpu, is_gpu_weight, nullptr,
+        if (!core_gguf::load_weights_split(path_model, ctx->backend, ctx->backend_cpu, is_gpu_weight, &cann_f16_embeds,
                                            "mimo_asr", wl)) {
             fprintf(stderr, "mimo_asr: GPU split load failed from '%s'\n", path_model);
             delete ctx;
@@ -652,7 +668,7 @@ struct AudioGraphIO {
 
 static ggml_tensor* build_input_local_block(ggml_context* ctx0, ggml_cgraph* gf, ggml_tensor* x,
                                             const mimo_asr_qwen2_block& b, const mimo_asr_hp& hp, int n_groups,
-                                            int group_size, ggml_tensor* positions) {
+                                            int group_size, ggml_tensor* positions, bool eager_attn) {
     (void)gf; // accepted for symmetry with helpers that need it for set_rows
     // x : [audio_dim, group_size, n_groups]
     // `positions` is a shared 1D I32 tensor of length group_size, set by
@@ -697,10 +713,19 @@ static ggml_tensor* build_input_local_block(ggml_context* ctx0, ggml_cgraph* gf,
     K = ggml_cont(ctx0, ggml_permute(ctx0, K, 0, 2, 1, 3));
     V = ggml_cont(ctx0, ggml_permute(ctx0, V, 0, 2, 1, 3));
 
-    // ggml_flash_attn_ext expects (hd, T, n_h, B). We have exactly that.
-    // mask=nullptr → bidirectional, attends within each (n_h, B) slice
-    // across T positions. The "B" dim here is ng (per-group batch).
-    ggml_tensor* attn = ggml_flash_attn_ext(ctx0, Q, K, V, /*mask*/ nullptr, scale, 0.0f, 0.0f);
+    ggml_tensor* attn;
+    if (eager_attn) {
+        ggml_tensor* scores = ggml_mul_mat(ctx0, K, Q);
+        ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
+        scores = ggml_soft_max_ext(ctx0, scores, /*mask*/ nullptr, scale, 0.0f);
+        ggml_tensor* Vt = ggml_cont(ctx0, ggml_transpose(ctx0, V));
+        attn = ggml_mul_mat(ctx0, Vt, scores);
+        attn = ggml_cont(ctx0, ggml_permute(ctx0, attn, 0, 2, 1, 3));
+    } else {
+        // ggml_flash_attn_ext expects (hd, T, n_h, B). We have exactly that.
+        // mask=nullptr → bidirectional, attends within each (n_h, B) slice.
+        attn = ggml_flash_attn_ext(ctx0, Q, K, V, /*mask*/ nullptr, scale, 0.0f, 0.0f);
+    }
     // attn: (hd, n_h, T=gs, B=ng) ?  Actually flash_attn_ext output is
     // (hd, n_h, T, B) per ggml convention. Reshape to [d, gs*ng].
     attn = ggml_reshape_2d(ctx0, attn, hd * n_h, gs * ng);
@@ -795,7 +820,7 @@ static ggml_cgraph* mimo_asr_build_prefill_graph(mimo_asr_context* ctx, int T_gr
 
     // 6L input_local_transformer (full bidirectional, per-group).
     for (uint32_t il = 0; il < hp.audio_layers; il++) {
-        x = build_input_local_block(ctx0, gf, x, m.audio.blocks[il], hp, T, gs, ilt_positions);
+        x = build_input_local_block(ctx0, gf, x, m.audio.blocks[il], hp, T, gs, ilt_positions, !ctx->params.flash_attn);
     }
     // Final audio.norm RMSNorm (matches upstream
     // input_local_transformer.norm of the Qwen2Model trunk).
@@ -888,7 +913,7 @@ static ggml_cgraph* mimo_asr_build_prefill_graph(mimo_asr_context* ctx, int T_gr
         ggml_set_name(causal_mask, "lm_causal_mask");
     }
 
-    const core_attn::KvSelfAttnParams kvp = {
+    core_attn::KvSelfAttnParams kvp = {
         /*n_heads*/ n_q,
         /*n_kv_heads*/ n_kv,
         /*head_dim*/ hd,
@@ -901,6 +926,7 @@ static ggml_cgraph* mimo_asr_build_prefill_graph(mimo_asr_context* ctx, int T_gr
         /*qk_norm_eps*/ eps,
         /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
     };
+    kvp.eager_f32_attn = !ctx->params.flash_attn;
 
     ggml_tensor* cur = inputs_embeds;
     for (uint32_t il = 0; il < hp.llm_layers; il++) {
@@ -1017,7 +1043,7 @@ static ggml_cgraph* mimo_asr_build_step_graph(mimo_asr_context* ctx, int n_past,
     GGML_ASSERT(n_past + T <= ctx->kv_max_ctx);
     GGML_ASSERT(Lk <= ctx->kv_max_ctx);
 
-    const core_attn::KvSelfAttnParams kvp = {
+    core_attn::KvSelfAttnParams kvp = {
         /*n_heads*/ n_q,
         /*n_kv_heads*/ n_kv,
         /*head_dim*/ hd,
@@ -1030,6 +1056,7 @@ static ggml_cgraph* mimo_asr_build_step_graph(mimo_asr_context* ctx, int n_past,
         /*qk_norm_eps*/ eps,
         /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
     };
+    kvp.eager_f32_attn = !ctx->params.flash_attn;
 
     // When fixed_kv_len is set, hand `positions` to kv_self_attn as the
     // kv_indices tensor — it scatters K/V via ggml_set_rows keyed by the
@@ -1724,6 +1751,7 @@ static char* mimo_asr_transcribe_impl(struct mimo_asr_context* ctx, const float*
         auto tp = mimo_tokenizer_context_default_params();
         tp.n_threads = ctx->n_threads;
         tp.use_gpu = ctx->params.use_gpu;
+        tp.flash_attn = ctx->params.flash_attn;
         tp.verbosity = ctx->params.verbosity;
         ctx->tokenizer = mimo_tokenizer_init_from_file(ctx->tokenizer_path.c_str(), tp);
         if (!ctx->tokenizer) {
