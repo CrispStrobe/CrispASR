@@ -435,13 +435,32 @@ Recogniser measurements, 2026-10-05/06 on an M1 (16 GB, Metal), the same clip.
   streaming mode under load 7–19. Its `<de-DE>` language-tag tokens are now
   stripped from text, word lists and the session stream.
 
+### One model instead of two: hikari (English speech → de / ja / ru)
+
+`sbintuitions/hikari-medium` (MIT) translates straight from audio and decides
+every 80 ms whether to emit the next word or wait, so text appears while the
+speaker talks — no recogniser, no sentence commits, no drafts:
+
+```bash
+crispasr --stream --backend hikari -m auto -l en --tr-tl de   # live, mic or stdin
+crispasr --backend hikari -m auto -l en -tl ja -f talk.wav    # a file
+```
+
+`-m auto` fetches `cstr/hikari-medium-GGUF` (f16, 1.5 GB) and the Silero VAD
+it needs: Silero's speech probability raises the policy's wait penalty, and
+without it the model hardly ever emits. The f16 equals the reference
+implementation (161/161 stream steps on jfk); q8_0 (`-m auto:q8_0`, 873 MB)
+changed one German sentence of a 27 s clip on Metal. **Not real time yet on
+an M1**: 1.8 s per audio-second on Metal (encoder 87 ms + decoder 58 ms per
+80 ms step). English speech only; for German speech use the pipeline above.
+
 Other models people ask about (Hugging Face tags `speech-translation`,
 `streaming-translation`, `simultaneous-translation`, looked at 2026-10-05,
 none of these run here unless stated):
 
-- `sbintuitions/hikari-medium` — causal-Whisper simultaneous speech
-  translation, **English speech only** (→ ja/ru/de) plus English streaming
-  ASR. The right kind of model for English→German; needs a backend port.
+- `sbintuitions/hikari-medium` — **runs here** (`--backend hikari`, see
+  below): causal-Whisper simultaneous speech translation, English speech
+  only (→ de/ja/ru), plus English ASR.
 - `netease-youdao/Confucius4-T3PO` — append-only streaming text translation
   with KV-cache reuse, the ideal protocol for this mode; Qwen2.5-14B, zh↔en,
   smallest GGUF 10.5 GB.

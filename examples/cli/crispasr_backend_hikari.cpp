@@ -144,7 +144,21 @@ public:
             whisper_params vp = p;
             vp.vad = true;
             const char* env_vad = std::getenv("HIKARI_VAD_MODEL");
-            const std::string path = (env_vad && *env_vad) ? std::string(env_vad) : crispasr_resolve_vad_model(vp);
+            // HIKARI_VAD_MODEL, the Silero file next to the model (where -m auto
+            // puts it, as the C API also looks), else the usual VAD resolution.
+            std::string near;
+            {
+                const size_t cut = p.model.find_last_of("/\\");
+                near =
+                    (cut == std::string::npos ? std::string(".") : p.model.substr(0, cut)) + "/ggml-silero-v6.2.0.bin";
+                if (FILE* f = std::fopen(near.c_str(), "rb"))
+                    std::fclose(f);
+                else
+                    near.clear();
+            }
+            const std::string path = (env_vad && *env_vad) ? std::string(env_vad)
+                                     : !near.empty()       ? near
+                                                           : crispasr_resolve_vad_model(vp);
             whisper_vad_context_params vcp = whisper_vad_default_context_params();
             vcp.n_threads = 1;
             vad_.vctx = path.empty() ? nullptr : whisper_vad_init_from_file_with_params(path.c_str(), vcp);
