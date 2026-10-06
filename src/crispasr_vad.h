@@ -148,6 +148,22 @@ std::vector<crispasr_audio_slice> crispasr_compute_vad_slices(const float* sampl
                                                               const crispasr_vad_options& opts,
                                                               bool* out_load_failed = nullptr);
 
+// Incremental VAD for a live stream (Silero only). Each call scores only the
+// complete 32 ms frames that arrived since the previous call, continuing the
+// detector's recurrent state, instead of re-scoring the whole window from a
+// reset state; segments are then cut from the cached probabilities over
+// [max(from_sample, window_start), end of scored audio). `window` holds the
+// absolute samples [window_start, window_start + n_window_samples); slices
+// come back relative to it, as crispasr_compute_vad_slices over the window
+// would return them. Returns false when this VAD model is not Silero or
+// cannot be loaded — the caller then uses crispasr_compute_vad_slices.
+struct crispasr_stream_vad;
+crispasr_stream_vad* crispasr_stream_vad_new();
+void crispasr_stream_vad_free(crispasr_stream_vad* st);
+bool crispasr_stream_vad_slices(crispasr_stream_vad* st, const float* window, int n_window_samples,
+                                int64_t window_start, int64_t from_sample, int sample_rate, const char* vad_model_path,
+                                const crispasr_vad_options& opts, std::vector<crispasr_audio_slice>& out);
+
 // Same shape as above but without VAD: returns fixed `chunk_seconds` windows
 // (one slice covering the whole buffer when it's shorter than a chunk).
 // Useful as a fallback when no VAD model is available.
