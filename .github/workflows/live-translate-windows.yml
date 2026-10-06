@@ -1,0 +1,89 @@
+name: Live Translate Windows
+
+# Runs the --stream live transcription + translation path on Windows, where it
+# is otherwise only compiled: binary stdin, the PeekNamedPipe catch-up probe
+# behind --stream-realtime, and UTF-8 text on the command line.
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/live-translate-windows.yml'
+      - 'tests/live-translate-smoke.py'
+      - 'examples/cli/crispasr_run.cpp'
+      - 'examples/cli/crispasr_live_translate.h'
+      - 'examples/cli/crispasr_live_translate_sink.h'
+      - 'src/m2m100.cpp'
+      - 'src/core/marian_tokenizer.h'
+
+# One run per workflow per branch: a newer push cancels the older run. On
+# main nothing is cancelled (every main commit keeps its verdict).
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
+jobs:
+  # Cheap gate: on a branch push, run the heavy job only when the BRANCH ITSELF
+  # changes a watched path (vs its merge-base with main). See the script's header.
+  scope:
+    runs-on: ubuntu-latest
+    outputs:
+      relevant: ${{ steps.scope.outputs.relevant }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        run: |
+          if [ "${{ github.event_name }}" != "push" ] || [ "${{ github.ref }}" = "refs/heads/main" ]; then
+            echo "relevant=true" >> "$GITHUB_OUTPUT"
+          else
+            git fetch --no-tags origin main || true   # no base -> script answers true
+            python3 .github/scripts/branch_touches_paths.py "$GITHUB_WORKFLOW_REF_PATH" origin/main >> "$GITHUB_OUTPUT" \
+              || echo "relevant=true" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GITHUB_WORKFLOW_REF_PATH: .github/workflows/live-translate-windows.yml
+
+  stream-en-de:
+    needs: scope
+    if: needs.scope.outputs.relevant == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Build portable CPU CLI
+        shell: pwsh
+        run: |
+          cmake -S . -B build -G Ninja `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DGGML_NATIVE=OFF -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON
+          cmake --build build --target crispasr-cli -j 2
+
+      - name: Download models
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force smoke-models | Out-Null
+          $files = @{
+            'parakeet-tdt-0.6b-v3-q4_k.gguf' = 'https://huggingface.co/cstr/parakeet-tdt-0.6b-v3-GGUF/resolve/main/parakeet-tdt-0.6b-v3-q4_k.gguf'
+            'opus-mt-en-de-q8_0.gguf'        = 'https://huggingface.co/cstr/opus-mt-en-de-GGUF/resolve/main/opus-mt-en-de-q8_0.gguf'
+            'opus-mt-de-en-q8_0.gguf'        = 'https://huggingface.co/cstr/opus-mt-de-en-GGUF/resolve/main/opus-mt-de-en-q8_0.gguf'
+            'ggml-silero-v6.2.0.bin'         = 'https://huggingface.co/ggml-org/whisper-vad/resolve/9ffd54a1e1ee413ddf265af9913beaf518d1639b/ggml-silero-v6.2.0.bin'
+          }
+          $ProgressPreference = 'SilentlyContinue'
+          foreach ($f in $files.Keys) {
+            Invoke-WebRequest -Uri $files[$f] -OutFile "smoke-models/$f"
+          }
+          Get-ChildItem smoke-models | Select-Object Name, Length
+          if ((Get-Item smoke-models/parakeet-tdt-0.6b-v3-q4_k.gguf).Length -lt 400000000) { throw 'parakeet GGUF is truncated' }
+          if ((Get-Item smoke-models/opus-mt-en-de-q8_0.gguf).Length -lt 70000000) { throw 'Opus-MT GGUF is truncated' }
+
+      - name: Live transcription + translation, file and pipe
+        shell: pwsh
+        run: |
+          $env:PYTHONUTF8 = '1'
+          python tests/live-translate-smoke.py --crispasr build/bin/crispasr.exe --models smoke-models
+          if ($LASTEXITCODE -ne 0) { throw "live-translate smoke test exited $LASTEXITCODE" }
