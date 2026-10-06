@@ -48,6 +48,15 @@ void moonshine_set_beam_size(struct moonshine_context* ctx, int beam_size);
 // #292: forward --max-new-tokens (<= 0 keeps the 194 short-form default).
 void moonshine_set_max_new_tokens(struct moonshine_context* ctx, int max_new_tokens);
 
+// Decode the stretches between pauses of at least `ms` milliseconds separately
+// (0 = off, the default). For the German fine-tunes, which end their output at
+// the first sentence-final pause and drop the rest.
+void moonshine_set_pause_split_ms(struct moonshine_context* ctx, int ms);
+// The setting moonshine_set_pause_split_ms should get for this model: 200 for
+// the German fine-tunes (named *-de*, or `fine_tune` != 0), 0 otherwise;
+// CRISPASR_MOONSHINE_PAUSE_SPLIT_MS overrides.
+int moonshine_default_pause_split_ms(const char* model_path, int fine_tune);
+
 // Single-token piece lookup. The returned pointer is owned by the context
 // and stable until the next call to this function. Returns empty string
 // for special tokens / out-of-range ids.

@@ -775,6 +775,20 @@ catch_discover_tests(test-stream-partial-decode
     PROPERTIES LABELS "unit;stream-json"
 )
 
+# core/pause_split.h: cutting audio at pauses (moonshine-de). Header-only, synthetic tones.
+add_executable(test-pause-split
+    test-pause-split.cpp
+)
+target_include_directories(test-pause-split PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-pause-split PRIVATE
+    Catch2::Catch2WithMain
+)
+catch_discover_tests(test-pause-split
+    TEST_SPEC "[unit]"
+)
+
 # Live transcribe + translate: the sentence-commit policy and its sink
 # (examples/cli/crispasr_live_translate*.h). Header-only; the translator is a
 # lambda and the partials are scripted, so no model and no audio.

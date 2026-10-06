@@ -941,6 +941,7 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `CRISPASR_MOONSHINE_STREAMING_BENCH`
 - `CRISPASR_MOONSHINE_STREAMING_GPU`
 - `CRISPASR_MOONSHINE_STREAM_BENCH`
+- `CRISPASR_MOONSHINE_PAUSE_SPLIT_MS` — milliseconds; the German moonshine fine-tunes decode the stretches between pauses at least this long separately, because they stop at the first sentence-final pause (default 200; `0` = off; English moonshine 0). Lower catches shorter sentence pauses and splits more often at commas.
 
 ### MOSS family
 

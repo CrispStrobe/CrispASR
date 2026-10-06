@@ -1,4 +1,5 @@
 #include "moonshine.h"
+#include "core/pause_split.h"
 #include "moonshine-impl.h"
 #include "moonshine-tokenizer.h"
 
@@ -76,6 +77,7 @@ struct moonshine_context {
     // default 194 (~30 s) is architectural; --max-new-tokens raises the ceiling
     // for callers who force single-pass long audio.
     int max_new_tokens = 194;
+    int pause_split_ms = 0; // > 0: decode the pieces between pauses separately (moonshine_set_pause_split_ms)
     // Sticky per-call seed override for best-of-N. 0 = derive deterministically
     // from the input audio buffer (the historical default — repeated calls
     // with the same input give identical samples). Non-zero values let the
@@ -1083,8 +1085,8 @@ static int moonshine_decode_step(struct moonshine_context* ctx, int32_t token_id
 // `out_tokens`. When `out_token_probs` is non-null, also fills it with the
 // softmax probability of the picked token at each step (parallel to
 // `out_tokens`). Returns 0 on success.
-static int moonshine_transcribe_impl(struct moonshine_context* ctx, const float* audio, int n_samples,
-                                     std::vector<int32_t>& out_tokens, std::vector<float>* out_token_probs) {
+static int moonshine_transcribe_one(struct moonshine_context* ctx, const float* audio, int n_samples,
+                                    std::vector<int32_t>& out_tokens, std::vector<float>* out_token_probs) {
     out_tokens.clear();
     if (out_token_probs)
         out_token_probs->clear();
@@ -1365,6 +1367,32 @@ static int moonshine_transcribe_impl(struct moonshine_context* ctx, const float*
     return 0;
 }
 
+// With pause splitting on, each stretch between pauses is decoded on its
+// own and the token streams are joined (see core/pause_split.h for why).
+static int moonshine_transcribe_impl(struct moonshine_context* ctx, const float* audio, int n_samples,
+                                     std::vector<int32_t>& out_tokens, std::vector<float>* out_token_probs) {
+    if (!ctx || ctx->pause_split_ms <= 0)
+        return moonshine_transcribe_one(ctx, audio, n_samples, out_tokens, out_token_probs);
+    const auto pieces = core_pause_split::pieces(audio, n_samples, 16000, ctx->pause_split_ms);
+    if (pieces.size() <= 1)
+        return moonshine_transcribe_one(ctx, audio, n_samples, out_tokens, out_token_probs);
+    out_tokens.clear();
+    if (out_token_probs)
+        out_token_probs->clear();
+    std::vector<int32_t> tok;
+    std::vector<float> prob;
+    for (const auto& p : pieces) {
+        const int rc =
+            moonshine_transcribe_one(ctx, audio + p.first, p.second - p.first, tok, out_token_probs ? &prob : nullptr);
+        if (rc != 0)
+            return rc;
+        out_tokens.insert(out_tokens.end(), tok.begin(), tok.end());
+        if (out_token_probs)
+            out_token_probs->insert(out_token_probs->end(), prob.begin(), prob.end());
+    }
+    return 0;
+}
+
 const char* moonshine_transcribe(struct moonshine_context* ctx, const float* audio, int n_samples) {
     if (!ctx)
         return "";
@@ -1401,6 +1429,24 @@ extern "C" struct moonshine_result* moonshine_transcribe_with_probs(struct moons
         }
     }
     return r;
+}
+
+extern "C" int moonshine_default_pause_split_ms(const char* model_path, int fine_tune) {
+    if (const char* e = std::getenv("CRISPASR_MOONSHINE_PAUSE_SPLIT_MS"))
+        return std::max(0, std::atoi(e));
+    // The German fine-tunes stop at the first sentence-final pause; English
+    // moonshine does not (no sentence dropped on a 37 s clip with 0.9-1.5 s
+    // pauses), so it keeps whole-input decoding. The GGUF has no language
+    // field, so the variant is recognised by its name, as the language guard
+    // in crispasr_c_api.cpp does.
+    const std::string p = model_path ? model_path : "";
+    const bool de = fine_tune || p.find("-de") != std::string::npos || p.find("_de") != std::string::npos;
+    return de ? 200 : 0;
+}
+
+extern "C" void moonshine_set_pause_split_ms(struct moonshine_context* ctx, int ms) {
+    if (ctx)
+        ctx->pause_split_ms = ms > 0 ? ms : 0;
 }
 
 extern "C" void moonshine_result_free(struct moonshine_result* r) {

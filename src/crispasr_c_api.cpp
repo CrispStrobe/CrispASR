@@ -3355,6 +3355,8 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
             delete s;
             return nullptr;
         }
+        moonshine_set_pause_split_ms((moonshine_context*)s->moonshine_ctx,
+                                     moonshine_default_pause_split_ms(model_path, 0));
         return s;
     }
 #endif
