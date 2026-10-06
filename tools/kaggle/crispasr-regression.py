@@ -782,7 +782,11 @@ def run_validate() -> list[dict]:
             crispasr_bin = BUILD / "bin" / "crispasr"
             diff_bin = BUILD / "bin" / "crispasr-diff"
 
-            actual = run_one.run_transcript(crispasr_bin, gguf_local, sample)
+            # `transcript_format: srt` (index-echo's bilingual cues): the same
+            # cue-joining run_one.py does. Without it only the last stdout line
+            # was compared and index-echo could never pass here.
+            actual = run_one.run_transcript(crispasr_bin, gguf_local, sample,
+                                            srt=entry.get("transcript_format") == "srt")
             # Same rule as GH (run_one.transcript_gate): WER-normalised, not
             # byte-exact, honouring transcript_tolerance.
             transcript_ok, _tlines = run_one.transcript_gate(entry, actual)
