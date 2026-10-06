@@ -59,6 +59,13 @@ int m2m100_tokenize(struct m2m100_context* ctx, const char* text, const char* sr
 char* m2m100_translate(struct m2m100_context* ctx, const char* text, const char* src_lang, const char* tgt_lang,
                        int max_new_tokens);
 
+// Like m2m100_translate, with `target_prefix` (target-language text, whole
+// words) as the fixed start of the translation: the decoder is fed it and
+// continues after it, and the returned text starts with it. NULL or "" = no
+// prefix. For live drafts, to keep words already shown from changing.
+char* m2m100_translate_prefixed(struct m2m100_context* ctx, const char* text, const char* src_lang,
+                                const char* tgt_lang, int max_new_tokens, const char* target_prefix);
+
 // Get the list of supported language codes.
 int m2m100_n_languages(struct m2m100_context* ctx);
 const char* m2m100_language(struct m2m100_context* ctx, int index);

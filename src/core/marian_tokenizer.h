@@ -336,6 +336,11 @@ struct Unigram {
 struct Tokenizer {
     Normalizer norm;
     Unigram src;
+    // Target side (target.spm): only for text that is fed to the DECODER, such
+    // as a fixed start of the translation. Same vocabulary.
+    Normalizer tgt_norm;
+    Unigram tgt;
+    bool has_tgt = false;
     std::unordered_map<std::string, int32_t> vocab; // vocab.json: token → id
     int32_t unk_id = 1;
     int32_t eos_id = 0;
@@ -351,6 +356,17 @@ struct Tokenizer {
             return 0;
         const size_t end = text.find("<<");
         return end == std::string::npos ? 0 : end + 2;
+    }
+
+    // Target-language text as decoder ids (no language code, no </s>), the way
+    // the reference tokenizes text_target. Empty when the target model is absent.
+    std::vector<int32_t> encode_target(const std::string& text) const {
+        std::vector<int32_t> ids;
+        if (!has_tgt)
+            return ids;
+        for (const Piece& p : tgt.encode(tgt_norm.normalize(text)))
+            ids.push_back(lookup(p.text));
+        return ids;
     }
 
     std::vector<int32_t> encode(const std::string& text, bool add_eos = true) const {

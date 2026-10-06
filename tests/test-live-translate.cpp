@@ -549,3 +549,15 @@ TEST_CASE("live-translate: a draft reports the words it shares with the previous
     REQUIRE(all.find("\"translation\":\"We have today\",\"stable\":\"\"") != std::string::npos);
     REQUIRE(all.find("\"translation\":\"We have three points today.\",\"stable\":\"We have \"") != std::string::npos);
 }
+
+TEST_CASE("live-translate: a draft's source continues when only its last word moved", "[unit][live-translate]") {
+    using crispasr::lt_detail::source_continues;
+    REQUIRE(source_continues("Wir haben heute drei Punkte.", "Wir haben heute drei Punkte auf der"));
+    REQUIRE(source_continues("Guten Morgen und Herr.", "Guten Morgen und herzlich willkommen"));
+    REQUIRE(source_continues("Zuerst sprechen wir", "Zuerst sprechen wir über die"));
+    // An earlier word changed: not a continuation.
+    REQUIRE_FALSE(source_continues("um 12 Prozent gestiegen.", "um zwölf Prozent gestiegen und"));
+    // Shorter, or nothing before: not a continuation.
+    REQUIRE_FALSE(source_continues("Wir haben heute drei", "Wir haben heute"));
+    REQUIRE_FALSE(source_continues("", "Wir haben"));
+}

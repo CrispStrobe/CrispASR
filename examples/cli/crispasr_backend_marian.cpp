@@ -65,6 +65,12 @@ public:
 
     std::string translate_text(const std::string& text, const std::string& src_lang, const std::string& tgt_lang,
                                const whisper_params& params) override {
+        return translate_text_prefixed(text, src_lang, tgt_lang, std::string(), params);
+    }
+
+    std::string translate_text_prefixed(const std::string& text, const std::string& src_lang,
+                                        const std::string& tgt_lang, const std::string& target_prefix,
+                                        const whisper_params& params) override {
         if (!ctx_ || text.empty()) {
             return {};
         }
@@ -74,7 +80,8 @@ public:
         m2m100_set_beam_size(ctx_, params.beam_size > 0 ? params.beam_size : m2m100_model_beam_size(ctx_));
         // 0 = the runtime's default: the checkpoint's max_length.
         const int max_tokens = params.translate_max_tokens > 0 ? params.translate_max_tokens : 0;
-        char* out = m2m100_translate(ctx_, text.c_str(), src_lang.c_str(), tgt_lang.c_str(), max_tokens);
+        char* out = m2m100_translate_prefixed(ctx_, text.c_str(), src_lang.c_str(), tgt_lang.c_str(), max_tokens,
+                                              target_prefix.c_str());
         if (!out) {
             return {};
         }

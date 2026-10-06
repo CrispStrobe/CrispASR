@@ -4180,6 +4180,10 @@ int crispasr_run_backend(const whisper_params& params_in) {
 
             // The translator as one function; the sink does not care which kind it is.
             crispasr::lt_sink::translate_fn tr_fn;
+            // Drafts with a fixed start (the words two drafts agreed on), for
+            // translators that support it (Opus-MT, m2m100). Empty = drafts
+            // are translated free. CRISPASR_LT_DRAFT_PREFIX=0 turns it off.
+            crispasr::lt_sink::prefixed_translate_fn tr_prefixed_fn;
             if (tr_is_llm) {
                 crispasr_chat_open_params op;
                 crispasr_chat_open_params_default(&op);
@@ -4272,6 +4276,9 @@ int crispasr_run_backend(const whisper_params& params_in) {
                                                          const crispasr::lt_sink::progress_fn&) {
                     return trb->translate_text(text, tr_src, tr_tgt, tr_params);
                 };
+                tr_prefixed_fn = [trb, tr_src, tr_tgt, tr_params](const std::string& text, const std::string& prefix) {
+                    return trb->translate_text_prefixed(text, tr_src, tr_tgt, prefix, tr_params);
+                };
             }
             // One throwaway translation: proves this translator + language
             // pair really produces text (a speech-translation backend also
@@ -4311,6 +4318,12 @@ int crispasr_run_backend(const whisper_params& params_in) {
             if (params.no_prints)
                 lc.log = nullptr;
             live_tr.reset(new crispasr::lt_sink(lc, tr_fn));
+            {
+                const char* e = getenv("CRISPASR_LT_DRAFT_PREFIX");
+                const bool on = !(e && *e == '0');
+                if (on && tr_prefixed_fn && (tr_name == "marian" || tr_name == "m2m100" || tr_name == "m2m100-wmt21"))
+                    live_tr->set_prefixed_translator(tr_prefixed_fn);
+            }
             if (!params.no_prints)
                 fprintf(stderr, "crispasr[translate]: %s -> %s via %s (%s), step %d ms\n", tr_src.c_str(),
                         tr_tgt.c_str(), tr_name.c_str(), tr_model.c_str(), params.stream_step_ms);

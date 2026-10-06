@@ -58,6 +58,12 @@ public:
 
     std::string translate_text(const std::string& text, const std::string& src_lang, const std::string& tgt_lang,
                                const whisper_params& params) override {
+        return translate_text_prefixed(text, src_lang, tgt_lang, std::string(), params);
+    }
+
+    std::string translate_text_prefixed(const std::string& text, const std::string& src_lang,
+                                        const std::string& tgt_lang, const std::string& target_prefix,
+                                        const whisper_params& params) override {
         if (!ctx_ || text.empty() || src_lang.empty() || tgt_lang.empty()) {
             return {};
         }
@@ -77,7 +83,8 @@ public:
         // reported run emitted 258 tokens instead of stopping at the reference
         // bound. Keep ONE source of truth for the cap.
         const int max_tokens = params.translate_max_tokens > 0 ? params.translate_max_tokens : 0;
-        char* out = m2m100_translate(ctx_, text.c_str(), src_lang.c_str(), tgt_lang.c_str(), max_tokens);
+        char* out = m2m100_translate_prefixed(ctx_, text.c_str(), src_lang.c_str(), tgt_lang.c_str(), max_tokens,
+                                              target_prefix.c_str());
         if (!out) {
             return {};
         }

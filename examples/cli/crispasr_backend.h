@@ -351,6 +351,17 @@ public:
         return {};
     }
 
+    // translate_text with `target_prefix` (target-language words) as the fixed
+    // start of the translation: the result starts with it and continues after
+    // it. Live drafts use it so words already shown stay put. A backend that
+    // cannot force a prefix ignores it (this default).
+    virtual std::string translate_text_prefixed(const std::string& text, const std::string& src_lang,
+                                                const std::string& tgt_lang, const std::string& target_prefix,
+                                                const whisper_params& params) {
+        (void)target_prefix;
+        return translate_text(text, src_lang, tgt_lang, params);
+    }
+
     // Whether the backend should auto-enable VAD for long audio when the
     // user didn't explicitly set --chunk-seconds or --vad. Backends whose
     // encoder degenerates on arbitrary-length chunks (e.g. parakeet-ja)

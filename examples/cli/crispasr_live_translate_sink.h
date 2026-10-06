@@ -27,6 +27,7 @@
 #include <deque>
 #include <functional>
 #include <mutex>
+#include <cstring>
 #include <string>
 #include <thread>
 #include <vector>
@@ -116,6 +117,39 @@ inline size_t stable_prefix_bytes(const std::string& a, const std::string& b) {
     return ok;
 }
 
+// Whether `cur` continues `prev` as far as a draft's fixed start is concerned:
+// every word of `prev` but its last reappears in `cur`, in place, ignoring
+// trailing punctuation, and `cur` is not shorter. The recogniser's last word
+// and its provisional full stop are still moving ("drei Punkte." -> "drei
+// Punkte auf der"), so a literal prefix test almost never held.
+inline bool source_continues(const std::string& prev, const std::string& cur) {
+    auto words = [](const std::string& s) {
+        std::vector<std::string> w;
+        size_t i = 0;
+        while (i < s.size()) {
+            while (i < s.size() && s[i] == ' ')
+                ++i;
+            size_t j = i;
+            while (j < s.size() && s[j] != ' ')
+                ++j;
+            if (j > i) {
+                std::string t = s.substr(i, j - i);
+                while (!t.empty() && std::strchr(".,;:!?", t.back()))
+                    t.pop_back();
+                w.push_back(t);
+            }
+            i = j;
+        }
+        return w;
+    };
+    const auto a = words(prev), b = words(cur);
+    if (a.empty() || b.size() < a.size())
+        return false;
+    for (size_t k = 0; k + 1 < a.size(); ++k)
+        if (a[k] != b[k])
+            return false;
+    return true;
+}
 } // namespace lt_detail
 
 class lt_sink {
@@ -127,6 +161,12 @@ public:
     // Translates one sentence. Called from the translator thread only (or the
     // caller's thread in sync mode) — never concurrently with itself.
     using translate_fn = std::function<std::string(const std::string& text, const progress_fn& progress)>;
+
+    // A translator that can be given the fixed start of its translation
+    // (target-language words). Optional: without it drafts are translated
+    // free, as before.
+    using prefixed_translate_fn = std::function<std::string(const std::string& text, const std::string& target_prefix)>;
+    void set_prefixed_translator(prefixed_translate_fn fn) { prefixed_ = std::move(fn); }
 
     lt_sink(const lt_sink_config& cfg, translate_fn fn) : cfg_(cfg), translate_(std::move(fn)), committer_(cfg.commit) {
         if (!cfg_.sync)
@@ -210,6 +250,7 @@ private:
         std::string text;
         double t_audio = 0;
         clock::time_point arrived;
+        std::string prefix; // draft only: fixed start of its translation (see set_prefixed_translator)
     };
 
     struct pending {
@@ -279,8 +320,11 @@ private:
                     commits_.push_back(std::move(j));
             }
             const bool tail_moved = closed ? !tail_src_.empty() : (up.tail != tail_src_);
-            if (closed || !up.committed.empty())
+            if (closed || !up.committed.empty()) {
                 prev_draft_.clear(); // the open sentence changed: no draft to agree with
+                prev_draft_src_.clear();
+                stable_text_.clear();
+            }
             if (closed) {
                 tail_src_.clear();
                 tail_draft_.clear();
@@ -312,6 +356,14 @@ private:
                     d.text = draft_text;
                     d.t_audio = t_audio;
                     d.arrived = arrived;
+                    // A draft of the same sentence, grown at the end only,
+                    // keeps the words the last two drafts agreed on as the
+                    // fixed start of its translation. Not for a speculative
+                    // draft (it may become the final), nor after the
+                    // recogniser revised earlier words of the source.
+                    if (!speculative && prefixed_ && !stable_text_.empty() &&
+                        lt_detail::source_continues(prev_draft_src_, draft_text))
+                        d.prefix = stable_text_;
                     if (cfg_.sync) {
                         run_now.push_back(std::move(d));
                     } else {
@@ -374,7 +426,13 @@ private:
                 }
             };
         }
-        std::string tr = ready.empty() ? translate_(j.text, progress) : ready;
+        std::string tr;
+        if (!ready.empty())
+            tr = ready;
+        else if (j.draft && !j.prefix.empty() && prefixed_)
+            tr = prefixed_(j.text, j.prefix);
+        else
+            tr = translate_(j.text, progress);
         const auto t1 = clock::now();
         const double mt_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
         const double lag_ms = std::chrono::duration<double, std::milli>(t1 - j.arrived).count();
@@ -383,8 +441,12 @@ private:
         if (j.draft) {
             // Remember it whatever happens to the display: the sentence may
             // commit while this was running, and then this IS its translation.
-            spec_src_ = j.text;
-            spec_tr_ = tr;
+            // (Not a draft with a fixed start: a final translation is always
+            // made free, so it keeps full quality.)
+            if (j.prefix.empty()) {
+                spec_src_ = j.text;
+                spec_tr_ = tr;
+            }
             // Stale if the tail moved on to different text while we worked.
             if (tail_src_.compare(0, j.text.size(), j.text) != 0)
                 return;
@@ -398,7 +460,13 @@ private:
             // even when the recogniser revised a word of the source (that is
             // when the draft on screen is dropped, and when agreement matters).
             tail_draft_stable_ = prev_draft_.empty() ? 0 : lt_detail::stable_prefix_bytes(prev_draft_, tr);
+            // A fixed start is stable by construction, even where the previous
+            // free draft had said something else.
+            if (!j.prefix.empty() && tr.compare(0, j.prefix.size(), j.prefix) == 0)
+                tail_draft_stable_ = std::max(tail_draft_stable_, j.prefix.size());
             prev_draft_ = tr;
+            prev_draft_src_ = j.text;
+            stable_text_ = tr.substr(0, tail_draft_stable_);
             tail_draft_ = tr;
             tail_draft_src_ = j.text;
             if (cfg_.output == lt_output::json) {
@@ -643,7 +711,10 @@ private:
     std::string tail_draft_src_;
     size_t tail_draft_stable_ = 0; // bytes of tail_draft_ that the previous draft agreed on
     std::string prev_draft_;       // previous draft of the open sentence, for tail_draft_stable_
-    std::string spec_src_;         // last text translated ahead of time, and its translation
+    std::string prev_draft_src_;   // the source text prev_draft_ translated
+    std::string stable_text_;      // the stable start of prev_draft_: the next draft's fixed start
+    prefixed_translate_fn prefixed_;
+    std::string spec_src_; // last text translated ahead of time, and its translation
     std::string spec_tr_;
     int reused_ = 0;
     int live_rows_ = 0;

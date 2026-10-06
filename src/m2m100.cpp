@@ -513,6 +513,8 @@ static bool load_marian_metadata(m2m100_context* c, gguf_context* g) {
     }
     if (!load_marian_spm(g, "source", mt.norm, mt.src))
         return false;
+    // Optional: only a fixed start of the translation (drafts) needs it.
+    mt.has_tgt = load_marian_spm(g, "target", mt.tgt_norm, mt.tgt);
 
     for (const std::string& l : {hp.source_lang, hp.target_lang})
         if (!l.empty())
@@ -1477,6 +1479,32 @@ extern "C" int m2m100_tokenize(struct m2m100_context* ctx, const char* text, con
 
 extern "C" char* m2m100_translate(struct m2m100_context* ctx, const char* text, const char* src_lang,
                                   const char* tgt_lang, int max_new_tokens) {
+    return m2m100_translate_prefixed(ctx, text, src_lang, tgt_lang, max_new_tokens, nullptr);
+}
+
+// The decoder ids of `prefix` as the start of a translation into `tgt_lang`.
+static std::vector<int> target_prefix_ids(m2m100_context* c, const char* prefix) {
+    std::vector<int> ids;
+    if (!prefix || !*prefix)
+        return ids;
+    std::string p = prefix;
+    while (!p.empty() && p.back() == ' ')
+        p.pop_back(); // whole words: the next one starts with its own "▁"
+    if (p.empty())
+        return ids;
+    if (c->model.hp.marian) {
+        for (int32_t id : c->marian_tok.encode_target(p))
+            ids.push_back((int)id);
+    } else {
+        ids = tokenize(c->tokenizer, p, ""); // no language token
+        if (!ids.empty() && ids.back() == 2)
+            ids.pop_back(); // </s>
+    }
+    return ids;
+}
+
+extern "C" char* m2m100_translate_prefixed(struct m2m100_context* ctx, const char* text, const char* src_lang,
+                                           const char* tgt_lang, int max_new_tokens, const char* target_prefix) {
     if (!ctx || !text || !src_lang || !tgt_lang)
         return nullptr;
 
@@ -1555,6 +1583,17 @@ extern "C" char* m2m100_translate(struct m2m100_context* ctx, const char* text, 
             return nullptr;
         }
         dec_ids.push_back(tgt_it->second); // __de__ etc.
+    }
+
+    // A fixed start of the translation (a live draft's stable words): fed to
+    // the decoder with the start token(s), so generation continues after it.
+    {
+        const std::vector<int> fixed = target_prefix_ids(ctx, target_prefix);
+        const int room = max_new_tokens - 1;
+        if (!fixed.empty() && (int)fixed.size() < room) {
+            dec_ids.insert(dec_ids.end(), fixed.begin(), fixed.end());
+            max_new_tokens -= (int)fixed.size();
+        }
     }
 
     m2m100_bench_stage _bs_dec("decode");
