@@ -43,8 +43,9 @@ struct hikari_policy {
 struct hikari_policy hikari_default_policy(void);
 void hikari_set_policy(struct hikari_context* ctx, const struct hikari_policy* p);
 
-// Speech probability of `n` samples (the newest 512 of the window), used only
-// by the wait-penalty boost. NULL (default) = never speech = boost disabled.
+// Speech probability of `n` samples (the newest 512 of the window), used by
+// the wait-penalty boost. NULL (default) = never speech = boost disabled —
+// and then the model mostly WAITs: the boost is what makes it emit.
 typedef float (*hikari_speech_prob_fn)(const float* samples, int n, void* user);
 void hikari_set_speech_prob_fn(struct hikari_context* ctx, hikari_speech_prob_fn fn, void* user);
 
@@ -63,6 +64,8 @@ int hikari_stream_n_steps(struct hikari_context* ctx);
 int32_t hikari_stream_step_token(struct hikari_context* ctx, int i);
 // Seconds of audio the decision at step i had seen.
 double hikari_stream_step_time(struct hikari_context* ctx, int i);
+// Speech probability the step used (0 when no speech_prob_fn is set).
+float hikari_stream_step_speech_prob(struct hikari_context* ctx, int i);
 // Decoded text of everything emitted since reset (malloc'd, caller frees).
 char* hikari_stream_text(struct hikari_context* ctx);
 // Decoded text of one token id (WAIT/specials -> ""). malloc'd.

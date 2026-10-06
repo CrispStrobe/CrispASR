@@ -145,6 +145,7 @@ struct hikari_context {
     float wp = 0.0f;
     std::vector<int32_t> step_tok;
     std::vector<double> step_t;
+    std::vector<float> step_sp;
     // mel + incremental bookkeeping
     std::unordered_map<int64_t, std::array<float, 80>> raw_cache; // clean frames by absolute index
     int64_t win_start = -1;                                       // samples
@@ -681,12 +682,15 @@ static int step(hikari_context* c, int64_t t) {
     c->bench.enc += now_ms() - t0;
     c->bench.enc_frames += n_enc - e0;
 
-    // speech (only feeds the wait-penalty boost)
+    // speech: feeds the wait-penalty boost — without it the model mostly
+    // WAITs (measured: jfk 0-4 s, upstream and here, 48/48 WAIT with VAD off)
     bool speech = false;
+    float sp = 0.0f;
     if (c->speech_fn) {
         t0 = now_ms();
         const int nv = (int)std::min<int64_t>(kVadSamples, t - ws);
-        speech = c->speech_fn(c->audio.data() + t - nv, nv, c->speech_user) > c->pol.speech_threshold;
+        sp = c->speech_fn(c->audio.data() + t - nv, nv, c->speech_user);
+        speech = sp > c->pol.speech_threshold;
         c->bench.vad += now_ms() - t0;
     }
 
@@ -730,6 +734,7 @@ static int step(hikari_context* c, int64_t t) {
     }
     c->step_tok.push_back(tok);
     c->step_t.push_back((double)t / 16000.0);
+    c->step_sp.push_back(sp);
     if (c->params.verbosity >= 2)
         fprintf(stderr, "hikari: step %4d t=%6.2fs e0=%4d/%4d p0=%3d/%3d tok=%5d wp=%.2f%s\n", c->j, t / 16000.0, e0,
                 n_enc, p0, pos, tok, c->wp, speech ? " speech" : "");
@@ -907,6 +912,7 @@ extern "C" void hikari_stream_reset(hikari_context* c) {
     c->wp = c->pol.baseline_wait_penalty;
     c->step_tok.clear();
     c->step_t.clear();
+    c->step_sp.clear();
     c->raw_cache.clear();
     c->win_start = -1;
     c->norm_mel.clear();
@@ -939,6 +945,9 @@ extern "C" int32_t hikari_stream_step_token(hikari_context* c, int i) {
 }
 extern "C" double hikari_stream_step_time(hikari_context* c, int i) {
     return (c && i >= 0 && i < (int)c->step_t.size()) ? c->step_t[i] : -1.0;
+}
+extern "C" float hikari_stream_step_speech_prob(hikari_context* c, int i) {
+    return (c && i >= 0 && i < (int)c->step_sp.size()) ? c->step_sp[i] : -1.0f;
 }
 extern "C" char* hikari_stream_text(hikari_context* c) {
     return c ? dup(decode_ids(c, c->step_tok)) : nullptr;

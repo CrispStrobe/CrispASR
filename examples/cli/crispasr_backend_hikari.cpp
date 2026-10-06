@@ -12,9 +12,10 @@
 // Policy knobs (upstream hikari-client defaults): HIKARI_WP_BASE (0),
 // HIKARI_WP_BOOST (0.6), HIKARI_WP_DECAY (0.3), HIKARI_REP (40),
 // HIKARI_CTX (337 tokens), HIKARI_TAIL_MS (2000 ms of trailing silence for
-// files). HIKARI_VAD=0 disables the Silero speech probability (which only
-// drives the wait-penalty boost); otherwise the default Silero model is used,
-// or the one named by --vad-model.
+// files). The Silero speech probability drives the wait-penalty boost, and
+// that boost is what makes the model emit at all during speech (without it,
+// upstream and here, jfk 0-4 s is 48/48 WAIT). Model: HIKARI_VAD_MODEL, else
+// --vad-model, else the default Silero (auto-download). HIKARI_VAD=0 = off.
 
 #include "crispasr_backend.h"
 #include "crispasr_backend_utils.h"
@@ -138,9 +139,12 @@ public:
         if (env_i("HIKARI_VAD", 1)) {
             // The speech flag only steers the wait-penalty boost, so a VAD
             // the user picked for slicing is honoured, and Silero otherwise.
+            // HIKARI_VAD_MODEL names the file without turning on the
+            // dispatcher's VAD slicing (which --vad-model would).
             whisper_params vp = p;
             vp.vad = true;
-            const std::string path = crispasr_resolve_vad_model(vp);
+            const char* env_vad = std::getenv("HIKARI_VAD_MODEL");
+            const std::string path = (env_vad && *env_vad) ? std::string(env_vad) : crispasr_resolve_vad_model(vp);
             whisper_vad_context_params vcp = whisper_vad_default_context_params();
             vcp.n_threads = 1;
             vad_.vctx = path.empty() ? nullptr : whisper_vad_init_from_file_with_params(path.c_str(), vcp);

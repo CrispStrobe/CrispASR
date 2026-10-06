@@ -16,10 +16,12 @@ hikari-client sends:
   * the wait penalty is boosted after 10 WAITs during speech and decays
     toward the baseline on every emitted token.
 
-Speech detection (silero VAD) only feeds the boost. It is NOT run here:
-speech is taken as False, which disables the boost — the C++ side must be
-run with VAD off for a token-parity comparison (`HIKARI_VAD=0`). Steps where
-the boost WOULD have been considered are counted and reported.
+Speech detection: the upstream stateful Silero TorchScript model (from the
+`silero-vad` pip package, data/silero_vad.jit — what torch.hub returns),
+called once per step on the newest 512 samples. It feeds the boost, and the
+boost is what makes the model emit during speech: with HIKARI_VAD=0 jfk 0-4 s
+is 48/48 WAIT. Per-step probabilities are dumped (stream_speech_probs) so
+crispasr-diff can separate VAD drift from model drift.
 
 Two deliberate, semantics-preserving departures from the server, both for CPU
 time, both opt-out:
@@ -121,9 +123,22 @@ def dump(model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens: i
     if len(a) % CHUNK:
         a = np.concatenate([a, np.zeros(CHUNK - len(a) % CHUNK, np.float32)])
 
+    # Silero VAD, as model_wrapper.py: stateful TorchScript model called once
+    # per step on the newest 512 samples, speech = prob > 0.8. HIKARI_VAD=0
+    # (speech always False) disables the wait-penalty boost.
+    vad = None
+    if _env("HIKARI_VAD", 1, int):
+        spec = importlib.util.find_spec("silero_vad")
+        if spec is None:
+            raise SystemExit("pip install silero-vad (or HIKARI_VAD=0)")
+        vad = torch.jit.load(os.path.join(list(spec.submodule_search_locations)[0], "data", "silero_vad.jit"))
+        vad.eval()
+    speech_thr = 0.8
+
     wp = wp_base
     j = -1
     toks = []
+    probs = []
     boost_candidates = 0
     snap = {}
     t0 = time.time()
@@ -138,6 +153,9 @@ def dump(model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens: i
             mel = log_mel(torch.from_numpy(window)).unsqueeze(0)
             mel = F.pad(mel, (0, 3000 - mel.shape[-1]), mode="constant", value=0)
             enc = model.model.encoder(mel).last_hidden_state
+            sp = vad(torch.from_numpy(window[-512:].copy()), 16000).item() if vad is not None else 0.0
+            probs.append(sp)
+            speech = sp > speech_thr
             if len(ids) > W:
                 ids.pop(4)
             n_in = pos + 1 if trim else W
@@ -155,7 +173,9 @@ def dump(model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens: i
             ids.append(tok)
             if tok == WAIT:
                 if len(ids) > 10 and all(i == WAIT for i in ids[-10:]):
-                    boost_candidates += 1  # boost only fires during speech (VAD) — off here
+                    boost_candidates += 1
+                    if speech:
+                        wp += wp_boost
             else:
                 wp -= wp_decay * (wp - wp_base)
             toks.append(tok)
@@ -181,7 +201,9 @@ def dump(model_dir: Path, audio: np.ndarray, stages: Set[str], max_new_tokens: i
         caps["decoder_input_ids"] = snap["ids"]
     if "stream_tokens" in stages:
         caps["stream_tokens"] = np.asarray(toks, dtype=np.int32)
+        caps["stream_speech_probs"] = np.asarray(probs, dtype=np.float32)
     caps["generated_text"] = text
     caps["hikari_settings"] = f"task={task};tgt={tgt};ctx={W};wp_base={wp_base};wp_boost={wp_boost};" \
-                              f"wp_decay={wp_decay};rep={rep};tail_ms={tail_ms};boost_candidates={boost_candidates}"
+                              f"wp_decay={wp_decay};rep={rep};tail_ms={tail_ms};boost_candidates={boost_candidates};" \
+                              f"vad={1 if vad is not None else 0}"
     return caps

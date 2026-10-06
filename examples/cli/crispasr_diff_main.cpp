@@ -80,6 +80,7 @@
 #include "lid_fasttext.h"
 #include "moonshine.h"
 #include "hikari.h"
+#include "core/silero_context.h"
 #include "omniasr.h"
 #include "canary_ctc.h"
 #include "wav2vec2-ggml.h"
@@ -6420,10 +6421,53 @@ int main(int argc, char** argv) {
             hikari_free(ctx);
             return 4;
         }
+        // The reference runs upstream's stateful Silero (TorchScript) when
+        // vad=1; mirror it with the Silero GGUF in per-chunk continue mode.
+        whisper_vad_context* vctx = nullptr;
+        if (kv["vad"] == "1") {
+            const char* vp = std::getenv("HIKARI_VAD_MODEL");
+            if (!vp || !*vp) {
+                fprintf(stderr, "hikari: the reference ran with VAD; set HIKARI_VAD_MODEL=<ggml-silero-v6.2.0.bin>\n");
+                hikari_free(ctx);
+                return 4;
+            }
+            whisper_vad_context_params vcp = whisper_vad_default_context_params();
+            vcp.n_threads = 1;
+            vctx = whisper_vad_init_from_file_with_params(vp, vcp);
+            if (!vctx || !crispasr_silero_enable_context(vctx)) {
+                fprintf(stderr, "hikari: cannot load Silero VAD '%s'\n", vp);
+                hikari_free(ctx);
+                return 4;
+            }
+            float z = 0.0f;
+            whisper_vad_detect_speech(vctx, &z, 0); // reset state
+            hikari_set_speech_prob_fn(
+                ctx,
+                [](const float* s, int n, void* u) -> float {
+                    auto* v = static_cast<whisper_vad_context*>(u);
+                    if (!crispasr_silero_detect_continue(v, s, n))
+                        return 0.0f;
+                    const int np = whisper_vad_n_probs(v);
+                    return np > 0 ? whisper_vad_probs(v)[np - 1] : 0.0f;
+                },
+                vctx);
+        }
         std::vector<float> a = samples;
         a.resize(a.size() + (size_t)std::atoi(kv["tail_ms"].c_str()) * 16, 0.0f);
         hikari_stream_push(ctx, a.data(), (int)a.size());
         hikari_stream_flush(ctx);
+        auto rp = ref.get_f32("stream_speech_probs");
+        if (vctx && rp.first) {
+            const int n = std::min<int>(hikari_stream_n_steps(ctx), (int)rp.second);
+            float mx = 0.0f;
+            int flips = 0;
+            for (int i = 0; i < n; i++) {
+                const float o = hikari_stream_step_speech_prob(ctx, i);
+                mx = std::max(mx, std::fabs(o - rp.first[i]));
+                flips += (o > 0.8f) != (rp.first[i] > 0.8f);
+            }
+            printf("[INFO] speech_probs           max|diff|=%.4f  threshold(0.8) flips=%d/%d\n", mx, flips, n);
+        }
 
         // per-step tokens
         auto rt = ref.get_f32("stream_tokens");
@@ -6478,6 +6522,8 @@ int main(int argc, char** argv) {
             std::free(enc);
         }
         hikari_free(ctx);
+        if (vctx)
+            whisper_vad_free(vctx);
     } else if (backend_name == "moonshine") {
         // Moonshine (UsefulSensors tiny/base). Non-streaming variant.
         moonshine_init_params mp{};
