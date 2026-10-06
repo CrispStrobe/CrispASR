@@ -42,6 +42,12 @@ technical deep-dives are in `LEARNINGS.md`.
   at load ~8: 52.6 s → 24.5 s of compute, 67 ms per 320 ms chunk; transcript
   differs from the old path by one word in 114. No gain on Metal (148 ms per
   chunk) — use `-ng`. `--stream-session` closes turns on audio silence.
+- 2026-10-06: Opus-MT for 22 more directions, all published as
+  `cstr/opus-mt-<src>-<tgt>-GGUF` after a parity gate (f16 equal to the
+  reference on 8 sentences, greedy and beam 4: 22/22): fr, it, es, ar, he
+  with de and en both ways, tr→en, en→tr and he→en (tc-big). Pairs without a
+  model go through English (`--translate-backend marian`), live-checked
+  de→tr and fr→ar. de→ar ships f16 (q8_0 3/8).
 
 ## DONE 2026-10-06 — Live transcribe + translate, ggml v0.26.0 sync (#493)
 
