@@ -48,7 +48,7 @@ struct HikariVad {
     whisper_vad_context* vctx = nullptr;
     static float prob(const float* s, int n, void* user) {
         auto* self = static_cast<HikariVad*>(user);
-        if (!self->vctx || !crispasr_silero_detect_continue(self->vctx, s, n))
+        if (!self->vctx || !whisper_vad_detect_speech_continue(self->vctx, s, n))
             return 0.0f;
         const int np = whisper_vad_n_probs(self->vctx);
         return np > 0 ? whisper_vad_probs(self->vctx)[np - 1] : 0.0f;

@@ -6445,7 +6445,7 @@ int main(int argc, char** argv) {
                 ctx,
                 [](const float* s, int n, void* u) -> float {
                     auto* v = static_cast<whisper_vad_context*>(u);
-                    if (!crispasr_silero_detect_continue(v, s, n))
+                    if (!whisper_vad_detect_speech_continue(v, s, n))
                         return 0.0f;
                     const int np = whisper_vad_n_probs(v);
                     return np > 0 ? whisper_vad_probs(v)[np - 1] : 0.0f;
