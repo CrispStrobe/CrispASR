@@ -45,10 +45,11 @@ Open, in the order they would help:
    (parakeet, canary, cohere, sensevoice, qwen3-asr, nemotron,
    moonshine-tiny) and index-echo-2b passes all 67 stages. wav2vec2 prints
    "…what ou can do…" there — identically on `main`, so not the bump.
-   Left in the Kaggle suite:
-   no `transcript_format: srt` (index-echo's transcript compare cannot
-   pass), voxtral-mini-3b's pinned revision 404s, and wav2vec2's word flip
-   on that hardware. canary's per-layer gate is 0.99 since this bump (x86
+   Kaggle suite: `transcript_format: srt` is honoured now, and three
+   hand-padded GGUF pins (voxtral-mini-3b, parakeet-tdt_ctc-1.1b, mimo-asr)
+   are real commits — `check-registry-urls.py` now HEADs every manifest pin.
+   Left: wav2vec2's "ou" for "you" on Kaggle hardware only (not reproducible
+   here; its WER gate is not loosened blind). canary's per-layer gate is 0.99 since this bump (x86
    layer 18 = 0.9977).
 5. ~~VAD re-runs over the whole window every step~~: incremental Silero
    (each 32 ms frame scored once, state kept) — 30-86 → 3-6 ms per step.
