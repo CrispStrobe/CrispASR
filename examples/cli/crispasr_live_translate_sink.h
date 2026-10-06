@@ -24,6 +24,7 @@
 #include <chrono>
 #include <condition_variable>
 #include <cstdio>
+#include <cstring>
 #include <deque>
 #include <functional>
 #include <mutex>
@@ -81,6 +82,9 @@ struct lt_sink_config {
     int max_unit_words = 60;
     // Fewer words than this are not worth a draft translation.
     int draft_min_words = 3;
+    // Draft only the open words two consecutive partials agree on (see
+    // lt_detail::agreed_source), not the whole moving tail.
+    bool draft_agreed_source = true;
     // Drafts stop once a committed sentence takes longer than this to
     // translate (running average). A translator that slow is busy with a
     // draft when the next real sentence arrives, and it shares the GPU with
@@ -116,6 +120,36 @@ inline size_t stable_prefix_bytes(const std::string& a, const std::string& b) {
     return ok;
 }
 
+// The words of `cur` that the previous partial `prev` already had, in place
+// (compared without trailing punctuation), as text from `cur`, without a
+// sentence-final mark at the end: the recogniser's last word and its
+// provisional full stop are what keeps changing ("drei Punkte." -> "drei
+// Punkte auf der"). A draft of this part is rewritten far less.
+inline std::string agreed_source(const std::string& prev, const std::string& cur) {
+    auto bare = [](std::string w) {
+        while (!w.empty() && std::strchr(".,;:!?", w.back()))
+            w.pop_back();
+        return w;
+    };
+    size_t i = 0, j = 0, end = 0;
+    while (true) {
+        while (i < prev.size() && prev[i] == ' ')
+            ++i;
+        while (j < cur.size() && cur[j] == ' ')
+            ++j;
+        const size_t ie = std::min(prev.find(' ', i), prev.size());
+        const size_t je = std::min(cur.find(' ', j), cur.size());
+        if (i >= prev.size() || j >= cur.size() || bare(prev.substr(i, ie - i)) != bare(cur.substr(j, je - j)))
+            break;
+        end = je;
+        i = ie;
+        j = je;
+    }
+    std::string out = cur.substr(0, end);
+    while (!out.empty() && std::strchr(".!?", out.back()))
+        out.pop_back();
+    return out;
+}
 } // namespace lt_detail
 
 class lt_sink {
@@ -279,8 +313,10 @@ private:
                     commits_.push_back(std::move(j));
             }
             const bool tail_moved = closed ? !tail_src_.empty() : (up.tail != tail_src_);
-            if (closed || !up.committed.empty())
-                prev_draft_.clear(); // the open sentence changed: no draft to agree with
+            if (closed || !up.committed.empty()) {
+                prev_draft_.clear(); // the open sentence changed: nothing to agree with
+                prev_tail_src_.clear();
+            }
             if (closed) {
                 tail_src_.clear();
                 tail_draft_.clear();
@@ -303,7 +339,13 @@ private:
                 // the whole open text, which is display only.
                 const std::string candidate = first_complete_sentence(tail_src_);
                 const bool speculative = !candidate.empty();
-                const std::string& draft_text = speculative ? candidate : tail_src_;
+                // Not speculative: the part of the open text that the last two
+                // partials agree on (CRISPASR_LT_DRAFT_AGREE=0: all of it).
+                const std::string draft_text =
+                    speculative
+                        ? candidate
+                        : (cfg_.draft_agreed_source ? lt_detail::agreed_source(prev_tail_src_, tail_src_) : tail_src_);
+                prev_tail_src_ = tail_src_;
                 if (cfg_.drafts && (speculative || mt_avg_ms_ <= cfg_.draft_max_mt_ms) && draft_text != spec_src_ &&
                     count_words(draft_text) >= (speculative ? 1 : cfg_.draft_min_words)) {
                     job d;
@@ -643,6 +685,7 @@ private:
     std::string tail_draft_src_;
     size_t tail_draft_stable_ = 0; // bytes of tail_draft_ that the previous draft agreed on
     std::string prev_draft_;       // previous draft of the open sentence, for tail_draft_stable_
+    std::string prev_tail_src_;    // the open text of the previous partial, for agreed_source
     std::string spec_src_;         // last text translated ahead of time, and its translation
     std::string spec_tr_;
     int reused_ = 0;

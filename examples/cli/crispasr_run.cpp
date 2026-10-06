@@ -4303,6 +4303,10 @@ int crispasr_run_backend(const whisper_params& params_in) {
             lc.tgt_lang = tr_tgt;
             lc.drafts = params.translate_drafts;
             lc.sync = getenv("CRISPASR_TRANSLATE_SYNC") != nullptr;
+            {
+                const char* e = getenv("CRISPASR_LT_DRAFT_AGREE");
+                lc.draft_agreed_source = !(e && *e == '0'); // A/B: 0 drafts the whole moving tail
+            }
             if (stream_json_events) {
                 lc.output = crispasr::lt_output::json;
             } else {

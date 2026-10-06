@@ -59,9 +59,12 @@ Open, in the order they would help:
 7. Drafts: the part two consecutive drafts agree on is marked stable
    (normal text vs dimmed; JSON `stable`). On German speech with Opus-MT,
    whole drafts are rewritten at normalized erasure 1.17-1.48, the stable
-   part at 0.16-0.18. Not done: forcing the stable prefix into the next
-   decode (needs a target-prefix API in the translators), and a model
-   trained to revise (StreamRevise); base Hy-MT2 is not.
+   part at 0.16-0.18. Drafts now translate only the source words two
+   partials agree on: whole-draft erasure 1.98/1.45/0.66 -> 0.71/0.64/0.05
+   (3 pairs), ~12 % fewer correct early words in 2 of 3, half the translator
+   calls. Tried and rejected: forcing the stable words as the next draft's
+   fixed start (branch feat/draft-forced-prefix: no less erasure, worse
+   drafts). Not done: a model trained to revise (StreamRevise).
 8. moonshine-de ended its output at the first sentence-final pause. Fixed in
    the library: the German variants decode the stretches between pauses of
    >= 200 ms separately (file, VAD, live and C API: 11/11 sentences on the
