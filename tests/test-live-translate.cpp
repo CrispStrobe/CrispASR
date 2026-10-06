@@ -530,6 +530,7 @@ TEST_CASE("live-translate: a draft reports the words it shares with the previous
         cfg.tgt_lang = "en";
         cfg.sync = true;
         cfg.draft_min_words = 1;
+        cfg.draft_agreed_source = false; // this test is about the stable prefix, not source agreement
         cfg.out = f;
         cfg.log = nullptr;
         crispasr::lt_sink sink(cfg, [&](const std::string& s, const crispasr::lt_sink::progress_fn&) {
@@ -548,4 +549,41 @@ TEST_CASE("live-translate: a draft reports the words it shares with the previous
     INFO(all);
     REQUIRE(all.find("\"translation\":\"We have today\",\"stable\":\"\"") != std::string::npos);
     REQUIRE(all.find("\"translation\":\"We have three points today.\",\"stable\":\"We have \"") != std::string::npos);
+}
+
+TEST_CASE("live-translate: a draft covers the source words two partials agree on", "[unit][live-translate]") {
+    using crispasr::lt_detail::agreed_source;
+    REQUIRE(agreed_source("Wir haben heute drei Punkte.", "Wir haben heute drei Punkte auf der.") ==
+            "Wir haben heute drei Punkte");
+    REQUIRE(agreed_source("Guten Morgen und Herr.", "Guten Morgen und herzlich.") == "Guten Morgen und");
+    REQUIRE(agreed_source("um 12 Prozent", "um zwölf Prozent gestiegen") == "um");
+    REQUIRE(agreed_source("", "Wir haben") == "");
+    // A comma inside stays; only a sentence-final mark at the very end goes.
+    REQUIRE(agreed_source("Danach, sagte er, kommt", "Danach, sagte er, kommt es") == "Danach, sagte er, kommt");
+}
+
+TEST_CASE("live-translate: drafts follow the agreed source across partials", "[unit][live-translate]") {
+    FILE* f = tmpfile();
+    REQUIRE(f != nullptr);
+    std::vector<std::string> seen;
+    {
+        crispasr::lt_sink_config cfg;
+        cfg.output = crispasr::lt_output::json;
+        cfg.src_lang = "de";
+        cfg.tgt_lang = "en";
+        cfg.sync = true;
+        cfg.out = f;
+        cfg.log = nullptr;
+        crispasr::lt_sink sink(cfg, [&](const std::string& s, const crispasr::lt_sink::progress_fn&) {
+            seen.push_back(s);
+            return "EN<" + s + ">";
+        });
+        const auto now = crispasr::lt_sink::clock::now();
+        sink.on_partial(1, "Zuerst sprechen wir", 1.0, now);
+        sink.on_partial(1, "Zuerst sprechen wir über die", 1.5, now);
+        sink.on_partial(1, "Zuerst sprechen wir über die Ergebnisse des", 2.0, now);
+    }
+    fclose(f);
+    // First partial: nothing to agree with yet. Then the agreed words only.
+    REQUIRE(seen == std::vector<std::string>{"Zuerst sprechen wir", "Zuerst sprechen wir über die"});
 }

@@ -59,9 +59,12 @@ Open, in the order they would help:
 7. Drafts: the part two consecutive drafts agree on is marked stable
    (normal text vs dimmed; JSON `stable`). On German speech with Opus-MT,
    whole drafts are rewritten at normalized erasure 1.17-1.48, the stable
-   part at 0.16-0.18. Not done: forcing the stable prefix into the next
-   decode (needs a target-prefix API in the translators), and a model
-   trained to revise (StreamRevise); base Hy-MT2 is not.
+   part at 0.16-0.18. Drafts now translate only the source words two
+   partials agree on: whole-draft erasure 1.98/1.45/0.66 -> 0.71/0.64/0.05
+   (3 pairs), ~12 % fewer correct early words in 2 of 3, half the translator
+   calls. Tried and rejected: forcing the stable words as the next draft's
+   fixed start (branch feat/draft-forced-prefix: no less erasure, worse
+   drafts). Not done: a model trained to revise (StreamRevise).
 8. moonshine-de ended its output at the first sentence-final pause. Fixed in
    the library: the German variants decode the stretches between pauses of
    >= 200 ms separately (file, VAD, live and C API: 11/11 sentences on the
@@ -69,9 +72,9 @@ Open, in the order they would help:
    (3 extra breaks on that clip). Windows: the live
    pipeline runs end to end on a Windows runner (#503). No timing here was taken on an idle
    machine (load 4-30 throughout).
-9. Opus-MT: only de↔en is hosted (`cstr/opus-mt-{de-en,en-de}-GGUF`, f16 +
-   q8_0, CC-BY-4.0 per the OPUS-MT project's own statement). Other pairs
-   need converting and a registry row. A multi-target checkpoint
+9. Opus-MT: 24 directions hosted (de/en with fr, it, es, ar, he, tr; see
+   docs/streaming.md), each f16 exact on 8 sentences; de↔tr goes through
+   English (no model exists). de→ar ships f16 (its q8_0 matched 3/8). A multi-target checkpoint
    (`opus-mt-en-ROMANCE`, f16) matched the reference 8/8 greedy and beam 4,
    and `-tl es` selects the target; a relu checkpoint
    (`opus-mt-tc-big-gmw-gmw`, 437 MB f16, de↔en↔nl in one file) matched
