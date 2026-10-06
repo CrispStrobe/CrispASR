@@ -941,6 +941,7 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `CRISPASR_MOONSHINE_STREAMING_BENCH`
 - `CRISPASR_MOONSHINE_STREAMING_GPU`
 - `CRISPASR_MOONSHINE_STREAM_BENCH`
+- `CRISPASR_MOONSHINE_VAD_SLICE_CAP` — seconds; VAD slices for the German moonshine fine-tunes are re-split to this length (default 8; `0` = no cap; English moonshine 0).
 
 ### MOSS family
 

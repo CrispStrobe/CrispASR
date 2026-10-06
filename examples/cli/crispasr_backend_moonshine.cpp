@@ -5,6 +5,7 @@
 #include "moonshine.h"
 #include "whisper_params.h"
 
+#include <algorithm>
 #include <cstdlib>
 #include <cstring>
 #include <string>
@@ -34,6 +35,28 @@ public:
         // CAP_DIARIZE: framework post-step works on the segment list.
         return CAP_AUTO_DOWNLOAD | CAP_TOKEN_CONFIDENCE | CAP_TEMPERATURE | CAP_BEAM_SEARCH | CAP_PUNCTUATION_TOGGLE |
                CAP_TIMESTAMPS_CTC | CAP_FLASH_ATTN | CAP_DIARIZE;
+    }
+
+    // The German fine-tunes (moonshine-de, trained on short Common Voice
+    // clips) end their output at the first sentence-final pause they hear:
+    // given a 13.6 s VAD segment holding two sentences with a pause between,
+    // moonshine-de transcribed the first and dropped the second, and without
+    // VAD everything after the first longer pause of a 50 s clip was lost.
+    // Slices re-split at the quietest point down to 8 s give the complete
+    // transcript (7/7 sentences on that clip, 4/6 with plain VAD). English
+    // moonshine-tiny/base do not do this (no sentence dropped on a 37 s clip
+    // with 0.9-1.5 s pauses, cap or not), and the cap would only re-split
+    // their jfk fixture, so they keep the plain path.
+    // CRISPASR_MOONSHINE_VAD_SLICE_CAP overrides (0 = no cap).
+    bool is_fine_tune() const { return sole_lang_ && std::strcmp(sole_lang_, "en") != 0; }
+
+    bool prefers_vad() const override { return is_fine_tune(); }
+
+    int vad_slice_cap_seconds() const override {
+        int cap = is_fine_tune() ? 8 : 0;
+        if (const char* e = getenv("CRISPASR_MOONSHINE_VAD_SLICE_CAP"))
+            cap = std::max(0, atoi(e));
+        return cap;
     }
 
     bool init(const whisper_params& params) override {
