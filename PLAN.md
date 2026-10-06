@@ -27,9 +27,10 @@ Open, in the order they would help:
 2. **nemotron session** is real time on CPU now (67 ms per 320 ms chunk at
    load ~8) but CPU-bound: it fell 17-25 s behind when other jobs took the
    cores. Left: the prompt kernel is still a scalar loop (~8 % of the time),
-   Metal is no faster than before (per-op overhead on ~2000 tiny nodes), and
-   the graph-reuse corruption (`CRISPASR_NEMOTRON_GPU_STREAM_GRAPH_REUSE=1`)
-   has no root cause yet.
+   Metal is no faster than before (per-op overhead on ~2000 tiny nodes), and the
+   graph-reuse corruption is found and fixed (stale allocator addresses on
+   re-allocation; reuse is exact now but saves nothing, so rebuild stays the
+   default).
 3. **Index-Translate-2B** works: the qwen35 loader now skips the appended
    MTP block. Left over:
    `qwen35moe` has the same gap; the loader derives the layer pattern from
