@@ -33,10 +33,10 @@ Open, in the order they would help:
 3. **Index-Translate-2B** works: the qwen35 loader now skips the appended
    MTP block. Left over:
    `qwen35moe` has the same gap; the loader derives the layer pattern from
-   the interval instead of `qwen35.attention.recurrent_layers`; the chat
-   template path ignores `enable_thinking`, so an empty `<think>` block is
-   generated and stripped; `test-chat-ggml.cpp:342` fails with Hy-MT2
-   (assumes a gemma-style template; not checked against a baseline build).
+   the interval instead of `qwen35.attention.recurrent_layers`; the empty
+   `<think>` block is now put into the prompt as the model's own template
+   does (#498; it used to be generated, ~4 tokens per sentence); `test-chat-ggml` now passes with Hy-MT2 and Index-Translate-2B (430 / 420
+   assertions; one gemma-only assertion was relaxed).
 4. The ggml bump was verified before merging: PR CI
    green (80 checks; CrispStrobe/ggml#5 green incl. Vulkan and the CUDA
    compile), and on a Kaggle GPU with CUDA seven backends pass outright
