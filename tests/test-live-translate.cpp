@@ -51,8 +51,7 @@ TEST_CASE("live-translate: tokens normalise case and edge punctuation", "[unit][
     REQUIRE(w[3].norm == "ja");
 }
 
-TEST_CASE("live-translate: sentence ends — German ordinals and abbreviations are not ends",
-          "[unit][live-translate]") {
+TEST_CASE("live-translate: sentence ends — German ordinals and abbreviations are not ends", "[unit][live-translate]") {
     REQUIRE(ends("Das ist gut.", 2));
     REQUIRE(ends("Wirklich?", 0));
     REQUIRE(ends("Er sagte: \"Nein!\"", 2));
@@ -187,8 +186,7 @@ TEST_CASE("live-translate: a re-rendered number inside committed text does not r
     REQUIRE(texts(u) == std::vector<std::string>{"Das ist vor allem so."});
 }
 
-TEST_CASE("live-translate: a revised boundary stalls instead of duplicating, then resyncs",
-          "[unit][live-translate]") {
+TEST_CASE("live-translate: a revised boundary stalls instead of duplicating, then resyncs", "[unit][live-translate]") {
     lt_committer c;
     c.on_partial(1, "Alpha beta gamma delta. Epsilon");
     REQUIRE(c.on_partial(1, "Alpha beta gamma delta. Epsilon zeta").committed.size() == 1);
@@ -282,8 +280,7 @@ TEST_CASE("live-translate: a pause commits a finished sentence, and only a finis
     REQUIRE(c.on_pause(3).committed.empty());
 }
 
-TEST_CASE("live-translate: with word timestamps the boundary is a time, not an alignment",
-          "[unit][live-translate]") {
+TEST_CASE("live-translate: with word timestamps the boundary is a time, not an alignment", "[unit][live-translate]") {
     using crispasr::lt_timed_word;
     lt_committer c;
     std::vector<lt_timed_word> t1 = {{"Erster", 0.2, 0.6}, {"Satz.", 0.6, 1.0}, {"Zweiter", 1.4, 1.9}};
@@ -295,8 +292,8 @@ TEST_CASE("live-translate: with word timestamps the boundary is a time, not an a
     // The caller now decodes from just before 1.0 s. The hypothesis shows
     // NONE of the committed words in a recognisable form — a mangled sliver
     // of the old sentence at most — which text alignment could not resolve.
-    std::vector<lt_timed_word> t2 = {{"atz.", 0.8, 1.0}, {"Zweiter", 1.4, 1.9}, {"Satz", 1.9, 2.3}, {"hier.", 2.3, 2.7},
-                                     {"Und", 3.0, 3.2}};
+    std::vector<lt_timed_word> t2 = {
+        {"atz.", 0.8, 1.0}, {"Zweiter", 1.4, 1.9}, {"Satz", 1.9, 2.3}, {"hier.", 2.3, 2.7}, {"Und", 3.0, 3.2}};
     lt_update u = c.on_partial(1, "atz. Zweiter Satz hier. Und", 3.3, &t2);
     REQUIRE(c.align_misses() == 0);
     REQUIRE(u.committed.empty()); // "hier." has been seen once only
@@ -479,8 +476,7 @@ TEST_CASE("live-translate: a sentence translated ahead of time is not translated
                      "\"translation\":\"EN<Guten Morgen.>\"") != std::string::npos);
 }
 
-TEST_CASE("live-translate: threaded sink drains every committed sentence before it stops",
-          "[unit][live-translate]") {
+TEST_CASE("live-translate: threaded sink drains every committed sentence before it stops", "[unit][live-translate]") {
     FILE* f = tmpfile();
     REQUIRE(f != nullptr);
     int n = 0;
@@ -507,4 +503,49 @@ TEST_CASE("live-translate: threaded sink drains every committed sentence before 
     fclose(f);
     REQUIRE(all == "[de] Eins.\n[en] T:Eins.\n[de] Zwei.\n[en] T:Zwei.\n[de] Drei.\n[en] T:Drei.\n");
     REQUIRE(n == 3);
+}
+
+TEST_CASE("live-translate: the stable part of a draft is the whole words two drafts share", "[unit][live-translate]") {
+    using crispasr::lt_detail::stable_prefix_bytes;
+    const std::string a = "We have today", b = "We have three points today.";
+    REQUIRE(b.substr(0, stable_prefix_bytes(a, b)) == "We have ");
+    // A word that only begins the same is not shared ("the" / "them").
+    REQUIRE(stable_prefix_bytes("First we talk about the", "First we talk about them all") ==
+            std::string("First we talk about ").size());
+    // Identical drafts are stable throughout; nothing in common is nothing.
+    REQUIRE(stable_prefix_bytes("Thank you.", "Thank you.") == std::string("Thank you.").size());
+    REQUIRE(stable_prefix_bytes("Sales are", "The turnover") == 0);
+    REQUIRE(stable_prefix_bytes("", "Hello") == 0);
+    // Multi-byte words compare as bytes.
+    REQUIRE(stable_prefix_bytes("Größe über alles", "Größe über 12") == std::string("Größe über ").size());
+}
+
+TEST_CASE("live-translate: a draft reports the words it shares with the previous draft", "[unit][live-translate]") {
+    FILE* f = tmpfile();
+    REQUIRE(f != nullptr);
+    {
+        crispasr::lt_sink_config cfg;
+        cfg.output = crispasr::lt_output::json;
+        cfg.src_lang = "de";
+        cfg.tgt_lang = "en";
+        cfg.sync = true;
+        cfg.draft_min_words = 1;
+        cfg.out = f;
+        cfg.log = nullptr;
+        crispasr::lt_sink sink(cfg, [&](const std::string& s, const crispasr::lt_sink::progress_fn&) {
+            return std::string(s == "Wir haben heute" ? "We have today" : "We have three points today.");
+        });
+        const auto now = crispasr::lt_sink::clock::now();
+        sink.on_partial(1, "Wir haben heute", 1.0, now);
+        sink.on_partial(1, "Wir haben heute drei Punkte", 2.0, now);
+    }
+    rewind(f);
+    std::string all;
+    char buf[512];
+    while (fgets(buf, sizeof(buf), f))
+        all += buf;
+    fclose(f);
+    INFO(all);
+    REQUIRE(all.find("\"translation\":\"We have today\",\"stable\":\"\"") != std::string::npos);
+    REQUIRE(all.find("\"translation\":\"We have three points today.\",\"stable\":\"We have \"") != std::string::npos);
 }

@@ -336,10 +336,12 @@ TEST_CASE("crispasr_chat_count_tokens counts the templated prompt", "[chat][gguf
     // an error — see the template table below for the families that render
     // nothing there — and for this model's template it is a real cost a
     // caller budgeting a context window can see.
+    // Whether it is more than zero depends on the model's template (gemma's
+    // opens the assistant turn, Hy-MT2's renders nothing): the per-family
+    // split is pinned by the template table below, with overrides.
     const int32_t n_empty = crispasr_chat_count_tokens(s, nullptr, 0, &err);
     REQUIRE(n_empty >= 0);
     REQUIRE(err.code == 0);
-    REQUIRE(n_empty > 0); // gemma opens the assistant turn for add_ass
     REQUIRE(n_empty < n_one);
 
     // Counting neither prefills nor extends the history: a generation run

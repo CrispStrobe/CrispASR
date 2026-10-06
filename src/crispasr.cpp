@@ -5660,7 +5660,8 @@ struct whisper_vad_context* whisper_vad_init_with_params(struct whisper_model_lo
     return vctx;
 }
 
-bool whisper_vad_detect_speech(struct whisper_vad_context* vctx, const float* samples, int n_samples) {
+static bool whisper_vad_detect_speech_impl(struct whisper_vad_context* vctx, const float* samples, int n_samples,
+                                           bool reset) {
     int n_chunks = n_samples / vctx->n_window;
     if (n_samples % vctx->n_window != 0) {
         n_chunks += 1; // Add one more chunk for remaining samples.
@@ -5669,8 +5670,10 @@ bool whisper_vad_detect_speech(struct whisper_vad_context* vctx, const float* sa
     CRISPASR_LOG_INFO("%s: detecting speech in %d samples\n", __func__, n_samples);
     CRISPASR_LOG_INFO("%s: n_chunks: %d\n", __func__, n_chunks);
 
-    // Reset LSTM hidden/cell states
-    ggml_backend_buffer_clear(vctx->buffer, 0);
+    // Reset LSTM hidden/cell states (a continuation keeps them: the stream
+    // VAD scores each new frame once, in order).
+    if (reset)
+        ggml_backend_buffer_clear(vctx->buffer, 0);
 
     vctx->probs.resize(n_chunks);
     CRISPASR_LOG_INFO("%s: props size: %u\n", __func__, n_chunks);
@@ -5683,7 +5686,8 @@ bool whisper_vad_detect_speech(struct whisper_vad_context* vctx, const float* sa
     }
     auto& window = vctx->window_buf;
     // The released wrapper resets waveform context along with LSTM state.
-    std::fill(window.begin(), window.begin() + carry, 0.0f);
+    if (reset)
+        std::fill(window.begin(), window.begin() + carry, 0.0f);
 
     auto& sched = vctx->sched.sched;
 
@@ -5764,6 +5768,18 @@ bool whisper_vad_detect_speech(struct whisper_vad_context* vctx, const float* sa
     ggml_backend_sched_reset(sched);
 
     return true;
+}
+
+bool whisper_vad_detect_speech(struct whisper_vad_context* vctx, const float* samples, int n_samples) {
+    return whisper_vad_detect_speech_impl(vctx, samples, n_samples, /*reset=*/true);
+}
+
+bool whisper_vad_detect_speech_continue(struct whisper_vad_context* vctx, const float* samples, int n_samples) {
+    return whisper_vad_detect_speech_impl(vctx, samples, n_samples, /*reset=*/false);
+}
+
+void whisper_vad_set_probs(struct whisper_vad_context* vctx, const float* probs, int n_probs) {
+    vctx->probs.assign(probs, probs + std::max(0, n_probs));
 }
 
 int whisper_vad_segments_n_segments(struct whisper_vad_segments* segments) {

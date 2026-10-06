@@ -318,7 +318,7 @@
       "source_model": "nvidia/parakeet-tdt_ctc-1.1b",
       "gguf": {
         "repo": "cstr/parakeet-tdt_ctc-1.1b-GGUF",
-        "revision": "6ced2ca0551a4e6ad2c0f6a6c8c70df4a52cf07b",
+        "revision": "6ced2ca0551aa68a892f3e7ffe83369082522617",
         "file": "parakeet-tdt_ctc-1.1b-q8_0.gguf",
         "approx_size_mb": 1215
       },
@@ -416,14 +416,12 @@
       "backend_id": "voxtral",
       "skip_diff": true,
       "_skip_diff_note": "Added 2026-05-25 — rebake-pending. Voxtral mini 3B; the larger 24B variant is not on cstr yet.",
-      "skip_preflight": true,
-      "_skip_preflight_note": "Rebake-pending — GGUF revision is a TODO placeholder. Remove skip_preflight once the rebake fills in the real 40-char SHA and the file lands on HF.",
       "source_model": "mistralai/Voxtral-Mini-3B-2507",
       "source_model_note": "HF id for tools/reference_backends/voxtral.py.",
       "gguf": {
         "repo": "cstr/voxtral-mini-3b-2507-GGUF",
-        "revision": "7a6ffdc7ff9ed4e2f3a6b8c1d9e5f0a2b3c4d5e6",
-        "_revision_note": "TODO: replace with full 40-char SHA.",
+        "revision": "7a6ffdc7ff9ef90d291554546f3a54562ff5beda",
+        "_revision_note": "Real commit (2026-04-09). The old pin shared its first 12 characters and was padded by hand, so it 404'd. The q4_k file is byte-identical (sha256 306088d8...) at this revision and at the current head cfe49042.",
         "file": "voxtral-mini-3b-2507-q4_k.gguf",
         "approx_size_mb": 2529
       },
@@ -442,7 +440,7 @@
       "source_model_note": "HF id for tools/reference_backends/mimo_asr.py. Needs MIMO_TOKENIZER_DIR env to point at the sibling tokenizer snapshot during rebake.",
       "gguf": {
         "repo": "cstr/mimo-asr-GGUF",
-        "revision": "4c6a0ede08740b9e8c7e4f5a4b2a1d3a5c7b9e8c",
+        "revision": "4c6a0ede0874e2cb33fec55f73b1c3969d5cfad5",
         "_revision_note": "TODO: replace with full 40-char SHA.",
         "file": "mimo-asr-q4_k.gguf",
         "approx_size_mb": 4308

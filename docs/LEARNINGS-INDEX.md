@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (326 lessons)
+## Index by topic (328 lessons)
 
 **Security & untrusted input** (2)
 
@@ -143,7 +143,7 @@ cross-reference when you already know which model you are touching.
 - L18945 — Device-side argmax can cost more than the readback it removes, and an unused graph output still runs
 - L19386 — 314. Index-Echo 9B: preload functional child weights before trusting offloaded cache references
 
-**ggml graphs, allocation & caching** (49)
+**ggml graphs, allocation & caching** (50)
 
 - L77 — A float `--tensor-type` override must not reach 1-D tensors (2026-09-29, #461)
 - L1254 — Reusing a cached scheduler graph across `sched_reset`/`alloc` cycles is CPU-safe but SIGSEGVs on GPU — the reused input tensor is bound to the prior cycle's freed buffer
@@ -194,6 +194,7 @@ cross-reference when you already know which model you are touching.
 - L19343 — 2026-10-02 — Scheduler disposal must distinguish restored graphs from live rewires (PR #480)
 - L19419 — 315. Index-Echo 9B: VAD scheduler placement and whole-case F32 acceptance
 - L19489 — 2026-10-06 — A cached ggml graph whose nodes write persistent state must not be resubmitted (nemotron stream cache)
+- L19566 — 2026-10-06 — A graph allocated twice keeps its first addresses (nemotron GPU graph reuse)
 
 **GPU portability — Metal / CUDA / Vulkan** (28)
 
@@ -376,7 +377,7 @@ cross-reference when you already know which model you are touching.
 - L19253 — 2026-10-01 — Parakeet / Phonon-2 CPU decoding: probe the production projection and SOS
 - L19552 — 2026-10-06 — A GGUF's `block_count` can include blocks that are not part of the trunk (Qwen3.5 MTP)
 
-**Uncategorised** (11)
+**Uncategorised** (12)
 
 - L67 — A stage timer can hide per-process setup — two very different GPUs showing the same time is the tell (2026-09-29, #461)
 - L85 — Keeping the old path "for safety" and re-running it can double the cost (2026-09-30, #478)
@@ -389,6 +390,7 @@ cross-reference when you already know which model you are touching.
 - L19001 — A phoneme dialect mismatch is invisible to every guard built to catch a bad G2P
 - L19503 — 2026-10-06 — Lining up a new hypothesis with committed text needs an alignment, and word lists need the same attribution as the text
 - L19538 — 2026-10-06 — A diagnosis is a prediction: test the prediction before shipping the fix (moonshine-de, and a loaded box)
+- L19582 — 2026-10-06 — A revision pin can be 12 real characters and 28 invented ones
 
 ## Cross-reference by model / family
 

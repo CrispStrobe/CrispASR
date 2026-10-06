@@ -59,6 +59,7 @@ static bool nemotron_force_scalar() {
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <unordered_set>
 #include <cstring>
 #include <map>
 #include <memory>
@@ -353,6 +354,40 @@ struct nemotron_stream_device_state {
     bool rpos_valid = false;
 };
 
+// Every tensor reachable from the graph's nodes that has no storage yet:
+// what ggml_backend_sched_alloc_graph will place in its compute buffer.
+static std::vector<ggml_tensor*> nemotron_graph_unplaced_tensors(ggml_cgraph* gf) {
+    std::vector<ggml_tensor*> out, stack;
+    std::unordered_set<ggml_tensor*> seen;
+    for (int i = 0; i < ggml_graph_n_nodes(gf); i++)
+        stack.push_back(ggml_graph_node(gf, i));
+    while (!stack.empty()) {
+        ggml_tensor* t = stack.back();
+        stack.pop_back();
+        if (!t || !seen.insert(t).second)
+            continue;
+        if (t->data == nullptr && t->buffer == nullptr)
+            out.push_back(t);
+        for (int j = 0; j < GGML_MAX_SRC; j++)
+            stack.push_back(t->src[j]);
+        stack.push_back(t->view_src);
+    }
+    return out;
+}
+
+// Make a graph that was allocated before allocatable again. The allocator
+// treats a tensor that already has data as placed elsewhere and leaves it,
+// so on a second ggml_backend_sched_alloc_graph every intermediate kept its
+// address from the first allocation - inside a compute buffer that other
+// graphs (decoder, prompt kernel) had reset and reused, or that had been
+// reallocated. That was the word salad behind graph reuse.
+static void nemotron_graph_unplace(const std::vector<ggml_tensor*>& placed) {
+    for (ggml_tensor* t : placed) {
+        t->data = nullptr;
+        t->buffer = nullptr;
+    }
+}
+
 struct nemotron_stream_device_chunk_graph {
     std::vector<uint8_t> meta;
     ggml_context* ctx0 = nullptr;
@@ -362,6 +397,9 @@ struct nemotron_stream_device_chunk_graph {
     ggml_tensor* pos_enc = nullptr;
     bool uses_pos = true;    // false when every layer read its rel-pos table from the cache
     bool fills_rpos = false; // this graph writes the rel-pos table into the cache
+    // Tensors with no storage when the graph was built: the scheduler places
+    // them. See nemotron_graph_unplace.
+    std::vector<ggml_tensor*> sched_placed;
 
     nemotron_stream_device_chunk_graph() = default;
     nemotron_stream_device_chunk_graph(const nemotron_stream_device_chunk_graph&) = delete;
@@ -1625,18 +1663,21 @@ static bool nemotron_run_encoder_chunked(nemotron_context* ctx, const float* pre
             auto key = std::make_tuple(T_new, T_cache, has_conv_cache ? 1 : 0, src_bank);
             auto it = device_graphs.find(key);
             if (it != device_graphs.end()) {
-                // A chunk graph must NOT be submitted twice. Its ggml_cpy nodes
-                // write into the persistent cache banks, and re-allocating the
-                // same graph after a scheduler reset computes garbage on Metal:
-                // the transcript was right for exactly as long as every chunk
-                // still had a new key (the first L frames, ~4.5 s) and turned to
-                // word salad at the first cache hit. Rebuilding the graph per
-                // chunk is exact and costs nothing measurable (15 s clip: 9.1 s
-                // rebuilt vs 9.5 s reused). CRISPASR_NEMOTRON_GPU_STREAM_GRAPH_REUSE=1
-                // restores the reuse for whoever chases the scheduler side.
+                // Rebuilt per chunk by default. Reusing a chunk graph used to
+                // compute garbage on Metal from the first cache hit (~4.5 s):
+                // its intermediates kept the addresses of their first
+                // allocation, because the allocator leaves any tensor that
+                // already has data where it is, and other graphs had reused
+                // that compute buffer since. nemotron_graph_unplace clears
+                // them first; reuse is then exact (same transcript, md5 match)
+                // but saves nothing measurable — building every chunk graph of
+                // a 15 s clip takes ~86 ms in total either way.
+                // CRISPASR_NEMOTRON_GPU_STREAM_GRAPH_REUSE=1 turns it on.
                 static const bool reuse = getenv("CRISPASR_NEMOTRON_GPU_STREAM_GRAPH_REUSE") != nullptr;
-                if (reuse)
+                if (reuse) {
+                    nemotron_graph_unplace(it->second->sched_placed);
                     return *it->second;
+                }
                 device_graphs.erase(it);
             }
 
@@ -1764,6 +1805,7 @@ static bool nemotron_run_encoder_chunked(nemotron_context* ctx, const float* pre
             ggml_set_name(cg->block_out, "block_out");
             ggml_set_output(cg->block_out);
             ggml_build_forward_expand(cg->gf, cg->block_out);
+            cg->sched_placed = nemotron_graph_unplaced_tensors(cg->gf);
 
             auto* result = cg.get();
             device_graphs.emplace(key, std::move(cg));
@@ -3204,11 +3246,20 @@ static void nemotron_apply_prompt(nemotron_context* ctx, std::vector<float>& enc
     if (!ctx->model.prompt_kernel.l0_w)
         return;
 
-    if (ctx->backend != ctx->backend_cpu && nemotron_opt_enabled("CRISPASR_NEMOTRON_GPU_PROMPT")) {
+    // The ggml graph (two matmuls over all T_enc frames at once) on the
+    // context's backend. On the CPU this replaces a scalar per-frame
+    // matrix-vector loop with ggml's threaded SIMD matmul;
+    // CRISPASR_NEMOTRON_SCALAR_PROMPT=1 keeps the loop (A/B). On a GPU it
+    // stays opt-in (CRISPASR_NEMOTRON_GPU_PROMPT).
+    const bool on_cpu = ctx->backend == ctx->backend_cpu;
+    const char* scalar = std::getenv("CRISPASR_NEMOTRON_SCALAR_PROMPT");
+    const bool use_graph =
+        on_cpu ? !(scalar && *scalar && *scalar != '0') : nemotron_opt_enabled("CRISPASR_NEMOTRON_GPU_PROMPT");
+    if (use_graph) {
         if (nemotron_apply_prompt_gpu(ctx, enc_out, T_enc, d_model)) {
             return;
         }
-        fprintf(stderr, "nemotron: GPU prompt kernel failed, falling back to CPU\n");
+        fprintf(stderr, "nemotron: prompt kernel graph failed, falling back to the scalar loop\n");
     }
 
     const auto& pk = ctx->model.prompt_kernel;

@@ -190,6 +190,7 @@ surviving artifact. Applied on both the CLI and the session C-ABI.
 | `CRISPASR_T5_KEEP_EMBED` | `1` keeps `shared.embed.*` and `lm_head.*` at source precision when quantizing a T5 model. **Off by default because it was measured and loses**: on madlad400 it makes q8_0 3.38→3.62 GB and q4_k 2.04→2.41 GB for a worst-stage cosine that does not improve (0.999922→0.999920, 0.992929→0.992606). The Q4_K loss accumulates through the 32 encoder blocks, not in the embedding lookup (#333). |
 | `CRISPASR_MARIAN_KEEP` | Which tensors `crispasr-quantize` holds at source precision for a Marian / Opus-MT model: `none` (default), `embed` (the tied `shared.embed.weight`), or a comma list of name fragments. **`none` is the measured default**: keeping the embedding nearly doubles the file (q8_0 84→111 MB, q4_k 47→89 MB) for 0–2 more sentences that match the reference exactly. |
 | `CRISPASR_M2M100_BEAM_REPLAY` | `1` restores the old m2m100 / Opus-MT beam search that replays each beam's whole prefix per step instead of snapshotting the decoder cache. Same output, 2–4× slower; for A/B only. |
+| `CRISPASR_STREAM_VAD_FULL` | `1` makes `--stream` re-score the whole window with the VAD on every step from a reset state, as before 2026-10. The default scores each new 32 ms frame once and keeps Silero's recurrent state (30-86 ms → 3-6 ms per step, same segments in A/B). Other VAD models always re-scan. |
 | `CRISPASR_KOKORO_PUNCT` | `0` drops punctuation from the phoneme string for the German/French/Spanish built-in G2Ps, restoring pre-0.8.26 behaviour for A/B. On by default: Kokoro's vocabulary contains `,.;:!?` and they are how it pauses (#316). English is not gated — it is settled against misaki. |
 
 ### Watermark / provenance
@@ -941,6 +942,7 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `CRISPASR_MOONSHINE_STREAMING_BENCH`
 - `CRISPASR_MOONSHINE_STREAMING_GPU`
 - `CRISPASR_MOONSHINE_STREAM_BENCH`
+- `CRISPASR_MOONSHINE_PAUSE_SPLIT_MS` — milliseconds; the German moonshine fine-tunes decode the stretches between pauses at least this long separately, because they stop at the first sentence-final pause (default 200; `0` = off; English moonshine 0). Lower catches shorter sentence pauses and splits more often at commas.
 
 ### MOSS family
 
@@ -1102,6 +1104,7 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
   (off by default).
 - `CRISPASR_NEMOTRON_GPU_STREAM_CACHE` — `1` keeps the per-layer streaming state
   in a device-resident ping-pong cache across chunks (off by default).
+- `CRISPASR_NEMOTRON_SCALAR_PROMPT` — `1` runs the prompt kernel as the old scalar per-frame loop on CPU instead of the ggml graph (A/B; the graph took it from ~2 s to ~45 ms per 15 s clip).
 - `CRISPASR_NEMOTRON_STREAM_HOST_CACHE` — `1` runs a realtime session the old
   way: one graph per layer per chunk, per-layer state copied to the host and
   back. Default: one graph per chunk, state kept in backend memory. A/B switch.

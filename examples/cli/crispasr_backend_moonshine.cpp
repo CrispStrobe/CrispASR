@@ -43,6 +43,10 @@ public:
         mp.n_threads = params.n_threads;
         mp.use_gpu = params.use_gpu;
         ctx_ = moonshine_init_with_params(mp);
+        if (ctx_) {
+            const bool fine_tune = sole_lang_ && std::strcmp(sole_lang_, "en") != 0;
+            moonshine_set_pause_split_ms(ctx_, moonshine_default_pause_split_ms(params.model.c_str(), fine_tune));
+        }
         return ctx_ != nullptr;
     }
 

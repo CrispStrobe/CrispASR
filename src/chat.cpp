@@ -168,6 +168,27 @@ const char* resolve_template(const llama_model* model, const char* override_tmpl
     return tmpl_owned.c_str();
 }
 
+// Text a template appends after the assistant opening that the built-in
+// renderer (llama_chat_apply_template, which matches templates by family and
+// does not evaluate Jinja) leaves out. Qwen3 / Qwen3.5 templates open the
+// reply with an empty `<think>\n\n</think>\n\n` unless `enable_thinking`
+// is set: that empty block IS their non-thinking mode. Rendered without it,
+// the model writes the block itself — four or more generated tokens per
+// reply, and on a reasoning checkpoint sometimes a real one. Only templates
+// that spell out this exact branch get it; the caller's override is taken
+// as written.
+std::string generation_suffix(const llama_model* model, const char* override_tmpl) {
+    if (override_tmpl && *override_tmpl)
+        return {};
+    const char* baked = llama_model_chat_template(model, /*name=*/nullptr);
+    if (!baked)
+        return {};
+    const std::string t = baked;
+    if (t.find("enable_thinking") != std::string::npos && t.find("'<think>\\n\\n</think>\\n\\n'") != std::string::npos)
+        return "<think>\n\n</think>\n\n";
+    return {};
+}
+
 } // namespace
 
 // ---------------------------------------------------------------------------
@@ -178,7 +199,8 @@ struct crispasr_chat_session {
     llama_context* ctx = nullptr;
     const llama_vocab* vocab = nullptr;
 
-    std::string tmpl; // resolved chat template name
+    std::string tmpl;       // resolved chat template name
+    std::string gen_suffix; // appended after the assistant opening (generation_suffix)
     int32_t n_ctx = 0;
     int32_t n_threads = 1;
     int32_t n_threads_batch = 1;
@@ -371,6 +393,7 @@ extern "C" crispasr_chat_session_t crispasr_chat_open(const char* model_path, co
     s->n_threads = cparams.n_threads;
     s->n_threads_batch = cparams.n_threads_batch;
     (void)resolve_template(model, p.chat_template, s->tmpl);
+    s->gen_suffix = generation_suffix(model, p.chat_template);
     return s;
 }
 
@@ -465,6 +488,7 @@ extern "C" int32_t crispasr_chat_count_tokens(crispasr_chat_session_t s, const c
         // inventing a token would count one the model never sees.
         return 0;
     }
+    formatted += s->gen_suffix;
     const std::vector<llama_token> tokens = tokenize(s->vocab, formatted, /*add_special=*/true, /*parse_special=*/true);
     if (tokens.empty()) {
         set_err(err, 21, "tokenize produced no tokens for a non-empty prompt");
@@ -671,6 +695,7 @@ int32_t prepare_prompt(crispasr_chat_session* s, const crispasr_chat_message* me
         set_err(err, 20, "llama_chat_apply_template failed for template '%s'", s->tmpl.c_str());
         return 20;
     }
+    formatted += s->gen_suffix;
     // `messages` is the whole conversation, so it is tokenized exactly as
     // a just-opened session would tokenize it, leading BOS included. That
     // is what makes it comparable to the history token for token below.

@@ -26,34 +26,48 @@ Open, in the order they would help:
 1. **Re-measure on an idle machine.** Best runs were at load ~5-10.
 2. **nemotron session** is real time on CPU now (67 ms per 320 ms chunk at
    load ~8) but CPU-bound: it fell 17-25 s behind when other jobs took the
-   cores. Left: the prompt kernel is still a scalar loop (~8 % of the time),
-   Metal is no faster than before (per-op overhead on ~2000 tiny nodes), and
-   the graph-reuse corruption (`CRISPASR_NEMOTRON_GPU_STREAM_GRAPH_REUSE=1`)
-   has no root cause yet.
+   cores. The prompt kernel is a ggml graph on CPU now (1.7-2.4 s -> 45 ms
+   per 15 s clip, same transcript), and the graph-reuse corruption is found
+   and fixed (stale allocator addresses on re-allocation; reuse is exact now
+   but saves nothing, so rebuild stays the default). Left: Metal is no faster
+   than before (per-op overhead on ~2000 tiny nodes).
 3. **Index-Translate-2B** works: the qwen35 loader now skips the appended
    MTP block. Left over:
-   `qwen35moe` has the same gap; the loader derives the layer pattern from
-   the interval instead of `qwen35.attention.recurrent_layers`; the chat
-   template path ignores `enable_thinking`, so an empty `<think>` block is
-   generated and stripped; `test-chat-ggml.cpp:342` fails with Hy-MT2
-   (assumes a gemma-style template; not checked against a baseline build).
+   `qwen35moe` now skips the MTP block too (compiled; no MoE checkpoint
+   run — the smallest is 35B); the interval-derived layer pattern equals the
+   file's own `attention.recurrent_layers` on Index-Translate-2B, so the key
+   is not read; the empty `<think>` block is now put into the prompt as the
+   model's own template does (#498; it used to be generated, ~4 tokens per
+   sentence); `test-chat-ggml` passes with Hy-MT2 and Index-Translate-2B (430 /
+   420 assertions; one gemma-only assertion was relaxed).
 4. The ggml bump was verified before merging: PR CI
    green (80 checks; CrispStrobe/ggml#5 green incl. Vulkan and the CUDA
    compile), and on a Kaggle GPU with CUDA seven backends pass outright
    (parakeet, canary, cohere, sensevoice, qwen3-asr, nemotron,
    moonshine-tiny) and index-echo-2b passes all 67 stages. wav2vec2 prints
    "…what ou can do…" there — identically on `main`, so not the bump.
-   Left in the Kaggle suite:
-   no `transcript_format: srt` (index-echo's transcript compare cannot
-   pass), voxtral-mini-3b's pinned revision 404s, and wav2vec2's word flip
-   on that hardware. canary's per-layer gate is 0.99 since this bump (x86
+   Kaggle suite: `transcript_format: srt` is honoured now, and three
+   hand-padded GGUF pins (voxtral-mini-3b, parakeet-tdt_ctc-1.1b, mimo-asr)
+   are real commits — `check-registry-urls.py` now HEADs every manifest pin.
+   Left: wav2vec2's "ou" for "you" on Kaggle hardware only (not reproducible
+   here; its WER gate is not loosened blind). canary's per-layer gate is 0.99 since this bump (x86
    layer 18 = 0.9977).
-5. **VAD re-runs over the whole 15 s window every step** (~70-130 ms).
+5. ~~VAD re-runs over the whole window every step~~: incremental Silero
+   (each 32 ms frame scored once, state kept) — 30-86 → 3-6 ms per step.
+   Other VAD models still re-scan.
 6. **hikari-medium port** (causal Whisper, English→German simultaneous S2TT).
-7. A StreamRevise-style draft (revise the previous translation instead of
-   re-translating) for de/en; base Hy-MT2 is not trained for it.
-8. moonshine-de stops at the first longer pause of a clip. Windows paths are
-   compiled by CI only, never run. No timing here was taken on an idle
+7. Drafts: the part two consecutive drafts agree on is marked stable
+   (normal text vs dimmed; JSON `stable`). On German speech with Opus-MT,
+   whole drafts are rewritten at normalized erasure 1.17-1.48, the stable
+   part at 0.16-0.18. Not done: forcing the stable prefix into the next
+   decode (needs a target-prefix API in the translators), and a model
+   trained to revise (StreamRevise); base Hy-MT2 is not.
+8. moonshine-de ended its output at the first sentence-final pause. Fixed in
+   the library: the German variants decode the stretches between pauses of
+   >= 200 ms separately (file, VAD, live and C API: 11/11 sentences on the
+   50 s clip, was 6-7/11). Cost: comma pauses as long as 200 ms also split
+   (3 extra breaks on that clip). Windows: the live
+   pipeline runs end to end on a Windows runner (#503). No timing here was taken on an idle
    machine (load 4-30 throughout).
 9. Opus-MT: only de↔en is hosted (`cstr/opus-mt-{de-en,en-de}-GGUF`, f16 +
    q8_0, CC-BY-4.0 per the OPUS-MT project's own statement). Other pairs

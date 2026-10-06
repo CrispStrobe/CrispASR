@@ -33,6 +33,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 REGISTRY = ROOT / "src" / "crispasr_model_registry.cpp"
+MANIFEST = ROOT / "tests" / "regression" / "manifest.json"
 
 # {"name", "file.gguf", "https://…", "~size", companion_file, companion_url, …}
 # Entries span lines and contain nullptrs, so match the URL string literals and
@@ -87,6 +88,24 @@ def parse_registry(path: Path):
     return out
 
 
+def parse_manifest(path: Path):
+    """Yield ("regression:<name>", url) for every pinned GGUF in the regression
+    manifest. Three pins were 12 real hex characters padded to 40 by hand, so
+    they 404'd and their backends never ran in the Kaggle suite (2026-10-06)."""
+    import json
+    out = []
+    if not path.is_file():
+        return out
+    for entry in json.loads(path.read_text()).get("backends", []):
+        g = entry.get("gguf") or {}
+        if not (g.get("repo") and g.get("revision") and g.get("file")):
+            continue
+        for f in [g["file"], *g.get("companion_files", [])]:
+            out.append((f"regression:{entry['name']}",
+                        f"https://huggingface.co/{g['repo']}/resolve/{g['revision']}/{f}"))
+    return out
+
+
 def check(url: str, timeout: float, attempts: int = 3):
     req = urllib.request.Request(url, method="HEAD",
                                  headers={"User-Agent": "crispasr-registry-check"})
@@ -128,7 +147,7 @@ def main() -> int:
     if not REGISTRY.is_file():
         print(f"ERROR: {REGISTRY} not found", file=sys.stderr)
         return 1
-    pairs = parse_registry(REGISTRY)
+    pairs = parse_registry(REGISTRY) + parse_manifest(MANIFEST)
     if args.backend:
         pairs = [p for p in pairs if p[0] == args.backend]
     # De-duplicate: several entries legitimately share a URL (aliases).
@@ -138,7 +157,8 @@ def main() -> int:
             seen.add(u)
             uniq.append((b, u))
 
-    print(f"checking {len(uniq)} unique URLs from {REGISTRY.relative_to(ROOT)}\n")
+    print(f"checking {len(uniq)} unique URLs from {REGISTRY.relative_to(ROOT)} "
+          f"and {MANIFEST.relative_to(ROOT)}\n")
     with ThreadPoolExecutor(max_workers=args.jobs) as ex:
         results = list(ex.map(lambda p: (p[0], p[1], *check(p[1], args.timeout)), uniq))
 
