@@ -1345,10 +1345,18 @@ extern "C" struct m2m100_context* m2m100_init_from_file(const char* path_model, 
     // core_gguf::load_weights + ggml_backend_alloc_ctx_tensors, so picking a GPU
     // backend is the whole change.
     //   * CRISPASR_M2M100_GPU=1 forces GPU on ANY backend; =0 forces CPU.
-    //   * default: GPU on CUDA/Vulkan, CPU on Metal. Kaggle P100 A/B: identical
-    //     en->de output, 1.24x wall (slow OpenBLAS baseline). On M1 (Accelerate)
-    //     neutral — small encoder-decoder AR, launch-bound (LEARNING 34) — so
-    //     Metal stays CPU unless forced. Mirrors LEARNING 34's is_metal gate.
+    //   * default: GPU on CUDA/Vulkan (Kaggle P100 A/B: identical en->de
+    //     output, 1.24x wall against a slow OpenBLAS baseline).
+    //   * Metal, m2m100: GPU. An earlier M1 reading called it neutral; in
+    //     interleaved pairs at load 4-5 (2026-10-06, 418M q8_0, warm, tokens
+    //     identical) the GPU is ~20% faster alone (median 134-140 vs 158-186
+    //     ms, 3/3) and ~9% faster inside the live pipeline, where it shares
+    //     the GPU with the recogniser (summed 9.67 vs 10.59 s over 4 pairs,
+    //     3/4 in its favour). Under CPU contention the gap widens.
+    //   * Metal, Marian / Opus-MT: CPU. Alone the GPU is slightly ahead, but
+    //     in the live pipeline it is ~2x SLOWER (median 98-118 vs 38-69 ms,
+    //     3/3): a decoder step is ~4 ms of CPU work, less than the wait
+    //     behind the recogniser's GPU work.
     c->backend_cpu = core_cpu_backend::init();
     // Honour the caller's thread count. It used to be parsed, stored and never
     // applied, so `-t` did nothing for m2m100 / marian.
@@ -1365,7 +1373,7 @@ extern "C" struct m2m100_context* m2m100_init_from_file(const char* path_model, 
 #if defined(GGML_USE_METAL)
             is_metal = core_cpu_backend::is_metal(gpu);
 #endif
-            if (!is_metal || force_gpu) {
+            if (!is_metal || force_gpu || !hp.marian) {
                 c->backend = gpu;
                 if (params.verbosity >= 1)
                     fprintf(stderr, "m2m100: GPU backend enabled (%s)\n", ggml_backend_name(c->backend));
@@ -1373,8 +1381,8 @@ extern "C" struct m2m100_context* m2m100_init_from_file(const char* path_model, 
                 ggml_backend_free(gpu);
                 if (params.verbosity >= 1)
                     fprintf(stderr,
-                            "%s: GPU default limited to CUDA/Vulkan (Metal neutral); set "
-                            "CRISPASR_M2M100_GPU=1 to force\n",
+                            "%s: runs on the CPU on Metal by default (measured faster in the live "
+                            "pipeline); set CRISPASR_M2M100_GPU=1 to force the GPU\n",
                             hp.marian ? "marian" : "m2m100");
             }
         }

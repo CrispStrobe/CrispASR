@@ -27,7 +27,10 @@ technical deep-dives are in `LEARNINGS.md`.
   and 1378→361 ms, m2m100 beam 5 20.6→11.8 s for five sentences incl. load);
   relu (`tc-big-gmw-gmw`, 12/12) and multi-target (`en-ROMANCE`, 8/8)
   checkpoints verified; keep-the-embedding quantisation measured and
-  rejected (`CRISPASR_MARIAN_KEEP`).
+  rejected (`CRISPASR_MARIAN_KEEP`). m2m100 now defaults to the GPU on
+  Metal (Opus-MT stays on CPU): paired runs at load 4-7 gave ~20% alone and
+  ~9% in the live pipeline with identical tokens; Opus-MT is ~2x slower on
+  the GPU inside the pipeline.
 - **Live translation**: the next commit candidate is translated ahead of time
   and reused at commit (10 of 11 sentences); the LLM translator no longer
   resets between sentences (the runtime keeps the shared instruction prefix);

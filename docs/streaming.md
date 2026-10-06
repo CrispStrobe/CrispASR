@@ -370,10 +370,10 @@ in (the second is chosen automatically for a file named like the model,
 otherwise the first); anything else is taken as a template —
 `--translate-prompt 'Translate from {src} to {tgt}:\n{text}'`. A reasoning
 model's `<think>` block is removed from the output.
-m2m100 and Opus-MT run on the CPU by default on Apple Silicon; the LLM
+On Apple Silicon Opus-MT runs on the CPU and m2m100 on the GPU by default; the LLM
 translators need the GPU (Hy-MT2 on CPU: ~8.5 s per sentence against ~0.6 s,
-`CRISPASR_TRANSLATE_CPU=1`, load 12–27). `CRISPASR_M2M100_GPU=1` puts
-m2m100 / Opus-MT on the GPU; measured in interleaved pairs at load 10–50:
+`CRISPASR_TRANSLATE_CPU=1`, load 12–27). `CRISPASR_M2M100_GPU=1` / `=0`
+forces either device for m2m100 and Opus-MT; measured in interleaved pairs at load 10–50:
 
 | | CPU | GPU |
 |---|---|---|
@@ -387,9 +387,12 @@ wins because it is immune to the CPU contention on this machine. In the live
 pipeline the recogniser already owns the GPU, and each of a sentence's ~20
 single-token decoder steps queues behind it — for Opus-MT, whose step is
 ~4 ms of CPU work, that queueing costs more than the step. So Opus-MT stays
-on the CPU. m2m100 is a draw on the median; the GPU had the shorter worst case in
-two of three pairs. It stays on the CPU until that is repeated on a quiet
-machine.
+on the CPU. m2m100 was a draw on the median at that load, so it was
+repeated at load 4–7: alone the GPU is ~20% faster (median 134–140 ms
+against 158–186, 3 of 3 pairs), and in the live pipeline ~9% (summed
+9.67 s against 10.59 s over 4 pairs, 3 of 4 in its favour), with identical
+tokens for greedy and beam 5. m2m100 therefore defaults to the GPU;
+`CRISPASR_M2M100_GPU=0` puts it back on the CPU.
 
 Where an Opus-MT decoder step goes (`CRISPASR_M2M100_BENCH=1`, CPU): graph
 build 0.11 ms, allocation 0.15 ms, compute 3.5–4 ms, read-back 0.04 ms.

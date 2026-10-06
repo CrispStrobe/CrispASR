@@ -61,7 +61,9 @@ Open, in the order they would help:
    (`opus-mt-en-ROMANCE`, f16) matched the reference 8/8 greedy and beam 4,
    and `-tl es` selects the target; a relu checkpoint
    (`opus-mt-tc-big-gmw-gmw`, 437 MB f16, de↔en↔nl in one file) matched
-   12/12 greedy and beam 4. gelu is the one activation branch never run.
+   12/12 greedy and beam 4. gelu is the one activation branch never run,
+   and nothing needs it: of 117 Helsinki-NLP checkpoints surveyed
+   (2026-10-06) 92 are relu, 25 swish, none gelu.
    Quantisation: everything is quantised, measured — see the table in
    `examples/crispasr-quantize/main.cpp` (`CRISPASR_MARIAN_KEEP`).
 
