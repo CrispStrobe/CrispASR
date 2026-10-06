@@ -32,8 +32,10 @@ Open, in the order they would help:
    has no root cause yet.
 3. **Index-Translate-2B** works: the qwen35 loader now skips the appended
    MTP block. Left over:
-   `qwen35moe` has the same gap; the loader derives the layer pattern from
-   the interval instead of `qwen35.attention.recurrent_layers`; the chat
+   `qwen35moe` now skips the MTP block too (compiled; no MoE checkpoint
+   run — the smallest is 35B); the interval-derived layer pattern equals the
+   file's own `attention.recurrent_layers` on Index-Translate-2B, so the key
+   is not read; the chat
    template path ignores `enable_thinking`, so an empty `<think>` block is
    generated and stripped; `test-chat-ggml.cpp:342` fails with Hy-MT2
    (assumes a gemma-style template; not checked against a baseline build).
