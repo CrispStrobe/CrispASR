@@ -62,7 +62,11 @@ Open, in the order they would help:
    part at 0.16-0.18. Not done: forcing the stable prefix into the next
    decode (needs a target-prefix API in the translators), and a model
    trained to revise (StreamRevise); base Hy-MT2 is not.
-8. moonshine-de stops at the first longer pause of a clip. Windows paths are
+8. moonshine-de ended its output at the first sentence-final pause. Fixed in
+   the library: the German variants decode the stretches between pauses of
+   >= 200 ms separately (file, VAD, live and C API: 11/11 sentences on the
+   50 s clip, was 6-7/11). Cost: comma pauses as long as 200 ms also split
+   (3 extra breaks on that clip). Windows paths are
    compiled by CI only, never run. No timing here was taken on an idle
    machine (load 4-30 throughout).
 9. Opus-MT: only de↔en is hosted (`cstr/opus-mt-{de-en,en-de}-GGUF`, f16 +
