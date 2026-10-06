@@ -4103,6 +4103,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
 
         // ---- Live translation: second-stage text translator ----
         std::unique_ptr<CrispasrBackend> tr_backend;
+        std::unique_ptr<CrispasrBackend> tr_backend_pivot; // second hop of a pivot through English
         std::shared_ptr<crispasr_chat_session> tr_llm(nullptr, &crispasr_chat_close);
         std::unique_ptr<crispasr::lt_sink> live_tr; // declared last: its thread uses the two above
         if (params.live_translate || !params.translate_model.empty() || !params.translate_backend.empty()) {
@@ -4131,6 +4132,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
             // LLM by its registry name. `--translate-backend llm` with no
             // model (or `auto`) means the default one.
             std::string tr_registry;
+            std::string tr_pivot_registry; // second hop, when the pair goes through English
             if (tr_model == "hy-mt2" || tr_model == "index-translate") {
                 tr_registry = tr_model;
                 tr_model = "auto";
@@ -4145,7 +4147,16 @@ int crispasr_run_backend(const whisper_params& params_in) {
                 tr_name = "marian";
             } else if (tr_model == "auto" && tr_name == "marian") {
                 // One Marian model per language pair: pick it from the languages.
+                // A pair with no model of its own (de-tr: Opus-MT never released
+                // one) goes through English when both halves exist.
                 tr_registry = "opus-mt-" + tr_src + "-" + tr_tgt;
+                CrispasrRegistryEntry probe;
+                if (!crispasr_registry_lookup(tr_registry, probe) && tr_src != "en" && tr_tgt != "en" &&
+                    crispasr_registry_lookup("opus-mt-" + tr_src + "-en", probe) &&
+                    crispasr_registry_lookup("opus-mt-en-" + tr_tgt, probe)) {
+                    tr_registry = "opus-mt-" + tr_src + "-en";
+                    tr_pivot_registry = "opus-mt-en-" + tr_tgt;
+                }
             }
             if (tr_name.empty() && tr_model != "auto")
                 tr_name = crispasr_detect_backend_from_gguf(tr_model);
@@ -4159,14 +4170,30 @@ int crispasr_run_backend(const whisper_params& params_in) {
             if (!tr_is_llm || tr_model == "auto")
                 tr_model = crispasr_resolve_model_cli(tr_model, !tr_registry.empty() ? tr_registry : tr_name,
                                                       params.no_prints, params.cache_dir, params.auto_download, "");
+            std::string tr_pivot_model;
+            if (!tr_model.empty() && !tr_pivot_registry.empty()) {
+                tr_pivot_model = crispasr_resolve_model_cli("auto", tr_pivot_registry, params.no_prints,
+                                                            params.cache_dir, params.auto_download, "");
+                if (tr_pivot_model.empty())
+                    tr_model.clear();
+                else if (!params.no_prints)
+                    fprintf(stderr, "crispasr: no Opus-MT model for %s -> %s; translating through English (%s + %s)\n",
+                            tr_src.c_str(), tr_tgt.c_str(), tr_registry.c_str(), tr_pivot_registry.c_str());
+            }
             if (tr_model.empty()) {
-                if (tr_name == "marian")
+                if (tr_name == "marian") {
+                    std::string pairs;
+                    for (int i = 0; i < crispasr_registry_count(); i++) {
+                        CrispasrRegistryEntry e;
+                        if (crispasr_registry_get_at(i, e) && e.backend.rfind("opus-mt-", 0) == 0)
+                            pairs += (pairs.empty() ? "" : ", ") + e.backend.substr(8);
+                    }
                     fprintf(stderr,
-                            "crispasr: error: no Opus-MT model is registered for %s -> %s (registered: de-en, "
-                            "en-de). Convert one with models/convert-marian-to-gguf.py and pass the file to "
-                            "--translate-model.\n",
-                            tr_src.c_str(), tr_tgt.c_str());
-                else
+                            "crispasr: error: no Opus-MT model is registered for %s -> %s, directly or through "
+                            "English (registered: %s). Convert one with models/convert-marian-to-gguf.py and pass "
+                            "the file to --translate-model.\n",
+                            tr_src.c_str(), tr_tgt.c_str(), pairs.c_str());
+                } else
                     fprintf(stderr, "crispasr: error: could not resolve the translation model (--translate-model).\n");
                 return 22;
             }
@@ -4268,10 +4295,27 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     return 22;
                 }
                 CrispasrBackend* trb = tr_backend.get();
-                tr_fn = [trb, tr_src, tr_tgt, tr_params](const std::string& text,
-                                                         const crispasr::lt_sink::progress_fn&) {
-                    return trb->translate_text(text, tr_src, tr_tgt, tr_params);
-                };
+                if (!tr_pivot_model.empty()) {
+                    whisper_params pivot_params = tr_params;
+                    pivot_params.model = tr_pivot_model;
+                    tr_backend_pivot = crispasr_create_backend(tr_name);
+                    if (!tr_backend_pivot || !tr_backend_pivot->init(pivot_params)) {
+                        fprintf(stderr, "crispasr: error: failed to load translation model '%s'\n",
+                                tr_pivot_model.c_str());
+                        return 22;
+                    }
+                    CrispasrBackend* trb2 = tr_backend_pivot.get();
+                    tr_fn = [trb, trb2, tr_src, tr_tgt, tr_params,
+                             pivot_params](const std::string& text, const crispasr::lt_sink::progress_fn&) {
+                        const std::string en = trb->translate_text(text, tr_src, "en", tr_params);
+                        return en.empty() ? en : trb2->translate_text(en, "en", tr_tgt, pivot_params);
+                    };
+                } else {
+                    tr_fn = [trb, tr_src, tr_tgt, tr_params](const std::string& text,
+                                                             const crispasr::lt_sink::progress_fn&) {
+                        return trb->translate_text(text, tr_src, tr_tgt, tr_params);
+                    };
+                }
             }
             // One throwaway translation: proves this translator + language
             // pair really produces text (a speech-translation backend also
