@@ -520,9 +520,10 @@ their upstream terms apply to the weights and any redistribution of them:
     states in both of its repositories — Helsinki-NLP/Opus-MT and
     Helsinki-NLP/OPUS-MT-train, checked 2026-10-06 — that its pre-trained
     models are distributed under CC-BY 4.0; that statement is the one
-    followed here.) Format conversions are hosted at
-    https://huggingface.co/cstr/opus-mt-de-en-GGUF and
-    https://huggingface.co/cstr/opus-mt-en-de-GGUF, under CC-BY-4.0 with
+    followed here; the same holds for every other pair hosted here, all
+    from the same project.) Format conversions are hosted at
+    https://huggingface.co/cstr/opus-mt-<src>-<tgt>-GGUF for 24 directions
+    (de↔en, fr↔de, fr↔en, ar↔de, ar↔en, it↔de, it↔en, es↔de, es↔en, he↔de, en→he, he→en, tr→en, en→tr; he→en and en→tr from Helsinki-NLP/opus-mt-tc-big-*), under CC-BY-4.0 with
     attribution to the OPUS-MT project (J. Tiedemann, S. Thottingal,
     "OPUS-MT - Building open translation services for the World", EAMT 2020).
 

@@ -259,8 +259,8 @@ sentence. With `--stream-json` you get events instead (below).
 `-l` is the spoken language and is required. `--tr-tl` is the language to
 translate into (default: `en`, or `de` when the speech is English).
 `--translate-model` takes `auto` (m2m100-418M, 100 languages, ~500 MB), a
-registry name — `opus-mt-de-en` / `opus-mt-en-de` (Opus-MT, 84 MB, the
-fastest), `hy-mt2` (Hy-MT2-1.8B, ~1.1 GB, the best speed-for-quality LLM) or
+registry name — `opus-mt-<src>-<tgt>` (Opus-MT, ~85 MB, the fastest; 24
+directions, see [Opus-MT language pairs](#opus-mt-language-pairs)), `hy-mt2` (Hy-MT2-1.8B, ~1.1 GB, the best speed-for-quality LLM) or
 `index-translate` (Index-Translate-2B, ~1.3 GB) — or a translator GGUF. The
 kind of translator is detected from the file
 (`--translate-backend m2m100|marian|madlad|llm` overrides); see the table below.
@@ -398,6 +398,30 @@ Where an Opus-MT decoder step goes (`CRISPASR_M2M100_BENCH=1`, CPU): graph
 build 0.11 ms, allocation 0.15 ms, compute 3.5–4 ms, read-back 0.04 ms.
 The graph is rebuilt per token, but that is ~7% of the step; more than half
 of the compute is the output projection over the 58k-word vocabulary.
+
+### Opus-MT language pairs
+
+Hosted at `cstr/opus-mt-<src>-<tgt>-GGUF`, CC-BY-4.0. `--translate-backend
+marian` picks the model from `-l` / `--tr-tl`. A pair without a model of its
+own, where both halves exist, goes through English in two hops (de↔tr: no
+Opus-MT model was ever released; fr→ar and the like). Every f16 file equals
+the reference implementation on 8 test sentences, greedy and with beam 4.
+q8_0 is what is downloaded, except de→ar.
+
+| | into de | into en | other |
+|---|---|---|---|
+| **de** | — | 12/14 | fr 7/8 · it 8/8 · es 7/8 · ar **f16** (q8_0 3/8) · he 8/8 · tr via en |
+| **en** | 8/8 | — | fr 7/8 · it 7/8 · es 8/8 · ar 8/8 · he 8/8 · tr 8/8 (tc-big, 262 MB) |
+| **fr** | 8/8 | 8/8 | via en |
+| **it** | 6/8 | 7/8 | via en |
+| **es** | 7/8 | 8/8 | via en |
+| **ar** | 8/8 | 8/8 | via en |
+| **he** | 7/8 | 8/8 (tc-big, 265 MB) | via en |
+| **tr** | via en | 8/8 | via en |
+
+The numbers are q8_0 sentences identical to the reference, greedy (the
+others differ in wording). German→Turkish through English, live: "Wir haben
+heute drei Punkte auf der Tagesordnung." → "Bugün gündemde üç madde var."
 
 **Quantisation of Opus-MT.** q8_0 differs from f16 on 2 of 14 German
 sentences and q4_k on 6 of 14, which looks alarming next to the recognisers

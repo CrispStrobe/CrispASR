@@ -55,9 +55,9 @@ Open, in the order they would help:
 8. moonshine-de stops at the first longer pause of a clip. Windows paths are
    compiled by CI only, never run. No timing here was taken on an idle
    machine (load 4-30 throughout).
-9. Opus-MT: only de↔en is hosted (`cstr/opus-mt-{de-en,en-de}-GGUF`, f16 +
-   q8_0, CC-BY-4.0 per the OPUS-MT project's own statement). Other pairs
-   need converting and a registry row. A multi-target checkpoint
+9. Opus-MT: 24 directions hosted (de/en with fr, it, es, ar, he, tr; see
+   docs/streaming.md), each f16 exact on 8 sentences; de↔tr goes through
+   English (no model exists). de→ar ships f16 (its q8_0 matched 3/8). A multi-target checkpoint
    (`opus-mt-en-ROMANCE`, f16) matched the reference 8/8 greedy and beam 4,
    and `-tl es` selects the target; a relu checkpoint
    (`opus-mt-tc-big-gmw-gmw`, 437 MB f16, de↔en↔nl in one file) matched
