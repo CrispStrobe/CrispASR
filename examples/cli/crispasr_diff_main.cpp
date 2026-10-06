@@ -79,6 +79,7 @@
 #include "lid_cld3.h"
 #include "lid_fasttext.h"
 #include "moonshine.h"
+#include "hikari.h"
 #include "omniasr.h"
 #include "canary_ctc.h"
 #include "wav2vec2-ggml.h"
@@ -6374,6 +6375,109 @@ int main(int argc, char** argv) {
             free(lg);
         }
         omniasr_free(ctx);
+    } else if (backend_name == "hikari") {
+        // Hikari (sbintuitions/hikari-medium). The reference
+        // (tools/reference_backends/hikari.py) replays the upstream server's
+        // per-80ms policy; the settings it used ride in the metadata. Run the
+        // same stream (VAD off, as the reference), then compare the per-step
+        // tokens and the stages of the LAST step.
+        std::map<std::string, std::string> kv;
+        {
+            const std::string s = ref.meta("hikari_settings");
+            size_t i = 0;
+            while (i < s.size()) {
+                size_t semi = s.find(';', i);
+                if (semi == std::string::npos)
+                    semi = s.size();
+                const std::string item = s.substr(i, semi - i);
+                const size_t eq = item.find('=');
+                if (eq != std::string::npos)
+                    kv[item.substr(0, eq)] = item.substr(eq + 1);
+                i = semi + 1;
+            }
+        }
+        if (kv.empty()) {
+            fprintf(stderr, "hikari: reference has no hikari_settings metadata\n");
+            return 4;
+        }
+        hikari_context_params hp = hikari_context_default_params();
+        hp.verbosity = 1;
+        hikari_context* ctx = hikari_init_from_file(model_path.c_str(), hp);
+        if (!ctx) {
+            fprintf(stderr, "failed to load hikari model '%s'\n", model_path.c_str());
+            return 4;
+        }
+        hikari_policy pol = hikari_default_policy();
+        pol.decoder_context = std::atoi(kv["ctx"].c_str());
+        pol.baseline_wait_penalty = (float)std::atof(kv["wp_base"].c_str());
+        pol.wait_penalty_boost = (float)std::atof(kv["wp_boost"].c_str());
+        pol.wait_penalty_decay = (float)std::atof(kv["wp_decay"].c_str());
+        pol.repetition_penalty = (float)std::atof(kv["rep"].c_str());
+        hikari_set_policy(ctx, &pol);
+        const bool tr = kv["task"] == "translate";
+        if (hikari_set_task(ctx, tr ? 1 : 0, kv["tgt"].c_str()) != 0) {
+            fprintf(stderr, "hikari: bad task in reference settings\n");
+            hikari_free(ctx);
+            return 4;
+        }
+        std::vector<float> a = samples;
+        a.resize(a.size() + (size_t)std::atoi(kv["tail_ms"].c_str()) * 16, 0.0f);
+        hikari_stream_push(ctx, a.data(), (int)a.size());
+        hikari_stream_flush(ctx);
+
+        // per-step tokens
+        auto rt = ref.get_f32("stream_tokens");
+        const int n_ours = hikari_stream_n_steps(ctx);
+        if (rt.first) {
+            int same = 0, first_diff = -1;
+            const int n = std::min<int>(n_ours, (int)rt.second);
+            for (int i = 0; i < n; i++) {
+                if (hikari_stream_step_token(ctx, i) == (int32_t)std::lround(rt.first[i]))
+                    same++;
+                else if (first_diff < 0)
+                    first_diff = i;
+            }
+            const bool ok = same == n && n_ours == (int)rt.second;
+            printf("[%s] stream_tokens           steps ours=%d ref=%zu  identical=%d/%d  first_diff=%d\n",
+                   ok ? "PASS" : "FAIL", n_ours, rt.second, same, n, first_diff);
+            ok ? n_pass++ : n_fail++;
+        }
+        char* text = hikari_stream_text(ctx);
+        printf("[INFO] text ours: %s\n[INFO] text ref : %s\n", text ? text : "", ref.meta("generated_text").c_str());
+        std::free(text);
+
+        int nm = 0, nt = 0;
+        if (float* mel = hikari_debug_last_mel(ctx, &nm, &nt)) {
+            auto rep = ref.compare("mel_spectrogram", mel, (size_t)nm * nt);
+            print_row("mel_spectrogram", rep, COS_THRESHOLD);
+            record(rep);
+            std::free(mel);
+        }
+        int np = 0, nv = 0;
+        int32_t* ids = nullptr;
+        if (float* lg = hikari_debug_last_logits(ctx, &np, &nv, &ids)) {
+            auto ri = ref.get_f32("decoder_input_ids");
+            bool ids_ok = ri.first && (int)ri.second == np;
+            for (int i = 0; ids_ok && i < np; i++)
+                ids_ok = ids[i] == (int32_t)std::lround(ri.first[i]);
+            printf("[%s] decoder_input_ids       n=%d\n", ids_ok ? "PASS" : "FAIL", np);
+            ids_ok ? n_pass++ : n_fail++;
+            auto rep = ref.compare("decoder_logits", lg, (size_t)np * nv, crispasr_diff::Ref::COS_FIRST_DIM);
+            print_row("decoder_logits", rep, COS_THRESHOLD);
+            record(rep);
+            auto am = ref.compare_argmax("decoder_logits", lg, (size_t)np * nv);
+            printf("[INFO] decoder_logits argmax  %d/%d positions agree\n", am.top1_match, am.top1_total);
+            std::free(lg);
+            std::free(ids);
+        }
+        int nf = 0, dm = 0;
+        if (float* enc = hikari_debug_encoder_full(ctx, &nf, &dm)) {
+            auto rep = ref.compare("encoder_output", enc, (size_t)nf * dm, crispasr_diff::Ref::COS_FIRST_DIM);
+            print_row("encoder_output", rep, COS_THRESHOLD);
+            record(rep);
+            std::free(enc);
+        }
+        hikari_free(ctx);
     } else if (backend_name == "moonshine") {
         // Moonshine (UsefulSensors tiny/base). Non-streaming variant.
         moonshine_init_params mp{};

@@ -2003,6 +2003,18 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# hikari — sbintuitions/hikari-medium simultaneous speech translation
+# ---------------------------------------------------------------------------
+add_library(hikari STATIC hikari.h hikari.cpp)
+set_target_properties(hikari PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(hikari PUBLIC .)
+target_compile_features   (hikari PUBLIC cxx_std_17)
+target_link_libraries     (hikari PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+if(NOT MSVC)
+    target_compile_options(hikari PRIVATE -O3)
+endif()
+
+# ---------------------------------------------------------------------------
 # t5_translate — T5 encoder-decoder translation (MADLAD-400, mT5, Flan-T5)
 # ---------------------------------------------------------------------------
 add_library(t5_translate STATIC t5_translate.h t5_translate.cpp)
@@ -3172,6 +3184,9 @@ if (TARGET indextts)
 endif()
 if (TARGET m2m100)
     target_link_libraries(crispasr-lib PUBLIC m2m100)
+endif()
+if (TARGET hikari)
+    target_link_libraries(crispasr-lib PUBLIC hikari)
 endif()
 if (TARGET t5_translate)
     target_link_libraries(crispasr-lib PUBLIC t5_translate)

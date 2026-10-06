@@ -1395,6 +1395,52 @@ translation, `x-en` for English-target. Pick whichever matches your
 direction (`-sl`/`-tl`) — the auto-download path picks `en-x` by
 default; load `x-en` explicitly with `-m <path>` for X→English.
 
+### hikari
+
+[sbintuitions/hikari-medium](https://huggingface.co/sbintuitions/hikari-medium)
+(MIT; [code](https://github.com/sbintuitions/hikari), arXiv 2603.11578):
+**simultaneous** speech translation EN → DE / JA / RU and streaming English
+ASR. A Whisper-medium encoder-decoder (24L + 24L, d=1024, 16 heads, 769M
+parameters) retrained so it can run while the speaker is talking:
+
+- **Causal encoder.** Self-attention is causal; the conv stem keeps Whisper's
+  symmetric k=3 padding, so an encoder frame reads mel frames `[2e-2, 2e+2]`
+  (30 ms of lookahead).
+- **Time-aligned decoder.** Decoder position `i` cross-attends encoder frames
+  `j < 4·i` only (`decoder_time_dilation = 4`): one decoder token per 80 ms of
+  audio. Learned positions (no RoPE, despite the `rope_position_ids` plumbing
+  in the upstream code — it is never applied).
+- **Read/write policy** (upstream `server/model_wrapper.py`): every 80 ms the
+  server takes the last `decoder_context` × 80 ms of audio (default 337 → 26.96 s),
+  computes Whisper's log-mel of that window (clip at window-max − 8, zero-padded
+  to 3000 frames), runs encoder + decoder and takes ONE token at the last
+  position. Token 93 (`~`) is **WAIT**. A repetition penalty (40) hits the
+  arg-max if it is among the last five ids; a wait penalty (baseline 0) is
+  subtracted from the WAIT logit, boosted (+0.6) after ten WAITs in a row
+  during speech (Silero VAD > 0.8 on the newest 512 samples) and decayed (×0.3)
+  toward the baseline on every emitted token. Past the window the oldest
+  emitted id is dropped (`ids.pop(4)`) and the audio window slides.
+- **Prompt:** `<|startoftranscript|> <|de|> <|translate|> <|notimestamps|>`
+  (or `<|en|> <|transcribe|>` for ASR).
+
+**Runtime.** The server recomputes the whole window every 80 ms (CUDA graphs on
+an A100). `src/hikari.cpp` computes the same function **incrementally and
+exactly**: it caches the encoder self-KV, the cross-KV and the decoder self-KV,
+and each step recomputes only from the first mel frame whose *normalised*
+value changed (the window max moved, the right-edge reflect pad, a slide).
+Usually that is ~5 encoder frames and 2 decoder positions per step. Once the
+window slides (> 26.96 s of audio) every step is a full recompute, as upstream:
+learned positions restart at the window start.
+
+**Offline** (`crispasr --backend hikari -m … -l en --tr-tl de -f talk.wav`) is
+the same policy replayed over the file, plus 2 s of trailing silence
+(`HIKARI_TAIL_MS`) so the lagging decoder can finish: a live microphone keeps
+delivering audio, a file ends. Segment and token times are **emission** times,
+not speech times. **Streaming** (`--stream`, `--mic`) drives the session
+directly and prints German as it is emitted; `--stream-session` with a
+`--translate-model` behind it works as for nemotron. `--vad` slices the file
+first, and each slice then starts a fresh stream.
+
 ### marian
 
 MarianMT / Opus-MT (`Helsinki-NLP/opus-mt-de-en`, `opus-mt-en-de`): 6L encoder +

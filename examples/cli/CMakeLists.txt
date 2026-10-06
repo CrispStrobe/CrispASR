@@ -74,6 +74,7 @@ add_executable(${TARGET}
     crispasr_backend_piper.cpp
     crispasr_backend_melotts.cpp
     crispasr_backend_m2m100.cpp
+    crispasr_backend_hikari.cpp
     crispasr_backend_marian.cpp
     crispasr_backend_t5.cpp
     crispasr_backend_glm_asr.cpp
@@ -266,6 +267,7 @@ target_link_libraries(crispasr-diff PRIVATE
     tada-encoder
     indextts
     m2m100
+    hikari
     gemma4_e2b
     mimo_tokenizer
     mimo_asr
@@ -411,6 +413,7 @@ target_link_libraries(${TARGET} PRIVATE
     csm-tts
     voxcpm2_tts
     m2m100
+    hikari
     t5_translate
     canary_ctc
     wav2vec2-ggml

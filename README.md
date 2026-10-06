@@ -209,6 +209,7 @@ from the GGUF metadata. Jump to the [TTS table](#text-to-speech-models) for the 
 | **wav2vec2** | [`facebook/data2vec-audio-base-960h`](https://huggingface.co/cstr/data2vec-audio-960h-GGUF) | Data2Vec Audio (79 MB Q4_K) | English | Apache-2.0 |
 | **wav2vec2** | [`facebook/hubert-large-ls960-ft`](https://huggingface.co/cstr/hubert-large-ls960-ft-GGUF) | HuBERT Large (212 MB Q4_K) | English | Apache-2.0 |
 | **glm-asr** | [`zai-org/GLM-ASR-Nano-2512`](https://huggingface.co/zai-org/GLM-ASR-Nano-2512) | Whisper encoder + 4-frame projector + Llama 1.5B (GQA) | Mandarin (+ Chinese dialects), English, Cantonese | MIT |
+| **hikari** | [`sbintuitions/hikari-medium`](https://huggingface.co/sbintuitions/hikari-medium) | Whisper-medium enc-dec with a causal encoder; one token (or WAIT) per 80 ms — simultaneous translation, `--stream` emits while the speaker talks ([more](docs/architecture.md#hikari)) | English speech → DE / JA / RU text, or English ASR (`--tr-tl de`) | MIT |
 | **kyutai-stt** | [`kyutai/stt-1b-en_fr`](https://huggingface.co/kyutai/stt-1b-en_fr) | Mimi codec (SEANet + RVQ) + 16L causal LM | en, fr | MIT |
 | **kyutai-stt** | [`kyutai/stt-2.6b-en`](https://huggingface.co/kyutai/stt-2.6b-en) | Mimi codec + 48L causal LM (2.6B, English-only; 3.5 s lookahead) | en | MIT |
 | **firered-asr** | [`FireRedTeam/FireRedASR2-AED`](https://huggingface.co/FireRedTeam/FireRedASR2-AED) | Conformer + CTC + beam search; also LID (120 langs) | Mandarin, English, 20+ Chinese dialects | Apache-2.0 |

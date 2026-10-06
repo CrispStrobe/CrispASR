@@ -41,6 +41,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_chatterbox_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_tada_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_indextts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_m2m100_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_hikari_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_marian_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_t5_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_kokoro_backend();
@@ -270,6 +271,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
     if (name == "m2m100" || name == "m2m-100" || name == "translate" || name == "m2m100-wmt21" || name == "wmt21" ||
         name == "m2m100-1.2b")
         return crispasr_make_m2m100_backend();
+    if (name == "hikari" || name == "hikari-medium")
+        return crispasr_make_hikari_backend();
     if (name == "marian" || name == "marianmt" || name == "marian-mt" || name == "opus-mt" || name == "opusmt")
         return crispasr_make_marian_backend();
     if (name == "madlad" || name == "madlad400" || name == "madlad-400" || name == "t5" || name == "t5-translate")
@@ -442,6 +445,7 @@ std::vector<std::string> crispasr_list_backends() {
         "cosyvoice3-tts-rl",
         "m2m100",
         "m2m100-wmt21",
+        "hikari",
         "marian",
         "madlad",
         "glm-asr",
@@ -794,6 +798,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "tada";
     if (contains_ci("m2m100") || (contains_ci("m2m") && contains_ci("100")) || contains_ci("wmt21"))
         return "m2m100";
+    if (contains_ci("hikari"))
+        return "hikari";
     if (contains_ci("opus-mt") || contains_ci("opus_mt") || contains_ci("marian"))
         return "marian";
     if (contains_ci("madlad"))

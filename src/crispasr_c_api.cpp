@@ -405,6 +405,10 @@
 #include "moonshine.h"
 #define CA_HAVE_MOONSHINE 1
 #endif
+#if __has_include("hikari.h")
+#include "hikari.h"
+#define CA_HAVE_HIKARI 1
+#endif
 #if __has_include("omniasr.h")
 #include "omniasr.h"
 #define CA_HAVE_OMNIASR 1
@@ -2175,6 +2179,9 @@ struct crispasr_session {
 #ifdef CA_HAVE_FIRERED
     void* firered_ctx = nullptr;
 #endif
+#ifdef CA_HAVE_HIKARI
+    hikari_context* hikari_ctx = nullptr;
+#endif
 #ifdef CA_HAVE_MOONSHINE
     void* moonshine_ctx = nullptr;
 #endif
@@ -3337,6 +3344,20 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         p.use_gpu = g_open_use_gpu_tls;
         s->firered_ctx = firered_asr_init_from_file(model_path, p);
         if (!s->firered_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_HIKARI
+    if (s->backend == "hikari") {
+        hikari_context_params hp = hikari_context_default_params();
+        hp.n_threads = s->n_threads;
+        hp.use_gpu = g_open_use_gpu_tls;
+        hp.verbosity = 0;
+        s->hikari_ctx = hikari_init_from_file(model_path, hp);
+        if (!s->hikari_ctx) {
             delete s;
             return nullptr;
         }
@@ -4864,6 +4885,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_MOONSHINE
     list += ",moonshine";
+#endif
+#ifdef CA_HAVE_HIKARI
+    list += ",hikari";
 #endif
 #ifdef CA_HAVE_MOONSHINE_STREAMING
     list += ",moonshine-streaming";
@@ -7657,6 +7681,41 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         char* text = strdup(fr->text);
         firered_asr_result_free(fr);
         return package_with_tokens(text, std::move(toks));
+    }
+#endif
+#ifdef CA_HAVE_HIKARI
+    if (s->backend == "hikari" && s->hikari_ctx) {
+        // Target language = set_target_language; empty / "en" = English ASR.
+        // The model decides once per 80 ms; token times are emission times.
+        const std::string& tl = s->target_language;
+        const bool tr = !tl.empty() && tl != "en";
+        if (hikari_set_task(s->hikari_ctx, tr ? 1 : 0, tl.c_str()) != 0) {
+            delete r;
+            return nullptr;
+        }
+        char* text = hikari_transcribe(s->hikari_ctx, pcm, n_samples);
+        if (!text) {
+            delete r;
+            return nullptr;
+        }
+        std::vector<ca_token_record> toks;
+        for (int i = 0; i < hikari_stream_n_steps(s->hikari_ctx); i++) {
+            char* piece = hikari_token_text(s->hikari_ctx, hikari_stream_step_token(s->hikari_ctx, i));
+            if (piece && piece[0]) {
+                ca_token_record tk;
+                tk.text = piece;
+                tk.t0 = tk.t1 = (int64_t)(hikari_stream_step_time(s->hikari_ctx, i) * 100.0 + 0.5);
+                toks.push_back(std::move(tk));
+            }
+            free(piece);
+        }
+        // strip the leading space of the first word
+        char* lead = text;
+        while (*lead == ' ')
+            lead++;
+        char* out = strdup(lead);
+        free(text);
+        return package_with_tokens(out, std::move(toks));
     }
 #endif
 #ifdef CA_HAVE_MOONSHINE
@@ -11788,6 +11847,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_FIRERED
     if (s->firered_ctx)
         firered_asr_free((firered_asr_context*)s->firered_ctx);
+#endif
+#ifdef CA_HAVE_HIKARI
+    if (s->hikari_ctx)
+        hikari_free(s->hikari_ctx);
 #endif
 #ifdef CA_HAVE_MOONSHINE
     if (s->moonshine_ctx)
