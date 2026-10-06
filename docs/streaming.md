@@ -470,7 +470,7 @@ plus:
 |---|---|---|
 | `sentence` | A sentence was committed. | `utterance_id`, `sentence_id`, `text`, `t` |
 | `translation` | Its translation is ready. | `utterance_id`, `sentence_id`, `text`, `translation`, `source_lang`, `target_lang`, `t`, `mt_ms`, `lag_ms` |
-| `translation_partial` | Draft translation of the open remainder. May change or never be followed up. | `utterance_id`, `text`, `translation`, `t`, `mt_ms`, `lag_ms` |
+| `translation_partial` | Draft translation of the open remainder. May change or never be followed up. `stable` is the start of `translation` (whole words) that the previous draft of the same sentence agreed on; it is rewritten far less often (normalized erasure 0.16–0.18 against 1.17–1.48 for the whole draft, German→English with Opus-MT). Show only `stable` for a calm display, all of `translation` for the earliest one. The terminal view prints `stable` normally and the rest dimmed. | `utterance_id`, `text`, `translation`, `stable`, `t`, `mt_ms`, `lag_ms` |
 
 `t` is the stream time of the step that decided the event; `lag_ms` is how
 long after that audio arrived the translation was ready. `sentence_id` counts

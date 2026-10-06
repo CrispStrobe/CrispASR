@@ -50,8 +50,12 @@ Open, in the order they would help:
    layer 18 = 0.9977).
 5. **VAD re-runs over the whole 15 s window every step** (~70-130 ms).
 6. **hikari-medium port** (causal Whisper, English→German simultaneous S2TT).
-7. A StreamRevise-style draft (revise the previous translation instead of
-   re-translating) for de/en; base Hy-MT2 is not trained for it.
+7. Drafts: the part two consecutive drafts agree on is marked stable
+   (normal text vs dimmed; JSON `stable`). On German speech with Opus-MT,
+   whole drafts are rewritten at normalized erasure 1.17-1.48, the stable
+   part at 0.16-0.18. Not done: forcing the stable prefix into the next
+   decode (needs a target-prefix API in the translators), and a model
+   trained to revise (StreamRevise); base Hy-MT2 is not.
 8. moonshine-de stops at the first longer pause of a clip. Windows paths are
    compiled by CI only, never run. No timing here was taken on an idle
    machine (load 4-30 throughout).
