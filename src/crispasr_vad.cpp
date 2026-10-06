@@ -214,6 +214,56 @@ static std::vector<crispasr_audio_slice> compute_firered_vad_slices(const float*
     return slices; // vctx stays cached; lock released here
 }
 
+// What every detector's raw segments go through: the merge policy, the
+// obviously-broken-result failover (§W4) and the re-chunk to chunk_seconds.
+static std::vector<crispasr_audio_slice> finish_vad_slices(std::vector<crispasr_audio_slice> slices,
+                                                           const float* samples, int n_samples, int sample_rate,
+                                                           const crispasr_vad_options& opts) {
+    // Post-merge: offline/file callers keep the historical short/close merge.
+    // JSON streaming can request a narrower close-gap-only policy so VAD never
+    // hides a silence gap that should finalize an utterance.
+    slices = crispasr_post_merge_vad_slices(slices, sample_rate, opts);
+
+    // PLAN.md §W4: is this result obviously wrong?
+    //
+    // Assessed HERE — after the merge, before the re-chunk below. The re-chunk
+    // splits long segments at `chunk_seconds`, so one 10-minute monologue
+    // becomes ~20 slices; measuring segment COUNT after that would report a
+    // healthy-looking number for any input and the few-segment signal could
+    // never fire. This is the last point where the slice list still means
+    // "what the VAD actually found".
+    //
+    // On failover we hand back fixed chunks over the whole buffer rather than
+    // one giant slice: "transcribe everything" has to stay within the chunk
+    // length the pipeline (and the backend's context) expects.
+    // Disable with CRISPASR_VAD_FAILOVER=0.
+    {
+        const char* off = std::getenv("CRISPASR_VAD_FAILOVER");
+        if (!(off && off[0] == '0') && sample_rate > 0) {
+            std::vector<core_vad_failover::Span> spans;
+            spans.reserve(slices.size());
+            for (const auto& s : slices)
+                spans.push_back({(double)s.t0_cs / 100.0, (double)s.t1_cs / 100.0});
+            const double audio_sec = (double)n_samples / (double)sample_rate;
+            const auto verdict = core_vad_failover::assess(spans, audio_sec);
+            if (verdict.failover) {
+                fprintf(stderr, "crispasr[vad]: %s — falling back to full-clip chunks\n", verdict.reason.c_str());
+                const int chunk = opts.chunk_seconds > 0 ? opts.chunk_seconds : 30;
+                return crispasr_fixed_chunk_slices(n_samples, sample_rate, chunk);
+            }
+        }
+    }
+
+    // Post-split: break any VAD segment that exceeds chunk_seconds into
+    // sub-segments. See crispasr_rechunk_slices — the same step is reused on the
+    // import path so a raw-segment export (issue #227) can be re-chunked to
+    // whatever chunk length the importing run wants.
+    if (opts.chunk_seconds > 0)
+        slices = crispasr_rechunk_slices(slices, samples, n_samples, sample_rate, opts.chunk_seconds);
+
+    return slices;
+}
+
 std::vector<crispasr_audio_slice> crispasr_compute_vad_slices(const float* samples, int n_samples, int sample_rate,
                                                               const char* vad_model_path,
                                                               const crispasr_vad_options& opts, bool* out_load_failed) {
@@ -365,49 +415,7 @@ std::vector<crispasr_audio_slice> crispasr_compute_vad_slices(const float* sampl
         // Do NOT free vctx — it's owned by the cache.
     }
 
-    // Post-merge: offline/file callers keep the historical short/close merge.
-    // JSON streaming can request a narrower close-gap-only policy so VAD never
-    // hides a silence gap that should finalize an utterance.
-    slices = crispasr_post_merge_vad_slices(slices, sample_rate, opts);
-
-    // PLAN.md §W4: is this result obviously wrong?
-    //
-    // Assessed HERE — after the merge, before the re-chunk below. The re-chunk
-    // splits long segments at `chunk_seconds`, so one 10-minute monologue
-    // becomes ~20 slices; measuring segment COUNT after that would report a
-    // healthy-looking number for any input and the few-segment signal could
-    // never fire. This is the last point where the slice list still means
-    // "what the VAD actually found".
-    //
-    // On failover we hand back fixed chunks over the whole buffer rather than
-    // one giant slice: "transcribe everything" has to stay within the chunk
-    // length the pipeline (and the backend's context) expects.
-    // Disable with CRISPASR_VAD_FAILOVER=0.
-    {
-        const char* off = std::getenv("CRISPASR_VAD_FAILOVER");
-        if (!(off && off[0] == '0') && sample_rate > 0) {
-            std::vector<core_vad_failover::Span> spans;
-            spans.reserve(slices.size());
-            for (const auto& s : slices)
-                spans.push_back({(double)s.t0_cs / 100.0, (double)s.t1_cs / 100.0});
-            const double audio_sec = (double)n_samples / (double)sample_rate;
-            const auto verdict = core_vad_failover::assess(spans, audio_sec);
-            if (verdict.failover) {
-                fprintf(stderr, "crispasr[vad]: %s — falling back to full-clip chunks\n", verdict.reason.c_str());
-                const int chunk = opts.chunk_seconds > 0 ? opts.chunk_seconds : 30;
-                return crispasr_fixed_chunk_slices(n_samples, sample_rate, chunk);
-            }
-        }
-    }
-
-    // Post-split: break any VAD segment that exceeds chunk_seconds into
-    // sub-segments. See crispasr_rechunk_slices — the same step is reused on the
-    // import path so a raw-segment export (issue #227) can be re-chunked to
-    // whatever chunk length the importing run wants.
-    if (opts.chunk_seconds > 0)
-        slices = crispasr_rechunk_slices(slices, samples, n_samples, sample_rate, opts.chunk_seconds);
-
-    return slices;
+    return finish_vad_slices(std::move(slices), samples, n_samples, sample_rate, opts);
 }
 
 std::vector<crispasr_audio_slice> crispasr_rechunk_slices(const std::vector<crispasr_audio_slice>& in,
@@ -716,5 +724,124 @@ bool crispasr_parse_vad_slices(const std::string& text, std::vector<crispasr_aud
         out.push_back(s);
         p = obj_rb + 1;
     }
+    return true;
+}
+
+// ---------------------------------------------------------------------------
+// Incremental Silero VAD for --stream (see crispasr_vad.h)
+// ---------------------------------------------------------------------------
+
+struct crispasr_stream_vad {
+    whisper_vad_context* ctx = nullptr;
+    std::string path;
+    int64_t probs_base = 0;    // absolute sample of probs[0]
+    int64_t scored_until = -1; // absolute sample up to which frames are scored; -1 = nothing yet
+    std::vector<float> probs;  // one per n_window samples, from probs_base
+    int n_window = 512;
+};
+
+crispasr_stream_vad* crispasr_stream_vad_new() {
+    return new crispasr_stream_vad();
+}
+
+void crispasr_stream_vad_free(crispasr_stream_vad* st) {
+    if (!st)
+        return;
+    if (st->ctx)
+        whisper_vad_free(st->ctx);
+    delete st;
+}
+
+static bool is_silero_vad_path(const std::string& p) {
+    auto has = [&](const char* x) { return p.find(x) != std::string::npos; };
+    if (is_firered_vad_model(p.c_str()) || has("webrtc"))
+        return false;
+    if (has(".gguf") && (has("marblenet") || (has("whisper") && has("vad"))))
+        return false;
+    return true;
+}
+
+bool crispasr_stream_vad_slices(crispasr_stream_vad* st, const float* window, int n_window_samples,
+                                int64_t window_start, int64_t from_sample, int sample_rate, const char* vad_model_path,
+                                const crispasr_vad_options& opts, std::vector<crispasr_audio_slice>& out) {
+    out.clear();
+    if (!st || !vad_model_path || !*vad_model_path || sample_rate != CRISPASR_SAMPLE_RATE || n_window_samples <= 0)
+        return false;
+    if (!is_silero_vad_path(vad_model_path))
+        return false;
+    if (!st->ctx || st->path != vad_model_path) {
+        if (st->ctx)
+            whisper_vad_free(st->ctx);
+        whisper_vad_context_params vcp = whisper_vad_default_context_params();
+        vcp.n_threads = opts.n_threads;
+        st->ctx = whisper_vad_init_from_file_with_params(vad_model_path, vcp);
+        if (!st->ctx)
+            return false;
+        st->path = vad_model_path;
+        st->scored_until = -1;
+        st->probs.clear();
+    }
+    const int64_t window_end = window_start + n_window_samples;
+
+    // Score each complete frame once, in stream order, with the recurrent
+    // state carried over. A stream that skipped ahead of what was scored
+    // (first call, or a window that no longer reaches back that far) starts
+    // fresh at the window's first sample.
+    bool reset = false;
+    if (st->scored_until < window_start || st->scored_until > window_end) {
+        st->probs.clear();
+        st->probs_base = st->scored_until = window_start;
+        reset = true;
+    }
+    const int64_t n_new = ((window_end - st->scored_until) / st->n_window) * st->n_window;
+    if (n_new > 0) {
+        const float* src = window + (st->scored_until - window_start);
+        const bool ok = reset ? whisper_vad_detect_speech(st->ctx, src, (int)n_new)
+                              : whisper_vad_detect_speech_continue(st->ctx, src, (int)n_new);
+        if (!ok)
+            return false;
+        const int np = whisper_vad_n_probs(st->ctx);
+        const float* p = whisper_vad_probs(st->ctx);
+        st->probs.insert(st->probs.end(), p, p + np);
+        st->scored_until += n_new;
+    }
+
+    // Frames before the earlier of `from_sample` and the window start can
+    // never be asked for again.
+    const int64_t keep_from = std::max(st->probs_base, std::min(from_sample, window_start));
+    const int64_t drop = (keep_from - st->probs_base) / st->n_window;
+    if (drop > 0) {
+        st->probs.erase(st->probs.begin(), st->probs.begin() + drop);
+        st->probs_base += drop * st->n_window;
+    }
+
+    // Segments over [from, scored_until), from the cached probabilities.
+    const int64_t from = std::max(std::max(from_sample, window_start), st->probs_base);
+    const int64_t first = (from - st->probs_base) / st->n_window;
+    const int64_t seg_base = st->probs_base + first * st->n_window;
+    if (first >= (int64_t)st->probs.size())
+        return true;
+    whisper_vad_set_probs(st->ctx, st->probs.data() + first, (int)(st->probs.size() - first));
+    whisper_vad_params vp = whisper_vad_default_params();
+    vp.threshold = opts.threshold;
+    vp.min_speech_duration_ms = opts.min_speech_duration_ms;
+    vp.min_silence_duration_ms = opts.min_silence_duration_ms;
+    vp.speech_pad_ms = (float)opts.speech_pad_ms;
+    whisper_vad_segments* vseg = whisper_vad_segments_from_probs(st->ctx, vp);
+    const int nv = vseg ? whisper_vad_segments_n_segments(vseg) : 0;
+    std::vector<crispasr_audio_slice> slices;
+    for (int i = 0; i < nv; i++) {
+        // Segment times are centiseconds from seg_base; slices are relative
+        // to the window, like crispasr_compute_vad_slices over the window.
+        const int64_t s_abs = seg_base + (int64_t)(whisper_vad_segments_get_segment_t0(vseg, i) / 100.0f * sample_rate);
+        const int64_t e_abs = seg_base + (int64_t)(whisper_vad_segments_get_segment_t1(vseg, i) / 100.0f * sample_rate);
+        const int s = (int)std::max<int64_t>(0, s_abs - window_start);
+        const int e = (int)std::min<int64_t>(n_window_samples, e_abs - window_start);
+        if (e > s)
+            slices.push_back({s, e, (int64_t)s * 100 / sample_rate, (int64_t)e * 100 / sample_rate});
+    }
+    if (vseg)
+        whisper_vad_free_segments(vseg);
+    out = finish_vad_slices(std::move(slices), window, n_window_samples, sample_rate, opts);
     return true;
 }

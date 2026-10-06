@@ -48,7 +48,9 @@ Open, in the order they would help:
    pass), voxtral-mini-3b's pinned revision 404s, and wav2vec2's word flip
    on that hardware. canary's per-layer gate is 0.99 since this bump (x86
    layer 18 = 0.9977).
-5. **VAD re-runs over the whole 15 s window every step** (~70-130 ms).
+5. ~~VAD re-runs over the whole window every step~~: incremental Silero
+   (each 32 ms frame scored once, state kept) — 30-86 → 3-6 ms per step.
+   Other VAD models still re-scan.
 6. **hikari-medium port** (causal Whisper, English→German simultaneous S2TT).
 7. A StreamRevise-style draft (revise the previous translation instead of
    re-translating) for de/en; base Hy-MT2 is not trained for it.

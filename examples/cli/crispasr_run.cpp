@@ -4336,6 +4336,16 @@ int crispasr_run_backend(const whisper_params& params_in) {
             stream_vad_opts.stream_close_gap_ms = params.stream_vad_merge_gap_ms;
             stream_vad_opts.stream_final_silence_ms = params.stream_final_silence_ms;
         }
+        // Silero scores each new 32 ms frame once and keeps its state, rather
+        // than re-scoring the window from a reset state every step.
+        // CRISPASR_STREAM_VAD_FULL=1 restores the re-scan (A/B).
+        std::unique_ptr<crispasr_stream_vad, void (*)(crispasr_stream_vad*)> stream_vad(nullptr,
+                                                                                        crispasr_stream_vad_free);
+        {
+            const char* full = std::getenv("CRISPASR_STREAM_VAD_FULL");
+            if (!stream_vad_path.empty() && !(full && *full && *full != '0'))
+                stream_vad.reset(crispasr_stream_vad_new());
+        }
 
         // If --mic, spawn a subprocess to capture audio from the default mic
         FILE* mic_pipe = nullptr;
@@ -4769,13 +4779,20 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     if (vad_off < SR)
                         vad_off = 0;
                 }
-                auto slices = crispasr_compute_vad_slices(pcm_window.data() + vad_off, (int)pcm_window.size() - vad_off,
-                                                          SR, stream_vad_path.c_str(), stream_vad_opts);
-                for (auto& sl : slices) {
-                    sl.start += vad_off;
-                    sl.end += vad_off;
-                    sl.t0_cs += (int64_t)vad_off * 100 / SR;
-                    sl.t1_cs += (int64_t)vad_off * 100 / SR;
+                std::vector<crispasr_audio_slice> slices;
+                const int64_t vad_win_start = cumulative_samples - (int64_t)pcm_window.size();
+                if (!stream_vad || !crispasr_stream_vad_slices(
+                                       stream_vad.get(), pcm_window.data(), (int)pcm_window.size(), vad_win_start,
+                                       vad_win_start + vad_off, SR, stream_vad_path.c_str(), stream_vad_opts, slices)) {
+                    stream_vad.reset(); // not Silero, or it failed: the full re-scan from here on
+                    slices = crispasr_compute_vad_slices(pcm_window.data() + vad_off, (int)pcm_window.size() - vad_off,
+                                                         SR, stream_vad_path.c_str(), stream_vad_opts);
+                    for (auto& sl : slices) {
+                        sl.start += vad_off;
+                        sl.end += vad_off;
+                        sl.t0_cs += (int64_t)vad_off * 100 / SR;
+                        sl.t1_cs += (int64_t)vad_off * 100 / SR;
+                    }
                 }
                 timing_vad_ms =
                     std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - timing_vad_t0).count();

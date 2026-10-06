@@ -871,6 +871,14 @@ CRISPASR_API struct whisper_vad_context* whisper_vad_init_with_params(struct whi
                                                                       struct whisper_vad_context_params params);
 
 CRISPASR_API bool whisper_vad_detect_speech(struct whisper_vad_context* vctx, const float* samples, int n_samples);
+// Like whisper_vad_detect_speech, but keeps the recurrent state and the
+// waveform context from the previous call, so a stream can be scored one
+// chunk at a time. The probabilities cover only the samples of THIS call.
+CRISPASR_API bool whisper_vad_detect_speech_continue(struct whisper_vad_context* vctx, const float* samples,
+                                                     int n_samples);
+// Replaces the context's per-frame probabilities, for
+// whisper_vad_segments_from_probs over probabilities kept by the caller.
+CRISPASR_API void whisper_vad_set_probs(struct whisper_vad_context* vctx, const float* probs, int n_probs);
 
 CRISPASR_API int whisper_vad_n_probs(struct whisper_vad_context* vctx);
 CRISPASR_API float* whisper_vad_probs(struct whisper_vad_context* vctx);
