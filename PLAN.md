@@ -66,8 +66,8 @@ Open, in the order they would help:
    the library: the German variants decode the stretches between pauses of
    >= 200 ms separately (file, VAD, live and C API: 11/11 sentences on the
    50 s clip, was 6-7/11). Cost: comma pauses as long as 200 ms also split
-   (3 extra breaks on that clip). Windows paths are
-   compiled by CI only, never run. No timing here was taken on an idle
+   (3 extra breaks on that clip). Windows: the live
+   pipeline runs end to end on a Windows runner (#503). No timing here was taken on an idle
    machine (load 4-30 throughout).
 9. Opus-MT: only de↔en is hosted (`cstr/opus-mt-{de-en,en-de}-GGUF`, f16 +
    q8_0, CC-BY-4.0 per the OPUS-MT project's own statement). Other pairs
