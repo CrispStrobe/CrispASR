@@ -26,7 +26,8 @@ Open, in the order they would help:
 1. **Re-measure on an idle machine.** Best runs were at load ~5-10.
 2. **nemotron session** is real time on CPU now (67 ms per 320 ms chunk at
    load ~8) but CPU-bound: it fell 17-25 s behind when other jobs took the
-   cores. Left: the prompt kernel is still a scalar loop (~8 % of the time),
+   cores. Left: the prompt kernel is a ggml graph on CPU now (1.7-2.4 s -> 45 ms
+   per 15 s clip, same transcript),
    Metal is no faster than before (per-op overhead on ~2000 tiny nodes), and
    the graph-reuse corruption (`CRISPASR_NEMOTRON_GPU_STREAM_GRAPH_REUSE=1`)
    has no root cause yet.

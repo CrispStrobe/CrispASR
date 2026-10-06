@@ -1103,6 +1103,7 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
   (off by default).
 - `CRISPASR_NEMOTRON_GPU_STREAM_CACHE` — `1` keeps the per-layer streaming state
   in a device-resident ping-pong cache across chunks (off by default).
+- `CRISPASR_NEMOTRON_SCALAR_PROMPT` — `1` runs the prompt kernel as the old scalar per-frame loop on CPU instead of the ggml graph (A/B; the graph took it from ~2 s to ~45 ms per 15 s clip).
 - `CRISPASR_NEMOTRON_STREAM_HOST_CACHE` — `1` runs a realtime session the old
   way: one graph per layer per chunk, per-layer state copied to the host and
   back. Default: one graph per chunk, state kept in backend memory. A/B switch.

@@ -3204,11 +3204,20 @@ static void nemotron_apply_prompt(nemotron_context* ctx, std::vector<float>& enc
     if (!ctx->model.prompt_kernel.l0_w)
         return;
 
-    if (ctx->backend != ctx->backend_cpu && nemotron_opt_enabled("CRISPASR_NEMOTRON_GPU_PROMPT")) {
+    // The ggml graph (two matmuls over all T_enc frames at once) on the
+    // context's backend. On the CPU this replaces a scalar per-frame
+    // matrix-vector loop with ggml's threaded SIMD matmul;
+    // CRISPASR_NEMOTRON_SCALAR_PROMPT=1 keeps the loop (A/B). On a GPU it
+    // stays opt-in (CRISPASR_NEMOTRON_GPU_PROMPT).
+    const bool on_cpu = ctx->backend == ctx->backend_cpu;
+    const char* scalar = std::getenv("CRISPASR_NEMOTRON_SCALAR_PROMPT");
+    const bool use_graph =
+        on_cpu ? !(scalar && *scalar && *scalar != '0') : nemotron_opt_enabled("CRISPASR_NEMOTRON_GPU_PROMPT");
+    if (use_graph) {
         if (nemotron_apply_prompt_gpu(ctx, enc_out, T_enc, d_model)) {
             return;
         }
-        fprintf(stderr, "nemotron: GPU prompt kernel failed, falling back to CPU\n");
+        fprintf(stderr, "nemotron: prompt kernel graph failed, falling back to the scalar loop\n");
     }
 
     const auto& pk = ctx->model.prompt_kernel;
