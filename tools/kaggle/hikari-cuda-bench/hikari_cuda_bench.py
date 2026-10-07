@@ -13,6 +13,7 @@
 #
 # Works on a P100 (ggml compiles its own kernels; no torch). One push, then
 # read the log. Do not re-push in a loop (tools/kaggle/README.md).
+import json
 import os
 import subprocess
 import sys
@@ -27,7 +28,7 @@ os.environ.setdefault("CRISPASR_REGRESSION_MODE", "validate")
 os.environ.setdefault("CRISPASR_REGRESSION_BUILD", "cuda")
 os.environ.setdefault("CRISPASR_REGRESSION_BACKENDS", "hikari-medium")
 
-subprocess.run(["nvidia-smi"], check=False)
+subprocess.run(["nvidia-smi"], check=True)
 subprocess.run(["nvidia-smi", "--query-gpu=name,compute_cap,memory.total", "--format=csv"], check=False)
 
 WORK = Path("/kaggle/working")
@@ -49,6 +50,8 @@ except SystemExit as e:  # keep going: the benchmark below is the point
     suite_exit = e.code or 0
 print(f"regression suite exit: {suite_exit}", flush=True)
 
+benchmark_failed = False
+results = []
 GERMAN = "Und meine Mit-Amerikaner fragen nicht, was dein Land für dich tun kann. Frag, was du für dein Land tun kannst."
 
 try:
@@ -71,18 +74,35 @@ try:
             for name, wav in (("jfk", jfk), ("jfk x3", jfk3)):
                 if dev == "CPU" and name == "jfk x3":
                     continue  # CPU is the slow reference arm; one clip is enough
+                prefix = WORK / f"hikari-{q}-{dev}-{name.replace(' ', '-')}"
                 r = subprocess.run([exe, "--backend", "hikari", "-m", files[f"hikari-medium-{q}.gguf"], "-l", "en",
-                                    "-tl", "de", "-f", wav, "-np"] + extra,
+                                    "-tl", "de", "-f", wav, "-np", "-otxt", "-of", str(prefix)] + extra,
                                    capture_output=True, text=True, timeout=3600, env=env)
-                text = r.stdout.strip().splitlines()[-1] if r.stdout.strip() else ""
+                transcript = prefix.with_suffix(".txt")
+                text = transcript.read_text().strip() if transcript.exists() else ""
                 bench = [l for l in r.stderr.splitlines() if "hikari_bench" in l]
-                same = text.startswith(GERMAN) if name == "jfk" else None
+                same = text == GERMAN if name == "jfk" else None
+                # A fast failure/no-op must never count as a benchmark win.
+                # Long input must perform proportionally more recognition work.
+                work_ok = (same if name == "jfk" else
+                           2.5 <= len(text.split()) / len(GERMAN.split()) <= 3.5)
+                passed = r.returncode == 0 and bool(bench) and bool(text) and work_ok
+                benchmark_failed |= not passed
+                results.append(dict(quant=q, device=dev, sample=name, returncode=r.returncode,
+                                    equal_reference=same, work_ok=work_ok, passed=passed,
+                                    transcript=text, bench=bench))
                 print(f"RESULT {q} {dev} {name}: rc={r.returncode} equal_ref={same}", flush=True)
                 print(f"  bench: {bench[-1] if bench else '(none)'}", flush=True)
                 print(f"  text: {text[:300]!r}", flush=True)
                 if r.returncode != 0:
                     print(r.stderr[-1500:], flush=True)
 except Exception as e:
+    benchmark_failed = True
     print(f"benchmark failed: {e!r}", flush=True)
 
-sys.exit(suite_exit)
+(WORK / "hikari-bench-results.json").write_text(json.dumps(dict(
+    source_commit=subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=REPO, text=True).strip(),
+    model_revision=rev if "rev" in globals() else None,
+    passed=not benchmark_failed and suite_exit == 0, regression_exit=suite_exit,
+    cases=results), indent=2, ensure_ascii=False) + "\n")
+sys.exit(suite_exit or int(benchmark_failed))
