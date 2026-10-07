@@ -2183,12 +2183,12 @@ class StreamingSession {
     required _StreamGetText getText,
     required _StreamClose close,
     _StreamSetLiveDecode? setLiveDecode,
-  }) : _handle = handle,
-       _feedFn = feed,
-       _flushFn = flush,
-       _getTextFn = getText,
-       _closeFn = close,
-       _setLiveDecodeFn = setLiveDecode;
+  })  : _handle = handle,
+        _feedFn = feed,
+        _flushFn = flush,
+        _getTextFn = getText,
+        _closeFn = close,
+        _setLiveDecodeFn = setLiveDecode;
 
   final Pointer<Void> _handle;
   final _StreamFeed _feedFn;
@@ -5027,11 +5027,8 @@ class CrispasrSession {
   int get streamingKind {
     if (_closed) throw StateError('CrispasrSession is closed');
     if (!_lib.providesSymbol('crispasr_session_stream_kind')) return 0;
-    final fn = _lib
-        .lookupFunction<
-          Int32 Function(Pointer<Void>),
-          int Function(Pointer<Void>)
-        >('crispasr_session_stream_kind');
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>),
+        int Function(Pointer<Void>)>('crispasr_session_stream_kind');
     return fn(_handle);
   }
 

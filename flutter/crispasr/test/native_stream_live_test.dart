@@ -26,7 +26,9 @@ void main() {
   final kind = int.parse(Platform.environment['CRISPASR_STREAM_KIND'] ?? '2');
   test('native German stream preserves state across chunks and reopening', () {
     final session = CrispasrSession.openWithParams(modelPath!,
-        libPath: Platform.environment['CRISPASR_LIB'], useGpu: false, nThreads: 3);
+        libPath: Platform.environment['CRISPASR_LIB'],
+        useGpu: false,
+        nThreads: 3);
     try {
       expect(session.streamingKind, kind);
       final pcm = readPcm(wavPath!);
@@ -47,7 +49,8 @@ void main() {
           text = stream.flush()?.text ?? text;
           expect(stream.flush(), isNull);
           expect(() => stream.feed(Float32List(1600)), throwsException);
-          expect(updates, greaterThan(2), reason: 'must emit before final flush');
+          expect(updates, greaterThan(2),
+              reason: 'must emit before final flush');
           expect(text, isNot(contains('<de-DE>')));
           // Stream protocol test, not an exact-word accuracy gate: Nemotron
           // has opening-word errors on this fixture; retain substantive German checks.
@@ -59,6 +62,7 @@ void main() {
           stream.close();
         }
       }
+
       expect(run(1777), run(5120),
           reason: 'feed partition must not reset model caches');
     } finally {
