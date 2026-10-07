@@ -185,6 +185,24 @@ public:
     // event (JSON) or a marked block (terminal). It runs on its own
     // low-priority thread and never delays the fast pass. Call before the
     // first partial.
+    // Phase 2 of the slow pass: a slower recogniser that re-transcribes each
+    // finished utterance from its audio before it is re-translated. With it,
+    // a paragraph is the whole utterance (no length split), so the audio and
+    // the sentences it replaces line up. Requires set_reviser.
+    using recognize_fn = std::function<std::string(const std::vector<float>& pcm)>;
+    void set_source_reviser(recognize_fn fn) { recognize_ = std::move(fn); }
+    bool has_source_reviser() const { return (bool)recognize_; }
+
+    // The audio of an utterance that is about to be finalised (call before
+    // on_final). Ignored without a source reviser.
+    void attach_utterance_audio(int64_t utterance_id, std::vector<float> pcm) {
+        if (!recognize_)
+            return;
+        std::lock_guard<std::mutex> lk(rev_mu_);
+        audio_utt_ = utterance_id;
+        audio_ = std::move(pcm);
+    }
+
     void set_reviser(translate_fn fn) {
         reviser_ = std::move(fn);
         if (reviser_ && !cfg_.sync && !rev_worker_.joinable())
@@ -322,9 +340,18 @@ private:
                 para_.text += (para_.text.empty() ? "" : " ") + s.text;
                 para_.utterance_id = utterance_id;
             }
-            if (!para_.ids.empty() && (closed || (int)para_.ids.size() >= cfg_.revise_max_sentences)) {
+            const bool by_length = !recognize_ && (int)para_.ids.size() >= cfg_.revise_max_sentences;
+            if (!para_.ids.empty() && (closed || by_length)) {
                 para_.t_audio = t_audio;
                 para_.arrived = arrived;
+                if (closed && recognize_) {
+                    std::lock_guard<std::mutex> lk(rev_mu_);
+                    if (audio_utt_ == utterance_id) {
+                        para_.audio = std::move(audio_);
+                        audio_.clear();
+                        audio_utt_ = -1;
+                    }
+                }
                 if (cfg_.sync) {
                     rev_now.push_back(std::move(para_));
                 } else {
@@ -438,6 +465,7 @@ private:
     struct paragraph {
         std::vector<int> ids;
         std::string text;
+        std::vector<float> audio; // the utterance, when a source reviser re-transcribes it
         int64_t utterance_id = 0;
         double t_audio = 0;
         clock::time_point arrived;
@@ -474,7 +502,23 @@ private:
 
     void revise(const paragraph& p) {
         const auto t0 = clock::now();
-        const std::string tr = reviser_(p.text, progress_fn());
+        // Phase 2: the slower recogniser's reading of the whole utterance.
+        std::string src = p.text;
+        bool src_revised = false;
+        double asr_ms = 0;
+        if (recognize_ && !p.audio.empty()) {
+            std::string heard = recognize_(p.audio);
+            while (!heard.empty() && heard.front() == ' ')
+                heard.erase(heard.begin());
+            while (!heard.empty() && heard.back() == ' ')
+                heard.pop_back();
+            asr_ms = std::chrono::duration<double, std::milli>(clock::now() - t0).count();
+            if (!heard.empty()) {
+                src_revised = heard != src;
+                src = heard;
+            }
+        }
+        const std::string tr = reviser_(src, progress_fn());
         const auto t1 = clock::now();
         const double mt_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
         const double lag_ms = std::chrono::duration<double, std::milli>(t1 - p.arrived).count();
@@ -487,13 +531,14 @@ private:
                 ids += (ids.empty() ? "" : ",") + std::to_string(id);
             fprintf(cfg_.out,
                     "{\"type\":\"revision\",\"utterance_id\":%lld,\"sentence_ids\":[%s],\"text\":\"%s\","
-                    "\"translation\":\"%s\",\"t\":%.3f,\"mt_ms\":%.0f,\"lag_ms\":%.0f}\n",
-                    (long long)p.utterance_id, ids.c_str(), esc(p.text).c_str(), esc(tr).c_str(), p.t_audio, mt_ms,
-                    lag_ms);
+                    "\"translation\":\"%s\",\"source_revised\":%s,\"t\":%.3f,\"asr_ms\":%.0f,\"mt_ms\":%.0f,"
+                    "\"lag_ms\":%.0f}\n",
+                    (long long)p.utterance_id, ids.c_str(), esc(src).c_str(), esc(tr).c_str(),
+                    src_revised ? "true" : "false", p.t_audio, asr_ms, mt_ms - asr_ms, lag_ms);
             fflush(cfg_.out);
             return;
         }
-        render_locked({}, tr);
+        render_locked({}, tr, src_revised ? src : std::string());
     }
 
     // Caller holds rev_mu_.
@@ -613,7 +658,8 @@ private:
 
     // Erase the live region, print `pair` (source, translation) permanently
     // if given, then draw the live region again. Caller holds mu_.
-    void render_locked(const std::vector<std::string>& pair, const std::string& revised = std::string()) {
+    void render_locked(const std::vector<std::string>& pair, const std::string& revised = std::string(),
+                       const std::string& revised_src = std::string()) {
         if (cfg_.output == lt_output::json)
             return;
         const bool tty = cfg_.output == lt_output::tty;
@@ -621,6 +667,12 @@ private:
         if (tty && live_rows_ > 0)
             o += "\r\033[" + std::to_string(live_rows_) + "A\033[J";
         live_rows_ = 0;
+        if (!revised_src.empty()) {
+            if (tty)
+                o += "\033[2m" + tag(cfg_.src_lang) + "\u2713 \033[0m\033[32m" + revised_src + "\033[0m\n";
+            else
+                o += "[" + cfg_.src_lang + " revised] " + revised_src + "\n";
+        }
         if (!revised.empty()) {
             // The slow pass's version of the paragraph above: marked, so it
             // reads as a correction of the lines it follows.
@@ -841,6 +893,9 @@ private:
     std::thread worker_;
     // Slow pass.
     translate_fn reviser_;
+    recognize_fn recognize_;
+    std::vector<float> audio_; // attach_utterance_audio, guarded by rev_mu_
+    int64_t audio_utt_ = -1;
     std::thread rev_worker_;
     std::mutex rev_mu_;
     std::condition_variable rev_cv_;

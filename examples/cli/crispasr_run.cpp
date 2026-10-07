@@ -4206,6 +4206,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
         std::unique_ptr<CrispasrBackend> tr_backend_pivot; // second hop of a pivot through English
         std::shared_ptr<crispasr_chat_session> tr_llm(nullptr, &crispasr_chat_close);
         std::shared_ptr<crispasr_chat_session> rev_llm(nullptr, &crispasr_chat_close); // slow pass
+        std::unique_ptr<CrispasrBackend> rev_asr;                                      // slow pass, phase 2
+        whisper_params rev_asr_params;
         std::unique_ptr<crispasr::lt_sink> live_tr; // declared last: its thread uses the two above
         if (params.live_translate || !params.translate_model.empty() || !params.translate_backend.empty()) {
             std::string tr_src = !params.translate_source_lang.empty() ? params.translate_source_lang
@@ -4397,6 +4399,11 @@ int crispasr_run_backend(const whisper_params& params_in) {
             if (params.no_prints)
                 lc.log = nullptr;
             live_tr.reset(new crispasr::lt_sink(lc, tr_fn));
+            if (!params.translate_revise_asr.empty() && params.translate_revise_model.empty()) {
+                fprintf(stderr, "crispasr: error: --translate-revise-asr needs --translate-revise (the translator "
+                                "for the re-transcribed text)\n");
+                return 22;
+            }
             if (!params.translate_revise_model.empty()) {
                 std::string rm = params.translate_revise_model;
                 if (rm == "hy-mt2" || rm == "index-translate")
@@ -4415,6 +4422,43 @@ int crispasr_run_backend(const whisper_params& params_in) {
                     return 22;
                 }
                 live_tr->set_reviser(rev_fn);
+                if (!params.translate_revise_asr.empty()) {
+                    // A second recogniser for the slow pass. Same language;
+                    // the utterance is already speech, so no VAD inside.
+                    std::string am = params.translate_revise_asr, aname;
+                    if (am.find('/') == std::string::npos && am.find(".gguf") == std::string::npos) {
+                        aname = am;
+                        am = crispasr_resolve_model_cli("auto", aname, params.no_prints, params.cache_dir,
+                                                        params.auto_download, "");
+                    } else {
+                        aname = crispasr_detect_backend_from_gguf(am);
+                    }
+                    rev_asr_params = params;
+                    rev_asr_params.model = am;
+                    rev_asr_params.vad = false;
+                    rev_asr_params.vad_model.clear();
+                    rev_asr_params.no_prints = true;
+                    rev_asr = am.empty() || aname.empty() ? nullptr : crispasr_create_backend(aname);
+                    if (!rev_asr || !rev_asr->init(rev_asr_params)) {
+                        fprintf(stderr, "crispasr: error: failed to load the revising recogniser '%s'\n",
+                                params.translate_revise_asr.c_str());
+                        return 22;
+                    }
+                    CrispasrBackend* ra = rev_asr.get();
+                    const whisper_params* rp = &rev_asr_params;
+                    live_tr->set_source_reviser([ra, rp](const std::vector<float>& pcm) {
+                        std::string text;
+                        for (const auto& seg : ra->transcribe(pcm.data(), (int)pcm.size(), 0, *rp)) {
+                            if (!text.empty() && !seg.text.empty() && seg.text.front() != ' ')
+                                text += ' ';
+                            text += seg.text;
+                        }
+                        return text;
+                    });
+                    if (!params.no_prints)
+                        fprintf(stderr, "crispasr: slow pass: %s (%s) re-transcribes each finished utterance\n",
+                                am.c_str(), aname.c_str());
+                }
                 if (!params.no_prints)
                     fprintf(stderr, "crispasr: slow pass: %s re-translates each finished paragraph\n", rm.c_str());
             }
@@ -5309,6 +5353,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
                         // hypothesis for everything still open — no redecode
                         // of the whole utterance just to re-read its tail.
                         // The sink returns the utterance as committed.
+                        if (live_tr->has_source_reviser())
+                            live_tr->attach_utterance_audio(utterance_id, utterance_pcm);
                         final_text = live_tr->on_final(utterance_id, last_partial_text,
                                                        (double)cumulative_samples / (double)SR, step_arrived);
                         final_text_from_redecode = true; // already post-processed as partials
@@ -5654,6 +5700,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
             if (live_tr) {
                 // Same contract as the in-loop finalize: the sink commits the
                 // open remainder from the last partial and owns the final text.
+                if (live_tr->has_source_reviser())
+                    live_tr->attach_utterance_audio(utterance_id, utterance_pcm);
                 final_text = live_tr->on_final(utterance_id, last_partial_text, (double)cumulative_samples / (double)SR,
                                                step_arrived);
                 final_text_from_redecode = true;
