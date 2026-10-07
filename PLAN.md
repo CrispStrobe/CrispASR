@@ -11,27 +11,24 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
-## CLAIMED 2026-10-07 — issue/PR triage and Orukeet short-name routing
+## OPEN 2026-10-07 — triage fixes: hosted acceptance queued
 
-Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
-`fix/issue491-orukeet`. Pulled main at `3f4ca9372`; descriptions and complete
-comment/review threads for all 11 open issues and 4 open PRs are archived under
-`/mnt/storage/crispasr/triage-20261007/`. Investigating #491 CLI short-name
-routing and cached-model reuse; reviewing #496 WASM notes and #514 Hikari
-benchmark failure handling for integration. #492 performance changes and #515
-native streaming/ONNX changes remain under review; no ownership of their work.
-Heavy builds/models use hosted CI; large files remain on cold storage.
+Integrated source: Orukeet short-name routing (#491), author-preserving PR #496
+WASM note bindings and PR #514 Hikari benchmark, plus bounded official-mirror
+APT setup for CI/regression. See [triage and acceptance scope](docs/issue-pr-triage-2026-10-07.md)
+and its receipt. Offline: actual C++ routing 14/14 (old source fails six),
+Hikari fault injection 8/8, apt helper argument/mirror/failure checks pass.
+Fresh native/lint/WASM and Orukeet download/cache/C ABI jobs remain queued;
+do not report them green or close #491 on speech acceptance yet. Exact job IDs
+and tested commits are in the report. Source archive:
+`archive/triage-source-20261007`; cold work/proof:
+`/mnt/storage/crispasr/triage-20261007/`.
 
-Checkpoint: integration branch `5bf3e80dd` retains PRs #496/#514 and fixes
-Orukeet filename routing; Hikari benchmark now fails on exceptions, empty/
-wrong output or missing timing evidence. In flight: Orukeet hosted CPU
-[37703780788](https://github.com/CrispStrobe/CrispASR/actions/runs/37703780788),
-native CI [37703783152](https://github.com/CrispStrobe/CrispASR/actions/runs/37703783152),
-and the WASM matrix. PR #515 regression failures were traced to Azure Ubuntu
-mirror downloads in `apt-get update` (45-minute job timeout before build/model
-execution). Investigating bounded package setup for CI/regression without
-changing model gates. No native streaming, ONNX or MiMo performance changes
-have been integrated from #515/#492.
+Next: collect hosted verdicts/artifacts, fix any failure, then close this entry.
+#490 character-level Arabic alignment is feasible but not implemented;
+#483's reporter requested a forced-MMQ experimental build. PR #492 MiMo/CANN
+needs broader numerical/output acceptance; PR #515 streaming/ONNX stays separate
+and needs regression reruns after the package mirror fix. Neither is merged.
 
 ## OPEN 2026-10-05 — live transcribe + translate: follow-ups
 

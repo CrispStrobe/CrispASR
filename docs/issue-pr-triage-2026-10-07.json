@@ -1,0 +1,686 @@
+{
+  "source_commit": "33aa375be434edaa5f12fad81e6b86272faf23fc",
+  "scope": "Issue/PR triage and narrow source fixes; hosted speech and fresh WASM acceptance pending",
+  "filename_routing": {
+    "passed": true,
+    "scope": "Actual factory translation unit; filename routing only; existing ggml linked for metadata fallback, no model inference",
+    "cases": [
+      {
+        "source": "baseline",
+        "returncode": 1,
+        "stdout": "FAIL orukeet -> '', expected 'parakeet'\nFAIL orukeet-q4_k.gguf -> '', expected 'parakeet'\nFAIL orukeet-f16.gguf -> '', expected 'parakeet'\nFAIL ORUKEET-Q8_0.GGUF -> '', expected 'parakeet'\nFAIL /models/orukeet-q4_k.gguf -> '', expected 'parakeet'\nFAIL C:\\models\\orukeet-q4_k.gguf -> '', expected 'parakeet'\nFilename routing: 14 cases, 6 failures\n"
+      },
+      {
+        "source": "current",
+        "returncode": 0,
+        "stdout": "Filename routing: 14 cases, 0 failures\n"
+      }
+    ]
+  },
+  "benchmark_guard": {
+    "passed": true,
+    "source_sha256": "7ae2e2cde59c9bf0f5ceab24bc03807aa957563b5d7b4d008c2a2d44395c267e",
+    "scope": "Offline benchmark-tail fault injection; subprocess/HF mocked, no GPU/timing claim",
+    "cases": [
+      {
+        "case": "valid",
+        "exit_code": 0,
+        "passed": true
+      },
+      {
+        "case": "exception",
+        "exit_code": 1,
+        "passed": true
+      },
+      {
+        "case": "wrong_text",
+        "exit_code": 1,
+        "passed": true
+      },
+      {
+        "case": "empty",
+        "exit_code": 1,
+        "passed": true
+      },
+      {
+        "case": "nonzero",
+        "exit_code": 1,
+        "passed": true
+      },
+      {
+        "case": "missing_bench",
+        "exit_code": 1,
+        "passed": true
+      },
+      {
+        "case": "short_long_input",
+        "exit_code": 1,
+        "passed": true
+      },
+      {
+        "case": "stale_transcript",
+        "exit_code": 1,
+        "passed": true
+      }
+    ]
+  },
+  "apt_helper": {
+    "passed": true,
+    "exit_codes": [
+      0,
+      17
+    ],
+    "arguments": [
+      "-o",
+      "Acquire::Retries=2",
+      "-o",
+      "Acquire::http::Timeout=30",
+      "-o",
+      "Acquire::https::Timeout=30",
+      "install",
+      "-y",
+      "cmake"
+    ],
+    "preserves_ports": true
+  },
+  "original_pr_checks": [
+    {
+      "number": 496,
+      "checks": [
+        {
+          "name": "ubuntu-22",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "build-wasm (default)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-backend-dl",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "clang-format (style)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "scan",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "scan",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "build-wasm (single-thread)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "build-wasm (proxy-to-pthread)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "build-wasm (single-thread-lowheap)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "build-wasm (proxy-to-pthread-lowheap)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-x86_64",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "clang-tidy (lint / types / security)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-unit",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "kaggle_harness bundled-copy sync",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-amr-fetch (g++)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "doc anchors resolve",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-amr-fetch (clang++)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-opus-fetch",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "core_cpu_backend header reachable everywhere",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-asan-audio",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "CUDA runtime ships split from every package",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-fuzz-smoke",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "chat ABI bound by every binding",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "model-registry URLs resolve",
+          "status": "COMPLETED",
+          "conclusion": "SKIPPED"
+        },
+        {
+          "name": "linux-vulkan",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "macos",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "version files agree with VERSION",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "windows",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "README language metadata",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "ios",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "android",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        }
+      ]
+    },
+    {
+      "number": 514,
+      "checks": [
+        {
+          "name": "ubuntu-22",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "build-wasm (default)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-backend-dl",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "scan",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "scan",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "build-wasm (single-thread)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "build-wasm (proxy-to-pthread)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "build-wasm (single-thread-lowheap)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "build-wasm (proxy-to-pthread-lowheap)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-x86_64",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-unit",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-amr-fetch (g++)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-amr-fetch (clang++)",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-opus-fetch",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-asan-audio",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-fuzz-smoke",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "linux-vulkan",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "macos",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "windows",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "ios",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        },
+        {
+          "name": "android",
+          "status": "COMPLETED",
+          "conclusion": "SUCCESS"
+        }
+      ]
+    }
+  ],
+  "hosted_runs": [
+    {
+      "conclusion": "",
+      "databaseId": 37704039045,
+      "headSha": "061460b575268f55c5c0389e5b787590b327cc17",
+      "name": "Lint",
+      "status": "queued"
+    },
+    {
+      "conclusion": "",
+      "databaseId": 37704036313,
+      "headSha": "061460b575268f55c5c0389e5b787590b327cc17",
+      "name": "CI",
+      "status": "queued"
+    },
+    {
+      "conclusion": "",
+      "databaseId": 37703919707,
+      "headSha": "061460b575268f55c5c0389e5b787590b327cc17",
+      "name": "Secret scan",
+      "status": "queued"
+    },
+    {
+      "conclusion": "",
+      "databaseId": 37703785629,
+      "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
+      "name": "Build WASM",
+      "status": "queued"
+    },
+    {
+      "conclusion": "cancelled",
+      "databaseId": 37703783152,
+      "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
+      "name": "CI",
+      "status": "completed"
+    },
+    {
+      "conclusion": "",
+      "databaseId": 37703781173,
+      "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
+      "name": "Piper Windows Live",
+      "status": "queued"
+    },
+    {
+      "conclusion": "",
+      "databaseId": 37703781082,
+      "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
+      "name": "Bindings Tests (Rust)",
+      "status": "queued"
+    },
+    {
+      "conclusion": "",
+      "databaseId": 37703780788,
+      "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
+      "name": "Heavy CPU job",
+      "status": "queued"
+    },
+    {
+      "conclusion": "",
+      "databaseId": 37703781041,
+      "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
+      "name": "Win CUDA13 Verify",
+      "status": "queued"
+    },
+    {
+      "conclusion": "",
+      "databaseId": 37703781047,
+      "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
+      "name": "Linux ISA Fallback Verify",
+      "status": "queued"
+    },
+    {
+      "conclusion": "",
+      "databaseId": 37703780980,
+      "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
+      "name": "Live Translate Windows",
+      "status": "queued"
+    },
+    {
+      "conclusion": "",
+      "databaseId": 37703781001,
+      "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
+      "name": "Secret scan",
+      "status": "queued"
+    },
+    {
+      "conclusion": "",
+      "databaseId": 37703780982,
+      "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
+      "name": "Bindings Tests (Go)",
+      "status": "queued"
+    },
+    {
+      "conclusion": "",
+      "databaseId": 37703781060,
+      "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
+      "name": "Bindings Tests (Dart)",
+      "status": "in_progress"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": "456-comments.json",
+      "sha256": "bd7606ab9efc84d35f7e52e3fd8fd273b5f7dee3a97f2768436b420d88913b01",
+      "bytes": 3415
+    },
+    {
+      "path": "456-item.json",
+      "sha256": "269e102351ebc9017a24aa2f0512231ae0f2e1ac9f608004dcea2191659107ce",
+      "bytes": 3237
+    },
+    {
+      "path": "461-comments.json",
+      "sha256": "4b3ca5cc63c8dede74e46500eb4ac72b0f4e3b3e64e38328d0e7d6cce02fb8ec",
+      "bytes": 78350
+    },
+    {
+      "path": "461-item.json",
+      "sha256": "09d9b67684f0d563820ab003ee0fe7f3c83f700f6276def912456d327a228077",
+      "bytes": 2419
+    },
+    {
+      "path": "478-comments.json",
+      "sha256": "d5d91de732e55d72538bb22131252ef2155bd76eff4d727a03d8f91427b0d255",
+      "bytes": 6431
+    },
+    {
+      "path": "478-item.json",
+      "sha256": "a5dff94261c1b31bc1a3f63db6fcc618a5793567a9b96484f0707d2d59431894",
+      "bytes": 5138
+    },
+    {
+      "path": "481-comments.json",
+      "sha256": "44b77921ff36d55088ade124355fe7ba34eca57c2839a032ff03897246949809",
+      "bytes": 4853
+    },
+    {
+      "path": "481-item.json",
+      "sha256": "9770c1b851de0b323e37e286c2f3241774a45508e66f09fa678dfbf59ce41fe9",
+      "bytes": 3106
+    },
+    {
+      "path": "482-comments.json",
+      "sha256": "9bc495f1aa0201934f109fbcf7276d86906fd16018930734069a106e3bef40d4",
+      "bytes": 2952
+    },
+    {
+      "path": "482-item.json",
+      "sha256": "972bfa4a7fc2c75bac747a3034809bd038ea0a7bc8975af57e05c10fd2439513",
+      "bytes": 5059
+    },
+    {
+      "path": "483-comments.json",
+      "sha256": "8c269ec93d4e2e645bcd6259a4804a0165c26383a43f69258f5f59392384744d",
+      "bytes": 5602
+    },
+    {
+      "path": "483-item.json",
+      "sha256": "82a26988a698aeda770670b1dffaf5cdd07f15a3725826017b56f43f4b8c7c3d",
+      "bytes": 5553
+    },
+    {
+      "path": "484-comments.json",
+      "sha256": "64bef24f3b18783bff7567603c2a41edd92bd934cecea29822635967b3818a80",
+      "bytes": 7247
+    },
+    {
+      "path": "484-item.json",
+      "sha256": "4eaf495dfbb78bb190f193878834a3a4bdbe5d46df7f74eaffab586de26d06b9",
+      "bytes": 5668
+    },
+    {
+      "path": "485-comments.json",
+      "sha256": "b48ad10f7f4d59040d6321acc37a63f19b68f7cc1d4f8a3d3d8ba231f62619c1",
+      "bytes": 5423
+    },
+    {
+      "path": "485-item.json",
+      "sha256": "15fc53b8ef40e1d6ab2ba16ec2fcda4872546ff1bf9124bb3261ccd86c403f0d",
+      "bytes": 2602
+    },
+    {
+      "path": "488-comments.json",
+      "sha256": "fb03077afaa62e876d931b03c09b0eb8749f0728b1b267e191bd861fd3dfa86d",
+      "bytes": 2899
+    },
+    {
+      "path": "488-item.json",
+      "sha256": "d34e35926c1194427b2da82f3d3b8eb55d9d33c2cec7af59f5ca1c559d9aba3a",
+      "bytes": 5929
+    },
+    {
+      "path": "490-comments.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "490-item.json",
+      "sha256": "56b1df25334c4bc4fdea3d56b3fc135c09319cd8e78c01337a29272d5596bb5c",
+      "bytes": 3577
+    },
+    {
+      "path": "491-comments.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "491-item.json",
+      "sha256": "ae959409b426401665fef23b16b55bb5295f697caf801b3fbdd0bdb4df830385",
+      "bytes": 3372
+    },
+    {
+      "path": "492-comments.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "492-item.json",
+      "sha256": "78215d0b80fb10fad76f3d0682649ca0c3c3b23e990602c789d83f2fd7563ded",
+      "bytes": 18051
+    },
+    {
+      "path": "492-review_comments.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "492-reviews.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "496-comments.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "496-item.json",
+      "sha256": "6dbb19d5e1cfe05092e25a211aebadb57d9363351657cfaeede4ae1fc977663f",
+      "bytes": 17690
+    },
+    {
+      "path": "496-review_comments.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "496-reviews.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "514-comments.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "514-item.json",
+      "sha256": "c83b4bcd46bf05d43403f79ac5ddd3888ca665e0dab1927ed4c3c86d135330de",
+      "bytes": 17075
+    },
+    {
+      "path": "514-review_comments.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "514-reviews.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "515-comments.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "515-item.json",
+      "sha256": "97ac9964ff6f70ed4e53dcf9635aab008fbe38b3adc86edb08aa2d621bdc65cf",
+      "bytes": 17668
+    },
+    {
+      "path": "515-review_comments.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "515-reviews.json",
+      "sha256": "cf1cbb66a638b4860a516671fb74850e6ccf787fe6c4c8d29e9c04efe880bd05",
+      "bytes": 4
+    },
+    {
+      "path": "apt-helper-check.json",
+      "sha256": "9abab7c70c5ff2978d4f236d9f82ac9bc082bfbcb2a7474a98d05d8bc79b8060",
+      "bytes": 267
+    },
+    {
+      "path": "ggml-pr4.json",
+      "sha256": "04bce2adc242d25ae7dbcb6039dbe025240bd88ead801066016f39ed1fb4d5da",
+      "bytes": 1565
+    },
+    {
+      "path": "hikari-failure-guards.json",
+      "sha256": "09d2204a6f5750954942598369e28115df687b3b9d3decac5444f25ebea9bc55",
+      "bytes": 894
+    },
+    {
+      "path": "hosted-status.json",
+      "sha256": "1967f95b4b39f5ec22c266d029ca40986aa56a5dfdf15d50644c96ae75431ed2",
+      "bytes": 2456
+    },
+    {
+      "path": "in-progress.json",
+      "sha256": "71d1f39beddb399ee43adcbfed48aae7379fed83d25f707305ad2884feca8aee",
+      "bytes": 156
+    },
+    {
+      "path": "pr515-regression-jobs.json",
+      "sha256": "c9700051521b92cbbfaee6955d29cb4922413c548ffa2bb5e2b40fb61d8821a3",
+      "bytes": 23571
+    },
+    {
+      "path": "reviewed-pr-checks.json",
+      "sha256": "b4b505dfc9456b1062bb435286f9ba709179b76c7d969a64f068d137d80f9aab",
+      "bytes": 6267
+    }
+  ],
+  "cold_root": "/mnt/storage/crispasr/triage-20261007"
+}

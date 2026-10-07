@@ -6,6 +6,22 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## DONE 2026-10-07 — narrow issue/PR source integration; hosted acceptance pending
+
+Orukeet short-name routing now reaches the registry/Parakeet backend (#491).
+Actual factory checks pass 14/14; old source fails the six Orukeet cases. PRs
+#496 (WASM note transcription) and #514 (Hikari CUDA benchmark tooling) are
+integrated with author commits preserved. Added WASM export/no-session checks
+and documented the note API. Hikari failure handling passes eight offline
+fault-injection cases and cannot use stale transcript files as proof of work.
+CI/regression package setup avoids the Azure mirror that timed out #515 jobs,
+with bounded APT waits and preserved failure exits.
+
+Fresh hosted Orukeet speech/cache/C ABI, native/lint and WASM checks remain
+queued. This records source integration, not successful hosted acceptance or
+new GPU timings. [Full triage, remaining threads and exact runs](docs/issue-pr-triage-2026-10-07.md).
+No release/tag was cut; #492 and #515 remain unmerged.
+
 ## DONE 2026-10-06 — Live translation speed-ups, Opus-MT backend, nemotron streaming encoder
 
 - **`marian` backend (Opus-MT / MarianMT)** on the m2m100 runtime, six
