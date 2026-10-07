@@ -95,6 +95,10 @@ const char* crispasr_session_token_text(CrispasrSession* s, int id);
 int crispasr_session_pitch(CrispasrSession* s, const float* pcm_16k, int n_samples, float hop_ms);
 const float* crispasr_session_pitch_frames(CrispasrSession* s, int* out_n_frames);
 int crispasr_session_pitch_sample_rate(CrispasrSession* s);
+int crispasr_session_piano(CrispasrSession* s, const float* pcm_16k, int n_samples);
+const float* crispasr_session_piano_notes(CrispasrSession* s, int* out_n_notes);
+const int* crispasr_session_piano_note_programs(CrispasrSession* s, int* out_n_notes);
+int crispasr_session_piano_sample_rate(CrispasrSession* s);
 
 // Chord recognition — BTC. `chords` runs the timeline and returns the span
 // count; `chords_spans` hands back a session-owned flat array of 4 floats per
@@ -1303,6 +1307,56 @@ EMSCRIPTEN_BINDINGS(whisper) {
     // 0 when the session has no pitch arm — doubles as a capability probe.
     emscripten::function("sessionPitchSampleRate", emscripten::optional_override([]() {
                              return g_tts_session ? crispasr_session_pitch_sample_rate(g_tts_session) : 0;
+                         }));
+
+    // --- Note transcription — basic-pitch, piano-transcription, mt3,
+    // onsets-and-frames, hft-transformer ---
+    // Open the model with ttsOpenExplicit(path, "<backend>", nThreads), the
+    // same way sessionPitch does.
+    //
+    // `audio` is a mono Float32Array at sessionPianoSampleRate() — 22050 for
+    // basic-pitch, 16000 for the other four; ask rather than assume. Returns
+    // [{onMs, offMs, midi, velocity, program}, ...], the fields of the Dart
+    // `PianoNote` record, or [] on failure. `program` is the General MIDI
+    // program MT3 identified, or -1 when the model names no instrument.
+    emscripten::function(
+        "sessionPianoNotes", emscripten::optional_override([](const emscripten::val& audio) -> emscripten::val {
+            emscripten::val out = emscripten::val::array();
+            if (!g_tts_session)
+                return out;
+            const int n = audio["length"].as<int>();
+            if (n <= 0)
+                return out;
+            std::vector<float> pcmf32(n);
+            emscripten::val heap = emscripten::val::module_property("HEAPU8");
+            emscripten::val memory = heap["buffer"];
+            emscripten::val view = audio["constructor"].new_(memory, reinterpret_cast<uintptr_t>(pcmf32.data()), n);
+            view.call<void>("set", audio);
+
+            if (crispasr_session_piano(g_tts_session, pcmf32.data(), n) < 0)
+                return out;
+            int n_notes = 0;
+            const float* notes = crispasr_session_piano_notes(g_tts_session, &n_notes);
+            if (!notes || n_notes <= 0)
+                return out;
+            int n_programs = 0;
+            const int* programs = crispasr_session_piano_note_programs(g_tts_session, &n_programs);
+            for (int i = 0; i < n_notes; i++) {
+                emscripten::val e = emscripten::val::object();
+                e.set("onMs", (double)notes[i * 4 + 0]);
+                e.set("offMs", (double)notes[i * 4 + 1]);
+                e.set("midi", (int)notes[i * 4 + 2]);
+                e.set("velocity", (int)notes[i * 4 + 3]);
+                e.set("program", (programs && i < n_programs) ? programs[i] : -1);
+                out.call<void>("push", e);
+            }
+            return out;
+        }));
+
+    // Native input rate of the loaded note model, or 0 when the session has
+    // no note arm — a capability probe, mirroring sessionPitchSampleRate.
+    emscripten::function("sessionPianoSampleRate", emscripten::optional_override([]() {
+                             return g_tts_session ? crispasr_session_piano_sample_rate(g_tts_session) : 0;
                          }));
 
     // --- Chord recognition (BTC) ---
