@@ -12,11 +12,21 @@ if [[ -f "$root/.crispasr-sdk" && "$(cat "$root/.crispasr-sdk")" == "$package $d
   echo "$root"; exit 0
 fi
 archive="$(mktemp -t crispasr-ort.XXXXXXXX)"
-trap 'rm -f "$archive"' EXIT
+staging="$(mktemp -d -t crispasr-ort-unpack.XXXXXXXX)"
+trap 'rm -f "$archive"; rm -rf "$staging"' EXIT
 curl -fsSL --retry 3 "https://github.com/microsoft/onnxruntime/releases/download/v1.30.0/$package.tgz" -o "$archive"
 if command -v sha256sum >/dev/null; then actual="$(sha256sum "$archive" | cut -d' ' -f1)"; else actual="$(shasum -a 256 "$archive" | cut -d' ' -f1)"; fi
 if [[ "$actual" != "$digest" ]]; then echo 'ONNX Runtime SDK checksum mismatch' >&2; exit 1; fi
 mkdir -p "$root"
-tar -xzf "$archive" --strip-components=1 -C "$root"
+# Some official archives prefix the package directory with './'. Stripping
+# one component leaves an extra directory on macOS. Extract first so both
+# archive layouts resolve to the same SDK root.
+tar -xzf "$archive" -C "$staging"
+sdk="$staging/$package"
+if [[ ! -f "$sdk/include/onnxruntime_cxx_api.h" ]]; then
+  echo 'ONNX Runtime archive is missing the expected SDK headers' >&2
+  exit 1
+fi
+cp -R "$sdk/." "$root/"
 printf '%s %s\n' "$package" "$digest" > "$root/.crispasr-sdk"
 echo "$root"

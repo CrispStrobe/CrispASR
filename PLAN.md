@@ -36,6 +36,11 @@ and German byte fallback. Updated to merged PR #513 (3f4ca937); its 134 CLI
 assertions pass. CrisperWeaver build 99 bundles the native ONNX runtime.
 Private audio and full transcript remain outside Git. No changes pushed.
 
+Release follow-up 2026-10-07: work is now pushed in PR #515, with the user's
+release authorization. Repair the pinned SDK fetcher's archive layout after
+the clean GitHub macOS build exposed an extra directory level; verify a fresh
+download, cache reuse, and a native header compile before repinning the app.
+
 ## OPEN 2026-10-05 — live transcribe + translate: follow-ups
 
 Shipped 2026-10-06 (#493) together with the ggml v0.26.0 sync — what landed
