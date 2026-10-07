@@ -75,6 +75,7 @@ try:
                 if dev == "CPU" and name == "jfk x3":
                     continue  # CPU is the slow reference arm; one clip is enough
                 prefix = WORK / f"hikari-{q}-{dev}-{name.replace(' ', '-')}"
+                prefix.with_suffix(".txt").unlink(missing_ok=True)
                 r = subprocess.run([exe, "--backend", "hikari", "-m", files[f"hikari-medium-{q}.gguf"], "-l", "en",
                                     "-tl", "de", "-f", wav, "-np", "-otxt", "-of", str(prefix)] + extra,
                                    capture_output=True, text=True, timeout=3600, env=env)
