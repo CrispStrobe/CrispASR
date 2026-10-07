@@ -719,8 +719,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
     // though its filename also contains "ctc".
     if (contains_ci("parakeet") && contains_ci("ctc") && !contains_ci("tdt"))
         return "fastconformer-ctc";
-    if (contains_ci("parakeet"))
-        return "parakeet";
+    if (contains_ci("parakeet") || contains_ci("orukeet"))
+        return "parakeet"; // Orukeet is a Parakeet fine-tune; also routes its registry short name (#491).
     if (contains_ci("phonon2") || contains_ci("phonon-2"))
         return "phonon2"; // #481: model-specific caps, shared Parakeet TDT graph
     if (contains_ci("reazonspeech"))

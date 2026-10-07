@@ -107,6 +107,15 @@ jobs:
           grep -q "asrOpen" build-wasm/bin/libwhisper.wasm || \
             (echo "WASM build missing asrOpen export (§166 asr* session surface)" && exit 1)
 
+      - name: Verify note transcription bindings
+        run: |
+          for symbol in sessionPianoNotes sessionPianoSampleRate; do
+            grep -q "$symbol" build-wasm/bin/libwhisper.wasm || exit 1
+          done
+      - name: Exercise note binding without a session
+        if: matrix.name == 'single-thread'
+        run: node tests/test-wasm-piano.cjs ./build-wasm/bin/libwhisper.js
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

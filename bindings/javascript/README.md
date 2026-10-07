@@ -79,3 +79,19 @@ whisper_print_timings:   encode time =  8582.63 ms / 1430.44 ms per layer
 whisper_print_timings:   decode time =   436.16 ms / 72.69 ms per layer
 whisper_print_timings:    total time =  9370.90 ms
 ```
+
+## Note transcription
+
+Open a note model with `ttsOpenExplicit(path, backend, nThreads)`, where
+`backend` is `basic-pitch`, `piano-transcription`, `mt3`, `onsets-and-frames`,
+or `hft-transformer`. `sessionPianoSampleRate()` returns its input rate
+(22050 Hz for basic-pitch, 16000 Hz for the other four), or 0 without a note
+model. Pass mono `Float32Array` PCM at that rate to `sessionPianoNotes(audio)`:
+
+```js
+const notes = module.sessionPianoNotes(pcm);
+// [{onMs, offMs, midi, velocity, program}, ...]
+```
+
+Times are milliseconds. MT3 reports General MIDI programs; other backends use
+`program: -1`. Empty input, no session, or a failed inference returns `[]`.
