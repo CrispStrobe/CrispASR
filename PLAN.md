@@ -11,6 +11,17 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-07 — issue/PR triage and Orukeet short-name routing
+
+Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
+`fix/issue491-orukeet`. Pulled main at `3f4ca9372`; descriptions and complete
+comment/review threads for all 11 open issues and 4 open PRs are archived under
+`/mnt/storage/crispasr/triage-20261007/`. Investigating #491 CLI short-name
+routing and cached-model reuse; reviewing #496 WASM notes and #514 Hikari
+benchmark failure handling for integration. #492 performance changes and #515
+native streaming/ONNX changes remain under review; no ownership of their work.
+Heavy builds/models use hosted CI; large files remain on cold storage.
+
 ## OPEN 2026-10-05 — live transcribe + translate: follow-ups
 
 Shipped 2026-10-06 (#493) together with the ggml v0.26.0 sync — what landed
