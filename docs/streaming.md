@@ -521,6 +521,16 @@ back from canary as one sentence with commas, which the translator then
 handled. Canary took 0.9–6.8 s per utterance on the M1, so revisions arrived
 3–15 s after the audio.
 
+**In the terminal**, with a slow pass the view is in place by default
+(`--translate-view inplace|scroll`): the transcript lives on the alternate
+screen and is redrawn, so a revision replaces the fast sentences where they
+stand (green, ✓) instead of being appended below them; when the stream ends,
+the final transcript is printed to the normal screen. In JSON every revision
+carries `final_until_sentence`: all sentences up to that id are final
+(revised, or skipped by the backlog limit). `--translate-revise-backlog N`
+(default 3) sets how many paragraphs may wait for the slow pass before the
+oldest is dropped.
+
 A caveat: an LLM reviser can add what was not said. On a clip cut off
 mid-sentence ("Die Umsätze sind … um zwölf.") Hy-MT2 wrote "Sales are 12%
 **lower** …", where the fast m2m100 stayed literal. Paragraphs normally end

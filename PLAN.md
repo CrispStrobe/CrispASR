@@ -57,10 +57,11 @@ Open, in the order they would help:
    Other VAD models still re-scan.
 5b. **Two speeds**: phase 1 (`--translate-revise`, slow re-translation of
    finished paragraphs) and phase 2 (`--translate-revise-asr`, a slower
-   recogniser re-reads each finished utterance first) done. Next: phase 3 — backlog
-   policy tuning, a 'final up to' marker, a viewer that edits text in place.
-   Open: does the slow pass delay the fast one on a shared GPU (measure at
-   load < 3; the paragraph wait-for-idle guard is in).
+   recogniser re-reads each finished utterance first) and phase 3 (in-place
+   terminal view, `final_until_sentence`, `--translate-revise-backlog`) done.
+   Left: a graphical viewer (browser / app) on the JSON events; tuning the
+   backlog limit under real load. Open: does the slow pass delay the fast
+   one on a shared GPU (measure at load < 3; the wait-for-idle guard is in).
 6. **hikari** (sbintuitions/hikari-medium, English -> de/ja/ru simultaneous
    translation + English ASR) is ported: f16 equals the reference on jfk
    (every stage >= 0.9995 cosine, 161/161 stream steps, same text) and on a

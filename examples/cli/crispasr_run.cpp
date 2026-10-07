@@ -4398,6 +4398,9 @@ int crispasr_run_backend(const whisper_params& params_in) {
             }
             if (params.no_prints)
                 lc.log = nullptr;
+            lc.revise_max_backlog = std::max(1, params.translate_revise_backlog);
+            lc.inplace = params.translate_view == "inplace" ||
+                         (params.translate_view.empty() && !params.translate_revise_model.empty());
             live_tr.reset(new crispasr::lt_sink(lc, tr_fn));
             if (!params.translate_revise_asr.empty() && params.translate_revise_model.empty()) {
                 fprintf(stderr, "crispasr: error: --translate-revise-asr needs --translate-revise (the translator "

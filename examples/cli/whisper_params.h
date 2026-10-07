@@ -708,8 +708,13 @@ struct whisper_params {
     // finished utterance before the slow translator re-translates it (a GGUF,
     // or a registry name such as canary / cohere). Needs translate_revise_model.
     std::string translate_revise_asr;
-    int translate_beam = 1;       // greedy: m2m100 beam search has no KV cache (~5x slower); 0 = backend default
-    bool translate_drafts = true; // re-translate the still-open sentence as a dimmed draft
+    // Terminal view for live translation: "inplace" keeps the transcript on
+    // the alternate screen so revisions replace text where it stands;
+    // "scroll" prints and moves on. Default: inplace with a slow pass.
+    std::string translate_view;
+    int translate_revise_backlog = 3; // paragraphs queued for the slow pass before the oldest is dropped
+    int translate_beam = 1;           // greedy: m2m100 beam search has no KV cache (~5x slower); 0 = backend default
+    bool translate_drafts = true;     // re-translate the still-open sentence as a dimmed draft
     // The input arrives in real time (microphone, a live feed). When decoding
     // falls behind, read the whole backlog in one step instead of working
     // through it one --stream-step at a time and staying behind for good.

@@ -679,3 +679,35 @@ TEST_CASE("live-translate: with a slow recogniser the utterance audio is re-tran
             std::string::npos);
     REQUIRE(all.find("\"source_revised\":true") != std::string::npos);
 }
+
+TEST_CASE("live-translate: revisions report how far the transcript is final", "[unit][live-translate]") {
+    FILE* f = tmpfile();
+    REQUIRE(f != nullptr);
+    {
+        crispasr::lt_sink_config cfg;
+        cfg.output = crispasr::lt_output::json;
+        cfg.src_lang = "de";
+        cfg.tgt_lang = "en";
+        cfg.sync = true;
+        cfg.drafts = false;
+        cfg.revise_max_sentences = 2;
+        cfg.out = f;
+        cfg.log = nullptr;
+        crispasr::lt_sink sink(cfg, [](const std::string& s, const crispasr::lt_sink::progress_fn&) { return s; });
+        sink.set_reviser([](const std::string& s, const crispasr::lt_sink::progress_fn&) { return s; });
+        const auto now = crispasr::lt_sink::clock::now();
+        sink.on_partial(1, "Eins ist hier. Zwei ist da. Drei", 1.0, now);
+        sink.on_partial(1, "Eins ist hier. Zwei ist da. Drei kommt noch", 1.5, now);
+        sink.on_final(1, "Eins ist hier. Zwei ist da. Drei kommt noch.", 2.5, now);
+    }
+    rewind(f);
+    std::string all;
+    char buf[1024];
+    while (fgets(buf, sizeof(buf), f))
+        all += buf;
+    fclose(f);
+    INFO(all);
+    REQUIRE(all.find("\"sentence_ids\":[0,1]") != std::string::npos);
+    REQUIRE(all.find("\"final_until_sentence\":1}") != std::string::npos);
+    REQUIRE(all.find("\"final_until_sentence\":2}") != std::string::npos);
+}
