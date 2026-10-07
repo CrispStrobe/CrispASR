@@ -1080,6 +1080,27 @@
       },
       "stage_threshold_default": 0.999,
       "stage_threshold_note": "F16 magnitude <=2%, all32 encoder+32 decoder blocks, exact prompt and all16 cached greedy IDs. Weekly index-echo-9b-regression.yml performs five complete file cases and real Piper roundtrips on hosted scratch; not the 14GB daily matrix."
+    },
+    {
+      "name": "hikari-medium",
+      "backend_id": "hikari",
+      "skip_diff": true,
+      "_skip_diff_note": "Transcript-only for now. The stage-by-stage reference (crispasr-diff hikari, tools/reference_backends/hikari.py) was captured for en->de, while this runner transcribes; f16 matched it on every stage and 161/161 stream steps (2026-10-07).",
+      "source_model": "sbintuitions/hikari-medium",
+      "source_model_note": "HF id for tools/reference_backends/hikari.py. Only needed for re-bake.",
+      "gguf": {
+        "repo": "cstr/hikari-medium-GGUF",
+        "revision": "20311f04bd4691aefeebdabe182ac9ac770d6696",
+        "file": "hikari-medium-q8_0.gguf",
+        "approx_size_mb": 873,
+        "_file_note": "q8_0: same English and German text as f16 on CPU. Silero must sit next to the model: its speech probability drives the policy's wait penalty.",
+        "companion_files": [
+          "ggml-silero-v6.2.0.bin"
+        ]
+      },
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "And so my fellow Americans, ask not. what your country can do for you. Ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-10-07 with HF revision 20311f04, q8_0 and f16 identical, CPU (-ng), samples/jfk.wav; English transcription (no target language)"
     }
   ],
   "tts_backends_note": "TTS->ASR roundtrip regression. Each entry synthesises tts_phrase via the TTS backend, transcribes the output with the pinned ASR backend (parakeet by default — high-accuracy English ground truth), and asserts WER <= wer_max. Catches silent decode regressions like the voxcpm2 BF16 noise bug that the encoder/mel diff harness can miss. WER ignores punctuation and case after normalisation, so a kokoro tts_phrase that comes back as 'the quick brown fox jumps over the lazy dog.' is still WER=0.",

@@ -55,7 +55,15 @@ Open, in the order they would help:
 5. ~~VAD re-runs over the whole window every step~~: incremental Silero
    (each 32 ms frame scored once, state kept) — 30-86 → 3-6 ms per step.
    Other VAD models still re-scan.
-6. **hikari-medium port** (causal Whisper, English→German simultaneous S2TT).
+6. **hikari** (sbintuitions/hikari-medium, English -> de/ja/ru simultaneous
+   translation + English ASR) is ported: f16 equals the reference on jfk
+   (every stage >= 0.9995 cosine, 161/161 stream steps, same text) and on a
+   4 s cut (48/48). Left: (a) not real time — 1.82 s per audio-second on M1
+   Metal at load ~10 (encoder 87 ms + decoder 58 ms per 80 ms step; CPU 3x
+   slower); (b) q8_0 is token-exact on CPU-level text but on Metal changes
+   one German sentence of a 27 s clip, q4_k breaks the encoder (cos 0.36) —
+   ship f16 until a keep-rule is measured; (c) not published (no registry
+   row), so no -m auto and no regression fixture.
 7. Drafts: the part two consecutive drafts agree on is marked stable
    (normal text vs dimmed; JSON `stable`). On German speech with Opus-MT,
    whole drafts are rewritten at normalized erasure 1.17-1.48, the stable

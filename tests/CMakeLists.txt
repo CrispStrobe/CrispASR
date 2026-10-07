@@ -1421,6 +1421,28 @@ catch_discover_tests(test-canary-180m-live
         TIMEOUT 900
         WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
 )
+# hikari through the session C ABI (what the bindings use): English ASR and
+# en->de against the reference text. Skips without CRISPASR_MODEL_HIKARI.
+add_executable(test-hikari-live
+    test_hikari_live.cpp
+)
+target_include_directories(test-hikari-live PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/ggml/include
+)
+target_link_libraries(test-hikari-live PRIVATE
+    Catch2::Catch2WithMain
+    crispasr-lib
+)
+catch_discover_tests(test-hikari-live
+    TEST_SPEC "[hikari]"
+    PROPERTIES
+        LABELS live
+        SKIP_RETURN_CODE 4
+        TIMEOUT 900
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
 add_test(NAME test-canary-source-contract
     COMMAND python3 ${CMAKE_CURRENT_SOURCE_DIR}/test_canary_lang_whitelist.py
     WORKING_DIRECTORY ${PROJECT_SOURCE_DIR}

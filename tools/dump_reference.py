@@ -262,6 +262,9 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # per-layer, encoder_output and the CTC log-prob grid (canary_ctc runtime).
     "fastconformer-ctc": "reference_backends.fastconformer_ctc",
     "moonshine":       "reference_backends.moonshine",
+    # Hikari (sbintuitions/hikari-medium) simultaneous S2TT: replays the
+    # upstream server's per-80ms policy; HIKARI_SRC = hikari repo src/.
+    "hikari":          "reference_backends.hikari",
     "moonshine-base":  "reference_backends.moonshine",
     # Moonshine-Streaming (ONNX variant from usefulsensors/moonshine).
     # model_dir = root of the cloned repo (onnx/tiny/{preprocess,encode}.onnx).

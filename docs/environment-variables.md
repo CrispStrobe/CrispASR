@@ -864,6 +864,14 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `CRISPASR_LFM2_AUDIO_CPU`
 - `CRISPASR_LFM2_SNAP_LAYERS`
 
+### hikari
+
+- `HIKARI_VAD_MODEL` — Silero file for the policy's speech probability (default: `ggml-silero-v6.2.0.bin` next to the model, else the managed download; CLI also `--vad-model`).
+- `HIKARI_VAD` — `0` turns Silero off (the model then rarely emits; for A/B only).
+- `HIKARI_WP_BASE`, `HIKARI_WP_BOOST`, `HIKARI_WP_DECAY`, `HIKARI_REP`, `HIKARI_CTX`, `HIKARI_TAIL_MS` — the upstream client's policy knobs (defaults 0, 0.6, 0.3, 40, 337 tokens, 2000 ms).
+- `HIKARI_VERBOSE`, `HIKARI_BENCH` — per-step trace, per-stage timings.
+- `HIKARI_GPU` — `0` keeps hikari on the CPU (default: the GPU when there is one).
+
 ### M2M-100 translate
 
 - `CRISPASR_M2M100_BENCH`

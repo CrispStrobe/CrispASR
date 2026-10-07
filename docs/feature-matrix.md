@@ -3,7 +3,7 @@
 
 # Feature matrix
 
-All 134 backends compiled into the `crispasr` binary, with their declared capability bits. For an interactive sortable/filterable view, open [`feature-matrix.html`](https://htmlpreview.github.io/?https://github.com/CrispStrobe/CrispASR/blob/main/docs/feature-matrix.html).
+All 135 backends compiled into the `crispasr` binary, with their declared capability bits. For an interactive sortable/filterable view, open [`feature-matrix.html`](https://htmlpreview.github.io/?https://github.com/CrispStrobe/CrispASR/blob/main/docs/feature-matrix.html).
 
 | Backend | TTS | Voice cloning | Translate | Src/Tgt language | Language detect | Auto-download | Timestamps (native) | Timestamps (CTC) | Word timestamps | Token confidence | Temperature | Beam search | Punctuation toggle | Flash attention | Diarize | GBNF grammar | VAD (internal) | Parallel processors | Beats | Chords | Piano | Pitch | Punctuation Native | S2S | Separate | Streaming | Tab | TTS Speed |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
@@ -91,6 +91,7 @@ All 134 backends compiled into the `crispasr` binary, with their declared capabi
 | `cosyvoice3-tts-rl` | ✓ | ✓ |  | ✓ |  | ✓ |  |  |  |  | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `m2m100` |  |  | ✓ | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `m2m100-wmt21` |  |  | ✓ | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
+| `hikari` |  |  | ✓ | ✓ |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  | ✓ |  |  | ✓ |  |  |
 | `marian` |  |  | ✓ | ✓ |  |  |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `madlad` |  |  | ✓ | ✓ |  | ✓ |  |  |  |  |  | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |  |
 | `glm-asr` |  |  | ✓ | ✓ |  | ✓ |  | ✓ |  | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |  |  |  |  |  |  |  |  |  |  |  |  |

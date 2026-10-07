@@ -26,6 +26,9 @@ fi
 export CRISPASR_MODEL_WHISPER="${CRISPASR_MODEL_WHISPER:-$_whisper_default}"
 unset _whisper_cache _whisper_default
 
+# hikari: simultaneous speech translation; Silero next to the model (as -m auto puts it).
+export CRISPASR_MODEL_HIKARI="${CRISPASR_MODEL_HIKARI:-$CRISPASR_MODELS_DIR/hikari-medium-f16.gguf}"
+
 # Tiron (#295): Whisper large-v3 + inline <|speakerN|> markers (legacy ggml bin).
 export CRISPASR_MODEL_TIRON="${CRISPASR_MODEL_TIRON:-$CRISPASR_MODELS_DIR/tiron-q4_k.bin}"
 

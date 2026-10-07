@@ -59,6 +59,7 @@
 #include "text_lid_dispatch.h"        // Text-LID backend-agnostic façade (CLD3 + fastText)
 #include "crispasr_aligner.h"         // CTC / forced-aligner word timings (shared with CLI)
 #include "crispasr_cache.h"           // HF download + filesystem cache (shared with CLI)
+#include "core/silero_context.h"      // crispasr_silero_enable_context (hikari)
 #include "crispasr_model_registry.h"  // Known-model lookup (shared with CLI)
 #include "crispasr_punc_model.h"      // shared --punc-model alias resolution (CLI/server/C-ABI parity)
 #include "core/beam_decode.h"         // Shared autoregressive beam-search decode helper
@@ -404,6 +405,10 @@
 #if __has_include("moonshine.h")
 #include "moonshine.h"
 #define CA_HAVE_MOONSHINE 1
+#endif
+#if __has_include("hikari.h")
+#include "hikari.h"
+#define CA_HAVE_HIKARI 1
 #endif
 #if __has_include("omniasr.h")
 #include "omniasr.h"
@@ -2175,6 +2180,10 @@ struct crispasr_session {
 #ifdef CA_HAVE_FIRERED
     void* firered_ctx = nullptr;
 #endif
+#ifdef CA_HAVE_HIKARI
+    hikari_context* hikari_ctx = nullptr;
+    whisper_vad_context* hikari_vad = nullptr; // Silero: drives the policy's wait penalty
+#endif
 #ifdef CA_HAVE_MOONSHINE
     void* moonshine_ctx = nullptr;
 #endif
@@ -3339,6 +3348,67 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         if (!s->firered_ctx) {
             delete s;
             return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_HIKARI
+    if (s->backend == "hikari") {
+        hikari_context_params hp = hikari_context_default_params();
+        hp.n_threads = s->n_threads;
+        hp.use_gpu = g_open_use_gpu_tls;
+        hp.verbosity = 0;
+        s->hikari_ctx = hikari_init_from_file(model_path, hp);
+        if (!s->hikari_ctx) {
+            delete s;
+            return nullptr;
+        }
+        // Without Silero's speech probability the policy's wait penalty never
+        // rises and the model hardly emits (en->de on jfk: empty text). Same
+        // lookup as the CLI adapter: HIKARI_VAD_MODEL, the file next to the
+        // model (where -m auto puts it), else the managed download.
+        const char* vad_env = std::getenv("HIKARI_VAD"); // "0" = off, as in the CLI adapter
+        if (!(vad_env && vad_env[0] == '0')) {
+            std::string vp;
+            if (const char* e = std::getenv("HIKARI_VAD_MODEL"))
+                vp = e;
+            if (vp.empty()) {
+                std::string dir = model_path;
+                const size_t cut = dir.find_last_of("/\\");
+                dir = cut == std::string::npos ? std::string(".") : dir.substr(0, cut);
+                const std::string near = dir + "/ggml-silero-v6.2.0.bin";
+                if (FILE* f = std::fopen(near.c_str(), "rb")) {
+                    std::fclose(f);
+                    vp = near;
+                } else {
+                    vp = crispasr_managed_download("ggml-silero-v6.2.0.bin",
+                                                   "https://huggingface.co/ggml-org/whisper-vad/resolve/"
+                                                   "9ffd54a1e1ee413ddf265af9913beaf518d1639b/ggml-silero-v6.2.0.bin",
+                                                   "", true, "hikari VAD");
+                }
+            }
+            if (!vp.empty()) {
+                whisper_vad_context_params vcp = whisper_vad_default_context_params();
+                vcp.n_threads = 1;
+                s->hikari_vad = whisper_vad_init_from_file_with_params(vp.c_str(), vcp);
+                if (s->hikari_vad && !crispasr_silero_enable_context(s->hikari_vad)) {
+                    whisper_vad_free(s->hikari_vad);
+                    s->hikari_vad = nullptr;
+                }
+            }
+            if (s->hikari_vad)
+                hikari_set_speech_prob_fn(
+                    s->hikari_ctx,
+                    [](const float* x, int n, void* user) -> float {
+                        auto* v = static_cast<whisper_vad_context*>(user);
+                        if (!whisper_vad_detect_speech_continue(v, x, n))
+                            return 0.0f;
+                        const int np = whisper_vad_n_probs(v);
+                        return np > 0 ? whisper_vad_probs(v)[np - 1] : 0.0f;
+                    },
+                    s->hikari_vad);
+            else
+                fprintf(stderr, "crispasr: hikari: no Silero VAD - the model will rarely emit\n");
         }
         return s;
     }
@@ -4864,6 +4934,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_MOONSHINE
     list += ",moonshine";
+#endif
+#ifdef CA_HAVE_HIKARI
+    list += ",hikari";
 #endif
 #ifdef CA_HAVE_MOONSHINE_STREAMING
     list += ",moonshine-streaming";
@@ -7657,6 +7730,45 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         char* text = strdup(fr->text);
         firered_asr_result_free(fr);
         return package_with_tokens(text, std::move(toks));
+    }
+#endif
+#ifdef CA_HAVE_HIKARI
+    if (s->backend == "hikari" && s->hikari_ctx) {
+        // Target language = set_target_language; empty / "en" = English ASR.
+        // The model decides once per 80 ms; token times are emission times.
+        const std::string& tl = s->target_language;
+        const bool tr = !tl.empty() && tl != "en";
+        if (hikari_set_task(s->hikari_ctx, tr ? 1 : 0, tl.c_str()) != 0) {
+            delete r;
+            return nullptr;
+        }
+        if (s->hikari_vad) {
+            float z = 0.0f;
+            whisper_vad_detect_speech(s->hikari_vad, &z, 0); // fresh Silero state per call
+        }
+        char* text = hikari_transcribe(s->hikari_ctx, pcm, n_samples);
+        if (!text) {
+            delete r;
+            return nullptr;
+        }
+        std::vector<ca_token_record> toks;
+        for (int i = 0; i < hikari_stream_n_steps(s->hikari_ctx); i++) {
+            char* piece = hikari_token_text(s->hikari_ctx, hikari_stream_step_token(s->hikari_ctx, i));
+            if (piece && piece[0]) {
+                ca_token_record tk;
+                tk.text = piece;
+                tk.t0 = tk.t1 = (int64_t)(hikari_stream_step_time(s->hikari_ctx, i) * 100.0 + 0.5);
+                toks.push_back(std::move(tk));
+            }
+            free(piece);
+        }
+        // strip the leading space of the first word
+        char* lead = text;
+        while (*lead == ' ')
+            lead++;
+        char* out = strdup(lead);
+        free(text);
+        return package_with_tokens(out, std::move(toks));
     }
 #endif
 #ifdef CA_HAVE_MOONSHINE
@@ -11788,6 +11900,12 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_FIRERED
     if (s->firered_ctx)
         firered_asr_free((firered_asr_context*)s->firered_ctx);
+#endif
+#ifdef CA_HAVE_HIKARI
+    if (s->hikari_ctx)
+        hikari_free(s->hikari_ctx);
+    if (s->hikari_vad)
+        whisper_vad_free(s->hikari_vad);
 #endif
 #ifdef CA_HAVE_MOONSHINE
     if (s->moonshine_ctx)

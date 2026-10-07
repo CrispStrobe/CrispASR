@@ -1382,6 +1382,13 @@ constexpr Entry k_registry[] = {
     {"madlad", "madlad400-3b-mt-q4_k.gguf",
      "https://huggingface.co/cstr/madlad400-3b-mt-GGUF/resolve/main/madlad400-3b-mt-q4_k.gguf",
      "~1.9 GB", nullptr, nullptr},
+    // hikari (sbintuitions/hikari-medium, MIT): simultaneous speech translation
+    // EN -> DE/JA/RU + English ASR. f16 is the default: it equals the reference
+    // and gives the same text on CPU and Metal; q8_0 (-m auto:q8_0) changed one
+    // German sentence of a 27 s clip on Metal. Silero rides along (k_extras).
+    {"hikari", "hikari-medium-f16.gguf",
+     "https://huggingface.co/cstr/hikari-medium-GGUF/resolve/main/hikari-medium-f16.gguf", "~1.5 GB", nullptr,
+     nullptr, nullptr, "MIT (https://huggingface.co/sbintuitions/hikari-medium)"},
     // Opus-MT / MarianMT (Helsinki-NLP, CC-BY-4.0): one ~75M model per language
     // pair, the fastest translator for live translation. `marian` is the
     // `-m auto` default (de->en); `--translate-model auto --translate-backend
@@ -1771,8 +1778,17 @@ constexpr ExtraCompanion k_index_echo_extras[] = {
     {nullptr, nullptr},
 };
 
+// hikari: its streaming policy's wait penalty is driven by Silero's speech
+// probability; without it the model hardly ever emits (jfk 0-4 s: 48/48 WAIT).
+constexpr ExtraCompanion k_hikari_extras[] = {
+    {"ggml-silero-v6.2.0.bin",
+     "https://huggingface.co/ggml-org/whisper-vad/resolve/9ffd54a1e1ee413ddf265af9913beaf518d1639b/ggml-silero-v6.2.0.bin"},
+    {nullptr, nullptr},
+};
+
 constexpr ExtraList k_extras[] = {
     {"index-echo", k_index_echo_extras},
+    {"hikari", k_hikari_extras},
     {"kokoro", k_kokoro_extras},
     {"dots-tts", k_dots_tts_extras},
     {"confucius4-tts", k_confucius4_tts_extras},

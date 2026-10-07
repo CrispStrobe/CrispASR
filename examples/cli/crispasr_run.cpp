@@ -103,6 +103,30 @@
 // progress is committed and translated); the handler then uninstalls itself,
 // so a second Ctrl+C kills the process as usual.
 static volatile std::sig_atomic_t g_stream_interrupted = 0;
+
+// --stream on a session backend with no translator behind it: print only what
+// the hypothesis ADDED (a simultaneous model never revises emitted text; if it
+// ever does, the whole line is reprinted). JSON: one partial event per growth
+// and a final event at the end of the stream.
+static void crispasr_stream_print_growth(const std::string& before, const std::string& now, bool json, double t_now,
+                                         bool is_final) {
+    if (json) {
+        if (now != before || is_final) {
+            fprintf(stdout, "{\"type\":\"%s\",\"utterance_id\":1,\"text\":\"%s\",\"t0\":0.000,\"t1\":%.3f}\n",
+                    is_final ? "final" : "partial", crispasr_json_escape(now).c_str(), t_now);
+            fflush(stdout);
+        }
+        return;
+    }
+    if (now.size() >= before.size() && now.compare(0, before.size(), before) == 0) {
+        fputs(now.c_str() + before.size(), stdout);
+    } else {
+        fprintf(stdout, "\n%s", now.c_str());
+    }
+    if (is_final)
+        fputc('\n', stdout);
+    fflush(stdout);
+}
 static void crispasr_stream_on_sigint(int) {
     g_stream_interrupted = 1;
 #if defined(_WIN32)
@@ -4365,6 +4389,10 @@ int crispasr_run_backend(const whisper_params& params_in) {
         }
 
         const int SR = 16000;
+        // A simultaneous-policy backend decides every 80 ms; reading in
+        // bigger steps would only add latency.
+        if (backend->prefers_realtime_session() && !live_tr && !params.stream_step_explicit)
+            params.stream_step_ms = 80;
         const int step_samples = (params.stream_step_ms * SR) / 1000;
         const int length_samples = (params.stream_length_ms * SR) / 1000;
         const int keep_samples = (params.stream_keep_ms * SR) / 1000;
@@ -4597,8 +4625,18 @@ int crispasr_run_backend(const whisper_params& params_in) {
         // sentences in half. Without a VAD model the text is all there is,
         // and the wait is stretched to cover a burst.
         std::unique_ptr<CrispasrRealtimeSession> rt_session;
+        // A simultaneous-policy backend (hikari) streams through its session
+        // with or without a translator; its text is printed as it grows.
+        if (!params.stream_session && backend->prefers_realtime_session()) {
+            rt_session = backend->create_realtime_session(params);
+            if (!rt_session) {
+                fprintf(stderr, "crispasr: error: backend '%s' failed to open its streaming session.\n",
+                        backend->name());
+                return 23;
+            }
+        }
         if (params.stream_session) {
-            if (!live_tr) {
+            if (!live_tr && !backend->prefers_realtime_session()) {
                 fprintf(stderr, "crispasr: error: --stream-session needs live translation (--translate-model).\n");
                 return 23;
             }
@@ -4723,6 +4761,23 @@ int crispasr_run_backend(const whisper_params& params_in) {
             cumulative_samples += (int64_t)n_new;
             (void)keep_samples; // legacy, intentionally unused
 
+            if (rt_session && !live_tr) {
+                // No translator behind it: one continuous session for the
+                // whole stream (a simultaneous model never resets mid-talk),
+                // printing what it adds as soon as it adds it.
+                const auto timing_asr_t0 = std::chrono::steady_clock::now();
+                const size_t fed = std::min(n_new, pcm_window.size());
+                std::string now_text = rt_text;
+                rt_session->append(pcm_window.data() + pcm_window.size() - fed, (int)fed, /*flush=*/false,
+                                   [&](const std::string& t, bool) { now_text = t; });
+                timing_asr_ms =
+                    std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - timing_asr_t0).count();
+                timing_asr_audio_s = (double)fed / SR;
+                crispasr_stream_print_growth(rt_text, now_text, stream_json_events, (double)cumulative_samples / SR,
+                                             false);
+                rt_text = now_text;
+                continue;
+            }
             if (rt_session) {
                 const auto timing_asr_t0 = std::chrono::steady_clock::now();
                 std::string now_text = rt_text;
@@ -5609,8 +5664,13 @@ int crispasr_run_backend(const whisper_params& params_in) {
                 fflush(stdout);
             }
         }
-        if (rt_session)
+        if (rt_session && !live_tr) {
+            std::string now_text = rt_text;
+            rt_session->append(nullptr, 0, /*flush=*/true, [&](const std::string& t, bool) { now_text = t; });
+            crispasr_stream_print_growth(rt_text, now_text, stream_json_events, (double)cumulative_samples / SR, true);
+        } else if (rt_session) {
             rt_close_turn();
+        }
         // Translate whatever is still queued before the stream closes.
         if (live_tr)
             live_tr->finish();

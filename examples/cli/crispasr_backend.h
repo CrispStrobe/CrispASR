@@ -425,6 +425,12 @@ public:
     // preserve their native frontend/encoder/decoder state per connection.
     virtual std::unique_ptr<CrispasrRealtimeSession> create_realtime_session(const whisper_params&) { return nullptr; }
 
+    // A backend whose model is itself a simultaneous (streaming) policy —
+    // hikari decides once per 80 ms — makes no sense re-decoding a rolling
+    // window; `--stream` then drives create_realtime_session() directly, with
+    // or without a live translator behind it.
+    virtual bool prefers_realtime_session() const { return false; }
+
     // Warmup: run a short dummy transcribe to amortize first-call
     // overhead (graph allocation, GPU kernel compilation, gallocr shape
     // setup).  Called once after init(), before the first real audio.
