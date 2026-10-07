@@ -587,6 +587,12 @@ static bool fetch_download(const std::string& url, const std::string& dest, bool
 // at `dest` (which file_present() would later mistake for a valid cache hit),
 // and concurrent downloads to the same `dest` use distinct temps.
 bool fetch(const std::string& url, const std::string& dest, bool quiet) {
+    std::error_code ec;
+    const auto parent = std::filesystem::path(dest).parent_path();
+    if (!parent.empty())
+        std::filesystem::create_directories(parent, ec);
+    if (ec)
+        return false;
     const std::string tmp = unique_temp_path(dest);
     if (fetch_download(url, tmp, quiet) && file_present(tmp) && atomic_rename(tmp, dest) && file_present(dest))
         return true;

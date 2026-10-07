@@ -6189,3 +6189,8 @@ add_executable(test-asr-prompt-contract test-asr-prompt-contract.cpp)
 target_include_directories(test-asr-prompt-contract PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-asr-prompt-contract PRIVATE Catch2::Catch2WithMain)
 catch_discover_tests(test-asr-prompt-contract TEST_SPEC "[unit]" PROPERTIES LABELS "unit;asr-prompt")
+
+add_executable(test-moonshine-tokenizer test-moonshine-tokenizer.cpp)
+target_include_directories(test-moonshine-tokenizer PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-moonshine-tokenizer PRIVATE Catch2::Catch2WithMain moonshine_tokenizer)
+catch_discover_tests(test-moonshine-tokenizer TEST_SPEC "[unit]" PROPERTIES LABELS "unit;moonshine")

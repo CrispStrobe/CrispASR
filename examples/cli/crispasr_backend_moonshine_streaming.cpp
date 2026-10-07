@@ -16,8 +16,8 @@ public:
 
     const char* name() const override { return "moonshine-streaming"; }
 
-    // English-only (see MoonshineBackend) — skip external LID on -l auto. #227.
-    const char* sole_language() const override { return "en"; }
+    // These checkpoints are language-specific; skip external LID on -l auto.
+    const char* sole_language() const override { return sole_; }
 
     uint32_t capabilities() const override {
         // #300/#308 audit: the model emits punctuated, sentence-cased text (verified
@@ -33,6 +33,8 @@ public:
     }
 
     bool init(const whisper_params& params) override {
+        sole_ = params.model.find("-de") != std::string::npos || params.model.find("_de") != std::string::npos ? "de"
+                                                                                                               : "en";
         moonshine_streaming_context_params cp = moonshine_streaming_context_default_params();
         cp.n_threads = params.n_threads;
         cp.verbosity = params.no_prints ? 0 : 1;
@@ -57,7 +59,8 @@ public:
         if (!ctx_)
             return out;
 
-        if (!params.language.empty() && params.language != "auto" && params.language != "en")
+        if (sole_ && std::string(sole_) == "en" && !params.language.empty() && params.language != "auto" &&
+            params.language != "en")
             fprintf(stderr, "crispasr[moonshine-streaming]: English-only model; language='%s' ignored\n",
                     params.language.c_str());
         moonshine_streaming_set_beam_size(ctx_, params.beam_size > 0 ? params.beam_size : 1);
@@ -139,6 +142,7 @@ public:
 
 private:
     moonshine_streaming_context* ctx_ = nullptr;
+    const char* sole_ = nullptr;
 };
 
 std::unique_ptr<CrispasrBackend> crispasr_make_moonshine_streaming_backend() {

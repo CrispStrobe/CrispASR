@@ -573,6 +573,13 @@ constexpr Entry k_registry[] = {
     {"wav2vec2-aligner-de", "wav2vec2-large-xlsr-53-german-q4_k.gguf",
      "https://huggingface.co/cstr/wav2vec2-large-xlsr-53-german-GGUF/resolve/main/wav2vec2-large-xlsr-53-german-q4_k.gguf",
      "~222 MB", nullptr, nullptr},
+    {"moonshine-streaming-tiny-de-onnx", "moonshine-streaming-tiny-de-onnx/encoder_int8.onnx", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/encoder_int8.onnx", "~8 MB", nullptr, nullptr, nullptr, "MIT"},
+    {"moonshine-onnx", "moonshine-streaming-small-de-onnx/encoder_int8.onnx", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/encoder_int8.onnx", "~43 MB", nullptr, nullptr, nullptr, "MIT"},
+    {"moonshine-streaming-small-de-onnx", "moonshine-streaming-small-de-onnx/encoder_int8.onnx", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/encoder_int8.onnx", "~43 MB", nullptr, nullptr, nullptr, "MIT"},
+    {"moonshine-tiny-de-dattazigzag", "moonshine-tiny-de-dattazigzag-q4_k/moonshine-tiny-de-dattazigzag-q4_k.gguf", "https://huggingface.co/cstr/moonshine-tiny-de-dattazigzag-GGUF/resolve/c5d7964c5284893b35fa937536b7187fe78a3f9e/moonshine-tiny-de-dattazigzag-q4_k.gguf", "~17 MB", nullptr, nullptr, nullptr, "MIT"},
+    {"moonshine-tiny-de-phreak87-onnx", "moonshine-tiny-de-phreak87-onnx/onnx/encoder_model.onnx", "https://huggingface.co/Phreak87/moonshine-tiny-de-onnx/resolve/ed7433af42952f66cc03a966c3571166c3e50013/onnx/encoder_model.onnx", "~30 MB", nullptr, nullptr, nullptr, "MIT"},
+    {"moonshine-streaming-tiny-de-onnx-f32", "moonshine-streaming-tiny-de-onnx-f32/encoder.onnx", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/encoder.onnx", "~29 MB", nullptr, nullptr, nullptr, "MIT"},
+    {"moonshine-streaming-small-de-onnx-f32", "moonshine-streaming-small-de-onnx-f32/encoder.onnx", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/encoder.onnx", "~167 MB", nullptr, nullptr, nullptr, "MIT"},
     {"moonshine-streaming", "moonshine-streaming-tiny-q4_k.gguf",
      "https://huggingface.co/cstr/moonshine-streaming-tiny-GGUF/resolve/main/moonshine-streaming-tiny-q4_k.gguf", "~31 MB",
      "tokenizer.bin", "https://huggingface.co/cstr/moonshine-streaming-tiny-GGUF/resolve/main/tokenizer.bin",
@@ -1786,7 +1793,68 @@ constexpr ExtraCompanion k_hikari_extras[] = {
     {nullptr, nullptr},
 };
 
+constexpr ExtraCompanion k_moonshine_streaming_tiny_de_onnx_extras[] = {
+    {"moonshine-streaming-tiny-de-onnx/frontend.onnx", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/frontend.onnx"},
+    {"moonshine-streaming-tiny-de-onnx/adapter_int8.onnx", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/adapter_int8.onnx"},
+    {"moonshine-streaming-tiny-de-onnx/cross_kv_int8.onnx", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/cross_kv_int8.onnx"},
+    {"moonshine-streaming-tiny-de-onnx/decoder_kv_int8.onnx", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/decoder_kv_int8.onnx"},
+    {"moonshine-streaming-tiny-de-onnx/streaming_config.json", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/streaming_config.json"},
+    {"moonshine-streaming-tiny-de-onnx/tokenizer.json", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/tokenizer.json"},
+    {"moonshine-streaming-tiny-de-onnx/LICENSE", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/LICENSE"},
+    {nullptr, nullptr},
+};
+constexpr ExtraCompanion k_moonshine_streaming_small_de_onnx_extras[] = {
+    {"moonshine-streaming-small-de-onnx/frontend.onnx", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/frontend.onnx"},
+    {"moonshine-streaming-small-de-onnx/adapter_int8.onnx", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/adapter_int8.onnx"},
+    {"moonshine-streaming-small-de-onnx/cross_kv_int8.onnx", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/cross_kv_int8.onnx"},
+    {"moonshine-streaming-small-de-onnx/decoder_kv_int8.onnx", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/decoder_kv_int8.onnx"},
+    {"moonshine-streaming-small-de-onnx/streaming_config.json", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/streaming_config.json"},
+    {"moonshine-streaming-small-de-onnx/tokenizer.json", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/tokenizer.json"},
+    {"moonshine-streaming-small-de-onnx/LICENSE", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/LICENSE"},
+    {nullptr, nullptr},
+};
+constexpr ExtraCompanion k_moonshine_tiny_de_dattazigzag_q4_k_extras[] = {
+    {"moonshine-tiny-de-dattazigzag-q4_k/tokenizer.bin", "https://huggingface.co/cstr/moonshine-tiny-de-dattazigzag-GGUF/resolve/c5d7964c5284893b35fa937536b7187fe78a3f9e/tokenizer.bin"},
+    {nullptr, nullptr},
+};
+constexpr ExtraCompanion k_moonshine_tiny_de_phreak87_onnx_extras[] = {
+    {"moonshine-tiny-de-phreak87-onnx/onnx/decoder_model_merged.onnx", "https://huggingface.co/Phreak87/moonshine-tiny-de-onnx/resolve/ed7433af42952f66cc03a966c3571166c3e50013/onnx/decoder_model_merged.onnx"},
+    {"moonshine-tiny-de-phreak87-onnx/config.json", "https://huggingface.co/Phreak87/moonshine-tiny-de-onnx/resolve/ed7433af42952f66cc03a966c3571166c3e50013/config.json"},
+    {"moonshine-tiny-de-phreak87-onnx/tokenizer.json", "https://huggingface.co/Phreak87/moonshine-tiny-de-onnx/resolve/ed7433af42952f66cc03a966c3571166c3e50013/tokenizer.json"},
+    {nullptr, nullptr},
+};
+
+constexpr ExtraCompanion k_moonshine_streaming_tiny_de_onnx_f32_extras[] = {
+    {"moonshine-streaming-tiny-de-onnx-f32/frontend.onnx", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/frontend.onnx"},
+    {"moonshine-streaming-tiny-de-onnx-f32/adapter.onnx", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/adapter.onnx"},
+    {"moonshine-streaming-tiny-de-onnx-f32/cross_kv.onnx", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/cross_kv.onnx"},
+    {"moonshine-streaming-tiny-de-onnx-f32/decoder_kv.onnx", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/decoder_kv.onnx"},
+    {"moonshine-streaming-tiny-de-onnx-f32/streaming_config.json", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/streaming_config.json"},
+    {"moonshine-streaming-tiny-de-onnx-f32/tokenizer.json", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/tokenizer.json"},
+    {"moonshine-streaming-tiny-de-onnx-f32/LICENSE", "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX/resolve/67a2c78a3a7d3494dd7952863a18db515e6fb64a/LICENSE"},
+    {nullptr, nullptr},
+};
+
+constexpr ExtraCompanion k_moonshine_streaming_small_de_onnx_f32_extras[] = {
+    {"moonshine-streaming-small-de-onnx-f32/frontend.onnx", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/frontend.onnx"},
+    {"moonshine-streaming-small-de-onnx-f32/adapter.onnx", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/adapter.onnx"},
+    {"moonshine-streaming-small-de-onnx-f32/cross_kv.onnx", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/cross_kv.onnx"},
+    {"moonshine-streaming-small-de-onnx-f32/decoder_kv.onnx", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/decoder_kv.onnx"},
+    {"moonshine-streaming-small-de-onnx-f32/streaming_config.json", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/streaming_config.json"},
+    {"moonshine-streaming-small-de-onnx-f32/tokenizer.json", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/tokenizer.json"},
+    {"moonshine-streaming-small-de-onnx-f32/LICENSE", "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/LICENSE"},
+    {nullptr, nullptr},
+};
+
 constexpr ExtraList k_extras[] = {
+    {"moonshine-streaming-small-de-onnx-f32", k_moonshine_streaming_small_de_onnx_f32_extras},
+    {"moonshine-streaming-tiny-de-onnx-f32", k_moonshine_streaming_tiny_de_onnx_f32_extras},
+    {"moonshine-streaming-tiny-de-onnx", k_moonshine_streaming_tiny_de_onnx_extras},
+    {"moonshine-onnx", k_moonshine_streaming_small_de_onnx_extras},
+    {"moonshine-streaming-small-de-onnx", k_moonshine_streaming_small_de_onnx_extras},
+    {"moonshine-tiny-de-dattazigzag", k_moonshine_tiny_de_dattazigzag_q4_k_extras},
+    {"moonshine-tiny-de-phreak87-onnx", k_moonshine_tiny_de_phreak87_onnx_extras},
+
     {"index-echo", k_index_echo_extras},
     {"hikari", k_hikari_extras},
     {"kokoro", k_kokoro_extras},

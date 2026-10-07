@@ -394,6 +394,7 @@ struct Config {
     int unfixed_chunk_num = 0;
     int unfixed_token_num = 1;
     bool rollback_punctuation = false;
+    bool stock_qwen = false;       // Qwen3-ASR SDK, without R2T2 normalisation
     std::u32string force_language; // canonical name, empty = auto
 };
 
@@ -437,11 +438,37 @@ struct StepResult {
     bool counted = false; // chunk_id advanced (the reference `continue`s otherwise)
 };
 
+// Stock Qwen3-ASR SDK control flow. Unlike R2T2 this preserves punctuation,
+// pipes and CJK spacing, and advances the chunk even without an ASR tag.
+inline StepResult stock_decode(State& st, const Hooks& h, int max_new_tokens, bool final) {
+    StepResult r;
+    if (st.chunk_id >= st.cfg.unfixed_chunk_num) {
+        const auto ids = h.encode(utf8_encode(st.raw_decoded));
+        if (final) {
+            const int end = std::max(1, (int)ids.size() - st.cfg.unfixed_token_num);
+            r.prefix = utf8_decode_replace(
+                h.decode_bytes(std::vector<int32_t>(ids.begin(), ids.begin() + std::min<size_t>(end, ids.size()))));
+        } else {
+            r.prefix = rollback_decode(h, ids, st.cfg.unfixed_token_num);
+        }
+    }
+    r.gen_text = utf8_decode_replace(h.generate(st.audio_accum, utf8_encode(r.prefix), max_new_tokens));
+    st.raw_decoded = r.prefix + r.gen_text;
+    const auto parsed = parse_asr_output(st.raw_decoded, st.cfg.force_language);
+    st.language = parsed.language;
+    st.text = parsed.text;
+    ++st.chunk_id;
+    r.counted = true;
+    return r;
+}
+
 // One streaming_transcribe chunk. `chunk` has already been cut to size by the
 // caller (the reference slices state.buffer by chunk_size_samples).
 inline StepResult step(State& st, const Hooks& h, const float* chunk, size_t n, int max_new_tokens) {
     StepResult r;
     st.audio_accum.insert(st.audio_accum.end(), chunk, chunk + n);
+    if (st.cfg.stock_qwen)
+        return stock_decode(st, h, max_new_tokens, false);
 
     std::u32string prefix;
     if (st.chunk_id >= st.cfg.unfixed_chunk_num) {
@@ -509,6 +536,8 @@ inline StepResult finish(State& st, const Hooks& h, const float* tail, size_t n,
     if (n == 0)
         return r;
     st.audio_accum.insert(st.audio_accum.end(), tail, tail + n);
+    if (st.cfg.stock_qwen)
+        return stock_decode(st, h, max_new_tokens, true);
     std::u32string prefix;
     if (st.chunk_id >= st.cfg.unfixed_chunk_num) {
         const auto ids = h.encode(utf8_encode(st.raw_decoded));

@@ -430,9 +430,21 @@ extern "C" struct moonshine_streaming_context* moonshine_streaming_init_from_fil
     }
 
     // ── Load tokenizer ─────────────────────────────────────��────────────
-    std::string tok_path = dir_of(path_model) + "/tokenizer.bin";
+    std::string tok_path = std::string(path_model) + ".tokenizer.bin";
+    FILE* specific = fopen(tok_path.c_str(), "rb");
+    if (specific)
+        fclose(specific);
+    else
+        tok_path = dir_of(path_model) + "/tokenizer.bin";
     if (!ctx->tokenizer.load(tok_path.c_str())) {
         fprintf(stderr, "moonshine_streaming: failed to load tokenizer from '%s'\n", tok_path.c_str());
+        delete ctx;
+        return nullptr;
+    }
+
+    if (ctx->tokenizer.vocab_size() != hp.vocab_size) {
+        fprintf(stderr, "moonshine_streaming: tokenizer/model vocabulary mismatch (%zu != %u)\n",
+                ctx->tokenizer.vocab_size(), hp.vocab_size);
         delete ctx;
         return nullptr;
     }

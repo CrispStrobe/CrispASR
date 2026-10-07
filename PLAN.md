@@ -11,6 +11,31 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-07 — local native-streaming bindings and CrisperWeaver integration
+
+Worktree: `CrispASR-streaming-local`, branch `fix/native-streaming-bindings`.
+Expose persistent Nemotron and prefix Qwen streams through the session C/Dart
+API; connect CrisperWeaver, fix flush/error/output handling and verify German
+chunked input. Local claim only: user requested local work, no main push.
+Local validation complete: 247 Qwen state-machine assertions, 18 Dart ABI /
+stream-protocol tests, German Nemotron and Qwen model runs across irregular
+feed partitions with identical final transcripts and safe reopening. Nemotron
+also needed canonical internal PCM batching: caller packet sizes changed its
+frontend context and words. The macOS app build 96 uses these bindings.
+
+## CLAIMED 2026-10-07 — German Moonshine model coverage (local)
+
+Worktree: `CrispASR-streaming-local`. Audit the requested German checkpoints
+and derivative licenses; support the MIT German GGUF and ONNX variants in
+the CLI/session API and CrisperWeaver. Add tokenizer isolation, byte fallback,
+German streaming metadata/conversion and native incremental ONNX execution.
+Local claim only, consistent with the user's isolated local checkout request.
+Validation complete locally: six deployment variants, 18 real-Zoom batch runs,
+six CrisperWeaver live-worker replays, 38 artifact hashes, packet-size parity,
+and German byte fallback. Updated to merged PR #513 (3f4ca937); its 134 CLI
+assertions pass. CrisperWeaver build 99 bundles the native ONNX runtime.
+Private audio and full transcript remain outside Git. No changes pushed.
+
 ## OPEN 2026-10-05 — live transcribe + translate: follow-ups
 
 Shipped 2026-10-06 (#493) together with the ggml v0.26.0 sync — what landed

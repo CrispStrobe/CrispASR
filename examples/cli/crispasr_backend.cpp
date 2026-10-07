@@ -51,6 +51,9 @@ std::unique_ptr<CrispasrBackend> crispasr_make_firered_asr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_moonshine_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_moonshine_backend_lang(const char* sole_lang);
 std::unique_ptr<CrispasrBackend> crispasr_make_moonshine_streaming_backend();
+#ifdef CRISPASR_HAS_ONNX
+std::unique_ptr<CrispasrBackend> crispasr_make_moonshine_onnx_backend();
+#endif
 std::unique_ptr<CrispasrBackend> crispasr_make_gemma4_e2b_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_omniasr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mimo_asr_backend();
@@ -298,6 +301,10 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_kyutai_stt_backend();
     if (name == "firered-asr" || name == "firered")
         return crispasr_make_firered_asr_backend();
+#ifdef CRISPASR_HAS_ONNX
+    if (name == "moonshine-onnx" || (name.find("moonshine-") == 0 && name.find("-onnx") != std::string::npos))
+        return crispasr_make_moonshine_onnx_backend();
+#endif
     if (name == "moonshine-streaming")
         return crispasr_make_moonshine_streaming_backend();
     if (name == "gemma4-e2b" || name == "gemma4e2b" || name == "gemma4")
@@ -305,7 +312,7 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
     // The de fine-tunes share the runtime but are NOT en-only — the variant's
     // language must ride along or the sole-language guard rejects `-l de` and
     // the #227 auto shortcut mislabels output (found 2026-09-02).
-    if (name == "moonshine-de" || name == "moonshine-tiny-de")
+    if (name == "moonshine-de" || name == "moonshine-tiny-de" || name == "moonshine-tiny-de-dattazigzag")
         return crispasr_make_moonshine_backend_lang("de");
     if (name == "moonshine")
         return crispasr_make_moonshine_backend();
@@ -453,6 +460,13 @@ std::vector<std::string> crispasr_list_backends() {
         "firered-asr",
         "moonshine",
         "moonshine-streaming",
+#ifdef CRISPASR_HAS_ONNX
+        "moonshine-onnx",
+        "moonshine-streaming-small-de-onnx",
+        "moonshine-streaming-tiny-de-onnx",
+        "moonshine-tiny-de-phreak87-onnx",
+#endif
+        "moonshine-tiny-de-dattazigzag",
         "gemma4-e2b",
         "omniasr",
         "omniasr-300m",
@@ -828,6 +842,8 @@ std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
         return "firered-asr";
     if (contains_ci("gemma") && (contains_ci("e2b") || contains_ci("4-e2b")))
         return "gemma4-e2b";
+    if (contains_ci("moonshine") && contains_ci("onnx"))
+        return "moonshine-onnx";
     if (contains_ci("moonshine") && contains_ci("streaming"))
         return "moonshine-streaming";
     // The de fine-tune must resolve to its variant name so the factory hands

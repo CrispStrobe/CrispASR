@@ -1,0 +1,132 @@
+{
+  "audited": "2026-10-07",
+  "policy": "Permissive models are offered in release builds. Non-commercial upstream weights remain restricted even if a derivative card shows a permissive label.",
+  "models": [
+    {
+      "repo": "Masterx/moonshine-streaming-small-de-ONNX",
+      "revision": "5d6dadcd2d3b9a53fcde00a8793950d2b222cac3",
+      "declared_license": "mit",
+      "effective_license": "mit",
+      "release_eligible": true,
+      "deployment": "moonshine-onnx",
+      "source": "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX"
+    },
+    {
+      "repo": "Masterx/moonshine-streaming-tiny-de-ONNX",
+      "revision": "67a2c78a3a7d3494dd7952863a18db515e6fb64a",
+      "declared_license": "mit",
+      "effective_license": "mit",
+      "release_eligible": true,
+      "deployment": "moonshine-onnx",
+      "source": "https://huggingface.co/Masterx/moonshine-streaming-tiny-de-ONNX"
+    },
+    {
+      "repo": "Phreak87/moonshine-base-de-onnx",
+      "revision": "4a1727de2ee46fe9421467c2391db945694e8ed1",
+      "declared_license": "apache-2.0",
+      "effective_license": "CC-BY-NC-SA-4.0 (inherited fidoriel weights)",
+      "release_eligible": false,
+      "deployment": "existing non-commercial development gate only",
+      "source": "https://huggingface.co/Phreak87/moonshine-base-de-onnx"
+    },
+    {
+      "repo": "Phreak87/moonshine-base_V2",
+      "revision": "23bd1eebb96fff5243cc484aee6faf84e3093b8f",
+      "declared_license": "apache-2.0",
+      "effective_license": "CC-BY-NC-SA-4.0 (inherited fidoriel weights)",
+      "release_eligible": false,
+      "deployment": "existing non-commercial development gate only",
+      "source": "https://huggingface.co/Phreak87/moonshine-base_V2"
+    },
+    {
+      "repo": "Phreak87/moonshine-tiny-de-onnx",
+      "revision": "ed7433af42952f66cc03a966c3571166c3e50013",
+      "declared_license": "mit",
+      "effective_license": "mit",
+      "release_eligible": true,
+      "deployment": "moonshine-onnx",
+      "source": "https://huggingface.co/Phreak87/moonshine-tiny-de-onnx"
+    },
+    {
+      "repo": "Phreak87/moonshine-tiny_V2",
+      "revision": "a364e08f271b00f5aa628367282183eef57e60ca",
+      "declared_license": "apache-2.0",
+      "effective_license": "CC-BY-NC-SA-4.0 (inherited fidoriel weights)",
+      "release_eligible": false,
+      "deployment": "existing non-commercial development gate only",
+      "source": "https://huggingface.co/Phreak87/moonshine-tiny_V2"
+    },
+    {
+      "repo": "cstr/moonshine-base-de-fidoriel-GGUF",
+      "revision": "5f7a394b96976967d587637ab6711ae62c75be2d",
+      "declared_license": "cc-by-nc-sa-4.0",
+      "effective_license": "CC-BY-NC-SA-4.0 (inherited fidoriel weights)",
+      "release_eligible": false,
+      "deployment": "existing non-commercial development gate only",
+      "source": "https://huggingface.co/cstr/moonshine-base-de-fidoriel-GGUF"
+    },
+    {
+      "repo": "cstr/moonshine-tiny-de-dattazigzag-GGUF",
+      "revision": "c5d7964c5284893b35fa937536b7187fe78a3f9e",
+      "declared_license": "mit",
+      "effective_license": "mit",
+      "release_eligible": true,
+      "deployment": "moonshine GGUF or source conversion",
+      "source": "https://huggingface.co/cstr/moonshine-tiny-de-dattazigzag-GGUF"
+    },
+    {
+      "repo": "cstr/moonshine-tiny-de-fidoriel-GGUF",
+      "revision": "395eb54bddf881a5d840a96ac711b3a90555bb9b",
+      "declared_license": "cc-by-nc-sa-4.0",
+      "effective_license": "CC-BY-NC-SA-4.0 (inherited fidoriel weights)",
+      "release_eligible": false,
+      "deployment": "existing non-commercial development gate only",
+      "source": "https://huggingface.co/cstr/moonshine-tiny-de-fidoriel-GGUF"
+    },
+    {
+      "repo": "dattazigzag/moonshine-tiny-de",
+      "revision": "669f0bf9df40d625c5cbe2a205f8369f835f29c0",
+      "declared_license": "mit",
+      "effective_license": "mit",
+      "release_eligible": true,
+      "deployment": "moonshine GGUF or source conversion",
+      "source": "https://huggingface.co/dattazigzag/moonshine-tiny-de"
+    },
+    {
+      "repo": "fidoriel/moonshine-base-de",
+      "revision": "67b0d82ac7026a4c12e6c8739977d3810ea69c7d",
+      "declared_license": "cc-by-nc-sa-4.0",
+      "effective_license": "CC-BY-NC-SA-4.0 (inherited fidoriel weights)",
+      "release_eligible": false,
+      "deployment": "existing non-commercial development gate only",
+      "source": "https://huggingface.co/fidoriel/moonshine-base-de"
+    },
+    {
+      "repo": "fidoriel/moonshine-tiny-de",
+      "revision": "bca49e4ea827f84a863a6634dce8057c82fbda44",
+      "declared_license": "cc-by-nc-sa-4.0",
+      "effective_license": "CC-BY-NC-SA-4.0 (inherited fidoriel weights)",
+      "release_eligible": false,
+      "deployment": "existing non-commercial development gate only",
+      "source": "https://huggingface.co/fidoriel/moonshine-tiny-de"
+    },
+    {
+      "repo": "moonshine-ai/moonshine-streaming-small-de",
+      "revision": "56473ba32b22b484fdfc7eb03d34c393ff494197",
+      "declared_license": "mit",
+      "effective_license": "mit",
+      "release_eligible": true,
+      "deployment": "moonshine GGUF or source conversion",
+      "source": "https://huggingface.co/moonshine-ai/moonshine-streaming-small-de"
+    },
+    {
+      "repo": "moonshine-ai/moonshine-streaming-tiny-de",
+      "revision": "928bfb925992902b7e187fda7921d72114142e1f",
+      "declared_license": "mit",
+      "effective_license": "mit",
+      "release_eligible": true,
+      "deployment": "moonshine GGUF or source conversion",
+      "source": "https://huggingface.co/moonshine-ai/moonshine-streaming-tiny-de"
+    }
+  ]
+}
