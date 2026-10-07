@@ -33,7 +33,7 @@ jobs:
           submodules: recursive
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake g++
+        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake g++
 
       - name: Configure (GGML_BACKEND_DL, as the CUDA packages are built)
         run: |
@@ -58,7 +58,7 @@ jobs:
           submodules: recursive
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ libopenblas-dev
+        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake g++ libopenblas-dev
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_OPENBLAS=ON -DCRISPASR_BUILD_TESTS=OFF -DGGML_NATIVE=OFF
@@ -123,7 +123,7 @@ jobs:
       # indistinguishable from a pass in the summary — which is how the release
       # packaging went unobserved in the first place.
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake ninja-build g++ libopenblas-dev patchelf
+        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake ninja-build g++ libopenblas-dev patchelf
 
       # Examples/server stay at their defaults: some tests link `common`, which
       # lives under examples/, so switching them off would break configure.
@@ -178,7 +178,7 @@ jobs:
           submodules: recursive
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ clang libopenblas-dev
+        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake g++ clang libopenblas-dev
 
       - name: Configure (AMR FetchContent static) + assert gate enabled
         run: |
@@ -217,7 +217,7 @@ jobs:
           submodules: recursive
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ libopenblas-dev
+        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake g++ libopenblas-dev
 
       - name: Configure (Opus FetchContent static) + assert gate enabled
         run: |
@@ -255,7 +255,7 @@ jobs:
           submodules: recursive
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake g++ libopenblas-dev libopusfile-dev
+        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake g++ libopenblas-dev libopusfile-dev
 
       - name: Configure (ASan + UBSan)
         run: >
@@ -291,7 +291,7 @@ jobs:
           submodules: recursive
 
       - name: Install dependencies
-        run: sudo apt-get update && sudo apt-get install -y cmake clang libopenblas-dev libopusfile-dev
+        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake clang libopenblas-dev libopusfile-dev
 
       - name: Configure (fuzzer + ASan/UBSan, clang)
         env:
@@ -374,10 +374,10 @@ jobs:
           # ubuntu-latest (24.04) ships libvulkan-dev but not glslc;
           # the glslc binary is in the `glslc` or `shaderc` package
           # depending on the distro version.
-          sudo apt-get update
-          sudo apt-get install -y cmake g++ libvulkan-dev spirv-headers glslc || \
-          sudo apt-get install -y cmake g++ libvulkan-dev spirv-headers glslang-tools || \
-          sudo apt-get install -y cmake g++ libvulkan-dev spirv-headers shaderc
+          bash tools/ci-apt.sh update
+          bash tools/ci-apt.sh install -y cmake g++ libvulkan-dev spirv-headers glslc || \
+          bash tools/ci-apt.sh install -y cmake g++ libvulkan-dev spirv-headers glslang-tools || \
+          bash tools/ci-apt.sh install -y cmake g++ libvulkan-dev spirv-headers shaderc
 
       - name: Configure with Vulkan
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON -DCRISPASR_BUILD_TESTS=OFF

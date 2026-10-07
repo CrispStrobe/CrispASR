@@ -262,7 +262,7 @@ jobs:
 
       - name: Install build + runtime deps
         run: |
-          sudo apt-get update
+          bash tools/ci-apt.sh update
           # libespeak-ng-dev: provides espeak-ng/speak_lib.h + libespeak-ng.so
           # + espeak-ng-data, so CMake's `CRISPASR_WITH_ESPEAK_NG=AUTO` detects
           # the library and compiles kokoro with `CRISPASR_HAVE_ESPEAK_NG=1`.
@@ -273,7 +273,7 @@ jobs:
           # so we also keep the `espeak-ng` binary installed for belt-and-
           # braces coverage. See src/kokoro.cpp `phonemize_espeak_lib` /
           # `phonemize_popen` and src/CMakeLists.txt `CRISPASR_WITH_ESPEAK_NG`.
-          sudo apt-get install -y cmake g++ ninja-build libopenblas-dev jq \
+          bash tools/ci-apt.sh install -y cmake g++ ninja-build libopenblas-dev jq \
               libespeak-ng-dev espeak-ng pkg-config
           # huggingface_hub for hf_hub_download; no transformers / nemo
           # needed on the CI side because reference dumps are pre-baked
