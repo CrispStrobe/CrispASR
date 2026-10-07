@@ -1413,6 +1413,7 @@ ffmpeg -re -i talk.wav -f s16le -ar 16000 -ac 1 - 2>/dev/null \
 | `--translate-model NAME\|FILE` | The translator. `auto` = m2m100-418M; `opus-mt-de-en` / `opus-mt-en-de` = Opus-MT (fastest); `hy-mt2` / `index-translate` = translation LLMs; or a GGUF path. Setting it on a plain `--stream` / `--mic` run turns translation on there too. |
 | `--translate-backend NAME` | `m2m100`, `marian`, `madlad` or `llm`. Default: detected from the model file; a GGUF that is none of the translation backends is run as a translation chat LLM. Given without `--translate-model`, it picks that kind's default: `marian` the Opus-MT model for the language pair, `llm` Hy-MT2. |
 | `--translate-prompt TEXT` | LLM translators only: `hy-mt2`, `index-translate`, or a template with `{src}` `{tgt}` `{text}` (`\n` = newline). Default: by model. |
+| `--translate-revise MODEL` | Slow pass for live translation: re-translate each finished paragraph with this translation LLM (`hy-mt2`, `index-translate` or a GGUF) and emit it as a `revision` that replaces the fast translations of those sentences (see docs/streaming.md). Off by default. |
 | `--translate-beam N` | Beam for m2m100 / madlad. Default `1` (greedy): beam search costs several greedy decodes per sentence (Opus-MT beam 4: median ~400 ms against ~45 ms). `0` = the translator's own default. |
 | `--no-translate-drafts` | Translate committed sentences only; no draft of the sentence still being spoken. |
 | `--tr-tl LANG`, `--tr-sl LANG` | Translation target (default `en`, or `de` for English speech) / source (default `-l`). |

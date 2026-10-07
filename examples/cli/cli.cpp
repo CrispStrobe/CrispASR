@@ -828,6 +828,8 @@ static bool whisper_params_parse_arg_streaming_tts(int argc, char** argv, int& i
         params.translate_backend = ARGV_NEXT;
     } else if (arg == "--translate-prompt") {
         params.translate_prompt = ARGV_NEXT;
+    } else if (arg == "--translate-revise") {
+        params.translate_revise_model = ARGV_NEXT;
     } else if (arg == "--translate-beam") {
         params.translate_beam = std::stoi(ARGV_NEXT);
         if (params.translate_beam < 0) {
@@ -1333,6 +1335,9 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
         params.translate_backend.c_str());
     fprintf(out, "  --translate-prompt TEXT                     llm translator prompt: hy-mt2, index-translate, or a "
                  "template with {src} {tgt} {text} (default: by model file name, else hy-mt2)\n");
+    fprintf(out, "  --translate-revise MODEL                    live translation slow pass: re-translate each finished "
+                 "paragraph with this translation LLM (hy-mt2, index-translate, or a GGUF) and replace the fast "
+                 "translations\n");
     fprintf(out,
             "  --translate-beam N                [%-7d] translator beam size (1 = greedy, fastest); 0 = the "
             "translator's default\n",

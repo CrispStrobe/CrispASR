@@ -201,9 +201,85 @@ static std::string crispasr_translate_llm_clean(const std::string& raw) {
     return b == std::string::npos ? std::string() : out.substr(b, e - b + 1);
 }
 
+
 static void crispasr_replace_all(std::string& s, const std::string& from, const std::string& to) {
     for (size_t p = 0; (p = s.find(from, p)) != std::string::npos; p += to.size())
         s.replace(p, from.size(), to);
+}
+
+// A translation chat LLM (Hy-MT2, Index-Translate, …) as a live-translate
+// translate function. `holder` owns the session and must outlive the function.
+// `preset`: "hy-mt2", "index-translate", a template with {src} {tgt} {text}
+// ("\\n" = newline), or empty = by the model's file name.
+static crispasr::lt_sink::translate_fn crispasr_make_llm_translator(
+    const std::string& model, const std::string& preset_in, const std::string& src, const std::string& tgt,
+    int n_threads, bool use_gpu, int n_ctx, int max_tokens, std::shared_ptr<crispasr_chat_session>& holder,
+    std::string& error) {
+    crispasr_chat_open_params op;
+    crispasr_chat_open_params_default(&op);
+    op.n_threads = n_threads;
+    op.n_ctx = n_ctx;
+    if (!use_gpu)
+        op.n_gpu_layers = 0;
+    crispasr_chat_error cerr{};
+    holder.reset(crispasr_chat_open(model.c_str(), &op, &cerr), &crispasr_chat_close);
+    if (!holder) {
+        error = cerr.message;
+        return {};
+    }
+    // The instruction is part of the model: each translation LLM was trained
+    // on one wording. Two are built in; anything else is a template.
+    std::string preset = preset_in;
+    if (preset.empty()) {
+        std::string lower = model;
+        for (auto& ch : lower)
+            ch = (char)tolower((unsigned char)ch);
+        preset = lower.find("index-translate") != std::string::npos ? "index-translate" : "hy-mt2";
+    }
+    std::string prompt = preset;
+    if (preset == "hy-mt2") {
+        prompt = "Translate the following text into {tgt}. Note that you should only output the "
+                 "translated result without any additional explanation:\n\n{text}";
+        crispasr_replace_all(prompt, "{tgt}", crispasr_translate_lang_name(tgt));
+    } else if (preset == "index-translate") {
+        // Index-Translate is instructed in Chinese, with Chinese language names.
+        prompt = "请将以下{src}文本翻译为{tgt}，直接输出翻译结果，不要进行任何解释。\n\n{text}";
+        crispasr_replace_all(prompt, "{src}", crispasr_translate_lang_name_zh(src));
+        crispasr_replace_all(prompt, "{tgt}", crispasr_translate_lang_name_zh(tgt));
+    } else {
+        crispasr_replace_all(prompt, "\\n", "\n");
+        crispasr_replace_all(prompt, "{src}", crispasr_translate_lang_name(src));
+        crispasr_replace_all(prompt, "{tgt}", crispasr_translate_lang_name(tgt));
+    }
+    crispasr_chat_session* llm = holder.get();
+    return [llm, prompt, max_tokens](const std::string& text, const crispasr::lt_sink::progress_fn& progress) {
+        std::string content = prompt;
+        crispasr_replace_all(content, "{text}", text);
+        crispasr_chat_generate_params gp;
+        crispasr_chat_generate_params_default(&gp);
+        gp.max_tokens = max_tokens;
+        gp.temperature = 0.0f; // greedy: a translation, not a conversation
+        gp.repeat_penalty = 1.0f;
+        crispasr_chat_error e{};
+        // No reset between calls: the chat runtime keeps the tokens the new
+        // prompt shares with the previous one in its KV cache and decodes only
+        // what differs, so the instruction is read once per session.
+        const crispasr_chat_message msg{"user", content.c_str()};
+        struct state {
+            std::string out;
+            const crispasr::lt_sink::progress_fn* progress;
+        } st{std::string(), &progress};
+        crispasr_chat_generate_stream(
+            llm, &msg, 1, &gp,
+            [](const char* chunk, void* user) {
+                auto* s = static_cast<state*>(user);
+                s->out += chunk;
+                if (*s->progress)
+                    (*s->progress)(crispasr_translate_llm_clean(s->out));
+            },
+            &st, &e);
+        return crispasr_translate_llm_clean(st.out);
+    };
 }
 
 namespace {
@@ -4129,6 +4205,7 @@ int crispasr_run_backend(const whisper_params& params_in) {
         std::unique_ptr<CrispasrBackend> tr_backend;
         std::unique_ptr<CrispasrBackend> tr_backend_pivot; // second hop of a pivot through English
         std::shared_ptr<crispasr_chat_session> tr_llm(nullptr, &crispasr_chat_close);
+        std::shared_ptr<crispasr_chat_session> rev_llm(nullptr, &crispasr_chat_close); // slow pass
         std::unique_ptr<crispasr::lt_sink> live_tr; // declared last: its thread uses the two above
         if (params.live_translate || !params.translate_model.empty() || !params.translate_backend.empty()) {
             std::string tr_src = !params.translate_source_lang.empty() ? params.translate_source_lang
@@ -4232,79 +4309,16 @@ int crispasr_run_backend(const whisper_params& params_in) {
             // The translator as one function; the sink does not care which kind it is.
             crispasr::lt_sink::translate_fn tr_fn;
             if (tr_is_llm) {
-                crispasr_chat_open_params op;
-                crispasr_chat_open_params_default(&op);
-                op.n_threads = params.n_threads;
-                op.n_ctx = 2048; // one sentence in, one out
-                if (!tr_params.use_gpu || tr_params.gpu_backend == "cpu")
-                    op.n_gpu_layers = 0;
-                crispasr_chat_error cerr{};
-                tr_llm.reset(crispasr_chat_open(tr_model.c_str(), &op, &cerr), &crispasr_chat_close);
-                if (!tr_llm) {
+                std::string err;
+                tr_fn = crispasr_make_llm_translator(
+                    tr_model, params.translate_prompt, tr_src, tr_tgt, params.n_threads,
+                    tr_params.use_gpu && tr_params.gpu_backend != "cpu", 2048,
+                    params.translate_max_tokens > 0 ? params.translate_max_tokens : 256, tr_llm, err);
+                if (!tr_fn) {
                     fprintf(stderr, "crispasr: error: failed to load translation LLM '%s': %s\n", tr_model.c_str(),
-                            cerr.message);
+                            err.c_str());
                     return 22;
                 }
-                // The instruction is part of the model: each translation LLM
-                // was trained on one wording. Two are built in; anything else
-                // is a template with {src} {tgt} {text} ("\\n" = newline).
-                std::string preset = params.translate_prompt;
-                if (preset.empty()) {
-                    std::string lower = tr_model;
-                    for (auto& ch : lower)
-                        ch = (char)tolower((unsigned char)ch);
-                    preset = lower.find("index-translate") != std::string::npos ? "index-translate" : "hy-mt2";
-                }
-                std::string prompt = preset;
-                if (preset == "hy-mt2") {
-                    prompt = "Translate the following text into {tgt}. Note that you should only output the "
-                             "translated result without any additional explanation:\n\n{text}";
-                    crispasr_replace_all(prompt, "{tgt}", crispasr_translate_lang_name(tr_tgt));
-                } else if (preset == "index-translate") {
-                    // Index-Translate is instructed in Chinese, with Chinese language names.
-                    prompt = "请将以下{src}文本翻译为{tgt}，直接输出翻译结果，不要进行任何解释。\n\n{text}";
-                    crispasr_replace_all(prompt, "{src}", crispasr_translate_lang_name_zh(tr_src));
-                    crispasr_replace_all(prompt, "{tgt}", crispasr_translate_lang_name_zh(tr_tgt));
-                } else {
-                    crispasr_replace_all(prompt, "\\n", "\n");
-                    crispasr_replace_all(prompt, "{src}", crispasr_translate_lang_name(tr_src));
-                    crispasr_replace_all(prompt, "{tgt}", crispasr_translate_lang_name(tr_tgt));
-                }
-                crispasr_chat_session* llm = tr_llm.get();
-                const int max_tokens = params.translate_max_tokens > 0 ? params.translate_max_tokens : 256;
-                tr_fn = [llm, prompt, max_tokens](const std::string& text,
-                                                  const crispasr::lt_sink::progress_fn& progress) {
-                    std::string content = prompt;
-                    crispasr_replace_all(content, "{text}", text);
-                    crispasr_chat_generate_params gp;
-                    crispasr_chat_generate_params_default(&gp);
-                    gp.max_tokens = max_tokens;
-                    gp.temperature = 0.0f; // greedy: a translation, not a conversation
-                    gp.repeat_penalty = 1.0f;
-                    crispasr_chat_error e{};
-                    // No reset between sentences: the chat runtime keeps the
-                    // tokens the new prompt shares with the previous one in its
-                    // KV cache and decodes only what differs. The instruction
-                    // comes first in every prompt, so it is read once per
-                    // session instead of once per sentence. (A cache that
-                    // cannot drop a suffix — recurrent state — is cleared by
-                    // the runtime itself, which is the old behaviour.)
-                    const crispasr_chat_message msg{"user", content.c_str()};
-                    struct state {
-                        std::string out;
-                        const crispasr::lt_sink::progress_fn* progress;
-                    } st{std::string(), &progress};
-                    crispasr_chat_generate_stream(
-                        llm, &msg, 1, &gp,
-                        [](const char* chunk, void* user) {
-                            auto* s = static_cast<state*>(user);
-                            s->out += chunk;
-                            if (*s->progress)
-                                (*s->progress)(crispasr_translate_llm_clean(s->out));
-                        },
-                        &st, &e);
-                    return crispasr_translate_llm_clean(st.out);
-                };
             } else {
                 tr_backend = crispasr_create_backend(tr_name);
                 if (!tr_backend || !(tr_backend->capabilities() & CAP_TRANSLATE)) {
@@ -4383,6 +4397,27 @@ int crispasr_run_backend(const whisper_params& params_in) {
             if (params.no_prints)
                 lc.log = nullptr;
             live_tr.reset(new crispasr::lt_sink(lc, tr_fn));
+            if (!params.translate_revise_model.empty()) {
+                std::string rm = params.translate_revise_model;
+                if (rm == "hy-mt2" || rm == "index-translate")
+                    rm = crispasr_resolve_model_cli("auto", rm, params.no_prints, params.cache_dir,
+                                                    params.auto_download, "");
+                std::string err;
+                // A paragraph in, a paragraph out: more context and output than a sentence.
+                auto rev_fn = rm.empty()
+                                  ? crispasr::lt_sink::translate_fn()
+                                  : crispasr_make_llm_translator(rm, "", tr_src, tr_tgt, params.n_threads,
+                                                                 tr_params.use_gpu && tr_params.gpu_backend != "cpu",
+                                                                 4096, 1024, rev_llm, err);
+                if (!rev_fn) {
+                    fprintf(stderr, "crispasr: error: failed to load the revising translator '%s'%s%s\n",
+                            params.translate_revise_model.c_str(), err.empty() ? "" : ": ", err.c_str());
+                    return 22;
+                }
+                live_tr->set_reviser(rev_fn);
+                if (!params.no_prints)
+                    fprintf(stderr, "crispasr: slow pass: %s re-translates each finished paragraph\n", rm.c_str());
+            }
             if (!params.no_prints)
                 fprintf(stderr, "crispasr[translate]: %s -> %s via %s (%s), step %d ms\n", tr_src.c_str(),
                         tr_tgt.c_str(), tr_name.c_str(), tr_model.c_str(), params.stream_step_ms);

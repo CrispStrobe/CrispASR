@@ -28,6 +28,10 @@
 #include <deque>
 #include <functional>
 #include <mutex>
+#if defined(__APPLE__)
+#include <pthread.h>
+#include <sys/qos.h>
+#endif
 #include <string>
 #include <thread>
 #include <vector>
@@ -85,6 +89,12 @@ struct lt_sink_config {
     // Draft only the open words two consecutive partials agree on (see
     // lt_detail::agreed_source), not the whole moving tail.
     bool draft_agreed_source = true;
+    // Slow pass (set_reviser): a paragraph is revised when its utterance ends
+    // or after this many committed sentences of continuous speech.
+    int revise_max_sentences = 4;
+    // Paragraphs waiting for the slow translator beyond this many: the oldest
+    // is dropped (and reported) so the slow pass never falls behind for good.
+    int revise_max_backlog = 3;
     // Drafts stop once a committed sentence takes longer than this to
     // translate (running average). A translator that slow is busy with a
     // draft when the next real sentence arrives, and it shares the GPU with
@@ -169,6 +179,18 @@ public:
 
     ~lt_sink() { finish(); }
 
+    // The slow pass. A better (slower) translator re-translates each finished
+    // paragraph as one unit, with all of its sentences as context, and the
+    // result replaces the fast translations of those sentences: a `revision`
+    // event (JSON) or a marked block (terminal). It runs on its own
+    // low-priority thread and never delays the fast pass. Call before the
+    // first partial.
+    void set_reviser(translate_fn fn) {
+        reviser_ = std::move(fn);
+        if (reviser_ && !cfg_.sync && !rev_worker_.joinable())
+            rev_worker_ = std::thread([this] { run_reviser(); });
+    }
+
     lt_sink(const lt_sink&) = delete;
     lt_sink& operator=(const lt_sink&) = delete;
 
@@ -221,6 +243,14 @@ public:
             cv_.notify_all();
             worker_.join();
         }
+        if (rev_worker_.joinable()) {
+            {
+                std::lock_guard<std::mutex> lk(rev_mu_);
+                rev_stop_ = true;
+            }
+            rev_cv_.notify_all();
+            rev_worker_.join(); // finishes the paragraphs already queued
+        }
         std::lock_guard<std::mutex> lk(mu_);
         tail_src_.clear();
         tail_draft_.clear();
@@ -234,6 +264,9 @@ public:
                     mt_ms_.size(), pct(mt_ms_, 0.5), pct(mt_ms_, 0.9), pct(lag_ms_, 0.5), pct(lag_ms_, 0.9), reused_,
                     committer_.align_misses());
         }
+        if (cfg_.log && reviser_)
+            fprintf(cfg_.log, "crispasr[translate]: slow pass revised %d paragraph(s), skipped %d; median %.0f ms\n",
+                    revised_, rev_skipped_, rev_ms_.empty() ? 0.0 : pct(rev_ms_, 0.5));
     }
 
 private:
@@ -279,6 +312,33 @@ private:
         }
         up.tail = unit_src_.empty() ? up_in.tail : (up_in.tail.empty() ? unit_src_ : unit_src_ + " " + up_in.tail);
         up.tail_changed = up_in.tail_changed;
+
+        // Paragraphs for the slow pass: whole sentence units, closed by the
+        // end of the utterance or by length.
+        std::vector<paragraph> rev_now;
+        if (reviser_) {
+            for (const auto& s : up.committed) {
+                para_.ids.push_back(s.id);
+                para_.text += (para_.text.empty() ? "" : " ") + s.text;
+                para_.utterance_id = utterance_id;
+            }
+            if (!para_.ids.empty() && (closed || (int)para_.ids.size() >= cfg_.revise_max_sentences)) {
+                para_.t_audio = t_audio;
+                para_.arrived = arrived;
+                if (cfg_.sync) {
+                    rev_now.push_back(std::move(para_));
+                } else {
+                    std::lock_guard<std::mutex> lk(rev_mu_);
+                    rev_queue_.push_back(std::move(para_));
+                    while ((int)rev_queue_.size() > cfg_.revise_max_backlog) {
+                        report_skipped(rev_queue_.front());
+                        rev_queue_.pop_front();
+                    }
+                    rev_cv_.notify_one();
+                }
+                para_ = paragraph();
+            }
+        }
 
         std::vector<job> run_now;
         if (utterance_id != utterance_text_id_) {
@@ -368,8 +428,85 @@ private:
         if (cfg_.sync) {
             for (auto& j : run_now)
                 execute(j);
+            for (const paragraph& p : rev_now)
+                revise(p); // after the fast translations of the same update
         } else {
             cv_.notify_one();
+        }
+    }
+
+    struct paragraph {
+        std::vector<int> ids;
+        std::string text;
+        int64_t utterance_id = 0;
+        double t_audio = 0;
+        clock::time_point arrived;
+    };
+
+    void run_reviser() {
+#if defined(__APPLE__)
+        // Below the recogniser and the fast translator: this pass may lag.
+        pthread_set_qos_class_self_np(QOS_CLASS_UTILITY, 0);
+#endif
+        for (;;) {
+            paragraph p;
+            {
+                std::unique_lock<std::mutex> lk(rev_mu_);
+                rev_cv_.wait(lk, [this] { return rev_stop_ || !rev_queue_.empty(); });
+                if (rev_queue_.empty())
+                    return;
+                p = std::move(rev_queue_.front());
+                rev_queue_.pop_front();
+            }
+            // Never ahead of the fast pass: start only while it has no
+            // committed sentence waiting (it shares the device with us).
+            for (int waited = 0; waited < 200; ++waited) {
+                {
+                    std::lock_guard<std::mutex> lk(mu_);
+                    if (commits_.empty() && pending_.empty())
+                        break;
+                }
+                std::this_thread::sleep_for(std::chrono::milliseconds(25));
+            }
+            revise(p);
+        }
+    }
+
+    void revise(const paragraph& p) {
+        const auto t0 = clock::now();
+        const std::string tr = reviser_(p.text, progress_fn());
+        const auto t1 = clock::now();
+        const double mt_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        const double lag_ms = std::chrono::duration<double, std::milli>(t1 - p.arrived).count();
+        std::lock_guard<std::mutex> lk(mu_);
+        ++revised_;
+        rev_ms_.push_back(mt_ms);
+        if (cfg_.output == lt_output::json) {
+            std::string ids;
+            for (int id : p.ids)
+                ids += (ids.empty() ? "" : ",") + std::to_string(id);
+            fprintf(cfg_.out,
+                    "{\"type\":\"revision\",\"utterance_id\":%lld,\"sentence_ids\":[%s],\"text\":\"%s\","
+                    "\"translation\":\"%s\",\"t\":%.3f,\"mt_ms\":%.0f,\"lag_ms\":%.0f}\n",
+                    (long long)p.utterance_id, ids.c_str(), esc(p.text).c_str(), esc(tr).c_str(), p.t_audio, mt_ms,
+                    lag_ms);
+            fflush(cfg_.out);
+            return;
+        }
+        render_locked({}, tr);
+    }
+
+    // Caller holds rev_mu_.
+    void report_skipped(const paragraph& p) {
+        std::lock_guard<std::mutex> lk(mu_);
+        ++rev_skipped_;
+        if (cfg_.output == lt_output::json) {
+            std::string ids;
+            for (int id : p.ids)
+                ids += (ids.empty() ? "" : ",") + std::to_string(id);
+            fprintf(cfg_.out, "{\"type\":\"revision_skipped\",\"utterance_id\":%lld,\"sentence_ids\":[%s]}\n",
+                    (long long)p.utterance_id, ids.c_str());
+            fflush(cfg_.out);
         }
     }
 
@@ -476,7 +613,7 @@ private:
 
     // Erase the live region, print `pair` (source, translation) permanently
     // if given, then draw the live region again. Caller holds mu_.
-    void render_locked(const std::vector<std::string>& pair) {
+    void render_locked(const std::vector<std::string>& pair, const std::string& revised = std::string()) {
         if (cfg_.output == lt_output::json)
             return;
         const bool tty = cfg_.output == lt_output::tty;
@@ -484,6 +621,14 @@ private:
         if (tty && live_rows_ > 0)
             o += "\r\033[" + std::to_string(live_rows_) + "A\033[J";
         live_rows_ = 0;
+        if (!revised.empty()) {
+            // The slow pass's version of the paragraph above: marked, so it
+            // reads as a correction of the lines it follows.
+            if (tty)
+                o += "\033[2m" + tag(cfg_.tgt_lang) + "\u2713 \033[0m\033[1;32m" + revised + "\033[0m\n";
+            else
+                o += "[" + cfg_.tgt_lang + " revised] " + revised + "\n";
+        }
         if (pair.size() == 2) {
             if (tty) {
                 o += "\033[2m" + tag(cfg_.src_lang) + "\033[0m" + pair[0] + "\n";
@@ -694,6 +839,16 @@ private:
     double mt_avg_ms_ = 0.0; // running average over committed sentences
     std::vector<double> lag_ms_;
     std::thread worker_;
+    // Slow pass.
+    translate_fn reviser_;
+    std::thread rev_worker_;
+    std::mutex rev_mu_;
+    std::condition_variable rev_cv_;
+    std::deque<paragraph> rev_queue_;
+    bool rev_stop_ = false;
+    paragraph para_; // being collected (caller's thread)
+    int revised_ = 0, rev_skipped_ = 0;
+    std::vector<double> rev_ms_;
 };
 
 } // namespace crispasr
