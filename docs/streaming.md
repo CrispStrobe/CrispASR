@@ -496,6 +496,41 @@ reference's spelled-out numbers against Hy-MT2's "12%", "October 3rd", "7 a.m."
 Load was 7–158 during these runs, so whether the slow pass slows the fast one
 down on a shared GPU is not settled (one pair showed it, one did not).
 
+**Re-transcribing too** (`--translate-revise-asr MODEL`, with
+`--translate-revise`): a second, slower recogniser re-reads each finished
+utterance from its audio before the slow translator sees it; the paragraph is
+then the whole utterance, and the revision carries the new source text
+(`source_revised`, `asr_ms`; a ✓ source line in the terminal).
+
+```bash
+crispasr --live-translate -l de --tr-tl en -m auto --backend parakeet \
+    --translate-backend marian --translate-revise hy-mt2 --translate-revise-asr canary
+```
+
+Measured on the 50 s clip with canary-1b-v2 re-transcribing (2 runs each,
+m2m100 as the fast translator):
+
+| fast recogniser | German changed by the slow pass | chrF fast → after revisions |
+|---|---|---|
+| parakeet-v3 | 0 of 3 utterances (it was already right, 0.9 % WER) | 78.4 → 80.2 |
+| moonshine-de | 2 of 3 utterances | 76.7 → 80.2 |
+
+The gain with moonshine-de is segmentation, not words: its "Bitte denken Sie
+daran. Ihre Unterlagen rechtzeitig einzupacken? Weil die Möbelpacker …" came
+back from canary as one sentence with commas, which the translator then
+handled. Canary took 0.9–6.8 s per utterance on the M1, so revisions arrived
+3–15 s after the audio.
+
+**In the terminal**, with a slow pass the view is in place by default
+(`--translate-view inplace|scroll`): the transcript lives on the alternate
+screen and is redrawn, so a revision replaces the fast sentences where they
+stand (green, ✓) instead of being appended below them; when the stream ends,
+the final transcript is printed to the normal screen. In JSON every revision
+carries `final_until_sentence`: all sentences up to that id are final
+(revised, or skipped by the backlog limit). `--translate-revise-backlog N`
+(default 3) sets how many paragraphs may wait for the slow pass before the
+oldest is dropped.
+
 A caveat: an LLM reviser can add what was not said. On a clip cut off
 mid-sentence ("Die Umsätze sind … um zwölf.") Hy-MT2 wrote "Sales are 12%
 **lower** …", where the fast m2m100 stayed literal. Paragraphs normally end
@@ -517,9 +552,17 @@ crispasr --backend hikari -m auto -l en -tl ja -f talk.wav    # a file
 it needs: Silero's speech probability raises the policy's wait penalty, and
 without it the model hardly ever emits. The f16 equals the reference
 implementation (161/161 stream steps on jfk); q8_0 (`-m auto:q8_0`, 873 MB)
-changed one German sentence of a 27 s clip on Metal. **Not real time yet on
-an M1**: 1.8 s per audio-second on Metal (encoder 87 ms + decoder 58 ms per
-80 ms step). English speech only; for German speech use the pipeline above.
+changed one German sentence of a 27 s clip on Metal. Speed, jfk.wav en→de:
+
+| device | f16 | q8_0 |
+|---|---|---|
+| NVIDIA GPU (CUDA, Kaggle) | 234–258 ms per audio-second | 193–207 ms |
+| CPU (Kaggle x86) | 2775 ms | 1684 ms |
+| Apple M1, Metal | ~1800 ms | ~2100 ms |
+
+So on an NVIDIA GPU it is 4–5× faster than real time, and the CUDA runs gave
+the reference text exactly with q8_0 too; on an M1 it is not real time.
+English speech only; for German speech use the pipeline above.
 
 Other models people ask about (Hugging Face tags `speech-translation`,
 `streaming-translation`, `simultaneous-translation`, looked at 2026-10-05,

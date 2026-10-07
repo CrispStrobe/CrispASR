@@ -32,6 +32,7 @@
 #include <pthread.h>
 #include <sys/qos.h>
 #endif
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
@@ -95,6 +96,10 @@ struct lt_sink_config {
     // Paragraphs waiting for the slow translator beyond this many: the oldest
     // is dropped (and reported) so the slow pass never falls behind for good.
     int revise_max_backlog = 3;
+    // Terminal only: keep the whole transcript on the alternate screen and
+    // redraw it, so a revision replaces its sentences where they stand. On
+    // exit the final transcript is printed to the normal screen.
+    bool inplace = false;
     // Drafts stop once a committed sentence takes longer than this to
     // translate (running average). A translator that slow is busy with a
     // draft when the next real sentence arrives, and it shares the GPU with
@@ -185,6 +190,24 @@ public:
     // event (JSON) or a marked block (terminal). It runs on its own
     // low-priority thread and never delays the fast pass. Call before the
     // first partial.
+    // Phase 2 of the slow pass: a slower recogniser that re-transcribes each
+    // finished utterance from its audio before it is re-translated. With it,
+    // a paragraph is the whole utterance (no length split), so the audio and
+    // the sentences it replaces line up. Requires set_reviser.
+    using recognize_fn = std::function<std::string(const std::vector<float>& pcm)>;
+    void set_source_reviser(recognize_fn fn) { recognize_ = std::move(fn); }
+    bool has_source_reviser() const { return (bool)recognize_; }
+
+    // The audio of an utterance that is about to be finalised (call before
+    // on_final). Ignored without a source reviser.
+    void attach_utterance_audio(int64_t utterance_id, std::vector<float> pcm) {
+        if (!recognize_)
+            return;
+        std::lock_guard<std::mutex> lk(rev_mu_);
+        audio_utt_ = utterance_id;
+        audio_ = std::move(pcm);
+    }
+
     void set_reviser(translate_fn fn) {
         reviser_ = std::move(fn);
         if (reviser_ && !cfg_.sync && !rev_worker_.joinable())
@@ -252,6 +275,11 @@ public:
             rev_worker_.join(); // finishes the paragraphs already queued
         }
         std::lock_guard<std::mutex> lk(mu_);
+        if (cfg_.inplace && cfg_.output == lt_output::tty) {
+            tail_src_.clear();
+            tail_draft_.clear();
+            close_inplace_locked();
+        }
         tail_src_.clear();
         tail_draft_.clear();
         tail_draft_stable_ = 0;
@@ -322,9 +350,18 @@ private:
                 para_.text += (para_.text.empty() ? "" : " ") + s.text;
                 para_.utterance_id = utterance_id;
             }
-            if (!para_.ids.empty() && (closed || (int)para_.ids.size() >= cfg_.revise_max_sentences)) {
+            const bool by_length = !recognize_ && (int)para_.ids.size() >= cfg_.revise_max_sentences;
+            if (!para_.ids.empty() && (closed || by_length)) {
                 para_.t_audio = t_audio;
                 para_.arrived = arrived;
+                if (closed && recognize_) {
+                    std::lock_guard<std::mutex> lk(rev_mu_);
+                    if (audio_utt_ == utterance_id) {
+                        para_.audio = std::move(audio_);
+                        audio_.clear();
+                        audio_utt_ = -1;
+                    }
+                }
                 if (cfg_.sync) {
                     rev_now.push_back(std::move(para_));
                 } else {
@@ -438,6 +475,7 @@ private:
     struct paragraph {
         std::vector<int> ids;
         std::string text;
+        std::vector<float> audio; // the utterance, when a source reviser re-transcribes it
         int64_t utterance_id = 0;
         double t_audio = 0;
         clock::time_point arrived;
@@ -474,32 +512,80 @@ private:
 
     void revise(const paragraph& p) {
         const auto t0 = clock::now();
-        const std::string tr = reviser_(p.text, progress_fn());
+        // Phase 2: the slower recogniser's reading of the whole utterance.
+        std::string src = p.text;
+        bool src_revised = false;
+        double asr_ms = 0;
+        if (recognize_ && !p.audio.empty()) {
+            std::string heard = recognize_(p.audio);
+            while (!heard.empty() && heard.front() == ' ')
+                heard.erase(heard.begin());
+            while (!heard.empty() && heard.back() == ' ')
+                heard.pop_back();
+            asr_ms = std::chrono::duration<double, std::milli>(clock::now() - t0).count();
+            if (!heard.empty()) {
+                src_revised = heard != src;
+                src = heard;
+            }
+        }
+        const std::string tr = reviser_(src, progress_fn());
         const auto t1 = clock::now();
         const double mt_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
         const double lag_ms = std::chrono::duration<double, std::milli>(t1 - p.arrived).count();
         std::lock_guard<std::mutex> lk(mu_);
         ++revised_;
         rev_ms_.push_back(mt_ms);
+        for (int id : p.ids)
+            final_ids_.insert(id);
+        while (final_ids_.count(final_until_ + 1))
+            ++final_until_;
         if (cfg_.output == lt_output::json) {
             std::string ids;
             for (int id : p.ids)
                 ids += (ids.empty() ? "" : ",") + std::to_string(id);
             fprintf(cfg_.out,
                     "{\"type\":\"revision\",\"utterance_id\":%lld,\"sentence_ids\":[%s],\"text\":\"%s\","
-                    "\"translation\":\"%s\",\"t\":%.3f,\"mt_ms\":%.0f,\"lag_ms\":%.0f}\n",
-                    (long long)p.utterance_id, ids.c_str(), esc(p.text).c_str(), esc(tr).c_str(), p.t_audio, mt_ms,
-                    lag_ms);
+                    "\"translation\":\"%s\",\"source_revised\":%s,\"t\":%.3f,\"asr_ms\":%.0f,\"mt_ms\":%.0f,"
+                    "\"lag_ms\":%.0f,\"final_until_sentence\":%d}\n",
+                    (long long)p.utterance_id, ids.c_str(), esc(src).c_str(), esc(tr).c_str(),
+                    src_revised ? "true" : "false", p.t_audio, asr_ms, mt_ms - asr_ms, lag_ms, final_until_);
             fflush(cfg_.out);
             return;
         }
-        render_locked({}, tr);
+        if (cfg_.inplace) {
+            // Replace the fast entries of these sentences with the revision,
+            // at the position of the first one.
+            size_t at = doc_.size();
+            std::vector<doc_entry> kept;
+            for (size_t i = 0; i < doc_.size(); ++i) {
+                bool covered = false;
+                for (int id : doc_[i].ids)
+                    covered = covered || std::find(p.ids.begin(), p.ids.end(), id) != p.ids.end();
+                if (covered) {
+                    if (at == doc_.size())
+                        at = kept.size();
+                } else {
+                    kept.push_back(doc_[i]);
+                }
+            }
+            if (at > kept.size())
+                at = kept.size();
+            kept.insert(kept.begin() + (ptrdiff_t)at, doc_entry{p.ids, src, tr, true});
+            doc_.swap(kept);
+            render_locked({});
+            return;
+        }
+        render_locked({}, tr, src_revised ? src : std::string());
     }
 
     // Caller holds rev_mu_.
     void report_skipped(const paragraph& p) {
         std::lock_guard<std::mutex> lk(mu_);
         ++rev_skipped_;
+        for (int id : p.ids)
+            final_ids_.insert(id);
+        while (final_ids_.count(final_until_ + 1))
+            ++final_until_;
         if (cfg_.output == lt_output::json) {
             std::string ids;
             for (int id : p.ids)
@@ -608,19 +694,35 @@ private:
             fflush(cfg_.out);
             return;
         }
+        if (cfg_.inplace) {
+            doc_.push_back({{j.id}, j.text, tr.empty() ? std::string("(translation failed)") : tr, false});
+            render_locked({});
+            return;
+        }
         render_locked({j.text, tr.empty() ? std::string("(translation failed)") : tr});
     }
 
     // Erase the live region, print `pair` (source, translation) permanently
     // if given, then draw the live region again. Caller holds mu_.
-    void render_locked(const std::vector<std::string>& pair, const std::string& revised = std::string()) {
+    void render_locked(const std::vector<std::string>& pair, const std::string& revised = std::string(),
+                       const std::string& revised_src = std::string()) {
         if (cfg_.output == lt_output::json)
             return;
         const bool tty = cfg_.output == lt_output::tty;
+        if (tty && cfg_.inplace) {
+            render_inplace_locked();
+            return;
+        }
         std::string o;
         if (tty && live_rows_ > 0)
             o += "\r\033[" + std::to_string(live_rows_) + "A\033[J";
         live_rows_ = 0;
+        if (!revised_src.empty()) {
+            if (tty)
+                o += "\033[2m" + tag(cfg_.src_lang) + "\u2713 \033[0m\033[32m" + revised_src + "\033[0m\n";
+            else
+                o += "[" + cfg_.src_lang + " revised] " + revised_src + "\n";
+        }
         if (!revised.empty()) {
             // The slow pass's version of the paragraph above: marked, so it
             // reads as a correction of the lines it follows.
@@ -671,6 +773,119 @@ private:
             fwrite(o.data(), 1, o.size(), cfg_.out);
             fflush(cfg_.out);
         }
+    }
+
+    // The whole transcript, newest at the bottom, on the alternate screen:
+    // fast translations normal, revised ones green with a check mark, the
+    // open text and its draft dimmed underneath.
+    void render_inplace_locked() {
+        if (view_closed_)
+            return; // the final transcript is already on the normal screen
+        const int width = term_width(), height = term_height();
+        const int room = std::max(8, width - 6);
+        std::vector<std::string> rows;
+        auto add = [&](const std::string& prefix, const std::string& style, const std::string& text) {
+            bool first_piece = true;
+            for (const std::string& piece : wrap(text, room)) {
+                // Continuation rows are indented, not tagged again.
+                rows.push_back("\033[2m" + (first_piece ? prefix : std::string(6, ' ')) + "\033[0m" + style + piece +
+                               "\033[0m");
+                first_piece = false;
+            }
+        };
+        for (const doc_entry& e : doc_) {
+            add(tag(cfg_.src_lang) + (e.revised ? "\u2713 " : "  "), e.revised ? "\033[32m" : "", e.src);
+            add(tag(cfg_.tgt_lang) + (e.revised ? "\u2713 " : "  "), e.revised ? "\033[1;32m" : "\033[1m", e.tr);
+        }
+        for (const auto& pnd : pending_)
+            add(tag(cfg_.src_lang) + "  ", "\033[2m", pnd.src);
+        if (!pending_.empty())
+            add(tag(cfg_.tgt_lang) + "  ", "\033[2m", pending_.front().so_far + "\xE2\x80\xA6");
+        if (!tail_src_.empty()) {
+            add(tag(cfg_.src_lang) + "  ", "\033[2m", tail_src_);
+            if (!tail_draft_.empty())
+                add(tag(cfg_.tgt_lang) + "  ", "\033[2m", tail_draft_);
+        }
+        if (!inplace_active_) {
+            fputs("\033[?1049h", cfg_.out); // alternate screen
+            inplace_active_ = true;
+        }
+        std::string o = "\033[H\033[J";
+        const size_t first = rows.size() > (size_t)std::max(1, height - 1) ? rows.size() - (size_t)(height - 1) : 0;
+        for (size_t i = first; i < rows.size(); ++i)
+            o += rows[i] + "\n";
+        fwrite(o.data(), 1, o.size(), cfg_.out);
+        fflush(cfg_.out);
+    }
+
+    // Leave the alternate screen and print the final transcript for good.
+    void close_inplace_locked() {
+        if (!inplace_active_)
+            return;
+        fputs("\033[?1049l", cfg_.out);
+        inplace_active_ = false;
+        view_closed_ = true;
+        std::string o;
+        for (const doc_entry& e : doc_) {
+            o += "\033[2m" + tag(cfg_.src_lang) + "\033[0m" + e.src + "\n";
+            o += "\033[2m" + tag(cfg_.tgt_lang) + "\033[0m\033[1m" + e.tr + "\033[0m\n";
+        }
+        fwrite(o.data(), 1, o.size(), cfg_.out);
+        fflush(cfg_.out);
+    }
+
+    // Split into pieces of at most `cols` columns, at spaces where possible.
+    static std::vector<std::string> wrap(const std::string& s, int cols) {
+        std::vector<std::string> out;
+        std::string line;
+        int w = 0;
+        size_t i = 0;
+        while (i < s.size()) {
+            size_t j = s.find(' ', i);
+            if (j == std::string::npos)
+                j = s.size();
+            const std::string word = s.substr(i, j - i);
+            int ww = 0;
+            for (size_t k = 0; k < word.size();) {
+                const unsigned char c = word[k];
+                const size_t n = lt_detail::u8_len(c);
+                uint32_t cp = c;
+                if (n == 2 && k + 1 < word.size())
+                    cp = ((c & 0x1F) << 6) | (word[k + 1] & 0x3F);
+                else if (n >= 3)
+                    cp = 0x1100;
+                ww += cp_width(cp);
+                k += n;
+            }
+            if (w > 0 && w + 1 + ww > cols) {
+                out.push_back(line);
+                line.clear();
+                w = 0;
+            }
+            if (w > 0) {
+                line += ' ';
+                ++w;
+            }
+            line += word;
+            w += ww;
+            i = j + 1;
+        }
+        if (!line.empty() || out.empty())
+            out.push_back(line);
+        return out;
+    }
+
+    static int term_height() {
+#if defined(_WIN32)
+        CONSOLE_SCREEN_BUFFER_INFO info;
+        if (GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &info))
+            return info.srWindow.Bottom - info.srWindow.Top + 1;
+#else
+        struct winsize ws;
+        if (ioctl(STDOUT_FILENO, TIOCGWINSZ, &ws) == 0 && ws.ws_row > 0)
+            return ws.ws_row;
+#endif
+        return 24;
     }
 
     static std::string tag(const std::string& lang) {
@@ -841,6 +1056,9 @@ private:
     std::thread worker_;
     // Slow pass.
     translate_fn reviser_;
+    recognize_fn recognize_;
+    std::vector<float> audio_; // attach_utterance_audio, guarded by rev_mu_
+    int64_t audio_utt_ = -1;
     std::thread rev_worker_;
     std::mutex rev_mu_;
     std::condition_variable rev_cv_;
@@ -849,6 +1067,18 @@ private:
     paragraph para_; // being collected (caller's thread)
     int revised_ = 0, rev_skipped_ = 0;
     std::vector<double> rev_ms_;
+    // Final-up-to marker: every sentence up to this id is revised (or skipped).
+    std::set<int> final_ids_;
+    int final_until_ = -1;
+    // In-place view.
+    struct doc_entry {
+        std::vector<int> ids;
+        std::string src, tr;
+        bool revised = false;
+    };
+    std::vector<doc_entry> doc_;
+    bool inplace_active_ = false;
+    bool view_closed_ = false;
 };
 
 } // namespace crispasr

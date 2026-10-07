@@ -632,3 +632,82 @@ TEST_CASE("live-translate: the slow pass revises whole paragraphs, closed by len
             std::string::npos);
     REQUIRE(all.find("\"sentence_ids\":[2],\"text\":\"Drei kommt noch.\"") != std::string::npos);
 }
+
+TEST_CASE("live-translate: with a slow recogniser the utterance audio is re-transcribed before revision",
+          "[unit][live-translate]") {
+    FILE* f = tmpfile();
+    REQUIRE(f != nullptr);
+    std::vector<std::string> slow;
+    size_t heard_samples = 0;
+    {
+        crispasr::lt_sink_config cfg;
+        cfg.output = crispasr::lt_output::json;
+        cfg.src_lang = "de";
+        cfg.tgt_lang = "en";
+        cfg.sync = true;
+        cfg.drafts = false;
+        cfg.revise_max_sentences = 1; // ignored with a recogniser: the paragraph is the utterance
+        cfg.out = f;
+        cfg.log = nullptr;
+        crispasr::lt_sink sink(
+            cfg, [&](const std::string& s, const crispasr::lt_sink::progress_fn&) { return "EN<" + s + ">"; });
+        sink.set_reviser([&](const std::string& s, const crispasr::lt_sink::progress_fn&) {
+            slow.push_back(s);
+            return "REV<" + s + ">";
+        });
+        sink.set_source_reviser([&](const std::vector<float>& pcm) {
+            heard_samples = pcm.size();
+            return std::string(" Bitte denken Sie daran, Ihre Unterlagen einzupacken. ");
+        });
+        const auto now = crispasr::lt_sink::clock::now();
+        sink.on_partial(1, "Bitte denken Sie daran. Ihre Unterlagen", 1.0, now);
+        sink.on_partial(1, "Bitte denken Sie daran. Ihre Unterlagen einzupacken", 1.5, now);
+        sink.attach_utterance_audio(1, std::vector<float>(32000, 0.0f));
+        sink.on_final(1, "Bitte denken Sie daran. Ihre Unterlagen einzupacken?", 2.5, now);
+    }
+    rewind(f);
+    std::string all;
+    char buf[1024];
+    while (fgets(buf, sizeof(buf), f))
+        all += buf;
+    fclose(f);
+    INFO(all);
+    REQUIRE(heard_samples == 32000);
+    // One paragraph for the whole utterance, translated from the slow recogniser's text.
+    REQUIRE(slow == std::vector<std::string>{"Bitte denken Sie daran, Ihre Unterlagen einzupacken."});
+    REQUIRE(all.find("\"sentence_ids\":[0,1],\"text\":\"Bitte denken Sie daran, Ihre Unterlagen einzupacken.\"") !=
+            std::string::npos);
+    REQUIRE(all.find("\"source_revised\":true") != std::string::npos);
+}
+
+TEST_CASE("live-translate: revisions report how far the transcript is final", "[unit][live-translate]") {
+    FILE* f = tmpfile();
+    REQUIRE(f != nullptr);
+    {
+        crispasr::lt_sink_config cfg;
+        cfg.output = crispasr::lt_output::json;
+        cfg.src_lang = "de";
+        cfg.tgt_lang = "en";
+        cfg.sync = true;
+        cfg.drafts = false;
+        cfg.revise_max_sentences = 2;
+        cfg.out = f;
+        cfg.log = nullptr;
+        crispasr::lt_sink sink(cfg, [](const std::string& s, const crispasr::lt_sink::progress_fn&) { return s; });
+        sink.set_reviser([](const std::string& s, const crispasr::lt_sink::progress_fn&) { return s; });
+        const auto now = crispasr::lt_sink::clock::now();
+        sink.on_partial(1, "Eins ist hier. Zwei ist da. Drei", 1.0, now);
+        sink.on_partial(1, "Eins ist hier. Zwei ist da. Drei kommt noch", 1.5, now);
+        sink.on_final(1, "Eins ist hier. Zwei ist da. Drei kommt noch.", 2.5, now);
+    }
+    rewind(f);
+    std::string all;
+    char buf[1024];
+    while (fgets(buf, sizeof(buf), f))
+        all += buf;
+    fclose(f);
+    INFO(all);
+    REQUIRE(all.find("\"sentence_ids\":[0,1]") != std::string::npos);
+    REQUIRE(all.find("\"final_until_sentence\":1}") != std::string::npos);
+    REQUIRE(all.find("\"final_until_sentence\":2}") != std::string::npos);
+}

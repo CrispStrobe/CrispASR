@@ -55,18 +55,19 @@ Open, in the order they would help:
 5. ~~VAD re-runs over the whole window every step~~: incremental Silero
    (each 32 ms frame scored once, state kept) — 30-86 → 3-6 ms per step.
    Other VAD models still re-scan.
-5b. **Two speeds** (phase 1 done: `--translate-revise`, slow re-translation
-   of finished paragraphs). Next: phase 2 — a slower recogniser re-decodes
-   closed utterances, re-splits sentences, re-translates; phase 3 — backlog
-   policy tuning, a 'final up to' marker, a viewer that edits text in place.
-   Open: does the slow pass delay the fast one on a shared GPU (measure at
-   load < 3; the paragraph wait-for-idle guard is in).
+5b. **Two speeds**: phase 1 (`--translate-revise`, slow re-translation of
+   finished paragraphs) and phase 2 (`--translate-revise-asr`, a slower
+   recogniser re-reads each finished utterance first) and phase 3 (in-place
+   terminal view, `final_until_sentence`, `--translate-revise-backlog`) done.
+   Left: a graphical viewer (browser / app) on the JSON events; tuning the
+   backlog limit under real load. Open: does the slow pass delay the fast
+   one on a shared GPU (measure at load < 3; the wait-for-idle guard is in).
 6. **hikari** (sbintuitions/hikari-medium, English -> de/ja/ru simultaneous
    translation + English ASR) is ported: f16 equals the reference on jfk
    (every stage >= 0.9995 cosine, 161/161 stream steps, same text) and on a
-   4 s cut (48/48). Left: (a) not real time — 1.82 s per audio-second on M1
-   Metal at load ~10 (encoder 87 ms + decoder 58 ms per 80 ms step; CPU 3x
-   slower); (b) q8_0 is token-exact on CPU-level text but on Metal changes
+   4 s cut (48/48). Left: (a) not real time on an M1 — 1.82 s per audio-second
+   on Metal at load ~10; on CUDA (Kaggle) 0.19-0.26 s, i.e. 4-5x faster than
+   real time, with q8_0 text-exact too; (b) q8_0 is token-exact on CPU-level text but on Metal changes
    one German sentence of a 27 s clip, q4_k breaks the encoder (cos 0.36) —
    ship f16 until a keep-rule is measured; (c) not published (no registry
    row), so no -m auto and no regression fixture.

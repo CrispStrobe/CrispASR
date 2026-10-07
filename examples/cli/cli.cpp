@@ -753,12 +753,6 @@ static bool whisper_params_parse_arg_streaming_tts(int argc, char** argv, int& i
         params.tts_play_device = std::stoi(ARGV_NEXT);
     } else if (arg == "--text") {
         params.text_input = ARGV_NEXT;
-    } else if (arg == "--translate-max-tokens") {
-        params.translate_max_tokens = std::stoi(ARGV_NEXT);
-    } else if (arg == "-trsl" || arg == "--tr-sl" || arg == "--translate-source-lang") {
-        params.translate_source_lang = whisper_param_turn_lowercase(ARGV_NEXT);
-    } else if (arg == "-trtl" || arg == "--tr-tl" || arg == "--translate-target-lang") {
-        params.translate_target_lang = whisper_param_turn_lowercase(ARGV_NEXT);
     } else if (arg == "--accept-license") {
         if (++i >= argc) {
             fprintf(stderr, "error: --accept-license requires an SPDX tag (or \"all\")\n");
@@ -788,7 +782,18 @@ static bool whisper_params_parse_arg_streaming_tts(int argc, char** argv, int& i
     } else if (arg == "--hf-file" || arg == "-hff") {
         params.hf_file = ARGV_NEXT;
         params.auto_download = true;
-    } else if (arg == "--dry-run-resolve") {
+    } else {
+        return false;
+    }
+    return true;
+#undef ARGV_NEXT
+}
+
+// Second half of the above, split for the same MSVC C1061 nesting limit.
+static bool whisper_params_parse_arg_streaming_tts2(int argc, char** argv, int& i, whisper_params& params) {
+    std::string arg = argv[i];
+#define ARGV_NEXT (((i + 1) < argc) ? argv[++i] : requires_value_error(arg))
+    if (arg == "--dry-run-resolve") {
         params.dry_run_resolve = true;
     } else if (arg == "--dry-run-ignore-cache") {
         params.dry_run_ignore_cache = true;
@@ -816,28 +821,6 @@ static bool whisper_params_parse_arg_streaming_tts(int argc, char** argv, int& i
         params.stream_realtime = true;
     } else if (arg == "--stream-session") {
         params.stream_session = true;
-    } else if (arg == "--live-translate") {
-        // Preset: microphone in, transcript + translation out. The stream
-        // defaults it implies are applied in crispasr_run.cpp.
-        params.live_translate = true;
-        params.mic = true;
-        params.stream = true;
-    } else if (arg == "--translate-model") {
-        params.translate_model = ARGV_NEXT;
-    } else if (arg == "--translate-backend") {
-        params.translate_backend = ARGV_NEXT;
-    } else if (arg == "--translate-prompt") {
-        params.translate_prompt = ARGV_NEXT;
-    } else if (arg == "--translate-revise") {
-        params.translate_revise_model = ARGV_NEXT;
-    } else if (arg == "--translate-beam") {
-        params.translate_beam = std::stoi(ARGV_NEXT);
-        if (params.translate_beam < 0) {
-            fprintf(stderr, "crispasr: --translate-beam must be >= 0\n");
-            exit(2);
-        }
-    } else if (arg == "--no-translate-drafts") {
-        params.translate_drafts = false;
     } else if (arg == "--stream-keep") {
         params.stream_keep_ms = std::stoi(ARGV_NEXT);
     } else if (arg == "--stream-json") {
@@ -971,6 +954,53 @@ static bool whisper_params_parse_arg_streaming_tts(int argc, char** argv, int& i
 #undef ARGV_NEXT
 }
 
+// Live and text translation flags — their own chunk for the same MSVC C1061
+// reason as the split below: whisper_params_parse_arg_streaming_tts had
+// grown to 124 branches and broke the Windows build.
+static bool whisper_params_parse_arg_translate(int argc, char** argv, int& i, whisper_params& params) {
+    std::string arg = argv[i];
+#define ARGV_NEXT (((i + 1) < argc) ? argv[++i] : requires_value_error(arg))
+    if (arg == "--translate-max-tokens") {
+        params.translate_max_tokens = std::stoi(ARGV_NEXT);
+    } else if (arg == "-trsl" || arg == "--tr-sl" || arg == "--translate-source-lang") {
+        params.translate_source_lang = whisper_param_turn_lowercase(ARGV_NEXT);
+    } else if (arg == "-trtl" || arg == "--tr-tl" || arg == "--translate-target-lang") {
+        params.translate_target_lang = whisper_param_turn_lowercase(ARGV_NEXT);
+    } else if (arg == "--live-translate") {
+        // Preset: microphone in, transcript + translation out. The stream
+        // defaults it implies are applied in crispasr_run.cpp.
+        params.live_translate = true;
+        params.mic = true;
+        params.stream = true;
+    } else if (arg == "--translate-model") {
+        params.translate_model = ARGV_NEXT;
+    } else if (arg == "--translate-backend") {
+        params.translate_backend = ARGV_NEXT;
+    } else if (arg == "--translate-prompt") {
+        params.translate_prompt = ARGV_NEXT;
+    } else if (arg == "--translate-revise") {
+        params.translate_revise_model = ARGV_NEXT;
+    } else if (arg == "--translate-revise-asr") {
+        params.translate_revise_asr = ARGV_NEXT;
+    } else if (arg == "--translate-view") {
+        params.translate_view = ARGV_NEXT;
+    } else if (arg == "--translate-revise-backlog") {
+        params.translate_revise_backlog = std::stoi(ARGV_NEXT);
+    } else if (arg == "--translate-beam") {
+        params.translate_beam = std::stoi(ARGV_NEXT);
+        if (params.translate_beam < 0) {
+            fprintf(stderr, "crispasr: --translate-beam must be >= 0\n");
+            exit(2);
+        }
+    } else if (arg == "--no-translate-drafts") {
+        params.translate_drafts = false;
+    } else {
+        return false;
+    }
+    return true;
+#undef ARGV_NEXT
+}
+
 static bool whisper_params_parse(int argc, char** argv, whisper_params& params) {
     if (const char* env_device = std::getenv("CRISPASR_ARG_DEVICE")) {
         params.gpu_device = std::stoi(env_device);
@@ -1018,6 +1048,12 @@ static bool whisper_params_parse(int argc, char** argv, whisper_params& params) 
             continue;
         }
         if (whisper_params_parse_arg_streaming_tts(argc, argv, i, params)) {
+            continue;
+        }
+        if (whisper_params_parse_arg_translate(argc, argv, i, params)) {
+            continue;
+        }
+        if (whisper_params_parse_arg_streaming_tts2(argc, argv, i, params)) {
             continue;
         }
 
@@ -1338,6 +1374,15 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
     fprintf(out, "  --translate-revise MODEL                    live translation slow pass: re-translate each finished "
                  "paragraph with this translation LLM (hy-mt2, index-translate, or a GGUF) and replace the fast "
                  "translations\n");
+    fprintf(out, "  --translate-revise-asr MODEL                with --translate-revise: re-transcribe each finished "
+                 "utterance with this slower recogniser first (a GGUF or a registry name, e.g. canary)\n");
+    fprintf(out,
+            "  --translate-view inplace|scroll             terminal view: inplace redraws the transcript so revisions "
+            "replace text where it stands (default with --translate-revise); scroll appends\n");
+    fprintf(out,
+            "  --translate-revise-backlog N      [%-7d] paragraphs queued for the slow pass before the oldest is "
+            "dropped\n",
+            params.translate_revise_backlog);
     fprintf(out,
             "  --translate-beam N                [%-7d] translator beam size (1 = greedy, fastest); 0 = the "
             "translator's default\n",
