@@ -22,6 +22,17 @@ benchmark failure handling for integration. #492 performance changes and #515
 native streaming/ONNX changes remain under review; no ownership of their work.
 Heavy builds/models use hosted CI; large files remain on cold storage.
 
+Checkpoint: integration branch `5bf3e80dd` retains PRs #496/#514 and fixes
+Orukeet filename routing; Hikari benchmark now fails on exceptions, empty/
+wrong output or missing timing evidence. In flight: Orukeet hosted CPU
+[37703780788](https://github.com/CrispStrobe/CrispASR/actions/runs/37703780788),
+native CI [37703783152](https://github.com/CrispStrobe/CrispASR/actions/runs/37703783152),
+and the WASM matrix. PR #515 regression failures were traced to Azure Ubuntu
+mirror downloads in `apt-get update` (45-minute job timeout before build/model
+execution). Investigating bounded package setup for CI/regression without
+changing model gates. No native streaming, ONNX or MiMo performance changes
+have been integrated from #515/#492.
+
 ## OPEN 2026-10-05 — live transcribe + translate: follow-ups
 
 Shipped 2026-10-06 (#493) together with the ggml v0.26.0 sync — what landed
