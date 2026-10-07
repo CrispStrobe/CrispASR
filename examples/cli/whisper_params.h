@@ -700,6 +700,10 @@ struct whisper_params {
     // {src} / {tgt} are replaced by the English language names, {text} by the
     // sentence. Empty = the Hy-MT2 instruction.
     std::string translate_prompt;
+    // Live translation, slow pass: a better translator that re-translates each
+    // finished paragraph and replaces the fast translations (hy-mt2,
+    // index-translate or a translation-LLM GGUF). Empty = no slow pass.
+    std::string translate_revise_model;
     int translate_beam = 1;       // greedy: m2m100 beam search has no KV cache (~5x slower); 0 = backend default
     bool translate_drafts = true; // re-translate the still-open sentence as a dimmed draft
     // The input arrives in real time (microphone, a live feed). When decoding

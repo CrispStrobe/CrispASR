@@ -587,3 +587,48 @@ TEST_CASE("live-translate: drafts follow the agreed source across partials", "[u
     // First partial: nothing to agree with yet. Then the agreed words only.
     REQUIRE(seen == std::vector<std::string>{"Zuerst sprechen wir", "Zuerst sprechen wir über die"});
 }
+
+TEST_CASE("live-translate: the slow pass revises whole paragraphs, closed by length or by the utterance",
+          "[unit][live-translate]") {
+    FILE* f = tmpfile();
+    REQUIRE(f != nullptr);
+    std::vector<std::string> fast, slow;
+    {
+        crispasr::lt_sink_config cfg;
+        cfg.output = crispasr::lt_output::json;
+        cfg.src_lang = "de";
+        cfg.tgt_lang = "en";
+        cfg.sync = true;
+        cfg.drafts = false;
+        cfg.revise_max_sentences = 2;
+        cfg.out = f;
+        cfg.log = nullptr;
+        crispasr::lt_sink sink(cfg, [&](const std::string& s, const crispasr::lt_sink::progress_fn&) {
+            fast.push_back(s);
+            return "EN<" + s + ">";
+        });
+        sink.set_reviser([&](const std::string& s, const crispasr::lt_sink::progress_fn&) {
+            slow.push_back(s);
+            return "REV<" + s + ">";
+        });
+        const auto now = crispasr::lt_sink::clock::now();
+        sink.on_partial(1, "Eins ist hier. Zwei ist da. Drei", 1.0, now);
+        sink.on_partial(1, "Eins ist hier. Zwei ist da. Drei kommt noch", 1.5, now);
+        sink.on_final(1, "Eins ist hier. Zwei ist da. Drei kommt noch.", 2.5, now);
+    }
+    rewind(f);
+    std::string all;
+    char buf[1024];
+    while (fgets(buf, sizeof(buf), f))
+        all += buf;
+    fclose(f);
+    INFO(all);
+    // Fast pass: every sentence on its own, as before.
+    REQUIRE(fast == std::vector<std::string>{"Eins ist hier.", "Zwei ist da.", "Drei kommt noch."});
+    // Slow pass: two sentences (the length limit), then the rest at the end of the utterance.
+    REQUIRE(slow == std::vector<std::string>{"Eins ist hier. Zwei ist da.", "Drei kommt noch."});
+    REQUIRE(all.find("\"type\":\"revision\",\"utterance_id\":1,\"sentence_ids\":[0,1],"
+                     "\"text\":\"Eins ist hier. Zwei ist da.\",\"translation\":\"REV<Eins ist hier. Zwei ist da.>\"") !=
+            std::string::npos);
+    REQUIRE(all.find("\"sentence_ids\":[2],\"text\":\"Drei kommt noch.\"") != std::string::npos);
+}

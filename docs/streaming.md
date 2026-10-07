@@ -459,6 +459,49 @@ Recogniser measurements, 2026-10-05/06 on an M1 (16 GB, Metal), the same clip.
   streaming mode under load 7–19. Its `<de-DE>` language-tag tokens are now
   stripped from text, word lists and the session stream.
 
+### Two speeds: a fast pass now, a better translation a few seconds later
+
+`--translate-revise MODEL` adds a slow pass. The fast pass works as above
+(sentence by sentence, usually Opus-MT or m2m100). The slow pass collects the
+committed sentences into paragraphs — closed when the utterance ends, or after
+four sentences of continuous speech — and re-translates each paragraph as one
+unit with a translation LLM, so every sentence is translated with its
+neighbours as context:
+
+```bash
+crispasr --live-translate -l de --tr-tl en -m auto --backend parakeet \
+    --translate-backend marian --translate-revise hy-mt2
+```
+
+The result replaces the fast translations of those sentences: a `revision`
+event in JSON (`sentence_ids`, `text`, `translation`, `mt_ms`, `lag_ms`), a
+green ✓ block in the terminal. It runs on its own low-priority thread, starts
+a paragraph only while the fast translator has nothing waiting, and drops the
+oldest paragraph (`revision_skipped`) if more than three are queued, so it can
+lag but never pile up.
+
+Measured on the 50 s German clip, Hy-MT2 as the slow pass (chrF against a
+reference translation; 2 runs each):
+
+| fast translator | fast only | after revisions | revision arrives |
+|---|---|---|---|
+| m2m100 | 79.8 / 79.1 | **81.9 / 81.9** | median 5–10 s after the audio |
+| Opus-MT | 82.5 / 82.5 | 80.1 / 80.1 | median 5–6 s |
+
+With m2m100 the revisions fix real errors ("our new colleagues. he comes" →
+"our new colleague to you. He comes"; "furniture packaging" → "furniture
+movers"; "Do you have questions until here?" → "… up to this point?"). Opus-MT
+is already good on this clean clip, and the lower score there is mostly the
+reference's spelled-out numbers against Hy-MT2's "12%", "October 3rd", "7 a.m."
+Load was 7–158 during these runs, so whether the slow pass slows the fast one
+down on a shared GPU is not settled (one pair showed it, one did not).
+
+A caveat: an LLM reviser can add what was not said. On a clip cut off
+mid-sentence ("Die Umsätze sind … um zwölf.") Hy-MT2 wrote "Sales are 12%
+**lower** …", where the fast m2m100 stayed literal. Paragraphs normally end
+with the utterance, so this is rare, but the revision is a better reading,
+not a guaranteed one.
+
 ### One model instead of two: hikari (English speech → de / ja / ru)
 
 `sbintuitions/hikari-medium` (MIT) translates straight from audio and decides
