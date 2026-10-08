@@ -612,3 +612,22 @@ TEST_CASE("registry: Index-Echo downloads a matching pair and source VAD", "[uni
     REQUIRE(entry.companion_url.find("/index-echo-9b-GGUF/") != std::string::npos);
     REQUIRE_FALSE(crispasr_license_requires_acceptance(entry.license));
 }
+
+TEST_CASE("registry: German Moonshine bundles own every companion", "[unit][registry]") {
+    for (const auto& key : {"moonshine-streaming-tiny-de-onnx", "moonshine-streaming-small-de-onnx",
+                            "moonshine-streaming-tiny-de-onnx-f32", "moonshine-streaming-small-de-onnx-f32"}) {
+        CAPTURE(key);
+        CrispasrRegistryBundle bundle;
+        REQUIRE(crispasr_registry_default_bundle(key, bundle));
+        REQUIRE(bundle.backend == key);
+        REQUIRE(bundle.artifacts.size() == 8);
+        REQUIRE(bundle.license == "MIT");
+        REQUIRE_FALSE(bundle.requires_license_acceptance);
+        for (const auto& artifact : bundle.artifacts) {
+            REQUIRE(artifact.filename.find(std::string(key) + "/") == 0);
+            REQUIRE(artifact.url.find("/resolve/main/") == std::string::npos);
+        }
+        const bool f32 = std::string(key).find("-f32") != std::string::npos;
+        REQUIRE(bundle.artifacts.front().filename == std::string(key) + (f32 ? "/encoder.onnx" : "/encoder_int8.onnx"));
+    }
+}

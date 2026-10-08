@@ -2053,15 +2053,6 @@ const ExtraCompanion* find_extras(const char* backend) {
     return nullptr;
 }
 
-void download_extras(const Entry& e, bool quiet, const std::string& cache_dir_override) {
-    const ExtraCompanion* extras = find_extras(e.backend);
-    if (!extras)
-        return;
-    for (const ExtraCompanion* it = extras; it->file && it->url; ++it) {
-        crispasr_cache::ensure_cached_file(it->file, it->url, quiet, "crispasr", cache_dir_override);
-    }
-}
-
 // ---------------------------------------------------------------------------
 // Restricted-licence acceptance gate.
 //
@@ -2291,6 +2282,26 @@ bool crispasr_find_cached_model(CrispasrRegistryEntry& out, const std::string& c
 std::string crispasr_resolve_model(const std::string& model_arg, const std::string& backend_name, bool quiet,
                                    const std::string& cache_dir_override, bool allow_download,
                                    const std::string& preferred_quant, const std::string& accepted_license) {
+    // Companions belong to the matched registry variant, which can differ
+    // from the runtime backend (e.g. German Tiny versus Small ONNX bundles).
+    auto ensure_companions = [&](const CrispasrRegistryEntry& entry) {
+        auto fetch = [&](const std::string& filename, const std::string& url) {
+            if (!crispasr_cache::file_present(crispasr_cache::dir(cache_dir_override) + "/" + filename) &&
+                !license_gate_allows_download(entry, accepted_license))
+                return false;
+            return !crispasr_cache::ensure_cached_file(filename, url, quiet, "crispasr", cache_dir_override).empty();
+        };
+        if (!entry.companion_filename.empty() && !entry.companion_url.empty() &&
+            !fetch(entry.companion_filename, entry.companion_url))
+            return false;
+        if (const ExtraCompanion* extras = find_extras(entry.backend.c_str())) {
+            for (const ExtraCompanion* it = extras; it->file && it->url; ++it)
+                if (!fetch(it->file, it->url))
+                    return false;
+        }
+        return true;
+    };
+
     // Concrete path that exists on disk — pass through.
     if (model_arg != "auto" && model_arg != "default") {
         FILE* f = fopen(model_arg.c_str(), "rb");
@@ -2328,6 +2339,8 @@ std::string crispasr_resolve_model(const std::string& model_arg, const std::stri
                 // A previously-downloaded restricted model used to load in
                 // total silence — state the licence on every load, not just
                 // the one where it happened to be fetched.
+                if (allow_download && !ensure_companions(match))
+                    return "";
                 print_license_note(match, quiet);
                 return cached;
             }
@@ -2343,13 +2356,9 @@ std::string crispasr_resolve_model(const std::string& model_arg, const std::stri
             }
             std::string dl =
                 crispasr_cache::ensure_cached_file(match.filename, match.url, quiet, "crispasr", cache_dir_override);
-            if (!dl.empty() && !match.companion_filename.empty() && !match.companion_url.empty())
-                crispasr_cache::ensure_cached_file(match.companion_filename, match.companion_url, quiet, "crispasr",
-                                                   cache_dir_override);
             if (!dl.empty()) {
-                if (const Entry* match_entry =
-                        !backend_name.empty() ? find_by_backend(backend_name) : find_by_filename(model_arg))
-                    download_extras(*match_entry, quiet, cache_dir_override);
+                if (!ensure_companions(match))
+                    return "";
                 print_license_note(match, quiet);
             }
             return dl;
@@ -2377,16 +2386,9 @@ std::string crispasr_resolve_model(const std::string& model_arg, const std::stri
         fprintf(stderr, "crispasr: resolving %s (%s) via -m auto\n", e.filename.c_str(), e.approx_size.c_str());
     std::string result = crispasr_cache::ensure_cached_file(e.filename, e.url, quiet, "crispasr", cache_dir_override);
 
-    // Download companion file (e.g. tokenizer.bin for moonshine) if needed
-    if (!result.empty() && !e.companion_filename.empty() && !e.companion_url.empty()) {
-        crispasr_cache::ensure_cached_file(e.companion_filename, e.companion_url, quiet, "crispasr",
-                                           cache_dir_override);
-    }
-    // Backend-specific extras (e.g. kokoro German backbone + voice) — opt-in
-    // per backend via k_extras.
     if (!result.empty()) {
-        if (const Entry* entry = find_by_backend(backend_name))
-            download_extras(*entry, quiet, cache_dir_override);
+        if (!ensure_companions(e))
+            return "";
         print_license_note(e, quiet);
     }
 

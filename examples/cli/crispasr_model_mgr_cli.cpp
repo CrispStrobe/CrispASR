@@ -252,6 +252,9 @@ std::string crispasr_resolve_model_cli(const std::string& model_arg, const std::
                 fprintf(stderr, "crispasr: note: %s is licensed %s — review and comply with the upstream terms.\n",
                         match.filename.c_str(), match.license.c_str());
         }
+        if (auto_download)
+            return crispasr_resolve_model(effective_model_arg, match.backend, quiet, cache_dir_override, true,
+                                          effective_quant, accepted_license);
         return cached_path;
     }
 
@@ -296,7 +299,8 @@ std::string crispasr_resolve_model_cli(const std::string& model_arg, const std::
     }
 
     if (do_download) {
-        return crispasr_cache::ensure_cached_file(match.filename, match.url, quiet, "crispasr", cache_dir_override);
+        return crispasr_resolve_model(effective_model_arg, match.backend, quiet, cache_dir_override, true,
+                                      effective_quant, accepted_license);
     }
 
     return effective_model_arg;
