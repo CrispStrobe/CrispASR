@@ -14,9 +14,10 @@ from pathlib import Path
 import subprocess
 import sys
 
-SCRIPT_VERSION = 'mimo-pr492-tokenizer-cuda-v3'
-SOURCE = '389c3c712081f8612817e20b7f9e784d03a7b703'
+SCRIPT_VERSION = 'mimo-pr492-tokenizer-cuda-v4'
+SOURCE = '3493c8ef9738fa60175ea2c76201fa8cc57cd7f8'
 GGML = 'c36dab89b662838f0f5d4826c399198c0b90bbfc'
+CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'mimo-pr492/sm75-v3.tar', 'revision': '7bac5a6c0e5cae845d8ded349a2bcb7d0a23050e', 'sha256': 'a60bf4b1ea7d0db9099ead0383133c2ac22b0f5c6c8c0117857dc1ef59035b95', 'bytes': 51097600, 'source': '389c3c712081f8612817e20b7f9e784d03a7b703'}
 WORK = Path('/kaggle/working')
 SCRATCH = Path('/kaggle/temp/mimo-pr492')
 REPO = SCRATCH / 'CrispASR'
@@ -27,7 +28,7 @@ def main():
     SCRATCH.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
     os.environ.update(PYTHONUNBUFFERED='1', TMPDIR=str(SCRATCH),
-                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='mimo-pr492-tokenizer-cuda-v3')
+                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='mimo-pr492-tokenizer-cuda-v4')
     devices = subprocess.check_output(['nvidia-smi', '--query-gpu=name,compute_cap,memory.total',
                                        '--format=csv'], text=True)
     print(SCRIPT_VERSION, devices, flush=True)
@@ -47,6 +48,21 @@ def main():
     kh.provenance(SCRIPT_VERSION, REPO)
     kh.install_build_toolchain()
     arch = kh.detect_cuda_arch()
+    # Reuse only actual Kaggle compiler output, with an immutable HF pin/hash.
+    # The existing private cache repo holds build objects, never model weights.
+    if str(arch) == '75':
+        import tarfile
+        from huggingface_hub import hf_hub_download
+        archive = Path(hf_hub_download(CACHE['repo'], CACHE['file'], repo_type='dataset',
+                           revision=CACHE['revision'], local_dir=SCRATCH / 'build-cache'))
+        assert hashlib.sha256(archive.read_bytes()).hexdigest() == CACHE['sha256']
+        destination = Path(os.environ['CCACHE_DIR']).parent
+        with tarfile.open(archive) as tf:
+            assert all(m.name == '.ccache' or m.name.startswith('.ccache/') for m in tf)
+            tf.extractall(destination, filter='data')
+        kh.step('cuda.cache.warmed', **CACHE)
+    else:
+        kh.step('cuda.cache.skipped', arch=arch, cached_arch='75')
     # CUDA performs the native inference. Do not install or use PyTorch CUDA.
     subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', 'numpy', 'gguf',
                     'huggingface_hub', 'soundfile', 'transformers==4.57.6'], check=True, timeout=1200)
@@ -66,6 +82,7 @@ extern "C" int mimo_probe_threads() { return mimo_tokenizer_context_default_para
   target_link_libraries(mimo_tokenizer_probe PRIVATE mimo_tokenizer)
   add_executable(mimo_attention_probe "{REPO / 'tools/ci-heavy/pr492_attention_probe.cpp'}")
   target_link_libraries(mimo_attention_probe PRIVATE ggml)
+  file(GENERATE OUTPUT "{wrapper / 'probe-path.txt'}" CONTENT "$<TARGET_FILE:mimo_attention_probe>")
 endfunction()
 cmake_language(DEFER CALL mimo_diag_add_probe)
 ''')
@@ -83,14 +100,16 @@ cmake_language(DEFER CALL mimo_diag_add_probe)
                                        '-j' + kh.safe_build_jobs(gpu=True)]))
     library = build / 'libmimo_tokenizer_probe.so'
     assert library.is_file()
+    probe = Path((wrapper / 'probe-path.txt').read_text().strip()).resolve(strict=True)
+    assert probe.is_file() and os.access(probe, os.X_OK), probe
     (OUT / 'CMakeCache.txt').write_bytes((build / 'CMakeCache.txt').read_bytes())
     (OUT / 'hardware.json').write_text(json.dumps(dict(script_version=SCRIPT_VERSION, source=SOURCE,
         ggml=GGML, devices=devices, arch=arch, cmake_flags=flags,
         kernel_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
-        scope=__doc__), indent=2) + '\n')
+        attention_probe=str(probe), cache=CACHE, scope=__doc__), indent=2) + '\n')
     os.environ.update(HEAVY_OUT=str(OUT), HEAVY_SCRATCH=str(SCRATCH),
                       MIMO_TOKENIZER_DIAG_GPU='1', MIMO_TOKENIZER_DIAG_LIB=str(library),
-                      MIMO_DIAG_ATTN_PROBE=str(build / 'mimo_attention_probe'))
+                      MIMO_DIAG_ATTN_PROBE=str(probe))
     kh.step('tokenizer.diagnosis.begin', source=SOURCE, arch=arch)
     with kh.build_heartbeat('tokenizer-cuda-diagnosis'):
         result = subprocess.run([sys.executable, REPO / 'tools/ci-heavy/pr492_attention_diagnose.py'],
