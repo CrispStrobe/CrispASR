@@ -791,7 +791,7 @@
     "comment": "https://github.com/CrispStrobe/CrispASR/issues/491#issuecomment-6052699324"
   },
   "pr515_review": {
-    "source_commit": "f43dfd5eb5f9915e2c54b42da1ce5fa3fa00318d",
+    "source_commit": "91496680a02b1da30ad9e16cfc4aae0a9512edde",
     "merged": false,
     "offline_bundle_probe": [
       {
@@ -836,7 +836,7 @@
       }
     ],
     "queued_runs": {
-      "cpu": 37732822370,
+      "cpu": 37733187037,
       "ci": 37730684549,
       "regression": 37730687001
     },
@@ -942,6 +942,14 @@
       "Whole encoder recompute at final ONNX flush avoids int8 window-dependent scales",
       "Shared Nemotron language-tag stripping for CLI and C ABI text/words/stream"
     ],
-    "stage_diff_scope": "Native C++ against independent Python ORT driver, identical deployed graphs; exporter-to-source checkpoint parity is not claimed"
+    "stage_diff_scope": "Native C++ against independent Python ORT driver, identical deployed graphs; exporter-to-source checkpoint parity is not claimed",
+    "automatic_acceptance_workflow": ".github/workflows/moonshine-onnx.yml"
+  },
+  "issue483_mmq": {
+    "source_commit": "04ded753e909da019a2cd391f651f51f5299b6f5",
+    "run_id": 37733919241,
+    "status": "queued",
+    "merged": false,
+    "scope": "Matched CUDA 12.6.3 ON/OFF forced-MMQ CLI packages; compile/packaging/driverless startup only; reporter GTX1660 acceptance pending"
   }
 }

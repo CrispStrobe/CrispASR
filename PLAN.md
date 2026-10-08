@@ -51,6 +51,15 @@ PTX targets and runtime DLLs, differing only in `GGML_CUDA_FORCE_MMQ`.
 Hosted Windows can prove compilation/packaging/driverless fallback; the reporter
 must measure the actual GTX1660. No release-default or speed claim.
 
+Checkpoint: branch `04ded753e909da019a2cd391f651f51f5299b6f5` adds a manual
+ON/OFF packaging mode to the existing Windows CUDA Smoke workflow. Actionlint
+and diff checks pass. Hosted Windows package/pair proof
+[37733919241](https://github.com/CrispStrobe/CrispASR/actions/runs/37733919241)
+is queued. Both artifacts require actual compiler-definition checks, matching
+CUDA runtime versions/hashes, portable CPU flags and staged CLI startup.
+Do not present either package as GPU-validated or change release defaults.
+
+
 ## OPEN 2026-10-08 — final main checks and remaining triage
 
 Orukeet CPU acceptance [37728843835](https://github.com/CrispStrobe/CrispASR/actions/runs/37728843835)
