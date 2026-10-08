@@ -41,3 +41,14 @@ live test, session rate getter, CLI WAV header and both TTS→ASR roundtrips.
 It also checks 24 kHz and missing-key metadata dispatch using temporary copies;
 those copies are not claimed to be legacy codec speech models. Run with
 `-f pip="numpy gguf huggingface_hub"` on Linux x86 or ARM.
+
+`mimo_cabi_device_params.py` checks four device/verbosity combinations and four
+failed-open default restores through the actual shared library and an init hook.
+Removing the two forwarding assignments must fail; restoring them must pass.
+Run on Linux x86 with no extra pip packages. No model/GPU inference claim.
+
+`data2vec_reference_parity.py` verifies the existing independent Python CTC
+transcript using pinned logits/vocabulary/sample hashes, rejects four broken
+provenance/target controls, then runs the actual Q4 CLI and F16 stage regression.
+Zero-WER upstream parity remains hard; the original model's 4.55% human WER
+is reported separately. Run with `-f pip="numpy gguf huggingface_hub"`.

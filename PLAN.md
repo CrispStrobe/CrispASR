@@ -22,29 +22,19 @@ elapsed stages and scratch size; do not land a production precision/default
 change without numerical and performance evidence. No direct BLAS-module
 symbol dependencies, GPU placement changes or reference tolerance changes.
 
-## CLAIMED 2026-10-08 — data2vec nightly Q4 word insertion
+## VALIDATED 2026-10-08 — data2vec independent transcript parity
 
-Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
-`review/data2vec-nightly`, diagnostic source `d43a25230`, hosted
-`37786726672` completed (FAILED unchanged Q4 gate). Nightly `37768023710`, job `113289821084`, fails
-Q4 JFK speech at runtime source `2da878e72`: an extra `A` after `AND SO`
-(WER 4.55% versus required zero). F16 logits still pass cosine 0.999141.
-Compare pinned v0.8.41/current builds and Q4/Q8/F16 weights before changing
-runtime, fixture or quantization policy. Matched-host results: baseline Q4
-passes, current Q4 inserts A; Q8/F16 insert A on BOTH versions. The CTC head
-is already byte-identical F32. Original-F16 layer 0 preservation passes this
-clip (+10,174,464 bytes); preserving layers 0–1 or 0–3 fails. Both F16 stage
-diffs pass the original cosine gate. This is not sufficient evidence for a
-quantization-policy fix. Next inspect/decode the frozen independent Python
-CTC reference and compare the original Python checkpoint, keeping zero-WER
-gates unchanged. The frozen Python reference `ab4151f8…` also decodes the A, using the pinned
-upstream vocabulary at `32331f3123e703528918aa688a9a38232d58c872`.
-Correction source `c9dec41f2`, branch `review/data2vec-reference-parity`,
-actual regression job `37791614453` running. Correct this entry's transcript target to the frozen
-independent Python decode, add a hash-verified CTC-reference provenance guard
-and negative controls, and retain/document 4.55% human WER explicitly. Keep
-zero-WER parity, stage thresholds, weights and decoder unchanged. Validate
-actual CLI and stage diff through the hosted regression runner before landing.
+Integrated source `3cb9bb48ee1ed7d7a8c26a2032a158480c37661e` corrects the data2vec transcript target to
+the frozen independent Python CTC decode. Hosted `37791614453` PASS at
+`c9dec41f2`: actual Q4 CLI zero-WER upstream parity, F16 logits cosine
+0.999141 >= unchanged 0.999, and four reference/target/hash negative controls.
+The published weights and decoder are unchanged; human WER remains 4.55%
+and is explicitly reported separately. Original diagnosis `37786726672`
+showed Q8/F16 already inserting A on BOTH old/current builds, and the frozen
+Python reference also contains A. The old July native target was not the
+independent reference. No replacement model/first-layer precision policy was
+shipped. Proof: `docs/data2vec-reference-parity-2026-10-08.json`.
+Final integrated main CI/broad regression must settle before release.
 
 ## VALIDATED 2026-10-08 — MiMo C ABI device/verbosity forwarding
 

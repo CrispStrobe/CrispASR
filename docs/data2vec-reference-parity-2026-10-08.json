@@ -1,0 +1,32 @@
+{
+  "passed": true,
+  "scope": "Validate data2vec's frozen Python transcript target and actual regression.\n\nNo model/decoder/reference activation changes. Zero-WER upstream parity and\nF16 stage gates remain hard; human WER is reported separately, not improved.\n",
+  "negative_controls": {
+    "wrong-target": "Transcript target disagrees with independent Python reference: 'AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY'",
+    "reference-sha": "Transcript reference SHA256 mismatch: ref.gguf",
+    "vocab-sha": "Transcript reference SHA256 mismatch: vocab.json",
+    "sample-sha": "Transcript reference SHA256 mismatch: jfk.wav"
+  },
+  "source": "c9dec41f2f3eb71bfdd9378632a6ae65b9097980",
+  "provenance": {
+    "stage": "ctc_logits",
+    "sha256": "ab4151f868b958d9461719ba8142c2f5c8f104fac2c2987539aa6f041bc7ac1a",
+    "vocab": {
+      "repo": "facebook/data2vec-audio-base-960h",
+      "revision": "32331f3123e703528918aa688a9a38232d58c872",
+      "file": "vocab.json",
+      "sha256": "19727f8944fe6459fc3f240ae2c198395b740f6a029bd23e06656266b83bcf64"
+    },
+    "blank_token": "<pad>",
+    "word_delimiter_token": "|",
+    "sample_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e"
+  },
+  "independent_decoded_transcript": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
+  "human_wer": 0.045454545454545456,
+  "failures": 0,
+  "integrated_source": "3cb9bb48ee1ed7d7a8c26a2032a158480c37661e",
+  "run": 37791614453,
+  "artifact": 11558022190,
+  "ctc_logits_cos_min": 0.999141,
+  "ctc_logits_threshold": 0.999
+}

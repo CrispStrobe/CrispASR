@@ -249,11 +249,12 @@ The latest broad nightly `37768023710` also exposes a Q4 data2vec JFK word
 insertion (zero-WER gate fails at 4.55%; F16 stage cosine 0.999141 passes).
 Matched-host diagnostic `37786726672` confirms old-release Q4 matched the
 native July target, while Q8/F16 on both versions insert the A. The existing
-SHA-verified independent Python reference also decodes A. Pending correction
-`c9dec41f2` checks zero-WER upstream parity with a hash-verified reference,
+SHA-verified independent Python reference also decodes A. Integrated correction
+`3cb9bb48e` checks zero-WER upstream parity with a hash-verified reference,
 vocabulary and sample guard, reporting the unchanged 4.55% human WER separately.
 Four provenance negative controls and 56 driver tests pass locally. Actual
-hosted regression `37791614453` is running. This corrects the test target;
+hosted regression `37791614453` PASSES, including Q4 CLI zero-WER upstream
+parity and unchanged F16 stage gate (cosine 0.999141 >= 0.999). This corrects the test target;
 it does not change weights, decoder, reference activations or tolerances,
 or claim improved model accuracy.
 

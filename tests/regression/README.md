@@ -62,7 +62,7 @@ under `<backend>/<sample-stem>/ref.gguf`.
 
 ## Running locally
 
-Build first:
+Install the driver dependencies (`huggingface_hub`, `numpy`, `gguf`), then build:
 
 ```bash
 cmake -S . -B build-ninja-compile \
