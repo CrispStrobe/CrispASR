@@ -8,6 +8,7 @@
 // historical crispasr behaviour is bit-identical.
 
 #include "core/align_json.h"
+#include "core/lid_probe.h"
 #include "crispasr_backend.h"
 #include "crispasr_cache.h"
 #include "crispasr_gap_fill.h"
@@ -2955,8 +2956,9 @@ int crispasr_run_backend(const whisper_params& params_in) {
             fprintf(stderr, "crispasr[align-only]: aligner=%s\n", am.c_str());
             fprintf(stderr, "crispasr[align-only]: audio=%.2fs (%d samples @ 16kHz)\n",
                     (float)samples.size() / 16000.0f, (int)samples.size());
-            fprintf(stderr, "crispasr[align-only]: transcript='%.80s%s'\n", transcript.c_str(),
-                    transcript.size() > 80 ? "…" : "");
+            const std::string preview = core_lid_probe::utf8_prefix(transcript, 80);
+            fprintf(stderr, "crispasr[align-only]: transcript='%s%s'\n", preview.c_str(),
+                    transcript.size() > preview.size() ? "…" : "");
         }
 
         // Run alignment.
