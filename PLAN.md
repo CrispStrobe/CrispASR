@@ -32,15 +32,21 @@ RVQ/EN-ZH decoded-output gates before production changes or accepting #492.
 Release follow-up in `/mnt/storage/crispasr/triage-20261007/worktree`: await
 final native/lint and full regression CI, fix failures, finalize comprehensive
 v0.8.42 notes and use `scripts/bump-version.sh` only after acceptance; #492
-remains excluded. CUDA v3 is queued at immutable source `389c3c712`
-(packaging `8a38afbf8`): identical official Q/K/V at layers 0/15/31,
-flash/default/F32-hint versus F32 eager and half-rounded eager, six measured
-alternating repetitions after two warmups, explicit CUDA allocation and sampled
-VRAM. Tiny real-Torch capture smoke passes all six QKV/half layout roundtrips,
-exact saved output and independent NumPy SDPA (max absolute error 1.43e-6).
-C++ syntax/format and Python syntax pass. No v3 GPU results yet. Final native
-`37805363962`, main lint `37806475239` and full regression `37802900089` are
-queued (regression unit tests PASS). Full receipts:
+remains excluded. CUDA v3 at immutable source `389c3c712`
+(packaging `8a38afbf8`) completed its CUDA build and tokenizer diagnostic on
+Tesla T4, but the standalone probe never started: the launcher used `build/`
+instead of CMake's actual `build/bin/`. Full logs and 105 output files,
+including captured Q/K/V and a 51.1 MB Kaggle-built cache, are archived under
+`/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-v3`. No attention
+kernel timing/parity result exists for v3. Follow-up in the same candidate
+worktree: repair/assert executable path, protect resident Q/K/V against allocator
+reuse and verify repeated outputs, refresh the existing HF build cache, then
+launch pinned v4. The tiny capture smoke passes exact layouts and independent
+NumPy SDPA. Native CI `37805363962` PASS at `3fd1bf5fa`; lint `37806475239`
+has nine passed checks with clang-tidy running. Full 33-model regression
+`37802900089` has unit/select/smoke/preflight and six model jobs passed so far;
+remaining jobs are running/queued. Final main checks remain required.
+Full receipts:
 `docs/mimo-pr492-cuda-precision-2026-10-08.json` and
 `docs/mimo-pr492-cuda-rvq-oracle-2026-10-08.json`.
 

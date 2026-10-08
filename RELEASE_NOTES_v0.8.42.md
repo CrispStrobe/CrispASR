@@ -282,10 +282,13 @@ not repeated medians. See the [CPU receipt](docs/mimo-pr492-cpu-blas-2026-10-08.
 [CUDA receipt](docs/mimo-pr492-cuda-precision-2026-10-08.json) and
 [affected-frame oracle](docs/mimo-pr492-cuda-rvq-oracle-2026-10-08.json).
 
-Before tagging, final main native CI `37805363962`, main lint `37806475239`
-and full 33-backend regression `37802900089` must complete successfully, and
-this draft must be refreshed against the final source. The new identical-input
-CUDA attention probe is queued on Kaggle at pinned source `389c3c712`; its
-six-repeat resident-graph timings and sampled VRAM are not yet available.
-Reporter-specific Windows/Vulkan, Intel Mac and newer NVIDIA hardware retests
-remain open. OmniVoice's remaining upstream audio cleanup is tracked in #518.
+Before tagging, final main native CI, lint and the full 33-backend regression
+must complete successfully, and this draft must match the final source.
+Native CI `37805363962` passes at `3fd1bf5fa`; lint `37806475239` and full
+regression `37802900089` are still progressing. The identical-input CUDA
+attention study remains diagnostic work: v3 saved official Q/K/V but failed to
+launch its executable because of a packaging path error. No standalone GPU
+attention timing or precision result is claimed from that run. A corrected
+rerun is planned. Reporter-specific Windows/Vulkan, Intel Mac and newer NVIDIA
+hardware retests remain open. OmniVoice's remaining upstream audio cleanup is
+tracked in #518.
