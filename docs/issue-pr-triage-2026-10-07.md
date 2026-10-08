@@ -226,3 +226,25 @@ The older queued x86 run `37738992713` was cancelled because its runtime still
 had this defect. #515 remains unmerged. Go, Rust, all five WASM jobs and the
 Windows CUDA13 check pass; native CI has ten of 13 jobs passing and three in
 progress. Deep lint rerun `37737578258` is running. No release tag is cut.
+
+
+## Explicit generation-cap wiring — 2026-10-08
+
+The final contributing checklist found ignored ONNX generation caps. Source
+`c46e44e82` forwards explicit CLI/session limits to both legacy and five-graph
+decoders, including persistent streams and retained draft prefixes. Clearing
+the session override restores its existing duration-derived default. Local
+Small int8 x86 at 1/4 threads passes one-token “Guten” output, capped final/batch
+equality and full-text reset; all four normal packet cases remain exact.
+
+Hosted acceptance now checks CLI/C ABI capped output, persistent capped streams
+and reset on all five ONNX deployments. Replacement
+[x86 37741562051](https://github.com/CrispStrobe/CrispASR/actions/runs/37741562051)
+and [ARM64 37741564942](https://github.com/CrispStrobe/CrispASR/actions/runs/37741564942)
+are queued; prior flush-only runs were superseded before starting. Native CI
+`37735908557` passes all 13 jobs on the earlier binding-completion source.
+This does not replace optional-SDK acceptance for the newest runtime.
+
+Comprehensive next-release notes are drafted in `RELEASE_NOTES_v0.8.42.md`.
+They cover landed changes since v0.8.41 and exclude #515/#492 from shipped
+features while those PRs remain unmerged. Version/tag remain unchanged.

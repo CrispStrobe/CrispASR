@@ -840,12 +840,12 @@
       "ci": 37730684549,
       "regression": 37730687001
     },
-    "runtime_commit": "cdd1b80d0df90279e26489b94fa20c8a73abb2ca",
+    "runtime_commit": "c46e44e82",
     "driver_smoke": {
       "passed": true,
       "tests": 56
     },
-    "review_comment": "https://github.com/CrispStrobe/CrispASR/pull/515#issuecomment-6052735019",
+    "review_comment": "https://github.com/CrispStrobe/CrispASR/pull/515#issuecomment-6054430157",
     "cpu_previous": {
       "commit": "107789133cbfeabba1295e9958d47547dae52f59",
       "scope": "CPU download/bundle/C ABI packet/flush acceptance; no GPU performance claim",
@@ -1141,8 +1141,8 @@
       "harness_failure": "GGUF Ref::shape singleton-axis normalization; graph values and text match"
     },
     "latest_runs": {
-      "x86": 37740556768,
-      "arm64": 37740559460,
+      "x86": 37741562051,
+      "arm64": 37741564942,
       "native_ci": 37735908557,
       "lint": 37735910817,
       "wasm": 37735912990,
@@ -1157,17 +1157,18 @@
       "websocket_syntax": "pass"
     },
     "latest_x86": {
-      "run_id": 37740556768,
-      "source_commit": "cdd1b80d0df90279e26489b94fa20c8a73abb2ca",
+      "run_id": 37741562051,
+      "source_commit": "c46e44e82",
       "runner": "ubuntu-22.04",
       "status": "queued",
-      "replaces": 37738992713
+      "replaces": 37740556768
     },
     "latest_arm64": {
-      "run_id": 37740559460,
-      "source_commit": "cdd1b80d0df90279e26489b94fa20c8a73abb2ca",
+      "run_id": 37741564942,
+      "source_commit": "c46e44e82",
       "runner": "ubuntu-24.04-arm",
-      "status": "queued"
+      "status": "queued",
+      "replaces": 37740559460
     },
     "x86_flush_fix": {
       "before_failed": true,
@@ -1176,13 +1177,23 @@
       "frontend_max_abs": 4.76837e-07,
       "frontend_relative_l2": 3.10646e-07,
       "fix": "Replay batch inference from retained original PCM at final flush",
-      "receipt_on_feature_branch": "docs/moonshine-onnx-x86-flush-2026-10-08.json"
+      "receipt_on_feature_branch": "docs/moonshine-onnx-x86-flush-2026-10-08.json",
+      "generation_cap_followup": {
+        "commit": "c46e44e82",
+        "local_threads": [
+          1,
+          4
+        ],
+        "one_token_output": "Guten",
+        "reset": "passed",
+        "hosted_cli_cabi_stream_checks": "added; queued"
+      }
     },
     "binding_checks": {
       "go": "passed",
       "rust": "passed",
       "wasm": "all five jobs passed",
-      "native_ci": "10 passed, 3 in progress",
+      "native_ci": "passed all 13 jobs at a1a3d4a25; optional-SDK final runtime acceptance pending",
       "lint": "in progress",
       "windows_cuda13": "passed"
     }

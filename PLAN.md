@@ -54,17 +54,23 @@ saved pre-fix binary fails; all four local x86 combinations (1/4 threads,
 1777/5120-sample packets) pass exact final/batch text, repeat flush and
 feed-after-flush rejection. PCM history costs 64 kB per second. This direct
 runtime check is narrower than hosted CLI/C ABI acceptance.
-Fresh full acceptance: x86 [37740556768](https://github.com/CrispStrobe/CrispASR/actions/runs/37740556768)
-and ARM [37740559460](https://github.com/CrispStrobe/CrispASR/actions/runs/37740559460)
-are queued at that runtime. The earlier ARM pass remains evidence for its own
+Final checklist follow-up `c46e44e82` forwards explicit generation caps
+through CLI, session batch and persistent streaming. Local native x86 at 1/4
+threads emits “Guten” with a one-token cap, restores full text when cleared,
+and retains all four final/batch packet passes. The hosted suite adds CLI/C ABI
+cap equality, capped streaming and reset checks for all five ONNX deployments.
+Fresh full acceptance: x86 [37741562051](https://github.com/CrispStrobe/CrispASR/actions/runs/37741562051)
+and ARM [37741564942](https://github.com/CrispStrobe/CrispASR/actions/runs/37741564942)
+are queued at this runtime. Earlier flush-only runs `37740556768`/`37740559460`
+were superseded while queued. The earlier ARM pass remains evidence for its own
 source, and is not approval of the new flush code. X86 `37738992713` was
 cancelled while queued because it predates this correction.
 
 All seven wrappers, WASM/JS and the WebSocket ready event expose the new
 streaming-kind query. C# builds with zero warnings/errors; WebSocket syntax
 passes. Go `37735851685`, Rust `37735851828`, all five WASM jobs `37735912990`
-and Windows CUDA13 `37730263830` pass. Native CI `37735908557` has ten of
-13 jobs passing, with three in progress; lint `37735910817` remains in flight.
+and Windows CUDA13 `37730263830` pass. Native CI `37735908557` passes all
+13 jobs on the earlier binding-completion source; lint `37735910817` remains in flight.
 Numerical regression `37730687001` passes unit/smoke/preflight and four model
 jobs so far; remaining models are queued. Automatic optional-SDK acceptance
 pins Python ORT 1.30.0 to the SDK and retains strict stage, scale and speech
