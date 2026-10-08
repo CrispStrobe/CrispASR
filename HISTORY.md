@@ -23142,3 +23142,16 @@ profiling. Archived all terminal proof, refreshed the successful build cache,
 and submitted v3 with actual GGUF scope inventories and full-library exact
 code replay against the independent official oracle before speech/profile.
 Receipt: `docs/mimo-pr492-full-asr-scope-2026-10-08.json`.
+
+## 2026-10-08 — Full original-Q4 MiMo CUDA outputs and repeated precision profile
+
+Kaggle full-ASR v3 COMPLETE on one T4 at `6b9035367`. The actual full library
+passes all 2,208 official tokenizer codes plus continuous A/B gates. Scope
+selects all 192 codec quantized matrices, none of 354 LM matrices. All 12
+EN/ZH CLI/session outputs match across default/precise/eager; all 64 profile
+calls preserve output. ABBA 12 measured calls per clip/mode: EN 3.37865 →
+3.61968s (+7.1%), ZH 1.45788 → 1.60141s (+9.8%). Sampled profile process-memory
+peaks +20 MiB; download sizes unchanged. Public pinned raw proof and receipt:
+`docs/mimo-pr492-full-asr-cuda-2026-10-08.json`. Defaults unchanged; #492 remains
+unmerged/excluded pending separate Q4 LM numerical, original-checkpoint and
+CANN acceptance. Successful Kaggle full-build cache refreshed.

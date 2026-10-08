@@ -278,8 +278,8 @@ matches the same-weight promoted-F32 model byte for byte at every stage in
 each attention mode. Its 250 ms/2.4 s controls have exact codes. The official
 quantizer and exhaustive F64 nearest-neighbour checks on the affected frame
 agree with each arm's own choices, locating the discrepancy before RVQ.
-These are tokenizer diagnostics, not original-checkpoint, full-ASR, CANN or
-speedup certification. Model-file size is unchanged; transient dequantization
+The table reports tokenizer diagnostics, not original-checkpoint, CANN or
+speedup certification. Full-ASR decoded-output validation is reported below. Model-file size is unchanged; transient dequantization
 and attention buffers still consume runtime memory. Paired timings above are
 not repeated medians. See the [CPU receipt](docs/mimo-pr492-cpu-blas-2026-10-08.json),
 [CUDA receipt](docs/mimo-pr492-cuda-precision-2026-10-08.json) and
@@ -297,8 +297,15 @@ eager; this is not full-model performance. A later diagnostic F32 TILE path elim
 and matches all 2,208 official-encoder codes, with unchanged model-file size.
 The [strict official full-clip replay](docs/mimo-pr492-full-rvq-cuda-tile-2026-10-08.json)
 passes all four arms on their own pools and against official encoder codes.
-It is slower than MMA flash and full-ASR validation is pending, so #492 stays
-excluded. See the [precision receipt](docs/mimo-pr492-cuda-tile-precision-2026-10-08.json)
+Full CUDA CLI/session validation subsequently passes all 12 EN/ZH outputs
+across default/precise/eager, and every repeated profile call preserves output.
+Same-binary/device/files ABBA profiling (12 measured samples per clip/mode)
+finds the precise path slower: English 3.37865 → 3.61968s (+7.1%), Chinese
+1.45788 → 1.60141s (+9.8%). Sampled GPU process-memory peaks rise by 20 MiB;
+model-file size is unchanged. Separate Q4 LM non-flash numerical, original-
+checkpoint and CANN acceptance remain unresolved, so #492 stays excluded and
+production defaults remain unchanged. See the [full-ASR receipt and public
+proof](docs/mimo-pr492-full-asr-cuda-2026-10-08.json), [precision receipt](docs/mimo-pr492-cuda-tile-precision-2026-10-08.json)
 and [attention receipt](docs/mimo-pr492-cuda-attention-2026-10-08.json).
 The full-clip CPU oracle also confirms native/official RVQ equality on every
 arm's own input across all frames and eight codebooks; both promoted-F32

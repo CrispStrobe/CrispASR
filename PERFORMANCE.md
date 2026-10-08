@@ -4,6 +4,31 @@ Test audio: jfk.wav (11.0s), Q4_K quantization, greedy decode (`-bs 1`).
 
 ---
 
+## MiMo original-Q4 CUDA precision study — 2026-10-08 (#492, diagnostic)
+
+One Tesla T4 (SM75), same actual shared library, original Q4 codec/LM files,
+and unchanged LM flash in both timed modes. The diagnostic uses F32 cuBLAS
+for tokenizer matrices and an F32 TILE attention path. Full-library precise
+flash/eager match all 2,208 official encoder/quantizer codes, with transformer/
+pooling A/B relative L2 1.18811e-5 / 9.22843e-5. All 12 EN/ZH CLI/session
+outputs and every profile output match across tested modes.
+
+| Clip | Default median | Precise median | Latency increase |
+| --- | ---: | ---: | ---: |
+| English, 11.0s | 3.37865s | 3.61968s | 7.1% |
+| Chinese, 5.616s | 1.45788s | 1.60141s | 9.8% |
+
+ABBA processes, two warm and six measured calls per clip/process: 12 measured
+samples per clip/mode, 48 measured calls total; all 64 calls including warmups
+check exact decoded text. Sampled GPU0 process-memory peaks: 4,932 → 4,952 MiB
+(+20 MiB), lower bounds including load. Model downloads stay 395,594,656-byte
+codec and 4,517,988,832-byte LM. This recovers precision against official
+Python on the same quantized encoder weights; it does not certify original
+checkpoint or full LM numerical parity. The diagnostic is slower, defaults
+remain unchanged, and PR #492 stays unmerged/excluded pending separate Q4 LM
+non-flash numerical and CANN acceptance. [Pinned raw proof, full timings and
+hardware receipt](docs/mimo-pr492-full-asr-cuda-2026-10-08.json).
+
 ## Index-Echo S2TT 9B CUDA — 2026-10-02 (#485)
 
 On two actual Tesla T4 GPUs (SM75, 15 GiB each), the accepted F16 port is

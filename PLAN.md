@@ -11,61 +11,38 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
-## CLAIMED 2026-10-08 — MiMo full CUDA speech acceptance and precision profile
+## VALIDATED 2026-10-08 — MiMo full CUDA speech acceptance and precision profile
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, branch
-`review/pr492-acceptance`. F32 TILE v1 completed on Tesla T4/sm_75 at
-numeric source `534a929f7`; all terminal logs/205 files and attention hashes
-are archived. The original 395,594,656-byte Q4 codec is unchanged. All four
-arms match all 2,208 official encoder-plus-quantizer codes. Strict own-input
-and all-encoder oracle `37821379986` PASS on GH ARM, with no gate relaxation.
-Transformer/pooling A/B relative L2 is 1.18811e-5 / 9.22844e-5. TILE agrees
-with independent K/V-half Python within 3.56e-7–1.01e-6. Isolated TILE is
-~1.8x faster than eager but slower than original fused flash; one unrepeated
-whole-code extraction is 571ms vs 437ms, so there is no full-model speed win.
-Receipts: `docs/mimo-pr492-cuda-tile-precision-2026-10-08.json` and
-`docs/mimo-pr492-full-rvq-cuda-tile-2026-10-08.json`. Earlier CUDA v4 official
-oracle `37820013373` also PASS: flash differs at six encoder codes, eager zero;
-each arm's RVQ is correct on its own pool.
+`review/pr492-acceptance`. Kaggle `mimo-pr492-asr-cuda` v3 COMPLETE on one
+Tesla T4/sm_75 at numeric `6b90353678f525e634c1a359355ae15c2c815ace`, packaging
+`e77acb058`. All terminal artifacts are archived and the numerical arrays,
+logs, transcripts and timing calls are public with an immutable pin/hash.
+The full shared-library tokenizer matches all 2,208 independent official
+encoder/quantizer codes in precise flash and eager modes; unchanged continuous
+A/B gates pass (transformer relative L2 1.18811e-5, pooling 9.22843e-5).
+Actual GGUF audit selects all 192 quantized codec matrices and none of 354 LM
+matrices; dispatch logs and GPU PID prove execution. Earlier v1 missing-submodule
+and v2 incorrect-prefix failures are preserved in their receipts, not accepted.
 
-Full-ASR CUDA v3 submitted: kernel `mimo-pr492-asr-cuda`, numeric source
-`6b90353678f525e634c1a359355ae15c2c815ace`, packaging `e77acb058`.
-Temporary cuBLAS override is restricted to tokenizer `enc.blk.*`/`encoder.*` weights;
-F32 TILE remains env/shape gated. Actual full Q4 LM/codec run sequentially
-through EN/ZH CLI and session C ABI: 12 outputs must pass the established
-speech guards and exact cross-mode/surface readback before ANY profile.
-Then same-binary/device/files ABBA full inference uses two warm and six
-measured calls per clip/process, validating every decoded result; sampled
-GPU0 process-memory peaks are lower bounds, not allocator peaks. No production
-runtime, ggml pin, file size or default changes. The actual prior Kaggle cache
-was refreshed and pinned to `f84b003cee87d2d5b0801b34831d7f89832883b3`.
-Collector: `/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-asr-v3`.
-Both earlier tokenizer endpoints remain intact for independent replays.
-Full-ASR v1 stopped at CMake before compilation/inference: the launcher
-initialized ggml alone and omitted the CLI's required consent-hash submodule.
-All terminal logs/seven outputs are archived in `proof/cuda-asr-v1`.
-V2 initializes every pinned submodule and verifies clean status and the required
-SHA-256 header before configure. Numeric source/patches/models/gates unchanged.
-Receipt: `docs/mimo-pr492-full-asr-launch-2026-10-08.json`.
-V2 built the actual shared library and CLI on T4; all eight tested default/
-TILE-only EN/ZH outputs agree. It FAILED the cuBLAS dispatch gate before eager
-or profiling: quantized codec matrices use `enc.blk.*`, not the `encoder.*`
-stem/norm prefix. No numerical/dispatch gate was relaxed. All 28 terminal files
-are archived. V3 selects both prefixes, verifies actual GGUF inventories
-(all 192 quantized codec matrices selected, no LM matrices selected), and
-rechecks full-library flash/eager arrays against all 2,208 official codes
-before full speech and any profile. Cache refreshed from the actual successful
-full build to `2d1f1ff707b75c962f369da2e3730296dee4e61e`.
-Receipt: `docs/mimo-pr492-full-asr-scope-2026-10-08.json`.
+All 12 EN/ZH CLI/session outputs agree across default/precise/eager. All 64
+full-inference profile calls retain exact decoded output, including warmups.
+Same-binary/GPU/files ABBA profiling (2 warm + 6 measured per clip/process,
+12 measured samples per clip/mode) gives EN 3.37865 → 3.61968s (+7.1%) and
+ZH 1.45788 → 1.60141s (+9.8%). LM flash is unchanged between timed modes.
+Sampled GPU0 process-memory peaks rise 4,932 → 4,952 MiB (+20 MiB), lower
+bounds including load. Original Q4 codec/LM files stay 395,594,656 /
+4,517,988,832 bytes. Decision: keep production defaults unchanged; no speed win.
+Receipt: `docs/mimo-pr492-full-asr-cuda-2026-10-08.json`; successful full-build
+cache refreshed at `0480221f9f7e5b16773ad8ad7e673cfc1afcdc94`.
+Separate Q4 LM non-flash numerical, original-checkpoint and CANN hardware gaps
+remain. PR #492 stays unmerged and excluded from v0.8.42.
 
-Next: inspect full speech results before interpreting timing; fix actual
-failures, preserve unchanged gates. Earlier Q4 LM non-flash numerical failures,
-original-checkpoint/full-ASR parity and CANN hardware remain unresolved. #492
-stays unmerged and excluded from v0.8.42. PR comment updated with exact-code
-proof and timing limits. Release worktree `/mnt/storage/crispasr/triage-20261007/worktree`
-awaits final main native/lint and full33 regression `37802900089`; 18 model
-jobs pass, 15 remain active/queued, no failures. Last accepted native/lint at
-`3fd1bf5fa` both PASS. Comprehensive release notes are written; use only
+Next release action: let final main native/lint and full33 regression
+`37802900089` settle; 25 model jobs pass, eight remain active/queued, no failures
+at this checkpoint. Last accepted native/lint at `3fd1bf5fa` both PASS.
+Release worktree: `/mnt/storage/crispasr/triage-20261007/worktree`.
+Comprehensive release notes include the new proof and limits. Use only
 `scripts/bump-version.sh` after final accepted main gates are green.
 
 

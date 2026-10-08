@@ -1,0 +1,810 @@
+{
+  "scope": "Diagnostic CUDA MiMo full ASR: actual CLI/session readback, then warm A/B.\n\nOriginal pinned Q4 LM/codec, one model lifetime at a time, same GPU and binary.\nThe temporary precision override applies only to tokenizer encoder matrices\n(`enc.blk.*`, plus any quantized `encoder.*` stem weights);\nLM arithmetic is unchanged between default and precise (both flash enabled).\nThe eager control disables flash in both components. No production acceptance\nor recovered original-checkpoint precision is implied by this study.\n",
+  "terminal_status": "COMPLETE",
+  "kernel": "chr1s4/crispasr-mimo-pr492-asr-cuda",
+  "kernel_version": 3,
+  "numeric_source": "6b90353678f525e634c1a359355ae15c2c815ace",
+  "packaging_source": "e77acb058b0c4b44d00a6b3fd149f030e2a46e92",
+  "hardware": {
+    "script_version": "mimo-pr492-asr-cuda-v3",
+    "source": "6b90353678f525e634c1a359355ae15c2c815ace",
+    "ggml": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+    "devices": "name, compute_cap, memory.total [MiB]\nTesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB\n",
+    "arch": "75",
+    "cmake_flags": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DBUILD_SHARED_LIBS=ON",
+      "-DGGML_NATIVE=OFF",
+      "-DGGML_BLAS=OFF",
+      "-DCRISPASR_MEL_BLAS=OFF",
+      "-DCRISPASR_BUILD_TESTS=OFF",
+      "-DCRISPASR_BUILD_EXAMPLES=ON",
+      "-DCRISPASR_BUILD_SERVER=OFF",
+      "-DGGML_CUDA=ON",
+      "-DGGML_CUDA_NO_VMM=ON",
+      "-DCMAKE_CUDA_ARCHITECTURES=75",
+      "-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc",
+      "-DCRISPASR_NO_C2PA_NATIVE=ON",
+      "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold",
+      "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold",
+      "-DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=mold"
+    ],
+    "kernel_sha256": "8e5e83c529d2f1076bd12f38af877d57755f362aabeaabb2d2b73cb1a2a5d565",
+    "cache": {
+      "repo": "cstr/crispasr-ccache",
+      "file": "mimo-pr492/sm75-full-asr-v2.tar",
+      "revision": "2d1f1ff707b75c962f369da2e3730296dee4e61e",
+      "sha256": "a3184b5c746ac7d5a3f5b4bebda9339b63c10ee5454a8d59ae63d6188b75c233",
+      "bytes": 76267520,
+      "source": "fee98afbc80296e4bb7b63ccf6b8d8952d5433f2"
+    },
+    "submodules": " c36dab89b662838f0f5d4826c399198c0b90bbfc ggml (v0.10.2-1125-gc36dab89)\n e40329b83f16f67bb5ddc7bb13ae18de0a9376fc third_party/c2pa-audio (c2pa_audio-v0.2.1~5)\n",
+    "scope": "Full CUDA MiMo CLI/session speech acceptance before repeated precision A/B.\n\nThe original pinned Q4 LM/codec run on one actual GPU; numerical overrides\nare diagnostic only, restricted to tokenizer weights and unmasked D64/H20.\nNo production default or model change; CANN/full PR acceptance remains separate.\n"
+  },
+  "visible_devices": "CUDA_VISIBLE_DEVICES=0; one Tesla T4 used",
+  "pins": {
+    "q4_k": [
+      "cstr/mimo-asr-GGUF",
+      "e2d7dfebf0afd8076771903e92958039c5074eab",
+      "mimo-asr-q4_k.gguf",
+      "12dbc7cc7a20c7add6ff00bf8b12bca1c46304e0100a5c5a6e74bdecfc57a306"
+    ],
+    "codec": [
+      "cstr/mimo-tokenizer-GGUF",
+      "fa380f4c49a8e8c62c02c00d0da5e263fc5b0dcf",
+      "mimo-tokenizer-q4_k.gguf",
+      "3f3a903b10294ead4ef6a4afec035639fd2113b1d307d42f649a97cc85670e3f"
+    ]
+  },
+  "model_file_bytes": {
+    "q4_k": 4517988832,
+    "codec": 395594656
+  },
+  "weight_scope": {
+    "q4_k": {
+      "quantized_count": 354,
+      "selected_count": 0,
+      "inventory_sha256": "45197627450623708cfae7807fc63ec375f0d511d16f165797f27911accbf2b1"
+    },
+    "codec": {
+      "quantized_count": 192,
+      "selected_count": 192,
+      "inventory_sha256": "2eeb5411d8d922edd660b3f774e210bcdcf34bdd29b065962a2a521ecccac16d"
+    }
+  },
+  "tokenizer_gate": {
+    "official_codes_sha256": "65da2d8bbf0338e80d3322ad88325f71c66db069767a97add8095aa891a7867b",
+    "pcm_sha256": "0c03e80f9c348c2319823d6505d6d875a61b90fc7c817a1cc762b64981842142",
+    "arms": {
+      "precise": {
+        "codes_sha256": "65da2d8bbf0338e80d3322ad88325f71c66db069767a97add8095aa891a7867b",
+        "exact_codes": 2208,
+        "memory": {
+          "sampled_peak_device_process_mib": 586,
+          "samples": 33,
+          "gpu_uuid": "GPU-ac7b3e8d-18c5-c1a8-7775-4385619c4f9c",
+          "scope": "GPU0 process memory sampled every >=200ms; lower bound, includes load"
+        },
+        "dispatch": [
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.k.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.o.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.fc1.weight type=q4_K k=1280 m=5120 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.fc2.weight type=q4_K k=5120 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.k.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.o.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.fc1.weight type=q4_K k=1280 m=5120 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.fc2.weight type=q4_K k=5120 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.k.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.o.weight type=q4_K k=1280 m=1280 n=551"
+        ]
+      },
+      "eager": {
+        "codes_sha256": "65da2d8bbf0338e80d3322ad88325f71c66db069767a97add8095aa891a7867b",
+        "exact_codes": 2208,
+        "memory": {
+          "sampled_peak_device_process_mib": 590,
+          "samples": 17,
+          "gpu_uuid": "GPU-ac7b3e8d-18c5-c1a8-7775-4385619c4f9c",
+          "scope": "GPU0 process memory sampled every >=200ms; lower bound, includes load"
+        },
+        "dispatch": [
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.k.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.o.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.fc1.weight type=q4_K k=1280 m=5120 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.fc2.weight type=q4_K k=5120 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.k.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.o.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.fc1.weight type=q4_K k=1280 m=5120 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.fc2.weight type=q4_K k=5120 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.k.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.o.weight type=q4_K k=1280 m=1280 n=551"
+        ]
+      }
+    },
+    "passed": true,
+    "attention_ab": {
+      "tok_mel": {
+        "cosine": 1.0000000000000004,
+        "mine_norm": 1201.209716136071,
+        "ref_norm": 1201.209716136071,
+        "relative_l2": 0.0,
+        "max_abs": 0.0,
+        "exact": true
+      },
+      "tok_conv1_out": {
+        "cosine": 1.0000000000000022,
+        "mine_norm": 1442.2562912028125,
+        "ref_norm": 1442.2562912028125,
+        "relative_l2": 0.0,
+        "max_abs": 0.0,
+        "exact": true
+      },
+      "tok_conv2_out": {
+        "cosine": 0.9999999999999991,
+        "mine_norm": 9297.916342572398,
+        "ref_norm": 9297.916342572398,
+        "relative_l2": 0.0,
+        "max_abs": 0.0,
+        "exact": true
+      },
+      "tok_xfmr_out": {
+        "cosine": 0.9999999999294197,
+        "mine_norm": 72.54437323375255,
+        "ref_norm": 72.54437391395686,
+        "relative_l2": 1.1881122845309119e-05,
+        "max_abs": 5.8554112911224365e-05,
+        "exact": false
+      },
+      "tok_pool_out": {
+        "cosine": 0.9999999957418106,
+        "mine_norm": 1905.7775895204575,
+        "ref_norm": 1905.7779169096125,
+        "relative_l2": 9.228434843648905e-05,
+        "max_abs": 0.005018711090087891,
+        "exact": false
+      }
+    }
+  },
+  "speech_passed": true,
+  "acceptance_outputs": {
+    "default": {
+      "en": {
+        "abi": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+        "audio_sha256": "71614bdbf09447be92877b4629b12d9e7c915775af963886dc36e1f6d31693ce",
+        "cli": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
+      },
+      "zh": {
+        "abi": "开放时间早上九点至下午五点",
+        "audio_sha256": "9606d246ae977781b16ec8cf99be3c1347407b29c443cfb8fbd086280d588f90",
+        "cli": "开放时间早上九点至下午五点"
+      }
+    },
+    "precise": {
+      "en": {
+        "abi": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+        "audio_sha256": "71614bdbf09447be92877b4629b12d9e7c915775af963886dc36e1f6d31693ce",
+        "cli": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
+      },
+      "zh": {
+        "abi": "开放时间早上九点至下午五点",
+        "audio_sha256": "9606d246ae977781b16ec8cf99be3c1347407b29c443cfb8fbd086280d588f90",
+        "cli": "开放时间早上九点至下午五点"
+      }
+    },
+    "eager": {
+      "en": {
+        "abi": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+        "audio_sha256": "71614bdbf09447be92877b4629b12d9e7c915775af963886dc36e1f6d31693ce",
+        "cli": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
+      },
+      "zh": {
+        "abi": "开放时间早上九点至下午五点",
+        "audio_sha256": "9606d246ae977781b16ec8cf99be3c1347407b29c443cfb8fbd086280d588f90",
+        "cli": "开放时间早上九点至下午五点"
+      }
+    }
+  },
+  "acceptance_dispatch_first": {
+    "default": {
+      "accept-default.log": {
+        "cublas": [],
+        "tile": []
+      },
+      "cli-en.log": {
+        "cublas": [],
+        "tile": []
+      },
+      "cli-zh.log": {
+        "cublas": [],
+        "tile": []
+      }
+    },
+    "precise": {
+      "accept-precise.log": {
+        "cublas": [
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.k.weight type=q4_K k=1280 m=1280 n=551"
+        ],
+        "tile": [
+          "MIMO_DIAG_TILE_F32 device=0 q=551 kv=551 d=64 heads=20",
+          "MIMO_DIAG_TILE_F32 device=0 q=551 kv=551 d=64 heads=20"
+        ]
+      },
+      "cli-en.log": {
+        "cublas": [
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.k.weight type=q4_K k=1280 m=1280 n=551"
+        ],
+        "tile": [
+          "MIMO_DIAG_TILE_F32 device=0 q=551 kv=551 d=64 heads=20",
+          "MIMO_DIAG_TILE_F32 device=0 q=551 kv=551 d=64 heads=20"
+        ]
+      },
+      "cli-zh.log": {
+        "cublas": [
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.q.weight type=q4_K k=1280 m=1280 n=281",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.k.weight type=q4_K k=1280 m=1280 n=281"
+        ],
+        "tile": [
+          "MIMO_DIAG_TILE_F32 device=0 q=281 kv=281 d=64 heads=20",
+          "MIMO_DIAG_TILE_F32 device=0 q=281 kv=281 d=64 heads=20"
+        ]
+      }
+    },
+    "eager": {
+      "accept-eager.log": {
+        "cublas": [
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.k.weight type=q4_K k=1280 m=1280 n=551"
+        ],
+        "tile": []
+      },
+      "cli-en.log": {
+        "cublas": [
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.k.weight type=q4_K k=1280 m=1280 n=551"
+        ],
+        "tile": []
+      },
+      "cli-zh.log": {
+        "cublas": [
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.v.weight type=q4_K k=1280 m=1280 n=281",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.k.weight type=q4_K k=1280 m=1280 n=281"
+        ],
+        "tile": []
+      }
+    }
+  },
+  "profile_passed": true,
+  "profile_protocol": "ABBA default/precise/precise/default, separate processes; same binary, GPU, files and LM flash; 2 warm + 6 measured calls per clip/process; 12 measured samples per clip/mode; every decoded output checked",
+  "profile": {
+    "profile-0-default": {
+      "mode": "default",
+      "flash": true,
+      "encoder_only_precision": false,
+      "session_open_seconds": 2.1038720899999817,
+      "memory": {
+        "sampled_peak_device_process_mib": 4932,
+        "samples": 173,
+        "gpu_uuid": "GPU-ac7b3e8d-18c5-c1a8-7775-4385619c4f9c",
+        "scope": "GPU0 process memory sampled every >=200ms; lower bound, includes load"
+      },
+      "calls": [
+        {
+          "language": "en",
+          "repetition": 0,
+          "seconds": 3.860999545000027,
+          "measured": false
+        },
+        {
+          "language": "zh",
+          "repetition": 0,
+          "seconds": 1.458986053999979,
+          "measured": false
+        },
+        {
+          "language": "zh",
+          "repetition": 1,
+          "seconds": 1.479541557999994,
+          "measured": false
+        },
+        {
+          "language": "en",
+          "repetition": 1,
+          "seconds": 3.389217460999987,
+          "measured": false
+        },
+        {
+          "language": "en",
+          "repetition": 2,
+          "seconds": 3.360152071000016,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 2,
+          "seconds": 1.4227938529999733,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 3,
+          "seconds": 1.4589044400000262,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 3,
+          "seconds": 3.335963824999965,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 4,
+          "seconds": 3.347954351999988,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 4,
+          "seconds": 1.4781254869999998,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 5,
+          "seconds": 1.4549453999999855,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 5,
+          "seconds": 3.3954528830000186,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 6,
+          "seconds": 3.408182011000008,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 6,
+          "seconds": 1.417048904000012,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 7,
+          "seconds": 1.4511300660000188,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 7,
+          "seconds": 3.3403069029999983,
+          "measured": true
+        }
+      ],
+      "all_decoded_results_match": true,
+      "dispatch_first": {
+        "cublas": [],
+        "tile": []
+      }
+    },
+    "profile-1-precise": {
+      "mode": "precise",
+      "flash": true,
+      "encoder_only_precision": true,
+      "session_open_seconds": 2.070647727999983,
+      "memory": {
+        "sampled_peak_device_process_mib": 4952,
+        "samples": 187,
+        "gpu_uuid": "GPU-ac7b3e8d-18c5-c1a8-7775-4385619c4f9c",
+        "scope": "GPU0 process memory sampled every >=200ms; lower bound, includes load"
+      },
+      "calls": [
+        {
+          "language": "en",
+          "repetition": 0,
+          "seconds": 3.967362297999955,
+          "measured": false
+        },
+        {
+          "language": "zh",
+          "repetition": 0,
+          "seconds": 1.6077263799999741,
+          "measured": false
+        },
+        {
+          "language": "zh",
+          "repetition": 1,
+          "seconds": 1.6444541369999683,
+          "measured": false
+        },
+        {
+          "language": "en",
+          "repetition": 1,
+          "seconds": 3.6361103229999685,
+          "measured": false
+        },
+        {
+          "language": "en",
+          "repetition": 2,
+          "seconds": 3.6629790110000044,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 2,
+          "seconds": 1.614080121000029,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 3,
+          "seconds": 1.6732747840000002,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 3,
+          "seconds": 3.665256889000034,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 4,
+          "seconds": 3.6797926730000086,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 4,
+          "seconds": 1.5823076860000356,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 5,
+          "seconds": 1.6112965250000002,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 5,
+          "seconds": 3.565879607999989,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 6,
+          "seconds": 3.6509397980000244,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 6,
+          "seconds": 1.583769325999981,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 7,
+          "seconds": 1.6011470470000404,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 7,
+          "seconds": 3.6111677289999307,
+          "measured": true
+        }
+      ],
+      "all_decoded_results_match": true,
+      "dispatch_first": {
+        "cublas": [
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.k.weight type=q4_K k=1280 m=1280 n=551"
+        ],
+        "tile": [
+          "MIMO_DIAG_TILE_F32 device=0 q=551 kv=551 d=64 heads=20",
+          "MIMO_DIAG_TILE_F32 device=0 q=551 kv=551 d=64 heads=20"
+        ]
+      }
+    },
+    "profile-2-precise": {
+      "mode": "precise",
+      "flash": true,
+      "encoder_only_precision": true,
+      "session_open_seconds": 2.1812420859999975,
+      "memory": {
+        "sampled_peak_device_process_mib": 4952,
+        "samples": 187,
+        "gpu_uuid": "GPU-ac7b3e8d-18c5-c1a8-7775-4385619c4f9c",
+        "scope": "GPU0 process memory sampled every >=200ms; lower bound, includes load"
+      },
+      "calls": [
+        {
+          "language": "en",
+          "repetition": 0,
+          "seconds": 3.946350857000084,
+          "measured": false
+        },
+        {
+          "language": "zh",
+          "repetition": 0,
+          "seconds": 1.6123321589999478,
+          "measured": false
+        },
+        {
+          "language": "zh",
+          "repetition": 1,
+          "seconds": 1.6227422099999558,
+          "measured": false
+        },
+        {
+          "language": "en",
+          "repetition": 1,
+          "seconds": 3.622484755999949,
+          "measured": false
+        },
+        {
+          "language": "en",
+          "repetition": 2,
+          "seconds": 3.6085099309999578,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 2,
+          "seconds": 1.6123813170000858,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 3,
+          "seconds": 1.5881689620000543,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 3,
+          "seconds": 3.6067119159999947,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 4,
+          "seconds": 3.612137546999975,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 4,
+          "seconds": 1.598335503000044,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 5,
+          "seconds": 1.5723309319999998,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 5,
+          "seconds": 3.6149701890000188,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 6,
+          "seconds": 3.634079693999979,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 6,
+          "seconds": 1.6016801700000087,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 7,
+          "seconds": 1.6228921449999234,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 7,
+          "seconds": 3.624397853000005,
+          "measured": true
+        }
+      ],
+      "all_decoded_results_match": true,
+      "dispatch_first": {
+        "cublas": [
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+          "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.k.weight type=q4_K k=1280 m=1280 n=551"
+        ],
+        "tile": [
+          "MIMO_DIAG_TILE_F32 device=0 q=551 kv=551 d=64 heads=20",
+          "MIMO_DIAG_TILE_F32 device=0 q=551 kv=551 d=64 heads=20"
+        ]
+      }
+    },
+    "profile-3-default": {
+      "mode": "default",
+      "flash": true,
+      "encoder_only_precision": false,
+      "session_open_seconds": 2.1216587899999695,
+      "memory": {
+        "sampled_peak_device_process_mib": 4932,
+        "samples": 175,
+        "gpu_uuid": "GPU-ac7b3e8d-18c5-c1a8-7775-4385619c4f9c",
+        "scope": "GPU0 process memory sampled every >=200ms; lower bound, includes load"
+      },
+      "calls": [
+        {
+          "language": "en",
+          "repetition": 0,
+          "seconds": 3.8736213399999997,
+          "measured": false
+        },
+        {
+          "language": "zh",
+          "repetition": 0,
+          "seconds": 1.449046752000072,
+          "measured": false
+        },
+        {
+          "language": "zh",
+          "repetition": 1,
+          "seconds": 1.4592287899999974,
+          "measured": false
+        },
+        {
+          "language": "en",
+          "repetition": 1,
+          "seconds": 3.367866909999975,
+          "measured": false
+        },
+        {
+          "language": "en",
+          "repetition": 2,
+          "seconds": 3.38293626199993,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 2,
+          "seconds": 1.4611023610000302,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 3,
+          "seconds": 1.4452297009999029,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 3,
+          "seconds": 3.3462495290000334,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 4,
+          "seconds": 3.395105955999952,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 4,
+          "seconds": 1.456851475999997,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 5,
+          "seconds": 1.466005702000075,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 5,
+          "seconds": 3.374363437999932,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 6,
+          "seconds": 3.390975099000002,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 6,
+          "seconds": 1.4617258089999723,
+          "measured": true
+        },
+        {
+          "language": "zh",
+          "repetition": 7,
+          "seconds": 1.4628513970000085,
+          "measured": true
+        },
+        {
+          "language": "en",
+          "repetition": 7,
+          "seconds": 3.406422154000097,
+          "measured": true
+        }
+      ],
+      "all_decoded_results_match": true,
+      "dispatch_first": {
+        "cublas": [],
+        "tile": []
+      }
+    }
+  },
+  "warm_median_seconds": {
+    "default": {
+      "en": 3.378649849999931,
+      "zh": 1.4578779580000116
+    },
+    "precise": {
+      "en": 3.619684021000012,
+      "zh": 1.6014136085000246
+    }
+  },
+  "precision_latency_ratio": {
+    "en": 1.0713403820168241,
+    "zh": 1.0984551894158014
+  },
+  "sampled_profile_memory_mib": {
+    "default": 4932,
+    "precise": 4952,
+    "delta": 20,
+    "scope": "GPU0 process memory sampled every >=200ms; lower bound including model load, not allocator peak"
+  },
+  "full_pr_acceptance": false,
+  "decision": "Keep production defaults unchanged. Full decoded-output and strict tokenizer precision gates pass on these clips, but diagnostic full inference is 7.1%/9.8% slower. Separate Q4 LM non-flash numerical/original-checkpoint/CANN validation gaps remain; PR #492 unmerged and excluded from v0.8.42.",
+  "public_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "file": "mimo-pr492/cuda-asr-20261008-v3/proof.zip",
+    "revision": "c2d289a2b72d2936503572a957638e0f4836aafa",
+    "sha256": "798e7205d99d58bda9ebe9174e369edb859560e31eaa65b8a73429631f7d88b5",
+    "bytes": 19870849,
+    "files": 53,
+    "source": "6b90353678f525e634c1a359355ae15c2c815ace",
+    "url": "https://huggingface.co/datasets/cstr/crispasr-regression-fixtures/resolve/c2d289a2b72d2936503572a957638e0f4836aafa/mimo-pr492/cuda-asr-20261008-v3/proof.zip"
+  },
+  "raw_asr_receipt_sha256": "8e1398f9f7b2379af1b10db4dd79fa1fb616466719ba028a75c3d33948f3f549",
+  "successful_cache_refresh": {
+    "repo": "cstr/crispasr-ccache",
+    "file": "mimo-pr492/sm75-full-asr-v3.tar",
+    "revision": "0480221f9f7e5b16773ad8ad7e673cfc1afcdc94",
+    "sha256": "5cf9eb772a1190c2a058d9ec682ea0b08378b0d723bfbbef7235d80293833344",
+    "bytes": 78080000,
+    "source": "6b90353678f525e634c1a359355ae15c2c815ace"
+  }
+}
