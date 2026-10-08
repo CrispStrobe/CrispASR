@@ -81,10 +81,43 @@ Four actual resolver cases pass (CC-BY-SA/CC-BY-NC, cached/uncached), and the
 old source reproduces the incorrect CC-BY-SA notice.
 
 [Revised Orukeet CPU acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37728843835)
-is queued at `4b45fec39ff603ad68bad0435c733e41695bfe10`. It first checks
-refusal without download or a false noncommercial notice, then explicitly
-accepts CC-BY-SA and checks the real download/cache/path/anonymous C ABI speech
-and released-binary negative control. #491 remains open pending that result.
+passed at `4b45fec39ff603ad68bad0435c733e41695bfe10`. Fresh download,
+cached short name, filename, explicit path and anonymous C ABI all return
+identical JFK text. The pinned Q4 model is revision
+`2a93474c2771a6ca2228a7e001bd06ce0c97f880`, SHA-256
+`769f346e3960de76afabcb82670b9d0d78c91051bc030be82e77eac45a7075be`.
+Released v0.8.41 reproduces the original failure. Missing licence acceptance
+refuses without downloading. This proves routing and speech acceptance across
+those surfaces, not new numerical parity or speed.
+
+PR #515 validation branch `f43dfd5eb5f9915e2c54b42da1ce5fa3fa00318d`
+preserves author commits. Review fixed missing/wrong companions on named-model
+downloads, failure propagation and cached repair. Offline actual CLI/resolver
+probes pass six isolated bundles. Hosted CPU `37730765885` built successfully,
+loaded all six deployments, and passed five German choices plus Qwen streaming.
+It found Small int8 final punctuation drift versus batch and Nemotron C ABI batch
+language-tag leakage. Neither failure gate was relaxed. Final ONNX flush now
+recomputes whole-utterance encoder output because dynamic int8 scales depend on
+window shape; Nemotron cleanup is shared with the CLI and also filters C ABI
+word output.
+
+Added an optional independent Python ONNX driver and `crispasr-diff` dispatch:
+exact PCM and shapes, cosine >= 0.99999, relative L2 <= 1e-4 and final text via
+Python's standard tokenizer. A deliberately scaled reference must fail. This
+measures native wrapper/graph execution parity; it does not certify the exporter
+against original source checkpoints. C++ runtime syntax, formatting and Python
+syntax pass locally; regression-driver smoke passed 56 tests.
+
+[New CPU acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37733187037)
+is running at `91496680a` with identical runtime plus automatic ONNX/stream CI
+and speech-content checks for every deployment. ARM64 run
+[37734757849](https://github.com/CrispStrobe/CrispASR/actions/runs/37734757849)
+is queued at `eb2ebe30a` with the same runtime and strict gates. Earlier
+[native CI](https://github.com/CrispStrobe/CrispASR/actions/runs/37730684549)
+passes all 13 jobs;
+[numerical regression](https://github.com/CrispStrobe/CrispASR/actions/runs/37730687001)
+are pending on the earlier runtime source. #515 remains unmerged. #491 is closed
+with final acceptance linked.
 
 The earlier native CI dispatch `37703783152` was superseded by the apt-fixed
 source dispatch. Original proof source and queued-run commits remain reachable
@@ -107,3 +140,38 @@ change their implementation.
 | [#481](https://github.com/CrispStrobe/CrispASR/issues/481) Phonon-2 | Native port shipped. The upstream 164 MB artifact and headline timing remain distinct from native GGUF sizes/performance. |
 | [#478](https://github.com/CrispStrobe/CrispASR/issues/478), [#461](https://github.com/CrispStrobe/CrispASR/issues/461) VoxCPM2 | Existing prefill and mixed-head fixes shipped. Windows/Khmer remains external. The 2026-10-08 B390 retest confirms active batched prefill, but RTF is 1.019, VAE setup is slower, and eight-step audio quality is poorer than ten. Earlier RTF estimates are not accepted measurements; no newly proven Vulkan optimization. |
 | [#456](https://github.com/CrispStrobe/CrispASR/issues/456) nyra | Explicitly deferred in PLAN; model/output licence restrictions and GMM-HMM integration remain. |
+
+## #483 experimental package follow-up — 2026-10-08
+
+The full issue includes the reporter confirming that matched CUDA 12.6 removed
+the warning, then requesting a forced-MMQ build for GTX1660 tests. Branch
+`04ded753e909da019a2cd391f651f51f5299b6f5` prepares matched ON/OFF packages
+with CUDA 12.6.3, identical PTX 61/80 targets, source, CPU floor and runtime.
+[Hosted package/pair checks](https://github.com/CrispStrobe/CrispASR/actions/runs/37733919241)
+have started both Windows jobs. Compile definitions, staged runtime version and DLL hashes are
+checked, followed by packaged CLI driverless startup and a pair comparison.
+Actionlint passes. No release defaults change; no GTX1660 speed/output verdict
+exists until the reporter exercises the actual GPU. This branch is unmerged.
+
+Final-source native CI [37735374748](https://github.com/CrispStrobe/CrispASR/actions/runs/37735374748)
+and lint [37735377165](https://github.com/CrispStrobe/CrispASR/actions/runs/37735377165)
+are queued at `eb2ebe30ab42378a0b16ecb302b0c266145e9f7c`.
+
+## Strict harness and binding completion — 2026-10-08
+
+Strict CPU run [37733187037](https://github.com/CrispStrobe/CrispASR/actions/runs/37733187037)
+found matching Python/native graph values and text, but failed the shape gate:
+`Ref::shape` removes singleton axes after dimension zero. Latest branch
+`a1a3d4a25` applies the same normalization, retaining cosine >= 0.99999 and
+relative L2 <= 1e-4. This run separately proves Nemotron batch tag cleanup and
+packet-size-independent streaming, legacy Moonshine deployments and Qwen.
+ONNX streaming acceptance was blocked by the earlier shape check and remains
+pending. No success is inferred for tests that did not execute.
+
+The new streaming-kind query is now exposed in all seven wrappers, WASM/JS and
+the WebSocket ready event. C# compiles with no warnings/errors; WebSocket source
+syntax passes. Rust format checking reports pre-existing formatting elsewhere,
+so those unrelated lines were left intact. Fresh x86 `37735853879`, ARM
+`37735856512`, native CI `37735908557`, lint `37735910817`, WASM `37735912990`,
+Go `37735851685` and Rust `37735851828` validate the latest branch. Replaced
+queued jobs were cancelled; #515 remains unmerged.

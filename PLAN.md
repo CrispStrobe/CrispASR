@@ -18,33 +18,74 @@ Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
 `2bf39c58a53160ed10aed82d5d621c794dc32bba`, preserve author commits,
 and test on current main with bounded APT setup. Inspect packet/flush and
 UTF-8 behavior, German ONNX model/companion/licence routing, C ABI and bindings.
-Orukeet acceptance `37728843835` is now running; collect it alongside this work.
-Do not merge #515 before the required review and validation pass.
+Validation branch `f43dfd5eb5f9915e2c54b42da1ce5fa3fa00318d` preserves the
+author commits. Fixed matched-model companion downloads, failure propagation
+and cached repair; actual CLI/resolver offline probes pass six bundles.
+Hosted CPU [37730765885](https://github.com/CrispStrobe/CrispASR/actions/runs/37730765885)
+built and loaded all six German choices. Five choices and Qwen streaming passed;
+Small int8 final punctuation differed from batch, and Nemotron C ABI batch leaked
+a language tag already removed by the CLI. Fixes recompute the whole encoder
+once at ONNX final flush (window-dependent int8 scales) and share Nemotron tag
+cleanup across CLI, C ABI words/text and streams. Strict gates are retained.
 
-## OPEN 2026-10-08 — Orukeet speech acceptance rerun and deep lint
+Added optional ONNX graph-stage reference/diff integration with exact PCM/shape,
+cosine >= 0.99999, relative L2 <= 1e-4, independent tokenizer text and a 2x-scale
+negative control. This validates wrapper execution of identical graphs, not the
+exporter against source PyTorch checkpoints. C++ runtime syntax and formatting
+pass locally. Strict CPU rerun `37733187037` found exact Python/native graph
+values and text, but a harness shape check failed because `Ref::shape` drops
+singleton axes after dimension zero. Fixed that normalization without changing
+cosine/magnitude gates. Nemotron batch and both packet sizes now pass; legacy
+Moonshine and Qwen also pass. Small int8 streaming still awaits the fixed harness.
 
-Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`.
+Latest branch `a1a3d4a25a442fbe355d562aabe020a4c9ba07ed` also completes the
+new streaming-kind query in all seven wrappers, WASM/JS and the WebSocket ready
+event, and requires the shared-library symbol audit. C# builds with 0 warnings /
+0 errors; WebSocket syntax passes. Earlier native CI `37730684549` passes all
+13 jobs on `710457c5b`. Fresh x86 acceptance `37735853879`, ARM acceptance
+`37735856512`, native CI `37735908557`, lint `37735910817`, WASM `37735912990`,
+Go `37735851685` and Rust `37735851828` are queued on the latest source.
+ARM `37734757849` and final checks `37735374748`/`37735377165` were cancelled
+while queued, superseded by the corrected source. Numerical regression
+`37730687001` has unit/smoke passes and its model jobs queued. Automatic relevant
+source-change ONNX acceptance pins Python ORT 1.30.0 to the SDK and requires
+speech-content checks for every deployment. #515 stays unmerged pending proof.
+
+## CLAIMED 2026-10-08 — #483 matched forced-MMQ experiment
+
+Worktree: `/mnt/storage/crispasr/issue483-mmq-20261008/worktree`, branch
+`tools/issue483-mmq`. Read the complete issue including the reporter's request
+for an experimental GTX1660 build after confirming the CUDA 12.6 warning fix.
+Prepare manual-only CUDA 12.6.3 CLI packages with the same source, CPU floor,
+PTX targets and runtime DLLs, differing only in `GGML_CUDA_FORCE_MMQ`.
+Hosted Windows can prove compilation/packaging/driverless fallback; the reporter
+must measure the actual GTX1660. No release-default or speed claim.
+
+Checkpoint: branch `04ded753e909da019a2cd391f651f51f5299b6f5` adds a manual
+ON/OFF packaging mode to the existing Windows CUDA Smoke workflow. Actionlint
+and diff checks pass. Hosted Windows package/pair proof
+[37733919241](https://github.com/CrispStrobe/CrispASR/actions/runs/37733919241)
+has started both Windows jobs. Both artifacts require actual compiler-definition checks, matching
+CUDA runtime versions/hashes, portable CPU flags and staged CLI startup.
+Do not present either package as GPU-validated or change release defaults.
+
+
+## OPEN 2026-10-08 — final main checks and remaining triage
+
+Orukeet CPU acceptance [37728843835](https://github.com/CrispStrobe/CrispASR/actions/runs/37728843835)
+passed at `4b45fec39ff603ad68bad0435c733e41695bfe10`: fresh download,
+cached short name, filename, explicit path and anonymous C ABI all produce
+identical speech text. Released v0.8.41 reproduces #491; missing licence
+acceptance refuses without downloading. Proof is in the triage receipt. #491 is closed with the hosted proof linked.
+
 Integrated #496/#514 source and APT setup pass native CI `37704656972`,
 regression `37704657102`, lint `37704656959` and five WASM builds
 `37704657094` on `d754aa10a`; Node emits three note-binding assertions.
-Lint Deep `37704657127` found an uninitialized Hikari token probability:
-fixed in `4b45fec39` with the established unavailable-confidence value 1.0.
-Focused cppcheck with Hikari enabled passes; full hosted deep lint must rerun.
-
-Orukeet heavy `37703780788` built and passed 5,988 registry assertions,
-then refused the missing CC-BY-SA acceptance. Revised heavy `37728843835`
-at `4b45fec39ff603ad68bad0435c733e41695bfe10` is queued, now with explicit
-acceptance plus a refusal/no-download control. Also fixed misleading CLI
-noncommercial notices without changing licence policy: actual CC-BY-SA and
-CC-BY-NC cached/uncached resolver checks pass 4/4. #491 stays open until
-speech/download/cache/anonymous C ABI acceptance passes. Exact scope and
-results: [triage report](docs/issue-pr-triage-2026-10-07.md) and its receipt.
-Cold proof: `/mnt/storage/crispasr/triage-20261007/`.
-
-Next: harvest that run and final main CI; fix failures before closing #491.
+Lint Deep found an uninitialized Hikari probability, fixed in `4b45fec39`;
+focused cppcheck passes. Full hosted rerun `37729063238` is in progress.
+No new GPU performance claim. Cold proof: `/mnt/storage/crispasr/triage-20261007/`.
 #490 Arabic character alignment and #483's forced-MMQ experiment remain doable.
-#492 MiMo/CANN needs numerical/output acceptance; #515 streaming/ONNX needs
-review and regression reruns on the APT-fixed base. Neither is merged.
+#492 MiMo/CANN needs numerical/output acceptance. #492/#515 remain unmerged.
 
 ## OPEN 2026-10-05 — live transcribe + translate: follow-ups
 

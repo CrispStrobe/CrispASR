@@ -1,6 +1,6 @@
 {
   "source_commit": "33aa375be434edaa5f12fad81e6b86272faf23fc",
-  "scope": "Integrated narrow source fixes; native/regression/WASM acceptance passed; Orukeet speech rerun queued after adding required licence acceptance",
+  "scope": "Integrated narrow fixes; native/regression/WASM and Orukeet CPU speech acceptance passed; PR515 review branch pending hosted validation",
   "filename_routing": {
     "passed": true,
     "scope": "Actual factory translation unit; filename routing only; existing ggml linked for metadata fallback, no model inference",
@@ -493,8 +493,8 @@
       "databaseId": 37728843835,
       "headSha": "4b45fec39ff603ad68bad0435c733e41695bfe10",
       "name": "Heavy CPU job",
-      "status": "queued",
-      "conclusion": ""
+      "status": "completed",
+      "conclusion": "success"
     }
   ],
   "artifacts": [
@@ -737,19 +737,19 @@
       "model": "orukeet",
       "cached": true,
       "passed": true,
-      "stderr": "crispasr: note: orukeet-q4_k.gguf is licensed CC-BY-SA-4.0 (see https://huggingface.co/oruk/orukeet) \u2014 review and comply with the upstream terms.\n"
+      "stderr": "crispasr: note: orukeet-q4_k.gguf is licensed CC-BY-SA-4.0 (see https://huggingface.co/oruk/orukeet) — review and comply with the upstream terms.\n"
     },
     {
       "model": "voxtral-tts",
       "cached": false,
       "passed": true,
-      "stderr": "crispasr: model 'voxtral-tts' not found locally.\n  Available for download: voxtral-4b-tts-q4_k.gguf (~2.5 GB)\n  LICENSE: CC-BY-NC-4.0 \u2014 NON-COMMERCIAL use only (base model mistralai/Voxtral-4B-TTS-2603; see https://huggingface.co/mistralai/Voxtral-4B-TTS-2603) \u2014 NON-COMMERCIAL USE ONLY. Do not use for commercial purposes.\n  Refusing: pass --accept-license cc-by-nc-4.0 (or set CRISPASR_ACCEPT_LICENSE).\n"
+      "stderr": "crispasr: model 'voxtral-tts' not found locally.\n  Available for download: voxtral-4b-tts-q4_k.gguf (~2.5 GB)\n  LICENSE: CC-BY-NC-4.0 — NON-COMMERCIAL use only (base model mistralai/Voxtral-4B-TTS-2603; see https://huggingface.co/mistralai/Voxtral-4B-TTS-2603) — NON-COMMERCIAL USE ONLY. Do not use for commercial purposes.\n  Refusing: pass --accept-license cc-by-nc-4.0 (or set CRISPASR_ACCEPT_LICENSE).\n"
     },
     {
       "model": "voxtral-tts",
       "cached": true,
       "passed": true,
-      "stderr": "crispasr: WARNING: voxtral-4b-tts-q4_k.gguf is licensed CC-BY-NC-4.0 \u2014 NON-COMMERCIAL use only (base model mistralai/Voxtral-4B-TTS-2603; see https://huggingface.co/mistralai/Voxtral-4B-TTS-2603) \u2014 NON-COMMERCIAL USE ONLY.\n  By loading this model you confirm you will not use it for commercial purposes.\n"
+      "stderr": "crispasr: WARNING: voxtral-4b-tts-q4_k.gguf is licensed CC-BY-NC-4.0 — NON-COMMERCIAL use only (base model mistralai/Voxtral-4B-TTS-2603; see https://huggingface.co/mistralai/Voxtral-4B-TTS-2603) — NON-COMMERCIAL USE ONLY.\n  By loading this model you confirm you will not use it for commercial purposes.\n"
     }
   ],
   "b390_followup": {
@@ -767,5 +767,299 @@
     "cfm_ms_per_step": 99.5,
     "quality": "Reporter hears poorer audio at eight steps than ten; ten stays default",
     "scope": "Reporter measurements; not a controlled same-session A/B"
+  },
+  "orukeet_acceptance": {
+    "passed": true,
+    "source_commit": "4b45fec39ff603ad68bad0435c733e41695bfe10",
+    "model_repo": "cstr/orukeet-GGUF",
+    "model_revision": "2a93474c2771a6ca2228a7e001bd06ce0c97f880",
+    "model_sha256": "769f346e3960de76afabcb82670b9d0d78c91051bc030be82e77eac45a7075be",
+    "baseline_release": "v0.8.41",
+    "baseline_reproduced": true,
+    "license_refusal_verified": true,
+    "accepted_license": "cc-by-sa-4.0",
+    "transcripts": {
+      "download": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "cached": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "filename": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "explicit": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "abi_anonymous": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    "scope": "CPU; same-Q4 cross-surface routing; no new numerical/performance claim",
+    "run_id": 37728843835,
+    "issue_closed": true,
+    "comment": "https://github.com/CrispStrobe/CrispASR/issues/491#issuecomment-6052699324"
+  },
+  "pr515_review": {
+    "source_commit": "a1a3d4a25a442fbe355d562aabe020a4c9ba07ed",
+    "merged": false,
+    "offline_bundle_probe": [
+      {
+        "variant": "moonshine-streaming-tiny-de-onnx",
+        "requests": 8,
+        "cached_requests": 0,
+        "passed": true
+      },
+      {
+        "variant": "moonshine-streaming-small-de-onnx",
+        "requests": 8,
+        "cached_requests": 0,
+        "passed": true
+      },
+      {
+        "variant": "moonshine-streaming-tiny-de-onnx-f32",
+        "requests": 8,
+        "cached_requests": 0,
+        "passed": true
+      },
+      {
+        "variant": "moonshine-streaming-small-de-onnx-f32",
+        "requests": 8,
+        "cached_requests": 0,
+        "passed": true
+      },
+      {
+        "variant": "moonshine-tiny-de-phreak87-onnx",
+        "requests": 4,
+        "cached_requests": 0,
+        "passed": true
+      },
+      {
+        "variant": "moonshine-tiny-de-dattazigzag",
+        "requests": 2,
+        "cached_requests": 0,
+        "passed": true
+      },
+      {
+        "case": "failed companion rejected; authorized cached repair succeeds",
+        "passed": true
+      }
+    ],
+    "queued_runs": {
+      "cpu": 37733187037,
+      "ci": 37730684549,
+      "regression": 37730687001
+    },
+    "runtime_commit": "f43dfd5eb5f9915e2c54b42da1ce5fa3fa00318d",
+    "driver_smoke": {
+      "passed": true,
+      "tests": 56
+    },
+    "review_comment": "https://github.com/CrispStrobe/CrispASR/pull/515#issuecomment-6052735019",
+    "cpu_previous": {
+      "commit": "107789133cbfeabba1295e9958d47547dae52f59",
+      "scope": "CPU download/bundle/C ABI packet/flush acceptance; no GPU performance claim",
+      "cases": [
+        {
+          "variant": "moonshine-streaming-tiny-de-onnx",
+          "passed": true,
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "streaming_kind": 2,
+          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "updates": [
+            7,
+            7
+          ]
+        },
+        {
+          "variant": "moonshine-streaming-small-de-onnx",
+          "passed": false,
+          "batch": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "streaming_kind": 2,
+          "error": "AssertionError(('Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.', 'Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.'))"
+        },
+        {
+          "variant": "moonshine-streaming-tiny-de-onnx-f32",
+          "passed": true,
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "streaming_kind": 2,
+          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "updates": [
+            7,
+            7
+          ]
+        },
+        {
+          "variant": "moonshine-streaming-small-de-onnx-f32",
+          "passed": true,
+          "batch": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "streaming_kind": 2,
+          "final": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "updates": [
+            7,
+            7
+          ]
+        },
+        {
+          "variant": "moonshine-tiny-de-phreak87-onnx",
+          "passed": true,
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "streaming_kind": 0
+        },
+        {
+          "variant": "moonshine-tiny-de-dattazigzag",
+          "passed": true,
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "streaming_kind": 0
+        },
+        {
+          "variant": "nemotron",
+          "passed": false,
+          "model_pin": {
+            "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
+            "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
+            "_revision_note": "TODO: replace with actual 40-char SHA from HF repo.",
+            "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
+            "approx_size_mb": 458
+          },
+          "error": "AssertionError(('Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal. <de-DE>', 'Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.'))"
+        },
+        {
+          "variant": "qwen3",
+          "passed": true,
+          "model_pin": {
+            "repo": "cstr/qwen3-asr-0.6b-GGUF",
+            "revision": "ad086c22597ed47af05cc159dd61c98bd6e945f9",
+            "file": "qwen3-asr-0.6b-q4_k.gguf",
+            "approx_size_mb": 400
+          },
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "streaming_kind": 3,
+          "final": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "updates": [
+            2,
+            2
+          ]
+        }
+      ],
+      "audio_sha256": "7d161e34953595856acc195aee52e9e2a48724b669176f2f0b38549d60927ba3",
+      "fixture_revision": "e9a1bd899e6b46f8a624aec05fc605c5461b13db",
+      "passed": false,
+      "run_id": 37730765885
+    },
+    "earlier_ci_source": "710457c5becfbd4464ec8da838322ec0d71c2165",
+    "fixes_pending_proof": [
+      "Whole encoder recompute at final ONNX flush avoids int8 window-dependent scales",
+      "Shared Nemotron language-tag stripping for CLI and C ABI text/words/stream"
+    ],
+    "stage_diff_scope": "Native C++ against independent Python ORT driver, identical deployed graphs; exporter-to-source checkpoint parity is not claimed",
+    "automatic_acceptance_workflow": ".github/workflows/moonshine-onnx.yml",
+    "arm64_acceptance": {
+      "run_id": 37734757849,
+      "source_commit": "eb2ebe30ab42378a0b16ecb302b0c266145e9f7c",
+      "status": "queued"
+    },
+    "final_ci": {
+      "run_id": 37735374748,
+      "lint_run_id": 37735377165,
+      "source_commit": "eb2ebe30ab42378a0b16ecb302b0c266145e9f7c",
+      "status": "queued"
+    },
+    "earlier_native_ci": {
+      "run_id": 37730684549,
+      "status": "success",
+      "jobs": 13
+    },
+    "strict_cpu_previous": {
+      "commit": "91496680a02b1da30ad9e16cfc4aae0a9512edde",
+      "scope": "CPU download/bundle/C ABI packet/flush acceptance; no GPU performance claim",
+      "cases": [
+        {
+          "variant": "moonshine-streaming-tiny-de-onnx",
+          "passed": false,
+          "error": "AssertionError('moonshine-streaming-tiny-de-onnx-diff')"
+        },
+        {
+          "variant": "moonshine-streaming-small-de-onnx",
+          "passed": false,
+          "error": "AssertionError('moonshine-streaming-small-de-onnx-diff')"
+        },
+        {
+          "variant": "moonshine-streaming-tiny-de-onnx-f32",
+          "passed": false,
+          "error": "AssertionError('moonshine-streaming-tiny-de-onnx-f32-diff')"
+        },
+        {
+          "variant": "moonshine-streaming-small-de-onnx-f32",
+          "passed": false,
+          "error": "AssertionError('moonshine-streaming-small-de-onnx-f32-diff')"
+        },
+        {
+          "variant": "moonshine-tiny-de-phreak87-onnx",
+          "passed": true,
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "streaming_kind": 0
+        },
+        {
+          "variant": "moonshine-tiny-de-dattazigzag",
+          "passed": true,
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "streaming_kind": 0
+        },
+        {
+          "variant": "nemotron",
+          "passed": true,
+          "model_pin": {
+            "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
+            "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
+            "_revision_note": "TODO: replace with actual 40-char SHA from HF repo.",
+            "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
+            "approx_size_mb": 458
+          },
+          "batch": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "streaming_kind": 2,
+          "final": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "updates": [
+            3,
+            3
+          ]
+        },
+        {
+          "variant": "qwen3",
+          "passed": true,
+          "model_pin": {
+            "repo": "cstr/qwen3-asr-0.6b-GGUF",
+            "revision": "ad086c22597ed47af05cc159dd61c98bd6e945f9",
+            "file": "qwen3-asr-0.6b-q4_k.gguf",
+            "approx_size_mb": 400
+          },
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "streaming_kind": 3,
+          "final": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "updates": [
+            2,
+            2
+          ]
+        }
+      ],
+      "audio_sha256": "7d161e34953595856acc195aee52e9e2a48724b669176f2f0b38549d60927ba3",
+      "fixture_revision": "e9a1bd899e6b46f8a624aec05fc605c5461b13db",
+      "passed": false,
+      "run_id": 37733187037,
+      "harness_failure": "GGUF Ref::shape singleton-axis normalization; graph values and text match"
+    },
+    "latest_runs": {
+      "x86": 37735853879,
+      "arm64": 37735856512,
+      "native_ci": 37735908557,
+      "lint": 37735910817,
+      "wasm": 37735912990,
+      "go": 37735851685,
+      "rust": 37735851828
+    },
+    "binding_completion": {
+      "wrappers": 7,
+      "wasm": true,
+      "websocket_ready": true,
+      "csharp_build": "pass; 0 warnings/errors",
+      "websocket_syntax": "pass"
+    }
+  },
+  "issue483_mmq": {
+    "source_commit": "04ded753e909da019a2cd391f651f51f5299b6f5",
+    "run_id": 37733919241,
+    "status": "in_progress",
+    "merged": false,
+    "scope": "Matched CUDA 12.6.3 ON/OFF forced-MMQ CLI packages; compile/packaging/driverless startup only; reporter GTX1660 acceptance pending"
   }
 }
