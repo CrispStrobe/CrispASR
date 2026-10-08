@@ -2,6 +2,9 @@
 
 #include "crispasr_backend.h"
 #include "whisper_params.h"
+#ifdef CRISPASR_HAS_ONNX
+#include "moonshine_onnx.h"
+#endif
 #include "core/arch_backend_map.h" // #335: general.architecture → backend table, SHARED with the C ABI
 
 // Forward declarations of per-backend constructors. Each is implemented in
@@ -682,6 +685,13 @@ void crispasr_print_backend_matrix_json() {
 std::string crispasr_detect_backend_from_gguf(const std::string& model_path) {
     if (model_path.empty())
         return "";
+
+#ifdef CRISPASR_HAS_ONNX
+    // Exported ONNX filenames are generic. Inspect their companion config,
+    // using the same detector as the session C ABI before GGUF fallback.
+    if (moonshine_onnx_is_model(model_path.c_str()))
+        return "moonshine-onnx";
+#endif
 
     // ---- Pass 1: filename heuristics ----
     //
