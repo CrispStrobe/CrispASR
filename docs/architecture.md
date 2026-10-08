@@ -322,6 +322,27 @@ Detailed architecture notes for backends whose design warrants more than
 a one-line summary. The [README backend table](../README.md#asr-backends)
 links here for each entry.
 
+### moonshine-onnx
+
+This optional CPU backend executes exported ONNX graphs through ONNX Runtime;
+it uses ORT's graph execution and allocation rather than ggml's scheduler.
+The German streaming Tiny/Small deployments split into frontend, encoder,
+absolute-position adapter, cross-attention KV projection and cached decoder.
+Canonical 40 ms frontend packets carry convolution state. Partial updates retain
+stable encoder frames and revise the decoder's last eight draft tokens. Final
+flush recomputes the full encoder and decodes from BOS because dynamic int8
+activation scales depend on the encoder window. The positional limit is 4096
+encoder frames (about 82 seconds); callers should split longer utterances.
+
+The int8 and F32 bundles have isolated companion paths. The legacy two-graph
+Tiny export is batch-only. `crispasr_session_stream_kind` distinguishes the
+loaded model's streaming mode, including that legacy case. Per-graph wall time
+is available with `MOONSHINE_ONNX_BENCH=1`. An independent Python ORT driver
+feeds `crispasr-diff` the same PCM and compares graph outputs, magnitudes and
+text; this certifies wrapper execution of those exports, with exporter-to-source
+checkpoint parity outside that check's scope. Build, licences and usage:
+[German Moonshine deployment](german-moonshine.md).
+
 ### index-echo
 
 Index-Echo S2TT 2B combines a 32-layer AuT encoder (`d=1280`, 20 heads,

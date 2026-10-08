@@ -217,7 +217,7 @@ from the GGUF metadata. Jump to the [TTS table](#text-to-speech-models) for the 
 | **moonshine&#8209;de** | [`fidoriel/moonshine-base-de`](https://huggingface.co/cstr/moonshine-base-de-fidoriel-GGUF) | German fine-tune of moonshine-base (6.9% WER CV22) | German | CC&#8209;BY&#8209;NC&#8209;SA&#8209;4.0 |
 | **moonshine&#8209;tiny&#8209;de** | [`fidoriel/moonshine-tiny-de`](https://huggingface.co/cstr/moonshine-tiny-de-fidoriel-GGUF) | German fine-tune of moonshine-tiny (11.4% WER CV22) | German | CC&#8209;BY&#8209;NC&#8209;SA&#8209;4.0 |
 | **moonshine-streaming** | [`UsefulSensors/moonshine-streaming-{tiny,small,medium}`](https://huggingface.co/cstr/moonshine-streaming-tiny-GGUF) | Streaming: sliding-window encoder + AR decoder (34–245M) | English | MIT |
-| **moonshine-streaming-de-onnx** | [Official Tiny/Small exports](docs/german-moonshine.md) | Optional CPU ONNX Runtime; int8 or f32 five-graph streaming | German | MIT |
+| **moonshine-streaming-de-onnx** | [Official Tiny/Small exports](docs/architecture.md#moonshine-onnx) | Optional CPU ONNX Runtime; int8 or f32 five-graph streaming | German | MIT |
 | **moonshine-tiny-de-dattazigzag** | [dattazigzag/moonshine-tiny-de](https://huggingface.co/dattazigzag/moonshine-tiny-de) | Tiny German checkpoint; GGUF or legacy two-graph ONNX export | German | MIT |
 | **gemma4-e2b** | [`google/gemma-4-E2B-it`](https://huggingface.co/cstr/gemma4-e2b-it-GGUF) | USM Conformer 12L + Gemma4 LLM 35L (GQA, PLE) | 140+ langs | Apache-2.0 |
 | **gemma4-e4b** | [`google/gemma-4-E4B-it`](https://huggingface.co/cstr/gemma4-e4b-it-GGUF) | Same USM Conformer 12L + larger Gemma4 LLM 42L (GQA, PLE); runs on `--backend gemma4-e2b` | 140+ langs | Apache-2.0 |
