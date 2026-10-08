@@ -11,22 +11,10 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
-## CLAIMED 2026-10-08 — Moonshine ONNX destructor final deep lint
-
-Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`. Full pinned cppcheck
-`37749837117` on #515 source fails only `virtualCallInConstructor`: destructor
-calls virtual `shutdown()`. The existing close/null-reset operation now lives
-in private nonvirtual `close_context()`, called by shutdown and destruction.
-Saved local cppcheck 2.17.1 reproduces the diagnostic before the fix and removes
-it afterward; C++17 syntax and clang-format 18 pass. Final hosted cppcheck 2.7
-and main platform validation remain required before release. No model/stream
-compute graph changed. Receipts: `proof/moonshine-destructor/` in this worktree's
-sibling directory; hosted failure and fix scope are in the triage report.
-
 ## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, internal
-branch `review/pr492-acceptance`, latest diagnostic source `3c176505a`;
+branch `review/pr492-acceptance`, latest diagnostic source `7551b12de`;
 completed F16 runtime/harness source remains `c50c50061`.
 Original numerical source: `fae7e22419b8c797dfa2759a9d4884a8f426bf63`.
 Contributor commits through `ac07cf0be3b528cdb035735738098e30f7468a41` are
@@ -65,7 +53,9 @@ ancestry. `pr492_tokenizer_diagnose.py` promotes the same dequantized Q4 matrix
 weights to F32 and compares native flash/eager paths with the pinned official
 Python transformer on identical conv2 input. Pooling is checked independently
 on each arm's own input, with scale/time-order controls. Hosted `37775542252`
-is queued, not accepted. No weight precision is recovered; this is a diagnostic,
+failed before numerical testing because FFmpeg was absent. Source `7551b12de`
+installs it through the bounded APT helper; replacement `37783601573` is
+dispatched, not accepted. No weight precision is recovered; this is a diagnostic,
 not original-checkpoint or PR acceptance. The acceptance harness now saves all
 completed comparisons before failing and lets both quantizations finish.
 
@@ -87,9 +77,9 @@ also explicitly forces CPU to retain its mmap path. No GPU execution is claimed.
 No new CANN/CUDA correctness or performance claim; combined CANN/NZ timings
 cannot be attributed to this PR alone. PR #492 remains unmerged. #516 Arabic
 alignment is integrated after full runtime acceptance; native main CI and regression pass.
-Full pinned deep lint remains in progress.
+Full pinned cppcheck 2.7 `37763588589` passes at `2da878e72`.
 
-## OPEN 2026-10-08 — integrated Arabic platform validation
+## VALIDATED 2026-10-08 — integrated Arabic platform validation
 
 #516/#490 measured character alignment is integrated after full hosted Arabic
 acceptance `37756933124` (15 words / 85 exact independent Viterbi spans,
@@ -99,7 +89,8 @@ Main `2da878e72` passes native CI `37763588567`, regression `37763588786`,
 lint and Moonshine acceptance `37763589121`. Integrated `ff33461e0` passes
 Go/Rust/C#/Dart, five WASM builds, Windows live translation and Arabic acceptance.
 The only subsequent runtime delta is the nonvirtual ONNX cleanup helper; its
-full cppcheck 2.7 run `37763588589` remains in progress.
+full cppcheck 2.7 run `37763588589` PASSES. Latest main `d2c269f93`
+also passes native CI `37777990060` and lint `37777990004`.
 Implementation and proof are archived in HISTORY and
 `docs/ctc-characters-2026-10-08.json`.
 

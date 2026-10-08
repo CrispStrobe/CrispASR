@@ -238,6 +238,8 @@ cap/reset/stream checks. These compare identical deployed ONNX exports against
 independent Python ORT execution. PR #516 passes full real Arabic character
 alignment and Java/JNA acceptance. Integrated native CI, regression, lint,
 Moonshine speech acceptance, Go/Rust/C#/Dart, WASM and Windows live translation
-checks pass at their recorded sources; full pinned deep lint is still running.
+checks pass at their recorded sources. Full pinned cppcheck 2.7
+`37763588589` passes at `2da878e72`; latest main `d2c269f93` also passes native
+CI `37777990060` and lint `37777990004`.
 PR #492's MiMo/CANN changes remain unmerged. Reporter-specific
 Windows/Vulkan, Intel Mac and newer NVIDIA hardware retests remain open.

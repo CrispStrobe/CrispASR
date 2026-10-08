@@ -516,3 +516,16 @@ between-arm drift from each arm's own transformer input. This places the
 observed difference before pooling; it does not certify the full transformer.
 The diagnostic's official source-class/CPU-adapter smoke also passes on a
 7-by-8 synthetic tensor. Full same-weight encoder validation remains queued.
+
+
+## Full deep lint accepted; tokenizer setup repaired — 2026-10-08
+
+Full pinned cppcheck 2.7 [37763588589](https://github.com/CrispStrobe/CrispASR/actions/runs/37763588589)
+passes at `2da878e72`, closing the Moonshine destructor follow-up. Latest main
+`d2c269f93` passes native CI `37777990060` and lint `37777990004`; its changes
+since the accepted runtime are documentation only.
+
+Tokenizer diagnostic `37775542252` failed before numerical comparisons because
+FFmpeg was absent. `7551b12de` installs the dependency through the bounded APT
+helper before building. Replacement [37783601573](https://github.com/CrispStrobe/CrispASR/actions/runs/37783601573)
+is dispatched. No numerical threshold changed; PR #492 remains unmerged.

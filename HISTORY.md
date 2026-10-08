@@ -29,7 +29,8 @@ Integrated-source deep analysis `37749837117` reported the adapter's virtual
 close/null-reset operation through private nonvirtual `close_context()`.
 Local cppcheck 2.17.1 reproduces the original warning and accepts the fix;
 C++17 syntax and clang-format 18 pass. No model/stream graph changed. Final
-full hosted pinned cppcheck 2.7 remains a release gate.
+full hosted pinned cppcheck 2.7 `37763588589` PASSES at `2da878e72`;
+native CI, regression and real Moonshine speech acceptance pass at that source.
 
 ## DONE 2026-10-08 — measured CTC character alignment and Java UTF-8 (#490/#516)
 

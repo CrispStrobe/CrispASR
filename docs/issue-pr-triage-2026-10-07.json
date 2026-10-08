@@ -1,6 +1,6 @@
 {
   "source_commit": "33aa375be434edaa5f12fad81e6b86272faf23fc",
-  "scope": "Integrated #515/#516; native CI/regression/targeted acceptance and bindings pass at recorded sources. Deep lint pending; PR492 remains unmerged.",
+  "scope": "Integrated #515/#516; native CI/regression/targeted acceptance and bindings pass at recorded sources. Full pinned deep lint passes; PR492 remains unmerged.",
   "filename_routing": {
     "passed": true,
     "scope": "Actual factory translation unit; filename routing only; existing ggml linked for metadata fallback, no model inference",
@@ -1385,8 +1385,12 @@
     "tokenizer_diagnostic": {
       "source": "3c176505a",
       "run": 37775542252,
-      "status": "queued",
-      "scope": "same dequantized weights promoted to F32; independent official Python transformer; isolated pooling; not PR acceptance"
+      "status": "setup failure before numerical testing: missing FFmpeg",
+      "scope": "same dequantized weights promoted to F32; independent official Python transformer; isolated pooling; not PR acceptance",
+      "replacement_source": "7551b12de",
+      "replacement_run": 37783601573,
+      "replacement_status": "dispatched; not accepted",
+      "fix": "Install FFmpeg with tools/ci-apt.sh before building and resampling"
     },
     "selected_pool_oracle": {
       "frames": [
@@ -1450,7 +1454,7 @@
     "fixed_file_sha256": "45fcbdc6a9c20d9971b24306001fcbb0cd372fa5bdd0e79ff76fc6a3a6808d8c",
     "local_before": "cppcheck 2.17.1 reproduces exact diagnostic",
     "local_after": "diagnostic gone; C++17 syntax and clang-format 18 pass",
-    "hosted_after": "final full cppcheck 2.7 pending",
+    "hosted_after": "PASS: full pinned cppcheck 2.7 run 37763588589 at 2da878e72629ccae55f412d88b0396b6bbcdfb6f",
     "scope": "resource-cleanup dispatch only; no model/stream graph changes",
     "proof": "/mnt/storage/crispasr/triage-20261007/proof/moonshine-destructor"
   },
@@ -1462,9 +1466,16 @@
     "lint": 37763588749,
     "deep_lint": {
       "run": 37763588589,
-      "status": "in_progress"
+      "status": "success"
     },
     "prior_binding_source": "ff33461e0ae711854d1af61d65a6b5915c5d568e",
-    "prior_binding_and_wasm": "Go/Rust/C#/Dart, WASM, live Windows translation and Arabic character acceptance PASS; only ONNX destructor cleanup changed afterward"
+    "prior_binding_and_wasm": "Go/Rust/C#/Dart, WASM, live Windows translation and Arabic character acceptance PASS; only ONNX destructor cleanup changed afterward",
+    "latest_main": {
+      "source": "d2c269f935269b9fa3666e78d533166fb09a1cbb",
+      "native_ci": 37777990060,
+      "lint": 37777990004,
+      "status": "success",
+      "delta": "documentation only since accepted runtime"
+    }
   }
 }
