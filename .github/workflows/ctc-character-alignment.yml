@@ -15,7 +15,8 @@ on:
       - 'tests/CMakeLists.txt'
       - 'examples/cli/crispasr_run.cpp'
       - 'tools/ci-heavy/issue490_characters.py'
-      - 'tools/ci-heavy/Issue490Characters.java'
+      - 'tools/ci-heavy/Issue490*.java'
+      - 'tools/ci-heavy/issue490_jna_utf8.c'
       - 'bindings/java/**'
       - '.github/workflows/ctc-character-alignment.yml'
   push:
@@ -33,7 +34,8 @@ on:
       - 'tests/CMakeLists.txt'
       - 'examples/cli/crispasr_run.cpp'
       - 'tools/ci-heavy/issue490_characters.py'
-      - 'tools/ci-heavy/Issue490Characters.java'
+      - 'tools/ci-heavy/Issue490*.java'
+      - 'tools/ci-heavy/issue490_jna_utf8.c'
       - 'bindings/java/**'
       - '.github/workflows/ctc-character-alignment.yml'
 permissions:
