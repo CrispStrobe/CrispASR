@@ -32,6 +32,10 @@ struct Arm {
     ggml_tensor* output = nullptr;
     std::string name;
     std::vector<double> timings;
+    ggml_tensor* inputs[3] = {};
+    std::vector<float> original_inputs[3];
+    std::vector<float> first_output;
+    int verified_repetitions = 0;
     Arm(ggml_backend_t backend, const std::string& dir, const std::string& mode, int t, int h, int d) : name(mode) {
         ggml_init_params ip = {ggml_tensor_overhead() * 64 + ggml_graph_overhead_custom(64, false), nullptr, true};
         ctx = ggml_init(ip);
@@ -42,6 +46,14 @@ struct Arm {
         ggml_set_input(q);
         ggml_set_input(k);
         ggml_set_input(v);
+        // Preserve constants across gallocr reuse and CUDA graph capture.
+        // Marking an input alone does not promise it survives its last use.
+        ggml_set_output(q);
+        ggml_set_output(k);
+        ggml_set_output(v);
+        inputs[0] = q;
+        inputs[1] = k;
+        inputs[2] = v;
         const float scale = 1.0f / std::sqrt(static_cast<float>(d));
         if (mode == "eager" || mode == "half-eager") {
             auto scores = ggml_mul_mat(ctx, k, q);
@@ -64,10 +76,10 @@ struct Arm {
         alloc = ggml_gallocr_new(ggml_backend_get_default_buffer_type(backend));
         require(ggml_gallocr_alloc_graph(alloc, graph), "allocation");
         const std::string prefix = mode == "half-eager" ? "half-" : "";
-        ggml_tensor* inputs[] = {q, k, v};
         const char* names[] = {"q", "k", "v"};
         for (int i = 0; i < 3; ++i) {
-            auto x = read(dir + "/" + prefix + names[i] + ".bin", static_cast<size_t>(t) * h * d);
+            original_inputs[i] = read(dir + "/" + prefix + names[i] + ".bin", static_cast<size_t>(t) * h * d);
+            const auto& x = original_inputs[i];
             ggml_backend_tensor_set(inputs[i], x.data(), 0, x.size() * sizeof(float));
         }
     }
@@ -77,6 +89,20 @@ struct Arm {
         ggml_backend_synchronize(backend);
         if (record)
             timings.push_back(std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count());
+        // Readbacks are outside timing. A fast corrupted/no-op replay cannot pass.
+        for (int i = 0; i < 3; ++i) {
+            std::vector<float> current(original_inputs[i].size());
+            ggml_backend_tensor_get(inputs[i], current.data(), 0, current.size() * sizeof(float));
+            require(std::memcmp(current.data(), original_inputs[i].data(), current.size() * sizeof(float)) == 0,
+                    "resident input overwritten");
+        }
+        std::vector<float> current(ggml_nelements(output));
+        ggml_backend_tensor_get(output, current.data(), 0, current.size() * sizeof(float));
+        if (first_output.empty())
+            first_output = current;
+        require(std::memcmp(current.data(), first_output.data(), current.size() * sizeof(float)) == 0,
+                "repeated output changed");
+        ++verified_repetitions;
     }
     void save(const std::string& dir) {
         std::vector<float> x(ggml_nelements(output));
@@ -123,7 +149,7 @@ int main(int argc, char** argv) {
             if (i)
                 receipt << ',';
             receipt << '"' << arm.name << "\":{\"allocation_bytes\":" << ggml_gallocr_get_buffer_size(arm.alloc, 0)
-                    << ",\"seconds\":[";
+                    << ",\"verified_repetitions\":" << arm.verified_repetitions << ",\"seconds\":[";
             for (size_t k = 0; k < arm.timings.size(); ++k) {
                 if (k)
                     receipt << ',';

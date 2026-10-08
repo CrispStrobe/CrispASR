@@ -72,7 +72,7 @@ def main():
             half_rounding=metrics(arrays['python-half'], arrays['python']),
             scale_negative_control=metrics(arrays['python'] * 2, arrays['python']))
         for arm in native['arms'].values():
-            assert len(arm['seconds']) == 6
+            assert len(arm['seconds']) == 6 and arm['verified_repetitions'] == 8
             arm['median_seconds'] = float(np.median(arm['seconds']))
         receipt['layers'][layer.name] = dict(shape=shape, native=native, comparisons=comparisons,
             hint_byte_identical=np.array_equal(arrays['flash'], arrays['flash-prec']),
