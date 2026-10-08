@@ -4339,6 +4339,8 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         s->backend = "mimo-asr";
         mimo_asr_context_params p = mimo_asr_context_default_params();
         p.n_threads = s->n_threads;
+        p.verbosity = g_open_verbosity_tls;
+        p.use_gpu = g_open_use_gpu_tls;
         s->mimo_asr_ctx = mimo_asr_init_from_file(model_path, p);
         if (!s->mimo_asr_ctx) {
             delete s;
