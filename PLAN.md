@@ -6,7 +6,21 @@ Live work only. Completed threads move to `HISTORY.md`; technical deep-dives to
 `LEARNINGS.md`.
 
 **Before you pick something up:** re-read this section on `origin/main`, add a
-`## OPEN 2026-10-08 — release draft and final gates
+`## CLAIMED <date> — <what>` block naming your worktree, and **push that claim
+to main before you start**. Several agents run here at once; a claim that lands
+with the work is a claim that did nothing. Delete it when the work lands, or if
+it goes stale for more than a day.
+
+## CLAIMED 2026-10-08 — #490 CTC character timestamps
+
+Worktree: `/mnt/storage/crispasr/issue490-characters-20261008/worktree`, branch
+`fix/issue490-characters`. Preserve the existing Viterbi label spans through
+wav2vec2 alignment and align-only JSON, including repeated UTF-8 letters,
+unsupported characters and no-path cases. Keep word output compatible; no
+interpolated character times. Add synthetic known-path guards first, then
+hosted real-audio CLI/C ABI validation where a pinned model is available.
+
+## OPEN 2026-10-08 — release draft and final gates
 
 Comprehensive `RELEASE_NOTES_v0.8.42.md` covers landed changes since v0.8.41,
 with validation scope and remaining gates. Refresh it after final integration;
