@@ -6,7 +6,14 @@ Live work only. Completed threads move to `HISTORY.md`; technical deep-dives to
 `LEARNINGS.md`.
 
 **Before you pick something up:** re-read this section on `origin/main`, add a
-`## CLAIMED <date> — <what>` block naming your worktree, and **push that claim
+`## CLAIMED 2026-10-08 — next release notes
+
+Worktree: `/mnt/storage/crispasr/issue483-mmq-20261008/worktree`.
+Prepare `RELEASE_NOTES_v0.8.42.md` from changes since v0.8.41, including
+validation scope and remaining hardware gates. Keep unmerged PR #515 out of
+shipped features until accepted. No version bump/tag until main tip is green.
+
+## CLAIMED <date> — <what>` block naming your worktree, and **push that claim
 to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
