@@ -546,15 +546,37 @@ on this fixture; it does not certify original weight precision or accept #492.
 Selective promotion is next, with no relaxation of acceptance thresholds.
 
 
-## Hosted follow-ups queued — 2026-10-08
+## Independent fixes integrated; CUDA results archived — 2026-10-08
 
-Selective MiMo promotion [37785711004](https://github.com/CrispStrobe/CrispASR/actions/runs/37785711004)
-at `09f65ad8b` is queued. Five profiles retain Q4 matrices outside the selected
-sets, record size and keep the same independent-reference/RVQ gates.
+MiMo session device/verbosity forwarding is integrated independently at
+`273b8a40c`. [Actual-library probe 37789763493](https://github.com/CrispStrobe/CrispASR/actions/runs/37789763493)
+passes four settings combinations, four failed-open restores and the negative
+control with both assignments removed. Formatting, clang-tidy, Rust/Dart,
+Windows/macOS/iOS and Linux unit/Vulkan checks pass at the tested source;
+remaining broad main CI is a release gate. No attention changes were merged.
 
-Broad nightly `37768023710` exposes a separate data2vec Q4 JFK word insertion
-(`AND SO A MY FELLOW ...`, WER 4.55%, gate zero). F16 ctc_logits pass cosine
-0.999141. [Diagnostic 37786726672](https://github.com/CrispStrobe/CrispASR/actions/runs/37786726672)
-at `d43a25230` is queued: v0.8.41/current builds, Q4/Q8/F16 controls and
-original-source head/early-layer preservation. No fixture/tolerance change,
-model upload or replacement-model acceptance is claimed.
+[Data2vec diagnostic 37786726672](https://github.com/CrispStrobe/CrispASR/actions/runs/37786726672)
+found that Q8/F16 on both releases and the existing frozen independent Python
+logits all contain the extra A. The old expected text was a July native Q4
+capture. Correction `3cb9bb48e` verifies logits/vocabulary/audio hashes and
+checks zero-WER upstream parity; it retains the original human reference and
+reports 4.55% human WER separately. [Actual hosted regression 37791614453](https://github.com/CrispStrobe/CrispASR/actions/runs/37791614453)
+PASSES Q4 CLI parity, the unchanged F16 logits threshold (0.999141 >= 0.999),
+and four provenance/target negative controls. No weights, decoder, reference
+activations or numeric tolerances changed. This does not improve model accuracy.
+
+Selective MiMo promotion `37785711004` failed all five profiles. Actual CUDA
+validation at `d6b29207b` on a Tesla T4 passes continuous promoted-F32 and
+isolated-pool diagnostic gates, but original Q4 pooling A/B relative L2 is
+8.83074% and RVQ agreement 70.7880%. Promoted F32 still differs in six RVQ
+entries at one frame. Diagnostic success is not full PR acceptance. Full
+norm/relative-L2/hash/hardware evidence is in
+`docs/mimo-pr492-cuda-tokenizer-2026-10-08.json`; all terminal logs are archived.
+The original-file CPU BLAS experiment `37792853553` at `2a4eda81d` PASSES:
+pooling A/B relative L2 1.12548e-6 and exact RVQ codes, with both paths passing
+the official encoder. The file remains 395,594,656 bytes. Paired extraction is
+1.71x/1.90x slower than ordinary CPU; no production default changed. Placement,
+repeated timing/memory, short EN/ZH, ARM and full-ASR validation remain next.
+The first attempt stopped before numerics on the wrong thread setter, now fixed.
+PR #492 remains unmerged. No release tag was created; final integrated main
+CI/regression must settle before release.

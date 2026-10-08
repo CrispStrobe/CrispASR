@@ -272,3 +272,11 @@ applicable platform/format/tidy checks pass, while final broad main CI/lint
 remain release gates. CPU-only session requests now reach MiMo initialization
 instead of silently using its native GPU preference. Full measurements are in
 `docs/mimo-pr492-selective-promotion-2026-10-08.json`.
+
+A diagnostic CPU BLAS scheduler passes the tokenizer's original-Q4 numerical
+and exact-code gates in `37792853553`, without changing the 395,594,656-byte
+model. Pooling attention A/B relative L2 is 1.12548e-6; RVQ codes are exact.
+Both paths match the official same-weight encoder. Paired extraction is
+1.71x/1.90x slower than ordinary CPU (flash/eager); this is a potential precision
+option, not a shipping speedup or default change. Short EN/ZH, placement,
+repeated timing/memory, ARM and full-ASR acceptance remain unvalidated.

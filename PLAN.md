@@ -17,9 +17,15 @@ Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, branch
 `review/pr492-acceptance`. The complete promotion oracle isolates CPU Q8
 activation quantization. Test a diagnostic-only scheduler variant that adds
 BLAS ahead of CPU for CPU tokenizer sessions, retaining the original Q4 file
-and unchanged official-reference, attention A/B and exact RVQ gates. Compare
-elapsed stages and scratch size; do not land a production precision/default
-change without numerical and performance evidence. No direct BLAS-module
+and unchanged official-reference, attention A/B and exact RVQ gates. Hosted
+`37792853553` at `2a4eda81d` PASSES: transformer A/B relative L2 1.04712e-7,
+pooling 1.12548e-6, exact RVQ codes; official encoder/pooling <=3.05219e-7 /
+6.10356e-6. Original file stays 395,594,656 bytes (zero size increase).
+Paired tok_codes extraction takes 10.40/12.58s versus 6.08/6.61s on CPU:
+1.71/1.90x slower, not a speedup or a default-flip justification. Full proof:
+`docs/mimo-pr492-cpu-blas-2026-10-08.json`. Next validate placement, repeated
+timing/memory, short EN/ZH and ARM before production use. No production
+precision/default change has landed. No direct BLAS-module
 symbol dependencies, GPU placement changes or reference tolerance changes.
 
 ## VALIDATED 2026-10-08 — data2vec independent transcript parity
@@ -112,7 +118,9 @@ agreement only 70.7880%. Promoted F32 still differs in 6/2,208 RVQ entries,
 all at frame 263; pairwise F64 distances support each arm's differing choice
 on its own residual. Diagnostic success is not full/exact-code acceptance.
 Full proof: `docs/mimo-pr492-cuda-tokenizer-2026-10-08.json`.
-Next: original-file CPU BLAS experiment `37792853553` at `2a4eda81d`.
+Original-file CPU BLAS experiment `37792853553` at `2a4eda81d` PASSES
+all tokenizer numerical/code gates on JFK, at 1.71/1.90x paired CPU latency.
+No size increase or runtime/default change; broader validation is next.
 The first attempt `37790733015` failed before numerics on a CPU-only thread
 setter applied to BLAS; the harness now uses BLAS's registry function.
 No weight precision is recovered by promotion; this is a diagnostic,

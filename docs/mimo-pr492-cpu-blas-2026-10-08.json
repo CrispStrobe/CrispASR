@@ -1,0 +1,299 @@
+{
+  "passed": true,
+  "scope": "Test original Q4 MiMo weights with a diagnostic CPU BLAS scheduler.\n\nThe production runtime is untouched. This script records and applies a temporary\nscheduler patch, builds once, compares CPU/BLAS paths on the same runner, and\nrestores source in finally. The official same-weight encoder and exact RVQ gates\nremain mandatory. No lost checkpoint precision is recovered.\n",
+  "source": "2a4eda81dfdc0b7c40021aa9d3455a6bb268c891",
+  "diagnostic_cpp_sha256": "d59210aecaf0c262b4ad3587cf82c813b6814dd354764470e584ee918a2f326c",
+  "temporary_replacements": [
+    [
+      "struct mimo_tokenizer_context {",
+      "static void mimo_diag_set_blas_threads(ggml_backend_t backend, int n) {\n    auto dev = ggml_backend_get_device(backend);\n    auto reg = ggml_backend_dev_backend_reg(dev);\n    auto fn = reinterpret_cast<void (*)(ggml_backend_t, int)>(\n        ggml_backend_reg_get_proc_address(reg, \"ggml_backend_set_n_threads\"));\n    GGML_ASSERT(fn);\n    fn(backend, n);\n}\n\nstruct mimo_tokenizer_context {"
+    ],
+    [
+      "ggml_backend_t backend_cpu = nullptr;",
+      "ggml_backend_t backend_blas = nullptr; // diagnostic CPU precision experiment\n    ggml_backend_t backend_cpu = nullptr;"
+    ],
+    [
+      "        ggml_backend_t backends[2];\n        backends[n_be++] = ctx->backend;",
+      "        ggml_backend_t backends[3];\n        if (std::getenv(\"CRISPASR_DIAG_MIMO_BLAS\") && ctx->backend == ctx->backend_cpu) {\n            ctx->backend_blas = ggml_backend_init_by_name(\"BLAS\", nullptr);\n            if (!ctx->backend_blas) {\n                fprintf(stderr, \"MIMO_DIAG_BLAS_UNAVAILABLE\\n\");\n                mimo_tokenizer_free(ctx);\n                return nullptr;\n            }\n            mimo_diag_set_blas_threads(ctx->backend_blas, ctx->n_threads);\n            fprintf(stderr, \"MIMO_DIAG_BLAS_ACTIVE backend=%s\\n\", ggml_backend_name(ctx->backend_blas));\n            backends[n_be++] = ctx->backend_blas;\n        }\n        backends[n_be++] = ctx->backend;"
+    ],
+    [
+      "    if (ctx->backend_cpu)\n        ggml_backend_free(ctx->backend_cpu);",
+      "    if (ctx->backend_blas)\n        ggml_backend_free(ctx->backend_blas);\n    if (ctx->backend_cpu)\n        ggml_backend_free(ctx->backend_cpu);"
+    ],
+    [
+      "    ctx->n_threads = n_threads;\n    if (ctx->backend_cpu)",
+      "    ctx->n_threads = n_threads;\n    if (ctx->backend_blas)\n        mimo_diag_set_blas_threads(ctx->backend_blas, n_threads);\n    if (ctx->backend_cpu)"
+    ]
+  ],
+  "codec": {
+    "repo": "cstr/mimo-tokenizer-GGUF",
+    "revision": "fa380f4c49a8e8c62c02c00d0da5e263fc5b0dcf",
+    "filename": "mimo-tokenizer-q4_k.gguf",
+    "sha256": "3f3a903b10294ead4ef6a4afec035639fd2113b1d307d42f649a97cc85670e3f"
+  },
+  "q4_attention_ab": {
+    "tok_mel": {
+      "cosine": 0.999999999999999,
+      "mine_norm": 1201.2097161360718,
+      "ref_norm": 1201.2097161360718,
+      "relative_l2": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    "tok_conv1_out": {
+      "cosine": 1.000000000000002,
+      "mine_norm": 1442.2562898933197,
+      "ref_norm": 1442.2562898933197,
+      "relative_l2": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    "tok_conv2_out": {
+      "cosine": 0.9999999999999956,
+      "mine_norm": 9297.916502685865,
+      "ref_norm": 9297.916502685865,
+      "relative_l2": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    "tok_xfmr_out": {
+      "cosine": 0.9999999999999936,
+      "mine_norm": 72.54437492733769,
+      "ref_norm": 72.544374745845,
+      "relative_l2": 1.0471159089083571e-07,
+      "max_abs": 7.152557373046875e-07,
+      "exact": false
+    },
+    "tok_pool_out": {
+      "cosine": 0.9999999999993615,
+      "mine_norm": 1905.7785038077088,
+      "ref_norm": 1905.778553263168,
+      "relative_l2": 1.12548039735813e-06,
+      "max_abs": 4.9591064453125e-05,
+      "exact": false
+    },
+    "tok_codes": {
+      "match_fraction": 1.0,
+      "exact": true
+    }
+  },
+  "q4_independent_same_weights": {
+    "tok_xfmr_out": {
+      "q4-flash": {
+        "cosine": 0.9999999999999531,
+        "mine_norm": 72.544374745845,
+        "ref_norm": 72.54437505659013,
+        "relative_l2": 3.05218145117389e-07,
+        "max_abs": 2.436339855194092e-06,
+        "exact": false
+      },
+      "q4-eager": {
+        "cosine": 0.9999999999999603,
+        "mine_norm": 72.54437492733769,
+        "ref_norm": 72.54437505659013,
+        "relative_l2": 2.8223464767615345e-07,
+        "max_abs": 2.123415470123291e-06,
+        "exact": false
+      }
+    },
+    "tok_pool_out": {
+      "q4-flash": {
+        "cosine": 0.999999999981601,
+        "mine_norm": 1905.778553263168,
+        "ref_norm": 1905.7798562602327,
+        "relative_l2": 6.103551964022325e-06,
+        "max_abs": 0.00021219253540039062,
+        "exact": false
+      },
+      "q4-eager": {
+        "cosine": 0.9999999999817257,
+        "mine_norm": 1905.7785038077088,
+        "ref_norm": 1905.7798562602327,
+        "relative_l2": 6.086075141636473e-06,
+        "max_abs": 0.00021123886108398438,
+        "exact": false
+      }
+    }
+  },
+  "timings": {
+    "blas-q4-flash": {
+      "gpu_requested": false,
+      "pid": 4713,
+      "stages": {
+        "tok_mel": {
+          "seconds": 0.09972697399996377,
+          "elements": 140928
+        },
+        "tok_conv1_out": {
+          "seconds": 10.316096880000032,
+          "elements": 1409280
+        },
+        "tok_conv2_out": {
+          "seconds": 10.290695523999943,
+          "elements": 705280
+        },
+        "tok_xfmr_out": {
+          "seconds": 9.892281647999994,
+          "elements": 705280
+        },
+        "tok_pool_out": {
+          "seconds": 10.732654507000007,
+          "elements": 353280
+        },
+        "tok_codes": {
+          "seconds": 10.400353451,
+          "elements": 2208
+        }
+      }
+    },
+    "blas-q4-eager": {
+      "gpu_requested": false,
+      "pid": 7609,
+      "stages": {
+        "tok_mel": {
+          "seconds": 0.09976677400004519,
+          "elements": 140928
+        },
+        "tok_conv1_out": {
+          "seconds": 11.266084339000031,
+          "elements": 1409280
+        },
+        "tok_conv2_out": {
+          "seconds": 10.664236025000037,
+          "elements": 705280
+        },
+        "tok_xfmr_out": {
+          "seconds": 10.199100378000026,
+          "elements": 705280
+        },
+        "tok_pool_out": {
+          "seconds": 11.383242400999961,
+          "elements": 353280
+        },
+        "tok_codes": {
+          "seconds": 12.578257287999918,
+          "elements": 2208
+        }
+      }
+    },
+    "cpu-q4-flash": {
+      "gpu_requested": false,
+      "pid": 10557,
+      "stages": {
+        "tok_mel": {
+          "seconds": 0.09998626100002639,
+          "elements": 140928
+        },
+        "tok_conv1_out": {
+          "seconds": 5.05620198500003,
+          "elements": 1409280
+        },
+        "tok_conv2_out": {
+          "seconds": 5.057688991999953,
+          "elements": 705280
+        },
+        "tok_xfmr_out": {
+          "seconds": 5.039772472999971,
+          "elements": 705280
+        },
+        "tok_pool_out": {
+          "seconds": 5.053386030999945,
+          "elements": 353280
+        },
+        "tok_codes": {
+          "seconds": 6.076416430999984,
+          "elements": 2208
+        }
+      }
+    },
+    "cpu-q4-eager": {
+      "gpu_requested": false,
+      "pid": 10573,
+      "stages": {
+        "tok_mel": {
+          "seconds": 0.0999414569999999,
+          "elements": 140928
+        },
+        "tok_conv1_out": {
+          "seconds": 5.559085462999974,
+          "elements": 1409280
+        },
+        "tok_conv2_out": {
+          "seconds": 5.545176302999948,
+          "elements": 705280
+        },
+        "tok_xfmr_out": {
+          "seconds": 5.542518585000039,
+          "elements": 705280
+        },
+        "tok_pool_out": {
+          "seconds": 5.549491881999984,
+          "elements": 353280
+        },
+        "tok_codes": {
+          "seconds": 6.608797382000034,
+          "elements": 2208
+        }
+      }
+    }
+  },
+  "cpu_attention_ab": {
+    "tok_mel": {
+      "cosine": 0.999999999999999,
+      "mine_norm": 1201.2097161360718,
+      "ref_norm": 1201.2097161360718,
+      "relative_l2": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    "tok_conv1_out": {
+      "cosine": 1.0000000000000013,
+      "mine_norm": 1442.2562894785267,
+      "ref_norm": 1442.2562894785267,
+      "relative_l2": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    "tok_conv2_out": {
+      "cosine": 0.9999999999999966,
+      "mine_norm": 9297.916544799959,
+      "ref_norm": 9297.916544799959,
+      "relative_l2": 0.0,
+      "max_abs": 0.0,
+      "exact": true
+    },
+    "tok_xfmr_out": {
+      "cosine": 0.9999921592961412,
+      "mine_norm": 72.54479947611303,
+      "ref_norm": 72.5448264627693,
+      "relative_l2": 0.0039599750023970705,
+      "max_abs": 0.06183701939880848,
+      "exact": false
+    },
+    "tok_pool_out": {
+      "cosine": 0.9965391421964757,
+      "mine_norm": 1898.3404544761345,
+      "ref_norm": 1892.0515993696463,
+      "relative_l2": 0.08340125921765845,
+      "max_abs": 16.29553973674774,
+      "exact": false
+    },
+    "tok_codes": {
+      "exact": false,
+      "match_fraction": 0.7359601449275363
+    }
+  },
+  "source_restored": true,
+  "run": 37792853553,
+  "artifact": 11558283333,
+  "codec_bytes": 395594656,
+  "model_file_size_delta_bytes": 0,
+  "production_runtime_changed": false,
+  "full_pr_acceptance_passed": false,
+  "timing_scope": "One paired wall-clock extraction per attention mode, same binary/host/four threads. Stage extractors recompute graph stages. Not repeated statistics, full-ASR latency, or a hardware-independent speed claim.",
+  "next_required": "Trace actual per-op placement; repeated alternating timing and memory; short English/Chinese inputs and ARM; full decoded-output acceptance before production use.",
+  "tok_codes_paired_slowdown": {
+    "flash": 1.7115932670349314,
+    "eager": 1.9032596342351977
+  }
+}
