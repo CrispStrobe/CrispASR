@@ -84,6 +84,10 @@ struct Arm {
         }
     }
     void compute(ggml_backend_t backend, bool record) {
+        if (name == "tile-f32")
+            setenv("CRISPASR_DIAG_MIMO_TILE_F32", "1", 1);
+        else
+            unsetenv("CRISPASR_DIAG_MIMO_TILE_F32");
         auto start = std::chrono::steady_clock::now();
         require(ggml_backend_graph_compute(backend, graph) == GGML_STATUS_SUCCESS, "compute");
         ggml_backend_synchronize(backend);
@@ -132,12 +136,12 @@ int main(int argc, char** argv) {
         size_t free_before, total, free_after;
         ggml_backend_dev_memory(dev, &free_before, &total);
         std::vector<std::unique_ptr<Arm>> arms;
-        for (const char* mode : {"flash", "flash-prec", "eager", "half-eager"})
+        for (const char* mode : {"flash", "flash-prec", "eager", "half-eager", "tile-f32"})
             arms.emplace_back(new Arm(backend, dir, mode, t, h, d));
         for (int repeat = 0; repeat < 8; ++repeat) {
             // Alternating order on one backend; no graph rebuild, allocation or transfer in timed region.
-            for (int j = 0; j < 4; ++j)
-                arms[repeat % 2 ? 3 - j : j]->compute(backend, repeat >= 2);
+            for (int j = 0; j < static_cast<int>(arms.size()); ++j)
+                arms[repeat % 2 ? arms.size() - 1 - j : j]->compute(backend, repeat >= 2);
         }
         ggml_backend_dev_memory(dev, &free_after, &total);
         std::ofstream receipt(dir + "/native.json");

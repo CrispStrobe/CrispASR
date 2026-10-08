@@ -118,6 +118,10 @@ def official_classes(scratch, receipt):
                 q.half().float().transpose(0, 1)[None], k.half().float().transpose(0, 1)[None],
                 v.half().float().transpose(0, 1)[None], dropout_p=0.0, is_causal=False)
             rounded[0].transpose(0, 1).contiguous().numpy().tofile(dest / 'python-half.bin')
+            rounded_kv = F.scaled_dot_product_attention(
+                q.transpose(0, 1)[None], k.half().float().transpose(0, 1)[None],
+                v.half().float().transpose(0, 1)[None], dropout_p=0.0, is_causal=False)
+            rounded_kv[0].transpose(0, 1).contiguous().numpy().tofile(dest / 'python-half-kv.bin')
             (dest / 'shape.json').write_text(json.dumps(dict(shape=list(q.shape),
                 source='pinned official Attention.forward on native conv2 input',
                 layer=attention_call, inputs={name: digest(dest / (name + '.bin'))

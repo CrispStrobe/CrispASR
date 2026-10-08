@@ -60,13 +60,16 @@ def main():
                 done.set(); thread.join(timeout=15)
             assert code == 0, (layer, code)
         native = json.loads((layer / 'native.json').read_text())
+        assert 'MIMO_DIAG_TILE_F32' in (layer / 'native.log').read_text(), 'No actual TILE dispatch'
         assert 'CUDA' in native['backend']
         arrays = {name: np.fromfile(layer / (name + '.bin'), dtype=np.float32).reshape(shape)
-                  for name in ['python', 'python-half', 'flash', 'flash-prec', 'eager', 'half-eager']}
+                  for name in ['python', 'python-half', 'python-half-kv', 'flash', 'flash-prec', 'eager', 'half-eager', 'tile-f32']}
         assert all(np.isfinite(x).all() for x in arrays.values())
         comparisons = {name + '_vs_python': metrics(arrays[name], arrays['python'])
-                       for name in ['flash', 'flash-prec', 'eager', 'half-eager']}
-        comparisons.update(flash_vs_half_python=metrics(arrays['flash'], arrays['python-half']),
+                       for name in ['flash', 'flash-prec', 'eager', 'half-eager', 'tile-f32']}
+        comparisons.update(tile_vs_half_kv_python=metrics(arrays['tile-f32'], arrays['python-half-kv']),
+            kv_half_rounding=metrics(arrays['python-half-kv'], arrays['python']),
+            flash_vs_half_python=metrics(arrays['flash'], arrays['python-half']),
             half_eager_vs_half_python=metrics(arrays['half-eager'], arrays['python-half']),
             flash_vs_half_eager=metrics(arrays['flash'], arrays['half-eager']),
             half_rounding=metrics(arrays['python-half'], arrays['python']),
