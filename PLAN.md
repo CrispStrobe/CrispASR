@@ -53,6 +53,16 @@ Graph caching alone has a modest ceiling (~1.8% summed decode phase time).
 All terminal files archived, public proof and refreshed actual-Kaggle cache
 pinned in `docs/mimo-graph-profile-2026-10-08.json`. Inspect compute dispatch
 and avoid the redundant GPU prefill/audio route before proposing a speedup.
+Next experiment in the same claimed profile worktree: opt-in cached GPU T=1
+decode using the existing in-graph CPU embedding gather and device KV scatter,
+with the working prefill route retained. Compare every step logit vector
+(norms/relative L2), all CLI/session outputs and ABBA warm timings on actual
+CUDA; do not flip the default or claim P100/other backend support from T4.
+Q4 LM layer diagnostic `47b661df1` is pushed separately; its seven boundaries
+in layers 0/1/4/8/16/24/35 start from byte-identical frozen Python fused inputs,
+with CPU flash/eager and BLAS controls and untouched canonical-stage probes.
+Native diagnostic source syntax and Python compile checks pass. Hosted results
+remain pending and are not original-checkpoint or decoded-output acceptance.
 
 VoxCPM2 ten-step Vulkan profile v1 launched at source `ece203528`, harness
 `323a568ca`: [kernel](https://www.kaggle.com/code/chr1s4/crispasr-voxcpm2-current-profile).
