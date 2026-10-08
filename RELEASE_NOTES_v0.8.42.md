@@ -243,3 +243,9 @@ checks pass at their recorded sources. Full pinned cppcheck 2.7
 CI `37777990060` and lint `37777990004`.
 PR #492's MiMo/CANN changes remain unmerged. Reporter-specific
 Windows/Vulkan, Intel Mac and newer NVIDIA hardware retests remain open.
+
+
+The latest broad nightly `37768023710` also exposes a Q4 data2vec JFK word
+insertion (zero-WER gate fails at 4.55%; F16 stage cosine 0.999141 passes).
+A matched release/current and precision-control diagnostic `37786726672` is
+queued. This failure remains a release gate; no fixture or tolerance changed.

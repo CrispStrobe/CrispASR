@@ -13,8 +13,9 @@ it goes stale for more than a day.
 
 ## CLAIMED 2026-10-08 — data2vec nightly Q4 word insertion
 
-Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, planned branch
-`review/data2vec-nightly`. Nightly `37768023710`, job `113289821084`, fails
+Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
+`review/data2vec-nightly`, diagnostic source `d43a25230`, hosted
+`37786726672` queued. Nightly `37768023710`, job `113289821084`, fails
 Q4 JFK speech at runtime source `2da878e72`: an extra `A` after `AND SO`
 (WER 4.55% versus required zero). F16 logits still pass cosine 0.999141.
 Compare pinned v0.8.41/current builds and Q4/Q8/F16 weights before changing

@@ -544,3 +544,17 @@ required. The original Q4 pooling A/B remains 8.3401% with 73.5960% RVQ
 agreement. This isolates activation quantization as the source of amplification
 on this fixture; it does not certify original weight precision or accept #492.
 Selective promotion is next, with no relaxation of acceptance thresholds.
+
+
+## Hosted follow-ups queued — 2026-10-08
+
+Selective MiMo promotion [37785711004](https://github.com/CrispStrobe/CrispASR/actions/runs/37785711004)
+at `09f65ad8b` is queued. Five profiles retain Q4 matrices outside the selected
+sets, record size and keep the same independent-reference/RVQ gates.
+
+Broad nightly `37768023710` exposes a separate data2vec Q4 JFK word insertion
+(`AND SO A MY FELLOW ...`, WER 4.55%, gate zero). F16 ctc_logits pass cosine
+0.999141. [Diagnostic 37786726672](https://github.com/CrispStrobe/CrispASR/actions/runs/37786726672)
+at `d43a25230` is queued: v0.8.41/current builds, Q4/Q8/F16 controls and
+original-source head/early-layer preservation. No fixture/tolerance change,
+model upload or replacement-model acceptance is claimed.
