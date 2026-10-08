@@ -11,6 +11,17 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-08 — MiMo Q4 CPU BLAS precision experiment
+
+Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, branch
+`review/pr492-acceptance`. The complete promotion oracle isolates CPU Q8
+activation quantization. Test a diagnostic-only scheduler variant that adds
+BLAS ahead of CPU for CPU tokenizer sessions, retaining the original Q4 file
+and unchanged official-reference, attention A/B and exact RVQ gates. Compare
+elapsed stages and scratch size; do not land a production precision/default
+change without numerical and performance evidence. No direct BLAS-module
+symbol dependencies, GPU placement changes or reference tolerance changes.
+
 ## CLAIMED 2026-10-08 — data2vec nightly Q4 word insertion
 
 Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
