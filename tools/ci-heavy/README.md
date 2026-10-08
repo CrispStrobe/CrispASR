@@ -98,3 +98,14 @@ same-weight encoder and unchanged continuous/exact-RVQ gates. Short-input
 controls exercise two additional shapes. A continuous pass with unequal RVQ
 codes exits unsuccessfully after saving all evidence; it is not PR acceptance.
 No production dispatch or model changes are made.
+
+`mimo_lm_first_divergence.py` captures seven boundaries in LM layers
+0/1/4/8/16/24/35 on original Q4_K and F16, with CPU flash/eager and BLAS
+controls. Every layer study starts from the same independently frozen Python
+`prefill_inputs_embeds`; layer-zero input must be byte-exact. Captures are
+explicitly retained and dumped in one computation per layer. Canonical full
+stages run without input injection. The temporary patch, raw arrays, norms,
+relative L2 and elapsed diagnostics are archived and source is restored.
+Run with `-f pip="numpy gguf huggingface_hub soundfile"`. Completion proves
+capture invariants; these native A/B intermediates do not replace an independent
+layer oracle or decoded-output acceptance and do not establish a speedup.
