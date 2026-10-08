@@ -6,6 +6,16 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+## 2026-10-08 — requested CUDA 12.6 forced-MMQ experiment (#483)
+
+Added a manual-only ON/OFF package mode to Windows CUDA Smoke. Both arms built
+and pass compiler-definition, staged-runtime and driverless-startup checks in
+`37733919241`. Actual uploaded manifests also pair locally: same source, ggml,
+PTX 61/80, AVX2/FMA/F16C floor and all three runtime DLL hashes; only forced MMQ
+differs. The hosted final pairing job is still queued. Packages and source pins
+are in [the experiment report](docs/cuda126-mmq-experiment-2026-10-08.md).
+No release default changes, and no GTX1660/MX150 correctness or speed is claimed.
+
 ## 2026-10-08 — Hikari realtime constructor initialization
 
 Deep lint `37729063238` found `virtualCallInConstructor`: Hikari's constructor

@@ -945,9 +945,111 @@
     "stage_diff_scope": "Native C++ against independent Python ORT driver, identical deployed graphs; exporter-to-source checkpoint parity is not claimed",
     "automatic_acceptance_workflow": ".github/workflows/moonshine-onnx.yml",
     "arm64_acceptance": {
-      "run_id": 37734757849,
-      "source_commit": "eb2ebe30ab42378a0b16ecb302b0c266145e9f7c",
-      "status": "queued"
+      "commit": "a1a3d4a25a442fbe355d562aabe020a4c9ba07ed",
+      "scope": "CPU download/bundle/C ABI packet/flush acceptance; no GPU performance claim",
+      "architecture": "aarch64",
+      "cases": [
+        {
+          "variant": "moonshine-streaming-tiny-de-onnx",
+          "passed": true,
+          "graph_diff": "passed; exact input/shape, cosine >= 0.99999, relative L2 <= 1e-4, text exact",
+          "scale_failure_rejected": true,
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "streaming_kind": 2,
+          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "updates": [
+            7,
+            7
+          ]
+        },
+        {
+          "variant": "moonshine-streaming-small-de-onnx",
+          "passed": true,
+          "graph_diff": "passed; exact input/shape, cosine >= 0.99999, relative L2 <= 1e-4, text exact",
+          "batch": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "streaming_kind": 2,
+          "final": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "updates": [
+            7,
+            7
+          ]
+        },
+        {
+          "variant": "moonshine-streaming-tiny-de-onnx-f32",
+          "passed": true,
+          "graph_diff": "passed; exact input/shape, cosine >= 0.99999, relative L2 <= 1e-4, text exact",
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "streaming_kind": 2,
+          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "updates": [
+            7,
+            7
+          ]
+        },
+        {
+          "variant": "moonshine-streaming-small-de-onnx-f32",
+          "passed": true,
+          "graph_diff": "passed; exact input/shape, cosine >= 0.99999, relative L2 <= 1e-4, text exact",
+          "batch": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "streaming_kind": 2,
+          "final": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "updates": [
+            7,
+            7
+          ]
+        },
+        {
+          "variant": "moonshine-tiny-de-phreak87-onnx",
+          "passed": true,
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "streaming_kind": 0
+        },
+        {
+          "variant": "moonshine-tiny-de-dattazigzag",
+          "passed": true,
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "streaming_kind": 0
+        },
+        {
+          "variant": "nemotron",
+          "passed": true,
+          "model_pin": {
+            "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
+            "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
+            "_revision_note": "TODO: replace with actual 40-char SHA from HF repo.",
+            "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
+            "approx_size_mb": 458
+          },
+          "batch": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "streaming_kind": 2,
+          "final": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "updates": [
+            3,
+            3
+          ]
+        },
+        {
+          "variant": "qwen3",
+          "passed": true,
+          "model_pin": {
+            "repo": "cstr/qwen3-asr-0.6b-GGUF",
+            "revision": "ad086c22597ed47af05cc159dd61c98bd6e945f9",
+            "file": "qwen3-asr-0.6b-q4_k.gguf",
+            "approx_size_mb": 400
+          },
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "streaming_kind": 3,
+          "final": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "updates": [
+            2,
+            2
+          ]
+        }
+      ],
+      "audio_sha256": "7d161e34953595856acc195aee52e9e2a48724b669176f2f0b38549d60927ba3",
+      "fixture_revision": "e9a1bd899e6b46f8a624aec05fc605c5461b13db",
+      "passed": true,
+      "run_id": 37735856512
     },
     "final_ci": {
       "run_id": 37735374748,
@@ -1053,14 +1155,25 @@
       "websocket_ready": true,
       "csharp_build": "pass; 0 warnings/errors",
       "websocket_syntax": "pass"
+    },
+    "latest_x86": {
+      "run_id": 37738992713,
+      "source_commit": "68b849eb9",
+      "runner": "ubuntu-22.04",
+      "status": "queued",
+      "replaces": 37735853879
     }
   },
   "issue483_mmq": {
     "source_commit": "04ded753e909da019a2cd391f651f51f5299b6f5",
     "run_id": 37733919241,
-    "status": "in_progress",
-    "merged": false,
-    "scope": "Matched CUDA 12.6.3 ON/OFF forced-MMQ CLI packages; compile/packaging/driverless startup only; reporter GTX1660 acceptance pending"
+    "status": "windows_packages_pass_local_pair_pass_hosted_pair_queued",
+    "merged": true,
+    "scope": "Matched CUDA 12.6.3 ON/OFF forced-MMQ CLI packages; compile/packaging/driverless startup only; reporter GTX1660 acceptance pending",
+    "artifact_ids": {
+      "OFF": 11532751916,
+      "ON": 11532004516
+    }
   },
   "hikari_constructor_followup": {
     "failed_run": 37729063238,

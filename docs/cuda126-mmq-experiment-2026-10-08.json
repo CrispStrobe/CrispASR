@@ -1,0 +1,67 @@
+{
+  "run_id": 37733919241,
+  "passed": true,
+  "scope": "Local pairing of actual uploaded Windows manifests; no GPU execution",
+  "artifacts": {
+    "OFF": 11532751916,
+    "ON": 11532004516
+  },
+  "manifests": {
+    "OFF": {
+      "commit": "04ded753e909da019a2cd391f651f51f5299b6f5",
+      "ggml_commit": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+      "toolkit": "12.6.3",
+      "runtime_version": 12060,
+      "architectures": "61-virtual;80-virtual",
+      "force_mmq": "OFF",
+      "cpu_floor": {
+        "fma": "ON",
+        "native": "OFF",
+        "avx2": "ON",
+        "f16c": "ON"
+      },
+      "runtime_sha256": {
+        "cudart64_12.dll": "d954ca542b3b6bcf03cc2b798a7d00051501cf734ca751050e986af505cf9dad",
+        "cublas64_12.dll": "01d8172b25d8e2d2cb6a276e76e719f5908c6124f484c8c8ca310fbe7b6634f3",
+        "cublasLt64_12.dll": "0d59d264782cec2782b9ac72483e53c9ba485a9d3a1e19b34071a17b8152102e"
+      },
+      "cuda_compile_commands_verified": 144,
+      "gpu_execution": false,
+      "scope": "Compile, staged DLL/runtime and driverless startup checks; no GPU performance acceptance"
+    },
+    "ON": {
+      "commit": "04ded753e909da019a2cd391f651f51f5299b6f5",
+      "ggml_commit": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+      "toolkit": "12.6.3",
+      "runtime_version": 12060,
+      "architectures": "61-virtual;80-virtual",
+      "force_mmq": "ON",
+      "cpu_floor": {
+        "fma": "ON",
+        "avx2": "ON",
+        "native": "OFF",
+        "f16c": "ON"
+      },
+      "runtime_sha256": {
+        "cudart64_12.dll": "d954ca542b3b6bcf03cc2b798a7d00051501cf734ca751050e986af505cf9dad",
+        "cublas64_12.dll": "01d8172b25d8e2d2cb6a276e76e719f5908c6124f484c8c8ca310fbe7b6634f3",
+        "cublasLt64_12.dll": "0d59d264782cec2782b9ac72483e53c9ba485a9d3a1e19b34071a17b8152102e"
+      },
+      "cuda_compile_commands_verified": 144,
+      "gpu_execution": false,
+      "scope": "Compile, staged DLL/runtime and driverless startup checks; no GPU performance acceptance"
+    }
+  },
+  "windows_package_jobs": {
+    "OFF": {
+      "id": 113169064571,
+      "status": "success"
+    },
+    "ON": {
+      "id": 113169064299,
+      "status": "success"
+    }
+  },
+  "hosted_pair_job_status": "queued",
+  "source_archive_branch": "archive/issue483-mmq-source-20261008"
+}

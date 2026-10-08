@@ -36,39 +36,35 @@ pass locally. Strict CPU rerun `37733187037` found exact Python/native graph
 values and text, but a harness shape check failed because `Ref::shape` drops
 singleton axes after dimension zero. Fixed that normalization without changing
 cosine/magnitude gates. Nemotron batch and both packet sizes now pass; legacy
-Moonshine and Qwen also pass. Small int8 streaming still awaits the fixed harness.
+Moonshine and Qwen also pass. All eight cases now pass ARM64 acceptance `37735856512`, including Small int8
+final/batch parity and the numerical scale-failure control. All four deployed
+graph variants have 15 stages at reported cosine 1.000000 / relative L2 0.
 
 Latest branch `a1a3d4a25a442fbe355d562aabe020a4c9ba07ed` also completes the
 new streaming-kind query in all seven wrappers, WASM/JS and the WebSocket ready
 event, and requires the shared-library symbol audit. C# builds with 0 warnings /
 0 errors; WebSocket syntax passes. Earlier native CI `37730684549` passes all
-13 jobs on `710457c5b`. Fresh x86 acceptance `37735853879`, ARM acceptance
-`37735856512`, native CI `37735908557`, lint `37735910817`, WASM `37735912990`,
-Go `37735851685` and Rust `37735851828` are queued on the latest source.
+13 jobs on `710457c5b`. ARM acceptance
+`37735856512` passes. X86 `37735853879` waited over 30 minutes and was cancelled
+while queued; replacement `37738992713` uses Ubuntu 22.04 at `68b849eb9`
+(same runtime; isolated scale-only control). Native CI `37735908557`, lint `37735910817`, WASM `37735912990`,
+Go `37735851685` is running and Rust `37735851828` passes. Remaining source
+checks are in flight.
 ARM `37734757849` and final checks `37735374748`/`37735377165` were cancelled
 while queued, superseded by the corrected source. Numerical regression
 `37730687001` has unit/smoke passes and its model jobs queued. Automatic relevant
 source-change ONNX acceptance pins Python ORT 1.30.0 to the SDK and requires
 speech-content checks for every deployment. #515 stays unmerged pending proof.
 
-## CLAIMED 2026-10-08 — #483 matched forced-MMQ experiment
+## OPEN 2026-10-08 — #483 reporter GPU comparison
 
-Worktree: `/mnt/storage/crispasr/issue483-mmq-20261008/worktree`, branch
-`tools/issue483-mmq`. Read the complete issue including the reporter's request
-for an experimental GTX1660 build after confirming the CUDA 12.6 warning fix.
-Prepare manual-only CUDA 12.6.3 CLI packages with the same source, CPU floor,
-PTX targets and runtime DLLs, differing only in `GGML_CUDA_FORCE_MMQ`.
-Hosted Windows can prove compilation/packaging/driverless fallback; the reporter
-must measure the actual GTX1660. No release-default or speed claim.
-
-Checkpoint: branch `04ded753e909da019a2cd391f651f51f5299b6f5` adds a manual
-ON/OFF packaging mode to the existing Windows CUDA Smoke workflow. Actionlint
-and diff checks pass. Hosted Windows package/pair proof
-[37733919241](https://github.com/CrispStrobe/CrispASR/actions/runs/37733919241)
-has started both Windows jobs. Both artifacts require actual compiler-definition checks, matching
-CUDA runtime versions/hashes, portable CPU flags and staged CLI startup.
-Do not present either package as GPU-validated or change release defaults.
-
+The requested matched MMQ experiment is built and packaged. Both Windows jobs
+pass in `37733919241`; the actual uploaded manifests pair locally with identical
+source, ggml pin, CPU floor, PTX targets and CUDA runtime DLL hashes. The final
+hosted pairing job is queued. Packages, exact source and scope:
+[experiment](docs/cuda126-mmq-experiment-2026-10-08.md) and its JSON receipt.
+The reporter can now test the GTX1660/MX150. No release defaults or GPU speed
+claims change; keep #483 open for actual hardware correctness/timing results.
 
 ## OPEN 2026-10-08 — final main checks and remaining triage
 
