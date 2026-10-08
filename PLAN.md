@@ -13,10 +13,14 @@ it goes stale for more than a day.
 
 ## CLAIMED 2026-10-08 — Metal cache test API compatibility
 
-Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`. Repair the existing
-Apple-only cache test after the ggml v0.26.0 device-init signature change.
-Add a focused macOS hosted compile/CTest gate; do not claim GPU cache execution
-when a hosted runner has no Metal device. No runtime/cache-default change.
+Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`. Fixed the existing
+Apple-only cache test after the ggml v0.26.0 device-init signature change,
+explicit Metal linkage and Objective-C++17. A real compiler negative control
+rejects the old single-argument call and accepts the new two-argument call.
+The fixture now restores both cache environment variables; no-device cases
+explicitly skip instead of reporting success. Added `metal-cache-test.yml`
+(shared/static macOS build and focused CTest). Hosted compilation is pending;
+no GPU cache execution or runtime/cache-default change is claimed.
 
 ## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
 
@@ -125,8 +129,9 @@ and how it was verified is in `HISTORY.md`; usage, model verdicts and
 measurements are in `docs/streaming.md`. ⚠ Still true after the sync:
 `GGML_PREC_F32` is now 10 (was 1), so a binding passing a raw `1` breaks
 silently (not audited); `ggml_*_set_prec` are deprecated upstream (58 call
-lines here); `tests/test-metal-pipeline-cache.mm` does not compile and
-`test-ggml-scheduler-replay.cpp` is in no CMake target.
+lines here); `tests/test-metal-pipeline-cache.mm` API/build wiring is repaired with focused
+hosted validation pending. Scheduler replay is wired through the standalone
+`tools/ci-heavy/scheduler-replay` CMake target and its Vulkan workflow.
 
 Open, in the order they would help:
 
