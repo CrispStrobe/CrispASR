@@ -23124,3 +23124,11 @@ Receipt: `docs/mimo-pr492-full-rvq-cuda-tile-2026-10-08.json`.
 Full original-Q4 CUDA CLI/session EN/ZH and gated ABBA inference profiling
 submitted at numeric `fee98afbc8` / packaging `21ddd24df`; override is scoped
 to tokenizer encoder weights. Production defaults unchanged, #492 excluded.
+
+## 2026-10-08 — Full CUDA ASR launcher correction
+
+V1 stopped at configure before compilation/inference because the CLI consent
+hash requires c2pa-audio even with signing disabled. Complete terminal evidence
+was archived before retry. V2 packaging `ed2273fa7` initializes/verifies both
+pinned submodules; numeric source and acceptance gates are unchanged.
+Receipt: `docs/mimo-pr492-full-asr-launch-2026-10-08.json`.

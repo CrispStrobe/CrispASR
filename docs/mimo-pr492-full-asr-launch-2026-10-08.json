@@ -1,0 +1,18 @@
+{
+  "scope": "Launcher-only failure and corrected retry; no GPU numerical/performance result",
+  "failed_version": 1,
+  "terminal_status": "ERROR",
+  "failure": "CLI CMake configure rejected missing third_party/c2pa-audio/src/sha256.h",
+  "inference_started": false,
+  "terminal_log_sha256": "3c4c6c68f0c126457d6de1d309e01bf2b1599e5c3e944ffbdbee8fed9dcce629",
+  "numeric_source": "fee98afbc80296e4bb7b63ccf6b8d8952d5433f2",
+  "corrected_packaging": "ed2273fa7e7ffbdc670b89e74c5dfe2b03c3597c",
+  "submitted_version": 2,
+  "kernel": "mimo-pr492-asr-cuda",
+  "ggml": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+  "c2pa_audio": "e40329b83f16f67bb5ddc7bb13ae18de0a9376fc",
+  "correction": "Initialize all submodules; assert required CLI SHA-256 header and clean pinned submodule status before CMake",
+  "speech_passed": false,
+  "profile_passed": false,
+  "full_pr_acceptance": false
+}

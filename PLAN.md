@@ -28,8 +28,8 @@ Receipts: `docs/mimo-pr492-cuda-tile-precision-2026-10-08.json` and
 oracle `37820013373` also PASS: flash differs at six encoder codes, eager zero;
 each arm's RVQ is correct on its own pool.
 
-Full-ASR CUDA v1 submitted: kernel `mimo-pr492-asr-cuda`, numeric source
-`fee98afbc80296e4bb7b63ccf6b8d8952d5433f2`, packaging `21ddd24df`.
+Full-ASR CUDA v2 submitted: kernel `mimo-pr492-asr-cuda`, numeric source
+`fee98afbc80296e4bb7b63ccf6b8d8952d5433f2`, packaging `ed2273fa7`.
 Temporary cuBLAS override is restricted to tokenizer `encoder.*` weights;
 F32 TILE remains env/shape gated. Actual full Q4 LM/codec run sequentially
 through EN/ZH CLI and session C ABI: 12 outputs must pass the established
@@ -39,8 +39,14 @@ measured calls per clip/process, validating every decoded result; sampled
 GPU0 process-memory peaks are lower bounds, not allocator peaks. No production
 runtime, ggml pin, file size or default changes. The actual prior Kaggle cache
 was refreshed and pinned to `f84b003cee87d2d5b0801b34831d7f89832883b3`.
-Collector: `/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-asr-v1`.
+Collector: `/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-asr-v2`.
 Both earlier tokenizer endpoints remain intact for independent replays.
+Full-ASR v1 stopped at CMake before compilation/inference: the launcher
+initialized ggml alone and omitted the CLI's required consent-hash submodule.
+All terminal logs/seven outputs are archived in `proof/cuda-asr-v1`.
+V2 initializes every pinned submodule and verifies clean status and the required
+SHA-256 header before configure. Numeric source/patches/models/gates unchanged.
+Receipt: `docs/mimo-pr492-full-asr-launch-2026-10-08.json`.
 
 Next: inspect full speech results before interpreting timing; fix actual
 failures, preserve unchanged gates. Earlier Q4 LM non-flash numerical failures,
