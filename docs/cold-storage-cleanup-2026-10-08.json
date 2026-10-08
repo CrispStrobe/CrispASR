@@ -1,0 +1,48 @@
+{
+  "scope": "Cold unused files moved to CIFS with original paths preserved as symlinks",
+  "trace_files": [
+    {
+      "source": "/mnt/volume1/tmp-astra/native-hot-clock-fenced-capture-20261002/fenced.stderr",
+      "destination": "/mnt/storage/cold-storage-20261008/astra-traces/native-hot-clock-fenced-capture-20261002/fenced.stderr",
+      "bytes": 149865650,
+      "sha256": "fbdcd8ae90edc1282a0725443db4942ab9d0fafb614f91dcd1d3039540312d3d",
+      "old_atime": 1790911975.2019246,
+      "old_mtime": 1790911971.9969094
+    },
+    {
+      "source": "/mnt/volume1/tmp-astra/native-owned-clock-fulltrace-on-r2-20261002/stderr",
+      "destination": "/mnt/storage/cold-storage-20261008/astra-traces/native-owned-clock-fulltrace-on-r2-20261002/stderr",
+      "bytes": 149865654,
+      "sha256": "96e51063d64759a208d8376580d97c6171c9851b5a38c8eeb1aa8c0fe11dd96f",
+      "old_atime": 1790918325.6025217,
+      "old_mtime": 1790918322.589498
+    },
+    {
+      "source": "/mnt/volume1/tmp-astra/native-owned-main-fulltrace-on-20261002/stderr",
+      "destination": "/mnt/storage/cold-storage-20261008/astra-traces/native-owned-main-fulltrace-on-20261002/stderr",
+      "bytes": 149865646,
+      "sha256": "dcc06250433fc6dee2c13d50c1c844db5c3765c42aef9401dead50bd54dddc61",
+      "old_atime": 1790924847.6226017,
+      "old_mtime": 1790924832.8104827
+    },
+    {
+      "source": "/mnt/volume1/tmp-astra/native-hot-h5-fulltrace-20261001/fulltrace.stderr",
+      "destination": "/mnt/storage/cold-storage-20261008/astra-traces/native-hot-h5-fulltrace-20261001/fulltrace.stderr",
+      "bytes": 149865640,
+      "sha256": "2f8385dbe5fa8b0445f2fd4855452c0ba5c353e1c230b8a27fd60a9dfd994603",
+      "old_atime": 1790910103.666603,
+      "old_mtime": 1790910102.5685933
+    }
+  ],
+  "cache": {
+    "source": "/mnt/volume1/sccache",
+    "destination": "/mnt/storage/cold-storage-20261008/sccache",
+    "files": 1914,
+    "bytes_reclaimed": 2147335763,
+    "all_hashes_verified": true,
+    "manifest": "/mnt/storage/crispasr/pr492-acceptance-20261008/proof/storage-sccache-20261008.json",
+    "manifest_sha256": "0487039439b25cc51e0050a67e0e2f03fd65ea59e2db9a9fcf45acf1057d30f1"
+  },
+  "bytes_reclaimed": 2746798353,
+  "minimum_idle_hours": 5
+}

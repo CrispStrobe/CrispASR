@@ -23096,3 +23096,11 @@ Full-clip CPU RVQ oracle `37815978118` PASS: all four arms match the
 unmodified official quantizer on their own pools; both promoted-F32 arms
 also match official-encoder codes. Original Q4 encoder drift remains.
 Receipt: `docs/mimo-pr492-full-rvq-cpu-2026-10-08.json`.
+
+## 2026-10-08 — Additional cold-storage cleanup
+
+Moved four week-old trace files and the inactive sccache to CIFS after checking
+all file access/modification times exceed five hours. Verified every destination
+hash before removing redundant local copies; all original paths remain symlinks.
+Reclaimed 2,746,798,353 bytes on /mnt/volume1. No live model/server relocation.
+Receipt: `docs/cold-storage-cleanup-2026-10-08.json`.

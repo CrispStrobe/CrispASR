@@ -30,7 +30,7 @@ eager kernels with independent Python and half-rounded controls, then test a
 targeted precision path with repeated timings and peak memory. Preserve exact
 RVQ/EN-ZH decoded-output gates before production changes or accepting #492.
 Release follow-up in `/mnt/storage/crispasr/triage-20261007/worktree`: await
-final native/lint and full regression CI, fix failures, finalize comprehensive
+final native/lint and full regression CI, fix failures, validate comprehensive
 v0.8.42 notes and use `scripts/bump-version.sh` only after acceptance; #492
 remains excluded. CUDA v4 completed on Tesla T4 at numeric source
 `3493c8ef9` / packaging `9a0d75639`. All 125 archived files and recorded
@@ -47,8 +47,11 @@ F32 arithmetic for the exact MiMo shape. VEC requires padded KV length and is
 unsafe for unpadded T=551, so do not force it. Retain baseline/F32-eager controls,
 actual dispatch traces, unchanged code gates and independent Python oracle.
 No production ggml pin/default change. Archive v4 before repushing. Full-clip
-official quantizer runs `37815978118` (CPU) and `37816478863` (CUDA v4) are
-CPU PASS / CUDA queued. All four CPU arms match official quantization on their
+official quantizer runs `37815978118` (CPU) and `37820013373` (CUDA v4 arrays, GH ARM) are
+CPU PASS / CUDA arrays queued on GH ARM. Original x86 oracle `37816478863`
+was canceled before any runner started after prolonged queuing; replacement
+`37820013373` executes the same pinned official quantizer and CUDA v4 arrays
+at candidate source `e07e2d83e`, using `ubuntu-24.04-arm`. All four CPU arms match official quantization on their
 own pools at all 276 frames/eight stages; both promoted-F32 arms also match
 official-encoder codes. Original Q4 encoder drift remains. Receipt:
 `docs/mimo-pr492-full-rvq-cpu-2026-10-08.json`. The new F32 TILE experiment
@@ -59,11 +62,14 @@ candidate branch. Submitted version 1 at packaging `e07e2d83e`; numeric source
 `/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-attention-precision-v1`.
 A generated-header smoke verifies matching F32 host/device configuration,
 preserved baseline headers and removal of extern-template declarations so the
-new specialization is actually emitted. GPU build/runtime remain pending. Local C++ syntax/clang-format checks pass;
+new specialization is actually emitted. GPU execution started at 17:54 UTC. Terminal results remain pending. Local C++ syntax/clang-format checks pass;
 the actual capture wrapper preserves layouts exactly and the new K/V-only
 half-rounding reference agrees with independent NumPy at relative L2 7.49e-8.
 These are preparation checks, not CUDA execution proof.
 No quota bypass/GPU fishing: one actual precision experiment.
+Additional storage cleanup is complete: 2,746,798,353 bytes reclaimed from
+four old traces and inactive sccache, every hash checked, original symlinks kept.
+Receipt: `docs/cold-storage-cleanup-2026-10-08.json`.
 Native `37805363962` and lint `37806475239` both PASS at `3fd1bf5fa`.
 Full 33-model regression `37802900089` is still running with no failures.
 Receipt: `docs/mimo-pr492-cuda-attention-2026-10-08.json`.
