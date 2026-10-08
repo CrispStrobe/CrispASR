@@ -23083,3 +23083,11 @@ on their side.
   45,602,304-sample constrained CPU command. The exact command completed once
   in 3,675.52 s at 2,173,180 KiB peak RSS; repeating a one-hour CPU proof adds
   no coverage after the forced unsafe arm made the old failure deterministic.
+
+## 2026-10-08 — MiMo identical-input CUDA attention diagnostic
+
+Tesla T4 source `3493c8ef9`: three layers pass F32 eager/Python controls,
+flash F32 hint is byte-identical, half input rounding explains only part of
+the fused error. All eight repetitions preserve inputs and replay output.
+Isolated timings do not establish full-ASR speed. Six RVQ entries still differ;
+#492 remains unmerged. See `docs/mimo-pr492-cuda-attention-2026-10-08.json`.

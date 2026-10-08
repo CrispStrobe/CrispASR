@@ -1,0 +1,606 @@
+{
+  "scope": "Identical-input CUDA attention diagnostic, not full ASR acceptance",
+  "hardware": {
+    "script_version": "mimo-pr492-tokenizer-cuda-v4",
+    "source": "3493c8ef9738fa60175ea2c76201fa8cc57cd7f8",
+    "ggml": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+    "devices": "name, compute_cap, memory.total [MiB]\nTesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB\n",
+    "arch": "75",
+    "cmake_flags": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DBUILD_SHARED_LIBS=ON",
+      "-DGGML_NATIVE=OFF",
+      "-DGGML_BLAS=OFF",
+      "-DCRISPASR_MEL_BLAS=OFF",
+      "-DCRISPASR_BUILD_TESTS=OFF",
+      "-DCRISPASR_BUILD_EXAMPLES=OFF",
+      "-DCRISPASR_BUILD_SERVER=OFF",
+      "-DCMAKE_PROJECT_crispasr_INCLUDE=/kaggle/temp/mimo-pr492/wrapper/add-probe.cmake",
+      "-DGGML_CUDA=ON",
+      "-DGGML_CUDA_NO_VMM=ON",
+      "-DCMAKE_CUDA_ARCHITECTURES=75",
+      "-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc",
+      "-DCRISPASR_NO_C2PA_NATIVE=ON",
+      "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold",
+      "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold",
+      "-DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=mold"
+    ],
+    "kernel_sha256": "9b41e4ec5ae37fc49de273e0826788438b8f6e72c786a25ff9011c1b920f9cd3",
+    "attention_probe": "/kaggle/temp/mimo-pr492/build/bin/mimo_attention_probe",
+    "cache": {
+      "repo": "cstr/crispasr-ccache",
+      "file": "mimo-pr492/sm75-v3.tar",
+      "revision": "7bac5a6c0e5cae845d8ded349a2bcb7d0a23050e",
+      "sha256": "a60bf4b1ea7d0db9099ead0383133c2ac22b0f5c6c8c0117857dc1ef59035b95",
+      "bytes": 51097600,
+      "source": "389c3c712081f8612817e20b7f9e784d03a7b703"
+    },
+    "scope": "MiMo PR492 identical-input CUDA attention diagnostic; no full-ASR claim.\n\nUses the actual native tokenizer, including device weights/RVQ, and the pinned\nofficial Python encoder on the GPU's own conv2 input. PyTorch is CPU-only here:\nggml compiles and executes CUDA for the detected GPU, including a P100. Pascal\nresults do not establish integer MMQ support. Same-weight promotion is a\ndiagnostic, not recovered original precision or full ASR acceptance.\n"
+  },
+  "archive": {
+    "time": "2026-10-08T17:27:57.750225+00:00",
+    "terminal_status": {
+      "status": "COMPLETE",
+      "failureMessage": null
+    },
+    "hardware_present": true,
+    "numerical_receipt_present": true,
+    "files": 125
+  },
+  "diagnosis": {
+    "scope": "Identical-input CUDA attention probe. Diagnostic only; no ASR acceptance.\n\nQ/K/V come from the pinned official encoder on native conv2 input. Timings\nexclude allocation/transfers and use one backend, resident graphs, alternating\norder, two warmups and six measured repetitions. Sampled VRAM is a lower bound\non process peak, not a model/session memory benchmark.\n",
+    "source": "3493c8ef9738fa60175ea2c76201fa8cc57cd7f8",
+    "layers": {
+      "layer-00": {
+        "shape": [
+          551,
+          20,
+          64
+        ],
+        "native": {
+          "backend": "CUDA0",
+          "free_before": 15526068224,
+          "free_after": 15391850496,
+          "total": 15636037632,
+          "arms": {
+            "flash": {
+              "allocation_bytes": 14105600,
+              "verified_repetitions": 8,
+              "seconds": [
+                0.000278135,
+                0.000289302,
+                0.000288199,
+                0.000281274,
+                0.00027975,
+                0.000285868
+              ],
+              "median_seconds": 0.000283571
+            },
+            "flash-prec": {
+              "allocation_bytes": 14105600,
+              "verified_repetitions": 8,
+              "seconds": [
+                0.000284497,
+                0.000287639,
+                0.000285204,
+                0.000284655,
+                0.000281689,
+                0.000285212
+              ],
+              "median_seconds": 0.0002849295
+            },
+            "eager": {
+              "allocation_bytes": 38393728,
+              "verified_repetitions": 8,
+              "seconds": [
+                0.00231356,
+                0.00232258,
+                0.0023215,
+                0.00231551,
+                0.00231444,
+                0.00231203
+              ],
+              "median_seconds": 0.002314975
+            },
+            "half-eager": {
+              "allocation_bytes": 38393728,
+              "verified_repetitions": 8,
+              "seconds": [
+                0.00231239,
+                0.00231727,
+                0.00231403,
+                0.00232692,
+                0.00231211,
+                0.00231169
+              ],
+              "median_seconds": 0.00231321
+            }
+          }
+        },
+        "comparisons": {
+          "flash_vs_python": {
+            "cosine": 0.9999997483075629,
+            "mine_norm": 270.2280103545959,
+            "ref_norm": 270.30760460018246,
+            "relative_l2": 0.000768076935123623,
+            "max_abs": 0.006113767623901367,
+            "exact": false
+          },
+          "flash-prec_vs_python": {
+            "cosine": 0.9999997483075629,
+            "mine_norm": 270.2280103545959,
+            "ref_norm": 270.30760460018246,
+            "relative_l2": 0.000768076935123623,
+            "max_abs": 0.006113767623901367,
+            "exact": false
+          },
+          "eager_vs_python": {
+            "cosine": 0.9999999999994975,
+            "mine_norm": 270.3075403647417,
+            "ref_norm": 270.30760460018246,
+            "relative_l2": 1.0272059580985515e-06,
+            "max_abs": 1.4543533325195312e-05,
+            "exact": false
+          },
+          "half-eager_vs_python": {
+            "cosine": 0.9999999941056866,
+            "mine_norm": 270.3009877136682,
+            "ref_norm": 270.30760460018246,
+            "relative_l2": 0.00011129941692657861,
+            "max_abs": 0.0010019540786743164,
+            "exact": false
+          },
+          "flash_vs_half_python": {
+            "cosine": 0.9999997546384918,
+            "mine_norm": 270.2280103545959,
+            "ref_norm": 270.30105066798535,
+            "relative_l2": 0.0007507385600134831,
+            "max_abs": 0.005851030349731445,
+            "exact": false
+          },
+          "half_eager_vs_half_python": {
+            "cosine": 0.9999999999994988,
+            "mine_norm": 270.3009877136682,
+            "ref_norm": 270.30105066798535,
+            "relative_l2": 1.0258942481583559e-06,
+            "max_abs": 1.430511474609375e-05,
+            "exact": false
+          },
+          "flash_vs_half_eager": {
+            "cosine": 0.9999997546142075,
+            "mine_norm": 270.2280103545959,
+            "ref_norm": 270.3009877136682,
+            "relative_l2": 0.0007506872005594601,
+            "max_abs": 0.0058515071868896484,
+            "exact": false
+          },
+          "half_rounding": {
+            "cosine": 0.9999999941329785,
+            "mine_norm": 270.30105066798535,
+            "ref_norm": 270.30760460018246,
+            "relative_l2": 0.00011100285087106289,
+            "max_abs": 0.0010013580322265625,
+            "exact": false
+          },
+          "scale_negative_control": {
+            "cosine": 0.999999999999998,
+            "mine_norm": 540.6152092003649,
+            "ref_norm": 270.30760460018246,
+            "relative_l2": 1.0,
+            "max_abs": 2.7122952938079834,
+            "exact": false
+          }
+        },
+        "hint_byte_identical": true,
+        "pid": 2000,
+        "sampled_vram": [
+          {
+            "seconds": 339.552398087,
+            "mib": 10
+          },
+          {
+            "seconds": 339.688601508,
+            "mib": 216
+          },
+          {
+            "seconds": 339.824413095,
+            "mib": 230
+          },
+          {
+            "seconds": 339.987099342,
+            "mib": 112
+          }
+        ],
+        "sampled_peak_mib": 230,
+        "hashes": {
+          "half-eager.bin": "4f8dfe5e8cc0bba7a99fdb0f288f70ea32cad68cb7348f080e3eb6790a668f28",
+          "k.bin": "8ebc6aa61384068860d16ef1a89da309b28eeadeb33cb6c1eb79be6c5c114dd6",
+          "v.bin": "89369f4952b9f5a27e249db679616c8db94f20d33701b902e54ed6972c6f742a",
+          "half-k.bin": "79f624208c0ea2a85240a89bda8b35701fea0329781ba908c5f11938357da63c",
+          "eager.bin": "3f1af3520a1a21f5d91784dbb3b3e8c4b430c3fd79b5ae8d46bf18f5c7f37d4d",
+          "half-q.bin": "d3fbec068f4f04e95016f6a1e12bcfa33920dd93e6f0bad19354ba32564dc4d8",
+          "flash.bin": "84838b25bb0ab4cd65b2f02524bc7fc9b962508f97016bef527c3e973f082d63",
+          "flash-prec.bin": "84838b25bb0ab4cd65b2f02524bc7fc9b962508f97016bef527c3e973f082d63",
+          "q.bin": "2ed114c7ec2d9349a101082197ffd3d1721830663956afdd66da40f9b0fc6304",
+          "python.bin": "cca5ebf07914d0e1714459b767c5d28c85be6ec200ae45ae905ee3195bfab01c",
+          "python-half.bin": "d7ea4f76bccdd2dc02dd484f052adac9766c177a4c3f199f38ee75206fbe4f39",
+          "half-v.bin": "a6218c90084a45519c68e68dd3b99ab59f635edee38a06751e5a172c6a3a3b76"
+        }
+      },
+      "layer-15": {
+        "shape": [
+          551,
+          20,
+          64
+        ],
+        "native": {
+          "backend": "CUDA0",
+          "free_before": 15526068224,
+          "free_after": 15391850496,
+          "total": 15636037632,
+          "arms": {
+            "flash": {
+              "allocation_bytes": 14105600,
+              "verified_repetitions": 8,
+              "seconds": [
+                0.000254353,
+                0.000261364,
+                0.000258074,
+                0.000271052,
+                0.00026668,
+                0.000271649
+              ],
+              "median_seconds": 0.000264022
+            },
+            "flash-prec": {
+              "allocation_bytes": 14105600,
+              "verified_repetitions": 8,
+              "seconds": [
+                0.0002581,
+                0.000258082,
+                0.000257866,
+                0.000271328,
+                0.000270623,
+                0.000268779
+              ],
+              "median_seconds": 0.00026343950000000003
+            },
+            "eager": {
+              "allocation_bytes": 38393728,
+              "verified_repetitions": 8,
+              "seconds": [
+                0.00198254,
+                0.00197865,
+                0.00215897,
+                0.00213839,
+                0.00213003,
+                0.00213362
+              ],
+              "median_seconds": 0.0021318250000000004
+            },
+            "half-eager": {
+              "allocation_bytes": 38393728,
+              "verified_repetitions": 8,
+              "seconds": [
+                0.00197734,
+                0.00197452,
+                0.00214118,
+                0.00213526,
+                0.00212703,
+                0.00212884
+              ],
+              "median_seconds": 0.002127935
+            }
+          }
+        },
+        "comparisons": {
+          "flash_vs_python": {
+            "cosine": 0.9999997281848458,
+            "mine_norm": 101.90563607683949,
+            "ref_norm": 101.91313833325592,
+            "relative_l2": 0.0007409516390962876,
+            "max_abs": 0.00570523738861084,
+            "exact": false
+          },
+          "flash-prec_vs_python": {
+            "cosine": 0.9999997281848458,
+            "mine_norm": 101.90563607683949,
+            "ref_norm": 101.91313833325592,
+            "relative_l2": 0.0007409516390962876,
+            "max_abs": 0.00570523738861084,
+            "exact": false
+          },
+          "eager_vs_python": {
+            "cosine": 0.9999999999998697,
+            "mine_norm": 101.91313869963825,
+            "ref_norm": 101.91313833325592,
+            "relative_l2": 4.988882380171587e-07,
+            "max_abs": 2.9802322387695312e-06,
+            "exact": false
+          },
+          "half-eager_vs_python": {
+            "cosine": 0.999999984763945,
+            "mine_norm": 101.9128680881915,
+            "ref_norm": 101.91313833325592,
+            "relative_l2": 0.00017458249919773215,
+            "max_abs": 0.001095890998840332,
+            "exact": false
+          },
+          "flash_vs_half_python": {
+            "cosine": 0.9999997462450501,
+            "mine_norm": 101.90563607683949,
+            "ref_norm": 101.9128680013689,
+            "relative_l2": 0.0007158976577252603,
+            "max_abs": 0.004822134971618652,
+            "exact": false
+          },
+          "half_eager_vs_half_python": {
+            "cosine": 0.9999999999998697,
+            "mine_norm": 101.9128680881915,
+            "ref_norm": 101.9128680013689,
+            "relative_l2": 5.012281169213412e-07,
+            "max_abs": 3.0994415283203125e-06,
+            "exact": false
+          },
+          "flash_vs_half_eager": {
+            "cosine": 0.999999746246372,
+            "mine_norm": 101.90563607683949,
+            "ref_norm": 101.9128680881915,
+            "relative_l2": 0.0007158958963030406,
+            "max_abs": 0.004823446273803711,
+            "exact": false
+          },
+          "half_rounding": {
+            "cosine": 0.9999999847625496,
+            "mine_norm": 101.9128680013689,
+            "ref_norm": 101.91313833325592,
+            "relative_l2": 0.00017459050396536585,
+            "max_abs": 0.0010961294174194336,
+            "exact": false
+          },
+          "scale_negative_control": {
+            "cosine": 0.999999999999994,
+            "mine_norm": 203.82627666651183,
+            "ref_norm": 101.91313833325592,
+            "relative_l2": 1.0,
+            "max_abs": 2.103747606277466,
+            "exact": false
+          }
+        },
+        "hint_byte_identical": true,
+        "pid": 2018,
+        "sampled_vram": [
+          {
+            "seconds": 340.918101217,
+            "mib": 10
+          },
+          {
+            "seconds": 341.056241337,
+            "mib": 216
+          },
+          {
+            "seconds": 341.191724473,
+            "mib": 230
+          },
+          {
+            "seconds": 341.364508521,
+            "mib": 112
+          }
+        ],
+        "sampled_peak_mib": 230,
+        "hashes": {
+          "half-eager.bin": "3a990aeeaa3dc67e4feebe41e6b4a06ade3472701083a4d3582a4629d7b91cf4",
+          "k.bin": "98de0b792c7ef60712d25011d7378145798e3a087f42921ae7ac21da3750a5cc",
+          "v.bin": "8e857b870c96257fc054961732955762e3d8431edbdd0ccb9cb2eed4ed6e389a",
+          "half-k.bin": "2989ffab3d59f7933043348d6169977c15769d551b56c11daedaee28914d8bc9",
+          "eager.bin": "8bf0d6d3faa4272556470d13351584f5fed3b12d749e8f0ff0a58cb71252d775",
+          "half-q.bin": "ac19841f674c5f90766abff694ab5497a4052b8f5d694105cff61d00e0c474f1",
+          "flash.bin": "eb3b487c19625051688e4775544b546cb703c4077c74d3b35ed661c39071797a",
+          "flash-prec.bin": "eb3b487c19625051688e4775544b546cb703c4077c74d3b35ed661c39071797a",
+          "q.bin": "29986f7dd3ae5da1c963b4b77850d842eac6a701e64961b39bd8d6ebb693c426",
+          "python.bin": "93ddf844c4a79ce1300d3bc976bb77132cd94abdc0db34427f4bc722277dd4f5",
+          "python-half.bin": "caf3584ccb8ed02e6781e395a54f9a7ef7ac3736f7e724ca0c3304d33fd7ed4e",
+          "half-v.bin": "1e859275c1aa3b040d109c2bf24fc4f79019c61e4ec24c0440594fc1605bcfa0"
+        }
+      },
+      "layer-31": {
+        "shape": [
+          551,
+          20,
+          64
+        ],
+        "native": {
+          "backend": "CUDA0",
+          "free_before": 15526068224,
+          "free_after": 15391850496,
+          "total": 15636037632,
+          "arms": {
+            "flash": {
+              "allocation_bytes": 14105600,
+              "verified_repetitions": 8,
+              "seconds": [
+                0.000305002,
+                0.000303795,
+                0.00030488,
+                0.000304443,
+                0.000308694,
+                0.000304175
+              ],
+              "median_seconds": 0.00030466149999999997
+            },
+            "flash-prec": {
+              "allocation_bytes": 14105600,
+              "verified_repetitions": 8,
+              "seconds": [
+                0.000303502,
+                0.000319274,
+                0.000304567,
+                0.000309926,
+                0.000306747,
+                0.00030851
+              ],
+              "median_seconds": 0.0003076285
+            },
+            "eager": {
+              "allocation_bytes": 38393728,
+              "verified_repetitions": 8,
+              "seconds": [
+                0.00260407,
+                0.00260236,
+                0.00260672,
+                0.00260637,
+                0.00260568,
+                0.00260339
+              ],
+              "median_seconds": 0.002604875
+            },
+            "half-eager": {
+              "allocation_bytes": 38393728,
+              "verified_repetitions": 8,
+              "seconds": [
+                0.00259816,
+                0.00259966,
+                0.00260211,
+                0.00260289,
+                0.0026011,
+                0.00259995
+              ],
+              "median_seconds": 0.0026005250000000002
+            }
+          }
+        },
+        "comparisons": {
+          "flash_vs_python": {
+            "cosine": 0.9999998156762405,
+            "mine_norm": 1332.6006127075013,
+            "ref_norm": 1332.7699337534154,
+            "relative_l2": 0.0006202749159098903,
+            "max_abs": 0.04403209686279297,
+            "exact": false
+          },
+          "flash-prec_vs_python": {
+            "cosine": 0.9999998156762405,
+            "mine_norm": 1332.6006127075013,
+            "ref_norm": 1332.7699337534154,
+            "relative_l2": 0.0006202749159098903,
+            "max_abs": 0.04403209686279297,
+            "exact": false
+          },
+          "eager_vs_python": {
+            "cosine": 0.9999999999999105,
+            "mine_norm": 1332.769915287852,
+            "ref_norm": 1332.7699337534154,
+            "relative_l2": 4.1121289723572023e-07,
+            "max_abs": 2.574920654296875e-05,
+            "exact": false
+          },
+          "half-eager_vs_python": {
+            "cosine": 0.9999999595927996,
+            "mine_norm": 1332.7726173754177,
+            "ref_norm": 1332.7699337534154,
+            "relative_l2": 0.000284286136375023,
+            "max_abs": 0.019011735916137695,
+            "exact": false
+          },
+          "flash_vs_half_python": {
+            "cosine": 0.9999998569041003,
+            "mine_norm": 1332.6006127075013,
+            "ref_norm": 1332.7726342968162,
+            "relative_l2": 0.0005502854133387318,
+            "max_abs": 0.040556907653808594,
+            "exact": false
+          },
+          "half_eager_vs_half_python": {
+            "cosine": 0.999999999999911,
+            "mine_norm": 1332.7726173754177,
+            "ref_norm": 1332.7726342968162,
+            "relative_l2": 4.0916698490852936e-07,
+            "max_abs": 2.6702880859375e-05,
+            "exact": false
+          },
+          "flash_vs_half_eager": {
+            "cosine": 0.9999998569092228,
+            "mine_norm": 1332.6006127075013,
+            "ref_norm": 1332.7726173754177,
+            "relative_l2": 0.0005502731316679306,
+            "max_abs": 0.04057502746582031,
+            "exact": false
+          },
+          "half_rounding": {
+            "cosine": 0.9999999595928094,
+            "mine_norm": 1332.7726342968162,
+            "ref_norm": 1332.7699337534154,
+            "relative_l2": 0.0002842861939423892,
+            "max_abs": 0.019011735916137695,
+            "exact": false
+          },
+          "scale_negative_control": {
+            "cosine": 0.9999999999999944,
+            "mine_norm": 2665.539867506831,
+            "ref_norm": 1332.7699337534154,
+            "relative_l2": 1.0,
+            "max_abs": 20.000757217407227,
+            "exact": false
+          }
+        },
+        "hint_byte_identical": true,
+        "pid": 2036,
+        "sampled_vram": [
+          {
+            "seconds": 342.226262329,
+            "mib": 10
+          },
+          {
+            "seconds": 342.363207849,
+            "mib": 216
+          },
+          {
+            "seconds": 342.498824845,
+            "mib": 230
+          },
+          {
+            "seconds": 342.666576206,
+            "mib": 112
+          }
+        ],
+        "sampled_peak_mib": 230,
+        "hashes": {
+          "half-eager.bin": "082939b5e9a5c6e6153241fb2efca20e80f3f86e6706f0881ddb55697cecac1f",
+          "k.bin": "61f8b9fa156f4ab375d122bdb55aff4c780390e6aeb358a2d56b62f5d8589230",
+          "v.bin": "230390f25df557bf655f0d33ce2627dd24f85dcc3ac360cca675888ce546a019",
+          "half-k.bin": "d95b3e1ac7578c7ef83404d5fd1c09d38196df09eafb09f6f59f919fd24634ec",
+          "eager.bin": "561d17a7f6547c2d639ed323c6d3a1d9df577d6e1fa56df52d8945cdd6cd668f",
+          "half-q.bin": "01256e3c12405b70cf790071df7ed5354813fa0c1d48048b679290c5f56e941b",
+          "flash.bin": "a82ab9de8ec4e56221b6d87fc7df53d1edf51fe73700c6b416b972185d4d6874",
+          "flash-prec.bin": "a82ab9de8ec4e56221b6d87fc7df53d1edf51fe73700c6b416b972185d4d6874",
+          "q.bin": "d00b82a055cde7d79d60948ae622804898e0b9debec0b3407d61504e6aff6a44",
+          "python.bin": "7b70e90d1dbe72fb815f632f199538f2a7c1c9aff1f8ac9d1d88262feaa08469",
+          "python-half.bin": "16acb4ade25e84426c77674d5d2907220f2a8a593b0f3dd7263a03fbe634cb97",
+          "half-v.bin": "74be66f493eaa36b89e5fa1246754d8cadc64dab200fb77996f1136a7e869189"
+        }
+      }
+    },
+    "full_pr_acceptance": false,
+    "tokenizer_exact_codes": {
+      "match_fraction": 0.9972826086956522,
+      "exact": false
+    },
+    "upstream": "691ce54144a6844cc641fd96046a6ba20776c8b0",
+    "upstream_files": {
+      "modeling_rope_utils.py": {
+        "url": "https://raw.githubusercontent.com/XiaomiMiMo/MiMo-Audio/691ce54144a6844cc641fd96046a6ba20776c8b0/src/mimo_audio_tokenizer/modeling_rope_utils.py",
+        "sha256": "29d62d9fa8acee7a969ea35defe5581fb4977563c56701e1659ecc0e6345ccf4"
+      },
+      "modeling_audio_tokenizer.py": {
+        "url": "https://raw.githubusercontent.com/XiaomiMiMo/MiMo-Audio/691ce54144a6844cc641fd96046a6ba20776c8b0/src/mimo_audio_tokenizer/modeling_audio_tokenizer.py",
+        "sha256": "42e802e075b018e6ea60616976ea8397a278ceb2728edbcef06fc436862fb236"
+      }
+    },
+    "diagnostic_controls_passed": true
+  },
+  "all_recorded_array_hashes_verified": true,
+  "inference": "Input half rounding alone does not explain fused-kernel drift. F32 hint is byte-identical. Internal fused arithmetic remains a candidate; no production change."
+}

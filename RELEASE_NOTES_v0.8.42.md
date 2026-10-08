@@ -284,11 +284,14 @@ not repeated medians. See the [CPU receipt](docs/mimo-pr492-cpu-blas-2026-10-08.
 
 Before tagging, final main native CI, lint and the full 33-backend regression
 must complete successfully, and this draft must match the final source.
-Native CI `37805363962` passes at `3fd1bf5fa`; lint `37806475239` and full
-regression `37802900089` are still progressing. The identical-input CUDA
-attention study remains diagnostic work: v3 saved official Q/K/V but failed to
-launch its executable because of a packaging path error. No standalone GPU
-attention timing or precision result is claimed from that run. A corrected
-rerun is planned. Reporter-specific Windows/Vulkan, Intel Mac and newer NVIDIA
+Native CI `37805363962` and lint `37806475239` pass at `3fd1bf5fa`;
+full regression `37802900089` is still progressing. The identical-input CUDA
+attention diagnostic now passes its independent controls on three layers:
+F32 eager relative L2 4.11e-7–1.03e-6, flash 6.20e-4–7.68e-4. The F32 hint
+is byte-identical to default flash. Isolated flash is 8.1–8.6x faster than
+eager; this is not full-model performance. Six tokenizer code differences
+remain, so #492 stays excluded. See the
+[attention receipt](docs/mimo-pr492-cuda-attention-2026-10-08.json).
+Reporter-specific Windows/Vulkan, Intel Mac and newer NVIDIA
 hardware retests remain open. OmniVoice's remaining upstream audio cleanup is
 tracked in #518.

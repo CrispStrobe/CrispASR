@@ -32,34 +32,27 @@ RVQ/EN-ZH decoded-output gates before production changes or accepting #492.
 Release follow-up in `/mnt/storage/crispasr/triage-20261007/worktree`: await
 final native/lint and full regression CI, fix failures, finalize comprehensive
 v0.8.42 notes and use `scripts/bump-version.sh` only after acceptance; #492
-remains excluded. CUDA v3 at immutable source `389c3c712`
-(packaging `8a38afbf8`) completed its CUDA build and tokenizer diagnostic on
-Tesla T4, but the standalone probe never started: the launcher used `build/`
-instead of CMake's actual `build/bin/`. Full logs and 105 output files,
-including captured Q/K/V and a 51.1 MB Kaggle-built cache, are archived under
-`/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-v3`. No attention
-kernel timing/parity result exists for v3. Follow-up in the same candidate
-worktree: repair/assert executable path, protect resident Q/K/V against allocator
-reuse and verify repeated outputs, refresh the existing HF build cache, then
-launch pinned v4. Corrected v4 is now submitted with numeric source
-`3493c8ef9` and packaging `9a0d75639`; CMake generates the actual executable
-path, and a real build/run negative control rejects the old assumed path.
-All Q/K/V are protected from allocator reuse; each of eight repetitions checks
-unchanged inputs and byte-exact replay output, outside timed regions. The
-existing private HF cache holds only Kaggle compiler output, pinned by revision
-and SHA-256; no model/reference repository was made private. Terminal collection
-is armed under `proof/cuda-v4` (collector PID 3741746). Full launch-failure
-receipt: `docs/mimo-pr492-cuda-attention-launch-2026-10-08.json`. Full-clip
-RVQ follow-up source `7dd998ca4` is queued in GH run `37815978118`: execute the
-pinned unmodified official quantizer across all frames, compare every native
-arm on its own pooled input and separately to the official encoder. The first
-run consumes CPU diagnostic `37783601573` at verified source `7551b12de`;
-the same runner can read only terminal Kaggle proof for the GPU follow-up.
-No numerical tolerances, discrete gates or production runtime change. The tiny capture smoke passes exact layouts and independent
-NumPy SDPA. Native CI `37805363962` PASS at `3fd1bf5fa`; lint `37806475239`
-has nine passed checks with clang-tidy running. Full 33-model regression
-`37802900089` has unit/select/smoke/preflight and six model jobs passed so far;
-remaining jobs are running/queued. Final main checks remain required.
+remains excluded. CUDA v4 completed on Tesla T4 at numeric source
+`3493c8ef9` / packaging `9a0d75639`. All 125 archived files and recorded
+array hashes are verified. Three identical-input layers pass the independent
+F32 eager controls (relative L2 4.11e-7–1.03e-6). Flash relative L2 is
+6.20e-4–7.68e-4; the F32 hint is byte-identical. Half-rounding alone is smaller
+(1.11e-4–2.84e-4), implicating additional fused arithmetic. Eight repetitions
+per arm verify unchanged resident inputs and byte-identical replay outputs.
+Flash medians 0.264–0.305ms versus eager 2.13–2.60ms apply ONLY to isolated
+attention; graph allocations 14,105,600/38,393,728 bytes are not model peaks.
+The tokenizer still differs at six of 2,208 entries. Full PR acceptance FAILS.
+Next claimed experiment: temporary env-gated CUDA TILE selection with existing
+F32 arithmetic for the exact MiMo shape. VEC requires padded KV length and is
+unsafe for unpadded T=551, so do not force it. Retain baseline/F32-eager controls,
+actual dispatch traces, unchanged code gates and independent Python oracle.
+No production ggml pin/default change. Archive v4 before repushing. Full-clip
+official quantizer runs `37815978118` (CPU) and `37816478863` (CUDA v4) are
+queued; preserve the current Kaggle endpoint until the latter downloads proof.
+Native `37805363962` and lint `37806475239` both PASS at `3fd1bf5fa`.
+Full 33-model regression `37802900089` is still running with no failures.
+Receipt: `docs/mimo-pr492-cuda-attention-2026-10-08.json`.
+
 Full receipts:
 `docs/mimo-pr492-cuda-precision-2026-10-08.json` and
 `docs/mimo-pr492-cuda-rvq-oracle-2026-10-08.json`.
