@@ -1,0 +1,47 @@
+{
+  "pr": 492,
+  "merged": false,
+  "contributor_source": "ac07cf0be3b528cdb035735738098e30f7468a41",
+  "base": "7afaf2e8559efdb0f16bae8a6bc95e145e9a18d9",
+  "ggml": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+  "hosted": "not dispatched yet",
+  "local_mel": {
+    "cases": 16,
+    "frames": [
+      63,
+      64,
+      65,
+      300
+    ],
+    "filterbank_layouts": 2,
+    "accumulator_types": [
+      "float",
+      "double"
+    ],
+    "threads": [
+      1,
+      4
+    ],
+    "baseline_candidate": "byte-identical",
+    "output_sha256": "8f6944527902dd4f52b7f25dd87754b622662c213898368cb7e51c667b881c05"
+  },
+  "frozen_reference": {
+    "repo": "cstr/mimo-asr-GGUF",
+    "revision": "e2d7dfebf0afd8076771903e92958039c5074eab",
+    "file": "diff-harness-ref/mimo-asr-ref.gguf",
+    "sha256": "7d4dfedc32a1451751199ed694a887f5091d3131bdefa840f811bc74e6312218",
+    "upstream_revision": "98641d537df521ac6df05f74090475694d9510b7",
+    "stages": 5,
+    "generated_text": "not present; archive explicitly skips generation",
+    "storage_note": "Legacy public reference in model repository; canonical dataset mirror remains a follow-up after validation"
+  },
+  "planned_hosted_scope": {
+    "baseline_and_candidate": "same current ggml pin and scalar mel build; baseline and candidate default, candidate non-flash",
+    "lm": "five stages against frozen independent Python archive, plus baseline/candidate norms and relative L2",
+    "tokenizer": "five continuous stages against baseline plus exact RVQ codes; no independent tokenizer fixture available",
+    "speech": "forced English/Chinese CLI and session exact equality and baseline/candidate equality",
+    "quantization": "Q4_K and F16 LM separate jobs; both use the pinned shipped Q4_K tokenizer",
+    "hardware": "CPU only; CANN/CUDA correctness and speed are separate gates"
+  },
+  "cold_proof": "/mnt/storage/crispasr/pr492-acceptance-20261008/proof"
+}

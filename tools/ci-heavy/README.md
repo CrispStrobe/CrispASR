@@ -41,3 +41,13 @@ live test, session rate getter, CLI WAV header and both TTS→ASR roundtrips.
 It also checks 24 kHz and missing-key metadata dispatch using temporary copies;
 those copies are not claimed to be legacy codec speech models. Run with
 `-f pip="numpy gguf huggingface_hub"` on Linux x86 or ARM.
+
+`pr492_acceptance.py --quant q4_k|f16|all` compares PR #492 with pinned main
+using the same ggml source. It checks 16 shared-mel cases byte-for-byte, five
+LM stages against the frozen Python reference with norms/relative L2, tokenizer
+stages and RVQ codes against baseline, and English/Chinese CLI/session speech.
+Default output must be exact; non-flash output is separately checked. F16 refers
+to the LM; both runs use the shipped Q4_K tokenizer. Run on Linux x86 with
+`-f pip="numpy gguf huggingface_hub soundfile"`. CPU results do not establish
+CANN/CUDA correctness or speed. See `docs/mimo-pr492-acceptance-2026-10-08.json`
+for reference provenance and the initial local mel result.
