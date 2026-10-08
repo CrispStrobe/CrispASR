@@ -11,6 +11,21 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-08 — MiMo original-Q4 CUDA precision follow-up
+
+Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, branch
+`review/pr492-acceptance`. User explicitly requests CUDA validation through
+`../kaggle_usage.md`. CUDA v1 terminal logs and all 72 proof files are archived.
+Version 2 will compare the normal CUDA dispatch with a diagnostic-only,
+environment-gated quantized-matrix cuBLAS/F32 dispatch on the same GPU and
+unchanged original Q4 file. Record the temporary ggml patch and actual
+operator-dispatch evidence, independent same-weight Python stages, norms,
+relative L2, exact RVQ codes and paired timing. Preserve all numerical gates;
+continuous diagnostic success alone does not accept #492. Use the shared
+Kaggle harness, immutable source/ggml pins and the single chr1s4 account.
+No production ggml/runtime/default changes or release tag are authorized by
+this diagnostic result alone.
+
 ## CLAIMED 2026-10-08 — MiMo Q4 CPU BLAS precision experiment
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, branch
