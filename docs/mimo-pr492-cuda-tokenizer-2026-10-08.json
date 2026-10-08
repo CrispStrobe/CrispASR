@@ -1175,5 +1175,119 @@
     }
   },
   "scope_note": "Continuous same-weight F32 and isolated-pool diagnostic gates pass. Original Q4 fails pooling and exact RVQ acceptance. Promoted CUDA flash/eager codes also differ; diagnostic success is not full acceptance. One fixture, no LM/CANN/performance certification.",
-  "kernel_log_sha256": "041eae1fd4a28b6f65c13ba26fd7e58179cd93ba99d73528390d25a4ed27b3ef"
+  "kernel_log_sha256": "041eae1fd4a28b6f65c13ba26fd7e58179cd93ba99d73528390d25a4ed27b3ef",
+  "promoted_rvq_pairwise_margins": {
+    "scope": "F64 pairwise distances for the six promoted CUDA flash/eager RVQ mismatches; not an exhaustive nearest-neighbor oracle or acceptance relaxation. Prior stages use each native arm\u2019s own codes.",
+    "rows": [
+      {
+        "frame": 263,
+        "stage": 1,
+        "flash_code": 621,
+        "eager_code": 49,
+        "two_candidate_distances": {
+          "flash": {
+            "flash_candidate": 765.5518259571581,
+            "eager_candidate": 765.5808186771267,
+            "flash_minus_eager": -0.028992719968528036
+          },
+          "eager": {
+            "flash_candidate": 765.7170121732838,
+            "eager_candidate": 765.5687304816443,
+            "flash_minus_eager": 0.14828169163956773
+          }
+        }
+      },
+      {
+        "frame": 263,
+        "stage": 3,
+        "flash_code": 122,
+        "eager_code": 117,
+        "two_candidate_distances": {
+          "flash": {
+            "flash_candidate": 583.2065763658104,
+            "eager_candidate": 594.851459379827,
+            "flash_minus_eager": -11.644883014016614
+          },
+          "eager": {
+            "flash_candidate": 731.3693175700296,
+            "eager_candidate": 620.0394338731755,
+            "flash_minus_eager": 111.32988369685404
+          }
+        }
+      },
+      {
+        "frame": 263,
+        "stage": 4,
+        "flash_code": 8,
+        "eager_code": 40,
+        "two_candidate_distances": {
+          "flash": {
+            "flash_candidate": 509.54035704293557,
+            "eager_candidate": 620.327712555637,
+            "flash_minus_eager": -110.78735551270148
+          },
+          "eager": {
+            "flash_candidate": 661.9996350060944,
+            "eager_candidate": 518.1424033671366,
+            "flash_minus_eager": 143.85723163895784
+          }
+        }
+      },
+      {
+        "frame": 263,
+        "stage": 5,
+        "flash_code": 61,
+        "eager_code": 75,
+        "two_candidate_distances": {
+          "flash": {
+            "flash_candidate": 447.69228308576487,
+            "eager_candidate": 505.1975710126092,
+            "flash_minus_eager": -57.505287926844346
+          },
+          "eager": {
+            "flash_candidate": 546.3435925304329,
+            "eager_candidate": 444.9486130884367,
+            "flash_minus_eager": 101.39497944199627
+          }
+        }
+      },
+      {
+        "frame": 263,
+        "stage": 6,
+        "flash_code": 89,
+        "eager_code": 84,
+        "two_candidate_distances": {
+          "flash": {
+            "flash_candidate": 433.99909476049027,
+            "eager_candidate": 560.936396753811,
+            "flash_minus_eager": -126.93730199332072
+          },
+          "eager": {
+            "flash_candidate": 455.1207744206637,
+            "eager_candidate": 419.5097797925117,
+            "flash_minus_eager": 35.61099462815196
+          }
+        }
+      },
+      {
+        "frame": 263,
+        "stage": 7,
+        "flash_code": 104,
+        "eager_code": 64,
+        "two_candidate_distances": {
+          "flash": {
+            "flash_candidate": 403.205052965821,
+            "eager_candidate": 509.2933398192978,
+            "flash_minus_eager": -106.0882868534768
+          },
+          "eager": {
+            "flash_candidate": 446.98010088224476,
+            "eager_candidate": 406.30307612227205,
+            "flash_minus_eager": 40.67702475997271
+          }
+        }
+      }
+    ],
+    "interpretation": "All six differences occur at frame 263. The first is RVQ stage 1: each native arm selects the closer of the two competing candidates on its own residual in F64. This supports a pooling-input perturbation changing the decision, followed by residual-code propagation; it is not exhaustive RVQ parity proof."
+  }
 }
