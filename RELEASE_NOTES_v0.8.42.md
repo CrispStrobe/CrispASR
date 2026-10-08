@@ -28,6 +28,8 @@ PR #492 remains unmerged.
   configuration and license files. Companion failures propagate; cached
   incomplete bundles can be repaired. Generic `encoder*.onnx` paths are detected
   from their companion configuration through both CLI and C ABI.
+- ONNX backend cleanup shares a nonvirtual helper between explicit shutdown
+  and destruction, resolving the destructor diagnostic from deep static analysis.
 - Five-graph Moonshine produces incremental drafts with persistent frontend
   state and bounded encoder updates. Final flush replays the actual batch
   frontend/encoder/decoder from retained original PCM, correcting Small int8

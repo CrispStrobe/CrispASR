@@ -1395,5 +1395,18 @@
     },
     "discovery_fixed_source": "608e6012202c0f5942ddef97eb5fae2353fc18af",
     "discovery_fixed_run": 37761910908
+  },
+  "moonshine_onnx_destructor_followup": {
+    "failure_run": 37749837117,
+    "failure_source": "5c172455e3a0dc606fd36135bb9d08682c4b4523",
+    "diagnostic": "virtualCallInConstructor: shutdown called from destructor",
+    "file": "examples/cli/crispasr_backend_moonshine_onnx.cpp",
+    "fix": "move unchanged close/null-reset operations to nonvirtual close_context shared by shutdown and destructor",
+    "fixed_file_sha256": "45fcbdc6a9c20d9971b24306001fcbb0cd372fa5bdd0e79ff76fc6a3a6808d8c",
+    "local_before": "cppcheck 2.17.1 reproduces exact diagnostic",
+    "local_after": "diagnostic gone; C++17 syntax and clang-format 18 pass",
+    "hosted_after": "final full cppcheck 2.7 pending",
+    "scope": "resource-cleanup dispatch only; no model/stream graph changes",
+    "proof": "/mnt/storage/crispasr/triage-20261007/proof/moonshine-destructor"
   }
 }

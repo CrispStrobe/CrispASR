@@ -47,6 +47,11 @@ public:
 class MoonshineOnnxBackend : public CrispasrBackend {
     moonshine_onnx_context* ctx_ = nullptr;
 
+    void close_context() {
+        moonshine_onnx_close(ctx_);
+        ctx_ = nullptr;
+    }
+
 public:
     const char* name() const override { return "moonshine-onnx"; }
     const char* sole_language() const override { return "de"; }
@@ -95,11 +100,8 @@ public:
                 return;
         stream->append(nullptr, 0, true, on_text);
     }
-    void shutdown() override {
-        moonshine_onnx_close(ctx_);
-        ctx_ = nullptr;
-    }
-    ~MoonshineOnnxBackend() override { shutdown(); }
+    void shutdown() override { close_context(); }
+    ~MoonshineOnnxBackend() override { close_context(); }
 };
 std::unique_ptr<CrispasrBackend> crispasr_make_moonshine_onnx_backend() {
     return std::make_unique<MoonshineOnnxBackend>();

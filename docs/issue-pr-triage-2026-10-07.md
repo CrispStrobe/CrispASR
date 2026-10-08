@@ -452,3 +452,18 @@ and no alignment/binding runtime changed after proof. HISTORY archives the
 implementation and the comprehensive release draft now includes character
 timestamps and bidirectional Java UTF-8. Final main platform CI still gates
 release; MiMo #492 stays unmerged because non-flash numerical acceptance failed.
+
+## Moonshine ONNX destructor deep-lint fix — 2026-10-08
+
+[Full cppcheck 37749837117](https://github.com/CrispStrobe/CrispASR/actions/runs/37749837117)
+completed with one diagnostic on integrated #515 source: the ONNX CLI adapter's
+destructor calls virtual `shutdown()`. The existing native close/null-reset
+operation is now in a private nonvirtual helper shared by both entry points.
+Local cppcheck 2.17.1 reproduces the original finding and removes it afterward;
+C++17 syntax and clang-format 18 pass. This changes cleanup dispatch only.
+Final hosted pinned cppcheck 2.7 and platform checks remain required before tag.
+
+#516 was fast-forwarded onto main at `ff33461e0`; GitHub marks the PR merged
+and #490 closed. All nine recorded accepted runtime fingerprints still match.
+Twenty-two queued superseded character-branch CI runs were cancelled after
+integration, retaining completed acceptance artifacts and final main/F16 runs.
