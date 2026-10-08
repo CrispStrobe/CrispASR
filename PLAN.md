@@ -44,6 +44,12 @@ F16 is the LM; both jobs use the shipped Q4_K tokenizer. Source/fixture pins
 and local evidence are on the branch in
 `docs/mimo-pr492-acceptance-2026-10-08.json`.
 
+Follow-up claimed in the same worktree: the MiMo C ABI forwards flash attention
+but omits `use_gpu` and verbosity. Wire both through, with an actual built-library
+initializer-interposition guard proving the old mismatch and the corrected
+values without model/GPU execution. Current Q4/F16 runs retain their original
+source pin; do not cancel useful numerical work for this scoped follow-up.
+
 No new CANN/CUDA correctness or performance claim; combined CANN/NZ timings
 cannot be attributed to this PR alone. PR #492 remains unmerged. #516 Arabic
 acceptance has progressed to a Java input-encoding fix; see the #490 claim.
