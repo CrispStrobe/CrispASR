@@ -9,3 +9,7 @@ Actual CUDA ASR must return each input sentence exactly, with no quality-gate
 relaxation. VAE CPU fallback fails the profile. NVIDIA hardware results cannot
 certify Intel B390 speed or listening quality. No runtime/default/model change.
 Archive terminal logs/output before repush; refresh exported real build cache.
+
+A separate process captures `GGML_VK_PERF_LOGGER` operation timings after the
+accepted timing loop, so instrumentation does not contaminate those samples.
+The capture must contain LocDiT matmul and VAE sine-operation evidence.

@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 SCRIPT_VERSION = 'voxcpm2-current-profile-v1'
-SOURCE = 'c98e32abf20f15d7936f0d2dacfd62449f75d480'
+SOURCE = 'ece203528358c5b919b72877075715a5b7ae81a1'
 GGML = 'c36dab89b662838f0f5d4826c399198c0b90bbfc'
 CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'mimo-pr492/sm75-full-asr-v3.tar', 'revision': '0480221f9f7e5b16773ad8ad7e673cfc1afcdc94', 'sha256': '5cf9eb772a1190c2a058d9ec682ea0b08378b0d723bfbbef7235d80293833344', 'bytes': 78080000}
 WORK = Path('/kaggle/working')
@@ -106,6 +106,17 @@ def main():
             with (OUT/'vulkan-worker.log').open('w') as log:
                 result = subprocess.run([sys.executable, REPO / 'tools/ci-heavy/voxcpm2_vulkan_profile.py'],
                                         cwd=REPO, stdout=log, stderr=subprocess.STDOUT, timeout=7200)
+        if result.returncode == 0:
+            perf = OUT/'per-op'
+            perf.mkdir(exist_ok=True)
+            with kh.build_heartbeat('vulkan-per-op-capture'):
+                with (OUT/'vulkan-per-op.log').open('w') as log:
+                    capture = subprocess.run([sys.executable, REPO/'tools/ci-heavy/voxcpm2_vulkan_profile.py', '--perf-only'],
+                        cwd=REPO, env=dict(os.environ,HEAVY_OUT=str(perf)),
+                        stdout=log,stderr=subprocess.STDOUT,timeout=2400)
+            assert capture.returncode == 0, 'Vulkan per-op capture failed'
+            per_op = (OUT/'vulkan-per-op.log').read_text()
+            assert 'MUL_MAT' in per_op and 'SIN' in per_op, 'Missing LocDiT/VAE per-op evidence'
         kh.step('asr.validation.end', returncode=result.returncode)
     finally:
         kh.export_ccache_tar(OUT / 'ccache.tar')
