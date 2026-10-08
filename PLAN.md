@@ -19,8 +19,10 @@ explicit Metal linkage and Objective-C++17. A real compiler negative control
 rejects the old single-argument call and accepts the new two-argument call.
 The fixture now restores both cache environment variables; no-device cases
 explicitly skip instead of reporting success. Added `metal-cache-test.yml`
-(shared/static macOS build and focused CTest). Hosted compilation is pending;
-no GPU cache execution or runtime/cache-default change is claimed.
+(shared/static macOS build and focused CTest). First shared hosted build
+`37755267314` compiled the Objective-C++ test, then failed linking Objective-C
+runtime symbols. Added explicit `objc` linkage; fresh hosted validation pending.
+No GPU cache execution or runtime/cache-default change is claimed.
 
 ## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
 
@@ -34,7 +36,7 @@ both layouts and accumulator types, 1/4 threads), byte-identical to main.
 Found and checksum-verified the legacy public Python LM reference, upstream
 `98641d537df521ac6df05f74090475694d9510b7`. It has five LM stages but explicitly
 skips generated text, so it is not decoded-output proof. Hosted Q4 job
-`37754319857` is queued; F16 job `37754323202` waits behind it in the same
+`37754319857` is running; F16 job `37754323202` waits behind it in the same
 script concurrency group. Each compares main/default, candidate/default and
 candidate/non-flash: five LM stage values/norms/relative L2, tokenizer continuous
 stages and exact RVQ codes, English/Chinese CLI/session equality and transcripts.

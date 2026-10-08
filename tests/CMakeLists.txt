@@ -2977,6 +2977,7 @@ if (APPLE AND GGML_METAL)
         Catch2::Catch2WithMain
         ggml-metal
         "-framework Metal"
+        objc
     )
     # Match the host C++ standard the rest of the tests use (the
     # .mm file mixes Catch2 templates + filesystem with Obj-C

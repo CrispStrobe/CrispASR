@@ -1312,7 +1312,7 @@
     },
     "q4_run": 37754319857,
     "f16_run": 37754323202,
-    "hosted_status": "Q4 queued, F16 pending same script concurrency group",
+    "hosted_status": "Q4 running, F16 pending serial concurrency",
     "reference": {
       "repo": "cstr/mimo-asr-GGUF",
       "revision": "e2d7dfebf0afd8076771903e92958039c5074eab",
@@ -1327,8 +1327,19 @@
   "metal_cache_compatibility": {
     "source": "c849ba214a97a9c5f596eed0a5c25b91701f555f",
     "run": 37755267314,
-    "status": "queued",
+    "status": "first shared job compiled test but failed linking Objective-C runtime symbols; explicit objc added, fresh validation pending",
     "local_negative_control": "compiler rejects old one-argument device-init, accepts new two-argument call",
-    "scope": "shared/static macOS test compilation and lifecycle CTest; explicit skip without Metal device, no PSO serialization proof"
+    "scope": "shared/static macOS test compilation and lifecycle CTest; explicit skip without Metal device, no PSO serialization proof",
+    "first_failure": {
+      "run": 37755267314,
+      "job": 113238147072,
+      "stage": "link",
+      "missing_symbols": [
+        "objc_autoreleasePoolPop",
+        "objc_autoreleasePoolPush",
+        "objc_release"
+      ],
+      "fix": "explicit objc linkage"
+    }
   }
 }
