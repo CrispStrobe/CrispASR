@@ -1,0 +1,85 @@
+{
+  "scope": "Full CUDA ASR v2 built and eight transcripts agree; intended cuBLAS dispatch absent, so acceptance/profile stopped",
+  "hardware": {
+    "script_version": "mimo-pr492-asr-cuda-v2",
+    "source": "fee98afbc80296e4bb7b63ccf6b8d8952d5433f2",
+    "ggml": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+    "devices": "name, compute_cap, memory.total [MiB]\nTesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB\n",
+    "arch": "75",
+    "cmake_flags": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DBUILD_SHARED_LIBS=ON",
+      "-DGGML_NATIVE=OFF",
+      "-DGGML_BLAS=OFF",
+      "-DCRISPASR_MEL_BLAS=OFF",
+      "-DCRISPASR_BUILD_TESTS=OFF",
+      "-DCRISPASR_BUILD_EXAMPLES=ON",
+      "-DCRISPASR_BUILD_SERVER=OFF",
+      "-DGGML_CUDA=ON",
+      "-DGGML_CUDA_NO_VMM=ON",
+      "-DCMAKE_CUDA_ARCHITECTURES=75",
+      "-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc",
+      "-DCRISPASR_NO_C2PA_NATIVE=ON",
+      "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold",
+      "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold",
+      "-DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=mold"
+    ],
+    "kernel_sha256": "440ac4b01d1dacc9b328cbb4a4e89d1fbd71506e4e07b72e8a1c4ca377c36de4",
+    "cache": {
+      "repo": "cstr/crispasr-ccache",
+      "file": "mimo-pr492/sm75-attention-f32-v1.tar",
+      "revision": "f84b003cee87d2d5b0801b34831d7f89832883b3",
+      "sha256": "ee362852ccc3f23d2bbe2f15eabdb01f72e91d9a5f7c14f98c13f77a09da9652",
+      "bytes": 51752960,
+      "source": "534a929f75e61febf4143a96fdaa88dbdb811528"
+    },
+    "submodules": " c36dab89b662838f0f5d4826c399198c0b90bbfc ggml (v0.10.2-1125-gc36dab89)\n e40329b83f16f67bb5ddc7bb13ae18de0a9376fc third_party/c2pa-audio (c2pa_audio-v0.2.1~5)\n",
+    "scope": "Full CUDA MiMo CLI/session speech acceptance before repeated precision A/B.\n\nThe original pinned Q4 LM/codec run on one actual GPU; numerical overrides\nare diagnostic only, restricted to tokenizer weights and unmasked D64/H20.\nNo production default or model change; CANN/full PR acceptance remains separate.\n"
+  },
+  "terminal_status": "ERROR",
+  "eight_transcripts_match": true,
+  "speech": {
+    "default": {
+      "en": {
+        "abi": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+        "audio_sha256": "71614bdbf09447be92877b4629b12d9e7c915775af963886dc36e1f6d31693ce",
+        "cli": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
+      },
+      "zh": {
+        "abi": "开放时间早上九点至下午五点",
+        "audio_sha256": "9606d246ae977781b16ec8cf99be3c1347407b29c443cfb8fbd086280d588f90",
+        "cli": "开放时间早上九点至下午五点"
+      }
+    },
+    "precise": {
+      "en": {
+        "abi": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+        "audio_sha256": "71614bdbf09447be92877b4629b12d9e7c915775af963886dc36e1f6d31693ce",
+        "cli": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
+      },
+      "zh": {
+        "abi": "开放时间早上九点至下午五点",
+        "audio_sha256": "9606d246ae977781b16ec8cf99be3c1347407b29c443cfb8fbd086280d588f90",
+        "cli": "开放时间早上九点至下午五点"
+      }
+    }
+  },
+  "failure": "Scope matched encoder.* stem/norm names, omitted actual enc.blk.* quantized matrices",
+  "cublas_dispatch_verified": false,
+  "full_speech_acceptance": false,
+  "profile_passed": false,
+  "full_pr_acceptance": false,
+  "terminal_log_sha256": "9b3aca5979836996676231af5a3b8be996a7726f0b8f0d2e7e69137c4759b637",
+  "retry": {
+    "version": 3,
+    "numeric_source": "6b90353678f525e634c1a359355ae15c2c815ace",
+    "packaging": "e77acb058b0c4b44d00a6b3fd149f030e2a46e92",
+    "codec_quantized_matrices": 192,
+    "scoped_matrices": 192,
+    "official_code_gate": "All 2208 frame-major I32 IDs must hash to independent official encoder/quantizer result before full speech/profile",
+    "official_codes_sha256": "65da2d8bbf0338e80d3322ad88325f71c66db069767a97add8095aa891a7867b"
+  }
+}

@@ -28,9 +28,9 @@ Receipts: `docs/mimo-pr492-cuda-tile-precision-2026-10-08.json` and
 oracle `37820013373` also PASS: flash differs at six encoder codes, eager zero;
 each arm's RVQ is correct on its own pool.
 
-Full-ASR CUDA v2 submitted: kernel `mimo-pr492-asr-cuda`, numeric source
-`fee98afbc80296e4bb7b63ccf6b8d8952d5433f2`, packaging `ed2273fa7`.
-Temporary cuBLAS override is restricted to tokenizer `encoder.*` weights;
+Full-ASR CUDA v3 submitted: kernel `mimo-pr492-asr-cuda`, numeric source
+`6b90353678f525e634c1a359355ae15c2c815ace`, packaging `e77acb058`.
+Temporary cuBLAS override is restricted to tokenizer `enc.blk.*`/`encoder.*` weights;
 F32 TILE remains env/shape gated. Actual full Q4 LM/codec run sequentially
 through EN/ZH CLI and session C ABI: 12 outputs must pass the established
 speech guards and exact cross-mode/surface readback before ANY profile.
@@ -39,7 +39,7 @@ measured calls per clip/process, validating every decoded result; sampled
 GPU0 process-memory peaks are lower bounds, not allocator peaks. No production
 runtime, ggml pin, file size or default changes. The actual prior Kaggle cache
 was refreshed and pinned to `f84b003cee87d2d5b0801b34831d7f89832883b3`.
-Collector: `/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-asr-v2`.
+Collector: `/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-asr-v3`.
 Both earlier tokenizer endpoints remain intact for independent replays.
 Full-ASR v1 stopped at CMake before compilation/inference: the launcher
 initialized ggml alone and omitted the CLI's required consent-hash submodule.
@@ -47,6 +47,16 @@ All terminal logs/seven outputs are archived in `proof/cuda-asr-v1`.
 V2 initializes every pinned submodule and verifies clean status and the required
 SHA-256 header before configure. Numeric source/patches/models/gates unchanged.
 Receipt: `docs/mimo-pr492-full-asr-launch-2026-10-08.json`.
+V2 built the actual shared library and CLI on T4; all eight tested default/
+TILE-only EN/ZH outputs agree. It FAILED the cuBLAS dispatch gate before eager
+or profiling: quantized codec matrices use `enc.blk.*`, not the `encoder.*`
+stem/norm prefix. No numerical/dispatch gate was relaxed. All 28 terminal files
+are archived. V3 selects both prefixes, verifies actual GGUF inventories
+(all 192 quantized codec matrices selected, no LM matrices selected), and
+rechecks full-library flash/eager arrays against all 2,208 official codes
+before full speech and any profile. Cache refreshed from the actual successful
+full build to `2d1f1ff707b75c962f369da2e3730296dee4e61e`.
+Receipt: `docs/mimo-pr492-full-asr-scope-2026-10-08.json`.
 
 Next: inspect full speech results before interpreting timing; fix actual
 failures, preserve unchanged gates. Earlier Q4 LM non-flash numerical failures,

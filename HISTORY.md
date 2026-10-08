@@ -23132,3 +23132,13 @@ hash requires c2pa-audio even with signing disabled. Complete terminal evidence
 was archived before retry. V2 packaging `ed2273fa7` initializes/verifies both
 pinned submodules; numeric source and acceptance gates are unchanged.
 Receipt: `docs/mimo-pr492-full-asr-launch-2026-10-08.json`.
+
+## 2026-10-08 — Full CUDA scope guard catches missed encoder matrices
+
+V2 built the full library/CLI and eight EN/ZH outputs agree. Actual cuBLAS
+dispatch was absent because codec matrices use enc.blk.*, while the filter
+matched encoder.* stem/norm names. The unchanged trace gate stopped before
+profiling. Archived all terminal proof, refreshed the successful build cache,
+and submitted v3 with actual GGUF scope inventories and full-library exact
+code replay against the independent official oracle before speech/profile.
+Receipt: `docs/mimo-pr492-full-asr-scope-2026-10-08.json`.
