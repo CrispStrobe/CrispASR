@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stream-quantize Echo on hosted CPU; private upload for real GPU acceptance."""
+"""Stream-quantize Echo on hosted CPU; public experimental upload for real GPU acceptance."""
 import hashlib
 import json
 import os
@@ -20,19 +20,21 @@ os.environ.update(HF_HOME=str(TEMP/'hf'), HF_XET_CACHE=str(TEMP/'xet'), TMPDIR=s
 sys.path.insert(0, str(ROOT / 'tools'))
 from index_echo_quant_recipes import RECIPES, audit
 SOURCE_REVISION = 'dffbadf0f173446fee0364a0807803d2b2fb6f49'
-PRIVATE_REPO = 'cstr/index-echo-9b-staging-GGUF'
-PREFIX = 'q4-guards-20261002'
+PREPARATION_REPO = 'cstr/index-echo-9b-GGUF'
+PREFIX = 'experiments/q4-guards-20261008'
 api = HfApi(token=os.environ['HF_TOKEN'])
-assert api.repo_info(PRIVATE_REPO).private, 'Experiments must remain private'
+assert not api.repo_info(PREPARATION_REPO).private, 'Preparation must use the authorized public repository'
 receipt = dict(source_revision=SOURCE_REVISION, source_repo='cstr/index-echo-9b-GGUF',
-               private_repo=PRIVATE_REPO, prefix=PREFIX, validated=False,
+               preparation_repo=PREPARATION_REPO, prefix=PREFIX, validated=False,
                preparation_only=True, recipes={})
 receipt['source_commit'] = subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip()
-# Prove the intended write permission before downloads or a build.
+# An experiment prefix leaves all published model files and registry pins intact.
+# This marker explicitly disclaims runtime acceptance; it also proves write
+# permission before a large download/build (it cannot prove available quota).
 preflight = OUT / 'preflight.json'
 preflight.write_text(json.dumps(receipt, indent=2)+'\n')
-api.upload_file(repo_id=PRIVATE_REPO, path_or_fileobj=str(preflight),
-                path_in_repo=PREFIX+'/preflight.json', commit_message='Q4 preparation write preflight')
+api.upload_file(repo_id=PREPARATION_REPO, path_or_fileobj=str(preflight),
+                path_in_repo=PREFIX+'/preflight.json', commit_message='Unvalidated public Q4 experiment: preparation write preflight')
 build = TEMP / 'build'
 for args in [
     ['cmake', '-S', ROOT, '-B', build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
@@ -78,17 +80,23 @@ for name, rules in RECIPES.items():
                   decoder_bytes=target.stat().st_size,primary_bytes=primary.stat().st_size,
                   decoder_sha256=sha256(target),source_revision=SOURCE_REVISION,
                   source_primary_unchanged=True, path=PREFIX+'/'+name+'/decoder.gguf')
-    manifest = OUT/(name+'-recipe.json');manifest.write_text(json.dumps(recipe,indent=2)+'\n')
-    upload = api.upload_file(repo_id=PRIVATE_REPO,path_or_fileobj=str(target),path_in_repo=recipe['path'],
+    manifest = OUT/(name+'-recipe.json')
+    upload = api.upload_file(repo_id=PREPARATION_REPO,path_or_fileobj=str(target),path_in_repo=recipe['path'],
                             commit_message='Experimental '+name+'; GPU acceptance pending')
     recipe['weight_revision'] = upload.oid
-    api.upload_file(repo_id=PRIVATE_REPO,path_or_fileobj=str(manifest),path_in_repo=PREFIX+'/'+name+'/recipe.json')
+    # Verify the immutable remote object before deleting the only local result.
+    remote = api.get_paths_info(PREPARATION_REPO, [recipe['path']], revision=upload.oid)[0]
+    assert remote.size == recipe['decoder_bytes'], 'Uploaded size mismatch'
+    assert remote.lfs and remote.lfs.sha256 == recipe['decoder_sha256'], 'Uploaded SHA256 mismatch'
+    recipe['remote_verified'] = True
+    manifest.write_text(json.dumps(recipe, indent=2)+'\n')
+    api.upload_file(repo_id=PREPARATION_REPO,path_or_fileobj=str(manifest),path_in_repo=PREFIX+'/'+name+'/recipe.json')
     receipt['recipes'][name] = recipe
     (OUT/'q4-preparation.json').write_text(json.dumps(receipt,indent=2)+'\n')
     target.unlink()
     print(name,recipe['decoder_bytes'],'bytes, Q4 bytes',recipe['q4_k_bytes'],flush=True)
-final = api.upload_file(repo_id=PRIVATE_REPO,path_or_fileobj=str(OUT/'q4-preparation.json'),
+final = api.upload_file(repo_id=PREPARATION_REPO,path_or_fileobj=str(OUT/'q4-preparation.json'),
                         path_in_repo=PREFIX+'/preparation.json',commit_message='Completed Q4 preparation; GPU acceptance pending')
-receipt['private_revision'] = final.oid
+receipt['preparation_revision'] = final.oid
 (OUT/'q4-preparation.json').write_text(json.dumps(receipt,indent=2)+'\n')
 (OUT/'summary.md').write_text('Four mixed-Q4 candidates prepared and physically audited; no runtime acceptance claim.\n')

@@ -51,3 +51,13 @@ These guards follow the existing quantizer's acoustic/adapter/output-head
 precision floors for Hojo, MOSS, Qwen3-ASR, Canary-Qwen and TTS models, plus
 Echo's prior Q8 failure evidence. A recipe is usable only after decoded and
 numerical acceptance. A failed recipe is not rescued by a high average cosine.
+
+## Public preparation retry (2026-10-08)
+
+The CPU producer now writes unvalidated candidates under
+`cstr/index-echo-9b-GGUF/experiments/q4-guards-20261008/`. It verifies each
+immutable remote object's size and LFS SHA256 before removing the local result.
+Per-candidate manifests include the weight commit. This does not overwrite
+published model files or change model-registry pins. The GPU consumer still
+requires a completed preparation receipt and immutable pins before launch;
+Q4 runtime acceptance remains pending.
