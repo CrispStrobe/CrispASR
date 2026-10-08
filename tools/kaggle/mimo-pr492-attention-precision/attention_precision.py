@@ -14,8 +14,8 @@ from pathlib import Path
 import subprocess
 import sys
 
-SCRIPT_VERSION = 'mimo-pr492-tokenizer-cuda-v4'
-SOURCE = '3493c8ef9738fa60175ea2c76201fa8cc57cd7f8'
+SCRIPT_VERSION = 'mimo-pr492-attention-precision-v1'
+SOURCE = '534a929f75e61febf4143a96fdaa88dbdb811528'
 GGML = 'c36dab89b662838f0f5d4826c399198c0b90bbfc'
 CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'mimo-pr492/sm75-v3.tar', 'revision': '7bac5a6c0e5cae845d8ded349a2bcb7d0a23050e', 'sha256': 'a60bf4b1ea7d0db9099ead0383133c2ac22b0f5c6c8c0117857dc1ef59035b95', 'bytes': 51097600, 'source': '389c3c712081f8612817e20b7f9e784d03a7b703'}
 WORK = Path('/kaggle/working')
@@ -28,7 +28,7 @@ def main():
     SCRATCH.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
     os.environ.update(PYTHONUNBUFFERED='1', TMPDIR=str(SCRATCH),
-                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='mimo-pr492-tokenizer-cuda-v4')
+                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='mimo-pr492-attention-precision-v1')
     devices = subprocess.check_output(['nvidia-smi', '--query-gpu=name,compute_cap,memory.total',
                                        '--format=csv'], text=True)
     print(SCRIPT_VERSION, devices, flush=True)
@@ -72,6 +72,8 @@ def main():
     from pr492_tokenizer_cuda_precision import patch_cuda
     patch = patch_cuda(REPO, OUT)
     kh.step('cuda.precision.patch', **patch)
+    from pr492_attention_precision import patch_attention
+    kh.step('cuda.attention.patch', **patch_attention(REPO, OUT))
     wrapper = SCRATCH / 'wrapper'
     wrapper.mkdir()
     (wrapper / 'entry.cpp').write_text('''#include "mimo_tokenizer.h"
@@ -112,7 +114,7 @@ cmake_language(DEFER CALL mimo_diag_add_probe)
                       MIMO_DIAG_ATTN_PROBE=str(probe))
     kh.step('tokenizer.diagnosis.begin', source=SOURCE, arch=arch)
     with kh.build_heartbeat('tokenizer-cuda-diagnosis'):
-        result = subprocess.run([sys.executable, REPO / 'tools/ci-heavy/pr492_attention_diagnose.py'],
+        result = subprocess.run([sys.executable, REPO / 'tools/ci-heavy/pr492_attention_precision_diagnose.py'],
                                 cwd=REPO, timeout=7200)
     kh.step('tokenizer.diagnosis.end', returncode=result.returncode)
     kh.export_ccache_tar(OUT / 'ccache.tar')
