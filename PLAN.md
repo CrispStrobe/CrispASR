@@ -11,6 +11,13 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-08 — Metal cache test API compatibility
+
+Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`. Repair the existing
+Apple-only cache test after the ggml v0.26.0 device-init signature change.
+Add a focused macOS hosted compile/CTest gate; do not claim GPU cache execution
+when a hosted runner has no Metal device. No runtime/cache-default change.
+
 ## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, internal
