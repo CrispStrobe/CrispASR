@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import time
 import urllib.request
 
 import gguf
@@ -43,15 +44,23 @@ def native(library, codec, audio, dest, flash):
     libc = C.CDLL(None)
     libc.free.argtypes = [C.c_void_p]
     p = lib.mimo_tokenizer_context_default_params()
-    p.n_threads, p.verbosity, p.use_gpu, p.flash_attn = 4, 0, False, bool(int(flash))
+    gpu = os.environ.get('MIMO_TOKENIZER_DIAG_GPU') == '1'
+    p.n_threads, p.verbosity, p.use_gpu, p.flash_attn = 4, int(gpu), gpu, bool(int(flash))
     ctx = lib.mimo_tokenizer_init_from_file(os.fsencode(codec), p)
     assert ctx
     pcm, sr = sf.read(audio, dtype='float32')
     assert sr == 16000 and pcm.ndim == 1
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
+    execution = dict(gpu_requested=gpu, pid=os.getpid(), stages={})
+    if gpu:
+        processes = subprocess.check_output(['nvidia-smi', '--query-compute-apps=pid',
+                                             '--format=csv,noheader,nounits'], text=True)
+        assert str(os.getpid()) in processes.split(), 'Native worker has no CUDA process'
+        execution['cuda_processes'] = processes.splitlines()
     try:
         for stage in TOK_STAGES:
+            started = time.monotonic()
             n = C.c_int()
             ptr = lib.mimo_tokenizer_extract_stage(ctx, pcm.ctypes.data_as(C.POINTER(C.c_float)),
                                                    len(pcm), stage.encode(), C.byref(n))
@@ -62,6 +71,8 @@ def native(library, codec, audio, dest, flash):
                 libc.free(ptr)
             assert np.isfinite(data).all()
             np.save(dest / (stage + '.npy'), data)
+            execution['stages'][stage] = dict(seconds=time.monotonic() - started, elements=n.value)
+            (dest / 'native-execution.json').write_text(json.dumps(execution, indent=2) + '\n')
     finally:
         lib.mimo_tokenizer_free(ctx)
 
@@ -122,19 +133,28 @@ def main():
     os.environ.update(TMPDIR=str(scratch), OMP_NUM_THREADS='4', OPENBLAS_NUM_THREADS='4',
                       CRISPASR_MIMO_FORCE_CPU='1', CRISPASR_GGUF_MMAP='1')
     os.environ.pop('CRISPASR_CORE_ATTN_EAGER_F32', None)
-    receipt = dict(passed=False, scope=__doc__, upstream=UPSTREAM,
+    gpu = os.environ.get('MIMO_TOKENIZER_DIAG_GPU') == '1'
+    if gpu:
+        os.environ.pop('CRISPASR_MIMO_TOK_CPU', None)
+        os.environ['NV_TF32_OVERRIDE'] = '0'
+    receipt = dict(passed=False, scope=__doc__, upstream=UPSTREAM, gpu_requested=gpu,
                    source=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip())
     def save():
         (out / 'tokenizer-diagnosis.json').write_text(json.dumps(receipt, indent=2) + '\n')
     save()
-    run(['bash', ROOT / 'tools/ci-apt.sh', 'update'], out / 'apt-update.log')
-    run(['bash', ROOT / 'tools/ci-apt.sh', 'install', '-y', 'ffmpeg'], out / 'apt-install.log')
-    build = scratch / 'build'
-    run(['cmake', '-S', ROOT, '-B', build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
-         '-DBUILD_SHARED_LIBS=ON', '-DGGML_NATIVE=OFF', '-DGGML_BLAS=OFF', '-DCRISPASR_MEL_BLAS=OFF',
-         '-DCRISPASR_BUILD_SERVER=OFF', '-DCRISPASR_BUILD_TESTS=OFF'], out / 'configure.log')
-    run(['cmake', '--build', build, '--target', 'crispasr-lib', '-j4'], out / 'build.log')
-    library = next(build.rglob('libcrispasr.so'))
+    if os.environ.get('MIMO_TOKENIZER_DIAG_LIB'):
+        library = Path(os.environ['MIMO_TOKENIZER_DIAG_LIB']).resolve(strict=True)
+        receipt['external_library'] = dict(path=str(library), sha256=digest(library))
+    else:
+        assert not gpu, 'CUDA diagnostic requires the explicitly built CUDA library'
+        run(['bash', ROOT / 'tools/ci-apt.sh', 'update'], out / 'apt-update.log')
+        run(['bash', ROOT / 'tools/ci-apt.sh', 'install', '-y', 'ffmpeg'], out / 'apt-install.log')
+        build = scratch / 'build'
+        run(['cmake', '-S', ROOT, '-B', build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
+             '-DBUILD_SHARED_LIBS=ON', '-DGGML_NATIVE=OFF', '-DGGML_BLAS=OFF', '-DCRISPASR_MEL_BLAS=OFF',
+             '-DCRISPASR_BUILD_SERVER=OFF', '-DCRISPASR_BUILD_TESTS=OFF'], out / 'configure.log')
+        run(['cmake', '--build', build, '--target', 'crispasr-lib', '-j4'], out / 'build.log')
+        library = next(build.rglob('libcrispasr.so'))
     repo, rev, filename, sha = PINS['codec']
     codec = Path(hf_hub_download(repo, filename, revision=rev, local_dir=scratch / 'models'))
     assert digest(codec) == sha
@@ -174,6 +194,8 @@ def main():
         for flash in [1, 0]:
             arm = f'{kind}-' + ('flash' if flash else 'eager')
             run([sys.executable, __file__, '--native', library, model, audio, out / arm, str(flash)], out / (arm + '.log'))
+            if gpu:
+                assert 'mimo_tokenizer: RVQ backend=CUDA' in (out / (arm + '.log')).read_text(), arm
     def data(arm, stage):
         return np.load(out / arm / (stage + '.npy'))
     receipt['attention_ab'] = {}
@@ -187,6 +209,7 @@ def main():
     save()
     import torch
     from torch.nn import functional as F
+    torch.set_default_device('cpu')
     torch.set_num_threads(4)
     torch.set_num_interop_threads(1)
     env = official_classes(scratch, receipt)
