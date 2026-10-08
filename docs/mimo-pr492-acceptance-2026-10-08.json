@@ -572,5 +572,156 @@
       }
     },
     "scope": "F16 LM; shipped Q4 tokenizer. Full job fails tokenizer pool/RVQ gates. No Python generated-text or CANN/GPU proof."
+  },
+  "selected_pool_oracle": {
+    "scope": "Selected-frame isolated NumPy F64 pool calculation on actual native transformer output; no full inference",
+    "frames": {
+      "0": {
+        "baseline-flash": {
+          "native_vs_numpy": {
+            "cosine": 0.9999999999984702,
+            "mine_norm": 181.1582074660903,
+            "ref_norm": 181.15821139027372,
+            "relative_l2": 1.7494601817639193e-06,
+            "max_abs": 4.863417712464013e-05
+          },
+          "pre_norm_std": 0.01755162671883326
+        },
+        "candidate-eager": {
+          "native_vs_numpy": {
+            "cosine": 0.9999999999987431,
+            "mine_norm": 184.07494549305986,
+            "ref_norm": 184.07497565321182,
+            "relative_l2": 1.593826809258876e-06,
+            "max_abs": 4.299878745772645e-05
+          },
+          "pre_norm_std": 0.017352960598857887
+        },
+        "numpy_eager_vs_flash": {
+          "cosine": 0.9989451457032346,
+          "mine_norm": 184.07497565321182,
+          "ref_norm": 181.15821139027372,
+          "relative_l2": 0.04901945605893016,
+          "max_abs": 1.073802503014078
+        }
+      },
+      "62": {
+        "baseline-flash": {
+          "native_vs_numpy": {
+            "cosine": 0.9999999999987026,
+            "mine_norm": 94.81973470597629,
+            "ref_norm": 94.81971743011624,
+            "relative_l2": 1.6211003103721207e-06,
+            "max_abs": 2.2221912498565644e-05
+          },
+          "pre_norm_std": 0.03219682232887071
+        },
+        "candidate-eager": {
+          "native_vs_numpy": {
+            "cosine": 0.9999999999995738,
+            "mine_norm": 181.0023222165161,
+            "ref_norm": 181.00226402960973,
+            "relative_l2": 9.776978735660685e-07,
+            "max_abs": 3.4459516649043564e-05
+          },
+          "pre_norm_std": 0.03272179451142229
+        },
+        "numpy_eager_vs_flash": {
+          "cosine": 0.5203915987996843,
+          "mine_norm": 181.00226402960973,
+          "ref_norm": 94.81971743011624,
+          "relative_l2": 1.6300842560263564,
+          "max_abs": 16.29553531552785
+        }
+      },
+      "125": {
+        "baseline-flash": {
+          "native_vs_numpy": {
+            "cosine": 0.9999999999988575,
+            "mine_norm": 89.75918404644607,
+            "ref_norm": 89.75916675607576,
+            "relative_l2": 1.523884235905437e-06,
+            "max_abs": 2.2369156000401347e-05
+          },
+          "pre_norm_std": 0.038697513116892526
+        },
+        "candidate-eager": {
+          "native_vs_numpy": {
+            "cosine": 0.9999999999987969,
+            "mine_norm": 89.72170254631169,
+            "ref_norm": 89.72169041738796,
+            "relative_l2": 1.5571525309852468e-06,
+            "max_abs": 1.9126921166900956e-05
+          },
+          "pre_norm_std": 0.03865299794910599
+        },
+        "numpy_eager_vs_flash": {
+          "cosine": 0.9998826349535165,
+          "mine_norm": 89.72169041738796,
+          "ref_norm": 89.75916675607576,
+          "relative_l2": 0.015323394272173036,
+          "max_abs": 0.173132293585622
+        }
+      },
+      "251": {
+        "baseline-flash": {
+          "native_vs_numpy": {
+            "cosine": 0.9999999999994132,
+            "mine_norm": 192.91630785676247,
+            "ref_norm": 192.91628657600944,
+            "relative_l2": 1.0888723659873017e-06,
+            "max_abs": 3.564703657410462e-05
+          },
+          "pre_norm_std": 0.025205722330699464
+        },
+        "candidate-eager": {
+          "native_vs_numpy": {
+            "cosine": 0.999999999999299,
+            "mine_norm": 191.4364062481812,
+            "ref_norm": 191.4363243681236,
+            "relative_l2": 1.2591448493586383e-06,
+            "max_abs": 3.512569271180155e-05
+          },
+          "pre_norm_std": 0.024464087405644527
+        },
+        "numpy_eager_vs_flash": {
+          "cosine": 0.9993522054857006,
+          "mine_norm": 191.4363243681236,
+          "ref_norm": 192.91628657600944,
+          "relative_l2": 0.036667454064033385,
+          "max_abs": 0.7954248086808846
+        }
+      }
+    },
+    "codec_sha256": "3f3a903b10294ead4ef6a4afec035639fd2113b1d307d42f649a97cc85670e3f",
+    "max_relative_l2": 1.7494601817639193e-06,
+    "conclusion": "At all four selected frames and both attention paths, the native pool matches independent NumPy F64 evaluation on its own transformer input. The observed drift is already present before pooling; no full-encoder or PR acceptance claim.",
+    "proof": "/mnt/storage/crispasr/pr492-acceptance-20261008/proof/selected-pool-oracle.json"
+  },
+  "tokenizer_diagnostic": {
+    "run": 37775542252,
+    "source": "3c176505a",
+    "status": "queued",
+    "upstream_source": "XiaomiMiMo/MiMo-Audio@691ce54144a6844cc641fd96046a6ba20776c8b0",
+    "scope": "same Q4 weights promoted to F32; independent official Python transformer and isolated pooling, scale/time-order controls; not PR acceptance"
+  },
+  "official_class_smoke": {
+    "upstream_files": {
+      "modeling_rope_utils.py": {
+        "url": "https://raw.githubusercontent.com/XiaomiMiMo/MiMo-Audio/691ce54144a6844cc641fd96046a6ba20776c8b0/src/mimo_audio_tokenizer/modeling_rope_utils.py",
+        "sha256": "29d62d9fa8acee7a969ea35defe5581fb4977563c56701e1659ecc0e6345ccf4"
+      },
+      "modeling_audio_tokenizer.py": {
+        "url": "https://raw.githubusercontent.com/XiaomiMiMo/MiMo-Audio/691ce54144a6844cc641fd96046a6ba20776c8b0/src/mimo_audio_tokenizer/modeling_audio_tokenizer.py",
+        "sha256": "42e802e075b018e6ea60616976ea8397a278ceb2728edbcef06fc436862fb236"
+      }
+    },
+    "passed": true,
+    "scope": "Small source-loading/CPU attention-adapter smoke; no model parity claim",
+    "shape": [
+      7,
+      8
+    ],
+    "torch": "2.11.0+cu130"
   }
 }
