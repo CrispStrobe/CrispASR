@@ -4,7 +4,7 @@
   "contributor_source": "ac07cf0be3b528cdb035735738098e30f7468a41",
   "base": "7afaf2e8559efdb0f16bae8a6bc95e145e9a18d9",
   "ggml": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
-  "hosted": "Original numerical source fae7e2241: Q4 37754319857 running; F16 37754323202 pending. Keep these pins distinct from the C-ABI follow-up.",
+  "hosted": "Q4 37754319857 failed non-flash numerical gate at original fae7e2241; default arrays/speech match. F16-only 37761799417 queued at c50c50061. Corrected combined 37758607763 cancelled before execution because known Q4 failure prevents F16 coverage.",
   "local_mel": {
     "cases": 16,
     "frames": [
@@ -47,8 +47,189 @@
   "cabi_followup": {
     "problem": "MiMo session omitted use_gpu and verbosity open overrides; GPU-less inference cannot expose the missing device flag",
     "fix": "forward g_open_use_gpu_tls and g_open_verbosity_tls alongside flash attention",
-    "local": "probe compiles; Python guard parses; no full-library result yet",
-    "hosted": "pending dispatch of pr492_cabi_params.py",
+    "local": "probe compiles; hosted actual-library acceptance now passes",
+    "hosted": {
+      "run": 37758333664,
+      "source": "7e18060607b40e59fce78fe1917d817fe57e670d",
+      "artifact": 11543240521,
+      "passed": true,
+      "requested_combinations": 8,
+      "failed_open_default_restoration": 8,
+      "negative_control": "removing device/verbosity assignments fails: expected [7,0,0,0], actual [7,1,1,0]; restored build passes all 16 rows"
+    },
     "scope": "actual-library parameter forwarding and failed-open TLS restoration; no model/GPU inference claim"
+  },
+  "q4_observed": {
+    "run": 37754319857,
+    "source": "fae7e22419b8c797dfa2759a9d4884a8f426bf63",
+    "artifact": 11541099234,
+    "passed": false,
+    "thresholds": "unchanged; no numerical acceptance",
+    "comparisons": {
+      "prefill_audio_features": {
+        "shape": [
+          71,
+          4096
+        ],
+        "default_exact": true,
+        "nonflash_exact": false,
+        "cosine": 0.9999981310066235,
+        "relative_l2": 0.0019335286949557584,
+        "norm_ratio": 1.0000215821728209,
+        "match_fraction": 0.5177053532130281
+      },
+      "prefill_inputs_embeds": {
+        "shape": [
+          71,
+          4096
+        ],
+        "default_exact": true,
+        "nonflash_exact": false,
+        "cosine": 0.9999984586873121,
+        "relative_l2": 0.0017558465198427957,
+        "norm_ratio": 1.0000177978624698,
+        "match_fraction": 0.5177053532130281
+      },
+      "prefill_last_hidden": {
+        "shape": [
+          4096
+        ],
+        "default_exact": true,
+        "nonflash_exact": false,
+        "cosine": 0.9981446305809992,
+        "relative_l2": 0.0610965537142969,
+        "norm_ratio": 1.0031936337937701,
+        "match_fraction": 0.0
+      },
+      "prefill_text_embeds": {
+        "shape": [
+          71,
+          4096
+        ],
+        "default_exact": true,
+        "nonflash_exact": true,
+        "cosine": 1.0,
+        "relative_l2": 0.0,
+        "norm_ratio": 1.0,
+        "match_fraction": 1.0
+      },
+      "prefill_text_logits_step0": {
+        "shape": [
+          151680
+        ],
+        "default_exact": true,
+        "nonflash_exact": false,
+        "cosine": 0.9984237076667456,
+        "relative_l2": 0.07469973725916822,
+        "norm_ratio": 0.9491291767572799,
+        "match_fraction": 0.0
+      },
+      "tok_codes": {
+        "shape": [
+          2208
+        ],
+        "default_exact": true,
+        "nonflash_exact": false,
+        "match_fraction": 0.7359601449275363
+      },
+      "tok_conv1_out": {
+        "shape": [
+          1409280
+        ],
+        "default_exact": true,
+        "nonflash_exact": true,
+        "cosine": 1.0000000000000022,
+        "relative_l2": 0.0,
+        "norm_ratio": 1.0,
+        "match_fraction": 1.0
+      },
+      "tok_conv2_out": {
+        "shape": [
+          705280
+        ],
+        "default_exact": true,
+        "nonflash_exact": true,
+        "cosine": 1.0000000000000002,
+        "relative_l2": 0.0,
+        "norm_ratio": 1.0,
+        "match_fraction": 1.0
+      },
+      "tok_mel": {
+        "shape": [
+          140928
+        ],
+        "default_exact": true,
+        "nonflash_exact": true,
+        "cosine": 1.0000000000000004,
+        "relative_l2": 0.0,
+        "norm_ratio": 1.0,
+        "match_fraction": 1.0
+      },
+      "tok_pool_out": {
+        "shape": [
+          353280
+        ],
+        "default_exact": true,
+        "nonflash_exact": false,
+        "cosine": 0.9965391421964782,
+        "relative_l2": 0.08340125921765856,
+        "norm_ratio": 1.0033238285407138,
+        "match_fraction": 5.661231884057971e-06
+      },
+      "tok_xfmr_out": {
+        "shape": [
+          705280
+        ],
+        "default_exact": true,
+        "nonflash_exact": false,
+        "cosine": 0.9999921592961417,
+        "relative_l2": 0.00395997500239708,
+        "norm_ratio": 0.9999996280002642,
+        "match_fraction": 1.4178765880217785e-06
+      }
+    },
+    "independent_python_reference": {
+      "prefill_audio_features": {
+        "cosine": 0.9990188670208742,
+        "mine_norm": 6.1525280615385745,
+        "ref_norm": 6.171803832209731,
+        "relative_l2": 0.04433837821287252,
+        "max_abs": 0.009288221597671509,
+        "exact": false
+      },
+      "prefill_text_embeds": {
+        "cosine": 0.9970077582696135,
+        "mine_norm": 2.837039588007749,
+        "ref_norm": 2.8365383933301365,
+        "relative_l2": 0.07736647913341997,
+        "max_abs": 0.0072362422943115234,
+        "exact": false
+      },
+      "prefill_inputs_embeds": {
+        "cosine": 0.9986664006232026,
+        "mine_norm": 6.77513063873626,
+        "ref_norm": 6.792430537010639,
+        "relative_l2": 0.05164196410371104,
+        "max_abs": 0.009288221597671509,
+        "exact": false
+      },
+      "prefill_last_hidden": {
+        "cosine": 0.9640510648451321,
+        "mine_norm": 246.9016036503281,
+        "ref_norm": 245.29708260654803,
+        "relative_l2": 0.26909282846767135,
+        "max_abs": 5.721060752868652,
+        "exact": false
+      },
+      "prefill_text_logits_step0": {
+        "cosine": 0.9809844077397555,
+        "mine_norm": 1176.2556697123944,
+        "ref_norm": 1048.5014301249141,
+        "relative_l2": 0.2398148997361624,
+        "max_abs": 2.784329414367676,
+        "exact": false
+      }
+    },
+    "speech": "all 12 EN/ZH CLI/C ABI outputs identical across baseline/default, candidate/default and candidate/non-flash; does not provide missing Python-generated text"
   }
 }
