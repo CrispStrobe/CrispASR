@@ -8,10 +8,10 @@ from pathlib import Path
 import subprocess
 import sys
 
-SCRIPT_VERSION = 'voxcpm2-current-profile-v3'
-SOURCE = 'ead34fd5d9f84f3f12c2f9014945f4c866f8a0fd'
+SCRIPT_VERSION = 'voxcpm2-current-profile-v4'
+SOURCE = '8fb4d1b0b19fea3f15c71247121d2c56bed8ebba'
 GGML = 'c36dab89b662838f0f5d4826c399198c0b90bbfc'
-CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'voxcpm2-vulkan/sm75-v2-build.tar', 'revision': 'c32253915bbef81d0d8a9aea39a1fbd43b4cb37c', 'sha256': '285f12d2b2084ad5d085c90787184217b1ad2f65c2d91d10ca209590d67a1572', 'bytes': 97638400}
+CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'voxcpm2-vulkan/sm75-v3-build.tar', 'revision': 'df9e11b0b66d1c87f1e0be5552d2974590e4ae20', 'sha256': 'a75cd84e3a122271386f68044117167840545696fd83866406b8380e8bac5dc8', 'bytes': 99747840}
 WORK = Path('/kaggle/working')
 SCRATCH = Path('/kaggle/temp/voxcpm2-current-profile')
 REPO = SCRATCH / 'CrispASR'
@@ -22,7 +22,7 @@ def main():
     SCRATCH.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
     os.environ.update(PYTHONUNBUFFERED='1', TMPDIR=str(SCRATCH),
-                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='voxcpm2-current-profile-v3')
+                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='voxcpm2-current-profile-v4')
     devices = subprocess.check_output(['nvidia-smi', '--query-gpu=name,compute_cap,memory.total',
                                        '--format=csv'], text=True)
     print(SCRIPT_VERSION, devices, flush=True)
