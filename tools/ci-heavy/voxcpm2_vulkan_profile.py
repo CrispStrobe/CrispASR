@@ -9,7 +9,9 @@ import re
 import subprocess
 import sys
 import time
+import zipfile
 import numpy as np
+import soundfile as sf
 from huggingface_hub import hf_hub_download
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -88,6 +90,22 @@ for cohort,name in [('q8','voxcpm2-q8_0.gguf'),('mixed','voxcpm2-q8_0-locdit-f16
                     waveforms.setdefault(cohort,{})[key] = pcm
                     np.save(OUT/(cohort+'-'+key+'.npy'),pcm)
                 save()
+# Actual CLI default: remove the environment override, so the ten-step native
+# default and the explicit CLI sentinel are exercised independently of session.
+if not PERF_ONLY:
+    for cohort,name in [('q8','voxcpm2-q8_0.gguf'),('mixed','voxcpm2-q8_0-locdit-f16.gguf')]:
+        wav = OUT/(cohort+'-cli-short.wav')
+        env = dict(os.environ)
+        env.pop('CRISPASR_VOXCPM2_INFERENCE_STEPS',None)
+        with (OUT/(cohort+'-cli.log')).open('w') as log:
+            subprocess.run([str(BUILD/'bin/crispasr'),'--backend','voxcpm2-tts','-m',str(TEMP/'models'/name),
+                '--tts',TEXTS['short'],'--tts-output',str(wav),'--seed','2','-t','4',
+                '--no-watermark','--no-spoken-disclaimer','--accept-marking-responsibility'],
+                env=env,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1200)
+        trace=(OUT/(cohort+'-cli.log')).read_text()
+        assert set(re.findall(r'voxcpm2\[bench\]: cfm.steps=(\d+)',trace)) == {'10'}
+        pcm,sr = sf.read(wav,dtype='float32'); assert sr==48000 and pcm.ndim==1
+        waveforms[cohort]['cli-short'] = pcm
 if PERF_ONLY:
     receipt['performance_only'] = True
     save()
@@ -96,13 +114,30 @@ if PERF_ONLY:
 # speech without spending a Kaggle session on CPU-only acceptance.
 asr = hf_hub_download('cstr/nemotron-3.5-asr-streaming-GGUF','nemotron-3.5-asr-streaming-0.6b-q4_k.gguf',
                       revision='bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2')
+# Replay the actual failed v2 session PCM at both rates. The historical getter
+# claimed 48 kHz for audio that had already been decimated to 24 kHz.
+failed = hf_hub_download('cstr/crispasr-regression-fixtures',
+    'voxcpm2/vulkan-profile-20261008-v2-failed/proof.zip',
+    revision='f5a04b061d6ceb5c090c97a3f3fadfd2066e6398')
+assert hashlib.sha256(Path(failed).read_bytes()).hexdigest() == '774d7f1a791b807a50b43898a3f674bdebc772ab2be998f35cc4a927823c8521'
+with zipfile.ZipFile(failed) as archive:
+    with archive.open('voxcpm2-profile/q8-short.npy') as file:
+        historical = np.load(file)
 with open_session(asr,'nemotron','cuda') as session:
+    receipt['historical_rate_control'] = {}
+    for rate in [48000,24000]:
+        text = ' '.join(seg.text for seg in session.transcribe(historical,sample_rate=rate,language='en'))
+        receipt['historical_rate_control'][str(rate)] = text
+        save()
+    normalize_control = lambda text: re.findall('[a-z]+',text.lower())
+    assert normalize_control(receipt['historical_rate_control']['24000']) == normalize_control(TEXTS['short'])
+    assert normalize_control(receipt['historical_rate_control']['48000']) != normalize_control(TEXTS['short'])
     for cohort,cases in waveforms.items():
         for key,pcm in cases.items():
             actual = ' '.join(seg.text for seg in session.transcribe(pcm,sample_rate=48000,language='en'))
             normalize = lambda text: re.findall('[a-z]+',text.lower())
-            receipt['roundtrips'][cohort+'-'+key] = dict(transcript=actual,expected=TEXTS[key],
-                                                       exact=normalize(actual)==normalize(TEXTS[key]))
+            receipt['roundtrips'][cohort+'-'+key] = dict(transcript=actual,expected=TEXTS['short' if key=='cli-short' else key],
+                                                       exact=normalize(actual)==normalize(TEXTS['short' if key=='cli-short' else key]))
             save()
 assert all(case['exact'] for case in receipt['roundtrips'].values()), receipt['roundtrips']
 receipt['passed'] = True
