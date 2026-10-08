@@ -78,8 +78,11 @@ v2 CUDA acceptance now PASS on T4: all 64 calls/eight CLI pairs exact;
 four ABBA arms (relative L2 zero, norms identical). Warm medians legacy/cached:
 EN 3.29871/3.21258s (1.0268×), ZH 1.42840/1.39455s (1.0243×).
 This is a modest 2.4–2.7% gain, not a large acceleration. Terminal archive
-is complete; immutable public proof/cache upload and isolated integration CI
-are pending. Keep opt-in OFF by default and retain the working GPU route.
+is complete; public proof revision `deceb2e18592ade7ab56094d7158e4fbf47e81f5`
+and refreshed cache `c099a5cab320f929ca8c67171362eea158662009` are pinned in
+`docs/mimo-gpu-cached-step-2026-10-08.json`. Local archival verification checks
+all 114 full-vocabulary array comparisons byte-exact. GPU process peaks
+4,932/4,950 MiB (sampled lower bounds). Isolated integration CI is pending. Keep opt-in OFF by default and retain the working GPU route.
 
 VoxCPM2 ten-step Vulkan profile v1 launched at source `ece203528`, harness
 `323a568ca`: [kernel](https://www.kaggle.com/code/chr1s4/crispasr-voxcpm2-current-profile).
