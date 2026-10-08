@@ -70,6 +70,13 @@ It compares full step logits (cosine >.999999, relative L2 <.001, norms and
 exact argmax), 64 speech calls, eight CLI/session pairs and ABBA timings.
 Logit dumps occur only in the first excluded warmup. Default OFF; GPU result
 pending. The kernel warms the refreshed actual-Kaggle sm75 cache.
+v2 CUDA acceptance now PASS on T4: all 64 calls/eight CLI pairs exact;
+27 EN and 11 ZH full-vocabulary logit vectors are byte-identical across all
+four ABBA arms (relative L2 zero, norms identical). Warm medians legacy/cached:
+EN 3.29871/3.21258s (1.0268×), ZH 1.42840/1.39455s (1.0243×).
+This is a modest 2.4–2.7% gain, not a large acceleration. Terminal archive
+is complete; immutable public proof/cache upload and isolated integration CI
+are pending. Keep opt-in OFF by default and retain the working GPU route.
 
 VoxCPM2 ten-step Vulkan profile v1 launched at source `ece203528`, harness
 `323a568ca`: [kernel](https://www.kaggle.com/code/chr1s4/crispasr-voxcpm2-current-profile).
@@ -85,6 +92,16 @@ must confirm ten actual steps, not just a receipt constant. Syntax/format
 checks pass; build/speech acceptance is pending. Keep the default at ten steps
 and distinguish cold context/shape setup from warm inference. NVIDIA Vulkan
 evidence cannot replace the Intel B390 retest.
+v2 built and ran all 32 repeated seeded Vulkan calls, but failed all four
+TTS→ASR gates. Audit found a real session mismatch: synthesize decimated native
+48 kHz PCM to 24 kHz while output_sample_rate() advertised 48 kHz. Source
+`916ab9464` now returns native 48 kHz, matching documented API/CLI behavior;
+`82517f41d` preserves the CLI ten-step default using tts_num_steps's explicit
+sentinel (shared tts_steps defaults to 20). v2 failed output/logs archived and
+public at fixture revision `f5a04b061d6ceb5c090c97a3f3fadfd2066e6398`.
+Next pinned run must replay v2 PCM at both rates as a negative control, pass
+native-48 kHz session and actual CLI default speech roundtrips, then collect
+separate per-op timings. Do not accept v2 timings as usable speech performance.
 
 OmniVoice #518 implementation `a1ae00dff` is pushed on
 `fix/omnivoice-postprocess-518`. Independent pinned upstream functions pass
