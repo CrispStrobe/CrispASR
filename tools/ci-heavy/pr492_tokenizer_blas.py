@@ -35,6 +35,17 @@ def main():
     original = source.read_text()
     patched = original
     replacements = [
+        ('struct mimo_tokenizer_context {',
+         """static void mimo_diag_set_blas_threads(ggml_backend_t backend, int n) {
+    auto dev = ggml_backend_get_device(backend);
+    auto reg = ggml_backend_dev_backend_reg(dev);
+    auto fn = reinterpret_cast<void (*)(ggml_backend_t, int)>(
+        ggml_backend_reg_get_proc_address(reg, "ggml_backend_set_n_threads"));
+    GGML_ASSERT(fn);
+    fn(backend, n);
+}
+
+struct mimo_tokenizer_context {"""),
         ('ggml_backend_t backend_cpu = nullptr;',
          'ggml_backend_t backend_blas = nullptr; // diagnostic CPU precision experiment\n    ggml_backend_t backend_cpu = nullptr;'),
         ('        ggml_backend_t backends[2];\n        backends[n_be++] = ctx->backend;',
@@ -46,7 +57,7 @@ def main():
                 mimo_tokenizer_free(ctx);
                 return nullptr;
             }
-            core_cpu_backend::set_n_threads(ctx->backend_blas, ctx->n_threads);
+            mimo_diag_set_blas_threads(ctx->backend_blas, ctx->n_threads);
             fprintf(stderr, "MIMO_DIAG_BLAS_ACTIVE backend=%s\\n", ggml_backend_name(ctx->backend_blas));
             backends[n_be++] = ctx->backend_blas;
         }
@@ -54,7 +65,7 @@ def main():
         ('    if (ctx->backend_cpu)\n        ggml_backend_free(ctx->backend_cpu);',
          '    if (ctx->backend_blas)\n        ggml_backend_free(ctx->backend_blas);\n    if (ctx->backend_cpu)\n        ggml_backend_free(ctx->backend_cpu);'),
         ('    ctx->n_threads = n_threads;\n    if (ctx->backend_cpu)',
-         '    ctx->n_threads = n_threads;\n    if (ctx->backend_blas)\n        core_cpu_backend::set_n_threads(ctx->backend_blas, n_threads);\n    if (ctx->backend_cpu)'),
+         '    ctx->n_threads = n_threads;\n    if (ctx->backend_blas)\n        mimo_diag_set_blas_threads(ctx->backend_blas, n_threads);\n    if (ctx->backend_cpu)'),
     ]
     for before, after in replacements:
         assert patched.count(before) == 1, before
