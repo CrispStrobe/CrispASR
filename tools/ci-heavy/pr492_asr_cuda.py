@@ -2,7 +2,8 @@
 """Diagnostic CUDA MiMo full ASR: actual CLI/session readback, then warm A/B.
 
 Original pinned Q4 LM/codec, one model lifetime at a time, same GPU and binary.
-The temporary precision override applies only to encoder.* tokenizer weights;
+The temporary precision override applies only to tokenizer encoder matrices
+(`enc.blk.*`, plus any quantized `encoder.*` stem weights);
 LM arithmetic is unchanged between default and precise (both flash enabled).
 The eager control disables flash in both components. No production acceptance
 or recovered original-checkpoint precision is implied by this study.
