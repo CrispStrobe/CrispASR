@@ -33,11 +33,23 @@ cosine >= 0.99999, relative L2 <= 1e-4, independent tokenizer text and a 2x-scal
 negative control. This validates wrapper execution of identical graphs, not the
 exporter against source PyTorch checkpoints. C++ runtime syntax and formatting
 pass locally. New CPU acceptance
-[37732822370](https://github.com/CrispStrobe/CrispASR/actions/runs/37732822370)
-is queued at the validation branch above. Earlier native CI `37730684549`
+[37733187037](https://github.com/CrispStrobe/CrispASR/actions/runs/37733187037)
+is queued at `91496680a02b1da30ad9e16cfc4aae0a9512edde` (same runtime).
+Added an automatic relevant-change ONNX/streaming workflow, pinned Python ORT
+1.30.0 to the SDK and added speech-content checks for legacy deployments too. Earlier native CI `37730684549`
 passes Linux unit, Windows and Clang AMR so far; remaining jobs and numerical
 regression `37730687001` are pending on `710457c5b`. Final source checks must
 cover the follow-up fixes. #515 stays unmerged pending validation.
+
+## CLAIMED 2026-10-08 — #483 matched forced-MMQ experiment
+
+Worktree: `/mnt/storage/crispasr/issue483-mmq-20261008/worktree`, branch
+`tools/issue483-mmq`. Read the complete issue including the reporter's request
+for an experimental GTX1660 build after confirming the CUDA 12.6 warning fix.
+Prepare manual-only CUDA 12.6.3 CLI packages with the same source, CPU floor,
+PTX targets and runtime DLLs, differing only in `GGML_CUDA_FORCE_MMQ`.
+Hosted Windows can prove compilation/packaging/driverless fallback; the reporter
+must measure the actual GTX1660. No release-default or speed claim.
 
 ## OPEN 2026-10-08 — final main checks and remaining triage
 
