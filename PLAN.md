@@ -18,6 +18,9 @@ Owner: this maintainer session. Worktrees under
 `omnivoice` (`fix/omnivoice-postprocess-518`), `echo` (`fix/echo-q4-public-transfer`),
 and `profile` (`perf/mimo-voxcpm-profile`). A fifth worktree `lm`
 (`diag/mimo-lm-first-divergence`) isolates the Q4 LM non-flash study.
+A sixth worktree `mimo-integration` (`fix/mimo-gpu-cached-decode`) will isolate
+only the validated MiMo instrumentation/cached-step changes from VoxCPM2's
+still-pending rate/step repairs, for native CI and integration review.
 PR #492 diagnostics remain in
 `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`.
 
@@ -99,7 +102,9 @@ TTS→ASR gates. Audit found a real session mismatch: synthesize decimated nativ
 `82517f41d` preserves the CLI ten-step default using tts_num_steps's explicit
 sentinel (shared tts_steps defaults to 20). v2 failed output/logs archived and
 public at fixture revision `f5a04b061d6ceb5c090c97a3f3fadfd2066e6398`.
-Next pinned run must replay v2 PCM at both rates as a negative control, pass
+Next pinned run uses source `ead34fd5d`, uploaded harness `fe6f363b2` and
+refreshed actual-Kaggle CUDA+Vulkan cache `c32253915bbef81d0d8a9aea39a1fbd43b4cb37c`.
+It must replay v2 PCM at both rates as a negative control, pass
 native-48 kHz session and actual CLI default speech roundtrips, then collect
 separate per-op timings. Do not accept v2 timings as usable speech performance.
 
