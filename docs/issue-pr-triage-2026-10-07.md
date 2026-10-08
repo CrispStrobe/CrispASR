@@ -156,3 +156,22 @@ exists until the reporter exercises the actual GPU. This branch is unmerged.
 Final-source native CI [37735374748](https://github.com/CrispStrobe/CrispASR/actions/runs/37735374748)
 and lint [37735377165](https://github.com/CrispStrobe/CrispASR/actions/runs/37735377165)
 are queued at `eb2ebe30ab42378a0b16ecb302b0c266145e9f7c`.
+
+## Strict harness and binding completion — 2026-10-08
+
+Strict CPU run [37733187037](https://github.com/CrispStrobe/CrispASR/actions/runs/37733187037)
+found matching Python/native graph values and text, but failed the shape gate:
+`Ref::shape` removes singleton axes after dimension zero. Latest branch
+`a1a3d4a25` applies the same normalization, retaining cosine >= 0.99999 and
+relative L2 <= 1e-4. This run separately proves Nemotron batch tag cleanup and
+packet-size-independent streaming, legacy Moonshine deployments and Qwen.
+ONNX streaming acceptance was blocked by the earlier shape check and remains
+pending. No success is inferred for tests that did not execute.
+
+The new streaming-kind query is now exposed in all seven wrappers, WASM/JS and
+the WebSocket ready event. C# compiles with no warnings/errors; WebSocket source
+syntax passes. Rust format checking reports pre-existing formatting elsewhere,
+so those unrelated lines were left intact. Fresh x86 `37735853879`, ARM
+`37735856512`, native CI `37735908557`, lint `37735910817`, WASM `37735912990`,
+Go `37735851685` and Rust `37735851828` validate the latest branch. Replaced
+queued jobs were cancelled; #515 remains unmerged.

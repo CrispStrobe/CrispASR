@@ -791,7 +791,7 @@
     "comment": "https://github.com/CrispStrobe/CrispASR/issues/491#issuecomment-6052699324"
   },
   "pr515_review": {
-    "source_commit": "91496680a02b1da30ad9e16cfc4aae0a9512edde",
+    "source_commit": "a1a3d4a25a442fbe355d562aabe020a4c9ba07ed",
     "merged": false,
     "offline_bundle_probe": [
       {
@@ -959,6 +959,100 @@
       "run_id": 37730684549,
       "status": "success",
       "jobs": 13
+    },
+    "strict_cpu_previous": {
+      "commit": "91496680a02b1da30ad9e16cfc4aae0a9512edde",
+      "scope": "CPU download/bundle/C ABI packet/flush acceptance; no GPU performance claim",
+      "cases": [
+        {
+          "variant": "moonshine-streaming-tiny-de-onnx",
+          "passed": false,
+          "error": "AssertionError('moonshine-streaming-tiny-de-onnx-diff')"
+        },
+        {
+          "variant": "moonshine-streaming-small-de-onnx",
+          "passed": false,
+          "error": "AssertionError('moonshine-streaming-small-de-onnx-diff')"
+        },
+        {
+          "variant": "moonshine-streaming-tiny-de-onnx-f32",
+          "passed": false,
+          "error": "AssertionError('moonshine-streaming-tiny-de-onnx-f32-diff')"
+        },
+        {
+          "variant": "moonshine-streaming-small-de-onnx-f32",
+          "passed": false,
+          "error": "AssertionError('moonshine-streaming-small-de-onnx-f32-diff')"
+        },
+        {
+          "variant": "moonshine-tiny-de-phreak87-onnx",
+          "passed": true,
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "streaming_kind": 0
+        },
+        {
+          "variant": "moonshine-tiny-de-dattazigzag",
+          "passed": true,
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "streaming_kind": 0
+        },
+        {
+          "variant": "nemotron",
+          "passed": true,
+          "model_pin": {
+            "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
+            "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
+            "_revision_note": "TODO: replace with actual 40-char SHA from HF repo.",
+            "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
+            "approx_size_mb": 458
+          },
+          "batch": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "streaming_kind": 2,
+          "final": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "updates": [
+            3,
+            3
+          ]
+        },
+        {
+          "variant": "qwen3",
+          "passed": true,
+          "model_pin": {
+            "repo": "cstr/qwen3-asr-0.6b-GGUF",
+            "revision": "ad086c22597ed47af05cc159dd61c98bd6e945f9",
+            "file": "qwen3-asr-0.6b-q4_k.gguf",
+            "approx_size_mb": 400
+          },
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "streaming_kind": 3,
+          "final": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "updates": [
+            2,
+            2
+          ]
+        }
+      ],
+      "audio_sha256": "7d161e34953595856acc195aee52e9e2a48724b669176f2f0b38549d60927ba3",
+      "fixture_revision": "e9a1bd899e6b46f8a624aec05fc605c5461b13db",
+      "passed": false,
+      "run_id": 37733187037,
+      "harness_failure": "GGUF Ref::shape singleton-axis normalization; graph values and text match"
+    },
+    "latest_runs": {
+      "x86": 37735853879,
+      "arm64": 37735856512,
+      "native_ci": 37735908557,
+      "lint": 37735910817,
+      "wasm": 37735912990,
+      "go": 37735851685,
+      "rust": 37735851828
+    },
+    "binding_completion": {
+      "wrappers": 7,
+      "wasm": true,
+      "websocket_ready": true,
+      "csharp_build": "pass; 0 warnings/errors",
+      "websocket_syntax": "pass"
     }
   },
   "issue483_mmq": {

@@ -32,18 +32,24 @@ Added optional ONNX graph-stage reference/diff integration with exact PCM/shape,
 cosine >= 0.99999, relative L2 <= 1e-4, independent tokenizer text and a 2x-scale
 negative control. This validates wrapper execution of identical graphs, not the
 exporter against source PyTorch checkpoints. C++ runtime syntax and formatting
-pass locally. New CPU acceptance
-[37733187037](https://github.com/CrispStrobe/CrispASR/actions/runs/37733187037)
-is running at `91496680a02b1da30ad9e16cfc4aae0a9512edde` (same runtime).
-ARM64 acceptance [37734757849](https://github.com/CrispStrobe/CrispASR/actions/runs/37734757849)
-is queued at `eb2ebe30ab42378a0b16ecb302b0c266145e9f7c`; this adds architecture
-recording and robust parsing of the deliberate scale-negative control, with
-unchanged real parity gates and runtime.
-Added an automatic relevant-change ONNX/streaming workflow, pinned Python ORT
-1.30.0 to the SDK and added speech-content checks for legacy deployments too.
-Earlier native CI `37730684549` passes all 13 jobs on `710457c5b`. Numerical
-regression `37730687001` is pending. Final-source native CI `37735374748` and
-lint `37735377165` are queued at `eb2ebe30a`. #515 stays unmerged pending validation.
+pass locally. Strict CPU rerun `37733187037` found exact Python/native graph
+values and text, but a harness shape check failed because `Ref::shape` drops
+singleton axes after dimension zero. Fixed that normalization without changing
+cosine/magnitude gates. Nemotron batch and both packet sizes now pass; legacy
+Moonshine and Qwen also pass. Small int8 streaming still awaits the fixed harness.
+
+Latest branch `a1a3d4a25a442fbe355d562aabe020a4c9ba07ed` also completes the
+new streaming-kind query in all seven wrappers, WASM/JS and the WebSocket ready
+event, and requires the shared-library symbol audit. C# builds with 0 warnings /
+0 errors; WebSocket syntax passes. Earlier native CI `37730684549` passes all
+13 jobs on `710457c5b`. Fresh x86 acceptance `37735853879`, ARM acceptance
+`37735856512`, native CI `37735908557`, lint `37735910817`, WASM `37735912990`,
+Go `37735851685` and Rust `37735851828` are queued on the latest source.
+ARM `37734757849` and final checks `37735374748`/`37735377165` were cancelled
+while queued, superseded by the corrected source. Numerical regression
+`37730687001` has unit/smoke passes and its model jobs queued. Automatic relevant
+source-change ONNX acceptance pins Python ORT 1.30.0 to the SDK and requires
+speech-content checks for every deployment. #515 stays unmerged pending proof.
 
 ## CLAIMED 2026-10-08 — #483 matched forced-MMQ experiment
 
