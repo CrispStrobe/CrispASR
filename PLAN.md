@@ -11,6 +11,17 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-08 — hosted triage follow-up
+
+Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`.
+Native CI 37704656972, regression 37704657102 and WASM 37704657094
+passed on `d754aa10a`. Lint Deep 37704657127 found an uninitialized Hikari
+token probability. Orukeet heavy acceptance 37703780788 reached the correct
+Parakeet runtime but stopped at the existing CC-BY-SA acceptance gate; its
+command omitted `--accept-license cc-by-sa-4.0`. Fix the token value and
+misleading noncommercial CLI notice, supply explicit acceptance in the test,
+and rerun hosted speech acceptance. No model or licence policy change.
+
 ## OPEN 2026-10-07 — triage fixes: hosted acceptance queued
 
 Integrated source: Orukeet short-name routing (#491), author-preserving PR #496
