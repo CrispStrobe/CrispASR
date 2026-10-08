@@ -27,13 +27,15 @@ Catch 3.7.1 splits semicolon-valued label properties: CTest found no tests for
 `-L pipeline-cache`. A saved minimal reproduction confirms the old selection
 finds zero tests. The workflow now selects the suite by name, asserts exactly
 two discovered cases, and retains the unit label. The corrected discovery
-passes locally; fresh actual macOS validation follows this checkpoint.
+passes locally; fresh actual macOS validation `37761910908` is queued at
+`608e60122`.
 No GPU cache execution or runtime/cache-default change is claimed.
 
 ## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, internal
-branch `review/pr492-acceptance`, latest `c50c50061`.
+branch `review/pr492-acceptance`, latest documentation `18b69d580`; runtime
+and F16 harness source remains `c50c50061`.
 Original numerical source: `fae7e22419b8c797dfa2759a9d4884a8f426bf63`.
 Contributor commits through `ac07cf0be3b528cdb035735738098e30f7468a41` are
 preserved as ancestors; merge against current main was clean, with unchanged
@@ -63,10 +65,12 @@ and local evidence are on the branch in
 `docs/mimo-pr492-acceptance-2026-10-08.json`.
 
 The MiMo C ABI now forwards `use_gpu` and verbosity alongside flash attention.
-Actual-library initializer-interposition job `37758333664` is queued at
-`7e1806060` (now running): eight requested combinations and eight failed-open default-reset
-checks; removing the two assignments must fail before the restored build passes.
-The probe compiles and Python scripts parse locally. No hosted pass yet.
+Actual-library initializer-interposition job `37758333664` PASSES at
+`7e1806060`: eight requested combinations and eight failed-open default-reset
+checks. Removing the two assignments fails on requested CPU/quiet settings
+(actual GPU=true/verbosity=1); the restored build passes all 16 rows. Artifact
+`11543240521` is archived in the worktree proof directory. This validates
+parameter forwarding, not model inference or GPU execution.
 This device fix prevents selecting a second CPU backend through init_best and
 copying the 16 GB F16 weights in the legacy CPU session. The numerical baseline
 also explicitly forces CPU to retain its mmap path. No GPU execution is claimed.
@@ -85,7 +89,8 @@ interpolated character times. Add synthetic known-path guards first, then
 hosted real-audio CLI/C ABI validation where a pinned model is available.
 
 Implemented in draft PR #516, rebased onto merged #515 (`5c172455e`),
-latest `d9fcfcc90`. Core measured-span implementation is unchanged; both
+latest `f0a40990b`, including main `608e60122` and its Metal discovery fix.
+Core measured-span implementation is unchanged; both
 appended CMake test targets are retained. All 41 known-path assertions and
 ASAN/UBSAN pass. Integrated bindings: Dart 3.13.5 formats 11 files cleanly;
 Java wrapper/driver compile; C# builds with zero warnings/errors; Python parses.
@@ -103,9 +108,13 @@ String arguments still use the global encoding even with the per-library UTF-8
 option. The earlier local guard tested only returned text. A strict native
 input/output guard now reproduces the failure, including a Unicode model path;
 explicit input conversion passes under US-ASCII, ISO-8859-1 and UTF-8 defaults.
-It runs before heavy work in fresh acceptance `37756933124` (now running). #516 is
-unmerged and excluded from release notes. Source/proof detail is on the branch
-in `docs/ctc-characters-2026-10-08.json`.
+Full real Arabic acceptance `37756933124` PASSES: 15 words / 85 character
+spans, exact independent full-sequence Viterbi, CLI word/segment JSON, Python/
+C ABI offsets and invalid accessors, and actual Java/JNA Arabic alignment
+under US-ASCII. Artifact `11542736536`, tested merge `a9c1afead`; all runtime
+files are unchanged after acceptance. Final platform checks run on the branch
+with the Metal discovery fix. #516 is unmerged and excluded from release notes.
+Source/proof detail is on the branch in `docs/ctc-characters-2026-10-08.json`.
 
 Go `37743605844`, Rust `37743605797` and Linux C# in `37743740252` passed
 at the original implementation source. Earlier Dart format failure is fixed;

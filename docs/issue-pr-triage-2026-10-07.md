@@ -418,3 +418,28 @@ workflow now selects the actual test-name prefix, requires exactly two discovere
 cases and keeps the unit label. Corrected discovery passes locally; that proof
 uses a listing-only dummy and makes no GPU/cache-runtime claim. Fresh macOS
 shared/static coverage is required.
+
+## Complete Arabic and MiMo ABI proof — 2026-10-08
+
+[Arabic acceptance 37756933124](https://github.com/CrispStrobe/CrispASR/actions/runs/37756933124)
+passes all runtime checks: 15 words / 85 measured character spans against exact
+independent full-sequence Viterbi, CLI word/segment JSON, Python/C ABI offsets
+and invalid accessors, plus real Java/JNA equality under a US-ASCII host default.
+Artifact 11542736536 tests merge `a9c1afead`, PR head `d9fcfcc90`. Branch
+`f0a40990b` incorporates main `608e60122` and records proof; only the Metal
+test/workflow and maintainer docs changed after accepted runtime. Final platform
+checks remain pending; #516/#490 stay unmerged/open.
+
+[MiMo ABI guard 37758333664](https://github.com/CrispStrobe/CrispASR/actions/runs/37758333664)
+passes eight device/verbosity/attention combinations and eight failed-open
+default resets. Removing the two forwarding assignments fails with actual
+GPU=true/verbosity=1 instead of requested CPU/quiet; restoring them passes
+all 16 rows. Artifact 11543240521 is archived. This is actual-library parameter
+proof, not model/GPU inference. Q4 non-flash numerical acceptance remains failed,
+and F16-only 37761799417 is queued at `c50c50061`. Branch documentation
+`18b69d580` preserves all stage metrics, norms and categorical code agreement.
+
+Metal discovery repair `608e60122` is in fresh [shared/static validation
+37761910908](https://github.com/CrispStrobe/CrispASR/actions/runs/37761910908).
+Both actual macOS jobs are queued; discovery-only local proof does not establish
+cache runtime behavior.
