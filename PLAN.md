@@ -54,7 +54,13 @@ official-encoder codes. Original Q4 encoder drift remains. Receipt:
 `docs/mimo-pr492-full-rvq-cpu-2026-10-08.json`. The new F32 TILE experiment
 uses a separate `mimo-pr492-attention-precision` kernel, retaining v4's endpoint
 for the queued oracle. Numeric source `534a929f7`; packaging is in the same
-candidate branch. No quota bypass/GPU fishing: one actual precision experiment.
+candidate branch. Submitted version 1 at packaging `e07e2d83e`; numeric source
+`534a929f75e61febf4143a96fdaa88dbdb811528`. Terminal collection is armed in
+`/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-attention-precision-v1`.
+A generated-header smoke verifies matching F32 host/device configuration,
+preserved baseline headers and removal of extern-template declarations so the
+new specialization is actually emitted. GPU build/runtime remain pending.
+No quota bypass/GPU fishing: one actual precision experiment.
 Native `37805363962` and lint `37806475239` both PASS at `3fd1bf5fa`.
 Full 33-model regression `37802900089` is still running with no failures.
 Receipt: `docs/mimo-pr492-cuda-attention-2026-10-08.json`.
