@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""MiMo PR492 tokenizer CUDA diagnostic; no LM, CANN or performance claim.
+"""MiMo PR492 identical-input CUDA attention diagnostic; no full-ASR claim.
 
 Uses the actual native tokenizer, including device weights/RVQ, and the pinned
 official Python encoder on the GPU's own conv2 input. PyTorch is CPU-only here:
@@ -14,8 +14,8 @@ from pathlib import Path
 import subprocess
 import sys
 
-SCRIPT_VERSION = 'mimo-pr492-tokenizer-cuda-v2'
-SOURCE = 'b16fe30a2c03e7b7abee0f38a2ea6b03b85d80e6'
+SCRIPT_VERSION = 'mimo-pr492-tokenizer-cuda-v3'
+SOURCE = '389c3c712081f8612817e20b7f9e784d03a7b703'
 GGML = 'c36dab89b662838f0f5d4826c399198c0b90bbfc'
 WORK = Path('/kaggle/working')
 SCRATCH = Path('/kaggle/temp/mimo-pr492')
@@ -27,7 +27,7 @@ def main():
     SCRATCH.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
     os.environ.update(PYTHONUNBUFFERED='1', TMPDIR=str(SCRATCH),
-                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='mimo-pr492-tokenizer-cuda-v2')
+                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='mimo-pr492-tokenizer-cuda-v3')
     devices = subprocess.check_output(['nvidia-smi', '--query-gpu=name,compute_cap,memory.total',
                                        '--format=csv'], text=True)
     print(SCRIPT_VERSION, devices, flush=True)
@@ -64,6 +64,8 @@ extern "C" int mimo_probe_threads() { return mimo_tokenizer_context_default_para
     (wrapper / 'add-probe.cmake').write_text(f'''function(mimo_diag_add_probe)
   add_library(mimo_tokenizer_probe SHARED "{wrapper / 'entry.cpp'}")
   target_link_libraries(mimo_tokenizer_probe PRIVATE mimo_tokenizer)
+  add_executable(mimo_attention_probe "{REPO / 'tools/ci-heavy/pr492_attention_probe.cpp'}")
+  target_link_libraries(mimo_attention_probe PRIVATE ggml)
 endfunction()
 cmake_language(DEFER CALL mimo_diag_add_probe)
 ''')
@@ -77,7 +79,7 @@ cmake_language(DEFER CALL mimo_diag_add_probe)
     with kh.build_heartbeat('cuda-configure'):
         kh.sh_with_progress(shlex.join(['cmake', '-S', str(REPO), '-B', str(build), '-G', 'Ninja', *flags]))
     with kh.build_heartbeat('cuda-build'):
-        kh.sh_with_progress(shlex.join(['cmake', '--build', str(build), '--target', 'mimo_tokenizer_probe',
+        kh.sh_with_progress(shlex.join(['cmake', '--build', str(build), '--target', 'mimo_tokenizer_probe', 'mimo_attention_probe',
                                        '-j' + kh.safe_build_jobs(gpu=True)]))
     library = build / 'libmimo_tokenizer_probe.so'
     assert library.is_file()
@@ -87,14 +89,16 @@ cmake_language(DEFER CALL mimo_diag_add_probe)
         kernel_sha256=hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
         scope=__doc__), indent=2) + '\n')
     os.environ.update(HEAVY_OUT=str(OUT), HEAVY_SCRATCH=str(SCRATCH),
-                      MIMO_TOKENIZER_DIAG_GPU='1', MIMO_TOKENIZER_DIAG_LIB=str(library))
+                      MIMO_TOKENIZER_DIAG_GPU='1', MIMO_TOKENIZER_DIAG_LIB=str(library),
+                      MIMO_DIAG_ATTN_PROBE=str(build / 'mimo_attention_probe'))
     kh.step('tokenizer.diagnosis.begin', source=SOURCE, arch=arch)
     with kh.build_heartbeat('tokenizer-cuda-diagnosis'):
-        result = subprocess.run([sys.executable, REPO / 'tools/ci-heavy/pr492_tokenizer_cuda_precision.py'],
+        result = subprocess.run([sys.executable, REPO / 'tools/ci-heavy/pr492_attention_diagnose.py'],
                                 cwd=REPO, timeout=7200)
     kh.step('tokenizer.diagnosis.end', returncode=result.returncode)
+    kh.export_ccache_tar(OUT / 'ccache.tar')
     kh._push_progress_to_hf(force=True)
-    assert result.returncode == 0, 'CUDA tokenizer precision/exact-code gates failed; inspect saved metrics/logs'
+    assert result.returncode == 0, 'CUDA identical-input diagnostic controls failed; inspect saved metrics/logs'
 
 
 if __name__ == '__main__':
