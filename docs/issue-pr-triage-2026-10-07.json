@@ -1651,7 +1651,10 @@
       "integrated_source": "273b8a40c",
       "run": 37789763493,
       "status": "success",
-      "proof": "docs/mimo-cabi-device-2026-10-08.json"
+      "proof": "docs/mimo-cabi-device-2026-10-08.json",
+      "native_ci": 37790010839,
+      "lint": 37790015470,
+      "platform_status": "success at tested independent-fix source"
     },
     "cpu_blas_experiment": {
       "source": "2a4eda81d",
@@ -1666,6 +1669,24 @@
         "flash": 1.7115932670349314,
         "eager": 1.9032596342351977
       }
+    },
+    "cuda_precision_v2": {
+      "source": "b16fe30a2",
+      "status": "failed exact RVQ gate; continuous pass",
+      "device": "Tesla T4 / sm_75",
+      "file_size_delta_bytes": 0,
+      "rvq_mismatches": 6,
+      "codes_total": 2208,
+      "pool_ab_relative_l2": 0.0003085191998577934,
+      "paired_latency_ratio": {
+        "flash": 1.7483637506742924,
+        "eager": 1.510022512657015
+      },
+      "short_shape_codes_exact": true,
+      "original_and_promoted_all_stages_exact": true,
+      "production_changed": false,
+      "proof": "docs/mimo-pr492-cuda-precision-2026-10-08.json",
+      "own_input_official_rvq_oracle": "docs/mimo-pr492-cuda-rvq-oracle-2026-10-08.json"
     }
   },
   "metal_cache_compatibility": {
@@ -1758,10 +1779,44 @@
     "human_wer": 0.045454545454545456
   },
   "integration_20261008": {
-    "source": "201af787e",
+    "source": "2592e2401",
     "mimo_device_fix": "273b8a40c",
     "data2vec_target_fix": "3cb9bb48e",
-    "main_ci_status": "pending",
-    "release_tag_created": false
+    "main_ci_status": "pending final tip",
+    "release_tag_created": false,
+    "regression_selection_fix": "2592e2401",
+    "full_regression_run": 37802900089
+  },
+  "regression_manifest_selection": {
+    "source": "893e417ca14b3b8bcd8ce88ded640b6e97167c4f",
+    "integrated_source": "2592e24016117892809651e8b24c1972e95e611c",
+    "base": "273b8a40ce833d1d247250d95e2f06fb293ced3d",
+    "head": "201af787e93b75c4c9e39f60cdc71eaeac34a158",
+    "before": [
+      "moonshine-tiny",
+      "parakeet-tdt-0.6b-en",
+      "canary-1b-v2",
+      "wav2vec2-xlsr-en",
+      "qwen3-asr-0.6b",
+      "kokoro-82m-en"
+    ],
+    "after": [
+      "moonshine-tiny",
+      "parakeet-tdt-0.6b-en",
+      "canary-1b-v2",
+      "wav2vec2-xlsr-en",
+      "data2vec-base",
+      "qwen3-asr-0.6b",
+      "kokoro-82m-en"
+    ],
+    "old_selector_reproduces_omission": true,
+    "new_selector_includes_data2vec": true,
+    "all_prior_models_retained": true,
+    "unavailable_snapshot_selects_full_nightly": true,
+    "nightly_count": 33,
+    "unit_tests": 14,
+    "selector_sha256": "50bd675864c86829a517f452ada1d44b8baca7128761a252d030dad8ee24495a",
+    "hosted_full_regression_run": 37802900089,
+    "hosted_status": "pending"
   }
 }

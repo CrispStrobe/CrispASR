@@ -1,0 +1,32 @@
+{
+  "source": "893e417ca14b3b8bcd8ce88ded640b6e97167c4f",
+  "integrated_source": "2592e24016117892809651e8b24c1972e95e611c",
+  "base": "273b8a40ce833d1d247250d95e2f06fb293ced3d",
+  "head": "201af787e93b75c4c9e39f60cdc71eaeac34a158",
+  "before": [
+    "moonshine-tiny",
+    "parakeet-tdt-0.6b-en",
+    "canary-1b-v2",
+    "wav2vec2-xlsr-en",
+    "qwen3-asr-0.6b",
+    "kokoro-82m-en"
+  ],
+  "after": [
+    "moonshine-tiny",
+    "parakeet-tdt-0.6b-en",
+    "canary-1b-v2",
+    "wav2vec2-xlsr-en",
+    "data2vec-base",
+    "qwen3-asr-0.6b",
+    "kokoro-82m-en"
+  ],
+  "old_selector_reproduces_omission": true,
+  "new_selector_includes_data2vec": true,
+  "all_prior_models_retained": true,
+  "unavailable_snapshot_selects_full_nightly": true,
+  "nightly_count": 33,
+  "unit_tests": 14,
+  "selector_sha256": "50bd675864c86829a517f452ada1d44b8baca7128761a252d030dad8ee24495a",
+  "hosted_full_regression_run": 37802900089,
+  "hosted_status": "pending"
+}

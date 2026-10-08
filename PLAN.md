@@ -11,31 +11,24 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
-## CLAIMED 2026-10-08 — manifest-specific regression selection
-
-Worktree: `/mnt/storage/crispasr/regression-manifest-selection-20261008/worktree`,
-branch `review/regression-manifest-selection`. Actual main regression
-`37794919636` selected only the generic six-model core after the data2vec
-manifest correction. Compare manifest entries at the diff base/head and add
-changed nightly entries to the matrix; use a conservative full nightly set if
-the manifest comparison is unavailable. Keep shared-driver core coverage and
-prove that transcript, hash, new-entry and TTS-entry changes select their own
-model. No model targets, weights or parity thresholds change in this fix.
-
-## CLAIMED 2026-10-08 — MiMo original-Q4 CUDA precision follow-up
+## CLAIMED 2026-10-08 — MiMo attention precision after original-Q4 CUDA study
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, branch
-`review/pr492-acceptance`. User explicitly requests CUDA validation through
-`../kaggle_usage.md`. CUDA v1 terminal logs and all 72 proof files are archived.
-Version 2 will compare the normal CUDA dispatch with a diagnostic-only,
-environment-gated quantized-matrix cuBLAS/F32 dispatch on the same GPU and
-unchanged original Q4 file. Record the temporary ggml patch and actual
-operator-dispatch evidence, independent same-weight Python stages, norms,
-relative L2, exact RVQ codes and paired timing. Preserve all numerical gates;
-continuous diagnostic success alone does not accept #492. Use the shared
-Kaggle harness, immutable source/ggml pins and the single authorized account.
-No production ggml/runtime/default changes or release tag are authorized by
-this diagnostic result alone.
+`review/pr492-acceptance`. CUDA v2 completed at `b16fe30a2` on Tesla T4/sm_75;
+all terminal logs and 158 output files are archived. A diagnostic F32 cuBLAS
+dispatch retains the original 395,594,656-byte Q4 file and is byte-identical to
+the promoted-F32 model at all six stages in each attention mode. Continuous
+A/B gates pass (transformer relative L2 3.95498e-5, pooling 3.08519e-4), but
+six of 2,208 RVQ codes still differ, so the unchanged exact-code gate FAILS.
+250 ms/2.4 s shape controls have exact codes. Paired full-code extraction is
+1.748x/1.510x slower than normal CUDA (flash/eager), not a speedup; peak memory
+and repeated/full-ASR performance are unmeasured. No production/default change.
+The pinned official quantizer and exhaustive F64 nearest-neighbour check on
+frame 263 confirm each arm's own choices; eager matches the official encoder
+there. Next diagnose attention rounding, preserving exact-code/decoded-output
+gates before production changes or accepting #492. Full receipts:
+`docs/mimo-pr492-cuda-precision-2026-10-08.json` and
+`docs/mimo-pr492-cuda-rvq-oracle-2026-10-08.json`.
 
 ## CLAIMED 2026-10-08 — MiMo Q4 CPU BLAS precision experiment
 
@@ -75,8 +68,9 @@ into MiMo initialization. No attention/graph changes or dependency on PR #492.
 Actual-library probe `37789763493` passes at `6c11d5a1f`: four requested
 combinations, four failed-open default restores; removing the assignments
 fails, restoring them passes. Rust/Dart, Windows/macOS/iOS, Linux unit/Vulkan,
-clang-tidy and clang-format also pass at that source. Remaining broad CI and
-lint jobs are queued; final main-tip CI must settle green before any release.
+clang-tidy and clang-format also pass at that source. Full native CI
+`37790010839` and lint `37790015470` now PASS at that tested source; final
+main-tip CI must settle green before any release.
 Evidence: `docs/mimo-cabi-device-2026-10-08.json`. This is parameter-forwarding
 proof, not a GPU/model-inference or performance claim.
 

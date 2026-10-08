@@ -7,6 +7,19 @@ technical deep-dives are in `LEARNINGS.md`.
 ---
 
 
+## DONE 2026-10-08 — manifest-specific regression coverage
+
+Integrated `2592e2401` compares complete ASR/TTS manifest entries at the Git
+base/head and adds changed nightly backends to the existing core matrix.
+Unavailable snapshots and nightly-list changes conservatively select all
+nightly entries. The actual data2vec correction diff previously selected six
+core models and omitted data2vec; the corrected selector retains all six and
+adds data2vec. Fourteen unit tests cover transcript/hash edits, additions,
+removals, TTS entries, ordering and unavailable/invalid snapshots. The old
+selector reproduces the omission. Full 33-backend hosted regression
+`37802900089` is pending at `893e417ca`; no model/reference/tolerance changed.
+Proof: `docs/regression-manifest-selection-2026-10-08.json`.
+
 ## DONE 2026-10-08 — Metal cache test compatibility and actual discovery
 
 Repaired the ggml device-init signature, explicit Metal/Objective-C linkage,

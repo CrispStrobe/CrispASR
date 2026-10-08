@@ -580,3 +580,27 @@ repeated timing/memory, short EN/ZH, ARM and full-ASR validation remain next.
 The first attempt stopped before numerics on the wrong thread setter, now fixed.
 PR #492 remains unmerged. No release tag was created; final integrated main
 CI/regression must settle before release.
+
+
+## Original Q4 CUDA precision measured; regression selection corrected
+
+CUDA v2 at `b16fe30a2` completed on T4. F32 cuBLAS on the unchanged Q4 file
+passes continuous gates and exactly reproduces every promoted-F32 stage in
+each attention mode, but flash/eager still differ in six RVQ entries. Short
+250 ms/2.4 s controls have exact codes. Paired code extraction is 1.75x/1.51x
+slower than normal CUDA, so this is a measured precision option, not a speedup
+or production/default change. The run correctly ends unsuccessfully on the
+unchanged exact-code gate. All 158 output files and terminal logs are archived.
+The official quantizer and exhaustive F64 nearest-neighbour check agree with
+each arm on frame 263; eager matches the official encoder there. Full evidence:
+[matrix precision](mimo-pr492-cuda-precision-2026-10-08.json) and
+[affected-frame oracle](mimo-pr492-cuda-rvq-oracle-2026-10-08.json).
+
+Independent fix `2592e2401` makes manifest entry changes select their own
+nightly models. Fourteen tests and the actual data2vec correction diff pass:
+the old selector omits data2vec; the new one adds it while retaining all core
+models. Unavailable snapshots/nightly-list edits select the full list. Full
+33-backend regression [37802900089](https://github.com/CrispStrobe/CrispASR/actions/runs/37802900089)
+is pending at `893e417ca`. The MiMo device fix's full CI `37790010839` and
+lint `37790015470` pass. Final main-tip CI is pending; #492 remains unmerged,
+and no release tag was created.

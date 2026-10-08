@@ -280,3 +280,26 @@ Both paths match the official same-weight encoder. Paired extraction is
 1.71x/1.90x slower than ordinary CPU (flash/eager); this is a potential precision
 option, not a shipping speedup or default change. Short EN/ZH, placement,
 repeated timing/memory, ARM and full-ASR acceptance remain unvalidated.
+
+
+The original-file CUDA F32 cuBLAS experiment on Tesla T4 also passes continuous
+stages without increasing the Q4 download size. Pooling A/B relative L2 falls
+from 8.83074% to 0.030852%, but six of 2,208 RVQ codes still differ. Short
+250 ms/2.4 s controls have exact codes. Paired extraction costs 449/442 ms
+versus normal CUDA 257/293 ms (flash/eager): 1.75x/1.51x slower. Every stage is
+byte-identical to the same-weight promoted-F32 model in its attention mode.
+The official quantizer and exhaustive F64 check on the affected frame agree
+with each arm's own choices, locating that discrepancy before RVQ. This remains
+an experiment excluded from production and PR acceptance. Peak memory,
+repeated timing and full decoded-ASR acceptance are unvalidated. Receipts:
+`docs/mimo-pr492-cuda-precision-2026-10-08.json` and
+`docs/mimo-pr492-cuda-rvq-oracle-2026-10-08.json`.
+
+Regression matrix selection now adds the nightly model whose manifest entry
+changed, including transcript and fixture-hash corrections. Previously a
+manifest-only data2vec correction ran only six generic core models. Unavailable
+Git snapshots and changes to the nightly list conservatively run the full
+nightly set. Fourteen unit tests and an actual before/after commit-diff control
+pass; fresh full 33-backend regression `37802900089` remains pending.
+The independent MiMo C ABI fix's complete native CI `37790010839` and lint
+`37790015470` now pass; final main-tip validation remains a release gate.

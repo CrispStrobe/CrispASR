@@ -1,0 +1,995 @@
+{
+  "scope": "Actual CUDA original-file precision diagnostic; unchanged gates. Single paired extraction timings are not full ASR or repeated benchmark statistics.",
+  "hardware": {
+    "script_version": "mimo-pr492-tokenizer-cuda-v2",
+    "source": "b16fe30a2c03e7b7abee0f38a2ea6b03b85d80e6",
+    "ggml": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+    "devices": "name, compute_cap, memory.total [MiB]\nTesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB\n",
+    "arch": "75",
+    "cmake_flags": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DBUILD_SHARED_LIBS=ON",
+      "-DGGML_NATIVE=OFF",
+      "-DGGML_BLAS=OFF",
+      "-DCRISPASR_MEL_BLAS=OFF",
+      "-DCRISPASR_BUILD_TESTS=OFF",
+      "-DCRISPASR_BUILD_EXAMPLES=OFF",
+      "-DCRISPASR_BUILD_SERVER=OFF",
+      "-DCMAKE_PROJECT_crispasr_INCLUDE=/kaggle/temp/mimo-pr492/wrapper/add-probe.cmake",
+      "-DGGML_CUDA=ON",
+      "-DGGML_CUDA_NO_VMM=ON",
+      "-DCMAKE_CUDA_ARCHITECTURES=75",
+      "-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc",
+      "-DCRISPASR_NO_C2PA_NATIVE=ON",
+      "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold",
+      "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold",
+      "-DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=mold"
+    ],
+    "kernel_sha256": "eb3e173341509ec4596ed14022deb5b94719981dc9911538db53be956c3c07be",
+    "scope": "MiMo PR492 tokenizer CUDA diagnostic; no LM, CANN or performance claim.\n\nUses the actual native tokenizer, including device weights/RVQ, and the pinned\nofficial Python encoder on the GPU's own conv2 input. PyTorch is CPU-only here:\nggml compiles and executes CUDA for the detected GPU, including a P100. Pascal\nresults do not establish integer MMQ support. Same-weight promotion is a\ndiagnostic, not recovered original precision or full ASR acceptance.\n"
+  },
+  "experiment": {
+    "source": "b16fe30a2c03e7b7abee0f38a2ea6b03b85d80e6",
+    "scope": "Original-file MiMo Q4 CUDA precision experiment; no production changes.\n\nCall patch_cuda() before the CUDA build. The temporary dispatch bypasses both\nMMQ and MMVQ only when explicitly enabled. Actual cuBLAS calls are traced;\nF32 computation is forced separately. Full PR acceptance still requires exact\nRVQ codes, independent original-checkpoint and decoded-output validation.\n",
+    "continuous_passed": true,
+    "exact_rvq_passed": false,
+    "tokenizer_acceptance_passed": false,
+    "full_pr_acceptance": false,
+    "codec": {
+      "repo": "cstr/mimo-tokenizer-GGUF",
+      "revision": "fa380f4c49a8e8c62c02c00d0da5e263fc5b0dcf",
+      "filename": "mimo-tokenizer-q4_k.gguf",
+      "sha256": "3f3a903b10294ead4ef6a4afec035639fd2113b1d307d42f649a97cc85670e3f"
+    },
+    "q4_attention_ab": {
+      "tok_mel": {
+        "cosine": 1.0000000000000004,
+        "mine_norm": 1201.209716136071,
+        "ref_norm": 1201.209716136071,
+        "relative_l2": 0.0,
+        "max_abs": 0.0,
+        "exact": true
+      },
+      "tok_conv1_out": {
+        "cosine": 1.0000000000000022,
+        "mine_norm": 1442.2562912028125,
+        "ref_norm": 1442.2562912028125,
+        "relative_l2": 0.0,
+        "max_abs": 0.0,
+        "exact": true
+      },
+      "tok_conv2_out": {
+        "cosine": 0.9999999999999991,
+        "mine_norm": 9297.916342572398,
+        "ref_norm": 9297.916342572398,
+        "relative_l2": 0.0,
+        "max_abs": 0.0,
+        "exact": true
+      },
+      "tok_xfmr_out": {
+        "cosine": 0.9999999992179197,
+        "mine_norm": 72.54437391395686,
+        "ref_norm": 72.54438597110291,
+        "relative_l2": 3.954981395201647e-05,
+        "max_abs": 0.0002937391400337219,
+        "exact": false
+      },
+      "tok_pool_out": {
+        "cosine": 0.9999999527733399,
+        "mine_norm": 1905.7779169096125,
+        "ref_norm": 1905.8295272429452,
+        "relative_l2": 0.0003085191998577934,
+        "max_abs": 0.029981613159179688,
+        "exact": false
+      },
+      "tok_codes": {
+        "match_fraction": 0.9972826086956522,
+        "exact": false
+      }
+    },
+    "q4_independent_same_weights": {
+      "tok_xfmr_out": {
+        "q4-flash": {
+          "cosine": 0.9999999992288381,
+          "mine_norm": 72.54438597110291,
+          "ref_norm": 72.54437510915895,
+          "relative_l2": 3.927272417281186e-05,
+          "max_abs": 0.0002895854413509369,
+          "exact": false
+        },
+        "q4-eager": {
+          "cosine": 0.9999999999997929,
+          "mine_norm": 72.54437391395686,
+          "ref_norm": 72.54437510915895,
+          "relative_l2": 6.448409903398721e-07,
+          "max_abs": 7.148832082748413e-06,
+          "exact": false
+        }
+      },
+      "tok_pool_out": {
+        "q4-flash": {
+          "cosine": 0.9999999527933017,
+          "mine_norm": 1905.8295272429452,
+          "ref_norm": 1905.7783075320885,
+          "relative_l2": 0.00030844488580429407,
+          "max_abs": 0.030008316040039062,
+          "exact": false
+        },
+        "q4-eager": {
+          "cosine": 0.9999999999494054,
+          "mine_norm": 1905.7779169096125,
+          "ref_norm": 1905.7783075320885,
+          "relative_l2": 1.0061031360232085e-05,
+          "max_abs": 0.000637054443359375,
+          "exact": false
+        }
+      }
+    },
+    "timings": {
+      "q4-flash": {
+        "gpu_requested": true,
+        "pid": 6010,
+        "stages": {
+          "tok_mel": {
+            "seconds": 0.1419761859999653,
+            "elements": 140928
+          },
+          "tok_conv1_out": {
+            "seconds": 0.6794660900000054,
+            "elements": 1409280
+          },
+          "tok_conv2_out": {
+            "seconds": 0.3799109530000351,
+            "elements": 705280
+          },
+          "tok_xfmr_out": {
+            "seconds": 0.35935369900016667,
+            "elements": 705280
+          },
+          "tok_pool_out": {
+            "seconds": 0.3543700400000489,
+            "elements": 353280
+          },
+          "tok_codes": {
+            "seconds": 0.4494469389999267,
+            "elements": 2208
+          }
+        },
+        "cuda_processes": [
+          "6010"
+        ]
+      },
+      "q4-eager": {
+        "gpu_requested": true,
+        "pid": 6021,
+        "stages": {
+          "tok_mel": {
+            "seconds": 0.1382014700000127,
+            "elements": 140928
+          },
+          "tok_conv1_out": {
+            "seconds": 0.5504465409999284,
+            "elements": 1409280
+          },
+          "tok_conv2_out": {
+            "seconds": 0.4277797790000477,
+            "elements": 705280
+          },
+          "tok_xfmr_out": {
+            "seconds": 0.3942485420000139,
+            "elements": 705280
+          },
+          "tok_pool_out": {
+            "seconds": 0.4021302859998741,
+            "elements": 353280
+          },
+          "tok_codes": {
+            "seconds": 0.44210736599984557,
+            "elements": 2208
+          }
+        },
+        "cuda_processes": [
+          "6021"
+        ]
+      },
+      "default-q4-flash": {
+        "gpu_requested": true,
+        "pid": 6060,
+        "stages": {
+          "tok_mel": {
+            "seconds": 0.13320761500017397,
+            "elements": 140928
+          },
+          "tok_conv1_out": {
+            "seconds": 0.34204845799990835,
+            "elements": 1409280
+          },
+          "tok_conv2_out": {
+            "seconds": 0.24025756100013496,
+            "elements": 705280
+          },
+          "tok_xfmr_out": {
+            "seconds": 0.21776811799986717,
+            "elements": 705280
+          },
+          "tok_pool_out": {
+            "seconds": 0.21264519100009238,
+            "elements": 353280
+          },
+          "tok_codes": {
+            "seconds": 0.2570671799999218,
+            "elements": 2208
+          }
+        },
+        "cuda_processes": [
+          "6060"
+        ]
+      },
+      "default-q4-eager": {
+        "gpu_requested": true,
+        "pid": 6071,
+        "stages": {
+          "tok_mel": {
+            "seconds": 0.1335523700001886,
+            "elements": 140928
+          },
+          "tok_conv1_out": {
+            "seconds": 0.3325884370001404,
+            "elements": 1409280
+          },
+          "tok_conv2_out": {
+            "seconds": 0.2686600790000284,
+            "elements": 705280
+          },
+          "tok_xfmr_out": {
+            "seconds": 0.2512595489999967,
+            "elements": 705280
+          },
+          "tok_pool_out": {
+            "seconds": 0.2448190310001337,
+            "elements": 353280
+          },
+          "tok_codes": {
+            "seconds": 0.29278196999985084,
+            "elements": 2208
+          }
+        },
+        "cuda_processes": [
+          "6071"
+        ]
+      }
+    },
+    "dispatch_traces": {
+      "q4-flash": [
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.k.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.o.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.fc1.weight type=q4_K k=1280 m=5120 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.fc2.weight type=q4_K k=5120 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.k.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.o.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.fc1.weight type=q4_K k=1280 m=5120 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.fc2.weight type=q4_K k=5120 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.k.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.o.weight type=q4_K k=1280 m=1280 n=551"
+      ],
+      "q4-eager": [
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.k.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.attn.o.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.fc1.weight type=q4_K k=1280 m=5120 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.0.fc2.weight type=q4_K k=5120 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.k.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.attn.o.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.fc1.weight type=q4_K k=1280 m=5120 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.1.fc2.weight type=q4_K k=5120 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.v.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.k.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.q.weight type=q4_K k=1280 m=1280 n=551",
+        "MIMO_DIAG_CUDA_CUBLAS_F32 device=0 weight=enc.blk.2.attn.o.weight type=q4_K k=1280 m=1280 n=551"
+      ]
+    },
+    "codec_bytes": 395594656,
+    "default_attention_ab": {
+      "tok_mel": {
+        "cosine": 1.0000000000000004,
+        "mine_norm": 1201.209716136071,
+        "ref_norm": 1201.209716136071,
+        "relative_l2": 0.0,
+        "max_abs": 0.0,
+        "exact": true
+      },
+      "tok_conv1_out": {
+        "cosine": 1.0000000000000022,
+        "mine_norm": 1442.2562912028125,
+        "ref_norm": 1442.2562912028125,
+        "relative_l2": 0.0,
+        "max_abs": 0.0,
+        "exact": true
+      },
+      "tok_conv2_out": {
+        "cosine": 0.9999999999999991,
+        "mine_norm": 9297.916342572398,
+        "ref_norm": 9297.916342572398,
+        "relative_l2": 0.0,
+        "max_abs": 0.0,
+        "exact": true
+      },
+      "tok_xfmr_out": {
+        "cosine": 0.999990263687846,
+        "mine_norm": 72.5445191598382,
+        "ref_norm": 72.54543711994661,
+        "relative_l2": 0.004412769881175245,
+        "max_abs": 0.050216108560562134,
+        "exact": false
+      },
+      "tok_pool_out": {
+        "cosine": 0.9961272823158945,
+        "mine_norm": 1899.8206214334537,
+        "ref_norm": 1891.5762714143027,
+        "relative_l2": 0.08830735886301795,
+        "max_abs": 18.263782501220703,
+        "exact": false
+      },
+      "tok_codes": {
+        "exact": false,
+        "match_fraction": 0.7078804347826086,
+        "mismatches": 645
+      }
+    },
+    "dispatch_ab": {
+      "flash": {
+        "tok_mel": {
+          "cosine": 1.0000000000000004,
+          "mine_norm": 1201.209716136071,
+          "ref_norm": 1201.209716136071,
+          "relative_l2": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        "tok_conv1_out": {
+          "cosine": 1.0000000000000022,
+          "mine_norm": 1442.2562912028125,
+          "ref_norm": 1442.2562912028125,
+          "relative_l2": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        "tok_conv2_out": {
+          "cosine": 0.9999999999999991,
+          "mine_norm": 9297.916342572398,
+          "ref_norm": 9297.916342572398,
+          "relative_l2": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        "tok_xfmr_out": {
+          "cosine": 0.9999682462400418,
+          "mine_norm": 72.54438597110291,
+          "ref_norm": 72.54543711994661,
+          "relative_l2": 0.007969115990440645,
+          "max_abs": 0.09173227474093437,
+          "exact": false
+        },
+        "tok_pool_out": {
+          "cosine": 0.9837151864905977,
+          "mine_norm": 1905.8295272429452,
+          "ref_norm": 1891.5762714143027,
+          "relative_l2": 0.18130587729391878,
+          "max_abs": 20.564274668693542,
+          "exact": false
+        },
+        "tok_codes": {
+          "exact": false,
+          "match_fraction": 0.5810688405797102,
+          "mismatches": 925
+        }
+      },
+      "eager": {
+        "tok_mel": {
+          "cosine": 1.0000000000000004,
+          "mine_norm": 1201.209716136071,
+          "ref_norm": 1201.209716136071,
+          "relative_l2": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        "tok_conv1_out": {
+          "cosine": 1.0000000000000022,
+          "mine_norm": 1442.2562912028125,
+          "ref_norm": 1442.2562912028125,
+          "relative_l2": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        "tok_conv2_out": {
+          "cosine": 0.9999999999999991,
+          "mine_norm": 9297.916342572398,
+          "ref_norm": 9297.916342572398,
+          "relative_l2": 0.0,
+          "max_abs": 0.0,
+          "exact": true
+        },
+        "tok_xfmr_out": {
+          "cosine": 0.9999706848058365,
+          "mine_norm": 72.54437391395686,
+          "ref_norm": 72.5445191598382,
+          "relative_l2": 0.007657040874170206,
+          "max_abs": 0.09162382408976555,
+          "exact": false
+        },
+        "tok_pool_out": {
+          "cosine": 0.9871511889942597,
+          "mine_norm": 1905.7779169096125,
+          "ref_norm": 1899.8206214334537,
+          "relative_l2": 0.1605865347085204,
+          "max_abs": 20.72348177433014,
+          "exact": false
+        },
+        "tok_codes": {
+          "exact": false,
+          "match_fraction": 0.592391304347826,
+          "mismatches": 900
+        }
+      }
+    },
+    "short_shape_controls": {
+      "4000": {
+        "default_attention_ab": {
+          "tok_mel": {
+            "cosine": 1.0000000000000009,
+            "mine_norm": 273.085340996193,
+            "ref_norm": 273.085340996193,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_conv1_out": {
+            "cosine": 1.0,
+            "mine_norm": 340.26352153006144,
+            "ref_norm": 340.26352153006144,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_conv2_out": {
+            "cosine": 1.0000000000000002,
+            "mine_norm": 1425.9500500552554,
+            "ref_norm": 1425.9500500552554,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_xfmr_out": {
+            "cosine": 0.9999938140859204,
+            "mine_norm": 11.138723273411573,
+            "ref_norm": 11.138431052551384,
+            "relative_l2": 0.003517504944273728,
+            "max_abs": 0.0033555030822753906,
+            "exact": false
+          },
+          "tok_pool_out": {
+            "cosine": 0.9997117533900601,
+            "mine_norm": 472.0442065574626,
+            "ref_norm": 471.23794161641257,
+            "relative_l2": 0.02409163597856893,
+            "max_abs": 0.7836618423461914,
+            "exact": false
+          },
+          "tok_codes": {
+            "exact": false,
+            "match_fraction": 0.8571428571428571,
+            "mismatches": 8
+          }
+        },
+        "cublas_attention_ab": {
+          "tok_mel": {
+            "cosine": 1.0000000000000009,
+            "mine_norm": 273.085340996193,
+            "ref_norm": 273.085340996193,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_conv1_out": {
+            "cosine": 1.0,
+            "mine_norm": 340.26352153006144,
+            "ref_norm": 340.26352153006144,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_conv2_out": {
+            "cosine": 1.0000000000000002,
+            "mine_norm": 1425.9500500552554,
+            "ref_norm": 1425.9500500552554,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_xfmr_out": {
+            "cosine": 0.9999999996733095,
+            "mine_norm": 11.138036997916696,
+            "ref_norm": 11.13803494058646,
+            "relative_l2": 2.5561983100695846e-05,
+            "max_abs": 2.0110979676246643e-05,
+            "exact": false
+          },
+          "tok_pool_out": {
+            "cosine": 0.9999999719080261,
+            "mine_norm": 474.744308805218,
+            "ref_norm": 474.7479591752797,
+            "relative_l2": 0.00023715530566548968,
+            "max_abs": 0.010566353797912598,
+            "exact": false
+          },
+          "tok_codes": {
+            "exact": true,
+            "match_fraction": 1.0,
+            "mismatches": 0
+          }
+        },
+        "timings": {
+          "short-4000-default-flash": {
+            "gpu_requested": true,
+            "pid": 6082,
+            "stages": {
+              "tok_mel": {
+                "seconds": 0.00934403399992334,
+                "elements": 3328
+              },
+              "tok_conv1_out": {
+                "seconds": 0.10137013000007755,
+                "elements": 33280
+              },
+              "tok_conv2_out": {
+                "seconds": 0.03071691400009513,
+                "elements": 16640
+              },
+              "tok_xfmr_out": {
+                "seconds": 0.019391174000020328,
+                "elements": 16640
+              },
+              "tok_pool_out": {
+                "seconds": 0.019149131000176567,
+                "elements": 8960
+              },
+              "tok_codes": {
+                "seconds": 0.05765369200003079,
+                "elements": 56
+              }
+            },
+            "cuda_processes": [
+              "6082"
+            ]
+          },
+          "short-4000-default-eager": {
+            "gpu_requested": true,
+            "pid": 6090,
+            "stages": {
+              "tok_mel": {
+                "seconds": 0.009140583000089464,
+                "elements": 3328
+              },
+              "tok_conv1_out": {
+                "seconds": 0.12210033900009876,
+                "elements": 33280
+              },
+              "tok_conv2_out": {
+                "seconds": 0.034882809999999154,
+                "elements": 16640
+              },
+              "tok_xfmr_out": {
+                "seconds": 0.024007525999877544,
+                "elements": 16640
+              },
+              "tok_pool_out": {
+                "seconds": 0.024090784999998505,
+                "elements": 8960
+              },
+              "tok_codes": {
+                "seconds": 0.06364898299989363,
+                "elements": 56
+              }
+            },
+            "cuda_processes": [
+              "6090"
+            ]
+          },
+          "short-4000-cublas-flash": {
+            "gpu_requested": true,
+            "pid": 6098,
+            "stages": {
+              "tok_mel": {
+                "seconds": 0.009104703000048175,
+                "elements": 3328
+              },
+              "tok_conv1_out": {
+                "seconds": 0.13079403300002923,
+                "elements": 33280
+              },
+              "tok_conv2_out": {
+                "seconds": 0.06579555100006473,
+                "elements": 16640
+              },
+              "tok_xfmr_out": {
+                "seconds": 0.05111372700002903,
+                "elements": 16640
+              },
+              "tok_pool_out": {
+                "seconds": 0.05175337800005764,
+                "elements": 8960
+              },
+              "tok_codes": {
+                "seconds": 0.09152674899996782,
+                "elements": 56
+              }
+            },
+            "cuda_processes": [
+              "6098"
+            ]
+          },
+          "short-4000-cublas-eager": {
+            "gpu_requested": true,
+            "pid": 6106,
+            "stages": {
+              "tok_mel": {
+                "seconds": 0.010394673000064358,
+                "elements": 3328
+              },
+              "tok_conv1_out": {
+                "seconds": 0.12121830800015232,
+                "elements": 33280
+              },
+              "tok_conv2_out": {
+                "seconds": 0.06855627799996,
+                "elements": 16640
+              },
+              "tok_xfmr_out": {
+                "seconds": 0.049431933000050776,
+                "elements": 16640
+              },
+              "tok_pool_out": {
+                "seconds": 0.047307237000040914,
+                "elements": 8960
+              },
+              "tok_codes": {
+                "seconds": 0.09257462699997632,
+                "elements": 56
+              }
+            },
+            "cuda_processes": [
+              "6106"
+            ]
+          }
+        }
+      },
+      "38400": {
+        "default_attention_ab": {
+          "tok_mel": {
+            "cosine": 1.0000000000000004,
+            "mine_norm": 576.216950432274,
+            "ref_norm": 576.216950432274,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_conv1_out": {
+            "cosine": 1.0000000000000007,
+            "mine_norm": 747.4184781220341,
+            "ref_norm": 747.4184781220341,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_conv2_out": {
+            "cosine": 1.0000000000000013,
+            "mine_norm": 4746.369289150312,
+            "ref_norm": 4746.369289150312,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_xfmr_out": {
+            "cosine": 0.9999954101795154,
+            "mine_norm": 33.992103402567224,
+            "ref_norm": 33.992285192118786,
+            "relative_l2": 0.0030297888503350635,
+            "max_abs": 0.0041494220495224,
+            "exact": false
+          },
+          "tok_pool_out": {
+            "cosine": 0.9996820547714024,
+            "mine_norm": 1015.5283567877419,
+            "ref_norm": 1015.9957700477952,
+            "relative_l2": 0.025215264484573074,
+            "max_abs": 0.9862651824951172,
+            "exact": false
+          },
+          "tok_codes": {
+            "exact": false,
+            "match_fraction": 0.735655737704918,
+            "mismatches": 129
+          }
+        },
+        "cublas_attention_ab": {
+          "tok_mel": {
+            "cosine": 1.0000000000000004,
+            "mine_norm": 576.216950432274,
+            "ref_norm": 576.216950432274,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_conv1_out": {
+            "cosine": 1.0000000000000007,
+            "mine_norm": 747.4184781220341,
+            "ref_norm": 747.4184781220341,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_conv2_out": {
+            "cosine": 1.0000000000000013,
+            "mine_norm": 4746.369289150312,
+            "ref_norm": 4746.369289150312,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_xfmr_out": {
+            "cosine": 0.9999999997926912,
+            "mine_norm": 33.99236444098395,
+            "ref_norm": 33.99236788687037,
+            "relative_l2": 2.0362388945237707e-05,
+            "max_abs": 2.8013251721858978e-05,
+            "exact": false
+          },
+          "tok_pool_out": {
+            "cosine": 0.9999999835031494,
+            "mine_norm": 1016.629466786442,
+            "ref_norm": 1016.6486240029329,
+            "relative_l2": 0.00018261478228959118,
+            "max_abs": 0.007563591003417969,
+            "exact": false
+          },
+          "tok_codes": {
+            "exact": true,
+            "match_fraction": 1.0,
+            "mismatches": 0
+          }
+        },
+        "timings": {
+          "short-38400-default-flash": {
+            "gpu_requested": true,
+            "pid": 6114,
+            "stages": {
+              "tok_mel": {
+                "seconds": 0.05978764399992542,
+                "elements": 30848
+              },
+              "tok_conv1_out": {
+                "seconds": 0.1722593090000828,
+                "elements": 308480
+              },
+              "tok_conv2_out": {
+                "seconds": 0.09282491599992682,
+                "elements": 154880
+              },
+              "tok_xfmr_out": {
+                "seconds": 0.07961828800011972,
+                "elements": 154880
+              },
+              "tok_pool_out": {
+                "seconds": 0.08000957199988079,
+                "elements": 78080
+              },
+              "tok_codes": {
+                "seconds": 0.118073928000058,
+                "elements": 488
+              }
+            },
+            "cuda_processes": [
+              "6114"
+            ]
+          },
+          "short-38400-default-eager": {
+            "gpu_requested": true,
+            "pid": 6125,
+            "stages": {
+              "tok_mel": {
+                "seconds": 0.05867498699990392,
+                "elements": 30848
+              },
+              "tok_conv1_out": {
+                "seconds": 0.18624893999981396,
+                "elements": 308480
+              },
+              "tok_conv2_out": {
+                "seconds": 0.12188942799980396,
+                "elements": 154880
+              },
+              "tok_xfmr_out": {
+                "seconds": 0.09965028700003131,
+                "elements": 154880
+              },
+              "tok_pool_out": {
+                "seconds": 0.09941905100004078,
+                "elements": 78080
+              },
+              "tok_codes": {
+                "seconds": 0.1441842409999481,
+                "elements": 488
+              }
+            },
+            "cuda_processes": [
+              "6125"
+            ]
+          },
+          "short-38400-cublas-flash": {
+            "gpu_requested": true,
+            "pid": 6136,
+            "stages": {
+              "tok_mel": {
+                "seconds": 0.05892089600001782,
+                "elements": 30848
+              },
+              "tok_conv1_out": {
+                "seconds": 0.2565154270000676,
+                "elements": 308480
+              },
+              "tok_conv2_out": {
+                "seconds": 0.1569730440000967,
+                "elements": 154880
+              },
+              "tok_xfmr_out": {
+                "seconds": 0.135674975000029,
+                "elements": 154880
+              },
+              "tok_pool_out": {
+                "seconds": 0.1328272390001075,
+                "elements": 78080
+              },
+              "tok_codes": {
+                "seconds": 0.16488345400011895,
+                "elements": 488
+              }
+            },
+            "cuda_processes": [
+              "6136"
+            ]
+          },
+          "short-38400-cublas-eager": {
+            "gpu_requested": true,
+            "pid": 6147,
+            "stages": {
+              "tok_mel": {
+                "seconds": 0.06026951100011502,
+                "elements": 30848
+              },
+              "tok_conv1_out": {
+                "seconds": 0.2060837609999453,
+                "elements": 308480
+              },
+              "tok_conv2_out": {
+                "seconds": 0.14415411900017716,
+                "elements": 154880
+              },
+              "tok_xfmr_out": {
+                "seconds": 0.12922164199994768,
+                "elements": 154880
+              },
+              "tok_pool_out": {
+                "seconds": 0.12758390199996938,
+                "elements": 78080
+              },
+              "tok_codes": {
+                "seconds": 0.1677733020001142,
+                "elements": 488
+              }
+            },
+            "cuda_processes": [
+              "6147"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "full_pr_acceptance": false,
+  "paired_tok_codes_timings": {
+    "flash": {
+      "cublas_seconds": 0.4494469389999267,
+      "default_seconds": 0.2570671799999218,
+      "cublas_over_default": 1.7483637506742924,
+      "default_over_cublas": 0.5719633569469337
+    },
+    "eager": {
+      "cublas_seconds": 0.44210736599984557,
+      "default_seconds": 0.29278196999985084,
+      "cublas_over_default": 1.510022512657015,
+      "default_over_cublas": 0.6622417822370169
+    }
+  },
+  "short_shape_gates": {
+    "4000": {
+      "continuous_passed": true,
+      "exact_codes": true
+    },
+    "38400": {
+      "continuous_passed": true,
+      "exact_codes": true
+    }
+  },
+  "q4_vs_promoted_same_weight_codes": {
+    "flash": {
+      "exact": true,
+      "match_fraction": 1.0,
+      "mismatches": 0
+    },
+    "eager": {
+      "exact": true,
+      "match_fraction": 1.0,
+      "mismatches": 0
+    }
+  },
+  "proof_files_sha256": {
+    "hardware.json": "78ac0ff8824558897f08af42de58efe0649791ba9e27e49b622e78fcbc720f51",
+    "cuda-precision.json": "e5189d0664ffa0aecee54f4ae45ed6ae859b750e225be17f6331a16d2f39c893",
+    "tokenizer-diagnosis.json": "5a0697cb506b1e43ef381bb7411cbeea595fbc1b5893576c15b76ab749016574",
+    "cuda-patch.json": "45131229ac98dc1162509aecf27c0e3dfecc5895f328b3a92613eb20f01d8a78"
+  },
+  "schema_version": 2,
+  "script_version": "mimo-pr492-tokenizer-cuda-v2",
+  "status": "COMPLETED: continuous gates pass; exact RVQ gates fail; excluded from full PR acceptance",
+  "collection": {
+    "time": "2026-10-08T15:42:21.233300+00:00",
+    "terminal_status": {
+      "status": "ERROR",
+      "failureMessage": null
+    },
+    "hardware_present": true,
+    "numerical_receipt_present": true,
+    "files": 162
+  },
+  "original_file_vs_promoted_exact_stages": {
+    "flash": {
+      "tok_mel": true,
+      "tok_conv1_out": true,
+      "tok_conv2_out": true,
+      "tok_xfmr_out": true,
+      "tok_pool_out": true,
+      "tok_codes": true
+    },
+    "eager": {
+      "tok_mel": true,
+      "tok_conv1_out": true,
+      "tok_conv2_out": true,
+      "tok_xfmr_out": true,
+      "tok_pool_out": true,
+      "tok_codes": true
+    }
+  },
+  "flash_eager_code_mismatches": 6,
+  "limits": [
+    "Temporary diagnostic dispatch only; no production/default change",
+    "Q4 file unchanged, but transient dequantization consumes runtime memory; peak memory not measured",
+    "Single paired extraction timings, not a speedup, repeated benchmark, or full-ASR performance",
+    "Short shape controls have no independent encoder reference",
+    "No original-checkpoint, LM, CANN, ARM or full decoded-ASR certification",
+    "One Tesla T4 used; two visible devices do not establish multi-GPU execution"
+  ],
+  "terminal_log_sha256": "7b4b6e4fcc3cc29c0193612cddd36ff833cec9b5e46d3e074b91891bc4cb972b",
+  "next_work": "The original-Q4 matrix precision problem is isolated without file bloat, at a latency cost. Diagnose the remaining flash/eager attention rounding before production changes; preserve exact RVQ and full decoded-output gates."
+}
