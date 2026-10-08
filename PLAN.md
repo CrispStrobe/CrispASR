@@ -26,12 +26,18 @@ symbol dependencies, GPU placement changes or reference tolerance changes.
 
 Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
 `review/data2vec-nightly`, diagnostic source `d43a25230`, hosted
-`37786726672` running. Nightly `37768023710`, job `113289821084`, fails
+`37786726672` completed (FAILED unchanged Q4 gate). Nightly `37768023710`, job `113289821084`, fails
 Q4 JFK speech at runtime source `2da878e72`: an extra `A` after `AND SO`
 (WER 4.55% versus required zero). F16 logits still pass cosine 0.999141.
 Compare pinned v0.8.41/current builds and Q4/Q8/F16 weights before changing
-runtime, fixture or quantization policy. Test retaining the original F32 CTC
-head in Q4 as a controlled variant; do not relax transcript gates.
+runtime, fixture or quantization policy. Matched-host results: baseline Q4
+passes, current Q4 inserts A; Q8/F16 insert A on BOTH versions. The CTC head
+is already byte-identical F32. Original-F16 layer 0 preservation passes this
+clip (+10,174,464 bytes); preserving layers 0–1 or 0–3 fails. Both F16 stage
+diffs pass the original cosine gate. This is not sufficient evidence for a
+quantization-policy fix. Next inspect/decode the frozen independent Python
+CTC reference and compare the original Python checkpoint, keeping zero-WER
+gates unchanged. No published model or decoder changes yet.
 
 ## CLAIMED 2026-10-08 — independent MiMo C ABI device/verbosity fix
 

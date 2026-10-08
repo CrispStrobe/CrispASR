@@ -1,0 +1,419 @@
+{
+  "passed": false,
+  "scope": "Diagnose data2vec Q4 word insertion against v0.8.41 and precision controls.\n\nThe original transcript gate stays at zero WER. Preserved tensors come from\nthe original pinned F16 GGUF, never from dequantizing Q4. This one-clip study\ndoes not certify a replacement model or change any published weights.\n",
+  "baseline": "340d7085eaa53c40a46dcb73a6d3d0448a480006",
+  "runs": {
+    "baseline": {
+      "q4_k": {
+        "passed": true,
+        "text": "AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+        "report": [
+          "\u001b[32m  PASS\u001b[0m  (byte-equal)",
+          "    'AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'"
+        ]
+      },
+      "q8_0": {
+        "passed": false,
+        "text": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+        "report": [
+          "\u001b[31m  FAIL\u001b[0m  wer=0.0455 (max 0.0) [gate]  cer=0.0280 [advisory] (over tolerance)",
+          "    expected: 'AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'",
+          "    actual:   'AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'"
+        ]
+      },
+      "f16": {
+        "passed": false,
+        "text": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+        "report": [
+          "\u001b[31m  FAIL\u001b[0m  wer=0.0455 (max 0.0) [gate]  cer=0.0280 [advisory] (over tolerance)",
+          "    expected: 'AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'",
+          "    actual:   'AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'"
+        ]
+      }
+    },
+    "current": {
+      "q4_k": {
+        "passed": false,
+        "text": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+        "report": [
+          "\u001b[31m  FAIL\u001b[0m  wer=0.0455 (max 0.0) [gate]  cer=0.0280 [advisory] (over tolerance)",
+          "    expected: 'AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'",
+          "    actual:   'AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'"
+        ]
+      },
+      "q8_0": {
+        "passed": false,
+        "text": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+        "report": [
+          "\u001b[31m  FAIL\u001b[0m  wer=0.0455 (max 0.0) [gate]  cer=0.0280 [advisory] (over tolerance)",
+          "    expected: 'AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'",
+          "    actual:   'AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'"
+        ]
+      },
+      "f16": {
+        "passed": false,
+        "text": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+        "report": [
+          "\u001b[31m  FAIL\u001b[0m  wer=0.0455 (max 0.0) [gate]  cer=0.0280 [advisory] (over tolerance)",
+          "    expected: 'AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'",
+          "    actual:   'AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'"
+        ]
+      }
+    }
+  },
+  "variants": {
+    "original-head": {
+      "preserved": [
+        {
+          "name": "lm_head.weight",
+          "old_type": "F32",
+          "new_type": "F32",
+          "unchanged_bytes": true
+        },
+        {
+          "name": "lm_head.bias",
+          "old_type": "F32",
+          "new_type": "F32",
+          "unchanged_bytes": true
+        }
+      ],
+      "model_bytes": 82257248,
+      "sha256": "93b6ab01f1f83525157d797a385a3e9e014c6761d3e974351363adc452a86f7e",
+      "transcript": {
+        "passed": false,
+        "text": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+        "report": [
+          "\u001b[31m  FAIL\u001b[0m  wer=0.0455 (max 0.0) [gate]  cer=0.0280 [advisory] (over tolerance)",
+          "    expected: 'AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'",
+          "    actual:   'AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'"
+        ]
+      }
+    },
+    "head1": {
+      "preserved": [
+        {
+          "name": "enc.0.attn.q.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.attn.k.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.attn.v.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.attn.out.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.ffn.fc1.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.ffn.fc2.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        }
+      ],
+      "model_bytes": 92431712,
+      "sha256": "56973efbf7d3581d2c82ef963814be564558c483049bed33b1c4d0c5f8aa9dc3",
+      "transcript": {
+        "passed": true,
+        "text": "AND SO MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+        "report": [
+          "\u001b[32m  PASS\u001b[0m  wer=0.0000 (max 0.0) [gate]  cer=0.0093 [advisory] (within tolerance)",
+          "    expected: 'AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'",
+          "    actual:   'AND SO MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'"
+        ]
+      }
+    },
+    "head2": {
+      "preserved": [
+        {
+          "name": "enc.0.attn.q.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.attn.k.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.attn.v.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.attn.out.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.ffn.fc1.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.ffn.fc2.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.1.attn.q.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.1.attn.k.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.1.attn.v.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.1.attn.out.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.1.ffn.fc1.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.1.ffn.fc2.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        }
+      ],
+      "model_bytes": 102606176,
+      "sha256": "3bed20ae17151e3a2a4977af03f4659c6ef2c7aebb0d88690ad7ced47c2f16fa",
+      "transcript": {
+        "passed": false,
+        "text": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+        "report": [
+          "\u001b[31m  FAIL\u001b[0m  wer=0.0455 (max 0.0) [gate]  cer=0.0280 [advisory] (over tolerance)",
+          "    expected: 'AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'",
+          "    actual:   'AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'"
+        ]
+      }
+    },
+    "head4": {
+      "preserved": [
+        {
+          "name": "enc.0.attn.q.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.attn.k.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.attn.v.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.attn.out.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.ffn.fc1.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.0.ffn.fc2.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.1.attn.q.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.1.attn.k.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.1.attn.v.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.1.attn.out.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.1.ffn.fc1.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.1.ffn.fc2.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.2.attn.q.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.2.attn.k.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.2.attn.v.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.2.attn.out.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.2.ffn.fc1.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.2.ffn.fc2.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.3.attn.q.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.3.attn.k.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.3.attn.v.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.3.attn.out.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.3.ffn.fc1.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        },
+        {
+          "name": "enc.3.ffn.fc2.weight",
+          "old_type": "Q4_K",
+          "new_type": "F16",
+          "unchanged_bytes": false
+        }
+      ],
+      "model_bytes": 122955104,
+      "sha256": "0f2fef075b9e9c8168ef727aff795afba72c40de193bf87d8f1037fd522d8caa",
+      "transcript": {
+        "passed": false,
+        "text": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+        "report": [
+          "\u001b[31m  FAIL\u001b[0m  wer=0.0455 (max 0.0) [gate]  cer=0.0280 [advisory] (over tolerance)",
+          "    expected: 'AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'",
+          "    actual:   'AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.'"
+        ]
+      }
+    }
+  },
+  "source": "d43a25230595aa20896899e8ed437c2eba320b17",
+  "ggml": {
+    "baseline": "2f5a80d258c46e6ac8eee95f1328c0f58376d7ee",
+    "current": "c36dab89b662838f0f5d4826c399198c0b90bbfc"
+  },
+  "audio_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "expected_transcript": "AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+  "models": {
+    "q4_k": {
+      "sha256": "93b6ab01f1f83525157d797a385a3e9e014c6761d3e974351363adc452a86f7e",
+      "bytes": 82257248,
+      "revision": "97d798574af55a3b861d323c2222f3d6cbbf1048"
+    },
+    "q8_0": {
+      "sha256": "622ea462be07a10bb4a4ebee4ceeb8b2fc049eb224d588f078582279a02255d3",
+      "bytes": 124921184,
+      "revision": "97d798574af55a3b861d323c2222f3d6cbbf1048"
+    },
+    "f16": {
+      "sha256": "4df9cc50b7f5340488fa64f5ead34f93660c6ff8785e7e71a859a8860a13254e",
+      "bytes": 204916000,
+      "revision": "97d798574af55a3b861d323c2222f3d6cbbf1048"
+    }
+  },
+  "reference": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "revision": "cb678dfd4806778aa55c39fe7b7a710a54cdc153",
+    "sha256": "ab4151f868b958d9461719ba8142c2f5c8f104fac2c2987539aa6f041bc7ac1a"
+  }
+}
