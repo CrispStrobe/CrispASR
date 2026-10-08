@@ -1,0 +1,27 @@
+{
+  "passed": true,
+  "source": "6c11d5a1fc1f93ed16acbc8228e35a89e96d5c25",
+  "scope": "Verify MiMo C-ABI open settings with real library calls and an init hook.\n\nNo model inference or GPU-performance acceptance is claimed. Removing the two\nnew forwarding assignments must fail, then the restored build must pass.\n",
+  "negative_control": "Removing device/verbosity assignments is rejected by actual C-ABI calls",
+  "combinations": 4,
+  "failed_open_default_restoration": 4,
+  "integrated_source": "273b8a40ce833d1d247250d95e2f06fb293ced3d",
+  "run": 37789763493,
+  "broad_ci_run": 37790010839,
+  "lint_run": 37790015470,
+  "broad_ci_status": "remaining jobs pending; applicable targeted/platform checks pass",
+  "negative_rows": [
+    {
+      "expected": [
+        7,
+        0,
+        0
+      ],
+      "actual": [
+        7,
+        1,
+        1
+      ]
+    }
+  ]
+}

@@ -266,5 +266,8 @@ diagnostic gates pass, but original Q4 pooling relative L2 is 8.83074% and RVQ
 agreement only 70.7880%. Even promoted F32 differs in 6/2,208 RVQ entries.
 PR #492 therefore remains excluded. The independent C ABI device/verbosity
 probe `37789763493` passes, including actual-library negative and restoration
-controls; broader CI/lint are pending before integration. Full measurements are in
+controls. The two-line device/verbosity fix is integrated independently;
+applicable platform/format/tidy checks pass, while final broad main CI/lint
+remain release gates. CPU-only session requests now reach MiMo initialization
+instead of silently using its native GPU preference. Full measurements are in
 `docs/mimo-pr492-selective-promotion-2026-10-08.json`.

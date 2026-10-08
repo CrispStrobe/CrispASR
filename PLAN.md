@@ -46,18 +46,17 @@ and negative controls, and retain/document 4.55% human WER explicitly. Keep
 zero-WER parity, stage thresholds, weights and decoder unchanged. Validate
 actual CLI and stage diff through the hosted regression runner before landing.
 
-## CLAIMED 2026-10-08 — independent MiMo C ABI device/verbosity fix
+## VALIDATED 2026-10-08 — MiMo C ABI device/verbosity forwarding
 
-Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
-`review/mimo-cabi-device`, fix source `6c11d5a1f`, actual-library probe
-`37789763493` PASS (four combinations, four restores, rejected negative
-control); Rust/Dart pass. Broader CI `37790010839` and lint `37790015470`
-are pending. Extract only the two validated device/verbosity
-forwarding assignments from the PR #492 review. These prevent a requested
-CPU session from silently choosing another backend and copying mmap weights.
-No attention/runtime-graph changes. Re-run an actual-main-library initializer
-probe with the assignments removed as a negative control, then validate CI
-before landing independently of the unresolved Q4 attention work.
+Integrated source `273b8a40ce833d1d247250d95e2f06fb293ced3d` forwards the requested device and verbosity
+into MiMo initialization. No attention/graph changes or dependency on PR #492.
+Actual-library probe `37789763493` passes at `6c11d5a1f`: four requested
+combinations, four failed-open default restores; removing the assignments
+fails, restoring them passes. Rust/Dart, Windows/macOS/iOS, Linux unit/Vulkan,
+clang-tidy and clang-format also pass at that source. Remaining broad CI and
+lint jobs are queued; final main-tip CI must settle green before any release.
+Evidence: `docs/mimo-cabi-device-2026-10-08.json`. This is parameter-forwarding
+proof, not a GPU/model-inference or performance claim.
 
 ## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
 
