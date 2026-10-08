@@ -9,6 +9,7 @@ import ctypes as C
 import hashlib
 import json
 import os
+import platform
 import re
 from pathlib import Path
 import subprocess
@@ -28,7 +29,8 @@ os.environ['TMPDIR'] = str(SCRATCH)
 os.environ['HF_HOME'] = str(SCRATCH / 'hf')
 os.environ.pop('CRISPASR_MODELS_DIR', None)
 results = {'commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
-           'scope': 'CPU download/bundle/C ABI packet/flush acceptance; no GPU performance claim', 'cases': []}
+           'scope': 'CPU download/bundle/C ABI packet/flush acceptance; no GPU performance claim',
+           'architecture': platform.machine(), 'cases': []}
 
 
 def save():
@@ -191,7 +193,8 @@ for variant, expected_kind in variants:
                                               str(model), str(bad), str(wav)], cwd=ROOT,
                                              stdout=log_file, stderr=subprocess.STDOUT, timeout=600)
                 control_log = (OUT / 'scale-control.log').read_text()
-                assert control.returncode != 0 and 'relative_l2=0.5 FAIL' in control_log, control_log
+                rejected = re.findall(r'relative_l2=([0-9.eE+\-]+) FAIL', control_log)
+                assert control.returncode != 0 and any(abs(float(x) - 0.5) < 0.01 for x in rejected), control_log
                 case['scale_failure_rejected'] = True
         with Session(str(model), lib_path=str(library), n_threads=4) as session:
             kind = lib.crispasr_session_stream_kind(session._handle)
