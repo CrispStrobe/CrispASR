@@ -330,8 +330,9 @@ The German streaming Tiny/Small deployments split into frontend, encoder,
 absolute-position adapter, cross-attention KV projection and cached decoder.
 Canonical 40 ms frontend packets carry convolution state. Partial updates retain
 stable encoder frames and revise the decoder's last eight draft tokens. Final
-flush recomputes the full encoder and decodes from BOS because dynamic int8
-activation scales depend on the encoder window. The positional limit is 4096
+flush replays the whole-utterance frontend and encoder from retained original
+PCM and decodes from BOS. Frontend window rounding on x86 and window-dependent
+int8 activation scales otherwise can change punctuation relative to batch. The positional limit is 4096
 encoder frames (about 82 seconds); callers should split longer utterances.
 
 The int8 and F32 bundles have isolated companion paths. The legacy two-graph

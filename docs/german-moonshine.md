@@ -39,9 +39,12 @@ The five-graph streaming path carries frontend state, processes canonical
 40 ms frontend packets, and retains stable encoder output using the encoder's
 bounded attention dependency window. Partial decoding refreshes cross-KV,
 prefills the older draft prefix, and permits its trailing eight tokens to
-revise. Final flush recomputes the whole utterance encoder and decodes again from BOS.
-This prevents window-dependent int8 activation scales from changing final text
-relative to batch; partial updates retain bounded encoder work. Drafts therefore are provisional.
+revise. Final flush reruns the batch path from retained original PCM: whole-utterance
+frontend, encoder and BOS decoding. Windowed frontend rounding on x86 can change
+int8 output even after full encoder recomputation. Replaying the same batch path
+therefore preserves final/batch text; partial updates retain bounded encoder
+work. PCM history costs 64 kB per second at 16 kHz float32 and is cleared at
+flush. Drafts remain provisional.
 The older two-graph export uses complete utterance recognition, not native
 streaming; its merged cached decoder branch is not trusted. Decoder prefix
 refresh is still work per update, so measure latency on the target device.

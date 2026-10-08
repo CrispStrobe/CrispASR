@@ -220,7 +220,7 @@ bool moonshine_onnx_incremental(const moonshine_onnx_context* ctx) {
 struct moonshine_onnx_stream {
     moonshine_onnx_context* ctx;
     std::vector<Ort::Value> frontend_state;
-    std::vector<float> pending, features, encoded;
+    std::vector<float> pending, pcm_history, features, encoded;
     int stable = 0, next_decode = 0, step = 5120;
     int64_t samples = 0, counter = 0;
     bool flushed = false, failed = false;
@@ -340,8 +340,10 @@ int moonshine_onnx_stream_feed(moonshine_onnx_stream* s, const float* pcm, int n
     if (!s || s->flushed || s->failed || n < 0 || (n && !pcm))
         return -1;
     try {
-        if (n)
+        if (n) {
             s->pending.insert(s->pending.end(), pcm, pcm + n);
+            s->pcm_history.insert(s->pcm_history.end(), pcm, pcm + n);
+        }
         s->samples += n;
         // Canonical 40 ms frontend packets: results do not depend on callers'
         // microphone packet sizes or the order of Dart message delivery.
@@ -370,12 +372,15 @@ int moonshine_onnx_stream_flush(moonshine_onnx_stream* s) {
     if (s->flushed)
         return 0;
     try {
-        if (!s->pending.empty()) {
-            s->pending.resize(640, 0);
-            frontend_chunk(s, s->pending);
-            s->pending.clear();
-        }
-        update(s, true);
+        // Windowed and whole-utterance frontend convolution can round
+        // differently on x86. Dynamic int8 scales amplify that small drift
+        // into punctuation changes even after recomputing the encoder.
+        // Use the actual batch path at final flush, from the original PCM.
+        s->text = moonshine_onnx_transcribe(s->ctx, s->pcm_history.data(), static_cast<int>(s->pcm_history.size()));
+        if (s->samples)
+            ++s->counter;
+        s->pending.clear();
+        s->pcm_history.clear();
         s->flushed = true;
         return 0;
     } catch (const std::exception& e) {

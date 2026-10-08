@@ -1,0 +1,87 @@
+{
+  "scope": "Narrow native ONNX runtime replay; full CLI/C ABI acceptance remains hosted",
+  "architecture": "x86_64",
+  "before_exit_code": 8,
+  "before_output": "threads=1 packet=1777 batch=Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal. final=Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+  "after_exit_code": 0,
+  "after_cases": [
+    {
+      "threads": 1,
+      "packet": 1777,
+      "batch": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "final": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "passed": true
+    },
+    {
+      "threads": 1,
+      "packet": 5120,
+      "batch": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "final": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "passed": true
+    },
+    {
+      "threads": 4,
+      "packet": 1777,
+      "batch": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "final": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "passed": true
+    },
+    {
+      "threads": 4,
+      "packet": 5120,
+      "batch": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "final": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "passed": true
+    }
+  ],
+  "runtime_source_sha256": "9021f6408d06d3cd3a19262712317275cfb71056a24ed8477eaded570a6be398",
+  "before_runtime_source_sha256": "71380e74406684194962999404412cc51a5ce349719ab79cd8b6aceb08a14901",
+  "frontend_probe": {
+    "values": 151280,
+    "changed": 138956,
+    "max_abs": 4.76837e-07,
+    "relative_l2": 3.10646e-07
+  },
+  "audio_sha256": "7d161e34953595856acc195aee52e9e2a48724b669176f2f0b38549d60927ba3",
+  "models": {
+    "source": "https://huggingface.co/Masterx/moonshine-streaming-small-de-ONNX/resolve/5d6dadcd2d3b9a53fcde00a8793950d2b222cac3/",
+    "files": [
+      {
+        "file": "encoder_int8.onnx",
+        "sha256": "b248453ec40b7ce0e7daaa4951e7f49d88f5b728c94d60c1fe6c6ba79a15edc6",
+        "bytes": 44581925
+      },
+      {
+        "file": "frontend.onnx",
+        "sha256": "24bc8abea5a3ead9c9015fbbd23f4f75141636420b3bef1a73f713334449ce87",
+        "bytes": 30966660
+      },
+      {
+        "file": "adapter_int8.onnx",
+        "sha256": "5eb364c1bdf7c15986060ed430d0e7a34dcf6be98ff5879276984f7effaea437",
+        "bytes": 10485642
+      },
+      {
+        "file": "cross_kv_int8.onnx",
+        "sha256": "39c78b9ec152cb287b0b3ebe49ca76fdc529ff0a8df97b25b7ba311f0e098996",
+        "bytes": 5352766
+      },
+      {
+        "file": "decoder_kv_int8.onnx",
+        "sha256": "2dfc3edb698f8ceeaba3442231e6bc99fcaa239d1337835d85db08a486ca9935",
+        "bytes": 73614909
+      },
+      {
+        "file": "streaming_config.json",
+        "sha256": "98ba8ada00cdb554076e9ba13fd02fd72bd69e83ae98e1ded6654e076143a782",
+        "bytes": 985
+      },
+      {
+        "file": "tokenizer.json",
+        "sha256": "983ec5f1b76300b74be6a764edc034a16e2912c38a8a8c0e4d51af355b6b755d",
+        "bytes": 588216
+      }
+    ]
+  },
+  "cold_proof": "/mnt/storage/crispasr/triage-20261007/local-small-int8"
+}
