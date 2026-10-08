@@ -120,7 +120,9 @@ All terminal files archived and public proof/cache pinned in
 `docs/voxcpm2-vulkan-v3-failure-2026-10-08.json`. v3 CLI used CUDA0, whereas
 session generation used Vulkan. Worker `8fb4d1b0b` now records all six current
 roundtrips before asserting the unchanged exact gates and explicitly selects
-CLI Vulkan. v4 will reuse the refreshed actual Kaggle cache; no numeric change.
+CLI Vulkan. v4 launched successfully: numeric/worker `8fb4d1b0b`, uploaded entry
+`ba789cf52`, refreshed actual Kaggle cache `df9e11b0b66d1c87f1e0be5552d2974590e4ae20`.
+No numeric change; complete speech diagnosis and acceptance remain pending.
 Do not lower speech acceptance thresholds to hide repetition.
 
 OmniVoice #518 implementation `a1ae00dff` is pushed on
