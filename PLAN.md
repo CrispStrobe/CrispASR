@@ -11,6 +11,16 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-08 — PR #515 integration review and hosted validation
+
+Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
+`review/pr515-integration`. Review the complete author patch at
+`2bf39c58a53160ed10aed82d5d621c794dc32bba`, preserve author commits,
+and test on current main with bounded APT setup. Inspect packet/flush and
+UTF-8 behavior, German ONNX model/companion/licence routing, C ABI and bindings.
+Orukeet acceptance `37728843835` is now running; collect it alongside this work.
+Do not merge #515 before the required review and validation pass.
+
 ## OPEN 2026-10-08 — Orukeet speech acceptance rerun and deep lint
 
 Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`.
