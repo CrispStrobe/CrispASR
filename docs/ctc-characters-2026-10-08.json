@@ -1,0 +1,17 @@
+{
+  "scope": "Post-logit CTC character output; no new model-stage/hardware timing claim",
+  "issue": 490,
+  "baseline_no_path": "saved binary fails impossible aa path (2 frames); exit 1",
+  "fixed_no_path": "NO_PATH_REJECTED",
+  "known_path_assertions": 41,
+  "csharp": "build passed, 0 warnings, 0 errors",
+  "hosted": "pending real Arabic Q4 CLI/C ABI and independent Viterbi validation",
+  "cold_proof": "/mnt/storage/crispasr/issue490-characters-20261008/proof",
+  "source_sha256": {
+    "src/align.cpp": "3a09740cb1c4fdaa278c34e63dbd0a613479d13fd02172e436b40f76ab0e9ec8",
+    "src/crispasr_aligner.cpp": "81df390db9bf2cd033c04722fd0a940a9d459eb307c1e829221580d46f287a3e",
+    "src/crispasr_c_api.cpp": "7148f19c7d6f0e4f2a428409a02967e1720359c52c2f2d23760cbd606a87b7e6",
+    "tests/test-align-characters.cpp": "b5a54f96698ab5023c0f9f68823d62e7244b6b9a31d9b9050a318154a37bbbe5",
+    "tools/ci-heavy/issue490_characters.py": "80f3be1bf525c2790fa0578915bb005ef989c23c0959f272469da51bd2b3fcb2"
+  }
+}

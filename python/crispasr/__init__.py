@@ -2,6 +2,7 @@
 
 from ._binding import (
     AlignedWord,
+    AlignedCharacter,
     ChatAborted,
     ChatMessage,
     ChatSession,
@@ -43,6 +44,7 @@ from ._binding import (
 
 __all__ = [
     "AlignedWord",
+    "AlignedCharacter",
     "ChatAborted",
     "ChatMessage",
     "ChatSession",

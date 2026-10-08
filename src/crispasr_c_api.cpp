@@ -8738,6 +8738,25 @@ CA_EXPORT int64_t crispasr_align_result_word_t1(crispasr_align_result* r, int i)
     return (r && i >= 0 && i < (int)r->words.size()) ? r->words[i].t1_cs : 0;
 }
 
+CA_EXPORT int crispasr_align_result_n_characters(crispasr_align_result* r, int word) {
+    return (r && word >= 0 && word < (int)r->words.size()) ? (int)r->words[word].characters.size() : 0;
+}
+static const CrispasrAlignedCharacter* ca_aligned_character(crispasr_align_result* r, int word, int i) {
+    return i >= 0 && i < crispasr_align_result_n_characters(r, word) ? &r->words[word].characters[i] : nullptr;
+}
+CA_EXPORT const char* crispasr_align_result_character_text(crispasr_align_result* r, int word, int i) {
+    const auto* ch = ca_aligned_character(r, word, i);
+    return ch ? ch->text.c_str() : "";
+}
+CA_EXPORT int64_t crispasr_align_result_character_t0(crispasr_align_result* r, int word, int i) {
+    const auto* ch = ca_aligned_character(r, word, i);
+    return ch ? ch->t0_cs : 0;
+}
+CA_EXPORT int64_t crispasr_align_result_character_t1(crispasr_align_result* r, int word, int i) {
+    const auto* ch = ca_aligned_character(r, word, i);
+    return ch ? ch->t1_cs : 0;
+}
+
 CA_EXPORT void crispasr_align_result_free(crispasr_align_result* r) {
     if (r)
         delete r;

@@ -161,6 +161,10 @@ extern int crispasr_align_result_n_words(struct crispasr_align_result* r);
 extern const char* crispasr_align_result_word_text(struct crispasr_align_result* r, int i);
 extern int64_t crispasr_align_result_word_t0(struct crispasr_align_result* r, int i);
 extern int64_t crispasr_align_result_word_t1(struct crispasr_align_result* r, int i);
+extern int crispasr_align_result_n_characters(struct crispasr_align_result* r, int word);
+extern const char* crispasr_align_result_character_text(struct crispasr_align_result* r, int word, int i);
+extern long long crispasr_align_result_character_t0(struct crispasr_align_result* r, int word, int i);
+extern long long crispasr_align_result_character_t1(struct crispasr_align_result* r, int word, int i);
 extern void crispasr_align_result_free(struct crispasr_align_result* r);
 
 // --- Streaming (PLAN #62b): rolling-window decoder. Whisper-only at the C-ABI today.
@@ -1226,6 +1230,17 @@ static VALUE rb_session_align_words(VALUE self, VALUE aligner_model, VALUE trans
         rb_hash_aset(w, ID2SYM(rb_intern("text")), rb_utf8_str_new_cstr(wt ? wt : ""));
         rb_hash_aset(w, ID2SYM(rb_intern("t0")), LL2NUM(crispasr_align_result_word_t0(r, i)));
         rb_hash_aset(w, ID2SYM(rb_intern("t1")), LL2NUM(crispasr_align_result_word_t1(r, i)));
+        int nc = crispasr_align_result_n_characters(r, i);
+        VALUE characters = rb_ary_new_capa(nc);
+        for (int j = 0; j < nc; j++) {
+            VALUE ch = rb_hash_new();
+            const char* cp = crispasr_align_result_character_text(r, i, j);
+            rb_hash_aset(ch, ID2SYM(rb_intern("text")), rb_utf8_str_new_cstr(cp ? cp : ""));
+            rb_hash_aset(ch, ID2SYM(rb_intern("t0")), LL2NUM(crispasr_align_result_character_t0(r, i, j)));
+            rb_hash_aset(ch, ID2SYM(rb_intern("t1")), LL2NUM(crispasr_align_result_character_t1(r, i, j)));
+            rb_ary_push(characters, ch);
+        }
+        rb_hash_aset(w, ID2SYM(rb_intern("characters")), characters);
         rb_ary_push(result, w);
     }
     crispasr_align_result_free(r);

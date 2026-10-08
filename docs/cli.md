@@ -864,6 +864,32 @@ Granularity is controlled by `--align-granularity`:
 | `segment` | one output entry per input SRT cue / JSON segment / non-empty `.txt` line, re-timed from the word alignment; JSON nests the per-word timings under each segment |
 | `word` | one output entry per aligned word (the pre-0.8.9 behaviour, also for `.srt` input) |
 
+#### Character timestamps with wav2vec2 CTC (#490)
+
+For wav2vec2/ HuBERT/ data2vec character-vocabulary aligners, `--align-only
+--align-format json` includes a `characters` array inside each aligned word,
+in both word and segment output. Each item has `char`, `start` and `end`
+(seconds). These are the first and last frames assigned to that individual
+CTC label occurrence, including distinct occurrences of repeated letters.
+They are not an equal division of the word duration.
+
+The loaded vocabulary determines the labels: an Arabic vocabulary keeps Arabic
+text, while a Latin-only aligner can still use the existing romanization
+fallback. Punctuation, spaces and unsupported codepoints have no invented
+character timestamp. A diacritic is included only if the model has its own
+label for it. Romanized words and other aligner families have no measured
+original-codepoint array. Boundaries have the model's frame resolution, commonly
+20 ms; this does not establish human phonetic boundary accuracy. Impossible
+complete CTC paths fail rather than returning partial zero-timed words.
+
+The C ABI exposes character count/text/start/end accessors on its existing
+alignment-result handle. Python, Dart, Rust, Go, Java, C# and Ruby alignment
+results expose `characters` / `Characters` in their existing time units.
+Python/Dart/Rust/C# use seconds; Go/Java/Ruby use centiseconds. Clearing or
+freeing a result keeps the existing ownership rules. Older Python libraries
+without the new symbols still return an empty character list.
+
+
 ### Aligner model options
 
 Any of these resolves via `-am <name> --auto-download`. All are

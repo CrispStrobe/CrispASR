@@ -1,0 +1,35 @@
+name: CTC character alignment
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'src/align.*'
+      - 'src/core/align_*.h'
+      - 'src/crispasr_aligner.*'
+      - 'examples/cli/crispasr_run.cpp'
+      - 'tools/ci-heavy/issue490_characters.py'
+      - '.github/workflows/ctc-character-alignment.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/align.*'
+      - 'src/core/align_*.h'
+      - 'src/crispasr_aligner.*'
+      - 'examples/cli/crispasr_run.cpp'
+      - 'tools/ci-heavy/issue490_characters.py'
+      - '.github/workflows/ctc-character-alignment.yml'
+permissions:
+  contents: read
+  actions: read
+concurrency:
+  group: ctc-character-alignment-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  arabic-q4:
+    uses: ./.github/workflows/heavy-cpu.yml
+    with:
+      script: tools/ci-heavy/issue490_characters.py
+      runner: ubuntu-22.04
+      pip: numpy gguf huggingface_hub pyarrow soundfile
+      timeout_minutes: '90'
+    secrets: inherit

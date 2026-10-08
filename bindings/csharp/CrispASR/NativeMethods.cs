@@ -417,6 +417,15 @@ namespace CrispASR
         internal static extern long crispasr_align_result_word_t1(IntPtr result, int i);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int crispasr_align_result_n_characters(IntPtr result, int word);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr crispasr_align_result_character_text(IntPtr result, int word, int i);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern long crispasr_align_result_character_t0(IntPtr result, int word, int i);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern long crispasr_align_result_character_t1(IntPtr result, int word, int i);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern void crispasr_align_result_free(IntPtr result);
 
         // ---- VAD ----

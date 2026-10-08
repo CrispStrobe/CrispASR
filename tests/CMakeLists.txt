@@ -6194,3 +6194,9 @@ add_executable(test-moonshine-tokenizer test-moonshine-tokenizer.cpp)
 target_include_directories(test-moonshine-tokenizer PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-moonshine-tokenizer PRIVATE Catch2::Catch2WithMain moonshine_tokenizer)
 catch_discover_tests(test-moonshine-tokenizer TEST_SPEC "[unit]" PROPERTIES LABELS "unit;moonshine")
+
+# Exact CTC label spans, repeated Unicode letters and JSON; no models needed.
+add_executable(test-align-characters test-align-characters.cpp ${PROJECT_SOURCE_DIR}/src/align.cpp)
+target_include_directories(test-align-characters PRIVATE ${PROJECT_SOURCE_DIR}/src)
+add_test(NAME test-align-characters COMMAND test-align-characters)
+set_tests_properties(test-align-characters PROPERTIES LABELS "unit;align")

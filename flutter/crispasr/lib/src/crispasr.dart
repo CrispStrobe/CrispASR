@@ -771,12 +771,21 @@ String? cacheDir({String? override, DynamicLibrary? lib}) {
 }
 
 /// One word + centisecond timings returned by [alignWords].
+/// Measured original codepoint; start/end are seconds.
+class AlignedCharacter {
+  final String text;
+  final double start;
+  final double end;
+  const AlignedCharacter({required this.text, required this.start, required this.end});
+}
+
 class AlignedWord {
+  final List<AlignedCharacter> characters;
   final String text;
   final double start; // seconds
   final double end;
   const AlignedWord(
-      {required this.text, required this.start, required this.end});
+      {required this.text, required this.start, required this.end, this.characters = const []});
 }
 
 /// CTC / forced-alignment word timings for a transcript + audio pair.
@@ -835,12 +844,27 @@ List<AlignedWord> alignWords({
   final freeFn = lib.lookupFunction<Void Function(Pointer<Void>),
       void Function(Pointer<Void>)>('crispasr_align_result_free');
 
+  final ncFn = lib.lookupFunction<Int32 Function(Pointer<Void>, Int32),
+      int Function(Pointer<Void>, int)>('crispasr_align_result_n_characters');
+  final cpFn = lib.lookupFunction<Pointer<Utf8> Function(Pointer<Void>, Int32, Int32),
+      Pointer<Utf8> Function(Pointer<Void>, int, int)>('crispasr_align_result_character_text');
+  final c0Fn = lib.lookupFunction<Int64 Function(Pointer<Void>, Int32, Int32),
+      int Function(Pointer<Void>, int, int)>('crispasr_align_result_character_t0');
+  final c1Fn = lib.lookupFunction<Int64 Function(Pointer<Void>, Int32, Int32),
+      int Function(Pointer<Void>, int, int)>('crispasr_align_result_character_t1');
   final n = nFn(res);
   final out = <AlignedWord>[];
   for (var i = 0; i < n; i++) {
     final tp = textFn(res, i);
     final t = tp == nullptr ? '' : tp.toDartString();
+    final characters = <AlignedCharacter>[];
+    for (var j = 0; j < ncFn(res, i); j++) {
+      final cp = cpFn(res, i, j);
+      characters.add(AlignedCharacter(text: cp == nullptr ? '' : cp.toDartString(),
+          start: c0Fn(res, i, j) / 100.0, end: c1Fn(res, i, j) / 100.0));
+    }
     out.add(AlignedWord(
+      characters: characters,
       text: t,
       start: t0Fn(res, i) / 100.0,
       end: t1Fn(res, i) / 100.0,
