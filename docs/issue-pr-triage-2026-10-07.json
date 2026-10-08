@@ -1167,7 +1167,7 @@
       "run_id": 37744841616,
       "source_commit": "a9c312cb1",
       "runner": "ubuntu-24.04-arm",
-      "status": "in_progress",
+      "status": "success",
       "replaces": 37741564942
     },
     "x86_flush_fix": {
@@ -1201,7 +1201,9 @@
       "x86": 37741562051,
       "arm64": 37741564942,
       "status": "both failed generic-path CLI routing after graph-stage parity passed; three native cases passed"
-    }
+    },
+    "final_arm64_receipt": "docs/moonshine-onnx-arm-2026-10-08.json",
+    "prepared_integration_commit": "c0f10937b693b755860d777c76c2b376391a530e"
   },
   "issue483_mmq": {
     "source_commit": "04ded753e909da019a2cd391f651f51f5299b6f5",

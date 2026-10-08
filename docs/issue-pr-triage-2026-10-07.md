@@ -279,3 +279,15 @@ and static analysis reports no issues. Java wrapper/driver compilation emits
 Java/JNA text/times/offset comparisons; runtime proof remains queued. The
 workflow now covers future C ABI/binding/runtime/test edits. Unicode fixtures
 compile explicitly as UTF-8 under MSVC. Final ONNX ARM acceptance is running.
+
+## Corrected final ARM acceptance — 2026-10-08
+
+[37744841616](https://github.com/CrispStrobe/CrispASR/actions/runs/37744841616)
+passes all eight cases at `a9c312cb1`, including direct ONNX CLI path routing,
+one-token caps and reset for five ONNX choices, capped persistent final output,
+both packet sizes, and native Nemotron/Qwen speech. Four deployed graph variants
+each pass 15 stages (reported cosine 1.000000, relative L2 0) and exact decoded
+text; scaling fails exactly one numerical check while text still passes.
+[Receipt](moonshine-onnx-arm-2026-10-08.json). Prepared integration `c0f10937b`
+adds main documentation only and preserves original author ancestry. Corrected
+x86 acceptance `37744837589` remains queued; #515 is still unmerged.
