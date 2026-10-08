@@ -541,9 +541,9 @@
           "cli": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
         },
         "zh": {
-          "abi": "开放时间早上九点至下午五点",
+          "abi": "\u5f00\u653e\u65f6\u95f4\u65e9\u4e0a\u4e5d\u70b9\u81f3\u4e0b\u5348\u4e94\u70b9",
           "audio_sha256": "4be99c8bd6d2068d42a0eb0ab546bbd4d2c1ac25005d5c6ac74f00660423a3ab",
-          "cli": "开放时间早上九点至下午五点"
+          "cli": "\u5f00\u653e\u65f6\u95f4\u65e9\u4e0a\u4e5d\u70b9\u81f3\u4e0b\u5348\u4e94\u70b9"
         }
       },
       "candidate-flash": {
@@ -553,9 +553,9 @@
           "cli": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
         },
         "zh": {
-          "abi": "开放时间早上九点至下午五点",
+          "abi": "\u5f00\u653e\u65f6\u95f4\u65e9\u4e0a\u4e5d\u70b9\u81f3\u4e0b\u5348\u4e94\u70b9",
           "audio_sha256": "4be99c8bd6d2068d42a0eb0ab546bbd4d2c1ac25005d5c6ac74f00660423a3ab",
-          "cli": "开放时间早上九点至下午五点"
+          "cli": "\u5f00\u653e\u65f6\u95f4\u65e9\u4e0a\u4e5d\u70b9\u81f3\u4e0b\u5348\u4e94\u70b9"
         }
       },
       "candidate-eager": {
@@ -565,9 +565,9 @@
           "cli": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
         },
         "zh": {
-          "abi": "开放时间早上九点至下午五点",
+          "abi": "\u5f00\u653e\u65f6\u95f4\u65e9\u4e0a\u4e5d\u70b9\u81f3\u4e0b\u5348\u4e94\u70b9",
           "audio_sha256": "4be99c8bd6d2068d42a0eb0ab546bbd4d2c1ac25005d5c6ac74f00660423a3ab",
-          "cli": "开放时间早上九点至下午五点"
+          "cli": "\u5f00\u653e\u65f6\u95f4\u65e9\u4e0a\u4e5d\u70b9\u81f3\u4e0b\u5348\u4e94\u70b9"
         }
       }
     },
@@ -945,8 +945,654 @@
     "selective_promotion": {
       "source": "09f65ad8b8347e278f83feeb5e04a5c477ce03e6",
       "run": 37785711004,
-      "status": "queued",
-      "scope": "same weights; head4/head8/head16/output projections/FFN promoted to F32, remaining matrices Q4; frozen independent reference and exact RVQ gates unchanged; not PR acceptance"
+      "status": "failure",
+      "scope": "same weights; head4/head8/head16/output projections/FFN promoted to F32, remaining matrices Q4; frozen independent reference and exact RVQ gates unchanged; not PR acceptance",
+      "artifact": 11555262443,
+      "passed": false,
+      "passing_profiles": [],
+      "profiles": {
+        "head4": {
+          "promoted": [
+            "enc.blk.0.fc1.weight",
+            "enc.blk.0.fc2.weight",
+            "enc.blk.0.attn.k.weight",
+            "enc.blk.0.attn.o.weight",
+            "enc.blk.0.attn.q.weight",
+            "enc.blk.0.attn.v.weight",
+            "enc.blk.1.fc1.weight",
+            "enc.blk.1.fc2.weight",
+            "enc.blk.1.attn.k.weight",
+            "enc.blk.1.attn.o.weight",
+            "enc.blk.1.attn.q.weight",
+            "enc.blk.1.attn.v.weight",
+            "enc.blk.2.fc1.weight",
+            "enc.blk.2.fc2.weight",
+            "enc.blk.2.attn.k.weight",
+            "enc.blk.2.attn.o.weight",
+            "enc.blk.2.attn.q.weight",
+            "enc.blk.2.attn.v.weight",
+            "enc.blk.3.fc1.weight",
+            "enc.blk.3.fc2.weight",
+            "enc.blk.3.attn.k.weight",
+            "enc.blk.3.attn.o.weight",
+            "enc.blk.3.attn.q.weight",
+            "enc.blk.3.attn.v.weight"
+          ],
+          "remaining_q4": 168,
+          "model_sha256": "ba67ef16eddf311b013a11d14c1406c23d32ad366c4fc248d665bbddc24c3660",
+          "model_bytes": 665930592,
+          "source_bytes": 395594656,
+          "attention_ab": {
+            "tok_xfmr_out": {
+              "cosine": 0.9999952001599328,
+              "mine_norm": 72.54481832475426,
+              "ref_norm": 72.54490078218717,
+              "relative_l2": 0.003098333506169832,
+              "max_abs": 0.04103384539484978,
+              "exact": false
+            },
+            "tok_pool_out": {
+              "cosine": 0.9966649464775313,
+              "mine_norm": 1899.1898470539593,
+              "ref_norm": 1891.5924664825602,
+              "relative_l2": 0.08193307173011527,
+              "max_abs": 17.07838726043701,
+              "exact": false
+            }
+          },
+          "independent_same_weights": {
+            "tok_xfmr_out": {
+              "flash": {
+                "cosine": 0.9999727532569621,
+                "mine_norm": 72.54490078218717,
+                "ref_norm": 72.54437494146971,
+                "relative_l2": 0.007382000651359662,
+                "max_abs": 0.08999022096395493,
+                "exact": false
+              },
+              "eager": {
+                "cosine": 0.9999760589657751,
+                "mine_norm": 72.54481832475426,
+                "ref_norm": 72.54437494146971,
+                "relative_l2": 0.0069197108649130526,
+                "max_abs": 0.09155946224927902,
+                "exact": false
+              }
+            },
+            "tok_pool_out": {
+              "flash": {
+                "cosine": 0.984238856937978,
+                "mine_norm": 1891.5924664825602,
+                "ref_norm": 1905.7783427186741,
+                "relative_l2": 0.17703969555325608,
+                "max_abs": 20.6778621673584,
+                "exact": false
+              },
+              "eager": {
+                "cosine": 0.9876105933816326,
+                "mine_norm": 1899.1898470539593,
+                "ref_norm": 1905.7783427186741,
+                "relative_l2": 0.15717856618100387,
+                "max_abs": 20.748688459396362,
+                "exact": false
+              }
+            }
+          },
+          "codes": {
+            "exact": false,
+            "match_fraction": 0.7871376811594203
+          },
+          "passed": false
+        },
+        "head8": {
+          "promoted": [
+            "enc.blk.0.fc1.weight",
+            "enc.blk.0.fc2.weight",
+            "enc.blk.0.attn.k.weight",
+            "enc.blk.0.attn.o.weight",
+            "enc.blk.0.attn.q.weight",
+            "enc.blk.0.attn.v.weight",
+            "enc.blk.1.fc1.weight",
+            "enc.blk.1.fc2.weight",
+            "enc.blk.1.attn.k.weight",
+            "enc.blk.1.attn.o.weight",
+            "enc.blk.1.attn.q.weight",
+            "enc.blk.1.attn.v.weight",
+            "enc.blk.2.fc1.weight",
+            "enc.blk.2.fc2.weight",
+            "enc.blk.2.attn.k.weight",
+            "enc.blk.2.attn.o.weight",
+            "enc.blk.2.attn.q.weight",
+            "enc.blk.2.attn.v.weight",
+            "enc.blk.3.fc1.weight",
+            "enc.blk.3.fc2.weight",
+            "enc.blk.3.attn.k.weight",
+            "enc.blk.3.attn.o.weight",
+            "enc.blk.3.attn.q.weight",
+            "enc.blk.3.attn.v.weight",
+            "enc.blk.4.fc1.weight",
+            "enc.blk.4.fc2.weight",
+            "enc.blk.4.attn.k.weight",
+            "enc.blk.4.attn.o.weight",
+            "enc.blk.4.attn.q.weight",
+            "enc.blk.4.attn.v.weight",
+            "enc.blk.5.fc1.weight",
+            "enc.blk.5.fc2.weight",
+            "enc.blk.5.attn.k.weight",
+            "enc.blk.5.attn.o.weight",
+            "enc.blk.5.attn.q.weight",
+            "enc.blk.5.attn.v.weight",
+            "enc.blk.6.fc1.weight",
+            "enc.blk.6.fc2.weight",
+            "enc.blk.6.attn.k.weight",
+            "enc.blk.6.attn.o.weight",
+            "enc.blk.6.attn.q.weight",
+            "enc.blk.6.attn.v.weight",
+            "enc.blk.7.fc1.weight",
+            "enc.blk.7.fc2.weight",
+            "enc.blk.7.attn.k.weight",
+            "enc.blk.7.attn.o.weight",
+            "enc.blk.7.attn.q.weight",
+            "enc.blk.7.attn.v.weight"
+          ],
+          "remaining_q4": 144,
+          "model_sha256": "f42b53722c5660f70cce477311d87a73898f039a5c31105fcaef2e35829b037e",
+          "model_bytes": 936266592,
+          "source_bytes": 395594656,
+          "attention_ab": {
+            "tok_xfmr_out": {
+              "cosine": 0.9999981918234104,
+              "mine_norm": 72.54493975318238,
+              "ref_norm": 72.54482444254002,
+              "relative_l2": 0.0019016733296512984,
+              "max_abs": 0.003449397161602974,
+              "exact": false
+            },
+            "tok_pool_out": {
+              "cosine": 0.9998780527104287,
+              "mine_norm": 1892.2472910198594,
+              "ref_norm": 1892.0771054332,
+              "relative_l2": 0.015618085892497018,
+              "max_abs": 0.8831372559070587,
+              "exact": false
+            }
+          },
+          "independent_same_weights": {
+            "tok_xfmr_out": {
+              "flash": {
+                "cosine": 0.999973138242823,
+                "mine_norm": 72.54482444254002,
+                "ref_norm": 72.54437494146971,
+                "relative_l2": 0.007329657947622172,
+                "max_abs": 0.09015469625592232,
+                "exact": false
+              },
+              "eager": {
+                "cosine": 0.9999732028649927,
+                "mine_norm": 72.54493975318238,
+                "ref_norm": 72.54437494146971,
+                "relative_l2": 0.007320843387383497,
+                "max_abs": 0.09018626064062119,
+                "exact": false
+              }
+            },
+            "tok_pool_out": {
+              "flash": {
+                "cosine": 0.9842015157507294,
+                "mine_norm": 1892.0771054332,
+                "ref_norm": 1905.7783427186741,
+                "relative_l2": 0.17726109054474054,
+                "max_abs": 20.640326142311096,
+                "exact": false
+              },
+              "eager": {
+                "cosine": 0.9842633127447816,
+                "mine_norm": 1892.2472910198594,
+                "ref_norm": 1905.7783427186741,
+                "relative_l2": 0.17691897388520864,
+                "max_abs": 20.641241312026978,
+                "exact": false
+              }
+            }
+          },
+          "codes": {
+            "exact": false,
+            "match_fraction": 0.7608695652173914
+          },
+          "passed": false
+        },
+        "head16": {
+          "promoted": [
+            "enc.blk.0.fc1.weight",
+            "enc.blk.0.fc2.weight",
+            "enc.blk.0.attn.k.weight",
+            "enc.blk.0.attn.o.weight",
+            "enc.blk.0.attn.q.weight",
+            "enc.blk.0.attn.v.weight",
+            "enc.blk.1.fc1.weight",
+            "enc.blk.1.fc2.weight",
+            "enc.blk.1.attn.k.weight",
+            "enc.blk.1.attn.o.weight",
+            "enc.blk.1.attn.q.weight",
+            "enc.blk.1.attn.v.weight",
+            "enc.blk.10.fc1.weight",
+            "enc.blk.10.fc2.weight",
+            "enc.blk.10.attn.k.weight",
+            "enc.blk.10.attn.o.weight",
+            "enc.blk.10.attn.q.weight",
+            "enc.blk.10.attn.v.weight",
+            "enc.blk.11.fc1.weight",
+            "enc.blk.11.fc2.weight",
+            "enc.blk.11.attn.k.weight",
+            "enc.blk.11.attn.o.weight",
+            "enc.blk.11.attn.q.weight",
+            "enc.blk.11.attn.v.weight",
+            "enc.blk.12.fc1.weight",
+            "enc.blk.12.fc2.weight",
+            "enc.blk.12.attn.k.weight",
+            "enc.blk.12.attn.o.weight",
+            "enc.blk.12.attn.q.weight",
+            "enc.blk.12.attn.v.weight",
+            "enc.blk.13.fc1.weight",
+            "enc.blk.13.fc2.weight",
+            "enc.blk.13.attn.k.weight",
+            "enc.blk.13.attn.o.weight",
+            "enc.blk.13.attn.q.weight",
+            "enc.blk.13.attn.v.weight",
+            "enc.blk.14.fc1.weight",
+            "enc.blk.14.fc2.weight",
+            "enc.blk.14.attn.k.weight",
+            "enc.blk.14.attn.o.weight",
+            "enc.blk.14.attn.q.weight",
+            "enc.blk.14.attn.v.weight",
+            "enc.blk.15.fc1.weight",
+            "enc.blk.15.fc2.weight",
+            "enc.blk.15.attn.k.weight",
+            "enc.blk.15.attn.o.weight",
+            "enc.blk.15.attn.q.weight",
+            "enc.blk.15.attn.v.weight",
+            "enc.blk.2.fc1.weight",
+            "enc.blk.2.fc2.weight",
+            "enc.blk.2.attn.k.weight",
+            "enc.blk.2.attn.o.weight",
+            "enc.blk.2.attn.q.weight",
+            "enc.blk.2.attn.v.weight",
+            "enc.blk.3.fc1.weight",
+            "enc.blk.3.fc2.weight",
+            "enc.blk.3.attn.k.weight",
+            "enc.blk.3.attn.o.weight",
+            "enc.blk.3.attn.q.weight",
+            "enc.blk.3.attn.v.weight",
+            "enc.blk.4.fc1.weight",
+            "enc.blk.4.fc2.weight",
+            "enc.blk.4.attn.k.weight",
+            "enc.blk.4.attn.o.weight",
+            "enc.blk.4.attn.q.weight",
+            "enc.blk.4.attn.v.weight",
+            "enc.blk.5.fc1.weight",
+            "enc.blk.5.fc2.weight",
+            "enc.blk.5.attn.k.weight",
+            "enc.blk.5.attn.o.weight",
+            "enc.blk.5.attn.q.weight",
+            "enc.blk.5.attn.v.weight",
+            "enc.blk.6.fc1.weight",
+            "enc.blk.6.fc2.weight",
+            "enc.blk.6.attn.k.weight",
+            "enc.blk.6.attn.o.weight",
+            "enc.blk.6.attn.q.weight",
+            "enc.blk.6.attn.v.weight",
+            "enc.blk.7.fc1.weight",
+            "enc.blk.7.fc2.weight",
+            "enc.blk.7.attn.k.weight",
+            "enc.blk.7.attn.o.weight",
+            "enc.blk.7.attn.q.weight",
+            "enc.blk.7.attn.v.weight",
+            "enc.blk.8.fc1.weight",
+            "enc.blk.8.fc2.weight",
+            "enc.blk.8.attn.k.weight",
+            "enc.blk.8.attn.o.weight",
+            "enc.blk.8.attn.q.weight",
+            "enc.blk.8.attn.v.weight",
+            "enc.blk.9.fc1.weight",
+            "enc.blk.9.fc2.weight",
+            "enc.blk.9.attn.k.weight",
+            "enc.blk.9.attn.o.weight",
+            "enc.blk.9.attn.q.weight",
+            "enc.blk.9.attn.v.weight"
+          ],
+          "remaining_q4": 96,
+          "model_sha256": "ef48a33e4571ae8dd410e50983338b2f97fd8e90b8abd7b9c4a1cccc5de6cd6a",
+          "model_bytes": 1476938592,
+          "source_bytes": 395594656,
+          "attention_ab": {
+            "tok_xfmr_out": {
+              "cosine": 0.9999875916117437,
+              "mine_norm": 72.54488245639887,
+              "ref_norm": 72.54463334572795,
+              "relative_l2": 0.004981653693349934,
+              "max_abs": 0.06117948330938816,
+              "exact": false
+            },
+            "tok_pool_out": {
+              "cosine": 0.9930756430164285,
+              "mine_norm": 1893.2751933048216,
+              "ref_norm": 1906.7994007195991,
+              "relative_l2": 0.11747678732678973,
+              "max_abs": 17.61332893371582,
+              "exact": false
+            }
+          },
+          "independent_same_weights": {
+            "tok_xfmr_out": {
+              "flash": {
+                "cosine": 0.9999934981892405,
+                "mine_norm": 72.54463334572795,
+                "ref_norm": 72.54437494146971,
+                "relative_l2": 0.003606061636288874,
+                "max_abs": 0.02162020653486252,
+                "exact": false
+              },
+              "eager": {
+                "cosine": 0.9999869215497327,
+                "mine_norm": 72.54488245639887,
+                "ref_norm": 72.54437494146971,
+                "relative_l2": 0.005114404409940109,
+                "max_abs": 0.06024623662233353,
+                "exact": false
+              }
+            },
+            "tok_pool_out": {
+              "flash": {
+                "cosine": 0.9995875031807334,
+                "mine_norm": 1906.7994007195991,
+                "ref_norm": 1905.7783427186741,
+                "relative_l2": 0.028735390966615183,
+                "max_abs": 3.3836727142333984,
+                "exact": false
+              },
+              "eager": {
+                "cosine": 0.9930629679188038,
+                "mine_norm": 1893.2751933048216,
+                "ref_norm": 1905.7783427186741,
+                "relative_l2": 0.11758436720029347,
+                "max_abs": 17.909685134887695,
+                "exact": false
+              }
+            }
+          },
+          "codes": {
+            "exact": false,
+            "match_fraction": 0.7767210144927537
+          },
+          "passed": false
+        },
+        "outputs": {
+          "promoted": [
+            "enc.blk.0.fc2.weight",
+            "enc.blk.0.attn.o.weight",
+            "enc.blk.1.fc2.weight",
+            "enc.blk.1.attn.o.weight",
+            "enc.blk.10.fc2.weight",
+            "enc.blk.10.attn.o.weight",
+            "enc.blk.11.fc2.weight",
+            "enc.blk.11.attn.o.weight",
+            "enc.blk.12.fc2.weight",
+            "enc.blk.12.attn.o.weight",
+            "enc.blk.13.fc2.weight",
+            "enc.blk.13.attn.o.weight",
+            "enc.blk.14.fc2.weight",
+            "enc.blk.14.attn.o.weight",
+            "enc.blk.15.fc2.weight",
+            "enc.blk.15.attn.o.weight",
+            "enc.blk.16.fc2.weight",
+            "enc.blk.16.attn.o.weight",
+            "enc.blk.17.fc2.weight",
+            "enc.blk.17.attn.o.weight",
+            "enc.blk.18.fc2.weight",
+            "enc.blk.18.attn.o.weight",
+            "enc.blk.19.fc2.weight",
+            "enc.blk.19.attn.o.weight",
+            "enc.blk.2.fc2.weight",
+            "enc.blk.2.attn.o.weight",
+            "enc.blk.20.fc2.weight",
+            "enc.blk.20.attn.o.weight",
+            "enc.blk.21.fc2.weight",
+            "enc.blk.21.attn.o.weight",
+            "enc.blk.22.fc2.weight",
+            "enc.blk.22.attn.o.weight",
+            "enc.blk.23.fc2.weight",
+            "enc.blk.23.attn.o.weight",
+            "enc.blk.24.fc2.weight",
+            "enc.blk.24.attn.o.weight",
+            "enc.blk.25.fc2.weight",
+            "enc.blk.25.attn.o.weight",
+            "enc.blk.26.fc2.weight",
+            "enc.blk.26.attn.o.weight",
+            "enc.blk.27.fc2.weight",
+            "enc.blk.27.attn.o.weight",
+            "enc.blk.28.fc2.weight",
+            "enc.blk.28.attn.o.weight",
+            "enc.blk.29.fc2.weight",
+            "enc.blk.29.attn.o.weight",
+            "enc.blk.3.fc2.weight",
+            "enc.blk.3.attn.o.weight",
+            "enc.blk.30.fc2.weight",
+            "enc.blk.30.attn.o.weight",
+            "enc.blk.31.fc2.weight",
+            "enc.blk.31.attn.o.weight",
+            "enc.blk.4.fc2.weight",
+            "enc.blk.4.attn.o.weight",
+            "enc.blk.5.fc2.weight",
+            "enc.blk.5.attn.o.weight",
+            "enc.blk.6.fc2.weight",
+            "enc.blk.6.attn.o.weight",
+            "enc.blk.7.fc2.weight",
+            "enc.blk.7.attn.o.weight",
+            "enc.blk.8.fc2.weight",
+            "enc.blk.8.attn.o.weight",
+            "enc.blk.9.fc2.weight",
+            "enc.blk.9.attn.o.weight"
+          ],
+          "remaining_q4": 128,
+          "model_sha256": "104cf4b61e4e474da778d94ffc5b3512ecec4587679bb1bec5eb031703e4faec",
+          "model_bytes": 1296714592,
+          "source_bytes": 395594656,
+          "attention_ab": {
+            "tok_xfmr_out": {
+              "cosine": 0.9999983588880068,
+              "mine_norm": 72.54504408608511,
+              "ref_norm": 72.54518751985734,
+              "relative_l2": 0.0018116902067366694,
+              "max_abs": 0.005538759753108025,
+              "exact": false
+            },
+            "tok_pool_out": {
+              "cosine": 0.999909923926078,
+              "mine_norm": 1891.6835339199208,
+              "ref_norm": 1891.360327088164,
+              "relative_l2": 0.01342431135278941,
+              "max_abs": 0.7651791572570801,
+              "exact": false
+            }
+          },
+          "independent_same_weights": {
+            "tok_xfmr_out": {
+              "flash": {
+                "cosine": 0.9999728292630604,
+                "mine_norm": 72.54518751985734,
+                "ref_norm": 72.54437494146971,
+                "relative_l2": 0.007371716762627071,
+                "max_abs": 0.08839762210845947,
+                "exact": false
+              },
+              "eager": {
+                "cosine": 0.999972390711009,
+                "mine_norm": 72.54504408608511,
+                "ref_norm": 72.54437494146971,
+                "relative_l2": 0.007430960395263242,
+                "max_abs": 0.08983008563518524,
+                "exact": false
+              }
+            },
+            "tok_pool_out": {
+              "flash": {
+                "cosine": 0.9841414890122666,
+                "mine_norm": 1891.360327088164,
+                "ref_norm": 1905.7783427186741,
+                "relative_l2": 0.17757901042938876,
+                "max_abs": 20.359368801116943,
+                "exact": false
+              },
+              "eager": {
+                "cosine": 0.984077762875136,
+                "mine_norm": 1891.6835339199208,
+                "ref_norm": 1905.7783427186741,
+                "relative_l2": 0.17794284550803208,
+                "max_abs": 20.708345890045166,
+                "exact": false
+              }
+            }
+          },
+          "codes": {
+            "exact": false,
+            "match_fraction": 0.8215579710144928
+          },
+          "passed": false
+        },
+        "ffn": {
+          "promoted": [
+            "enc.blk.0.fc1.weight",
+            "enc.blk.0.fc2.weight",
+            "enc.blk.1.fc1.weight",
+            "enc.blk.1.fc2.weight",
+            "enc.blk.10.fc1.weight",
+            "enc.blk.10.fc2.weight",
+            "enc.blk.11.fc1.weight",
+            "enc.blk.11.fc2.weight",
+            "enc.blk.12.fc1.weight",
+            "enc.blk.12.fc2.weight",
+            "enc.blk.13.fc1.weight",
+            "enc.blk.13.fc2.weight",
+            "enc.blk.14.fc1.weight",
+            "enc.blk.14.fc2.weight",
+            "enc.blk.15.fc1.weight",
+            "enc.blk.15.fc2.weight",
+            "enc.blk.16.fc1.weight",
+            "enc.blk.16.fc2.weight",
+            "enc.blk.17.fc1.weight",
+            "enc.blk.17.fc2.weight",
+            "enc.blk.18.fc1.weight",
+            "enc.blk.18.fc2.weight",
+            "enc.blk.19.fc1.weight",
+            "enc.blk.19.fc2.weight",
+            "enc.blk.2.fc1.weight",
+            "enc.blk.2.fc2.weight",
+            "enc.blk.20.fc1.weight",
+            "enc.blk.20.fc2.weight",
+            "enc.blk.21.fc1.weight",
+            "enc.blk.21.fc2.weight",
+            "enc.blk.22.fc1.weight",
+            "enc.blk.22.fc2.weight",
+            "enc.blk.23.fc1.weight",
+            "enc.blk.23.fc2.weight",
+            "enc.blk.24.fc1.weight",
+            "enc.blk.24.fc2.weight",
+            "enc.blk.25.fc1.weight",
+            "enc.blk.25.fc2.weight",
+            "enc.blk.26.fc1.weight",
+            "enc.blk.26.fc2.weight",
+            "enc.blk.27.fc1.weight",
+            "enc.blk.27.fc2.weight",
+            "enc.blk.28.fc1.weight",
+            "enc.blk.28.fc2.weight",
+            "enc.blk.29.fc1.weight",
+            "enc.blk.29.fc2.weight",
+            "enc.blk.3.fc1.weight",
+            "enc.blk.3.fc2.weight",
+            "enc.blk.30.fc1.weight",
+            "enc.blk.30.fc2.weight",
+            "enc.blk.31.fc1.weight",
+            "enc.blk.31.fc2.weight",
+            "enc.blk.4.fc1.weight",
+            "enc.blk.4.fc2.weight",
+            "enc.blk.5.fc1.weight",
+            "enc.blk.5.fc2.weight",
+            "enc.blk.6.fc1.weight",
+            "enc.blk.6.fc2.weight",
+            "enc.blk.7.fc1.weight",
+            "enc.blk.7.fc2.weight",
+            "enc.blk.8.fc1.weight",
+            "enc.blk.8.fc2.weight",
+            "enc.blk.9.fc1.weight",
+            "enc.blk.9.fc2.weight"
+          ],
+          "remaining_q4": 128,
+          "model_sha256": "895c382304ad572be53bd35238345a6d798294ceac12ae0160c69a9e46c5e856",
+          "model_bytes": 1837386592,
+          "source_bytes": 395594656,
+          "attention_ab": {
+            "tok_xfmr_out": {
+              "cosine": 0.9999964167097586,
+              "mine_norm": 72.54454370929315,
+              "ref_norm": 72.54443882998817,
+              "relative_l2": 0.0026770492959941397,
+              "max_abs": 0.043370986357331276,
+              "exact": false
+            },
+            "tok_pool_out": {
+              "cosine": 0.9966682483049456,
+              "mine_norm": 1898.934338759346,
+              "ref_norm": 1905.7112284625962,
+              "relative_l2": 0.08156257199570212,
+              "max_abs": 17.64148998260498,
+              "exact": false
+            }
+          },
+          "independent_same_weights": {
+            "tok_xfmr_out": {
+              "flash": {
+                "cosine": 0.9999991884769123,
+                "mine_norm": 72.54443882998817,
+                "ref_norm": 72.54437494146971,
+                "relative_l2": 0.0012739891602834468,
+                "max_abs": 0.012188810855150223,
+                "exact": false
+              },
+              "eager": {
+                "cosine": 0.999995617902317,
+                "mine_norm": 72.54454370929315,
+                "ref_norm": 72.54437494146971,
+                "relative_l2": 0.0029604427315064606,
+                "max_abs": 0.044920824468135834,
+                "exact": false
+              }
+            },
+            "tok_pool_out": {
+              "flash": {
+                "cosine": 0.9999393264952899,
+                "mine_norm": 1905.7112284625962,
+                "ref_norm": 1905.7783427186741,
+                "relative_l2": 0.011015624186347227,
+                "max_abs": 1.1139039993286133,
+                "exact": false
+              },
+              "eager": {
+                "cosine": 0.9965784005129195,
+                "mine_norm": 1898.934338759346,
+                "ref_norm": 1905.7783427186741,
+                "relative_l2": 0.08265301198742499,
+                "max_abs": 17.799124717712402,
+                "exact": false
+              }
+            }
+          },
+          "codes": {
+            "exact": false,
+            "match_fraction": 0.8908514492753623
+          },
+          "passed": false
+        }
+      }
     }
   },
   "official_class_smoke": {
@@ -967,5 +1613,18 @@
       8
     ],
     "torch": "2.11.0+cu130"
+  },
+  "cpu_blas_experiment": {
+    "source": "d20673ce6",
+    "run": 37790353538,
+    "status": "queued",
+    "scope": "temporary scheduler patch, original Q4 file, actual same-host CPU control and official encoder, unchanged gates; not production runtime"
+  },
+  "cuda_tokenizer_diagnostic": {
+    "source": "d6b29207b6d1304243db987a2f4d97f5deac9c05",
+    "kernel_packaging_source": "cbc3a79c0",
+    "script_version": "mimo-pr492-tokenizer-cuda-v1",
+    "status": "running",
+    "scope": "native CUDA tokenizer plus official CPU encoder; no full-ASR/CANN/performance or Pascal MMQ claim"
   }
 }

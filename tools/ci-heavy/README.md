@@ -80,3 +80,11 @@ reference hashes are enforced; a failed profile remains failed in the receipt.
 Run with `-f pip="numpy gguf huggingface_hub soundfile"`. The reference artifact
 has finite retention; this is a temporary diagnostic, not a canonical fixture
 or original-checkpoint/decoded-output acceptance.
+
+`pr492_tokenizer_blas.py` tests the original Q4 file with a temporary CPU
+BLAS scheduler patch. It builds once, runs the full official same-weight
+encoder diagnostic, requires Q4 flash/eager stage gates and exact RVQ codes,
+and compares elapsed stage times with CPU-only controls using the same binary
+and thread count. The patch, build configuration and timings are retained;
+source is restored in `finally`. No production default or model is changed.
+Run with `-f pip="numpy gguf huggingface_hub soundfile torch transformers==4.57.6"`.
