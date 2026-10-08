@@ -18,15 +18,18 @@ Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
 `2bf39c58a53160ed10aed82d5d621c794dc32bba`, preserve author commits,
 and test on current main with bounded APT setup. Inspect packet/flush and
 UTF-8 behavior, German ONNX model/companion/licence routing, C ABI and bindings.
-Validation branch `171dd9da905cb3fa4f5318e3666fe4d88197c323` preserves the
+Validation branch `107789133` preserves the
 author commits. Review found named-model downloads omitted companions and
 selected extras by runtime rather than matched variant. Fixed on the branch;
 actual resolver/CLI offline checks pass six isolated bundles, cache reuse,
 failed-companion rejection and cached repair. Hosted CPU acceptance
-[37730264543](https://github.com/CrispStrobe/CrispASR/actions/runs/37730264543),
-native CI [37730267002](https://github.com/CrispStrobe/CrispASR/actions/runs/37730267002)
-and regression [37730269519](https://github.com/CrispStrobe/CrispASR/actions/runs/37730269519)
-are queued. CPU acceptance covers six German deployments, Nemotron/Qwen
+[37730765885](https://github.com/CrispStrobe/CrispASR/actions/runs/37730765885),
+native CI [37730684549](https://github.com/CrispStrobe/CrispASR/actions/runs/37730684549)
+and regression [37730687001](https://github.com/CrispStrobe/CrispASR/actions/runs/37730687001)
+are queued. Native/regression source is `710457c5b`; the later change only
+pins German acceptance audio at a revision that contains it. Added required
+ONNX per-graph profiling, README model entries and C ABI exception cleanup.
+CPU acceptance covers six German deployments, Nemotron/Qwen
 packet partitioning, UTF-8 retries, flush and C ABI loading. These are acceptance
 checks; per-stage numerical parity is not claimed. Do not merge #515 before
 required review and validation pass.
@@ -37,7 +40,7 @@ Orukeet CPU acceptance [37728843835](https://github.com/CrispStrobe/CrispASR/act
 passed at `4b45fec39ff603ad68bad0435c733e41695bfe10`: fresh download,
 cached short name, filename, explicit path and anonymous C ABI all produce
 identical speech text. Released v0.8.41 reproduces #491; missing licence
-acceptance refuses without downloading. Proof is in the triage receipt.
+acceptance refuses without downloading. Proof is in the triage receipt. #491 is closed with the hosted proof linked.
 
 Integrated #496/#514 source and APT setup pass native CI `37704656972`,
 regression `37704657102`, lint `37704656959` and five WASM builds

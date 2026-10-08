@@ -90,14 +90,18 @@ Released v0.8.41 reproduces the original failure. Missing licence acceptance
 refuses without downloading. This proves routing and speech acceptance across
 those surfaces, not new numerical parity or speed.
 
-PR #515 validation branch `171dd9da905cb3fa4f5318e3666fe4d88197c323`
+PR #515 validation branch `107789133`
 preserves author commits. Review found and fixed missing companions on named
 CLI downloads, variant-confused extras and silent companion failures. Actual
 resolver/CLI offline checks pass six isolated bundles, cache reuse, failure
-rejection and repair. Fresh [CPU acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37730264543),
-[native CI](https://github.com/CrispStrobe/CrispASR/actions/runs/37730267002) and
-[regression](https://github.com/CrispStrobe/CrispASR/actions/runs/37730269519)
-are queued; #515 remains unmerged pending validation.
+rejection and repair. Fresh [CPU acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37730765885),
+[native CI](https://github.com/CrispStrobe/CrispASR/actions/runs/37730684549) and
+[regression](https://github.com/CrispStrobe/CrispASR/actions/runs/37730687001)
+are queued; #515 remains unmerged pending validation. Native/regression runs
+use identical runtime source at `710457c5b`; `107789133` only corrects the
+German acceptance fixture pin. Added `MOONSHINE_ONNX_BENCH=1` per-graph
+timing, README entries and C ABI exception-result cleanup. Regression-driver
+smoke passes 56 tests. #491 is closed with final acceptance linked.
 
 The earlier native CI dispatch `37703783152` was superseded by the apt-fixed
 source dispatch. Original proof source and queued-run commits remain reachable
