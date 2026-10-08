@@ -30,7 +30,8 @@ Both Windows package jobs pass in
 144 CUDA compile commands per arm, correct MMQ definitions, matching CUDA 12.6
 runtime API 12060 and staged `--version` / `--diagnostics` startup. The manifests
 extracted from the actual uploaded artifacts pass the same pair comparison
-locally. The final hosted pairing job remains queued at this checkpoint.
+locally. The final hosted pairing job `113183674377` also passes, including
+comparison of the actual uploaded manifests. The complete workflow is green.
 
 - [MMQ OFF control](https://github.com/CrispStrobe/CrispASR/actions/runs/37733919241/artifacts/11532751916)
 - [MMQ ON experiment](https://github.com/CrispStrobe/CrispASR/actions/runs/37733919241/artifacts/11532004516)

@@ -12,7 +12,8 @@ Added a manual-only ON/OFF package mode to Windows CUDA Smoke. Both arms built
 and pass compiler-definition, staged-runtime and driverless-startup checks in
 `37733919241`. Actual uploaded manifests also pair locally: same source, ggml,
 PTX 61/80, AVX2/FMA/F16C floor and all three runtime DLL hashes; only forced MMQ
-differs. The hosted final pairing job is still queued. Packages and source pins
+differs. Hosted final pairing job `113183674377` also passes; the complete
+workflow is green. Packages and source pins
 are in [the experiment report](docs/cuda126-mmq-experiment-2026-10-08.md).
 No release default changes, and no GTX1660/MX150 correctness or speed is claimed.
 
@@ -23,7 +24,7 @@ called its virtual `reset()`. Source `f55c7bc8c` moves the common state reset
 into a private nonvirtual helper used by both entry points, preserving model,
 VAD and transcript reset behavior. Focused cppcheck 2.17.1, clang-format 18 and
 C++17 syntax checks pass. Full hosted pinned cppcheck 2.7 rerun `37737578258`
-is queued; this entry does not claim that full run passed.
+is running; this entry does not claim that full run passed.
 
 ## DONE 2026-10-07 — narrow issue/PR integration and Orukeet speech acceptance
 

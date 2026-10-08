@@ -1,7 +1,7 @@
 {
   "run_id": 37733919241,
   "passed": true,
-  "scope": "Local pairing of actual uploaded Windows manifests; no GPU execution",
+  "scope": "Hosted and local pairing of actual uploaded Windows manifests; no GPU execution",
   "artifacts": {
     "OFF": 11532751916,
     "ON": 11532004516
@@ -62,6 +62,8 @@
       "status": "success"
     }
   },
-  "hosted_pair_job_status": "queued",
-  "source_archive_branch": "archive/issue483-mmq-source-20261008"
+  "hosted_pair_job_status": "success",
+  "source_archive_branch": "archive/issue483-mmq-source-20261008",
+  "hosted_pair_job_id": 113183674377,
+  "hosted_pair_log_sha256": "5aa0b4d7a5107e0d4135fbe47674666db5390727e8c23c4de8612459b021eb79"
 }

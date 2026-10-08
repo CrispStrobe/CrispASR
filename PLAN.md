@@ -20,6 +20,13 @@ unsupported characters and no-path cases. Keep word output compatible; no
 interpolated character times. Add synthetic known-path guards first, then
 hosted real-audio CLI/C ABI validation where a pinned model is available.
 
+Implemented in draft PR #516 at `5a8471309`: measured UTF-8 label spans,
+nested CLI JSON, C ABI and seven wrappers. All 41 known-path assertions pass,
+also under ASAN/UBSAN; C# builds with zero warnings/errors. An impossible
+repeated-label path fails on the saved baseline and is rejected after the fix.
+Real Arabic Q4 audio acceptance with an independent Viterbi reference is queued
+in `37743605571`; automatic PR acceptance is `37743740726`. Still unmerged.
+
 ## OPEN 2026-10-08 — release draft and final gates
 
 Comprehensive `RELEASE_NOTES_v0.8.42.md` covers landed changes since v0.8.41,
@@ -75,7 +82,11 @@ and retains all four final/batch packet passes. The hosted suite adds CLI/C ABI
 cap equality, capped streaming and reset checks for all five ONNX deployments.
 Fresh full acceptance: x86 [37741562051](https://github.com/CrispStrobe/CrispASR/actions/runs/37741562051)
 and ARM [37741564942](https://github.com/CrispStrobe/CrispASR/actions/runs/37741564942)
-are queued at this runtime. Earlier flush-only runs `37740556768`/`37740559460`
+have started at this runtime. ARM completed with a new CLI routing failure:
+the capped check opens a generic `encoder*.onnx` path, which falls back to
+Whisper while the C ABI already recognizes its companion configuration. Reuse
+the existing Moonshine config detector in CLI auto-detection and rerun both
+architectures. Graph-stage parity passes before this failure. Earlier flush-only runs `37740556768`/`37740559460`
 were superseded while queued. The earlier ARM pass remains evidence for its own
 source, and is not approval of the new flush code. X86 `37738992713` was
 cancelled while queued because it predates this correction.
@@ -84,7 +95,7 @@ All seven wrappers, WASM/JS and the WebSocket ready event expose the new
 streaming-kind query. C# builds with zero warnings/errors; WebSocket syntax
 passes. Go `37735851685`, Rust `37735851828`, all five WASM jobs `37735912990`
 and Windows CUDA13 `37730263830` pass. Native CI `37735908557` passes all
-13 jobs on the earlier binding-completion source; lint `37735910817` remains in flight.
+13 jobs on the earlier binding-completion source; lint `37735910817` passes all 10 jobs.
 Numerical regression `37730687001` passes unit/smoke/preflight and four model
 jobs so far; remaining models are queued. Automatic optional-SDK acceptance
 pins Python ORT 1.30.0 to the SDK and retains strict stage, scale and speech
@@ -95,7 +106,8 @@ checks. #515 stays unmerged pending full proof.
 The requested matched MMQ experiment is built and packaged. Both Windows jobs
 pass in `37733919241`; the actual uploaded manifests pair locally with identical
 source, ggml pin, CPU floor, PTX targets and CUDA runtime DLL hashes. The final
-hosted pairing job is queued. Packages, exact source and scope:
+hosted pairing job also passes (`113183674377`); the complete workflow is green.
+Packages, exact source and scope:
 [experiment](docs/cuda126-mmq-experiment-2026-10-08.md) and its JSON receipt.
 The reporter can now test the GTX1660/MX150. No release defaults or GPU speed
 claims change; keep #483 open for actual hardware correctness/timing results.
@@ -117,7 +129,7 @@ Fixed in `f55c7bc8c`: constructor and reset share a nonvirtual helper. Focused
 cppcheck 2.17.1 and C++ syntax pass; full pinned cppcheck 2.7 rerun
 `37737578258` is running. No full deep-lint success is claimed yet.
 No new GPU performance claim. Cold proof: `/mnt/storage/crispasr/triage-20261007/`.
-#490 Arabic character alignment remains doable. #483 has matched packages;
+#490 character alignment is implemented in draft PR #516, pending real-audio proof. #483 has matched packages;
 reporter GPU output/timing comparisons remain pending.
 #492 MiMo/CANN needs numerical/output acceptance. #492/#515 remain unmerged.
 

@@ -129,9 +129,9 @@ change their implementation.
 
 | Thread | Finding and next action |
 |---|---|
-| [#490](https://github.com/CrispStrobe/CrispASR/issues/490) Arabic character alignment | Feasible. `src/align.cpp` already walks UTF-8 codepoints and traces per-label Viterbi positions, then collapses them to word times. Preserve those spans through the aligner and JSON surface. Test repeated letters, Arabic codepoints/diacritics, blanks, punctuation and OOV handling; do not estimate character times by dividing word durations. Not implemented in this batch. |
+| [#490](https://github.com/CrispStrobe/CrispASR/issues/490) Arabic character alignment | Feasible. `src/align.cpp` already walks UTF-8 codepoints and traces per-label Viterbi positions, then collapses them to word times. Preserve those spans through the aligner and JSON surface. Test repeated letters, Arabic codepoints/diacritics, blanks, punctuation and OOV handling; do not estimate character times by dividing word durations. Implemented in draft [PR #516](https://github.com/CrispStrobe/CrispASR/pull/516): 41 known-path assertions and ASAN/UBSAN pass; C# builds cleanly. Real Arabic Q4 CLI/C ABI and independent Viterbi acceptance are queued. Still unmerged. |
 | [PR #492](https://github.com/CrispStrobe/CrispASR/pull/492) MiMo/CANN performance | Existing CI is green and the contributor reports five exact transcripts on Ascend. Shared attention/mel code and device placement deserve stage/magnitude and decoded-output validation on default and non-flash paths, F16 and shipped quant, with the current ggml pin. The cited timing combines this PR with the still-open [ggml #4](https://github.com/CrispStrobe/ggml/pull/4); it cannot be attributed to this PR alone. Retained unmerged. |
-| [PR #515](https://github.com/CrispStrobe/CrispASR/pull/515) streaming bindings / German ONNX Moonshine | Integration review fixed companion routing, bindings and Nemotron tags. Earlier ARM acceptance passes all eight cases, but local x86 exposed remaining Small int8 frontend drift. Full-frontend flush fix passes four local cases; fresh x86/ARM acceptance remains queued. Retained unmerged. |
+| [PR #515](https://github.com/CrispStrobe/CrispASR/pull/515) streaming bindings / German ONNX Moonshine | Integration review fixed companion routing, bindings and Nemotron tags. Earlier ARM acceptance passes all eight cases, but local x86 exposed remaining Small int8 frontend drift. Full-frontend flush fix passes four local cases; fresh x86/ARM acceptance is running. Retained unmerged. |
 | [#483](https://github.com/CrispStrobe/CrispASR/issues/483) CUDA 12.6 | Reporter confirms the mismatch warning is gone. Latest follow-up requests an experimental forced-MMQ/no-tensor build for GTX1660 comparisons. Both matched Windows packages pass, and their actual uploaded manifests pair locally. Packages and proof are published; reporter GPU model/output/timing comparisons remain pending. No forced-MMQ default change. |
 | [#488](https://github.com/CrispStrobe/CrispASR/issues/488) Qwen3 hotwords | Fixed and validated on main. Reporter Windows/Vulkan six-clip retest remains external. |
 | [#485](https://github.com/CrispStrobe/CrispASR/issues/485) Index-Echo | Both sizes shipped; 9B Q4 candidate acceptance remains open in PLAN, with transfer quota constraints. |
@@ -184,7 +184,7 @@ probability initialization fix remains intact. Source `f55c7bc8c` replaces the
 constructor's virtual call with a private reset helper shared by `reset()`.
 Focused cppcheck 2.17.1 and C++17 syntax pass; full pinned cppcheck 2.7
 [37737578258](https://github.com/CrispStrobe/CrispASR/actions/runs/37737578258)
-is queued. No inference behavior or performance default changes.
+is running. No inference behavior or performance default changes.
 
 ## ARM acceptance and MMQ packages — 2026-10-08
 
@@ -199,7 +199,7 @@ may fail. Rust checks pass; other native/Go/WASM/lint checks remain in flight.
 
 Both Windows MMQ packages pass and their uploaded manifests pair locally.
 [Downloads, pinned source and scope](cuda126-mmq-experiment-2026-10-08.md).
-The final hosted pairing job is queued. #483 remains open for actual GPU tests.
+The final hosted pairing job also passes; the complete workflow is green. #483 remains open for actual GPU tests.
 
 
 ## x86 frontend rounding and corrected final flush — 2026-10-08
@@ -248,3 +248,11 @@ This does not replace optional-SDK acceptance for the newest runtime.
 Comprehensive next-release notes are drafted in `RELEASE_NOTES_v0.8.42.md`.
 They cover landed changes since v0.8.41 and exclude #515/#492 from shipped
 features while those PRs remain unmerged. Version/tag remain unchanged.
+
+## Final validation checkpoint — 2026-10-08
+
+Lint `37735910817` passes all 10 jobs; native CI `37735908557` passes all 13
+on binding-completion source `a1a3d4a25`. Corrected optional-ONNX runtime
+`c46e44e82` is running full x86 `37741562051` and ARM `37741564942` acceptance.
+MMQ `37733919241` passes both Windows packages and the final hosted pair job.
+Draft #516 adds measured character output; real Arabic-audio proof remains queued.

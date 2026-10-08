@@ -1160,14 +1160,14 @@
       "run_id": 37741562051,
       "source_commit": "c46e44e82",
       "runner": "ubuntu-22.04",
-      "status": "queued",
+      "status": "in_progress",
       "replaces": 37740556768
     },
     "latest_arm64": {
       "run_id": 37741564942,
       "source_commit": "c46e44e82",
       "runner": "ubuntu-24.04-arm",
-      "status": "queued",
+      "status": "failure; investigating",
       "replaces": 37740559460
     },
     "x86_flush_fix": {
@@ -1194,14 +1194,14 @@
       "rust": "passed",
       "wasm": "all five jobs passed",
       "native_ci": "passed all 13 jobs at a1a3d4a25; optional-SDK final runtime acceptance pending",
-      "lint": "in progress",
+      "lint": "passed all 10 jobs at a1a3d4a25",
       "windows_cuda13": "passed"
     }
   },
   "issue483_mmq": {
     "source_commit": "04ded753e909da019a2cd391f651f51f5299b6f5",
     "run_id": 37733919241,
-    "status": "windows_packages_pass_local_pair_pass_hosted_pair_queued",
+    "status": "windows_packages_and_hosted_and_local_pair_pass",
     "merged": true,
     "scope": "Matched CUDA 12.6.3 ON/OFF forced-MMQ CLI packages; compile/packaging/driverless startup only; reporter GTX1660 acceptance pending",
     "artifact_ids": {
@@ -1216,6 +1216,22 @@
     "focused_cppcheck": "pass; 2.17.1",
     "cxx17_syntax": "pass",
     "hosted_pinned_cppcheck_run": 37737578258,
-    "hosted_status": "queued"
+    "hosted_status": "in_progress"
+  },
+  "issue490_characters": {
+    "source_commit": "5a8471309eadcb275a1cabff519ba727fe7f6fda",
+    "pr": 516,
+    "merged": false,
+    "known_path_assertions": 41,
+    "asan_ubsan": "passed",
+    "csharp": "passed; 0 warnings/errors",
+    "baseline_no_path": "failure reproduced; fixed guard passes",
+    "independent_reference_known_path": "passed",
+    "real_arabic_q4_runs": [
+      37743605571,
+      37743740726
+    ],
+    "hosted_status": "queued",
+    "scope": "Post-logit measured character output; no new model-stage or hardware-performance claim"
   }
 }
