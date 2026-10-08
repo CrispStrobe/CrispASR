@@ -48,6 +48,9 @@ See [German deployment and SDK setup](docs/german-moonshine.md) and
 - Choose Opus-MT/Marian, m2m100, MADLAD, or a translation LLM. Registry names
   `hy-mt2` and `index-translate` resolve the publishers' Apache-2.0 GGUF models.
   Translation LLM output appears as it is generated.
+- Chat sessions render the empty non-thinking block required by matching Qwen3/
+  Qwen3.5 baked templates in the prompt, avoiding extra generated setup tokens
+  on each translation request. Token counting uses the same prompt suffix.
 - Draft translation uses the words on which recent recognition updates agree.
   JSON `translation_partial.stable` identifies the stable whole-word prefix;
   the terminal dims the provisional remainder. Candidate translations are reused
@@ -257,7 +260,7 @@ deep-lint rerun passes at `f55c7bc8c`.
 
 PR #492 remains unmerged and is excluded from this release. Default-path stage
 values and all twelve tested EN/ZH CLI/session outputs match the baseline,
-but non-flash numerical/exact-code acceptance fails. F16 LM parity passes;
+but production non-flash numerical/exact-code acceptance fails. F16 LM parity passes;
 both LM configurations still use the shipped Q4 tokenizer. All five selective
 promotion profiles fail the unchanged tokenizer gates. The smallest pooling
 A/B error among those profiles is 1.3424%, with only 82.1558% exact RVQ codes.
@@ -268,6 +271,7 @@ No precision experiment changes the production defaults.
 | CPU BLAS scheduler | 0.0001125% | All 2,208 match | 1.71x/1.90x CPU baseline |
 | T4 normal CUDA | 8.83074% | 70.7880% match | Baseline |
 | T4 diagnostic F32 cuBLAS | 0.030852% | Six of 2,208 differ | 1.75x/1.51x CUDA baseline |
+| T4 diagnostic F32 cuBLAS + F32 TILE | 0.0092284% | All 2,208 match official encoder codes | 571ms vs 437ms cuBLAS/MMA; unrepeated |
 
 The cuBLAS experiment keeps the original 395,594,656-byte Q4 download and
 matches the same-weight promoted-F32 model byte for byte at every stage in
@@ -291,8 +295,11 @@ F32 eager relative L2 4.11e-7–1.03e-6, flash 6.20e-4–7.68e-4. The F32 hint
 is byte-identical to default flash. Isolated flash is 8.1–8.6x faster than
 eager; this is not full-model performance. A later diagnostic F32 TILE path eliminates the six tokenizer code differences
 and matches all 2,208 official-encoder codes, with unchanged model-file size.
-It is slower than MMA flash and lacks full-ASR validation, so #492 stays excluded. See the
-[attention receipt](docs/mimo-pr492-cuda-attention-2026-10-08.json).
+The [strict official full-clip replay](docs/mimo-pr492-full-rvq-cuda-tile-2026-10-08.json)
+passes all four arms on their own pools and against official encoder codes.
+It is slower than MMA flash and full-ASR validation is pending, so #492 stays
+excluded. See the [precision receipt](docs/mimo-pr492-cuda-tile-precision-2026-10-08.json)
+and [attention receipt](docs/mimo-pr492-cuda-attention-2026-10-08.json).
 The full-clip CPU oracle also confirms native/official RVQ equality on every
 arm's own input across all frames and eight codebooks; both promoted-F32
 paths match official-encoder codes. Original Q4 encoder drift remains. See the
