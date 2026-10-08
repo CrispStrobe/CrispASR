@@ -289,8 +289,9 @@ subsequent changes are documentation. Final release checks are tracked in
 attention diagnostic now passes its independent controls on three layers:
 F32 eager relative L2 4.11e-7–1.03e-6, flash 6.20e-4–7.68e-4. The F32 hint
 is byte-identical to default flash. Isolated flash is 8.1–8.6x faster than
-eager; this is not full-model performance. Six tokenizer code differences
-remain, so #492 stays excluded. See the
+eager; this is not full-model performance. A later diagnostic F32 TILE path eliminates the six tokenizer code differences
+and matches all 2,208 official-encoder codes, with unchanged model-file size.
+It is slower than MMA flash and lacks full-ASR validation, so #492 stays excluded. See the
 [attention receipt](docs/mimo-pr492-cuda-attention-2026-10-08.json).
 The full-clip CPU oracle also confirms native/official RVQ equality on every
 arm's own input across all frames and eight codebooks; both promoted-F32

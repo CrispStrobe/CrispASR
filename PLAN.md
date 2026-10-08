@@ -69,9 +69,22 @@ TILE agrees with independent K/V-half Python at relative L2 3.56e-7–1.01e-6;
 remaining full-F32 attention error is consistent with K/V half rounding.
 Six measured resident-graph medians are TILE 1.158–1.544ms, eager 2.127–2.783ms,
 original flash 0.265–0.319ms. This is ~1.8x faster than eager, slower than MMA;
-no full-model speed claim. Archive collection is in progress before any rerun.
-Next claimed work in the same candidate worktree: extend the full-clip official
-RVQ oracle to the separate kernel/study directory, then run it on GH. Full
+no full-model speed claim. All terminal logs and 205 files are archived; all 42 recorded attention array
+hashes and kernel/source pins verify. Full-clip official CUDA oracle
+`37820013373` PASS on GH ARM: all v4 arms agree with official quantization on
+own pools, while flash differs from official-encoder codes at six entries.
+The new TILE reference pool is byte-identical to that oracle's reference;
+all four new TILE arms exactly match its 2,208 independently generated codes.
+Stricter own-input/all-encoder replay `37821379986` is queued at `149467980`.
+Receipts: `docs/mimo-pr492-cuda-tile-precision-2026-10-08.json` and
+`docs/mimo-pr492-full-rvq-cuda-2026-10-08.json`.
+The single Q4 whole-code extraction is 571ms TILE versus 437ms MMA / 455ms
+eager; these are unrepeated process timings and do not establish a speedup.
+Next claimed work in the same candidate worktree: actual CUDA full-ASR EN/ZH
+CLI and session C ABI validation with the original Q4 model and tokenizer.
+Scope the temporary cuBLAS override to encoder.* tokenizer weights to avoid
+changing LM arithmetic. Only after output gates pass, collect repeated full
+inference timings/memory. Keep production defaults unchanged. Full
 EN/ZH CLI/C ABI decode, repeated whole-tokenizer timings/memory and original
 checkpoint/full-ASR gates remain required; no production default/ggml pin
 change, and #492 remains excluded from the release. Local C++ syntax/clang-format checks pass;

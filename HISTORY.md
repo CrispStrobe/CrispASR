@@ -23104,3 +23104,13 @@ all file access/modification times exceed five hours. Verified every destination
 hash before removing redundant local copies; all original paths remain symlinks.
 Reclaimed 2,746,798,353 bytes on /mnt/volume1. No live model/server relocation.
 Receipt: `docs/cold-storage-cleanup-2026-10-08.json`.
+
+## 2026-10-08 — Exact original-Q4 CUDA tokenizer codes
+
+A scoped diagnostic F32 TILE kernel eliminates the remaining six code differences.
+All four new arms match 2,208 official-encoder codes; the Python reference pool
+is byte-identical to the independently quantified v4 archive. Isolated TILE is
+faster than eager, slower than MMA; single whole-tokenizer Q4 timing is slower.
+No production/default or full-ASR acceptance. Full receipts:
+`docs/mimo-pr492-cuda-tile-precision-2026-10-08.json`,
+`docs/mimo-pr492-full-rvq-cuda-2026-10-08.json`.
