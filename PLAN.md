@@ -11,6 +11,28 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-08 — PR #492 salvage, OmniVoice cleanup and remaining performance work
+
+Owner: this maintainer session. Worktrees under
+`/mnt/storage/crispasr/salvage-20261008/`: `mel` (`fix/mel-projection-salvage`),
+`omnivoice` (`fix/omnivoice-postprocess-518`), `echo` (`fix/echo-q4-public-transfer`),
+and `profile` (`perf/mimo-voxcpm-profile`). PR #492 diagnostics remain in
+`/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`.
+
+Authorized order: extract the author's independent mel projection change with
+serial fallback and short/long, thread-count exactness/timing; port OmniVoice
+#518 from pinned upstream preprocessing/postprocessing, with raw opt-outs,
+cache semantics, independent waveform checks and actual CLI/session TTS→ASR;
+repair Echo Q4 producer/transfer using permitted public artifacts, pin/audit on
+GH CPU before GPU stage/cache/full-output/roundtrip acceptance; profile MiMo
+GPU graph rebuild/allocation/transfers and VoxCPM2 VAE/Vulkan before changing
+runtime defaults. Resolve the Q4 LM non-flash first divergence separately.
+CANN RVQ/F16 embeddings and ggml NZ need actual Ascend evidence; no CUDA
+substitute or combined-speed attribution. All large scratch/proof/model files
+stay on `/mnt/storage`; GH CPU and one-account Kaggle GPU protocol apply.
+Archive only code-audited completed PLAN claims; preserve remaining hardware
+retests and deferred #456. Check release asset publication separately.
+
 ## VALIDATED 2026-10-08 — MiMo full CUDA speech acceptance and precision profile
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, branch
