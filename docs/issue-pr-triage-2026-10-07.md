@@ -370,3 +370,25 @@ Metal linkage and Objective-C++17. A compiler negative control rejects the old
 call and accepts the fixed one. [Shared/static macOS coverage](https://github.com/CrispStrobe/CrispASR/actions/runs/37755267314)
 is queued; no-device runtime checks explicitly skip, and no PSO serialization
 or GPU performance proof is claimed.
+
+## MiMo C ABI settings and F16 memory follow-up — 2026-10-08
+
+Candidate `c50c50061` also forwards session device preference and verbosity.
+Previously only flash attention was forwarded; CPU-only hosts hid the device
+omission because init_best selected another CPU backend. That different backend
+instance takes the split-loader weight-copy path, defeating mmap and risking a
+16 GB F16 allocation. [Actual-library parameter guard](https://github.com/CrispStrobe/CrispASR/actions/runs/37758333664)
+at `7e1806060` is queued: eight combinations plus failed-open default restoration,
+with an incremental negative-control rebuild removing the two assignments.
+The probe compiles and scripts parse locally; hosted proof remains required.
+
+The original Q4 numerical run continues at its unchanged `fae7e2241` source.
+The unstarted F16 job was cancelled for the memory defect above. Replacement
+[combined Q4/F16 acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37758607763)
+at `c50c50061` waits in the same serial group. All numerical arms explicitly force
+CPU, including the legacy baseline, and session/CLI model contexts are released
+between speech checks. This is CPU-only acceptance, not a GPU claim.
+
+The first Metal shared job compiled the Objective-C++ test but failed linking
+Objective-C runtime symbols. `7b44257d3` adds explicit `objc`; [fresh shared/static
+coverage](https://github.com/CrispStrobe/CrispASR/actions/runs/37757366299) is queued.

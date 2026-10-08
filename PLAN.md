@@ -21,13 +21,15 @@ The fixture now restores both cache environment variables; no-device cases
 explicitly skip instead of reporting success. Added `metal-cache-test.yml`
 (shared/static macOS build and focused CTest). First shared hosted build
 `37755267314` compiled the Objective-C++ test, then failed linking Objective-C
-runtime symbols. Added explicit `objc` linkage; fresh hosted validation pending.
+runtime symbols. Added explicit `objc` linkage in `7b44257d3`; fresh shared/static
+validation `37757366299` is queued.
 No GPU cache execution or runtime/cache-default change is claimed.
 
 ## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, internal
-branch `review/pr492-acceptance`, source `fae7e22419b8c797dfa2759a9d4884a8f426bf63`.
+branch `review/pr492-acceptance`, latest `c50c50061`.
+Original numerical source: `fae7e22419b8c797dfa2759a9d4884a8f426bf63`.
 Contributor commits through `ac07cf0be3b528cdb035735738098e30f7468a41` are
 preserved as ancestors; merge against current main was clean, with unchanged
 ggml `c36dab89b`. Local shared-mel A/B passes 16 cases (63/64/65/300 frames,
@@ -36,19 +38,26 @@ both layouts and accumulator types, 1/4 threads), byte-identical to main.
 Found and checksum-verified the legacy public Python LM reference, upstream
 `98641d537df521ac6df05f74090475694d9510b7`. It has five LM stages but explicitly
 skips generated text, so it is not decoded-output proof. Hosted Q4 job
-`37754319857` is running; F16 job `37754323202` waits behind it in the same
-script concurrency group. Each compares main/default, candidate/default and
+`37754319857` remains running at the original numerical source. The unstarted
+F16 job `37754323202` was cancelled after finding a legacy C-ABI device flag
+bug that can force a full weight copy on a CPU-only runner. Replacement
+Q4/F16 `--quant all` run `37758607763` waits behind the original Q4 job at
+`c50c50061`, explicitly forcing CPU for both baseline/candidate and releasing
+session model/KV before each CLI model load. Each compares main/default, candidate/default and
 candidate/non-flash: five LM stage values/norms/relative L2, tokenizer continuous
 stages and exact RVQ codes, English/Chinese CLI/session equality and transcripts.
 F16 is the LM; both jobs use the shipped Q4_K tokenizer. Source/fixture pins
 and local evidence are on the branch in
 `docs/mimo-pr492-acceptance-2026-10-08.json`.
 
-Follow-up claimed in the same worktree: the MiMo C ABI forwards flash attention
-but omits `use_gpu` and verbosity. Wire both through, with an actual built-library
-initializer-interposition guard proving the old mismatch and the corrected
-values without model/GPU execution. Current Q4/F16 runs retain their original
-source pin; do not cancel useful numerical work for this scoped follow-up.
+The MiMo C ABI now forwards `use_gpu` and verbosity alongside flash attention.
+Actual-library initializer-interposition job `37758333664` is queued at
+`7e1806060`: eight requested combinations and eight failed-open default-reset
+checks; removing the two assignments must fail before the restored build passes.
+The probe compiles and Python scripts parse locally. No hosted pass yet.
+This device fix prevents selecting a second CPU backend through init_best and
+copying the 16 GB F16 weights in the legacy CPU session. The numerical baseline
+also explicitly forces CPU to retain its mmap path. No GPU execution is claimed.
 
 No new CANN/CUDA correctness or performance claim; combined CANN/NZ timings
 cannot be attributed to this PR alone. PR #492 remains unmerged. #516 Arabic

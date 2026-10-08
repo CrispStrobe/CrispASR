@@ -1299,7 +1299,7 @@
     "receipts": "/mnt/storage/crispasr/storage-cleanup-20261008/"
   },
   "pr492_acceptance": {
-    "source": "fae7e22419b8c797dfa2759a9d4884a8f426bf63",
+    "source": "c50c50061",
     "branch": "review/pr492-acceptance",
     "contributor_source": "ac07cf0be3b528cdb035735738098e30f7468a41",
     "merged": false,
@@ -1312,7 +1312,7 @@
     },
     "q4_run": 37754319857,
     "f16_run": 37754323202,
-    "hosted_status": "Q4 running, F16 pending serial concurrency",
+    "hosted_status": "Original Q4 running; unstarted F16 cancelled to avoid known C-ABI split-loader weight-copy risk. Corrected combined Q4/F16 job pending behind original Q4; C-ABI parameter guard queued.",
     "reference": {
       "repo": "cstr/mimo-asr-GGUF",
       "revision": "e2d7dfebf0afd8076771903e92958039c5074eab",
@@ -1322,7 +1322,14 @@
       "stages": 5,
       "generated_text": "explicitly skipped"
     },
-    "scope": "CPU A/B and frozen Python LM stages; F16 LM and Q4_K LM both use pinned shipped Q4_K codec. No CANN/CUDA timing acceptance."
+    "scope": "CPU A/B and frozen Python LM stages; F16 LM and Q4_K LM both use pinned shipped Q4_K codec. No CANN/CUDA timing acceptance.",
+    "original_numerical_source": "fae7e22419b8c797dfa2759a9d4884a8f426bf63",
+    "f16_run_status": "cancelled before execution",
+    "combined_run": 37758607763,
+    "cabi_params_run": 37758333664,
+    "cabi_params_source": "7e18060607b40e59fce78fe1917d817fe57e670d",
+    "cabi_fix": "Forward device/verbosity open settings. Actual-library interposition guard must reject removed assignments and pass restored source; no hosted proof yet.",
+    "memory": "Force CPU in all numerical arms, including legacy baseline C ABI; release session model/KV before CLI loads; delete each quant after accepted checks."
   },
   "metal_cache_compatibility": {
     "source": "c849ba214a97a9c5f596eed0a5c25b91701f555f",
@@ -1340,6 +1347,8 @@
         "objc_release"
       ],
       "fix": "explicit objc linkage"
-    }
+    },
+    "fixed_source": "7b44257d383c9722ef0ab535ea2bcef5279fa720",
+    "fixed_run": 37757366299
   }
 }
