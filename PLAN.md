@@ -11,6 +11,16 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-08 — Moonshine ONNX destructor deep-lint follow-up
+
+Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`. Full pinned cppcheck
+`37749837117` on integrated #515 source fails only `virtualCallInConstructor`:
+`MoonshineOnnxBackend` destructor calls virtual `shutdown()`. Move the existing
+close/null-reset operation into a private nonvirtual helper shared by shutdown
+and destruction. Reproduce the diagnostic, check the corrected adapter locally,
+and retain final hosted deep/platform validation before release. This changes
+resource cleanup dispatch, not the accepted model/stream graph.
+
 ## CLAIMED 2026-10-08 — Metal cache test API compatibility
 
 Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`. Fixed the existing
