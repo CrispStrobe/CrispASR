@@ -512,6 +512,9 @@ struct EncoderSelfAttnParams {
     // encoder was written without cont and changing it would alter the
     // ggml graph structure). Set to false for voxtral4b compatibility.
     bool permute_cont = true;
+    // Use full-score F32 attention instead of ggml_flash_attn_ext. This is
+    // needed by backends such as CANN 310P that decline the flash op.
+    bool eager_f32_attn = false;
 };
 
 static inline ggml_tensor* encoder_self_attn(ggml_context* ctx, ggml_tensor* x, ggml_tensor* q_w, ggml_tensor* q_b,
@@ -568,8 +571,26 @@ static inline ggml_tensor* encoder_self_attn(ggml_context* ctx, ggml_tensor* x, 
         V = ggml_cont(ctx, V);
     }
 
-    // Flash attention (bidirectional if mask==nullptr, causal/SWA otherwise).
-    ggml_tensor* attn = ggml_flash_attn_ext(ctx, Q, K, V, mask, p.attn_scale, 0.0f, 0.0f);
+    // Eager attention mirrors kv_self_attn's full-score path. It preserves
+    // flash_attn_ext's (head_dim, head, query) layout before the reshape.
+    static const int s_eager_env = []() {
+        const char* s = std::getenv("CRISPASR_CORE_ATTN_EAGER_F32");
+        if (!s || !*s)
+            return -1;
+        return std::strcmp(s, "0") != 0 ? 1 : 0;
+    }();
+    const bool use_eager = (s_eager_env >= 0) ? (s_eager_env == 1) : p.eager_f32_attn;
+    ggml_tensor* attn;
+    if (use_eager) {
+        ggml_tensor* scores = ggml_mul_mat(ctx, K, Q); // (key, query, head)
+        ggml_mul_mat_set_prec(scores, GGML_PREC_F32);
+        scores = ggml_soft_max_ext(ctx, scores, mask, p.attn_scale, 0.0f);
+        ggml_tensor* Vt = ggml_cont(ctx, ggml_transpose(ctx, V));
+        attn = ggml_mul_mat(ctx, Vt, scores); // (head_dim, query, head)
+        attn = ggml_cont(ctx, ggml_permute(ctx, attn, 0, 2, 1, 3));
+    } else {
+        attn = ggml_flash_attn_ext(ctx, Q, K, V, mask, p.attn_scale, 0.0f, 0.0f);
+    }
     attn = ggml_reshape_2d(ctx, attn, hd * n_q, T);
 
     // Output projection with optional bias.
