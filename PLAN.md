@@ -59,7 +59,10 @@ candidate branch. Submitted version 1 at packaging `e07e2d83e`; numeric source
 `/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-attention-precision-v1`.
 A generated-header smoke verifies matching F32 host/device configuration,
 preserved baseline headers and removal of extern-template declarations so the
-new specialization is actually emitted. GPU build/runtime remain pending.
+new specialization is actually emitted. GPU build/runtime remain pending. Local C++ syntax/clang-format checks pass;
+the actual capture wrapper preserves layouts exactly and the new K/V-only
+half-rounding reference agrees with independent NumPy at relative L2 7.49e-8.
+These are preparation checks, not CUDA execution proof.
 No quota bypass/GPU fishing: one actual precision experiment.
 Native `37805363962` and lint `37806475239` both PASS at `3fd1bf5fa`.
 Full 33-model regression `37802900089` is still running with no failures.

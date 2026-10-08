@@ -1,9 +1,7 @@
 # v0.8.42 — Live translation, persistent streaming and Hikari
 
-Draft for the next release, covering changes on main since v0.8.41. The version
-has not been bumped and the tag has not been created. Final integration and
-release-tip validation are still pending. PR #515 and #516 are integrated;
-PR #492 remains unmerged.
+Changes since v0.8.41. PR #515 and #516 are integrated. PR #492 remains
+unmerged and is excluded from this release.
 
 ## Persistent streaming and German Moonshine
 
@@ -152,6 +150,7 @@ boundaries. See [exact model/audio/source pins and proof](docs/ctc-characters-20
 - **MiMo-ASR (#489):** language-selected default instructions match upstream,
   explicit `--ask` remains independent, and automatic language detection avoids
   unnecessary external LID. CLI/library capability tables reflect this behavior.
+  Session initialization now forwards the requested device and verbosity.
 - **Orukeet (#491):** short names, cached filenames and explicit paths select
   the Parakeet runtime. Fresh download and anonymous C ABI recognition are
   validated. CC-BY-SA still requires acceptance; refusal performs no download.
@@ -214,10 +213,10 @@ Existing wav2vec2 GPU transcript drift remains under investigation.
   These are experiment artifacts, not changed release defaults or evidence of
   GTX1660/MX150 speed. [Packages and scope](docs/cuda126-mmq-experiment-2026-10-08.md).
 
-## Validation and remaining gates
+## Validation and remaining limits
 
 Accepted changes have recorded platform CI, lint, bindings, WASM and numerical
-regression evidence. These checkpoints do not replace final main validation:
+regression evidence:
 
 - German Moonshine (#515): all eight cases pass on x86/ARM, including 15 exact
   stages per five-graph deployment, independent Python ORT, scale controls and
@@ -282,16 +281,21 @@ not repeated medians. See the [CPU receipt](docs/mimo-pr492-cpu-blas-2026-10-08.
 [CUDA receipt](docs/mimo-pr492-cuda-precision-2026-10-08.json) and
 [affected-frame oracle](docs/mimo-pr492-cuda-rvq-oracle-2026-10-08.json).
 
-Before tagging, final main native CI, lint and the full 33-backend regression
-must complete successfully, and this draft must match the final source.
-Native CI `37805363962` and lint `37806475239` pass at `3fd1bf5fa`;
-full regression `37802900089` is still progressing. The identical-input CUDA
+Native CI `37805363962` and lint `37806475239` pass at `3fd1bf5fa`.
+The [full 33-backend regression](https://github.com/CrispStrobe/CrispASR/actions/runs/37802900089)
+uses the same runtime, tests and ggml revision as the release preparation tip;
+subsequent changes are documentation. Final release checks are tracked in
+[PLAN.md](PLAN.md). The identical-input CUDA
 attention diagnostic now passes its independent controls on three layers:
 F32 eager relative L2 4.11e-7–1.03e-6, flash 6.20e-4–7.68e-4. The F32 hint
 is byte-identical to default flash. Isolated flash is 8.1–8.6x faster than
 eager; this is not full-model performance. Six tokenizer code differences
 remain, so #492 stays excluded. See the
 [attention receipt](docs/mimo-pr492-cuda-attention-2026-10-08.json).
+The full-clip CPU oracle also confirms native/official RVQ equality on every
+arm's own input across all frames and eight codebooks; both promoted-F32
+paths match official-encoder codes. Original Q4 encoder drift remains. See the
+[full-clip oracle](docs/mimo-pr492-full-rvq-cpu-2026-10-08.json).
 Reporter-specific Windows/Vulkan, Intel Mac and newer NVIDIA
 hardware retests remain open. OmniVoice's remaining upstream audio cleanup is
 tracked in #518.
