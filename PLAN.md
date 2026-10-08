@@ -20,17 +20,22 @@ unsupported characters and no-path cases. Keep word output compatible; no
 interpolated character times. Add synthetic known-path guards first, then
 hosted real-audio CLI/C ABI validation where a pinned model is available.
 
-Implemented in draft PR #516 at `5a8471309`: measured UTF-8 label spans,
+Implemented in draft PR #516, latest `d57b0f7c7` (core implementation `5a8471309`): measured UTF-8 label spans,
 nested CLI JSON, C ABI and seven wrappers. All 41 known-path assertions pass,
 also under ASAN/UBSAN; C# builds with zero warnings/errors. An impossible
 repeated-label path fails on the saved baseline and is rejected after the fix.
 Real Arabic Q4 audio acceptance with an independent Viterbi reference is queued
-in automatic PR acceptance `37743740726`. Duplicate manual run `37743605571`
-was cancelled while queued to let that Ubuntu 22.04 job proceed. Still unmerged.
+in automatic PR acceptance `37746296873`, including exact Java/JNA character
+text/times and a nonzero offset. Earlier queued runs were superseded as the
+binding/CI follow-ups landed. Still unmerged.
 
 Dart push CI `37743605825` built the native library successfully, then failed
-`dart format` on the changed binding. Apply the actual Dart 3.13.5 formatter
-and rerun checks; do not treat formatting failure as native-model acceptance.
+`dart format`. Corrected using Dart 3.13.5: all nine library/test files format
+cleanly; static analysis reports no issues. Go `37743605844`, Rust `37743605797`
+and Linux C# job in `37743740252` pass at the core implementation source.
+Java wrapper/acceptance driver compile locally (15 class files); Java runtime
+proof is pending in the fresh Arabic acceptance. Added missing workflow triggers
+for C ABI/Python/Java/model-runtime/tests and explicit UTF-8 for MSVC fixtures.
 
 ## OPEN 2026-10-08 — release draft and final gates
 

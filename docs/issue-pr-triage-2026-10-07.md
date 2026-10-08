@@ -267,3 +267,15 @@ The saved baseline reproduces the failure; four positive/negative factory
 checks pass. [Local receipt](moonshine-onnx-routing-2026-10-08.json). Fresh full
 x86 `37744837589` and ARM `37744841616` runs are queued. Neither failed run
 proves the later ONNX cap/flush checks, which were not reached.
+
+## Character-binding validation follow-up — 2026-10-08
+
+PR #516 is now `d57b0f7c7` with the same core alignment implementation.
+Go `37743605844`, Rust `37743605797` and Linux C# in `37743740252` pass at
+`5a8471309`. Dart CI built the native library and exposed a format failure;
+the actual Dart 3.13.5 formatter corrects it, all nine lib/test files pass,
+and static analysis reports no issues. Java wrapper/driver compilation emits
+15 class files locally. Fresh Arabic Q4 acceptance `37746296873` adds exact
+Java/JNA text/times/offset comparisons; runtime proof remains queued. The
+workflow now covers future C ABI/binding/runtime/test edits. Unicode fixtures
+compile explicitly as UTF-8 under MSVC. Final ONNX ARM acceptance is running.

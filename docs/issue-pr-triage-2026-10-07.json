@@ -1167,7 +1167,7 @@
       "run_id": 37744841616,
       "source_commit": "a9c312cb1",
       "runner": "ubuntu-24.04-arm",
-      "status": "queued",
+      "status": "in_progress",
       "replaces": 37741564942
     },
     "x86_flush_fix": {
@@ -1224,7 +1224,7 @@
     "hosted_status": "in_progress"
   },
   "issue490_characters": {
-    "source_commit": "5a8471309eadcb275a1cabff519ba727fe7f6fda",
+    "source_commit": "d57b0f7c7a219641cbdbcebca1108f7b1f8096b5",
     "pr": 516,
     "merged": false,
     "known_path_assertions": 41,
@@ -1233,10 +1233,18 @@
     "baseline_no_path": "failure reproduced; fixed guard passes",
     "independent_reference_known_path": "passed",
     "real_arabic_q4_runs": [
-      37743740726
+      37746296873
     ],
     "hosted_status": "queued",
     "scope": "Post-logit measured character output; no new model-stage or hardware-performance claim",
-    "superseded_manual_run": 37743605571
+    "superseded_manual_run": 37743605571,
+    "core_implementation_commit": "5a8471309eadcb275a1cabff519ba727fe7f6fda",
+    "dart": "format all 9 files and static analysis pass; hosted rerun queued",
+    "java": "Session wrapper and Arabic acceptance driver compile; runtime comparison queued",
+    "hosted_original_binding_checks": {
+      "go": 37743605844,
+      "rust": 37743605797,
+      "csharp_linux": 37743740252
+    }
   }
 }
