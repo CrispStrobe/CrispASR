@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+## 0.8.42
+
+* **Persistent streaming:** `streamKind` exposes unavailable, rolling-window,
+  persistent-cache and text-prefix implementations. Nemotron, Qwen3-ASR and
+  Voxtral use their native streaming paths through the session API.
+* **German Moonshine:** native and ONNX deployments, model detection and
+  streaming/session support.
+* **Live translation:** Marian translation models and direction selection;
+  Hikari voice activity detection through the native session API.
+* **Native fixes:** Arabic word/character alignment, Qwen3 hotword prompt
+  forwarding, MiMo device/verbosity settings, and MioTTS output/voice handling.
+* **Distribution:** ggml Metal fixes, synchronized bindings/capabilities and
+  improved Windows CUDA diagnostics. Experimental PR #492 precision changes
+  remain excluded; production model/precision defaults are unchanged.
+
 ## 0.8.41
 
 * **Native Index-Echo:** validated 9B F16 translation with a matching decoder,
