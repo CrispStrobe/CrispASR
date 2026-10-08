@@ -49,8 +49,8 @@ public:
         const char* env_steps = crispasr_env::get("CRISPASR_VOXCPM2_INFERENCE_STEPS");
         if (env_steps)
             cp.inference_steps = atoi(env_steps);
-        if (p.tts_steps > 0)
-            cp.inference_steps = p.tts_steps;
+        if (p.tts_num_steps > 0)
+            cp.inference_steps = p.tts_num_steps;
 
         const char* env_cfg = crispasr_env::get("CRISPASR_VOXCPM2_CFG_VALUE");
         if (env_cfg)
@@ -78,8 +78,8 @@ public:
         if (!ctx_ || text.empty())
             return {};
         voxcpm2_set_seed(ctx_, (uint32_t)params.seed);
-        if (params.tts_steps > 0)
-            voxcpm2_set_inference_steps(ctx_, params.tts_steps);
+        if (params.tts_num_steps > 0)
+            voxcpm2_set_inference_steps(ctx_, params.tts_num_steps);
 
         // Voice cloning path: load WAV, resample to 16 kHz mono float32, hand to
         // voxcpm2_synthesize_clone. The encoder pads internally to the patch
