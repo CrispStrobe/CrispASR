@@ -1,6 +1,10 @@
 package io.github.ggerganov.whispercpp;
 
 import com.sun.jna.Callback;
+import com.sun.jna.DefaultTypeMapper;
+import com.sun.jna.Memory;
+import com.sun.jna.ToNativeContext;
+import com.sun.jna.ToNativeConverter;
 import com.sun.jna.Library;
 import com.sun.jna.Native;
 import com.sun.jna.Pointer;
@@ -28,10 +32,31 @@ import com.sun.jna.ptr.PointerByReference;
  */
 public final class CrispasrSession implements AutoCloseable {
 
+    private static java.util.Map<String, Object> nativeOptions() {
+        DefaultTypeMapper mapper = new DefaultTypeMapper();
+        // JNA 5.13 applies OPTION_STRING_ENCODING to returned strings, but
+        // scalar String arguments still use the global jna.encoding default.
+        // Convert inputs explicitly without changing the host's global setting.
+        mapper.addToNativeConverter(String.class, new ToNativeConverter() {
+            @Override public Object toNative(Object value, ToNativeContext context) {
+                if (value == null) return null;
+                byte[] utf8 = ((String) value).getBytes(java.nio.charset.StandardCharsets.UTF_8);
+                Memory memory = new Memory((long) utf8.length + 1);
+                memory.write(0, utf8, 0, utf8.length);
+                memory.setByte(utf8.length, (byte) 0);
+                return memory;
+            }
+            @Override public Class<?> nativeType() { return Pointer.class; }
+        });
+        java.util.Map<String, Object> options = new java.util.HashMap<>();
+        options.put(Library.OPTION_STRING_ENCODING, "UTF-8");
+        options.put(Library.OPTION_TYPE_MAPPER, mapper);
+        return options;
+    }
+
     public interface Lib extends Library {
         // The session C ABI uses UTF-8 regardless of the host/JNA default.
-        Lib INSTANCE = Native.load("crispasr", Lib.class,
-            java.util.Collections.singletonMap(Library.OPTION_STRING_ENCODING, "UTF-8"));
+        Lib INSTANCE = Native.load("crispasr", Lib.class, nativeOptions());
 
         Pointer crispasr_session_open(String modelPath, int nThreads);
         void    crispasr_session_close(Pointer session);

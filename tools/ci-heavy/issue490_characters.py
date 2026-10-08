@@ -105,6 +105,29 @@ def reference_spans(logits, words, vocab, blank, frame_seconds):
 
 
 save()
+# Validate the Java string boundary before any model download or heavy build.
+# Pin the dependency already declared by bindings/java/build.gradle.
+jna = SCRATCH / 'jna-5.13.0.jar'
+with urllib.request.urlopen('https://repo.maven.apache.org/maven2/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar') as response:
+    jna.write_bytes(response.read())
+assert hashlib.sha256(jna.read_bytes()).hexdigest() == '66d4f819a062a51a1d5627bffc23fac55d1677f0e0a1feba144aabdd670a64bb'
+classes = SCRATCH / 'java-classes'
+classes.mkdir(exist_ok=True)
+run(['javac', '-encoding', 'UTF-8', '-cp', jna, '-d', classes,
+     ROOT / 'bindings/java/src/main/java/io/github/ggerganov/whispercpp/CrispasrSession.java',
+     ROOT / 'tools/ci-heavy/Issue490Characters.java',
+     ROOT / 'tools/ci-heavy/Issue490Utf8.java'], 'java-compile')
+guard = SCRATCH / 'jna-guard'
+guard.mkdir(exist_ok=True)
+run(['cc', '-shared', '-fPIC', ROOT / 'tools/ci-heavy/issue490_jna_utf8.c',
+     '-o', guard / 'libcrispasr.so'], 'java-guard-build')
+for encoding in ['US-ASCII', 'ISO-8859-1', 'UTF-8']:
+    run(['java', '-Dfile.encoding=UTF-8', '-Djna.encoding=' + encoding,
+         '-Djna.library.path=' + str(guard), '-cp', str(classes) + os.pathsep + str(jna),
+         'Issue490Utf8'], 'java-utf8-' + encoding)
+receipt['java_utf8_guard'] = 'input/output UTF-8 and Unicode model path pass with US-ASCII, ISO-8859-1 and UTF-8 host defaults'
+save()
+
 build = SCRATCH / 'build'
 run(['cmake', '-S', ROOT, '-B', build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
      '-DBUILD_SHARED_LIBS=ON', '-DGGML_NATIVE=OFF', '-DGGML_BLAS=OFF',
@@ -163,6 +186,9 @@ for actual, expected in zip(words, ref):
     assert actual['characters'] == expected, (actual, expected)
 (OUT / 'independent-reference.json').write_text(json.dumps(ref, ensure_ascii=False, indent=2) + '\n')
 np.save(OUT / 'logits.npy', logits)
+receipt['independent_viterbi'] = 'exact character text/start/end'
+receipt['recognized_text'] = recognized_text
+save()
 
 aligned = align_words(str(model), text, pcm, t_offset=3.25, n_threads=4, lib_path=str(library))
 assert len(aligned) == len(words)
@@ -176,6 +202,9 @@ for actual, expected in zip(aligned, words):
         assert abs(char.start - target['start'] - 3.25) < 1e-8
         assert abs(char.end - target['end'] - 3.25) < 1e-8
 
+receipt['python_cabi_offset_seconds'] = 3.25
+save()
+
 lib = C.CDLL(str(library))
 for suffix, restype, nargs in [('n_characters', C.c_int, 2), ('character_text', C.c_char_p, 3),
                              ('character_t0', C.c_int64, 3), ('character_t1', C.c_int64, 3)]:
@@ -183,16 +212,6 @@ for suffix, restype, nargs in [('n_characters', C.c_int, 2), ('character_text', 
     fn.restype, fn.argtypes = restype, [C.c_void_p] + [C.c_int] * (nargs - 1)
     assert fn(None, -1, *([-1] if nargs == 3 else [])) == (b'' if restype == C.c_char_p else 0)
 # Exercise the Java/JNA wrapper against the same native library and real audio.
-# Pin the dependency already declared by bindings/java/build.gradle.
-jna = SCRATCH / 'jna-5.13.0.jar'
-with urllib.request.urlopen('https://repo.maven.apache.org/maven2/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar') as response:
-    jna.write_bytes(response.read())
-assert hashlib.sha256(jna.read_bytes()).hexdigest() == '66d4f819a062a51a1d5627bffc23fac55d1677f0e0a1feba144aabdd670a64bb'
-classes = SCRATCH / 'java-classes'
-classes.mkdir(exist_ok=True)
-run(['javac', '-encoding', 'UTF-8', '-cp', jna, '-d', classes,
-     ROOT / 'bindings/java/src/main/java/io/github/ggerganov/whispercpp/CrispasrSession.java',
-     ROOT / 'tools/ci-heavy/Issue490Characters.java'], 'java-compile')
 java_output = OUT / 'java-spans.tsv'
 run(['java', '-Dfile.encoding=UTF-8', '-Djna.encoding=US-ASCII',
      '-Djna.library.path=' + str(library.parent),

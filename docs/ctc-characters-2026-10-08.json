@@ -5,16 +5,18 @@
   "fixed_no_path": "NO_PATH_REJECTED",
   "known_path_assertions": 41,
   "csharp": "build passed, 0 warnings, 0 errors",
-  "hosted": "37746296873 failed on byte-truncated CLI diagnostic preview; JSON itself is valid (15 words, 85 characters). Independent Viterbi and binding runtime comparisons were not reached; rerun required.",
+  "hosted": "37751687697 failed in Java alignment after CLI JSON, independent Viterbi, Python/C ABI offset and invalid-accessor checks passed. Input UTF-8 conversion fixed; fresh hosted run required.",
   "cold_proof": "/mnt/storage/crispasr/issue490-characters-20261008/proof",
   "source_sha256": {
     "src/align.cpp": "3a09740cb1c4fdaa278c34e63dbd0a613479d13fd02172e436b40f76ab0e9ec8",
     "src/crispasr_aligner.cpp": "81df390db9bf2cd033c04722fd0a940a9d459eb307c1e829221580d46f287a3e",
     "src/crispasr_c_api.cpp": "186359ea4d75154951d6a0537526e9135268b72c7f136ab2020ae58857e42950",
     "tests/test-align-characters.cpp": "b5a54f96698ab5023c0f9f68823d62e7244b6b9a31d9b9050a318154a37bbbe5",
-    "tools/ci-heavy/issue490_characters.py": "cb93c069c94469e8b751a25c08634257c3f1f0182d7e92dce8ed8262356fcf0f",
-    "bindings/java/src/main/java/io/github/ggerganov/whispercpp/CrispasrSession.java": "e9c5750db2e4e8414efc09bcc3d0e15a7d5a68b863ff3515b0d262487342f89b",
-    "examples/cli/crispasr_run.cpp": "e3e2473be28022641a417f94e17ff0eaa2ceeaaad00a7632da90750187b70fc6"
+    "tools/ci-heavy/issue490_characters.py": "cea75bf6d062e1c325c4df13e2bdf21cb3ce2e840f5b707fb607c6d649afd45b",
+    "bindings/java/src/main/java/io/github/ggerganov/whispercpp/CrispasrSession.java": "68150442735208eebe18f38aa9e92aae760ef5115812ee0a8c8141292338cac5",
+    "examples/cli/crispasr_run.cpp": "e3e2473be28022641a417f94e17ff0eaa2ceeaaad00a7632da90750187b70fc6",
+    "tools/ci-heavy/Issue490Utf8.java": "9554a2b587121b0d41eccbaa366f21cce3d01d068feab41df532f3f724c9da36",
+    "tools/ci-heavy/issue490_jna_utf8.c": "b012772a2d7554c6a5bbb2511bcaf0e0425909a1979039013059f08180df0e2c"
   },
   "asan_ubsan": "41 assertions passed; no findings",
   "dart": "Dart 3.13.5 format: all 9 lib/test files pass; static analysis: No issues found",
@@ -33,7 +35,10 @@
   "java_encoding": {
     "before": "US-ASCII host JNA default corrupts UTF-8 Arabic word/character text; saved guard exits 1",
     "after": "JAVA_EXPLICIT_UTF8_PASS with US-ASCII JNA default; binding explicitly sets UTF-8",
-    "hosted_guard": "real Arabic Java/JNA acceptance forces US-ASCII host default"
+    "hosted_guard": "Run bidirectional guard before models/build; real Arabic Java acceptance keeps US-ASCII host default.",
+    "output_only_guard": "Earlier guard validated only returned text; it did not detect input corruption.",
+    "bidirectional_before": "Strict native UTF-8 input guard rejects old wrapper, exit 1, JAVA_UTF8_INPUT_REJECTED.",
+    "bidirectional_after": "Explicit input converter: JAVA_BIDIRECTIONAL_UTF8_PASS under US-ASCII, ISO-8859-1 and UTF-8, including Unicode model path, returned Arabic characters and centisecond offsets."
   },
   "hosted_first_attempt": {
     "run_id": 37746296873,
@@ -48,5 +53,18 @@
     "failure": "strict UTF-8 diagnostic read; printf precision cuts an Arabic codepoint",
     "fix": "reuse core_lid_probe::utf8_prefix; strict log decoding retained",
     "local_guard": "saved hosted log fails UTF-8 decode; fixed preview from identical transcript passes"
+  },
+  "hosted_second_attempt": {
+    "run_id": 37751687697,
+    "tested_merge": "8cbdcf0eed901492ec75498126c92b363ab33141",
+    "artifact_id": 11540345635,
+    "passed": false,
+    "words": 15,
+    "characters": 85,
+    "independent_viterbi": "exact character text/start/end",
+    "cli_word_segment_json_equal": true,
+    "python_cabi_offset_seconds": 3.25,
+    "failure": "JNA 5.13 scalar String input uses global US-ASCII despite per-library UTF-8 option; Arabic transcript becomes question marks",
+    "java_character_comparison": "not reached"
   }
 }
