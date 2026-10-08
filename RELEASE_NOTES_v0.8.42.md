@@ -247,8 +247,14 @@ Windows/Vulkan, Intel Mac and newer NVIDIA hardware retests remain open.
 
 The latest broad nightly `37768023710` also exposes a Q4 data2vec JFK word
 insertion (zero-WER gate fails at 4.55%; F16 stage cosine 0.999141 passes).
-A matched release/current and precision-control diagnostic `37786726672` is
-queued. This failure remains a release gate; no fixture or tolerance changed.
+Matched-host diagnostic `37786726672` confirms the old release Q4 output
+passed that native July capture, while Q8/F16 on both versions insert the A.
+The existing SHA-verified independent Python reference also decodes A. A
+pending correction makes the data2vec transcript gate check zero-WER upstream
+parity with a hash-verified reference/vocabulary/sample guard, and reports the
+unchanged 4.55% human WER separately. No weights, decoder, reference activations
+or numerical tolerance changed. Actual hosted regression validation is pending;
+this corrects the test target and does not claim improved model accuracy.
 
 Q4 MiMo follow-up: selective same-weight F32 promotion failed all five profiles
 in hosted run `37785711004` (artifact `11555262443`). The smallest pooling

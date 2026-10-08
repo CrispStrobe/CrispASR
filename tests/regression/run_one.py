@@ -368,6 +368,49 @@ def transcript_gate(entry: dict, actual: str) -> tuple[bool, list[str]]:
     return ok, [f"{verdict}  {gate}{suffix}", f"    expected: {expected!r}", f"    actual:   {actual!r}"]
 
 
+def verify_transcript_reference(entry: dict, reference: Path, sample: Path,
+                                work_dir: Path) -> str:
+    """Verify a transcript target against pinned, independent CTC logits.
+
+    This checks provenance before native inference. It cannot silently bless a
+    new native output by replacing the expected string. Human accuracy is
+    reported separately because upstream-model parity can include model errors.
+    """
+    import hashlib
+    from itertools import groupby
+    import gguf
+    import numpy as np
+
+    source = entry["transcript_reference"]
+    def check_hash(path: Path, expected: str):
+        with path.open("rb") as f:
+            h = hashlib.sha256()
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                h.update(chunk)
+            actual = h.hexdigest()
+        if actual != expected:
+            raise ValueError(f"Transcript reference SHA256 mismatch: {path.name}")
+    check_hash(reference, source["sha256"])
+    check_hash(sample, source["sample_sha256"])
+    pin = source["vocab"]
+    vocab_path = hf_download(pin["repo"], pin["file"], pin["revision"], work_dir)
+    check_hash(vocab_path, pin["sha256"])
+    vocab = json.loads(vocab_path.read_text())
+    inv = {i: text for text, i in vocab.items()}
+    reader = gguf.GGUFReader(str(reference))
+    logits = next(t.data for t in reader.tensors if t.name == source["stage"])
+    if logits.ndim != 2 or logits.shape[1] != len(vocab) or not np.isfinite(logits).all():
+        raise ValueError("Invalid independent CTC logit grid")
+    blank = vocab[source["blank_token"]]
+    ids = np.argmax(logits, axis=1).tolist()
+    decoded = "".join(inv[i] for i, _ in groupby(ids) if i != blank)
+    decoded = decoded.replace(source["word_delimiter_token"], " ").strip()
+    if _normalize_for_wer(decoded) != _normalize_for_wer(entry["expected_transcript"]):
+        raise ValueError(f"Transcript target disagrees with independent Python reference: {decoded!r}")
+    print(f"[transcript-reference] SHA256 verified; independent Python decode: {decoded!r}")
+    return decoded
+
+
 def regression_for(name: str, manifest: dict, work_dir: Path,
                    crispasr_bin: Path, diff_bin: Path) -> int:
     """Run one backend's regression. Return number of failures."""
@@ -425,6 +468,10 @@ def regression_for(name: str, manifest: dict, work_dir: Path,
 
     failures = 0
     skip_diff = entry.get("skip_diff", False)
+    if "transcript_reference" in entry:
+        if ref_local is None:
+            raise ValueError("Transcript provenance requires an independent reference dump")
+        verify_transcript_reference(entry, ref_local, sample, work_dir)
 
     # ----- 1. Transcript -----
     print(f"\n[transcript] {name}")
@@ -436,6 +483,9 @@ def regression_for(name: str, manifest: dict, work_dir: Path,
         print(ln)
     if not ok:
         failures += 1
+    if "human_reference_transcript" in entry:
+        _, human_wer = compute_transcript_metrics(entry["human_reference_transcript"], actual)
+        print(f"[human-accuracy/advisory] WER={human_wer:.4f}; upstream parity is a separate gate")
 
     # ----- 2. Diff harness -----
     if skip_diff:
@@ -777,6 +827,18 @@ def dry_run(manifest: dict, backend_filter: str | None = None) -> int:
                   f"{gguf_rev[:8]}::{gguf_file} not found")
             failures += 1
             continue
+
+        if "transcript_reference" in entry:
+            pin = entry["transcript_reference"]["vocab"]
+            try:
+                vocab_ok = api.file_exists(repo_id=pin["repo"], repo_type="model",
+                                           revision=pin["revision"], filename=pin["file"])
+            except HfHubHTTPError as exc:
+                vocab_ok = False
+                print(f"  {exc}")
+            if not vocab_ok:
+                print(f"  FAIL {name}: pinned transcript-reference vocabulary missing")
+                failures += 1
 
         dg = entry.get("diff_gguf")
         if dg and not entry.get("skip_diff", False):

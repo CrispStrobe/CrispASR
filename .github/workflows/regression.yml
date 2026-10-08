@@ -279,7 +279,7 @@ jobs:
           # needed on the CI side because reference dumps are pre-baked
           # and stored in HF, not regenerated.
           python -m pip install --upgrade pip
-          pip install huggingface_hub
+          pip install huggingface_hub numpy gguf
       - name: Authenticate HuggingFace (avoids 429 rate limit)
         if: env.HF_TOKEN != ''
         env:
