@@ -6198,5 +6198,8 @@ catch_discover_tests(test-moonshine-tokenizer TEST_SPEC "[unit]" PROPERTIES LABE
 # Exact CTC label spans, repeated Unicode letters and JSON; no models needed.
 add_executable(test-align-characters test-align-characters.cpp ${PROJECT_SOURCE_DIR}/src/align.cpp)
 target_include_directories(test-align-characters PRIVATE ${PROJECT_SOURCE_DIR}/src)
+if(MSVC)
+    target_compile_options(test-align-characters PRIVATE /utf-8)
+endif()
 add_test(NAME test-align-characters COMMAND test-align-characters)
 set_tests_properties(test-align-characters PROPERTIES LABELS "unit;align")
