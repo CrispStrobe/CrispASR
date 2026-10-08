@@ -83,3 +83,10 @@ standard tokenizer. A missing stage fails. This verifies native wrapper
 execution against an independent Python driver using the same deployed graphs;
 it does not establish exporter parity against the original PyTorch checkpoint.
 The older two-graph export and GGUF checkpoint use separate acceptance checks.
+
+The `Moonshine ONNX and native stream acceptance` workflow runs these checks
+on relevant pull requests and main changes. It downloads each isolated German
+bundle from an empty cache, checks real CLI/C ABI speech output, compares all
+four five-graph variants against the Python driver, and replays Nemotron/Qwen
+streams with different PCM packet sizes. This optional SDK configuration is
+therefore tested even though ordinary builds do not enable ONNX Runtime.

@@ -158,6 +158,8 @@ for variant, expected_kind in variants:
                    '-ng', '-t', '4', '-l', 'de', '-f', wav, '-otxt', '-of', prefix], variant)
         cli_text = prefix.with_suffix('.txt').read_text().strip()
         assert cli_text
+        recognized = set(re.findall(r'[^\W\d_]+', cli_text.lower()))
+        assert len(recognized & {'morgen', 'sitzung', 'heute', 'neun', 'großen', 'saal'}) >= 4, cli_text
         # Find the exact primary from the model-specific cache, not a generic filename.
         if native:
             model = Path(model_arg)
