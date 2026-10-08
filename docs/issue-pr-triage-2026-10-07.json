@@ -1,6 +1,6 @@
 {
   "source_commit": "33aa375be434edaa5f12fad81e6b86272faf23fc",
-  "scope": "Integrated narrow source fixes; native/regression/WASM acceptance passed; Orukeet speech rerun queued after adding required licence acceptance",
+  "scope": "Integrated narrow fixes; native/regression/WASM and Orukeet CPU speech acceptance passed; PR515 review branch pending hosted validation",
   "filename_routing": {
     "passed": true,
     "scope": "Actual factory translation unit; filename routing only; existing ggml linked for metadata fallback, no model inference",
@@ -767,5 +767,76 @@
     "cfm_ms_per_step": 99.5,
     "quality": "Reporter hears poorer audio at eight steps than ten; ten stays default",
     "scope": "Reporter measurements; not a controlled same-session A/B"
+  },
+  "orukeet_acceptance": {
+    "passed": true,
+    "source_commit": "4b45fec39ff603ad68bad0435c733e41695bfe10",
+    "model_repo": "cstr/orukeet-GGUF",
+    "model_revision": "2a93474c2771a6ca2228a7e001bd06ce0c97f880",
+    "model_sha256": "769f346e3960de76afabcb82670b9d0d78c91051bc030be82e77eac45a7075be",
+    "baseline_release": "v0.8.41",
+    "baseline_reproduced": true,
+    "license_refusal_verified": true,
+    "accepted_license": "cc-by-sa-4.0",
+    "transcripts": {
+      "download": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "cached": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "filename": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "explicit": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "abi_anonymous": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    "scope": "CPU; same-Q4 cross-surface routing; no new numerical/performance claim",
+    "run_id": 37728843835
+  },
+  "pr515_review": {
+    "source_commit": "171dd9da905cb3fa4f5318e3666fe4d88197c323",
+    "merged": false,
+    "offline_bundle_probe": [
+      {
+        "variant": "moonshine-streaming-tiny-de-onnx",
+        "requests": 8,
+        "cached_requests": 0,
+        "passed": true
+      },
+      {
+        "variant": "moonshine-streaming-small-de-onnx",
+        "requests": 8,
+        "cached_requests": 0,
+        "passed": true
+      },
+      {
+        "variant": "moonshine-streaming-tiny-de-onnx-f32",
+        "requests": 8,
+        "cached_requests": 0,
+        "passed": true
+      },
+      {
+        "variant": "moonshine-streaming-small-de-onnx-f32",
+        "requests": 8,
+        "cached_requests": 0,
+        "passed": true
+      },
+      {
+        "variant": "moonshine-tiny-de-phreak87-onnx",
+        "requests": 4,
+        "cached_requests": 0,
+        "passed": true
+      },
+      {
+        "variant": "moonshine-tiny-de-dattazigzag",
+        "requests": 2,
+        "cached_requests": 0,
+        "passed": true
+      },
+      {
+        "case": "failed companion rejected; authorized cached repair succeeds",
+        "passed": true
+      }
+    ],
+    "queued_runs": {
+      "cpu": 37730264543,
+      "ci": 37730267002,
+      "regression": 37730269519
+    }
   }
 }

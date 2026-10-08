@@ -81,10 +81,23 @@ Four actual resolver cases pass (CC-BY-SA/CC-BY-NC, cached/uncached), and the
 old source reproduces the incorrect CC-BY-SA notice.
 
 [Revised Orukeet CPU acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37728843835)
-is queued at `4b45fec39ff603ad68bad0435c733e41695bfe10`. It first checks
-refusal without download or a false noncommercial notice, then explicitly
-accepts CC-BY-SA and checks the real download/cache/path/anonymous C ABI speech
-and released-binary negative control. #491 remains open pending that result.
+passed at `4b45fec39ff603ad68bad0435c733e41695bfe10`. Fresh download,
+cached short name, filename, explicit path and anonymous C ABI all return
+identical JFK text. The pinned Q4 model is revision
+`2a93474c2771a6ca2228a7e001bd06ce0c97f880`, SHA-256
+`769f346e3960de76afabcb82670b9d0d78c91051bc030be82e77eac45a7075be`.
+Released v0.8.41 reproduces the original failure. Missing licence acceptance
+refuses without downloading. This proves routing and speech acceptance across
+those surfaces, not new numerical parity or speed.
+
+PR #515 validation branch `171dd9da905cb3fa4f5318e3666fe4d88197c323`
+preserves author commits. Review found and fixed missing companions on named
+CLI downloads, variant-confused extras and silent companion failures. Actual
+resolver/CLI offline checks pass six isolated bundles, cache reuse, failure
+rejection and repair. Fresh [CPU acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37730264543),
+[native CI](https://github.com/CrispStrobe/CrispASR/actions/runs/37730267002) and
+[regression](https://github.com/CrispStrobe/CrispASR/actions/runs/37730269519)
+are queued; #515 remains unmerged pending validation.
 
 The earlier native CI dispatch `37703783152` was superseded by the apt-fixed
 source dispatch. Original proof source and queued-run commits remain reachable

@@ -6,7 +6,7 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
-## DONE 2026-10-07 — narrow issue/PR source integration; hosted acceptance pending
+## DONE 2026-10-07 — narrow issue/PR integration and Orukeet speech acceptance
 
 Orukeet short-name routing now reaches the registry/Parakeet backend (#491).
 Actual factory checks pass 14/14; old source fails the six Orukeet cases. PRs
@@ -22,10 +22,13 @@ the Node note-binding smoke reports three assertions. Deep lint found an
 uninitialized Hikari token probability; fixed in `4b45fec39` (focused
 Hikari-enabled cppcheck passes). The initial Orukeet heavy run passed 5,988
 registry assertions then stopped at the existing licence gate: the validation
-command omitted explicit acceptance. A corrected run is queued, with an added
-refusal/no-download control. Corrected CLI notices distinguish CC-BY-SA from
-CC-BY-NC without changing acceptance policy (four actual resolver cases pass).
-Orukeet speech/cache/C ABI acceptance remains pending; no new GPU timing claim. [Full triage, remaining threads and exact runs](docs/issue-pr-triage-2026-10-07.md).
+command omitted explicit acceptance. Corrected CPU acceptance `37728843835` passes at `4b45fec39`: download,
+cached short name, filename, explicit path and anonymous C ABI emit identical
+JFK text with the pinned Q4 model. Released v0.8.41 reproduces the routing bug;
+refusal without licence acceptance performs no download. Corrected CLI notices
+distinguish CC-BY-SA from CC-BY-NC without changing acceptance policy.
+Full deep lint rerun is pending; no new GPU timing claim.
+[Full triage, remaining threads and exact runs](docs/issue-pr-triage-2026-10-07.md).
 No release/tag was cut; #492 and #515 remain unmerged.
 
 ## DONE 2026-10-06 — Live translation speed-ups, Opus-MT backend, nemotron streaming encoder

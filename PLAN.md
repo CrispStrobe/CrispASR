@@ -18,33 +18,35 @@ Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
 `2bf39c58a53160ed10aed82d5d621c794dc32bba`, preserve author commits,
 and test on current main with bounded APT setup. Inspect packet/flush and
 UTF-8 behavior, German ONNX model/companion/licence routing, C ABI and bindings.
-Orukeet acceptance `37728843835` is now running; collect it alongside this work.
-Do not merge #515 before the required review and validation pass.
+Validation branch `171dd9da905cb3fa4f5318e3666fe4d88197c323` preserves the
+author commits. Review found named-model downloads omitted companions and
+selected extras by runtime rather than matched variant. Fixed on the branch;
+actual resolver/CLI offline checks pass six isolated bundles, cache reuse,
+failed-companion rejection and cached repair. Hosted CPU acceptance
+[37730264543](https://github.com/CrispStrobe/CrispASR/actions/runs/37730264543),
+native CI [37730267002](https://github.com/CrispStrobe/CrispASR/actions/runs/37730267002)
+and regression [37730269519](https://github.com/CrispStrobe/CrispASR/actions/runs/37730269519)
+are queued. CPU acceptance covers six German deployments, Nemotron/Qwen
+packet partitioning, UTF-8 retries, flush and C ABI loading. These are acceptance
+checks; per-stage numerical parity is not claimed. Do not merge #515 before
+required review and validation pass.
 
-## OPEN 2026-10-08 — Orukeet speech acceptance rerun and deep lint
+## OPEN 2026-10-08 — final main checks and remaining triage
 
-Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`.
+Orukeet CPU acceptance [37728843835](https://github.com/CrispStrobe/CrispASR/actions/runs/37728843835)
+passed at `4b45fec39ff603ad68bad0435c733e41695bfe10`: fresh download,
+cached short name, filename, explicit path and anonymous C ABI all produce
+identical speech text. Released v0.8.41 reproduces #491; missing licence
+acceptance refuses without downloading. Proof is in the triage receipt.
+
 Integrated #496/#514 source and APT setup pass native CI `37704656972`,
 regression `37704657102`, lint `37704656959` and five WASM builds
 `37704657094` on `d754aa10a`; Node emits three note-binding assertions.
-Lint Deep `37704657127` found an uninitialized Hikari token probability:
-fixed in `4b45fec39` with the established unavailable-confidence value 1.0.
-Focused cppcheck with Hikari enabled passes; full hosted deep lint must rerun.
-
-Orukeet heavy `37703780788` built and passed 5,988 registry assertions,
-then refused the missing CC-BY-SA acceptance. Revised heavy `37728843835`
-at `4b45fec39ff603ad68bad0435c733e41695bfe10` is queued, now with explicit
-acceptance plus a refusal/no-download control. Also fixed misleading CLI
-noncommercial notices without changing licence policy: actual CC-BY-SA and
-CC-BY-NC cached/uncached resolver checks pass 4/4. #491 stays open until
-speech/download/cache/anonymous C ABI acceptance passes. Exact scope and
-results: [triage report](docs/issue-pr-triage-2026-10-07.md) and its receipt.
-Cold proof: `/mnt/storage/crispasr/triage-20261007/`.
-
-Next: harvest that run and final main CI; fix failures before closing #491.
+Lint Deep found an uninitialized Hikari probability, fixed in `4b45fec39`;
+focused cppcheck passes. Full hosted rerun `37729063238` is in progress.
+No new GPU performance claim. Cold proof: `/mnt/storage/crispasr/triage-20261007/`.
 #490 Arabic character alignment and #483's forced-MMQ experiment remain doable.
-#492 MiMo/CANN needs numerical/output acceptance; #515 streaming/ONNX needs
-review and regression reruns on the APT-fixed base. Neither is merged.
+#492 MiMo/CANN needs numerical/output acceptance. #492/#515 remain unmerged.
 
 ## OPEN 2026-10-05 — live transcribe + translate: follow-ups
 
