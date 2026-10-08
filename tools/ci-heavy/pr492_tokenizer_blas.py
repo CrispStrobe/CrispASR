@@ -65,12 +65,21 @@ def main():
     save()
     try:
         source.write_text(patched)
+        # Link only the actual tokenizer object and its ggml dependencies.
+        # Unrelated ASR backends and Rust/C2PA are outside this experiment.
+        wrapper = scratch / 'wrapper'
+        wrapper.mkdir(exist_ok=True)
+        (wrapper / 'entry.cpp').write_text('#include "mimo_tokenizer.h"\nextern "C" int mimo_probe_threads() { return mimo_tokenizer_context_default_params().n_threads; }\n')
+        (wrapper / 'add-probe.cmake').write_text(f'function(mimo_diag_add_probe)\n  add_library(mimo_tokenizer_probe SHARED "{wrapper / "entry.cpp"}")\n  target_link_libraries(mimo_tokenizer_probe PRIVATE mimo_tokenizer)\nendfunction()\ncmake_language(DEFER CALL mimo_diag_add_probe)\n')
         build = scratch / 'build'
         run(['cmake', '-S', ROOT, '-B', build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
              '-DBUILD_SHARED_LIBS=ON', '-DGGML_NATIVE=OFF', '-DGGML_BLAS=ON', '-DGGML_BLAS_VENDOR=OpenBLAS',
-             '-DCRISPASR_MEL_BLAS=OFF', '-DCRISPASR_BUILD_SERVER=OFF', '-DCRISPASR_BUILD_TESTS=OFF'], out / 'configure.log')
-        run(['cmake', '--build', build, '--target', 'crispasr-lib', '-j4'], out / 'build.log')
-        library = next(build.rglob('libcrispasr.so'))
+             '-DCRISPASR_MEL_BLAS=OFF', '-DCRISPASR_BUILD_SERVER=OFF', '-DCRISPASR_BUILD_TESTS=OFF',
+             '-DCRISPASR_BUILD_EXAMPLES=OFF',
+             f"-DCMAKE_PROJECT_crispasr_INCLUDE={wrapper / 'add-probe.cmake'}"], out / 'configure.log')
+        run(['cmake', '--build', build, '--target', 'mimo_tokenizer_probe', '-j4'], out / 'build.log')
+        library = build / 'libmimo_tokenizer_probe.so'
+        assert library.is_file()
         (out / 'CMakeCache.txt').write_bytes((build / 'CMakeCache.txt').read_bytes())
         os.environ.update(MIMO_TOKENIZER_DIAG_LIB=str(library), CRISPASR_DIAG_MIMO_BLAS='1')
         # The complete diagnostic generates an official reference on the native
