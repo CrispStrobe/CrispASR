@@ -60,9 +60,14 @@ for target in ['test-moonshine-tokenizer', 'test-qwen3-stream', 'test-registry']
 run([sys.executable, ROOT / 'tools/check-backend-wiring.py', '--crispasr', build / 'bin/crispasr'], 'wiring')
 
 manifest = json.loads((ROOT / 'tests/regression/manifest.json').read_text())
+# This later fixture is absent from the global regression revision. Pin it
+# independently; do not advance every backend's oracle to fetch one audio clip.
+fixture_revision = 'e9a1bd899e6b46f8a624aec05fc605c5461b13db'
 fixture = hf_hub_download(manifest['fixtures']['repo'], 'orukeet/de/ref.gguf',
-                         repo_type='dataset', revision=manifest['fixtures']['revision'],
+                         repo_type='dataset', revision=fixture_revision,
                          local_dir=SCRATCH / 'fixture')
+assert hashlib.sha256(Path(fixture).read_bytes()).hexdigest() == (
+    '09fb97f8a2ed2ea4eb6a513177602fb16949a3ca9ddca923007922240c199a5d')
 reader = gguf.GGUFReader(fixture)
 pcm = next(np.array(t.data, dtype=np.float32).reshape(-1) for t in reader.tensors if t.name == 'raw_audio')
 del reader
@@ -73,7 +78,7 @@ with wave.open(str(wav), 'wb') as f:
 # Feed exactly the same PCM as the CLI's PCM16 WAV reader.
 pcm = (np.frombuffer(wav.read_bytes()[44:], dtype='<i2').astype(np.float32) / 32768).copy()
 results['audio_sha256'] = hashlib.sha256(wav.read_bytes()).hexdigest()
-results['fixture_revision'] = manifest['fixtures']['revision']
+results['fixture_revision'] = fixture_revision
 
 sys.path.insert(0, str(ROOT / 'python'))
 from crispasr import Session
