@@ -104,10 +104,12 @@ struct mimo_asr_graph_profile {
         last = std::chrono::steady_clock::now();
     }
     void graph(ggml_backend_sched_t sched, ggml_cgraph* gf, bool cached) {
-        if (enabled)
-            std::fprintf(stderr, "mimo_asr_graph: path=%s past=%d nodes=%d splits=%d copies=%d cached=%d\n", path,
-                         n_past, ggml_graph_n_nodes(gf), ggml_backend_sched_get_n_splits(sched),
+        if (enabled) {
+            std::fprintf(stderr, "mimo_asr_graph: path=%s past=%d nodes=%d splits=%d pipeline_copies=%d cached=%d\n",
+                         path, n_past, ggml_graph_n_nodes(gf), ggml_backend_sched_get_n_splits(sched),
                          ggml_backend_sched_get_n_copies(sched), cached ? 1 : 0);
+            last = std::chrono::steady_clock::now();
+        }
     }
 };
 
