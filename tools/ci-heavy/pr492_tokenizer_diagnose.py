@@ -96,12 +96,34 @@ def official_classes(scratch, receipt):
                PretrainedConfig=PretrainedConfig, wraps=wraps,
                is_torch_available=is_torch_available, logging=logging,
                logger=logging.get_logger(__name__))
+    attention_call = 0
     def flash(q, k, v, cq, ck, mq, mk, causal=False, window_size=(-1, -1)):
+        nonlocal attention_call
         assert not causal and tuple(window_size) == (-1, -1)
         assert cq.tolist() == ck.tolist() == [0, q.shape[0]]
         a = F.scaled_dot_product_attention(q.transpose(0, 1)[None], k.transpose(0, 1)[None],
                                           v.transpose(0, 1)[None], dropout_p=0.0, is_causal=False)
-        return a[0].transpose(0, 1).contiguous()
+        result = a[0].transpose(0, 1).contiguous()
+        capture = os.environ.get('MIMO_DIAG_QKV_OUT')
+        if capture and attention_call in [0, 15, 31]:
+            dest = Path(capture) / f'layer-{attention_call:02d}'
+            dest.mkdir(parents=True, exist_ok=True)
+            for name, x in [('q', q), ('k', k), ('v', v)]:
+                # ggml (D,T,H), contiguous; Python original is (T,H,D).
+                packed = x.permute(1, 0, 2).contiguous().numpy()
+                packed.tofile(dest / (name + '.bin'))
+                packed.astype(np.float16).astype(np.float32).tofile(dest / ('half-' + name + '.bin'))
+            result.numpy().tofile(dest / 'python.bin')
+            rounded = F.scaled_dot_product_attention(
+                q.half().float().transpose(0, 1)[None], k.half().float().transpose(0, 1)[None],
+                v.half().float().transpose(0, 1)[None], dropout_p=0.0, is_causal=False)
+            rounded[0].transpose(0, 1).contiguous().numpy().tofile(dest / 'python-half.bin')
+            (dest / 'shape.json').write_text(json.dumps(dict(shape=list(q.shape),
+                source='pinned official Attention.forward on native conv2 input',
+                layer=attention_call, inputs={name: digest(dest / (name + '.bin'))
+                for name in ['q', 'k', 'v']}), indent=2) + '\n')
+        attention_call += 1
+        return result
     env['flash_attn_varlen_func'] = flash
     for filename, names in [
         ('modeling_rope_utils.py', {'dynamic_rope_update', '_compute_default_rope_parameters',
