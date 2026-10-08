@@ -3133,3 +3133,22 @@ This is a modest 2.5–3.6% speed gain on this pair of actual Tesla T4s, with
 same native F16 weights/runtime and initial + three warm calls per clip in
 both orders. Decoder generation accounts for most of the saving. The gate
 remains opt-in; other hardware and batched workloads need their own evidence.
+
+## Opt-in shared mel projection (2026-10-08)
+
+`CRISPASR_MEL_PROJECTION_PARALLEL=1` enables independent OpenMP frame rows
+for the scalar projection at T>=64. Default OFF; no-OpenMP builds and shorter
+inputs retain serial projection. Float BLAS bypasses this scalar path.
+
+Hosted four-thread validation passed 144 exact ABBA cases (six frame lengths,
+two layouts, float/double, 1/2/4 threads, OpenMP on/off), plus unchanged pinned
+Qwen3 reference stage gates and exact CLI output with BLAS disabled. At 64
+frames projection gains were 3.30–3.58×, total component 1.59–1.73×; at 3000
+frames projection gains were 3.05–3.50×, total component 2.44–2.66×. These are
+component timings, not end-to-end ASR gains. The contended local VPS regressed
+at 64 frames, so there is no universal minimum useful size or default-on claim.
+Measure on the deployment machine. Receipt: `docs/mel-projection-2026-10-08.json`;
+[hosted validation](https://github.com/CrispStrobe/CrispASR/actions/runs/37852305513).
+
+The independent projection change retains KokerZhou's original authorship
+from PR #492; its separate MiMo/CANN changes are not included here.
