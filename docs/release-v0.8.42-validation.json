@@ -51,7 +51,313 @@
   "regression_runtime_tests_ggml_identical": true,
   "pr492": "Unmerged and excluded; production defaults unchanged",
   "binary_assets_at_publication": [],
-  "binary_publication_status": "Build workflows started; not yet verified available",
+  "binary_publication_status": "Partial: remaining platform jobs pending",
   "notes_in_tag": "RELEASE_NOTES_v0.8.42.md",
-  "release_workflow": "https://github.com/CrispStrobe/CrispASR/actions/runs/37850360339"
+  "release_workflow": "https://github.com/CrispStrobe/CrispASR/actions/runs/37850360339",
+  "binary_assets_observed": [
+    {
+      "name": "crispasr-android-arm64-v8a.tar.gz",
+      "size": 58315842,
+      "digest": "sha256:9e50240a74b6674ed3ec36a48846e04acba16095d5206aced3f5ed0eb9e1e4ba",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-android-arm64-v8a.tar.gz"
+    },
+    {
+      "name": "crispasr-linux-arm64.tar.gz",
+      "size": 35803285,
+      "digest": "sha256:2d75644e943dc2d02f519b3c24fd44d190af85c32eb89ae7c560ca11a7408ce1",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-linux-arm64.tar.gz"
+    },
+    {
+      "name": "crispasr-linux-x86_64-cpu-legacy.tar.gz",
+      "size": 42488451,
+      "digest": "sha256:83475071ef597db5014c412bcc3ae226320b660da01654a5762566de4e192992",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-linux-x86_64-cpu-legacy.tar.gz"
+    },
+    {
+      "name": "crispasr-linux-x86_64-vulkan.tar.gz",
+      "size": 70722373,
+      "digest": "sha256:355f6af387e4073aecbda95465da8f605c1621a74671ede7935f95e2aad42fe0",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-linux-x86_64-vulkan.tar.gz"
+    },
+    {
+      "name": "crispasr-linux-x86_64.tar.gz",
+      "size": 42812132,
+      "digest": "sha256:1b942bb9bd85f9e732bb3c222dbc97a644d50a8f3a4378b1507d121fae39e91f",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-linux-x86_64.tar.gz"
+    },
+    {
+      "name": "crispasr-macos-arm64.tar.gz",
+      "size": 18008551,
+      "digest": "sha256:87899a6a32af2055da5267bb366b51be9c5478bbf9dd0195334f4af6f0cbb773",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-macos-arm64.tar.gz"
+    },
+    {
+      "name": "crispasr-macos-x86_64-cpu-legacy.tar.gz",
+      "size": 18281365,
+      "digest": "sha256:a828d2f85b67a2e2d5e638023a880bc9439e8fb00f3ed9ed43f83963e1499121",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-macos-x86_64-cpu-legacy.tar.gz"
+    },
+    {
+      "name": "crispasr-macos-x86_64.tar.gz",
+      "size": 18497013,
+      "digest": "sha256:cdbcdc60af6c5579965bdf6463eb6789f1b008e5ab8c83b878b696920e33ee1d",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-macos-x86_64.tar.gz"
+    },
+    {
+      "name": "crispasr-macos.tar.gz",
+      "size": 18008547,
+      "digest": "sha256:ad0d520ba9c899f44c2f838d076de9c1289ff5600fa4262b6bdcd5cb86ab8668",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-macos.tar.gz"
+    },
+    {
+      "name": "crispasr-python-linux-arm64.tar.gz",
+      "size": 9865067,
+      "digest": "sha256:7869f4e793872794579739834c31d8fe420e186feee6dd7bc3098641754fea27",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-python-linux-arm64.tar.gz"
+    },
+    {
+      "name": "crispasr-wasm.tar.gz",
+      "size": 4179109,
+      "digest": "sha256:3197858a8cba6775e51d3104a01b1d1c744e0fc05b0771a08b55f02e0f74cd0f",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-wasm.tar.gz"
+    },
+    {
+      "name": "crispasr-windows-x86_64-cpu-legacy.zip",
+      "size": 8509879,
+      "digest": "sha256:b27923bbd836656facf2d3dd6ec46fd26802f3172a7c3a2c6c768e3f3c493072",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-windows-x86_64-cpu-legacy.zip"
+    },
+    {
+      "name": "crispasr-windows-x86_64-cpu.zip",
+      "size": 9083292,
+      "digest": "sha256:b8d9102f695238c04d5c676098c8af60d40010396ff25ac5f9aadcc3d00ea7c5",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-windows-x86_64-cpu.zip"
+    },
+    {
+      "name": "crispasr-windows-x86_64-vulkan.zip",
+      "size": 35983685,
+      "digest": "sha256:9239e36be77daad03e02a4d6479445a06657e831daf9ca254a5c776937e541fa",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/crispasr-windows-x86_64-vulkan.zip"
+    },
+    {
+      "name": "libcrispasr-linux-arm64.tar.gz",
+      "size": 17094798,
+      "digest": "sha256:92a4d2713ee2b8649d9062b75ed595a5d94271a7b248c043c52b46c204fcc05b",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/libcrispasr-linux-arm64.tar.gz"
+    },
+    {
+      "name": "libcrispasr-linux-x86_64-avx512.tar.gz",
+      "size": 22557571,
+      "digest": "sha256:b1a1dba174bfc9a0192612d1448d932a1c8e64ba6158fcb02c16135eb55ff498",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/libcrispasr-linux-x86_64-avx512.tar.gz"
+    },
+    {
+      "name": "libcrispasr-linux-x86_64.tar.gz",
+      "size": 22499348,
+      "digest": "sha256:d3b1da69460a3078a9cc85d8c4feb5396410621f6e264f21f831366e4b07d791",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/libcrispasr-linux-x86_64.tar.gz"
+    },
+    {
+      "name": "libcrispasr-macos-arm64.tar.gz",
+      "size": 9113817,
+      "digest": "sha256:51dde98b136b6e98a1a37e286015445c84b37fd2ac764b83545e47a531aa45da",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/libcrispasr-macos-arm64.tar.gz"
+    },
+    {
+      "name": "libcrispasr-windows-x86_64-cpu-legacy.tar.gz",
+      "size": 57651474,
+      "digest": "sha256:841445ac58905c21b9245a112f0a08c5ba65ea7d52454def7eb0d6c342b939dd",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/libcrispasr-windows-x86_64-cpu-legacy.tar.gz"
+    },
+    {
+      "name": "libcrispasr-windows-x86_64-vulkan.tar.gz",
+      "size": 86146438,
+      "digest": "sha256:f569dcdbc0c6bd9b21df5750f102ef8fa6fc9385cf221d0fe332f313857f610b",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/libcrispasr-windows-x86_64-vulkan.tar.gz"
+    },
+    {
+      "name": "libcrispasr-windows-x86_64.tar.gz",
+      "size": 57784359,
+      "digest": "sha256:b1306aab507f30a4d4e6ef45d4fcee6b4d7d66d02c6c6978f5b819cb429427f3",
+      "url": "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.42/libcrispasr-windows-x86_64.tar.gz"
+    }
+  ],
+  "binary_jobs_observed": [
+    {
+      "name": "build-linux",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "validate-glint-fresh",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-libs-windows-x86_64-vulkan",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-linux-cpu-legacy",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-python-linux-arm64",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-windows-cuda (12.6.3, cuda126, 60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-r...",
+      "status": "in_progress",
+      "conclusion": ""
+    },
+    {
+      "name": "build-linux-x86_64-hip",
+      "status": "in_progress",
+      "conclusion": ""
+    },
+    {
+      "name": "build-linux-arm64",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-macos",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-linux-x86_64-cuda13",
+      "status": "in_progress",
+      "conclusion": ""
+    },
+    {
+      "name": "build-windows-vulkan",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-android-arm64",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-libs-windows-x86_64",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-windows-cpu",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-macos-x86_64 (legacy, crispasr-macos-x86_64-cpu-legacy)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "validate-version",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-libs-linux-x86_64-hip",
+      "status": "in_progress",
+      "conclusion": ""
+    },
+    {
+      "name": "build-wasm",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-libs-linux-x86_64-cuda",
+      "status": "in_progress",
+      "conclusion": ""
+    },
+    {
+      "name": "build-libs-linux-x86_64",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-windows-cpu-legacy",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-python-linux",
+      "status": "queued",
+      "conclusion": ""
+    },
+    {
+      "name": "build-windows-cuda13",
+      "status": "in_progress",
+      "conclusion": ""
+    },
+    {
+      "name": "build-libs-linux-x86_64-avx512",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-linux-x86_64-vulkan",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-libs-linux-arm64",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-macos-x86_64 (avx2, crispasr-macos-x86_64)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-libs-windows-x86_64-cuda (12.8.0, cuda, 60-real;61-real;70-real;75-real;80-real;86-real;89-...",
+      "status": "in_progress",
+      "conclusion": ""
+    },
+    {
+      "name": "build-linux-x86_64-cuda",
+      "status": "in_progress",
+      "conclusion": ""
+    },
+    {
+      "name": "build-libs-macos-arm64",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-libs-windows-x86_64-cpu-legacy",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "name": "build-linux-x86_64-avx512",
+      "status": "queued",
+      "conclusion": ""
+    },
+    {
+      "name": "build-windows-cuda (12.8.0, cuda, 60-real;61-real;70-real;75-real;80-real;86-real;89-real;90-real...",
+      "status": "in_progress",
+      "conclusion": ""
+    },
+    {
+      "name": "build-libs-windows-x86_64-cuda (12.6.3, cuda126, 60-real;61-real;70-real;75-real;80-real;86-real;...",
+      "status": "in_progress",
+      "conclusion": ""
+    },
+    {
+      "name": "build-xcframework",
+      "status": "in_progress",
+      "conclusion": ""
+    }
+  ],
+  "binary_publication_observed_at": "2026-10-08T23:02:51.983753+00:00"
 }

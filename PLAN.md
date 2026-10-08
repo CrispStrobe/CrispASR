@@ -16,7 +16,15 @@ it goes stale for more than a day.
 Owner: this maintainer session. Worktrees under
 `/mnt/storage/crispasr/salvage-20261008/`: `mel` (`fix/mel-projection-salvage`),
 `omnivoice` (`fix/omnivoice-postprocess-518`), `echo` (`fix/echo-q4-public-transfer`),
-and `profile` (`perf/mimo-voxcpm-profile`). PR #492 diagnostics remain in
+and `profile` (`perf/mimo-voxcpm-profile`). A fifth worktree `lm`
+(`diag/mimo-lm-first-divergence`) isolates the Q4 LM non-flash study.
+A sixth worktree `mimo-integration` (`fix/mimo-gpu-cached-decode`) will isolate
+only the validated MiMo instrumentation/cached-step changes from VoxCPM2's
+still-pending rate/step repairs, for native CI and integration review.
+Isolated draft [PR #519](https://github.com/CrispStrobe/CrispASR/pull/519) is
+pushed at `087b34e15`. Native/worker file SHA256s match the GPU-tested source
+exactly. Await native CI before integration; v0.8.42 excludes these changes.
+PR #492 diagnostics remain in
 `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`.
 
 Authorized order: extract the author's independent mel projection change with
@@ -32,6 +40,123 @@ substitute or combined-speed attribution. All large scratch/proof/model files
 stay on `/mnt/storage`; GH CPU and one-account Kaggle GPU protocol apply.
 Archive only code-audited completed PLAN claims; preserve remaining hardware
 retests and deferred #456. Check release asset publication separately.
+
+MiMo graph-phase profile is pushed and Kaggle v1 launched:
+[crispasr-mimo-graph-profile](https://www.kaggle.com/code/chr1s4/crispasr-mimo-graph-profile).
+Numeric/source pin `b8ab3249d`, uploaded harness `9c978485d`; script SHA and
+actual hardware/submodules/build flags are recorded by the kernel. Production
+Q4 files/arithmetic and defaults stay unchanged. Exact CLI/session EN/ZH
+outputs must agree across ABBA profiling toggles (two warmups/six measured
+calls per clip/process). Timings separate host inputs, graph build, scheduler
+allocation, input preparation/upload, synchronous compute and readback;
+scheduler pipeline-copy multiplicity is not a transfer count. No speedup
+claim from instrumentation. v1 COMPLETE on Tesla T4: all 64 speech calls and
+eight CLI/session pairs agree exactly. Twelve measured calls/clip/mode:
+EN profiling off/on 3.11777/3.12138s, ZH 1.34072/1.34077s (medians).
+Decode medians including warmups: compute 95.85ms, allocation 1.277ms,
+graph build 0.509ms, readback 0.199ms, inputs 0.030ms; 13 scheduler splits.
+Graph caching alone has a modest ceiling (~1.8% summed decode phase time).
+All terminal files archived, public proof and refreshed actual-Kaggle cache
+pinned in `docs/mimo-graph-profile-2026-10-08.json`. Inspect compute dispatch
+and avoid the redundant GPU prefill/audio route before proposing a speedup.
+Next experiment in the same claimed profile worktree: opt-in cached GPU T=1
+decode using the existing in-graph CPU embedding gather and device KV scatter,
+with the working prefill route retained. Compare every step logit vector
+(norms/relative L2), all CLI/session outputs and ABBA warm timings on actual
+CUDA; do not flip the default or claim P100/other backend support from T4.
+Q4 LM layer diagnostic `47b661df1` is pushed separately; its seven boundaries
+in layers 0/1/4/8/16/24/35 start from byte-identical frozen Python fused inputs,
+with CPU flash/eager and BLAS controls and untouched canonical-stage probes.
+Native diagnostic source syntax and Python compile checks pass. GH CPU run
+[37855479658](https://github.com/CrispStrobe/CrispASR/actions/runs/37855479658)
+is queued; results are not original-checkpoint or decoded-output acceptance.
+The opt-in GPU experiment is pushed at `e15801570`, uploaded harness
+`c8696de18`, and Kaggle graph-profile v2 launched after archiving v1.
+It compares full step logits (cosine >.999999, relative L2 <.001, norms and
+exact argmax), 64 speech calls, eight CLI/session pairs and ABBA timings.
+Logit dumps occur only in the first excluded warmup. Default OFF; GPU result
+pending. The kernel warms the refreshed actual-Kaggle sm75 cache.
+v2 CUDA acceptance now PASS on T4: all 64 calls/eight CLI pairs exact;
+27 EN and 11 ZH full-vocabulary logit vectors are byte-identical across all
+four ABBA arms (relative L2 zero, norms identical). Warm medians legacy/cached:
+EN 3.29871/3.21258s (1.0268×), ZH 1.42840/1.39455s (1.0243×).
+This is a modest 2.4–2.7% gain, not a large acceleration. Terminal archive
+is complete; public proof revision `deceb2e18592ade7ab56094d7158e4fbf47e81f5`
+and refreshed cache `c099a5cab320f929ca8c67171362eea158662009` are pinned in
+`docs/mimo-gpu-cached-step-2026-10-08.json`. Local archival verification checks
+all 114 full-vocabulary array comparisons byte-exact. GPU process peaks
+4,932/4,950 MiB (sampled lower bounds). Isolated integration CI is pending. Keep opt-in OFF by default and retain the working GPU route.
+
+VoxCPM2 ten-step Vulkan profile v1 launched at source `ece203528`, harness
+`323a568ca`: [kernel](https://www.kaggle.com/code/chr1s4/crispasr-voxcpm2-current-profile).
+Post-launch audit found the generic session TTS step setter lacks VoxCPM2
+forwarding; v1 must reject rc=-2 and cannot establish ten-step acceptance.
+Fix the native setter, session dispatch and CLI runtime override in the profile
+worktree before a pinned rerun; archive v1 terminal output before repushing.
+v1 actually failed earlier at CMake: missing `spirv-headers`; logs and all
+outputs archived under the task proof root. Fixed the package and native
+step setter, C ABI forwarding and per-call CLI override at `c44f643dd`.
+Kernel v2 launched with that source, harness `94827d8f1`; native solver logs
+must confirm ten actual steps, not just a receipt constant. Syntax/format
+checks pass; build/speech acceptance is pending. Keep the default at ten steps
+and distinguish cold context/shape setup from warm inference. NVIDIA Vulkan
+evidence cannot replace the Intel B390 retest.
+v2 built and ran all 32 repeated seeded Vulkan calls, but failed all four
+TTS→ASR gates. Audit found a real session mismatch: synthesize decimated native
+48 kHz PCM to 24 kHz while output_sample_rate() advertised 48 kHz. Source
+`916ab9464` now returns native 48 kHz, matching documented API/CLI behavior;
+`82517f41d` preserves the CLI ten-step default using tts_num_steps's explicit
+sentinel (shared tts_steps defaults to 20). v2 failed output/logs archived and
+public at fixture revision `f5a04b061d6ceb5c090c97a3f3fadfd2066e6398`.
+Kaggle v3 launched using source `ead34fd5d`, uploaded harness `fe6f363b2` and
+refreshed actual-Kaggle CUDA+Vulkan cache `c32253915bbef81d0d8a9aea39a1fbd43b4cb37c`.
+It must replay v2 PCM at both rates as a negative control, pass
+native-48 kHz session and actual CLI default speech roundtrips, then collect
+separate per-op timings. Do not accept v2 timings as usable speech performance.
+
+OmniVoice #518 implementation `a1ae00dff` is pushed on
+`fix/omnivoice-postprocess-518`. Independent pinned upstream functions pass
+738 adversarial waveform comparisons and 18 exact multilingual text cases;
+raw-output negative control is rejected. Receipt:
+`docs/omnivoice-audio-utility-parity-2026-10-08.json`. Silence uses actual
+PCM16/integer-RMS/sliding-window semantics, not guessed frame thresholds.
+Native config setters preserve the by-value params ABI; reference PCM hashing
+covers cache semantics. Default-on behavior remains on the branch until
+GH CPU [37852750379](https://github.com/CrispStrobe/CrispASR/actions/runs/37852750379)
+passes same-code independent decode waveform parity, actual CLI/session
+cloning and four TTS→ASR gates. Utility parity is not full speech acceptance.
+
+Mel salvage retains author commit `3dce5b586` plus opt-in gate/instrumentation
+`ead1f2b12`. Local same-binary bitwise checks pass all 144 combinations
+(OpenMP/no OpenMP; 63/64/65/300/1100/3000 frames; both filter layouts and
+float/double accumulation; 1/2/4 threads). Local four-thread projection gains
+are 1.4–1.7× at 300 frames and 2.1–3.5× at 3000, but 64-frame calls regress:
+keep default OFF and determine a measured minimum useful size. These are
+local component measurements, not end-to-end ASR performance claims.
+GH CPU [37852305513](https://github.com/CrispStrobe/CrispASR/actions/runs/37852305513)
+runs the component ABBA matrix plus pinned Qwen3 CLI/stage regression with
+BLAS disabled to exercise the changed path. Acceptance pending.
+
+Echo public Q4 preparation launched on GH CPU run
+[37851965549](https://github.com/CrispStrobe/CrispASR/actions/runs/37851965549),
+source `603047454` on `fix/echo-q4-public-transfer`. Experimental public prefix
+`cstr/index-echo-9b-GGUF/experiments/q4-guards-20261008/`; remote immutable
+size/SHA verification and revision-bearing manifests precede local deletion.
+Write preflight, four quantizations/uploads and runtime acceptance are pending.
+Do not launch GPU or change shipped registry pins from preparation alone.
+Consumer repair `2790778aa` uses the public experimental prefix and each
+candidate's immutable weight revision, checking remote-verification markers
+and path scope. Python syntax passes. Preparation pins remain unset and no
+Echo GPU kernel has been launched while the CPU producer is queued.
+
+Storage maintenance checkpoint: moved inactive (>95h, no open handles)
+root-volume evidence (729,159,979 logical bytes / ~533 MiB allocated) and one
+inactive (>38h) volume1 shared library (24,727,872 bytes) to `/mnt/storage`.
+Every file SHA256 verified; original source paths remain symlinks and original
+mtimes restored (CIFS rounding <100ns). Local receipts remain under the task
+proof root. Root free space rises ~3.3→3.8 GiB; volume1 remains tight (~1.4 GiB).
+Skip directories with internal symlinks where CIFS cannot preserve semantics;
+do not relocate live services, active environments or the original checkout.
 
 ## VALIDATED 2026-10-08 — MiMo full CUDA speech acceptance and precision profile
 
@@ -69,7 +194,7 @@ are building; verify per-platform publication before claiming packages available
 Receipt: `docs/release-v0.8.42-validation.json`. #492 remains excluded.
 
 
-## CLAIMED 2026-10-08 — MiMo Q4 CPU BLAS precision experiment
+## OPEN 2026-10-08 — MiMo CPU BLAS follow-up validation
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, branch
 `review/pr492-acceptance`. The complete promotion oracle isolates CPU Q8
@@ -86,155 +211,31 @@ timing/memory, short EN/ZH and ARM before production use. No production
 precision/default change has landed. No direct BLAS-module
 symbol dependencies, GPU placement changes or reference tolerance changes.
 
-## VALIDATED 2026-10-08 — data2vec independent transcript parity
+## OPEN 2026-10-08 — PR #492 remaining acceptance
 
-Integrated source `3cb9bb48ee1ed7d7a8c26a2032a158480c37661e` corrects the data2vec transcript target to
-the frozen independent Python CTC decode. Hosted `37791614453` PASS at
-`c9dec41f2`: actual Q4 CLI zero-WER upstream parity, F16 logits cosine
-0.999141 >= unchanged 0.999, and four reference/target/hash negative controls.
-The published weights and decoder are unchanged; human WER remains 4.55%
-and is explicitly reported separately. Original diagnosis `37786726672`
-showed Q8/F16 already inserting A on BOTH old/current builds, and the frozen
-Python reference also contains A. The old July native target was not the
-independent reference. No replacement model/first-layer precision policy was
-shipped. Proof: `docs/data2vec-reference-parity-2026-10-08.json`.
-Final integrated main CI/broad regression must settle before release.
+Latest full-library CUDA diagnostic: numeric `6b9035367`, harness `e77acb058`.
+All 2,208 official tokenizer codes and continuous gates pass after scoped
+precision controls, and all EN/ZH CLI/session outputs remain exact. That
+control is 7.1–9.8% slower end to end: production defaults remain unchanged.
+Receipt: `docs/mimo-pr492-full-asr-cuda-2026-10-08.json`.
 
-## VALIDATED 2026-10-08 — MiMo C ABI device/verbosity forwarding
+Still unresolved: Q4 LM non-flash hidden/logit relative L2 6.1097% / 7.4700%
+(F16 LM passes), first-divergence localization and original-checkpoint
+precision scope. The separate `lm` worktree starts with diagnostic selected
+LM-layer captures and a CPU activation-quantization control, without model
+promotions or relaxed gates. CANN RVQ/F16 embedding and ggml NZ need actual
+Ascend proof and PR-only/NZ-only/both attribution. The independent mel piece
+is split into the opt-in branch above. Historical numerical/codec experiments
+are archived in HISTORY; the full PR stays open and unmerged.
 
-Integrated source `273b8a40ce833d1d247250d95e2f06fb293ced3d` forwards the requested device and verbosity
-into MiMo initialization. No attention/graph changes or dependency on PR #492.
-Actual-library probe `37789763493` passes at `6c11d5a1f`: four requested
-combinations, four failed-open default restores; removing the assignments
-fails, restoring them passes. Rust/Dart, Windows/macOS/iOS, Linux unit/Vulkan,
-clang-tidy and clang-format also pass at that source. Full native CI
-`37790010839` and lint `37790015470` now PASS at that tested source; final
-main-tip CI must settle green before any release.
-Evidence: `docs/mimo-cabi-device-2026-10-08.json`. This is parameter-forwarding
-proof, not a GPU/model-inference or performance claim.
+## OPEN 2026-10-08 — release binary publication
 
-## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
-
-Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, internal
-branch `review/pr492-acceptance`, latest diagnostic source `7551b12de`;
-completed F16 runtime/harness source remains `c50c50061`.
-Original numerical source: `fae7e22419b8c797dfa2759a9d4884a8f426bf63`.
-Contributor commits through `ac07cf0be3b528cdb035735738098e30f7468a41` are
-preserved as ancestors; merge against current main was clean, with unchanged
-ggml `c36dab89b`. Local shared-mel A/B passes 16 cases (63/64/65/300 frames,
-both layouts and accumulator types, 1/4 threads), byte-identical to main.
-
-Found and checksum-verified the legacy public Python LM reference, upstream
-`98641d537df521ac6df05f74090475694d9510b7`. It has five LM stages but explicitly
-skips generated text, so it is not decoded-output proof. Hosted Q4 job
-`37754319857` FAILED the non-flash numerical gate. Postprocessing its saved
-arrays confirms all 11 LM/tokenizer default stages are byte-identical to
-baseline, and all 12 English/Chinese CLI/session outputs across three arms
-match. Non-flash hidden-state cosine is 0.998144631 / relative L2 6.1097%;
-logits are 0.998423708 / 7.4700%. Tokenizer pooling relative L2 is 8.3401%
-and RVQ code agreement is 73.5960%. No threshold was relaxed; #492 remains
-unmerged pending diagnosis. The unstarted
-F16 job `37754323202` was cancelled after finding a legacy C-ABI device flag
-bug that can force a full weight copy on a CPU-only runner. Replacement
-Q4/F16 `--quant all` run `37758607763` was cancelled before execution because
-the known Q4 gate would prevent F16 from running. F16-only replacement
-`37761799417` at `c50c50061` explicitly forces CPU for baseline/candidate and
-releases session model/KV before each CLI load. It compares main/default, candidate/default and
-candidate/non-flash: five LM stage values/norms/relative L2, tokenizer continuous
-stages and exact RVQ codes, English/Chinese CLI/session equality and transcripts.
-F16 run `37761799417` now completes but FAILS on the same Q4 tokenizer
-pooling/RVQ gates. All five F16 LM A/B comparisons pass unchanged thresholds
-(hidden relative L2 0.04045%, logits 0.03690%); default stages remain exact.
-All five stages in all three arms pass the independent Python reference gate
-(hidden cosine >=0.999570796 / relative L2 <=2.93281%; logits >=0.999751999 /
-<=2.27965%). All 12 EN/ZH CLI/session transcripts match. Artifact `11547195216`
-is archived. This is partial evidence, not a passing acceptance run.
-
-Diagnostic source `3c176505a` merges current main while preserving contributor
-ancestry. `pr492_tokenizer_diagnose.py` promotes the same dequantized Q4 matrix
-weights to F32 and compares native flash/eager paths with the pinned official
-Python transformer on identical conv2 input. Pooling is checked independently
-on each arm's own input, with scale/time-order controls. Hosted `37775542252`
-failed before numerical testing because FFmpeg was absent. Source `7551b12de`
-installs it through the bounded APT helper; replacement `37783601573` is
-PASS as a diagnostic, not PR acceptance. Same-weight F32 promotion gives
-pooling A/B relative L2 0.000115% and exact RVQ codes. Both native paths
-match the independent encoder; Q4 activation rounding remains the divergence.
-Selective-promotion run `37785711004` at `09f65ad8b` completed and FAILED
-unchanged gates for all five profiles (artifact `11555262443`). Output
-projection promotion improves pooling A/B relative L2 to 1.3424% but exact
-RVQ code agreement remains only 82.1558%. First 4/8/16 layers and all FFNs
-also fail; no profile is accepted.
-GPU follow-up claimed in the same worktree: a pinned Kaggle CUDA tokenizer
-diagnostic, using the shared build harness and actual device weights/RVQ.
-It compares both attention paths against the official CPU Python encoder on
-the GPU's own conv2 input. No CANN, full-ASR, speed or Pascal MMQ claim;
-CPU diagnostics remain on GH Actions per `../kaggle_usage.md`.
-CUDA v1 completed on Tesla T4/sm_75 at immutable source `d6b29207b`;
-terminal logs and 72 proof files are archived. Continuous F32/isolated-pool
-diagnostic gates pass, but Q4 pooling A/B relative L2 is 8.83074% and RVQ
-agreement only 70.7880%. Promoted F32 still differs in 6/2,208 RVQ entries,
-all at frame 263; pairwise F64 distances support each arm's differing choice
-on its own residual. Diagnostic success is not full/exact-code acceptance.
-Full proof: `docs/mimo-pr492-cuda-tokenizer-2026-10-08.json`.
-Original-file CPU BLAS experiment `37792853553` at `2a4eda81d` PASSES
-all tokenizer numerical/code gates on JFK, at 1.71/1.90x paired CPU latency.
-No size increase or runtime/default change; broader validation is next.
-The first attempt `37790733015` failed before numerics on a CPU-only thread
-setter applied to BLAS; the harness now uses BLAS's registry function.
-No weight precision is recovered by promotion; this is a diagnostic,
-not original-checkpoint or PR acceptance. The acceptance harness now saves all
-completed comparisons before failing and lets both quantizations finish.
-
-F16 is the LM; both jobs use the shipped Q4_K tokenizer. Source/fixture pins
-and local evidence are on the branch in
-`docs/mimo-pr492-acceptance-2026-10-08.json`.
-
-The MiMo C ABI now forwards `use_gpu` and verbosity alongside flash attention.
-Actual-library initializer-interposition job `37758333664` PASSES at
-`7e1806060`: eight requested combinations and eight failed-open default-reset
-checks. Removing the two assignments fails on requested CPU/quiet settings
-(actual GPU=true/verbosity=1); the restored build passes all 16 rows. Artifact
-`11543240521` is archived in the worktree proof directory. This validates
-parameter forwarding, not model inference or GPU execution.
-This device fix prevents selecting a second CPU backend through init_best and
-copying the 16 GB F16 weights in the legacy CPU session. The numerical baseline
-also explicitly forces CPU to retain its mmap path. No GPU execution is claimed.
-
-No new CANN/CUDA correctness or performance claim; combined CANN/NZ timings
-cannot be attributed to this PR alone. PR #492 remains unmerged. #516 Arabic
-alignment is integrated after full runtime acceptance; native main CI and regression pass.
-Full pinned cppcheck 2.7 `37763588589` passes at `2da878e72`.
-
-## VALIDATED 2026-10-08 — integrated Arabic platform validation
-
-#516/#490 measured character alignment is integrated after full hosted Arabic
-acceptance `37756933124` (15 words / 85 exact independent Viterbi spans,
-CLI/Python/C ABI/Java equality and offsets; artifact `11542736536`). The
-accepted runtime is unchanged; main's Metal discovery repair is included.
-Main `2da878e72` passes native CI `37763588567`, regression `37763588786`,
-lint and Moonshine acceptance `37763589121`. Integrated `ff33461e0` passes
-Go/Rust/C#/Dart, five WASM builds, Windows live translation and Arabic acceptance.
-The only subsequent runtime delta is the nonvirtual ONNX cleanup helper; its
-full cppcheck 2.7 run `37763588589` PASSES. Latest main `d2c269f93`
-also passes native CI `37777990060` and lint `37777990004`.
-Implementation and proof are archived in HISTORY and
-`docs/ctc-characters-2026-10-08.json`.
-
-Storage checkpoint: 2,244,872,573 bytes of cold archives/JARs moved to
-`/mnt/storage/cold-files-20261008`, each checksum-verified before atomic
-replacement with a symlink at its original path. No active executables or
-shared-library trees moved. Receipts/scripts:
-`/mnt/storage/crispasr/storage-cleanup-20261008/`.
-
-## OPEN 2026-10-08 — release draft and final gates
-
-Comprehensive `RELEASE_NOTES_v0.8.42.md` covers landed changes since v0.8.41,
-with validation scope and remaining gates. Refresh it after final integration;
-PR #515 is integrated after final x86/ARM acceptance; #516 is integrated after
-full Arabic/Java acceptance. PR #492 remains unmerged and excluded from shipped
-features. No version
-bump/tag until required main-tip checks pass. Use `scripts/bump-version.sh`.
+v0.8.42 is published with comprehensive notes and passing native/lint/full33
+release gates. Workflow
+[37850360339](https://github.com/CrispStrobe/CrispASR/actions/runs/37850360339)
+is still building/publishing platforms; check remaining jobs and uploaded
+assets separately. PR #492 and all unaccepted experimental branches remain
+excluded. Receipt: `docs/release-v0.8.42-validation.json`.
 
 ## OPEN 2026-10-08 — #483 reporter GPU comparison
 
@@ -275,8 +276,8 @@ and how it was verified is in `HISTORY.md`; usage, model verdicts and
 measurements are in `docs/streaming.md`. ⚠ Still true after the sync:
 `GGML_PREC_F32` is now 10 (was 1), so a binding passing a raw `1` breaks
 silently (not audited); `ggml_*_set_prec` are deprecated upstream (58 call
-lines here); `tests/test-metal-pipeline-cache.mm` API/build wiring is repaired with focused
-hosted validation pending. Scheduler replay is wired through the standalone
+lines here); `tests/test-metal-pipeline-cache.mm` now executes both lifecycle cases on
+actual macOS in shared/static builds (`37762956547`); speed is not established. Scheduler replay is wired through the standalone
 `tools/ci-heavy/scheduler-replay` CMake target and its Vulkan workflow.
 
 Open, in the order they would help:

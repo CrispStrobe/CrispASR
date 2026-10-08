@@ -4,6 +4,31 @@ Test audio: jfk.wav (11.0s), Q4_K quantization, greedy decode (`-bs 1`).
 
 ---
 
+## MiMo CUDA graph phases — 2026-10-08
+
+Actual Tesla T4, original Q4 files, unchanged arithmetic and production decode
+route. All 64 EN/ZH calls and eight CLI/session comparisons retain exact text.
+Same-binary profiling-off/on ABBA medians (12 measured calls/clip/mode):
+English 3.11777/3.12138s; Chinese 1.34072/1.34077s. These measure profiling
+overhead, not an optimization or a comparison with the earlier run.
+
+| Decode phase | Median per step, including warmups |
+| --- | ---: |
+| Synchronous compute | 95.847 ms |
+| Scheduler allocation | 1.277 ms |
+| Graph construction | 0.509 ms |
+| Logit readback | 0.199 ms |
+| Input preparation/upload | 0.030 ms |
+| Host input construction | 0.023 ms |
+
+There are 576 observed decode steps; each graph has 13 scheduler splits.
+Scheduler pipeline-copy multiplicity is one; it is not a transfer count.
+Construction plus allocation consume about 1.8% of summed decode phase time,
+so caching alone cannot explain a large prospective speedup. The GPU route
+also recomputes a masked-out audio branch. An opt-in text-only cached-graph
+experiment is under validation; no default or speed claim has changed.
+[Immutable public proof, hardware, timings and cache receipt](docs/mimo-graph-profile-2026-10-08.json).
+
 ## MiMo original-Q4 CUDA precision study — 2026-10-08 (#492, diagnostic)
 
 One Tesla T4 (SM75), same actual shared library, original Q4 codec/LM files,
@@ -2299,6 +2324,14 @@ is the recommended default.
 ---
 
 ## Runtime optimization audit — 2026-06-20
+
+This is a historical code snapshot. In particular, its VoxCPM2 CPU-only/no-flash
+entries and MiMo CPU-forced notes below predate subsequent GPU work; consult
+current measurements above and code before choosing an optimization target.
+VoxCPM2 now has LocDiT flash attention, a step/config-keyed fused CFM graph and
+per-context normalized VAE weights. Ten-step Vulkan cold/warm and operation
+profiles are still being validated; lowering to eight steps is not an accepted
+quality-preserving optimization.
 
 Full code-read survey of every runtime in the project: what optimization
 tricks each already implements, and where room exists for more. Covers
