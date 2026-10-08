@@ -185,3 +185,18 @@ constructor's virtual call with a private reset helper shared by `reset()`.
 Focused cppcheck 2.17.1 and C++17 syntax pass; full pinned cppcheck 2.7
 [37737578258](https://github.com/CrispStrobe/CrispASR/actions/runs/37737578258)
 is queued. No inference behavior or performance default changes.
+
+## ARM acceptance and MMQ packages — 2026-10-08
+
+ARM64 acceptance `37735856512` passes all eight cases on `a1a3d4a25`: six German
+deployments plus Nemotron and Qwen. All four five-graph variants pass 15 stages
+at reported cosine 1.000000 / relative L2 0, matching Python text. Small int8
+final/batch parity passes; the scale-negative control rejects its encoder tensor.
+Replacement x86 `37738992713` uses Ubuntu 22.04 at `68b849eb9` after the older
+latest-image run waited over 30 minutes without a runner. The runtime is
+unchanged; the negative control now preserves text metadata, so only scaling
+may fail. Rust checks pass; other native/Go/WASM/lint checks remain in flight.
+
+Both Windows MMQ packages pass and their uploaded manifests pair locally.
+[Downloads, pinned source and scope](cuda126-mmq-experiment-2026-10-08.md).
+The final hosted pairing job is queued. #483 remains open for actual GPU tests.
