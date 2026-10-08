@@ -3414,3 +3414,18 @@ if (BUILD_SHARED_LIBS)
         )
     endif()
 endif()
+
+# Optional native ONNX execution for German Moonshine exports. No network fetch
+# during configure: point at an installed official ONNX Runtime distribution.
+set(CRISPASR_ONNXRUNTIME_ROOT "" CACHE PATH "ONNX Runtime CPU SDK root")
+if(CRISPASR_ONNXRUNTIME_ROOT)
+    find_path(CRISPASR_ORT_INCLUDE onnxruntime_cxx_api.h PATHS "${CRISPASR_ONNXRUNTIME_ROOT}/include" NO_DEFAULT_PATH REQUIRED)
+    find_library(CRISPASR_ORT_LIBRARY NAMES onnxruntime PATHS "${CRISPASR_ONNXRUNTIME_ROOT}/lib" NO_DEFAULT_PATH REQUIRED)
+    add_library(moonshine_onnx STATIC moonshine_onnx.cpp moonshine_onnx.h)
+    set_target_properties(moonshine_onnx PROPERTIES POSITION_INDEPENDENT_CODE ON)
+    target_compile_features(moonshine_onnx PUBLIC cxx_std_17)
+    target_include_directories(moonshine_onnx PRIVATE "${CRISPASR_ORT_INCLUDE}")
+    target_link_libraries(moonshine_onnx PUBLIC moonshine_tokenizer "${CRISPASR_ORT_LIBRARY}")
+    target_compile_definitions(moonshine_onnx PUBLIC CRISPASR_HAS_ONNX=1)
+    target_link_libraries(crispasr-lib PUBLIC moonshine_onnx)
+endif()

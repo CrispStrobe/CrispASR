@@ -49,6 +49,11 @@
 
 #include "crispasr.h"
 #include "core/qwen3_prompt.h"
+#include "core/qwen3_stream.h"
+#include "core/gguf_loader.h"
+#include <functional>
+#include <memory>
+#include <regex>
 #include "core/backend_caps_table.h" // #433: backend -> verb lookup
 #include "crispasr_vad.h"            // VAD slicing + stitching (shared with CLI)
 #include "crispasr_diarize.h"        // Speaker diarization (shared with CLI)
@@ -120,6 +125,7 @@
 #endif
 #if __has_include("qwen3_asr.h")
 #include "qwen3_asr.h"
+#include "core/qwen3_stream_model.h"
 #define CA_HAVE_QWEN3 1
 #endif
 #if __has_include("higgs_stt.h")
@@ -416,6 +422,9 @@
 #endif
 #if __has_include("moonshine_streaming.h")
 #include "moonshine_streaming.h"
+#ifdef CRISPASR_HAS_ONNX
+#include "moonshine_onnx.h"
+#endif
 #define CA_HAVE_MOONSHINE_STREAMING 1
 #endif
 #if __has_include("gemma4_e2b.h")
@@ -1086,10 +1095,18 @@ struct crispasr_stream {
     // PLAN #62c — opaque kyutai_stt_stream*; when set, all crispasr_stream_*
     // functions route to the kyutai backend instead of whisper. Mutually
     // exclusive with `ctx`.
+    // Stateful adapters own their backend state in these closures. Parent
+    // model session must outlive the stream, as for the existing adapters.
+    std::function<int(const float*, int, bool)> append;
+    std::function<void()> release;
+    bool finalized = false;
     void* kyutai_stream_state = nullptr;
 
     // PLAN #62c follow-on — opaque moonshine_streaming_stream*; same pattern.
     void* moonshine_streaming_state = nullptr;
+#ifdef CRISPASR_HAS_ONNX
+    moonshine_onnx_stream* moonshine_onnx_state = nullptr;
+#endif
 
     // PLAN #7 — opaque voxtral4b_stream*; native incremental encoder + LLM
     // decode-on-flush. Mutually exclusive with `ctx`.
@@ -1104,6 +1121,27 @@ struct crispasr_stream {
     float vibevoice_last_sample = 0.0f;
     bool vibevoice_has_last_sample = false;
 };
+
+#ifdef CA_HAVE_VOXTRAL4B
+// Voxtral returns consuming text deltas, unlike the common cumulative API.
+static int crispasr_voxtral_collect(crispasr_stream* s) {
+    char delta[4096];
+    int n;
+    bool changed = false;
+    while ((n = voxtral4b_stream_get_text((voxtral4b_stream*)s->voxtral4b_stream_state, delta, sizeof(delta),
+                                          &s->out_t0_s, &s->out_t1_s, nullptr)) > 0) {
+        s->out_text += delta;
+        changed = true;
+    }
+    if (n < 0)
+        return n;
+    if (changed) {
+        s->has_output = true;
+        ++s->decode_counter;
+    }
+    return changed ? 1 : 0;
+}
+#endif
 
 CA_EXPORT crispasr_stream* crispasr_stream_open(whisper_context* ctx, int n_threads, int step_ms, int length_ms,
                                                 int keep_ms, const char* language, int translate) {
@@ -1136,6 +1174,10 @@ CA_EXPORT void crispasr_stream_close(crispasr_stream* s) {
     }
 #endif
 #if __has_include("moonshine_streaming.h")
+#ifdef CRISPASR_HAS_ONNX
+    if (s->moonshine_onnx_state)
+        moonshine_onnx_stream_close(s->moonshine_onnx_state);
+#endif
     if (s->moonshine_streaming_state) {
         moonshine_streaming_stream_close((moonshine_streaming_stream*)s->moonshine_streaming_state);
         s->moonshine_streaming_state = nullptr;
@@ -1153,6 +1195,8 @@ CA_EXPORT void crispasr_stream_close(crispasr_stream* s) {
         s->vibevoice_stream_state = nullptr;
     }
 #endif
+    if (s->release)
+        s->release();
     delete s;
 }
 
@@ -1279,14 +1323,22 @@ static int crispasr_stream_run_decode(crispasr_stream* s) {
 }
 
 CA_EXPORT int crispasr_stream_feed(crispasr_stream* s, const float* pcm, int n_samples) {
-    if (!s || !pcm || n_samples <= 0)
+    if (!s || !pcm || n_samples <= 0 || s->finalized)
         return -1;
+    if (s->append) {
+        s->stream_time_s += (double)n_samples / 16000.0;
+        return s->append(pcm, n_samples, false);
+    }
 #if __has_include("kyutai_stt.h")
     if (s->kyutai_stream_state) {
         return kyutai_stt_stream_feed((kyutai_stt_stream*)s->kyutai_stream_state, pcm, n_samples);
     }
 #endif
 #if __has_include("moonshine_streaming.h")
+#ifdef CRISPASR_HAS_ONNX
+    if (s->moonshine_onnx_state)
+        return moonshine_onnx_stream_feed(s->moonshine_onnx_state, pcm, n_samples);
+#endif
     if (s->moonshine_streaming_state) {
         return moonshine_streaming_stream_feed((moonshine_streaming_stream*)s->moonshine_streaming_state, pcm,
                                                n_samples);
@@ -1294,7 +1346,10 @@ CA_EXPORT int crispasr_stream_feed(crispasr_stream* s, const float* pcm, int n_s
 #endif
 #if __has_include("voxtral4b.h")
     if (s->voxtral4b_stream_state) {
-        return voxtral4b_stream_feed((voxtral4b_stream*)s->voxtral4b_stream_state, pcm, n_samples);
+        const int rc = voxtral4b_stream_feed((voxtral4b_stream*)s->voxtral4b_stream_state, pcm, n_samples);
+        // The backend reports successful processing as 0 even when its
+        // live decoder produced text. The common API reports output ready.
+        return rc < 0 ? rc : crispasr_voxtral_collect(s);
     }
 #endif
 #ifdef CA_HAVE_VIBEVOICE
@@ -1328,6 +1383,11 @@ CA_EXPORT int crispasr_stream_get_text(crispasr_stream* s, char* out_text, int o
     }
 #endif
 #if __has_include("moonshine_streaming.h")
+#ifdef CRISPASR_HAS_ONNX
+    if (s->moonshine_onnx_state)
+        return moonshine_onnx_stream_get_text(s->moonshine_onnx_state, out_text, out_cap, out_t0_s, out_t1_s,
+                                              out_counter);
+#endif
     if (s->moonshine_streaming_state) {
         return moonshine_streaming_stream_get_text((moonshine_streaming_stream*)s->moonshine_streaming_state, out_text,
                                                    out_cap, out_t0_s, out_t1_s, out_counter);
@@ -1335,8 +1395,10 @@ CA_EXPORT int crispasr_stream_get_text(crispasr_stream* s, char* out_text, int o
 #endif
 #if __has_include("voxtral4b.h")
     if (s->voxtral4b_stream_state) {
-        return voxtral4b_stream_get_text((voxtral4b_stream*)s->voxtral4b_stream_state, out_text, out_cap, out_t0_s,
-                                         out_t1_s, out_counter);
+        // Collect asynchronous decoder output too; reads stay non-consuming
+        // at the common ABI, so clients can retry with a larger buffer.
+        if (crispasr_voxtral_collect(s) < 0)
+            return -2;
     }
 #endif
     if (!s->has_output) {
@@ -1366,19 +1428,32 @@ CA_EXPORT int crispasr_stream_get_text(crispasr_stream* s, char* out_text, int o
 CA_EXPORT int crispasr_stream_flush(crispasr_stream* s) {
     if (!s)
         return -1;
+    if (s->append) {
+        if (s->finalized)
+            return 0;
+        const int rc = s->append(nullptr, 0, true);
+        if (rc >= 0)
+            s->finalized = true;
+        return rc;
+    }
 #if __has_include("kyutai_stt.h")
     if (s->kyutai_stream_state) {
         return kyutai_stt_stream_flush((kyutai_stt_stream*)s->kyutai_stream_state);
     }
 #endif
 #if __has_include("moonshine_streaming.h")
+#ifdef CRISPASR_HAS_ONNX
+    if (s->moonshine_onnx_state)
+        return moonshine_onnx_stream_flush(s->moonshine_onnx_state);
+#endif
     if (s->moonshine_streaming_state) {
         return moonshine_streaming_stream_flush((moonshine_streaming_stream*)s->moonshine_streaming_state);
     }
 #endif
 #if __has_include("voxtral4b.h")
     if (s->voxtral4b_stream_state) {
-        return voxtral4b_stream_flush((voxtral4b_stream*)s->voxtral4b_stream_state);
+        const int rc = voxtral4b_stream_flush((voxtral4b_stream*)s->voxtral4b_stream_state);
+        return rc < 0 ? rc : crispasr_voxtral_collect(s);
     }
 #endif
 #ifdef CA_HAVE_VIBEVOICE
@@ -2189,6 +2264,9 @@ struct crispasr_session {
 #endif
 #ifdef CA_HAVE_MOONSHINE_STREAMING
     void* moonshine_streaming_ctx = nullptr;
+#ifdef CRISPASR_HAS_ONNX
+    moonshine_onnx_context* moonshine_onnx_ctx = nullptr;
+#endif
 #endif
 #ifdef CA_HAVE_GEMMA4_E2B
     void* gemma4_e2b_ctx = nullptr;
@@ -2633,6 +2711,12 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
     auto* s = new crispasr_session();
     s->model_path = model_path;
     s->backend = backend_name;
+#ifdef CRISPASR_HAS_ONNX
+    if (s->backend.find("moonshine-") == 0 && s->backend.find("-onnx") != std::string::npos)
+        s->backend = "moonshine-onnx";
+#endif
+    if (s->backend == "moonshine-tiny-de-dattazigzag")
+        s->backend = "moonshine";
     s->n_threads = n_threads > 0 ? n_threads : 4;
 
     // Register the default segment callback so the Dart polling buffer
@@ -3427,6 +3511,16 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         }
         moonshine_set_pause_split_ms((moonshine_context*)s->moonshine_ctx,
                                      moonshine_default_pause_split_ms(model_path, 0));
+        return s;
+    }
+#endif
+#ifdef CRISPASR_HAS_ONNX
+    if (s->backend == "moonshine-onnx") {
+        s->moonshine_onnx_ctx = moonshine_onnx_open(model_path, s->n_threads);
+        if (!s->moonshine_onnx_ctx) {
+            delete s;
+            return nullptr;
+        }
         return s;
     }
 #endif
@@ -4341,6 +4435,10 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
 CA_EXPORT crispasr_session* crispasr_session_open(const char* model_path, int n_threads) {
     if (!model_path)
         return nullptr;
+#ifdef CRISPASR_HAS_ONNX
+    if (moonshine_onnx_is_model(model_path))
+        return crispasr_session_open_explicit(model_path, "moonshine-onnx", n_threads);
+#endif
     char detected[64] = {0};
     if (crispasr_detect_backend_from_gguf(model_path, detected, (int)sizeof(detected)) <= 0) {
         // GGUF detection failed — check if this is a whisper GGML file
@@ -4441,7 +4539,12 @@ CA_EXPORT crispasr_session* crispasr_session_open_with_params(const char* model_
     } else {
         // Explicit-detection path matches `crispasr_session_open`.
         char detected[64] = {0};
-        if (crispasr_detect_backend_from_gguf(model_path, detected, (int)sizeof(detected)) > 0) {
+#ifdef CRISPASR_HAS_ONNX
+        if (moonshine_onnx_is_model(model_path)) {
+            s = crispasr_session_open_explicit(model_path, "moonshine-onnx", n_threads);
+        } else
+#endif
+            if (crispasr_detect_backend_from_gguf(model_path, detected, (int)sizeof(detected)) > 0) {
             s = crispasr_session_open_explicit(model_path, detected, n_threads);
         } else {
             // Whisper GGML magic check (legacy non-GGUF format).
@@ -4940,6 +5043,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_MOONSHINE_STREAMING
     list += ",moonshine-streaming";
+#ifdef CRISPASR_HAS_ONNX
+    list += ",moonshine-onnx";
+#endif
 #endif
 #ifdef CA_HAVE_GEMMA4_E2B
     list += ",gemma4-e2b";
@@ -5508,6 +5614,8 @@ static void apply_session_hygiene(crispasr_session_result* r, bool include_merge
 // "german" is caught like "de", raw string compare as the out-of-table
 // fallback — the same semantics as examples/cli/crispasr_run.cpp.
 static const char* session_sole_language(const std::string& backend, const std::string& model_path) {
+    if (backend == "moonshine-onnx")
+        return model_path.find("-de") != std::string::npos ? "de" : nullptr;
     if (backend == "moonshine" || backend == "moonshine-streaming") {
         // Fine-tune variants (moonshine-base-de etc.) share the arch string, so
         // a session can legitimately hold a non-English moonshine under the
@@ -7924,6 +8032,17 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         }
 #endif
 #ifdef CA_HAVE_MOONSHINE_STREAMING
+#ifdef CRISPASR_HAS_ONNX
+        if (!text && s->backend == "moonshine-onnx" && s->moonshine_onnx_ctx) {
+            try {
+                auto decoded = moonshine_onnx_transcribe(s->moonshine_onnx_ctx, pcm, n_samples);
+                text = strdup(decoded.c_str());
+            } catch (const std::exception& e) {
+                fprintf(stderr, "crispasr[moonshine-onnx]: %s\n", e.what());
+                return nullptr;
+            }
+        }
+#endif
         if (!text && s->backend == "moonshine-streaming" && s->moonshine_streaming_ctx) {
             if (s->beam_size > 1)
                 moonshine_streaming_set_beam_size((moonshine_streaming_context*)s->moonshine_streaming_ctx,
@@ -10853,10 +10972,189 @@ CA_EXPORT void crispasr_session_translate_text_free(char* text) {
 // Returns nullptr if the session's backend doesn't support streaming.
 // =========================================================================
 
+// 0: unavailable, 1: rolling windows, 2: persistent model caches,
+// 3: text-prefix streaming (re-encodes accumulated audio).
+CA_EXPORT int crispasr_session_stream_kind(crispasr_session* s) {
+    if (!s)
+        return 0;
+#ifdef CA_HAVE_NEMOTRON
+    if (s->nemotron_ctx)
+        return 2;
+#endif
+#ifdef CA_HAVE_QWEN3
+    if (s->qwen3_ctx && !qwen3_asr_is_raon_speech(s->qwen3_ctx))
+        return 3;
+#endif
+#ifdef CA_HAVE_VOXTRAL4B
+    if (s->voxtral4b_ctx)
+        return 2;
+#endif
+#ifdef CA_HAVE_VIBEVOICE
+    if (s->vibevoice_ctx && vibevoice_is_asr_streaming(s->vibevoice_ctx))
+        return 2;
+#endif
+    if (s->whisper_ctx)
+        return 1;
+#if __has_include("kyutai_stt.h")
+    if (s->kyutai_ctx)
+        return 1;
+#endif
+#if __has_include("moonshine_streaming.h")
+#ifdef CRISPASR_HAS_ONNX
+    if (s->moonshine_onnx_ctx)
+        return moonshine_onnx_incremental(s->moonshine_onnx_ctx) ? 2 : 0;
+#endif
+    if (s->moonshine_streaming_ctx)
+        return 1;
+#endif
+    return 0;
+}
+
+static int crispasr_stream_publish(crispasr_stream* w, const std::string& text) {
+    if (text == w->out_text || text.empty())
+        return 0;
+    w->out_text = text;
+    w->out_t1_s = w->stream_time_s;
+    w->has_output = true;
+    ++w->decode_counter;
+    return 1;
+}
+
 CA_EXPORT crispasr_stream* crispasr_session_stream_open(crispasr_session* s, int n_threads, int step_ms, int length_ms,
                                                         int keep_ms, const char* language, int translate) {
     if (!s)
         return nullptr;
+    // Speech translation is not supported by these recognition streams.
+    if (translate && crispasr_session_stream_kind(s) >= 2)
+        return nullptr;
+    const std::string lang = language && *language ? language : s->source_language;
+#ifdef CA_HAVE_NEMOTRON
+    if (s->nemotron_ctx) {
+        nemotron_set_language(s->nemotron_ctx, lang.empty() ? "auto" : lang.c_str());
+        auto* ns = nemotron_stream_create(s->nemotron_ctx);
+        if (!ns)
+            return nullptr;
+        auto* w = new crispasr_stream();
+        auto raw = std::make_shared<std::string>();
+        w->release = [ns]() { nemotron_stream_free(ns); };
+        w->append = [w, ns, raw, s](const float* pcm, int n, bool flush) {
+            struct Tokens {
+                nemotron_context* ctx;
+                std::string* text;
+            } tokens{s->nemotron_ctx, raw.get()};
+            auto cb = [](int id, float, void* data) {
+                auto* t = static_cast<Tokens*>(data);
+                const char* token = nemotron_token_to_str(t->ctx, id);
+                if (!token)
+                    return;
+                std::string piece(token);
+                size_t pos = 0;
+                while ((pos = piece.find("\xe2\x96\x81", pos)) != std::string::npos) {
+                    piece.replace(pos, 3, " ");
+                    ++pos;
+                }
+                *t->text += piece;
+            };
+            if (!nemotron_stream_append(ns, pcm, n, flush, cb, &tokens))
+                return -2;
+            // Work on the cumulative raw text: a control tag can span tokens.
+            static const std::regex tags("<[a-z]{2,3}-[A-Z]{2}>");
+            std::string text = std::regex_replace(*raw, tags, "");
+            const auto pending = text.rfind('<');
+            if (pending != std::string::npos && text.find('>', pending) == std::string::npos)
+                text.erase(pending);
+            const auto begin = text.find_first_not_of(' ');
+            text = begin == std::string::npos ? "" : text.substr(begin);
+            while (!text.empty() && text.back() == ' ')
+                text.pop_back();
+            return crispasr_stream_publish(w, text);
+        };
+        return w;
+    }
+#endif
+#ifdef CA_HAVE_QWEN3
+    if (s->qwen3_ctx && !qwen3_asr_is_raon_speech(s->qwen3_ctx)) {
+        struct State {
+            core_qwen3_stream::State algorithm;
+            core_qwen3_stream::Hooks hooks;
+            core_qwen3_stream::Schedule schedule;
+            std::vector<float> pending;
+            bool r2t2 = false;
+            int chunk = 32000;
+            int max_new = 256;
+        };
+        auto state = std::make_shared<State>();
+        if (auto* meta = core_gguf::open_metadata(s->model_path.c_str())) {
+            state->r2t2 = core_gguf::kv_str(meta, "qwen3asr.streaming_recipe", "") == "r2t2";
+            gguf_free(meta);
+        }
+        // Stock defaults match QwenLM/Qwen3-ASR init_streaming_state.
+        state->algorithm.cfg.stock_qwen = !state->r2t2;
+        state->algorithm.cfg.unfixed_chunk_num = state->r2t2 ? 0 : 2;
+        state->algorithm.cfg.unfixed_token_num = state->r2t2 ? 1 : 5;
+        if (!lang.empty() && lang != "auto") {
+            core_qwen3_stream::utf8_decode(ca_iso_to_english_lang(lang), state->algorithm.cfg.force_language);
+        }
+        state->schedule.init(2560, 2560);
+        auto* ctx = s->qwen3_ctx;
+        state->hooks.encode = [ctx](const std::string& text) {
+            int n = 0;
+            auto* ids = qwen3_asr_tokenize(ctx, text.c_str(), &n);
+            if (!ids)
+                throw std::runtime_error("Qwen streaming tokenization failed");
+            std::vector<int32_t> result(ids, ids + n);
+            free(ids);
+            return result;
+        };
+        state->hooks.decode_bytes = [ctx](const std::vector<int32_t>& ids) {
+            std::string text;
+            for (int id : ids)
+                text += gpt2_byte_decode(qwen3_asr_token_text(ctx, id));
+            return text;
+        };
+        const std::string suffix =
+            state->algorithm.cfg.force_language.empty()
+                ? ""
+                : "language " + core_qwen3_stream::utf8_encode(state->algorithm.cfg.force_language) + "<asr_text>";
+        state->hooks.generate = [ctx, suffix](const std::vector<float>& audio, const std::string& prefix, int max_new) {
+            bool ok = false;
+            auto result = core_qwen3_stream_model::generate(ctx, false, audio, suffix + prefix, max_new, &ok);
+            if (!ok)
+                throw std::runtime_error("Qwen streaming inference failed");
+            return result;
+        };
+        auto* w = new crispasr_stream();
+        w->append = [w, state](const float* pcm, int n, bool flush) {
+            try {
+                if (n)
+                    state->pending.insert(state->pending.end(), pcm, pcm + n);
+                int changed = 0;
+                auto chunk = [&]() { return state->r2t2 ? state->schedule.next_chunk_samples() : state->chunk; };
+                while ((int)state->pending.size() >= chunk()) {
+                    const int count = chunk();
+                    const auto result =
+                        core_qwen3_stream::step(state->algorithm, state->hooks, state->pending.data(), count,
+                                                state->r2t2 ? state->schedule.max_new : state->max_new);
+                    state->pending.erase(state->pending.begin(), state->pending.begin() + count);
+                    if (state->r2t2)
+                        state->schedule.update(result.fixed_text);
+                    changed |= crispasr_stream_publish(w, core_qwen3_stream::utf8_encode(state->algorithm.text));
+                }
+                if (flush) {
+                    core_qwen3_stream::finish(state->algorithm, state->hooks, state->pending.data(),
+                                              state->pending.size(),
+                                              state->r2t2 ? state->schedule.first_max_new : state->max_new);
+                    state->pending.clear();
+                    changed |= crispasr_stream_publish(w, core_qwen3_stream::utf8_encode(state->algorithm.text));
+                }
+                return changed;
+            } catch (...) {
+                return -2;
+            }
+        };
+        return w;
+    }
+#endif
     if (s->whisper_ctx)
         return crispasr_stream_open(s->whisper_ctx, n_threads, step_ms, length_ms, keep_ms, language, translate);
 #if __has_include("kyutai_stt.h")
@@ -10878,6 +11176,16 @@ CA_EXPORT crispasr_stream* crispasr_session_stream_open(crispasr_session* s, int
     }
 #endif
 #if __has_include("moonshine_streaming.h")
+#ifdef CRISPASR_HAS_ONNX
+    if (s->moonshine_onnx_ctx && moonshine_onnx_incremental(s->moonshine_onnx_ctx)) {
+        auto* stream = moonshine_onnx_stream_open(s->moonshine_onnx_ctx, step_ms);
+        if (!stream)
+            return nullptr;
+        auto* w = new crispasr_stream();
+        w->moonshine_onnx_state = stream;
+        return w;
+    }
+#endif
     if (s->moonshine_streaming_ctx) {
         // Same chunked-batch pattern as kyutai (PLAN #62c follow-on).
         // Despite the backend name, moonshine_streaming_transcribe is single-shot
@@ -11913,6 +12221,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
         moonshine_free((moonshine_context*)s->moonshine_ctx);
 #endif
 #ifdef CA_HAVE_MOONSHINE_STREAMING
+#ifdef CRISPASR_HAS_ONNX
+    if (s->moonshine_onnx_ctx)
+        moonshine_onnx_close(s->moonshine_onnx_ctx);
+#endif
     if (s->moonshine_streaming_ctx)
         moonshine_streaming_free((moonshine_streaming_context*)s->moonshine_streaming_ctx);
 #endif

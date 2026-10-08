@@ -3326,6 +3326,15 @@ int crispasr_run_backend(const whisper_params& params_in) {
             //   1. next to the model file (sibling directory)
             //   2. in the cache dir / well-known search dirs
             bool companion_found = false;
+            // Converted Moonshine GGUFs carry a model-specific sidecar to
+            // avoid sharing incompatible language vocabularies.
+            if (backend_name == "moonshine" || backend_name == "moonshine-streaming") {
+                FILE* own = fopen((params.model + ".tokenizer.bin").c_str(), "rb");
+                if (own) {
+                    fclose(own);
+                    companion_found = true;
+                }
+            }
             {
                 const auto sep = params.model.find_last_of("/\\");
                 if (sep != std::string::npos) {

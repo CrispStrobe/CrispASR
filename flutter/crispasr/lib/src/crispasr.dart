@@ -2169,10 +2169,9 @@ class CrispASR {
 
 /// A live streaming decode session, created via [CrispASR.openStream].
 ///
-/// Feed PCM chunks as they arrive; every chunk whose accumulation crosses
-/// the configured `stepMs` triggers a decode over the rolling window and
-/// returns a [StreamingUpdate]. Chunks that don't trigger a decode return
-/// `null` — the caller is still buffering.
+/// Feed new PCM chunks as they arrive. Persistent streams retain backend
+/// state; window-based streams decode at the configured `stepMs` threshold.
+/// Updates contain cumulative utterance text; null means no new output.
 ///
 /// Close the session explicitly with [close] to free the native state —
 /// there is no Dart finalizer hooking the native library.
@@ -2216,8 +2215,7 @@ class StreamingSession {
     try {
       final r = _feedFn(_handle, buf, pcm.length);
       if (r < 0) throw Exception('crispasr_stream_feed error $r');
-      if (r == 0) return null; // still buffering
-      return _readOutput();
+      return _readOutput(); // also polls asynchronous decoders
     } finally {
       calloc.free(buf);
     }
@@ -2232,21 +2230,32 @@ class StreamingSession {
     if (_closed) throw StateError('StreamingSession is closed');
     if (_flushFn == null) return _readOutput();
     final r = _flushFn!(_handle);
-    if (r <= 0) return null;
+    if (r < 0) throw Exception('crispasr_stream_flush error $r');
     return _readOutput();
   }
 
   StreamingUpdate? _readOutput() {
-    final outCap = 4096;
-    final outBuf = calloc<Uint8>(outCap);
-    final out = outBuf.cast<Utf8>();
+    var outCap = 4096;
+    var outBuf = calloc<Uint8>(outCap);
+    var out = outBuf.cast<Utf8>();
     final t0Ptr = calloc<Double>();
     final t1Ptr = calloc<Double>();
     final cntPtr = calloc<Int64>();
 
     try {
-      final n = _getTextFn(_handle, out, outCap, t0Ptr, t1Ptr, cntPtr);
-      if (n <= 0) return null;
+      var n = _getTextFn(_handle, out, outCap, t0Ptr, t1Ptr, cntPtr);
+      if (n < 0) throw Exception('crispasr_stream_get_text error $n');
+      // Common streams return the full byte length, even when truncated.
+      // Retry before decoding UTF-8: truncation may split a codepoint.
+      while (n >= outCap) {
+        outCap = n + 1;
+        calloc.free(outBuf);
+        outBuf = calloc<Uint8>(outCap);
+        out = outBuf.cast<Utf8>();
+        n = _getTextFn(_handle, out, outCap, t0Ptr, t1Ptr, cntPtr);
+        if (n < 0) throw Exception('crispasr_stream_get_text error $n');
+      }
+      if (n == 0) return null;
       final counter = cntPtr.value;
       if (counter == _lastCounter) return null; // same decode we already saw
       _lastCounter = counter;
@@ -2271,7 +2280,8 @@ class StreamingSession {
     if (_closed) throw StateError('StreamingSession is closed');
     if (_setLiveDecodeFn == null) {
       throw UnsupportedError(
-          'crispasr_stream_set_live_decode not available in this libcrispasr build');
+        'crispasr_stream_set_live_decode not available in this libcrispasr build',
+      );
     }
     _setLiveDecodeFn!(_handle, enabled ? 1 : 0);
   }
@@ -2617,7 +2627,7 @@ class CrispasrSession {
   /// Pass [language] as an ISO 639-1 code ("en", "de", "ja", …) to steer
   /// backends that accept a source-language hint (whisper / canary /
   /// cohere / voxtral / voxtral4b). Backends that auto-detect
-  /// (parakeet / qwen3) or that don't expose a language input
+  /// (parakeet) or that don't expose a language input
   /// (granite / wav2vec2 / fastconformer-ctc) ignore the hint silently.
   /// `null` or empty preserves each backend's historical default.
   List<SessionSegment> transcribe(Float32List pcm, {String? language}) {
@@ -5011,6 +5021,17 @@ class CrispasrSession {
     }
   }
 
+  /// 0: unavailable, 1: rolling windows, 2: persistent model caches,
+  /// 3: text-prefix streaming (accumulated audio is re-encoded).
+  /// Older libraries report 0 rather than claiming unsupported streaming.
+  int get streamingKind {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_stream_kind')) return 0;
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>),
+        int Function(Pointer<Void>)>('crispasr_session_stream_kind');
+    return fn(_handle);
+  }
+
   /// Open a streaming decode session against this session's backend.
   ///
   /// Backed by `crispasr_session_stream_open` on the C side, which
@@ -5041,7 +5062,7 @@ class CrispasrSession {
             Pointer<Void>, Int32, Int32, Int32, Int32, Pointer<Utf8>, Int32),
         Pointer<Void> Function(Pointer<Void>, int, int, int, int, Pointer<Utf8>,
             int)>('crispasr_session_stream_open');
-    final langPtr = (language == null || language.isEmpty || language == 'auto')
+    final langPtr = (language == null || language.isEmpty)
         ? nullptr
         : language.toNativeUtf8();
     final handle = fn(_handle, nThreads, stepMs, lengthMs, keepMs,

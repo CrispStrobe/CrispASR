@@ -159,3 +159,27 @@ TEST_CASE("qwen3_stream: example.py max_new_tokens schedule", "[qwen3-stream]") 
     s.update(U"ab"); // capped at min(32, max(4, 2*2)) = 4
     CHECK(s.max_new == 4);
 }
+
+TEST_CASE("stock Qwen stream preserves SDK rollback and raw punctuation", "[qwen3-stream]") {
+    State st;
+    st.cfg.stock_qwen = true;
+    st.cfg.force_language = U"German";
+    st.cfg.unfixed_chunk_num = 2;
+    st.cfg.unfixed_token_num = 5;
+    std::vector<std::string> prefixes;
+    auto hooks = byte_hooks({"Hallo | Welt!", "Guten Morgen.", "Abend.", "!"}, &prefixes);
+    float audio[16] = {};
+    step(st, hooks, audio, 16, 256);
+    CHECK(st.text == U"Hallo | Welt!");
+    step(st, hooks, audio, 16, 256);
+    CHECK(st.text == U"Guten Morgen.");
+    step(st, hooks, audio, 16, 256);
+    CHECK(prefixes == std::vector<std::string>{"", "", "Guten Mo"});
+    CHECK(st.text == U"Guten MoAbend.");
+    CHECK(st.audio_accum.size() == 48);
+    finish(st, hooks, audio, 3, 256);
+    CHECK(st.audio_accum.size() == 51);
+    CHECK(st.chunk_id == 4);
+    CHECK(st.text == U"Guten MoA!");
+    CHECK_FALSE(finish(st, hooks, nullptr, 0, 256).counted);
+}

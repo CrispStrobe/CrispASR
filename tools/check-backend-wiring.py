@@ -185,6 +185,17 @@ def main():
     capi_names = set(re.findall(r'list \+= ",([^"]+)"', capi))
     capi_flat = {n.strip() for entry in capi_names for n in entry.split(",") if n.strip()}
     cli_names = {name for name, _caps in backends}
+    # Source scanning sees #ifdef branches that this binary did not compile.
+    # Moonshine ONNX is optional in BOTH the CLI roster and the C ABI. Use
+    # the audited binary's own CMake cache as evidence that its SDK was off;
+    # without that evidence keep the reverse check fail-closed. ONNX-enabled
+    # builds still receive every normal factory/roster/library check below.
+    cache_path = Path(args.crispasr).resolve().parent.parent / "CMakeCache.txt"
+    if cache_path.is_file():
+        cache = cache_path.read_text(encoding="utf-8", errors="replace")
+        configured = re.search(r"^CRISPASR_ONNXRUNTIME_ROOT:PATH=(.*)$", cache, re.M)
+        if configured is not None and not configured.group(1).strip():
+            capi_flat.discard("moonshine-onnx")
     # A name is fine if the CLI ROSTER lists it *or* the CLI FACTORY resolves it
     # as an alias -- several backends are advertised by the c_api under an alias
     # (canary-ctc, vibevoice-tts, omniasr-llm-unlimited) and are genuinely

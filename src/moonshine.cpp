@@ -373,7 +373,12 @@ struct moonshine_context* moonshine_init_with_params(struct moonshine_init_param
     if (params.tokenizer_path) {
         tokenizer_path = params.tokenizer_path;
     } else {
-        tokenizer_path = dir_of(model_path) + "/tokenizer.bin";
+        tokenizer_path = std::string(model_path) + ".tokenizer.bin";
+        FILE* specific = fopen(tokenizer_path.c_str(), "rb");
+        if (specific)
+            fclose(specific);
+        else
+            tokenizer_path = dir_of(model_path) + "/tokenizer.bin";
     }
     if (!ctx->tokenizer.load(tokenizer_path.c_str())) {
         fprintf(stderr, "%s: failed to load tokenizer from '%s'\n", __func__, tokenizer_path.c_str());

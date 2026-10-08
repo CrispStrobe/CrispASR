@@ -8,6 +8,7 @@ struct moonshine_tokenizer {
     std::vector<std::vector<uint8_t>> vocab;
 
     bool load(const char* path);
+    bool load_json(const char* path);
     std::string tokens_to_text(const std::vector<int32_t>& tokens) const;
     // Detokenise a single id to its raw piece (no trim, no special-token strip).
     // Returns empty string for out-of-range / special-token (`<...>`) ids.

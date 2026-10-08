@@ -1,5 +1,46 @@
 # Streaming & live transcription
 
+## Stateful streams from C and Dart
+
+`crispasr_session_stream_kind(session)` reports the implementation actually
+available for the loaded model: 0 unavailable, 1 repeated rolling windows,
+2 persistent model caches, 3 text-prefix streaming. A streaming model name or
+per-token callback alone does not imply persistent state across audio calls.
+
+The session C ABI now exposes Nemotron's cache-aware encoder/RNN-T stream and
+Qwen3-ASR's prefix rollback stream, as well as the existing Voxtral realtime
+stream. Nemotron accepts `language="de"` at stream creation and selects the
+German model prompt; its output omits language control tags. Nemotron groups
+incoming PCM into canonical backend steps: microphone packet sizes no longer
+change frontend normalization/context and therefore the transcript. Stock Qwen uses
+the SDK defaults (2-second chunks, first two chunks unfixed, five-token
+rollback); R2T2 GGUFs retain their adaptive recipe. Qwen re-encodes accumulated
+audio and does **not** retain encoder/KV caches across chunks. The shared model
+call is used by both the CLI and the session API.
+
+In Dart, inspect `session.streamingKind`, create `session.openStream(language:
+'de')`, feed **only new** 16 kHz mono float PCM, then `flush()` and `close()`.
+For Voxtral captions call `stream.setLiveDecode(true)` before the first feed.
+Updates from the common session API contain the cumulative utterance text,
+including for Voxtral whose underlying API produces consuming deltas. Stream
+errors propagate through Dart; long UTF-8 output is read without truncation.
+
+Keep the parent model session alive until its stream closes. Use only one
+stream/inference call at a time per model session. Nemotron and Qwen streams
+are finalized by flush; repeated flush is harmless and feeding afterwards
+fails. Open a new stream for the next utterance, retaining the loaded model.
+Parakeet TDT remains an offline recognizer used with buffered windows; a
+German routing label cannot constrain its decoder to German.
+
+Verification (no models needed): `cd flutter/crispasr && dart test
+ test/stream_protocol_test.dart`; native prefix state tests:
+`build/bin/test-qwen3-stream`. For German native integration, set
+`CRISPASR_LIB`, `CRISPASR_STREAM_MODEL` (Nemotron), `CRISPASR_STREAM_WAV`
+(16 kHz mono PCM16 German fixture) and run `dart test
+ test/native_stream_live_test.dart`. This checks partial output before flush,
+irregular feed partitions, finalization and reopening on the same model.
+
+
 CrispASR supports three streaming modes — pipe input, microphone
 capture, and continuous live mode — and per-token confidence output.
 All work with every supported backend.
@@ -726,6 +767,14 @@ one update.
 For native streaming-architecture backends (`voxtral4b`,
 `moonshine-streaming`, `kyutai-stt`, `nemotron`), the encoder also runs
 incrementally — the sliding window cost is lower than for batch backends.
+
+### German Moonshine ONNX
+
+The optional `moonshine-onnx` backend supports the official German Streaming
+Tiny/Small checkpoints through pinned five-graph exports, with persistent
+frontend state and bounded encoder updates. The original Tiny two-graph export
+uses buffered recognition. See [German Moonshine deployment](german-moonshine.md)
+for licenses, SDK setup, bundle layout, streaming semantics and replay tests.
 
 ### Nemotron streaming (cache-aware FastConformer)
 

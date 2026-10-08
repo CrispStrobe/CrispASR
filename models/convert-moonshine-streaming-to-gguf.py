@@ -16,6 +16,7 @@ Usage:
 import argparse
 import json
 import sys
+import importlib.util
 from pathlib import Path
 
 import numpy as np
@@ -180,6 +181,11 @@ def main():
     dec_intermediate = config["intermediate_size"]
     vocab_size = config["vocab_size"]
     sliding_windows = enc_config.get("sliding_windows", [[16, 4]] * enc_layers)
+    # HF multilingual configs count the boundary exclusively: (17,5) means
+    # 16 past / 4 future positions. Existing English configs use inclusive
+    # (16,4). Never change the English checkpoints' established windows.
+    if vocab_size == 12288 and all(left == 17 and right in (1, 5) for left, right in sliding_windows):
+        sliding_windows = [[left - 1, right - 1] for left, right in sliding_windows]
     rope_params = config.get("rope_parameters", {})
     partial_rotary_factor = rope_params.get("partial_rotary_factor", 0.8)
     rope_theta = rope_params.get("rope_theta", 10000.0)
@@ -298,6 +304,12 @@ def main():
             writer.add_tensor(gguf_name, data, raw_dtype=ggml_type)
         mapped_count += 1
 
+    if "proj_out.weight" not in tensor_names and config.get("tie_word_embeddings"):
+        name = "model.decoder.embed_tokens.weight"
+        data = handles[tensor_names[name]].get_tensor(name)
+        writer.add_tensor("decoder.output.weight", np.ascontiguousarray(data.astype(out_dtype)), raw_dtype=ggml_type)
+        mapped_count += 1
+
     if unmapped:
         print(f"\nWarning: {len(unmapped)} unmapped tensors:")
         for name in unmapped:
@@ -308,6 +320,19 @@ def main():
     writer.write_kv_data_to_file()
     writer.write_tensors_to_file()
     writer.close()
+
+    # Every model owns its tokenizer; placing unlike vocabularies in the same
+    # directory must not silently change another model's interpretation.
+    spec = importlib.util.spec_from_file_location("moonshine_convert", Path(__file__).with_name("convert-moonshine-to-gguf.py"))
+    tokenizer_module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tokenizer_module)
+    import tempfile
+    with tempfile.TemporaryDirectory() as td:
+        tokenizer_module.convert_tokenizer(model_dir, Path(td), vocab_size)
+        tok = Path(td) / "tokenizer.bin"
+        if not tok.exists():
+            raise RuntimeError("missing tokenizer.json; refusing a model without its tokenizer")
+        Path(str(outfile) + ".tokenizer.bin").write_bytes(tok.read_bytes())
 
     size_mb = outfile.stat().st_size / 1024 / 1024
     print(f"Done! {outfile} ({size_mb:.1f} MB, {mapped_count} tensors)")

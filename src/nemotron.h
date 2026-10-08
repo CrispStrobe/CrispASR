@@ -119,7 +119,8 @@ void nemotron_transcribe_cb(struct nemotron_context* ctx, const float* samples, 
 // Persistent cache-aware streaming session. append() consumes new 16 kHz PCM
 // and emits tokens for encoder chunks that have become stable. flush=true
 // pads/processes the final short chunk. reset() starts a new utterance while
-// retaining the loaded model.
+// retaining the loaded model. Input packet sizes do not change the model
+// processing cadence: audio is regrouped into canonical internal steps.
 struct nemotron_stream* nemotron_stream_create(struct nemotron_context* ctx);
 void nemotron_stream_free(struct nemotron_stream* stream);
 bool nemotron_stream_append(struct nemotron_stream* stream, const float* samples, int n_samples, bool flush,

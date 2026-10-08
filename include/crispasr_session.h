@@ -701,6 +701,10 @@ CRISPASR_SESSION_API const char* crispasr_session_last_synth_error(crispasr_sess
 CRISPASR_SESSION_API char* crispasr_session_translate_text(crispasr_session* s, const char* text, const char* src_lang,
                                                            const char* tgt_lang, int max_tokens);
 CRISPASR_SESSION_API void crispasr_session_translate_text_free(char* text);
+// Streaming implementation: 0 unavailable, 1 rolling windows, 2 persistent
+// model caches, 3 text-prefix streaming. Model session must outlive its stream;
+// only one active stream/inference call per model session is supported.
+CRISPASR_SESSION_API int crispasr_session_stream_kind(crispasr_session* s);
 CRISPASR_SESSION_API crispasr_stream* crispasr_session_stream_open(crispasr_session* s, int n_threads, int step_ms,
                                                                    int length_ms, int keep_ms, const char* language,
                                                                    int translate);

@@ -1,6 +1,55 @@
 #include "moonshine-tokenizer.h"
 
 #include <cstdio>
+#include <fstream>
+#include "../examples/json.hpp"
+
+// SentencePiece byte fallback is text in the vocabulary, but bytes in the
+// decoded output. Decode before special-token filtering (which skips <...>).
+static std::vector<uint8_t> token_bytes(const std::string& token) {
+    if (token.size() == 6 && token.compare(0, 3, "<0x") == 0 && token.back() == '>') {
+        auto hex = [](char c) -> int {
+            if (c >= '0' && c <= '9')
+                return c - '0';
+            if (c >= 'A' && c <= 'F')
+                return c - 'A' + 10;
+            if (c >= 'a' && c <= 'f')
+                return c - 'a' + 10;
+            return -1;
+        };
+        int a = hex(token[3]), b = hex(token[4]);
+        if (a >= 0 && b >= 0)
+            return {static_cast<uint8_t>(a * 16 + b)};
+    }
+    return {token.begin(), token.end()};
+}
+
+bool moonshine_tokenizer::load_json(const char* path) {
+    try {
+        std::ifstream file(path);
+        const auto data = nlohmann::json::parse(file);
+        const auto& entries = data.at("model").at("vocab");
+        if (!entries.is_object())
+            return false;
+        vocab.clear();
+        auto put = [&](int id, const std::string& text) {
+            if (id < 0 || id > 1000000)
+                throw std::runtime_error("invalid vocabulary id");
+            if (vocab.size() <= static_cast<size_t>(id))
+                vocab.resize(id + 1);
+            vocab[id] = token_bytes(text);
+        };
+        for (auto it = entries.begin(); it != entries.end(); ++it)
+            put(it.value().get<int>(), it.key());
+        for (const auto& t : data.value("added_tokens", nlohmann::json::array()))
+            put(t.at("id").get<int>(), t.at("content").get<std::string>());
+        return !vocab.empty();
+    } catch (const std::exception& e) {
+        fprintf(stderr, "moonshine tokenizer: %s: %s\n", path, e.what());
+        vocab.clear();
+        return false;
+    }
+}
 
 static std::string replace_all(std::string str, const std::string& from, const std::string& to) {
     size_t pos = 0;
@@ -62,7 +111,7 @@ bool moonshine_tokenizer::load(const char* path) {
             return false;
         }
 
-        vocab.push_back(std::move(bytes));
+        vocab.push_back(token_bytes(std::string(bytes.begin(), bytes.end())));
     }
 
     fclose(f);

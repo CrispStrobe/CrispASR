@@ -532,3 +532,8 @@ if (NOT GGML_BACKEND_DL)
     target_link_libraries(crispasr-repack-probe PRIVATE ggml ggml-base ggml-cpu)
 endif()
 include(DefaultTargetOptions)
+
+if(TARGET moonshine_onnx)
+    target_sources(${TARGET} PRIVATE crispasr_backend_moonshine_onnx.cpp)
+    target_link_libraries(${TARGET} PRIVATE moonshine_onnx)
+endif()
