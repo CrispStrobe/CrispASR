@@ -14,6 +14,7 @@ import soundfile as sf
 from huggingface_hub import hf_hub_download
 
 ROOT = Path(__file__).resolve().parents[2]
+STEP_STUDY = os.environ.get('MIMO_GPU_STEP_STUDY') == '1'
 
 
 def save(path, data):
@@ -28,7 +29,8 @@ def sha(path):
 def worker(build, models, audio, out, enabled):
     build, models, audio, out = map(Path,(build,models,audio,out))
     out.mkdir(parents=True,exist_ok=True)
-    os.environ.update(CUDA_VISIBLE_DEVICES='0',CRISPASR_MIMO_ASR_GRAPH_PROFILE=enabled,
+    os.environ.update(CUDA_VISIBLE_DEVICES='0',CRISPASR_MIMO_ASR_GRAPH_PROFILE='1' if STEP_STUDY else enabled,
+                      CRISPASR_MIMO_ASR_GPU_STEP_GRAPH=enabled if STEP_STUDY else '0',
                       CRISPASR_MIMO_ASR_BENCH='1',OMP_NUM_THREADS='4')
     sys.path.insert(0,str(ROOT/'python'))
     from crispasr import Session
@@ -51,6 +53,12 @@ def worker(build, models, audio, out, enabled):
                 pcm,rate = sf.read(audio/(lang+'.wav'),dtype='float32')
                 assert rate == 16000 and pcm.ndim == 1
                 s.set_source_language(lang)
+                if STEP_STUDY and repeat == 0:
+                    dump = out/'logits'/lang
+                    dump.mkdir(parents=True,exist_ok=True)
+                    os.environ['CRISPASR_MIMO_ASR_DUMP_STEP_LOGITS'] = str(dump)
+                else:
+                    os.environ.pop('CRISPASR_MIMO_ASR_DUMP_STEP_LOGITS',None)
                 started = time.perf_counter()
                 text = ' '.join(seg.text for seg in s.transcribe(pcm)).strip()
                 elapsed = time.perf_counter()-started
@@ -62,6 +70,7 @@ def worker(build, models, audio, out, enabled):
                 result['calls'].append(dict(language=lang,repeat=repeat,measured=repeat>=2,
                                             seconds=elapsed,text=text,device=own))
                 save(out/'calls.json',result)
+    os.environ.pop('CRISPASR_MIMO_ASR_DUMP_STEP_LOGITS',None)
     for lang in ('en','zh'):
         prefix = out/('cli-'+lang)
         with (out/('cli-'+lang+'.log')).open('w') as log:
@@ -109,14 +118,46 @@ def main():
         text = logpath.read_text()
         assert 'mimo_asr: GPU backend active' in text and 'mimo_tokenizer: RVQ backend=CUDA' in text
         rows = re.findall(r'mimo_asr_graph: path=(\w+) past=(\d+) phase=(\w+) ms=([\d.]+)',text)
-        assert bool(rows) == (enabled=='1'), 'Profiling toggle not observed'
-        if enabled == '1':
+        assert bool(rows) == (STEP_STUDY or enabled=='1'), 'Profiling toggle not observed'
+        if STEP_STUDY:
+            expected_path = 'gpu_cached_step' if enabled=='1' else 'gpu_prefill_step'
+            assert any(row[0]==expected_path for row in rows), expected_path
+            assert 'step logit dump' not in text, 'Diagnostic dump failed'
+        elif enabled == '1':
             assert any(row[0]=='gpu_prefill_step' and row[2]=='graph_build' for row in rows)
         receipt['arms'].append(result)
         receipt['phase_rows'].append(rows)
         save(out/'mimo-graph-profile.json',receipt)
+    if STEP_STUDY:
+        comparisons = {}
+        for lang in ('en','zh'):
+            baseline = out/'arm-0'/'logits'/lang
+            files = sorted(p.name for p in baseline.glob('*.f32'))
+            assert len(files)>5
+            comparisons[lang] = {}
+            for index in [1,2,3]:
+                other = out/('arm-'+str(index))/'logits'/lang
+                assert sorted(p.name for p in other.glob('*.f32')) == files
+                rows = []
+                for name in files:
+                    a = np.fromfile(other/name,dtype=np.float32).astype(np.float64)
+                    b = np.fromfile(baseline/name,dtype=np.float32).astype(np.float64)
+                    assert a.shape == b.shape and len(a)>150000 and np.isfinite(a).all() and np.isfinite(b).all()
+                    an,bn = float(np.linalg.norm(a)),float(np.linalg.norm(b))
+                    cosine = float(np.dot(a,b)/(an*bn))
+                    rel = float(np.linalg.norm(a-b)/bn)
+                    row = dict(step=name,cosine=cosine,relative_l2=rel,mine_norm=an,ref_norm=bn,
+                               max_abs=float(np.max(np.abs(a-b))),argmax_exact=int(a.argmax())==int(b.argmax()))
+                    rows.append(row)
+                    comparisons[lang][str(index)] = rows
+                    receipt['step_logits'] = comparisons
+                    save(out/'mimo-graph-profile.json',receipt)
+                    assert cosine>.999999 and rel<.001 and row['argmax_exact'], (lang,index,row)
+        receipt['scope'] = 'Opt-in cached GPU T=1 graph versus unchanged legacy prefill decode; exact speech and step logits, same binary/files/GPU.'
     receipt['passed'] = True
     receipt['interpretation'] = 'Host wall phases, including synchronization. Profile toggle measures instrumentation overhead; no speedup is claimed.'
+    if STEP_STUDY:
+        receipt['interpretation'] = 'Same-binary ABBA on legacy/cached GPU decode. Two warmups, six measured calls/clip/process; logit dumps only during first excluded warmup. Default stays OFF.'
     save(out/'mimo-graph-profile.json',receipt)
 
 
