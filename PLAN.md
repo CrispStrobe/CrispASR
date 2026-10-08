@@ -11,6 +11,18 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
+
+Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, internal
+branch `review/pr492-acceptance`. Preserve contributor source
+`ac07cf0be3b528cdb035735738098e30f7468a41`, combine with the current main ggml
+pin, and add hosted CPU A/B checks for shared mel/attention and MiMo CLI/C ABI
+speech on default and non-flash paths. Cover F16 and shipped Q4 where resources
+permit; verify available independent reference fixtures before claiming parity.
+No attribution of the PR's combined CANN/NZ timing to this source alone.
+GPU/CANN acceptance remains separately scoped. #516 acceptance `37751687697`
+is queued; it is not being replaced or cancelled by this work.
+
 ## CLAIMED 2026-10-08 — #490 CTC character timestamps
 
 Worktree: `/mnt/storage/crispasr/issue490-characters-20261008/worktree`, branch
