@@ -82,7 +82,10 @@ Integrated #496/#514 source and APT setup pass native CI `37704656972`,
 regression `37704657102`, lint `37704656959` and five WASM builds
 `37704657094` on `d754aa10a`; Node emits three note-binding assertions.
 Lint Deep found an uninitialized Hikari probability, fixed in `4b45fec39`;
-focused cppcheck passes. Full hosted rerun `37729063238` is in progress.
+focused cppcheck passes. Full hosted rerun `37729063238` failed on a Hikari constructor virtual call.
+Fixed in `f55c7bc8c`: constructor and reset share a nonvirtual helper. Focused
+cppcheck 2.17.1 and C++ syntax pass; full pinned cppcheck 2.7 rerun
+`37737578258` is queued. No full deep-lint success is claimed yet.
 No new GPU performance claim. Cold proof: `/mnt/storage/crispasr/triage-20261007/`.
 #490 Arabic character alignment and #483's forced-MMQ experiment remain doable.
 #492 MiMo/CANN needs numerical/output acceptance. #492/#515 remain unmerged.
