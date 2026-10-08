@@ -18,9 +18,14 @@ on:
         type: choice
         options: ['12.8.0', '12.6.3']
         default: '12.8.0'
+      package_mmq_pair:
+        description: 'Build experimental CUDA 12.6.3 CLI ON/OFF MMQ packages (fixed 61-virtual;80-virtual targets)'
+        type: boolean
+        default: false
 
 jobs:
   win-cuda-smoke:
+    if: ${{ !inputs.package_mmq_pair }}
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v4
@@ -54,3 +59,67 @@ jobs:
             ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/acc.cu.obj ^
             ggml/src/ggml-cuda/CMakeFiles/ggml-cuda.dir/add-id.cu.obj || exit /b 1
           echo === WIN_CUDA_SMOKE_OK arch='${{ inputs.arch }}' ===
+
+  mmq-package:
+    if: ${{ inputs.package_mmq_pair }}
+    runs-on: windows-2022
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        mmq: ['OFF', 'ON']
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: Jimver/cuda-toolkit@v0.2.35
+        with:
+          cuda: '12.6.3'
+          method: 'network'
+          sub-packages: '["nvcc", "cudart", "cublas", "cublas_dev", "nvrtc", "nvrtc_dev", "nvtx", "cuda_profiler_api", "visual_studio_integration"]'
+      - name: Build matched PTX experiment
+        shell: cmd
+        run: |
+          for /f "tokens=*" %%i in ('"%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe" -latest -property installationPath') do set VSINSTALL=%%i
+          call "%VSINSTALL%\VC\Auxiliary\Build\vcvars64.bat"
+          cmake -S . -B build -G Ninja ^
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_EXPORT_COMPILE_COMMANDS=ON ^
+            -DGGML_CUDA=ON -DGGML_CUDA_FORCE_MMQ=${{ matrix.mmq }} ^
+            -DCMAKE_CUDA_ARCHITECTURES="61-virtual;80-virtual" ^
+            -DGGML_NATIVE=OFF -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON ^
+            -DCRISPASR_OPUS_FETCH=ON || exit /b 1
+          cmake --build build --target crispasr-cli crispasr-quantize -j 4 || exit /b 1
+      - name: Verify staged package and record exact configuration
+        shell: pwsh
+        run: tools/package-mmq-experiment.ps1 -Mode '${{ matrix.mmq }}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cuda126-ptx-mmq-${{ matrix.mmq }}
+          path: |
+            release/*.zip
+            release/manifest.json
+            release/*.txt
+          if-no-files-found: error
+          retention-days: 30
+
+  verify-mmq-pair:
+    needs: mmq-package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: cuda126-ptx-mmq-*
+          path: pair
+      - name: Verify identical source, PTX targets, CPU floor and CUDA runtime
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          off = json.loads(Path('pair/cuda126-ptx-mmq-OFF/manifest.json').read_text(encoding='utf-8-sig'))
+          on = json.loads(Path('pair/cuda126-ptx-mmq-ON/manifest.json').read_text(encoding='utf-8-sig'))
+          for key in ['commit', 'ggml_commit', 'toolkit', 'runtime_version', 'architectures', 'cpu_floor', 'runtime_sha256']:
+              assert off[key] == on[key], (key, off[key], on[key])
+          assert off['force_mmq'] == 'OFF' and on['force_mmq'] == 'ON'
+          assert off['gpu_execution'] is False and on['gpu_execution'] is False
+          print('MMQ_PAIR_OK: only MMQ differs; actual GPU acceptance remains external')
+          PY
