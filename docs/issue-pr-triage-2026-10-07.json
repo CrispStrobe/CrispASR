@@ -1610,7 +1610,12 @@
         "failures": [],
         "passed": true
       },
-      "next": "Selective same-weight F32 promotion ablation: head 4/8/16, output projections, FFN; preserve remaining Q4 matrices, unchanged gates."
+      "next": "Selective same-weight F32 promotion ablation: head 4/8/16, output projections, FFN; preserve remaining Q4 matrices, unchanged gates.",
+      "selective_promotion": {
+        "run": 37785711004,
+        "source": "09f65ad8b8347e278f83feeb5e04a5c477ce03e6",
+        "status": "queued"
+      }
     },
     "selected_pool_oracle": {
       "frames": [
@@ -1697,5 +1702,17 @@
       "status": "success",
       "delta": "documentation only since accepted runtime"
     }
+  },
+  "data2vec_nightly_followup": {
+    "run": 37768023710,
+    "job": 113289821084,
+    "source": "2da878e72629ccae55f412d88b0396b6bbcdfb6f",
+    "status": "Q4 speech failure, not fixed",
+    "actual": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+    "wer": 0.0455,
+    "wer_max": 0.0,
+    "f16_ctc_cos_min": 0.999141,
+    "next": "Matched v0.8.41/current Q4/Q8/F16 and original F32 CTC-head preservation A/B; thresholds unchanged",
+    "proof": "/mnt/storage/crispasr/triage-20261007/proof/integration-20261008/data2vec-nightly-failed.log"
   }
 }

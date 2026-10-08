@@ -11,6 +11,16 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-08 — data2vec nightly Q4 word insertion
+
+Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, planned branch
+`review/data2vec-nightly`. Nightly `37768023710`, job `113289821084`, fails
+Q4 JFK speech at runtime source `2da878e72`: an extra `A` after `AND SO`
+(WER 4.55% versus required zero). F16 logits still pass cosine 0.999141.
+Compare pinned v0.8.41/current builds and Q4/Q8/F16 weights before changing
+runtime, fixture or quantization policy. Test retaining the original F32 CTC
+head in Q4 as a controlled variant; do not relax transcript gates.
+
 ## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, internal
@@ -58,6 +68,7 @@ installs it through the bounded APT helper; replacement `37783601573` is
 PASS as a diagnostic, not PR acceptance. Same-weight F32 promotion gives
 pooling A/B relative L2 0.000115% and exact RVQ codes. Both native paths
 match the independent encoder; Q4 activation rounding remains the divergence.
+Selective-promotion run `37785711004` at `09f65ad8b` is queued.
 Next: selective-promotion ablation in this worktree (head 4/8/16 layers,
 output projections, FFN), retaining the remaining Q4 matrices and all gates. No weight precision is recovered; this is a diagnostic,
 not original-checkpoint or PR acceptance. The acceptance harness now saves all
