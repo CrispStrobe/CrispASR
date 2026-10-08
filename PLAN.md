@@ -99,7 +99,16 @@ the existing Moonshine config detector in CLI auto-detection and rerun both
 architectures. Graph-stage parity passes before this failure.
 Fixed in `a9c312cb1` with the same detector already used by the C ABI. The saved
 baseline fails; four local positive/negative routing checks pass. Fresh x86
-`37744837589` and ARM `37744841616` runs are queued.
+`37744837589` is running. ARM `37744841616` passes all eight cases at
+`a9c312cb1`: four graph variants each pass 15 stages at reported cosine
+1.000000 / relative L2 0 plus exact text; the isolated scale-negative control
+fails exactly one numeric check while text passes. All five ONNX choices pass
+one-token CLI/C ABI caps and reset; four persistent choices pass capped final
+output and both packet sizes. Native Nemotron/Qwen also pass.
+[Final ARM receipt](docs/moonshine-onnx-arm-2026-10-08.json).
+Prepared integration `c0f10937b` merges current main documentation only; its
+runtime is byte-identical to the accepted source and original author commits
+remain ancestors. Do not land until the corrected x86 acceptance passes.
 [Routing receipt](docs/moonshine-onnx-routing-2026-10-08.json). Earlier flush-only runs `37740556768`/`37740559460`
 were superseded while queued. The earlier ARM pass remains evidence for its own
 source, and is not approval of the new flush code. X86 `37738992713` was
@@ -141,7 +150,7 @@ Lint Deep found an uninitialized Hikari probability, fixed in `4b45fec39`;
 focused cppcheck passes. Full hosted rerun `37729063238` failed on a Hikari constructor virtual call.
 Fixed in `f55c7bc8c`: constructor and reset share a nonvirtual helper. Focused
 cppcheck 2.17.1 and C++ syntax pass; full pinned cppcheck 2.7 rerun
-`37737578258` is running. No full deep-lint success is claimed yet.
+`37737578258` passes the full pinned cppcheck 2.7 run.
 No new GPU performance claim. Cold proof: `/mnt/storage/crispasr/triage-20261007/`.
 #490 character alignment is implemented in draft PR #516, pending real-audio proof. #483 has matched packages;
 reporter GPU output/timing comparisons remain pending.

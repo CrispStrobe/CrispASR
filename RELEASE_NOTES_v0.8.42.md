@@ -167,7 +167,8 @@ See [MioTTS/Echo evidence](docs/miotts-echo-integration-2026-10-03.md),
 [issue/PR triage](docs/issue-pr-triage-2026-10-07.md) for source pins and runs.
 
 Before tagging, refresh this draft against the final main commit and complete
-its required checks. Hikari's full pinned deep-lint rerun is in progress.
+its required checks. Hikari's full pinned deep-lint rerun passes at `f55c7bc8c`.
 PR #515's persistent streaming/German ONNX integration still needs corrected
-x86/ARM acceptance; PR #492's MiMo/CANN changes remain unmerged. Reporter-specific
+x86 acceptance (the corrected ARM suite passes); PR #516 needs real Arabic
+character-alignment acceptance. PR #492's MiMo/CANN changes remain unmerged. Reporter-specific
 Windows/Vulkan, Intel Mac and newer NVIDIA hardware retests remain open.

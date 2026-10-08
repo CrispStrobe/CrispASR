@@ -24,7 +24,7 @@ called its virtual `reset()`. Source `f55c7bc8c` moves the common state reset
 into a private nonvirtual helper used by both entry points, preserving model,
 VAD and transcript reset behavior. Focused cppcheck 2.17.1, clang-format 18 and
 C++17 syntax checks pass. Full hosted pinned cppcheck 2.7 rerun `37737578258`
-is running; this entry does not claim that full run passed.
+passes the full analysis at `f55c7bc8c`.
 
 ## DONE 2026-10-07 — narrow issue/PR integration and Orukeet speech acceptance
 
