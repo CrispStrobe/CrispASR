@@ -191,6 +191,7 @@ char* crispasr_session_translate_text(CrispasrSession* s, const char* text, cons
 void crispasr_session_translate_text_free(char* text);
 
 // Streaming
+int crispasr_session_stream_kind(CrispasrSession* s);
 struct CrispasrStream;
 struct CrispasrStream* crispasr_session_stream_open(CrispasrSession* s, int n_threads, int step_ms, int length_ms,
                                                     int keep_ms, const char* language, int translate);
@@ -1302,6 +1303,11 @@ EMSCRIPTEN_BINDINGS(whisper) {
             }
             return out;
         }));
+
+    // Streaming mode of the active backend session (0 when none is loaded).
+    emscripten::function("sessionStreamKind", emscripten::optional_override([]() {
+                             return g_tts_session ? crispasr_session_stream_kind(g_tts_session) : 0;
+                         }));
 
     // Native input rate the loaded pitch model expects (16000 for CREPE), or
     // 0 when the session has no pitch arm — doubles as a capability probe.

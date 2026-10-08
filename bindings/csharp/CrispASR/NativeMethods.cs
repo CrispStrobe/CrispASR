@@ -534,6 +534,9 @@ namespace CrispASR
 
         // ---- Streaming ----
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int crispasr_session_stream_kind(IntPtr session);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern IntPtr crispasr_session_stream_open(
             IntPtr s, int nThreads, int stepMs, int lengthMs,
             int keepMs, [MarshalAs(UnmanagedType.LPUTF8Str)] string language, int translate);

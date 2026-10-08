@@ -6578,10 +6578,14 @@ int main(int argc, char** argv) {
                     shape.erase(axis);
                 }
                 std::reverse(shape.begin(), shape.end());
+                // Ref::shape reports the ggml shape without singleton axes
+                // after dimension zero (including interior unit axes).
+                if (shape.size() > 1)
+                    shape.erase(std::remove(shape.begin() + 1, shape.end(), 1), shape.end());
                 auto expected = ref.get_f32(stage.name);
                 auto report =
                     ref.compare(stage.name, stage.data.data(), stage.data.size(), crispasr_diff::Ref::COS_FIRST_DIM);
-                print_row(stage.name.c_str(), report, COS_THRESHOLD);
+                print_row(stage.name.c_str(), report, 0.99999f);
                 // Cosine alone cannot detect a scale bug. Gate magnitude and
                 // exact shape/count as well; missing stages are failures.
                 const double relative_l2 = report.rms / std::max(1e-12f, report.rms_ref);

@@ -475,6 +475,7 @@ extern "C" {
     ) -> c_int;
 
     // --- Streaming (PLAN #62) — rolling-window decoder for whisper today ---
+    pub fn crispasr_session_stream_kind(s: *mut CrispasrSession) -> c_int;
     pub fn crispasr_session_stream_open(
         s: *mut CrispasrSession,
         n_threads: c_int,

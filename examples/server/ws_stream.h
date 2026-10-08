@@ -22,6 +22,7 @@ struct CrispasrSession;
 struct CrispasrStream;
 struct CrispasrSession* crispasr_session_open(const char* model_path, int n_threads);
 void crispasr_session_close(struct CrispasrSession* s);
+int crispasr_session_stream_kind(struct CrispasrSession* s);
 struct CrispasrStream* crispasr_session_stream_open(struct CrispasrSession* s, int n_threads,
                                                      int step_ms, int length_ms, int keep_ms,
                                                      const char* language, int translate);

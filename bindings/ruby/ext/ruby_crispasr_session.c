@@ -165,6 +165,7 @@ extern void crispasr_align_result_free(struct crispasr_align_result* r);
 
 // --- Streaming (PLAN #62b): rolling-window decoder. Whisper-only at the C-ABI today.
 struct CrispasrStream;
+extern int crispasr_session_stream_kind(struct CrispasrSession* s);
 extern struct CrispasrStream* crispasr_session_stream_open(struct CrispasrSession* s, int n_threads, int step_ms,
                                                            int length_ms, int keep_ms, const char* language,
                                                            int translate);
@@ -1262,6 +1263,10 @@ static VALUE rb_kokoro_resolve_for_lang(VALUE self, VALUE model_path, VALUE lang
 // Streaming (PLAN #62b) — rolling-window decoder. Whisper-only at the C-ABI today.
 // =====================================================================
 
+static VALUE rb_session_stream_kind(VALUE self, VALUE session_h) {
+    return INT2NUM(crispasr_session_stream_kind((struct CrispasrSession*)NUM2ULL(session_h)));
+}
+
 static VALUE rb_stream_open(VALUE self, VALUE session_h, VALUE step_ms, VALUE length_ms, VALUE keep_ms, VALUE language,
                             VALUE translate) {
     struct CrispasrSession* sess = (struct CrispasrSession*)NUM2ULL(session_h);
@@ -1269,7 +1274,7 @@ static VALUE rb_stream_open(VALUE self, VALUE session_h, VALUE step_ms, VALUE le
     struct CrispasrStream* st = crispasr_session_stream_open(sess, 4, NUM2INT(step_ms), NUM2INT(length_ms),
                                                              NUM2INT(keep_ms), lang, RTEST(translate) ? 1 : 0);
     if (!st) {
-        rb_raise(rb_eRuntimeError, "crispasr_session_stream_open failed (whisper-only today)");
+        rb_raise(rb_eRuntimeError, "crispasr_session_stream_open failed");
     }
     return ULL2NUM((uintptr_t)st);
 }
@@ -1940,6 +1945,7 @@ void init_ruby_crispasr_session(VALUE* mWhisper) {
 
     // Streaming (PLAN #62b) — CrispASR::Session::Stream.{open, feed, get_text, flush, close}.
     mStream = rb_define_module_under(mSession, "Stream");
+    rb_define_singleton_method(mSession, "stream_kind", rb_session_stream_kind, 1);
     rb_define_singleton_method(mStream, "open", rb_stream_open, 6);
     rb_define_singleton_method(mStream, "feed", rb_stream_feed, 2);
     rb_define_singleton_method(mStream, "get_text", rb_stream_get_text, 1);

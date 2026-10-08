@@ -232,6 +232,7 @@ int crispasr_cache_dir_abi(const char* cache_dir_override, char* out_buf, int ou
 
 // --- Streaming (PLAN #62) ---
 typedef struct CrispasrStream CrispasrStream;
+int crispasr_session_stream_kind(CrispasrSession* s);
 CrispasrStream* crispasr_session_stream_open(CrispasrSession* s, int n_threads, int step_ms,
                                              int length_ms, int keep_ms, const char* language, int translate);
 CrispasrStream* crispasr_stream_open(void* ctx, int n_threads, int step_ms,
@@ -876,6 +877,12 @@ type StreamingUpdate struct {
 	Counter int64
 }
 
+// StreamKind returns 0 for unavailable streaming, 1 for rolling windows,
+// 2 for persistent model caches, or 3 for text-prefix streaming.
+func (s *CrispasrSession) StreamKind() int {
+	return int(C.crispasr_session_stream_kind(s.handle))
+}
+
 // StreamOpen opens a rolling-window streaming decoder for this session.
 // Currently whisper-only at the C-ABI level. stepMs (default 3000) is
 // how often to commit a partial transcript; lengthMs (default 10000) is
@@ -889,7 +896,7 @@ func (s *CrispasrSession) StreamOpen(stepMs, lengthMs, keepMs int, language stri
 	}
 	h := C.crispasr_session_stream_open(s.handle, C.int(4), C.int(stepMs), C.int(lengthMs), C.int(keepMs), clang, tr)
 	if h == nil {
-		return nil, errors.New("crispasr_session_stream_open failed (whisper-only today)")
+		return nil, errors.New("crispasr_session_stream_open failed")
 	}
 	return &Stream{handle: h}, nil
 }

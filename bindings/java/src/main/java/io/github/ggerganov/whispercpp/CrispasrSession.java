@@ -185,6 +185,7 @@ public final class CrispasrSession implements AutoCloseable {
         int crispasr_cache_dir_abi(String cacheDirOverride, byte[] outBuf, int outCap);
 
         // --- Streaming (PLAN #62b) — rolling-window decoder, whisper-only today.
+        int crispasr_session_stream_kind(Pointer session);
         Pointer crispasr_session_stream_open(Pointer session, int nThreads, int stepMs,
                                              int lengthMs, int keepMs, String language, int translate);
         int     crispasr_stream_feed(Pointer stream, float[] pcm, int nSamples);
@@ -954,10 +955,16 @@ public final class CrispasrSession implements AutoCloseable {
         return Lib.INSTANCE.crispasr_session_output_channels(handle);
     }
 
+    /** Streaming mode: 0 unavailable, 1 rolling windows, 2 persistent
+     * model caches, 3 text-prefix streaming. */
+    public int streamKind() {
+        return Lib.INSTANCE.crispasr_session_stream_kind(handle);
+    }
+
     /**
      * Open a rolling-window streaming decoder for this session. Mirrors
      * Go's {@code Session.StreamOpen} and the Python {@code Session.stream_open}.
-     * Currently whisper-only at the C-ABI level (PLAN #62b).
+     * Call streamKind() to query the loaded model's streaming implementation.
      *
      * @param stepMs   commit interval — how often to emit a partial transcript (default 3000)
      * @param lengthMs rolling window in ms (default 10000)
@@ -971,7 +978,7 @@ public final class CrispasrSession implements AutoCloseable {
                 handle, 4, stepMs, lengthMs, keepMs, language == null ? "" : language, translate ? 1 : 0);
         if (p == null) {
             throw new IllegalStateException(
-                    "crispasr_session_stream_open failed (whisper-only today)");
+                    "crispasr_session_stream_open failed");
         }
         return new Stream(p);
     }

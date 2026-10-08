@@ -755,15 +755,19 @@ namespace CrispASR
         // ----------------------------------------------------------------
 
         /// <summary>
-        /// Open a rolling-window streaming decoder. Whisper-only at the C-ABI level today.
+        /// Streaming mode: 0 unavailable, 1 rolling windows, 2 persistent
+        /// model caches, 3 text-prefix streaming.
         /// </summary>
+        public int StreamKind() => NativeMethods.crispasr_session_stream_kind(Handle);
+
+        /// <summary>Open a streaming decoder for this session's backend.</summary>
         public StreamDecoder StreamOpen(int stepMs = 3000, int lengthMs = 10000, int keepMs = 200,
                                         string? language = null, bool translate = false, int nThreads = 4)
         {
             var p = NativeMethods.crispasr_session_stream_open(
                 Handle, nThreads, stepMs, lengthMs, keepMs, language ?? "", translate ? 1 : 0);
             if (p == IntPtr.Zero)
-                throw new InvalidOperationException("stream_open failed (whisper-only today)");
+                throw new InvalidOperationException("stream_open failed");
             return new StreamDecoder(p);
         }
 

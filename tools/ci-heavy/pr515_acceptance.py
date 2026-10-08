@@ -59,7 +59,7 @@ run(['cmake', '--build', build, '--target', 'crispasr-cli', 'crispasr-lib',
      'crispasr-diff', 'test-moonshine-tokenizer', 'test-qwen3-stream', 'test-nemotron-params', 'test-registry', '-j4'], 'build')
 for target in ['test-moonshine-tokenizer', 'test-qwen3-stream', 'test-nemotron-params', 'test-registry']:
     run([build / 'bin' / target], target)
-run([sys.executable, ROOT / 'tools/check-backend-wiring.py', '--crispasr', build / 'bin/crispasr'], 'wiring')
+run([sys.executable, ROOT / 'tools/check-backend-wiring.py', '--crispasr', build / 'bin/crispasr', '--require-lib'], 'wiring')
 
 manifest = json.loads((ROOT / 'tests/regression/manifest.json').read_text())
 # This later fixture is absent from the global regression revision. Pin it
@@ -198,6 +198,7 @@ for variant, expected_kind in variants:
                 case['scale_failure_rejected'] = True
         with Session(str(model), lib_path=str(library), n_threads=4) as session:
             kind = lib.crispasr_session_stream_kind(session._handle)
+            assert session.stream_kind() == kind
             assert kind == expected_kind, (kind, expected_kind)
             batch = ' '.join(x.text for x in session.transcribe(pcm, language='de')).strip()
             assert batch == cli_text, (batch, cli_text)

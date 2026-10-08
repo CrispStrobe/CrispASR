@@ -30,6 +30,27 @@ are forwarded to the native runtime. The Python getter is
 `session.output_sample_rate()`, Go uses `OutputSampleRate()`, and Dart exposes
 `outputSampleRate`.
 
+## Streaming implementation query
+
+`crispasr_session_stream_kind(session)` returns 0 for unavailable streaming,
+1 for rolling windows, 2 for persistent model caches and 3 for text-prefix
+streaming (accumulated audio is re-encoded). It describes the loaded model;
+legacy Moonshine ONNX is batch-only even when the backend name is shared.
+
+| Wrapper | Query |
+|---|---|
+| Python / Rust | `session.stream_kind()` |
+| Go / C# | `session.StreamKind()` |
+| Java | `session.streamKind()` |
+| Dart | `session.streamingKind` |
+| Ruby | `CrispASR::Session.stream_kind(handle)` |
+| WASM/JS | `sessionStreamKind()` for the session opened with `ttsOpenExplicit` |
+
+The WebSocket streaming server includes `stream_kind` in its ready event.
+Python and Dart return 0 when an older library lacks the query. Other compiled
+wrappers require the matching native library. The model session must outlive
+its stream; allow only one active stream or inference call per model session.
+
 ## Session setter reference
 
 All generation-control setters are available in every binding. Each

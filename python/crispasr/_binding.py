@@ -2761,6 +2761,17 @@ class Session:
     # Streaming API (PLAN #62a — Python wrapper for crispasr_stream_*).
     # ------------------------------------------------------------------
 
+    def stream_kind(self) -> int:
+        """Streaming mode: 0 unavailable, 1 rolling windows, 2 persistent
+        model caches, 3 text-prefix streaming. Older libraries return 0.
+        """
+        if not hasattr(self._lib, "crispasr_session_stream_kind"):
+            return 0
+        fn = self._lib.crispasr_session_stream_kind
+        fn.argtypes = [ctypes.c_void_p]
+        fn.restype = ctypes.c_int
+        return fn(self._handle)
+
     def stream_open(self, *, step_ms: int = 3000, length_ms: int = 10000, keep_ms: int = 200,
                     language: str = "", translate: bool = False, live: bool = False) -> "Session._Stream":
         """Open a rolling-window streaming decoder for this session.

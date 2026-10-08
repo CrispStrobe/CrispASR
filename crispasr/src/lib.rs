@@ -1457,8 +1457,14 @@ impl Session {
         Ok(out)
     }
 
+    /// Streaming mode: 0 unavailable, 1 rolling windows, 2 persistent
+    /// model caches, 3 text-prefix streaming.
+    pub fn stream_kind(&self) -> i32 {
+        unsafe { crispasr_sys::crispasr_session_stream_kind(self.handle) }
+    }
+
     /// Open a rolling-window streaming decoder for this session
-    /// (PLAN #62). Currently whisper-only at the C-ABI level; other
+    /// (PLAN #62). Unsupported
     /// backends return an error. `step_ms` is how often to commit a
     /// partial transcript (default 3000); `length_ms` is the rolling
     /// window size (default 10000); `keep_ms` is the trailing audio

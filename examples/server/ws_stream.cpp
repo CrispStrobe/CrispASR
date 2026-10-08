@@ -277,7 +277,8 @@ static void ws_handle_connection(socket_t client_fd) {
         return;
     }
 
-    ws_send_text(client_fd, "{\"status\":\"ready\"}");
+    ws_send_text(client_fd, "{\"status\":\"ready\",\"stream_kind\":" +
+                 std::to_string(crispasr_session_stream_kind(session)) + "}");
 
     // 4. Frame loop: binary = PCM, text = control, close = bye
     std::vector<uint8_t> payload;
