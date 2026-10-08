@@ -18,25 +18,26 @@ Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
 `2bf39c58a53160ed10aed82d5d621c794dc32bba`, preserve author commits,
 and test on current main with bounded APT setup. Inspect packet/flush and
 UTF-8 behavior, German ONNX model/companion/licence routing, C ABI and bindings.
-Validation branch `107789133` preserves the
-author commits. Review found named-model downloads omitted companions and
-selected extras by runtime rather than matched variant. Fixed on the branch;
-actual resolver/CLI offline checks pass six isolated bundles, cache reuse,
-failed-companion rejection and cached repair. Hosted CPU acceptance
-[37730765885](https://github.com/CrispStrobe/CrispASR/actions/runs/37730765885),
-native CI [37730684549](https://github.com/CrispStrobe/CrispASR/actions/runs/37730684549)
-and regression [37730687001](https://github.com/CrispStrobe/CrispASR/actions/runs/37730687001)
-are queued. Native/regression source is `710457c5b`; the later change only
-pins German acceptance audio at a revision that contains it. Added required
-ONNX per-graph profiling, README model entries and C ABI exception cleanup.
-Adding a dedicated optional ONNX graph-stage reference/diff path: compare the
-actual runtime graph outputs to an independent Python ONNX driver, including
-input alignment and magnitudes. This measures wrapper/graph execution parity;
-it does not independently certify the exporter against the source checkpoint.
-CPU acceptance covers six German deployments, Nemotron/Qwen
-packet partitioning, UTF-8 retries, flush and C ABI loading. These are acceptance
-checks; per-stage numerical parity is not claimed. Do not merge #515 before
-required review and validation pass.
+Validation branch `f43dfd5eb5f9915e2c54b42da1ce5fa3fa00318d` preserves the
+author commits. Fixed matched-model companion downloads, failure propagation
+and cached repair; actual CLI/resolver offline probes pass six bundles.
+Hosted CPU [37730765885](https://github.com/CrispStrobe/CrispASR/actions/runs/37730765885)
+built and loaded all six German choices. Five choices and Qwen streaming passed;
+Small int8 final punctuation differed from batch, and Nemotron C ABI batch leaked
+a language tag already removed by the CLI. Fixes recompute the whole encoder
+once at ONNX final flush (window-dependent int8 scales) and share Nemotron tag
+cleanup across CLI, C ABI words/text and streams. Strict gates are retained.
+
+Added optional ONNX graph-stage reference/diff integration with exact PCM/shape,
+cosine >= 0.99999, relative L2 <= 1e-4, independent tokenizer text and a 2x-scale
+negative control. This validates wrapper execution of identical graphs, not the
+exporter against source PyTorch checkpoints. C++ runtime syntax and formatting
+pass locally. New CPU acceptance
+[37732822370](https://github.com/CrispStrobe/CrispASR/actions/runs/37732822370)
+is queued at the validation branch above. Earlier native CI `37730684549`
+passes Linux unit, Windows and Clang AMR so far; remaining jobs and numerical
+regression `37730687001` are pending on `710457c5b`. Final source checks must
+cover the follow-up fixes. #515 stays unmerged pending validation.
 
 ## OPEN 2026-10-08 — final main checks and remaining triage
 

@@ -791,7 +791,7 @@
     "comment": "https://github.com/CrispStrobe/CrispASR/issues/491#issuecomment-6052699324"
   },
   "pr515_review": {
-    "source_commit": "107789133",
+    "source_commit": "f43dfd5eb5f9915e2c54b42da1ce5fa3fa00318d",
     "merged": false,
     "offline_bundle_probe": [
       {
@@ -836,15 +836,112 @@
       }
     ],
     "queued_runs": {
-      "cpu": 37730765885,
+      "cpu": 37732822370,
       "ci": 37730684549,
       "regression": 37730687001
     },
-    "runtime_commit": "710457c5becfbd4464ec8da838322ec0d71c2165",
+    "runtime_commit": "f43dfd5eb5f9915e2c54b42da1ce5fa3fa00318d",
     "driver_smoke": {
       "passed": true,
       "tests": 56
     },
-    "review_comment": "https://github.com/CrispStrobe/CrispASR/pull/515#issuecomment-6052735019"
+    "review_comment": "https://github.com/CrispStrobe/CrispASR/pull/515#issuecomment-6052735019",
+    "cpu_previous": {
+      "commit": "107789133cbfeabba1295e9958d47547dae52f59",
+      "scope": "CPU download/bundle/C ABI packet/flush acceptance; no GPU performance claim",
+      "cases": [
+        {
+          "variant": "moonshine-streaming-tiny-de-onnx",
+          "passed": true,
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
+          "streaming_kind": 2,
+          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
+          "updates": [
+            7,
+            7
+          ]
+        },
+        {
+          "variant": "moonshine-streaming-small-de-onnx",
+          "passed": false,
+          "batch": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
+          "streaming_kind": 2,
+          "error": "AssertionError(('Guten Morgen, die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.', 'Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.'))"
+        },
+        {
+          "variant": "moonshine-streaming-tiny-de-onnx-f32",
+          "passed": true,
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
+          "streaming_kind": 2,
+          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
+          "updates": [
+            7,
+            7
+          ]
+        },
+        {
+          "variant": "moonshine-streaming-small-de-onnx-f32",
+          "passed": true,
+          "batch": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
+          "streaming_kind": 2,
+          "final": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
+          "updates": [
+            7,
+            7
+          ]
+        },
+        {
+          "variant": "moonshine-tiny-de-phreak87-onnx",
+          "passed": true,
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im gro\u00dfen saal",
+          "streaming_kind": 0
+        },
+        {
+          "variant": "moonshine-tiny-de-dattazigzag",
+          "passed": true,
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im gro\u00dfen saal",
+          "streaming_kind": 0
+        },
+        {
+          "variant": "nemotron",
+          "passed": false,
+          "model_pin": {
+            "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
+            "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
+            "_revision_note": "TODO: replace with actual 40-char SHA from HF repo.",
+            "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
+            "approx_size_mb": 458
+          },
+          "error": "AssertionError(('Guten Morgen, die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal. <de-DE>', 'Guten Morgen, die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.'))"
+        },
+        {
+          "variant": "qwen3",
+          "passed": true,
+          "model_pin": {
+            "repo": "cstr/qwen3-asr-0.6b-GGUF",
+            "revision": "ad086c22597ed47af05cc159dd61c98bd6e945f9",
+            "file": "qwen3-asr-0.6b-q4_k.gguf",
+            "approx_size_mb": 400
+          },
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.",
+          "streaming_kind": 3,
+          "final": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.",
+          "updates": [
+            2,
+            2
+          ]
+        }
+      ],
+      "audio_sha256": "7d161e34953595856acc195aee52e9e2a48724b669176f2f0b38549d60927ba3",
+      "fixture_revision": "e9a1bd899e6b46f8a624aec05fc605c5461b13db",
+      "passed": false,
+      "run_id": 37730765885
+    },
+    "earlier_ci_source": "710457c5becfbd4464ec8da838322ec0d71c2165",
+    "fixes_pending_proof": [
+      "Whole encoder recompute at final ONNX flush avoids int8 window-dependent scales",
+      "Shared Nemotron language-tag stripping for CLI and C ABI text/words/stream"
+    ],
+    "stage_diff_scope": "Native C++ against independent Python ORT driver, identical deployed graphs; exporter-to-source checkpoint parity is not claimed"
   }
 }

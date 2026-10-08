@@ -90,18 +90,30 @@ Released v0.8.41 reproduces the original failure. Missing licence acceptance
 refuses without downloading. This proves routing and speech acceptance across
 those surfaces, not new numerical parity or speed.
 
-PR #515 validation branch `107789133`
-preserves author commits. Review found and fixed missing companions on named
-CLI downloads, variant-confused extras and silent companion failures. Actual
-resolver/CLI offline checks pass six isolated bundles, cache reuse, failure
-rejection and repair. Fresh [CPU acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37730765885),
-[native CI](https://github.com/CrispStrobe/CrispASR/actions/runs/37730684549) and
-[regression](https://github.com/CrispStrobe/CrispASR/actions/runs/37730687001)
-are queued; #515 remains unmerged pending validation. Native/regression runs
-use identical runtime source at `710457c5b`; `107789133` only corrects the
-German acceptance fixture pin. Added `MOONSHINE_ONNX_BENCH=1` per-graph
-timing, README entries and C ABI exception-result cleanup. Regression-driver
-smoke passes 56 tests. #491 is closed with final acceptance linked.
+PR #515 validation branch `f43dfd5eb5f9915e2c54b42da1ce5fa3fa00318d`
+preserves author commits. Review fixed missing/wrong companions on named-model
+downloads, failure propagation and cached repair. Offline actual CLI/resolver
+probes pass six isolated bundles. Hosted CPU `37730765885` built successfully,
+loaded all six deployments, and passed five German choices plus Qwen streaming.
+It found Small int8 final punctuation drift versus batch and Nemotron C ABI batch
+language-tag leakage. Neither failure gate was relaxed. Final ONNX flush now
+recomputes whole-utterance encoder output because dynamic int8 scales depend on
+window shape; Nemotron cleanup is shared with the CLI and also filters C ABI
+word output.
+
+Added an optional independent Python ONNX driver and `crispasr-diff` dispatch:
+exact PCM and shapes, cosine >= 0.99999, relative L2 <= 1e-4 and final text via
+Python's standard tokenizer. A deliberately scaled reference must fail. This
+measures native wrapper/graph execution parity; it does not certify the exporter
+against original source checkpoints. C++ runtime syntax, formatting and Python
+syntax pass locally; regression-driver smoke passed 56 tests.
+
+[New CPU acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37732822370)
+is queued at `f43dfd5eb`. Earlier [native CI](https://github.com/CrispStrobe/CrispASR/actions/runs/37730684549)
+passes Linux unit, Windows and Clang AMR; remaining jobs and
+[numerical regression](https://github.com/CrispStrobe/CrispASR/actions/runs/37730687001)
+are pending on the earlier runtime source. #515 remains unmerged. #491 is closed
+with final acceptance linked.
 
 The earlier native CI dispatch `37703783152` was superseded by the apt-fixed
 source dispatch. Original proof source and queued-run commits remain reachable
