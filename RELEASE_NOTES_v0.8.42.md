@@ -201,8 +201,10 @@ Existing wav2vec2 GPU transcript drift remains under investigation.
   official HTTPS mirror, bounds network waits and preserves error exits.
 - Repaired the Apple Metal cache smoke test for the ggml device API and
   Objective-C++17, with explicit Metal linkage. A focused macOS workflow checks
-  shared/static builds; unavailable GPU hardware produces a skip. Hosted
-  compilation is pending; this is not proof of serialized GPU pipelines.
+  shared/static builds and asserts both tests are discovered. Actual macOS
+  compilation and both lifecycle/disable-env tests pass in both configurations
+  without skipping (`37762956547`). Unavailable GPU hardware produces a skip;
+  lifecycle coverage does not prove serialized compute pipelines or speed.
 - Kaggle regression honors SRT transcripts, downloads declared companions, and
   uses corrected model revisions. Registry URL checking verifies manifest pins.
 - The manual Windows CUDA smoke workflow can package matched CUDA-12.6
@@ -234,6 +236,8 @@ PR #515 passes final x86/ARM acceptance: all eight cases on each architecture,
 15 exact stages per five-graph deployment, scale-negative control, and CLI/C ABI
 cap/reset/stream checks. These compare identical deployed ONNX exports against
 independent Python ORT execution. PR #516 passes full real Arabic character
-alignment and Java/JNA acceptance; final main platform checks remain required.
+alignment and Java/JNA acceptance. Integrated native CI, regression, lint,
+Moonshine speech acceptance, Go/Rust/C#/Dart, WASM and Windows live translation
+checks pass at their recorded sources; full pinned deep lint is still running.
 PR #492's MiMo/CANN changes remain unmerged. Reporter-specific
 Windows/Vulkan, Intel Mac and newer NVIDIA hardware retests remain open.

@@ -7,6 +7,21 @@ technical deep-dives are in `LEARNINGS.md`.
 ---
 
 
+## DONE 2026-10-08 — Metal cache test compatibility and actual discovery
+
+Repaired the ggml device-init signature, explicit Metal/Objective-C linkage,
+Objective-C++17 and cache environment restoration. Catch 3.7.1 splits
+semicolon-valued labels, so the workflow selects the two cases by name and
+asserts discovery before execution. Saved negative controls reject the old
+API call and reproduce zero tests from the old label filter.
+
+Actual macOS run `37762956547` at integrated `ff33461e0` passes shared job
+`113263858880` and static job `113263859250`. Each discovers and executes both
+lifecycle/disable-env tests without skipping (shared 24.53/0.08 s, static
+26.35/0.07 s). This validates initialization, teardown, reinitialization and
+the cache-disable path. It does not prove compute PSO serialization or speed.
+Cold logs: `/mnt/storage/crispasr/metal-cache-20261008/proof/`.
+
 ## 2026-10-08 — Moonshine ONNX destructor cleanup
 
 Integrated-source deep analysis `37749837117` reported the adapter's virtual

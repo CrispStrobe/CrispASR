@@ -23,31 +23,11 @@ and main platform validation remain required before release. No model/stream
 compute graph changed. Receipts: `proof/moonshine-destructor/` in this worktree's
 sibling directory; hosted failure and fix scope are in the triage report.
 
-## CLAIMED 2026-10-08 — Metal cache test API compatibility
-
-Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`. Fixed the existing
-Apple-only cache test after the ggml v0.26.0 device-init signature change,
-explicit Metal linkage and Objective-C++17. A real compiler negative control
-rejects the old single-argument call and accepts the new two-argument call.
-The fixture now restores both cache environment variables; no-device cases
-explicitly skip instead of reporting success. Added `metal-cache-test.yml`
-(shared/static macOS build and focused CTest). First shared hosted build
-`37755267314` compiled the Objective-C++ test, then failed linking Objective-C
-runtime symbols. Added explicit `objc` linkage in `7b44257d3`; fresh shared/static
-validation `37757366299` compiled and linked the static test, then failed because
-Catch 3.7.1 splits semicolon-valued label properties: CTest found no tests for
-`-L pipeline-cache`. A saved minimal reproduction confirms the old selection
-finds zero tests. The workflow now selects the suite by name, asserts exactly
-two discovered cases, and retains the unit label. The corrected discovery
-passes locally; fresh actual macOS validation `37761910908` is queued at
-`608e60122`.
-No GPU cache execution or runtime/cache-default change is claimed.
-
 ## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, internal
-branch `review/pr492-acceptance`, latest documentation `18b69d580`; runtime
-and F16 harness source remains `c50c50061`.
+branch `review/pr492-acceptance`, latest diagnostic source `3c176505a`;
+completed F16 runtime/harness source remains `c50c50061`.
 Original numerical source: `fae7e22419b8c797dfa2759a9d4884a8f426bf63`.
 Contributor commits through `ac07cf0be3b528cdb035735738098e30f7468a41` are
 preserved as ancestors; merge against current main was clean, with unchanged
@@ -63,7 +43,7 @@ baseline, and all 12 English/Chinese CLI/session outputs across three arms
 match. Non-flash hidden-state cosine is 0.998144631 / relative L2 6.1097%;
 logits are 0.998423708 / 7.4700%. Tokenizer pooling relative L2 is 8.3401%
 and RVQ code agreement is 73.5960%. No threshold was relaxed; #492 remains
-unmerged pending diagnosis and F16 evidence. The unstarted
+unmerged pending diagnosis. The unstarted
 F16 job `37754323202` was cancelled after finding a legacy C-ABI device flag
 bug that can force a full weight copy on a CPU-only runner. Replacement
 Q4/F16 `--quant all` run `37758607763` was cancelled before execution because
@@ -72,6 +52,23 @@ the known Q4 gate would prevent F16 from running. F16-only replacement
 releases session model/KV before each CLI load. It compares main/default, candidate/default and
 candidate/non-flash: five LM stage values/norms/relative L2, tokenizer continuous
 stages and exact RVQ codes, English/Chinese CLI/session equality and transcripts.
+F16 run `37761799417` now completes but FAILS on the same Q4 tokenizer
+pooling/RVQ gates. All five F16 LM A/B comparisons pass unchanged thresholds
+(hidden relative L2 0.04045%, logits 0.03690%); default stages remain exact.
+All five stages in all three arms pass the independent Python reference gate
+(hidden cosine >=0.999570796 / relative L2 <=2.93281%; logits >=0.999751999 /
+<=2.27965%). All 12 EN/ZH CLI/session transcripts match. Artifact `11547195216`
+is archived. This is partial evidence, not a passing acceptance run.
+
+Diagnostic source `3c176505a` merges current main while preserving contributor
+ancestry. `pr492_tokenizer_diagnose.py` promotes the same dequantized Q4 matrix
+weights to F32 and compares native flash/eager paths with the pinned official
+Python transformer on identical conv2 input. Pooling is checked independently
+on each arm's own input, with scale/time-order controls. Hosted `37775542252`
+is queued, not accepted. No weight precision is recovered; this is a diagnostic,
+not original-checkpoint or PR acceptance. The acceptance harness now saves all
+completed comparisons before failing and lets both quantizations finish.
+
 F16 is the LM; both jobs use the shipped Q4_K tokenizer. Source/fixture pins
 and local evidence are on the branch in
 `docs/mimo-pr492-acceptance-2026-10-08.json`.
@@ -89,7 +86,8 @@ also explicitly forces CPU to retain its mmap path. No GPU execution is claimed.
 
 No new CANN/CUDA correctness or performance claim; combined CANN/NZ timings
 cannot be attributed to this PR alone. PR #492 remains unmerged. #516 Arabic
-alignment is integrated after full runtime acceptance; final main CI is pending.
+alignment is integrated after full runtime acceptance; native main CI and regression pass.
+Full pinned deep lint remains in progress.
 
 ## OPEN 2026-10-08 — integrated Arabic platform validation
 
@@ -97,7 +95,11 @@ alignment is integrated after full runtime acceptance; final main CI is pending.
 acceptance `37756933124` (15 words / 85 exact independent Viterbi spans,
 CLI/Python/C ABI/Java equality and offsets; artifact `11542736536`). The
 accepted runtime is unchanged; main's Metal discovery repair is included.
-Final main platform/binding/WASM/regression checks still precede release.
+Main `2da878e72` passes native CI `37763588567`, regression `37763588786`,
+lint and Moonshine acceptance `37763589121`. Integrated `ff33461e0` passes
+Go/Rust/C#/Dart, five WASM builds, Windows live translation and Arabic acceptance.
+The only subsequent runtime delta is the nonvirtual ONNX cleanup helper; its
+full cppcheck 2.7 run `37763588589` remains in progress.
 Implementation and proof are archived in HISTORY and
 `docs/ctc-characters-2026-10-08.json`.
 
@@ -146,7 +148,7 @@ cppcheck 2.17.1 and C++ syntax pass; full pinned cppcheck 2.7 rerun
 No new GPU performance claim. Cold proof: `/mnt/storage/crispasr/triage-20261007/`.
 #490 character alignment is integrated with full real Arabic/Java proof. #483 has matched packages;
 reporter GPU output/timing comparisons remain pending.
-#492 MiMo/CANN needs numerical/output acceptance. #492/#516 remain unmerged.
+#492 MiMo/CANN remains unmerged pending numerical diagnosis; #516 is integrated.
 
 ## OPEN 2026-10-05 — live transcribe + translate: follow-ups
 

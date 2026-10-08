@@ -467,3 +467,36 @@ Final hosted pinned cppcheck 2.7 and platform checks remain required before tag.
 and #490 closed. All nine recorded accepted runtime fingerprints still match.
 Twenty-two queued superseded character-branch CI runs were cancelled after
 integration, retaining completed acceptance artifacts and final main/F16 runs.
+
+## Final main acceptance and remaining MiMo diagnosis — 2026-10-08
+
+Main `2da878e72` passes [native CI](https://github.com/CrispStrobe/CrispASR/actions/runs/37763588567),
+[regression](https://github.com/CrispStrobe/CrispASR/actions/runs/37763588786), lint
+and [Moonshine speech/graph acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37763589121).
+Integrated `ff33461e0` also passes Go/Rust/C#/Dart, all five WASM builds,
+Windows live translation and Arabic character acceptance. The only subsequent
+runtime delta is the ONNX destructor's nonvirtual cleanup helper; full pinned
+[cppcheck 2.7](https://github.com/CrispStrobe/CrispASR/actions/runs/37763588589)
+remains in progress. No release tag yet.
+
+[Metal shared/static validation](https://github.com/CrispStrobe/CrispASR/actions/runs/37762956547)
+now passes: both configurations discover and actually execute both lifecycle
+and disable-env cases without skipping. This is not compute PSO serialization
+or performance evidence. Cold shared/static logs are archived under
+`/mnt/storage/crispasr/metal-cache-20261008/proof/`.
+
+[F16 MiMo](https://github.com/CrispStrobe/CrispASR/actions/runs/37761799417)
+completes but fails the shipped Q4 tokenizer's pooling/RVQ gates. All five F16
+LM A/B comparisons pass (hidden relative L2 0.04045%, logits 0.03690%), as do
+all five independent Python reference gates in each arm; all 12 EN/ZH CLI/session
+outputs match. Default stages remain byte-identical. Full comparisons and
+artifact `11547195216` are archived in the PR worktree proof directory.
+This does not turn the full failed job into acceptance.
+
+Diagnostic source `3c176505a` retains author ancestry and merges current main.
+[Tokenizer-only run](https://github.com/CrispStrobe/CrispASR/actions/runs/37775542252)
+is queued: same Q4 weights promoted to F32, native flash/eager and official
+Python transformer on identical conv2 input, plus isolated pooling and
+scale/time-order controls. It cannot recover original weight precision and
+is not original-checkpoint certification. No numerical gate was relaxed.
+PR #492 remains unmerged and excluded from the release draft.
