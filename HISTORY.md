@@ -23114,3 +23114,13 @@ faster than eager, slower than MMA; single whole-tokenizer Q4 timing is slower.
 No production/default or full-ASR acceptance. Full receipts:
 `docs/mimo-pr492-cuda-tile-precision-2026-10-08.json`,
 `docs/mimo-pr492-full-rvq-cuda-2026-10-08.json`.
+
+## 2026-10-08 — Strict official encoder/RVQ replay and full CUDA ASR launch
+
+GH ARM oracle `37821379986` PASS at `149467980`: all four new F32 TILE
+study arms match the official full-clip encoder/quantizer and official
+quantization on their own pools. No threshold relaxation or full PR acceptance.
+Receipt: `docs/mimo-pr492-full-rvq-cuda-tile-2026-10-08.json`.
+Full original-Q4 CUDA CLI/session EN/ZH and gated ABBA inference profiling
+submitted at numeric `fee98afbc8` / packaging `21ddd24df`; override is scoped
+to tokenizer encoder weights. Production defaults unchanged, #492 excluded.

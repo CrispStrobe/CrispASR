@@ -11,97 +11,47 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
-## CLAIMED 2026-10-08 — MiMo attention precision after original-Q4 CUDA study
+## CLAIMED 2026-10-08 — MiMo full CUDA speech acceptance and precision profile
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, branch
-`review/pr492-acceptance`. CUDA v2 completed at `b16fe30a2` on Tesla T4/sm_75;
-all terminal logs and 158 output files are archived. A diagnostic F32 cuBLAS
-dispatch retains the original 395,594,656-byte Q4 file and is byte-identical to
-the promoted-F32 model at all six stages in each attention mode. Continuous
-A/B gates pass (transformer relative L2 3.95498e-5, pooling 3.08519e-4), but
-six of 2,208 RVQ codes still differ, so the unchanged exact-code gate FAILS.
-250 ms/2.4 s shape controls have exact codes. Paired full-code extraction is
-1.748x/1.510x slower than normal CUDA (flash/eager), not a speedup; peak memory
-and repeated/full-ASR performance are unmeasured. No production/default change.
-The pinned official quantizer and exhaustive F64 nearest-neighbour check on
-frame 263 confirm each arm's own choices; eager matches the official encoder
-there. Active follow-up: capture identical Q/K/V, compare actual CUDA flash and
-eager kernels with independent Python and half-rounded controls, then test a
-targeted precision path with repeated timings and peak memory. Preserve exact
-RVQ/EN-ZH decoded-output gates before production changes or accepting #492.
-Release follow-up in `/mnt/storage/crispasr/triage-20261007/worktree`: await
-final native/lint and full regression CI, fix failures, validate comprehensive
-v0.8.42 notes and use `scripts/bump-version.sh` only after acceptance; #492
-remains excluded. CUDA v4 completed on Tesla T4 at numeric source
-`3493c8ef9` / packaging `9a0d75639`. All 125 archived files and recorded
-array hashes are verified. Three identical-input layers pass the independent
-F32 eager controls (relative L2 4.11e-7–1.03e-6). Flash relative L2 is
-6.20e-4–7.68e-4; the F32 hint is byte-identical. Half-rounding alone is smaller
-(1.11e-4–2.84e-4), implicating additional fused arithmetic. Eight repetitions
-per arm verify unchanged resident inputs and byte-identical replay outputs.
-Flash medians 0.264–0.305ms versus eager 2.13–2.60ms apply ONLY to isolated
-attention; graph allocations 14,105,600/38,393,728 bytes are not model peaks.
-The tokenizer still differs at six of 2,208 entries. Full PR acceptance FAILS.
-Next claimed experiment: temporary env-gated CUDA TILE selection with existing
-F32 arithmetic for the exact MiMo shape. VEC requires padded KV length and is
-unsafe for unpadded T=551, so do not force it. Retain baseline/F32-eager controls,
-actual dispatch traces, unchanged code gates and independent Python oracle.
-No production ggml pin/default change. Archive v4 before repushing. Full-clip
-official quantizer runs `37815978118` (CPU) and `37820013373` (CUDA v4 arrays, GH ARM) are
-CPU PASS / CUDA arrays queued on GH ARM. Original x86 oracle `37816478863`
-was canceled before any runner started after prolonged queuing; replacement
-`37820013373` executes the same pinned official quantizer and CUDA v4 arrays
-at candidate source `e07e2d83e`, using `ubuntu-24.04-arm`. All four CPU arms match official quantization on their
-own pools at all 276 frames/eight stages; both promoted-F32 arms also match
-official-encoder codes. Original Q4 encoder drift remains. Receipt:
-`docs/mimo-pr492-full-rvq-cpu-2026-10-08.json`. The new F32 TILE experiment
-uses a separate `mimo-pr492-attention-precision` kernel, retaining v4's endpoint
-for the queued oracle. Numeric source `534a929f7`; packaging is in the same
-candidate branch. Submitted version 1 at packaging `e07e2d83e`; numeric source
-`534a929f75e61febf4143a96fdaa88dbdb811528`. Terminal collection is armed in
-`/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-attention-precision-v1`.
-A generated-header smoke verifies matching F32 host/device configuration,
-preserved baseline headers and removal of extern-template declarations so the
-new specialization is actually emitted. CUDA F32 TILE version 1 COMPLETE on Tesla T4 at source `534a929f7`.
-Both continuous gates and all 2,208 flash/eager RVQ codes PASS; previously
-six differed. Pooling A/B relative L2 is 9.22844e-5 (previous 3.08519e-4).
-TILE agrees with independent K/V-half Python at relative L2 3.56e-7–1.01e-6;
-remaining full-F32 attention error is consistent with K/V half rounding.
-Six measured resident-graph medians are TILE 1.158–1.544ms, eager 2.127–2.783ms,
-original flash 0.265–0.319ms. This is ~1.8x faster than eager, slower than MMA;
-no full-model speed claim. All terminal logs and 205 files are archived; all 42 recorded attention array
-hashes and kernel/source pins verify. Full-clip official CUDA oracle
-`37820013373` PASS on GH ARM: all v4 arms agree with official quantization on
-own pools, while flash differs from official-encoder codes at six entries.
-The new TILE reference pool is byte-identical to that oracle's reference;
-all four new TILE arms exactly match its 2,208 independently generated codes.
-Stricter own-input/all-encoder replay `37821379986` is queued at `149467980`.
+`review/pr492-acceptance`. F32 TILE v1 completed on Tesla T4/sm_75 at
+numeric source `534a929f7`; all terminal logs/205 files and attention hashes
+are archived. The original 395,594,656-byte Q4 codec is unchanged. All four
+arms match all 2,208 official encoder-plus-quantizer codes. Strict own-input
+and all-encoder oracle `37821379986` PASS on GH ARM, with no gate relaxation.
+Transformer/pooling A/B relative L2 is 1.18811e-5 / 9.22844e-5. TILE agrees
+with independent K/V-half Python within 3.56e-7–1.01e-6. Isolated TILE is
+~1.8x faster than eager but slower than original fused flash; one unrepeated
+whole-code extraction is 571ms vs 437ms, so there is no full-model speed win.
 Receipts: `docs/mimo-pr492-cuda-tile-precision-2026-10-08.json` and
-`docs/mimo-pr492-full-rvq-cuda-2026-10-08.json`.
-The single Q4 whole-code extraction is 571ms TILE versus 437ms MMA / 455ms
-eager; these are unrepeated process timings and do not establish a speedup.
-Next claimed work in the same candidate worktree: actual CUDA full-ASR EN/ZH
-CLI and session C ABI validation with the original Q4 model and tokenizer.
-Scope the temporary cuBLAS override to encoder.* tokenizer weights to avoid
-changing LM arithmetic. Only after output gates pass, collect repeated full
-inference timings/memory. Keep production defaults unchanged. Full
-EN/ZH CLI/C ABI decode, repeated whole-tokenizer timings/memory and original
-checkpoint/full-ASR gates remain required; no production default/ggml pin
-change, and #492 remains excluded from the release. Local C++ syntax/clang-format checks pass;
-the actual capture wrapper preserves layouts exactly and the new K/V-only
-half-rounding reference agrees with independent NumPy at relative L2 7.49e-8.
-These are preparation checks, not CUDA execution proof.
-No quota bypass/GPU fishing: one actual precision experiment.
-Additional storage cleanup is complete: 2,746,798,353 bytes reclaimed from
-four old traces and inactive sccache, every hash checked, original symlinks kept.
-Receipt: `docs/cold-storage-cleanup-2026-10-08.json`.
-Native `37805363962` and lint `37806475239` both PASS at `3fd1bf5fa`.
-Full 33-model regression `37802900089` is still running with no failures.
-Receipt: `docs/mimo-pr492-cuda-attention-2026-10-08.json`.
+`docs/mimo-pr492-full-rvq-cuda-tile-2026-10-08.json`. Earlier CUDA v4 official
+oracle `37820013373` also PASS: flash differs at six encoder codes, eager zero;
+each arm's RVQ is correct on its own pool.
 
-Full receipts:
-`docs/mimo-pr492-cuda-precision-2026-10-08.json` and
-`docs/mimo-pr492-cuda-rvq-oracle-2026-10-08.json`.
+Full-ASR CUDA v1 submitted: kernel `mimo-pr492-asr-cuda`, numeric source
+`fee98afbc80296e4bb7b63ccf6b8d8952d5433f2`, packaging `21ddd24df`.
+Temporary cuBLAS override is restricted to tokenizer `encoder.*` weights;
+F32 TILE remains env/shape gated. Actual full Q4 LM/codec run sequentially
+through EN/ZH CLI and session C ABI: 12 outputs must pass the established
+speech guards and exact cross-mode/surface readback before ANY profile.
+Then same-binary/device/files ABBA full inference uses two warm and six
+measured calls per clip/process, validating every decoded result; sampled
+GPU0 process-memory peaks are lower bounds, not allocator peaks. No production
+runtime, ggml pin, file size or default changes. The actual prior Kaggle cache
+was refreshed and pinned to `f84b003cee87d2d5b0801b34831d7f89832883b3`.
+Collector: `/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-asr-v1`.
+Both earlier tokenizer endpoints remain intact for independent replays.
+
+Next: inspect full speech results before interpreting timing; fix actual
+failures, preserve unchanged gates. Earlier Q4 LM non-flash numerical failures,
+original-checkpoint/full-ASR parity and CANN hardware remain unresolved. #492
+stays unmerged and excluded from v0.8.42. PR comment updated with exact-code
+proof and timing limits. Release worktree `/mnt/storage/crispasr/triage-20261007/worktree`
+awaits final main native/lint and full33 regression `37802900089`; 18 model
+jobs pass, 15 remain active/queued, no failures. Last accepted native/lint at
+`3fd1bf5fa` both PASS. Comprehensive release notes are written; use only
+`scripts/bump-version.sh` after final accepted main gates are green.
+
 
 ## CLAIMED 2026-10-08 — MiMo Q4 CPU BLAS precision experiment
 

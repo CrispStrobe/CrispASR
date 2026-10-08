@@ -1,0 +1,149 @@
+{
+  "scope": "Full-clip official RVQ oracle on saved native and official encoder pools.\n\nSame dequantized Q4 weights; not original-checkpoint or full-ASR acceptance.\nCPU work only. Download only terminal Kaggle proof or an existing GH artifact.\n",
+  "upstream": "691ce54144a6844cc641fd96046a6ba20776c8b0",
+  "quantizer_sha256": "f0e856da2ad7dc52b8aad99d52f217eab44f1ab3620d386a8e706f30725a95c5",
+  "expected_source": "534a929f75e61febf4143a96fdaa88dbdb811528",
+  "require_all_encoder_codes": true,
+  "arms": {
+    "q4-flash": {
+      "pool_reference": {
+        "cosine": 0.9999999957364202,
+        "mine_norm": 1905.7775895204772,
+        "ref_norm": 1905.7783075321063,
+        "relative_l2": 9.23431274863194e-05,
+        "max_abs": 0.0050241947174072266,
+        "exact": false
+      },
+      "native_vs_official_own_input": {
+        "exact": true,
+        "mismatches": 0,
+        "match_fraction": 1.0,
+        "mismatch_positions": []
+      },
+      "native_vs_official_encoder": {
+        "exact": true,
+        "mismatches": 0,
+        "match_fraction": 1.0,
+        "mismatch_positions": []
+      },
+      "official_own_vs_official_encoder": {
+        "exact": true,
+        "mismatches": 0,
+        "match_fraction": 1.0,
+        "mismatch_positions": []
+      },
+      "pool_sha256": "542dc25535f92585139c65f025b9444502eca8b541c27b4b64cc24d749ba5901",
+      "native_codes_sha256": "f752787ee19cb91f10ce79041b47308d078d23c20b308c36133bd47dfc63cda9"
+    },
+    "q4-eager": {
+      "pool_reference": {
+        "cosine": 0.999999999949387,
+        "mine_norm": 1905.7779169096304,
+        "ref_norm": 1905.7783075321063,
+        "relative_l2": 1.0061031360231993e-05,
+        "max_abs": 0.000637054443359375,
+        "exact": false
+      },
+      "native_vs_official_own_input": {
+        "exact": true,
+        "mismatches": 0,
+        "match_fraction": 1.0,
+        "mismatch_positions": []
+      },
+      "native_vs_official_encoder": {
+        "exact": true,
+        "mismatches": 0,
+        "match_fraction": 1.0,
+        "mismatch_positions": []
+      },
+      "official_own_vs_official_encoder": {
+        "exact": true,
+        "mismatches": 0,
+        "match_fraction": 1.0,
+        "mismatch_positions": []
+      },
+      "pool_sha256": "d3e077caf7904b0e5019e011a94b765f60416355ea7f5333cc0a7a19f8258c4b",
+      "native_codes_sha256": "f752787ee19cb91f10ce79041b47308d078d23c20b308c36133bd47dfc63cda9"
+    },
+    "promoted-flash": {
+      "pool_reference": {
+        "cosine": 0.9999999957364202,
+        "mine_norm": 1905.7775895204772,
+        "ref_norm": 1905.7783075321063,
+        "relative_l2": 9.23431274863194e-05,
+        "max_abs": 0.0050241947174072266,
+        "exact": false
+      },
+      "native_vs_official_own_input": {
+        "exact": true,
+        "mismatches": 0,
+        "match_fraction": 1.0,
+        "mismatch_positions": []
+      },
+      "native_vs_official_encoder": {
+        "exact": true,
+        "mismatches": 0,
+        "match_fraction": 1.0,
+        "mismatch_positions": []
+      },
+      "official_own_vs_official_encoder": {
+        "exact": true,
+        "mismatches": 0,
+        "match_fraction": 1.0,
+        "mismatch_positions": []
+      },
+      "pool_sha256": "542dc25535f92585139c65f025b9444502eca8b541c27b4b64cc24d749ba5901",
+      "native_codes_sha256": "f752787ee19cb91f10ce79041b47308d078d23c20b308c36133bd47dfc63cda9"
+    },
+    "promoted-eager": {
+      "pool_reference": {
+        "cosine": 0.999999999949387,
+        "mine_norm": 1905.7779169096304,
+        "ref_norm": 1905.7783075321063,
+        "relative_l2": 1.0061031360231993e-05,
+        "max_abs": 0.000637054443359375,
+        "exact": false
+      },
+      "native_vs_official_own_input": {
+        "exact": true,
+        "mismatches": 0,
+        "match_fraction": 1.0,
+        "mismatch_positions": []
+      },
+      "native_vs_official_encoder": {
+        "exact": true,
+        "mismatches": 0,
+        "match_fraction": 1.0,
+        "mismatch_positions": []
+      },
+      "official_own_vs_official_encoder": {
+        "exact": true,
+        "mismatches": 0,
+        "match_fraction": 1.0,
+        "mismatch_positions": []
+      },
+      "pool_sha256": "d3e077caf7904b0e5019e011a94b765f60416355ea7f5333cc0a7a19f8258c4b",
+      "native_codes_sha256": "f752787ee19cb91f10ce79041b47308d078d23c20b308c36133bd47dfc63cda9"
+    }
+  },
+  "full_pr_acceptance": false,
+  "passed": true,
+  "kaggle_slug": "crispasr-mimo-pr492-attention-precision",
+  "study_path": "mimo-tokenizer/tile-tokenizer",
+  "kaggle_status": {
+    "status": "COMPLETE",
+    "failureMessage": null
+  },
+  "native_source": "534a929f75e61febf4143a96fdaa88dbdb811528",
+  "study_sha256": "2bbc09e71f6ea3d2f2bca7a60897f0c9682f368e4e84d9951255b3dafed97d7e",
+  "codec": {
+    "repo": "cstr/mimo-tokenizer-GGUF",
+    "revision": "fa380f4c49a8e8c62c02c00d0da5e263fc5b0dcf",
+    "filename": "mimo-tokenizer-q4_k.gguf",
+    "sha256": "3f3a903b10294ead4ef6a4afec035639fd2113b1d307d42f649a97cc85670e3f"
+  },
+  "reference_pool_sha256": "7be9c670e30e379bc159b299e83925975e55f37522b71241d49a746352cd739e",
+  "all_encoder_codes_exact": true,
+  "workflow_url": "https://github.com/CrispStrobe/CrispASR/actions/runs/37821379986",
+  "receipt_sha256": "2d822f4bc550293aefa633e11be3fa25ebc99cf036a12ed3fad6f8822ff6efd5"
+}
