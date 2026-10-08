@@ -9,7 +9,7 @@ import subprocess
 import sys
 
 SCRIPT_VERSION = 'voxcpm2-current-profile-v2'
-SOURCE = 'ece203528358c5b919b72877075715a5b7ae81a1'
+SOURCE = 'c44f643ddea219d661075bcfe37ae685fb1025ab'
 GGML = 'c36dab89b662838f0f5d4826c399198c0b90bbfc'
 CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'mimo-pr492/sm75-full-asr-v3.tar', 'revision': '0480221f9f7e5b16773ad8ad7e673cfc1afcdc94', 'sha256': '5cf9eb772a1190c2a058d9ec682ea0b08378b0d723bfbbef7235d80293833344', 'bytes': 78080000}
 WORK = Path('/kaggle/working')
