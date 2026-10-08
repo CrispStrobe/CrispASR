@@ -21,6 +21,9 @@ and `profile` (`perf/mimo-voxcpm-profile`). A fifth worktree `lm`
 A sixth worktree `mimo-integration` (`fix/mimo-gpu-cached-decode`) will isolate
 only the validated MiMo instrumentation/cached-step changes from VoxCPM2's
 still-pending rate/step repairs, for native CI and integration review.
+Isolated draft [PR #519](https://github.com/CrispStrobe/CrispASR/pull/519) is
+pushed at `087b34e15`. Native/worker file SHA256s match the GPU-tested source
+exactly. Await native CI before integration; v0.8.42 excludes these changes.
 PR #492 diagnostics remain in
 `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`.
 
@@ -105,7 +108,7 @@ TTS→ASR gates. Audit found a real session mismatch: synthesize decimated nativ
 `82517f41d` preserves the CLI ten-step default using tts_num_steps's explicit
 sentinel (shared tts_steps defaults to 20). v2 failed output/logs archived and
 public at fixture revision `f5a04b061d6ceb5c090c97a3f3fadfd2066e6398`.
-Next pinned run uses source `ead34fd5d`, uploaded harness `fe6f363b2` and
+Kaggle v3 launched using source `ead34fd5d`, uploaded harness `fe6f363b2` and
 refreshed actual-Kaggle CUDA+Vulkan cache `c32253915bbef81d0d8a9aea39a1fbd43b4cb37c`.
 It must replay v2 PCM at both rates as a negative control, pass
 native-48 kHz session and actual CLI default speech roundtrips, then collect
@@ -145,6 +148,15 @@ Consumer repair `2790778aa` uses the public experimental prefix and each
 candidate's immutable weight revision, checking remote-verification markers
 and path scope. Python syntax passes. Preparation pins remain unset and no
 Echo GPU kernel has been launched while the CPU producer is queued.
+
+Storage maintenance checkpoint: moved inactive (>95h, no open handles)
+root-volume evidence (729,159,979 logical bytes / ~533 MiB allocated) and one
+inactive (>38h) volume1 shared library (24,727,872 bytes) to `/mnt/storage`.
+Every file SHA256 verified; original source paths remain symlinks and original
+mtimes restored (CIFS rounding <100ns). Local receipts remain under the task
+proof root. Root free space rises ~3.3→3.8 GiB; volume1 remains tight (~1.4 GiB).
+Skip directories with internal symlinks where CIFS cannot preserve semantics;
+do not relocate live services, active environments or the original checkout.
 
 ## VALIDATED 2026-10-08 — MiMo full CUDA speech acceptance and precision profile
 
