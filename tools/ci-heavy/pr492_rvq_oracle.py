@@ -7,6 +7,7 @@ CPU work only. Download only terminal Kaggle proof or an existing GH artifact.
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import urllib.request
@@ -26,30 +27,38 @@ def main():
     parser.add_argument('--artifact-run', type=int)
     parser.add_argument('--kaggle', action='store_true')
     parser.add_argument('--expected-source', required=True)
+    parser.add_argument('--kaggle-slug', default='crispasr-mimo-pr492-tokenizer-cuda')
+    parser.add_argument('--study-path', default='mimo-tokenizer')
+    parser.add_argument('--require-all-encoder-codes', action='store_true')
     args = parser.parse_args()
     assert bool(args.artifact_run) != args.kaggle
+    assert re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', args.kaggle_slug)
+    assert re.fullmatch(r'[a-zA-Z0-9_-]+(?:/[a-zA-Z0-9_-]+)*', args.study_path)
+    assert re.fullmatch(r'[0-9a-f]{40}', args.expected_source)
     out = Path(os.environ['HEAVY_OUT']); out.mkdir(parents=True, exist_ok=True)
     scratch = Path(os.environ['HEAVY_SCRATCH']) / 'rvq-oracle'; scratch.mkdir(parents=True, exist_ok=True)
     receipt = dict(scope=__doc__, upstream=UPSTREAM, quantizer_sha256=QUANTIZER_SHA,
-                   expected_source=args.expected_source, arms={}, full_pr_acceptance=False, passed=False)
+                   expected_source=args.expected_source, require_all_encoder_codes=args.require_all_encoder_codes, arms={}, full_pr_acceptance=False, passed=False)
     def save():
         (out / 'rvq-oracle.json').write_text(json.dumps(receipt, indent=2) + '\n')
     save()
     if args.kaggle:
         from kaggle import KaggleApi
         api = KaggleApi(); api.authenticate()
-        ref = os.environ['KAGGLE_ACCOUNT'] + '/crispasr-mimo-pr492-tokenizer-cuda'
+        ref = os.environ['KAGGLE_ACCOUNT'] + '/' + args.kaggle_slug
+        receipt['kaggle_slug'] = args.kaggle_slug
+        receipt['study_path'] = args.study_path
         status = json.loads(str(api.kernels_status(ref)))
         assert status['status'] in ['COMPLETE', 'ERROR'], status
         receipt['kaggle_status'] = status
-        pattern = r'^mimo-tokenizer/(hardware.json|python-tok_pool_out.npy|tokenizer-diagnosis.json|(q4|promoted)-(flash|eager)/(tok_pool_out|tok_codes).npy)$'
+        pattern = '^' + re.escape(args.study_path) + r'/(hardware.json|python-tok_pool_out.npy|tokenizer-diagnosis.json|(q4|promoted)-(flash|eager)/(tok_pool_out|tok_codes).npy)$'
         token = None
         for _ in range(10):
             _, token = api.kernels_output(ref, path=str(scratch), file_pattern=pattern,
                 force=True, quiet=True, page_token=token, page_size=100)
             if not token: break
         assert not token
-        study_dir = scratch / 'mimo-tokenizer'
+        study_dir = scratch / args.study_path
     else:
         subprocess.run(['gh', 'run', 'download', str(args.artifact_run), '--repo', 'CrispStrobe/CrispASR',
             '--name', f'heavy-{args.artifact_run}', '--dir', str(scratch / 'artifact')], check=True)
@@ -106,6 +115,10 @@ def main():
             save()
     receipt['passed'] = all(receipt['arms'][arm]['native_vs_official_own_input']['exact']
                            for arm in receipt['arms']) and receipt['arms']['promoted-eager']['native_vs_official_encoder']['exact']
+    receipt['all_encoder_codes_exact'] = all(
+        arm['native_vs_official_encoder']['exact'] for arm in receipt['arms'].values())
+    if args.require_all_encoder_codes:
+        receipt['passed'] = receipt['passed'] and receipt['all_encoder_codes_exact']
     save()
     print(json.dumps(receipt), flush=True)
     assert receipt['passed'], 'Full-clip RVQ oracle gate failed; inspect saved own-input and encoder comparisons'
