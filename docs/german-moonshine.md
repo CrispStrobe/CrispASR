@@ -49,6 +49,9 @@ CrisperWeaver splits utterances at 60 seconds. ONNX uses CPU inference.
 Silence and noisy audio can still yield hallucinations, even with a German
 checkpoint. German-only does not guarantee correct recognition.
 
+Set `MOONSHINE_ONNX_BENCH=1` to report per-graph CPU wall time for the
+frontend, encoder, adapter, cross-KV and decoder. Timing is disabled by default.
+
 ## Verification
 
 `test-moonshine-tokenizer` covers binary/JSON byte fallback for German umlauts

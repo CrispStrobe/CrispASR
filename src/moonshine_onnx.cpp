@@ -4,6 +4,8 @@
 #include <onnxruntime_cxx_api.h>
 #include <algorithm>
 #include <cmath>
+#include <chrono>
+#include <cstdlib>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -13,6 +15,27 @@
 #include <vector>
 
 namespace {
+bool bench_enabled() {
+    static const bool enabled = [] {
+        const char* value = std::getenv("MOONSHINE_ONNX_BENCH");
+        return value && *value && *value != '0';
+    }();
+    return enabled;
+}
+struct BenchStage {
+    const char* name;
+    std::chrono::steady_clock::time_point start;
+    explicit BenchStage(const char* stage) : name(stage) {
+        if (bench_enabled())
+            start = std::chrono::steady_clock::now();
+    }
+    ~BenchStage() {
+        if (bench_enabled()) {
+            double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count();
+            fprintf(stderr, "  moonshine_onnx_bench: %-24s %.2f ms\n", name, ms);
+        }
+    }
+};
 Ort::Env& env() {
     static Ort::Env e(ORT_LOGGING_LEVEL_WARNING, "crispasr-moonshine");
     return e;
@@ -37,9 +60,10 @@ Ort::Value zeros(std::vector<int64_t> shape, ONNXTensorElementDataType type = ON
     return v;
 }
 struct Graph {
+    std::string name;
     Ort::Session session{nullptr};
     std::vector<std::string> inputs, outputs;
-    Graph(const std::filesystem::path& path, int threads) {
+    Graph(const std::filesystem::path& path, int threads) : name(path.filename().string()) {
         Ort::SessionOptions options;
         options.SetIntraOpNumThreads(std::max(1, threads));
         options.SetInterOpNumThreads(1);
@@ -52,6 +76,7 @@ struct Graph {
             outputs.emplace_back(session.GetOutputNameAllocated(i, allocator()).get());
     }
     std::vector<Ort::Value> run(std::vector<Ort::Value>& values) {
+        BenchStage bench(name.c_str());
         std::vector<const char*> in, out;
         for (const auto& s : inputs)
             in.push_back(s.c_str());

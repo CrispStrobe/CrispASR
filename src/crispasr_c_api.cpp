@@ -8039,6 +8039,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
                 text = strdup(decoded.c_str());
             } catch (const std::exception& e) {
                 fprintf(stderr, "crispasr[moonshine-onnx]: %s\n", e.what());
+                delete r;
                 return nullptr;
             }
         }
