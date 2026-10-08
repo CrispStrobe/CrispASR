@@ -15,7 +15,7 @@ it goes stale for more than a day.
 
 Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
 `review/data2vec-nightly`, diagnostic source `d43a25230`, hosted
-`37786726672` queued. Nightly `37768023710`, job `113289821084`, fails
+`37786726672` running. Nightly `37768023710`, job `113289821084`, fails
 Q4 JFK speech at runtime source `2da878e72`: an extra `A` after `AND SO`
 (WER 4.55% versus required zero). F16 logits still pass cosine 0.999141.
 Compare pinned v0.8.41/current builds and Q4/Q8/F16 weights before changing
@@ -24,8 +24,9 @@ head in Q4 as a controlled variant; do not relax transcript gates.
 
 ## CLAIMED 2026-10-08 — independent MiMo C ABI device/verbosity fix
 
-Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, planned branch
-`review/mimo-cabi-device`. Extract only the two validated device/verbosity
+Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
+`review/mimo-cabi-device`, fix source `6c11d5a1f`, actual-library probe
+`37789763493` queued. Extract only the two validated device/verbosity
 forwarding assignments from the PR #492 review. These prevent a requested
 CPU session from silently choosing another backend and copying mmap weights.
 No attention/runtime-graph changes. Re-run an actual-main-library initializer
@@ -79,14 +80,20 @@ installs it through the bounded APT helper; replacement `37783601573` is
 PASS as a diagnostic, not PR acceptance. Same-weight F32 promotion gives
 pooling A/B relative L2 0.000115% and exact RVQ codes. Both native paths
 match the independent encoder; Q4 activation rounding remains the divergence.
-Selective-promotion run `37785711004` at `09f65ad8b` is queued.
+Selective-promotion run `37785711004` at `09f65ad8b` completed and FAILED
+unchanged gates for all five profiles (artifact `11555262443`). Output
+projection promotion improves pooling A/B relative L2 to 1.3424% but exact
+RVQ code agreement remains only 82.1558%. First 4/8/16 layers and all FFNs
+also fail; no profile is accepted.
 GPU follow-up claimed in the same worktree: a pinned Kaggle CUDA tokenizer
 diagnostic, using the shared build harness and actual device weights/RVQ.
 It compares both attention paths against the official CPU Python encoder on
 the GPU's own conv2 input. No CANN, full-ASR, speed or Pascal MMQ claim;
 CPU diagnostics remain on GH Actions per `../kaggle_usage.md`.
-Next: selective-promotion ablation in this worktree (head 4/8/16 layers,
-output projections, FFN), retaining the remaining Q4 matrices and all gates. No weight precision is recovered; this is a diagnostic,
+CUDA kernel v1 is running at immutable diagnostic source `d6b29207b`;
+kernel packaging source is `cbc3a79c0`. Save terminal logs before any revision.
+Next: compare actual CUDA numerical results with the completed CPU study.
+No weight precision is recovered by promotion; this is a diagnostic,
 not original-checkpoint or PR acceptance. The acceptance harness now saves all
 completed comparisons before failing and lets both quantizations finish.
 

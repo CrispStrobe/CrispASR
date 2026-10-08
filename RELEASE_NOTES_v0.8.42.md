@@ -249,3 +249,11 @@ The latest broad nightly `37768023710` also exposes a Q4 data2vec JFK word
 insertion (zero-WER gate fails at 4.55%; F16 stage cosine 0.999141 passes).
 A matched release/current and precision-control diagnostic `37786726672` is
 queued. This failure remains a release gate; no fixture or tolerance changed.
+
+Q4 MiMo follow-up: selective same-weight F32 promotion failed all five profiles
+in hosted run `37785711004` (artifact `11555262443`). The smallest pooling
+A/B error among them was 1.3424% with output projections promoted; RVQ code
+agreement was 82.1558%, so this remains excluded from release acceptance.
+Actual CUDA tokenizer validation and the independent C ABI device/verbosity
+fix probe are pending. Full measurements are in
+`docs/mimo-pr492-selective-promotion-2026-10-08.json`.
