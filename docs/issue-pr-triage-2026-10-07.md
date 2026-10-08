@@ -131,8 +131,8 @@ change their implementation.
 |---|---|
 | [#490](https://github.com/CrispStrobe/CrispASR/issues/490) Arabic character alignment | Feasible. `src/align.cpp` already walks UTF-8 codepoints and traces per-label Viterbi positions, then collapses them to word times. Preserve those spans through the aligner and JSON surface. Test repeated letters, Arabic codepoints/diacritics, blanks, punctuation and OOV handling; do not estimate character times by dividing word durations. Not implemented in this batch. |
 | [PR #492](https://github.com/CrispStrobe/CrispASR/pull/492) MiMo/CANN performance | Existing CI is green and the contributor reports five exact transcripts on Ascend. Shared attention/mel code and device placement deserve stage/magnitude and decoded-output validation on default and non-flash paths, F16 and shipped quant, with the current ggml pin. The cited timing combines this PR with the still-open [ggml #4](https://github.com/CrispStrobe/ggml/pull/4); it cannot be attributed to this PR alone. Retained unmerged. |
-| [PR #515](https://github.com/CrispStrobe/CrispASR/pull/515) streaming bindings / German ONNX Moonshine | Separate, substantial runtime change. Its regression failures above are setup failures; two native CI jobs also remained in progress. Re-run against bounded package setup and review model-dependent packet/flush, tokenizer, licence and ONNX companion behavior before merging. Retained unmerged. |
-| [#483](https://github.com/CrispStrobe/CrispASR/issues/483) CUDA 12.6 | Reporter confirms the mismatch warning is gone. Latest follow-up requests an experimental forced-MMQ/no-tensor build for GTX1660 comparisons. That A/B package is still doable; it needs matched binaries, runtime and model/output checks. No forced-MMQ default change. |
+| [PR #515](https://github.com/CrispStrobe/CrispASR/pull/515) streaming bindings / German ONNX Moonshine | Integration review fixed companion routing, bindings and Nemotron tags. Earlier ARM acceptance passes all eight cases, but local x86 exposed remaining Small int8 frontend drift. Full-frontend flush fix passes four local cases; fresh x86/ARM acceptance remains queued. Retained unmerged. |
+| [#483](https://github.com/CrispStrobe/CrispASR/issues/483) CUDA 12.6 | Reporter confirms the mismatch warning is gone. Latest follow-up requests an experimental forced-MMQ/no-tensor build for GTX1660 comparisons. Both matched Windows packages pass, and their actual uploaded manifests pair locally. Packages and proof are published; reporter GPU model/output/timing comparisons remain pending. No forced-MMQ default change. |
 | [#488](https://github.com/CrispStrobe/CrispASR/issues/488) Qwen3 hotwords | Fixed and validated on main. Reporter Windows/Vulkan six-clip retest remains external. |
 | [#485](https://github.com/CrispStrobe/CrispASR/issues/485) Index-Echo | Both sizes shipped; 9B Q4 candidate acceptance remains open in PLAN, with transfer quota constraints. |
 | [#484](https://github.com/CrispStrobe/CrispASR/issues/484) Intel Mac regression | Correct SIMD packaging shipped in v0.8.40/41. Reporter Russian-recording hardware retest remains external. |
@@ -151,7 +151,7 @@ with CUDA 12.6.3, identical PTX 61/80 targets, source, CPU floor and runtime.
 have started both Windows jobs. Compile definitions, staged runtime version and DLL hashes are
 checked, followed by packaged CLI driverless startup and a pair comparison.
 Actionlint passes. No release defaults change; no GTX1660 speed/output verdict
-exists until the reporter exercises the actual GPU. This branch is unmerged.
+exists until the reporter exercises the actual GPU. The packaging workflow is now merged; the original tested source is retained in `archive/issue483-mmq-source-20261008`.
 
 Final-source native CI [37735374748](https://github.com/CrispStrobe/CrispASR/actions/runs/37735374748)
 and lint [37735377165](https://github.com/CrispStrobe/CrispASR/actions/runs/37735377165)
@@ -200,3 +200,29 @@ may fail. Rust checks pass; other native/Go/WASM/lint checks remain in flight.
 Both Windows MMQ packages pass and their uploaded manifests pair locally.
 [Downloads, pinned source and scope](cuda126-mmq-experiment-2026-10-08.md).
 The final hosted pairing job is queued. #483 remains open for actual GPU tests.
+
+
+## x86 frontend rounding and corrected final flush — 2026-10-08
+
+The ARM pass above was insufficient to establish x86 final/batch identity.
+A narrow local x86 replay of Small int8 on the same pinned German clip still
+failed after encoder-only recomputation: batch starts “Guten Morgen! Die”,
+while streaming final starts “Guten Morgen, die”. Whole-utterance versus
+40 ms frontend processing differs by maximum 4.76837e-7 (relative L2
+3.10646e-7), enough to alter this greedy int8 decode.
+
+Runtime `cdd1b80d0df90279e26489b94fa20c8a73abb2ca` retains original PCM and
+replays the actual batch frontend, encoder and decoder on final flush. Partial
+updates retain incremental processing. PCM history adds 64 kB per second.
+The saved pre-fix binary fails; the fixed runtime passes all four combinations
+of 1/4 threads and 1777/5120-sample packets, including exact final/batch text,
+repeat flush and feed-after-flush rejection. The feature branch contains
+`docs/moonshine-onnx-x86-flush-2026-10-08.json` with pins, hashes and scope.
+
+Fresh full CLI/C ABI acceptance at that source is queued on
+[x86 Ubuntu 22.04](https://github.com/CrispStrobe/CrispASR/actions/runs/37740556768)
+and [ARM64](https://github.com/CrispStrobe/CrispASR/actions/runs/37740559460).
+The older queued x86 run `37738992713` was cancelled because its runtime still
+had this defect. #515 remains unmerged. Go, Rust, all five WASM jobs and the
+Windows CUDA13 check pass; native CI has ten of 13 jobs passing and three in
+progress. Deep lint rerun `37737578258` is running. No release tag is cut.

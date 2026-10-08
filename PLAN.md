@@ -6,10 +6,12 @@ Live work only. Completed threads move to `HISTORY.md`; technical deep-dives to
 `LEARNINGS.md`.
 
 **Before you pick something up:** re-read this section on `origin/main`, add a
-`## CLAIMED <date> — <what>` block naming your worktree, and **push that claim
-to main before you start**. Several agents run here at once; a claim that lands
-with the work is a claim that did nothing. Delete it when the work lands, or if
-it goes stale for more than a day.
+`## OPEN 2026-10-08 — release draft and final gates
+
+Comprehensive `RELEASE_NOTES_v0.8.42.md` covers landed changes since v0.8.41,
+with validation scope and remaining gates. Refresh it after final integration;
+PR #515/#492 are excluded from shipped features while unmerged. No version
+bump/tag until required main-tip checks pass. Use `scripts/bump-version.sh`.
 
 ## CLAIMED 2026-10-08 — PR #515 integration review and hosted validation
 
@@ -24,7 +26,7 @@ and cached repair; actual CLI/resolver offline probes pass six bundles.
 Hosted CPU [37730765885](https://github.com/CrispStrobe/CrispASR/actions/runs/37730765885)
 built and loaded all six German choices. Five choices and Qwen streaming passed;
 Small int8 final punctuation differed from batch, and Nemotron C ABI batch leaked
-a language tag already removed by the CLI. Fixes recompute the whole encoder
+a language tag already removed by the CLI. Initial fixes recomputed the whole encoder
 once at ONNX final flush (window-dependent int8 scales) and share Nemotron tag
 cleanup across CLI, C ABI words/text and streams. Strict gates are retained.
 
@@ -40,21 +42,30 @@ Moonshine and Qwen also pass. All eight cases now pass ARM64 acceptance `3773585
 final/batch parity and the numerical scale-failure control. All four deployed
 graph variants have 15 stages at reported cosine 1.000000 / relative L2 0.
 
-Latest branch `a1a3d4a25a442fbe355d562aabe020a4c9ba07ed` also completes the
-new streaming-kind query in all seven wrappers, WASM/JS and the WebSocket ready
-event, and requires the shared-library symbol audit. C# builds with 0 warnings /
-0 errors; WebSocket syntax passes. Earlier native CI `37730684549` passes all
-13 jobs on `710457c5b`. ARM acceptance
-`37735856512` passes. X86 `37735853879` waited over 30 minutes and was cancelled
-while queued; replacement `37738992713` uses Ubuntu 22.04 at `68b849eb9`
-(same runtime; isolated scale-only control). Native CI `37735908557`, lint `37735910817`, WASM `37735912990`,
-Go `37735851685` is running and Rust `37735851828` passes. Remaining source
-checks are in flight.
-ARM `37734757849` and final checks `37735374748`/`37735377165` were cancelled
-while queued, superseded by the corrected source. Numerical regression
-`37730687001` has unit/smoke passes and its model jobs queued. Automatic relevant
-source-change ONNX acceptance pins Python ORT 1.30.0 to the SDK and requires
-speech-content checks for every deployment. #515 stays unmerged pending proof.
+Latest runtime `cdd1b80d0df90279e26489b94fa20c8a73abb2ca` fixes a remaining
+x86 failure: encoder-only recomputation still changed Small int8 punctuation.
+A frontend probe measured max absolute drift 4.76837e-7 / relative L2 3.10646e-7
+between windowed and whole-utterance processing. Final flush now replays the
+actual batch path from retained original PCM, including the frontend. The
+saved pre-fix binary fails; all four local x86 combinations (1/4 threads,
+1777/5120-sample packets) pass exact final/batch text, repeat flush and
+feed-after-flush rejection. PCM history costs 64 kB per second. This direct
+runtime check is narrower than hosted CLI/C ABI acceptance.
+Fresh full acceptance: x86 [37740556768](https://github.com/CrispStrobe/CrispASR/actions/runs/37740556768)
+and ARM [37740559460](https://github.com/CrispStrobe/CrispASR/actions/runs/37740559460)
+are queued at that runtime. The earlier ARM pass remains evidence for its own
+source, and is not approval of the new flush code. X86 `37738992713` was
+cancelled while queued because it predates this correction.
+
+All seven wrappers, WASM/JS and the WebSocket ready event expose the new
+streaming-kind query. C# builds with zero warnings/errors; WebSocket syntax
+passes. Go `37735851685`, Rust `37735851828`, all five WASM jobs `37735912990`
+and Windows CUDA13 `37730263830` pass. Native CI `37735908557` has ten of
+13 jobs passing, with three in progress; lint `37735910817` remains in flight.
+Numerical regression `37730687001` passes unit/smoke/preflight and four model
+jobs so far; remaining models are queued. Automatic optional-SDK acceptance
+pins Python ORT 1.30.0 to the SDK and retains strict stage, scale and speech
+checks. #515 stays unmerged pending full proof.
 
 ## OPEN 2026-10-08 — #483 reporter GPU comparison
 
@@ -81,9 +92,10 @@ Lint Deep found an uninitialized Hikari probability, fixed in `4b45fec39`;
 focused cppcheck passes. Full hosted rerun `37729063238` failed on a Hikari constructor virtual call.
 Fixed in `f55c7bc8c`: constructor and reset share a nonvirtual helper. Focused
 cppcheck 2.17.1 and C++ syntax pass; full pinned cppcheck 2.7 rerun
-`37737578258` is queued. No full deep-lint success is claimed yet.
+`37737578258` is running. No full deep-lint success is claimed yet.
 No new GPU performance claim. Cold proof: `/mnt/storage/crispasr/triage-20261007/`.
-#490 Arabic character alignment and #483's forced-MMQ experiment remain doable.
+#490 Arabic character alignment remains doable. #483 has matched packages;
+reporter GPU output/timing comparisons remain pending.
 #492 MiMo/CANN needs numerical/output acceptance. #492/#515 remain unmerged.
 
 ## OPEN 2026-10-05 — live transcribe + translate: follow-ups
