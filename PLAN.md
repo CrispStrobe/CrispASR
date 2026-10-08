@@ -33,6 +33,17 @@ stay on `/mnt/storage`; GH CPU and one-account Kaggle GPU protocol apply.
 Archive only code-audited completed PLAN claims; preserve remaining hardware
 retests and deferred #456. Check release asset publication separately.
 
+MiMo graph-phase profile is pushed and Kaggle v1 launched:
+[crispasr-mimo-graph-profile](https://www.kaggle.com/code/chr1s4/crispasr-mimo-graph-profile).
+Numeric/source pin `b8ab3249d`, uploaded harness `9c978485d`; script SHA and
+actual hardware/submodules/build flags are recorded by the kernel. Production
+Q4 files/arithmetic and defaults stay unchanged. Exact CLI/session EN/ZH
+outputs must agree across ABBA profiling toggles (two warmups/six measured
+calls per clip/process). Timings separate host inputs, graph build, scheduler
+allocation, input preparation/upload, synchronous compute and readback;
+scheduler pipeline-copy multiplicity is not a transfer count. No speedup
+claim from instrumentation. Terminal archive and cache refresh are pending.
+
 OmniVoice #518 implementation `a1ae00dff` is pushed on
 `fix/omnivoice-postprocess-518`. Independent pinned upstream functions pass
 738 adversarial waveform comparisons and 18 exact multilingual text cases;
@@ -116,33 +127,6 @@ Paired tok_codes extraction takes 10.40/12.58s versus 6.08/6.61s on CPU:
 timing/memory, short EN/ZH and ARM before production use. No production
 precision/default change has landed. No direct BLAS-module
 symbol dependencies, GPU placement changes or reference tolerance changes.
-
-## VALIDATED 2026-10-08 — data2vec independent transcript parity
-
-Integrated source `3cb9bb48ee1ed7d7a8c26a2032a158480c37661e` corrects the data2vec transcript target to
-the frozen independent Python CTC decode. Hosted `37791614453` PASS at
-`c9dec41f2`: actual Q4 CLI zero-WER upstream parity, F16 logits cosine
-0.999141 >= unchanged 0.999, and four reference/target/hash negative controls.
-The published weights and decoder are unchanged; human WER remains 4.55%
-and is explicitly reported separately. Original diagnosis `37786726672`
-showed Q8/F16 already inserting A on BOTH old/current builds, and the frozen
-Python reference also contains A. The old July native target was not the
-independent reference. No replacement model/first-layer precision policy was
-shipped. Proof: `docs/data2vec-reference-parity-2026-10-08.json`.
-Final integrated main CI/broad regression must settle before release.
-
-## VALIDATED 2026-10-08 — MiMo C ABI device/verbosity forwarding
-
-Integrated source `273b8a40ce833d1d247250d95e2f06fb293ced3d` forwards the requested device and verbosity
-into MiMo initialization. No attention/graph changes or dependency on PR #492.
-Actual-library probe `37789763493` passes at `6c11d5a1f`: four requested
-combinations, four failed-open default restores; removing the assignments
-fails, restoring them passes. Rust/Dart, Windows/macOS/iOS, Linux unit/Vulkan,
-clang-tidy and clang-format also pass at that source. Full native CI
-`37790010839` and lint `37790015470` now PASS at that tested source; final
-main-tip CI must settle green before any release.
-Evidence: `docs/mimo-cabi-device-2026-10-08.json`. This is parameter-forwarding
-proof, not a GPU/model-inference or performance claim.
 
 ## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
 
@@ -237,35 +221,14 @@ cannot be attributed to this PR alone. PR #492 remains unmerged. #516 Arabic
 alignment is integrated after full runtime acceptance; native main CI and regression pass.
 Full pinned cppcheck 2.7 `37763588589` passes at `2da878e72`.
 
-## VALIDATED 2026-10-08 — integrated Arabic platform validation
+## OPEN 2026-10-08 — release binary publication
 
-#516/#490 measured character alignment is integrated after full hosted Arabic
-acceptance `37756933124` (15 words / 85 exact independent Viterbi spans,
-CLI/Python/C ABI/Java equality and offsets; artifact `11542736536`). The
-accepted runtime is unchanged; main's Metal discovery repair is included.
-Main `2da878e72` passes native CI `37763588567`, regression `37763588786`,
-lint and Moonshine acceptance `37763589121`. Integrated `ff33461e0` passes
-Go/Rust/C#/Dart, five WASM builds, Windows live translation and Arabic acceptance.
-The only subsequent runtime delta is the nonvirtual ONNX cleanup helper; its
-full cppcheck 2.7 run `37763588589` PASSES. Latest main `d2c269f93`
-also passes native CI `37777990060` and lint `37777990004`.
-Implementation and proof are archived in HISTORY and
-`docs/ctc-characters-2026-10-08.json`.
-
-Storage checkpoint: 2,244,872,573 bytes of cold archives/JARs moved to
-`/mnt/storage/cold-files-20261008`, each checksum-verified before atomic
-replacement with a symlink at its original path. No active executables or
-shared-library trees moved. Receipts/scripts:
-`/mnt/storage/crispasr/storage-cleanup-20261008/`.
-
-## OPEN 2026-10-08 — release draft and final gates
-
-Comprehensive `RELEASE_NOTES_v0.8.42.md` covers landed changes since v0.8.41,
-with validation scope and remaining gates. Refresh it after final integration;
-PR #515 is integrated after final x86/ARM acceptance; #516 is integrated after
-full Arabic/Java acceptance. PR #492 remains unmerged and excluded from shipped
-features. No version
-bump/tag until required main-tip checks pass. Use `scripts/bump-version.sh`.
+v0.8.42 is published with comprehensive notes and passing native/lint/full33
+release gates. Workflow
+[37850360339](https://github.com/CrispStrobe/CrispASR/actions/runs/37850360339)
+is still building/publishing platforms; check remaining jobs and uploaded
+assets separately. PR #492 and all unaccepted experimental branches remain
+excluded. Receipt: `docs/release-v0.8.42-validation.json`.
 
 ## OPEN 2026-10-08 — #483 reporter GPU comparison
 
@@ -306,8 +269,8 @@ and how it was verified is in `HISTORY.md`; usage, model verdicts and
 measurements are in `docs/streaming.md`. ⚠ Still true after the sync:
 `GGML_PREC_F32` is now 10 (was 1), so a binding passing a raw `1` breaks
 silently (not audited); `ggml_*_set_prec` are deprecated upstream (58 call
-lines here); `tests/test-metal-pipeline-cache.mm` API/build wiring is repaired with focused
-hosted validation pending. Scheduler replay is wired through the standalone
+lines here); `tests/test-metal-pipeline-cache.mm` now executes both lifecycle cases on
+actual macOS in shared/static builds (`37762956547`); speed is not established. Scheduler replay is wired through the standalone
 `tools/ci-heavy/scheduler-replay` CMake target and its Vulkan workflow.
 
 Open, in the order they would help:

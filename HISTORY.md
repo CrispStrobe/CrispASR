@@ -17,7 +17,7 @@ core models and omitted data2vec; the corrected selector retains all six and
 adds data2vec. Fourteen unit tests cover transcript/hash edits, additions,
 removals, TTS entries, ordering and unavailable/invalid snapshots. The old
 selector reproduces the omission. Full 33-backend hosted regression
-`37802900089` is pending at `893e417ca`; no model/reference/tolerance changed.
+`37802900089` passes all 33 at `893e417ca`; no model/reference/tolerance changed.
 Proof: `docs/regression-manifest-selection-2026-10-08.json`.
 
 ## DONE 2026-10-08 — Metal cache test compatibility and actual discovery
@@ -23166,3 +23166,55 @@ version agree, including the Dart changelog entry. PR #492 remains unmerged
 and excluded. Binary publication is tracked separately from the release page.
 Receipt: `docs/release-v0.8.42-validation.json`. Root notes cleaned up after
 publication; the tag retains their full text.
+
+
+## DONE 2026-10-08 — data2vec independent transcript parity
+
+Integrated source `3cb9bb48ee1ed7d7a8c26a2032a158480c37661e` corrects the data2vec transcript target to
+the frozen independent Python CTC decode. Hosted `37791614453` PASS at
+`c9dec41f2`: actual Q4 CLI zero-WER upstream parity, F16 logits cosine
+0.999141 >= unchanged 0.999, and four reference/target/hash negative controls.
+The published weights and decoder are unchanged; human WER remains 4.55%
+and is explicitly reported separately. Original diagnosis `37786726672`
+showed Q8/F16 already inserting A on BOTH old/current builds, and the frozen
+Python reference also contains A. The old July native target was not the
+independent reference. No replacement model/first-layer precision policy was
+shipped. Proof: `docs/data2vec-reference-parity-2026-10-08.json`.
+Released in v0.8.42 after native/lint/full33 gates passed.
+
+
+## DONE 2026-10-08 — MiMo C ABI device/verbosity forwarding
+
+Integrated source `273b8a40ce833d1d247250d95e2f06fb293ced3d` forwards the requested device and verbosity
+into MiMo initialization. No attention/graph changes or dependency on PR #492.
+Actual-library probe `37789763493` passes at `6c11d5a1f`: four requested
+combinations, four failed-open default restores; removing the assignments
+fails, restoring them passes. Rust/Dart, Windows/macOS/iOS, Linux unit/Vulkan,
+clang-tidy and clang-format also pass at that source. Full native CI
+`37790010839` and lint `37790015470` now PASS at that tested source; final
+main-tip CI and full33 passed before v0.8.42.
+Evidence: `docs/mimo-cabi-device-2026-10-08.json`. This is parameter-forwarding
+proof, not a GPU/model-inference or performance claim.
+
+
+## DONE 2026-10-08 — integrated Arabic platform validation
+
+#516/#490 measured character alignment is integrated after full hosted Arabic
+acceptance `37756933124` (15 words / 85 exact independent Viterbi spans,
+CLI/Python/C ABI/Java equality and offsets; artifact `11542736536`). The
+accepted runtime is unchanged; main's Metal discovery repair is included.
+Main `2da878e72` passes native CI `37763588567`, regression `37763588786`,
+lint and Moonshine acceptance `37763589121`. Integrated `ff33461e0` passes
+Go/Rust/C#/Dart, five WASM builds, Windows live translation and Arabic acceptance.
+The only subsequent runtime delta is the nonvirtual ONNX cleanup helper; its
+full cppcheck 2.7 run `37763588589` PASSES. Latest main `d2c269f93`
+also passes native CI `37777990060` and lint `37777990004`.
+Implementation and proof are archived in HISTORY and
+`docs/ctc-characters-2026-10-08.json`.
+
+Storage checkpoint: 2,244,872,573 bytes of cold archives/JARs moved to
+`/mnt/storage/cold-files-20261008`, each checksum-verified before atomic
+replacement with a symlink at its original path. No active executables or
+shared-library trees moved. Receipts/scripts:
+`/mnt/storage/crispasr/storage-cleanup-20261008/`.
+
