@@ -840,7 +840,7 @@
       "ci": 37730684549,
       "regression": 37730687001
     },
-    "runtime_commit": "f43dfd5eb5f9915e2c54b42da1ce5fa3fa00318d",
+    "runtime_commit": "cdd1b80d0df90279e26489b94fa20c8a73abb2ca",
     "driver_smoke": {
       "passed": true,
       "tests": 56
@@ -1055,7 +1055,7 @@
       "run_id": 37735374748,
       "lint_run_id": 37735377165,
       "source_commit": "eb2ebe30ab42378a0b16ecb302b0c266145e9f7c",
-      "status": "queued"
+      "status": "cancelled; superseded by latest_runs.native_ci/lint"
     },
     "earlier_native_ci": {
       "run_id": 37730684549,
@@ -1141,8 +1141,8 @@
       "harness_failure": "GGUF Ref::shape singleton-axis normalization; graph values and text match"
     },
     "latest_runs": {
-      "x86": 37735853879,
-      "arm64": 37735856512,
+      "x86": 37740556768,
+      "arm64": 37740559460,
       "native_ci": 37735908557,
       "lint": 37735910817,
       "wasm": 37735912990,
@@ -1157,11 +1157,34 @@
       "websocket_syntax": "pass"
     },
     "latest_x86": {
-      "run_id": 37738992713,
-      "source_commit": "68b849eb9",
+      "run_id": 37740556768,
+      "source_commit": "cdd1b80d0df90279e26489b94fa20c8a73abb2ca",
       "runner": "ubuntu-22.04",
       "status": "queued",
-      "replaces": 37735853879
+      "replaces": 37738992713
+    },
+    "latest_arm64": {
+      "run_id": 37740559460,
+      "source_commit": "cdd1b80d0df90279e26489b94fa20c8a73abb2ca",
+      "runner": "ubuntu-24.04-arm",
+      "status": "queued"
+    },
+    "x86_flush_fix": {
+      "before_failed": true,
+      "local_cases_passed": 4,
+      "scope": "Direct native ONNX runtime; full CLI/C ABI acceptance queued",
+      "frontend_max_abs": 4.76837e-07,
+      "frontend_relative_l2": 3.10646e-07,
+      "fix": "Replay batch inference from retained original PCM at final flush",
+      "receipt_on_feature_branch": "docs/moonshine-onnx-x86-flush-2026-10-08.json"
+    },
+    "binding_checks": {
+      "go": "passed",
+      "rust": "passed",
+      "wasm": "all five jobs passed",
+      "native_ci": "10 passed, 3 in progress",
+      "lint": "in progress",
+      "windows_cuda13": "passed"
     }
   },
   "issue483_mmq": {
