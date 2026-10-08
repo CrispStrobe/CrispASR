@@ -77,7 +77,7 @@ for cohort,name in [('q8','voxcpm2-q8_0.gguf'),('mixed','voxcpm2-q8_0-locdit-f16
                 digest = hashlib.sha256(pcm.tobytes()).hexdigest()
                 canonical.setdefault(key,digest)
                 assert digest == canonical[key], (cohort,key,rep,'Repeated seeded PCM drift')
-                receipt['calls'].append(dict(cohort=cohort,text=key,repetition=rep,cold=rep==0,
+                receipt['calls'].append(dict(cohort=cohort,text=key,repetition=rep,cold=rep==0 and key=='short', first_shape=rep==0,
                     measured=rep>=2,seconds=elapsed,samples=len(pcm),audio_seconds=len(pcm)/48000,
                     rtf=elapsed/(len(pcm)/48000),sha256=digest))
                 if key not in waveforms.get(cohort,{}):
