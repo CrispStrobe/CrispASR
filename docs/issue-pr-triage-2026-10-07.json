@@ -1160,7 +1160,7 @@
       "run_id": 37744837589,
       "source_commit": "a9c312cb1",
       "runner": "ubuntu-22.04",
-      "status": "queued",
+      "status": "in_progress",
       "replaces": 37741562051
     },
     "latest_arm64": {
@@ -1223,7 +1223,8 @@
     "focused_cppcheck": "pass; 2.17.1",
     "cxx17_syntax": "pass",
     "hosted_pinned_cppcheck_run": 37737578258,
-    "hosted_status": "in_progress"
+    "hosted_status": "success",
+    "hosted_log_sha256": "121a273eedf84d982b0a3785f8e3a3c1c3b3bb54c98151d2f2aed32327bb2ef0"
   },
   "issue490_characters": {
     "source_commit": "d57b0f7c7a219641cbdbcebca1108f7b1f8096b5",
