@@ -14,8 +14,8 @@ from pathlib import Path
 import subprocess
 import sys
 
-SCRIPT_VERSION = 'mimo-pr492-tokenizer-cuda-v1'
-SOURCE = 'd6b29207b6d1304243db987a2f4d97f5deac9c05'
+SCRIPT_VERSION = 'mimo-pr492-tokenizer-cuda-v2'
+SOURCE = 'b16fe30a2c03e7b7abee0f38a2ea6b03b85d80e6'
 GGML = 'c36dab89b662838f0f5d4826c399198c0b90bbfc'
 WORK = Path('/kaggle/working')
 SCRATCH = Path('/kaggle/temp/mimo-pr492')
@@ -27,7 +27,7 @@ def main():
     SCRATCH.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
     os.environ.update(PYTHONUNBUFFERED='1', TMPDIR=str(SCRATCH),
-                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='mimo-pr492-tokenizer-cuda-v1')
+                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='mimo-pr492-tokenizer-cuda-v2')
     devices = subprocess.check_output(['nvidia-smi', '--query-gpu=name,compute_cap,memory.total',
                                        '--format=csv'], text=True)
     print(SCRIPT_VERSION, devices, flush=True)
@@ -52,6 +52,10 @@ def main():
                     'huggingface_hub', 'soundfile', 'transformers==4.57.6'], check=True, timeout=1200)
     subprocess.run(['apt-get', '-o', 'Acquire::Retries=2', '-o', 'Acquire::http::Timeout=30',
                     '-o', 'Acquire::https::Timeout=30', 'install', '-y', 'ffmpeg'], check=True, timeout=600)
+    sys.path.insert(0, str(REPO / 'tools/ci-heavy'))
+    from pr492_tokenizer_cuda_precision import patch_cuda
+    patch = patch_cuda(REPO, OUT)
+    kh.step('cuda.precision.patch', **patch)
     wrapper = SCRATCH / 'wrapper'
     wrapper.mkdir()
     (wrapper / 'entry.cpp').write_text('''#include "mimo_tokenizer.h"
@@ -86,11 +90,11 @@ cmake_language(DEFER CALL mimo_diag_add_probe)
                       MIMO_TOKENIZER_DIAG_GPU='1', MIMO_TOKENIZER_DIAG_LIB=str(library))
     kh.step('tokenizer.diagnosis.begin', source=SOURCE, arch=arch)
     with kh.build_heartbeat('tokenizer-cuda-diagnosis'):
-        result = subprocess.run([sys.executable, REPO / 'tools/ci-heavy/pr492_tokenizer_diagnose.py'],
+        result = subprocess.run([sys.executable, REPO / 'tools/ci-heavy/pr492_tokenizer_cuda_precision.py'],
                                 cwd=REPO, timeout=7200)
     kh.step('tokenizer.diagnosis.end', returncode=result.returncode)
     kh._push_progress_to_hf(force=True)
-    assert result.returncode == 0, 'CUDA tokenizer diagnostic failed; inspect saved metrics/logs'
+    assert result.returncode == 0, 'CUDA tokenizer precision/exact-code gates failed; inspect saved metrics/logs'
 
 
 if __name__ == '__main__':
