@@ -33,6 +33,18 @@ stay on `/mnt/storage`; GH CPU and one-account Kaggle GPU protocol apply.
 Archive only code-audited completed PLAN claims; preserve remaining hardware
 retests and deferred #456. Check release asset publication separately.
 
+OmniVoice #518 implementation `a1ae00dff` is pushed on
+`fix/omnivoice-postprocess-518`. Independent pinned upstream functions pass
+738 adversarial waveform comparisons and 18 exact multilingual text cases;
+raw-output negative control is rejected. Receipt:
+`docs/omnivoice-audio-utility-parity-2026-10-08.json`. Silence uses actual
+PCM16/integer-RMS/sliding-window semantics, not guessed frame thresholds.
+Native config setters preserve the by-value params ABI; reference PCM hashing
+covers cache semantics. Default-on behavior remains on the branch until
+GH CPU [37852750379](https://github.com/CrispStrobe/CrispASR/actions/runs/37852750379)
+passes same-code independent decode waveform parity, actual CLI/session
+cloning and four TTS→ASR gates. Utility parity is not full speech acceptance.
+
 Mel salvage retains author commit `3dce5b586` plus opt-in gate/instrumentation
 `ead1f2b12`. Local same-binary bitwise checks pass all 144 combinations
 (OpenMP/no OpenMP; 63/64/65/300/1100/3000 frames; both filter layouts and
