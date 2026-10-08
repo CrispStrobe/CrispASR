@@ -22,7 +22,7 @@ unchanged original Q4 file. Record the temporary ggml patch and actual
 operator-dispatch evidence, independent same-weight Python stages, norms,
 relative L2, exact RVQ codes and paired timing. Preserve all numerical gates;
 continuous diagnostic success alone does not accept #492. Use the shared
-Kaggle harness, immutable source/ggml pins and the single chr1s4 account.
+Kaggle harness, immutable source/ggml pins and the single authorized account.
 No production ggml/runtime/default changes or release tag are authorized by
 this diagnostic result alone.
 
