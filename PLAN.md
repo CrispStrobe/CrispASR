@@ -41,88 +41,9 @@ for C ABI/Python/Java/model-runtime/tests and explicit UTF-8 for MSVC fixtures.
 
 Comprehensive `RELEASE_NOTES_v0.8.42.md` covers landed changes since v0.8.41,
 with validation scope and remaining gates. Refresh it after final integration;
-PR #515/#492 are excluded from shipped features while unmerged. No version
+PR #515 is integrated after final x86/ARM acceptance. PR #516/#492 remain
+unmerged and excluded from shipped features. No version
 bump/tag until required main-tip checks pass. Use `scripts/bump-version.sh`.
-
-## CLAIMED 2026-10-08 — PR #515 integration review and hosted validation
-
-Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
-`review/pr515-integration`. Review the complete author patch at
-`2bf39c58a53160ed10aed82d5d621c794dc32bba`, preserve author commits,
-and test on current main with bounded APT setup. Final contributing audit also found
-the ONNX decoder cap was not forwarded: wire explicit `--max-new-tokens` and
-session cap overrides through batch and persistent streaming, retaining the
-existing duration-derived budget when cleared. Add real capped-output checks. Inspect packet/flush and
-UTF-8 behavior, German ONNX model/companion/licence routing, C ABI and bindings.
-Validation branch `f43dfd5eb5f9915e2c54b42da1ce5fa3fa00318d` preserves the
-author commits. Fixed matched-model companion downloads, failure propagation
-and cached repair; actual CLI/resolver offline probes pass six bundles.
-Hosted CPU [37730765885](https://github.com/CrispStrobe/CrispASR/actions/runs/37730765885)
-built and loaded all six German choices. Five choices and Qwen streaming passed;
-Small int8 final punctuation differed from batch, and Nemotron C ABI batch leaked
-a language tag already removed by the CLI. Initial fixes recomputed the whole encoder
-once at ONNX final flush (window-dependent int8 scales) and share Nemotron tag
-cleanup across CLI, C ABI words/text and streams. Strict gates are retained.
-
-Added optional ONNX graph-stage reference/diff integration with exact PCM/shape,
-cosine >= 0.99999, relative L2 <= 1e-4, independent tokenizer text and a 2x-scale
-negative control. This validates wrapper execution of identical graphs, not the
-exporter against source PyTorch checkpoints. C++ runtime syntax and formatting
-pass locally. Strict CPU rerun `37733187037` found exact Python/native graph
-values and text, but a harness shape check failed because `Ref::shape` drops
-singleton axes after dimension zero. Fixed that normalization without changing
-cosine/magnitude gates. Nemotron batch and both packet sizes now pass; legacy
-Moonshine and Qwen also pass. All eight cases now pass ARM64 acceptance `37735856512`, including Small int8
-final/batch parity and the numerical scale-failure control. All four deployed
-graph variants have 15 stages at reported cosine 1.000000 / relative L2 0.
-
-Latest runtime `cdd1b80d0df90279e26489b94fa20c8a73abb2ca` fixes a remaining
-x86 failure: encoder-only recomputation still changed Small int8 punctuation.
-A frontend probe measured max absolute drift 4.76837e-7 / relative L2 3.10646e-7
-between windowed and whole-utterance processing. Final flush now replays the
-actual batch path from retained original PCM, including the frontend. The
-saved pre-fix binary fails; all four local x86 combinations (1/4 threads,
-1777/5120-sample packets) pass exact final/batch text, repeat flush and
-feed-after-flush rejection. PCM history costs 64 kB per second. This direct
-runtime check is narrower than hosted CLI/C ABI acceptance.
-Final checklist follow-up `c46e44e82` forwards explicit generation caps
-through CLI, session batch and persistent streaming. Local native x86 at 1/4
-threads emits “Guten” with a one-token cap, restores full text when cleared,
-and retains all four final/batch packet passes. The hosted suite adds CLI/C ABI
-cap equality, capped streaming and reset checks for all five ONNX deployments.
-Initial full acceptance: x86 [37741562051](https://github.com/CrispStrobe/CrispASR/actions/runs/37741562051)
-and ARM [37741564942](https://github.com/CrispStrobe/CrispASR/actions/runs/37741564942)
-both failed at this runtime with a new CLI routing failure:
-the capped check opens a generic `encoder*.onnx` path, which falls back to
-Whisper while the C ABI already recognizes its companion configuration. Reuse
-the existing Moonshine config detector in CLI auto-detection and rerun both
-architectures. Graph-stage parity passes before this failure.
-Fixed in `a9c312cb1` with the same detector already used by the C ABI. The saved
-baseline fails; four local positive/negative routing checks pass. Fresh x86
-`37744837589` is running. ARM `37744841616` passes all eight cases at
-`a9c312cb1`: four graph variants each pass 15 stages at reported cosine
-1.000000 / relative L2 0 plus exact text; the isolated scale-negative control
-fails exactly one numeric check while text passes. All five ONNX choices pass
-one-token CLI/C ABI caps and reset; four persistent choices pass capped final
-output and both packet sizes. Native Nemotron/Qwen also pass.
-[Final ARM receipt](docs/moonshine-onnx-arm-2026-10-08.json).
-Prepared integration `c0f10937b` merges current main documentation only; its
-runtime is byte-identical to the accepted source and original author commits
-remain ancestors. Do not land until the corrected x86 acceptance passes.
-[Routing receipt](docs/moonshine-onnx-routing-2026-10-08.json). Earlier flush-only runs `37740556768`/`37740559460`
-were superseded while queued. The earlier ARM pass remains evidence for its own
-source, and is not approval of the new flush code. X86 `37738992713` was
-cancelled while queued because it predates this correction.
-
-All seven wrappers, WASM/JS and the WebSocket ready event expose the new
-streaming-kind query. C# builds with zero warnings/errors; WebSocket syntax
-passes. Go `37735851685`, Rust `37735851828`, all five WASM jobs `37735912990`
-and Windows CUDA13 `37730263830` pass. Native CI `37735908557` passes all
-13 jobs on the earlier binding-completion source; lint `37735910817` passes all 10 jobs.
-Numerical regression `37730687001` passes unit/smoke/preflight and four model
-jobs so far; remaining models are queued. Automatic optional-SDK acceptance
-pins Python ORT 1.30.0 to the SDK and retains strict stage, scale and speech
-checks. #515 stays unmerged pending full proof.
 
 ## OPEN 2026-10-08 — #483 reporter GPU comparison
 
@@ -154,7 +75,7 @@ cppcheck 2.17.1 and C++ syntax pass; full pinned cppcheck 2.7 rerun
 No new GPU performance claim. Cold proof: `/mnt/storage/crispasr/triage-20261007/`.
 #490 character alignment is implemented in draft PR #516, pending real-audio proof. #483 has matched packages;
 reporter GPU output/timing comparisons remain pending.
-#492 MiMo/CANN needs numerical/output acceptance. #492/#515 remain unmerged.
+#492 MiMo/CANN needs numerical/output acceptance. #492/#516 remain unmerged.
 
 ## OPEN 2026-10-05 — live transcribe + translate: follow-ups
 

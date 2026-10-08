@@ -131,7 +131,7 @@ change their implementation.
 |---|---|
 | [#490](https://github.com/CrispStrobe/CrispASR/issues/490) Arabic character alignment | Feasible. `src/align.cpp` already walks UTF-8 codepoints and traces per-label Viterbi positions, then collapses them to word times. Preserve those spans through the aligner and JSON surface. Test repeated letters, Arabic codepoints/diacritics, blanks, punctuation and OOV handling; do not estimate character times by dividing word durations. Implemented in draft [PR #516](https://github.com/CrispStrobe/CrispASR/pull/516): 41 known-path assertions and ASAN/UBSAN pass; C# builds cleanly. Real Arabic Q4 CLI/C ABI and independent Viterbi acceptance are queued. Still unmerged. |
 | [PR #492](https://github.com/CrispStrobe/CrispASR/pull/492) MiMo/CANN performance | Existing CI is green and the contributor reports five exact transcripts on Ascend. Shared attention/mel code and device placement deserve stage/magnitude and decoded-output validation on default and non-flash paths, F16 and shipped quant, with the current ggml pin. The cited timing combines this PR with the still-open [ggml #4](https://github.com/CrispStrobe/ggml/pull/4); it cannot be attributed to this PR alone. Retained unmerged. |
-| [PR #515](https://github.com/CrispStrobe/CrispASR/pull/515) streaming bindings / German ONNX Moonshine | Integration review fixed companion routing, bindings and Nemotron tags. Earlier ARM acceptance passes all eight cases, but local x86 exposed remaining Small int8 frontend drift. Full-frontend flush fix passes four local cases; fresh x86/ARM acceptance is running. Retained unmerged. |
+| [PR #515](https://github.com/CrispStrobe/CrispASR/pull/515) streaming bindings / German ONNX Moonshine | Integrated with author ancestry preserved after final x86 `37744837589` and ARM `37744841616` each pass all eight cases, graph parity and cap/stream checks. Final main-tip CI remains a release gate. |
 | [#483](https://github.com/CrispStrobe/CrispASR/issues/483) CUDA 12.6 | Reporter confirms the mismatch warning is gone. Latest follow-up requests an experimental forced-MMQ/no-tensor build for GTX1660 comparisons. Both matched Windows packages pass, and their actual uploaded manifests pair locally. Packages and proof are published; reporter GPU model/output/timing comparisons remain pending. No forced-MMQ default change. |
 | [#488](https://github.com/CrispStrobe/CrispASR/issues/488) Qwen3 hotwords | Fixed and validated on main. Reporter Windows/Vulkan six-clip retest remains external. |
 | [#485](https://github.com/CrispStrobe/CrispASR/issues/485) Index-Echo | Both sizes shipped; 9B Q4 candidate acceptance remains open in PLAN, with transfer quota constraints. |
@@ -297,3 +297,15 @@ x86 acceptance `37744837589` remains queued; #515 is still unmerged.
 Full pinned cppcheck 2.7 run [37737578258](https://github.com/CrispStrobe/CrispASR/actions/runs/37737578258)
 passes at `f55c7bc8c`, covering the probability initialization and nonvirtual
 constructor-reset fixes. Corrected final ONNX x86 acceptance is now running.
+
+## PR #515 accepted and integrated — 2026-10-08
+
+Final x86 `37744837589` passes the same complete eight-case suite as ARM
+`37744841616`, including all five ONNX caps/reset, capped persistent final
+output and both packet sizes. Four graph variants each pass 15 stages at
+reported cosine 1.000000 / relative L2 0 plus exact text; the scale-negative
+control rejects only the scaled tensor. [X86 receipt](moonshine-onnx-x86-2026-10-08.json).
+Integration preserves original author commit `2bf39c58a` and the validated runtime
+`a9c312cb1`; newer main changes are documentation only. #515 is integrated.
+Hikari deep lint also passes. #516 real Arabic acceptance and final main-tip
+checks remain pending; no release/version tag has been created.

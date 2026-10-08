@@ -792,7 +792,7 @@
   },
   "pr515_review": {
     "source_commit": "a1a3d4a25a442fbe355d562aabe020a4c9ba07ed",
-    "merged": false,
+    "merged": true,
     "offline_bundle_probe": [
       {
         "variant": "moonshine-streaming-tiny-de-onnx",
@@ -840,7 +840,7 @@
       "ci": 37730684549,
       "regression": 37730687001
     },
-    "runtime_commit": "a9c312cb1",
+    "runtime_commit": "a9c312cb1f49c6c9576df9e3aed07c80201e412b",
     "driver_smoke": {
       "passed": true,
       "tests": 56
@@ -1160,7 +1160,7 @@
       "run_id": 37744837589,
       "source_commit": "a9c312cb1",
       "runner": "ubuntu-22.04",
-      "status": "in_progress",
+      "status": "success",
       "replaces": 37741562051
     },
     "latest_arm64": {
@@ -1203,7 +1203,9 @@
       "status": "both failed generic-path CLI routing after graph-stage parity passed; three native cases passed"
     },
     "final_arm64_receipt": "docs/moonshine-onnx-arm-2026-10-08.json",
-    "prepared_integration_commit": "c0f10937b693b755860d777c76c2b376391a530e"
+    "prepared_integration_commit": "c0f10937b693b755860d777c76c2b376391a530e",
+    "final_x86_receipt": "docs/moonshine-onnx-x86-2026-10-08.json",
+    "author_commit_preserved": "2bf39c58a53160ed10aed82d5d621c794dc32bba"
   },
   "issue483_mmq": {
     "source_commit": "04ded753e909da019a2cd391f651f51f5299b6f5",

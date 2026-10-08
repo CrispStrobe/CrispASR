@@ -1,9 +1,43 @@
-# v0.8.42 — Live translation, Hikari and runtime fixes
+# v0.8.42 — Live translation, persistent streaming and Hikari
 
 Draft for the next release, covering changes on main since v0.8.41. The version
 has not been bumped and the tag has not been created. Final integration and
-release-tip validation are still pending. PR #515 is reviewed separately and
-is not included among the shipped features below.
+release-tip validation are still pending. PR #515 is integrated; PR #516 and
+PR #492 remain unmerged.
+
+## Persistent streaming and German Moonshine
+
+- The C session API now exposes Nemotron's cache-aware encoder/RNN-T stream,
+  Qwen3-ASR prefix streaming and the existing Voxtral realtime implementation.
+  Nemotron honors the stream language prompt and removes language control tags
+  consistently from CLI, C ABI text, words and stream output. Canonical backend
+  steps make its input independent of microphone packet boundaries.
+- `crispasr_session_stream_kind()` reports the loaded implementation: unavailable,
+  rolling windows, persistent model caches or text-prefix streaming. All seven
+  language wrappers, WASM/JavaScript and the WebSocket ready event expose it.
+  Qwen's prefix streaming re-encodes accumulated audio; it retains text prefixes
+  rather than encoder/KV caches across calls.
+- Stream updates contain cumulative utterance text, including Voxtral's
+  underlying consuming deltas. Dart propagates stream errors and reads long
+  UTF-8 output without truncation. Feed only new 16 kHz mono PCM, then flush
+  and close; the model session must outlive its stream.
+- Optional CPU ONNX Runtime support adds German Streaming Tiny/Small in int8
+  and F32, the Phreak87 Tiny two-graph ONNX export, and the dattazigzag native
+  Q4 Tiny GGUF. These registry entries are MIT licensed. Downloads use pinned
+  revisions and isolated bundles, including matching graphs, tokenizer,
+  configuration and license files. Companion failures propagate; cached
+  incomplete bundles can be repaired. Generic `encoder*.onnx` paths are detected
+  from their companion configuration through both CLI and C ABI.
+- Five-graph Moonshine produces incremental drafts with persistent frontend
+  state and bounded encoder updates. Final flush replays the actual batch
+  frontend/encoder/decoder from retained original PCM, correcting Small int8
+  punctuation drift caused by tiny differences in windowed frontend values.
+  PCM history costs 64 kB per second. Explicit generation caps work through
+  CLI, session batch and persistent streams; clearing the override restores
+  each model's duration-derived budget. The legacy two-graph model is buffered.
+
+See [German deployment and SDK setup](docs/german-moonshine.md) and
+[streaming semantics](docs/streaming.md#stateful-streams-from-c-and-dart).
 
 ## Live transcription and translation
 
@@ -168,7 +202,9 @@ See [MioTTS/Echo evidence](docs/miotts-echo-integration-2026-10-03.md),
 
 Before tagging, refresh this draft against the final main commit and complete
 its required checks. Hikari's full pinned deep-lint rerun passes at `f55c7bc8c`.
-PR #515's persistent streaming/German ONNX integration still needs corrected
-x86 acceptance (the corrected ARM suite passes); PR #516 needs real Arabic
+PR #515 passes final x86/ARM acceptance: all eight cases on each architecture,
+15 exact stages per five-graph deployment, scale-negative control, and CLI/C ABI
+cap/reset/stream checks. These compare identical deployed ONNX exports against
+independent Python ORT execution. PR #516 still needs real Arabic
 character-alignment acceptance. PR #492's MiMo/CANN changes remain unmerged. Reporter-specific
 Windows/Vulkan, Intel Mac and newer NVIDIA hardware retests remain open.

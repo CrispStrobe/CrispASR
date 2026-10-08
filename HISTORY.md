@@ -6,6 +6,35 @@ technical deep-dives are in `LEARNINGS.md`.
 
 ---
 
+
+## DONE 2026-10-08 — persistent streaming bindings and German Moonshine (#515)
+
+Integrated the original author commits with reviewed fixes. C ABI and all
+seven wrappers expose streaming implementation kinds; WASM/JS and WebSocket
+readiness also report them. Nemotron canonical packet steps and shared tag
+cleanup preserve CLI/C ABI speech. Qwen retains text-prefix streaming, not
+encoder/KV caches. Voxtral consuming deltas become cumulative updates.
+
+Optional ONNX Runtime 1.30 support adds pinned MIT German Tiny/Small int8/F32
+five-graph bundles and the legacy Phreak87 two-graph deployment; native
+Dattazigzag Q4 is also registered. Downloads isolate matching companions and
+licenses, propagate errors and repair incomplete caches. Generic ONNX paths
+use the same config detector in CLI and C ABI. Full batch replay at final
+flush fixes reproduced x86 Small int8 frontend rounding/punctuation drift;
+PCM history costs 64 kB/s. Explicit token caps/reset reach both surfaces.
+
+Final x86 `37744837589` and ARM `37744841616` each pass all eight speech cases,
+five ONNX cap/reset checks, persistent capped output and both packet sizes.
+Each of four deployed graphs passes 15 boundaries at reported cosine 1.000000,
+relative L2 0 plus exact text. The isolated scale control fails exactly one
+numeric check with text still passing. This is wrapper/graph execution parity
+against independent Python ORT, not exporter/source-PyTorch certification or
+GPU performance. Prior native CI (13 jobs), lint (10), Go/Rust, five WASM builds
+and Windows CUDA13 checks pass at their recorded sources. Final main-tip gates
+still precede a release tag. See the [x86 receipt](docs/moonshine-onnx-x86-2026-10-08.json),
+[ARM receipt](docs/moonshine-onnx-arm-2026-10-08.json) and
+[deployment guide](docs/german-moonshine.md).
+
 ## 2026-10-08 — requested CUDA 12.6 forced-MMQ experiment (#483)
 
 Added a manual-only ON/OFF package mode to Windows CUDA Smoke. Both arms built

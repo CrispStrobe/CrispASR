@@ -1,0 +1,149 @@
+{
+  "run_id": 37744837589,
+  "source_commit": "a9c312cb1f49c6c9576df9e3aed07c80201e412b",
+  "architecture": "x86_64",
+  "passed": true,
+  "scope": "Final CLI/C ABI speech, generation-cap and persistent-stream acceptance; graph execution against independent Python ORT on identical deployed exports, not exporter/source-PyTorch parity or GPU performance",
+  "cases": [
+    {
+      "variant": "moonshine-streaming-tiny-de-onnx",
+      "passed": true,
+      "graph_diff": "passed; exact input/shape, cosine >= 0.99999, relative L2 <= 1e-4, text exact",
+      "scale_failure_rejected": true,
+      "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "streaming_kind": 2,
+      "capped": "Guten",
+      "cap_reset_passed": true,
+      "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "updates": [
+        7,
+        7
+      ]
+    },
+    {
+      "variant": "moonshine-streaming-small-de-onnx",
+      "passed": true,
+      "graph_diff": "passed; exact input/shape, cosine >= 0.99999, relative L2 <= 1e-4, text exact",
+      "batch": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "streaming_kind": 2,
+      "capped": "Guten",
+      "cap_reset_passed": true,
+      "final": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "updates": [
+        7,
+        7
+      ]
+    },
+    {
+      "variant": "moonshine-streaming-tiny-de-onnx-f32",
+      "passed": true,
+      "graph_diff": "passed; exact input/shape, cosine >= 0.99999, relative L2 <= 1e-4, text exact",
+      "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "streaming_kind": 2,
+      "capped": "Guten",
+      "cap_reset_passed": true,
+      "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "updates": [
+        7,
+        7
+      ]
+    },
+    {
+      "variant": "moonshine-streaming-small-de-onnx-f32",
+      "passed": true,
+      "graph_diff": "passed; exact input/shape, cosine >= 0.99999, relative L2 <= 1e-4, text exact",
+      "batch": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "streaming_kind": 2,
+      "capped": "Guten",
+      "cap_reset_passed": true,
+      "final": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+      "updates": [
+        7,
+        7
+      ]
+    },
+    {
+      "variant": "moonshine-tiny-de-phreak87-onnx",
+      "passed": true,
+      "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+      "streaming_kind": 0,
+      "capped": "g",
+      "cap_reset_passed": true
+    },
+    {
+      "variant": "moonshine-tiny-de-dattazigzag",
+      "passed": true,
+      "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+      "streaming_kind": 0
+    },
+    {
+      "variant": "nemotron",
+      "passed": true,
+      "model_pin": {
+        "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
+        "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
+        "_revision_note": "TODO: replace with actual 40-char SHA from HF repo.",
+        "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
+        "approx_size_mb": 458
+      },
+      "batch": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.",
+      "streaming_kind": 2,
+      "final": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.",
+      "updates": [
+        3,
+        3
+      ]
+    },
+    {
+      "variant": "qwen3",
+      "passed": true,
+      "model_pin": {
+        "repo": "cstr/qwen3-asr-0.6b-GGUF",
+        "revision": "ad086c22597ed47af05cc159dd61c98bd6e945f9",
+        "file": "qwen3-asr-0.6b-q4_k.gguf",
+        "approx_size_mb": 400
+      },
+      "batch": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+      "streaming_kind": 3,
+      "final": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+      "updates": [
+        2,
+        2
+      ]
+    }
+  ],
+  "graphs": {
+    "moonshine-streaming-tiny-de-onnx": {
+      "stages": 15,
+      "minimum_reported_cosine": 1.0,
+      "maximum_relative_l2": 0.0,
+      "text": "exact",
+      "log_sha256": "fe6da01db5a875d642268cddd32dca340a2d0cb86e250f3a169854910619434e"
+    },
+    "moonshine-streaming-small-de-onnx": {
+      "stages": 15,
+      "minimum_reported_cosine": 1.0,
+      "maximum_relative_l2": 0.0,
+      "text": "exact",
+      "log_sha256": "c3cef3376489fb73d51c5de74a17ca2ed2c37c65467aeee22356930d2a221673"
+    },
+    "moonshine-streaming-tiny-de-onnx-f32": {
+      "stages": 15,
+      "minimum_reported_cosine": 1.0,
+      "maximum_relative_l2": 0.0,
+      "text": "exact",
+      "log_sha256": "2dded46c4ee3c9d5a58f0b76dacb5c6af41a5d2c461844ff4c9c65be7df4a17a"
+    },
+    "moonshine-streaming-small-de-onnx-f32": {
+      "stages": 15,
+      "minimum_reported_cosine": 1.0,
+      "maximum_relative_l2": 0.0,
+      "text": "exact",
+      "log_sha256": "fee80e53d51396e491eb8038724b632983cb7496c742e1d126858d6ace556ff9"
+    }
+  },
+  "scale_control": "2x encoder reference: exactly one numerical failure, relative L2 0.5; text passes",
+  "audio_sha256": "7d161e34953595856acc195aee52e9e2a48724b669176f2f0b38549d60927ba3",
+  "acceptance_json_sha256": "70de6ad2da3a52dc3f465fceb00efe03820629bc841e09c0994640f988562597",
+  "cold_proof": "/mnt/storage/crispasr/triage-20261007/pr515-a9-x86-37744837589"
+}
