@@ -176,14 +176,19 @@ def worker(args):
                 assert all(w in re.findall('[a-z]+', text.lower()) for w in ['americans', 'country', 'ask']), text
             else:
                 assert len(re.findall('[\u4e00-\u9fff]', text)) >= 5, text
-            prefix = out / ('cli-' + language)
-            run([build / 'bin/crispasr', '--backend', 'mimo-asr', '-m', model, '--codec-model', codec,
-                 '-ng', '-t', '4', '-l', language, '-fa' if flash else '-nfa',
-                 '--max-new-tokens', '128', '-f', audio, '-otxt', '-of', prefix], out / ('cli-' + language + '.log'))
-            cli_text = prefix.with_suffix('.txt').read_text().strip()
-            speech[language] = dict(abi=text, cli=cli_text, audio_sha256=digest(audio))
+            speech[language] = dict(abi=text, audio_sha256=digest(audio))
             (out / 'speech.json').write_text(json.dumps(speech, indent=2, ensure_ascii=False) + '\n')
-            assert cli_text == text, (cli_text, text)
+    # Release the session model/KV before loading a CLI model, especially F16.
+    for language in ['en', 'zh']:
+        audio = variant / (language + '.wav')
+        prefix = out / ('cli-' + language)
+        run([build / 'bin/crispasr', '--backend', 'mimo-asr', '-m', model, '--codec-model', codec,
+             '-ng', '-t', '4', '-l', language, '-fa' if flash else '-nfa',
+             '--max-new-tokens', '128', '-f', audio, '-otxt', '-of', prefix], out / ('cli-' + language + '.log'))
+        cli_text = prefix.with_suffix('.txt').read_text().strip()
+        speech[language]['cli'] = cli_text
+        (out / 'speech.json').write_text(json.dumps(speech, indent=2, ensure_ascii=False) + '\n')
+        assert cli_text == speech[language]['abi'], (cli_text, speech[language]['abi'])
     print('MIMO_STAGE_AND_SPEECH_WORKER_PASS', flush=True)
 
 
@@ -198,7 +203,10 @@ def main():
     os.environ.update(TMPDIR=str(scratch), HF_HOME=str(scratch / 'hf'), OMP_NUM_THREADS='4',
                       CRISPASR_GGUF_MMAP='1')
     os.environ.pop('CRISPASR_CORE_ATTN_EAGER_F32', None)
-    os.environ.pop('CRISPASR_MIMO_FORCE_CPU', None)
+    # Keep the legacy baseline C ABI on the intended CPU/mmap path too: it
+    # predates the use_gpu forwarding fix and otherwise picks another CPU
+    # backend through init_best, causing a full split-loader weight copy.
+    os.environ['CRISPASR_MIMO_FORCE_CPU'] = '1'
     receipt = dict(passed=False, source=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
                    baseline=BASE, pr_source='ac07cf0be3b528cdb035735738098e30f7468a41', pins=PINS,
                    scope=__doc__, results={})

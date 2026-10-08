@@ -47,7 +47,10 @@ using the same ggml source. It checks 16 shared-mel cases byte-for-byte, five
 LM stages against the frozen Python reference with norms/relative L2, tokenizer
 stages and RVQ codes against baseline, and English/Chinese CLI/session speech.
 Default output must be exact; non-flash output is separately checked. F16 refers
-to the LM; both runs use the shipped Q4_K tokenizer. Run on Linux x86 with
+to the LM; both runs use the shipped Q4_K tokenizer. All arms explicitly force
+CPU, including the legacy session that predates device-flag forwarding. CLI
+and session inference run sequentially to avoid retaining two F16 model/KV
+contexts. Run on Linux x86 with
 `-f pip="numpy gguf huggingface_hub soundfile"`. CPU results do not establish
 CANN/CUDA correctness or speed. See `docs/mimo-pr492-acceptance-2026-10-08.json`
 for reference provenance and the initial local mel result.
