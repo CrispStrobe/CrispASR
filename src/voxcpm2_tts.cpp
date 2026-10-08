@@ -3166,6 +3166,8 @@ static std::vector<float> cfm_euler_solve(voxcpm2_context* ctx, const float* mu,
                                           float cfg, ggml_backend_t cpu_be, const float* initial_noise = nullptr) {
     const bool bench = vox_env_bool("CRISPASR_VOXCPM2_BENCH");
     const double t_cfm0 = bench ? vox_now_ms() : 0;
+    if (bench)
+        fprintf(stderr, "voxcpm2[bench]: cfm.steps=%d\n", steps);
     double sum_locdit = 0;
 
     int feat_dim = 64;
@@ -7629,6 +7631,12 @@ void voxcpm2_vae_pcm_free(float* pcm) {
 void voxcpm2_set_n_threads(struct voxcpm2_context* ctx, int n_threads) {
     if (ctx)
         ctx->n_threads = n_threads > 0 ? n_threads : 1;
+}
+
+void voxcpm2_set_inference_steps(struct voxcpm2_context* ctx, int steps) {
+    if (ctx && steps > 0)
+        ctx->inference_steps = steps;
+    // The fused CFM cache is keyed by step count and rebuilds on the next call.
 }
 
 void voxcpm2_set_seed(struct voxcpm2_context* ctx, uint32_t seed) {

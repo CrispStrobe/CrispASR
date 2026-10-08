@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import sys
 
-SCRIPT_VERSION = 'voxcpm2-current-profile-v1'
+SCRIPT_VERSION = 'voxcpm2-current-profile-v2'
 SOURCE = 'ece203528358c5b919b72877075715a5b7ae81a1'
 GGML = 'c36dab89b662838f0f5d4826c399198c0b90bbfc'
 CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'mimo-pr492/sm75-full-asr-v3.tar', 'revision': '0480221f9f7e5b16773ad8ad7e673cfc1afcdc94', 'sha256': '5cf9eb772a1190c2a058d9ec682ea0b08378b0d723bfbbef7235d80293833344', 'bytes': 78080000}
@@ -22,7 +22,7 @@ def main():
     SCRATCH.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
     os.environ.update(PYTHONUNBUFFERED='1', TMPDIR=str(SCRATCH),
-                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='voxcpm2-current-profile-v1')
+                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='voxcpm2-current-profile-v2')
     devices = subprocess.check_output(['nvidia-smi', '--query-gpu=name,compute_cap,memory.total',
                                        '--format=csv'], text=True)
     print(SCRIPT_VERSION, devices, flush=True)
@@ -71,7 +71,7 @@ def main():
     # Every package operation is checked; CPU llvmpipe is not accepted.
     subprocess.run(['apt-get','update','-qq'],check=True,timeout=600)
     subprocess.run(['apt-get','install','-y','-qq','libvulkan1','libvulkan-dev',
-                    'vulkan-tools','glslc','glslang-tools','spirv-tools'],check=True,timeout=900)
+                    'vulkan-tools','glslc','glslang-tools','spirv-tools','spirv-headers'],check=True,timeout=900)
     vk = subprocess.run(['vulkaninfo','--summary'],capture_output=True,text=True,timeout=60)
     if not any(word in vk.stdout for word in ('NVIDIA','Tesla','GeForce')):
         driver = subprocess.check_output(['nvidia-smi','--query-gpu=driver_version','--format=csv,noheader'],text=True).splitlines()[0].split('.')[0]
@@ -126,6 +126,8 @@ def main():
     assert re.search(r'voxcpm2: backend = Vulkan',log), 'VoxCPM2 did not use Vulkan'
     assert 'falling back to CPU vae_decode' not in log and 'using CPU' not in log, 'VAE CPU fallback invalidates profile'
     assert 'vae.wn_init' in log and 'vae.compute' in log, 'Missing VAE phase evidence'
+    steps = re.findall(r'voxcpm2\[bench\]: cfm.steps=(\d+)',log)
+    assert steps and set(steps)=={'10'}, 'Native solver did not execute ten steps'
     receipt = json.loads((OUT/'voxcpm2-vulkan-profile.json').read_text())
     assert receipt['passed'] and receipt['steps']==10
 

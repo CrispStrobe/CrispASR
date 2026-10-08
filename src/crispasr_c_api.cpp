@@ -13140,13 +13140,18 @@ CA_EXPORT int crispasr_session_set_tts_seed(crispasr_session* s, uint64_t seed) 
 // ─────────────────────────────────────────────────────────────────
 
 // Set the diffusion / CFM step count for diffusion-based TTS
-// backends. Today only chatterbox honours this (its CFM mel-decoder
-// is a 10-step Euler solver by default; raising to 20-30 trades
-// latency for fidelity). Other TTS backends silently no-op (rc=-2).
+// backends. Each supported backend reads the updated setting on its next
+// synthesis call. Unsupported backends return rc=-2.
 CA_EXPORT int crispasr_session_set_tts_steps(crispasr_session* s, int steps) {
     if (!s)
         return -1;
     int touched = 0;
+#ifdef CA_HAVE_VOXCPM2
+    if (s->voxcpm2_ctx) {
+        voxcpm2_set_inference_steps((voxcpm2_context*)s->voxcpm2_ctx, steps);
+        touched++;
+    }
+#endif
 #ifdef CA_HAVE_CHATTERBOX
     if (s->chatterbox_ctx) {
         chatterbox_set_cfm_steps((chatterbox_context*)s->chatterbox_ctx, steps);
