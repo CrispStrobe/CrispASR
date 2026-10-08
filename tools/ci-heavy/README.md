@@ -7,6 +7,7 @@ dumps, parity diffs, ASR roundtrips, and download → convert → quantize → u
 | Runner | CPU / RAM | Disk | Notes |
 |---|---|---|---|
 | `ubuntu-latest` (default) | 4 vCPU / 16 GB | ~14 GB free on `/`, plus the `/mnt` scratch disk; the workflow also deletes unused toolchains | fp32 references up to ~3B params |
+| `ubuntu-22.04` | x86 CPU | as above | Pinned older Ubuntu image for compatibility checks |
 | `ubuntu-24.04-arm` | 4 vCPU / 16 GB | as above, minus `/mnt` | aarch64 numerics |
 | `macos-14` | 3 vCPU (M1) / 7 GB | ~14 GB | Metal |
 

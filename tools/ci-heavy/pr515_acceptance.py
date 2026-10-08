@@ -187,14 +187,22 @@ for variant, expected_kind in variants:
                 key = next(k for k in tensors if k.startswith('encoder.'))
                 tensors[key] *= 2
                 bad = OUT / 'scale-control-ref.gguf'
-                write_gguf_archive(tensors, {'backend': 'moonshine-onnx'}, bad)
+                # Preserve the original text oracle: only the selected encoder
+                # tensor changes, so rejection must be solely numerical.
+                write_gguf_archive(tensors, {
+                    'backend': 'moonshine-onnx',
+                    'generated_text': r.fields['crispasr.ref.generated_text'].contents(),
+                }, bad)
                 with (OUT / 'scale-control.log').open('w') as log_file:
                     control = subprocess.run([str(build / 'bin/crispasr-diff'), 'moonshine-onnx',
                                               str(model), str(bad), str(wav)], cwd=ROOT,
                                              stdout=log_file, stderr=subprocess.STDOUT, timeout=600)
                 control_log = (OUT / 'scale-control.log').read_text()
                 rejected = re.findall(r'relative_l2=([0-9.eE+\-]+) FAIL', control_log)
-                assert control.returncode != 0 and any(abs(float(x) - 0.5) < 0.01 for x in rejected), control_log
+                assert control.returncode != 0 and len(rejected) == 1, control_log
+                assert abs(float(rejected[0]) - 0.5) < 0.01, control_log
+                assert '[PASS] generated_text:' in control_log, control_log
+                assert 'summary: 15 pass, 1 fail, 0 skip' in control_log, control_log
                 case['scale_failure_rejected'] = True
         with Session(str(model), lib_path=str(library), n_threads=4) as session:
             kind = lib.crispasr_session_stream_kind(session._handle)

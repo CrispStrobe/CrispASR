@@ -60,7 +60,7 @@ on:
         required: false
         default: 'ubuntu-latest'
         type: choice
-        options: [ubuntu-latest, ubuntu-24.04-arm, macos-14, macos-15-intel]
+        options: [ubuntu-latest, ubuntu-22.04, ubuntu-24.04-arm, macos-14, macos-15-intel]
       timeout_minutes:
         description: 'Script timeout in minutes (job hard limit is 360)'
         required: false
