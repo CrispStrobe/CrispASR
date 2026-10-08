@@ -131,11 +131,18 @@ Mel salvage retains author commit `3dce5b586` plus opt-in gate/instrumentation
 (OpenMP/no OpenMP; 63/64/65/300/1100/3000 frames; both filter layouts and
 float/double accumulation; 1/2/4 threads). Local four-thread projection gains
 are 1.4–1.7× at 300 frames and 2.1–3.5× at 3000, but 64-frame calls regress:
-keep default OFF and determine a measured minimum useful size. These are
+keep default OFF; a universal useful-size threshold is not established. These are
 local component measurements, not end-to-end ASR performance claims.
 GH CPU [37852305513](https://github.com/CrispStrobe/CrispASR/actions/runs/37852305513)
 runs the component ABBA matrix plus pinned Qwen3 CLI/stage regression with
-BLAS disabled to exercise the changed path. Acceptance pending.
+BLAS disabled to exercise the changed path. COMPLETE SUCCESS: all 144 component
+cases bit-exact across ABBA, both Qwen3 CLI transcripts exact and existing
+reference stage gates unchanged. Hosted four-thread projection gains at 64
+frames are 3.30–3.58× (total component 1.59–1.73×), contrasting with the local
+short-call regression. Keep explicit opt-in and T>=64 guard; no default flip
+or end-to-end speed claim. All terminal files archived; public proof pinned
+in `docs/mel-projection-2026-10-08.json`. Isolate author-credited integration
+for native CI before merge.
 
 Echo public Q4 preparation launched on GH CPU run
 [37851965549](https://github.com/CrispStrobe/CrispASR/actions/runs/37851965549),
