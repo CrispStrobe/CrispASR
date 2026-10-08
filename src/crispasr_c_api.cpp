@@ -7757,6 +7757,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             if (piece && piece[0]) {
                 ca_token_record tk;
                 tk.text = piece;
+                tk.p = 1.0f; // Hikari exposes emission times, not token probabilities.
                 tk.t0 = tk.t1 = (int64_t)(hikari_stream_step_time(s->hikari_ctx, i) * 100.0 + 0.5);
                 toks.push_back(std::move(tk));
             }

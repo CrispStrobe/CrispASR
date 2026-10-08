@@ -52,13 +52,22 @@ cache.mkdir(exist_ok=True)
 model = cache / 'orukeet-q4_k.gguf'
 assert not model.exists(), 'First run must exercise the actual downloader'
 common = ['-ng', '-t', '4', '-l', 'en', '-f', ROOT / 'samples/jfk.wav', '--cache-dir', cache]
+# Acceptance is deliberately required for CC-BY-SA. Verify the refusal
+# without fetching weights, then explicitly accept for this validation run.
+os.environ.pop('CRISPASR_ACCEPT_LICENSE', None)
+refused, refusal_log = run([cli, '-m', 'orukeet', *common, '--auto-download'],
+                           'license-refusal', expected_success=False)
+assert refused.returncode != 0 and '--accept-license cc-by-sa-4.0' in refusal_log
+assert 'NON-COMMERCIAL' not in refusal_log, 'CC-BY-SA is not a noncommercial licence'
+assert not model.exists(), 'Unaccepted licence must not fetch the model'
 texts = {}
-for name, arg, extra in [('download', 'orukeet', ['--auto-download']),
+for name, arg, extra in [('download', 'orukeet', ['--auto-download', '--accept-license', 'cc-by-sa-4.0']),
                          ('cached', 'orukeet', []), ('filename', model.name, []),
                          ('explicit', model, [])]:
     prefix = OUT / name
     _, log = run([cli, '-m', arg, *common, *extra, '-otxt', '-of', prefix], name)
     assert 'failed to initialize whisper' not in log.lower(), name
+    assert 'NON-COMMERCIAL' not in log, name
     texts[name] = prefix.with_suffix('.txt').read_text().strip()
     assert texts[name], name
     if name == 'download':
@@ -99,7 +108,8 @@ with Session(str(anonymous), lib_path=str(lib), n_threads=4) as session:
 assert texts['abi_anonymous'] == texts['explicit'], texts
 receipt = dict(passed=True, source_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
                model_repo='cstr/orukeet-GGUF', model_revision=REVISION, model_sha256=SHA256,
-               baseline_release='v0.8.41', baseline_reproduced=True, transcripts=texts,
+               baseline_release='v0.8.41', baseline_reproduced=True, license_refusal_verified=True,
+               accepted_license='cc-by-sa-4.0', transcripts=texts,
                scope='CPU; same-Q4 cross-surface routing; no new numerical/performance claim')
 (OUT / 'acceptance.json').write_text(json.dumps(receipt, indent=2) + '\n')
 (OUT / 'summary.md').write_text('Orukeet download, cached short-name reuse, filename/path CLI, and anonymous C ABI PASS; v0.8.41 control reproduces #491.\n')
