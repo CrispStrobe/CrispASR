@@ -1183,12 +1183,22 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `CRISPASR_OMNIVOICE_DEBUG_SUM`
 - `CRISPASR_OMNIVOICE_DUMP_CODES`
 - `CRISPASR_OMNIVOICE_ENCODE_DIFF`
+- `CRISPASR_OMNIVOICE_FADE_S` — linear fade-in/out duration (seconds) applied to the
+  decoded audio (default `0.1`, mirroring upstream `fade_and_pad_audio`). `0`
+  disables the fade.
 - `CRISPASR_OMNIVOICE_FRAMES_PER_CHAR`
 - `CRISPASR_OMNIVOICE_FUSED_STEP`
 - `CRISPASR_OMNIVOICE_GUIDANCE`
 - `CRISPASR_OMNIVOICE_HUBERT_REF`
 - `CRISPASR_OMNIVOICE_NUM_STEPS`
+- `CRISPASR_OMNIVOICE_PAD_S` — silence padding duration (seconds) prepended and
+  appended to the decoded audio (default `0.1`, mirroring upstream
+  `fade_and_pad_audio`). `0` disables the pad.
 - `CRISPASR_OMNIVOICE_PERSISTENT_GRAPH`
+- `CRISPASR_OMNIVOICE_POSTPROCESS` — **default on.** Apply the output fade + pad
+  of upstream `_post_process_audio` (see `..._FADE_S` / `..._PAD_S`). `=0` returns
+  the raw decode. The fade suppresses the codec's leading transient — an audible
+  click/pop at `t=0` of cloned utterances (k2-fsa/OmniVoice#256).
 - `CRISPASR_OMNIVOICE_POS_TEMP`
 - `CRISPASR_OMNIVOICE_REF_RATE_CHECK`
 - `CRISPASR_OMNIVOICE_TARGET_DURATION` — exact output length in seconds

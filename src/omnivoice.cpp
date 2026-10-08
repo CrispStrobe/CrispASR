@@ -393,6 +393,18 @@ struct omnivoice_context {
     // the per-request reset the server/CLI do does not silently discard it.
     float env_target_duration_s = 0.0f;
 
+    // Output post-processing — upstream `OmniVoiceGenerationConfig.postprocess_output`
+    // (default ON). Upstream `_post_process_audio` ends with
+    // `fade_and_pad_audio(pad_duration=0.1, fade_duration=0.1)`: a 100 ms linear
+    // fade-in/out plus 100 ms of silence on each edge. That fade is what keeps
+    // the codec's leading transient from shipping as an audible click — the
+    // "click/pop at t=0 of cloned utterances" (k2-fsa/OmniVoice#256). This port
+    // implemented the RMS restore step of `_post_process_audio` but dropped the
+    // fade + pad, so the burst reached callers at full amplitude.
+    bool postprocess = true;
+    float postprocess_fade_s = 0.1f;
+    float postprocess_pad_s = 0.1f;
+
     // Audio tokenizer path (separate GGUF)
     std::string tokenizer_path;
 };
@@ -3321,6 +3333,15 @@ struct omnivoice_context* omnivoice_init_from_file(const char* path_model, struc
         if (v > 0.0f)
             ctx->target_duration_s = ctx->env_target_duration_s = std::min(v, 600.0f);
     }
+    // Output fade + pad (upstream postprocess parity). Default ON; set
+    // CRISPASR_OMNIVOICE_POSTPROCESS=0 for the raw decode. Fade/pad durations are
+    // overridable for A/B of the click mitigation.
+    if (const char* e = crispasr_env::get("CRISPASR_OMNIVOICE_POSTPROCESS"))
+        ctx->postprocess = (e[0] != '0');
+    if (const char* e = crispasr_env::get("CRISPASR_OMNIVOICE_FADE_S"))
+        ctx->postprocess_fade_s = std::max(0.0f, (float)atof(e));
+    if (const char* e = crispasr_env::get("CRISPASR_OMNIVOICE_PAD_S"))
+        ctx->postprocess_pad_s = std::max(0.0f, (float)atof(e));
 
     if (!load_model(ctx, path_model)) {
         delete ctx;
@@ -3581,6 +3602,32 @@ void omnivoice_codes_free(int32_t* codes) {
     free(codes);
 }
 
+// Mirror of upstream omnivoice/utils/audio.py::fade_and_pad_audio. Applies a
+// linear fade-in to the first `fade_s` seconds and a fade-out to the last
+// `fade_s` seconds (capped at half the buffer, as upstream does), then prepends
+// and appends `pad_s` seconds of digital silence. In-place on a mono buffer.
+static void ov_fade_and_pad(std::vector<float>& pcm, int sample_rate, float fade_s, float pad_s) {
+    const int n = (int)pcm.size();
+    if (n <= 0)
+        return;
+    const int fade = (int)(fade_s * (float)sample_rate + 0.5f);
+    if (fade > 0) {
+        const int k = std::min(fade, n / 2);
+        for (int i = 0; i < k; i++) {
+            // np.linspace(0, 1, k) for the in-ramp, np.linspace(1, 0, k) for the
+            // out-ramp. k == 1 collapses to (0, 1) exactly as numpy's linspace.
+            const float t = (k > 1) ? (float)i / (float)(k - 1) : 0.0f;
+            pcm[i] *= t;
+            pcm[n - k + i] *= 1.0f - t;
+        }
+    }
+    const int pad = (int)(pad_s * (float)sample_rate + 0.5f);
+    if (pad > 0) {
+        pcm.insert(pcm.begin(), (size_t)pad, 0.0f);
+        pcm.insert(pcm.end(), (size_t)pad, 0.0f);
+    }
+}
+
 float* omnivoice_decode_codes(struct omnivoice_context* ctx, const int32_t* codes, int n_codes, int* out_n_samples) {
     if (!ctx || !codes || n_codes <= 0 || !out_n_samples)
         return nullptr;
@@ -3617,6 +3664,12 @@ float* omnivoice_decode_codes(struct omnivoice_context* ctx, const int32_t* code
         for (float& sample : pcm)
             sample *= gain;
     }
+
+    // Upstream `_post_process_audio` ends with fade_and_pad_audio(): without this
+    // fade the codec's leading transient is an audible click at t=0
+    // (k2-fsa/OmniVoice#256). Runs after the RMS restore, matching upstream order.
+    if (ctx->postprocess)
+        ov_fade_and_pad(pcm, 24000, ctx->postprocess_fade_s, ctx->postprocess_pad_s);
 
     int n = (int)pcm.size();
     float* out = (float*)malloc(n * sizeof(float));
