@@ -2985,9 +2985,10 @@ class Session:
         Branch via :meth:`is_voice_design` / :meth:`is_custom_voice` —
         Base if neither returns True. For orpheus call
         :meth:`set_codec_path` (SNAC GGUF) and :meth:`set_speaker_name`.
-        voxcpm2-tts runs zero-shot today — the CLI ``--voice`` flag is
-        accepted but ignored (the adapter prints a warning and falls back
-        to the default voice; cloning hookup is still pending).
+        VoxCPM2 supports zero-shot synthesis and reference-audio cloning via
+        :meth:`set_voice`; query :meth:`output_sample_rate` for its native 48 kHz.
+        Its CFM step count defaults to ten and can be changed with
+        :meth:`set_tts_steps`.
         """
         if not hasattr(self._lib, "crispasr_session_synthesize"):
             raise RuntimeError("TTS API not present in this libcrispasr build")

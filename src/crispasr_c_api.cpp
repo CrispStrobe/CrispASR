@@ -10311,34 +10311,12 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
 #endif
 #ifdef CA_HAVE_VOXCPM2
     if (s->voxcpm2_ctx) {
-        // VoxCPM2 synthesises at 48 kHz mono; every other CrispASR TTS
-        // backend (and the Dart `synthesize` contract) emits 24 kHz.
-        // Decimate 2:1 with a pairwise average — a cheap half-band low
-        // pass — so the host's fixed-24 kHz playback path stays correct.
-        // When a 16 kHz reference was set via set_voice, clone that voice;
-        // otherwise fall back to the zero-shot default speaker.
-        int n48 = 0;
-        float* pcm48 = s->voxcpm2_ref_pcm.empty()
-                           ? voxcpm2_synthesize(s->voxcpm2_ctx, text, &n48)
-                           : voxcpm2_synthesize_clone(s->voxcpm2_ctx, text, s->voxcpm2_ref_pcm.data(),
-                                                      (int)s->voxcpm2_ref_pcm.size(), &n48);
-        if (!pcm48 || n48 <= 0) {
-            if (pcm48)
-                voxcpm2_pcm_free(pcm48);
-            return nullptr;
-        }
-        const int n24 = n48 / 2;
-        float* pcm24 = (float*)malloc((size_t)(n24 > 0 ? n24 : 1) * sizeof(float));
-        if (!pcm24) {
-            voxcpm2_pcm_free(pcm48);
-            return nullptr;
-        }
-        for (int i = 0; i < n24; ++i)
-            pcm24[i] = 0.5f * (pcm48[2 * i] + pcm48[2 * i + 1]);
-        voxcpm2_pcm_free(pcm48);
-        if (out_n_samples)
-            *out_n_samples = n24;
-        return pcm24;
+        // Return native 48 kHz PCM, matching output_sample_rate(), CLI and
+        // bindings. The former 24 kHz decimation contradicted the getter and
+        // made clients play/transcribe the result at double speed.
+        return s->voxcpm2_ref_pcm.empty() ? voxcpm2_synthesize(s->voxcpm2_ctx, text, out_n_samples)
+                                          : voxcpm2_synthesize_clone(s->voxcpm2_ctx, text, s->voxcpm2_ref_pcm.data(),
+                                                                     (int)s->voxcpm2_ref_pcm.size(), out_n_samples);
     }
 #endif
 #ifdef CA_HAVE_INDEXTTS
