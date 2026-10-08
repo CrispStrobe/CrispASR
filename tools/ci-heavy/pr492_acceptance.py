@@ -272,40 +272,54 @@ def main():
             run([sys.executable, __file__, '--worker', build, dest, model, codec, reference, audio, arm, flash],
                 out / (quant + '-' + variant + '.log'))
             rows[variant] = json.loads((dest / 'speech.json').read_text())
-        comparisons = {}
+        comparisons, failures = {}, []
         for stage in STAGES:
             b = np.load(out / quant / 'baseline-flash' / (stage + '.npy'))
             c = np.load(out / quant / 'candidate-flash' / (stage + '.npy'))
             e = np.load(out / quant / 'candidate-eager' / (stage + '.npy'))
             comparisons[stage] = dict(default=metrics(c, b), nonflash=metrics(e, b))
-            assert c.tobytes() == b.tobytes(), (quant, stage, 'default changed')
-            assert comparisons[stage]['nonflash']['cosine'] >= .9999 and comparisons[stage]['nonflash']['relative_l2'] <= .005, (quant, stage, comparisons[stage])
+            if c.tobytes() != b.tobytes():
+                failures.append(f'{stage}: default changed')
+            if not (comparisons[stage]['nonflash']['cosine'] >= .9999 and comparisons[stage]['nonflash']['relative_l2'] <= .005):
+                failures.append(f'{stage}: non-flash numerical gate')
         tokenizer_comparisons = {}
         for stage in TOK_STAGES:
             b = np.load(out / quant / 'baseline-flash' / (stage + '.npy'))
             c = np.load(out / quant / 'candidate-flash' / (stage + '.npy'))
             e = np.load(out / quant / 'candidate-eager' / (stage + '.npy'))
             assert b.shape == c.shape == e.shape
-            assert c.tobytes() == b.tobytes(), (stage, 'tokenizer default changed')
+            if c.tobytes() != b.tobytes():
+                failures.append(f'{stage}: tokenizer default changed')
             if stage == 'tok_codes':
                 tokenizer_comparisons[stage] = dict(default_exact=True, nonflash_exact=np.array_equal(e, b),
                                                     nonflash_match_fraction=float(np.mean(e == b)))
-                assert np.array_equal(e, b), ('RVQ codes changed', tokenizer_comparisons[stage])
+                if not np.array_equal(e, b):
+                    failures.append('tok_codes: non-flash RVQ codes changed')
             else:
                 tokenizer_comparisons[stage] = dict(default=metrics(c, b), nonflash=metrics(e, b))
-                assert tokenizer_comparisons[stage]['nonflash']['cosine'] >= .9999 and tokenizer_comparisons[stage]['nonflash']['relative_l2'] <= .005, (stage, tokenizer_comparisons[stage])
+                if not (tokenizer_comparisons[stage]['nonflash']['cosine'] >= .9999 and tokenizer_comparisons[stage]['nonflash']['relative_l2'] <= .005):
+                    failures.append(f'{stage}: tokenizer non-flash numerical gate')
         for language in ['en', 'zh']:
-            assert rows['baseline-flash'][language]['abi'] == rows['candidate-flash'][language]['abi'] == rows['candidate-eager'][language]['abi'], (quant, language, rows)
+            if not (rows['baseline-flash'][language]['abi'] == rows['candidate-flash'][language]['abi'] == rows['candidate-eager'][language]['abi']):
+                failures.append(f'{language}: decoded speech changed')
         # Independent reference metrics are always retained, including quant error.
         # F16 must pass the port's >99% cosine and scale-sensitive gate. Q4 is
         # judged against the identical shipped baseline plus decoded output.
+        independent = {variant: json.loads((out / quant / variant / 'stages.json').read_text())
+                       for variant in ['baseline-flash', 'candidate-flash', 'candidate-eager']}
         if quant == 'f16':
-            for variant in ['baseline-flash', 'candidate-flash', 'candidate-eager']:
-                for stage, value in json.loads((out / quant / variant / 'stages.json').read_text()).items():
-                    assert value['cosine'] >= .99 and value['relative_l2'] <= .05, (variant, stage, value)
-        receipt['results'][quant] = dict(passed=True, comparisons=comparisons, tokenizer_comparisons=tokenizer_comparisons, speech=rows)
+            for variant, stages in independent.items():
+                for stage, value in stages.items():
+                    if not (value['cosine'] >= .99 and value['relative_l2'] <= .05):
+                        failures.append(f'{variant}/{stage}: independent F16 reference gate')
+        # Checkpoint every comparison before failing so a tokenizer failure
+        # cannot hide completed LM/reference and decoded-output evidence.
+        receipt['results'][quant] = dict(passed=not failures, failures=failures, comparisons=comparisons,
+                                        tokenizer_comparisons=tokenizer_comparisons,
+                                        independent_python_reference=independent, speech=rows)
         save()
         model.unlink()
+    assert all(r['passed'] for r in receipt['results'].values()), receipt['results']
     receipt['passed'] = True
     save()
     (out / 'summary.md').write_text('PR #492 CPU acceptance PASS: shared mel exact; five LM stages with norms/relative L2; default and non-flash CLI/session English/Chinese speech. See acceptance.json for quant scope. No GPU/CANN timing claim.\n')

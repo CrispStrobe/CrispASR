@@ -4,7 +4,7 @@
   "contributor_source": "ac07cf0be3b528cdb035735738098e30f7468a41",
   "base": "7afaf2e8559efdb0f16bae8a6bc95e145e9a18d9",
   "ggml": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
-  "hosted": "Q4 37754319857 failed non-flash numerical gate at original fae7e2241; default arrays/speech match. F16-only 37761799417 queued at c50c50061. Corrected combined 37758607763 cancelled before execution because known Q4 failure prevents F16 coverage.",
+  "hosted": "Q4 37754319857 fails non-flash LM and tokenizer gates. F16 37761799417 passes all five LM A/B and independent-reference gates, but fails the same Q4 tokenizer pooling/RVQ gates. Neither job is PR acceptance.",
   "local_mel": {
     "cases": 16,
     "frames": [
@@ -231,5 +231,346 @@
       }
     },
     "speech": "all 12 EN/ZH CLI/C ABI outputs identical across baseline/default, candidate/default and candidate/non-flash; does not provide missing Python-generated text"
+  },
+  "f16_observed": {
+    "run": 37761799417,
+    "source": "c50c5006125056f1f3f02478634b823d4ff1fee5",
+    "passed": false,
+    "lm_ab_pass": true,
+    "independent_lm_pass": true,
+    "comparisons": {
+      "prefill_audio_features": {
+        "default": {
+          "cosine": 0.9999999999999989,
+          "mine_norm": 6.175928422193907,
+          "ref_norm": 6.175928422193907,
+          "relative_l2": 0.0,
+          "exact": true
+        },
+        "nonflash": {
+          "cosine": 0.9999999999999862,
+          "mine_norm": 6.1759284603739975,
+          "ref_norm": 6.175928422193907,
+          "relative_l2": 1.5709528211109968e-07,
+          "exact": false
+        }
+      },
+      "prefill_inputs_embeds": {
+        "default": {
+          "cosine": 0.9999999999999993,
+          "mine_norm": 6.796180714126299,
+          "ref_norm": 6.796180714126299,
+          "relative_l2": 0.0,
+          "exact": true
+        },
+        "nonflash": {
+          "cosine": 0.9999999999999888,
+          "mine_norm": 6.79618074882189,
+          "ref_norm": 6.796180714126299,
+          "relative_l2": 1.4275800756237518e-07,
+          "exact": false
+        }
+      },
+      "prefill_last_hidden": {
+        "default": {
+          "cosine": 1.0000000000000002,
+          "mine_norm": 245.53101284432083,
+          "ref_norm": 245.53101284432083,
+          "relative_l2": 0.0,
+          "exact": true
+        },
+        "nonflash": {
+          "cosine": 0.9999999183168471,
+          "mine_norm": 245.5273531843705,
+          "ref_norm": 245.53101284432083,
+          "relative_l2": 0.0004044577022490014,
+          "exact": false
+        }
+      },
+      "prefill_text_embeds": {
+        "default": {
+          "cosine": 0.9999999999999998,
+          "mine_norm": 2.8365437460049394,
+          "ref_norm": 2.8365437460049394,
+          "relative_l2": 0.0,
+          "exact": true
+        },
+        "nonflash": {
+          "cosine": 0.9999999999999998,
+          "mine_norm": 2.8365437460049394,
+          "ref_norm": 2.8365437460049394,
+          "relative_l2": 0.0,
+          "exact": true
+        }
+      },
+      "prefill_text_logits_step0": {
+        "default": {
+          "cosine": 1.0000000000000013,
+          "mine_norm": 1043.337027780589,
+          "ref_norm": 1043.337027780589,
+          "relative_l2": 0.0,
+          "exact": true
+        },
+        "nonflash": {
+          "cosine": 0.999999951054338,
+          "mine_norm": 1043.1329043973494,
+          "ref_norm": 1043.337027780589,
+          "relative_l2": 0.00036898378326964855,
+          "exact": false
+        }
+      },
+      "tok_codes": {
+        "default_exact": true,
+        "nonflash_exact": false,
+        "nonflash_match_fraction": 0.7359601449275363
+      },
+      "tok_conv1_out": {
+        "default": {
+          "cosine": 1.0000000000000022,
+          "mine_norm": 1442.256289478526,
+          "ref_norm": 1442.256289478526,
+          "relative_l2": 0.0,
+          "exact": true
+        },
+        "nonflash": {
+          "cosine": 1.0000000000000022,
+          "mine_norm": 1442.256289478526,
+          "ref_norm": 1442.256289478526,
+          "relative_l2": 0.0,
+          "exact": true
+        }
+      },
+      "tok_conv2_out": {
+        "default": {
+          "cosine": 1.0000000000000002,
+          "mine_norm": 9297.916544799942,
+          "ref_norm": 9297.916544799942,
+          "relative_l2": 0.0,
+          "exact": true
+        },
+        "nonflash": {
+          "cosine": 1.0000000000000002,
+          "mine_norm": 9297.916544799942,
+          "ref_norm": 9297.916544799942,
+          "relative_l2": 0.0,
+          "exact": true
+        }
+      },
+      "tok_mel": {
+        "default": {
+          "cosine": 1.0000000000000004,
+          "mine_norm": 1201.209716136071,
+          "ref_norm": 1201.209716136071,
+          "relative_l2": 0.0,
+          "exact": true
+        },
+        "nonflash": {
+          "cosine": 1.0000000000000004,
+          "mine_norm": 1201.209716136071,
+          "ref_norm": 1201.209716136071,
+          "relative_l2": 0.0,
+          "exact": true
+        }
+      },
+      "tok_pool_out": {
+        "default": {
+          "cosine": 0.999999999999997,
+          "mine_norm": 1892.0515993696438,
+          "ref_norm": 1892.0515993696438,
+          "relative_l2": 0.0,
+          "exact": true
+        },
+        "nonflash": {
+          "cosine": 0.9965391421964782,
+          "mine_norm": 1898.3404544761318,
+          "ref_norm": 1892.0515993696438,
+          "relative_l2": 0.08340125921765856,
+          "exact": false
+        }
+      },
+      "tok_xfmr_out": {
+        "default": {
+          "cosine": 0.9999999999999981,
+          "mine_norm": 72.54482646276928,
+          "ref_norm": 72.54482646276928,
+          "relative_l2": 0.0,
+          "exact": true
+        },
+        "nonflash": {
+          "cosine": 0.9999921592961417,
+          "mine_norm": 72.544799476113,
+          "ref_norm": 72.54482646276928,
+          "relative_l2": 0.00395997500239708,
+          "exact": false
+        }
+      }
+    },
+    "independent_python_reference": {
+      "baseline-flash": {
+        "prefill_audio_features": {
+          "cosine": 0.999992657905431,
+          "mine_norm": 6.175928422193918,
+          "ref_norm": 6.171803832209731,
+          "relative_l2": 0.0038910951750570962,
+          "max_abs": 0.002899169921875,
+          "exact": false
+        },
+        "prefill_text_embeds": {
+          "cosine": 0.999999069929051,
+          "mine_norm": 2.8365437460049394,
+          "ref_norm": 2.8365383933301365,
+          "relative_l2": 0.0013638727834152265,
+          "max_abs": 0.0001220703125,
+          "exact": false
+        },
+        "prefill_inputs_embeds": {
+          "cosine": 0.9999937435618804,
+          "mine_norm": 6.79618071412631,
+          "ref_norm": 6.792430537010639,
+          "relative_l2": 0.0035811466787023525,
+          "max_abs": 0.002899169921875,
+          "exact": false
+        },
+        "prefill_last_hidden": {
+          "cosine": 0.999570796644494,
+          "mine_norm": 245.5310128443208,
+          "ref_norm": 245.29708260654803,
+          "relative_l2": 0.029328054982471805,
+          "max_abs": 0.5264177322387695,
+          "exact": false
+        },
+        "prefill_text_logits_step0": {
+          "cosine": 0.9997528191295622,
+          "mine_norm": 1043.3370277805893,
+          "ref_norm": 1048.5014301249141,
+          "relative_l2": 0.022719757671970375,
+          "max_abs": 0.5973548889160156,
+          "exact": false
+        }
+      },
+      "candidate-flash": {
+        "prefill_audio_features": {
+          "cosine": 0.999992657905431,
+          "mine_norm": 6.175928422193918,
+          "ref_norm": 6.171803832209731,
+          "relative_l2": 0.0038910951750570962,
+          "max_abs": 0.002899169921875,
+          "exact": false
+        },
+        "prefill_text_embeds": {
+          "cosine": 0.999999069929051,
+          "mine_norm": 2.8365437460049394,
+          "ref_norm": 2.8365383933301365,
+          "relative_l2": 0.0013638727834152265,
+          "max_abs": 0.0001220703125,
+          "exact": false
+        },
+        "prefill_inputs_embeds": {
+          "cosine": 0.9999937435618804,
+          "mine_norm": 6.79618071412631,
+          "ref_norm": 6.792430537010639,
+          "relative_l2": 0.0035811466787023525,
+          "max_abs": 0.002899169921875,
+          "exact": false
+        },
+        "prefill_last_hidden": {
+          "cosine": 0.999570796644494,
+          "mine_norm": 245.5310128443208,
+          "ref_norm": 245.29708260654803,
+          "relative_l2": 0.029328054982471805,
+          "max_abs": 0.5264177322387695,
+          "exact": false
+        },
+        "prefill_text_logits_step0": {
+          "cosine": 0.9997528191295622,
+          "mine_norm": 1043.3370277805893,
+          "ref_norm": 1048.5014301249141,
+          "relative_l2": 0.022719757671970375,
+          "max_abs": 0.5973548889160156,
+          "exact": false
+        }
+      },
+      "candidate-eager": {
+        "prefill_audio_features": {
+          "cosine": 0.9999926579035956,
+          "mine_norm": 6.175928460374008,
+          "ref_norm": 6.171803832209731,
+          "relative_l2": 0.0038910967211460696,
+          "max_abs": 0.0028992295265197754,
+          "exact": false
+        },
+        "prefill_text_embeds": {
+          "cosine": 0.999999069929051,
+          "mine_norm": 2.8365437460049394,
+          "ref_norm": 2.8365383933301365,
+          "relative_l2": 0.0013638727834152265,
+          "max_abs": 0.0001220703125,
+          "exact": false
+        },
+        "prefill_inputs_embeds": {
+          "cosine": 0.9999937435597669,
+          "mine_norm": 6.7961807488219,
+          "ref_norm": 6.792430537010639,
+          "relative_l2": 0.0035811480656435394,
+          "max_abs": 0.0028992295265197754,
+          "exact": false
+        },
+        "prefill_last_hidden": {
+          "cosine": 0.9995718600400616,
+          "mine_norm": 245.52735318437047,
+          "ref_norm": 245.29708260654803,
+          "relative_l2": 0.029291039265847744,
+          "max_abs": 0.5310983657836914,
+          "exact": false
+        },
+        "prefill_text_logits_step0": {
+          "cosine": 0.9997519989429983,
+          "mine_norm": 1043.1329043973496,
+          "ref_norm": 1048.5014301249141,
+          "relative_l2": 0.02279646523145644,
+          "max_abs": 0.5960693359375,
+          "exact": false
+        }
+      }
+    },
+    "speech": {
+      "baseline-flash": {
+        "en": {
+          "abi": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+          "audio_sha256": "0eed5c2d8b5f66eefef2844ff71f55be35e18000b9fc566bec3e74987349db8d",
+          "cli": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
+        },
+        "zh": {
+          "abi": "开放时间早上九点至下午五点",
+          "audio_sha256": "4be99c8bd6d2068d42a0eb0ab546bbd4d2c1ac25005d5c6ac74f00660423a3ab",
+          "cli": "开放时间早上九点至下午五点"
+        }
+      },
+      "candidate-flash": {
+        "en": {
+          "abi": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+          "audio_sha256": "0eed5c2d8b5f66eefef2844ff71f55be35e18000b9fc566bec3e74987349db8d",
+          "cli": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
+        },
+        "zh": {
+          "abi": "开放时间早上九点至下午五点",
+          "audio_sha256": "4be99c8bd6d2068d42a0eb0ab546bbd4d2c1ac25005d5c6ac74f00660423a3ab",
+          "cli": "开放时间早上九点至下午五点"
+        }
+      },
+      "candidate-eager": {
+        "en": {
+          "abi": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country.",
+          "audio_sha256": "0eed5c2d8b5f66eefef2844ff71f55be35e18000b9fc566bec3e74987349db8d",
+          "cli": "And so, my fellow Americans, ask not what your country can do for you. Ask what you can do for your country."
+        },
+        "zh": {
+          "abi": "开放时间早上九点至下午五点",
+          "audio_sha256": "4be99c8bd6d2068d42a0eb0ab546bbd4d2c1ac25005d5c6ac74f00660423a3ab",
+          "cli": "开放时间早上九点至下午五点"
+        }
+      }
+    },
+    "scope": "F16 LM; shipped Q4 tokenizer. Full job fails tokenizer pool/RVQ gates. No Python generated-text or CANN/GPU proof."
   }
 }

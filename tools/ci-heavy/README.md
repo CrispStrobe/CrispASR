@@ -55,6 +55,15 @@ contexts. Run on Linux x86 with
 CANN/CUDA correctness or speed. See `docs/mimo-pr492-acceptance-2026-10-08.json`
 for reference provenance and the initial local mel result.
 
+`pr492_tokenizer_diagnose.py` isolates Q4 activation-rounding effects by
+promoting the same quantized matrix weights to F32 and comparing native
+flash/eager attention with the official Python transformer on identical native
+conv2 inputs. Pooling is checked independently on each arm's own transformer
+output. The source and weight hashes, all metrics and failed gates are retained.
+This is a diagnostic with dequantized weights, not original-checkpoint or
+decoded-output acceptance. Run with
+`-f pip="numpy gguf huggingface_hub soundfile torch transformers==4.57.6"`.
+
 `pr492_cabi_params.py` checks the actual MiMo session C ABI using an initializer
 interposition hook, without weights or GPU execution. Eight combinations cover
 CPU/GPU preference, verbosity and flash attention, followed by default-restoration

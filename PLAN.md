@@ -63,7 +63,7 @@ baseline, and all 12 English/Chinese CLI/session outputs across three arms
 match. Non-flash hidden-state cosine is 0.998144631 / relative L2 6.1097%;
 logits are 0.998423708 / 7.4700%. Tokenizer pooling relative L2 is 8.3401%
 and RVQ code agreement is 73.5960%. No threshold was relaxed; #492 remains
-unmerged pending diagnosis and F16 evidence. The unstarted
+unmerged pending diagnosis. The unstarted
 F16 job `37754323202` was cancelled after finding a legacy C-ABI device flag
 bug that can force a full weight copy on a CPU-only runner. Replacement
 Q4/F16 `--quant all` run `37758607763` was cancelled before execution because
@@ -72,6 +72,24 @@ the known Q4 gate would prevent F16 from running. F16-only replacement
 releases session model/KV before each CLI load. It compares main/default, candidate/default and
 candidate/non-flash: five LM stage values/norms/relative L2, tokenizer continuous
 stages and exact RVQ codes, English/Chinese CLI/session equality and transcripts.
+F16 run `37761799417` has now completed and FAILED on the same Q4 tokenizer
+pooling/code gates. All five F16 LM A/B comparisons pass unchanged thresholds:
+hidden relative L2 0.04045%, logits 0.03690%; default stages remain exact.
+All five stages in all three arms also pass the independent Python reference
+gate (hidden cosine >=0.999570796 / relative L2 <=2.93281%; logits
+>=0.999751999 / <=2.27965%). All 12 EN/ZH CLI/session transcripts match.
+This is partial evidence, not a passing acceptance run. Artifact `11547195216`
+and all comparisons are archived in the proof directory.
+
+Next diagnostic: `tools/ci-heavy/pr492_tokenizer_diagnose.py` promotes the
+same dequantized Q4 matrix weights to F32, compares both native attention
+paths and the official pinned Python transformer on identical native conv2
+input, and checks pooling separately on each arm's own input. This isolates
+activation rounding without recovering lost weight precision. It is not
+original-checkpoint certification or PR acceptance. No gates are relaxed.
+The numerical harness now checkpoints all completed comparisons and failures
+before returning nonzero; `--quant all` can retain both precision results.
+
 F16 is the LM; both jobs use the shipped Q4_K tokenizer. Source/fixture pins
 and local evidence are on the branch in
 `docs/mimo-pr492-acceptance-2026-10-08.json`.
