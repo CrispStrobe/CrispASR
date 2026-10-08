@@ -14,14 +14,26 @@ it goes stale for more than a day.
 ## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, internal
-branch `review/pr492-acceptance`. Preserve contributor source
-`ac07cf0be3b528cdb035735738098e30f7468a41`, combine with the current main ggml
-pin, and add hosted CPU A/B checks for shared mel/attention and MiMo CLI/C ABI
-speech on default and non-flash paths. Cover F16 and shipped Q4 where resources
-permit; verify available independent reference fixtures before claiming parity.
-No attribution of the PR's combined CANN/NZ timing to this source alone.
-GPU/CANN acceptance remains separately scoped. #516 acceptance `37751687697`
-is queued; it is not being replaced or cancelled by this work.
+branch `review/pr492-acceptance`, source `fae7e22419b8c797dfa2759a9d4884a8f426bf63`.
+Contributor commits through `ac07cf0be3b528cdb035735738098e30f7468a41` are
+preserved as ancestors; merge against current main was clean, with unchanged
+ggml `c36dab89b`. Local shared-mel A/B passes 16 cases (63/64/65/300 frames,
+both layouts and accumulator types, 1/4 threads), byte-identical to main.
+
+Found and checksum-verified the legacy public Python LM reference, upstream
+`98641d537df521ac6df05f74090475694d9510b7`. It has five LM stages but explicitly
+skips generated text, so it is not decoded-output proof. Hosted Q4 job
+`37754319857` is queued; F16 job `37754323202` waits behind it in the same
+script concurrency group. Each compares main/default, candidate/default and
+candidate/non-flash: five LM stage values/norms/relative L2, tokenizer continuous
+stages and exact RVQ codes, English/Chinese CLI/session equality and transcripts.
+F16 is the LM; both jobs use the shipped Q4_K tokenizer. Source/fixture pins
+and local evidence are on the branch in
+`docs/mimo-pr492-acceptance-2026-10-08.json`.
+
+No new CANN/CUDA correctness or performance claim; combined CANN/NZ timings
+cannot be attributed to this PR alone. PR #492 remains unmerged. #516 Arabic
+acceptance `37751687697` is still queued and was not cancelled by this work.
 
 ## CLAIMED 2026-10-08 — #490 CTC character timestamps
 

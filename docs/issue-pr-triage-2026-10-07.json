@@ -1274,5 +1274,31 @@
     "original_paths": "preserved as symlinks",
     "verification": "sha256 before atomic replacement; age >5h; no open file descriptors",
     "receipts": "/mnt/storage/crispasr/storage-cleanup-20261008/"
+  },
+  "pr492_acceptance": {
+    "source": "fae7e22419b8c797dfa2759a9d4884a8f426bf63",
+    "branch": "review/pr492-acceptance",
+    "contributor_source": "ac07cf0be3b528cdb035735738098e30f7468a41",
+    "merged": false,
+    "author_ancestry": "preserved",
+    "ggml_pin": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+    "local_mel": {
+      "cases": 16,
+      "baseline_candidate": "byte-identical, 1/4 threads",
+      "sha256": "8f6944527902dd4f52b7f25dd87754b622662c213898368cb7e51c667b881c05"
+    },
+    "q4_run": 37754319857,
+    "f16_run": 37754323202,
+    "hosted_status": "Q4 queued, F16 pending same script concurrency group",
+    "reference": {
+      "repo": "cstr/mimo-asr-GGUF",
+      "revision": "e2d7dfebf0afd8076771903e92958039c5074eab",
+      "file": "diff-harness-ref/mimo-asr-ref.gguf",
+      "sha256": "7d4dfedc32a1451751199ed694a887f5091d3131bdefa840f811bc74e6312218",
+      "upstream": "98641d537df521ac6df05f74090475694d9510b7",
+      "stages": 5,
+      "generated_text": "explicitly skipped"
+    },
+    "scope": "CPU A/B and frozen Python LM stages; F16 LM and Q4_K LM both use pinned shipped Q4_K codec. No CANN/CUDA timing acceptance."
   }
 }

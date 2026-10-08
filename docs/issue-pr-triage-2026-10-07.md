@@ -331,3 +331,20 @@ Each source was unused for over five hours and had no open descriptor; SHA-256
 was verified before atomically replacing its path with a symlink. Native
 executables/shared libraries were retained. Receipts live under
 `/mnt/storage/crispasr/storage-cleanup-20261008/`.
+
+## PR #492 numerical acceptance started — 2026-10-08
+
+Author-preserving candidate `fae7e2241` merges #492 onto current main with the
+same ggml pin. Shared mel projection passes 16 local A/B cases byte-for-byte,
+including the 64-frame branch boundary, both filterbank layouts, float/double
+accumulators and 1/4 threads. A frozen independent Python LM archive was found
+and checksum-verified; it contains five LM stages and explicitly skips generation.
+
+[Q4 acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37754319857)
+is queued; [F16 acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37754323202)
+waits in the script's serial concurrency group. Both check baseline/default,
+candidate/default and candidate/non-flash LM values with norms/relative L2,
+tokenizer stages/RVQ codes, and English/Chinese CLI/session decoded text. F16
+means the LM; the codec is the same shipped Q4_K in both jobs. CPU results do
+not establish CANN/CUDA correctness or the PR's combined NZ-weight speedup.
+#492 is still unmerged. #516 Arabic acceptance remains queued.
