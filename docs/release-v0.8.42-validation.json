@@ -1,0 +1,57 @@
+{
+  "release": "v0.8.42",
+  "url": "https://github.com/CrispStrobe/CrispASR/releases/tag/v0.8.42",
+  "published_at": "2026-10-08T21:57:44Z",
+  "accepted_main": "032621174c75481aa9f126d54f6c1b6f5cea7354",
+  "release_source": "3be8bcb4390b8080dc73f807b7abb34dc0aca9c3",
+  "tag_type": "annotated",
+  "version_sync_check": "PASS including Dart changelog",
+  "release_gate_passed": true,
+  "checks": {
+    "native": {
+      "run": 37831067687,
+      "source": "032621174c75481aa9f126d54f6c1b6f5cea7354",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/37831067687",
+      "status": "completed",
+      "conclusion": "success",
+      "expected_jobs": 13,
+      "actual_jobs": 13,
+      "passed": 13,
+      "failed": [],
+      "pending": [],
+      "passed_all": true
+    },
+    "lint": {
+      "run": 37831067785,
+      "source": "032621174c75481aa9f126d54f6c1b6f5cea7354",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/37831067785",
+      "status": "completed",
+      "conclusion": "success",
+      "expected_jobs": 10,
+      "actual_jobs": 10,
+      "passed": 10,
+      "failed": [],
+      "pending": [],
+      "passed_all": true
+    },
+    "full33": {
+      "run": 37802900089,
+      "source": "893e417ca14b3b8bcd8ce88ded640b6e97167c4f",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/37802900089",
+      "status": "completed",
+      "conclusion": "success",
+      "expected_jobs": 33,
+      "actual_jobs": 33,
+      "passed": 33,
+      "failed": [],
+      "pending": [],
+      "passed_all": true
+    }
+  },
+  "regression_runtime_tests_ggml_identical": true,
+  "pr492": "Unmerged and excluded; production defaults unchanged",
+  "binary_assets_at_publication": [],
+  "binary_publication_status": "Build workflows started; not yet verified available",
+  "notes_in_tag": "RELEASE_NOTES_v0.8.42.md",
+  "release_workflow": "https://github.com/CrispStrobe/CrispASR/actions/runs/37850360339"
+}

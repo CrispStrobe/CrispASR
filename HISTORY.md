@@ -23155,3 +23155,14 @@ peaks +20 MiB; download sizes unchanged. Public pinned raw proof and receipt:
 `docs/mimo-pr492-full-asr-cuda-2026-10-08.json`. Defaults unchanged; #492 remains
 unmerged/excluded pending separate Q4 LM numerical, original-checkpoint and
 CANN acceptance. Successful Kaggle full-build cache refreshed.
+
+## 2026-10-08 — v0.8.42 published after full release gates
+
+Published v0.8.42 with comprehensive notes: live translation, persistent
+streaming and Hikari, plus the accepted fixes. Native CI 13/13, lint 10/10 and
+full33 regression 33/33 pass before the official bump script. Annotated tag
+points to `3be8bcb4390b8080dc73f807b7abb34dc0aca9c3`; VERSION and every derived
+version agree, including the Dart changelog entry. PR #492 remains unmerged
+and excluded. Binary publication is tracked separately from the release page.
+Receipt: `docs/release-v0.8.42-validation.json`. Root notes cleaned up after
+publication; the tag retains their full text.

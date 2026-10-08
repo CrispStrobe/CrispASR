@@ -38,12 +38,13 @@ cache refreshed at `0480221f9f7e5b16773ad8ad7e673cfc1afcdc94`.
 Separate Q4 LM non-flash numerical, original-checkpoint and CANN hardware gaps
 remain. PR #492 stays unmerged and excluded from v0.8.42.
 
-Next release action: let final main native/lint and full33 regression
-`37802900089` settle; 25 model jobs pass, eight remain active/queued, no failures
-at this checkpoint. Last accepted native/lint at `3fd1bf5fa` both PASS.
-Release worktree: `/mnt/storage/crispasr/triage-20261007/worktree`.
-Comprehensive release notes include the new proof and limits. Use only
-`scripts/bump-version.sh` after final accepted main gates are green.
+Release gate COMPLETE at accepted main `032621174`: native `37831067687`
+13/13 PASS, lint `37831067785` 10/10 PASS, full33 `37802900089` 33/33 PASS.
+v0.8.42 published at annotated tag `3be8bcb4390b8080dc73f807b7abb34dc0aca9c3`
+using the official bump script; all version files and the Dart changelog agree.
+Comprehensive notes are retained in the tag and GitHub release. Binary assets
+are building; verify per-platform publication before claiming packages available.
+Receipt: `docs/release-v0.8.42-validation.json`. #492 remains excluded.
 
 
 ## CLAIMED 2026-10-08 — MiMo Q4 CPU BLAS precision experiment
