@@ -1,0 +1,318 @@
+{
+  "scope": "Lightweight one-frame diagnosis, not full-clip acceptance or original checkpoint proof.",
+  "upstream": "691ce54144a6844cc641fd96046a6ba20776c8b0",
+  "quantizer_sha256": "f0e856da2ad7dc52b8aad99d52f217eab44f1ab3620d386a8e706f30725a95c5",
+  "frame": 263,
+  "arms": {
+    "promoted-flash": {
+      "official_cpu_codes": [
+        718,
+        621,
+        12,
+        122,
+        8,
+        61,
+        89,
+        104
+      ],
+      "f64_exhaustive": [
+        {
+          "stage": 0,
+          "native_code": 718,
+          "nearest_code": 718,
+          "runner_up": 282,
+          "nearest_distance": 915.3333232342316,
+          "gap": 241.6419098561846,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 1,
+          "native_code": 621,
+          "nearest_code": 621,
+          "runner_up": 49,
+          "nearest_distance": 765.5518259571581,
+          "gap": 0.028992719968528036,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 2,
+          "native_code": 12,
+          "nearest_code": 12,
+          "runner_up": 32,
+          "nearest_distance": 647.1536576780661,
+          "gap": 43.757930838947004,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 3,
+          "native_code": 122,
+          "nearest_code": 122,
+          "runner_up": 117,
+          "nearest_distance": 583.2065763658104,
+          "gap": 11.644883014016614,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 4,
+          "native_code": 8,
+          "nearest_code": 8,
+          "runner_up": 63,
+          "nearest_distance": 509.54035704293557,
+          "gap": 65.03366462826483,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 5,
+          "native_code": 61,
+          "nearest_code": 61,
+          "runner_up": 85,
+          "nearest_distance": 447.69228308576487,
+          "gap": 34.65003630150625,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 6,
+          "native_code": 89,
+          "nearest_code": 89,
+          "runner_up": 109,
+          "nearest_distance": 433.99909476049027,
+          "gap": 0.29736668386425436,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 7,
+          "native_code": 104,
+          "nearest_code": 104,
+          "runner_up": 14,
+          "nearest_distance": 403.205052965821,
+          "gap": 27.064773196324495,
+          "native_is_nearest": true
+        }
+      ],
+      "native_codes": [
+        718,
+        621,
+        12,
+        122,
+        8,
+        61,
+        89,
+        104
+      ],
+      "native_matches_official_own_input": true
+    },
+    "promoted-eager": {
+      "official_cpu_codes": [
+        718,
+        49,
+        12,
+        117,
+        40,
+        75,
+        84,
+        64
+      ],
+      "f64_exhaustive": [
+        {
+          "stage": 0,
+          "native_code": 718,
+          "nearest_code": 718,
+          "runner_up": 282,
+          "nearest_distance": 915.50750581885,
+          "gap": 241.30954297126755,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 1,
+          "native_code": 49,
+          "nearest_code": 49,
+          "runner_up": 621,
+          "nearest_distance": 765.5687304816443,
+          "gap": 0.14828169163956773,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 2,
+          "native_code": 12,
+          "nearest_code": 12,
+          "runner_up": 102,
+          "nearest_distance": 644.4107843268696,
+          "gap": 35.58051984198471,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 3,
+          "native_code": 117,
+          "nearest_code": 117,
+          "runner_up": 50,
+          "nearest_distance": 620.0394338731755,
+          "gap": 2.926573463217892,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 4,
+          "native_code": 40,
+          "nearest_code": 40,
+          "runner_up": 16,
+          "nearest_distance": 518.1424033671366,
+          "gap": 46.09581285754268,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 5,
+          "native_code": 75,
+          "nearest_code": 75,
+          "runner_up": 40,
+          "nearest_distance": 444.9486130884367,
+          "gap": 65.62556173271213,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 6,
+          "native_code": 84,
+          "nearest_code": 84,
+          "runner_up": 117,
+          "nearest_distance": 419.5097797925117,
+          "gap": 18.133817439582685,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 7,
+          "native_code": 64,
+          "nearest_code": 64,
+          "runner_up": 52,
+          "nearest_distance": 406.30307612227205,
+          "gap": 9.345855466665682,
+          "native_is_nearest": true
+        }
+      ],
+      "native_codes": [
+        718,
+        49,
+        12,
+        117,
+        40,
+        75,
+        84,
+        64
+      ],
+      "native_matches_official_own_input": true
+    },
+    "python": {
+      "official_cpu_codes": [
+        718,
+        49,
+        12,
+        117,
+        40,
+        75,
+        84,
+        64
+      ],
+      "f64_exhaustive": [
+        {
+          "stage": 0,
+          "native_code": 718,
+          "nearest_code": 718,
+          "runner_up": 282,
+          "nearest_distance": 915.5069263496903,
+          "gap": 241.3093446304797,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 1,
+          "native_code": 49,
+          "nearest_code": 49,
+          "runner_up": 621,
+          "nearest_distance": 765.5669974501037,
+          "gap": 0.1491464857780329,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 2,
+          "native_code": 12,
+          "nearest_code": 12,
+          "runner_up": 102,
+          "nearest_distance": 644.4086398169885,
+          "gap": 35.5829367079092,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 3,
+          "native_code": 117,
+          "nearest_code": 117,
+          "runner_up": 50,
+          "nearest_distance": 620.0369166905716,
+          "gap": 2.927250392776841,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 4,
+          "native_code": 40,
+          "nearest_code": 40,
+          "runner_up": 16,
+          "nearest_distance": 518.1406611709801,
+          "gap": 46.09597017397016,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 5,
+          "native_code": 75,
+          "nearest_code": 75,
+          "runner_up": 40,
+          "nearest_distance": 444.9480656269973,
+          "gap": 65.62459479490462,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 6,
+          "native_code": 84,
+          "nearest_code": 84,
+          "runner_up": 117,
+          "nearest_distance": 419.50927101357865,
+          "gap": 18.13381037014824,
+          "native_is_nearest": true
+        },
+        {
+          "stage": 7,
+          "native_code": 64,
+          "nearest_code": 64,
+          "runner_up": 52,
+          "nearest_distance": 406.3023784807309,
+          "gap": 9.346926278422927,
+          "native_is_nearest": true
+        }
+      ],
+      "native_codes": [
+        718,
+        49,
+        12,
+        117,
+        40,
+        75,
+        84,
+        64
+      ],
+      "native_matches_official_own_input": true
+    }
+  },
+  "provenance": {
+    "native_source": "d6b29207b6d1304243db987a2f4d97f5deac9c05",
+    "ggml": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+    "model_sha256": "3f3a903b10294ead4ef6a4afec035639fd2113b1d307d42f649a97cc85670e3f",
+    "official_source_url": "https://raw.githubusercontent.com/XiaomiMiMo/MiMo-Audio/691ce54144a6844cc641fd96046a6ba20776c8b0/src/mimo_audio_tokenizer/quantization.py",
+    "reproducer_path": "/mnt/storage/crispasr/pr492-acceptance-20261008/proof/check_rvq_frame263.py",
+    "reproducer_sha256": "bde6e3ebc3dda0c665a40e7ebc5e7e616a3db8911d084d183a9fb11390e950c0"
+  },
+  "native_arrays_sha256": {
+    "promoted-flash/tok_pool_out": "84e6e6aa5d1f173da86eed44a922e8cae39721407d21cf2f972006733330e900",
+    "promoted-flash/tok_codes": "c3f63d6728e100785d4dea2dff2ce9c056b0de9f2b8061636dff1756778e23a6",
+    "promoted-eager/tok_pool_out": "d3e077caf7904b0e5019e011a94b765f60416355ea7f5333cc0a7a19f8258c4b",
+    "promoted-eager/tok_codes": "f752787ee19cb91f10ce79041b47308d078d23c20b308c36133bd47dfc63cda9"
+  },
+  "reference_array_sha256": "7be9c670e30e379bc159b299e83925975e55f37522b71241d49a746352cd739e",
+  "all_checked_native_choices_match_official_own_input": true,
+  "all_checked_choices_match_exhaustive_f64": true,
+  "eager_frame_codes_match_official_encoder_pool": true,
+  "interpretation": "On this single affected frame, both native arms select the actual nearest code for their own pooled feature/residual. The eager arm agrees with the official encoder plus official quantizer. Divergence therefore enters before RVQ; this does not establish full-clip or original-checkpoint parity, remove other failure gates, or justify any default change."
+}
