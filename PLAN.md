@@ -29,6 +29,10 @@ and regression [37730687001](https://github.com/CrispStrobe/CrispASR/actions/run
 are queued. Native/regression source is `710457c5b`; the later change only
 pins German acceptance audio at a revision that contains it. Added required
 ONNX per-graph profiling, README model entries and C ABI exception cleanup.
+Adding a dedicated optional ONNX graph-stage reference/diff path: compare the
+actual runtime graph outputs to an independent Python ONNX driver, including
+input alignment and magnitudes. This measures wrapper/graph execution parity;
+it does not independently certify the exporter against the source checkpoint.
 CPU acceptance covers six German deployments, Nemotron/Qwen
 packet partitioning, UTF-8 retries, flush and C ABI loading. These are acceptance
 checks; per-stage numerical parity is not claimed. Do not merge #515 before
