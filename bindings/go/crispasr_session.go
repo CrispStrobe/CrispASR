@@ -149,6 +149,10 @@ int          crispasr_align_result_n_words(crispasr_align_result* r);
 const char*  crispasr_align_result_word_text(crispasr_align_result* r, int i);
 long long    crispasr_align_result_word_t0(crispasr_align_result* r, int i);
 long long    crispasr_align_result_word_t1(crispasr_align_result* r, int i);
+int crispasr_align_result_n_characters(crispasr_align_result* r, int word);
+const char* crispasr_align_result_character_text(crispasr_align_result* r, int word, int i);
+long long crispasr_align_result_character_t0(crispasr_align_result* r, int word, int i);
+long long crispasr_align_result_character_t1(crispasr_align_result* r, int word, int i);
 void         crispasr_align_result_free(crispasr_align_result* r);
 
 // --- Watermark ---
@@ -1537,11 +1541,19 @@ func (s *CrispasrSession) CtcVocab() []string {
 // Forced alignment — word-level timestamps from transcript + audio
 // ---------------------------------------------------------------------------
 
+// AlignedCharacter holds a measured original codepoint; times are centiseconds.
+type AlignedCharacter struct {
+	Text string
+	T0   int64
+	T1   int64
+}
+
 // AlignedWord holds one word from forced alignment.
 type AlignedWord struct {
-	Text string
-	T0   int64 // centiseconds
-	T1   int64
+	Characters []AlignedCharacter
+	Text       string
+	T0         int64 // centiseconds
+	T1         int64
 }
 
 // AlignWords runs CTC forced alignment on a transcript + audio pair.
@@ -1567,6 +1579,15 @@ func AlignWords(alignerModel, transcript string, pcm []float32, tOffsetCs int64,
 			Text: C.GoString(C.crispasr_align_result_word_text(r, C.int(i))),
 			T0:   int64(C.crispasr_align_result_word_t0(r, C.int(i))),
 			T1:   int64(C.crispasr_align_result_word_t1(r, C.int(i))),
+		}
+		nc := int(C.crispasr_align_result_n_characters(r, C.int(i)))
+		words[i].Characters = make([]AlignedCharacter, nc)
+		for j := 0; j < nc; j++ {
+			words[i].Characters[j] = AlignedCharacter{
+				Text: C.GoString(C.crispasr_align_result_character_text(r, C.int(i), C.int(j))),
+				T0:   int64(C.crispasr_align_result_character_t0(r, C.int(i), C.int(j))),
+				T1:   int64(C.crispasr_align_result_character_t1(r, C.int(i), C.int(j))),
+			}
 		}
 	}
 	return words, nil

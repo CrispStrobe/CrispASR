@@ -7,6 +7,40 @@ technical deep-dives are in `LEARNINGS.md`.
 ---
 
 
+## 2026-10-08 — Moonshine ONNX destructor cleanup
+
+Integrated-source deep analysis `37749837117` reported the adapter's virtual
+`shutdown()` call from its destructor. Both paths now call the existing
+close/null-reset operation through private nonvirtual `close_context()`.
+Local cppcheck 2.17.1 reproduces the original warning and accepts the fix;
+C++17 syntax and clang-format 18 pass. No model/stream graph changed. Final
+full hosted pinned cppcheck 2.7 remains a release gate.
+
+## DONE 2026-10-08 — measured CTC character alignment and Java UTF-8 (#490/#516)
+
+Wav2vec2-family align-only output retains measured CTC label spans through
+CLI word/segment JSON, opaque C accessors and all seven bindings. Repeated
+letters keep separate occurrences; supported Arabic labels retain their script.
+Unsupported/romanized characters get no invented timestamps. Impossible
+complete CTC paths fail explicitly. Java converts input strings and decodes
+output as UTF-8 without changing host JNA defaults; diagnostic previews no
+longer split UTF-8 characters.
+
+Hosted `37756933124` passes 41 new / 91 existing assertions and real Arabic Q4
+alignment: 15 words / 85 character spans match independent full-sequence
+Viterbi exactly. CLI word/segment JSON, Python/C ABI offset/invalid-accessor
+checks and Java/JNA Arabic equality pass, including a US-ASCII host default.
+Strict bidirectional native guards pass three host encodings and a Unicode
+model path. Saved pre-fix guards reproduce impossible-path acceptance and
+input/output corruption. Local ASAN/UBSAN is clean; binding build/format
+checks pass at their recorded sources.
+
+Accepted PR head `d9fcfcc90`, tested merge `a9c1afead`, artifact `11542736536`.
+Later integration adds only the main Metal test/workflow repair and maintainer
+docs; alignment/binding runtime is unchanged. Final main platform CI precedes
+release. These are model-frame CTC spans, not human phonetic annotations or
+new model-stage parity. See [proof](docs/ctc-characters-2026-10-08.json).
+
 ## DONE 2026-10-08 — persistent streaming bindings and German Moonshine (#515)
 
 Integrated the original author commits with reviewed fixes. C ABI and all

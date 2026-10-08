@@ -76,7 +76,7 @@ static int utf8_seq_len(const std::string& word, size_t i) {
 // (e.g. "こ" as a 3-byte entry), not individual bytes. Per-byte iteration
 // previously made every CJK alignment fail with zero overlap (#32).
 static bool word_to_ids(const std::string& word, const std::unordered_map<std::string, int>& v2id, int blank_id,
-                        std::vector<int>& out_chars) {
+                        std::vector<int>& out_chars, std::vector<std::string>& out_text) {
     bool any = false;
     for (size_t i = 0; i < word.size();) {
         const int n = utf8_seq_len(word, i);
@@ -88,6 +88,7 @@ static bool word_to_ids(const std::string& word, const std::unordered_map<std::s
                 id = lookup_char(v2id, (unsigned char)word[i]);
             if (id >= 0 && id != blank_id) {
                 out_chars.push_back(id);
+                out_text.push_back(word.substr(i, 1));
                 any = true;
             }
         } else if (i + (size_t)n <= word.size()) {
@@ -96,6 +97,7 @@ static bool word_to_ids(const std::string& word, const std::unordered_map<std::s
             auto it = v2id.find(cp);
             if (it != v2id.end() && it->second != blank_id) {
                 out_chars.push_back(it->second);
+                out_text.push_back(cp);
                 any = true;
             }
         }
@@ -110,7 +112,8 @@ static bool word_to_ids(const std::string& word, const std::unordered_map<std::s
 
 std::vector<ctc_word_stamp> ctc_forced_align(const float* logits, int T, int V, const std::vector<std::string>& words,
                                              const std::vector<std::string>& vocab, int blank_id, float frame_dur) {
-    if (T <= 0 || V <= 0 || words.empty())
+    if (!logits || T <= 0 || V <= 0 || words.empty() || blank_id < 0 || blank_id >= V ||
+        vocab.size() > static_cast<size_t>(V) || !std::isfinite(frame_dur) || frame_dur <= 0)
         return {};
 
     // ------------------------------------------------------------------
@@ -139,14 +142,17 @@ std::vector<ctc_word_stamp> ctc_forced_align(const float* logits, int T, int V, 
     }; // inclusive, in chars[]
 
     std::vector<int> chars;
+    std::vector<std::string> char_text;
     std::vector<word_range> wranges;
 
     for (int wi = 0; wi < (int)words.size(); wi++) {
-        if (wi > 0 && bar_id >= 0)
+        if (wi > 0 && bar_id >= 0 && bar_id != blank_id) {
             chars.push_back(bar_id);
+            char_text.emplace_back();
+        }
 
         int cs = (int)chars.size();
-        bool ok = word_to_ids(words[wi], v2id, blank_id, chars);
+        bool ok = word_to_ids(words[wi], v2id, blank_id, chars, char_text);
         int ce = (int)chars.size() - 1;
 
         if (!ok || ce < cs) {
@@ -179,7 +185,7 @@ std::vector<ctc_word_stamp> ctc_forced_align(const float* logits, int T, int V, 
     // ------------------------------------------------------------------
     // 4. Compute log-softmax for every frame  [T × V]
     // ------------------------------------------------------------------
-    std::vector<float> lp(T * V);
+    std::vector<float> lp(static_cast<size_t>(T) * V);
     for (int t = 0; t < T; t++) {
         const float* src = logits + t * V;
         float* dst = lp.data() + t * V;
@@ -252,6 +258,8 @@ std::vector<ctc_word_stamp> ctc_forced_align(const float* logits, int T, int V, 
 
     // Start at the last label (S-1 or S-2, whichever is better)
     int j_cur = (alpha[S - 1] >= alpha[S - 2]) ? S - 1 : S - 2;
+    if (alpha[j_cur] <= NEG_INF)
+        return {}; // No complete CTC path; do not manufacture partial timestamps.
 
     for (int t = T - 1; t >= 0; t--) {
         path[t] = j_cur;
@@ -276,6 +284,17 @@ std::vector<ctc_word_stamp> ctc_forced_align(const float* logits, int T, int V, 
     //    t0 = first frame assigned to any label in that range
     //    t1 = (last such frame + 1)  → end-exclusive
     // ------------------------------------------------------------------
+    // Each odd expanded state identifies one label occurrence. Repeated
+    // letters have distinct states separated by a required blank.
+    std::vector<int> char_start(N, -1), char_end(N, -1);
+    for (int t = 0; t < T; ++t) {
+        if (path[t] % 2 == 0)
+            continue;
+        const int label = path[t] / 2;
+        if (char_start[label] < 0)
+            char_start[label] = t;
+        char_end[label] = t + 1;
+    }
     std::vector<ctc_word_stamp> result;
     result.reserve(words.size());
 
@@ -307,7 +326,11 @@ std::vector<ctc_word_stamp> ctc_forced_align(const float* logits, int T, int V, 
             ws.t0 = (float)t0_frame * frame_dur;
             ws.t1 = (float)(t1_frame + 1) * frame_dur;
         }
-        result.push_back(ws);
+        for (int ci = wranges[wi].cs; ci <= wranges[wi].ce; ++ci) {
+            if (char_start[ci] >= 0 && !char_text[ci].empty())
+                ws.characters.push_back({char_text[ci], char_start[ci] * frame_dur, char_end[ci] * frame_dur});
+        }
+        result.push_back(std::move(ws));
     }
 
     return result;

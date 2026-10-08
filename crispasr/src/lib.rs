@@ -2536,8 +2536,17 @@ pub fn cache_dir(override_path: Option<&str>) -> Result<Option<String>, String> 
 // CTC / forced-aligner word timings (shared C-ABI, 0.4.7+)
 // =========================================================================
 
+/// A measured original codepoint from wav2vec2 CTC alignment (seconds).
+#[derive(Clone, Debug)]
+pub struct AlignedCharacter {
+    pub text: String,
+    pub start: f64,
+    pub end: f64,
+}
+
 #[derive(Clone, Debug)]
 pub struct AlignedWord {
+    pub characters: Vec<AlignedCharacter>,
     pub text: String,
     pub start: f64, // seconds
     pub end: f64,
@@ -2547,8 +2556,11 @@ pub struct AlignedWord {
 ///
 /// `aligner_model` filename picks the backend: paths containing
 /// "forced-aligner" / "qwen3-fa" / "qwen3-forced" route to the
-/// Qwen3-ForcedAligner path; everything else goes through
-/// canary-ctc-aligner. `t_offset` (seconds) is added to every word
+/// Qwen3-ForcedAligner path. Wav2vec2/HuBERT/data2vec models use their
+/// own CTC vocabulary; remaining models use canary-ctc. Supported original
+/// codepoints have measured character spans; romanized words and other
+/// aligner families have an empty character vector.
+/// `t_offset` (seconds) is added to every word
 /// start/end so the returned timings are absolute against the
 /// original audio.
 ///
@@ -2594,8 +2606,22 @@ pub fn align_words(
             };
             let t0 = crispasr_sys::crispasr_align_result_word_t0(res, i) as f64 / 100.0;
             let t1 = crispasr_sys::crispasr_align_result_word_t1(res, i) as f64 / 100.0;
+            let mut characters = Vec::new();
+            for j in 0..crispasr_sys::crispasr_align_result_n_characters(res, i) {
+                let cp = crispasr_sys::crispasr_align_result_character_text(res, i, j);
+                characters.push(AlignedCharacter {
+                    text: if cp.is_null() {
+                        String::new()
+                    } else {
+                        CStr::from_ptr(cp).to_string_lossy().into_owned()
+                    },
+                    start: crispasr_sys::crispasr_align_result_character_t0(res, i, j) as f64 / 100.0,
+                    end: crispasr_sys::crispasr_align_result_character_t1(res, i, j) as f64 / 100.0,
+                });
+            }
             out.push(AlignedWord {
                 text,
+                characters,
                 start: t0,
                 end: t1,
             });

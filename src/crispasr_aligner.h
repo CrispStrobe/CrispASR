@@ -33,10 +33,17 @@
 #include <string>
 #include <vector>
 
+struct CrispasrAlignedCharacter {
+    std::string text;
+    int64_t t0_cs = 0;
+    int64_t t1_cs = 0;
+};
+
 struct CrispasrAlignedWord {
     std::string text;
     int64_t t0_cs = 0; // centiseconds, absolute (includes t_offset_cs)
     int64_t t1_cs = 0;
+    std::vector<CrispasrAlignedCharacter> characters{}; // measured wav2vec2 CTC labels only
 };
 
 /// A re-timed segment: one input SRT cue (or one text line) with timings

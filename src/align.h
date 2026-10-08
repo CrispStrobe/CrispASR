@@ -24,11 +24,20 @@
 #include <string>
 #include <vector>
 
+// One supported original UTF-8 codepoint, measured on the CTC label path.
+// Blanks, separators and codepoints absent from the vocabulary are omitted.
+struct ctc_character_stamp {
+    std::string character;
+    float t0;
+    float t1;
+};
+
 // Per-word timestamp produced by ctc_forced_align().
 struct ctc_word_stamp {
     std::string word; // original word text (not normalised)
     float t0;         // start time, seconds
     float t1;         // end time, seconds (exclusive: start of next frame)
+    std::vector<ctc_character_stamp> characters{};
 };
 
 /**

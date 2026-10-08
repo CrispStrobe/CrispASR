@@ -2963,9 +2963,8 @@ catch_discover_tests(test-flash-attn-defaults
 
 # ─── test - metal - pipeline - cache — Apple-only smoke test for the
 # persistent MTLBinaryArchive cache (PLAN #88 / CrisperWeaver §5.18).
-# Compiled with -ObjC++ when Metal is enabled; on Linux / Windows
-# the .mm body collapses to a single "skipped" TEST_CASE so the
-# binary still builds and registers cleanly. ────────
+# Built only with Metal on Apple; runners without a device explicitly skip
+# runtime checks. ────────
 if (APPLE AND GGML_METAL)
     add_executable(test-metal-pipeline-cache
         test-metal-pipeline-cache.mm
@@ -2976,18 +2975,21 @@ if (APPLE AND GGML_METAL)
     )
     target_link_libraries(test-metal-pipeline-cache PRIVATE
         Catch2::Catch2WithMain
-        ggml
+        ggml-metal
+        "-framework Metal"
+        objc
     )
     # Match the host C++ standard the rest of the tests use (the
     # .mm file mixes Catch2 templates + filesystem with Obj-C
     # frameworks, needs C++17 minimum for <filesystem>).
     set_target_properties(test-metal-pipeline-cache PROPERTIES
-        CXX_STANDARD 17
-        CXX_STANDARD_REQUIRED ON
+        OBJCXX_STANDARD 17
+        OBJCXX_STANDARD_REQUIRED ON
     )
     catch_discover_tests(test-metal-pipeline-cache
         TEST_SPEC "[unit]"
-        PROPERTIES LABELS "unit;metal;pipeline-cache"
+        PROPERTIES LABELS "unit"
+                   SKIP_REGULAR_EXPRESSION "All tests skipped"
     )
 endif()
 
@@ -6194,3 +6196,12 @@ add_executable(test-moonshine-tokenizer test-moonshine-tokenizer.cpp)
 target_include_directories(test-moonshine-tokenizer PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-moonshine-tokenizer PRIVATE Catch2::Catch2WithMain moonshine_tokenizer)
 catch_discover_tests(test-moonshine-tokenizer TEST_SPEC "[unit]" PROPERTIES LABELS "unit;moonshine")
+
+# Exact CTC label spans, repeated Unicode letters and JSON; no models needed.
+add_executable(test-align-characters test-align-characters.cpp ${PROJECT_SOURCE_DIR}/src/align.cpp)
+target_include_directories(test-align-characters PRIVATE ${PROJECT_SOURCE_DIR}/src)
+if(MSVC)
+    target_compile_options(test-align-characters PRIVATE /utf-8)
+endif()
+add_test(NAME test-align-characters COMMAND test-align-characters)
+set_tests_properties(test-align-characters PROPERTIES LABELS "unit;align")

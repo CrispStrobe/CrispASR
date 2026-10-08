@@ -198,6 +198,24 @@ exposes them as struct/class members on its segment type.
 >    (`Session::transcribe_chunked_with_progress`), and Python
 >    (`transcribe_chunked(..., progress=fn)`). The other bindings use the poll.
 
+## Character alignment
+
+With a wav2vec2-family character vocabulary, `align_words` / `alignWords`
+returns measured CTC spans in each word's `characters` (`Characters` in Go/C#).
+Each character retains its original UTF-8 text; repeated letters have separate
+spans. Python, Rust, Dart and C# use seconds; Go, Java and Ruby use
+centiseconds. The alignment offset applies to both word and character times.
+Unsupported codepoints are omitted, and romanized words and other aligner
+families return an empty list. Frame boundaries are model-derived, not
+human-annotated phonetic boundaries. See [CLI semantics](cli.md#character-timestamps-with-wav2vec2-ctc-490).
+
+The C ABI exposes `crispasr_align_result_n_characters`, `character_text`,
+`character_t0` and `character_t1` on the existing opaque alignment result
+(the latter three also have the `crispasr_align_result_` prefix).
+Text pointers remain borrowed until `crispasr_align_result_free`; invalid
+indices return empty text or zero. Python also returns an empty list when
+loaded against an older native library without these symbols.
+
 ## Python
 
 ```python

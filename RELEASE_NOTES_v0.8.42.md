@@ -2,8 +2,8 @@
 
 Draft for the next release, covering changes on main since v0.8.41. The version
 has not been bumped and the tag has not been created. Final integration and
-release-tip validation are still pending. PR #515 is integrated; PR #516 and
-PR #492 remain unmerged.
+release-tip validation are still pending. PR #515 and #516 are integrated;
+PR #492 remains unmerged.
 
 ## Persistent streaming and German Moonshine
 
@@ -28,6 +28,8 @@ PR #492 remain unmerged.
   configuration and license files. Companion failures propagate; cached
   incomplete bundles can be repaired. Generic `encoder*.onnx` paths are detected
   from their companion configuration through both CLI and C ABI.
+- ONNX backend cleanup shares a nonvirtual helper between explicit shutdown
+  and destruction, resolving the destructor diagnostic from deep static analysis.
 - Five-graph Moonshine produces incremental drafts with persistent frontend
   state and bounded encoder updates. Final flush replays the actual batch
   frontend/encoder/decoder from retained original PCM, correcting Small int8
@@ -115,6 +117,28 @@ Q8_0 on the tested setup. The tested M1 Metal path is slower than real time;
 this release does not claim universal Hikari real-time performance. Detailed
 usage and device results are in [the streaming guide](docs/streaming.md#one-model-instead-of-two-hikari-english-speech--de--ja--ru).
 
+## Character timestamps for Arabic and other CTC vocabularies
+
+- Wav2vec2-family forced alignment exposes measured character start/end times
+  alongside words. Align-only word and segment JSON include nested `characters`;
+  the C ABI and Python, Dart, Rust, Go, Java, C# and Ruby expose the same spans
+  in their existing time units.
+- Repeated letters retain separate CTC occurrences. Supported Arabic labels stay
+  in their original script. Latin-only aligners retain their romanization fallback;
+  unsupported or romanized characters receive no invented timestamps.
+- Impossible complete CTC paths fail explicitly. Character times use the model's
+  frame resolution and are not interpolated subdivisions of word durations.
+- Java now converts incoming strings and decodes returned strings as UTF-8
+  independently of the host JNA encoding, including Unicode model paths.
+  CLI diagnostic previews preserve UTF-8 character boundaries.
+
+Real Arabic Q4 acceptance passes 15 words / 85 character spans against an
+independent full-sequence Viterbi calculation, CLI word/segment JSON, Python/
+C ABI offsets and invalid accessors, and Java/JNA equality with US-ASCII forced.
+The job passes 41 new / 91 existing alignment assertions; local ASAN/UBSAN is
+clean. This validates post-logit alignment/output, not human-annotated phonetic
+boundaries. See [exact model/audio/source pins and proof](docs/ctc-characters-2026-10-08.json).
+
 ## ASR and TTS correctness
 
 - **MioTTS:** CLI and session output rates now come from codec metadata. Public
@@ -175,6 +199,10 @@ Existing wav2vec2 GPU transcript drift remains under investigation.
   CI after a real sync push, and supports a tested dry run.
 - CI/regression APT setup replaces the failing Azure Ubuntu mirror with the
   official HTTPS mirror, bounds network waits and preserves error exits.
+- Repaired the Apple Metal cache smoke test for the ggml device API and
+  Objective-C++17, with explicit Metal linkage. A focused macOS workflow checks
+  shared/static builds; unavailable GPU hardware produces a skip. Hosted
+  compilation is pending; this is not proof of serialized GPU pipelines.
 - Kaggle regression honors SRT transcripts, downloads declared companions, and
   uses corrected model revisions. Registry URL checking verifies manifest pins.
 - The manual Windows CUDA smoke workflow can package matched CUDA-12.6
@@ -205,6 +233,7 @@ its required checks. Hikari's full pinned deep-lint rerun passes at `f55c7bc8c`.
 PR #515 passes final x86/ARM acceptance: all eight cases on each architecture,
 15 exact stages per five-graph deployment, scale-negative control, and CLI/C ABI
 cap/reset/stream checks. These compare identical deployed ONNX exports against
-independent Python ORT execution. PR #516 still needs real Arabic
-character-alignment acceptance. PR #492's MiMo/CANN changes remain unmerged. Reporter-specific
+independent Python ORT execution. PR #516 passes full real Arabic character
+alignment and Java/JNA acceptance; final main platform checks remain required.
+PR #492's MiMo/CANN changes remain unmerged. Reporter-specific
 Windows/Vulkan, Intel Mac and newer NVIDIA hardware retests remain open.

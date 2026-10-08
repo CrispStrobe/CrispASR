@@ -11,7 +11,7 @@ import os
 import platform
 import threading
 import wave
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable, List, Optional, Tuple, Union
 
@@ -592,12 +592,21 @@ class LidResult:
 # =========================================================================
 
 @dataclass
+class AlignedCharacter:
+    """Measured original UTF-8 codepoint with start/end in seconds."""
+    text: str
+    start: float
+    end: float
+
+
+@dataclass
 class AlignedWord:
-    """Per-word output of :func:`align_words`."""
+    """Per-word output of :func:`align_words`; characters are measured CTC spans."""
     text: str
     start: float  # seconds (centiseconds / 100 on the C side)
     end: float
 
+    characters: List[AlignedCharacter] = field(default_factory=list)
 
 # =========================================================================
 # Cache + model registry (shared C-ABI, 0.4.8+)
@@ -918,8 +927,10 @@ def align_words(
 
     ``aligner_model`` filename picks the backend: paths containing
     "forced-aligner" / "qwen3-fa" / "qwen3-forced" route to the
-    Qwen3-ForcedAligner path; everything else goes through
-    canary-ctc-aligner.
+    Qwen3-ForcedAligner path. Wav2vec2/HuBERT/data2vec models use CTC
+    alignment with their own vocabulary; remaining models use canary-ctc.
+    Supported original codepoints have measured ``characters`` spans.
+    Romanized words and other aligner families return an empty list.
 
     ``t_offset`` (seconds) is added to every word start/end so the
     returned timings are absolute against the original audio.
@@ -953,6 +964,17 @@ def align_words(
     lib.crispasr_align_result_free.argtypes = [ctypes.c_void_p]
     lib.crispasr_align_result_free.restype = None
 
+    has_characters = hasattr(lib, "crispasr_align_result_n_characters")
+    if has_characters:
+        for name, result_type, args in [
+            ("n_characters", ctypes.c_int, [ctypes.c_void_p, ctypes.c_int]),
+            ("character_text", ctypes.c_char_p, [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]),
+            ("character_t0", ctypes.c_int64, [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]),
+            ("character_t1", ctypes.c_int64, [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]),
+        ]:
+            fn = getattr(lib, "crispasr_align_result_" + name)
+            fn.restype, fn.argtypes = result_type, args
+
     pcm_np = np.asarray(pcm, dtype=np.float32)
     res = lib.crispasr_align_words_abi(
         aligner_model.encode("utf-8"),
@@ -970,8 +992,18 @@ def align_words(
         for i in range(n):
             t = lib.crispasr_align_result_word_text(res, i)
             text = t.decode("utf-8") if t else ""
+            characters = []
+            if has_characters:
+                for j in range(lib.crispasr_align_result_n_characters(res, i)):
+                    cp = lib.crispasr_align_result_character_text(res, i, j)
+                    characters.append(AlignedCharacter(
+                        text=cp.decode("utf-8") if cp else "",
+                        start=lib.crispasr_align_result_character_t0(res, i, j) / 100.0,
+                        end=lib.crispasr_align_result_character_t1(res, i, j) / 100.0,
+                    ))
             out.append(AlignedWord(
                 text=text,
+                characters=characters,
                 start=lib.crispasr_align_result_word_t0(res, i) / 100.0,
                 end=lib.crispasr_align_result_word_t1(res, i) / 100.0,
             ))

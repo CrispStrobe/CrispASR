@@ -337,6 +337,13 @@ CRISPASR_SESSION_API int crispasr_align_result_n_words(crispasr_align_result* r)
 CRISPASR_SESSION_API const char* crispasr_align_result_word_text(crispasr_align_result* r, int i);
 CRISPASR_SESSION_API int64_t crispasr_align_result_word_t0(crispasr_align_result* r, int i);
 CRISPASR_SESSION_API int64_t crispasr_align_result_word_t1(crispasr_align_result* r, int i);
+// Measured original-codepoint spans for wav2vec2-family CTC alignment.
+// Count is zero for unsupported/romanized words and other aligner families.
+// Times are absolute centiseconds; invalid indices return empty text / zero.
+CRISPASR_SESSION_API int crispasr_align_result_n_characters(crispasr_align_result* r, int word);
+CRISPASR_SESSION_API const char* crispasr_align_result_character_text(crispasr_align_result* r, int word, int i);
+CRISPASR_SESSION_API int64_t crispasr_align_result_character_t0(crispasr_align_result* r, int word, int i);
+CRISPASR_SESSION_API int64_t crispasr_align_result_character_t1(crispasr_align_result* r, int word, int i);
 CRISPASR_SESSION_API void crispasr_align_result_free(crispasr_align_result* r);
 CRISPASR_SESSION_API int crispasr_cache_ensure_file_abi(const char* filename, const char* url, int32_t quiet,
                                                         const char* cache_dir_override, char* out_buf, int32_t out_cap);

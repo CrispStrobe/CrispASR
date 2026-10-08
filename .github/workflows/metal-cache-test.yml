@@ -1,0 +1,66 @@
+name: Metal cache test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - ggml
+      - tests/test-metal-pipeline-cache.mm
+      - tests/CMakeLists.txt
+      - .github/workflows/metal-cache-test.yml
+  pull_request:
+    paths:
+      - ggml
+      - tests/test-metal-pipeline-cache.mm
+      - tests/CMakeLists.txt
+      - .github/workflows/metal-cache-test.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: metal-cache-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-and-test:
+    runs-on: macos-14
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        shared: ['ON', 'OFF']
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Record source and configure actual test target
+        run: |
+          git rev-parse HEAD HEAD:ggml
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=${{ matrix.shared }} -DGGML_METAL=ON \
+            -DCRISPASR_BUILD_TESTS=ON -DCRISPASR_BUILD_SERVER=OFF
+      - name: Build Metal cache test
+        run: cmake --build build --target test-metal-pipeline-cache -j 3
+      - name: Run cache lifecycle checks (explicitly skipped without a GPU)
+        run: |
+          # Catch 3.7.1 discovery splits semicolon-valued PROPERTIES: only
+          # the first label survives. Select this suite by its actual names.
+          ctest --test-dir build -R '^metal pipeline cache:' --show-only=json-v1 > build/metal-cache-discovery.json
+          python3 - <<'PY'
+          import json
+          with open('build/metal-cache-discovery.json') as f:
+              tests = json.load(f)['tests']
+          assert len(tests) == 2, [t['name'] for t in tests]
+          print('METAL_CACHE_DISCOVERY_PASS:', [t['name'] for t in tests])
+          PY
+          ctest --test-dir build -R '^metal pipeline cache:' --no-tests=error \
+            --output-on-failure --timeout 60 --output-junit metal-cache.xml
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: metal-cache-${{ matrix.shared }}
+          path: |
+            build/metal-cache-discovery.json
+            build/metal-cache.xml
+            build/Testing/Temporary/LastTest.log

@@ -1,0 +1,110 @@
+{
+  "scope": "Post-logit CTC character output; no new model-stage/hardware timing claim",
+  "issue": 490,
+  "baseline_no_path": "saved binary fails impossible aa path (2 frames); exit 1",
+  "fixed_no_path": "NO_PATH_REJECTED",
+  "known_path_assertions": 41,
+  "csharp": "build passed, 0 warnings, 0 errors",
+  "hosted": "37756933124 PASS: exact independent post-logit Viterbi, CLI word/segment JSON, Python/C ABI offsets and invalid-accessor checks, real Java/JNA Arabic alignment.",
+  "cold_proof": "/mnt/storage/crispasr/issue490-characters-20261008/proof",
+  "source_sha256": {
+    "src/align.cpp": "3a09740cb1c4fdaa278c34e63dbd0a613479d13fd02172e436b40f76ab0e9ec8",
+    "src/crispasr_aligner.cpp": "81df390db9bf2cd033c04722fd0a940a9d459eb307c1e829221580d46f287a3e",
+    "src/crispasr_c_api.cpp": "186359ea4d75154951d6a0537526e9135268b72c7f136ab2020ae58857e42950",
+    "tests/test-align-characters.cpp": "b5a54f96698ab5023c0f9f68823d62e7244b6b9a31d9b9050a318154a37bbbe5",
+    "tools/ci-heavy/issue490_characters.py": "cea75bf6d062e1c325c4df13e2bdf21cb3ce2e840f5b707fb607c6d649afd45b",
+    "bindings/java/src/main/java/io/github/ggerganov/whispercpp/CrispasrSession.java": "68150442735208eebe18f38aa9e92aae760ef5115812ee0a8c8141292338cac5",
+    "examples/cli/crispasr_run.cpp": "e3e2473be28022641a417f94e17ff0eaa2ceeaaad00a7632da90750187b70fc6",
+    "tools/ci-heavy/Issue490Utf8.java": "9554a2b587121b0d41eccbaa366f21cce3d01d068feab41df532f3f724c9da36",
+    "tools/ci-heavy/issue490_jna_utf8.c": "b012772a2d7554c6a5bbb2511bcaf0e0425909a1979039013059f08180df0e2c"
+  },
+  "asan_ubsan": "41 assertions passed; no findings",
+  "dart": "Dart 3.13.5 format: all 9 lib/test files pass; static analysis: No issues found",
+  "java_compile": "Eclipse ECJ 3.40.0 on OpenJDK 21, Java 8 source/target: Session wrapper and Arabic acceptance driver compile",
+  "java_runtime": "exact UTF-8 word/character text and centisecond times with offset 325, host JNA encoding forced US-ASCII",
+  "integrated_base": "5c172455e3a0dc606fd36135bb9d08682c4b4523",
+  "rebase": "Only test target append conflict; both tokenizer and character targets retained. Core alignment implementation unchanged.",
+  "integrated_binding_checks": {
+    "base": "5c172455e3a0dc606fd36135bb9d08682c4b4523",
+    "dart_format": "Dart 3.13.5: 11 library/test files, 0 changes",
+    "java": "ECJ 3.40.0: Session and Arabic acceptance driver compile",
+    "csharp": "dotnet 8 Release build: 0 warnings, 0 errors",
+    "python": "binding and Arabic acceptance script parse",
+    "doc_anchors": "226 anchors in 80 files pass"
+  },
+  "java_encoding": {
+    "before": "US-ASCII host JNA default corrupts UTF-8 Arabic word/character text; saved guard exits 1",
+    "after": "JAVA_EXPLICIT_UTF8_PASS with US-ASCII JNA default; binding explicitly sets UTF-8",
+    "hosted_guard": "Run bidirectional guard before models/build; real Arabic Java acceptance keeps US-ASCII host default.",
+    "output_only_guard": "Earlier guard validated only returned text; it did not detect input corruption.",
+    "bidirectional_before": "Strict native UTF-8 input guard rejects old wrapper, exit 1, JAVA_UTF8_INPUT_REJECTED.",
+    "bidirectional_after": "Explicit input converter: JAVA_BIDIRECTIONAL_UTF8_PASS under US-ASCII, ISO-8859-1 and UTF-8, including Unicode model path, returned Arabic characters and centisecond offsets."
+  },
+  "hosted_first_attempt": {
+    "run_id": 37746296873,
+    "pr_head": "d57b0f7c7a219641cbdbcebca1108f7b1f8096b5",
+    "tested_merge": "360057f77c36c696ccd6504ccf37b3d56e125213",
+    "artifact_id": 11538695144,
+    "known_path_assertions": 41,
+    "existing_alignment_assertions": 91,
+    "cli_word_json_utf8": "valid",
+    "words": 15,
+    "characters": 85,
+    "failure": "strict UTF-8 diagnostic read; printf precision cuts an Arabic codepoint",
+    "fix": "reuse core_lid_probe::utf8_prefix; strict log decoding retained",
+    "local_guard": "saved hosted log fails UTF-8 decode; fixed preview from identical transcript passes"
+  },
+  "hosted_second_attempt": {
+    "run_id": 37751687697,
+    "tested_merge": "8cbdcf0eed901492ec75498126c92b363ab33141",
+    "artifact_id": 11540345635,
+    "passed": false,
+    "words": 15,
+    "characters": 85,
+    "independent_viterbi": "exact character text/start/end",
+    "cli_word_segment_json_equal": true,
+    "python_cabi_offset_seconds": 3.25,
+    "failure": "JNA 5.13 scalar String input uses global US-ASCII despite per-library UTF-8 option; Arabic transcript becomes question marks",
+    "java_character_comparison": "not reached"
+  },
+  "integrated_main": "608e6012202c0f5942ddef97eb5fae2353fc18af",
+  "hosted_third_attempt": {
+    "run_id": 37756933124,
+    "pr_head": "d9fcfcc9042c49afa61fc890edd559ead9ec62a6",
+    "tested_merge": "a9c1afead10f29fddc5fc0c82830e70156ca2c61",
+    "artifact_id": 11542736536,
+    "passed": true,
+    "receipt": {
+      "commit": "a9c1afead10f29fddc5fc0c82830e70156ca2c61",
+      "passed": true,
+      "scope": "#490: real Arabic Q4 CTC label spans through CLI, C ABI and Python.\n\nThis tests post-logit Viterbi/output behavior. It does not claim new model-stage\nparity or human-annotated phonetic boundary accuracy.\n",
+      "java_utf8_guard": "input/output UTF-8 and Unicode model path pass with US-ASCII, ISO-8859-1 and UTF-8 host defaults",
+      "audio_sha256": "9cf74b20120bc58d2474e875fcd55dcf2abda9bc8715d91fbdd6fbd90582e158",
+      "transcript": "تشكلت في المحيط الأطلسي اليوم عاشر عاصفة مُسماة لموسم الأعاصير الأطلسية العاصفة شبه الاستوائية جيري",
+      "model_sha256": "d1b186a975a1e3506ff61ca90c301caeadfc78c1f483f4b3cd2d899409ce1be7",
+      "dataset_revision": "70bb2e84b976b7e960aa89f1c648e09c59f894dd",
+      "dataset_row_id": 1993,
+      "recognized_text": "تشكلت في المحيت الأطلاس اليوم عيشر عوصفة مسميل لموسم العوصير الأطلصية الععصفة شبه لستوئيّ جيري",
+      "independent_viterbi": "exact character text/start/end",
+      "python_cabi_offset_seconds": 3.25,
+      "java_jna": "exact UTF-8 word/character text and centisecond times with offset 325, host JNA encoding forced US-ASCII",
+      "words": 15,
+      "characters": 85,
+      "cli_word_segment_json_equal": true,
+      "invalid_cabi_accessors": "passed"
+    }
+  },
+  "integration_after_acceptance": {
+    "main": "608e6012202c0f5942ddef97eb5fae2353fc18af",
+    "changed_paths": [
+      ".github/workflows/metal-cache-test.yml",
+      "PLAN.md",
+      "RELEASE_NOTES_v0.8.42.md",
+      "docs/issue-pr-triage-2026-10-07.json",
+      "docs/issue-pr-triage-2026-10-07.md",
+      "tests/CMakeLists.txt",
+      "tests/test-metal-pipeline-cache.mm"
+    ],
+    "runtime_delta": "none: only Metal test/workflow and maintainer documentation changed; final platform checks still pending"
+  }
+}

@@ -404,6 +404,14 @@ extern "C" {
     pub fn crispasr_align_result_word_text(r: *mut CrispasrAlignResult, i: c_int) -> *const c_char;
     pub fn crispasr_align_result_word_t0(r: *mut CrispasrAlignResult, i: c_int) -> i64;
     pub fn crispasr_align_result_word_t1(r: *mut CrispasrAlignResult, i: c_int) -> i64;
+    pub fn crispasr_align_result_n_characters(r: *mut CrispasrAlignResult, word: c_int) -> c_int;
+    pub fn crispasr_align_result_character_text(
+        r: *mut CrispasrAlignResult,
+        word: c_int,
+        i: c_int,
+    ) -> *const c_char;
+    pub fn crispasr_align_result_character_t0(r: *mut CrispasrAlignResult, word: c_int, i: c_int) -> i64;
+    pub fn crispasr_align_result_character_t1(r: *mut CrispasrAlignResult, word: c_int, i: c_int) -> i64;
     pub fn crispasr_align_result_free(r: *mut CrispasrAlignResult);
 
     /// Shared HF download + cache (0.4.8+). Writes the resolved path

@@ -8,6 +8,7 @@
 #include "crispasr_aligner.h"
 #include "align.h"
 #include "canary_ctc.h"
+#include "core/align_labels.h"
 #include "core/align_sentinel.h" // §W3 collapse detection
 #include "core/uroman.h"
 #include "gguf.h"
@@ -436,7 +437,11 @@ std::vector<CrispasrAlignedWord> align_wav2vec2_ctc(const std::string& model_pat
 
     const int V = (int)model->hparams.vocab_size;
     const int T = (int)(logits.size() / V);
-    auto aligned = ctc_forced_align(logits.data(), T, V, words, model->vocab, (int)model->hparams.pad_token_id,
+    const char* no_rom = std::getenv("CRISPASR_ALIGN_NO_ROMANIZE");
+    std::vector<std::string> labels;
+    for (const auto& word : words)
+        labels.push_back(core_align_labels::for_vocab(word, model->vocab, !(no_rom && no_rom[0] == '1')));
+    auto aligned = ctc_forced_align(logits.data(), T, V, labels, model->vocab, (int)model->hparams.pad_token_id,
                                     wav2vec2_frame_dur(*model));
     if (aligned.empty()) {
         fprintf(stderr, "crispasr[aligner-wav2vec2]: align_words failed\n");
@@ -449,6 +454,12 @@ std::vector<CrispasrAlignedWord> align_wav2vec2_ctc(const std::string& model_pat
         cw.text = w.word;
         cw.t0_cs = t_offset_cs + (int64_t)std::llround((double)w.t0 * 100.0);
         cw.t1_cs = t_offset_cs + (int64_t)std::llround((double)w.t1 * 100.0);
+        const size_t wi = out.size();
+        if (labels[wi] == words[wi]) {
+            for (const auto& ch : w.characters)
+                cw.characters.push_back({ch.character, t_offset_cs + (int64_t)std::llround((double)ch.t0 * 100.0),
+                                         t_offset_cs + (int64_t)std::llround((double)ch.t1 * 100.0)});
+        }
         out.push_back(std::move(cw));
     }
     return out;
@@ -666,6 +677,7 @@ static void align_sentinel_check(std::vector<CrispasrAlignedWord>& words, int n_
     for (size_t i = 0; i < words.size() && i < spread.size(); i++) {
         words[i].t0_cs = t_offset_cs + (int64_t)std::llround((double)spread[i].t0 * 100.0);
         words[i].t1_cs = t_offset_cs + (int64_t)std::llround((double)spread[i].t1 * 100.0);
+        words[i].characters.clear(); // redistributed word times are not measured CTC spans
     }
     fprintf(stderr, "crispasr[aligner]: redistributed %zu words across %.2fs\n", words.size(), (double)audio_sec);
 }
@@ -698,6 +710,8 @@ static std::vector<CrispasrAlignedWord> align_words_impl(const std::string& alig
                              path_contains_ci(aligner_model, "qwen3-fa") ||
                              path_contains_ci(aligner_model, "qwen3-forced");
 
+    const bool is_wav2vec2 = !is_qwen3_fa && is_wav2vec2_aligner_model(aligner_model, gguf_architecture(aligner_model));
+
     // #252: auto-romanize non-Latin reference text for CTC aligners with Latin
     // vocab. #419: romanization is an ALIGNMENT KEY, never a display
     // transform. It used to romanize the whole transcript and let the
@@ -717,7 +731,8 @@ static std::vector<CrispasrAlignedWord> align_words_impl(const std::string& alig
         // Qwen3-ForcedAligner is multilingual and its blueprint feeds the
         // original script. Romanizing Chinese here changed every prompt token
         // and was the primary #444 divergence.
-        if (!is_qwen3_fa && !(no_rom && no_rom[0] == '1') && core_uroman::needs_romanization(transcript)) {
+        if (!is_qwen3_fa && !is_wav2vec2 && !(no_rom && no_rom[0] == '1') &&
+            core_uroman::needs_romanization(transcript)) {
             for (auto& w : label_words) {
                 if (core_uroman::needs_romanization(w))
                     w = core_uroman::romanize(w);
@@ -754,9 +769,8 @@ static std::vector<CrispasrAlignedWord> align_words_impl(const std::string& alig
         return restore_text(align_qwen3_fa(aligner_model, label_words, samples, n_samples, t_offset_cs, n_threads));
     }
 
-    const std::string arch = gguf_architecture(aligner_model);
-    if (is_wav2vec2_aligner_model(aligner_model, arch)) {
-        return restore_text(align_wav2vec2_ctc(aligner_model, label_words, samples, n_samples, t_offset_cs, n_threads));
+    if (is_wav2vec2) {
+        return restore_text(align_wav2vec2_ctc(aligner_model, orig_words, samples, n_samples, t_offset_cs, n_threads));
     }
 
     // §176e: reuse cached canary-ctc context if same model path.

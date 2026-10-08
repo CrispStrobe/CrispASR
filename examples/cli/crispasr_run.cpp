@@ -7,6 +7,8 @@
 // The whisper code path in cli.cpp is left completely untouched so the
 // historical crispasr behaviour is bit-identical.
 
+#include "core/align_json.h"
+#include "core/lid_probe.h"
 #include "crispasr_backend.h"
 #include "crispasr_cache.h"
 #include "crispasr_gap_fill.h"
@@ -2954,8 +2956,9 @@ int crispasr_run_backend(const whisper_params& params_in) {
             fprintf(stderr, "crispasr[align-only]: aligner=%s\n", am.c_str());
             fprintf(stderr, "crispasr[align-only]: audio=%.2fs (%d samples @ 16kHz)\n",
                     (float)samples.size() / 16000.0f, (int)samples.size());
-            fprintf(stderr, "crispasr[align-only]: transcript='%.80s%s'\n", transcript.c_str(),
-                    transcript.size() > 80 ? "…" : "");
+            const std::string preview = core_lid_probe::utf8_prefix(transcript, 80);
+            fprintf(stderr, "crispasr[align-only]: transcript='%s%s'\n", preview.c_str(),
+                    transcript.size() > preview.size() ? "…" : "");
         }
 
         // Run alignment.
@@ -2990,13 +2993,8 @@ int crispasr_run_backend(const whisper_params& params_in) {
             return buf;
         };
         auto json_esc = [](const std::string& s) {
-            std::string esc;
-            for (char c : s) {
-                if (c == '"' || c == '\\')
-                    esc += '\\';
-                esc += c;
-            }
-            return esc;
+            const auto quoted = nlohmann::json(s).dump();
+            return quoted.substr(1, quoted.size() - 2);
         };
         std::string out;
         const std::string& fmt = params.align_format;
@@ -3010,18 +3008,13 @@ int crispasr_run_backend(const whisper_params& params_in) {
                              seg.t1_cs / 100.0);
                     out += "  {\"text\": \"" + json_esc(seg.text) + "\", " + num;
                     for (size_t w = seg.word_begin; w < seg.word_end; w++) {
-                        snprintf(num, sizeof(num), "\"start\": %.3f, \"end\": %.3f}", aligned[w].t0_cs / 100.0,
-                                 aligned[w].t1_cs / 100.0);
-                        out += std::string(w > seg.word_begin ? ", " : "") + "{\"word\": \"" +
-                               json_esc(aligned[w].text) + "\", " + num;
+                        out += std::string(w > seg.word_begin ? ", " : "") + core_align_json::word(aligned[w]).dump();
                     }
                     out += std::string("]}") + (i + 1 < segments.size() ? "," : "") + "\n";
                 }
             } else {
                 for (size_t i = 0; i < aligned.size(); i++) {
-                    snprintf(num, sizeof(num), "\"start\": %.3f, \"end\": %.3f}%s\n", aligned[i].t0_cs / 100.0,
-                             aligned[i].t1_cs / 100.0, i + 1 < aligned.size() ? "," : "");
-                    out += "  {\"word\": \"" + json_esc(aligned[i].text) + "\", " + num;
+                    out += "  " + core_align_json::word(aligned[i]).dump() + (i + 1 < aligned.size() ? "," : "") + "\n";
                 }
             }
             out += "]\n";
