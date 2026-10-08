@@ -33,6 +33,17 @@ stay on `/mnt/storage`; GH CPU and one-account Kaggle GPU protocol apply.
 Archive only code-audited completed PLAN claims; preserve remaining hardware
 retests and deferred #456. Check release asset publication separately.
 
+Mel salvage retains author commit `3dce5b586` plus opt-in gate/instrumentation
+`ead1f2b12`. Local same-binary bitwise checks pass all 144 combinations
+(OpenMP/no OpenMP; 63/64/65/300/1100/3000 frames; both filter layouts and
+float/double accumulation; 1/2/4 threads). Local four-thread projection gains
+are 1.4–1.7× at 300 frames and 2.1–3.5× at 3000, but 64-frame calls regress:
+keep default OFF and determine a measured minimum useful size. These are
+local component measurements, not end-to-end ASR performance claims.
+GH CPU [37852305513](https://github.com/CrispStrobe/CrispASR/actions/runs/37852305513)
+runs the component ABBA matrix plus pinned Qwen3 CLI/stage regression with
+BLAS disabled to exercise the changed path. Acceptance pending.
+
 Echo public Q4 preparation launched on GH CPU run
 [37851965549](https://github.com/CrispStrobe/CrispASR/actions/runs/37851965549),
 source `603047454` on `fix/echo-q4-public-transfer`. Experimental public prefix
