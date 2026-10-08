@@ -175,3 +175,13 @@ so those unrelated lines were left intact. Fresh x86 `37735853879`, ARM
 `37735856512`, native CI `37735908557`, lint `37735910817`, WASM `37735912990`,
 Go `37735851685` and Rust `37735851828` validate the latest branch. Replaced
 queued jobs were cancelled; #515 remains unmerged.
+
+## Hikari deep-lint completion follow-up — 2026-10-08
+
+[Deep lint 37729063238](https://github.com/CrispStrobe/CrispASR/actions/runs/37729063238)
+finished with `virtualCallInConstructor` in the Hikari realtime adapter. The
+probability initialization fix remains intact. Source `f55c7bc8c` replaces the
+constructor's virtual call with a private reset helper shared by `reset()`.
+Focused cppcheck 2.17.1 and C++17 syntax pass; full pinned cppcheck 2.7
+[37737578258](https://github.com/CrispStrobe/CrispASR/actions/runs/37737578258)
+is queued. No inference behavior or performance default changes.

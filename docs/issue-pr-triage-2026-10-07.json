@@ -1061,5 +1061,14 @@
     "status": "in_progress",
     "merged": false,
     "scope": "Matched CUDA 12.6.3 ON/OFF forced-MMQ CLI packages; compile/packaging/driverless startup only; reporter GTX1660 acceptance pending"
+  },
+  "hikari_constructor_followup": {
+    "failed_run": 37729063238,
+    "finding": "virtualCallInConstructor",
+    "fix_source": "f55c7bc8cbab6579f8eda0248c36ea3c42de8b75",
+    "focused_cppcheck": "pass; 2.17.1",
+    "cxx17_syntax": "pass",
+    "hosted_pinned_cppcheck_run": 37737578258,
+    "hosted_status": "queued"
   }
 }
