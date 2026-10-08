@@ -1307,12 +1307,14 @@
     "integration": "accepted f0a40990b ancestry retained, merged with main including Metal discovery repair; no accepted alignment/binding runtime delta"
   },
   "cold_storage_20261008": {
-    "bytes_moved": 1962991156,
-    "root_bytes": 1432700242,
-    "volume1_bytes": 530290914,
+    "bytes_moved": 2244872573,
+    "root_bytes": 1694382241,
+    "volume1_bytes": 550490332,
     "original_paths": "preserved as symlinks",
     "verification": "sha256 before atomic replacement; age >5h; no open file descriptors",
-    "receipts": "/mnt/storage/crispasr/storage-cleanup-20261008/"
+    "receipts": "/mnt/storage/crispasr/storage-cleanup-20261008/",
+    "additional_archives_bytes": 281881417,
+    "additional_receipt": "/mnt/storage/crispasr/storage-cleanup-20261008/moved-next.json"
   },
   "pr492_acceptance": {
     "source": "c50c50061",
@@ -1385,6 +1387,22 @@
       "run": 37775542252,
       "status": "queued",
       "scope": "same dequantized weights promoted to F32; independent official Python transformer; isolated pooling; not PR acceptance"
+    },
+    "selected_pool_oracle": {
+      "frames": [
+        0,
+        62,
+        125,
+        251
+      ],
+      "arms": [
+        "baseline-flash",
+        "candidate-eager"
+      ],
+      "max_relative_l2": 1.7494601817639193e-06,
+      "scope": "Independent NumPy F64 pool on actual native transformer inputs; four selected frames, not full encoder acceptance",
+      "conclusion": "Pooling matches the oracle at sampled frames including worst outlier; drift is present before pooling",
+      "proof": "/mnt/storage/crispasr/pr492-acceptance-20261008/proof/selected-pool-oracle.json"
     }
   },
   "metal_cache_compatibility": {

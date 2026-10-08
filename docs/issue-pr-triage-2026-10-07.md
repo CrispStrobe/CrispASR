@@ -500,3 +500,19 @@ Python transformer on identical conv2 input, plus isolated pooling and
 scale/time-order controls. It cannot recover original weight precision and
 is not original-checkpoint certification. No numerical gate was relaxed.
 PR #492 remains unmerged and excluded from the release draft.
+
+Storage follow-up: another 281,881,417 bytes of cold DEB/TAR proof/package
+archives moved to `/mnt/storage` (261,681,999 bytes from root; 20,199,418
+from volume1). All were unused for over five hours, had no open descriptor,
+and matched SHA-256 before atomic replacement with symlinks at the original
+paths. The receipt is `storage-cleanup-20261008/moved-next.json` under the
+CrispASR storage directory. Combined recovery is 2,244,872,573 bytes. No active
+executable/shared-library tree moved.
+
+A selected-frame independent NumPy F64 pooling oracle agrees with native
+pooling on frames 0/62/125/251 in both baseline-flash and candidate-eager:
+maximum relative L2 0.000175%. It reproduces the worst pooled frame's large
+between-arm drift from each arm's own transformer input. This places the
+observed difference before pooling; it does not certify the full transformer.
+The diagnostic's official source-class/CPU-adapter smoke also passes on a
+7-by-8 synthetic tensor. Full same-weight encoder validation remains queued.

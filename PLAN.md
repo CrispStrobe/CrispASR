@@ -103,7 +103,7 @@ full cppcheck 2.7 run `37763588589` remains in progress.
 Implementation and proof are archived in HISTORY and
 `docs/ctc-characters-2026-10-08.json`.
 
-Storage checkpoint: 1,962,991,156 bytes of cold archives/JARs moved to
+Storage checkpoint: 2,244,872,573 bytes of cold archives/JARs moved to
 `/mnt/storage/cold-files-20261008`, each checksum-verified before atomic
 replacement with a symlink at its original path. No active executables or
 shared-library trees moved. Receipts/scripts:
