@@ -10,7 +10,8 @@
 * **German Moonshine:** native and ONNX deployments, model detection and
   streaming/session support.
 * **Live translation:** Marian translation models and direction selection;
-  Hikari voice activity detection through the native session API.
+  Hikari simultaneous English ASR and speech translation to German, Japanese
+  and Russian.
 * **Native fixes:** Arabic word/character alignment, Qwen3 hotword prompt
   forwarding, MiMo device/verbosity settings, and MioTTS output/voice handling.
 * **Distribution:** ggml Metal fixes, synchronized bindings/capabilities and
