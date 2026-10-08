@@ -247,13 +247,24 @@ Windows/Vulkan, Intel Mac and newer NVIDIA hardware retests remain open.
 
 The latest broad nightly `37768023710` also exposes a Q4 data2vec JFK word
 insertion (zero-WER gate fails at 4.55%; F16 stage cosine 0.999141 passes).
-A matched release/current and precision-control diagnostic `37786726672` is
-queued. This failure remains a release gate; no fixture or tolerance changed.
+Matched-host diagnostic `37786726672` confirms old-release Q4 matched the
+native July target, while Q8/F16 on both versions insert the A. The existing
+SHA-verified independent Python reference also decodes A. Pending correction
+`c9dec41f2` checks zero-WER upstream parity with a hash-verified reference,
+vocabulary and sample guard, reporting the unchanged 4.55% human WER separately.
+Four provenance negative controls and 56 driver tests pass locally. Actual
+hosted regression `37791614453` is running. This corrects the test target;
+it does not change weights, decoder, reference activations or tolerances,
+or claim improved model accuracy.
 
 Q4 MiMo follow-up: selective same-weight F32 promotion failed all five profiles
 in hosted run `37785711004` (artifact `11555262443`). The smallest pooling
 A/B error among them was 1.3424% with output projections promoted; RVQ code
 agreement was 82.1558%, so this remains excluded from release acceptance.
-Actual CUDA tokenizer validation and the independent C ABI device/verbosity
-fix probe are pending. Full measurements are in
+Actual T4 CUDA tokenizer validation completed: continuous F32/isolated-pool
+diagnostic gates pass, but original Q4 pooling relative L2 is 8.83074% and RVQ
+agreement only 70.7880%. Even promoted F32 differs in 6/2,208 RVQ entries.
+PR #492 therefore remains excluded. The independent C ABI device/verbosity
+probe `37789763493` passes, including actual-library negative and restoration
+controls; broader CI/lint are pending before integration. Full measurements are in
 `docs/mimo-pr492-selective-promotion-2026-10-08.json`.

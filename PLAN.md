@@ -39,7 +39,8 @@ quantization-policy fix. Next inspect/decode the frozen independent Python
 CTC reference and compare the original Python checkpoint, keeping zero-WER
 gates unchanged. The frozen Python reference `ab4151f8…` also decodes the A, using the pinned
 upstream vocabulary at `32331f3123e703528918aa688a9a38232d58c872`.
-Claimed implementation: correct this entry's transcript target to the frozen
+Correction source `c9dec41f2`, branch `review/data2vec-reference-parity`,
+actual regression job `37791614453` running. Correct this entry's transcript target to the frozen
 independent Python decode, add a hash-verified CTC-reference provenance guard
 and negative controls, and retain/document 4.55% human WER explicitly. Keep
 zero-WER parity, stage thresholds, weights and decoder unchanged. Validate
@@ -49,7 +50,9 @@ actual CLI and stage diff through the hosted regression runner before landing.
 
 Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
 `review/mimo-cabi-device`, fix source `6c11d5a1f`, actual-library probe
-`37789763493` queued. Extract only the two validated device/verbosity
+`37789763493` PASS (four combinations, four restores, rejected negative
+control); Rust/Dart pass. Broader CI `37790010839` and lint `37790015470`
+are pending. Extract only the two validated device/verbosity
 forwarding assignments from the PR #492 review. These prevent a requested
 CPU session from silently choosing another backend and copying mmap weights.
 No attention/runtime-graph changes. Re-run an actual-main-library initializer
@@ -113,9 +116,16 @@ diagnostic, using the shared build harness and actual device weights/RVQ.
 It compares both attention paths against the official CPU Python encoder on
 the GPU's own conv2 input. No CANN, full-ASR, speed or Pascal MMQ claim;
 CPU diagnostics remain on GH Actions per `../kaggle_usage.md`.
-CUDA kernel v1 is running at immutable diagnostic source `d6b29207b`;
-kernel packaging source is `cbc3a79c0`. Save terminal logs before any revision.
-Next: compare actual CUDA numerical results with the completed CPU study.
+CUDA v1 completed on Tesla T4/sm_75 at immutable source `d6b29207b`;
+terminal logs and 72 proof files are archived. Continuous F32/isolated-pool
+diagnostic gates pass, but Q4 pooling A/B relative L2 is 8.83074% and RVQ
+agreement only 70.7880%. Promoted F32 still differs in 6/2,208 RVQ entries,
+all at frame 263; pairwise F64 distances support each arm's differing choice
+on its own residual. Diagnostic success is not full/exact-code acceptance.
+Full proof: `docs/mimo-pr492-cuda-tokenizer-2026-10-08.json`.
+Next: original-file CPU BLAS experiment `37792853553` at `2a4eda81d`.
+The first attempt `37790733015` failed before numerics on a CPU-only thread
+setter applied to BLAS; the harness now uses BLAS's registry function.
 No weight precision is recovered by promotion; this is a diagnostic,
 not original-checkpoint or PR acceptance. The acceptance harness now saves all
 completed comparisons before failing and lets both quantizations finish.
