@@ -20,6 +20,10 @@ BUILD = Path(os.environ['VOX_PROFILE_BUILD'])
 MODEL_PIN = '25b5cf03fdbf20011dad9a77def6112023cc0fe3'
 TEXTS = {'short':'Hello, this is a short test sentence.',
          'long':'The sun is shining today. Hello, this is a short test sentence.'}
+PERF_ONLY = '--perf-only' in sys.argv
+if PERF_ONLY:
+    os.environ['GGML_VK_PERF_LOGGER'] = '1'
+    TEXTS = {'short': TEXTS['short']}
 os.environ.update(CRISPASR_VOXCPM2_BENCH='1',CRISPASR_VOXCPM2_INFERENCE_STEPS='10')
 sys.path.insert(0,str(ROOT/'python'))
 from crispasr import Session
@@ -63,7 +67,7 @@ for cohort,name in [('q8','voxcpm2-q8_0.gguf'),('mixed','voxcpm2-q8_0-locdit-f16
     with open_session(model,'voxcpm2','vulkan') as session:
         session.set_tts_steps(10)
         assert session._lib.crispasr_session_set_tts_steps(session._handle,10) == 0
-        for rep in range(8):
+        for rep in range(1 if PERF_ONLY else 8):
             for key,text in TEXTS.items():
                 session.set_tts_seed(2)
                 assert session._lib.crispasr_session_set_tts_seed(session._handle,2) == 0
@@ -84,6 +88,10 @@ for cohort,name in [('q8','voxcpm2-q8_0.gguf'),('mixed','voxcpm2-q8_0-locdit-f16
                     waveforms.setdefault(cohort,{})[key] = pcm
                     np.save(OUT/(cohort+'-'+key+'.npy'),pcm)
                 save()
+if PERF_ONLY:
+    receipt['performance_only'] = True
+    save()
+    raise SystemExit(0)
 # Release all TTS state before opening actual CUDA ASR. This checks GPU-generated
 # speech without spending a Kaggle session on CPU-only acceptance.
 asr = hf_hub_download('cstr/nemotron-3.5-asr-streaming-GGUF','nemotron-3.5-asr-streaming-0.6b-q4_k.gguf',
