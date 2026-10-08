@@ -21,6 +21,9 @@ struct mimo_asr_context_params {
     int verbosity; // 0=silent, 1=normal, 2=verbose
     bool use_gpu;
     float temperature; // 0 = greedy
+    // false = eager attention (mul_mat QK^T + soft_max + mul_mat V) instead
+    // of ggml_flash_attn_ext. The CLI -nfa flag selects this path.
+    bool flash_attn;
 };
 
 struct mimo_asr_context_params mimo_asr_context_default_params(void);

@@ -21,6 +21,7 @@ TEST_CASE("mimo_asr_params: decode knobs match the shipped defaults", "[unit][mi
 
     REQUIRE(p.temperature == Catch::Approx(0.0f)); // greedy
     REQUIRE(p.use_gpu == true);
+    REQUIRE(p.flash_attn == true);
 }
 
 TEST_CASE("mimo_asr_init_from_file: null path returns nullptr", "[unit][mimo_asr]") {

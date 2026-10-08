@@ -384,6 +384,7 @@ extern "C" struct mimo_tokenizer_context_params mimo_tokenizer_context_default_p
     p.n_threads = 4;
     p.verbosity = 1;
     p.use_gpu = true;
+    p.flash_attn = true;
     return p;
 }
 
@@ -442,16 +443,16 @@ extern "C" struct mimo_tokenizer_context* mimo_tokenizer_init_from_file(const ch
     ggml_backend_t weights_be = ctx->backend;
     if (const char* e = std::getenv("CRISPASR_MIMO_TOK_CPU"); e && *e && *e != '0')
         weights_be = ctx->backend_cpu;
-#if defined(GGML_USE_CUDA)
     // ggml_backend_is_cuda() is a CUDA-MODULE symbol: linking it into
     // libcrispasr.so fails with "undefined reference" in the release CUDA
     // build. Test the backend NAME instead, which is core ggml and is what
     // granite_speech, dots_tts and omnivoice already do. ROCm is included
-    // for the same reason granite_speech includes it.
+    // for the same reason granite_speech includes it. CANN joins the same
+    // runtime-name check so its RVQ stages can run on-device too.
     const char* be_name = ctx->backend ? ggml_backend_name(ctx->backend) : nullptr;
     ctx->cuda_rvq_available =
-        weights_be == ctx->backend && be_name && (std::strstr(be_name, "CUDA") || std::strstr(be_name, "ROCm"));
-#endif
+        weights_be == ctx->backend && be_name &&
+        (std::strstr(be_name, "CUDA") || std::strstr(be_name, "ROCm") || std::strstr(be_name, "CANN"));
     core_gguf::WeightLoad wl;
     if (!core_gguf::load_weights(path_model, weights_be, "mimo_tokenizer", wl)) {
         delete ctx;
@@ -669,6 +670,7 @@ static ggml_cgraph* mimo_tok_build_encoder_graph(mimo_tokenizer_context* ctx, in
         ap.attn_scale = attn_scale;
         ap.n_ctx_orig = 0; // unused with no scaling
         ap.rope_theta = hp.rope_theta;
+        ap.eager_f32_attn = !ctx->params.flash_attn;
         ggml_tensor* attn = core_attn::encoder_self_attn(ctx0, x, L.q_w, L.q_b, L.k_w, /*k_b*/ nullptr, L.v_w, L.v_b,
                                                          L.o_w, L.o_b, positions, /*mask*/ nullptr, ap);
         cur = ggml_add(ctx0, residual, attn);

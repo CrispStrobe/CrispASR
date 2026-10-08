@@ -86,6 +86,7 @@ public:
         cp.verbosity = params.no_prints ? 0 : 1;
         cp.use_gpu = crispasr_backend_should_use_gpu(params);
         cp.temperature = params.temperature;
+        cp.flash_attn = params.flash_attn;
 
         ctx_ = mimo_asr_init_from_file(params.model.c_str(), cp);
         if (!ctx_) {
