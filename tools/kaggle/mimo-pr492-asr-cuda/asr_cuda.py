@@ -12,10 +12,10 @@ from pathlib import Path
 import subprocess
 import sys
 
-SCRIPT_VERSION = 'mimo-pr492-asr-cuda-v2'
-SOURCE = 'fee98afbc80296e4bb7b63ccf6b8d8952d5433f2'
+SCRIPT_VERSION = 'mimo-pr492-asr-cuda-v3'
+SOURCE = '6b90353678f525e634c1a359355ae15c2c815ace'
 GGML = 'c36dab89b662838f0f5d4826c399198c0b90bbfc'
-CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'mimo-pr492/sm75-attention-f32-v1.tar', 'revision': 'f84b003cee87d2d5b0801b34831d7f89832883b3', 'sha256': 'ee362852ccc3f23d2bbe2f15eabdb01f72e91d9a5f7c14f98c13f77a09da9652', 'bytes': 51752960, 'source': '534a929f75e61febf4143a96fdaa88dbdb811528'}
+CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'mimo-pr492/sm75-full-asr-v2.tar', 'revision': '2d1f1ff707b75c962f369da2e3730296dee4e61e', 'sha256': 'a3184b5c746ac7d5a3f5b4bebda9339b63c10ee5454a8d59ae63d6188b75c233', 'bytes': 76267520, 'source': 'fee98afbc80296e4bb7b63ccf6b8d8952d5433f2'}
 WORK = Path('/kaggle/working')
 SCRATCH = Path('/kaggle/temp/mimo-pr492-asr')
 REPO = SCRATCH / 'CrispASR'
@@ -26,7 +26,7 @@ def main():
     SCRATCH.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
     os.environ.update(PYTHONUNBUFFERED='1', TMPDIR=str(SCRATCH),
-                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='mimo-pr492-asr-cuda-v2')
+                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='mimo-pr492-asr-cuda-v3')
     devices = subprocess.check_output(['nvidia-smi', '--query-gpu=name,compute_cap,memory.total',
                                        '--format=csv'], text=True)
     print(SCRIPT_VERSION, devices, flush=True)
