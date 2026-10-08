@@ -51,3 +51,10 @@ to the LM; both runs use the shipped Q4_K tokenizer. Run on Linux x86 with
 `-f pip="numpy gguf huggingface_hub soundfile"`. CPU results do not establish
 CANN/CUDA correctness or speed. See `docs/mimo-pr492-acceptance-2026-10-08.json`
 for reference provenance and the initial local mel result.
+
+`pr492_cabi_params.py` checks the actual MiMo session C ABI using an initializer
+interposition hook, without weights or GPU execution. Eight combinations cover
+CPU/GPU preference, verbosity and flash attention, followed by default-restoration
+checks after failed opens. An incremental rebuild with the device/verbosity
+assignments removed must fail, then restoring the source must pass. Run on Linux
+x86 with no extra pip packages; this validates parameter forwarding only.

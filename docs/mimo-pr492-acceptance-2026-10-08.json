@@ -4,7 +4,7 @@
   "contributor_source": "ac07cf0be3b528cdb035735738098e30f7468a41",
   "base": "7afaf2e8559efdb0f16bae8a6bc95e145e9a18d9",
   "ggml": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
-  "hosted": "not dispatched yet",
+  "hosted": "Original numerical source fae7e2241: Q4 37754319857 running; F16 37754323202 pending. Keep these pins distinct from the C-ABI follow-up.",
   "local_mel": {
     "cases": 16,
     "frames": [
@@ -43,5 +43,12 @@
     "quantization": "Q4_K and F16 LM separate jobs; both use the pinned shipped Q4_K tokenizer",
     "hardware": "CPU only; CANN/CUDA correctness and speed are separate gates"
   },
-  "cold_proof": "/mnt/storage/crispasr/pr492-acceptance-20261008/proof"
+  "cold_proof": "/mnt/storage/crispasr/pr492-acceptance-20261008/proof",
+  "cabi_followup": {
+    "problem": "MiMo session omitted use_gpu and verbosity open overrides; GPU-less inference cannot expose the missing device flag",
+    "fix": "forward g_open_use_gpu_tls and g_open_verbosity_tls alongside flash attention",
+    "local": "probe compiles; Python guard parses; no full-library result yet",
+    "hosted": "pending dispatch of pr492_cabi_params.py",
+    "scope": "actual-library parameter forwarding and failed-open TLS restoration; no model/GPU inference claim"
+  }
 }
