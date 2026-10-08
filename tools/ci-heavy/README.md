@@ -88,3 +88,13 @@ and compares elapsed stage times with CPU-only controls using the same binary
 and thread count. The patch, build configuration and timings are retained;
 source is restored in `finally`. No production default or model is changed.
 Run with `-f pip="numpy gguf huggingface_hub soundfile torch transformers==4.57.6"`.
+
+`pr492_tokenizer_cuda_precision.py` is a diagnostic-only original-Q4 CUDA
+experiment used by the MiMo Kaggle kernel. Before compilation its
+`patch_cuda(repo, out)` records an environment-gated ggml dispatch patch.
+It forces actual quantized matmuls through F32 cuBLAS, traces the calls,
+compares normal dispatch in the same binary/GPU/file, and retains the official
+same-weight encoder and unchanged continuous/exact-RVQ gates. Short-input
+controls exercise two additional shapes. A continuous pass with unequal RVQ
+codes exits unsuccessfully after saving all evidence; it is not PR acceptance.
+No production dispatch or model changes are made.
