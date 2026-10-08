@@ -42,7 +42,9 @@ def patch_cuda(repo, out, encoder_only=False):
 '''
     if encoder_only:
         after = after.replace('&& ggml_is_quantized(src0->type))',
-                              '&& ggml_is_quantized(src0->type) && strncmp(src0->name, "encoder.", 8) == 0)')
+                              '&& ggml_is_quantized(src0->type) && '
+                              '(strncmp(src0->name, "encoder.", 8) == 0 || '
+                              'strncmp(src0->name, "enc.blk.", 8) == 0))')
     assert original.count(before) == 1
     source.write_text(original.replace(before, after))
     out = Path(out)

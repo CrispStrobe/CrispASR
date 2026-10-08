@@ -9,6 +9,7 @@ or recovered original-checkpoint precision is implied by this study.
 """
 import argparse
 import ctypes as C
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -18,14 +19,21 @@ import sys
 import time
 
 import numpy as np
+import gguf
 import soundfile as sf
 from huggingface_hub import hf_hub_download
 
-from pr492_acceptance import ROOT, PINS, digest
+from pr492_acceptance import ROOT, PINS, TOK_STAGES, digest, metrics
 
 MODES = {'default': (False, True), 'precise': (True, True), 'eager': (True, False)}
 CUBLAS = 'CRISPASR_DIAG_CUDA_Q4_CUBLAS'
 TILE = 'CRISPASR_DIAG_MIMO_TILE_F32'
+CODEC_PREFIXES = ('encoder.', 'enc.blk.')
+# Independent official encoder + unmodified official quantizer, GH 37821379986,
+# upstream 691ce54144a6844cc641fd96046a6ba20776c8b0, original pinned Q4 codec.
+# Hash all 276x8 code IDs in frame-major little-endian I32 order; no tolerance.
+OFFICIAL_CODES = '65da2d8bbf0338e80d3322ad88325f71c66db069767a97add8095aa891a7867b'
+JFK_PCM = '0c03e80f9c348c2319823d6505d6d875a61b90fc7c817a1cc762b64981842142'
 
 
 def write(path, value):
@@ -164,8 +172,61 @@ def check_dispatch(logs, mode):
     tiles = [line for line in text.splitlines() if 'MIMO_DIAG_TILE_F32' in line]
     assert bool(traces) == (mode != 'default'), (mode, 'cuBLAS trace')
     assert bool(tiles) == (mode == 'precise'), (mode, 'TILE trace')
-    assert all(' weight=encoder.' in line for line in traces), 'LM arithmetic override detected'
+    assert all(re.search(r' weight=(encoder\.|enc\.blk\.)', line) for line in traces), 'LM arithmetic override detected'
     return dict(cublas=traces, tile=tiles)
+
+
+def weight_inventory(path, codec):
+    reader = gguf.GGUFReader(str(path))
+    quantized = [t.name for t in reader.tensors if gguf.GGML_QUANT_SIZES[t.tensor_type][0] > 1]
+    assert quantized, 'Missing actual quantized matrices'
+    selected = [n for n in quantized if n.startswith(CODEC_PREFIXES)]
+    assert (len(selected) == len(quantized)) if codec else not selected, (codec, selected)
+    return dict(quantized=quantized, selected=selected)
+
+
+def tokenizer_gate(build, codec, audio, out):
+    """Recheck actual scoped dispatch and exact official codes in THIS full binary."""
+    pcm, sr = sf.read(audio / 'en.wav', dtype='float32')
+    assert sr == 16000 and hashlib.sha256(pcm.astype('<f4').tobytes()).hexdigest() == JFK_PCM
+    library = next(build.rglob('libcrispasr.so')).resolve(strict=True)
+    result = dict(official_codes_sha256=OFFICIAL_CODES, pcm_sha256=JFK_PCM, arms={}, passed=False)
+    os.environ.update(CUDA_VISIBLE_DEVICES='0', NV_TF32_OVERRIDE='0', MIMO_TOKENIZER_DIAG_GPU='1')
+    os.environ.pop('CRISPASR_MIMO_TOK_CPU', None)
+    os.environ.pop('CRISPASR_MIMO_FORCE_CPU', None)
+    os.environ.pop('CRISPASR_CORE_ATTN_EAGER_F32', None)
+    for flash in [1, 0]:
+        mode = 'precise' if flash else 'eager'
+        directory = out / ('tokenizer-' + mode)
+        os.environ[CUBLAS] = '1'
+        if flash:
+            os.environ[TILE] = '1'
+        else:
+            os.environ.pop(TILE, None)
+        logfile = out / ('tokenizer-' + mode + '.log')
+        memory = launch([sys.executable, ROOT / 'tools/ci-heavy/pr492_tokenizer_diagnose.py',
+                         '--native', library, codec, audio / 'en.wav', directory, flash], logfile)
+        log = logfile.read_text()
+        assert 'mimo_tokenizer: RVQ backend=CUDA' in log
+        traces = [line for line in log.splitlines() if 'MIMO_DIAG_CUDA_CUBLAS_F32' in line]
+        assert traces and all(re.search(r' weight=(encoder\.|enc\.blk\.)', line) for line in traces)
+        assert ('MIMO_DIAG_TILE_F32' in log) == bool(flash)
+        codes = np.load(directory / 'tok_codes.npy')
+        assert codes.size == 2208 and np.array_equal(codes, codes.astype(np.int32))
+        sha = hashlib.sha256(codes.astype('<i4').tobytes()).hexdigest()
+        assert sha == OFFICIAL_CODES, 'Full-library tokenizer disagrees with official encoder/RVQ'
+        result['arms'][mode] = dict(codes_sha256=sha, exact_codes=2208, memory=memory, dispatch=traces)
+    for name in [CUBLAS, TILE]:
+        os.environ.pop(name, None)
+    result['attention_ab'] = {}
+    for stage in TOK_STAGES[:-1]:
+        a, b = [np.load(out / ('tokenizer-' + mode) / (stage + '.npy')) for mode in ['precise', 'eager']]
+        m = metrics(a, b)
+        assert m['cosine'] >= .9999 and m['relative_l2'] <= .005, stage
+        result['attention_ab'][stage] = m
+    result['passed'] = True
+    write(out / 'full-library-tokenizer.json', result)
+    return result
 
 
 def main():
@@ -192,6 +253,12 @@ def main():
                    speech_passed=False, profile_passed=False, full_pr_acceptance=False,
                    acceptance={}, profile={})
     save = lambda: write(out / 'asr-cuda.json', receipt)
+    save()
+    # Positive/negative controls use actual GGUF names, including enc.blk.*;
+    # production codec stem/norm names alone do not select quantized matrices.
+    receipt['weight_scope'] = {key: weight_inventory(path, key == 'codec') for key, path in models.items()}
+    save()
+    receipt['tokenizer_gate'] = tokenizer_gate(build, models['codec'], audio, out)
     save()
     command = [sys.executable, Path(__file__).resolve(), '--worker', build, None,
                models['q4_k'], models['codec'], audio]
