@@ -33,6 +33,14 @@ stay on `/mnt/storage`; GH CPU and one-account Kaggle GPU protocol apply.
 Archive only code-audited completed PLAN claims; preserve remaining hardware
 retests and deferred #456. Check release asset publication separately.
 
+Echo public Q4 preparation launched on GH CPU run
+[37851965549](https://github.com/CrispStrobe/CrispASR/actions/runs/37851965549),
+source `603047454` on `fix/echo-q4-public-transfer`. Experimental public prefix
+`cstr/index-echo-9b-GGUF/experiments/q4-guards-20261008/`; remote immutable
+size/SHA verification and revision-bearing manifests precede local deletion.
+Write preflight, four quantizations/uploads and runtime acceptance are pending.
+Do not launch GPU or change shipped registry pins from preparation alone.
+
 ## VALIDATED 2026-10-08 — MiMo full CUDA speech acceptance and precision profile
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, branch
