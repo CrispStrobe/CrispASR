@@ -113,6 +113,15 @@ refreshed actual-Kaggle CUDA+Vulkan cache `c32253915bbef81d0d8a9aea39a1fbd43b4cb
 It must replay v2 PCM at both rates as a negative control, pass
 native-48 kHz session and actual CLI default speech roundtrips, then collect
 separate per-op timings. Do not accept v2 timings as usable speech performance.
+v3 ERROR: historical v2 PCM at 24 kHz is intelligible but repeats "sent" three
+times; at 48 kHz it remains garbage. Strict historical exactness aborted before
+current-output ASR probes; no accepted speech speed or complete repair claim.
+All terminal files archived and public proof/cache pinned in
+`docs/voxcpm2-vulkan-v3-failure-2026-10-08.json`. v3 CLI used CUDA0, whereas
+session generation used Vulkan. Worker `8fb4d1b0b` now records all six current
+roundtrips before asserting the unchanged exact gates and explicitly selects
+CLI Vulkan. v4 will reuse the refreshed actual Kaggle cache; no numeric change.
+Do not lower speech acceptance thresholds to hide repetition.
 
 OmniVoice #518 implementation `a1ae00dff` is pushed on
 `fix/omnivoice-postprocess-518`. Independent pinned upstream functions pass
@@ -141,8 +150,8 @@ reference stage gates unchanged. Hosted four-thread projection gains at 64
 frames are 3.30–3.58× (total component 1.59–1.73×), contrasting with the local
 short-call regression. Keep explicit opt-in and T>=64 guard; no default flip
 or end-to-end speed claim. All terminal files archived; public proof pinned
-in `docs/mel-projection-2026-10-08.json`. Isolate author-credited integration
-for native CI before merge.
+in `docs/mel-projection-2026-10-08.json`. Isolated author-credited draft [PR #520](https://github.com/CrispStrobe/CrispASR/pull/520)
+is pushed at `ae486c9a8`; native CI pending before merge.
 
 Echo public Q4 preparation launched on GH CPU run
 [37851965549](https://github.com/CrispStrobe/CrispASR/actions/runs/37851965549),
