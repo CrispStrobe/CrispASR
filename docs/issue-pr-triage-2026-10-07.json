@@ -1,6 +1,6 @@
 {
   "source_commit": "33aa375be434edaa5f12fad81e6b86272faf23fc",
-  "scope": "Issue/PR triage and narrow source fixes; hosted speech and fresh WASM acceptance pending",
+  "scope": "Integrated narrow source fixes; native/regression/WASM acceptance passed; Orukeet speech rerun queued after adding required licence acceptance",
   "filename_routing": {
     "passed": true,
     "scope": "Actual factory translation unit; filename routing only; existing ggml linked for metadata fallback, no model inference",
@@ -357,102 +357,144 @@
   ],
   "hosted_runs": [
     {
-      "conclusion": "",
       "databaseId": 37704039045,
       "headSha": "061460b575268f55c5c0389e5b787590b327cc17",
       "name": "Lint",
-      "status": "queued"
+      "status": "completed",
+      "conclusion": "success"
     },
     {
-      "conclusion": "",
       "databaseId": 37704036313,
       "headSha": "061460b575268f55c5c0389e5b787590b327cc17",
       "name": "CI",
-      "status": "queued"
+      "status": "completed",
+      "conclusion": "success"
     },
     {
-      "conclusion": "",
       "databaseId": 37703919707,
       "headSha": "061460b575268f55c5c0389e5b787590b327cc17",
       "name": "Secret scan",
-      "status": "queued"
+      "status": "completed",
+      "conclusion": "success"
     },
     {
-      "conclusion": "",
       "databaseId": 37703785629,
       "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
       "name": "Build WASM",
-      "status": "queued"
+      "status": "completed",
+      "conclusion": "success"
     },
     {
-      "conclusion": "cancelled",
       "databaseId": 37703783152,
       "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
       "name": "CI",
-      "status": "completed"
+      "status": "completed",
+      "conclusion": "cancelled"
     },
     {
-      "conclusion": "",
       "databaseId": 37703781173,
       "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
       "name": "Piper Windows Live",
-      "status": "queued"
+      "status": "completed",
+      "conclusion": "success"
     },
     {
-      "conclusion": "",
       "databaseId": 37703781082,
       "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
       "name": "Bindings Tests (Rust)",
-      "status": "queued"
+      "status": "completed",
+      "conclusion": "success"
     },
     {
-      "conclusion": "",
       "databaseId": 37703780788,
       "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
       "name": "Heavy CPU job",
-      "status": "queued"
+      "status": "completed",
+      "conclusion": "failure"
     },
     {
-      "conclusion": "",
       "databaseId": 37703781041,
       "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
       "name": "Win CUDA13 Verify",
-      "status": "queued"
+      "status": "completed",
+      "conclusion": "success"
     },
     {
-      "conclusion": "",
       "databaseId": 37703781047,
       "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
       "name": "Linux ISA Fallback Verify",
-      "status": "queued"
+      "status": "completed",
+      "conclusion": "success"
     },
     {
-      "conclusion": "",
       "databaseId": 37703780980,
       "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
       "name": "Live Translate Windows",
-      "status": "queued"
+      "status": "completed",
+      "conclusion": "success"
     },
     {
-      "conclusion": "",
       "databaseId": 37703781001,
       "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
       "name": "Secret scan",
-      "status": "queued"
+      "status": "completed",
+      "conclusion": "success"
     },
     {
-      "conclusion": "",
       "databaseId": 37703780982,
       "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
       "name": "Bindings Tests (Go)",
-      "status": "queued"
+      "status": "completed",
+      "conclusion": "success"
     },
     {
-      "conclusion": "",
       "databaseId": 37703781060,
       "headSha": "5bf3e80ddca43e01dfb9d47dde0723779a4d72c7",
       "name": "Bindings Tests (Dart)",
-      "status": "in_progress"
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "databaseId": 37704656972,
+      "headSha": "d754aa10a141ec742ff1d764c11f63845b82864b",
+      "name": "CI",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "databaseId": 37704657102,
+      "headSha": "d754aa10a141ec742ff1d764c11f63845b82864b",
+      "name": "Regression (nightly)",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "databaseId": 37704656959,
+      "headSha": "d754aa10a141ec742ff1d764c11f63845b82864b",
+      "name": "Lint",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "databaseId": 37704657094,
+      "headSha": "d754aa10a141ec742ff1d764c11f63845b82864b",
+      "name": "Build WASM",
+      "status": "completed",
+      "conclusion": "success"
+    },
+    {
+      "databaseId": 37704657127,
+      "headSha": "d754aa10a141ec742ff1d764c11f63845b82864b",
+      "name": "Lint Deep",
+      "status": "completed",
+      "conclusion": "failure"
+    },
+    {
+      "databaseId": 37728843835,
+      "headSha": "4b45fec39ff603ad68bad0435c733e41695bfe10",
+      "name": "Heavy CPU job",
+      "status": "queued",
+      "conclusion": ""
     }
   ],
   "artifacts": [
@@ -682,5 +724,48 @@
       "bytes": 6267
     }
   ],
-  "cold_root": "/mnt/storage/crispasr/triage-20261007"
+  "cold_root": "/mnt/storage/crispasr/triage-20261007",
+  "followup_commit": "4b45fec39ff603ad68bad0435c733e41695bfe10",
+  "license_notice_probe": [
+    {
+      "model": "orukeet",
+      "cached": false,
+      "passed": true,
+      "stderr": "crispasr: model 'orukeet' not found locally.\n  Available for download: orukeet-q4_k.gguf (~402 MB)\n  License: CC-BY-SA-4.0 (see https://huggingface.co/oruk/orukeet)\n  Refusing: pass --accept-license cc-by-sa-4.0 (or set CRISPASR_ACCEPT_LICENSE).\n"
+    },
+    {
+      "model": "orukeet",
+      "cached": true,
+      "passed": true,
+      "stderr": "crispasr: note: orukeet-q4_k.gguf is licensed CC-BY-SA-4.0 (see https://huggingface.co/oruk/orukeet) \u2014 review and comply with the upstream terms.\n"
+    },
+    {
+      "model": "voxtral-tts",
+      "cached": false,
+      "passed": true,
+      "stderr": "crispasr: model 'voxtral-tts' not found locally.\n  Available for download: voxtral-4b-tts-q4_k.gguf (~2.5 GB)\n  LICENSE: CC-BY-NC-4.0 \u2014 NON-COMMERCIAL use only (base model mistralai/Voxtral-4B-TTS-2603; see https://huggingface.co/mistralai/Voxtral-4B-TTS-2603) \u2014 NON-COMMERCIAL USE ONLY. Do not use for commercial purposes.\n  Refusing: pass --accept-license cc-by-nc-4.0 (or set CRISPASR_ACCEPT_LICENSE).\n"
+    },
+    {
+      "model": "voxtral-tts",
+      "cached": true,
+      "passed": true,
+      "stderr": "crispasr: WARNING: voxtral-4b-tts-q4_k.gguf is licensed CC-BY-NC-4.0 \u2014 NON-COMMERCIAL use only (base model mistralai/Voxtral-4B-TTS-2603; see https://huggingface.co/mistralai/Voxtral-4B-TTS-2603) \u2014 NON-COMMERCIAL USE ONLY.\n  By loading this model you confirm you will not use it for commercial purposes.\n"
+    }
+  ],
+  "b390_followup": {
+    "source": "https://github.com/CrispStrobe/CrispASR/issues/461#issuecomment-6051358760",
+    "commit": "d754aa10a141ec742ff1d764c11f63845b82864b",
+    "steps": 8,
+    "seed": 2,
+    "total_ms": 3096.5,
+    "audio_s": 3.04,
+    "rtf": 1.0185855263157895,
+    "tslm_prefill_ms": 90.7,
+    "vae_init_ms": 313.35,
+    "vae_compute_ms": 197.53,
+    "vae_total_ms": 554.33,
+    "cfm_ms_per_step": 99.5,
+    "quality": "Reporter hears poorer audio at eight steps than ten; ten stays default",
+    "scope": "Reporter measurements; not a controlled same-session A/B"
+  }
 }

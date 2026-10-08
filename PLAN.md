@@ -11,35 +11,30 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
-## CLAIMED 2026-10-08 — hosted triage follow-up
+## OPEN 2026-10-08 — Orukeet speech acceptance rerun and deep lint
 
 Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`.
-Native CI 37704656972, regression 37704657102 and WASM 37704657094
-passed on `d754aa10a`. Lint Deep 37704657127 found an uninitialized Hikari
-token probability. Orukeet heavy acceptance 37703780788 reached the correct
-Parakeet runtime but stopped at the existing CC-BY-SA acceptance gate; its
-command omitted `--accept-license cc-by-sa-4.0`. Fix the token value and
-misleading noncommercial CLI notice, supply explicit acceptance in the test,
-and rerun hosted speech acceptance. No model or licence policy change.
+Integrated #496/#514 source and APT setup pass native CI `37704656972`,
+regression `37704657102`, lint `37704656959` and five WASM builds
+`37704657094` on `d754aa10a`; Node emits three note-binding assertions.
+Lint Deep `37704657127` found an uninitialized Hikari token probability:
+fixed in `4b45fec39` with the established unavailable-confidence value 1.0.
+Focused cppcheck with Hikari enabled passes; full hosted deep lint must rerun.
 
-## OPEN 2026-10-07 — triage fixes: hosted acceptance queued
+Orukeet heavy `37703780788` built and passed 5,988 registry assertions,
+then refused the missing CC-BY-SA acceptance. Revised heavy `37728843835`
+at `4b45fec39ff603ad68bad0435c733e41695bfe10` is queued, now with explicit
+acceptance plus a refusal/no-download control. Also fixed misleading CLI
+noncommercial notices without changing licence policy: actual CC-BY-SA and
+CC-BY-NC cached/uncached resolver checks pass 4/4. #491 stays open until
+speech/download/cache/anonymous C ABI acceptance passes. Exact scope and
+results: [triage report](docs/issue-pr-triage-2026-10-07.md) and its receipt.
+Cold proof: `/mnt/storage/crispasr/triage-20261007/`.
 
-Integrated source: Orukeet short-name routing (#491), author-preserving PR #496
-WASM note bindings and PR #514 Hikari benchmark, plus bounded official-mirror
-APT setup for CI/regression. See [triage and acceptance scope](docs/issue-pr-triage-2026-10-07.md)
-and its receipt. Offline: actual C++ routing 14/14 (old source fails six),
-Hikari fault injection 8/8, apt helper argument/mirror/failure checks pass.
-Fresh native/lint/WASM and Orukeet download/cache/C ABI jobs remain queued;
-do not report them green or close #491 on speech acceptance yet. Exact job IDs
-and tested commits are in the report. Source archive:
-`archive/triage-source-20261007`; cold work/proof:
-`/mnt/storage/crispasr/triage-20261007/`.
-
-Next: collect hosted verdicts/artifacts, fix any failure, then close this entry.
-#490 character-level Arabic alignment is feasible but not implemented;
-#483's reporter requested a forced-MMQ experimental build. PR #492 MiMo/CANN
-needs broader numerical/output acceptance; PR #515 streaming/ONNX stays separate
-and needs regression reruns after the package mirror fix. Neither is merged.
+Next: harvest that run and final main CI; fix failures before closing #491.
+#490 Arabic character alignment and #483's forced-MMQ experiment remain doable.
+#492 MiMo/CANN needs numerical/output acceptance; #515 streaming/ONNX needs
+review and regression reruns on the APT-fixed base. Neither is merged.
 
 ## OPEN 2026-10-05 — live transcribe + translate: follow-ups
 
@@ -166,10 +161,13 @@ Original feature and integration proof source remain available as
 
 ## OPEN 2026-09-30 — voxcpm2 follow-ups (#461, #478)
 
-- **#461**: reporter at RTF 1.01 (Arc B390, 8 steps, `voxcpm2-q8_0-locdit-f16.gguf`)
-  on a pre-#478 build; asked to re-bench on main (estimate ~0.85). What remains is
-  the compute-bound LocDiT matmuls (22 columns) at 10 steps — only a faster Vulkan
-  kernel for that shape would move the default-quality number.
+- **#461 (reporter retest 2026-10-08)**: on main `d754aa10a`, batched prefill
+  is active (90.7 ms, no replay), but RTF remains 1.019 at eight steps with
+  `voxcpm2-q8_0-locdit-f16.gguf`. VAE setup increased 118.1 → 313.4 ms,
+  offsetting the prefill saving; this is not a controlled same-session A/B.
+  Reporter now hears poorer quality at eight steps than ten. Ten remains the
+  quality default. Earlier ~0.85–0.87 estimate was not achieved. Investigate
+  VAE setup and current Vulkan LocDiT matmuls; no new kernel win is proven.
 - **#478**: native AVX2/F16C CPU F16/Q8 RALM batching is now validated and default
   (see `HISTORY.md` / `PERFORMANCE.md`). Reporter Windows/249-position Khmer
   measurement remains external. Q4 batching stays opt-in: up to 1.83% state

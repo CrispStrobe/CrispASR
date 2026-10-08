@@ -17,9 +17,15 @@ fault-injection cases and cannot use stale transcript files as proof of work.
 CI/regression package setup avoids the Azure mirror that timed out #515 jobs,
 with bounded APT waits and preserved failure exits.
 
-Fresh hosted Orukeet speech/cache/C ABI, native/lint and WASM checks remain
-queued. This records source integration, not successful hosted acceptance or
-new GPU timings. [Full triage, remaining threads and exact runs](docs/issue-pr-triage-2026-10-07.md).
+Native CI, regression, lint and all five WASM builds pass on `d754aa10a`;
+the Node note-binding smoke reports three assertions. Deep lint found an
+uninitialized Hikari token probability; fixed in `4b45fec39` (focused
+Hikari-enabled cppcheck passes). The initial Orukeet heavy run passed 5,988
+registry assertions then stopped at the existing licence gate: the validation
+command omitted explicit acceptance. A corrected run is queued, with an added
+refusal/no-download control. Corrected CLI notices distinguish CC-BY-SA from
+CC-BY-NC without changing acceptance policy (four actual resolver cases pass).
+Orukeet speech/cache/C ABI acceptance remains pending; no new GPU timing claim. [Full triage, remaining threads and exact runs](docs/issue-pr-triage-2026-10-07.md).
 No release/tag was cut; #492 and #515 remain unmerged.
 
 ## DONE 2026-10-06 — Live translation speed-ups, Opus-MT backend, nemotron streaming encoder

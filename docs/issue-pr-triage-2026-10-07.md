@@ -22,7 +22,7 @@ performance claim is made here.
   `sessionPianoSampleRate` Embind functions. Added API documentation, export
   checks in all five WASM builds, and a real Node/Embind no-session smoke check
   in the single-thread build. Existing PR CI compiled all five variants; the
-  newly added smoke check is still queued. This does not claim model/audio
+  newly added smoke check passes on main. This does not claim model/audio
   acceptance in a browser.
 - **[PR #514](https://github.com/CrispStrobe/CrispASR/pull/514): Hikari CUDA
   benchmark.** Retains the author's kernel and model pin. Corrected success
@@ -40,34 +40,51 @@ performance claim is made here.
   and regression now use `tools/ci-apt.sh`: replace that failed mirror URL with
   the official Ubuntu HTTPS URL and bound network timeouts/retries. Ports URLs
   remain untouched. Offline checks verify URL substitution, argument forwarding
-  and propagation of apt's failure exit code. Hosted validation remains pending.
+  and propagation of apt's failure exit code. Native CI and regression pass on integrated main.
 
 For unattended first download, use:
 
 ```sh
-crispasr -m orukeet --auto-download -f audio.wav
+crispasr -m orukeet --auto-download --accept-license cc-by-sa-4.0 -f audio.wav
 # Once cached, the same short name works without a download flag:
 crispasr -m orukeet -f audio.wav
 ```
 
-Without `--auto-download`, an uncached named model retains the normal
+The first download also requires explicit CC-BY-SA licence acceptance. This
+policy is unchanged; CC-BY-SA is not a noncommercial licence. Without
+`--auto-download`, an accepted uncached named model retains the normal
 interactive download prompt; noninteractive callers must opt in. The documented
 manual-path workaround also continues to work.
 
-## Fresh hosted acceptance still pending
+## Hosted results and 2026-10-08 follow-up
 
-At this checkpoint GitHub had not assigned runners to the new jobs. They are
-queued, not passed:
+On integrated main `d754aa10a`, [native CI](https://github.com/CrispStrobe/CrispASR/actions/runs/37704656972),
+[regression](https://github.com/CrispStrobe/CrispASR/actions/runs/37704657102),
+[lint](https://github.com/CrispStrobe/CrispASR/actions/runs/37704656959) and
+[all five WASM builds](https://github.com/CrispStrobe/CrispASR/actions/runs/37704657094)
+passed. The single-thread job emits `WASM piano bindings: 3 assertions passed`.
+The original branch native CI `37704036313`, lint `37704039045` and WASM
+`37703785629` also passed.
 
-- [Orukeet CPU download/cache/C ABI acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37703780788)
-  at `5bf3e80dd`: actual download of the 402,226,496-byte public Q4 file,
-  SHA-256 verification, cached short name, filename, explicit path and anonymous
-  C ABI comparisons on JFK; released v0.8.41 negative control.
-- [Native CI with the apt fix](https://github.com/CrispStrobe/CrispASR/actions/runs/37704036313)
-  and [lint](https://github.com/CrispStrobe/CrispASR/actions/runs/37704039045)
-  at `061460b57`.
-- [Five WASM builds and new note smoke check](https://github.com/CrispStrobe/CrispASR/actions/runs/37703785629)
-  at `5bf3e80dd`.
+[Lint Deep](https://github.com/CrispStrobe/CrispASR/actions/runs/37704657127)
+found uninitialized Hikari token probability in the C ABI. The follow-up sets
+it to the existing unavailable-confidence convention, 1.0; Hikari exposes
+emission times but no token probability API.
+
+[Orukeet acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37703780788)
+built successfully and passed 5,988 registry assertions, then correctly refused
+the unaccepted CC-BY-SA licence. The test command had omitted the acceptance
+flag. It did not reach model inference. The CLI additionally mislabeled every
+licence requiring acceptance as noncommercial; corrected notices distinguish
+CC-BY-NC from CC-BY-SA/custom terms while preserving the acceptance policy.
+Four actual resolver cases pass (CC-BY-SA/CC-BY-NC, cached/uncached), and the
+old source reproduces the incorrect CC-BY-SA notice.
+
+[Revised Orukeet CPU acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37728843835)
+is queued at `4b45fec39ff603ad68bad0435c733e41695bfe10`. It first checks
+refusal without download or a false noncommercial notice, then explicitly
+accepts CC-BY-SA and checks the real download/cache/path/anonymous C ABI speech
+and released-binary negative control. #491 remains open pending that result.
 
 The earlier native CI dispatch `37703783152` was superseded by the apt-fixed
 source dispatch. Original proof source and queued-run commits remain reachable
@@ -88,5 +105,5 @@ change their implementation.
 | [#484](https://github.com/CrispStrobe/CrispASR/issues/484) Intel Mac regression | Correct SIMD packaging shipped in v0.8.40/41. Reporter Russian-recording hardware retest remains external. |
 | [#482](https://github.com/CrispStrobe/CrispASR/issues/482) AudioSeal graph capacity | Fixed and tested on CPU/T4. Exact reporter RTX5060 Ti/CUDA13 retest remains external. |
 | [#481](https://github.com/CrispStrobe/CrispASR/issues/481) Phonon-2 | Native port shipped. The upstream 164 MB artifact and headline timing remain distinct from native GGUF sizes/performance. |
-| [#478](https://github.com/CrispStrobe/CrispASR/issues/478), [#461](https://github.com/CrispStrobe/CrispASR/issues/461) VoxCPM2 | Existing prefill and mixed-head fixes shipped. Windows/Khmer and Arc B390 remeasurements remain external; no newly proven Vulkan optimization. |
+| [#478](https://github.com/CrispStrobe/CrispASR/issues/478), [#461](https://github.com/CrispStrobe/CrispASR/issues/461) VoxCPM2 | Existing prefill and mixed-head fixes shipped. Windows/Khmer remains external. The 2026-10-08 B390 retest confirms active batched prefill, but RTF is 1.019, VAE setup is slower, and eight-step audio quality is poorer than ten. Earlier RTF estimates are not accepted measurements; no newly proven Vulkan optimization. |
 | [#456](https://github.com/CrispStrobe/CrispASR/issues/456) nyra | Explicitly deferred in PLAN; model/output licence restrictions and GMM-HMM integration remain. |

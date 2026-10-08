@@ -250,7 +250,7 @@ Treat these as CI timings, not physical M1/M5 performance.
 See [full integration, parity and profiling details](docs/phonon2.md) and the
 [raw measurement receipt](docs/phonon2-profile-2026-09-30.json).
 
-## voxcpm2 — #461 (Vulkan) and #478 (CPU) (2026-09-29 to 2026-10-01)
+## voxcpm2 — #461 (Vulkan) and #478 (CPU) (updated 2026-10-08)
 
 Reporter's Arc B390 iGPU (Vulkan, seed 2, "Hello, this is a short test sentence."):
 
@@ -260,6 +260,18 @@ Reporter's Arc B390 iGPU (Vulkan, seed 2, "Hello, this is a short test sentence.
 | after, q8_0 | 10 | 316 ms | 141.5 ms | 4097 ms | 1.28 |
 | after, q8_0 | 8 | 303 ms | 110.6 ms | 3354 ms | 1.10 |
 | after, q8_0 + F16 LocDiT | 8 | 299 ms | 96.6 ms | 3085 ms | 1.01 |
+| main `d754aa10a`, q8_0 + F16 LocDiT | 8 | 554 ms | 99.5 ms | 3097 ms | 1.019 |
+
+The [2026-10-08 reporter follow-up](https://github.com/CrispStrobe/CrispASR/issues/461#issuecomment-6051358760)
+confirms batched TSLM prefill is active (90.7 ms, no replay; previously
+282.3 ms). Total synthesis did not improve in these logs: VAE initialization
+rose from 118.1 to 313.4 ms, including permutation/upload 14.7 → 120.5 ms;
+VAE compute rose 170.1 → 197.5 ms. The earlier estimated RTF 0.85–0.87 is
+not achieved on this B390 measurement. These are reporter measurements,
+not a controlled same-session A/B. The reporter now hears poorer quality
+at eight steps than ten, superseding the earlier listening assessment.
+Keep ten steps as the quality default; eight is not equivalent-quality
+acceptance. #461 remains open; no new Vulkan kernel speedup is proven.
 
 Kaggle T4 (Vulkan): CFM 70.2 ms (q8_0, 10 steps) → 59.4 (mixed) → 46.7 (mixed, 8).
 CPU (4-core GitHub runner, #478, 62-position voice clone): TSLM prefill 2497 →
