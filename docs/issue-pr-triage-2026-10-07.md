@@ -529,3 +529,18 @@ Tokenizer diagnostic `37775542252` failed before numerical comparisons because
 FFmpeg was absent. `7551b12de` installs the dependency through the bounded APT
 helper before building. Replacement [37783601573](https://github.com/CrispStrobe/CrispASR/actions/runs/37783601573)
 is dispatched. No numerical threshold changed; PR #492 remains unmerged.
+
+
+## MiMo tokenizer attention isolated — 2026-10-08
+
+[37783601573](https://github.com/CrispStrobe/CrispASR/actions/runs/37783601573)
+PASSES the diagnostic at `7551b12de`; artifact `11554395735` is archived.
+Promoting the same dequantized Q4 matrices to F32 produces flash/eager
+transformer relative L2 1.01e-7 and pooling 1.15e-6, with exact RVQ codes.
+Both native paths agree with the official Python encoder on the same weights
+(transformer <=3.01e-7, pooling <=9.45e-6 relative L2). Isolated pooling on all
+four native inputs agrees within 9.40e-6. Scale/time-order controls fail as
+required. The original Q4 pooling A/B remains 8.3401% with 73.5960% RVQ
+agreement. This isolates activation quantization as the source of amplification
+on this fixture; it does not certify original weight precision or accept #492.
+Selective promotion is next, with no relaxation of acceptance thresholds.

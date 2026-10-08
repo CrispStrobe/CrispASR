@@ -55,7 +55,11 @@ Python transformer on identical conv2 input. Pooling is checked independently
 on each arm's own input, with scale/time-order controls. Hosted `37775542252`
 failed before numerical testing because FFmpeg was absent. Source `7551b12de`
 installs it through the bounded APT helper; replacement `37783601573` is
-dispatched, not accepted. No weight precision is recovered; this is a diagnostic,
+PASS as a diagnostic, not PR acceptance. Same-weight F32 promotion gives
+pooling A/B relative L2 0.000115% and exact RVQ codes. Both native paths
+match the independent encoder; Q4 activation rounding remains the divergence.
+Next: selective-promotion ablation in this worktree (head 4/8/16 layers,
+output projections, FFN), retaining the remaining Q4 matrices and all gates. No weight precision is recovered; this is a diagnostic,
 not original-checkpoint or PR acceptance. The acceptance harness now saves all
 completed comparisons before failing and lets both quantizations finish.
 
