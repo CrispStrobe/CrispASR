@@ -46,6 +46,15 @@ allocation, input preparation/upload, synchronous compute and readback;
 scheduler pipeline-copy multiplicity is not a transfer count. No speedup
 claim from instrumentation. Terminal archive and cache refresh are pending.
 
+VoxCPM2 ten-step Vulkan profile v1 launched at source `ece203528`, harness
+`323a568ca`: [kernel](https://www.kaggle.com/code/chr1s4/crispasr-voxcpm2-current-profile).
+Post-launch audit found the generic session TTS step setter lacks VoxCPM2
+forwarding; v1 must reject rc=-2 and cannot establish ten-step acceptance.
+Fix the native setter, session dispatch and CLI runtime override in the profile
+worktree before a pinned rerun; archive v1 terminal output before repushing.
+Keep the default at ten steps and distinguish cold context/shape setup from
+warm inference. NVIDIA Vulkan evidence cannot replace the Intel B390 retest.
+
 OmniVoice #518 implementation `a1ae00dff` is pushed on
 `fix/omnivoice-postprocess-518`. Independent pinned upstream functions pass
 738 adversarial waveform comparisons and 18 exact multilingual text cases;
