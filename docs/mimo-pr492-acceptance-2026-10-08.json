@@ -1615,16 +1615,24 @@
     "torch": "2.11.0+cu130"
   },
   "cpu_blas_experiment": {
-    "source": "d20673ce6",
-    "run": 37790353538,
+    "source": "2a4eda81d",
+    "run": 37792853553,
     "status": "queued",
-    "scope": "temporary scheduler patch, original Q4 file, actual same-host CPU control and official encoder, unchanged gates; not production runtime"
+    "scope": "temporary scheduler patch, original Q4 file, actual same-host CPU control and official encoder, unchanged gates; not production runtime",
+    "previous_setup_failure_run": 37790733015,
+    "previous_failure": "CPU-only thread setter used on BLAS; corrected to its registry proc before numerical testing"
   },
   "cuda_tokenizer_diagnostic": {
     "source": "d6b29207b6d1304243db987a2f4d97f5deac9c05",
     "kernel_packaging_source": "cbc3a79c0",
     "script_version": "mimo-pr492-tokenizer-cuda-v1",
-    "status": "running",
-    "scope": "native CUDA tokenizer plus official CPU encoder; no full-ASR/CANN/performance or Pascal MMQ claim"
+    "status": "complete",
+    "scope": "native CUDA tokenizer plus official CPU encoder; no full-ASR/CANN/performance or Pascal MMQ claim",
+    "diagnostic_passed": true,
+    "full_pr_acceptance_passed": false,
+    "proof": "docs/mimo-pr492-cuda-tokenizer-2026-10-08.json",
+    "q4_pooling_relative_l2": 0.08830735886301795,
+    "q4_code_agreement": 0.7078804347826086,
+    "promoted_code_agreement": 0.9972826086956522
   }
 }
