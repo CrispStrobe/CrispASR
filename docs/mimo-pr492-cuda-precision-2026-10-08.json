@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "recorded_at": "2026-10-08T15:12:18.816365+00:00",
+  "status": "RUNNING; build heartbeat observed, numerical results pending",
+  "script_version": "mimo-pr492-tokenizer-cuda-v2",
+  "source": "b16fe30a2c03e7b7abee0f38a2ea6b03b85d80e6",
+  "ggml": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+  "kernel_sha256": "eb3e173341509ec4596ed14022deb5b94719981dc9911538db53be956c3c07be",
+  "submission_source_pulled_and_byte_verified": true,
+  "patch_sha256": "cfb226e011f905df1b574739ca308286be10554bd85bc30f58e3917892b0356b",
+  "scope": "Diagnostic-only actual CUDA Q4 matrix dispatch through F32 cuBLAS; original model file unchanged. No production/default changes.",
+  "controls": [
+    "Same binary/device/file with diagnostic dispatch disabled",
+    "Actual operator traces and CUDA worker PID/RVQ checks",
+    "Same-weight official Python encoder on native conv2 input",
+    "Continuous cosine, norms and relative L2",
+    "Exact RVQ codes",
+    "250 ms and 2.4 s input shape controls",
+    "Paired extraction timings, not full-ASR performance"
+  ],
+  "continuous_passed": null,
+  "exact_rvq_passed": null,
+  "tokenizer_acceptance_passed": null,
+  "full_pr_acceptance": false,
+  "evidence_root": "/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-v2",
+  "live_progress": "/mnt/storage/crispasr/pr492-acceptance-20261008/proof/live-cuda-v2",
+  "terminal_log_collection": "Background collector records terminal logs and paginated proof outputs before another kernel version may be pushed."
+}
