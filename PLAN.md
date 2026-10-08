@@ -37,7 +37,13 @@ clip (+10,174,464 bytes); preserving layers 0–1 or 0–3 fails. Both F16 stage
 diffs pass the original cosine gate. This is not sufficient evidence for a
 quantization-policy fix. Next inspect/decode the frozen independent Python
 CTC reference and compare the original Python checkpoint, keeping zero-WER
-gates unchanged. No published model or decoder changes yet.
+gates unchanged. The frozen Python reference `ab4151f8…` also decodes the A, using the pinned
+upstream vocabulary at `32331f3123e703528918aa688a9a38232d58c872`.
+Claimed implementation: correct this entry's transcript target to the frozen
+independent Python decode, add a hash-verified CTC-reference provenance guard
+and negative controls, and retain/document 4.55% human WER explicitly. Keep
+zero-WER parity, stage thresholds, weights and decoder unchanged. Validate
+actual CLI and stage diff through the hosted regression runner before landing.
 
 ## CLAIMED 2026-10-08 — independent MiMo C ABI device/verbosity fix
 
