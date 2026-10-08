@@ -1617,10 +1617,15 @@
   "cpu_blas_experiment": {
     "source": "2a4eda81d",
     "run": 37792853553,
-    "status": "queued",
-    "scope": "temporary scheduler patch, original Q4 file, actual same-host CPU control and official encoder, unchanged gates; not production runtime",
+    "status": "success",
+    "scope": "Original Q4 tokenizer passes continuous/reference/exact-RVQ gates on JFK; paired CPU extraction is 1.71x/1.90x slower. Broader validation required; no production default changed.",
     "previous_setup_failure_run": 37790733015,
-    "previous_failure": "CPU-only thread setter used on BLAS; corrected to its registry proc before numerical testing"
+    "previous_failure": "CPU-only thread setter used on BLAS; corrected to its registry proc before numerical testing",
+    "artifact": 11558283333,
+    "proof": "docs/mimo-pr492-cpu-blas-2026-10-08.json",
+    "model_file_size_delta_bytes": 0,
+    "production_runtime_changed": false,
+    "full_pr_acceptance_passed": false
   },
   "cuda_tokenizer_diagnostic": {
     "source": "d6b29207b6d1304243db987a2f4d97f5deac9c05",
