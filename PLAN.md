@@ -28,6 +28,10 @@ Real Arabic Q4 audio acceptance with an independent Viterbi reference is queued
 in automatic PR acceptance `37743740726`. Duplicate manual run `37743605571`
 was cancelled while queued to let that Ubuntu 22.04 job proceed. Still unmerged.
 
+Dart push CI `37743605825` built the native library successfully, then failed
+`dart format` on the changed binding. Apply the actual Dart 3.13.5 formatter
+and rerun checks; do not treat formatting failure as native-model acceptance.
+
 ## OPEN 2026-10-08 — release draft and final gates
 
 Comprehensive `RELEASE_NOTES_v0.8.42.md` covers landed changes since v0.8.41,
