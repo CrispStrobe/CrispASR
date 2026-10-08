@@ -25,8 +25,14 @@ six of 2,208 RVQ codes still differ, so the unchanged exact-code gate FAILS.
 and repeated/full-ASR performance are unmeasured. No production/default change.
 The pinned official quantizer and exhaustive F64 nearest-neighbour check on
 frame 263 confirm each arm's own choices; eager matches the official encoder
-there. Next diagnose attention rounding, preserving exact-code/decoded-output
-gates before production changes or accepting #492. Full receipts:
+there. Active follow-up: capture identical Q/K/V, compare actual CUDA flash and
+eager kernels with independent Python and half-rounded controls, then test a
+targeted precision path with repeated timings and peak memory. Preserve exact
+RVQ/EN-ZH decoded-output gates before production changes or accepting #492.
+Release follow-up in `/mnt/storage/crispasr/triage-20261007/worktree`: await
+final native/lint and full regression CI, fix failures, finalize comprehensive
+v0.8.42 notes and use `scripts/bump-version.sh` only after acceptance; #492
+remains excluded. Full receipts:
 `docs/mimo-pr492-cuda-precision-2026-10-08.json` and
 `docs/mimo-pr492-cuda-rvq-oracle-2026-10-08.json`.
 
