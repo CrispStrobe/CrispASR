@@ -840,7 +840,7 @@
       "ci": 37730684549,
       "regression": 37730687001
     },
-    "runtime_commit": "c46e44e82",
+    "runtime_commit": "a9c312cb1",
     "driver_smoke": {
       "passed": true,
       "tests": 56
@@ -1157,18 +1157,18 @@
       "websocket_syntax": "pass"
     },
     "latest_x86": {
-      "run_id": 37741562051,
-      "source_commit": "c46e44e82",
+      "run_id": 37744837589,
+      "source_commit": "a9c312cb1",
       "runner": "ubuntu-22.04",
-      "status": "in_progress",
-      "replaces": 37740556768
+      "status": "queued",
+      "replaces": 37741562051
     },
     "latest_arm64": {
-      "run_id": 37741564942,
-      "source_commit": "c46e44e82",
+      "run_id": 37744841616,
+      "source_commit": "a9c312cb1",
       "runner": "ubuntu-24.04-arm",
-      "status": "failure; investigating",
-      "replaces": 37740559460
+      "status": "queued",
+      "replaces": 37741564942
     },
     "x86_flush_fix": {
       "before_failed": true,
@@ -1196,6 +1196,11 @@
       "native_ci": "passed all 13 jobs at a1a3d4a25; optional-SDK final runtime acceptance pending",
       "lint": "passed all 10 jobs at a1a3d4a25",
       "windows_cuda13": "passed"
+    },
+    "c46_acceptance": {
+      "x86": 37741562051,
+      "arm64": 37741564942,
+      "status": "both failed generic-path CLI routing after graph-stage parity passed; three native cases passed"
     }
   },
   "issue483_mmq": {
@@ -1228,10 +1233,10 @@
     "baseline_no_path": "failure reproduced; fixed guard passes",
     "independent_reference_known_path": "passed",
     "real_arabic_q4_runs": [
-      37743605571,
       37743740726
     ],
     "hosted_status": "queued",
-    "scope": "Post-logit measured character output; no new model-stage or hardware-performance claim"
+    "scope": "Post-logit measured character output; no new model-stage or hardware-performance claim",
+    "superseded_manual_run": 37743605571
   }
 }

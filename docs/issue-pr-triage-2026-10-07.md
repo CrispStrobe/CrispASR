@@ -256,3 +256,14 @@ on binding-completion source `a1a3d4a25`. Corrected optional-ONNX runtime
 `c46e44e82` is running full x86 `37741562051` and ARM `37741564942` acceptance.
 MMQ `37733919241` passes both Windows packages and the final hosted pair job.
 Draft #516 adds measured character output; real Arabic-audio proof remains queued.
+
+## Generic ONNX path routing — 2026-10-08
+
+Both final acceptance runs at `c46e44e82` passed all four deployed graph diffs
+and the three native speech cases, then failed the generic-path capped CLI
+checks: `encoder*.onnx` was incorrectly sent to Whisper. C ABI detection was
+already correct. Source `a9c312cb1` reuses its config detector in the CLI.
+The saved baseline reproduces the failure; four positive/negative factory
+checks pass. [Local receipt](moonshine-onnx-routing-2026-10-08.json). Fresh full
+x86 `37744837589` and ARM `37744841616` runs are queued. Neither failed run
+proves the later ONNX cap/flush checks, which were not reached.

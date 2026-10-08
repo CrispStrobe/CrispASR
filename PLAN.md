@@ -25,7 +25,8 @@ nested CLI JSON, C ABI and seven wrappers. All 41 known-path assertions pass,
 also under ASAN/UBSAN; C# builds with zero warnings/errors. An impossible
 repeated-label path fails on the saved baseline and is rejected after the fix.
 Real Arabic Q4 audio acceptance with an independent Viterbi reference is queued
-in `37743605571`; automatic PR acceptance is `37743740726`. Still unmerged.
+in automatic PR acceptance `37743740726`. Duplicate manual run `37743605571`
+was cancelled while queued to let that Ubuntu 22.04 job proceed. Still unmerged.
 
 ## OPEN 2026-10-08 — release draft and final gates
 
@@ -80,13 +81,17 @@ through CLI, session batch and persistent streaming. Local native x86 at 1/4
 threads emits “Guten” with a one-token cap, restores full text when cleared,
 and retains all four final/batch packet passes. The hosted suite adds CLI/C ABI
 cap equality, capped streaming and reset checks for all five ONNX deployments.
-Fresh full acceptance: x86 [37741562051](https://github.com/CrispStrobe/CrispASR/actions/runs/37741562051)
+Initial full acceptance: x86 [37741562051](https://github.com/CrispStrobe/CrispASR/actions/runs/37741562051)
 and ARM [37741564942](https://github.com/CrispStrobe/CrispASR/actions/runs/37741564942)
-have started at this runtime. ARM completed with a new CLI routing failure:
+both failed at this runtime with a new CLI routing failure:
 the capped check opens a generic `encoder*.onnx` path, which falls back to
 Whisper while the C ABI already recognizes its companion configuration. Reuse
 the existing Moonshine config detector in CLI auto-detection and rerun both
-architectures. Graph-stage parity passes before this failure. Earlier flush-only runs `37740556768`/`37740559460`
+architectures. Graph-stage parity passes before this failure.
+Fixed in `a9c312cb1` with the same detector already used by the C ABI. The saved
+baseline fails; four local positive/negative routing checks pass. Fresh x86
+`37744837589` and ARM `37744841616` runs are queued.
+[Routing receipt](docs/moonshine-onnx-routing-2026-10-08.json). Earlier flush-only runs `37740556768`/`37740559460`
 were superseded while queued. The earlier ARM pass remains evidence for its own
 source, and is not approval of the new flush code. X86 `37738992713` was
 cancelled while queued because it predates this correction.
