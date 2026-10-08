@@ -109,9 +109,12 @@ against original source checkpoints. C++ runtime syntax, formatting and Python
 syntax pass locally; regression-driver smoke passed 56 tests.
 
 [New CPU acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37733187037)
-is queued at `91496680a` with identical runtime plus automatic ONNX/stream CI
-and speech-content checks for every deployment. Earlier [native CI](https://github.com/CrispStrobe/CrispASR/actions/runs/37730684549)
-passes Linux unit, Windows and Clang AMR; remaining jobs and
+is running at `91496680a` with identical runtime plus automatic ONNX/stream CI
+and speech-content checks for every deployment. ARM64 run
+[37734757849](https://github.com/CrispStrobe/CrispASR/actions/runs/37734757849)
+is queued at `eb2ebe30a` with the same runtime and strict gates. Earlier
+[native CI](https://github.com/CrispStrobe/CrispASR/actions/runs/37730684549)
+passes all 13 jobs;
 [numerical regression](https://github.com/CrispStrobe/CrispASR/actions/runs/37730687001)
 are pending on the earlier runtime source. #515 remains unmerged. #491 is closed
 with final acceptance linked.
@@ -145,7 +148,11 @@ the warning, then requesting a forced-MMQ build for GTX1660 tests. Branch
 `04ded753e909da019a2cd391f651f51f5299b6f5` prepares matched ON/OFF packages
 with CUDA 12.6.3, identical PTX 61/80 targets, source, CPU floor and runtime.
 [Hosted package/pair checks](https://github.com/CrispStrobe/CrispASR/actions/runs/37733919241)
-are queued. Compile definitions, staged runtime version and DLL hashes are
+have started both Windows jobs. Compile definitions, staged runtime version and DLL hashes are
 checked, followed by packaged CLI driverless startup and a pair comparison.
 Actionlint passes. No release defaults change; no GTX1660 speed/output verdict
 exists until the reporter exercises the actual GPU. This branch is unmerged.
+
+Final-source native CI [37735374748](https://github.com/CrispStrobe/CrispASR/actions/runs/37735374748)
+and lint [37735377165](https://github.com/CrispStrobe/CrispASR/actions/runs/37735377165)
+are queued at `eb2ebe30ab42378a0b16ecb302b0c266145e9f7c`.

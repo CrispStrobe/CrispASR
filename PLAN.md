@@ -34,12 +34,16 @@ negative control. This validates wrapper execution of identical graphs, not the
 exporter against source PyTorch checkpoints. C++ runtime syntax and formatting
 pass locally. New CPU acceptance
 [37733187037](https://github.com/CrispStrobe/CrispASR/actions/runs/37733187037)
-is queued at `91496680a02b1da30ad9e16cfc4aae0a9512edde` (same runtime).
+is running at `91496680a02b1da30ad9e16cfc4aae0a9512edde` (same runtime).
+ARM64 acceptance [37734757849](https://github.com/CrispStrobe/CrispASR/actions/runs/37734757849)
+is queued at `eb2ebe30ab42378a0b16ecb302b0c266145e9f7c`; this adds architecture
+recording and robust parsing of the deliberate scale-negative control, with
+unchanged real parity gates and runtime.
 Added an automatic relevant-change ONNX/streaming workflow, pinned Python ORT
-1.30.0 to the SDK and added speech-content checks for legacy deployments too. Earlier native CI `37730684549`
-passes Linux unit, Windows and Clang AMR so far; remaining jobs and numerical
-regression `37730687001` are pending on `710457c5b`. Final source checks must
-cover the follow-up fixes. #515 stays unmerged pending validation.
+1.30.0 to the SDK and added speech-content checks for legacy deployments too.
+Earlier native CI `37730684549` passes all 13 jobs on `710457c5b`. Numerical
+regression `37730687001` is pending. Final-source native CI `37735374748` and
+lint `37735377165` are queued at `eb2ebe30a`. #515 stays unmerged pending validation.
 
 ## CLAIMED 2026-10-08 — #483 matched forced-MMQ experiment
 
@@ -55,7 +59,7 @@ Checkpoint: branch `04ded753e909da019a2cd391f651f51f5299b6f5` adds a manual
 ON/OFF packaging mode to the existing Windows CUDA Smoke workflow. Actionlint
 and diff checks pass. Hosted Windows package/pair proof
 [37733919241](https://github.com/CrispStrobe/CrispASR/actions/runs/37733919241)
-is queued. Both artifacts require actual compiler-definition checks, matching
+has started both Windows jobs. Both artifacts require actual compiler-definition checks, matching
 CUDA runtime versions/hashes, portable CPU flags and staged CLI startup.
 Do not present either package as GPU-validated or change release defaults.
 
