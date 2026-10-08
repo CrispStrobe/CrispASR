@@ -23091,3 +23091,8 @@ flash F32 hint is byte-identical, half input rounding explains only part of
 the fused error. All eight repetitions preserve inputs and replay output.
 Isolated timings do not establish full-ASR speed. Six RVQ entries still differ;
 #492 remains unmerged. See `docs/mimo-pr492-cuda-attention-2026-10-08.json`.
+
+Full-clip CPU RVQ oracle `37815978118` PASS: all four arms match the
+unmodified official quantizer on their own pools; both promoted-F32 arms
+also match official-encoder codes. Original Q4 encoder drift remains.
+Receipt: `docs/mimo-pr492-full-rvq-cpu-2026-10-08.json`.

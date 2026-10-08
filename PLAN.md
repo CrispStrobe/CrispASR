@@ -48,7 +48,13 @@ unsafe for unpadded T=551, so do not force it. Retain baseline/F32-eager control
 actual dispatch traces, unchanged code gates and independent Python oracle.
 No production ggml pin/default change. Archive v4 before repushing. Full-clip
 official quantizer runs `37815978118` (CPU) and `37816478863` (CUDA v4) are
-queued; preserve the current Kaggle endpoint until the latter downloads proof.
+CPU PASS / CUDA queued. All four CPU arms match official quantization on their
+own pools at all 276 frames/eight stages; both promoted-F32 arms also match
+official-encoder codes. Original Q4 encoder drift remains. Receipt:
+`docs/mimo-pr492-full-rvq-cpu-2026-10-08.json`. The new F32 TILE experiment
+uses a separate `mimo-pr492-attention-precision` kernel, retaining v4's endpoint
+for the queued oracle. Numeric source `534a929f7`; packaging is in the same
+candidate branch. No quota bypass/GPU fishing: one actual precision experiment.
 Native `37805363962` and lint `37806475239` both PASS at `3fd1bf5fa`.
 Full 33-model regression `37802900089` is still running with no failures.
 Receipt: `docs/mimo-pr492-cuda-attention-2026-10-08.json`.
