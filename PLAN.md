@@ -32,7 +32,15 @@ RVQ/EN-ZH decoded-output gates before production changes or accepting #492.
 Release follow-up in `/mnt/storage/crispasr/triage-20261007/worktree`: await
 final native/lint and full regression CI, fix failures, finalize comprehensive
 v0.8.42 notes and use `scripts/bump-version.sh` only after acceptance; #492
-remains excluded. Full receipts:
+remains excluded. CUDA v3 is queued at immutable source `389c3c712`
+(packaging `8a38afbf8`): identical official Q/K/V at layers 0/15/31,
+flash/default/F32-hint versus F32 eager and half-rounded eager, six measured
+alternating repetitions after two warmups, explicit CUDA allocation and sampled
+VRAM. Tiny real-Torch capture smoke passes all six QKV/half layout roundtrips,
+exact saved output and independent NumPy SDPA (max absolute error 1.43e-6).
+C++ syntax/format and Python syntax pass. No v3 GPU results yet. Final native
+`37805363962`, main lint `37806475239` and full regression `37802900089` are
+queued (regression unit tests PASS). Full receipts:
 `docs/mimo-pr492-cuda-precision-2026-10-08.json` and
 `docs/mimo-pr492-cuda-rvq-oracle-2026-10-08.json`.
 

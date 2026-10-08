@@ -216,90 +216,76 @@ Existing wav2vec2 GPU transcript drift remains under investigation.
 
 ## Validation and remaining gates
 
-MioTTS ARM/x86 checks cover codec rate, request behavior and speech readback;
-both tested CLI/session outputs have 0% WER at 44.1 kHz. Combined Qwen3/MiMo
-checks preserve expected speech and CLI/C ABI equality. Fresh ARM Index-Echo-9B
-F16 validation passes 76 checks per clip, full-file output and three Piper
-roundtrips, with minimum cosine 0.999997 and maximum relative L2 0.1883%.
-These results do not accept experimental Echo Q4 weights.
+Accepted changes have recorded platform CI, lint, bindings, WASM and numerical
+regression evidence. These checkpoints do not replace final main validation:
 
-Integrated source checkpoints have passed platform CI, lint, bindings, WASM
-and selected numerical regressions. Orukeet's pinned Q4 model passes real CLI
-and C ABI speech acceptance, with the published v0.8.41 failure reproduced.
+- German Moonshine (#515): all eight cases pass on x86/ARM, including 15 exact
+  stages per five-graph deployment, independent Python ORT, scale controls and
+  CLI/C ABI generation cap, reset and streaming checks.
+- Arabic character alignment (#516): real Arabic character spans and Java/JNA
+  UTF-8 acceptance pass. Metal cache lifecycle tests pass in shared and static
+  builds; they do not certify model inference or performance.
+- MioTTS: ARM/x86 codec-rate, request and speech readback checks pass; tested
+  CLI/session outputs have 0% WER at 44.1 kHz. Index-Echo-9B F16 passes 76 checks
+  per clip on ARM, full-file output and three Piper roundtrips, with minimum
+  cosine 0.999997 and maximum relative L2 0.1883%. Experimental Echo Q4 weights
+  are not accepted by these F16 results.
+- Orukeet: pinned Q4 CLI and C ABI speech acceptance passes, with the published
+  v0.8.41 failure reproduced. Qwen3/MiMo prompt checks preserve expected speech
+  and CLI/C ABI equality.
+- MiMo session settings: the independent device/verbosity forwarding fix passes
+  the actual-library probe, negative control and restoration checks in
+  `37789763493`. Complete native CI `37790010839` and lint `37790015470` pass at
+  the recorded source. This fix is independent of PR #492.
+- data2vec: hosted `37791614453` passes actual Q4 zero-WER parity with the
+  SHA-verified independent Python transcript and the unchanged F16 stage gate
+  (cosine 0.999141 >= 0.999). Four provenance negative controls and 56 driver
+  tests pass. Human JFK WER remains 4.55%; the corrected test target does not
+  improve weights, decoding or accuracy, or relax any tolerance.
+- Regression selection: manifest entry changes now add the affected nightly
+  backend to the core set. Unavailable Git snapshots and changes to the nightly
+  list select the full set. Fourteen unit tests and an actual before/after
+  commit-diff control pass.
+
 See [MioTTS/Echo evidence](docs/miotts-echo-integration-2026-10-03.md),
-[prompt evidence](docs/asr-prompt-validation-2026-10-03.md) and
+[prompt evidence](docs/asr-prompt-validation-2026-10-03.md),
+[MiMo session settings](docs/mimo-cabi-device-2026-10-08.json),
+[data2vec upstream parity](docs/data2vec-reference-parity-2026-10-08.json),
+[regression selection](docs/regression-manifest-selection-2026-10-08.json) and
 [issue/PR triage](docs/issue-pr-triage-2026-10-07.md) for source pins and runs.
+Full pinned cppcheck 2.7 `37763588589` passes at `2da878e72`; Hikari's pinned
+deep-lint rerun passes at `f55c7bc8c`.
 
-Before tagging, refresh this draft against the final main commit and complete
-its required checks. Hikari's full pinned deep-lint rerun passes at `f55c7bc8c`.
-PR #515 passes final x86/ARM acceptance: all eight cases on each architecture,
-15 exact stages per five-graph deployment, scale-negative control, and CLI/C ABI
-cap/reset/stream checks. These compare identical deployed ONNX exports against
-independent Python ORT execution. PR #516 passes full real Arabic character
-alignment and Java/JNA acceptance. Integrated native CI, regression, lint,
-Moonshine speech acceptance, Go/Rust/C#/Dart, WASM and Windows live translation
-checks pass at their recorded sources. Full pinned cppcheck 2.7
-`37763588589` passes at `2da878e72`; latest main `d2c269f93` also passes native
-CI `37777990060` and lint `37777990004`.
-PR #492's MiMo/CANN changes remain unmerged. Reporter-specific
-Windows/Vulkan, Intel Mac and newer NVIDIA hardware retests remain open.
+PR #492 remains unmerged and is excluded from this release. Default-path stage
+values and all twelve tested EN/ZH CLI/session outputs match the baseline,
+but non-flash numerical/exact-code acceptance fails. F16 LM parity passes;
+both LM configurations still use the shipped Q4 tokenizer. All five selective
+promotion profiles fail the unchanged tokenizer gates. The smallest pooling
+A/B error among those profiles is 1.3424%, with only 82.1558% exact RVQ codes.
+No precision experiment changes the production defaults.
 
+| Original Q4 tokenizer experiment | Pooling A/B relative L2 | Exact RVQ codes | Paired latency cost |
+| --- | --- | --- | --- |
+| CPU BLAS scheduler | 0.0001125% | All 2,208 match | 1.71x/1.90x CPU baseline |
+| T4 normal CUDA | 8.83074% | 70.7880% match | Baseline |
+| T4 diagnostic F32 cuBLAS | 0.030852% | Six of 2,208 differ | 1.75x/1.51x CUDA baseline |
 
-The latest broad nightly `37768023710` also exposes a Q4 data2vec JFK word
-insertion (zero-WER gate fails at 4.55%; F16 stage cosine 0.999141 passes).
-Matched-host diagnostic `37786726672` confirms old-release Q4 matched the
-native July target, while Q8/F16 on both versions insert the A. The existing
-SHA-verified independent Python reference also decodes A. Integrated correction
-`3cb9bb48e` checks zero-WER upstream parity with a hash-verified reference,
-vocabulary and sample guard, reporting the unchanged 4.55% human WER separately.
-Four provenance negative controls and 56 driver tests pass locally. Actual
-hosted regression `37791614453` PASSES, including Q4 CLI zero-WER upstream
-parity and unchanged F16 stage gate (cosine 0.999141 >= 0.999). This corrects the test target;
-it does not change weights, decoder, reference activations or tolerances,
-or claim improved model accuracy.
+The cuBLAS experiment keeps the original 395,594,656-byte Q4 download and
+matches the same-weight promoted-F32 model byte for byte at every stage in
+each attention mode. Its 250 ms/2.4 s controls have exact codes. The official
+quantizer and exhaustive F64 nearest-neighbour checks on the affected frame
+agree with each arm's own choices, locating the discrepancy before RVQ.
+These are tokenizer diagnostics, not original-checkpoint, full-ASR, CANN or
+speedup certification. Model-file size is unchanged; transient dequantization
+and attention buffers still consume runtime memory. Paired timings above are
+not repeated medians. See the [CPU receipt](docs/mimo-pr492-cpu-blas-2026-10-08.json),
+[CUDA receipt](docs/mimo-pr492-cuda-precision-2026-10-08.json) and
+[affected-frame oracle](docs/mimo-pr492-cuda-rvq-oracle-2026-10-08.json).
 
-Q4 MiMo follow-up: selective same-weight F32 promotion failed all five profiles
-in hosted run `37785711004` (artifact `11555262443`). The smallest pooling
-A/B error among them was 1.3424% with output projections promoted; RVQ code
-agreement was 82.1558%, so this remains excluded from release acceptance.
-Actual T4 CUDA tokenizer validation completed: continuous F32/isolated-pool
-diagnostic gates pass, but original Q4 pooling relative L2 is 8.83074% and RVQ
-agreement only 70.7880%. Even promoted F32 differs in 6/2,208 RVQ entries.
-PR #492 therefore remains excluded. The independent C ABI device/verbosity
-probe `37789763493` passes, including actual-library negative and restoration
-controls. The two-line device/verbosity fix is integrated independently;
-applicable platform/format/tidy checks pass, while final broad main CI/lint
-remain release gates. CPU-only session requests now reach MiMo initialization
-instead of silently using its native GPU preference. Full measurements are in
-`docs/mimo-pr492-selective-promotion-2026-10-08.json`.
-
-A diagnostic CPU BLAS scheduler passes the tokenizer's original-Q4 numerical
-and exact-code gates in `37792853553`, without changing the 395,594,656-byte
-model. Pooling attention A/B relative L2 is 1.12548e-6; RVQ codes are exact.
-Both paths match the official same-weight encoder. Paired extraction is
-1.71x/1.90x slower than ordinary CPU (flash/eager); this is a potential precision
-option, not a shipping speedup or default change. Short EN/ZH, placement,
-repeated timing/memory, ARM and full-ASR acceptance remain unvalidated.
-
-
-The original-file CUDA F32 cuBLAS experiment on Tesla T4 also passes continuous
-stages without increasing the Q4 download size. Pooling A/B relative L2 falls
-from 8.83074% to 0.030852%, but six of 2,208 RVQ codes still differ. Short
-250 ms/2.4 s controls have exact codes. Paired extraction costs 449/442 ms
-versus normal CUDA 257/293 ms (flash/eager): 1.75x/1.51x slower. Every stage is
-byte-identical to the same-weight promoted-F32 model in its attention mode.
-The official quantizer and exhaustive F64 check on the affected frame agree
-with each arm's own choices, locating that discrepancy before RVQ. This remains
-an experiment excluded from production and PR acceptance. Peak memory,
-repeated timing and full decoded-ASR acceptance are unvalidated. Receipts:
-`docs/mimo-pr492-cuda-precision-2026-10-08.json` and
-`docs/mimo-pr492-cuda-rvq-oracle-2026-10-08.json`.
-
-Regression matrix selection now adds the nightly model whose manifest entry
-changed, including transcript and fixture-hash corrections. Previously a
-manifest-only data2vec correction ran only six generic core models. Unavailable
-Git snapshots and changes to the nightly list conservatively run the full
-nightly set. Fourteen unit tests and an actual before/after commit-diff control
-pass; fresh full 33-backend regression `37802900089` remains pending.
-The independent MiMo C ABI fix's complete native CI `37790010839` and lint
-`37790015470` now pass; final main-tip validation remains a release gate.
+Before tagging, final main native CI `37805363962`, main lint `37806475239`
+and full 33-backend regression `37802900089` must complete successfully, and
+this draft must be refreshed against the final source. The new identical-input
+CUDA attention probe is queued on Kaggle at pinned source `389c3c712`; its
+six-repeat resident-graph timings and sampled VRAM are not yet available.
+Reporter-specific Windows/Vulkan, Intel Mac and newer NVIDIA hardware retests
+remain open. OmniVoice's remaining upstream audio cleanup is tracked in #518.
