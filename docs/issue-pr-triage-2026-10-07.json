@@ -1231,7 +1231,7 @@
   "issue490_characters": {
     "source_commit": "f0a40990b29f3981cc017fec094e14143b487f26",
     "pr": 516,
-    "merged": false,
+    "merged": true,
     "known_path_assertions": 41,
     "asan_ubsan": "passed",
     "csharp": "passed; 0 warnings/errors",
@@ -1242,7 +1242,7 @@
       37751687697,
       37756933124
     ],
-    "hosted_status": "PASS: full real Arabic Q4 acceptance 37756933124; final platform checks pending with main Metal repair",
+    "hosted_status": "full real Arabic/Java acceptance PASS; integrated, final main CI pending",
     "scope": "Post-logit measured character output; no new model-stage or hardware-performance claim",
     "superseded_manual_run": 37743605571,
     "core_implementation_commit": "5a8471309eadcb275a1cabff519ba727fe7f6fda",
@@ -1303,7 +1303,8 @@
       "python_cabi_offset_seconds": 3.25,
       "invalid_cabi_accessors": "pass",
       "java": "exact word/character UTF-8 and centisecond offsets under US-ASCII"
-    }
+    },
+    "integration": "accepted f0a40990b ancestry retained, merged with main including Metal discovery repair; no accepted alignment/binding runtime delta"
   },
   "cold_storage_20261008": {
     "bytes_moved": 1962991156,

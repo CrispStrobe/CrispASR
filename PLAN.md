@@ -77,48 +77,17 @@ also explicitly forces CPU to retain its mmap path. No GPU execution is claimed.
 
 No new CANN/CUDA correctness or performance claim; combined CANN/NZ timings
 cannot be attributed to this PR alone. PR #492 remains unmerged. #516 Arabic
-acceptance has progressed to a Java input-encoding fix; see the #490 claim.
+alignment is integrated after full runtime acceptance; final main CI is pending.
 
-## CLAIMED 2026-10-08 — #490 CTC character timestamps
+## OPEN 2026-10-08 — integrated Arabic platform validation
 
-Worktree: `/mnt/storage/crispasr/issue490-characters-20261008/worktree`, branch
-`fix/issue490-characters`. Preserve the existing Viterbi label spans through
-wav2vec2 alignment and align-only JSON, including repeated UTF-8 letters,
-unsupported characters and no-path cases. Keep word output compatible; no
-interpolated character times. Add synthetic known-path guards first, then
-hosted real-audio CLI/C ABI validation where a pinned model is available.
-
-Implemented in draft PR #516, rebased onto merged #515 (`5c172455e`),
-latest `f0a40990b`, including main `608e60122` and its Metal discovery fix.
-Core measured-span implementation is unchanged; both
-appended CMake test targets are retained. All 41 known-path assertions and
-ASAN/UBSAN pass. Integrated bindings: Dart 3.13.5 formats 11 files cleanly;
-Java wrapper/driver compile; C# builds with zero warnings/errors; Python parses.
-
-Real Arabic Q4 run `37746296873` built and passed 41 new / 91 existing
-alignment assertions, then produced valid JSON with 15 words / 85 measured
-characters. It FAILED on a diagnostic preview cutting a UTF-8 codepoint;
-independent Viterbi and binding runtime comparisons were not reached. Fixed
-with the existing UTF-8 prefix helper, keeping strict log decoding. Separately,
-a saved Java/JNA guard reproduces Arabic text corruption under a US-ASCII
-host default; explicit UTF-8 makes it pass. Arabic acceptance `37751687697` now passes CLI word/segment JSON, all 85
-character spans against independent full-sequence Viterbi, Python/C ABI offsets
-and invalid-accessor checks. It FAILED at Java alignment: JNA 5.13's scalar
-String arguments still use the global encoding even with the per-library UTF-8
-option. The earlier local guard tested only returned text. A strict native
-input/output guard now reproduces the failure, including a Unicode model path;
-explicit input conversion passes under US-ASCII, ISO-8859-1 and UTF-8 defaults.
-Full real Arabic acceptance `37756933124` PASSES: 15 words / 85 character
-spans, exact independent full-sequence Viterbi, CLI word/segment JSON, Python/
-C ABI offsets and invalid accessors, and actual Java/JNA Arabic alignment
-under US-ASCII. Artifact `11542736536`, tested merge `a9c1afead`; all runtime
-files are unchanged after acceptance. Final platform checks run on the branch
-with the Metal discovery fix. #516 is unmerged and excluded from release notes.
-Source/proof detail is on the branch in `docs/ctc-characters-2026-10-08.json`.
-
-Go `37743605844`, Rust `37743605797` and Linux C# in `37743740252` passed
-at the original implementation source. Earlier Dart format failure is fixed;
-static analysis passes. Fresh platform/binding checks run at the rebased source.
+#516/#490 measured character alignment is integrated after full hosted Arabic
+acceptance `37756933124` (15 words / 85 exact independent Viterbi spans,
+CLI/Python/C ABI/Java equality and offsets; artifact `11542736536`). The
+accepted runtime is unchanged; main's Metal discovery repair is included.
+Final main platform/binding/WASM/regression checks still precede release.
+Implementation and proof are archived in HISTORY and
+`docs/ctc-characters-2026-10-08.json`.
 
 Storage checkpoint: 1,962,991,156 bytes of cold archives/JARs moved to
 `/mnt/storage/cold-files-20261008`, each checksum-verified before atomic
@@ -130,8 +99,9 @@ shared-library trees moved. Receipts/scripts:
 
 Comprehensive `RELEASE_NOTES_v0.8.42.md` covers landed changes since v0.8.41,
 with validation scope and remaining gates. Refresh it after final integration;
-PR #515 is integrated after final x86/ARM acceptance. PR #516/#492 remain
-unmerged and excluded from shipped features. No version
+PR #515 is integrated after final x86/ARM acceptance; #516 is integrated after
+full Arabic/Java acceptance. PR #492 remains unmerged and excluded from shipped
+features. No version
 bump/tag until required main-tip checks pass. Use `scripts/bump-version.sh`.
 
 ## OPEN 2026-10-08 — #483 reporter GPU comparison
@@ -162,7 +132,7 @@ Fixed in `f55c7bc8c`: constructor and reset share a nonvirtual helper. Focused
 cppcheck 2.17.1 and C++ syntax pass; full pinned cppcheck 2.7 rerun
 `37737578258` passes the full pinned cppcheck 2.7 run.
 No new GPU performance claim. Cold proof: `/mnt/storage/crispasr/triage-20261007/`.
-#490 character alignment is implemented in draft PR #516, pending real-audio proof. #483 has matched packages;
+#490 character alignment is integrated with full real Arabic/Java proof. #483 has matched packages;
 reporter GPU output/timing comparisons remain pending.
 #492 MiMo/CANN needs numerical/output acceptance. #492/#516 remain unmerged.
 

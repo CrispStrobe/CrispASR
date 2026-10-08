@@ -443,3 +443,12 @@ Metal discovery repair `608e60122` is in fresh [shared/static validation
 37761910908](https://github.com/CrispStrobe/CrispASR/actions/runs/37761910908).
 Both actual macOS jobs are queued; discovery-only local proof does not establish
 cache runtime behavior.
+
+## Arabic integration — 2026-10-08
+
+#516/#490 is integrated after complete hosted Arabic/Java acceptance. The
+accepted feature ancestry is retained, main's Metal discovery fix is included,
+and no alignment/binding runtime changed after proof. HISTORY archives the
+implementation and the comprehensive release draft now includes character
+timestamps and bidirectional Java UTF-8. Final main platform CI still gates
+release; MiMo #492 stays unmerged because non-flash numerical acceptance failed.
