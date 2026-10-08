@@ -1,0 +1,125 @@
+{
+  "scope": "CUDA v3 launcher failure; no standalone attention kernel measurements",
+  "source": "389c3c712081f8612817e20b7f9e784d03a7b703",
+  "hardware": {
+    "script_version": "mimo-pr492-tokenizer-cuda-v3",
+    "source": "389c3c712081f8612817e20b7f9e784d03a7b703",
+    "ggml": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+    "devices": "name, compute_cap, memory.total [MiB]\nTesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB\n",
+    "arch": "75",
+    "cmake_flags": [
+      "-DCMAKE_BUILD_TYPE=Release",
+      "-DBUILD_SHARED_LIBS=ON",
+      "-DGGML_NATIVE=OFF",
+      "-DGGML_BLAS=OFF",
+      "-DCRISPASR_MEL_BLAS=OFF",
+      "-DCRISPASR_BUILD_TESTS=OFF",
+      "-DCRISPASR_BUILD_EXAMPLES=OFF",
+      "-DCRISPASR_BUILD_SERVER=OFF",
+      "-DCMAKE_PROJECT_crispasr_INCLUDE=/kaggle/temp/mimo-pr492/wrapper/add-probe.cmake",
+      "-DGGML_CUDA=ON",
+      "-DGGML_CUDA_NO_VMM=ON",
+      "-DCMAKE_CUDA_ARCHITECTURES=75",
+      "-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc",
+      "-DCRISPASR_NO_C2PA_NATIVE=ON",
+      "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache",
+      "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold",
+      "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold",
+      "-DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=mold"
+    ],
+    "kernel_sha256": "1f2be7bd74816aaac85acc37adae51b650c6f9600fb9a8481179106075523160",
+    "scope": "MiMo PR492 identical-input CUDA attention diagnostic; no full-ASR claim.\n\nUses the actual native tokenizer, including device weights/RVQ, and the pinned\nofficial Python encoder on the GPU's own conv2 input. PyTorch is CPU-only here:\nggml compiles and executes CUDA for the detected GPU, including a P100. Pascal\nresults do not establish integer MMQ support. Same-weight promotion is a\ndiagnostic, not recovered original precision or full ASR acceptance.\n"
+  },
+  "failure": "FileNotFoundError before probe startup: build/mimo_attention_probe; actual linker output bin/mimo_attention_probe",
+  "diagnosis": {
+    "scope": "Identical-input CUDA attention probe. Diagnostic only; no ASR acceptance.\n\nQ/K/V come from the pinned official encoder on native conv2 input. Timings\nexclude allocation/transfers and use one backend, resident graphs, alternating\norder, two warmups and six measured repetitions. Sampled VRAM is a lower bound\non process peak, not a model/session memory benchmark.\n",
+    "source": "389c3c712081f8612817e20b7f9e784d03a7b703",
+    "layers": {},
+    "full_pr_acceptance": false,
+    "tokenizer_exact_codes": {
+      "match_fraction": 0.9972826086956522,
+      "exact": false
+    },
+    "upstream": "691ce54144a6844cc641fd96046a6ba20776c8b0",
+    "upstream_files": {
+      "modeling_rope_utils.py": {
+        "url": "https://raw.githubusercontent.com/XiaomiMiMo/MiMo-Audio/691ce54144a6844cc641fd96046a6ba20776c8b0/src/mimo_audio_tokenizer/modeling_rope_utils.py",
+        "sha256": "29d62d9fa8acee7a969ea35defe5581fb4977563c56701e1659ecc0e6345ccf4"
+      },
+      "modeling_audio_tokenizer.py": {
+        "url": "https://raw.githubusercontent.com/XiaomiMiMo/MiMo-Audio/691ce54144a6844cc641fd96046a6ba20776c8b0/src/mimo_audio_tokenizer/modeling_audio_tokenizer.py",
+        "sha256": "42e802e075b018e6ea60616976ea8397a278ceb2728edbcef06fc436862fb236"
+      }
+    }
+  },
+  "complete": {
+    "time": "2026-10-08T16:52:08.494553+00:00",
+    "terminal_status": {
+      "status": "ERROR",
+      "failureMessage": null
+    },
+    "hardware_present": true,
+    "numerical_receipt_present": true,
+    "files": 108
+  },
+  "cache": {
+    "repo": "cstr/crispasr-ccache",
+    "file": "mimo-pr492/sm75-v3.tar",
+    "revision": "7bac5a6c0e5cae845d8ded349a2bcb7d0a23050e",
+    "sha256": "a60bf4b1ea7d0db9099ead0383133c2ac22b0f5c6c8c0117857dc1ef59035b95",
+    "bytes": 51097600,
+    "source": "389c3c712081f8612817e20b7f9e784d03a7b703"
+  },
+  "cmake_negative_control": {
+    "passed": true,
+    "actual_target": "/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cmake-target-path-smoke/build/bin/mimo_attention_probe",
+    "old_assumption_exists": false,
+    "actual_executable_passed": true
+  },
+  "captured_layers": {
+    "layer-00": {
+      "shape": [
+        551,
+        20,
+        64
+      ],
+      "source": "pinned official Attention.forward on native conv2 input",
+      "layer": 0,
+      "inputs": {
+        "q": "2ed114c7ec2d9349a101082197ffd3d1721830663956afdd66da40f9b0fc6304",
+        "k": "8ebc6aa61384068860d16ef1a89da309b28eeadeb33cb6c1eb79be6c5c114dd6",
+        "v": "89369f4952b9f5a27e249db679616c8db94f20d33701b902e54ed6972c6f742a"
+      }
+    },
+    "layer-15": {
+      "shape": [
+        551,
+        20,
+        64
+      ],
+      "source": "pinned official Attention.forward on native conv2 input",
+      "layer": 15,
+      "inputs": {
+        "q": "29986f7dd3ae5da1c963b4b77850d842eac6a701e64961b39bd8d6ebb693c426",
+        "k": "98de0b792c7ef60712d25011d7378145798e3a087f42921ae7ac21da3750a5cc",
+        "v": "8e857b870c96257fc054961732955762e3d8431edbdd0ccb9cb2eed4ed6e389a"
+      }
+    },
+    "layer-31": {
+      "shape": [
+        551,
+        20,
+        64
+      ],
+      "source": "pinned official Attention.forward on native conv2 input",
+      "layer": 31,
+      "inputs": {
+        "q": "d00b82a055cde7d79d60948ae622804898e0b9debec0b3407d61504e6aff6a44",
+        "k": "61f8b9fa156f4ab375d122bdb55aff4c780390e6aeb358a2d56b62f5d8589230",
+        "v": "230390f25df557bf655f0d33ce2627dd24f85dcc3ac360cca675888ce546a019"
+      }
+    }
+  }
+}

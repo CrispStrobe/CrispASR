@@ -41,7 +41,15 @@ including captured Q/K/V and a 51.1 MB Kaggle-built cache, are archived under
 kernel timing/parity result exists for v3. Follow-up in the same candidate
 worktree: repair/assert executable path, protect resident Q/K/V against allocator
 reuse and verify repeated outputs, refresh the existing HF build cache, then
-launch pinned v4. The tiny capture smoke passes exact layouts and independent
+launch pinned v4. Corrected v4 is now submitted with numeric source
+`3493c8ef9` and packaging `9a0d75639`; CMake generates the actual executable
+path, and a real build/run negative control rejects the old assumed path.
+All Q/K/V are protected from allocator reuse; each of eight repetitions checks
+unchanged inputs and byte-exact replay output, outside timed regions. The
+existing private HF cache holds only Kaggle compiler output, pinned by revision
+and SHA-256; no model/reference repository was made private. Terminal collection
+is armed under `proof/cuda-v4` (collector PID 3741746). Full launch-failure
+receipt: `docs/mimo-pr492-cuda-attention-launch-2026-10-08.json`. The tiny capture smoke passes exact layouts and independent
 NumPy SDPA. Native CI `37805363962` PASS at `3fd1bf5fa`; lint `37806475239`
 has nine passed checks with clang-tidy running. Full 33-model regression
 `37802900089` has unit/select/smoke/preflight and six model jobs passed so far;
