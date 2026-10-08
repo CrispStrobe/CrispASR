@@ -175,6 +175,10 @@ Existing wav2vec2 GPU transcript drift remains under investigation.
   CI after a real sync push, and supports a tested dry run.
 - CI/regression APT setup replaces the failing Azure Ubuntu mirror with the
   official HTTPS mirror, bounds network waits and preserves error exits.
+- Repaired the Apple Metal cache smoke test for the ggml device API and
+  Objective-C++17, with explicit Metal linkage. A focused macOS workflow checks
+  shared/static builds; unavailable GPU hardware produces a skip. Hosted
+  compilation is pending; this is not proof of serialized GPU pipelines.
 - Kaggle regression honors SRT transcripts, downloads declared companions, and
   uses corrected model revisions. Registry URL checking verifies manifest pins.
 - The manual Windows CUDA smoke workflow can package matched CUDA-12.6

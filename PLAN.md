@@ -11,6 +11,70 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-08 — Metal cache test API compatibility
+
+Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`. Fixed the existing
+Apple-only cache test after the ggml v0.26.0 device-init signature change,
+explicit Metal linkage and Objective-C++17. A real compiler negative control
+rejects the old single-argument call and accepts the new two-argument call.
+The fixture now restores both cache environment variables; no-device cases
+explicitly skip instead of reporting success. Added `metal-cache-test.yml`
+(shared/static macOS build and focused CTest). First shared hosted build
+`37755267314` compiled the Objective-C++ test, then failed linking Objective-C
+runtime symbols. Added explicit `objc` linkage in `7b44257d3`; fresh shared/static
+validation `37757366299` compiled and linked the static test, then failed because
+Catch 3.7.1 splits semicolon-valued label properties: CTest found no tests for
+`-L pipeline-cache`. A saved minimal reproduction confirms the old selection
+finds zero tests. The workflow now selects the suite by name, asserts exactly
+two discovered cases, and retains the unit label. The corrected discovery
+passes locally; fresh actual macOS validation follows this checkpoint.
+No GPU cache execution or runtime/cache-default change is claimed.
+
+## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
+
+Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, internal
+branch `review/pr492-acceptance`, latest `c50c50061`.
+Original numerical source: `fae7e22419b8c797dfa2759a9d4884a8f426bf63`.
+Contributor commits through `ac07cf0be3b528cdb035735738098e30f7468a41` are
+preserved as ancestors; merge against current main was clean, with unchanged
+ggml `c36dab89b`. Local shared-mel A/B passes 16 cases (63/64/65/300 frames,
+both layouts and accumulator types, 1/4 threads), byte-identical to main.
+
+Found and checksum-verified the legacy public Python LM reference, upstream
+`98641d537df521ac6df05f74090475694d9510b7`. It has five LM stages but explicitly
+skips generated text, so it is not decoded-output proof. Hosted Q4 job
+`37754319857` FAILED the non-flash numerical gate. Postprocessing its saved
+arrays confirms all 11 LM/tokenizer default stages are byte-identical to
+baseline, and all 12 English/Chinese CLI/session outputs across three arms
+match. Non-flash hidden-state cosine is 0.998144631 / relative L2 6.1097%;
+logits are 0.998423708 / 7.4700%. Tokenizer pooling relative L2 is 8.3401%
+and RVQ code agreement is 73.5960%. No threshold was relaxed; #492 remains
+unmerged pending diagnosis and F16 evidence. The unstarted
+F16 job `37754323202` was cancelled after finding a legacy C-ABI device flag
+bug that can force a full weight copy on a CPU-only runner. Replacement
+Q4/F16 `--quant all` run `37758607763` was cancelled before execution because
+the known Q4 gate would prevent F16 from running. F16-only replacement
+`37761799417` at `c50c50061` explicitly forces CPU for baseline/candidate and
+releases session model/KV before each CLI load. It compares main/default, candidate/default and
+candidate/non-flash: five LM stage values/norms/relative L2, tokenizer continuous
+stages and exact RVQ codes, English/Chinese CLI/session equality and transcripts.
+F16 is the LM; both jobs use the shipped Q4_K tokenizer. Source/fixture pins
+and local evidence are on the branch in
+`docs/mimo-pr492-acceptance-2026-10-08.json`.
+
+The MiMo C ABI now forwards `use_gpu` and verbosity alongside flash attention.
+Actual-library initializer-interposition job `37758333664` is queued at
+`7e1806060` (now running): eight requested combinations and eight failed-open default-reset
+checks; removing the two assignments must fail before the restored build passes.
+The probe compiles and Python scripts parse locally. No hosted pass yet.
+This device fix prevents selecting a second CPU backend through init_best and
+copying the 16 GB F16 weights in the legacy CPU session. The numerical baseline
+also explicitly forces CPU to retain its mmap path. No GPU execution is claimed.
+
+No new CANN/CUDA correctness or performance claim; combined CANN/NZ timings
+cannot be attributed to this PR alone. PR #492 remains unmerged. #516 Arabic
+acceptance has progressed to a Java input-encoding fix; see the #490 claim.
+
 ## CLAIMED 2026-10-08 — #490 CTC character timestamps
 
 Worktree: `/mnt/storage/crispasr/issue490-characters-20261008/worktree`, branch
@@ -20,22 +84,38 @@ unsupported characters and no-path cases. Keep word output compatible; no
 interpolated character times. Add synthetic known-path guards first, then
 hosted real-audio CLI/C ABI validation where a pinned model is available.
 
-Implemented in draft PR #516, latest `d57b0f7c7` (core implementation `5a8471309`): measured UTF-8 label spans,
-nested CLI JSON, C ABI and seven wrappers. All 41 known-path assertions pass,
-also under ASAN/UBSAN; C# builds with zero warnings/errors. An impossible
-repeated-label path fails on the saved baseline and is rejected after the fix.
-Real Arabic Q4 audio acceptance with an independent Viterbi reference is queued
-in automatic PR acceptance `37746296873`, including exact Java/JNA character
-text/times and a nonzero offset. Earlier queued runs were superseded as the
-binding/CI follow-ups landed. Still unmerged.
+Implemented in draft PR #516, rebased onto merged #515 (`5c172455e`),
+latest `d9fcfcc90`. Core measured-span implementation is unchanged; both
+appended CMake test targets are retained. All 41 known-path assertions and
+ASAN/UBSAN pass. Integrated bindings: Dart 3.13.5 formats 11 files cleanly;
+Java wrapper/driver compile; C# builds with zero warnings/errors; Python parses.
 
-Dart push CI `37743605825` built the native library successfully, then failed
-`dart format`. Corrected using Dart 3.13.5: all nine library/test files format
-cleanly; static analysis reports no issues. Go `37743605844`, Rust `37743605797`
-and Linux C# job in `37743740252` pass at the core implementation source.
-Java wrapper/acceptance driver compile locally (15 class files); Java runtime
-proof is pending in the fresh Arabic acceptance. Added missing workflow triggers
-for C ABI/Python/Java/model-runtime/tests and explicit UTF-8 for MSVC fixtures.
+Real Arabic Q4 run `37746296873` built and passed 41 new / 91 existing
+alignment assertions, then produced valid JSON with 15 words / 85 measured
+characters. It FAILED on a diagnostic preview cutting a UTF-8 codepoint;
+independent Viterbi and binding runtime comparisons were not reached. Fixed
+with the existing UTF-8 prefix helper, keeping strict log decoding. Separately,
+a saved Java/JNA guard reproduces Arabic text corruption under a US-ASCII
+host default; explicit UTF-8 makes it pass. Arabic acceptance `37751687697` now passes CLI word/segment JSON, all 85
+character spans against independent full-sequence Viterbi, Python/C ABI offsets
+and invalid-accessor checks. It FAILED at Java alignment: JNA 5.13's scalar
+String arguments still use the global encoding even with the per-library UTF-8
+option. The earlier local guard tested only returned text. A strict native
+input/output guard now reproduces the failure, including a Unicode model path;
+explicit input conversion passes under US-ASCII, ISO-8859-1 and UTF-8 defaults.
+It runs before heavy work in fresh acceptance `37756933124` (now running). #516 is
+unmerged and excluded from release notes. Source/proof detail is on the branch
+in `docs/ctc-characters-2026-10-08.json`.
+
+Go `37743605844`, Rust `37743605797` and Linux C# in `37743740252` passed
+at the original implementation source. Earlier Dart format failure is fixed;
+static analysis passes. Fresh platform/binding checks run at the rebased source.
+
+Storage checkpoint: 1,962,991,156 bytes of cold archives/JARs moved to
+`/mnt/storage/cold-files-20261008`, each checksum-verified before atomic
+replacement with a symlink at its original path. No active executables or
+shared-library trees moved. Receipts/scripts:
+`/mnt/storage/crispasr/storage-cleanup-20261008/`.
 
 ## OPEN 2026-10-08 — release draft and final gates
 
@@ -84,8 +164,9 @@ and how it was verified is in `HISTORY.md`; usage, model verdicts and
 measurements are in `docs/streaming.md`. ⚠ Still true after the sync:
 `GGML_PREC_F32` is now 10 (was 1), so a binding passing a raw `1` breaks
 silently (not audited); `ggml_*_set_prec` are deprecated upstream (58 call
-lines here); `tests/test-metal-pipeline-cache.mm` does not compile and
-`test-ggml-scheduler-replay.cpp` is in no CMake target.
+lines here); `tests/test-metal-pipeline-cache.mm` API/build wiring is repaired with focused
+hosted validation pending. Scheduler replay is wired through the standalone
+`tools/ci-heavy/scheduler-replay` CMake target and its Vulkan workflow.
 
 Open, in the order they would help:
 

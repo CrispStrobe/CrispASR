@@ -129,7 +129,7 @@ change their implementation.
 
 | Thread | Finding and next action |
 |---|---|
-| [#490](https://github.com/CrispStrobe/CrispASR/issues/490) Arabic character alignment | Feasible. `src/align.cpp` already walks UTF-8 codepoints and traces per-label Viterbi positions, then collapses them to word times. Preserve those spans through the aligner and JSON surface. Test repeated letters, Arabic codepoints/diacritics, blanks, punctuation and OOV handling; do not estimate character times by dividing word durations. Implemented in draft [PR #516](https://github.com/CrispStrobe/CrispASR/pull/516): 41 known-path assertions and ASAN/UBSAN pass; C# builds cleanly. Real Arabic Q4 CLI/C ABI and independent Viterbi acceptance are queued. Still unmerged. |
+| [#490](https://github.com/CrispStrobe/CrispASR/issues/490) Arabic character alignment | Feasible. `src/align.cpp` already walks UTF-8 codepoints and traces per-label Viterbi positions, then collapses them to word times. Preserve those spans through the aligner and JSON surface. Test repeated letters, Arabic codepoints/diacritics, blanks, punctuation and OOV handling; do not estimate character times by dividing word durations. Implemented in draft [PR #516](https://github.com/CrispStrobe/CrispASR/pull/516): 41 known-path assertions and ASAN/UBSAN pass; C# builds cleanly. First hosted Arabic Q4 output has valid JSON (15 words / 85 measured characters), but a UTF-8 diagnostic preview crashed strict log reading before reference/binding checks. Corrected combined-source acceptance `37751687697` is queued. Still unmerged. |
 | [PR #492](https://github.com/CrispStrobe/CrispASR/pull/492) MiMo/CANN performance | Existing CI is green and the contributor reports five exact transcripts on Ascend. Shared attention/mel code and device placement deserve stage/magnitude and decoded-output validation on default and non-flash paths, F16 and shipped quant, with the current ggml pin. The cited timing combines this PR with the still-open [ggml #4](https://github.com/CrispStrobe/ggml/pull/4); it cannot be attributed to this PR alone. Retained unmerged. |
 | [PR #515](https://github.com/CrispStrobe/CrispASR/pull/515) streaming bindings / German ONNX Moonshine | Integrated with author ancestry preserved after final x86 `37744837589` and ARM `37744841616` each pass all eight cases, graph parity and cap/stream checks. Final main-tip CI remains a release gate. |
 | [#483](https://github.com/CrispStrobe/CrispASR/issues/483) CUDA 12.6 | Reporter confirms the mismatch warning is gone. Latest follow-up requests an experimental forced-MMQ/no-tensor build for GTX1660 comparisons. Both matched Windows packages pass, and their actual uploaded manifests pair locally. Packages and proof are published; reporter GPU model/output/timing comparisons remain pending. No forced-MMQ default change. |
@@ -309,3 +309,112 @@ Integration preserves original author commit `2bf39c58a` and the validated runti
 `a9c312cb1`; newer main changes are documentation only. #515 is integrated.
 Hikari deep lint also passes. #516 real Arabic acceptance and final main-tip
 checks remain pending; no release/version tag has been created.
+
+## Character alignment integration and UTF-8 fixes — 2026-10-08
+
+PR #516 is rebased onto merged #515, latest `8c373c4a9`. Both CMake test
+targets survive the append conflict. Integrated Dart formatting (11 files),
+Java compilation, C# build (zero warnings/errors) and Python parsing pass.
+Arabic Q4 run [37746296873](https://github.com/CrispStrobe/CrispASR/actions/runs/37746296873)
+built, passed 41 new / 91 existing assertions, and produced valid word JSON
+with 15 words and 85 measured characters. Its diagnostic preview split an
+Arabic codepoint and crashed strict log decoding; reference and binding runtime
+checks were not reached. The CLI now uses the existing UTF-8 prefix helper.
+Strict log decoding remains enabled. A separate saved JNA guard fails under
+US-ASCII before the explicit UTF-8 binding option and passes afterward.
+[37751687697](https://github.com/CrispStrobe/CrispASR/actions/runs/37751687697)
+reruns real Arabic CLI/reference/Python/Java acceptance with that host encoding
+forced. #516 remains unmerged pending full acceptance.
+
+Cold-file migration recovered 1.43 GB on root and 0.53 GB on `/mnt/volume1`.
+Each source was unused for over five hours and had no open descriptor; SHA-256
+was verified before atomically replacing its path with a symlink. Native
+executables/shared libraries were retained. Receipts live under
+`/mnt/storage/crispasr/storage-cleanup-20261008/`.
+
+## PR #492 numerical acceptance started — 2026-10-08
+
+Author-preserving candidate `fae7e2241` merges #492 onto current main with the
+same ggml pin. Shared mel projection passes 16 local A/B cases byte-for-byte,
+including the 64-frame branch boundary, both filterbank layouts, float/double
+accumulators and 1/4 threads. A frozen independent Python LM archive was found
+and checksum-verified; it contains five LM stages and explicitly skips generation.
+
+[Q4 acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37754319857)
+is queued; [F16 acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37754323202)
+waits in the script's serial concurrency group. Both check baseline/default,
+candidate/default and candidate/non-flash LM values with norms/relative L2,
+tokenizer stages/RVQ codes, and English/Chinese CLI/session decoded text. F16
+means the LM; the codec is the same shipped Q4_K in both jobs. CPU results do
+not establish CANN/CUDA correctness or the PR's combined NZ-weight speedup.
+#492 is still unmerged. #516 has progressed to the Java input fix below.
+
+## Arabic reference accepted; Java input encoding fixed — 2026-10-08
+
+[Arabic Q4 run 37751687697](https://github.com/CrispStrobe/CrispASR/actions/runs/37751687697)
+passes CLI word/segment JSON, exact independent full-sequence Viterbi for all
+85 measured characters, Python/C ABI offsets and invalid accessors, then fails
+at Java alignment. JNA 5.13's scalar String arguments still use the global
+encoding despite the per-library UTF-8 option. The earlier local guard checked
+only returned text; it missed incoming Arabic being replaced by question marks.
+
+A strict native guard now validates input UTF-8 bytes, a Unicode model path,
+returned Arabic characters and centisecond offsets. It rejects the old wrapper
+and passes after explicit per-library input conversion under US-ASCII,
+ISO-8859-1 and UTF-8 defaults. The global JNA setting is not changed. This guard
+runs before the expensive work. [Fresh acceptance 37756933124](https://github.com/CrispStrobe/CrispASR/actions/runs/37756933124)
+at `d9fcfcc90` is queued; #516 remains draft and unmerged.
+
+Metal cache test source `c849ba214` repairs the ggml device API call, direct
+Metal linkage and Objective-C++17. A compiler negative control rejects the old
+call and accepts the fixed one. [Shared/static macOS coverage](https://github.com/CrispStrobe/CrispASR/actions/runs/37755267314)
+is queued; no-device runtime checks explicitly skip, and no PSO serialization
+or GPU performance proof is claimed.
+
+## MiMo C ABI settings and F16 memory follow-up — 2026-10-08
+
+Candidate `c50c50061` also forwards session device preference and verbosity.
+Previously only flash attention was forwarded; CPU-only hosts hid the device
+omission because init_best selected another CPU backend. That different backend
+instance takes the split-loader weight-copy path, defeating mmap and risking a
+16 GB F16 allocation. [Actual-library parameter guard](https://github.com/CrispStrobe/CrispASR/actions/runs/37758333664)
+at `7e1806060` is queued: eight combinations plus failed-open default restoration,
+with an incremental negative-control rebuild removing the two assignments.
+The probe compiles and scripts parse locally; hosted proof remains required.
+
+The original Q4 numerical run continues at its unchanged `fae7e2241` source.
+The unstarted F16 job was cancelled for the memory defect above. Replacement
+[combined Q4/F16 acceptance](https://github.com/CrispStrobe/CrispASR/actions/runs/37758607763)
+at `c50c50061` waits in the same serial group. All numerical arms explicitly force
+CPU, including the legacy baseline, and session/CLI model contexts are released
+between speech checks. This is CPU-only acceptance, not a GPU claim.
+
+The first Metal shared job compiled the Objective-C++ test but failed linking
+Objective-C runtime symbols. `7b44257d3` adds explicit `objc`; [fresh shared/static
+coverage](https://github.com/CrispStrobe/CrispASR/actions/runs/37757366299) is queued.
+
+## Non-flash numerical gate and Metal discovery — 2026-10-08
+
+[MiMo Q4 run 37754319857](https://github.com/CrispStrobe/CrispASR/actions/runs/37754319857)
+failed the non-flash numerical gate. All 11 default LM/tokenizer stage arrays
+are byte-identical to baseline. English/Chinese text matches for all three arms
+through both CLI and C ABI (12 outputs). Non-flash final hidden-state cosine
+is 0.998144631 with relative L2 6.1097%; logits are 0.998423708 / 7.4700%.
+Tokenizer pooling relative L2 reaches 8.3401%, and discrete RVQ codes agree
+on 73.5960%. The thresholds remain unchanged; this is not numerical acceptance.
+The archive also preserves independent Python-reference metrics, including
+Q4 error already present in the baseline. #492 remains unmerged.
+
+The queued combined run was cancelled before execution because the known Q4
+gate would prevent reaching F16. [F16-only replacement 37761799417](https://github.com/CrispStrobe/CrispASR/actions/runs/37761799417)
+uses the corrected memory/CPU harness at `c50c50061`. The actual-library ABI
+guard and Arabic/Java acceptance are now executing.
+
+[Metal static job 113245123775](https://github.com/CrispStrobe/CrispASR/actions/runs/37757366299/job/113245123775)
+compiles and links the actual Objective-C++ test, then fails with no tests
+matching the label. A minimal Catch 3.7.1 CMake reproduction confirms that
+semicolon-valued PROPERTIES split the labels, leaving only `unit`. The focused
+workflow now selects the actual test-name prefix, requires exactly two discovered
+cases and keeps the unit label. Corrected discovery passes locally; that proof
+uses a listing-only dummy and makes no GPU/cache-runtime claim. Fresh macOS
+shared/static coverage is required.
