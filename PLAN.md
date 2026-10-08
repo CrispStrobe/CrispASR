@@ -49,7 +49,13 @@ unchanged inputs and byte-exact replay output, outside timed regions. The
 existing private HF cache holds only Kaggle compiler output, pinned by revision
 and SHA-256; no model/reference repository was made private. Terminal collection
 is armed under `proof/cuda-v4` (collector PID 3741746). Full launch-failure
-receipt: `docs/mimo-pr492-cuda-attention-launch-2026-10-08.json`. The tiny capture smoke passes exact layouts and independent
+receipt: `docs/mimo-pr492-cuda-attention-launch-2026-10-08.json`. Full-clip
+RVQ follow-up source `7dd998ca4` is queued in GH run `37815978118`: execute the
+pinned unmodified official quantizer across all frames, compare every native
+arm on its own pooled input and separately to the official encoder. The first
+run consumes CPU diagnostic `37783601573` at verified source `7551b12de`;
+the same runner can read only terminal Kaggle proof for the GPU follow-up.
+No numerical tolerances, discrete gates or production runtime change. The tiny capture smoke passes exact layouts and independent
 NumPy SDPA. Native CI `37805363962` PASS at `3fd1bf5fa`; lint `37806475239`
 has nine passed checks with clang-tidy running. Full 33-model regression
 `37802900089` has unit/select/smoke/preflight and six model jobs passed so far;
