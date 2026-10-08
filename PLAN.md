@@ -11,6 +11,17 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-08 — manifest-specific regression selection
+
+Worktree: `/mnt/storage/crispasr/regression-manifest-selection-20261008/worktree`,
+branch `review/regression-manifest-selection`. Actual main regression
+`37794919636` selected only the generic six-model core after the data2vec
+manifest correction. Compare manifest entries at the diff base/head and add
+changed nightly entries to the matrix; use a conservative full nightly set if
+the manifest comparison is unavailable. Keep shared-driver core coverage and
+prove that transcript, hash, new-entry and TTS-entry changes select their own
+model. No model targets, weights or parity thresholds change in this fix.
+
 ## CLAIMED 2026-10-08 — MiMo original-Q4 CUDA precision follow-up
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, branch
