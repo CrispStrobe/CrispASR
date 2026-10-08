@@ -44,7 +44,15 @@ outputs must agree across ABBA profiling toggles (two warmups/six measured
 calls per clip/process). Timings separate host inputs, graph build, scheduler
 allocation, input preparation/upload, synchronous compute and readback;
 scheduler pipeline-copy multiplicity is not a transfer count. No speedup
-claim from instrumentation. Terminal archive and cache refresh are pending.
+claim from instrumentation. v1 COMPLETE on Tesla T4: all 64 speech calls and
+eight CLI/session pairs agree exactly. Twelve measured calls/clip/mode:
+EN profiling off/on 3.11777/3.12138s, ZH 1.34072/1.34077s (medians).
+Decode medians including warmups: compute 95.85ms, allocation 1.277ms,
+graph build 0.509ms, readback 0.199ms, inputs 0.030ms; 13 scheduler splits.
+Graph caching alone has a modest ceiling (~1.8% summed decode phase time).
+All terminal files archived, public proof and refreshed actual-Kaggle cache
+pinned in `docs/mimo-graph-profile-2026-10-08.json`. Inspect compute dispatch
+and avoid the redundant GPU prefill/audio route before proposing a speedup.
 
 VoxCPM2 ten-step Vulkan profile v1 launched at source `ece203528`, harness
 `323a568ca`: [kernel](https://www.kaggle.com/code/chr1s4/crispasr-voxcpm2-current-profile).
@@ -52,8 +60,14 @@ Post-launch audit found the generic session TTS step setter lacks VoxCPM2
 forwarding; v1 must reject rc=-2 and cannot establish ten-step acceptance.
 Fix the native setter, session dispatch and CLI runtime override in the profile
 worktree before a pinned rerun; archive v1 terminal output before repushing.
-Keep the default at ten steps and distinguish cold context/shape setup from
-warm inference. NVIDIA Vulkan evidence cannot replace the Intel B390 retest.
+v1 actually failed earlier at CMake: missing `spirv-headers`; logs and all
+outputs archived under the task proof root. Fixed the package and native
+step setter, C ABI forwarding and per-call CLI override at `c44f643dd`.
+Kernel v2 launched with that source, harness `94827d8f1`; native solver logs
+must confirm ten actual steps, not just a receipt constant. Syntax/format
+checks pass; build/speech acceptance is pending. Keep the default at ten steps
+and distinguish cold context/shape setup from warm inference. NVIDIA Vulkan
+evidence cannot replace the Intel B390 retest.
 
 OmniVoice #518 implementation `a1ae00dff` is pushed on
 `fix/omnivoice-postprocess-518`. Independent pinned upstream functions pass
