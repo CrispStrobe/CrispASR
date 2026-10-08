@@ -7,10 +7,10 @@ from pathlib import Path
 import subprocess
 import sys
 
-SCRIPT_VERSION = 'mimo-graph-profile-v1'
-SOURCE = 'b8ab3249df7a791afefbde2541c41646fd0aac23'
+SCRIPT_VERSION = 'mimo-gpu-step-graph-v2'
+SOURCE = 'e15801570662ef1b1e4296e8c1002cea129d66ba'
 GGML = 'c36dab89b662838f0f5d4826c399198c0b90bbfc'
-CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'mimo-pr492/sm75-full-asr-v3.tar', 'revision': '0480221f9f7e5b16773ad8ad7e673cfc1afcdc94', 'sha256': '5cf9eb772a1190c2a058d9ec682ea0b08378b0d723bfbbef7235d80293833344', 'bytes': 78080000}
+CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'mimo-graph-profile/sm75-v1.tar', 'revision': 'd536fb7095d898397dc0110654a3f445b70428c7', 'sha256': '97dadd1746fd13fd0450fd36244c4cda05a5ef681fcbb31b284b7ff577477b0f', 'bytes': 85688320}
 WORK = Path('/kaggle/working')
 SCRATCH = Path('/kaggle/temp/mimo-graph-profile')
 REPO = SCRATCH / 'CrispASR'
@@ -21,7 +21,7 @@ def main():
     SCRATCH.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
     os.environ.update(PYTHONUNBUFFERED='1', TMPDIR=str(SCRATCH),
-                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='mimo-graph-profile-v1')
+                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='mimo-gpu-step-graph-v2')
     devices = subprocess.check_output(['nvidia-smi', '--query-gpu=name,compute_cap,memory.total',
                                        '--format=csv'], text=True)
     print(SCRIPT_VERSION, devices, flush=True)
@@ -85,7 +85,7 @@ def main():
     assert (build / 'bin/crispasr').is_file()
     (OUT / 'CMakeCache.txt').write_bytes((build / 'CMakeCache.txt').read_bytes())
     os.environ.update(HEAVY_OUT=str(OUT), HEAVY_SCRATCH=str(SCRATCH),
-                      MIMO_PROFILE_BUILD=str(build), CUDA_VISIBLE_DEVICES='0')
+                      MIMO_PROFILE_BUILD=str(build), CUDA_VISIBLE_DEVICES='0', MIMO_GPU_STEP_STUDY='1')
     kh.step('asr.validation.begin', source=SOURCE, arch=arch)
     try:
         with kh.build_heartbeat('asr-cuda-validation'):
