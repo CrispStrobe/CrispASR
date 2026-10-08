@@ -18,7 +18,10 @@ bump/tag until required main-tip checks pass. Use `scripts/bump-version.sh`.
 Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
 `review/pr515-integration`. Review the complete author patch at
 `2bf39c58a53160ed10aed82d5d621c794dc32bba`, preserve author commits,
-and test on current main with bounded APT setup. Inspect packet/flush and
+and test on current main with bounded APT setup. Final contributing audit also found
+the ONNX decoder cap was not forwarded: wire explicit `--max-new-tokens` and
+session cap overrides through batch and persistent streaming, retaining the
+existing duration-derived budget when cleared. Add real capped-output checks. Inspect packet/flush and
 UTF-8 behavior, German ONNX model/companion/licence routing, C ABI and bindings.
 Validation branch `f43dfd5eb5f9915e2c54b42da1ce5fa3fa00318d` preserves the
 author commits. Fixed matched-model companion downloads, failure propagation
