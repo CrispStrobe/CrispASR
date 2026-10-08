@@ -235,8 +235,15 @@ def main():
                 arm: metrics(data(arm, stage).reshape(value.shape), value)
                 for arm in ['q4-flash', 'q4-eager', 'promoted-flash', 'promoted-eager']}
     receipt['scale_negative_control'] = metrics(reference['tok_pool_out'] * 2, reference['tok_pool_out'])
+    receipt['time_order_negative_control'] = metrics(reference['tok_pool_out'][::-1], reference['tok_pool_out'])
     save()
     failures = []
+    control = receipt['scale_negative_control']
+    if not (control['cosine'] >= .9999 and control['relative_l2'] > .005):
+        failures.append('scale negative control was not rejected')
+    control = receipt['time_order_negative_control']
+    if control['cosine'] >= .9999 and control['relative_l2'] <= .005:
+        failures.append('time-order negative control was not rejected')
     for kind, stages in receipt['attention_ab'].items():
         if kind == 'promoted':
             for stage, m in stages.items():
