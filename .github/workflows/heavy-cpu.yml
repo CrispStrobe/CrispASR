@@ -93,6 +93,9 @@ jobs:
       # standard CI token can read models but cannot upload its Xet weights.
       HF_TOKEN: ${{ (inputs.script == 'tools/ci-heavy/index_echo_produce.py' || inputs.script == 'tools/ci-heavy/index_echo_publish.py' || inputs.script == 'tools/ci-heavy/index_echo_q4_prepare.py') && secrets.INDEX_ECHO_HF_TOKEN || secrets.HF_TOKEN }}
       GH_TOKEN: ${{ github.token }}
+      # Only the read-only RVQ oracle may retrieve terminal Kaggle arrays.
+      KAGGLE_ACCOUNT: ${{ inputs.script == 'tools/ci-heavy/pr492_rvq_oracle.py' && secrets.KAGGLE_ACCOUNT || '' }}
+      KAGGLE_API_TOKEN: ${{ inputs.script == 'tools/ci-heavy/pr492_rvq_oracle.py' && secrets.KAGGLE_TOKEN || '' }}
     steps:
       - uses: actions/checkout@v4
         with:
