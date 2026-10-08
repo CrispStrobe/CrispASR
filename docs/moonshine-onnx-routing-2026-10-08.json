@@ -1,0 +1,21 @@
+{
+  "scope": "Actual CLI factory and existing Moonshine companion-config detector; no full CLI inference or performance claim",
+  "source_commit": "a9c312cb1f49c6c9576df9e3aed07c80201e412b",
+  "baseline": "Generic real encoder_int8.onnx path returns empty backend; exit 1",
+  "fixed": "Real streaming and synthetic legacy configs recognized; unrelated and malformed configs rejected",
+  "checks": 4,
+  "code_sha256": "2c44168ed0021049da96bf6748ddbe5f68391ddeb4ab63e13a7648a40781f358",
+  "log_sha256": {
+    "before.log": "87166bb8076a92f2549021f0a9ffbcf3bcc18761f52eb632c442f400e5ff371c",
+    "after.log": "0b51cefa13b198a901fab36590fb740db2d904b8c3baefbf917fe97ac7012506"
+  },
+  "failed_hosted_runs": {
+    "x86": 37741562051,
+    "arm64": 37741564942
+  },
+  "fresh_hosted_runs": {
+    "x86": 37744837589,
+    "arm64": 37744841616
+  },
+  "cold_proof": "/mnt/storage/crispasr/triage-20261007/onnx-routing-proof"
+}

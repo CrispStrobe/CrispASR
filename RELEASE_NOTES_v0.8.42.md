@@ -146,7 +146,7 @@ Existing wav2vec2 GPU transcript drift remains under investigation.
 - The manual Windows CUDA smoke workflow can package matched CUDA-12.6
   forced-MMQ OFF/ON experiments for #483. Both Windows arms pass compile-setting,
   runtime-version and driverless-startup checks; actual artifact manifests pair
-  locally. The final hosted pair job remains pending at this draft checkpoint.
+  locally and in the final hosted pair job; the complete workflow passes.
   These are experiment artifacts, not changed release defaults or evidence of
   GTX1660/MX150 speed. [Packages and scope](docs/cuda126-mmq-experiment-2026-10-08.md).
 

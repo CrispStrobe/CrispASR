@@ -840,12 +840,12 @@
       "ci": 37730684549,
       "regression": 37730687001
     },
-    "runtime_commit": "cdd1b80d0df90279e26489b94fa20c8a73abb2ca",
+    "runtime_commit": "a9c312cb1",
     "driver_smoke": {
       "passed": true,
       "tests": 56
     },
-    "review_comment": "https://github.com/CrispStrobe/CrispASR/pull/515#issuecomment-6052735019",
+    "review_comment": "https://github.com/CrispStrobe/CrispASR/pull/515#issuecomment-6054430157",
     "cpu_previous": {
       "commit": "107789133cbfeabba1295e9958d47547dae52f59",
       "scope": "CPU download/bundle/C ABI packet/flush acceptance; no GPU performance claim",
@@ -1141,8 +1141,8 @@
       "harness_failure": "GGUF Ref::shape singleton-axis normalization; graph values and text match"
     },
     "latest_runs": {
-      "x86": 37740556768,
-      "arm64": 37740559460,
+      "x86": 37741562051,
+      "arm64": 37741564942,
       "native_ci": 37735908557,
       "lint": 37735910817,
       "wasm": 37735912990,
@@ -1157,17 +1157,18 @@
       "websocket_syntax": "pass"
     },
     "latest_x86": {
-      "run_id": 37740556768,
-      "source_commit": "cdd1b80d0df90279e26489b94fa20c8a73abb2ca",
+      "run_id": 37744837589,
+      "source_commit": "a9c312cb1",
       "runner": "ubuntu-22.04",
       "status": "queued",
-      "replaces": 37738992713
+      "replaces": 37741562051
     },
     "latest_arm64": {
-      "run_id": 37740559460,
-      "source_commit": "cdd1b80d0df90279e26489b94fa20c8a73abb2ca",
+      "run_id": 37744841616,
+      "source_commit": "a9c312cb1",
       "runner": "ubuntu-24.04-arm",
-      "status": "queued"
+      "status": "in_progress",
+      "replaces": 37741564942
     },
     "x86_flush_fix": {
       "before_failed": true,
@@ -1176,21 +1177,36 @@
       "frontend_max_abs": 4.76837e-07,
       "frontend_relative_l2": 3.10646e-07,
       "fix": "Replay batch inference from retained original PCM at final flush",
-      "receipt_on_feature_branch": "docs/moonshine-onnx-x86-flush-2026-10-08.json"
+      "receipt_on_feature_branch": "docs/moonshine-onnx-x86-flush-2026-10-08.json",
+      "generation_cap_followup": {
+        "commit": "c46e44e82",
+        "local_threads": [
+          1,
+          4
+        ],
+        "one_token_output": "Guten",
+        "reset": "passed",
+        "hosted_cli_cabi_stream_checks": "added; queued"
+      }
     },
     "binding_checks": {
       "go": "passed",
       "rust": "passed",
       "wasm": "all five jobs passed",
-      "native_ci": "10 passed, 3 in progress",
-      "lint": "in progress",
+      "native_ci": "passed all 13 jobs at a1a3d4a25; optional-SDK final runtime acceptance pending",
+      "lint": "passed all 10 jobs at a1a3d4a25",
       "windows_cuda13": "passed"
+    },
+    "c46_acceptance": {
+      "x86": 37741562051,
+      "arm64": 37741564942,
+      "status": "both failed generic-path CLI routing after graph-stage parity passed; three native cases passed"
     }
   },
   "issue483_mmq": {
     "source_commit": "04ded753e909da019a2cd391f651f51f5299b6f5",
     "run_id": 37733919241,
-    "status": "windows_packages_pass_local_pair_pass_hosted_pair_queued",
+    "status": "windows_packages_and_hosted_and_local_pair_pass",
     "merged": true,
     "scope": "Matched CUDA 12.6.3 ON/OFF forced-MMQ CLI packages; compile/packaging/driverless startup only; reporter GTX1660 acceptance pending",
     "artifact_ids": {
@@ -1205,6 +1221,30 @@
     "focused_cppcheck": "pass; 2.17.1",
     "cxx17_syntax": "pass",
     "hosted_pinned_cppcheck_run": 37737578258,
-    "hosted_status": "queued"
+    "hosted_status": "in_progress"
+  },
+  "issue490_characters": {
+    "source_commit": "d57b0f7c7a219641cbdbcebca1108f7b1f8096b5",
+    "pr": 516,
+    "merged": false,
+    "known_path_assertions": 41,
+    "asan_ubsan": "passed",
+    "csharp": "passed; 0 warnings/errors",
+    "baseline_no_path": "failure reproduced; fixed guard passes",
+    "independent_reference_known_path": "passed",
+    "real_arabic_q4_runs": [
+      37746296873
+    ],
+    "hosted_status": "queued",
+    "scope": "Post-logit measured character output; no new model-stage or hardware-performance claim",
+    "superseded_manual_run": 37743605571,
+    "core_implementation_commit": "5a8471309eadcb275a1cabff519ba727fe7f6fda",
+    "dart": "format all 9 files and static analysis pass; hosted rerun queued",
+    "java": "Session wrapper and Arabic acceptance driver compile; runtime comparison queued",
+    "hosted_original_binding_checks": {
+      "go": 37743605844,
+      "rust": 37743605797,
+      "csharp_linux": 37743740252
+    }
   }
 }
