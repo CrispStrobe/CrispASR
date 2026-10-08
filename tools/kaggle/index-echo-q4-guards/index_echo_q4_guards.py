@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Predeclared mixed-Q4 candidates, with unchanged independent acceptance.
 
-CPU compilation, quantization and private uploads run on GitHub. This kernel
-only downloads pinned candidates and executes them on actual GPUs. Rejected weights
-remain private. No threshold, default, reference or decoded text is changed.
+CPU compilation, quantization and experimental public uploads run on GitHub.
+This kernel downloads pinned, explicitly unvalidated candidates and executes
+them on actual GPUs. Rejected weights remain marked as unvalidated. No threshold, default, reference or decoded text is changed.
 """
 import hashlib
 import json
@@ -19,12 +19,12 @@ BUILD_RUN = 37040196454
 BUNDLE_REVISION = '51158bc93be3e4f2f65a3bde6296bd9a59712968'
 BUNDLE_SHA256 = '0a4f882975c802a4ff3a1932fcb3ecf838cac39c3ccecc181240e331d0432303'
 MODEL_REVISION = 'dffbadf0f173446fee0364a0807803d2b2fb6f49'
-PRIVATE_REPO = 'cstr/index-echo-9b-staging-GGUF'
-# No successful preparation run: the corrected 37046153440 hit HF quota.
+PREPARATION_REPO = 'cstr/index-echo-9b-GGUF'
+# Public CPU retry 37851965549 is pending; do not launch without its pins.
 PREPARATION_RUN = None
 PREPARATION_REVISION = 'PENDING'
 PREPARATION_SHA256 = 'PENDING'
-PREPARATION_PATH = 'q4-guards-20261002/preparation.json'
+PREPARATION_PATH = 'experiments/q4-guards-20261008/preparation.json'
 SDK = Path('/kaggle/temp/index-echo-q4-sdk')
 TEMP = Path('/kaggle/temp/index-echo-q4')
 OUT = Path('/kaggle/working')
@@ -95,12 +95,17 @@ def validate(name, additions):
 
 
 # Permission/provenance preflight precedes any model download or execution.
-prepared_path = Path(hf_hub_download(PRIVATE_REPO, PREPARATION_PATH,
+prepared_path = Path(hf_hub_download(PREPARATION_REPO, PREPARATION_PATH,
     revision=PREPARATION_REVISION, local_dir=TEMP / 'preparation'))
 assert digest(prepared_path) == PREPARATION_SHA256, 'Preparation receipt checksum mismatch'
 prepared = json.loads(prepared_path.read_text())
 assert prepared['preparation_only'] and prepared['validated'] is False
 assert prepared['source_revision'] == MODEL_REVISION
+assert prepared['preparation_repo'] == PREPARATION_REPO
+assert prepared['prefix'] == str(Path(PREPARATION_PATH).parent)
+for recipe in prepared['recipes'].values():
+    assert recipe['remote_verified'] and len(recipe['weight_revision']) == 40
+    assert recipe['path'].startswith(prepared['prefix'] + '/')
 assert set(prepared['recipes']) == {'q4_k_plain', 'q4_k_sensitive', 'q4_k_ffn_guarded', 'q4_k_middle'}
 # Same compiled runtime/hardware must first reproduce the accepted F16 pair.
 control = validate('f16-control', {})
@@ -108,7 +113,7 @@ assert control['validated'], 'F16 control failed; do not blame or measure quants
 source = TEMP / 'f16-control/models'
 results = dict(script_version=SCRIPT_VERSION, source_commit=SOURCE_COMMIT,
                build_commit=BUILD_COMMIT, build_run=BUILD_RUN, hardware=hardware,
-               source_model_revision=MODEL_REVISION, private_repo=PRIVATE_REPO,
+               source_model_revision=MODEL_REVISION, preparation_repo=PREPARATION_REPO,
                preparation_run=PREPARATION_RUN, preparation_revision=PREPARATION_REVISION,
                preparation_sha256=PREPARATION_SHA256,
                control_passed=True, defaults_changed=False, candidates={})
@@ -121,8 +126,8 @@ for name, recipe in prepared['recipes'].items():
     # while testing the physically audited mixed decoder in an isolated folder.
     decoder = models / 'index-echo-9b-decoder-f16.gguf'
     with kh.build_heartbeat(name+'.download', interval_s=30):
-        downloaded = Path(hf_hub_download(PRIVATE_REPO, recipe['path'],
-            revision=PREPARATION_REVISION, local_dir=models / 'download'))
+        downloaded = Path(hf_hub_download(PREPARATION_REPO, recipe['path'],
+            revision=recipe['weight_revision'], local_dir=models / 'download'))
     assert downloaded.stat().st_size == recipe['decoder_bytes']
     assert digest(downloaded) == recipe['decoder_sha256']
     decoder.symlink_to(downloaded)

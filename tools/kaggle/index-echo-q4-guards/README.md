@@ -10,8 +10,8 @@ preparation revision/checksum remain unset until a successful producer run and
 artifact transfer.
 
 Build the CUDA bundle on GitHub. Run `tools/ci-heavy/index_echo_q4_prepare.py`
-through `heavy-cpu.yml` with the dedicated Index-Echo staging credential;
-quantization, physical audits and private uploads all run on that CPU runner.
+through `heavy-cpu.yml` with the existing HF write credential; quantization, physical audits and
+explicitly unvalidated public experimental uploads run on that CPU runner.
 Pin its preparation revision/checksum as well as the successful CUDA build
 SHA, HF dataset revision and SHA256 before pushing with `../kpush.py`.
 No GPU-less build counts as hardware acceptance.
@@ -34,12 +34,13 @@ All 177 original F32 tensors, including 24 recurrent convolution matrices, must
 retain F32. Per-tensor inventory and actual Q4 byte counts prevent a nominal Q4 artifact
 from silently remaining F16. Separate candidate directories resolve the
 unchanged primary's original companion basename to the tested mixed decoder.
-Each decoder is uploaded immediately to the existing private staging repository
-on GitHub and local runner weights are released. Kaggle downloads one candidate
+Each decoder is uploaded immediately to the public experimental prefix by the
+GitHub producer and local runner weights are released after remote size/SHA
+verification. Kaggle downloads one candidate
 at a time and releases it after actual GPU acceptance. Its receipt/log is
 retained even after rejection. All CLI checks must log actual CUDA layer
 assignment; the small CPU VAD companion is part of the real file pipeline.
-No compilation, quantization, CPU-only CLI pass, TTS synthesis, public weights
+No compilation, quantization, CPU-only CLI pass, TTS synthesis, weight uploads
 or default quantization changes occur in the GPU kernel.
 
 The original v1 GPU F16 control passed every acceptance gate but stopped before
@@ -61,3 +62,8 @@ Per-candidate manifests include the weight commit. This does not overwrite
 published model files or change model-registry pins. The GPU consumer still
 requires a completed preparation receipt and immutable pins before launch;
 Q4 runtime acceptance remains pending.
+
+The consumer now uses that public preparation repo and each recipe’s immutable
+weight revision, and rejects missing remote verification or paths outside the
+experimental prefix. Its launch pins remain deliberately unset while the CPU
+producer is queued; the old private route is retained only as historical evidence.
