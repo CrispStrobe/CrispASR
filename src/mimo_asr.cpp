@@ -101,7 +101,7 @@ struct mimo_asr_graph_profile {
         const auto now = std::chrono::steady_clock::now();
         const double ms = std::chrono::duration<double, std::milli>(now - last).count();
         std::fprintf(stderr, "mimo_asr_graph: path=%s past=%d phase=%s ms=%.6f\n", path, n_past, phase, ms);
-        last = now;
+        last = std::chrono::steady_clock::now();
     }
     void graph(ggml_backend_sched_t sched, ggml_cgraph* gf, bool cached) {
         if (enabled)
