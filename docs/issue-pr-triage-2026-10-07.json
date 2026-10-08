@@ -737,19 +737,19 @@
       "model": "orukeet",
       "cached": true,
       "passed": true,
-      "stderr": "crispasr: note: orukeet-q4_k.gguf is licensed CC-BY-SA-4.0 (see https://huggingface.co/oruk/orukeet) — review and comply with the upstream terms.\n"
+      "stderr": "crispasr: note: orukeet-q4_k.gguf is licensed CC-BY-SA-4.0 (see https://huggingface.co/oruk/orukeet) \u2014 review and comply with the upstream terms.\n"
     },
     {
       "model": "voxtral-tts",
       "cached": false,
       "passed": true,
-      "stderr": "crispasr: model 'voxtral-tts' not found locally.\n  Available for download: voxtral-4b-tts-q4_k.gguf (~2.5 GB)\n  LICENSE: CC-BY-NC-4.0 — NON-COMMERCIAL use only (base model mistralai/Voxtral-4B-TTS-2603; see https://huggingface.co/mistralai/Voxtral-4B-TTS-2603) — NON-COMMERCIAL USE ONLY. Do not use for commercial purposes.\n  Refusing: pass --accept-license cc-by-nc-4.0 (or set CRISPASR_ACCEPT_LICENSE).\n"
+      "stderr": "crispasr: model 'voxtral-tts' not found locally.\n  Available for download: voxtral-4b-tts-q4_k.gguf (~2.5 GB)\n  LICENSE: CC-BY-NC-4.0 \u2014 NON-COMMERCIAL use only (base model mistralai/Voxtral-4B-TTS-2603; see https://huggingface.co/mistralai/Voxtral-4B-TTS-2603) \u2014 NON-COMMERCIAL USE ONLY. Do not use for commercial purposes.\n  Refusing: pass --accept-license cc-by-nc-4.0 (or set CRISPASR_ACCEPT_LICENSE).\n"
     },
     {
       "model": "voxtral-tts",
       "cached": true,
       "passed": true,
-      "stderr": "crispasr: WARNING: voxtral-4b-tts-q4_k.gguf is licensed CC-BY-NC-4.0 — NON-COMMERCIAL use only (base model mistralai/Voxtral-4B-TTS-2603; see https://huggingface.co/mistralai/Voxtral-4B-TTS-2603) — NON-COMMERCIAL USE ONLY.\n  By loading this model you confirm you will not use it for commercial purposes.\n"
+      "stderr": "crispasr: WARNING: voxtral-4b-tts-q4_k.gguf is licensed CC-BY-NC-4.0 \u2014 NON-COMMERCIAL use only (base model mistralai/Voxtral-4B-TTS-2603; see https://huggingface.co/mistralai/Voxtral-4B-TTS-2603) \u2014 NON-COMMERCIAL USE ONLY.\n  By loading this model you confirm you will not use it for commercial purposes.\n"
     }
   ],
   "b390_followup": {
@@ -853,9 +853,9 @@
         {
           "variant": "moonshine-streaming-tiny-de-onnx",
           "passed": true,
-          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "streaming_kind": 2,
-          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "updates": [
             7,
             7
@@ -864,16 +864,16 @@
         {
           "variant": "moonshine-streaming-small-de-onnx",
           "passed": false,
-          "batch": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "batch": "Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "streaming_kind": 2,
-          "error": "AssertionError(('Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.', 'Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im großen Saal.'))"
+          "error": "AssertionError(('Guten Morgen, die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.', 'Guten Morgen! Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.'))"
         },
         {
           "variant": "moonshine-streaming-tiny-de-onnx-f32",
           "passed": true,
-          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "streaming_kind": 2,
-          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "updates": [
             7,
             7
@@ -882,9 +882,9 @@
         {
           "variant": "moonshine-streaming-small-de-onnx-f32",
           "passed": true,
-          "batch": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "batch": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "streaming_kind": 2,
-          "final": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "final": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "updates": [
             7,
             7
@@ -893,13 +893,13 @@
         {
           "variant": "moonshine-tiny-de-phreak87-onnx",
           "passed": true,
-          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im gro\u00dfen saal",
           "streaming_kind": 0
         },
         {
           "variant": "moonshine-tiny-de-dattazigzag",
           "passed": true,
-          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im gro\u00dfen saal",
           "streaming_kind": 0
         },
         {
@@ -912,7 +912,7 @@
             "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
             "approx_size_mb": 458
           },
-          "error": "AssertionError(('Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal. <de-DE>', 'Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.'))"
+          "error": "AssertionError(('Guten Morgen, die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal. <de-DE>', 'Guten Morgen, die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.'))"
         },
         {
           "variant": "qwen3",
@@ -923,9 +923,9 @@
             "file": "qwen3-asr-0.6b-q4_k.gguf",
             "approx_size_mb": 400
           },
-          "batch": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.",
           "streaming_kind": 3,
-          "final": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "final": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.",
           "updates": [
             2,
             2
@@ -954,9 +954,9 @@
           "passed": true,
           "graph_diff": "passed; exact input/shape, cosine >= 0.99999, relative L2 <= 1e-4, text exact",
           "scale_failure_rejected": true,
-          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "streaming_kind": 2,
-          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "updates": [
             7,
             7
@@ -966,9 +966,9 @@
           "variant": "moonshine-streaming-small-de-onnx",
           "passed": true,
           "graph_diff": "passed; exact input/shape, cosine >= 0.99999, relative L2 <= 1e-4, text exact",
-          "batch": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "batch": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "streaming_kind": 2,
-          "final": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "final": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "updates": [
             7,
             7
@@ -978,9 +978,9 @@
           "variant": "moonshine-streaming-tiny-de-onnx-f32",
           "passed": true,
           "graph_diff": "passed; exact input/shape, cosine >= 0.99999, relative L2 <= 1e-4, text exact",
-          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "streaming_kind": 2,
-          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "final": "Guten Morgen. Die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "updates": [
             7,
             7
@@ -990,9 +990,9 @@
           "variant": "moonshine-streaming-small-de-onnx-f32",
           "passed": true,
           "graph_diff": "passed; exact input/shape, cosine >= 0.99999, relative L2 <= 1e-4, text exact",
-          "batch": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "batch": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "streaming_kind": 2,
-          "final": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im großen Saal.",
+          "final": "Guten Morgen, die Sitzung beginnt heute um 9 Uhr im gro\u00dfen Saal.",
           "updates": [
             7,
             7
@@ -1001,13 +1001,13 @@
         {
           "variant": "moonshine-tiny-de-phreak87-onnx",
           "passed": true,
-          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im gro\u00dfen saal",
           "streaming_kind": 0
         },
         {
           "variant": "moonshine-tiny-de-dattazigzag",
           "passed": true,
-          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im gro\u00dfen saal",
           "streaming_kind": 0
         },
         {
@@ -1020,9 +1020,9 @@
             "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
             "approx_size_mb": 458
           },
-          "batch": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "batch": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.",
           "streaming_kind": 2,
-          "final": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "final": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.",
           "updates": [
             3,
             3
@@ -1037,9 +1037,9 @@
             "file": "qwen3-asr-0.6b-q4_k.gguf",
             "approx_size_mb": 400
           },
-          "batch": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.",
           "streaming_kind": 3,
-          "final": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "final": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.",
           "updates": [
             2,
             2
@@ -1089,13 +1089,13 @@
         {
           "variant": "moonshine-tiny-de-phreak87-onnx",
           "passed": true,
-          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im gro\u00dfen saal",
           "streaming_kind": 0
         },
         {
           "variant": "moonshine-tiny-de-dattazigzag",
           "passed": true,
-          "batch": "guten morgen die sitzung beginnt heute um neun uhr im großen saal",
+          "batch": "guten morgen die sitzung beginnt heute um neun uhr im gro\u00dfen saal",
           "streaming_kind": 0
         },
         {
@@ -1108,9 +1108,9 @@
             "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
             "approx_size_mb": 458
           },
-          "batch": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "batch": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.",
           "streaming_kind": 2,
-          "final": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "final": "Guten Morgen, die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.",
           "updates": [
             3,
             3
@@ -1125,9 +1125,9 @@
             "file": "qwen3-asr-0.6b-q4_k.gguf",
             "approx_size_mb": 400
           },
-          "batch": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "batch": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.",
           "streaming_kind": 3,
-          "final": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im großen Saal.",
+          "final": "Guten Morgen. Die Sitzung beginnt heute um neun Uhr im gro\u00dfen Saal.",
           "updates": [
             2,
             2
@@ -1288,7 +1288,8 @@
       "run": 37756933124,
       "superseded_same_runtime_run": 37756898297
     },
-    "integration_check": "Clean merge tree with c849ba214 before Java fix; only docs and Metal test differ from candidate. Repeat before integration."
+    "integration_check": "Clean merge tree with c849ba214 before Java fix; only docs and Metal test differ from candidate. Repeat before integration.",
+    "latest_hosted_status": "real Arabic/Java acceptance 37756933124 running"
   },
   "cold_storage_20261008": {
     "bytes_moved": 1962991156,
@@ -1312,7 +1313,7 @@
     },
     "q4_run": 37754319857,
     "f16_run": 37754323202,
-    "hosted_status": "Original Q4 running; unstarted F16 cancelled to avoid known C-ABI split-loader weight-copy risk. Corrected combined Q4/F16 job pending behind original Q4; C-ABI parameter guard queued.",
+    "hosted_status": "Q4 numerical acceptance failed on non-flash drift; default stages and EN/ZH CLI/session outputs match. F16-only replacement queued; ABI guard running.",
     "reference": {
       "repo": "cstr/mimo-asr-GGUF",
       "revision": "e2d7dfebf0afd8076771903e92958039c5074eab",
@@ -1329,12 +1330,29 @@
     "cabi_params_run": 37758333664,
     "cabi_params_source": "7e18060607b40e59fce78fe1917d817fe57e670d",
     "cabi_fix": "Forward device/verbosity open settings. Actual-library interposition guard must reject removed assignments and pass restored source; no hosted proof yet.",
-    "memory": "Force CPU in all numerical arms, including legacy baseline C ABI; release session model/KV before CLI loads; delete each quant after accepted checks."
+    "memory": "Force CPU in all numerical arms, including legacy baseline C ABI; release session model/KV before CLI loads; delete each quant after accepted checks.",
+    "q4_run_status": "failure",
+    "combined_run_status": "cancelled before execution: known Q4 failure would prevent F16 coverage",
+    "replacement_f16_run": 37761799417,
+    "q4_observed": {
+      "source": "fae7e22419b8c797dfa2759a9d4884a8f426bf63",
+      "artifact": 11541099234,
+      "default_exact_stages": 11,
+      "matching_speech_outputs": 12,
+      "nonflash_hidden_cosine": 0.9981446305809997,
+      "nonflash_hidden_relative_l2": 0.0610965537142969,
+      "nonflash_logits_cosine": 0.9984237076667456,
+      "nonflash_logits_relative_l2": 0.07469973725916822,
+      "nonflash_pool_relative_l2": 0.08340125921765856,
+      "nonflash_rvq_match_fraction": 0.7359601449275363,
+      "gate": "failed; thresholds unchanged",
+      "proof": "/mnt/storage/crispasr/pr492-acceptance-20261008/proof/run-37754319857/heavy-37754319857/all-comparisons.json"
+    }
   },
   "metal_cache_compatibility": {
     "source": "c849ba214a97a9c5f596eed0a5c25b91701f555f",
     "run": 37755267314,
-    "status": "first shared job compiled test but failed linking Objective-C runtime symbols; explicit objc added, fresh validation pending",
+    "status": "Static actual test compiles/links; CTest label selection found zero tests. Fixed name selection and exact discovery count locally; fresh actual macOS run pending.",
     "local_negative_control": "compiler rejects old one-argument device-init, accepts new two-argument call",
     "scope": "shared/static macOS test compilation and lifecycle CTest; explicit skip without Metal device, no PSO serialization proof",
     "first_failure": {
@@ -1349,6 +1367,13 @@
       "fix": "explicit objc linkage"
     },
     "fixed_source": "7b44257d383c9722ef0ab535ea2bcef5279fa720",
-    "fixed_run": 37757366299
+    "fixed_run": 37757366299,
+    "discovery_failure": {
+      "run": 37757366299,
+      "job": 113245123775,
+      "cause": "Catch 3.7.1 splits semicolon-valued PROPERTIES labels; only unit label survives",
+      "fix": "unit label and test-name suite selection, assert exactly two discovered cases",
+      "local": "original label filter zero cases; corrected actual declaration/name filter discovers two (discovery-only dummy, no GPU inference)"
+    }
   }
 }

@@ -2988,7 +2988,7 @@ if (APPLE AND GGML_METAL)
     )
     catch_discover_tests(test-metal-pipeline-cache
         TEST_SPEC "[unit]"
-        PROPERTIES LABELS "unit;metal;pipeline-cache"
+        PROPERTIES LABELS "unit"
                    SKIP_REGULAR_EXPRESSION "All tests skipped"
     )
 endif()

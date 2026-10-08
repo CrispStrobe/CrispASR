@@ -22,7 +22,12 @@ explicitly skip instead of reporting success. Added `metal-cache-test.yml`
 (shared/static macOS build and focused CTest). First shared hosted build
 `37755267314` compiled the Objective-C++ test, then failed linking Objective-C
 runtime symbols. Added explicit `objc` linkage in `7b44257d3`; fresh shared/static
-validation `37757366299` is queued.
+validation `37757366299` compiled and linked the static test, then failed because
+Catch 3.7.1 splits semicolon-valued label properties: CTest found no tests for
+`-L pipeline-cache`. A saved minimal reproduction confirms the old selection
+finds zero tests. The workflow now selects the suite by name, asserts exactly
+two discovered cases, and retains the unit label. The corrected discovery
+passes locally; fresh actual macOS validation follows this checkpoint.
 No GPU cache execution or runtime/cache-default change is claimed.
 
 ## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
@@ -38,12 +43,19 @@ both layouts and accumulator types, 1/4 threads), byte-identical to main.
 Found and checksum-verified the legacy public Python LM reference, upstream
 `98641d537df521ac6df05f74090475694d9510b7`. It has five LM stages but explicitly
 skips generated text, so it is not decoded-output proof. Hosted Q4 job
-`37754319857` remains running at the original numerical source. The unstarted
+`37754319857` FAILED the non-flash numerical gate. Postprocessing its saved
+arrays confirms all 11 LM/tokenizer default stages are byte-identical to
+baseline, and all 12 English/Chinese CLI/session outputs across three arms
+match. Non-flash hidden-state cosine is 0.998144631 / relative L2 6.1097%;
+logits are 0.998423708 / 7.4700%. Tokenizer pooling relative L2 is 8.3401%
+and RVQ code agreement is 73.5960%. No threshold was relaxed; #492 remains
+unmerged pending diagnosis and F16 evidence. The unstarted
 F16 job `37754323202` was cancelled after finding a legacy C-ABI device flag
 bug that can force a full weight copy on a CPU-only runner. Replacement
-Q4/F16 `--quant all` run `37758607763` waits behind the original Q4 job at
-`c50c50061`, explicitly forcing CPU for both baseline/candidate and releasing
-session model/KV before each CLI model load. Each compares main/default, candidate/default and
+Q4/F16 `--quant all` run `37758607763` was cancelled before execution because
+the known Q4 gate would prevent F16 from running. F16-only replacement
+`37761799417` at `c50c50061` explicitly forces CPU for baseline/candidate and
+releases session model/KV before each CLI load. It compares main/default, candidate/default and
 candidate/non-flash: five LM stage values/norms/relative L2, tokenizer continuous
 stages and exact RVQ codes, English/Chinese CLI/session equality and transcripts.
 F16 is the LM; both jobs use the shipped Q4_K tokenizer. Source/fixture pins
@@ -52,7 +64,7 @@ and local evidence are on the branch in
 
 The MiMo C ABI now forwards `use_gpu` and verbosity alongside flash attention.
 Actual-library initializer-interposition job `37758333664` is queued at
-`7e1806060`: eight requested combinations and eight failed-open default-reset
+`7e1806060` (now running): eight requested combinations and eight failed-open default-reset
 checks; removing the two assignments must fail before the restored build passes.
 The probe compiles and Python scripts parse locally. No hosted pass yet.
 This device fix prevents selecting a second CPU backend through init_best and
@@ -91,7 +103,7 @@ String arguments still use the global encoding even with the per-library UTF-8
 option. The earlier local guard tested only returned text. A strict native
 input/output guard now reproduces the failure, including a Unicode model path;
 explicit input conversion passes under US-ASCII, ISO-8859-1 and UTF-8 defaults.
-It runs before heavy work in fresh acceptance `37756933124` (queued). #516 is
+It runs before heavy work in fresh acceptance `37756933124` (now running). #516 is
 unmerged and excluded from release notes. Source/proof detail is on the branch
 in `docs/ctc-characters-2026-10-08.json`.
 

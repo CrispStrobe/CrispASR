@@ -392,3 +392,29 @@ between speech checks. This is CPU-only acceptance, not a GPU claim.
 The first Metal shared job compiled the Objective-C++ test but failed linking
 Objective-C runtime symbols. `7b44257d3` adds explicit `objc`; [fresh shared/static
 coverage](https://github.com/CrispStrobe/CrispASR/actions/runs/37757366299) is queued.
+
+## Non-flash numerical gate and Metal discovery — 2026-10-08
+
+[MiMo Q4 run 37754319857](https://github.com/CrispStrobe/CrispASR/actions/runs/37754319857)
+failed the non-flash numerical gate. All 11 default LM/tokenizer stage arrays
+are byte-identical to baseline. English/Chinese text matches for all three arms
+through both CLI and C ABI (12 outputs). Non-flash final hidden-state cosine
+is 0.998144631 with relative L2 6.1097%; logits are 0.998423708 / 7.4700%.
+Tokenizer pooling relative L2 reaches 8.3401%, and discrete RVQ codes agree
+on 73.5960%. The thresholds remain unchanged; this is not numerical acceptance.
+The archive also preserves independent Python-reference metrics, including
+Q4 error already present in the baseline. #492 remains unmerged.
+
+The queued combined run was cancelled before execution because the known Q4
+gate would prevent reaching F16. [F16-only replacement 37761799417](https://github.com/CrispStrobe/CrispASR/actions/runs/37761799417)
+uses the corrected memory/CPU harness at `c50c50061`. The actual-library ABI
+guard and Arabic/Java acceptance are now executing.
+
+[Metal static job 113245123775](https://github.com/CrispStrobe/CrispASR/actions/runs/37757366299/job/113245123775)
+compiles and links the actual Objective-C++ test, then fails with no tests
+matching the label. A minimal Catch 3.7.1 CMake reproduction confirms that
+semicolon-valued PROPERTIES split the labels, leaving only `unit`. The focused
+workflow now selects the actual test-name prefix, requires exactly two discovered
+cases and keeps the unit label. Corrected discovery passes locally; that proof
+uses a listing-only dummy and makes no GPU/cache-runtime claim. Fresh macOS
+shared/static coverage is required.

@@ -44,12 +44,23 @@ jobs:
         run: cmake --build build --target test-metal-pipeline-cache -j 3
       - name: Run cache lifecycle checks (explicitly skipped without a GPU)
         run: |
-          ctest --test-dir build -L pipeline-cache --no-tests=error \
+          # Catch 3.7.1 discovery splits semicolon-valued PROPERTIES: only
+          # the first label survives. Select this suite by its actual names.
+          ctest --test-dir build -R '^metal pipeline cache:' --show-only=json-v1 > build/metal-cache-discovery.json
+          python3 - <<'PY'
+          import json
+          with open('build/metal-cache-discovery.json') as f:
+              tests = json.load(f)['tests']
+          assert len(tests) == 2, [t['name'] for t in tests]
+          print('METAL_CACHE_DISCOVERY_PASS:', [t['name'] for t in tests])
+          PY
+          ctest --test-dir build -R '^metal pipeline cache:' --no-tests=error \
             --output-on-failure --timeout 60 --output-junit metal-cache.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: metal-cache-${{ matrix.shared }}
           path: |
+            build/metal-cache-discovery.json
             build/metal-cache.xml
             build/Testing/Temporary/LastTest.log
