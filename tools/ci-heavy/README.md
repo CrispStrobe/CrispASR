@@ -70,3 +70,13 @@ CPU/GPU preference, verbosity and flash attention, followed by default-restorati
 checks after failed opens. An incremental rebuild with the device/verbosity
 assignments removed must fail, then restoring the source must pass. Run on Linux
 x86 with no extra pip packages; this validates parameter forwarding only.
+
+`pr492_tokenizer_ablation.py` tests selective F32 promotion of the same
+dequantized Q4 weights (head 4/8/16 layers, output projections, FFN) while
+retaining Q4 for the other matrices. Each profile records its size, compares
+flash/eager stages and exact RVQ codes, and checks the frozen independent
+same-weight encoder from diagnostic artifact `11554395735`. Input equality and
+reference hashes are enforced; a failed profile remains failed in the receipt.
+Run with `-f pip="numpy gguf huggingface_hub soundfile"`. The reference artifact
+has finite retention; this is a temporary diagnostic, not a canonical fixture
+or original-checkpoint/decoded-output acceptance.

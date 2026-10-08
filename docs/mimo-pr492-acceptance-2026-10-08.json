@@ -701,9 +701,253 @@
   "tokenizer_diagnostic": {
     "run": 37775542252,
     "source": "3c176505a",
-    "status": "queued",
+    "status": "setup failure before numerical testing: FFmpeg absent",
     "upstream_source": "XiaomiMiMo/MiMo-Audio@691ce54144a6844cc641fd96046a6ba20776c8b0",
-    "scope": "same Q4 weights promoted to F32; independent official Python transformer and isolated pooling, scale/time-order controls; not PR acceptance"
+    "scope": "same Q4 weights promoted to F32; independent official Python transformer and isolated pooling, scale/time-order controls; not PR acceptance",
+    "replacement_run": 37783601573,
+    "replacement_source": "7551b12de69510e26db6ba22077d0d4ea999674b",
+    "replacement_status": "PASS: diagnostic only",
+    "artifact": 11554395735,
+    "results": {
+      "codec": {
+        "repo": "cstr/mimo-tokenizer-GGUF",
+        "revision": "fa380f4c49a8e8c62c02c00d0da5e263fc5b0dcf",
+        "filename": "mimo-tokenizer-q4_k.gguf",
+        "sha256": "3f3a903b10294ead4ef6a4afec035639fd2113b1d307d42f649a97cc85670e3f"
+      },
+      "upstream_files": {
+        "modeling_rope_utils.py": {
+          "url": "https://raw.githubusercontent.com/XiaomiMiMo/MiMo-Audio/691ce54144a6844cc641fd96046a6ba20776c8b0/src/mimo_audio_tokenizer/modeling_rope_utils.py",
+          "sha256": "29d62d9fa8acee7a969ea35defe5581fb4977563c56701e1659ecc0e6345ccf4"
+        },
+        "modeling_audio_tokenizer.py": {
+          "url": "https://raw.githubusercontent.com/XiaomiMiMo/MiMo-Audio/691ce54144a6844cc641fd96046a6ba20776c8b0/src/mimo_audio_tokenizer/modeling_audio_tokenizer.py",
+          "sha256": "42e802e075b018e6ea60616976ea8397a278ceb2728edbcef06fc436862fb236"
+        }
+      },
+      "attention_ab": {
+        "q4": {
+          "tok_mel": {
+            "cosine": 1.0000000000000004,
+            "mine_norm": 1201.209716136071,
+            "ref_norm": 1201.209716136071,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_conv1_out": {
+            "cosine": 1.0000000000000022,
+            "mine_norm": 1442.256289478526,
+            "ref_norm": 1442.256289478526,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_conv2_out": {
+            "cosine": 1.0000000000000002,
+            "mine_norm": 9297.916544799942,
+            "ref_norm": 9297.916544799942,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_xfmr_out": {
+            "cosine": 0.9999921592961417,
+            "mine_norm": 72.544799476113,
+            "ref_norm": 72.54482646276928,
+            "relative_l2": 0.00395997500239708,
+            "max_abs": 0.06183701939880848,
+            "exact": false
+          },
+          "tok_pool_out": {
+            "cosine": 0.9965391421964783,
+            "mine_norm": 1898.3404544761318,
+            "ref_norm": 1892.0515993696438,
+            "relative_l2": 0.08340125921765856,
+            "max_abs": 16.29553973674774,
+            "exact": false
+          },
+          "tok_codes": {
+            "match_fraction": 0.7359601449275363,
+            "exact": false
+          }
+        },
+        "promoted": {
+          "tok_mel": {
+            "cosine": 1.0000000000000004,
+            "mine_norm": 1201.209716136071,
+            "ref_norm": 1201.209716136071,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_conv1_out": {
+            "cosine": 1.0000000000000022,
+            "mine_norm": 1442.256289478526,
+            "ref_norm": 1442.256289478526,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_conv2_out": {
+            "cosine": 1.0000000000000002,
+            "mine_norm": 9297.916544799942,
+            "ref_norm": 9297.916544799942,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "tok_xfmr_out": {
+            "cosine": 0.999999999999995,
+            "mine_norm": 72.54437484533585,
+            "ref_norm": 72.54437480078373,
+            "relative_l2": 1.0085847102387473e-07,
+            "max_abs": 7.152557373046875e-07,
+            "exact": false
+          },
+          "tok_pool_out": {
+            "cosine": 0.9999999999993381,
+            "mine_norm": 1905.7785069609788,
+            "ref_norm": 1905.7785368348311,
+            "relative_l2": 1.1485537785539898e-06,
+            "max_abs": 4.792213439941406e-05,
+            "exact": false
+          },
+          "tok_codes": {
+            "match_fraction": 1.0,
+            "exact": true
+          }
+        }
+      },
+      "pool_isolated": {
+        "q4-flash": {
+          "cosine": 0.9999999999558765,
+          "mine_norm": 1892.0515993696438,
+          "ref_norm": 1892.0514735493766,
+          "relative_l2": 9.393891450385064e-06,
+          "max_abs": 0.0003020763397216797,
+          "exact": false
+        },
+        "q4-eager": {
+          "cosine": 0.9999999999564859,
+          "mine_norm": 1898.3404544761318,
+          "ref_norm": 1898.3402931712326,
+          "relative_l2": 9.328947054899483e-06,
+          "max_abs": 0.0003039836883544922,
+          "exact": false
+        },
+        "promoted-flash": {
+          "cosine": 0.9999999999567791,
+          "mine_norm": 1905.7785368348311,
+          "ref_norm": 1905.778419263746,
+          "relative_l2": 9.297298899471013e-06,
+          "max_abs": 0.00029596686363220215,
+          "exact": false
+        },
+        "promoted-eager": {
+          "cosine": 0.9999999999572976,
+          "mine_norm": 1905.7785069609788,
+          "ref_norm": 1905.7783344545373,
+          "relative_l2": 9.241570472989521e-06,
+          "max_abs": 0.00029793381690979004,
+          "exact": false
+        }
+      },
+      "independent_same_weights": {
+        "tok_xfmr_out": {
+          "q4-flash": {
+            "cosine": 0.9999853026679197,
+            "mine_norm": 72.54482646276928,
+            "ref_norm": 72.54437494146971,
+            "relative_l2": 0.005421705068667536,
+            "max_abs": 0.059869952499866486,
+            "exact": false
+          },
+          "q4-eager": {
+            "cosine": 0.9999904817066966,
+            "mine_norm": 72.544799476113,
+            "ref_norm": 72.54437494146971,
+            "relative_l2": 0.004363110387864846,
+            "max_abs": 0.04757528938353062,
+            "exact": false
+          },
+          "promoted-flash": {
+            "cosine": 0.9999999999999558,
+            "mine_norm": 72.54437480078373,
+            "ref_norm": 72.54437494146971,
+            "relative_l2": 2.9773741820284207e-07,
+            "max_abs": 3.3564865589141846e-06,
+            "exact": false
+          },
+          "promoted-eager": {
+            "cosine": 0.9999999999999547,
+            "mine_norm": 72.54437484533585,
+            "ref_norm": 72.54437494146971,
+            "relative_l2": 3.000949313774795e-07,
+            "max_abs": 3.3602118492126465e-06,
+            "exact": false
+          }
+        },
+        "tok_pool_out": {
+          "q4-flash": {
+            "cosine": 0.9928175268456086,
+            "mine_norm": 1892.0515993696438,
+            "ref_norm": 1905.7783427186741,
+            "relative_l2": 0.11963845032912264,
+            "max_abs": 18.065807342529297,
+            "exact": false
+          },
+          "q4-eager": {
+            "cosine": 0.9961193061114648,
+            "mine_norm": 1898.3404544761318,
+            "ref_norm": 1905.7783427186741,
+            "relative_l2": 0.08801322901173302,
+            "max_abs": 18.02187442779541,
+            "exact": false
+          },
+          "promoted-flash": {
+            "cosine": 0.9999999999554408,
+            "mine_norm": 1905.7785368348311,
+            "ref_norm": 1905.7783427186741,
+            "relative_l2": 9.440497826347284e-06,
+            "max_abs": 0.0003681182861328125,
+            "exact": false
+          },
+          "promoted-eager": {
+            "cosine": 0.9999999999554627,
+            "mine_norm": 1905.7785069609788,
+            "ref_norm": 1905.7783427186741,
+            "relative_l2": 9.438017511877104e-06,
+            "max_abs": 0.00036835670471191406,
+            "exact": false
+          }
+        }
+      },
+      "scale_negative_control": {
+        "cosine": 0.9999999999999966,
+        "mine_norm": 3811.5566854373483,
+        "ref_norm": 1905.7783427186741,
+        "relative_l2": 1.0,
+        "max_abs": 25.400663375854492,
+        "exact": false
+      },
+      "time_order_negative_control": {
+        "cosine": 0.4647429583545323,
+        "mine_norm": 1905.778342718674,
+        "ref_norm": 1905.7783427186741,
+        "relative_l2": 1.034656504976861,
+        "max_abs": 26.927605628967285,
+        "exact": false
+      },
+      "failures": [],
+      "passed": true
+    },
+    "selective_promotion": {
+      "source": "09f65ad8b8347e278f83feeb5e04a5c477ce03e6",
+      "run": 37785711004,
+      "status": "queued",
+      "scope": "same weights; head4/head8/head16/output projections/FFN promoted to F32, remaining matrices Q4; frozen independent reference and exact RVQ gates unchanged; not PR acceptance"
+    }
   },
   "official_class_smoke": {
     "upstream_files": {
