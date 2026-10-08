@@ -140,6 +140,11 @@ record them in `stage_threshold_note`.
 Push to main and PRs run only the backends the changed files can affect
 (`tools/regression_select.py`); shared code (src/core, ggml, CLI plumbing,
 this directory) selects a small core set, and docs-only changes select none.
+Manifest entry changes additionally select each affected nightly backend by
+comparing its complete ASR/TTS entry at the Git diff base and head. If those
+snapshots cannot be compared, all nightly entries run; changing the nightly
+list itself also runs the full list. A transcript or fixture-hash correction
+therefore exercises its own model even when no runtime source changed.
 
 ## Transcript tolerance (`transcript_tolerance`) — opt-in WER/CER
 
