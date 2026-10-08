@@ -61,8 +61,15 @@ CUDA; do not flip the default or claim P100/other backend support from T4.
 Q4 LM layer diagnostic `47b661df1` is pushed separately; its seven boundaries
 in layers 0/1/4/8/16/24/35 start from byte-identical frozen Python fused inputs,
 with CPU flash/eager and BLAS controls and untouched canonical-stage probes.
-Native diagnostic source syntax and Python compile checks pass. Hosted results
-remain pending and are not original-checkpoint or decoded-output acceptance.
+Native diagnostic source syntax and Python compile checks pass. GH CPU run
+[37855479658](https://github.com/CrispStrobe/CrispASR/actions/runs/37855479658)
+is queued; results are not original-checkpoint or decoded-output acceptance.
+The opt-in GPU experiment is pushed at `e15801570`, uploaded harness
+`c8696de18`, and Kaggle graph-profile v2 launched after archiving v1.
+It compares full step logits (cosine >.999999, relative L2 <.001, norms and
+exact argmax), 64 speech calls, eight CLI/session pairs and ABBA timings.
+Logit dumps occur only in the first excluded warmup. Default OFF; GPU result
+pending. The kernel warms the refreshed actual-Kaggle sm75 cache.
 
 VoxCPM2 ten-step Vulkan profile v1 launched at source `ece203528`, harness
 `323a568ca`: [kernel](https://www.kaggle.com/code/chr1s4/crispasr-voxcpm2-current-profile).
@@ -109,6 +116,10 @@ source `603047454` on `fix/echo-q4-public-transfer`. Experimental public prefix
 size/SHA verification and revision-bearing manifests precede local deletion.
 Write preflight, four quantizations/uploads and runtime acceptance are pending.
 Do not launch GPU or change shipped registry pins from preparation alone.
+Consumer repair `2790778aa` uses the public experimental prefix and each
+candidate's immutable weight revision, checking remote-verification markers
+and path scope. Python syntax passes. Preparation pins remain unset and no
+Echo GPU kernel has been launched while the CPU producer is queued.
 
 ## VALIDATED 2026-10-08 — MiMo full CUDA speech acceptance and precision profile
 
