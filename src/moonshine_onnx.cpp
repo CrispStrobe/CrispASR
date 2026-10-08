@@ -127,6 +127,7 @@ void error(const char* where, const std::exception& e) {
 struct moonshine_onnx_context {
     nlohmann::json config;
     bool incremental = false;
+    int max_new_tokens = 0;
     int depth = 0, heads = 0, head_dim = 0, enc_dim = 0, dec_dim = 0, vocab = 0, bos = 1, eos = 2, lookahead = 0,
         left = 0, max_positions = 4096;
     std::unique_ptr<Graph> frontend, encoder, adapter, cross, decoder;
@@ -213,6 +214,10 @@ moonshine_onnx_context* moonshine_onnx_open(const char* config_path, int threads
 void moonshine_onnx_close(moonshine_onnx_context* ctx) {
     delete ctx;
 }
+void moonshine_onnx_set_max_new_tokens(moonshine_onnx_context* ctx, int count) {
+    if (ctx)
+        ctx->max_new_tokens = std::max(0, count);
+}
 bool moonshine_onnx_incremental(const moonshine_onnx_context* ctx) {
     return ctx && ctx->incremental;
 }
@@ -249,13 +254,15 @@ static std::string decode_memory(moonshine_onnx_context* c, std::vector<float>& 
     auto v = zeros({c->depth, 1, c->heads, 0, c->head_dim});
     std::vector<int32_t> result;
     std::vector<int64_t> token{c->bos};
+    const int budget =
+        c->max_new_tokens > 0 ? c->max_new_tokens : std::min(1024, std::max(4, static_cast<int>(seconds * 6.5) + 2));
     // Prefill older draft tokens in one call and allow the trailing eight to
     // revise. Final flush decodes from BOS, avoiding draft error lock-in.
     if (draft && draft->size() > 8) {
-        result.assign(draft->begin(), draft->end() - 8);
+        const size_t kept = std::min(draft->size() - 8, static_cast<size_t>(budget));
+        result.assign(draft->begin(), draft->begin() + kept);
         token.insert(token.end(), result.begin(), result.end());
     }
-    const int budget = std::min(1024, std::max(4, static_cast<int>(seconds * 6.5) + 2));
     for (int i = static_cast<int>(result.size()); i < budget; ++i) {
         std::vector<Ort::Value> input;
         input.push_back(tensor(token, {1, static_cast<int64_t>(token.size())}));
@@ -422,7 +429,8 @@ static std::string legacy_transcribe(moonshine_onnx_context* c, const float* pcm
     auto shape = encoded[0].GetTensorTypeAndShapeInfo().GetShape();
     std::vector<int64_t> ids{c->bos};
     std::vector<int32_t> result;
-    int budget = std::min(512, std::max(4, static_cast<int>(n / 16000.0 * 10) + 2));
+    const int budget =
+        c->max_new_tokens > 0 ? c->max_new_tokens : std::min(512, std::max(4, static_cast<int>(n / 16000.0 * 10) + 2));
     // The merged V1 export's cached branch is defective for some checkpoints.
     // Use the uncached branch with the complete prefix; never feed zero cross-KV
     // into that defective branch and silently return plausible wrong text.

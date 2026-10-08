@@ -211,6 +211,24 @@ for variant, expected_kind in variants:
             batch = ' '.join(x.text for x in session.transcribe(pcm, language='de')).strip()
             assert batch == cli_text, (batch, cli_text)
             case.update(batch=batch, streaming_kind=kind)
+            if 'onnx' in variant:
+                capped_prefix = OUT / (variant + '-capped')
+                run([build / 'bin/crispasr', '-m', model, '-ng', '-t', '4', '-l', 'de',
+                     '--max-new-tokens', '1', '-f', wav, '-otxt', '-of', capped_prefix],
+                    variant + '-cap')
+                capped_cli = capped_prefix.with_suffix('.txt').read_text().strip()
+                session.set_max_new_tokens(1)
+                capped = ' '.join(x.text for x in session.transcribe(pcm, language='de')).strip()
+                assert capped and capped == capped_cli, (capped, capped_cli)
+                assert capped != batch and batch.startswith(capped), (capped, batch)
+                if kind >= 2:
+                    capped_final, _ = stream_text(session, 1777)
+                    assert capped_final == capped, (capped_final, capped)
+                session.set_max_new_tokens(0)
+                restored = ' '.join(x.text for x in session.transcribe(pcm, language='de')).strip()
+                assert restored == batch, (restored, batch)
+                case.update(capped=capped, cap_reset_passed=True)
+
             if kind >= 2:
                 a, drafts_a = stream_text(session, 1777)
                 b, drafts_b = stream_text(session, 5120)

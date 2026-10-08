@@ -83,5 +83,14 @@
       }
     ]
   },
-  "cold_proof": "/mnt/storage/crispasr/triage-20261007/local-small-int8"
+  "cold_proof": "/mnt/storage/crispasr/triage-20261007/local-small-int8",
+  "generation_cap_followup": {
+    "runtime_source_sha256": "ac1a168729cab6d240c81c43289bb1b17d078dd9d9ef50b1cf820d8224127336",
+    "local_scope": "Direct native Small int8 x86, threads 1 and 4",
+    "one_token_text": "Guten",
+    "batch_stream_cap_and_reset": "passed on both thread counts",
+    "final_batch_packet_cases": 4,
+    "hosted_scope": "CLI, C ABI batch and persistent streaming cap/reset tests added for all five ONNX deployments; pending execution",
+    "log_sha256": "b9e8ab3a66bc117d438d3fe309d51e8a0bf9f3fe8571300a31057494706cec7d"
+  }
 }

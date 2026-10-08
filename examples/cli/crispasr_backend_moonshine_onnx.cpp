@@ -55,10 +55,13 @@ public:
     }
     bool init(const whisper_params& p) override {
         ctx_ = moonshine_onnx_open(p.model.c_str(), p.n_threads);
+        moonshine_onnx_set_max_new_tokens(ctx_, p.max_new_tokens_explicit ? p.max_new_tokens : 0);
         return ctx_ != nullptr;
     }
-    std::vector<crispasr_segment> transcribe(const float* pcm, int n, int64_t offset, const whisper_params&) override {
+    std::vector<crispasr_segment> transcribe(const float* pcm, int n, int64_t offset,
+                                             const whisper_params& p) override {
         try {
+            moonshine_onnx_set_max_new_tokens(ctx_, p.max_new_tokens_explicit ? p.max_new_tokens : 0);
             crispasr_segment s;
             s.text = moonshine_onnx_transcribe(ctx_, pcm, n);
             s.t0 = offset;
@@ -74,6 +77,7 @@ public:
     std::unique_ptr<CrispasrRealtimeSession> create_realtime_session(const whisper_params& p) override {
         if (!moonshine_onnx_incremental(ctx_))
             return nullptr;
+        moonshine_onnx_set_max_new_tokens(ctx_, p.max_new_tokens_explicit ? p.max_new_tokens : 0);
         auto stream = std::make_unique<MoonshineOnnxRealtime>(ctx_, p.stream_step_ms);
         if (!stream->valid())
             return nullptr;

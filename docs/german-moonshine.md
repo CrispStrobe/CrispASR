@@ -93,3 +93,8 @@ bundle from an empty cache, checks real CLI/C ABI speech output, compares all
 four five-graph variants against the Python driver, and replays Nemotron/Qwen
 streams with different PCM packet sizes. This optional SDK configuration is
 therefore tested even though ordinary builds do not enable ONNX Runtime.
+
+Explicit `--max-new-tokens N` and session `set_max_new_tokens(N)` apply to
+ONNX batch and persistent streaming. A nonpositive session value clears the
+override and restores the duration-derived budget; greedy decoding remains the
+supported strategy. Final flush uses the same limit as batch.

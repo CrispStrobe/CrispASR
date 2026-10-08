@@ -10,6 +10,8 @@ struct moonshine_onnx_stream;
 moonshine_onnx_context* moonshine_onnx_open(const char* config_path, int threads);
 bool moonshine_onnx_is_model(const char* path);
 void moonshine_onnx_close(moonshine_onnx_context* ctx);
+// <= 0 restores the model's duration-derived decoding budget.
+void moonshine_onnx_set_max_new_tokens(moonshine_onnx_context* ctx, int count);
 bool moonshine_onnx_incremental(const moonshine_onnx_context* ctx);
 std::string moonshine_onnx_transcribe(moonshine_onnx_context* ctx, const float* pcm, int count);
 moonshine_onnx_stream* moonshine_onnx_stream_open(moonshine_onnx_context* ctx, int step_ms);

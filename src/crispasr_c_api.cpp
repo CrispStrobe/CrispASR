@@ -8038,6 +8038,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
 #ifdef CRISPASR_HAS_ONNX
         if (!text && s->backend == "moonshine-onnx" && s->moonshine_onnx_ctx) {
             try {
+                moonshine_onnx_set_max_new_tokens(s->moonshine_onnx_ctx, s->max_new_tokens);
                 auto decoded = moonshine_onnx_transcribe(s->moonshine_onnx_ctx, pcm, n_samples);
                 text = strdup(decoded.c_str());
             } catch (const std::exception& e) {
@@ -11181,6 +11182,7 @@ CA_EXPORT crispasr_stream* crispasr_session_stream_open(crispasr_session* s, int
 #if __has_include("moonshine_streaming.h")
 #ifdef CRISPASR_HAS_ONNX
     if (s->moonshine_onnx_ctx && moonshine_onnx_incremental(s->moonshine_onnx_ctx)) {
+        moonshine_onnx_set_max_new_tokens(s->moonshine_onnx_ctx, s->max_new_tokens);
         auto* stream = moonshine_onnx_stream_open(s->moonshine_onnx_ctx, step_ms);
         if (!stream)
             return nullptr;
@@ -13458,6 +13460,10 @@ CA_EXPORT int crispasr_session_set_max_new_tokens(crispasr_session* s, int n) {
     if (!s)
         return -1;
     s->max_new_tokens = n > 0 ? n : 0;
+#ifdef CRISPASR_HAS_ONNX
+    if (s->moonshine_onnx_ctx)
+        moonshine_onnx_set_max_new_tokens(s->moonshine_onnx_ctx, s->max_new_tokens);
+#endif
 #ifdef CA_HAVE_COHERE
     if (s->cohere_ctx)
         cohere_set_max_new_tokens(s->cohere_ctx, s->max_new_tokens);
