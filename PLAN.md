@@ -70,6 +70,11 @@ PASS as a diagnostic, not PR acceptance. Same-weight F32 promotion gives
 pooling A/B relative L2 0.000115% and exact RVQ codes. Both native paths
 match the independent encoder; Q4 activation rounding remains the divergence.
 Selective-promotion run `37785711004` at `09f65ad8b` is queued.
+GPU follow-up claimed in the same worktree: a pinned Kaggle CUDA tokenizer
+diagnostic, using the shared build harness and actual device weights/RVQ.
+It compares both attention paths against the official CPU Python encoder on
+the GPU's own conv2 input. No CANN, full-ASR, speed or Pascal MMQ claim;
+CPU diagnostics remain on GH Actions per `../kaggle_usage.md`.
 Next: selective-promotion ablation in this worktree (head 4/8/16 layers,
 output projections, FFN), retaining the remaining Q4 matrices and all gates. No weight precision is recovered; this is a diagnostic,
 not original-checkpoint or PR acceptance. The acceptance harness now saves all
