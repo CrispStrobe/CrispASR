@@ -62,7 +62,19 @@ candidate branch. Submitted version 1 at packaging `e07e2d83e`; numeric source
 `/mnt/storage/crispasr/pr492-acceptance-20261008/proof/cuda-attention-precision-v1`.
 A generated-header smoke verifies matching F32 host/device configuration,
 preserved baseline headers and removal of extern-template declarations so the
-new specialization is actually emitted. GPU execution started at 17:54 UTC. Terminal results remain pending. Local C++ syntax/clang-format checks pass;
+new specialization is actually emitted. CUDA F32 TILE version 1 COMPLETE on Tesla T4 at source `534a929f7`.
+Both continuous gates and all 2,208 flash/eager RVQ codes PASS; previously
+six differed. Pooling A/B relative L2 is 9.22844e-5 (previous 3.08519e-4).
+TILE agrees with independent K/V-half Python at relative L2 3.56e-7–1.01e-6;
+remaining full-F32 attention error is consistent with K/V half rounding.
+Six measured resident-graph medians are TILE 1.158–1.544ms, eager 2.127–2.783ms,
+original flash 0.265–0.319ms. This is ~1.8x faster than eager, slower than MMA;
+no full-model speed claim. Archive collection is in progress before any rerun.
+Next claimed work in the same candidate worktree: extend the full-clip official
+RVQ oracle to the separate kernel/study directory, then run it on GH. Full
+EN/ZH CLI/C ABI decode, repeated whole-tokenizer timings/memory and original
+checkpoint/full-ASR gates remain required; no production default/ggml pin
+change, and #492 remains excluded from the release. Local C++ syntax/clang-format checks pass;
 the actual capture wrapper preserves layouts exactly and the new K/V-only
 half-rounding reference agrees with independent NumPy at relative L2 7.49e-8.
 These are preparation checks, not CUDA execution proof.
