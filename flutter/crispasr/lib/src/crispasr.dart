@@ -770,30 +770,36 @@ String? cacheDir({String? override, DynamicLibrary? lib}) {
   return dir;
 }
 
-/// One word + centisecond timings returned by [alignWords].
 /// Measured original codepoint; start/end are seconds.
 class AlignedCharacter {
   final String text;
   final double start;
   final double end;
-  const AlignedCharacter({required this.text, required this.start, required this.end});
+  const AlignedCharacter(
+      {required this.text, required this.start, required this.end});
 }
 
+/// One word and optional measured character spans returned by [alignWords].
 class AlignedWord {
   final List<AlignedCharacter> characters;
   final String text;
   final double start; // seconds
   final double end;
   const AlignedWord(
-      {required this.text, required this.start, required this.end, this.characters = const []});
+      {required this.text,
+      required this.start,
+      required this.end,
+      this.characters = const []});
 }
 
 /// CTC / forced-alignment word timings for a transcript + audio pair.
 ///
 /// `alignerModel` picks the backend by filename convention: any path
 /// containing "forced-aligner" / "qwen3-fa" / "qwen3-forced" routes to
-/// the Qwen3-ForcedAligner path; everything else goes through
-/// canary-ctc-aligner.
+/// the Qwen3-ForcedAligner path. Wav2vec2/HuBERT/data2vec models use
+/// their own CTC vocabulary; remaining models use canary-ctc. Supported
+/// original codepoints have measured character spans. Romanized words
+/// and other aligner families return an empty character list.
 ///
 /// `tOffset` (seconds) is added to every word's start/end so the
 /// returned timings are absolute against the original audio.
@@ -846,12 +852,18 @@ List<AlignedWord> alignWords({
 
   final ncFn = lib.lookupFunction<Int32 Function(Pointer<Void>, Int32),
       int Function(Pointer<Void>, int)>('crispasr_align_result_n_characters');
-  final cpFn = lib.lookupFunction<Pointer<Utf8> Function(Pointer<Void>, Int32, Int32),
-      Pointer<Utf8> Function(Pointer<Void>, int, int)>('crispasr_align_result_character_text');
-  final c0Fn = lib.lookupFunction<Int64 Function(Pointer<Void>, Int32, Int32),
-      int Function(Pointer<Void>, int, int)>('crispasr_align_result_character_t0');
-  final c1Fn = lib.lookupFunction<Int64 Function(Pointer<Void>, Int32, Int32),
-      int Function(Pointer<Void>, int, int)>('crispasr_align_result_character_t1');
+  final cpFn = lib.lookupFunction<
+      Pointer<Utf8> Function(Pointer<Void>, Int32, Int32),
+      Pointer<Utf8> Function(
+          Pointer<Void>, int, int)>('crispasr_align_result_character_text');
+  final c0Fn = lib.lookupFunction<
+      Int64 Function(Pointer<Void>, Int32, Int32),
+      int Function(
+          Pointer<Void>, int, int)>('crispasr_align_result_character_t0');
+  final c1Fn = lib.lookupFunction<
+      Int64 Function(Pointer<Void>, Int32, Int32),
+      int Function(
+          Pointer<Void>, int, int)>('crispasr_align_result_character_t1');
   final n = nFn(res);
   final out = <AlignedWord>[];
   for (var i = 0; i < n; i++) {
@@ -860,8 +872,10 @@ List<AlignedWord> alignWords({
     final characters = <AlignedCharacter>[];
     for (var j = 0; j < ncFn(res, i); j++) {
       final cp = cpFn(res, i, j);
-      characters.add(AlignedCharacter(text: cp == nullptr ? '' : cp.toDartString(),
-          start: c0Fn(res, i, j) / 100.0, end: c1Fn(res, i, j) / 100.0));
+      characters.add(AlignedCharacter(
+          text: cp == nullptr ? '' : cp.toDartString(),
+          start: c0Fn(res, i, j) / 100.0,
+          end: c1Fn(res, i, j) / 100.0));
     }
     out.add(AlignedWord(
       characters: characters,

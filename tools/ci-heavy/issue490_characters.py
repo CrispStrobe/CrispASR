@@ -4,6 +4,7 @@
 This tests post-logit Viterbi/output behavior. It does not claim new model-stage
 parity or human-annotated phonetic boundary accuracy.
 """
+import base64
 import ctypes as C
 import hashlib
 import io
@@ -12,6 +13,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import urllib.request
 
 import gguf
 from huggingface_hub import hf_hub_download
@@ -180,6 +182,33 @@ for suffix, restype, nargs in [('n_characters', C.c_int, 2), ('character_text', 
     fn = getattr(lib, 'crispasr_align_result_' + suffix)
     fn.restype, fn.argtypes = restype, [C.c_void_p] + [C.c_int] * (nargs - 1)
     assert fn(None, -1, *([-1] if nargs == 3 else [])) == (b'' if restype == C.c_char_p else 0)
+# Exercise the Java/JNA wrapper against the same native library and real audio.
+# Pin the dependency already declared by bindings/java/build.gradle.
+jna = SCRATCH / 'jna-5.13.0.jar'
+with urllib.request.urlopen('https://repo.maven.apache.org/maven2/net/java/dev/jna/jna/5.13.0/jna-5.13.0.jar') as response:
+    jna.write_bytes(response.read())
+assert hashlib.sha256(jna.read_bytes()).hexdigest() == '66d4f819a062a51a1d5627bffc23fac55d1677f0e0a1feba144aabdd670a64bb'
+classes = SCRATCH / 'java-classes'
+classes.mkdir(exist_ok=True)
+run(['javac', '-encoding', 'UTF-8', '-cp', jna, '-d', classes,
+     ROOT / 'bindings/java/src/main/java/io/github/ggerganov/whispercpp/CrispasrSession.java',
+     ROOT / 'tools/ci-heavy/Issue490Characters.java'], 'java-compile')
+java_output = OUT / 'java-spans.tsv'
+run(['java', '-Dfile.encoding=UTF-8', '-Djna.library.path=' + str(library.parent),
+     '-cp', str(classes) + os.pathsep + str(jna), 'Issue490Characters',
+     model, wav, OUT / 'transcript.txt', java_output], 'java-alignment')
+expected_rows = []
+for word in words:
+    expected_rows.append(('W', word['word'], round(word['start'] * 100) + 325, round(word['end'] * 100) + 325))
+    expected_rows.extend(('C', cp['char'], round(cp['start'] * 100) + 325, round(cp['end'] * 100) + 325)
+                         for cp in word['characters'])
+actual_rows = []
+for line in java_output.read_text().splitlines():
+    kind, encoded, start, end = line.split('\t')
+    actual_rows.append((kind, base64.b64decode(encoded).decode('utf-8'), int(start), int(end)))
+assert actual_rows == expected_rows, (actual_rows, expected_rows)
+receipt['java_jna'] = 'exact word/character text and centisecond times with offset 325'
+
 receipt.update(passed=True, words=len(words), characters=sum(map(len, ref)),
                independent_viterbi='exact character text/start/end', cli_word_segment_json_equal=True,
                python_cabi_offset_seconds=3.25, invalid_cabi_accessors='passed')

@@ -2556,8 +2556,11 @@ pub struct AlignedWord {
 ///
 /// `aligner_model` filename picks the backend: paths containing
 /// "forced-aligner" / "qwen3-fa" / "qwen3-forced" route to the
-/// Qwen3-ForcedAligner path; everything else goes through
-/// canary-ctc-aligner. `t_offset` (seconds) is added to every word
+/// Qwen3-ForcedAligner path. Wav2vec2/HuBERT/data2vec models use their
+/// own CTC vocabulary; remaining models use canary-ctc. Supported original
+/// codepoints have measured character spans; romanized words and other
+/// aligner families have an empty character vector.
+/// `t_offset` (seconds) is added to every word
 /// start/end so the returned timings are absolute against the
 /// original audio.
 ///

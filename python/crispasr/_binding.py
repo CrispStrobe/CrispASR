@@ -927,8 +927,10 @@ def align_words(
 
     ``aligner_model`` filename picks the backend: paths containing
     "forced-aligner" / "qwen3-fa" / "qwen3-forced" route to the
-    Qwen3-ForcedAligner path; everything else goes through
-    canary-ctc-aligner.
+    Qwen3-ForcedAligner path. Wav2vec2/HuBERT/data2vec models use CTC
+    alignment with their own vocabulary; remaining models use canary-ctc.
+    Supported original codepoints have measured ``characters`` spans.
+    Romanized words and other aligner families return an empty list.
 
     ``t_offset`` (seconds) is added to every word start/end so the
     returned timings are absolute against the original audio.

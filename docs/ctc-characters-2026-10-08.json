@@ -12,6 +12,10 @@
     "src/crispasr_aligner.cpp": "81df390db9bf2cd033c04722fd0a940a9d459eb307c1e829221580d46f287a3e",
     "src/crispasr_c_api.cpp": "7148f19c7d6f0e4f2a428409a02967e1720359c52c2f2d23760cbd606a87b7e6",
     "tests/test-align-characters.cpp": "b5a54f96698ab5023c0f9f68823d62e7244b6b9a31d9b9050a318154a37bbbe5",
-    "tools/ci-heavy/issue490_characters.py": "80f3be1bf525c2790fa0578915bb005ef989c23c0959f272469da51bd2b3fcb2"
-  }
+    "tools/ci-heavy/issue490_characters.py": "63c605ad45cb66f7284ff0017c13d20c8615ef510d4c80f66b6c3d95b2b16b00"
+  },
+  "asan_ubsan": "41 assertions passed; no findings",
+  "dart": "Dart 3.13.5 format: all 9 lib/test files pass; static analysis: No issues found",
+  "java_compile": "Eclipse ECJ 3.40.0 on OpenJDK 21, Java 8 source/target: Session wrapper and Arabic acceptance driver compile",
+  "java_runtime": "pending hosted real Arabic audio/JNA equality"
 }
