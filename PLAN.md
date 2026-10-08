@@ -22,6 +22,16 @@ Compare pinned v0.8.41/current builds and Q4/Q8/F16 weights before changing
 runtime, fixture or quantization policy. Test retaining the original F32 CTC
 head in Q4 as a controlled variant; do not relax transcript gates.
 
+## CLAIMED 2026-10-08 — independent MiMo C ABI device/verbosity fix
+
+Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, planned branch
+`review/mimo-cabi-device`. Extract only the two validated device/verbosity
+forwarding assignments from the PR #492 review. These prevent a requested
+CPU session from silently choosing another backend and copying mmap weights.
+No attention/runtime-graph changes. Re-run an actual-main-library initializer
+probe with the assignments removed as a negative control, then validate CI
+before landing independently of the unresolved Q4 attention work.
+
 ## CLAIMED 2026-10-08 — PR #492 numerical/output acceptance
 
 Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, internal
