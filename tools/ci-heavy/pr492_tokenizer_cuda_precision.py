@@ -19,7 +19,7 @@ FLAG = 'CRISPASR_DIAG_CUDA_Q4_CUBLAS'
 MARKER = 'MIMO_DIAG_CUDA_CUBLAS_F32'
 
 
-def patch_cuda(repo, out):
+def patch_cuda(repo, out, encoder_only=False):
     source = Path(repo) / 'ggml/src/ggml-cuda/ggml-cuda.cu'
     original = source.read_text()
     before = '''static void ggml_cuda_mul_mat(ggml_backend_cuda_context & ctx, const ggml_tensor * src0, const ggml_tensor * src1, ggml_tensor * dst) {
@@ -40,6 +40,9 @@ def patch_cuda(repo, out):
         return;
     }
 '''
+    if encoder_only:
+        after = after.replace('&& ggml_is_quantized(src0->type))',
+                              '&& ggml_is_quantized(src0->type) && strncmp(src0->name, "encoder.", 8) == 0)')
     assert original.count(before) == 1
     source.write_text(original.replace(before, after))
     out = Path(out)
@@ -48,7 +51,7 @@ def patch_cuda(repo, out):
         ['git', 'diff', '--', 'src/ggml-cuda/ggml-cuda.cu'], cwd=Path(repo) / 'ggml', text=True))
     receipt = dict(original_sha256=__import__('hashlib').sha256(original.encode()).hexdigest(),
                    patched_sha256=digest(source), patch_sha256=digest(out / 'cuda-dispatch.patch'),
-                   flag=FLAG, trace_marker=MARKER, scope=__doc__)
+                   flag=FLAG, trace_marker=MARKER, encoder_only=encoder_only, scope=__doc__)
     (out / 'cuda-patch.json').write_text(json.dumps(receipt, indent=2) + '\n')
     return receipt
 
