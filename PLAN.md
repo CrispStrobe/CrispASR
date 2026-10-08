@@ -20,22 +20,32 @@ unsupported characters and no-path cases. Keep word output compatible; no
 interpolated character times. Add synthetic known-path guards first, then
 hosted real-audio CLI/C ABI validation where a pinned model is available.
 
-Implemented in draft PR #516, latest `d57b0f7c7` (core implementation `5a8471309`): measured UTF-8 label spans,
-nested CLI JSON, C ABI and seven wrappers. All 41 known-path assertions pass,
-also under ASAN/UBSAN; C# builds with zero warnings/errors. An impossible
-repeated-label path fails on the saved baseline and is rejected after the fix.
-Real Arabic Q4 audio acceptance with an independent Viterbi reference is queued
-in automatic PR acceptance `37746296873`, including exact Java/JNA character
-text/times and a nonzero offset. Earlier queued runs were superseded as the
-binding/CI follow-ups landed. Still unmerged.
+Implemented in draft PR #516, rebased onto merged #515 (`5c172455e`),
+latest `8c373c4a9`. Core measured-span implementation is unchanged; both
+appended CMake test targets are retained. All 41 known-path assertions and
+ASAN/UBSAN pass. Integrated bindings: Dart 3.13.5 formats 11 files cleanly;
+Java wrapper/driver compile; C# builds with zero warnings/errors; Python parses.
 
-Dart push CI `37743605825` built the native library successfully, then failed
-`dart format`. Corrected using Dart 3.13.5: all nine library/test files format
-cleanly; static analysis reports no issues. Go `37743605844`, Rust `37743605797`
-and Linux C# job in `37743740252` pass at the core implementation source.
-Java wrapper/acceptance driver compile locally (15 class files); Java runtime
-proof is pending in the fresh Arabic acceptance. Added missing workflow triggers
-for C ABI/Python/Java/model-runtime/tests and explicit UTF-8 for MSVC fixtures.
+Real Arabic Q4 run `37746296873` built and passed 41 new / 91 existing
+alignment assertions, then produced valid JSON with 15 words / 85 measured
+characters. It FAILED on a diagnostic preview cutting a UTF-8 codepoint;
+independent Viterbi and binding runtime comparisons were not reached. Fixed
+with the existing UTF-8 prefix helper, keeping strict log decoding. Separately,
+a saved Java/JNA guard reproduces Arabic text corruption under a US-ASCII
+host default; explicit UTF-8 makes it pass. Fresh Arabic acceptance
+`37751687697` tests both fixes and exact Java/JNA spans/offsets. Still queued,
+unmerged and excluded from release notes. Source/proof detail is on the branch
+in `docs/ctc-characters-2026-10-08.json`.
+
+Go `37743605844`, Rust `37743605797` and Linux C# in `37743740252` passed
+at the original implementation source. Earlier Dart format failure is fixed;
+static analysis passes. Fresh platform/binding checks run at the rebased source.
+
+Storage checkpoint: 1,962,991,156 bytes of cold archives/JARs moved to
+`/mnt/storage/cold-files-20261008`, each checksum-verified before atomic
+replacement with a symlink at its original path. No active executables or
+shared-library trees moved. Receipts/scripts:
+`/mnt/storage/crispasr/storage-cleanup-20261008/`.
 
 ## OPEN 2026-10-08 — release draft and final gates
 

@@ -129,7 +129,7 @@ change their implementation.
 
 | Thread | Finding and next action |
 |---|---|
-| [#490](https://github.com/CrispStrobe/CrispASR/issues/490) Arabic character alignment | Feasible. `src/align.cpp` already walks UTF-8 codepoints and traces per-label Viterbi positions, then collapses them to word times. Preserve those spans through the aligner and JSON surface. Test repeated letters, Arabic codepoints/diacritics, blanks, punctuation and OOV handling; do not estimate character times by dividing word durations. Implemented in draft [PR #516](https://github.com/CrispStrobe/CrispASR/pull/516): 41 known-path assertions and ASAN/UBSAN pass; C# builds cleanly. Real Arabic Q4 CLI/C ABI and independent Viterbi acceptance are queued. Still unmerged. |
+| [#490](https://github.com/CrispStrobe/CrispASR/issues/490) Arabic character alignment | Feasible. `src/align.cpp` already walks UTF-8 codepoints and traces per-label Viterbi positions, then collapses them to word times. Preserve those spans through the aligner and JSON surface. Test repeated letters, Arabic codepoints/diacritics, blanks, punctuation and OOV handling; do not estimate character times by dividing word durations. Implemented in draft [PR #516](https://github.com/CrispStrobe/CrispASR/pull/516): 41 known-path assertions and ASAN/UBSAN pass; C# builds cleanly. First hosted Arabic Q4 output has valid JSON (15 words / 85 measured characters), but a UTF-8 diagnostic preview crashed strict log reading before reference/binding checks. Corrected combined-source acceptance `37751687697` is queued. Still unmerged. |
 | [PR #492](https://github.com/CrispStrobe/CrispASR/pull/492) MiMo/CANN performance | Existing CI is green and the contributor reports five exact transcripts on Ascend. Shared attention/mel code and device placement deserve stage/magnitude and decoded-output validation on default and non-flash paths, F16 and shipped quant, with the current ggml pin. The cited timing combines this PR with the still-open [ggml #4](https://github.com/CrispStrobe/ggml/pull/4); it cannot be attributed to this PR alone. Retained unmerged. |
 | [PR #515](https://github.com/CrispStrobe/CrispASR/pull/515) streaming bindings / German ONNX Moonshine | Integrated with author ancestry preserved after final x86 `37744837589` and ARM `37744841616` each pass all eight cases, graph parity and cap/stream checks. Final main-tip CI remains a release gate. |
 | [#483](https://github.com/CrispStrobe/CrispASR/issues/483) CUDA 12.6 | Reporter confirms the mismatch warning is gone. Latest follow-up requests an experimental forced-MMQ/no-tensor build for GTX1660 comparisons. Both matched Windows packages pass, and their actual uploaded manifests pair locally. Packages and proof are published; reporter GPU model/output/timing comparisons remain pending. No forced-MMQ default change. |
@@ -309,3 +309,25 @@ Integration preserves original author commit `2bf39c58a` and the validated runti
 `a9c312cb1`; newer main changes are documentation only. #515 is integrated.
 Hikari deep lint also passes. #516 real Arabic acceptance and final main-tip
 checks remain pending; no release/version tag has been created.
+
+## Character alignment integration and UTF-8 fixes — 2026-10-08
+
+PR #516 is rebased onto merged #515, latest `8c373c4a9`. Both CMake test
+targets survive the append conflict. Integrated Dart formatting (11 files),
+Java compilation, C# build (zero warnings/errors) and Python parsing pass.
+Arabic Q4 run [37746296873](https://github.com/CrispStrobe/CrispASR/actions/runs/37746296873)
+built, passed 41 new / 91 existing assertions, and produced valid word JSON
+with 15 words and 85 measured characters. Its diagnostic preview split an
+Arabic codepoint and crashed strict log decoding; reference and binding runtime
+checks were not reached. The CLI now uses the existing UTF-8 prefix helper.
+Strict log decoding remains enabled. A separate saved JNA guard fails under
+US-ASCII before the explicit UTF-8 binding option and passes afterward.
+[37751687697](https://github.com/CrispStrobe/CrispASR/actions/runs/37751687697)
+reruns real Arabic CLI/reference/Python/Java acceptance with that host encoding
+forced. #516 remains unmerged pending full acceptance.
+
+Cold-file migration recovered 1.43 GB on root and 0.53 GB on `/mnt/volume1`.
+Each source was unused for over five hours and had no open descriptor; SHA-256
+was verified before atomically replacing its path with a symlink. Native
+executables/shared libraries were retained. Receipts live under
+`/mnt/storage/crispasr/storage-cleanup-20261008/`.
