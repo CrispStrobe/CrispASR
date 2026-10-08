@@ -347,4 +347,26 @@ candidate/default and candidate/non-flash LM values with norms/relative L2,
 tokenizer stages/RVQ codes, and English/Chinese CLI/session decoded text. F16
 means the LM; the codec is the same shipped Q4_K in both jobs. CPU results do
 not establish CANN/CUDA correctness or the PR's combined NZ-weight speedup.
-#492 is still unmerged. #516 Arabic acceptance remains queued.
+#492 is still unmerged. #516 has progressed to the Java input fix below.
+
+## Arabic reference accepted; Java input encoding fixed — 2026-10-08
+
+[Arabic Q4 run 37751687697](https://github.com/CrispStrobe/CrispASR/actions/runs/37751687697)
+passes CLI word/segment JSON, exact independent full-sequence Viterbi for all
+85 measured characters, Python/C ABI offsets and invalid accessors, then fails
+at Java alignment. JNA 5.13's scalar String arguments still use the global
+encoding despite the per-library UTF-8 option. The earlier local guard checked
+only returned text; it missed incoming Arabic being replaced by question marks.
+
+A strict native guard now validates input UTF-8 bytes, a Unicode model path,
+returned Arabic characters and centisecond offsets. It rejects the old wrapper
+and passes after explicit per-library input conversion under US-ASCII,
+ISO-8859-1 and UTF-8 defaults. The global JNA setting is not changed. This guard
+runs before the expensive work. [Fresh acceptance 37756933124](https://github.com/CrispStrobe/CrispASR/actions/runs/37756933124)
+at `d9fcfcc90` is queued; #516 remains draft and unmerged.
+
+Metal cache test source `c849ba214` repairs the ggml device API call, direct
+Metal linkage and Objective-C++17. A compiler negative control rejects the old
+call and accepts the fixed one. [Shared/static macOS coverage](https://github.com/CrispStrobe/CrispASR/actions/runs/37755267314)
+is queued; no-device runtime checks explicitly skip, and no PSO serialization
+or GPU performance proof is claimed.

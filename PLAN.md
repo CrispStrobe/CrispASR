@@ -44,7 +44,7 @@ and local evidence are on the branch in
 
 No new CANN/CUDA correctness or performance claim; combined CANN/NZ timings
 cannot be attributed to this PR alone. PR #492 remains unmerged. #516 Arabic
-acceptance `37751687697` is still queued and was not cancelled by this work.
+acceptance has progressed to a Java input-encoding fix; see the #490 claim.
 
 ## CLAIMED 2026-10-08 — #490 CTC character timestamps
 
@@ -56,7 +56,7 @@ interpolated character times. Add synthetic known-path guards first, then
 hosted real-audio CLI/C ABI validation where a pinned model is available.
 
 Implemented in draft PR #516, rebased onto merged #515 (`5c172455e`),
-latest `8c373c4a9`. Core measured-span implementation is unchanged; both
+latest `d9fcfcc90`. Core measured-span implementation is unchanged; both
 appended CMake test targets are retained. All 41 known-path assertions and
 ASAN/UBSAN pass. Integrated bindings: Dart 3.13.5 formats 11 files cleanly;
 Java wrapper/driver compile; C# builds with zero warnings/errors; Python parses.
@@ -67,8 +67,14 @@ characters. It FAILED on a diagnostic preview cutting a UTF-8 codepoint;
 independent Viterbi and binding runtime comparisons were not reached. Fixed
 with the existing UTF-8 prefix helper, keeping strict log decoding. Separately,
 a saved Java/JNA guard reproduces Arabic text corruption under a US-ASCII
-host default; explicit UTF-8 makes it pass. Fresh Arabic acceptance
-`37751687697` tests both fixes and exact Java/JNA spans/offsets. Still queued,
+host default; explicit UTF-8 makes it pass. Arabic acceptance `37751687697` now passes CLI word/segment JSON, all 85
+character spans against independent full-sequence Viterbi, Python/C ABI offsets
+and invalid-accessor checks. It FAILED at Java alignment: JNA 5.13's scalar
+String arguments still use the global encoding even with the per-library UTF-8
+option. The earlier local guard tested only returned text. A strict native
+input/output guard now reproduces the failure, including a Unicode model path;
+explicit input conversion passes under US-ASCII, ISO-8859-1 and UTF-8 defaults.
+It runs before heavy work in fresh acceptance `37756933124` (queued). #516 is
 unmerged and excluded from release notes. Source/proof detail is on the branch
 in `docs/ctc-characters-2026-10-08.json`.
 
