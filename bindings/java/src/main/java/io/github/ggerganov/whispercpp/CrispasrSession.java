@@ -29,7 +29,9 @@ import com.sun.jna.ptr.PointerByReference;
 public final class CrispasrSession implements AutoCloseable {
 
     public interface Lib extends Library {
-        Lib INSTANCE = Native.load("crispasr", Lib.class);
+        // The session C ABI uses UTF-8 regardless of the host/JNA default.
+        Lib INSTANCE = Native.load("crispasr", Lib.class,
+            java.util.Collections.singletonMap(Library.OPTION_STRING_ENCODING, "UTF-8"));
 
         Pointer crispasr_session_open(String modelPath, int nThreads);
         void    crispasr_session_close(Pointer session);

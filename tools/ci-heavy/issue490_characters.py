@@ -194,7 +194,8 @@ run(['javac', '-encoding', 'UTF-8', '-cp', jna, '-d', classes,
      ROOT / 'bindings/java/src/main/java/io/github/ggerganov/whispercpp/CrispasrSession.java',
      ROOT / 'tools/ci-heavy/Issue490Characters.java'], 'java-compile')
 java_output = OUT / 'java-spans.tsv'
-run(['java', '-Dfile.encoding=UTF-8', '-Djna.library.path=' + str(library.parent),
+run(['java', '-Dfile.encoding=UTF-8', '-Djna.encoding=US-ASCII',
+     '-Djna.library.path=' + str(library.parent),
      '-cp', str(classes) + os.pathsep + str(jna), 'Issue490Characters',
      model, wav, OUT / 'transcript.txt', java_output], 'java-alignment')
 expected_rows = []
@@ -207,7 +208,7 @@ for line in java_output.read_text().splitlines():
     kind, encoded, start, end = line.split('\t')
     actual_rows.append((kind, base64.b64decode(encoded).decode('utf-8'), int(start), int(end)))
 assert actual_rows == expected_rows, (actual_rows, expected_rows)
-receipt['java_jna'] = 'exact word/character text and centisecond times with offset 325'
+receipt['java_jna'] = 'exact UTF-8 word/character text and centisecond times with offset 325, host JNA encoding forced US-ASCII'
 
 receipt.update(passed=True, words=len(words), characters=sum(map(len, ref)),
                independent_viterbi='exact character text/start/end', cli_word_segment_json_equal=True,

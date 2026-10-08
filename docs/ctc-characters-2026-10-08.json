@@ -12,7 +12,8 @@
     "src/crispasr_aligner.cpp": "81df390db9bf2cd033c04722fd0a940a9d459eb307c1e829221580d46f287a3e",
     "src/crispasr_c_api.cpp": "186359ea4d75154951d6a0537526e9135268b72c7f136ab2020ae58857e42950",
     "tests/test-align-characters.cpp": "b5a54f96698ab5023c0f9f68823d62e7244b6b9a31d9b9050a318154a37bbbe5",
-    "tools/ci-heavy/issue490_characters.py": "63c605ad45cb66f7284ff0017c13d20c8615ef510d4c80f66b6c3d95b2b16b00"
+    "tools/ci-heavy/issue490_characters.py": "cb93c069c94469e8b751a25c08634257c3f1f0182d7e92dce8ed8262356fcf0f",
+    "bindings/java/src/main/java/io/github/ggerganov/whispercpp/CrispasrSession.java": "e9c5750db2e4e8414efc09bcc3d0e15a7d5a68b863ff3515b0d262487342f89b"
   },
   "asan_ubsan": "41 assertions passed; no findings",
   "dart": "Dart 3.13.5 format: all 9 lib/test files pass; static analysis: No issues found",
@@ -27,5 +28,10 @@
     "csharp": "dotnet 8 Release build: 0 warnings, 0 errors",
     "python": "binding and Arabic acceptance script parse",
     "doc_anchors": "226 anchors in 80 files pass"
+  },
+  "java_encoding": {
+    "before": "US-ASCII host JNA default corrupts UTF-8 Arabic word/character text; saved guard exits 1",
+    "after": "JAVA_EXPLICIT_UTF8_PASS with US-ASCII JNA default; binding explicitly sets UTF-8",
+    "hosted_guard": "real Arabic Java/JNA acceptance forces US-ASCII host default"
   }
 }
