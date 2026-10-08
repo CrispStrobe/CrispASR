@@ -100,10 +100,12 @@ if not PERF_ONLY:
         with (OUT/(cohort+'-cli.log')).open('w') as log:
             subprocess.run([str(BUILD/'bin/crispasr'),'--backend','voxcpm2-tts','-m',str(TEMP/'models'/name),
                 '--tts',TEXTS['short'],'--tts-output',str(wav),'--seed','2','-t','4',
+                '--gpu-backend','vulkan',
                 '--no-watermark','--no-spoken-disclaimer','--accept-marking-responsibility'],
                 env=env,stdout=log,stderr=subprocess.STDOUT,check=True,timeout=1200)
         trace=(OUT/(cohort+'-cli.log')).read_text()
         assert set(re.findall(r'voxcpm2\[bench\]: cfm.steps=(\d+)',trace)) == {'10'}
+        assert 'voxcpm2: backend = Vulkan' in trace, 'CLI did not use Vulkan'
         pcm,sr = sf.read(wav,dtype='float32'); assert sr==48000 and pcm.ndim==1
         waveforms[cohort]['cli-short'] = pcm
 if PERF_ONLY:
@@ -130,8 +132,13 @@ with open_session(asr,'nemotron','cuda') as session:
         receipt['historical_rate_control'][str(rate)] = text
         save()
     normalize_control = lambda text: re.findall('[a-z]+',text.lower())
-    assert normalize_control(receipt['historical_rate_control']['24000']) == normalize_control(TEXTS['short'])
-    assert normalize_control(receipt['historical_rate_control']['48000']) != normalize_control(TEXTS['short'])
+    # Record the historical gate without aborting before current-output probes.
+    # v3 exposed repeated words at the corrected historical rate; do not relax
+    # exact acceptance or hide that defect behind a sample-rate diagnosis.
+    receipt['historical_rate_control_pass'] = (
+        normalize_control(receipt['historical_rate_control']['24000']) == normalize_control(TEXTS['short'])
+        and normalize_control(receipt['historical_rate_control']['48000']) != normalize_control(TEXTS['short']))
+    save()
     for cohort,cases in waveforms.items():
         for key,pcm in cases.items():
             actual = ' '.join(seg.text for seg in session.transcribe(pcm,sample_rate=48000,language='en'))
@@ -139,6 +146,7 @@ with open_session(asr,'nemotron','cuda') as session:
             receipt['roundtrips'][cohort+'-'+key] = dict(transcript=actual,expected=TEXTS['short' if key=='cli-short' else key],
                                                        exact=normalize(actual)==normalize(TEXTS['short' if key=='cli-short' else key]))
             save()
-assert all(case['exact'] for case in receipt['roundtrips'].values()), receipt['roundtrips']
+assert len(receipt['roundtrips']) == 6 and all(case['exact'] for case in receipt['roundtrips'].values()), receipt['roundtrips']
+assert receipt['historical_rate_control_pass'], receipt['historical_rate_control']
 receipt['passed'] = True
 save()
