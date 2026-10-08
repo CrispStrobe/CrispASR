@@ -127,6 +127,8 @@ def main():
     def save():
         (out / 'tokenizer-diagnosis.json').write_text(json.dumps(receipt, indent=2) + '\n')
     save()
+    run(['bash', ROOT / 'tools/ci-apt.sh', 'update'], out / 'apt-update.log')
+    run(['bash', ROOT / 'tools/ci-apt.sh', 'install', '-y', 'ffmpeg'], out / 'apt-install.log')
     build = scratch / 'build'
     run(['cmake', '-S', ROOT, '-B', build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
          '-DBUILD_SHARED_LIBS=ON', '-DGGML_NATIVE=OFF', '-DGGML_BLAS=OFF', '-DCRISPASR_MEL_BLAS=OFF',
