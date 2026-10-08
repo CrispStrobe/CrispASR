@@ -85,6 +85,9 @@
 #include "canary_ctc.h"
 #include "wav2vec2-ggml.h"
 #include "moonshine_streaming.h"
+#ifdef CRISPASR_HAS_ONNX
+#include "moonshine_onnx.h"
+#endif
 #include "glm_asr.h"
 #include "firered_asr.h"
 #include "voxcpm2_tts.h"
@@ -1637,7 +1640,8 @@ int main(int argc, char** argv) {
                 "tada-encoder, kokoro, granite, "
                 "granite-4.1, "
                 "granite-nle, parakeet, gigaam, wespeaker, chatterbox, voxcpm2-tts, "
-                "canary, cohere, gemma4, mimo-tokenizer, mimo-asr, orpheus, moonshine, moonshine-streaming, "
+                "canary, cohere, gemma4, mimo-tokenizer, mimo-asr, orpheus, moonshine, moonshine-onnx, "
+                "moonshine-streaming, "
                 "kyutai-stt, parler-tts, moss-audio, madlad\n"
                 "                (madlad/t5 is a text model: pass only <model.gguf> <reference.gguf>)\n"
                 "  model.gguf    crispasr-compatible model weights\n"
@@ -6547,6 +6551,65 @@ int main(int argc, char** argv) {
         }
 
         moonshine_free(ctx);
+    } else if (backend_name == "moonshine-onnx") {
+#ifdef CRISPASR_HAS_ONNX
+        auto* ctx = moonshine_onnx_open(model_path.c_str(), 4);
+        if (!ctx)
+            return 4;
+        try {
+            auto input = ref.get_f32("raw_audio");
+            if (!input.first || input.second != samples.size() ||
+                !std::equal(samples.begin(), samples.end(), input.first)) {
+                fprintf(stderr, "moonshine-onnx: reference input PCM differs; refusing stage comparison\n");
+                moonshine_onnx_close(ctx);
+                return 4;
+            }
+            auto capture = moonshine_onnx_debug_forward(ctx, samples.data(), (int)samples.size());
+            if (capture.stages.empty())
+                n_fail++;
+            for (const auto& stage : capture.stages) {
+                auto shape = stage.shape;
+                // Mirror the archive writer's removal of leftmost unit axes
+                // above GGUF's four-dimensional limit, then its axis order.
+                while (shape.size() > 4) {
+                    auto axis = std::find(shape.begin(), shape.end(), 1);
+                    if (axis == shape.end())
+                        throw std::runtime_error("diagnostic shape exceeds GGUF rank");
+                    shape.erase(axis);
+                }
+                std::reverse(shape.begin(), shape.end());
+                auto expected = ref.get_f32(stage.name);
+                auto report =
+                    ref.compare(stage.name, stage.data.data(), stage.data.size(), crispasr_diff::Ref::COS_FIRST_DIM);
+                print_row(stage.name.c_str(), report, COS_THRESHOLD);
+                // Cosine alone cannot detect a scale bug. Gate magnitude and
+                // exact shape/count as well; missing stages are failures.
+                const double relative_l2 = report.rms / std::max(1e-12f, report.rms_ref);
+                const bool pass = report.is_pass(0.99999f) && expected.second == stage.data.size() &&
+                                  ref.shape(stage.name) == shape && relative_l2 <= 1e-4;
+                printf("       |mine|=%.9g |ref|=%.9g relative_l2=%.9g %s\n", report.rms_data, report.rms_ref,
+                       relative_l2, pass ? "PASS" : "FAIL");
+                if (pass)
+                    n_pass++;
+                else
+                    n_fail++;
+            }
+            const std::string expected_text = ref.meta("generated_text");
+            const bool text_pass = !expected_text.empty() && capture.text == expected_text;
+            printf("[%s] generated_text: %s\n", text_pass ? "PASS" : "FAIL", capture.text.c_str());
+            if (text_pass)
+                n_pass++;
+            else
+                n_fail++;
+        } catch (const std::exception& e) {
+            fprintf(stderr, "moonshine-onnx diff: %s\n", e.what());
+            n_fail++;
+        }
+        moonshine_onnx_close(ctx);
+#else
+        fprintf(stderr, "moonshine-onnx diff requires CRISPASR_ONNXRUNTIME_ROOT\n");
+        return 4;
+#endif
     } else if (backend_name == "moonshine-streaming") {
         // Moonshine-Streaming (sliding-window encoder variant).
         // Uses a separate GGUF with moonshine_streaming.* keys.
@@ -9789,7 +9852,8 @@ int main(int argc, char** argv) {
                 "crispasr-diff: backend '%s' is not recognised. "
                 "Supported: voxtral, voxtral4b, qwen3, qwen3-tts, qwen3-tts-codec, omnivoice, kokoro, granite, "
                 "granite-4.1, granite-nle, parakeet, canary, canary-qwen, cohere, gemma4, mimo-tokenizer, mimo-asr, "
-                "orpheus, moonshine, moonshine-streaming, lid-cld3, glm-asr, firered-asr, voxcpm2-tts, funasr, "
+                "orpheus, moonshine, moonshine-onnx, moonshine-streaming, lid-cld3, glm-asr, firered-asr, voxcpm2-tts, "
+                "funasr, "
                 "paraformer, sensevoice, cosyvoice3-tts, melotts, parler-tts, moss-audio, kugelaudio, zonos-tts, "
                 "lfm2-audio, mini-omni2, nemotron, kyutai-stt, moss-diarize, miotts, miocodec, htdemucs, "
                 "crepe.\n",

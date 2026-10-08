@@ -85,6 +85,7 @@
 #endif
 #if __has_include("nemotron.h")
 #include "nemotron.h"
+#include "core/nemotron_text.h"
 #define CA_HAVE_NEMOTRON 1
 #endif
 #if __has_include("gigaam.h")
@@ -6637,14 +6638,16 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         // we package word-level timings into a single segment for the
         // unified shape.
         crispasr_session_seg seg;
-        seg.text = nr->text ? nr->text : "";
+        seg.text = core_nemotron_text::strip_lang_tags(nr->text ? nr->text : "");
         if (nr->n_words > 0) {
             seg.t0 = nr->words[0].t0;
             seg.t1 = nr->words[nr->n_words - 1].t1;
             seg.words.reserve(nr->n_words);
             for (int i = 0; i < nr->n_words; ++i) {
                 crispasr_session_seg::word w;
-                w.text = nr->words[i].text;
+                w.text = core_nemotron_text::strip_lang_tags(nr->words[i].text);
+                if (w.text.empty())
+                    continue;
                 w.t0 = nr->words[i].t0;
                 w.t1 = nr->words[i].t1;
                 w.p = nr->words[i].p > 0.0f ? nr->words[i].p : 1.0f;
@@ -11059,8 +11062,7 @@ CA_EXPORT crispasr_stream* crispasr_session_stream_open(crispasr_session* s, int
             if (!nemotron_stream_append(ns, pcm, n, flush, cb, &tokens))
                 return -2;
             // Work on the cumulative raw text: a control tag can span tokens.
-            static const std::regex tags("<[a-z]{2,3}-[A-Z]{2}>");
-            std::string text = std::regex_replace(*raw, tags, "");
+            std::string text = core_nemotron_text::strip_lang_tags(*raw);
             const auto pending = text.rfind('<');
             if (pending != std::string::npos && text.find('>', pending) == std::string::npos)
                 text.erase(pending);

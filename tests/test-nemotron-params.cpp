@@ -3,6 +3,7 @@
 
 #include <catch2/catch_test_macros.hpp>
 #include "nemotron.h"
+#include "core/nemotron_text.h"
 
 TEST_CASE("nemotron_params: default values are sensible", "[unit][nemotron]") {
     struct nemotron_context_params p = nemotron_context_default_params();
@@ -34,4 +35,16 @@ TEST_CASE("nemotron_init_from_file: empty path returns nullptr", "[unit][nemotro
 TEST_CASE("nemotron_free: NULL context is a no-op", "[unit][nemotron]") {
     nemotron_free(nullptr);
     SUCCEED("nemotron_free tolerated a NULL ctx.");
+}
+
+TEST_CASE("nemotron: language metadata never becomes transcript or words", "[unit][nemotron]") {
+    using core_nemotron_text::strip_lang_tags;
+    CHECK(strip_lang_tags("Guten Morgen. <de-DE>") == "Guten Morgen.");
+    CHECK(strip_lang_tags("Hallo. <de-DE> Guten Tag.") == "Hallo. Guten Tag.");
+    CHECK(strip_lang_tags("<de-DE>").empty());
+    CHECK(strip_lang_tags("<eng-US>").empty());
+    CHECK(strip_lang_tags("Grüße <de-DE> für alle") == "Grüße für alle");
+    CHECK(strip_lang_tags("x<de-DE><en-US>y") == "xy");
+    CHECK(strip_lang_tags("<DE-de> <d-DE> <de-DEU> <word>") == "<DE-de> <d-DE> <de-DEU> <word>");
+    CHECK(strip_lang_tags("unvollständig <de-") == "unvollständig <de-");
 }

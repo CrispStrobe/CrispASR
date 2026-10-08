@@ -54,8 +54,8 @@ run(['cmake', '-S', ROOT, '-B', build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Releas
      '-DCRISPASR_BUILD_SERVER=OFF', '-DCRISPASR_BUILD_TESTS=ON',
      '-DCRISPASR_ONNXRUNTIME_ROOT=' + str(sdk)], 'configure')
 run(['cmake', '--build', build, '--target', 'crispasr-cli', 'crispasr-lib',
-     'test-moonshine-tokenizer', 'test-qwen3-stream', 'test-registry', '-j4'], 'build')
-for target in ['test-moonshine-tokenizer', 'test-qwen3-stream', 'test-registry']:
+     'crispasr-diff', 'test-moonshine-tokenizer', 'test-qwen3-stream', 'test-nemotron-params', 'test-registry', '-j4'], 'build')
+for target in ['test-moonshine-tokenizer', 'test-qwen3-stream', 'test-nemotron-params', 'test-registry']:
     run([build / 'bin' / target], target)
 run([sys.executable, ROOT / 'tools/check-backend-wiring.py', '--crispasr', build / 'bin/crispasr'], 'wiring')
 
@@ -167,6 +167,30 @@ for variant, expected_kind in variants:
             model = cache / variant / 'onnx/encoder_model.onnx'
         else:
             model = cache / variant / ('encoder.onnx' if variant.endswith('f32') else 'encoder_int8.onnx')
+        if variant.startswith('moonshine-streaming'):
+            reference = OUT / (variant + '-ref.gguf')
+            run([sys.executable, ROOT / 'tools/dump_reference.py', '--backend', 'moonshine-onnx',
+                 '--model-dir', model, '--audio', wav, '--output', reference], variant + '-reference')
+            run([build / 'bin/crispasr-diff', 'moonshine-onnx', model, reference, wav], variant + '-diff')
+            case['graph_diff'] = 'passed; exact input/shape, cosine >= 0.99999, relative L2 <= 1e-4, text exact'
+            if variant == 'moonshine-streaming-tiny-de-onnx':
+                # A uniform scale defect keeps cosine perfect. Prove the new
+                # magnitude gate rejects it using the actual native diff path.
+                sys.path.insert(0, str(ROOT / 'tools'))
+                from dump_reference import write_gguf_archive
+                r = gguf.GGUFReader(str(reference))
+                tensors = {t.name: np.array(t.data, dtype=np.float32, copy=True) for t in r.tensors}
+                key = next(k for k in tensors if k.startswith('encoder.'))
+                tensors[key] *= 2
+                bad = OUT / 'scale-control-ref.gguf'
+                write_gguf_archive(tensors, {'backend': 'moonshine-onnx'}, bad)
+                with (OUT / 'scale-control.log').open('w') as log_file:
+                    control = subprocess.run([str(build / 'bin/crispasr-diff'), 'moonshine-onnx',
+                                              str(model), str(bad), str(wav)], cwd=ROOT,
+                                             stdout=log_file, stderr=subprocess.STDOUT, timeout=600)
+                control_log = (OUT / 'scale-control.log').read_text()
+                assert control.returncode != 0 and 'relative_l2=0.5 FAIL' in control_log, control_log
+                case['scale_failure_rejected'] = True
         with Session(str(model), lib_path=str(library), n_threads=4) as session:
             kind = lib.crispasr_session_stream_kind(session._handle)
             assert kind == expected_kind, (kind, expected_kind)

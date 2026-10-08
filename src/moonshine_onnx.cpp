@@ -61,6 +61,8 @@ Ort::Value zeros(std::vector<int64_t> shape, ONNXTensorElementDataType type = ON
 }
 struct Graph {
     std::string name;
+    std::vector<moonshine_onnx_stage>* capture = nullptr;
+    bool captured = false;
     Ort::Session session{nullptr};
     std::vector<std::string> inputs, outputs;
     Graph(const std::filesystem::path& path, int threads) : name(path.filename().string()) {
@@ -82,7 +84,34 @@ struct Graph {
             in.push_back(s.c_str());
         for (const auto& s : outputs)
             out.push_back(s.c_str());
-        return session.Run(Ort::RunOptions{nullptr}, in.data(), values.data(), values.size(), out.data(), out.size());
+        auto result =
+            session.Run(Ort::RunOptions{nullptr}, in.data(), values.data(), values.size(), out.data(), out.size());
+        if (capture && !captured) {
+            std::string prefix = name.substr(0, name.find('.'));
+            if (prefix.size() > 5 && prefix.compare(prefix.size() - 5, 5, "_int8") == 0)
+                prefix.resize(prefix.size() - 5);
+            for (size_t i = 0; i < result.size(); ++i) {
+                auto info = result[i].GetTensorTypeAndShapeInfo();
+                moonshine_onnx_stage stage;
+                stage.name = prefix + "." + outputs[i];
+                stage.shape = info.GetShape();
+                size_t n = info.GetElementCount();
+                if (info.GetElementType() == ONNX_TENSOR_ELEMENT_DATA_TYPE_FLOAT) {
+                    const float* data = result[i].GetTensorData<float>();
+                    if (n)
+                        stage.data.assign(data, data + n);
+                } else if (info.GetElementType() == ONNX_TENSOR_ELEMENT_DATA_TYPE_INT64) {
+                    const int64_t* data = result[i].GetTensorData<int64_t>();
+                    if (n)
+                        stage.data.assign(data, data + n);
+                } else {
+                    throw std::runtime_error("unsupported diagnostic graph output dtype");
+                }
+                capture->push_back(std::move(stage));
+            }
+            captured = true;
+        }
+        return result;
     }
 };
 std::vector<float> floats(const Ort::Value& v) {
@@ -274,15 +303,18 @@ static void update(moonshine_onnx_stream* s, bool final, int64_t processed = -1)
         throw std::runtime_error("Moonshine utterance exceeds positional capacity; split at a pause");
     // Encoder work is bounded to the dependency cone of the newly stable frames.
     // Previously stable output is immutable; unstable right-context is replaced.
-    int start = std::max(0, s->stable - c->left);
+    // Dynamic int8 activation scales depend on the encoder window. Cached
+    // frames from earlier windows can differ from whole-utterance inference.
+    // Recompute once at final flush so the final transcript matches batch.
+    int kept = final ? 0 : s->stable;
+    int start = final ? 0 : std::max(0, kept - c->left);
     std::vector<float> window(s->features.begin() + static_cast<size_t>(start) * c->enc_dim, s->features.end());
     std::vector<Ort::Value> input;
     input.push_back(tensor(window, {1, frames - start, c->enc_dim}));
     auto out = c->encoder->run(input);
     auto fresh = floats(out[0]);
-    s->encoded.resize(static_cast<size_t>(s->stable) * c->enc_dim);
-    s->encoded.insert(s->encoded.end(), fresh.begin() + static_cast<size_t>(s->stable - start) * c->enc_dim,
-                      fresh.end());
+    s->encoded.resize(static_cast<size_t>(kept) * c->enc_dim);
+    s->encoded.insert(s->encoded.end(), fresh.begin() + static_cast<size_t>(kept - start) * c->enc_dim, fresh.end());
     s->stable = final ? frames : std::max(s->stable, frames - c->lookahead);
     std::vector<int64_t> offset{0};
     std::vector<Ort::Value> adapt;
@@ -436,4 +468,26 @@ std::string moonshine_onnx_transcribe(moonshine_onnx_context* c, const float* pc
     }
     update(s.get(), true);
     return s->text;
+}
+
+moonshine_onnx_capture moonshine_onnx_debug_forward(moonshine_onnx_context* c, const float* pcm, int n) {
+    if (!c)
+        throw std::runtime_error("invalid Moonshine context");
+    moonshine_onnx_capture result;
+    struct ResetCapture {
+        std::vector<Graph*> graphs;
+        ~ResetCapture() {
+            for (auto* graph : graphs)
+                graph->capture = nullptr;
+        }
+    } reset;
+    for (auto* graph : {c->frontend.get(), c->encoder.get(), c->adapter.get(), c->cross.get(), c->decoder.get()}) {
+        if (graph) {
+            reset.graphs.push_back(graph);
+            graph->capture = &result.stages;
+            graph->captured = false;
+        }
+    }
+    result.text = moonshine_onnx_transcribe(c, pcm, n);
+    return result;
 }

@@ -8,51 +8,14 @@
 #include "whisper_params.h"
 
 #include "nemotron.h"
+#include "core/nemotron_text.h"
 
 #include <cstdio>
 #include <cstring>
 
 namespace {
 
-// The model closes each sentence with its language tag as an ordinary token
-// ("… Besprechung. <de-DE> Wir haben …"). That is the model talking about the
-// audio, not transcript: it reached SRTs, word lists and the realtime stream
-// verbatim. Remove every `<xx-XX>` / `<xxx-XX>` and the space it leaves.
-static bool nemotron_is_lang_tag(const std::string& s, size_t i, size_t* len) {
-    if (i >= s.size() || s[i] != '<')
-        return false;
-    size_t j = i + 1;
-    size_t lower = 0;
-    while (j < s.size() && s[j] >= 'a' && s[j] <= 'z' && lower < 3) {
-        ++j;
-        ++lower;
-    }
-    if (lower < 2 || j + 3 >= s.size() || s[j] != '-')
-        return false;
-    if (!(s[j + 1] >= 'A' && s[j + 1] <= 'Z' && s[j + 2] >= 'A' && s[j + 2] <= 'Z' && s[j + 3] == '>'))
-        return false;
-    *len = j + 4 - i;
-    return true;
-}
-
-static std::string nemotron_strip_lang_tags(const std::string& in) {
-    std::string out;
-    out.reserve(in.size());
-    for (size_t i = 0; i < in.size();) {
-        size_t len = 0;
-        if (nemotron_is_lang_tag(in, i, &len)) {
-            i += len;
-            // One separator is enough where the tag stood.
-            if (!out.empty() && out.back() == ' ' && i < in.size() && in[i] == ' ')
-                ++i;
-            continue;
-        }
-        out += in[i++];
-    }
-    while (!out.empty() && out.back() == ' ')
-        out.pop_back();
-    return out;
-}
+using core_nemotron_text::strip_lang_tags;
 
 class NemotronRealtimeSession final : public CrispasrRealtimeSession {
 public:
@@ -84,14 +47,14 @@ public:
                     state.self->first_token_ = false;
             }
             state.self->text_ += piece;
-            const std::string clean = nemotron_strip_lang_tags(state.self->text_);
+            const std::string clean = strip_lang_tags(state.self->text_);
             if (!clean.empty())
                 (*state.fn)(clean, false);
         };
         if (!nemotron_stream_append(stream_, samples, n_samples, flush, token_cb, &state))
             return false;
         if (flush)
-            on_text(nemotron_strip_lang_tags(text_), true);
+            on_text(strip_lang_tags(text_), true);
         return true;
     }
 
@@ -191,14 +154,14 @@ public:
         crispasr_segment seg;
         seg.t0 = t_offset_cs;
         seg.t1 = t_offset_cs;
-        seg.text = nemotron_strip_lang_tags(r->text ? r->text : "");
+        seg.text = strip_lang_tags(r->text ? r->text : "");
 
         // Words
         seg.words.reserve(r->n_words);
         for (int i = 0; i < r->n_words; i++) {
             const auto& w = r->words[i];
             crispasr_word cw;
-            cw.text = nemotron_strip_lang_tags(w.text);
+            cw.text = strip_lang_tags(w.text);
             if (cw.text.empty())
                 continue; // the tag was a "word" of its own
             cw.t0 = w.t0;
@@ -263,13 +226,13 @@ public:
                     first_tok = false;
             }
             accumulated += piece;
-            const std::string clean = nemotron_strip_lang_tags(accumulated);
+            const std::string clean = strip_lang_tags(accumulated);
             if (!clean.empty())
                 on_text(clean, false);
         };
         auto cb_fn = [](int id, float p, void* ud) { (*static_cast<decltype(cb)*>(ud))(id, p, nullptr); };
         nemotron_transcribe_cb(ctx_, samples, n_samples, cb_fn, &cb);
-        on_text(nemotron_strip_lang_tags(accumulated), true);
+        on_text(strip_lang_tags(accumulated), true);
     }
 
     std::unique_ptr<CrispasrRealtimeSession> create_realtime_session(const whisper_params& params) override {

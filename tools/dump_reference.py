@@ -270,6 +270,7 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # model_dir = root of the cloned repo (onnx/tiny/{preprocess,encode}.onnx).
     # Captures encoder_output (T, 288) matching moonshine_encode() streaming path.
     "moonshine-streaming": "reference_backends.moonshine_streaming",
+    "moonshine-onnx": "reference_backends.moonshine_onnx",
     # GLM-ASR (GGUF-direct, no PyTorch). model_dir = path to an F32 GLM-ASR GGUF
     # (e.g. cstr/glm-asr-nano-GGUF / glm-asr-nano.gguf) or a directory containing
     # it. Captures mel_spectrogram (128, T_mel) and encoder_output (T_proj, 2048).
