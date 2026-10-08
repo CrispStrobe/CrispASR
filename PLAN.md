@@ -11,6 +11,14 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-08 — Hikari constructor deep-lint follow-up
+
+Worktree: `/mnt/storage/crispasr/issue488-pr489-glint-20261003/worktree`,
+branch `fix/hikari-constructor`. Deep lint `37729063238` now finishes with
+`virtualCallInConstructor` at the Hikari realtime session's constructor/reset.
+Move common initialization into a nonvirtual helper; preserve reset behavior,
+run focused cppcheck/format checks and rerun hosted deep lint before landing.
+
 ## CLAIMED 2026-10-08 — PR #515 integration review and hosted validation
 
 Worktree: `/mnt/storage/crispasr/triage-20261007/worktree`, branch
@@ -82,7 +90,8 @@ Integrated #496/#514 source and APT setup pass native CI `37704656972`,
 regression `37704657102`, lint `37704656959` and five WASM builds
 `37704657094` on `d754aa10a`; Node emits three note-binding assertions.
 Lint Deep found an uninitialized Hikari probability, fixed in `4b45fec39`;
-focused cppcheck passes. Full hosted rerun `37729063238` is in progress.
+focused cppcheck passes. Full hosted rerun `37729063238` failed on the Hikari constructor virtual call;
+the dedicated claim above tracks that follow-up.
 No new GPU performance claim. Cold proof: `/mnt/storage/crispasr/triage-20261007/`.
 #490 Arabic character alignment and #483's forced-MMQ experiment remain doable.
 #492 MiMo/CANN needs numerical/output acceptance. #492/#515 remain unmerged.
