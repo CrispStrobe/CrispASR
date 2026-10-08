@@ -568,8 +568,8 @@
         "approx_size_mb": 60
       },
       "sample": "samples/jfk.wav",
-      "expected_transcript": "AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
-      "expected_transcript_source": "re-baked 2026-07-13 from nightly run 29232149677 (ubuntu-x86 OpenBLAS CI); word-identical to the prior CPU capture (WER=0), differs only in decode-tie punctuation/case",
+      "expected_transcript": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
+      "expected_transcript_source": "Greedy CTC decode of the existing frozen independent transformers reference, SHA256 ab4151f868b958d9461719ba8142c2f5c8f104fac2c2987539aa6f041bc7ac1a, not a native-output rebake. The original model inserts A (human WER 4.55%); this gate checks zero-WER upstream parity, not zero human WER.",
       "source_model": "facebook/data2vec-audio-base-960h",
       "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
       "fixture_ref_path": "data2vec-base/ref.gguf",
@@ -580,7 +580,21 @@
         "ctc_logits": 0.999
       },
       "stage_threshold_default": 0.999,
-      "stage_threshold_note": "Kaggle validate 2026-09-28 (CPU, F16 diff): ctc_logits per-frame cos >= 0.99916 vs transformers Data2VecAudioForCTC."
+      "stage_threshold_note": "Kaggle validate 2026-09-28 (CPU, F16 diff): ctc_logits per-frame cos >= 0.99916 vs transformers Data2VecAudioForCTC.",
+      "human_reference_transcript": "AND SO MY FELLOW AMERICANS, ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+      "transcript_reference": {
+        "stage": "ctc_logits",
+        "sha256": "ab4151f868b958d9461719ba8142c2f5c8f104fac2c2987539aa6f041bc7ac1a",
+        "vocab": {
+          "repo": "facebook/data2vec-audio-base-960h",
+          "revision": "32331f3123e703528918aa688a9a38232d58c872",
+          "file": "vocab.json",
+          "sha256": "19727f8944fe6459fc3f240ae2c198395b740f6a029bd23e06656266b83bcf64"
+        },
+        "blank_token": "<pad>",
+        "word_delimiter_token": "|",
+        "sample_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e"
+      }
     },
     {
       "name": "fastconformer-ctc-large",

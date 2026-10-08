@@ -3,8 +3,8 @@
 These tests guard against silent behavioural regressions by running
 each registered backend's GGUF under test against:
 
-1. A **pinned expected transcript** — byte-for-byte match against a
-   string captured at a known-good commit. Catches greedy-decode
+1. A **pinned expected transcript** — zero-WER normalized match by default
+   against a known-good capture or a pinned independent model reference. Catches greedy-decode
    divergences (e.g. issue #88), tokenizer changes, sample-rate
    handling drift.
 2. The **per-stage diff harness** — cosine similarity of every
@@ -12,6 +12,16 @@ each registered backend's GGUF under test against:
    against a pre-computed Python-reference dump. Catches numerical
    regressions even when the transcript happens to land on the same
    string.
+
+For entries with `transcript_reference`, the driver first verifies the SHA256
+of the frozen CTC logits, sample and pinned upstream vocabulary, then decodes
+CTC with repeat collapse followed by blank removal. The expected transcript
+must match that independent decode before native inference is checked.
+`data2vec-base` uses this guard: its original Python model also inserts `A`
+after `AND SO`. The zero-WER gate therefore measures upstream parity; the
+separate human reference remains in the manifest and reports 4.55% WER as an
+accuracy advisory. The model weights, decoder and stage thresholds are unchanged.
+The previous target was a native Q4 capture from July, not the Python reference.
 
 ## Why pin everything
 
