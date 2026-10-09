@@ -28,8 +28,15 @@ with exact real decode waveform parity (max_abs 0.0) and identical generated
 codes, then failed the anticipated missing CLI cloning attestation.
 All terminal artifacts archived locally; no six-roundtrip acceptance yet.
 CLI audit additionally found the fixture clone must pass --i-have-rights;
-worker `e81d1f6f7` adds that required attestation. Corrected GH run 37889514048
-is now running with that required fixture attestation.
+worker `e81d1f6f7` adds that required attestation. Corrected GH run 37889514048 completed: utility/decode gates pass and
+unconditioned raw/full/default marked speech all WER zero; session raw/marked
+and CLI clones all substitute fox/dog -> fix/dig (WER 2/9 = .2222), failing
+the unchanged <=.2 gate. Terminal artifacts archived; native integration remains
+blocked on speech quality. Draft PR #521 starts native CI at eeb398be8.
+Next diagnostic in the claimed OmniVoice worktree: retain seed/steps/weights,
+isolate reference silence versus punctuation, and compare identical clone codes
+with raw/full decode cleanup. Record every ASR result without acceptance claims;
+do not weaken the six speech gates or select a lucky seed.
 Echo preparation is public, pinned at `afdef3d4b111aa89e45fc400a03ba31ff54ac1dd`,
 all four remote size/SHA and physical tensor audits pass. Kernel public retry
 v2 launched with entry `845bf2e6d`; accepted F16 control precedes candidates,
