@@ -72,7 +72,11 @@ All terminal output/logs archived before reuse; actual successful build cache
 is being refreshed. Next in the claimed profile worktree: GH CPU pinned official
 Python BF16 full generation and native F16/Q8 controls, same seed 2/ten steps/
 short-long texts/two repeats, full PCM/latent and ASR receipts. Worker
-`08be8c020` is pushed; numerical defaults remain unchanged. Establish source
+`08be8c020` is pushed; GH original-controls run 37892473946 queued.
+Numerical defaults remain unchanged. Public VoxCPM2 model card was corrected
+to qualify historical component timings and explicitly disclose the failed
+current GPU speech gate; no weights changed. Receipt in
+`docs/voxcpm2-model-card-correction-2026-10-09.json`. Establish source
 versus quant/runtime drift before changing production arithmetic.
 MiMo diagnostic capture complete: identical frozen layer-0 input, CPU Q4
 flash/eager first differences at layer-0 attention (relL2 .000146), amplified
