@@ -3802,3 +3802,25 @@ and shared-library archives match all three actual DLL hashes in their CLI
 manifests. A real 12.8 CLI/12.6 library-runtime mismatch is rejected for the
 expected reason. GH CPU 37980464852 is SUCCESS; no Windows GPU inference claim.
 Receipt: `docs/windows-cuda-package-pair-2026-10-09.json`.
+
+## CLAIMED 2026-10-09 — Decode original controls for stage-passing Nemotron hybrid
+
+Worktree: `/mnt/storage/crispasr/salvage-20261008/nemotron-quant`, experimental
+branch `fix/nemotron-rnnt-quant`; native diagnostic branch is not an integration PR.
+GH CPU 37981088899 is SUCCESS at `3bb2b58b0`: all ten prior baseline arrays and
+original PCM are byte-exact, F16 passes all three unchanged stage and 24 layer
+gates. Four new late-layer/position-source arms fail the unchanged encoder gate.
+FFN+QKV+out-source / position-Q4_K passes all three (encoder cosine 0.999842)
+and all 24 original frame-layer gates, final relative L2 0.00309294. Physical
+size 1,179,413,408 bytes, actual Q4 payload 14,155,776 bytes. Most weights are
+source precision; this is an 8.3% size reduction from F16, not a small Q4 or
+speed claim. No production model/default promotion. Receipt:
+`docs/nemotron-encoder-late-layer-2026-10-09.json`.
+Next reproduce its exact SHA/type/byte ledger on GH CPU, retain F16-first
+strict gates, and run all 26 pinned original transcripts plus 22 VoxCPM2 words
+in fresh and reverse-reused sessions. Include a plain-Q4 negative stage control.
+Only retain the candidate in a workflow artifact if every original decoded and
+state control passes; then it can be copied to a public experimental immutable
+model path for actual GPU parity/streaming controls. No original model compute,
+conversion, quantization or native compilation on Kaggle. No release quant pin
+before full acceptance. All scratch/artifacts stay on storage/GH.
