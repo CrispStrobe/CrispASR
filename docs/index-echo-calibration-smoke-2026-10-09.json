@@ -1,0 +1,67 @@
+{
+  "receipt": {
+    "script_version": "2026-10-09.1",
+    "entry_sha256": "874c3a83eb22c06ad977bffcd9319d2c7e625434fb8f675fb0f84bfd58d3478e",
+    "source_commit": "327be3fda80c44f280bfecab988458f9c3712b08",
+    "build_commit": "a03820a4fcf32bae0b658b35cf6663e85abcc854",
+    "build_run": 37901223622,
+    "bundle_revision": "b284cbc8727e1f91904a4c2928e6991bd5bea938",
+    "bundle_sha256": "894bf650161f4c672a2992da394cdb8d65cca69af2f17c5b960c52bd4b6826f9",
+    "hardware": "Tesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB",
+    "purpose": "held-out F16 acceptance and decoder callback coverage smoke test",
+    "suitable_for_quantization": false,
+    "production_defaults_changed": false,
+    "q4_accepted": false,
+    "validated": true,
+    "arms": {
+      "control": {
+        "returncode": 0,
+        "validated": true,
+        "full_pipeline_checked": true,
+        "failed": []
+      },
+      "observed": {
+        "returncode": 0,
+        "validated": true,
+        "full_pipeline_checked": true,
+        "failed": []
+      }
+    },
+    "decoded_receipts_identical": true,
+    "imatrix_sha256": "a5f5e6ebda2c7edbffb22e6b6b8afc44725c0b2723e8e97ceb9779fe29a84712",
+    "imatrix_bytes": 5153408,
+    "coverage": {
+      "required_ffn_matrices": 96,
+      "decoder_matrices": 249,
+      "all_collected_matrices": 249,
+      "missing": [],
+      "invalid": []
+    },
+    "stage_comparisons": {
+      "clips": [
+        "jfk",
+        "zh",
+        "jfk-tail"
+      ],
+      "each_arm_each_clip": {
+        "pass": 76,
+        "fail": 0,
+        "skip": 0,
+        "threshold": 0.999
+      }
+    }
+  },
+  "proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "revision": "047cf9a4ac204b3b705fdbd0bfb14a0b8853a45c",
+    "path": "index-echo-9b/calibration-smoke-20261009/proof.zip",
+    "sha256": "72eb1260b4ff136f59f5f539f9b2d5aa88e82c525fde0082c2775569de78dff9",
+    "bytes": 4062617,
+    "remote_verified": true
+  },
+  "interpretation": [
+    "Actual GPU decoder collection, unchanged F16 stage/norm and full decoded gates pass.",
+    "The smoke imatrix uses held-out acceptance inputs and must never be used for quantization.",
+    "No Q4 recipe or production calibration corpus has passed by this smoke result."
+  ]
+}

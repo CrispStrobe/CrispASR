@@ -1,0 +1,11 @@
+{
+  "repo": "cstr/voxcpm2-GGUF",
+  "previous_revision": "1a25f9759e207ed5def2946bf07ca2dc635816b4",
+  "revision": "fb5f9e6c592f86638e474b7076ac684e0491d854",
+  "readme_sha256": "092ff475d3aceb53c2107d4dc02e85333496aca0f4fb66f95bfd790141f81816",
+  "readme_bytes": 7742,
+  "remote_verified": true,
+  "gguf_files_unchanged": 5,
+  "original_asr_proof_revision": "10e579dedf52a16a159cbc5d35e17f8bffa77190",
+  "defaults_changed": false
+}

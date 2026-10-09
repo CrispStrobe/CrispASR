@@ -21,8 +21,26 @@ No fresh/reused state differences. Isolate joint/predictor/prompt critical
 precision using existing quantizer overrides, compare Parakeet RNNT/GigaAM
 rules, physically audit source types and size, retain encoder weight equality,
 and run original stage/norm gates plus full decoded controls. GH CPU only;
-no model publication/default change until acceptance. Pinned public proof:
+no model publication/default change until acceptance. Worker `64972cd34`,
+GH `37907322941`, compares F16, published/plain Q4, joint+embed and full
+RNNT+prompt guards on all 26 original controls in fresh/reversed-reused
+sessions. Raw unchanged strict stage/norm logs and per-tensor byte/type
+audits are mandatory; decoded recovery alone cannot promote a failed stage
+gate. Queued. Pinned public proof:
 `docs/nemotron-tts-reference-diagnostic-2026-10-09.json`.
+
+## CLAIMED 2026-10-09 — Echo decoder calibration integration
+
+Owner: this maintainer session. Clean worktree
+`/mnt/storage/crispasr/salvage-20261008/echo-calibration-integration`, branch
+`fix/echo-decoder-calibration`. Integrate only the opt-in callback composition,
+actual sums/counts unit and reproducible GPU smoke/corpus tooling from the
+Echo experiment branch. Actual dual-T4 callback off/on acceptance is complete:
+three clips × 76 stage comparisons in each arm, full file translations,
+CLI/anonymous-model C ABI and TTS-ASR roundtrips all pass, with identical
+decoded receipts. 249 decoder matrices collected; all 96 FFN widths/counts
+valid. Public full proof: `docs/index-echo-calibration-smoke-2026-10-09.json`.
+No quantizer/model/registry/default promotion. Full PR CI is required before merge.
 
 ## CLAIMED 2026-10-09 — PR #492 salvage, OmniVoice cleanup and remaining performance work
 
@@ -89,10 +107,15 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   off/on, identical decoded receipts, and all 96 FFN matrix widths/counts.
   Its held-out statistics are explicitly unsuitable for quantization; a
   disjoint EN/ZH production calibration corpus is still needed. Kaggle
-  `index-echo-calibration-smoke` v1 is RUNNING; its actual SM75/dual-device
-  guard and full collection-off control passed; collection-on acceptance is
-  in flight. Disjoint 24 EN + 24 ZH CC0 corpus preparation is GH `37905840624`,
-  worker `e35df5895`, queued. Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
+  `index-echo-calibration-smoke` v1 COMPLETE on two actual T4s. Both arms
+  pass all stage/norm, full file translation, CLI/C ABI and roundtrip gates;
+  decoded receipts are identical. 249 decoder matrices collected, all 96
+  required FFN widths/counts valid. Held-out smoke statistics stay excluded
+  from quantization. Full proof: `docs/index-echo-calibration-smoke-2026-10-09.json`. Disjoint 24 EN + 24 ZH CC0 corpus preparation is GH `37905840624`,
+  worker `e35df5895`, stopped before preparation because hosted ffmpeg was
+  absent; terminal log archived (no artifact emitted). Worker `861b82411`
+  installs the missing tool; retry GH `37907323063` is queued. Inputs and
+  corpus selection unchanged. Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
   Real GPU calibration/coverage/full candidate acceptance still needed.
 
 - **VoxCPM2 — actual step/rate repairs on branch, speech still rejected.**
