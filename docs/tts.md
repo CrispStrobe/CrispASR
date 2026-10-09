@@ -8,7 +8,7 @@ trade-off:
 
 VoxCPM2 returns native 48 kHz mono PCM through the CLI and session API.
 Bindings should use the output sample rate getter when playing or saving PCM.
-Its CFM solver defaults to ten steps; explicit CLI `--tts-num-steps` and session
+Its CFM solver defaults to ten steps; explicit CLI `--tts-steps` and session
 `set_tts_steps` overrides apply to the next synthesis call. Lower step counts
 can reduce speech quality.
 
