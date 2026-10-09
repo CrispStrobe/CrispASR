@@ -19,6 +19,11 @@ original/F16 recognizer; published Nemotron Q4 reads only 8/22. Public proof
 `voxcpm2/path-diagnostic-20261009-v6/proof.zip` at fixtures revision
 `449ed355010eddb8dcedef6c2ab0fa62431ebeb7`. Confirm integrated native hunks
 against accepted sources and require full PR CI. No B390/8-step quality claim.
+[PR #524](https://github.com/CrispStrobe/CrispASR/pull/524), head `895ca82bc`,
+is open. All three native files and both VoxCPM2 C ABI hunks match validated
+source exactly; format 18/Python syntax/diff checks pass. Binding docs use
+output rate getters. Full platform/binding/regression CI is queued. Evidence:
+`docs/voxcpm2-session-contract-2026-10-09.json` on the PR branch.
 
 ## CLAIMED <date> — <what>` block naming your worktree, and **push that claim
 to main before you start**. Several agents run here at once; a claim that lands
@@ -143,7 +148,7 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   `echo` worktree: imatrix-aware plain/FFN-guarded/middle recipes, exact
   source-F32 preservation, tensor audits and public experiment-only upload,
   followed by unchanged actual GPU acceptance. Worker `72aac76a5`,
-  GH `37917151969`, is queued for calibrated plain/FFN-guarded/middle
+  GH `37917151969`, is running for calibrated plain/FFN-guarded/middle
   preparation. All 96 FFN statistics and original-F32 floors are re-audited;
   imatrix loading/shape evidence is required. No candidate accepted. Callback support merged as PR #523
   (`74a35b198`) after 42 applicable CI checks passed (one intentional skip). Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
