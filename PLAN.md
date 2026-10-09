@@ -3824,3 +3824,14 @@ state control passes; then it can be copied to a public experimental immutable
 model path for actual GPU parity/streaming controls. No original model compute,
 conversion, quantization or native compilation on Kaggle. No release quant pin
 before full acceptance. All scratch/artifacts stay on storage/GH.
+
+Original decoded-control worker `b93d60bfe93da80ebac1841df0835277b12ec10c`
+is pushed; GH CPU [37987517614](https://github.com/CrispStrobe/CrispASR/actions/runs/37987517614)
+is queued at that exact source. Reproduction must match candidate SHA
+`84cefe0658e8d87fc55a704406f92c48224118f916f3d5b47a94817b7e315f28`,
+size 1,179,413,408 and Q4 payload 14,155,776 bytes, with source-guard byte
+identity and plain-Q4 tensor equality. F16 and candidate must pass unchanged
+stages before decoded testing; the known plain-Q4 negative must reject.
+Every positive must match all 26 original transcripts, all 22 VoxCPM2 controls,
+and reverse-reused fresh outputs before retaining the candidate in the artifact.
+No model/default promotion; public full stage/layer proof is pinned in the receipt.

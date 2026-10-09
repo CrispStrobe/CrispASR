@@ -6821,5 +6821,20 @@
   },
   "native_receipt_sha256": "ff88af725d81cf4569a9fa230e6ddcf54b51d084eb66a635803602e221fbceb7",
   "decoded_original_controls_tested": false,
-  "gpu_tested": false
+  "gpu_tested": false,
+  "public_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "repo_type": "dataset",
+    "revision": "db8dca5167d1b2a7e8a49b675e1d47dcaa5cf721",
+    "path": "tts-asr/nemotron-encoder-late-layer-20261009/proof.zip",
+    "sha256": "d2ef2d651899d814c62fdee6257bb0987bb73c3b8e8d61d24e852d21088bdced",
+    "bytes": 207180348,
+    "remote_sha256_verified": true
+  },
+  "next_decoded_run": {
+    "run": 37987517614,
+    "source": "b93d60bfe93da80ebac1841df0835277b12ec10c",
+    "status": "queued",
+    "candidate_exact_sha_required": "84cefe0658e8d87fc55a704406f92c48224118f916f3d5b47a94817b7e315f28"
+  }
 }

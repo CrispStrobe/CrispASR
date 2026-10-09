@@ -2639,6 +2639,11 @@ core infrastructure.
   three stage gates and all 24 original frame-layer controls; seven previous
   baseline arrays are exact. Full audit:
   [attention isolation receipt](docs/nemotron-encoder-attention-2026-10-09.json).
+  Follow-up: preserving FFN/QKV/out and quantizing only position projections
+  passes the three stage and 24 layer comparisons at 1,179,413,408 bytes
+  (14,155,776 Q4 bytes; encoder cosine 0.999842, final relative L2 0.00309294).
+  Original transcript/state and GPU acceptance are pending; no release or
+  speed claim. [Full proof](docs/nemotron-encoder-late-layer-2026-10-09.json).
 
 **Gemma4 E2B** (`gemma4_e2b.cpp`):
 - Has: dual KV cache (sliding-window + full-context), KV sharing via
