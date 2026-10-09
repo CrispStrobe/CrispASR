@@ -103,7 +103,13 @@ specs = [('f16', f16, None), ('plain-q4', TEMP / 'plain-q4.gguf', []),
     ('attention-source-q4', TEMP / 'attention-source-q4.gguf',
         common_guards + [r'^encoder\.layers\.[0-9]+\.attn\.']),
     ('ffn-source-q4', TEMP / 'ffn-source-q4.gguf',
-        common_guards + [r'^encoder\.layers\.[0-9]+\.ff[12]\.'])]
+        common_guards + [r'^encoder\.layers\.[0-9]+\.ff[12]\.']),
+    ('attention-ffn-linear1-source-q4', TEMP / 'attention-ffn-linear1-source-q4.gguf',
+        common_guards + [r'^encoder\.layers\.[0-9]+\.attn\.',
+                         r'^encoder\.layers\.[0-9]+\.ff[12]\.linear1\.']),
+    ('attention-ffn-linear2-source-q4', TEMP / 'attention-ffn-linear2-source-q4.gguf',
+        common_guards + [r'^encoder\.layers\.[0-9]+\.attn\.',
+                         r'^encoder\.layers\.[0-9]+\.ff[12]\.linear2\.'])]
 all_arrays = {'pcm': pcm}
 plain_tensors = None
 for name, path, patterns in specs:
