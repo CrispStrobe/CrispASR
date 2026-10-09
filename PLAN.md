@@ -60,6 +60,21 @@ source is `9431cef65` (from its checkout log). This is model-free API validation
 not browser threading or synthesis acceptance. The README correction is in
 PR #527; the old archive is unchanged. Receipt: `docs/release-package-dry-run-2026-10-09.json`.
 
+## CLAIMED 2026-10-09 — Actual Linux CUDA release-package hardware validation
+
+Worktree: `/mnt/storage/crispasr/salvage-20261008/release-cuda-hardware`.
+Use the already-built Linux CUDA archive from GH 37958100129, artifact
+11637375498, source `3b814f780277286ece56e8cdee6bdc435e07ae4d`.
+Download directly from GitHub on Kaggle and verify artifact ZIP/tar SHA-256;
+no rebuild, quantization, original-model computation or torch install there.
+Reuse the accepted Nemotron F16 three-stage/26-transcript and native streaming
+controls with unchanged gates against public immutable original references.
+Require real CUDA allocation and record device/driver/runtime/plugin metadata;
+no CPU fallback acceptance. This tests packaged dynamic backend loading and
+CUDA 12.8 artifacts, not new quantization or a Windows package. The 30 recent
+kernels on the single authorized account are terminal; no active GPU session
+observed before this launch preparation. All local scratch stays on storage.
+
 ## Release preparation checkpoint 2026-10-09
 
 Comprehensive `RELEASE_NOTES_v0.8.43.md` is committed before any version bump.
