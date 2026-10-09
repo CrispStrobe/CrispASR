@@ -1434,6 +1434,11 @@ static bool nemotron_run_encoder(nemotron_context* ctx, const float* mel, int n_
     if (!nemotron_ensure_sched(ctx))
         return false;
     ggml_backend_sched_reset(ctx->sched);
+    // Output flags change buffer lifetimes without changing node shapes. The
+    // cached gallocr plan does not detect that change, so capture must reserve
+    // again rather than inherit the preceding inference allocation plan.
+    if (layer_outputs && !ggml_backend_sched_reserve(ctx->sched, gf))
+        return false;
     if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
         fprintf(stderr, "nemotron: sched alloc encoder graph failed\n");
         return false;
