@@ -68,7 +68,14 @@ of original streaming parity. The original 24-layer encoder capture worker
 `3ca187201`, GH `37946465069`, is running on CPU with pinned original NVIDIA
 weights and Transformers 5.19.0. Capture must preserve original generation
 IDs exactly; clone subsampling outputs before their in-place input scaling.
-Next compare these original layers to native F16/Q4 before choosing more guards. All 26 archived
+Next compare these original layers to native F16/Q4 before choosing more guards. Native diagnostic worker
+`4818ccefe`, GH `37947134922`, now captures all 24 full-sequence outputs
+with explicit ggml output lifetimes. It requires capture OFF/ON/OFF final
+encoder bytes to agree for F16, plain Q4 and RNNT+prompt+source-F32-preout
+Q4. F16 must pass existing original three-stage gates first. Model/tensor
+hashes and complete arrays are archived; no threshold, quant default or
+production capture change. Compare against original layer reference only
+after both workers complete; failed capture controls invalidate the probe. All 26 archived
 original NVIDIA attention masks independently confirm floor(samples/hop);
 full failed-boundary arrays and logs publicly archived and SHA-verified:
 `docs/nemotron-boundary-diagnostic-2026-10-09.json`.
