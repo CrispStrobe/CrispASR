@@ -13,242 +13,95 @@ it goes stale for more than a day.
 
 ## CLAIMED 2026-10-09 — PR #492 salvage, OmniVoice cleanup and remaining performance work
 
-Owner: this maintainer session, resumed 2026-10-09. Current tasks remain
-claimed in the worktrees below; account-placeholder repair and release
-publication are complete. Native integration awaits refreshed checks.
+Owner: this maintainer session, resumed 2026-10-09. Separate worktrees under
+`/mnt/storage/crispasr/salvage-20261008/`: `mel`, `mimo-integration`,
+`omnivoice`, `echo`, `profile`, `lm`; PR #492 diagnostics remain under
+`/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`. Do not modify the
+original checkout or live service. Large scratch/models/proof stay on storage;
+GH CPU and the one-account Kaggle real-GPU protocol apply. Every terminal GPU
+run is archived before reuse, including rejected speech results; successful
+actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
 
-Current 2026-10-09 results: account-literal scanner passes unchanged after
-doc placeholder repair (`731593dda`). Branches #519/#520 refreshed against it
-and native CI is running; previous native/lint/bindings passed.
-OmniVoice worker `3d30ea127` fixes a harness confound: the default session API
-adds watermark after native DSP. Attested raw PCM now feeds the unchanged
-2e-6 upstream waveform gate; two extra default marked roundtrips are included.
-No native arithmetic or thresholds changed. GH run 37888585305 completed
-with exact real decode waveform parity (max_abs 0.0) and identical generated
-codes, then failed the anticipated missing CLI cloning attestation.
-All terminal artifacts archived locally; no six-roundtrip acceptance yet.
-CLI audit additionally found the fixture clone must pass --i-have-rights;
-worker `e81d1f6f7` adds that required attestation. Corrected GH run 37889514048 completed: utility/decode gates pass and
-unconditioned raw/full/default marked speech all WER zero; session raw/marked
-and CLI clones all substitute fox/dog -> fix/dig (WER 2/9 = .2222), failing
-the unchanged <=.2 gate. Terminal artifacts archived; native integration remains
-blocked on speech quality. Draft PR #521 starts native CI at eeb398be8.
-Next diagnostic in the claimed OmniVoice worktree: retain seed/steps/weights,
-isolate reference silence versus punctuation, and compare identical clone codes
-with raw/full decode cleanup. Record every ASR result without acceptance claims;
-do not weaken the six speech gates or select a lucky seed.
-Fixed-seed worker `1b0ea317f` pushed; GH diagnostic run 37891923274 queued.
-Public rejected proof pinned in `docs/omnivoice-clone-failure-2026-10-09.json`.
-Echo preparation is public, pinned at `afdef3d4b111aa89e45fc400a03ba31ff54ac1dd`,
-all four remote size/SHA and physical tensor audits pass. Kernel public retry
-v2 launched with entry `845bf2e6d`; accepted F16 control precedes candidates,
-and actual two-T4 guard precedes model pulls. All four candidates rejected after an accepted F16 control on actual two T4s.
-Middle-FFN Q4 passes all three Piper roundtrips at WER zero, but still fails
-stage/norm and exact complete output/subtitle gates. No registry/default changes.
-All recipe/roundtrip outcomes and immutable terminal proof pins are in
-`docs/index-echo-q4-rejection-2026-10-09.json`.
-VoxCPM2 v4 confirms five of six exact speech gates fail with repeated syllables,
-including explicit Vulkan CLI; all terminal outputs archived and public.
-Next: isolate existing fused/per-step/batch/split CFM paths and CUDA/Vulkan
-at unchanged ten steps/seed/model, two repeats per text, with all 16 ASR results
-recorded. Kaggle v5 launched at worker/source `2ee7212fd`, uploaded entry `3db5808ec`,
-cache `85e6e05e264111f9b2f920b02f99c5b8ebeba935`. It is diagnostic only, not an original Python oracle or
-acceptance; no numerical/default changes. Do not lower quality gates.
-v5 ERROR: first q8 short/long repeated waveforms completed; child segfaulted
-after opening the mixed model, before further path/ASR evidence. All output
-and logs archived. Harness audit found direct step-setter calls without
-ctypes argtypes (possible 64-bit pointer truncation). Fix using the public
-Session setter and typed rc checks; enable faulthandler on the rerun. This is
-not a native fused-graph verdict, and no quality gate is relaxed.
-Typed worker `a232c9bc7` is pushed, uploaded entry `51e45d8ea`; v6 launched
-with refreshed actual Kaggle cache `47cb5a2fa310674b785aa1ff5d1942d16e730134`.
-Public terminal proof/cache pins are in `docs/voxcpm2-path-v5-failure-2026-10-09.json`.
-Completed v6 raw PCM/ASR/device proof and refreshed build cache are pinned in
-`docs/voxcpm2-path-v6-diagnostic-2026-10-09.json`.
-v6 diagnostic is COMPLETE on T4: all four fused/per-step/batch/split CUDA/Vulkan
-paths repeat short-text syllables; six of sixteen exact ASR cases pass, none
-of the arms passes both models/texts. Disabling CFM fusion alone does not fix it.
-All terminal output/logs archived before reuse; actual successful build cache
-is being refreshed. Next in the claimed profile worktree: GH CPU pinned official
-Python BF16 full generation and native F16/Q8 controls, same seed 2/ten steps/
-short-long texts/two repeats, full PCM/latent and ASR receipts. Worker
-`08be8c020` is pushed; GH original-controls run 37892473946 queued.
-Numerical defaults remain unchanged. Public VoxCPM2 model card was corrected
-to qualify historical component timings and explicitly disclose the failed
-current GPU speech gate; no weights changed. Receipt in
-`docs/voxcpm2-model-card-correction-2026-10-09.json`. Establish source
-versus quant/runtime drift before changing production arithmetic.
-MiMo diagnostic capture complete: identical frozen layer-0 input, CPU Q4
-flash/eager first differences at layer-0 attention (relL2 .000146), amplified
-in its MLP (.00183) and subsequent layers. F16 is much smaller. BLAS flash/eager
-drift shrinks but full Q4 Python hidden/logit parity remains below acceptance
-(.965/.982); no production BLAS/default promotion. Public raw proof pinned in
-`docs/mimo-lm-first-divergence-2026-10-09.json`.
-Release workflow is COMPLETE SUCCESS, 53 published assets. Full job/asset
-evidence refreshed; binary-publication task moved to HISTORY.
+- **MiMo cached GPU decode — accepted T4 experiment, integration pending.**
+  Draft [PR #519](https://github.com/CrispStrobe/CrispASR/pull/519), head
+  `04b2601e2`, isolates the validated source from VoxCPM2. All 64 EN/ZH calls,
+  eight CLI/session pairs and 114 full-vocabulary comparisons are byte-exact
+  (cosine 1, relative L2 zero, identical norms/argmax). Warm medians improve
+  2.4–2.7%, sampled GPU peak +18 MiB. Default remains OFF. Await refreshed
+  native CI before merging. Phase profile identifies compute (~96–101 ms)
+  as dominant over graph build/allocation (~2 ms/token). Immutable proof:
+  `docs/mimo-gpu-cached-step-2026-10-08.json` and
+  `docs/mimo-graph-profile-2026-10-08.json`.
+- **Mel projection — accepted opt-in experiment, integration pending.**
+  Draft [PR #520](https://github.com/CrispStrobe/CrispASR/pull/520), head
+  `2a12970c0`, preserves KokerZhou's independent author commit. Hosted GH
+  `37852305513` passes all 144 bitwise ABBA cases plus unchanged Qwen3 stage
+  gates/exact CLI speech. Four-thread component gains 3.30–3.58× at 64 frames,
+  3.05–3.50× at 3000; the local contended VPS regresses at 64. Default OFF,
+  serial fallback below 64/no OpenMP, BLAS unaffected; no end-to-end speed
+  claim. Await refreshed native/regression CI. Public proof:
+  `docs/mel-projection-2026-10-08.json`.
+- **OmniVoice #518 — DSP exact, cloned speech rejected.** Draft
+  [PR #521](https://github.com/CrispStrobe/CrispASR/pull/521) ports pinned
+  upstream audio/text utilities with config opt-outs and processed-PCM cache
+  semantics, preserving the params ABI. Native `a1ae00dff` passes 738 waveform
+  and 18 text cases. Actual GH `37889514048` has identical generated codes and
+  exact decode DSP waveform parity (max_abs 0.0); unconditioned raw/full/default
+  marked speech all WER zero. Session raw/marked and CLI clones all substitute
+  fox/dog -> fix/dig, WER 2/9=.2222, failing the unchanged <=.2 gate. Issue
+  remains open; no native integration. Diagnostic worker `1b0ea317f`, GH
+  `37891923274` queued: same seed 42/32 steps, isolate punctuation, reference
+  silence and output cleanup; identical-code assertion for output-only toggle.
+  No lucky-seed selection. Public proof:
+  `docs/omnivoice-clone-failure-2026-10-09.json` and
+  `docs/omnivoice-audio-utility-parity-2026-10-08.json`.
+- **Echo 9B Q4 — public preparation complete, all candidates rejected.** GH
+  `37851965549` produced/audited all four recipes publicly, remote size/SHA
+  verified and all 177 source F32 sensitive tensors retained. Immutable
+  preparation `afdef3d4b111aa89e45fc400a03ba31ff54ac1dd`. Public GPU retry v2
+  (entry `845bf2e6d`, SDK `2790778aa`) ran on two T4s with an accepted F16
+  control. All four recipes fail full stage/norm and exact complete-output
+  gates. The middle-FFN recipe passes three Piper clips at WER zero but still
+  fails strict full acceptance. No registry/default promotion. Receipts:
+  `docs/index-echo-q4-preparation-2026-10-09.json` and
+  `docs/index-echo-q4-rejection-2026-10-09.json`. Next audit first divergent
+  tensors and calibration coverage before another quant recipe; plain
+  `CRISPASR_IMATRIX_OUT` is not yet wired to Echo's decoder callback.
+- **VoxCPM2 — actual step/rate repairs on branch, speech still rejected.**
+  Profile branch forwards positive step overrides through native/C ABI/CLI,
+  preserves ten-step default and returns actual native 48 kHz session PCM
+  (old ABI decimated to 24 kHz while advertising 48). v4 five/six speech gates
+  fail. v5 diagnostic crashed at an untyped ctypes setter; v6 uses the public
+  pointer-width-safe setter and completes all four existing fused/per-step/
+  batch/split Vulkan/CUDA paths, two models/texts/two byte-exact repeats.
+  Six/sixteen exact ASR cases pass; every short case repeats final syllables.
+  Disabling CFM fusion alone does not fix it. Native arithmetic/defaults stay
+  unchanged. GH original-controls `37892473946` queued at worker `08be8c020`:
+  pinned official Python BF16 full generation and native F16/Q8 CPU controls,
+  same seed 2/ten steps/texts/repeats, full PCM/latent and ASR evidence.
+  Public proof/cache: `docs/voxcpm2-path-v6-diagnostic-2026-10-09.json`;
+  earlier failed receipts remain in docs. Public model card now qualifies
+  historical timings and discloses failed current GPU speech; no weights
+  changed (`docs/voxcpm2-model-card-correction-2026-10-09.json`). Intel B390
+  performance remains unvalidated by NVIDIA evidence; #461 stays open.
+- **MiMo Q4 LM — first-divergence capture complete, no production fix.** GH
+  `37855479658` compares byte-identical frozen layer-0 inputs across CPU
+  flash/eager and BLAS controls. Q4 differences begin in layer-0 attention
+  (relL2 .000146), amplify in MLP (.00183) and later layers. BLAS reduces
+  flash/eager drift but original Python hidden/logit parity stays ~.965/.982,
+  below acceptance. No BLAS/default promotion or original-checkpoint layer
+  oracle claim. Raw proof: `docs/mimo-lm-first-divergence-2026-10-09.json`.
 
-Worktrees under
-`/mnt/storage/crispasr/salvage-20261008/`: `mel` (`fix/mel-projection-salvage`),
-`omnivoice` (`fix/omnivoice-postprocess-518`), `echo` (`fix/echo-q4-public-transfer`),
-and `profile` (`perf/mimo-voxcpm-profile`). A fifth worktree `lm`
-(`diag/mimo-lm-first-divergence`) isolates the Q4 LM non-flash study.
-A sixth worktree `mimo-integration` (`fix/mimo-gpu-cached-decode`) will isolate
-only the validated MiMo instrumentation/cached-step changes from VoxCPM2's
-still-pending rate/step repairs, for native CI and integration review.
-Isolated draft [PR #519](https://github.com/CrispStrobe/CrispASR/pull/519) is
-refreshed at `04b2601e2` after account-placeholder repair. Native/worker file SHA256s match the GPU-tested source
-exactly. Await native CI before integration; v0.8.42 excludes these changes.
-PR #492 diagnostics remain in
-`/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`.
-
-Authorized order: extract the author's independent mel projection change with
-serial fallback and short/long, thread-count exactness/timing; port OmniVoice
-#518 from pinned upstream preprocessing/postprocessing, with raw opt-outs,
-cache semantics, independent waveform checks and actual CLI/session TTS→ASR;
-repair Echo Q4 producer/transfer using permitted public artifacts, pin/audit on
-GH CPU before GPU stage/cache/full-output/roundtrip acceptance; profile MiMo
-GPU graph rebuild/allocation/transfers and VoxCPM2 VAE/Vulkan before changing
-runtime defaults. Resolve the Q4 LM non-flash first divergence separately.
-CANN RVQ/F16 embeddings and ggml NZ need actual Ascend evidence; no CUDA
-substitute or combined-speed attribution. All large scratch/proof/model files
-stay on `/mnt/storage`; GH CPU and one-account Kaggle GPU protocol apply.
-Archive only code-audited completed PLAN claims; preserve remaining hardware
-retests and deferred #456. Check release asset publication separately.
-
-MiMo graph-phase profile is pushed and Kaggle v1 launched:
-[crispasr-mimo-graph-profile](https://www.kaggle.com/code/${KAGGLE_ACCOUNT}/crispasr-mimo-graph-profile).
-Numeric/source pin `b8ab3249d`, uploaded harness `9c978485d`; script SHA and
-actual hardware/submodules/build flags are recorded by the kernel. Production
-Q4 files/arithmetic and defaults stay unchanged. Exact CLI/session EN/ZH
-outputs must agree across ABBA profiling toggles (two warmups/six measured
-calls per clip/process). Timings separate host inputs, graph build, scheduler
-allocation, input preparation/upload, synchronous compute and readback;
-scheduler pipeline-copy multiplicity is not a transfer count. No speedup
-claim from instrumentation. v1 COMPLETE on Tesla T4: all 64 speech calls and
-eight CLI/session pairs agree exactly. Twelve measured calls/clip/mode:
-EN profiling off/on 3.11777/3.12138s, ZH 1.34072/1.34077s (medians).
-Decode medians including warmups: compute 95.85ms, allocation 1.277ms,
-graph build 0.509ms, readback 0.199ms, inputs 0.030ms; 13 scheduler splits.
-Graph caching alone has a modest ceiling (~1.8% summed decode phase time).
-All terminal files archived, public proof and refreshed actual-Kaggle cache
-pinned in `docs/mimo-graph-profile-2026-10-08.json`. Inspect compute dispatch
-and avoid the redundant GPU prefill/audio route before proposing a speedup.
-Next experiment in the same claimed profile worktree: opt-in cached GPU T=1
-decode using the existing in-graph CPU embedding gather and device KV scatter,
-with the working prefill route retained. Compare every step logit vector
-(norms/relative L2), all CLI/session outputs and ABBA warm timings on actual
-CUDA; do not flip the default or claim P100/other backend support from T4.
-Q4 LM layer diagnostic `47b661df1` is pushed separately; its seven boundaries
-in layers 0/1/4/8/16/24/35 start from byte-identical frozen Python fused inputs,
-with CPU flash/eager and BLAS controls and untouched canonical-stage probes.
-Native diagnostic source syntax and Python compile checks pass. GH CPU run
-[37855479658](https://github.com/CrispStrobe/CrispASR/actions/runs/37855479658)
-is queued; results are not original-checkpoint or decoded-output acceptance.
-The opt-in GPU experiment is pushed at `e15801570`, uploaded harness
-`c8696de18`, and Kaggle graph-profile v2 launched after archiving v1.
-It compares full step logits (cosine >.999999, relative L2 <.001, norms and
-exact argmax), 64 speech calls, eight CLI/session pairs and ABBA timings.
-Logit dumps occur only in the first excluded warmup. Default OFF; GPU result
-pending. The kernel warms the refreshed actual-Kaggle sm75 cache.
-v2 CUDA acceptance now PASS on T4: all 64 calls/eight CLI pairs exact;
-27 EN and 11 ZH full-vocabulary logit vectors are byte-identical across all
-four ABBA arms (relative L2 zero, norms identical). Warm medians legacy/cached:
-EN 3.29871/3.21258s (1.0268×), ZH 1.42840/1.39455s (1.0243×).
-This is a modest 2.4–2.7% gain, not a large acceleration. Terminal archive
-is complete; public proof revision `deceb2e18592ade7ab56094d7158e4fbf47e81f5`
-and refreshed cache `c099a5cab320f929ca8c67171362eea158662009` are pinned in
-`docs/mimo-gpu-cached-step-2026-10-08.json`. Local archival verification checks
-all 114 full-vocabulary array comparisons byte-exact. GPU process peaks
-4,932/4,950 MiB (sampled lower bounds). Isolated integration CI is pending. Keep opt-in OFF by default and retain the working GPU route.
-
-VoxCPM2 ten-step Vulkan profile v1 launched at source `ece203528`, harness
-`323a568ca`: [kernel](https://www.kaggle.com/code/${KAGGLE_ACCOUNT}/crispasr-voxcpm2-current-profile).
-Post-launch audit found the generic session TTS step setter lacks VoxCPM2
-forwarding; v1 must reject rc=-2 and cannot establish ten-step acceptance.
-Fix the native setter, session dispatch and CLI runtime override in the profile
-worktree before a pinned rerun; archive v1 terminal output before repushing.
-v1 actually failed earlier at CMake: missing `spirv-headers`; logs and all
-outputs archived under the task proof root. Fixed the package and native
-step setter, C ABI forwarding and per-call CLI override at `c44f643dd`.
-Kernel v2 launched with that source, harness `94827d8f1`; native solver logs
-must confirm ten actual steps, not just a receipt constant. Syntax/format
-checks pass; build/speech acceptance is pending. Keep the default at ten steps
-and distinguish cold context/shape setup from warm inference. NVIDIA Vulkan
-evidence cannot replace the Intel B390 retest.
-v2 built and ran all 32 repeated seeded Vulkan calls, but failed all four
-TTS→ASR gates. Audit found a real session mismatch: synthesize decimated native
-48 kHz PCM to 24 kHz while output_sample_rate() advertised 48 kHz. Source
-`916ab9464` now returns native 48 kHz, matching documented API/CLI behavior;
-`82517f41d` preserves the CLI ten-step default using tts_num_steps's explicit
-sentinel (shared tts_steps defaults to 20). v2 failed output/logs archived and
-public at fixture revision `f5a04b061d6ceb5c090c97a3f3fadfd2066e6398`.
-Kaggle v3 launched using source `ead34fd5d`, uploaded harness `fe6f363b2` and
-refreshed actual-Kaggle CUDA+Vulkan cache `c32253915bbef81d0d8a9aea39a1fbd43b4cb37c`.
-It must replay v2 PCM at both rates as a negative control, pass
-native-48 kHz session and actual CLI default speech roundtrips, then collect
-separate per-op timings. Do not accept v2 timings as usable speech performance.
-v3 ERROR: historical v2 PCM at 24 kHz is intelligible but repeats "sent" three
-times; at 48 kHz it remains garbage. Strict historical exactness aborted before
-current-output ASR probes; no accepted speech speed or complete repair claim.
-All terminal files archived and public proof/cache pinned in
-`docs/voxcpm2-vulkan-v3-failure-2026-10-08.json`. v3 CLI used CUDA0, whereas
-session generation used Vulkan. Worker `8fb4d1b0b` now records all six current
-roundtrips before asserting the unchanged exact gates and explicitly selects
-CLI Vulkan. v4 launched successfully: numeric/worker `8fb4d1b0b`, uploaded entry
-`ba789cf52`, refreshed actual Kaggle cache `df9e11b0b66d1c87f1e0be5552d2974590e4ae20`.
-No numeric change; complete speech diagnosis and acceptance remain pending.
-Do not lower speech acceptance thresholds to hide repetition.
-
-OmniVoice #518 implementation `a1ae00dff` is pushed on
-`fix/omnivoice-postprocess-518`. Independent pinned upstream functions pass
-738 adversarial waveform comparisons and 18 exact multilingual text cases;
-raw-output negative control is rejected. Receipt:
-`docs/omnivoice-audio-utility-parity-2026-10-08.json`. Silence uses actual
-PCM16/integer-RMS/sliding-window semantics, not guessed frame thresholds.
-Native config setters preserve the by-value params ABI; reference PCM hashing
-covers cache semantics. Default-on behavior remains on the branch until
-GH CPU [37852750379](https://github.com/CrispStrobe/CrispASR/actions/runs/37852750379)
-passes same-code independent decode waveform parity, actual CLI/session
-cloning and four TTS→ASR gates. Utility parity is not full speech acceptance.
-
-Mel salvage retains author commit `3dce5b586` plus opt-in gate/instrumentation
-`ead1f2b12`. Local same-binary bitwise checks pass all 144 combinations
-(OpenMP/no OpenMP; 63/64/65/300/1100/3000 frames; both filter layouts and
-float/double accumulation; 1/2/4 threads). Local four-thread projection gains
-are 1.4–1.7× at 300 frames and 2.1–3.5× at 3000, but 64-frame calls regress:
-keep default OFF; a universal useful-size threshold is not established. These are
-local component measurements, not end-to-end ASR performance claims.
-GH CPU [37852305513](https://github.com/CrispStrobe/CrispASR/actions/runs/37852305513)
-runs the component ABBA matrix plus pinned Qwen3 CLI/stage regression with
-BLAS disabled to exercise the changed path. COMPLETE SUCCESS: all 144 component
-cases bit-exact across ABBA, both Qwen3 CLI transcripts exact and existing
-reference stage gates unchanged. Hosted four-thread projection gains at 64
-frames are 3.30–3.58× (total component 1.59–1.73×), contrasting with the local
-short-call regression. Keep explicit opt-in and T>=64 guard; no default flip
-or end-to-end speed claim. All terminal files archived; public proof pinned
-in `docs/mel-projection-2026-10-08.json`. Isolated author-credited draft [PR #520](https://github.com/CrispStrobe/CrispASR/pull/520)
-is refreshed at `2a12970c0` after account-placeholder repair; native CI pending before merge.
-
-Echo public Q4 preparation launched on GH CPU run
-[37851965549](https://github.com/CrispStrobe/CrispASR/actions/runs/37851965549),
-source `603047454` on `fix/echo-q4-public-transfer`. Experimental public prefix
-`cstr/index-echo-9b-GGUF/experiments/q4-guards-20261008/`; remote immutable
-size/SHA verification and revision-bearing manifests precede local deletion.
-Write preflight, four quantizations/uploads and runtime acceptance are pending.
-Do not launch GPU or change shipped registry pins from preparation alone.
-Consumer repair `2790778aa` uses the public experimental prefix and each
-candidate's immutable weight revision, checking remote-verification markers
-and path scope. Python syntax passes. Preparation pins remain unset and no
-Echo GPU kernel has been launched while the CPU producer is queued.
-
-Storage maintenance checkpoint: moved inactive (>95h, no open handles)
-root-volume evidence (729,159,979 logical bytes / ~533 MiB allocated) and one
-inactive (>38h) volume1 shared library (24,727,872 bytes) to `/mnt/storage`.
-Every file SHA256 verified; original source paths remain symlinks and original
-mtimes restored (CIFS rounding <100ns). Local receipts remain under the task
-proof root. Root free space rises ~3.3→3.8 GiB; volume1 remains tight (~1.4 GiB).
-Skip directories with internal symlinks where CIFS cannot preserve semantics;
-do not relocate live services, active environments or the original checkout.
+The unchanged secret scanner passes after account-placeholder repair
+`731593dda`; refreshed #519/#520 checks are progressing without failures.
+PR #492's CANN RVQ/F16 embeddings and ggml NZ require actual Ascend evidence;
+CUDA is not a substitute. Native/worker hashes on isolated branches match
+accepted proof. v0.8.42 excludes these new changes: its release publication
+is COMPLETE SUCCESS with 53 assets; full proof is in
+`docs/release-v0.8.42-validation.json`. Storage maintenance is complete for the
+verified inactive files, original source paths remain symlinks; local receipts
+are under the task proof root. External reporter hardware retests and #456
+remain pending/deferred; do not archive them as resolved.
 
 ## VALIDATED 2026-10-08 — MiMo full CUDA speech acceptance and precision profile
 
@@ -442,40 +295,29 @@ Open, in the order they would help:
    Quantisation: everything is quantised, measured — see the table in
    `examples/crispasr-quantize/main.cpp` (`CRISPASR_MARIAN_KEEP`).
 
-## OPEN 2026-10-03 — Index-Echo Q4 candidate preparation and GPU acceptance
+## OPEN 2026-10-03 — Index-Echo Q4 quality follow-up
 
-MioTTS and the opt-in Echo scheduler source are integrated; see
+MioTTS and opt-in Echo scheduler source are integrated; see
 [the integration report](docs/miotts-echo-integration-2026-10-03.md) and HISTORY.
-Q4 tooling is present, but no Q4 candidate has passed runtime acceptance.
-Large artifacts/logs stay under `/mnt/storage/crispasr/miotts-echo-20261002/`
-and `/mnt/storage/crispasr/miotts-echo-integration-20261003/`.
+Public Q4 preparation/transfer is now complete after the private staging
+quota failures. Four decoder recipes retain all 177 source F32 tensors,
+including 24 recurrent convolution matrices; acoustic tower/connector remain
+original. Source pair is pinned at
+`cstr/index-echo-9b-GGUF@dffbadf0f173446fee0364a0807803d2b2fb6f49`.
 
-- Four decoder recipes are defined in `tools/index_echo_quant_recipes.py`:
-  plain Q4 baseline; F16 sensitive tensors with Q8 attention/down and Q4 gate/up;
-  all gate/up Q4 with down Q8; and only layers 4–27 gate/up Q4. All 177 original
-  F32 tensors, including 24 recurrent convolution matrices, must retain F32;
-  the acoustic tower/connector remain original. Source pair:
-  `cstr/index-echo-9b-GGUF@dffbadf0f173446fee0364a0807803d2b2fb6f49`.
-- Kaggle q4-guards v1 passed the F16 control on two T4s, then repository creation
-  failed with HTTP 403 before any candidate ran. All 31 outputs and terminal
-  logs are retained. CPU preparation was removed from the GPU wrapper.
-- Hosted CPU preparation [37044026371](https://github.com/CrispStrobe/CrispASR/actions/runs/37044026371)
-  was cancelled to correct F32 guards. Corrected
-  [37046153440](https://github.com/CrispStrobe/CrispASR/actions/runs/37046153440)
-  produced a 5.05 GB plain Q4 decoder, but its HF upload commit failed with HTTP
-  400 (private repository storage quota). No candidate has successfully uploaded
-  artifact pins or GPU acceptance. Private staging is a transfer choice, not a
-  runtime requirement; do not retry the quota-limited route unchanged.
-- GPU-only q4-guards v2 has not been pushed. Preparation-run/revision/checksum
-  pins are deliberately unset; a successful producer/transfer is required.
+Actual two-T4 retry v2 accepts the F16 control but rejects all four Q4 recipes
+on full stage/norm and complete decoded/subtitle gates. Middle-layer gate/up
+Q4 passes all three Piper clips at WER zero; this does not establish complete
+acceptance. See `docs/index-echo-q4-rejection-2026-10-09.json` for immutable
+public proof and every recipe outcome. No candidate is promoted to registry.
 
-Next: establish a feasible artifact transfer route; prepare/audit/pin all
-candidates on hosted CPU; then run GPU-only canonical stage/magnitude/cache,
-exact full decoded-output and TTS→ASR gates without relaxing thresholds.
-Public weights and defaults remain unchanged until a candidate passes.
-Original feature and integration proof source remain available as
-`archive/miotts-echo-q4-source-20261003` and
-`archive/miotts-echo-integration-proof-20261003`.
+Next: audit first divergent stages and critical tensors; establish whether
+representative calibration can reduce the low-bit error. The generic imatrix
+collector is not installed on Echo's llama decoder callback, so an env-only
+calibration attempt currently collects no decoder statistics. Verify coverage
+before a calibrated quant experiment, then retain all existing stage/magnitude/
+cache, exact full-output and roundtrip gates. Do not retry the rejected recipes
+unchanged or weaken gates. Task work/proof is claimed above on storage.
 
 ## OPEN 2026-09-30 — voxcpm2 follow-ups (#461, #478)
 
