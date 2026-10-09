@@ -6,26 +6,7 @@ Live work only. Completed threads move to `HISTORY.md`; technical deep-dives to
 `LEARNINGS.md`.
 
 **Before you pick something up:** re-read this section on `origin/main`, add a
-`## CLAIMED 2026-10-09 — VoxCPM2 step and native PCM integration
-
-Owner: this maintainer session. Separate worktree
-`/mnt/storage/crispasr/salvage-20261008/voxcpm2-integration`, branch
-`fix/voxcpm2-steps-native-pcm`. Isolate the already validated live step setter,
-explicit CLI override sentinel and native 48 kHz session return from the
-profile branch; preserve the ten-step default. Do not merge MiMo experiments
-or lower-step recipes. Actual dual-T4/Vulkan controls and original NVIDIA/F16
-readbacks are archived: all 22 VoxCPM2 controls decode correctly with the
-original/F16 recognizer; published Nemotron Q4 reads only 8/22. Public proof
-`voxcpm2/path-diagnostic-20261009-v6/proof.zip` at fixtures revision
-`449ed355010eddb8dcedef6c2ab0fa62431ebeb7`. Confirm integrated native hunks
-against accepted sources and require full PR CI. No B390/8-step quality claim.
-[PR #524](https://github.com/CrispStrobe/CrispASR/pull/524), head `895ca82bc`,
-is open. All three native files and both VoxCPM2 C ABI hunks match validated
-source exactly; format 18/Python syntax/diff checks pass. Binding docs use
-output rate getters. Full platform/binding/regression CI is queued. Evidence:
-`docs/voxcpm2-session-contract-2026-10-09.json` on the PR branch.
-
-## CLAIMED <date> — <what>` block naming your worktree, and **push that claim
+`## CLAIMED <date> — <what>` block naming your worktree, and **push that claim
 to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
@@ -54,8 +35,13 @@ compare the earliest reference boundary before further encoder guards. Worker
 `c9aff16e7`, GH `37915072437`, FAILED its F16-first control: mel cosine minimum
 0.993376 and preencode 0.943016, while encoder remains 0.999982 PASS.
 No further Q4 guards ran. Terminal logs/artifacts archived. Worker `85c04e5ff`,
-GH `37916931975`, captures complete native/reference arrays before the same
-unchanged control gate, to locate the discrepancy without cropping or padding.
+GH `37916931975`, FAILED the same unchanged gate and retained full arrays.
+Only mel frame 1100 and subsampling frame 138 have max error >0.1. The
+reference terminal mel frame is zero; native is log-mel. Upstream current
+NeMo uses floor(n_samples/hop) and masks invalid frames to zero. Worker
+`464bc0438` implements that length rule while retaining shape/thresholds;
+GH `37938926545` runs the F16-first three-stage control and guarded Q4
+comparison. No frontend/default or quant promotion before acceptance.
 Completed quant diagnosis:
 `docs/nemotron-q4-precision-diagnostic-2026-10-09.json`.
 Pinned original public proof:
@@ -148,8 +134,11 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   `echo` worktree: imatrix-aware plain/FFN-guarded/middle recipes, exact
   source-F32 preservation, tensor audits and public experiment-only upload,
   followed by unchanged actual GPU acceptance. Worker `72aac76a5`,
-  GH `37917151969`, is running for calibrated plain/FFN-guarded/middle
-  preparation. All 96 FFN statistics and original-F32 floors are re-audited;
+  GH `37917151969`, completed calibrated plain/FFN-guarded/middle
+  preparation. Public experiment receipt pin is
+  `83ac9d70bd3eaec34cc1dc19dbff605ce5869d85` under
+  `experiments/q4-imatrix-20261009/preparation.json`. Actual GPU acceptance
+  of all three candidates is the next task in the claimed Echo worktree. All 96 FFN statistics and original-F32 floors are re-audited;
   imatrix loading/shape evidence is required. No candidate accepted. Callback support merged as PR #523
   (`74a35b198`) after 42 applicable CI checks passed (one intentional skip). Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
   Real GPU calibration/coverage/full candidate acceptance still needed.

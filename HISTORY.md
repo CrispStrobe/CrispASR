@@ -7,6 +7,20 @@ technical deep-dives are in `LEARNINGS.md`.
 ---
 
 
+## DONE 2026-10-09 — VoxCPM2 native PCM and live step overrides
+
+[PR #524](https://github.com/CrispStrobe/CrispASR/pull/524) merged as
+`865f8b2e03b5ccaeafa3e105ff539bf05b011858` after all 45 applicable CI checks
+passed (one intentional skip), including the VoxCPM2 model regression.
+Session synthesis returns native 48 kHz PCM, matching the output rate getter;
+the old pairwise decimation halved sample count and caused double-speed
+playback. The existing session setter and explicit CLI `--tts-steps` override
+update the next synthesis call, with ten retained as the default. Binding
+comments use backend output rate getters. Native files and VoxCPM2 C ABI hunks
+match actual CUDA/Vulkan controls; original NVIDIA/F16 recognizes all 22 fixed
+controls. No eight-step/B390/full waveform parity claim. Public source/proof:
+`docs/voxcpm2-session-contract-2026-10-09.json`. This is after v0.8.42.
+
 ## DONE 2026-10-09 — Echo decoder calibration callback composition
 
 [PR #523](https://github.com/CrispStrobe/CrispASR/pull/523) merged as
