@@ -121,8 +121,9 @@ for name,array in list(arrays.items()):
     arrays['reference_'+name]=expected
     a=array.astype(np.float64).reshape(-1,int(tensor.shape[-1]));b=expected.astype(np.float64).reshape(a.shape)
     na=np.linalg.norm(a,axis=1);nb=np.linalg.norm(b,axis=1);power=na*nb
-    cosine=np.divide(np.sum(a*b,axis=1),power,out=np.ones_like(power),where=power>1e-20)
-    cosine[(power<=1e-20)&((na>1e-10)|(nb>1e-10))]=0
+    cosine=np.divide(np.sum(a*b,axis=1),power,out=np.ones_like(power),where=power>1e-12)
+    cosine[(na<=1e-12)!=(nb<=1e-12)]=0
+    cosine=cosine.astype(np.float32)  # Ref.compare stores each cosine in float32.
     report=dict(cosine_min=float(cosine.min()),native_norm=float(np.linalg.norm(a)),reference_norm=float(np.linalg.norm(b)),
         relative_l2=float(np.linalg.norm(a-b)/max(np.linalg.norm(b),1e-30)),max_abs=float(np.max(np.abs(a-b))))
     report['passed']=bool(np.isfinite(array).all() and report['cosine_min']>=0.999)
