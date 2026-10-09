@@ -45,6 +45,7 @@ on:
       - 'tests/regression/**'
       - 'tests/test_python_diarize_turns.py'
       - 'tests/test_python_audio_resample.py'
+      - 'tests/test_python_helpers.py'
       - 'python/crispasr/**'
       - '.github/workflows/regression.yml'
       - 'src/**'
@@ -69,6 +70,7 @@ on:
     paths:
       - 'python/crispasr/**'
       - 'tests/test_python_audio_resample.py'
+      - 'tests/test_python_helpers.py'
       - 'src/**'
       - 'examples/cli/**'
       - 'models/**'
@@ -144,6 +146,8 @@ jobs:
         run: |
           python -m pytest tests/test_python_chat.py -v || \
           python -m unittest tests/test_python_chat.py -v
+      - name: Run Python constructor helper discovery tests
+        run: python -m unittest discover -s tests -p test_python_helpers.py -v
       - name: Run Python array resampling and native ABI tests
         run: python -m unittest discover -s tests -p test_python_audio_resample.py -v
       - name: Run Python diarization ABI tests
