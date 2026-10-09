@@ -795,7 +795,7 @@ public final class CrispasrSession implements AutoCloseable {
     }
 
     /**
-     * Synthesise {@code text} to 24 kHz mono PCM. Requires a TTS-capable
+     * Synthesise {@code text} to mono PCM at {@link #outputSampleRate()}. Requires a TTS-capable
      * backend (kokoro / vibevoice / qwen3-tts / orpheus).
      */
     public float[] synthesize(String text) {

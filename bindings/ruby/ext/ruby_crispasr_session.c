@@ -14,7 +14,7 @@
 //   set_tts_phonemes(handle, ipa)              # kokoro/piper: skip the G2P
 //   is_custom_voice(handle) -> Boolean         # qwen3-tts variant detect
 //   is_voice_design(handle) -> Boolean         # qwen3-tts variant detect
-//   synthesize(handle, text) -> Array<Float>   # 24 kHz mono PCM
+//   synthesize(handle, text) -> Array<Float>   # mono PCM at output_sample_rate(handle)
 //
 // And a singleton method:
 //   CrispASR::Session.kokoro_resolve_for_lang(model_path, lang)
@@ -811,7 +811,7 @@ static VALUE rb_session_synthesize(VALUE self, VALUE handle, VALUE text) {
 
 // UNMARKED synthesis — no audible/inaudible watermark. Hard-refused unless
 // accept_marking_responsibility was called first on the session. Otherwise
-// identical to synthesize; returns 24 kHz mono PCM as Array<Float>.
+// identical to synthesize; returns mono PCM at output_sample_rate(handle).
 static VALUE rb_session_synthesize_raw(VALUE self, VALUE handle, VALUE text) {
     struct CrispasrSession* s = (struct CrispasrSession*)NUM2ULL(handle);
     int n = 0;
