@@ -19,14 +19,16 @@ Release dry-run Linux Python artifact loads its bundled native library, but
 Fix platform-aware adjacent helper discovery, preserve explicit overrides and
 repo build fallback, and validate the actual staged package plus model-free
 constructor-path and native resampling regressions before merging.
-[PR #526](https://github.com/CrispStrobe/CrispASR/pull/526) is open at
+[PR #526](https://github.com/CrispStrobe/CrispASR/pull/526) has implementation
 `1c1dae6f6`: all 18 constructor routes pass (10 failed before repair),
 and all eight audio resampling tests pass against the actual staged Linux
 shared library with only the candidate binding overlaid. Actual default
 constructor now loads the packaged helper with loader overrides cleared.
 Missing-model initialization was intentional; no model-inference claim.
 Full no-secrets scan passes all four checks, no skips (54.723 seconds);
-227 documentation anchors pass. CI remains queued; do not merge before green.
+227 documentation anchors pass. The actual package checkout SHA is corrected
+in the PR receipt (`be13df2d3`, event head `23b401b3d`). CI remains queued;
+do not merge before green.
 
 ## CLAIMED 2026-10-09 — Pin release dry-run checkout source
 
@@ -36,6 +38,15 @@ queued jobs can build later branch commits than the workflow event SHA.
 Linux CLI build metadata confirms this drift in run 37958100129. Pin the
 fallback checkout to `github.sha`, retain explicit-tag selection, lint all
 checkout sites, and correct dry-run provenance receipts before release.
+[PR #527](https://github.com/CrispStrobe/CrispASR/pull/527) pins all 33
+checkouts, including publishing notes. Syntax/expression lint passes; full
+lint has the same 24 existing diagnostics before/after. All four no-secrets
+checks pass, no skips (55.010 seconds). Focused no-publication Linux Python
+probe [37968611724](https://github.com/CrispStrobe/CrispASR/actions/runs/37968611724)
+was dispatched at `65de05e08f2cd582ba36694c4135bc2aa96d2259`; branch advanced
+with documentation-only `0df939b42` while jobs remain queued. Predeclared
+acceptance: checkout must select the dispatch SHA despite branch movement.
+No hosted acceptance yet; merge only after green checks and observed checkout.
 
 ## Release preparation checkpoint 2026-10-09
 
