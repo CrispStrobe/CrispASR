@@ -3830,3 +3830,8 @@ is queued at the corrected source. Freeze the branch until its checkout is
 observed; no candidate package/GPU acceptance yet.
 The original decoded-control worker's full four-test secret scan passes with
 no skips (137.633 seconds); decoded run 37987517614 remains queued.
+
+Corrected plugin source passes all four no-secrets tests with the account
+environment set, no skips (122.715 seconds). Documentation checkpoint resolves
+all 227 internal anchors. Candidate CI 37988394079 and CUDA package
+37988408052 are queued; decoded Q4 run 37987517614 is queued.

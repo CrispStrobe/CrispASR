@@ -111,6 +111,12 @@
       "correction": "Preserve the UTF-8 object representation as char bytes; staged C ABI CI path includes non-ASCII characters",
       "standalone_cxx17_cxx20_utf8_assertions_passed": true
     },
-    "package_gpu_validated": false
+    "package_gpu_validated": false,
+    "secret_scan": {
+      "tests_passed": 4,
+      "skips": 0,
+      "seconds": 122.715
+    },
+    "ci_run": 37988394079
   }
 }
