@@ -42,7 +42,174 @@
     "rule": "Zero frames at/after original feature length, retain STFT shape.",
     "stage_run": 37938926545,
     "original_control_run": 37939212612,
-    "accepted": false
+    "accepted": false,
+    "f16_three_stage_control_passed": true,
+    "integrated": false,
+    "proof": {
+      "repo": "cstr/crispasr-regression-fixtures",
+      "repo_type": "dataset",
+      "revision": "c126e7b33cc7bb79126b007248996627ce69e053",
+      "path": "tts-asr/nemotron-boundaries-fixed-20261009/proof.zip",
+      "sha256": "219a3fd91f9f8c823f2a901ea095219a6e4de779c783c816acd25c8ba4fd8705",
+      "bytes": 3336747,
+      "remote_verified": true
+    },
+    "models": {
+      "f16": {
+        "bytes": 1286368480,
+        "protected": [],
+        "stage_returncode": 0,
+        "stages": {
+          "mel_spectrogram": [
+            "[PASS] mel_spectrogram        shape=[1101,128]       cos_min=1.000000  cos_mean=1.000000  max_abs=6.10e-03  rms=1.02e-04"
+          ],
+          "pre_encode_output": [
+            "[PASS] pre_encode_output      shape=[1024,139]       cos_min=1.000000  cos_mean=1.000000  max_abs=4.69e-02  rms=4.41e-03"
+          ],
+          "encoder_output": [
+            "[PASS] encoder_output         shape=[1024,139]       cos_min=0.999991  cos_mean=1.000000  max_abs=1.04e-03  rms=1.23e-05"
+          ]
+        }
+      },
+      "plain-q4": {
+        "bytes": 408557984,
+        "protected": [],
+        "stage_returncode": 6,
+        "stages": {
+          "mel_spectrogram": [
+            "[PASS] mel_spectrogram        shape=[1101,128]       cos_min=1.000000  cos_mean=1.000000  max_abs=6.10e-03  rms=1.02e-04"
+          ],
+          "pre_encode_output": [
+            "[FAIL] pre_encode_output      shape=[1024,139]       cos_min=0.991164  cos_mean=0.998073  max_abs=4.87e+01  rms=5.60e+00"
+          ],
+          "encoder_output": [
+            "[FAIL] encoder_output         shape=[1024,139]       cos_min=0.947463  cos_mean=0.996345  max_abs=6.70e-02  rms=2.80e-03"
+          ]
+        }
+      },
+      "rnnt-prompt-q4": {
+        "bytes": 440576928,
+        "protected": [
+          "decoder.lstm.0.b_hh",
+          "decoder.lstm.1.b_hh",
+          "decoder.lstm.0.b_ih",
+          "decoder.lstm.1.b_ih",
+          "decoder.lstm.0.w_hh",
+          "decoder.lstm.1.w_hh",
+          "decoder.lstm.0.w_ih",
+          "decoder.lstm.1.w_ih",
+          "decoder.embed.weight",
+          "joint.enc.bias",
+          "joint.enc.weight",
+          "joint.out.bias",
+          "joint.out.weight",
+          "joint.pred.bias",
+          "joint.pred.weight",
+          "prompt_kernel.0.bias",
+          "prompt_kernel.0.weight",
+          "prompt_kernel.2.bias",
+          "prompt_kernel.2.weight"
+        ],
+        "stage_returncode": 6,
+        "stages": {
+          "mel_spectrogram": [
+            "[PASS] mel_spectrogram        shape=[1101,128]       cos_min=1.000000  cos_mean=1.000000  max_abs=6.10e-03  rms=1.02e-04"
+          ],
+          "pre_encode_output": [
+            "[FAIL] pre_encode_output      shape=[1024,139]       cos_min=0.991164  cos_mean=0.998073  max_abs=4.87e+01  rms=5.60e+00"
+          ],
+          "encoder_output": [
+            "[FAIL] encoder_output         shape=[1024,139]       cos_min=0.947463  cos_mean=0.996345  max_abs=6.70e-02  rms=2.80e-03"
+          ]
+        }
+      },
+      "rnnt-prompt-preout-q4": {
+        "bytes": 455895968,
+        "protected": [
+          "decoder.lstm.0.b_hh",
+          "decoder.lstm.1.b_hh",
+          "decoder.lstm.0.b_ih",
+          "decoder.lstm.1.b_ih",
+          "decoder.lstm.0.w_hh",
+          "decoder.lstm.1.w_hh",
+          "decoder.lstm.0.w_ih",
+          "decoder.lstm.1.w_ih",
+          "decoder.embed.weight",
+          "encoder.pre.out.bias",
+          "encoder.pre.out.weight",
+          "joint.enc.bias",
+          "joint.enc.weight",
+          "joint.out.bias",
+          "joint.out.weight",
+          "joint.pred.bias",
+          "joint.pred.weight",
+          "prompt_kernel.0.bias",
+          "prompt_kernel.0.weight",
+          "prompt_kernel.2.bias",
+          "prompt_kernel.2.weight"
+        ],
+        "stage_returncode": 6,
+        "stages": {
+          "mel_spectrogram": [
+            "[PASS] mel_spectrogram        shape=[1101,128]       cos_min=1.000000  cos_mean=1.000000  max_abs=6.10e-03  rms=1.02e-04"
+          ],
+          "pre_encode_output": [
+            "[PASS] pre_encode_output      shape=[1024,139]       cos_min=1.000000  cos_mean=1.000000  max_abs=4.69e-02  rms=4.41e-03"
+          ],
+          "encoder_output": [
+            "[FAIL] encoder_output         shape=[1024,139]       cos_min=0.938963  cos_mean=0.996315  max_abs=6.75e-02  rms=2.81e-03"
+          ]
+        }
+      },
+      "rnnt-prompt-preall-q4": {
+        "bytes": 455895968,
+        "protected": [
+          "decoder.lstm.0.b_hh",
+          "decoder.lstm.1.b_hh",
+          "decoder.lstm.0.b_ih",
+          "decoder.lstm.1.b_ih",
+          "decoder.lstm.0.w_hh",
+          "decoder.lstm.1.w_hh",
+          "decoder.lstm.0.w_ih",
+          "decoder.lstm.1.w_ih",
+          "decoder.embed.weight",
+          "encoder.pre.conv.0.bias",
+          "encoder.pre.conv.0.weight",
+          "encoder.pre.conv.2.bias",
+          "encoder.pre.conv.2.weight",
+          "encoder.pre.conv.3.bias",
+          "encoder.pre.conv.3.weight",
+          "encoder.pre.conv.5.bias",
+          "encoder.pre.conv.5.weight",
+          "encoder.pre.conv.6.bias",
+          "encoder.pre.conv.6.weight",
+          "encoder.pre.out.bias",
+          "encoder.pre.out.weight",
+          "joint.enc.bias",
+          "joint.enc.weight",
+          "joint.out.bias",
+          "joint.out.weight",
+          "joint.pred.bias",
+          "joint.pred.weight",
+          "prompt_kernel.0.bias",
+          "prompt_kernel.0.weight",
+          "prompt_kernel.2.bias",
+          "prompt_kernel.2.weight"
+        ],
+        "stage_returncode": 6,
+        "stages": {
+          "mel_spectrogram": [
+            "[PASS] mel_spectrogram        shape=[1101,128]       cos_min=1.000000  cos_mean=1.000000  max_abs=6.10e-03  rms=1.02e-04"
+          ],
+          "pre_encode_output": [
+            "[PASS] pre_encode_output      shape=[1024,139]       cos_min=1.000000  cos_mean=1.000000  max_abs=4.69e-02  rms=4.41e-03"
+          ],
+          "encoder_output": [
+            "[FAIL] encoder_output         shape=[1024,139]       cos_min=0.938963  cos_mean=0.996315  max_abs=6.75e-02  rms=2.81e-03"
+          ]
+        }
+      }
+    }
   },
   "upstream": "https://github.com/NVIDIA/NeMo/blob/main/nemo/collections/asr/parts/preprocessing/features.py"
 }

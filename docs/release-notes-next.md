@@ -96,8 +96,9 @@ No production model files, registry quantization pins or quality thresholds
 change with these merged PRs. Calibrated Echo Q4 candidates require unchanged
 full GPU stage/norm, decoding, translation and roundtrip acceptance before
 promotion. Nemotron Q4 precision experiments recover all 26 fixed transcripts
-with RNNT/prompt guards, but encoder parity remains rejected. Its newly exposed
-frontend/subsampling boundary discrepancies are under investigation.
+with RNNT/prompt guards, but encoder parity remains rejected. A candidate frontend length-mask correction now passes all three F16 stage
+gates, but remains unmerged pending broader controls; further Q4 encoder
+precision work is unfinished.
 OmniVoice PR #521 remains a draft because clone acceptance is unfinished.
 The remaining CANN and hardware-specific work in PR #492 is not included.
 

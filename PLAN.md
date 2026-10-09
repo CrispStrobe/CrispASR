@@ -40,8 +40,12 @@ Only mel frame 1100 and subsampling frame 138 have max error >0.1. The
 reference terminal mel frame is zero; native is log-mel. Upstream current
 NeMo uses floor(n_samples/hop) and masks invalid frames to zero. Worker
 `464bc0438` implements that length rule while retaining shape/thresholds;
-GH `37938926545` runs the F16-first three-stage control and guarded Q4
-comparison. GH `37939212612` additionally reruns all 26 original controls
+GH `37938926545` completed the F16-first three-stage control and guarded
+Q4 comparison: F16 mel/preencode cosine minima round to 1.000000; encoder
+0.999991. All three unchanged gates PASS. Q4 first diverges at preencode
+output projection (cosine minimum 0.991164). Retaining its actual source F32
+restores preencode parity at 455,895,968 bytes, but encoder still FAILS
+0.938963. No Q4 promotion. Next compare original/native encoder layer outputs. GH `37939212612` additionally reruns all 26 original controls
 in fresh/reversed-reused sessions with the same frontend change. No frontend/default or quant promotion before acceptance. All 26 archived
 original NVIDIA attention masks independently confirm floor(samples/hop);
 full failed-boundary arrays and logs publicly archived and SHA-verified:
