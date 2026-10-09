@@ -169,7 +169,23 @@ arms in the same experimental worktree: hold attention at source precision,
 then preserve FFN linear1 versus linear2. Retain common RNNT/prompt/preout
 source guards, unchanged F16-first gates, physical source/unrelated-Q4 byte
 checks and nonzero Q4 payload. No production quantization or acceptance claim. Worker `47e48bd5c` is
-pushed; GH CPU `37964322326` launched for these projection arms. Parakeet RNNT preserves joint/embed; GigaAM preserves
+pushed; GH CPU `37964322326` completed. Both 926,182,304-byte candidates
+retain 113,246,208 Q4 bytes but FAIL the unchanged encoder gate: linear1
+source cosine 0.977366; linear2 source 0.882196. F16 still passes all three
+stages and all 24 original layers; all five prior baselines and the PCM
+reproduce byte-exactly. Capture OFF/ON/OFF remains exact in all seven arms.
+Proper frame-axis first failures are layers 2 and 1; final relative L2 values
+are 0.025868 and 0.059344. Full raw arrays, tensor byte/type/SHA audits,
+original gold and worker are public and remote-SHA verified in
+`docs/nemotron-encoder-projections-2026-10-09.json`. No promotion.
+Next this session claims three predeclared attention precision isolation
+arms in the same `nemotron-quant` worktree, starting from the better
+FFN-source baseline: preserve attention q/k/v versus out versus pos at
+actual source precision, retaining existing RNNT/prompt/preout/FFN guards.
+All unprotected tensors must stay byte-identical to plain Q4; minimum actual
+Q4 payload is 28,311,552 bytes (the q/k/v-source arm). Keep original F16-first
+three-stage gates, complete layer captures and OFF/ON/OFF controls. These are
+mixed-precision diagnostics, with no speed or production Q4 shipping claim. Parakeet RNNT preserves joint/embed; GigaAM preserves
 RNNT/prompt-front precision. Those small-head rules do not explain the
 remaining Conformer drift, so isolate learned encoder groups before further
 calibration or guards.

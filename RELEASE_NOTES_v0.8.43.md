@@ -116,7 +116,9 @@ its full F16 control, but all three candidates failed stage/magnitude and
 complete translation gates. No candidate is promoted; the terminal proof is
 pinned in `docs/index-echo-q4-imatrix-validation-2026-10-09.json`.
 Nemotron RNNT/prompt guards recover all 26 fixed transcripts, but Q4 encoder
-parity remains rejected. The merged frontend length-mask correction passes
+parity remains rejected. Further FFN projection isolation also rejects both
+926 MB mixed-precision candidates (encoder cosine 0.977366 / 0.882196);
+no quantization default is changed. The merged frontend length-mask correction passes
 all three F16 stage gates and all 26 original transcript controls with no
 fresh/reused differences. Actual dual-T4 validation also passes all three stage gates, the 26 original
 transcripts, fresh/reused equality and native streaming packet/reset/flush
