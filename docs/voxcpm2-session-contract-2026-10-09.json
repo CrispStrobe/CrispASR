@@ -1,0 +1,27 @@
+{
+  "source_commits": [
+    "c44f643ddea219d661075bcfe37ae685fb1025ab",
+    "82517f41d3455ac6bec194029b296d81927653ae",
+    "916ab9464"
+  ],
+  "native_sha256": {
+    "src/voxcpm2_tts.cpp": "27561f093038c55d914fc6e064b2627b3fb7ebb24e73134d55621a2ad40ca7bb",
+    "src/voxcpm2_tts.h": "d4819c0d0c1238e918fe2e33438395ecf4a1cbb18c19144deaae62f50a8109f3",
+    "examples/cli/crispasr_backend_voxcpm2_tts.cpp": "38bf8f80cacae4e065532104f694aea39ce37bd932b3419cea9b6ab5915e6228"
+  },
+  "cabi_hunks_match": true,
+  "default_steps": 10,
+  "session_output_sample_rate": 48000,
+  "validation": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "revision": "449ed355010eddb8dcedef6c2ab0fa62431ebeb7",
+    "path": "voxcpm2/path-diagnostic-20261009-v6/proof.zip",
+    "sha256": "f52e5fbc49a0654bdcd13da6660c8e0841fbe87e80eb0cc158d74801339a5abc",
+    "scope": "Existing step/rate contract and real CUDA/Vulkan controls; original/F16 recognizer words exact on all 22 controls."
+  },
+  "limitations": [
+    "No eight-step or Intel B390 quality/performance promotion.",
+    "No full Python/native waveform parity claim.",
+    "Published Nemotron Q4 recognition remains rejected."
+  ]
+}
