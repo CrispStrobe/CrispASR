@@ -5,5 +5,7 @@
   "revision": "819f1fbf685e0538ad0356504517768dada0a33f",
   "sha256": "ee3b94ea10721e4fcbc3c25ed4273cc0e87bb0ca0d79c89b38f8e71758f48f07",
   "bytes": 6356,
-  "weights_changed": false
+  "weights_changed": false,
+  "remote_card_sha256_verified": true,
+  "gguf_files_byte_identical": 5
 }

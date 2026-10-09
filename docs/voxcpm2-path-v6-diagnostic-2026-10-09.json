@@ -340,14 +340,16 @@
     "file": "voxcpm2/path-diagnostic-20261009-v6/proof.zip",
     "revision": "449ed355010eddb8dcedef6c2ab0fa62431ebeb7",
     "sha256": "f52e5fbc49a0654bdcd13da6660c8e0841fbe87e80eb0cc158d74801339a5abc",
-    "bytes": 11760215
+    "bytes": 11760215,
+    "remote_size_sha256_verified": true
   },
   "build_cache": {
     "repo": "cstr/crispasr-ccache",
     "file": "voxcpm2-vulkan/sm75-v6-build.tar",
     "revision": "b736b6c06fe693ae1bc67696d1a2dafff99ed0c3",
     "sha256": "37fa83e2c82fadc7d16182a66bab047f5731402199d0c885fbbb655b1f64e43a",
-    "bytes": 104622080
+    "bytes": 104622080,
+    "remote_size_sha256_verified": true
   },
   "interpretation": "All short utterances repeat across existing GPU CFM paths; disabling fusion alone does not resolve speech quality. Diagnostic completion is not acceptance."
 }

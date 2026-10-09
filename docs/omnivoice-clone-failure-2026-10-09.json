@@ -54,6 +54,7 @@
     "file": "omnivoice/issue518-20261009-clone-failed/proof.zip",
     "revision": "9e890227fcaf1032b28881c6d9707fd3880bcbec",
     "sha256": "79048a8aad17bb0df18b65fbf5737f1d8c3048819ac58a5515008dc0f2df7fce",
-    "bytes": 1002964
+    "bytes": 1002964,
+    "remote_size_sha256_verified": true
   }
 }

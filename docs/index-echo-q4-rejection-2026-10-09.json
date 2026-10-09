@@ -386,6 +386,7 @@
     "file": "index-echo-9b/q4-guards-20261009-v2-failed/proof.zip",
     "revision": "a5305679e245ad7b232af84aa2bc841d8e14643c",
     "sha256": "4c20f77cb164a2a2e1fda4064a69fd9cd384b4f2fe12876545683df81d4edaf5",
-    "bytes": 1886570
+    "bytes": 1886570,
+    "remote_size_sha256_verified": true
   }
 }
