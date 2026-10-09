@@ -37,7 +37,8 @@ VoxCPM2 v4 confirms five of six exact speech gates fail with repeated syllables,
 including explicit Vulkan CLI; all terminal outputs archived and public.
 Next: isolate existing fused/per-step/batch/split CFM paths and CUDA/Vulkan
 at unchanged ten steps/seed/model, two repeats per text, with all 16 ASR results
-recorded. `2ee7212fd` is diagnostic only, not an original Python oracle or
+recorded. Kaggle v5 launched at worker/source `2ee7212fd`, uploaded entry `3db5808ec`,
+cache `85e6e05e264111f9b2f920b02f99c5b8ebeba935`. It is diagnostic only, not an original Python oracle or
 acceptance; no numerical/default changes. Do not lower quality gates.
 MiMo diagnostic capture complete: identical frozen layer-0 input, CPU Q4
 flash/eager first differences at layer-0 attention (relL2 .000146), amplified
