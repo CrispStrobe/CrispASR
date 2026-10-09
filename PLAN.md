@@ -46,7 +46,7 @@ probe [37968611724](https://github.com/CrispStrobe/CrispASR/actions/runs/3796861
 was dispatched at `65de05e08f2cd582ba36694c4135bc2aa96d2259`; branch advanced
 with documentation-only `0df939b42` while jobs remain queued. Predeclared
 acceptance: checkout must select the dispatch SHA despite branch movement.
-Hosted Python package job 113949199260 succeeded and its complete checkout log verifies the dispatch SHA `65de05e08` despite the later branch head `ba74c8d00`. Glint validation passed; validate-version and final PR CI are still pending. Receipt: `docs/release-checkout-pin-2026-10-09.json`. Merge only after green checks.
+Hosted Python package job 113949199260 succeeded and its complete checkout log verifies the dispatch SHA `65de05e08` despite the later branch head `ba74c8d00`. The full hosted probe is SUCCESS: Python package, glint and version validation all passed, with no publication requested. Current proof: `docs/release-checkout-pin-hosted-2026-10-09.json`; `docs/release-checkout-pin-2026-10-09.json` remains the archived, predeclared launch receipt from the PR. This separates the historical receipt from the completed result and resolves the documentation-only add/add conflict without changing the PR build source. Final PR CI remains pending; merge only after green checks.
 Additional claimed package-documentation repair in this same worktree/PR:
 the generic WASM archive README incorrectly specifies fixed 24 kHz output.
 Replace it with the actual `sessionOutputSampleRate()` getter guidance;

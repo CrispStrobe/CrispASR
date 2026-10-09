@@ -1,5 +1,5 @@
 {
-  "status": "hosted probe queued; not accepted",
+  "status": "Hosted checkout pin probe passed; final PR CI pending",
   "workflow": "release.yml",
   "run": 37968611724,
   "source": "65de05e08f2cd582ba36694c4135bc2aa96d2259",
@@ -21,6 +21,16 @@
     "hosted_intel_label_supplied_locally": true
   },
   "predeclared_control": "Advance this branch with this documentation-only receipt after dispatch. Hosted checkout must still select the dispatch source SHA, not the later branch commit.",
-  "hosted_checkout_verified": false,
-  "native_model_inference_tested": false
+  "hosted_checkout_verified": true,
+  "native_model_inference_tested": false,
+  "observed_python_package_source": "65de05e08f2cd582ba36694c4135bc2aa96d2259",
+  "observed_python_job": 113949199260,
+  "observed_python_job_conclusion": "success",
+  "branch_head_after_dispatch": "ba74c8d009df080b4ed4cbaaeb8eef0247c8e0c5",
+  "job_log_sha256": "fc59e077cddabfa1bbd43ef5de3f38ce2c0c128f94fc8319bfea19959a0f1077",
+  "hosted_probe_conclusion": "success",
+  "hosted_glint_validation": "success",
+  "hosted_version_validation": "success",
+  "hosted_python_package": "success",
+  "hosted_publication_requested": false
 }
