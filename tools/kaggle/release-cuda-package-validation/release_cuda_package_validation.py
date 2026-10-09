@@ -12,7 +12,7 @@ import tarfile
 import wave
 import zipfile
 
-VERSION = '2026-10-09.release-package.2'
+VERSION = '2026-10-09.release-package.3'
 SOURCE = '3b814f780277286ece56e8cdee6bdc435e07ae4d'
 BUILD_RUN = 37958100129
 ARTIFACT_ID = 11637375498
@@ -20,6 +20,8 @@ ARTIFACT_ZIP_SHA = '658ee8dd67da3facb1d0fc8498c045293dcd5e3799cb55d36d4aae99338f
 BUNDLE_SHA = '60e29fe5efd78979768904566c7b3a05d2387557c36ca2bd927cd6e4887c26fa'
 ORIGINAL_REV = '10e579dedf52a16a159cbc5d35e17f8bffa77190'
 ORIGINAL_SHA = '7762f2a73d8ae7dad05d667fbf0bca393a0b3b7ad622b1b1f09473fa8f5d0463'
+PACKAGE_MIRROR_REV = 'a93e0228b081be547ddea2d2c35bec904ed1a4b9'
+PACKAGE_MIRROR_PATH = 'experimental/release-package-37958100129/crispasr-linux-x86_64-cuda.tar.gz'
 MODEL_REV = 'bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2'
 TEMP = Path('/kaggle/temp/release-cuda-package')
 OUT = Path('/kaggle/working')
@@ -64,39 +66,12 @@ def fetch(repo,path,rev,sha=None,kind='model'):
     return result
 
 
-# Fetch the actual immutable GitHub artifact, not a rebuilt binary or HF mirror.
-import requests
-import shutil
+# Public byte-identical mirror of the CI archive, uploaded after local ZIP/tar checks.
+# The immutable HF commit and original tar SHA prohibit substituted/rebuilt binaries.
+# No GitHub secret is required on the GPU worker.
 import site
-secret_paths=[Path('/kaggle/input/crispasr-hf-token/gh_token.txt')]
-secret_paths+=list(Path('/kaggle/input/datasets').glob('*/crispasr-hf-token/gh_token.txt'))
-secret_paths+=list(Path('/kaggle/input').rglob('gh_token.txt'))
-# Known mount paths cover directory symlinks; duplicate aliases are harmless.
-mounted_tokens={p.read_text().strip() for p in secret_paths if p.is_file()}
-mounted_tokens.discard('')
-gh_token=os.environ.get('GH_TOKEN') or (next(iter(mounted_tokens)) if len(mounted_tokens)==1 else None)
-assert gh_token, f'GitHub artifact credential unresolved; distinct mounted tokens: {len(mounted_tokens)}'
-try:
-    response=requests.get(f'https://api.github.com/repos/CrispStrobe/CrispASR/actions/artifacts/{ARTIFACT_ID}/zip',
-        headers={'Authorization':'Bearer '+gh_token,'Accept':'application/vnd.github+json'},
-        allow_redirects=False,timeout=60)
-    assert response.status_code==302, f'GitHub artifact HTTP status {response.status_code}'
-    location=response.headers['Location'];assert location.startswith('https://')
-    archive_zip=TEMP/'artifact.zip'
-    # The signed storage request receives no GitHub authorization header.
-    with requests.get(location,stream=True,timeout=120) as download:
-        assert download.status_code==200, f'Artifact storage HTTP status {download.status_code}'
-        with archive_zip.open('wb') as stream:
-            for chunk in download.iter_content(8*1024**2): stream.write(chunk)
-except requests.RequestException as error:
-    raise RuntimeError('Artifact transport failed: '+type(error).__name__) from None
-assert digest(archive_zip)==ARTIFACT_ZIP_SHA
-archive=TEMP/'crispasr-linux-x86_64-cuda.tar.gz'
-with zipfile.ZipFile(archive_zip) as z:
-    files=[name for name in z.namelist() if not name.endswith('/')]
-    assert len(files)==1 and Path(files[0]).name==archive.name
-    with z.open(files[0]) as src,archive.open('wb') as dst: shutil.copyfileobj(src,dst)
-assert digest(archive)==BUNDLE_SHA
+archive=fetch('cstr/crispasr-regression-fixtures',PACKAGE_MIRROR_PATH,
+    PACKAGE_MIRROR_REV,BUNDLE_SHA,kind='dataset')
 with tarfile.open(archive) as tar: tar.extractall(TEMP,filter='data')
 bundle=TEMP/'crispasr-linux-x86_64-cuda'
 cli_version=subprocess.check_output([str(bundle/'crispasr'),'--version'],text=True)
@@ -146,6 +121,8 @@ for name in ['nemotron_run_preencode_ext','nemotron_run_encoder_ext']:
 allocator=ctypes.CDLL(None);allocator.free.argtypes=[ctypes.c_void_p];allocator.free.restype=None
 params=lib.nemotron_context_default_params();params.n_threads=4;params.use_gpu=True;params.verbosity=1
 receipt=dict(version=VERSION,source=SOURCE,build_run=BUILD_RUN,package_artifact_id=ARTIFACT_ID,package_sha256=BUNDLE_SHA,
+    package_mirror_revision=PACKAGE_MIRROR_REV,package_mirror_path=PACKAGE_MIRROR_PATH,
+    package_transport='public byte-identical CI archive mirror',
     hardware=hardware,model_revision=MODEL_REV,original_revision=ORIGINAL_REV,original_sha256=ORIGINAL_SHA,
     reference_revision=manifest['fixtures']['revision'],artifact_zip_sha256=ARTIFACT_ZIP_SHA,
     cli_version=cli_version,host_libraries=host_libraries,cuda_runtime_version=runtime_version.value,
