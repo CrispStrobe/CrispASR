@@ -11,6 +11,21 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## Release preparation checkpoint 2026-10-09
+
+Comprehensive `RELEASE_NOTES_v0.8.43.md` is committed before any version bump.
+Merged scope: PRs #519, #520, #522, #523, #524, #525. No new version/tag or
+production quantization pin. Full no-publication Release dry run
+[GH 37958100129](https://github.com/CrispStrobe/CrispASR/actions/runs/37958100129)
+uses source `23b401b3d20a2ef794a88ade6a261369e899359d`; queued, packages and
+runtime dependencies not yet inspected. Main integration CI is also queued.
+Both Q4 encoder isolation `37957419289` and original OmniVoice generation
+`37957953495` remain queued. Documentation anchors pass (227 across 82 files).
+Tag only through `scripts/bump-version.sh` after green chosen tip; verify
+release packages before publication. The pending quant/clone experiments are
+excluded from this release scope. Issue #485 has the terminal calibrated-Q4
+rejection update; draft PR #521 now describes the queued original control.
+
 ## CLAIMED 2026-10-09 — Nemotron Q4 RNNT precision repair
 
 Owner: this maintainer session. Worktree
