@@ -1,6 +1,6 @@
 # v0.8.43 — audio correctness, frontend parity and measured opt-in optimizations
 
-This release covers merged PRs #519, #520, #522, #523, #524 and #525. Experimental quantization candidates and unfinished hardware
+This release covers merged PRs #519, #520, #522, #523, #524, #525 and #526. Experimental quantization candidates and unfinished hardware
 validation are excluded from the released behavior described below.
 
 ## VoxCPM2: correct session audio rate and configurable CFM steps
@@ -61,6 +61,21 @@ between native and fallback output within 1e-7, input/rate/error contracts,
 contiguity and independent allocation/free ownership.
 
 Details: [Python audio resampling](docs/python-audio-resampling.md).
+
+## Python: discover packaged native helpers
+
+Automatic native-library discovery and `CRISPASR_LIB` selection now load the
+adjacent platform-specific helpers library. Previously only an explicit
+constructor library path reliably found that helper. Explicit helper overrides
+and legacy build/helper-free fallbacks remain supported.
+
+PR #526 passed all 41 applicable CI checks, with one intentional skip. All 18
+constructor routes pass; eight resampling tests pass against the actual staged
+Linux native and helper libraries with the candidate binding overlaid. This
+proves package loading and resampling, without claiming native Windows/macOS
+execution or model inference.
+
+Evidence: [actual package helper proof](docs/python-package-helpers-2026-10-09.json).
 
 ## MiMo-ASR: opt-in cached GPU decode
 

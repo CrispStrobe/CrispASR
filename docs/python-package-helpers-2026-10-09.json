@@ -26,5 +26,12 @@
   "resampling_stderr": "test_anti_alias_and_passband (__main__.AudioResampleTests.test_anti_alias_and_passband) ... ok\ntest_both_front_doors_receive_filtered_contiguous_samples (__main__.AudioResampleTests.test_both_front_doors_receive_filtered_contiguous_samples) ... ok\ntest_contiguous_unchanged_and_ceil_length (__main__.AudioResampleTests.test_contiguous_unchanged_and_ceil_length) ... ok\ntest_invalid_inputs (__main__.AudioResampleTests.test_invalid_inputs) ... ok\ntest_native_failure_does_not_silently_use_fallback (__main__.AudioResampleTests.test_native_failure_does_not_silently_use_fallback) ... ok\ntest_static_wav_loader_is_bandlimited (__main__.AudioResampleTests.test_static_wav_loader_is_bandlimited) ... ok\ntest_error_reset_empty_and_identity_ownership (__main__.NativeAudioResampleTests.test_error_reset_empty_and_identity_ownership) ... ok\ntest_native_fallback_agreement (__main__.NativeAudioResampleTests.test_native_fallback_agreement) ... ok\n\n----------------------------------------------------------------------\nRan 8 tests in 1.306s\n\nOK\n",
   "real_model_inference_tested": false,
   "artifact_workflow_event_head_sha": "23b401b3d20a2ef794a88ade6a261369e899359d",
-  "artifact_source_evidence": "Checkout git log -1 --format=%H in completed release job 113913673053"
+  "artifact_source_evidence": "Checkout git log -1 --format=%H in completed release job 113913673053",
+  "integration": {
+    "pr": 526,
+    "tested_head": "aee110229470d99b5c2f488b3ffa71a6f90605a7",
+    "merge_commit": "c6777953baec6c83aa945e2d581026641f511ac6",
+    "applicable_checks_passed": 41,
+    "intentional_skips": 1
+  }
 }

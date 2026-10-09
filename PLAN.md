@@ -11,25 +11,6 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
-## CLAIMED 2026-10-09 — Packaged Python helper discovery
-
-Worktree: `/mnt/storage/crispasr/salvage-20261008/python-package-helpers`.
-Release dry-run Linux Python artifact loads its bundled native library, but
-`CrispASR()` without an explicit library path skips the adjacent helpers library.
-Fix platform-aware adjacent helper discovery, preserve explicit overrides and
-repo build fallback, and validate the actual staged package plus model-free
-constructor-path and native resampling regressions before merging.
-[PR #526](https://github.com/CrispStrobe/CrispASR/pull/526) has implementation
-`1c1dae6f6`: all 18 constructor routes pass (10 failed before repair),
-and all eight audio resampling tests pass against the actual staged Linux
-shared library with only the candidate binding overlaid. Actual default
-constructor now loads the packaged helper with loader overrides cleared.
-Missing-model initialization was intentional; no model-inference claim.
-Full no-secrets scan passes all four checks, no skips (54.723 seconds);
-227 documentation anchors pass. The actual package checkout SHA is corrected
-in the PR receipt (`be13df2d3`, event head `23b401b3d`). CI remains queued;
-do not merge before green.
-
 ## CLAIMED 2026-10-09 — Pin release dry-run checkout source
 
 Worktree: `/mnt/storage/crispasr/salvage-20261008/release-checkout-pin`.
@@ -82,6 +63,7 @@ CUDA package rebuild GH 37977686803 is queued at this source; leave this branch
 unchanged until checkout is observed because the old release workflow still
 selects a moving branch. Terminal T4 failure proof is public and hash-verified
 via the hardware receipt. No candidate GPU acceptance yet.
+Hosted dynamic-backend job 113979995896 failed at compilation: C++20 returns `std::u8string`, which cannot implicitly convert to `std::string`. Claim includes preserving UTF-8 bytes explicitly across C++17/C++20, then rerunning dynamic-backend and actual-package validation. The original CUDA rebuild already checked out `108e38024`; it remains a historical attempt, not acceptance of the forthcoming correction.
 
 ## CLAIMED 2026-10-09 — Actual Linux CUDA release-package hardware validation
 

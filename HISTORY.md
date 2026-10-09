@@ -7,6 +7,19 @@ technical deep-dives are in `LEARNINGS.md`.
 ---
 
 
+## DONE 2026-10-09 — Packaged Python helper discovery
+
+[PR #526](https://github.com/CrispStrobe/CrispASR/pull/526) merged as
+`c6777953baec6c83aa945e2d581026641f511ac6` after all 41 applicable checks
+passed (one intentional skip). Automatic and environment-selected native
+libraries now discover adjacent platform-specific helpers, preserving explicit
+helper overrides and legacy fallback. All 18 constructor routes pass (10
+failed before repair); eight resampling checks pass against the actual staged
+Linux native/helper libraries with the candidate binding overlaid. Full four-test
+secret scan passed without skips. No native Windows/macOS execution or model
+inference claim. Receipt: `docs/python-package-helpers-2026-10-09.json`.
+This is after v0.8.42.
+
 ## DONE 2026-10-09 — Nemotron terminal frontend mask and stage diagnostics
 
 [PR #525](https://github.com/CrispStrobe/CrispASR/pull/525) merged as

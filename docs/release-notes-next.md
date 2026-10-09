@@ -1,6 +1,6 @@
 # Draft release notes — changes after v0.8.42
 
-This draft covers merged PRs #519, #520, #522, #523, #524 and #525. No new tag has
+This draft covers merged PRs #519, #520, #522, #523, #524, #525 and #526. No new tag has
 been cut. Experimental quantization candidates and unfinished hardware
 validation are excluded from the released behavior described below.
 
@@ -62,6 +62,21 @@ between native and fallback output within 1e-7, input/rate/error contracts,
 contiguity and independent allocation/free ownership.
 
 Details: [Python audio resampling](python-audio-resampling.md).
+
+## Python: discover packaged native helpers
+
+Automatic native-library discovery and `CRISPASR_LIB` selection now load the
+adjacent platform-specific helpers library. Previously only an explicit
+constructor library path reliably found that helper. Explicit helper overrides
+and legacy build/helper-free fallbacks remain supported.
+
+PR #526 passed all 41 applicable CI checks, with one intentional skip. All 18
+constructor routes pass; eight resampling tests pass against the actual staged
+Linux native and helper libraries with the candidate binding overlaid. This
+proves package loading and resampling, without claiming native Windows/macOS
+execution or model inference.
+
+Evidence: [actual package helper proof](python-package-helpers-2026-10-09.json).
 
 ## MiMo-ASR: opt-in cached GPU decode
 
