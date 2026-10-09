@@ -31,9 +31,13 @@ recovers original words on 26/26 controls and all 22 VoxCPM2 controls at
 440,576,928 bytes, versus 479,337,248 published Q4 bytes. Fresh/reused outputs
 agree, but encoder cosine minimum 0.947463 fails the unchanged 0.999 gate
 (F16 0.999982). No promotion. Next expose existing preencode diagnostics and
-compare the earliest reference boundary before further encoder guards. Worker `c9aff16e7`, GH `37915072437`, is
-queued for F16-first mel/preencode/encoder comparison, then source-precision
-subsampling guards. Completed quant diagnosis:
+compare the earliest reference boundary before further encoder guards. Worker
+`c9aff16e7`, GH `37915072437`, FAILED its F16-first control: mel cosine minimum
+0.993376 and preencode 0.943016, while encoder remains 0.999982 PASS.
+No further Q4 guards ran. Terminal logs/artifacts archived. Worker `85c04e5ff`,
+GH `37916931975`, captures complete native/reference arrays before the same
+unchanged control gate, to locate the discrepancy without cropping or padding.
+Completed quant diagnosis:
 `docs/nemotron-q4-precision-diagnostic-2026-10-09.json`.
 Pinned original public proof:
 `docs/nemotron-tts-reference-diagnostic-2026-10-09.json`.
@@ -115,10 +119,16 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   Inputs and corpus selection unchanged. Publish the corpus and collect fresh
   actual GPU statistics before quantizing. Public corpus with verified checksum:
   `docs/index-echo-calibration-corpus-2026-10-09.json`. GPU collector
-  `93f660df6` is Kaggle `index-echo-calibration-corpus` v1 RUNNING; pulled
-  remote source matches exactly. Same accepted sm75 runtime, fresh statistics
-  path, one model session over all 48 clips, per-PCM hashes and all 96 FFN
-  matrix coverage checks. No calibration result or Q4 acceptance yet. Callback support merged as PR #523
+  `93f660df6`, Kaggle `index-echo-calibration-corpus` v1 COMPLETE on dual T4s,
+  processed all 48 clips in one session and proved decoder CUDA assignment.
+  249 decoder matrices collected; all 96 FFN matrices have valid widths,
+  finite nonnegative nonzero statistics and positive counts. Full terminal
+  logs, source and statistics publicly archived and remote-SHA verified.
+  Fresh corpus imatrix SHA `4cb3e75e9ef3f09ed65860b172d5e0cfb994cca16544db31904e269d91cc9bb4`.
+  No Q4 acceptance. This session claims the next CPU producer in the same
+  `echo` worktree: imatrix-aware plain/FFN-guarded/middle recipes, exact
+  source-F32 preservation, tensor audits and public experiment-only upload,
+  followed by unchanged actual GPU acceptance. Callback support merged as PR #523
   (`74a35b198`) after 42 applicable CI checks passed (one intentional skip). Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
   Real GPU calibration/coverage/full candidate acceptance still needed.
 

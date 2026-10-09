@@ -15,7 +15,7 @@
     "remote_verified": true,
     "repo_type": "dataset"
   },
-  "calibration_complete": false,
+  "calibration_complete": true,
   "quantization_accepted": false,
   "gpu_launch": {
     "version": 1,
@@ -23,12 +23,57 @@
     "entry_sha256": "faf8a163e8c7e2875ab316cd954f12ff83d006645b68290f04a0bb388a1bf955",
     "remote_source_identical": true,
     "kernel": "${KAGGLE_ACCOUNT}/crispasr-index-echo-calibration-corpus",
-    "status": "RUNNING",
+    "status": "COMPLETE",
     "status_at_checkpoint": "2026-10-09",
     "build_commit": "a03820a4fcf32bae0b658b35cf6663e85abcc854",
     "build_run": 37901223622,
     "bundle_revision": "b284cbc8727e1f91904a4c2928e6991bd5bea938",
     "bundle_sha256": "894bf650161f4c672a2992da394cdb8d65cca69af2f17c5b960c52bd4b6826f9",
     "purpose": "Fresh disjoint corpus statistics; no held-out smoke imatrix, CPU builds, quantization or model publication."
+  },
+  "calibration_result": {
+    "script_version": "2026-10-09.1-corpus-v1",
+    "entry_sha256": "faf8a163e8c7e2875ab316cd954f12ff83d006645b68290f04a0bb388a1bf955",
+    "source_commit": "327be3fda80c44f280bfecab988458f9c3712b08",
+    "build_commit": "a03820a4fcf32bae0b658b35cf6663e85abcc854",
+    "build_run": 37901223622,
+    "bundle_revision": "b284cbc8727e1f91904a4c2928e6991bd5bea938",
+    "bundle_sha256": "894bf650161f4c672a2992da394cdb8d65cca69af2f17c5b960c52bd4b6826f9",
+    "hardware": "Tesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB",
+    "corpus_revision": "06258ecef2dfed2be52ced573ec0dffc2443fabc",
+    "corpus_sha256": "44680f20e390cc0c6bf5bfcf3e284a1a3feabf118bd1a96e0ab510c682bf2188",
+    "model_revision": "dffbadf0f173446fee0364a0807803d2b2fb6f49",
+    "calibration_complete": true,
+    "q4_accepted": false,
+    "defaults_changed": false,
+    "model_sha256": {
+      "index-echo-9b-decoder-f16.gguf": "98acd9b753295cdc9a9b8773317ab046bf83e466b1ebfc775d59ac8dab9d177a",
+      "index-echo-9b-f16.gguf": "e4b1dd177211ba5d8eb0ea7140ac2f813ddc68b55381f050ecf7ddab3e83172f"
+    },
+    "collection_returncode": 0,
+    "cuda_assignment_proven": true,
+    "imatrix_sha256": "4cb3e75e9ef3f09ed65860b172d5e0cfb994cca16544db31904e269d91cc9bb4",
+    "imatrix_bytes": 5153408,
+    "clips": 48,
+    "duration_s": 259.176,
+    "heldout_pcm_disjoint": true,
+    "coverage": {
+      "required_ffn_matrices": 96,
+      "decoder_matrices": 249,
+      "missing": [],
+      "invalid": []
+    }
+  },
+  "statistics_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "repo_type": "dataset",
+    "revision": "65bcaed727b355b605b883937b25bf7ce1bb7044",
+    "path": "index-echo-9b/disjoint-calibration-20261009/proof.zip",
+    "sha256": "96dac2e3cb508db1e26b08a59848d398036c9fb1f8f5d0bb21bb781de45542c6",
+    "bytes": 3363033,
+    "imatrix_path": "index-echo-9b/disjoint-calibration-20261009/imatrix.gguf",
+    "imatrix_sha256": "4cb3e75e9ef3f09ed65860b172d5e0cfb994cca16544db31904e269d91cc9bb4",
+    "imatrix_bytes": 5153408,
+    "remote_verified": true
   }
 }
