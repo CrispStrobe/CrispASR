@@ -1,0 +1,145 @@
+{
+  "passed": false,
+  "diagnostic_complete": true,
+  "scope": "Pinned official full generation and native precision controls; diagnostic only.",
+  "seed": 2,
+  "steps": 10,
+  "cfg": 2.0,
+  "upstream_source": "cce58a5b59303c9bd63d12f23afe6a49a4a80c59",
+  "upstream_model": "32279effe8c19989596f05d353d1447f51d9e915",
+  "gguf_revision": "25b5cf03fdbf20011dad9a77def6112023cc0fe3",
+  "native_source": "08be8c020fcfff649f33859ba71404a5cc6dd474",
+  "generation": {
+    "python-bf16/short": {
+      "samples": 184320,
+      "sample_rate": 48000,
+      "sha256": "6ec25140da83db7232b21afb5c1ffef7b5a3d7bcbe93658bceb61f6ce3954d0c",
+      "seconds": 14.808981021000022,
+      "norm": 44.270279848709684,
+      "peak": 0.8716994524002075
+    },
+    "python-bf16/long": {
+      "samples": 253440,
+      "sample_rate": 48000,
+      "sha256": "086105cea839fd8d5e387ca0d5f54ba1316bf972d4484409de649d66142f56c5",
+      "seconds": 19.738183247999984,
+      "norm": 50.78001289563837,
+      "peak": 0.946912407875061
+    },
+    "native-f16/short": {
+      "samples": 153600,
+      "sample_rate": 48000,
+      "sha256": "ff8d2761a7ea25336a0e2c35b7ec059f03385ddcfee8f9f7ab929ad174442c7a",
+      "seconds": 37.07934553899997,
+      "norm": 34.49971621679665,
+      "peak": 0.6221092343330383
+    },
+    "native-f16/long": {
+      "samples": 299520,
+      "sample_rate": 48000,
+      "sha256": "915d38a53f4f4df4a89f2abd6cf78f2abf7fa54697322e70415f5a3b6e966d5a",
+      "seconds": 73.05989416,
+      "norm": 38.102631491106955,
+      "peak": 0.4993424713611603
+    },
+    "native-q8/short": {
+      "samples": 153600,
+      "sample_rate": 48000,
+      "sha256": "9b4a2350b9b4796dc0e2b98e89cf9a0b406055451f635b5093a656d7a07c37ad",
+      "seconds": 16.501643973,
+      "norm": 31.922291392817886,
+      "peak": 0.5613301992416382
+    },
+    "native-q8/long": {
+      "samples": 245760,
+      "sample_rate": 48000,
+      "sha256": "d86393c6839abdb63a6a217e6c52455d61ae1f2005cd0651e38e5a25e1dac273",
+      "seconds": 26.33878104200005,
+      "norm": 31.689840085803468,
+      "peak": 0.6148308515548706
+    }
+  },
+  "roundtrips": {
+    "python-bf16/short": {
+      "transcript": "Hello, this is a short test sent sent sent sentence.",
+      "expected": "Hello, this is a short test sentence.",
+      "exact": false
+    },
+    "python-bf16/long": {
+      "transcript": "The sun is shining today. hello, this is a short test sentence.",
+      "expected": "The sun is shining today. Hello, this is a short test sentence.",
+      "exact": true
+    },
+    "native-f16/short": {
+      "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+      "expected": "Hello, this is a short test sentence.",
+      "exact": false
+    },
+    "native-f16/long": {
+      "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+      "expected": "The sun is shining today. Hello, this is a short test sentence.",
+      "exact": true
+    },
+    "native-q8/short": {
+      "transcript": "Hello, this is a short test sent sent sent sentence.",
+      "expected": "Hello, this is a short test sentence.",
+      "exact": false
+    },
+    "native-q8/long": {
+      "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+      "expected": "The sun is shining today. Hello, this is a short test sentence.",
+      "exact": true
+    }
+  },
+  "comparisons": {
+    "python-bf16/short": {
+      "samples": 184320,
+      "reference_samples": 184320,
+      "aligned": false,
+      "cosine": 1.0,
+      "relative_l2": 0.0,
+      "mine_norm": 44.270279848709684,
+      "ref_norm": 44.270279848709684
+    },
+    "python-bf16/long": {
+      "samples": 253440,
+      "reference_samples": 253440,
+      "aligned": false,
+      "cosine": 1.0,
+      "relative_l2": 0.0,
+      "mine_norm": 50.78001289563837,
+      "ref_norm": 50.78001289563837
+    },
+    "native-f16/short": {
+      "samples": 153600,
+      "reference_samples": 184320,
+      "aligned": false
+    },
+    "native-f16/long": {
+      "samples": 299520,
+      "reference_samples": 253440,
+      "aligned": false
+    },
+    "native-q8/short": {
+      "samples": 153600,
+      "reference_samples": 184320,
+      "aligned": false
+    },
+    "native-q8/long": {
+      "samples": 245760,
+      "reference_samples": 253440,
+      "aligned": false
+    }
+  },
+  "torch": "2.14.1+cpu",
+  "python_parameter_dtype": "torch.bfloat16",
+  "public_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "file": "voxcpm2/original-controls-20261009/proof.zip",
+    "revision": "78790b006e7ee65f6e8975d437000858fb5dfe7a",
+    "sha256": "2684b0da6981bb36423c9fc3c007d743069462860c7bba5f994bae364d39d234",
+    "bytes": 4857535,
+    "remote_size_sha256_verified": true
+  },
+  "interpretation": "Official Python BF16 and native F16/Q8 all have repeated sent tokens in short Nemotron transcripts; long controls pass. Unequal generated lengths prevent direct waveform parity. The Python ASR ndarray front door uses unfiltered linear interpolation; fixed-audio cross-recognizer/resampler diagnosis follows."
+}

@@ -1,0 +1,76 @@
+{
+  "passed": false,
+  "diagnostic_complete": true,
+  "seed": 42,
+  "steps": 32,
+  "scope": "Isolate OmniVoice reference and decode cleanup; diagnostic only, not acceptance.",
+  "model_revision": "92266739c4496b04a497e164cf8c2801a792551e",
+  "fixture_revision": "d0a7d7a8be318a5841dfdbe6ad37d3acf75523e3",
+  "source_commit": "1b0ea317f85f31c63203927c64f8b334a12398ab",
+  "arms": {
+    "legacy": {
+      "legacy": "1",
+      "preprocess": "0",
+      "ref_text": "The quick brown fox jumps over the lazy dog",
+      "samples": 63335,
+      "pcm_sha256": "87b077a1de8d75438c64925f952d8fc11f0d0dd5688dc8c360d0e017c6b122ce",
+      "codes_sha256": "5254614661cd3211f0058097475291d3e3b778c681749563ede857b4a1b29ac7"
+    },
+    "punctuation": {
+      "legacy": "1",
+      "preprocess": "0",
+      "ref_text": "The quick brown fox jumps over the lazy dog.",
+      "samples": 63335,
+      "pcm_sha256": "dc0cb1664c8604dfc23f7714e63f66584986d176ef2e243d1882f993138d3592",
+      "codes_sha256": "f531ff27eabdb9ea7cfd2adaa9fe10f4c272d64d0e466d298cd0a30ade4ba8ef"
+    },
+    "reference-cleanup": {
+      "legacy": "1",
+      "preprocess": "1",
+      "ref_text": "The quick brown fox jumps over the lazy dog.",
+      "samples": 63335,
+      "pcm_sha256": "111d0844c71466d04cd34afa7a5e4afa542b71089276677e81bb8e422ea2c4ed",
+      "codes_sha256": "3acb4983d97455ea5c88a3972adc23b98247aee4a5f06eb8431cffc791a6f345"
+    },
+    "output-cleanup": {
+      "legacy": "0",
+      "preprocess": "1",
+      "ref_text": "The quick brown fox jumps over the lazy dog.",
+      "samples": 68136,
+      "pcm_sha256": "052f0192bc8b926e6626ae1cd7438bd27186571a2a321bc8f7811a079055a067",
+      "codes_sha256": "3acb4983d97455ea5c88a3972adc23b98247aee4a5f06eb8431cffc791a6f345"
+    }
+  },
+  "roundtrips": {
+    "legacy": {
+      "transcript": "The quick brown fect jumps over the lazy dig.",
+      "wer": 0.2222222222222222,
+      "meets_existing_gate": false
+    },
+    "punctuation": {
+      "transcript": "The quick brown fect jumps over the lazy dig.",
+      "wer": 0.2222222222222222,
+      "meets_existing_gate": false
+    },
+    "reference-cleanup": {
+      "transcript": "The quick brown fix jumps over the lazy dig.",
+      "wer": 0.2222222222222222,
+      "meets_existing_gate": false
+    },
+    "output-cleanup": {
+      "transcript": "The quick brown fix jumps over the lazy dig.",
+      "wer": 0.2222222222222222,
+      "meets_existing_gate": false
+    }
+  },
+  "output_only_codes_exact": true,
+  "public_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "file": "omnivoice/clone-diagnostic-20261009/proof.zip",
+    "revision": "3f7d258695ae58be8e0b7b717f4273b8241609a2",
+    "sha256": "f69d5a1b7e9257c78e3cfc42736ebdcbb22227acbabfb00561c56b0602870b9b",
+    "bytes": 958385,
+    "remote_size_sha256_verified": true
+  },
+  "interpretation": "Legacy clone and DSP port have the same 2/9 WER; output-only codes are identical. Quality remains unaccepted; cross-check the fixed audio and resampler before attributing the transcript error to the DSP change."
+}
