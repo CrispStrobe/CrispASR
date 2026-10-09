@@ -1529,5 +1529,13 @@
     },
     "native_intermediate_capture_valid": true
   },
-  "public_proof_pending": true
+  "public_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "repo_type": "dataset",
+    "revision": "c53f5912a6dac3fa90f6877c2e47fa6b223c2519",
+    "path": "tts-asr/nemotron-encoder-groups-20261009/proof.zip",
+    "sha256": "1158993c45c85b94df2f3af6aca50b2c5e1ddd7c55b36b6a7d1c24f55c3061d0",
+    "bytes": 79185310,
+    "remote_sha256_verified": true
+  }
 }

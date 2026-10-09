@@ -17,8 +17,13 @@ Comprehensive `RELEASE_NOTES_v0.8.43.md` is committed before any version bump.
 Merged scope: PRs #519, #520, #522, #523, #524, #525. No new version/tag or
 production quantization pin. Full no-publication Release dry run
 [GH 37958100129](https://github.com/CrispStrobe/CrispASR/actions/runs/37958100129)
-uses source `23b401b3d20a2ef794a88ade6a261369e899359d`; queued, packages and
-runtime dependencies not yet inspected. Main integration CI is also queued.
+uses source `23b401b3d20a2ef794a88ade6a261369e899359d`; matrix still running, no failed job observed. Linux x86_64 CPU/Vulkan
+packages have been downloaded and physically inspected: both CLI/quantizer
+start, all loader dependencies resolve, both executables use $ORIGIN without
+build-host paths, and the needed OpenBLAS library is bundled. This is package
+startup/dependency validation, not Vulkan hardware/model acceptance. Full
+receipt: `docs/release-package-dry-run-2026-10-09.json`. Main integration CI
+for the final checkpoint still needs to settle.
 Q4 encoder isolation `37957419289` and original OmniVoice generation
 `37957953495` completed successfully as diagnostics; quality gates remain
 rejected. Attention-source Q4 encoder gate is 0.891277 at 636,775,328 bytes;
@@ -27,8 +32,9 @@ pass, all 24 F16 layers still pass original, and both candidates retain actual
 Q4 payload with physical protected/unrelated byte audits. Original OmniVoice
 F32 seed-42/32-step cloning also fails at 2/9 WER in both unprocessed and full
 cleanup arms; capture OFF/ON PCM is exact and original-ASR JFK control passes.
-The upstream failure does not waive native acceptance. Full proofs are being
-published and SHA-verified. Documentation anchors pass (227 across 82 files).
+The upstream failure does not waive native acceptance. Full public proofs
+are pinned and remote-SHA verified in the new original-clone and encoder-group
+diagnostics. Issue #518 and PR #521 now record the terminal original result. Documentation anchors pass (227 across 82 files).
 Tag only through `scripts/bump-version.sh` after green chosen tip; verify
 release packages before publication. The pending quant/clone experiments are
 excluded from this release scope. Issue #485 has the terminal calibrated-Q4
@@ -120,7 +126,8 @@ CLI layout) shows FFN preservation first failing layer 5, final relative-L2
 arms in the same experimental worktree: hold attention at source precision,
 then preserve FFN linear1 versus linear2. Retain common RNNT/prompt/preout
 source guards, unchanged F16-first gates, physical source/unrelated-Q4 byte
-checks and nonzero Q4 payload. No production quantization or acceptance claim. Parakeet RNNT preserves joint/embed; GigaAM preserves
+checks and nonzero Q4 payload. No production quantization or acceptance claim. Worker `47e48bd5c` is
+pushed; GH CPU `37964322326` launched for these projection arms. Parakeet RNNT preserves joint/embed; GigaAM preserves
 RNNT/prompt-front precision. Those small-head rules do not explain the
 remaining Conformer drift, so isolate learned encoder groups before further
 calibration or guards.

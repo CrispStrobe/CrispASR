@@ -123,7 +123,10 @@ fresh/reused differences. Actual dual-T4 validation also passes all three stage 
 transcripts, fresh/reused equality and native streaming packet/reset/flush
 checks for presets 0/2/3. PR #525 is merged; further Q4 encoder precision work is unfinished. Full proof:
 `docs/nemotron-frontend-gpu-2026-10-09.json`.
-OmniVoice PR #521 remains a draft because clone acceptance is unfinished.
+OmniVoice PR #521 remains a draft because clone acceptance is rejected.
+The pinned original F32 model also fails the same fixed clone control at 2/9
+word errors with and without cleanup. This upstream result does not waive
+native acceptance; no cleanup default is promoted.
 The remaining CANN and hardware-specific work in PR #492 is not included.
 
 Before publication, finish integration CI for the chosen release commit and

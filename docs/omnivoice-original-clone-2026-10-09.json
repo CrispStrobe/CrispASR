@@ -104,5 +104,13 @@
     "production_accepted": false,
     "original_generation_control_only": true
   },
-  "public_proof_pending": true
+  "public_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "repo_type": "dataset",
+    "revision": "f0f48617ba11bc125f089226bd90e384eaa1d366",
+    "path": "omnivoice/original-clone-control-20261009/proof.zip",
+    "sha256": "bbf966cbc11744a089b2aa8e5c24f0105ee10de543287cc0077d4198f507fcb8",
+    "bytes": 750153,
+    "remote_sha256_verified": true
+  }
 }
