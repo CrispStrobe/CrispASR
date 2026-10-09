@@ -243,3 +243,20 @@ ASR backends.
 > **Chatterbox q8 on Apple Silicon:** the auto CFM→CPU route (above) makes the
 > q8 S3Gen flow-matcher correct but slower than F16-on-GPU on Metal. For fast
 > *and* correct synthesis on M1/M2, prefer the F16 S3Gen GGUF.
+
+
+## Index-Echo decoder calibration
+
+Index-Echo's llama decoder now composes the shared imatrix observer with its
+existing stage-capture callback when `CRISPASR_IMATRIX_OUT` or activation dumping
+is explicitly enabled. Without those variables, its original callback remains
+unchanged. The collector keeps only named leaf weight matrix operations and
+writes per-column activation sums and row counts in the existing format.
+
+Calibration must actually exercise the decoder: verify the resulting file
+contains `blk.*` decoder weights with positive row counts and importance-vector
+lengths matching the quantized weight rows. An empty or encoder-only file does
+not calibrate the 9B decoder. Keep model/source/corpus pins, public recipe
+hashes and the full stage/norm/output gates; calibration is not acceptance.
+EN and Chinese coverage remain required. The four previous public Q4 recipes
+remain rejected until a newly calibrated candidate passes full validation.
