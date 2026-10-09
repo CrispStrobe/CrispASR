@@ -160,7 +160,14 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   Parakeet retain 2/9 substitutions across all three samplers; Qwen3 reads all
   four clones correctly. Neither output-only DSP nor resampling clears the
   unchanged primary gate. All 42 applicable code CI checks pass (one skip);
-  full cloned-speech acceptance still fails. Official ASR diagnosis pending.
+  full cloned-speech acceptance still fails. Original NVIDIA/F16 ASR retains
+  the same substitutions. This session claims the missing original OmniVoice
+  generation control in separate worktree
+  `/mnt/storage/crispasr/salvage-20261008/omnivoice`: pinned upstream `08be0b4`
+  and original model `c5fdb5cc`, immutable existing reference/text, seed 42 and
+  32 steps. Compare baseline versus full preprocessing/postprocessing, archive
+  complete PCM/codes and recognize with the pinned original NVIDIA F32 model.
+  Run on GH CPU; no seed selection, gate relaxation or default promotion.
 
   No lucky-seed selection. Public proof:
   `docs/omnivoice-clone-failure-2026-10-09.json` and
