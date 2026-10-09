@@ -47,6 +47,9 @@ and logs archived. Harness audit found direct step-setter calls without
 ctypes argtypes (possible 64-bit pointer truncation). Fix using the public
 Session setter and typed rc checks; enable faulthandler on the rerun. This is
 not a native fused-graph verdict, and no quality gate is relaxed.
+Typed worker `a232c9bc7` is pushed, uploaded entry `51e45d8ea`; v6 launched
+with refreshed actual Kaggle cache `47cb5a2fa310674b785aa1ff5d1942d16e730134`.
+Public terminal proof/cache pins are in `docs/voxcpm2-path-v5-failure-2026-10-09.json`.
 MiMo diagnostic capture complete: identical frozen layer-0 input, CPU Q4
 flash/eager first differences at layer-0 attention (relL2 .000146), amplified
 in its MLP (.00183) and subsequent layers. F16 is much smaller. BLAS flash/eager
