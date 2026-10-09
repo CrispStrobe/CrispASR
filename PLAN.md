@@ -28,6 +28,15 @@ Missing-model initialization was intentional; no model-inference claim.
 Full no-secrets scan passes all four checks, no skips (54.723 seconds);
 227 documentation anchors pass. CI remains queued; do not merge before green.
 
+## CLAIMED 2026-10-09 — Pin release dry-run checkout source
+
+Worktree: `/mnt/storage/crispasr/salvage-20261008/release-checkout-pin`.
+The no-publication release matrix checks out `github.ref` at job start, so
+queued jobs can build later branch commits than the workflow event SHA.
+Linux CLI build metadata confirms this drift in run 37958100129. Pin the
+fallback checkout to `github.sha`, retain explicit-tag selection, lint all
+checkout sites, and correct dry-run provenance receipts before release.
+
 ## Release preparation checkpoint 2026-10-09
 
 Comprehensive `RELEASE_NOTES_v0.8.43.md` is committed before any version bump.
