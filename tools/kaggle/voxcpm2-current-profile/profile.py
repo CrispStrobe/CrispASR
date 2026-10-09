@@ -8,10 +8,10 @@ from pathlib import Path
 import subprocess
 import sys
 
-SCRIPT_VERSION = 'voxcpm2-current-profile-v5-path-diagnostic'
-SOURCE = '2ee7212fd8d22d65132baafa0bb714fb284257dc'
+SCRIPT_VERSION = 'voxcpm2-current-profile-v6-path-diagnostic'
+SOURCE = 'a232c9bc737fb43f5beb0cbac4897fcc964b7b3a'
 GGML = 'c36dab89b662838f0f5d4826c399198c0b90bbfc'
-CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'voxcpm2-vulkan/sm75-v4-build.tar', 'revision': '85e6e05e264111f9b2f920b02f99c5b8ebeba935', 'sha256': '774e310a50b8570ab7f7922f324077b50e5f52bde93d1fc4f1d2b79b15b83e34', 'bytes': 101376000}
+CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'voxcpm2-vulkan/sm75-v5-build.tar', 'revision': '47cb5a2fa310674b785aa1ff5d1942d16e730134', 'sha256': '0e8f31c207a8d5c8abb4839fcdb802a5fa89d74c676f8289f9174b3a9bef6a6e', 'bytes': 102993920}
 WORK = Path('/kaggle/working')
 SCRATCH = Path('/kaggle/temp/voxcpm2-current-profile')
 REPO = SCRATCH / 'CrispASR'
@@ -21,8 +21,8 @@ OUT = WORK / 'voxcpm2-profile'
 def main():
     SCRATCH.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
-    os.environ.update(PYTHONUNBUFFERED='1', TMPDIR=str(SCRATCH),
-                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='voxcpm2-current-profile-v5-path-diagnostic')
+    os.environ.update(PYTHONUNBUFFERED='1', PYTHONFAULTHANDLER='1', TMPDIR=str(SCRATCH),
+                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='voxcpm2-current-profile-v6-path-diagnostic')
     devices = subprocess.check_output(['nvidia-smi', '--query-gpu=name,compute_cap,memory.total',
                                        '--format=csv'], text=True)
     print(SCRIPT_VERSION, devices, flush=True)
