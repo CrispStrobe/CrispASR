@@ -43,6 +43,6 @@ The independent oracle executes pinned upstream functions with numpy/pydub;
 boundaries, sub-millisecond/short clips, long pauses, fades and multilingual
 punctuation, including a rejected raw-output negative control.
 `tools/ci-heavy/omnivoice_audio_acceptance.py` adds same-code raw/processed
-waveform parity, actual CLI/session cloning and four unchanged WER <= 0.2
-roundtrip gates. Utility parity alone is not speech acceptance. Fades can
+waveform parity, actual CLI/session cloning and six unchanged WER <= 0.2
+roundtrip gates, including default marked session output. Utility parity alone is not speech acceptance. Fades can
 attenuate the upstream transient; they do not guarantee removal of every click.
