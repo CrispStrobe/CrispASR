@@ -1,0 +1,22 @@
+{
+  "candidate_source": "464bc04387b30bc2bbe960f8a3be26e333136349",
+  "cpu_three_stage_passed": true,
+  "original_word_matches": 26,
+  "voxcpm_exact": 22,
+  "fresh_reused_differences": 0,
+  "gpu_validated": false,
+  "quant_promoted": false,
+  "proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "repo_type": "dataset",
+    "revision": "e1c0e1239587b133b98b237cd3c722681bb8eeed",
+    "path": "tts-asr/nemotron-frontend-controls-20261009/proof.zip",
+    "sha256": "0ecc743cb8bdf6637e87adf7dc1b512b01ebc1bbcbf4c0a56a4bf46a621249d6",
+    "bytes": 222848,
+    "remote_verified": true
+  },
+  "source_hashes": {
+    "src/nemotron.cpp": "dfe96582934fb9910cbdd41e4ec31356c22f54f48ead56f97cdf23d097e83ab8",
+    "src/nemotron.h": "e34780126da5df494a055cda3e67fd3ead7f1ef4d38af161f452b2ec9d45737e"
+  }
+}

@@ -829,6 +829,12 @@ static std::vector<float> nemotron_compute_mel_impl(nemotron_context* ctx, const
 
     auto mel = core_mel::compute(samples, n_samples, window_raw.data(), win, mel_fb.data(), n_freqs, nemotron_fft_r2c,
                                  p, T_out);
+    // NeMo FilterbankFeatures.get_seq_len uses floor(n_samples / hop) with
+    // centered STFT, then masks frames at/after that length to pad_value=0.
+    // Keep the STFT shape; its extra terminal frame is not a valid feature.
+    const int valid_frames = n_samples / hop;
+    if (valid_frames < T_out)
+        std::fill(mel.begin() + (size_t)valid_frames * n_mels, mel.end(), 0.0f);
     return mel;
 }
 
@@ -3877,6 +3883,29 @@ extern "C" float* nemotron_compute_mel(struct nemotron_context* ctx, const float
         *out_T_mel = T_mel;
     float* ret = (float*)malloc(mel.size() * sizeof(float));
     memcpy(ret, mel.data(), mel.size() * sizeof(float));
+    return ret;
+}
+
+extern "C" float* nemotron_run_preencode_ext(struct nemotron_context* ctx, const float* mel, int n_mels, int T_mel,
+                                             int* out_T_enc, int* out_d_model) {
+    if (out_T_enc)
+        *out_T_enc = 0;
+    if (out_d_model)
+        *out_d_model = 0;
+    if (!ctx || !mel || T_mel <= 0 || n_mels != (int)ctx->model.hparams.n_mels)
+        return nullptr;
+    std::vector<float> pre_enc;
+    int T_enc = 0, d_model = 0;
+    if (!nemotron_run_preencode(ctx, mel, T_mel, pre_enc, T_enc, d_model))
+        return nullptr;
+    float* ret = (float*)malloc(pre_enc.size() * sizeof(float));
+    if (!ret)
+        return nullptr;
+    memcpy(ret, pre_enc.data(), pre_enc.size() * sizeof(float));
+    if (out_T_enc)
+        *out_T_enc = T_enc;
+    if (out_d_model)
+        *out_d_model = d_model;
     return ret;
 }
 
