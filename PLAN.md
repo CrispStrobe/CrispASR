@@ -28,7 +28,10 @@ and native CI is running; previous native/lint/bindings passed.
 OmniVoice worker `3d30ea127` fixes a harness confound: the default session API
 adds watermark after native DSP. Attested raw PCM now feeds the unchanged
 2e-6 upstream waveform gate; two extra default marked roundtrips are included.
-No native arithmetic or thresholds changed. GH run 37888585305 queued.
+No native arithmetic or thresholds changed. GH run 37888585305 is running.
+CLI audit additionally found the fixture clone must pass --i-have-rights;
+worker `e81d1f6f7` adds that required attestation. Corrected GH run 37889514048
+is serialized behind the first run, which can still expose preceding gates.
 Echo preparation is public, pinned at `afdef3d4b111aa89e45fc400a03ba31ff54ac1dd`,
 all four remote size/SHA and physical tensor audits pass. Kernel public retry
 v2 launched with entry `845bf2e6d`; accepted F16 control precedes candidates,
@@ -58,7 +61,7 @@ A sixth worktree `mimo-integration` (`fix/mimo-gpu-cached-decode`) will isolate
 only the validated MiMo instrumentation/cached-step changes from VoxCPM2's
 still-pending rate/step repairs, for native CI and integration review.
 Isolated draft [PR #519](https://github.com/CrispStrobe/CrispASR/pull/519) is
-pushed at `087b34e15`. Native/worker file SHA256s match the GPU-tested source
+refreshed at `04b2601e2` after account-placeholder repair. Native/worker file SHA256s match the GPU-tested source
 exactly. Await native CI before integration; v0.8.42 excludes these changes.
 PR #492 diagnostics remain in
 `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`.
@@ -189,7 +192,7 @@ frames are 3.30–3.58× (total component 1.59–1.73×), contrasting with the l
 short-call regression. Keep explicit opt-in and T>=64 guard; no default flip
 or end-to-end speed claim. All terminal files archived; public proof pinned
 in `docs/mel-projection-2026-10-08.json`. Isolated author-credited draft [PR #520](https://github.com/CrispStrobe/CrispASR/pull/520)
-is pushed at `ae486c9a8`; native CI pending before merge.
+is refreshed at `2a12970c0` after account-placeholder repair; native CI pending before merge.
 
 Echo public Q4 preparation launched on GH CPU run
 [37851965549](https://github.com/CrispStrobe/CrispASR/actions/runs/37851965549),
