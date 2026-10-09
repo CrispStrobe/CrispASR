@@ -1,0 +1,16 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-nemotron-frontend-validation",
+  "title": "CrispASR Nemotron Frontend Validation",
+  "code_file": "nemotron_frontend_validation.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [
+    "${KAGGLE_ACCOUNT}/crispasr-hf-token"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
