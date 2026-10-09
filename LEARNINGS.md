@@ -19590,7 +19590,7 @@ commit list. A 40-character pin proves nothing; a HEAD request on
 `resolve/<rev>/<file>` does, and `tools/check-registry-urls.py` now makes one
 for every pinned manifest file.
 
-## 2026-10-09 — Output flags do not invalidate a cached allocation plan (Nemotron layer diagnostics)
+## 2026-10-09 — Output flags do not invalidate a cached graph allocation plan (Nemotron layer diagnostics)
 
 The initial 24-layer Nemotron capture marked every layer as an output and
 preserved the final encoder bytes in capture OFF/ON/OFF runs. Nevertheless,
