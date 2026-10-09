@@ -1,0 +1,28 @@
+{
+  "source": "2ee7212fd8d22d65132baafa0bb714fb284257dc",
+  "model_revision": "25b5cf03fdbf20011dad9a77def6112023cc0fe3",
+  "scope": "Isolate existing GPU CFM paths; diagnostic completion is not speech acceptance.",
+  "steps": 10,
+  "seed": 2,
+  "passed": false,
+  "diagnostic_complete": false,
+  "defaults_changed": false,
+  "arms": {},
+  "roundtrips": {},
+  "comparisons": {},
+  "public_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "file": "voxcpm2/path-diagnostic-20261009-v5-failed/proof.zip",
+    "revision": "bb16fb2157ea59d6a7542f2a027d4553dacba6ce",
+    "sha256": "8003f1d2a5f84d3179cdd74ac63fb3970cb53290c7c9085a8519e946add55c1c",
+    "bytes": 1479099
+  },
+  "refreshed_build_cache": {
+    "repo": "cstr/crispasr-ccache",
+    "file": "voxcpm2-vulkan/sm75-v5-build.tar",
+    "revision": "47cb5a2fa310674b785aa1ff5d1942d16e730134",
+    "sha256": "0e8f31c207a8d5c8abb4839fcdb802a5fa89d74c676f8289f9174b3a9bef6a6e",
+    "bytes": 102993920
+  },
+  "failure": "Untyped ctypes step setter at second-model opening; SIGSEGV, no path/ASR completion. Fix uses Session.set_tts_steps to register void-pointer signatures; no native numerical change."
+}

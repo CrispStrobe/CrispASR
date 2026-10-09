@@ -17,7 +17,7 @@ core models and omitted data2vec; the corrected selector retains all six and
 adds data2vec. Fourteen unit tests cover transcript/hash edits, additions,
 removals, TTS entries, ordering and unavailable/invalid snapshots. The old
 selector reproduces the omission. Full 33-backend hosted regression
-`37802900089` is pending at `893e417ca`; no model/reference/tolerance changed.
+`37802900089` passes all 33 at `893e417ca`; no model/reference/tolerance changed.
 Proof: `docs/regression-manifest-selection-2026-10-08.json`.
 
 ## DONE 2026-10-08 — Metal cache test compatibility and actual discovery
@@ -23166,3 +23166,154 @@ version agree, including the Dart changelog entry. PR #492 remains unmerged
 and excluded. Binary publication is tracked separately from the release page.
 Receipt: `docs/release-v0.8.42-validation.json`. Root notes cleaned up after
 publication; the tag retains their full text.
+
+
+## DONE 2026-10-08 — data2vec independent transcript parity
+
+Integrated source `3cb9bb48ee1ed7d7a8c26a2032a158480c37661e` corrects the data2vec transcript target to
+the frozen independent Python CTC decode. Hosted `37791614453` PASS at
+`c9dec41f2`: actual Q4 CLI zero-WER upstream parity, F16 logits cosine
+0.999141 >= unchanged 0.999, and four reference/target/hash negative controls.
+The published weights and decoder are unchanged; human WER remains 4.55%
+and is explicitly reported separately. Original diagnosis `37786726672`
+showed Q8/F16 already inserting A on BOTH old/current builds, and the frozen
+Python reference also contains A. The old July native target was not the
+independent reference. No replacement model/first-layer precision policy was
+shipped. Proof: `docs/data2vec-reference-parity-2026-10-08.json`.
+Released in v0.8.42 after native/lint/full33 gates passed.
+
+
+## DONE 2026-10-08 — MiMo C ABI device/verbosity forwarding
+
+Integrated source `273b8a40ce833d1d247250d95e2f06fb293ced3d` forwards the requested device and verbosity
+into MiMo initialization. No attention/graph changes or dependency on PR #492.
+Actual-library probe `37789763493` passes at `6c11d5a1f`: four requested
+combinations, four failed-open default restores; removing the assignments
+fails, restoring them passes. Rust/Dart, Windows/macOS/iOS, Linux unit/Vulkan,
+clang-tidy and clang-format also pass at that source. Full native CI
+`37790010839` and lint `37790015470` now PASS at that tested source; final
+main-tip CI and full33 passed before v0.8.42.
+Evidence: `docs/mimo-cabi-device-2026-10-08.json`. This is parameter-forwarding
+proof, not a GPU/model-inference or performance claim.
+
+
+## DONE 2026-10-08 — integrated Arabic platform validation
+
+#516/#490 measured character alignment is integrated after full hosted Arabic
+acceptance `37756933124` (15 words / 85 exact independent Viterbi spans,
+CLI/Python/C ABI/Java equality and offsets; artifact `11542736536`). The
+accepted runtime is unchanged; main's Metal discovery repair is included.
+Main `2da878e72` passes native CI `37763588567`, regression `37763588786`,
+lint and Moonshine acceptance `37763589121`. Integrated `ff33461e0` passes
+Go/Rust/C#/Dart, five WASM builds, Windows live translation and Arabic acceptance.
+The only subsequent runtime delta is the nonvirtual ONNX cleanup helper; its
+full cppcheck 2.7 run `37763588589` PASSES. Latest main `d2c269f93`
+also passes native CI `37777990060` and lint `37777990004`.
+Implementation and proof are archived in HISTORY and
+`docs/ctc-characters-2026-10-08.json`.
+
+Storage checkpoint: 2,244,872,573 bytes of cold archives/JARs moved to
+`/mnt/storage/cold-files-20261008`, each checksum-verified before atomic
+replacement with a symlink at its original path. No active executables or
+shared-library trees moved. Receipts/scripts:
+`/mnt/storage/crispasr/storage-cleanup-20261008/`.
+
+## 2026-10-08 — PR #492 diagnostic checkpoints (PR remains open)
+
+Worktree: `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`, internal
+branch `review/pr492-acceptance`, latest diagnostic source `7551b12de`;
+completed F16 runtime/harness source remains `c50c50061`.
+Original numerical source: `fae7e22419b8c797dfa2759a9d4884a8f426bf63`.
+Contributor commits through `ac07cf0be3b528cdb035735738098e30f7468a41` are
+preserved as ancestors; merge against current main was clean, with unchanged
+ggml `c36dab89b`. Local shared-mel A/B passes 16 cases (63/64/65/300 frames,
+both layouts and accumulator types, 1/4 threads), byte-identical to main.
+
+Found and checksum-verified the legacy public Python LM reference, upstream
+`98641d537df521ac6df05f74090475694d9510b7`. It has five LM stages but explicitly
+skips generated text, so it is not decoded-output proof. Hosted Q4 job
+`37754319857` FAILED the non-flash numerical gate. Postprocessing its saved
+arrays confirms all 11 LM/tokenizer default stages are byte-identical to
+baseline, and all 12 English/Chinese CLI/session outputs across three arms
+match. Non-flash hidden-state cosine is 0.998144631 / relative L2 6.1097%;
+logits are 0.998423708 / 7.4700%. Tokenizer pooling relative L2 is 8.3401%
+and RVQ code agreement is 73.5960%. No threshold was relaxed; #492 remains
+unmerged pending diagnosis. The unstarted
+F16 job `37754323202` was cancelled after finding a legacy C-ABI device flag
+bug that can force a full weight copy on a CPU-only runner. Replacement
+Q4/F16 `--quant all` run `37758607763` was cancelled before execution because
+the known Q4 gate would prevent F16 from running. F16-only replacement
+`37761799417` at `c50c50061` explicitly forces CPU for baseline/candidate and
+releases session model/KV before each CLI load. It compares main/default, candidate/default and
+candidate/non-flash: five LM stage values/norms/relative L2, tokenizer continuous
+stages and exact RVQ codes, English/Chinese CLI/session equality and transcripts.
+F16 run `37761799417` now completes but FAILS on the same Q4 tokenizer
+pooling/RVQ gates. All five F16 LM A/B comparisons pass unchanged thresholds
+(hidden relative L2 0.04045%, logits 0.03690%); default stages remain exact.
+All five stages in all three arms pass the independent Python reference gate
+(hidden cosine >=0.999570796 / relative L2 <=2.93281%; logits >=0.999751999 /
+<=2.27965%). All 12 EN/ZH CLI/session transcripts match. Artifact `11547195216`
+is archived. This is partial evidence, not a passing acceptance run.
+
+Diagnostic source `3c176505a` merges current main while preserving contributor
+ancestry. `pr492_tokenizer_diagnose.py` promotes the same dequantized Q4 matrix
+weights to F32 and compares native flash/eager paths with the pinned official
+Python transformer on identical conv2 input. Pooling is checked independently
+on each arm's own input, with scale/time-order controls. Hosted `37775542252`
+failed before numerical testing because FFmpeg was absent. Source `7551b12de`
+installs it through the bounded APT helper; replacement `37783601573` is
+PASS as a diagnostic, not PR acceptance. Same-weight F32 promotion gives
+pooling A/B relative L2 0.000115% and exact RVQ codes. Both native paths
+match the independent encoder; Q4 activation rounding remains the divergence.
+Selective-promotion run `37785711004` at `09f65ad8b` completed and FAILED
+unchanged gates for all five profiles (artifact `11555262443`). Output
+projection promotion improves pooling A/B relative L2 to 1.3424% but exact
+RVQ code agreement remains only 82.1558%. First 4/8/16 layers and all FFNs
+also fail; no profile is accepted.
+GPU follow-up claimed in the same worktree: a pinned Kaggle CUDA tokenizer
+diagnostic, using the shared build harness and actual device weights/RVQ.
+It compares both attention paths against the official CPU Python encoder on
+the GPU's own conv2 input. No CANN, full-ASR, speed or Pascal MMQ claim;
+CPU diagnostics remain on GH Actions per `../kaggle_usage.md`.
+CUDA v1 completed on Tesla T4/sm_75 at immutable source `d6b29207b`;
+terminal logs and 72 proof files are archived. Continuous F32/isolated-pool
+diagnostic gates pass, but Q4 pooling A/B relative L2 is 8.83074% and RVQ
+agreement only 70.7880%. Promoted F32 still differs in 6/2,208 RVQ entries,
+all at frame 263; pairwise F64 distances support each arm's differing choice
+on its own residual. Diagnostic success is not full/exact-code acceptance.
+Full proof: `docs/mimo-pr492-cuda-tokenizer-2026-10-08.json`.
+Original-file CPU BLAS experiment `37792853553` at `2a4eda81d` PASSES
+all tokenizer numerical/code gates on JFK, at 1.71/1.90x paired CPU latency.
+No size increase or runtime/default change; broader validation is next.
+The first attempt `37790733015` failed before numerics on a CPU-only thread
+setter applied to BLAS; the harness now uses BLAS's registry function.
+No weight precision is recovered by promotion; this is a diagnostic,
+not original-checkpoint or PR acceptance. The acceptance harness now saves all
+completed comparisons before failing and lets both quantizations finish.
+
+F16 is the LM; both jobs use the shipped Q4_K tokenizer. Source/fixture pins
+and local evidence are on the branch in
+`docs/mimo-pr492-acceptance-2026-10-08.json`.
+
+The MiMo C ABI now forwards `use_gpu` and verbosity alongside flash attention.
+Actual-library initializer-interposition job `37758333664` PASSES at
+`7e1806060`: eight requested combinations and eight failed-open default-reset
+checks. Removing the two assignments fails on requested CPU/quiet settings
+(actual GPU=true/verbosity=1); the restored build passes all 16 rows. Artifact
+`11543240521` is archived in the worktree proof directory. This validates
+parameter forwarding, not model inference or GPU execution.
+This device fix prevents selecting a second CPU backend through init_best and
+copying the 16 GB F16 weights in the legacy CPU session. The numerical baseline
+also explicitly forces CPU to retain its mmap path. No GPU execution is claimed.
+
+No new CANN/CUDA correctness or performance claim; combined CANN/NZ timings
+cannot be attributed to this PR alone. PR #492 remains unmerged. #516 Arabic
+alignment is integrated after full runtime acceptance; native main CI and regression pass.
+Full pinned cppcheck 2.7 `37763588589` passes at `2da878e72`.
+
+## 2026-10-09 — v0.8.42 binary publication complete
+
+Release workflow 37850360339 completed SUCCESS; 53 binary/package assets
+are published. All platform jobs are terminal. Immutable tag/source and full
+asset digests are recorded in `docs/release-v0.8.42-validation.json`.
+Pending PR #492 salvage and OmniVoice/VoxCPM2/Echo experiments are excluded.

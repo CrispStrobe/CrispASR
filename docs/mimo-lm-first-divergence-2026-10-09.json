@@ -1,0 +1,4933 @@
+{
+  "source": "47b661df11debc2679216a071a75d294ddf9e989",
+  "scope": "Locate Q4 flash/eager drift within the LM; diagnostic BLAS control, no promotion.\n\nTemporary native captures preserve tensors explicitly and stop after each selected\nlayer. Full canonical stages independently check that the patch's disabled path\nstill agrees with the pinned Python reference. Native A/B captures are not a new\noriginal-checkpoint oracle or speech acceptance. Production sources are restored.\n",
+  "passed": true,
+  "pins": {
+    "q4_k": [
+      "cstr/mimo-asr-GGUF",
+      "e2d7dfebf0afd8076771903e92958039c5074eab",
+      "mimo-asr-q4_k.gguf",
+      "12dbc7cc7a20c7add6ff00bf8b12bca1c46304e0100a5c5a6e74bdecfc57a306"
+    ],
+    "f16": [
+      "cstr/mimo-asr-GGUF",
+      "e2d7dfebf0afd8076771903e92958039c5074eab",
+      "mimo-asr-f16.gguf",
+      "619172cd385561c95f2bc2c5cdcb20ef9bbc25bb542bc41ba528182e8804c0f2"
+    ],
+    "codec": [
+      "cstr/mimo-tokenizer-GGUF",
+      "fa380f4c49a8e8c62c02c00d0da5e263fc5b0dcf",
+      "mimo-tokenizer-q4_k.gguf",
+      "3f3a903b10294ead4ef6a4afec035639fd2113b1d307d42f649a97cc85670e3f"
+    ],
+    "reference": [
+      "cstr/mimo-asr-GGUF",
+      "e2d7dfebf0afd8076771903e92958039c5074eab",
+      "diff-harness-ref/mimo-asr-ref.gguf",
+      "7d4dfedc32a1451751199ed694a887f5091d3131bdefa840f811bc74e6312218"
+    ]
+  },
+  "layers": [
+    0,
+    1,
+    4,
+    8,
+    16,
+    24,
+    35
+  ],
+  "comparisons": {
+    "q4_k": {
+      "0": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 1.0,
+            "mine_norm": 6.792430537010639,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 1.0,
+            "mine_norm": 6.792430537010639,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "blas-flash": {
+            "cosine": 1.0,
+            "mine_norm": 6.792430537010639,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "blas-eager": {
+            "cosine": 1.0,
+            "mine_norm": 6.792430537010639,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 1.0,
+            "mine_norm": 6.792430537010639,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999971,
+            "mine_norm": 206.3514414391758,
+            "ref_norm": 206.3514414391758,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999999971,
+            "mine_norm": 206.3514414391758,
+            "ref_norm": 206.3514414391758,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999999971,
+            "mine_norm": 206.3514414391758,
+            "ref_norm": 206.3514414391758,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999999971,
+            "mine_norm": 206.3514414391758,
+            "ref_norm": 206.3514414391758,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999999971,
+            "mine_norm": 206.3514414391758,
+            "ref_norm": 206.3514414391758,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999943,
+            "mine_norm": 5.821113230158379,
+            "ref_norm": 5.821113230158379,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999893643391,
+            "mine_norm": 5.821118429297638,
+            "ref_norm": 5.821113230158379,
+            "relative_l2": 0.0001458496727944787,
+            "max_abs": 5.946308374404907e-05,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9994991343544364,
+            "mine_norm": 5.820272270716192,
+            "ref_norm": 5.821113230158379,
+            "relative_l2": 0.031648182327464566,
+            "max_abs": 0.005379796028137207,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9994991331113341,
+            "mine_norm": 5.820272373997568,
+            "ref_norm": 5.821113230158379,
+            "relative_l2": 0.03164822180035178,
+            "max_abs": 0.005379796028137207,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999910355,
+            "mine_norm": 5.820272373997568,
+            "ref_norm": 5.820272270716192,
+            "relative_l2": 4.232944909705818e-06,
+            "max_abs": 1.6614794731140137e-06,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999951,
+            "mine_norm": 8.895117328796752,
+            "ref_norm": 8.895117328796752,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999954451915,
+            "mine_norm": 8.8951229728596,
+            "ref_norm": 8.895117328796752,
+            "relative_l2": 9.544640514969382e-05,
+            "max_abs": 5.946308374404907e-05,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9997856046122834,
+            "mine_norm": 8.897235652947305,
+            "ref_norm": 8.895117328796752,
+            "relative_l2": 0.020711098533908165,
+            "max_abs": 0.005379796028137207,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9997856040771014,
+            "mine_norm": 8.897235642545887,
+            "ref_norm": 8.895117328796752,
+            "relative_l2": 0.020711124354834885,
+            "max_abs": 0.005379796028137207,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999961612,
+            "mine_norm": 8.897235642545887,
+            "ref_norm": 8.897235652947305,
+            "relative_l2": 2.7691012603457802e-06,
+            "max_abs": 1.6540288925170898e-06,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999957,
+            "mine_norm": 58.12974395653113,
+            "ref_norm": 58.12974395653113,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999905159322,
+            "mine_norm": 58.12969657567769,
+            "ref_norm": 58.12974395653113,
+            "relative_l2": 0.00013772717878478575,
+            "max_abs": 0.000626295804977417,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9996054463743702,
+            "mine_norm": 58.06759722990943,
+            "ref_norm": 58.12974395653113,
+            "relative_l2": 0.0280963804882997,
+            "max_abs": 0.02605953812599182,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9996054448545677,
+            "mine_norm": 58.06759739181393,
+            "ref_norm": 58.12974395653113,
+            "relative_l2": 0.028096434456024805,
+            "max_abs": 0.026058882474899292,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.999999999987438,
+            "mine_norm": 58.06759739181393,
+            "ref_norm": 58.06759722990943,
+            "relative_l2": 5.011574433870931e-06,
+            "max_abs": 1.4316290616989136e-05,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999946,
+            "mine_norm": 8.436754031480739,
+            "ref_norm": 8.436754031480739,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.999998319674642,
+            "mine_norm": 8.436766763415365,
+            "ref_norm": 8.436754031480739,
+            "relative_l2": 0.0018332097685630545,
+            "max_abs": 0.001108616590499878,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9998126187000255,
+            "mine_norm": 8.44126158871559,
+            "ref_norm": 8.436754031480739,
+            "relative_l2": 0.019371326175408505,
+            "max_abs": 0.012953758239746094,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9998126185397351,
+            "mine_norm": 8.441258584939055,
+            "ref_norm": 8.436754031480739,
+            "relative_l2": 0.01937132119405928,
+            "max_abs": 0.012953758239746094,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999969598,
+            "mine_norm": 8.441258584939055,
+            "ref_norm": 8.44126158871559,
+            "relative_l2": 2.489428381583381e-06,
+            "max_abs": 8.821487426757812e-06,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999949,
+            "mine_norm": 13.690472282087384,
+            "ref_norm": 13.690472282087384,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999993598092926,
+            "mine_norm": 13.690548958604056,
+            "ref_norm": 13.690472282087384,
+            "relative_l2": 0.0011315564250875476,
+            "max_abs": 0.001115262508392334,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9998509789064619,
+            "mine_norm": 13.700816613996722,
+            "ref_norm": 13.690472282087384,
+            "relative_l2": 0.017286939987526683,
+            "max_abs": 0.010504603385925293,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999850978481185,
+            "mine_norm": 13.700814339916391,
+            "ref_norm": 13.690472282087384,
+            "relative_l2": 0.01728695591575478,
+            "max_abs": 0.010505080223083496,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999979589,
+            "mine_norm": 13.700814339916391,
+            "ref_norm": 13.700816613996722,
+            "relative_l2": 2.024547457990414e-06,
+            "max_abs": 8.702278137207031e-06,
+            "exact": false
+          }
+        }
+      },
+      "1": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999949,
+            "mine_norm": 13.690472282087384,
+            "ref_norm": 13.690472282087384,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999993598092926,
+            "mine_norm": 13.690548958604056,
+            "ref_norm": 13.690472282087384,
+            "relative_l2": 0.0011315564250875476,
+            "max_abs": 0.001115262508392334,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9998509789064619,
+            "mine_norm": 13.700816613996722,
+            "ref_norm": 13.690472282087384,
+            "relative_l2": 0.017286939987526683,
+            "max_abs": 0.010504603385925293,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999850978481185,
+            "mine_norm": 13.700814339916391,
+            "ref_norm": 13.690472282087384,
+            "relative_l2": 0.01728695591575478,
+            "max_abs": 0.010505080223083496,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999979589,
+            "mine_norm": 13.700814339916391,
+            "ref_norm": 13.700816613996722,
+            "relative_l2": 2.024547457990414e-06,
+            "max_abs": 8.702278137207031e-06,
+            "exact": false
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999982,
+            "mine_norm": 107.17204016499095,
+            "ref_norm": 107.17204016499095,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.999999308121848,
+            "mine_norm": 107.17223856229089,
+            "ref_norm": 107.17204016499095,
+            "relative_l2": 0.0011763342586786412,
+            "max_abs": 0.018397867679595947,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9998766297729518,
+            "mine_norm": 107.137851125513,
+            "ref_norm": 107.17204016499095,
+            "relative_l2": 0.015708708066492855,
+            "max_abs": 0.1299595832824707,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9998766295036036,
+            "mine_norm": 107.13785512667457,
+            "ref_norm": 107.17204016499095,
+            "relative_l2": 0.015708724742494136,
+            "max_abs": 0.1299586296081543,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999993195,
+            "mine_norm": 107.13785512667457,
+            "ref_norm": 107.137851125513,
+            "relative_l2": 1.165652061425287e-06,
+            "max_abs": 1.9788742065429688e-05,
+            "exact": false
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999947,
+            "mine_norm": 4.0030290765089305,
+            "ref_norm": 4.0030290765089305,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.999959566855658,
+            "mine_norm": 4.002970598336541,
+            "ref_norm": 4.0030290765089305,
+            "relative_l2": 0.008992514706594746,
+            "max_abs": 0.0017366185784339905,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.998297715638686,
+            "mine_norm": 3.9923456237517825,
+            "ref_norm": 4.0030290765089305,
+            "relative_l2": 0.058331853944005495,
+            "max_abs": 0.010472536087036133,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.998297706664529,
+            "mine_norm": 3.9923470112977886,
+            "ref_norm": 4.0030290765089305,
+            "relative_l2": 0.058332001637353935,
+            "max_abs": 0.010473500937223434,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.999999999819418,
+            "mine_norm": 3.9923470112977886,
+            "ref_norm": 3.9923456237517825,
+            "relative_l2": 1.900726666238855e-05,
+            "max_abs": 4.664063453674316e-06,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999947,
+            "mine_norm": 14.627462005340025,
+            "ref_norm": 14.627462005340025,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999964100259039,
+            "mine_norm": 14.627367970871145,
+            "ref_norm": 14.627462005340025,
+            "relative_l2": 0.0026795416308769754,
+            "max_abs": 0.002033323049545288,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.999750372722526,
+            "mine_norm": 14.622106663070054,
+            "ref_norm": 14.627462005340025,
+            "relative_l2": 0.022342914104757642,
+            "max_abs": 0.011582106351852417,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9997503717531101,
+            "mine_norm": 14.622103797777653,
+            "ref_norm": 14.627462005340025,
+            "relative_l2": 0.02234295849902351,
+            "max_abs": 0.011583030223846436,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.999999999984687,
+            "mine_norm": 14.622103797777653,
+            "ref_norm": 14.622106663070054,
+            "relative_l2": 5.5365162398296616e-06,
+            "max_abs": 1.0609626770019531e-05,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.999999999999994,
+            "mine_norm": 78.62499911344392,
+            "ref_norm": 78.62499911344392,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999903137724927,
+            "mine_norm": 78.62527035246082,
+            "ref_norm": 78.62499911344392,
+            "relative_l2": 0.00440142405753986,
+            "max_abs": 0.005932111293077469,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9993861263139596,
+            "mine_norm": 78.58270855548344,
+            "ref_norm": 78.62499911344392,
+            "relative_l2": 0.035033930791489684,
+            "max_abs": 0.04597172141075134,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999386125626575,
+            "mine_norm": 78.58272667558866,
+            "ref_norm": 78.62499911344392,
+            "relative_l2": 0.03503395090216328,
+            "max_abs": 0.04597683250904083,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999662358,
+            "mine_norm": 78.58272667558866,
+            "ref_norm": 78.58270855548344,
+            "relative_l2": 8.220128611914029e-06,
+            "max_abs": 1.4036893844604492e-05,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999953,
+            "mine_norm": 8.509085968433846,
+            "ref_norm": 8.509085968433846,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999100846743403,
+            "mine_norm": 8.50851094002378,
+            "ref_norm": 8.509085968433846,
+            "relative_l2": 0.013409812284034428,
+            "max_abs": 0.003229290246963501,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9994076299181964,
+            "mine_norm": 8.508544360422677,
+            "ref_norm": 8.509085968433846,
+            "relative_l2": 0.034419018080513994,
+            "max_abs": 0.013090178370475769,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9994076230409306,
+            "mine_norm": 8.50854577653904,
+            "ref_norm": 8.509085968433846,
+            "relative_l2": 0.03441922043416645,
+            "max_abs": 0.013090834021568298,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999687608,
+            "mine_norm": 8.50854577653904,
+            "ref_norm": 8.508544360422677,
+            "relative_l2": 7.90557199107595e-06,
+            "max_abs": 6.258487701416016e-06,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999947,
+            "mine_norm": 18.839861117226558,
+            "ref_norm": 18.839861117226558,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999800512422967,
+            "mine_norm": 18.839786272527686,
+            "ref_norm": 18.839861117226558,
+            "relative_l2": 0.00631643670739225,
+            "max_abs": 0.003144681453704834,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9997596972256021,
+            "mine_norm": 18.84731078547278,
+            "ref_norm": 18.839861117226558,
+            "relative_l2": 0.021930616669563294,
+            "max_abs": 0.010742902755737305,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9997596965305753,
+            "mine_norm": 18.847306057599067,
+            "ref_norm": 18.839861117226558,
+            "relative_l2": 0.02193064110105358,
+            "max_abs": 0.010742902755737305,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999877023,
+            "mine_norm": 18.847306057599067,
+            "ref_norm": 18.84731078547278,
+            "relative_l2": 4.964725980463637e-06,
+            "max_abs": 5.125999450683594e-06,
+            "exact": false
+          }
+        }
+      },
+      "4": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999987,
+            "mine_norm": 2924.228233263535,
+            "ref_norm": 2924.228233263535,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999735703116,
+            "mine_norm": 2924.22817885935,
+            "ref_norm": 2924.228233263535,
+            "relative_l2": 0.00022991166891263295,
+            "max_abs": 0.014888942241668701,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999998425863128,
+            "mine_norm": 2927.3855922553535,
+            "ref_norm": 2924.228233263535,
+            "relative_l2": 0.0012169514832424857,
+            "max_abs": 3.055908203125,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999998425883808,
+            "mine_norm": 2927.3855929001224,
+            "ref_norm": 2924.228233263535,
+            "relative_l2": 0.0012169499766994016,
+            "max_abs": 3.055908203125,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999999081,
+            "mine_norm": 2927.3855929001224,
+            "ref_norm": 2927.3855922553535,
+            "relative_l2": 4.286910011127769e-07,
+            "max_abs": 6.031990051269531e-05,
+            "exact": false
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999948,
+            "mine_norm": 247.6793761855917,
+            "ref_norm": 247.6793761855917,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9998473529090881,
+            "mine_norm": 247.6551176887347,
+            "ref_norm": 247.6793761855917,
+            "relative_l2": 0.01747208840409164,
+            "max_abs": 0.09899729490280151,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9996037888579038,
+            "mine_norm": 247.6918114861408,
+            "ref_norm": 247.6793761855917,
+            "relative_l2": 0.02815074759744161,
+            "max_abs": 0.19642925262451172,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9996038002875903,
+            "mine_norm": 247.6916674292123,
+            "ref_norm": 247.6793761855917,
+            "relative_l2": 0.028150332339542165,
+            "max_abs": 0.19644594192504883,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999994726949,
+            "mine_norm": 247.6916674292123,
+            "ref_norm": 247.6918114861408,
+            "relative_l2": 3.24798008836875e-05,
+            "max_abs": 0.000240325927734375,
+            "exact": false
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999944,
+            "mine_norm": 10.249838915541114,
+            "ref_norm": 10.249838915541114,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9995214338630427,
+            "mine_norm": 10.266249788162328,
+            "ref_norm": 10.249838915541114,
+            "relative_l2": 0.03100368044239136,
+            "max_abs": 0.010408453643321991,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9974126751993313,
+            "mine_norm": 10.174028737650087,
+            "ref_norm": 10.249838915541114,
+            "relative_l2": 0.07204915635869324,
+            "max_abs": 0.015145301818847656,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9974123859367398,
+            "mine_norm": 10.173877455593576,
+            "ref_norm": 10.249838915541114,
+            "relative_l2": 0.07205412785727565,
+            "max_abs": 0.015134930610656738,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999840022871,
+            "mine_norm": 10.173877455593576,
+            "ref_norm": 10.174028737650087,
+            "relative_l2": 0.00017948827379905163,
+            "max_abs": 9.874999523162842e-05,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999971,
+            "mine_norm": 2924.2154196441525,
+            "ref_norm": 2924.2154196441525,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999687623775,
+            "mine_norm": 2924.215553657771,
+            "ref_norm": 2924.2154196441525,
+            "relative_l2": 0.0002499504871435163,
+            "max_abs": 0.020534873008728027,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.999999813406291,
+            "mine_norm": 2927.370447702175,
+            "ref_norm": 2924.2154196441525,
+            "relative_l2": 0.0012400335423480915,
+            "max_abs": 3.053955078125,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999999813403037,
+            "mine_norm": 2927.3704473932407,
+            "ref_norm": 2924.2154196441525,
+            "relative_l2": 0.0012400360775252444,
+            "max_abs": 3.053955078125,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999997198,
+            "mine_norm": 2927.3704473932407,
+            "ref_norm": 2927.370447702175,
+            "relative_l2": 7.473619598748272e-07,
+            "max_abs": 9.918212890625e-05,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999947,
+            "mine_norm": 163.72707839479403,
+            "ref_norm": 163.72707839479403,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9996886589987345,
+            "mine_norm": 163.6844162508061,
+            "ref_norm": 163.72707839479403,
+            "relative_l2": 0.024951706297014858,
+            "max_abs": 0.048820674419403076,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9990529263258264,
+            "mine_norm": 163.69773260852355,
+            "ref_norm": 163.72707839479403,
+            "relative_l2": 0.043518271731420484,
+            "max_abs": 0.07205653935670853,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9990529055706091,
+            "mine_norm": 163.69793436661635,
+            "ref_norm": 163.72707839479403,
+            "relative_l2": 0.04351877033465275,
+            "max_abs": 0.07206222787499428,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999973054093,
+            "mine_norm": 163.69793436661635,
+            "ref_norm": 163.69773260852355,
+            "relative_l2": 7.342136307847188e-05,
+            "max_abs": 0.0004246830940246582,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999944,
+            "mine_norm": 24.752031363290495,
+            "ref_norm": 24.752031363290495,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9995782015545113,
+            "mine_norm": 24.761269975191297,
+            "ref_norm": 24.752031363290495,
+            "relative_l2": 0.029052557093748824,
+            "max_abs": 0.021065399050712585,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9991650793667207,
+            "mine_norm": 24.73580973534156,
+            "ref_norm": 24.752031363290495,
+            "relative_l2": 0.04085555548663828,
+            "max_abs": 0.02159738540649414,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9991650418595694,
+            "mine_norm": 24.735882710244105,
+            "ref_norm": 24.752031363290495,
+            "relative_l2": 0.04085648598347378,
+            "max_abs": 0.021594583988189697,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999972885949,
+            "mine_norm": 24.735882710244105,
+            "ref_norm": 24.73580973534156,
+            "relative_l2": 7.36988336703201e-05,
+            "max_abs": 7.012486457824707e-05,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999989,
+            "mine_norm": 2936.7938037778786,
+            "ref_norm": 2936.7938037778786,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999491121803,
+            "mine_norm": 2936.7940580072395,
+            "ref_norm": 2936.7938037778786,
+            "relative_l2": 0.0003190229695782957,
+            "max_abs": 0.02568233013153076,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999997834511848,
+            "mine_norm": 2939.9549956823525,
+            "ref_norm": 2936.7938037778786,
+            "relative_l2": 0.0012618322439552692,
+            "max_abs": 3.063232421875,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999997834491,
+            "mine_norm": 2939.954996002355,
+            "ref_norm": 2936.7938037778786,
+            "relative_l2": 0.0012618339909180357,
+            "max_abs": 3.063232421875,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999996336,
+            "mine_norm": 2939.954996002355,
+            "ref_norm": 2939.9549956823525,
+            "relative_l2": 8.563425015815029e-07,
+            "max_abs": 0.00016927719116210938,
+            "exact": false
+          }
+        }
+      },
+      "8": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 1.0000000000000056,
+            "mine_norm": 2952.363367782853,
+            "ref_norm": 2952.363367782853,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999998003275198,
+            "mine_norm": 2952.3631859936622,
+            "ref_norm": 2952.363367782853,
+            "relative_l2": 0.0006319374545736002,
+            "max_abs": 0.04074591398239136,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999995375264409,
+            "mine_norm": 2955.53694846825,
+            "ref_norm": 2952.363367782853,
+            "relative_l2": 0.001442710470342969,
+            "max_abs": 3.07373046875,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999995375162429,
+            "mine_norm": 2955.536943923563,
+            "ref_norm": 2952.363367782853,
+            "relative_l2": 0.0014427163986842286,
+            "max_abs": 3.07373046875,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999977033,
+            "mine_norm": 2955.536943923563,
+            "ref_norm": 2955.53694846825,
+            "relative_l2": 2.1434653416279757e-06,
+            "max_abs": 0.00020933151245117188,
+            "exact": false
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999949,
+            "mine_norm": 341.84248775796055,
+            "ref_norm": 341.84248775796055,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9997202637348008,
+            "mine_norm": 341.87630615712897,
+            "ref_norm": 341.84248775796055,
+            "relative_l2": 0.023654548526183983,
+            "max_abs": 0.1961374282836914,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9994507820004918,
+            "mine_norm": 341.8289020272905,
+            "ref_norm": 341.84248775796055,
+            "relative_l2": 0.03314202654809097,
+            "max_abs": 0.3327007293701172,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9994507935379461,
+            "mine_norm": 341.8289657495441,
+            "ref_norm": 341.84248775796055,
+            "relative_l2": 0.033141681304578195,
+            "max_abs": 0.33268308639526367,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999967496859,
+            "mine_norm": 341.8289657495441,
+            "ref_norm": 341.8289020272905,
+            "relative_l2": 8.06266372683549e-05,
+            "max_abs": 0.0009288787841796875,
+            "exact": false
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999954,
+            "mine_norm": 18.96605960167957,
+            "ref_norm": 18.96605960167957,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9993429797978445,
+            "mine_norm": 18.93085122343328,
+            "ref_norm": 18.96605960167957,
+            "relative_l2": 0.036263579711450396,
+            "max_abs": 0.014290392398834229,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9988912342944676,
+            "mine_norm": 19.009752367303065,
+            "ref_norm": 18.96605960167957,
+            "relative_l2": 0.04720113565628407,
+            "max_abs": 0.015446126461029053,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9988910394911725,
+            "mine_norm": 19.009741538172143,
+            "ref_norm": 18.96605960167957,
+            "relative_l2": 0.047205230796893434,
+            "max_abs": 0.015356451272964478,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999517534105,
+            "mine_norm": 19.009741538172143,
+            "ref_norm": 19.009752367303065,
+            "relative_l2": 0.000310633932264797,
+            "max_abs": 0.00011822022497653961,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 1.000000000000001,
+            "mine_norm": 2952.3134125073248,
+            "ref_norm": 2952.3134125073248,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999997743278005,
+            "mine_norm": 2952.312821916909,
+            "ref_norm": 2952.3134125073248,
+            "relative_l2": 0.0006718216629872956,
+            "max_abs": 0.040508270263671875,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999994934779657,
+            "mine_norm": 2955.4946627902555,
+            "ref_norm": 2952.3134125073248,
+            "relative_l2": 0.001474869044074411,
+            "max_abs": 3.081787109375,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999994934644705,
+            "mine_norm": 2955.494659045009,
+            "ref_norm": 2952.3134125073248,
+            "relative_l2": 0.0014748772771222428,
+            "max_abs": 3.081787109375,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999958062,
+            "mine_norm": 2955.494659045009,
+            "ref_norm": 2955.4946627902555,
+            "relative_l2": 2.8961131103245813e-06,
+            "max_abs": 0.00025153160095214844,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999957,
+            "mine_norm": 229.65678015025583,
+            "ref_norm": 229.65678015025583,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9994856358416861,
+            "mine_norm": 229.64829628031774,
+            "ref_norm": 229.65678015025583,
+            "relative_l2": 0.03207322369998557,
+            "max_abs": 0.0697559118270874,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9990507067889645,
+            "mine_norm": 229.7198150583974,
+            "ref_norm": 229.65678015025583,
+            "relative_l2": 0.043579615322311326,
+            "max_abs": 0.10891491174697876,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9990507194178124,
+            "mine_norm": 229.72021575967153,
+            "ref_norm": 229.65678015025583,
+            "relative_l2": 0.04357937448415665,
+            "max_abs": 0.10889661312103271,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999905105738,
+            "mine_norm": 229.72021575967153,
+            "ref_norm": 229.7198150583974,
+            "relative_l2": 0.0001377748868348056,
+            "max_abs": 0.0005361437797546387,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999954,
+            "mine_norm": 33.290952783406574,
+            "ref_norm": 33.290952783406574,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9989558319557704,
+            "mine_norm": 33.2599307453972,
+            "ref_norm": 33.290952783406574,
+            "relative_l2": 0.04568652337187285,
+            "max_abs": 0.04338634014129639,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9985682055866504,
+            "mine_norm": 33.30124354459829,
+            "ref_norm": 33.290952783406574,
+            "relative_l2": 0.05352167374060948,
+            "max_abs": 0.038657575845718384,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9985681318317973,
+            "mine_norm": 33.30130564409682,
+            "ref_norm": 33.290952783406574,
+            "relative_l2": 0.05352311289425762,
+            "max_abs": 0.03869304060935974,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999859360381,
+            "mine_norm": 33.30130564409682,
+            "ref_norm": 33.30124354459829,
+            "relative_l2": 0.0001677243158307247,
+            "max_abs": 0.00016595423221588135,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 1.0000000000000009,
+            "mine_norm": 2954.023659073909,
+            "ref_norm": 2954.023659073909,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999997100098971,
+            "mine_norm": 2954.0230045531257,
+            "ref_norm": 2954.023659073909,
+            "relative_l2": 0.0007615642634546799,
+            "max_abs": 0.05631399154663086,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999994285436974,
+            "mine_norm": 2957.210003960613,
+            "ref_norm": 2954.023659073909,
+            "relative_l2": 0.0015190858850743325,
+            "max_abs": 3.08544921875,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999994285401168,
+            "mine_norm": 2957.2100031601203,
+            "ref_norm": 2954.023659073909,
+            "relative_l2": 0.0015190880532564475,
+            "max_abs": 3.08544921875,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.999999999995594,
+            "mine_norm": 2957.2100031601203,
+            "ref_norm": 2957.210003960613,
+            "relative_l2": 2.968360133692852e-06,
+            "max_abs": 0.00028014183044433594,
+            "exact": false
+          }
+        }
+      },
+      "16": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999993,
+            "mine_norm": 2983.433064424128,
+            "ref_norm": 2983.433064424128,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999987172221955,
+            "mine_norm": 2983.439019689711,
+            "ref_norm": 2983.433064424128,
+            "relative_l2": 0.0016017380294383857,
+            "max_abs": 0.17783498764038086,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999983612111557,
+            "mine_norm": 2986.5255375499037,
+            "ref_norm": 2983.433064424128,
+            "relative_l2": 0.0020869614012987555,
+            "max_abs": 2.99658203125,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.99999836044003,
+            "mine_norm": 2986.525571208283,
+            "ref_norm": 2983.433064424128,
+            "relative_l2": 0.002087336859059428,
+            "max_abs": 2.99658203125,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.999999999952976,
+            "mine_norm": 2986.525571208283,
+            "ref_norm": 2986.5255375499037,
+            "relative_l2": 9.697768244896681e-06,
+            "max_abs": 0.0017594099044799805,
+            "exact": false
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999948,
+            "mine_norm": 420.90047465004574,
+            "ref_norm": 420.90047465004574,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9990900805071116,
+            "mine_norm": 420.7905541613303,
+            "ref_norm": 420.90047465004574,
+            "relative_l2": 0.04265479957702042,
+            "max_abs": 0.3482022285461426,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9989177650745037,
+            "mine_norm": 420.9823960960089,
+            "ref_norm": 420.90047465004574,
+            "relative_l2": 0.04652879766566928,
+            "max_abs": 0.517244815826416,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9989171878677126,
+            "mine_norm": 420.9831205945459,
+            "ref_norm": 420.90047465004574,
+            "relative_l2": 0.046541251070372235,
+            "max_abs": 0.5174782276153564,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999633997396,
+            "mine_norm": 420.9831205945459,
+            "ref_norm": 420.9823960960089,
+            "relative_l2": 0.00027056163446701067,
+            "max_abs": 0.004058837890625,
+            "exact": false
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999963,
+            "mine_norm": 27.810296688323547,
+            "ref_norm": 27.810296688323547,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9983970898775556,
+            "mine_norm": 27.792570976100592,
+            "ref_norm": 27.810296688323547,
+            "relative_l2": 0.056605504798178906,
+            "max_abs": 0.24823793768882751,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9979329953066355,
+            "mine_norm": 27.63442754364903,
+            "ref_norm": 27.810296688323547,
+            "relative_l2": 0.06440386569460131,
+            "max_abs": 0.20830446481704712,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9979302394393013,
+            "mine_norm": 27.635126575454237,
+            "ref_norm": 27.810296688323547,
+            "relative_l2": 0.06444471713257933,
+            "max_abs": 0.20923525094985962,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999998737500435,
+            "mine_norm": 27.635126575454237,
+            "ref_norm": 27.63442754364903,
+            "relative_l2": 0.000503136328048101,
+            "max_abs": 0.0017297863960266113,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 1.0000000000000004,
+            "mine_norm": 2982.499592061135,
+            "ref_norm": 2982.499592061135,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999986457518518,
+            "mine_norm": 2982.5037811431835,
+            "ref_norm": 2982.499592061135,
+            "relative_l2": 0.0016457527371276496,
+            "max_abs": 0.1899735927581787,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999982372151437,
+            "mine_norm": 2985.5998031139056,
+            "ref_norm": 2982.499592061135,
+            "relative_l2": 0.0021470274507551235,
+            "max_abs": 3.0078125,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999982362796774,
+            "mine_norm": 2985.5998574969967,
+            "ref_norm": 2982.499592061135,
+            "relative_l2": 0.0021474724038131297,
+            "max_abs": 3.0078125,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.999999999945347,
+            "mine_norm": 2985.5998574969967,
+            "ref_norm": 2985.5998031139056,
+            "relative_l2": 1.0455094755045521e-05,
+            "max_abs": 0.001394033432006836,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999953,
+            "mine_norm": 280.8884965593699,
+            "ref_norm": 280.8884965593699,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9987366610253153,
+            "mine_norm": 280.96281556030283,
+            "ref_norm": 280.8884965593699,
+            "relative_l2": 0.05027341719986628,
+            "max_abs": 0.17983555793762207,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9984745617986959,
+            "mine_norm": 280.91913143023095,
+            "ref_norm": 280.8884965593699,
+            "relative_l2": 0.05523785874647454,
+            "max_abs": 0.19830632209777832,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.998473699180656,
+            "mine_norm": 280.9204331671899,
+            "ref_norm": 280.8884965593699,
+            "relative_l2": 0.055253612029781865,
+            "max_abs": 0.19943833351135254,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.999999945676362,
+            "mine_norm": 280.9204331671899,
+            "ref_norm": 280.91913143023095,
+            "relative_l2": 0.00032965018149916456,
+            "max_abs": 0.0014873147010803223,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999944,
+            "mine_norm": 49.45356286204018,
+            "ref_norm": 49.45356286204018,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9977017994768687,
+            "mine_norm": 49.493272994743215,
+            "ref_norm": 49.45356286204018,
+            "relative_l2": 0.06782873012269285,
+            "max_abs": 0.1461879462003708,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9975685919571377,
+            "mine_norm": 49.36033569903108,
+            "ref_norm": 49.45356286204018,
+            "relative_l2": 0.06969363488422525,
+            "max_abs": 0.13001608848571777,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9975671501374356,
+            "mine_norm": 49.361355574095256,
+            "ref_norm": 49.45356286204018,
+            "relative_l2": 0.06971444586660917,
+            "max_abs": 0.1300048828125,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999121963941,
+            "mine_norm": 49.361355574095256,
+            "ref_norm": 49.36033569903108,
+            "relative_l2": 0.0004195685193062389,
+            "max_abs": 0.0008589029312133789,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 1.000000000000003,
+            "mine_norm": 2985.1332522551184,
+            "ref_norm": 2985.1332522551184,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999985367028159,
+            "mine_norm": 2985.137237505458,
+            "ref_norm": 2985.1332522551184,
+            "relative_l2": 0.0017107308559453545,
+            "max_abs": 0.17982995510101318,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.999998155651614,
+            "mine_norm": 2988.238302153661,
+            "ref_norm": 2985.1332522551184,
+            "relative_l2": 0.002185060630247226,
+            "max_abs": 3.013916015625,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.99999815471256,
+            "mine_norm": 2988.2383421913255,
+            "ref_norm": 2985.1332522551184,
+            "relative_l2": 0.0021854971916981064,
+            "max_abs": 3.013916015625,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999440574,
+            "mine_norm": 2988.2383421913255,
+            "ref_norm": 2988.238302153661,
+            "relative_l2": 1.0577622427963104e-05,
+            "max_abs": 0.0013394355773925781,
+            "exact": false
+          }
+        }
+      },
+      "24": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 1.000000000000002,
+            "mine_norm": 3041.8914709658234,
+            "ref_norm": 3041.8914709658234,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999965791668453,
+            "mine_norm": 3041.89669429573,
+            "ref_norm": 3041.8914709658234,
+            "relative_l2": 0.0026156607214574182,
+            "max_abs": 0.3639039993286133,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.999995856186522,
+            "mine_norm": 3047.2507011814455,
+            "ref_norm": 3041.8914709658234,
+            "relative_l2": 0.003377306222758809,
+            "max_abs": 5.268798828125,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999958542240691,
+            "mine_norm": 3047.250709536356,
+            "ref_norm": 3041.8914709658234,
+            "relative_l2": 0.0033778897023101517,
+            "max_abs": 5.268798828125,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999998251774,
+            "mine_norm": 3047.250709536356,
+            "ref_norm": 3047.2507011814455,
+            "relative_l2": 1.869880775017814e-05,
+            "max_abs": 0.002635478973388672,
+            "exact": false
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999956,
+            "mine_norm": 492.17233750994933,
+            "ref_norm": 492.17233750994933,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.998922212679259,
+            "mine_norm": 491.7845194663049,
+            "ref_norm": 492.17233750994933,
+            "relative_l2": 0.046416559640472796,
+            "max_abs": 0.6707892417907715,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9987469041081912,
+            "mine_norm": 491.7148587553054,
+            "ref_norm": 492.17233750994933,
+            "relative_l2": 0.0500472401096255,
+            "max_abs": 0.8408317565917969,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9987462547183108,
+            "mine_norm": 491.71359349041694,
+            "ref_norm": 492.17233750994933,
+            "relative_l2": 0.050060185323828436,
+            "max_abs": 0.8482036590576172,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999434524107,
+            "mine_norm": 491.71359349041694,
+            "ref_norm": 491.7148587553054,
+            "relative_l2": 0.00033630566432347775,
+            "max_abs": 0.008258938789367676,
+            "exact": false
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999956,
+            "mine_norm": 38.63690968726338,
+            "ref_norm": 38.63690968726338,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9981686774383269,
+            "mine_norm": 38.6009760705785,
+            "ref_norm": 38.63690968726338,
+            "relative_l2": 0.06049879092308952,
+            "max_abs": 0.07071498036384583,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9972797473411444,
+            "mine_norm": 38.820436785283675,
+            "ref_norm": 38.63690968726338,
+            "relative_l2": 0.07408718448634509,
+            "max_abs": 0.10184431076049805,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9972760285251607,
+            "mine_norm": 38.8206554172573,
+            "ref_norm": 38.63690968726338,
+            "relative_l2": 0.0741381715689897,
+            "max_abs": 0.10188055038452148,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999997866453142,
+            "mine_norm": 38.8206554172573,
+            "ref_norm": 38.820436785283675,
+            "relative_l2": 0.0006532560631611451,
+            "max_abs": 0.0006900131702423096,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999982,
+            "mine_norm": 3040.9072071829582,
+            "ref_norm": 3040.9072071829582,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999963020523509,
+            "mine_norm": 3040.9128271482696,
+            "ref_norm": 3040.9072071829582,
+            "relative_l2": 0.0027195426785369425,
+            "max_abs": 0.34505216777324677,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999954248449371,
+            "mine_norm": 3046.196404684956,
+            "ref_norm": 3040.9072071829582,
+            "relative_l2": 0.0034916413097854414,
+            "max_abs": 5.2041015625,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999954224017211,
+            "mine_norm": 3046.1964054451096,
+            "ref_norm": 3040.9072071829582,
+            "relative_l2": 0.00349234231397346,
+            "max_abs": 5.2041015625,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999997927042,
+            "mine_norm": 3046.1964054451096,
+            "ref_norm": 3046.196404684956,
+            "relative_l2": 2.0361498497744288e-05,
+            "max_abs": 0.0026912689208984375,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999943,
+            "mine_norm": 334.8107647886122,
+            "ref_norm": 334.8107647886122,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9983105429837994,
+            "mine_norm": 334.7080478431027,
+            "ref_norm": 334.8107647886122,
+            "relative_l2": 0.05812031944646321,
+            "max_abs": 0.2991499900817871,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9980244148973437,
+            "mine_norm": 334.9889537592352,
+            "ref_norm": 334.8107647886122,
+            "relative_l2": 0.06287731144932375,
+            "max_abs": 0.2901831604540348,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9980234377531061,
+            "mine_norm": 334.98959513192443,
+            "ref_norm": 334.8107647886122,
+            "relative_l2": 0.06289293473091126,
+            "max_abs": 0.29141608253121376,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999087293965,
+            "mine_norm": 334.98959513192443,
+            "ref_norm": 334.9889537592352,
+            "relative_l2": 0.0004272530989658148,
+            "max_abs": 0.0024156570434570312,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999948,
+            "mine_norm": 65.9687709115191,
+            "ref_norm": 65.9687709115191,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9969694187715035,
+            "mine_norm": 65.88648230611254,
+            "ref_norm": 65.9687709115191,
+            "relative_l2": 0.07781489455801417,
+            "max_abs": 0.1599622666835785,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9968281564508321,
+            "mine_norm": 66.07261793542588,
+            "ref_norm": 65.9687709115191,
+            "relative_l2": 0.07972547453677023,
+            "max_abs": 0.20456314086914062,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9968268609795884,
+            "mine_norm": 66.07282753504954,
+            "ref_norm": 65.9687709115191,
+            "relative_l2": 0.07974193682269606,
+            "max_abs": 0.20516467094421387,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999998550708602,
+            "mine_norm": 66.07282753504954,
+            "ref_norm": 66.07261793542588,
+            "relative_l2": 0.0005383950727324676,
+            "max_abs": 0.0014354437589645386,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999998,
+            "mine_norm": 3041.9191186368666,
+            "ref_norm": 3041.9191186368666,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999956605764175,
+            "mine_norm": 3041.9265876707063,
+            "ref_norm": 3041.9191186368666,
+            "relative_l2": 0.0029459929569106416,
+            "max_abs": 0.4837643802165985,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999948112213147,
+            "mine_norm": 3047.210556461064,
+            "ref_norm": 3041.9191186368666,
+            "relative_l2": 0.0036635354193908106,
+            "max_abs": 5.201171875,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999948085470852,
+            "mine_norm": 3047.2105579448207,
+            "ref_norm": 3041.9191186368666,
+            "relative_l2": 0.0036642668068015104,
+            "max_abs": 5.201171875,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999997679522,
+            "mine_norm": 3047.2105579448207,
+            "ref_norm": 3047.210556461064,
+            "relative_l2": 2.1542790780889197e-05,
+            "max_abs": 0.0029653608798980713,
+            "exact": false
+          }
+        }
+      },
+      "35": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999991,
+            "mine_norm": 2905.0759191953093,
+            "ref_norm": 2905.0759191953093,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.999829197482833,
+            "mine_norm": 2905.3965107264266,
+            "ref_norm": 2905.0759191953093,
+            "relative_l2": 0.018483909509230474,
+            "max_abs": 2.229278564453125,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9998139580999845,
+            "mine_norm": 2920.2146769080628,
+            "ref_norm": 2905.0759191953093,
+            "relative_l2": 0.020029447379825645,
+            "max_abs": 15.767333984375,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.99981389649166,
+            "mine_norm": 2920.2145002390143,
+            "ref_norm": 2905.0759191953093,
+            "relative_l2": 0.020032522672767603,
+            "max_abs": 15.767333984375,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999938073552,
+            "mine_norm": 2920.2145002390143,
+            "ref_norm": 2920.2146769080628,
+            "relative_l2": 0.00011128920911364781,
+            "max_abs": 0.01648712158203125,
+            "exact": false
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999948,
+            "mine_norm": 710.2991828248718,
+            "ref_norm": 710.2991828248718,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.996656264346975,
+            "mine_norm": 709.1886401650779,
+            "ref_norm": 710.2991828248718,
+            "relative_l2": 0.08172796355956377,
+            "max_abs": 4.029409408569336,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9967039723787874,
+            "mine_norm": 708.4578516476244,
+            "ref_norm": 710.2991828248718,
+            "relative_l2": 0.08112759476348043,
+            "max_abs": 1.2522087097167969,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9967024757735183,
+            "mine_norm": 708.4592552975065,
+            "ref_norm": 710.2991828248718,
+            "relative_l2": 0.08114600960165985,
+            "max_abs": 1.2529582977294922,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999998753397344,
+            "mine_norm": 708.4592552975065,
+            "ref_norm": 708.4578516476244,
+            "relative_l2": 0.0004993244833125843,
+            "max_abs": 0.0170135498046875,
+            "exact": false
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999989,
+            "mine_norm": 1034.8796126154352,
+            "ref_norm": 1034.8796126154352,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9998412178815552,
+            "mine_norm": 1034.9902244867994,
+            "ref_norm": 1034.8796126154352,
+            "relative_l2": 0.017821604964515323,
+            "max_abs": 2.004664897918701,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9998014400253935,
+            "mine_norm": 1030.786740128599,
+            "ref_norm": 1034.8796126154352,
+            "relative_l2": 0.020277840376100215,
+            "max_abs": 3.5714111328125,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9998014797606469,
+            "mine_norm": 1030.7867882735482,
+            "ref_norm": 1034.8796126154352,
+            "relative_l2": 0.020275879872333098,
+            "max_abs": 3.5714111328125,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.999999990213526,
+            "mine_norm": 1030.7867882735482,
+            "ref_norm": 1030.786740128599,
+            "relative_l2": 0.00013990336209694133,
+            "max_abs": 0.01654672622680664,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 1.0000000000000007,
+            "mine_norm": 2007.1059477799192,
+            "ref_norm": 2007.1059477799192,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9996103369622512,
+            "mine_norm": 2007.6938374331844,
+            "ref_norm": 2007.1059477799192,
+            "relative_l2": 0.027922036748333302,
+            "max_abs": 3.0422401428222656,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9995641281844456,
+            "mine_norm": 2025.1959384009626,
+            "ref_norm": 2007.1059477799192,
+            "relative_l2": 0.030997327383390477,
+            "max_abs": 19.3387451171875,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9995640160523115,
+            "mine_norm": 2025.1955486794539,
+            "ref_norm": 2007.1059477799192,
+            "relative_l2": 0.03100091806843211,
+            "max_abs": 19.3387451171875,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999849651614,
+            "mine_norm": 2025.1955486794539,
+            "ref_norm": 2025.1959384009626,
+            "relative_l2": 0.00017340620039533864,
+            "max_abs": 0.014837265014648438,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999952,
+            "mine_norm": 730.6938530497354,
+            "ref_norm": 730.6938530497354,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9969093059854346,
+            "mine_norm": 730.4415702891545,
+            "ref_norm": 730.6938530497354,
+            "relative_l2": 0.07860898817565957,
+            "max_abs": 3.067257881164551,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9967907310913683,
+            "mine_norm": 730.6947976821981,
+            "ref_norm": 730.6938530497354,
+            "relative_l2": 0.0801158293768256,
+            "max_abs": 3.099527359008789,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9967899604597195,
+            "mine_norm": 730.6982993436139,
+            "ref_norm": 730.6938530497354,
+            "relative_l2": 0.0801256399909026,
+            "max_abs": 3.096435546875,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999998772212596,
+            "mine_norm": 730.6982993436139,
+            "ref_norm": 730.6947976821981,
+            "relative_l2": 0.0004955619180780624,
+            "max_abs": 0.02518749237060547,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999973,
+            "mine_norm": 567.7277369649245,
+            "ref_norm": 567.7277369649245,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9976484168371288,
+            "mine_norm": 569.7451054939461,
+            "ref_norm": 567.7277369649245,
+            "relative_l2": 0.068793206845801,
+            "max_abs": 5.477930068969727,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9978197909939831,
+            "mine_norm": 567.6869762354406,
+            "ref_norm": 567.7277369649245,
+            "relative_l2": 0.06603112981780393,
+            "max_abs": 5.369272232055664,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.997819677102554,
+            "mine_norm": 567.6956849618086,
+            "ref_norm": 567.7277369649245,
+            "relative_l2": 0.06603334608217737,
+            "max_abs": 5.356157302856445,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999271433878,
+            "mine_norm": 567.6956849618086,
+            "ref_norm": 567.6869762354406,
+            "relative_l2": 0.00038203506640076707,
+            "max_abs": 0.028524398803710938,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999983,
+            "mine_norm": 1966.0111097498157,
+            "ref_norm": 1966.0111097498157,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9994325336463383,
+            "mine_norm": 1966.6371213263017,
+            "ref_norm": 1966.0111097498157,
+            "relative_l2": 0.03369562996551184,
+            "max_abs": 6.578342437744141,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9994004759297406,
+            "mine_norm": 1983.865615263842,
+            "ref_norm": 1966.0111097498157,
+            "relative_l2": 0.03595014141900797,
+            "max_abs": 19.3240966796875,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999400386505571,
+            "mine_norm": 1983.8671231976882,
+            "ref_norm": 1966.0111097498157,
+            "relative_l2": 0.0359528579141974,
+            "max_abs": 19.3240966796875,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.999999979281722,
+            "mine_norm": 1983.8671231976882,
+            "ref_norm": 1983.865615263842,
+            "relative_l2": 0.0002035612052515391,
+            "max_abs": 0.02797698974609375,
+            "exact": false
+          }
+        }
+      }
+    },
+    "f16": {
+      "0": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 1.0,
+            "mine_norm": 6.792430537010639,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 1.0,
+            "mine_norm": 6.792430537010639,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "blas-flash": {
+            "cosine": 1.0,
+            "mine_norm": 6.792430537010639,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "blas-eager": {
+            "cosine": 1.0,
+            "mine_norm": 6.792430537010639,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 1.0,
+            "mine_norm": 6.792430537010639,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999971,
+            "mine_norm": 206.3514414391758,
+            "ref_norm": 206.3514414391758,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999999971,
+            "mine_norm": 206.3514414391758,
+            "ref_norm": 206.3514414391758,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999999971,
+            "mine_norm": 206.3514414391758,
+            "ref_norm": 206.3514414391758,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999999971,
+            "mine_norm": 206.3514414391758,
+            "ref_norm": 206.3514414391758,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999999971,
+            "mine_norm": 206.3514414391758,
+            "ref_norm": 206.3514414391758,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999947,
+            "mine_norm": 5.75706942223748,
+            "ref_norm": 5.75706942223748,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999802197,
+            "mine_norm": 5.757069490648425,
+            "ref_norm": 5.75706942223748,
+            "relative_l2": 6.288848163575976e-06,
+            "max_abs": 1.1976808309555054e-06,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999480509,
+            "mine_norm": 5.7570703658589695,
+            "ref_norm": 5.75706942223748,
+            "relative_l2": 1.0193847971707169e-05,
+            "max_abs": 1.8887221813201904e-06,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999423651,
+            "mine_norm": 5.757070491233161,
+            "ref_norm": 5.75706942223748,
+            "relative_l2": 1.0737492053105845e-05,
+            "max_abs": 1.8971040844917297e-06,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999930789,
+            "mine_norm": 5.757070491233161,
+            "ref_norm": 5.7570703658589695,
+            "relative_l2": 3.719054373388481e-06,
+            "max_abs": 1.1175870895385742e-06,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999959,
+            "mine_norm": 8.862329363728506,
+            "ref_norm": 8.862329363728506,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.99999999999165,
+            "mine_norm": 8.862329411086563,
+            "ref_norm": 8.862329363728506,
+            "relative_l2": 4.085441056393233e-06,
+            "max_abs": 1.1976808309555054e-06,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999780782,
+            "mine_norm": 8.86233047343881,
+            "ref_norm": 8.862329363728506,
+            "relative_l2": 6.6220401122440235e-06,
+            "max_abs": 1.9073486328125e-06,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999999999975677,
+            "mine_norm": 8.862330570354109,
+            "ref_norm": 8.862329363728506,
+            "relative_l2": 6.9753965773120934e-06,
+            "max_abs": 1.9073486328125e-06,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999970767,
+            "mine_norm": 8.862330570354109,
+            "ref_norm": 8.86233047343881,
+            "relative_l2": 2.4162579795221257e-06,
+            "max_abs": 1.1175870895385742e-06,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999952,
+            "mine_norm": 57.942165109971,
+            "ref_norm": 57.942165109971,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999720448,
+            "mine_norm": 57.94216331591158,
+            "ref_norm": 57.942165109971,
+            "relative_l2": 7.476802124318028e-06,
+            "max_abs": 1.7181038856506348e-05,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999539738,
+            "mine_norm": 57.942166673645545,
+            "ref_norm": 57.942165109971,
+            "relative_l2": 9.593970398837508e-06,
+            "max_abs": 1.576170325279236e-05,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999459204,
+            "mine_norm": 57.94216419676358,
+            "ref_norm": 57.942165109971,
+            "relative_l2": 1.0399519297117941e-05,
+            "max_abs": 1.7404556274414062e-05,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999902225,
+            "mine_norm": 57.94216419676358,
+            "ref_norm": 57.942166673645545,
+            "relative_l2": 4.421275638266869e-06,
+            "max_abs": 1.4331191778182983e-05,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999951,
+            "mine_norm": 8.572051789473711,
+            "ref_norm": 8.572051789473711,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999953333,
+            "mine_norm": 8.57204877040283,
+            "ref_norm": 8.572051789473711,
+            "relative_l2": 3.0736717945214405e-06,
+            "max_abs": 3.6954879760742188e-06,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999857501,
+            "mine_norm": 8.572052608519122,
+            "ref_norm": 8.572051789473711,
+            "relative_l2": 5.338326785104853e-06,
+            "max_abs": 5.304813385009766e-06,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999843425,
+            "mine_norm": 8.572050993810771,
+            "ref_norm": 8.572051789473711,
+            "relative_l2": 5.595800478097768e-06,
+            "max_abs": 5.260109901428223e-06,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999982135,
+            "mine_norm": 8.572050993810771,
+            "ref_norm": 8.572052608519122,
+            "relative_l2": 1.8963954501983562e-06,
+            "max_abs": 1.6689300537109375e-06,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999949,
+            "mine_norm": 13.765664574033968,
+            "ref_norm": 13.765664574033968,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999954697,
+            "mine_norm": 13.76566242951163,
+            "ref_norm": 13.765664574033968,
+            "relative_l2": 3.0124024193328337e-06,
+            "max_abs": 3.337860107421875e-06,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999874639,
+            "mine_norm": 13.765664819267986,
+            "ref_norm": 13.765664574033968,
+            "relative_l2": 5.006138906047507e-06,
+            "max_abs": 6.4373016357421875e-06,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999865644,
+            "mine_norm": 13.765663825850446,
+            "ref_norm": 13.765664574033968,
+            "relative_l2": 5.183000310479474e-06,
+            "max_abs": 6.377696990966797e-06,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999990424,
+            "mine_norm": 13.765663825850446,
+            "ref_norm": 13.765664819267986,
+            "relative_l2": 1.3814014777041014e-06,
+            "max_abs": 1.7881393432617188e-06,
+            "exact": false
+          }
+        }
+      },
+      "1": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999949,
+            "mine_norm": 13.765664574033968,
+            "ref_norm": 13.765664574033968,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999954697,
+            "mine_norm": 13.76566242951163,
+            "ref_norm": 13.765664574033968,
+            "relative_l2": 3.0124024193328337e-06,
+            "max_abs": 3.337860107421875e-06,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999874639,
+            "mine_norm": 13.765664819267986,
+            "ref_norm": 13.765664574033968,
+            "relative_l2": 5.006138906047507e-06,
+            "max_abs": 6.4373016357421875e-06,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999865644,
+            "mine_norm": 13.765663825850446,
+            "ref_norm": 13.765664574033968,
+            "relative_l2": 5.183000310479474e-06,
+            "max_abs": 6.377696990966797e-06,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999990424,
+            "mine_norm": 13.765663825850446,
+            "ref_norm": 13.765664819267986,
+            "relative_l2": 1.3814014777041014e-06,
+            "max_abs": 1.7881393432617188e-06,
+            "exact": false
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.999999999999998,
+            "mine_norm": 108.39766936465865,
+            "ref_norm": 108.39766936465865,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999981182,
+            "mine_norm": 108.39766830131917,
+            "ref_norm": 108.39766936465865,
+            "relative_l2": 1.9390581381643097e-06,
+            "max_abs": 5.093216896057129e-05,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999866628,
+            "mine_norm": 108.39770070870517,
+            "ref_norm": 108.39766936465865,
+            "relative_l2": 5.172473134980298e-06,
+            "max_abs": 0.00010395050048828125,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999862488,
+            "mine_norm": 108.39769979796279,
+            "ref_norm": 108.39766936465865,
+            "relative_l2": 5.251371507369307e-06,
+            "max_abs": 0.000102996826171875,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999995713,
+            "mine_norm": 108.39769979796279,
+            "ref_norm": 108.39770070870517,
+            "relative_l2": 9.243086996856578e-07,
+            "max_abs": 1.0967254638671875e-05,
+            "exact": false
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999954,
+            "mine_norm": 4.024293002650912,
+            "ref_norm": 4.024293002650912,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999997528517,
+            "mine_norm": 4.024296785648155,
+            "ref_norm": 4.024293002650912,
+            "relative_l2": 2.2252453575089478e-05,
+            "max_abs": 3.159046173095703e-06,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999993322285,
+            "mine_norm": 4.024282738649488,
+            "ref_norm": 4.024293002650912,
+            "relative_l2": 3.663380604512168e-05,
+            "max_abs": 6.012618541717529e-06,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999999999356974,
+            "mine_norm": 4.024286632488764,
+            "ref_norm": 4.024293002650912,
+            "relative_l2": 3.5896323336612066e-05,
+            "max_abs": 5.880370736122131e-06,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999998551593,
+            "mine_norm": 4.024286632488764,
+            "ref_norm": 4.024282738649488,
+            "relative_l2": 1.7047261560219577e-05,
+            "max_abs": 2.816319465637207e-06,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999952,
+            "mine_norm": 14.69637792082917,
+            "ref_norm": 14.69637792082917,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999774583,
+            "mine_norm": 14.696384308448922,
+            "ref_norm": 14.69637792082917,
+            "relative_l2": 6.727763832096502e-06,
+            "max_abs": 4.76837158203125e-06,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999390786,
+            "mine_norm": 14.696371128029348,
+            "ref_norm": 14.69637792082917,
+            "relative_l2": 1.1047464938640405e-05,
+            "max_abs": 9.47713851928711e-06,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999999999940445,
+            "mine_norm": 14.696379006412464,
+            "ref_norm": 14.69637792082917,
+            "relative_l2": 1.0913549537072257e-05,
+            "max_abs": 8.165836334228516e-06,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999884646,
+            "mine_norm": 14.696379006412464,
+            "ref_norm": 14.696371128029348,
+            "relative_l2": 4.831948782769349e-06,
+            "max_abs": 2.384185791015625e-06,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999944,
+            "mine_norm": 78.66889825541328,
+            "ref_norm": 78.66889825541328,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.999999999944693,
+            "mine_norm": 78.66886914933819,
+            "ref_norm": 78.66889825541328,
+            "relative_l2": 1.0523297079946247e-05,
+            "max_abs": 1.9788742065429688e-05,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999998473097,
+            "mine_norm": 78.66892941970158,
+            "ref_norm": 78.66889825541328,
+            "relative_l2": 1.7479311780239402e-05,
+            "max_abs": 2.7477741241455078e-05,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999999999851878,
+            "mine_norm": 78.66888381585103,
+            "ref_norm": 78.66889825541328,
+            "relative_l2": 1.721237478563655e-05,
+            "max_abs": 2.944469451904297e-05,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999721212,
+            "mine_norm": 78.66888381585103,
+            "ref_norm": 78.66892941970158,
+            "relative_l2": 7.4887852074791475e-06,
+            "max_abs": 1.515168696641922e-05,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999959,
+            "mine_norm": 8.695055236443713,
+            "ref_norm": 8.695055236443713,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999579927,
+            "mine_norm": 8.695048569077828,
+            "ref_norm": 8.695055236443713,
+            "relative_l2": 9.197481291114988e-06,
+            "max_abs": 5.185604095458984e-06,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999998834297,
+            "mine_norm": 8.695067025803231,
+            "ref_norm": 8.695055236443713,
+            "relative_l2": 1.5328716461366945e-05,
+            "max_abs": 5.5730342864990234e-06,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999998891342,
+            "mine_norm": 8.695052658790807,
+            "ref_norm": 8.695055236443713,
+            "relative_l2": 1.4893296204448811e-05,
+            "max_abs": 6.556510925292969e-06,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999798874,
+            "mine_norm": 8.695052658790807,
+            "ref_norm": 8.695067025803231,
+            "relative_l2": 6.5532305568765085e-06,
+            "max_abs": 4.947185516357422e-06,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999943,
+            "mine_norm": 19.04355630106808,
+            "ref_norm": 19.04355630106808,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999816893,
+            "mine_norm": 19.04355447607769,
+            "ref_norm": 19.04355630106808,
+            "relative_l2": 6.051456446915083e-06,
+            "max_abs": 4.76837158203125e-06,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.999999999948225,
+            "mine_norm": 19.04356144382897,
+            "ref_norm": 19.04355630106808,
+            "relative_l2": 1.0179031228045508e-05,
+            "max_abs": 6.973743438720703e-06,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999499649,
+            "mine_norm": 19.0435541103104,
+            "ref_norm": 19.04355630106808,
+            "relative_l2": 1.0003644391257131e-05,
+            "max_abs": 6.735324859619141e-06,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999906991,
+            "mine_norm": 19.0435541103104,
+            "ref_norm": 19.04356144382897,
+            "relative_l2": 4.329080188282847e-06,
+            "max_abs": 4.0531158447265625e-06,
+            "exact": false
+          }
+        }
+      },
+      "4": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 1.0000000000000036,
+            "mine_norm": 2967.9375354830518,
+            "ref_norm": 2967.9375354830518,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999998397,
+            "mine_norm": 2967.9375356255723,
+            "ref_norm": 2967.9375354830518,
+            "relative_l2": 5.710342271828512e-07,
+            "max_abs": 5.6743621826171875e-05,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999998467,
+            "mine_norm": 2967.9373229165467,
+            "ref_norm": 2967.9375354830518,
+            "relative_l2": 5.609610386999383e-07,
+            "max_abs": 0.000244140625,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999998613,
+            "mine_norm": 2967.9373229112834,
+            "ref_norm": 2967.9375354830518,
+            "relative_l2": 5.373201315180323e-07,
+            "max_abs": 0.000244140625,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999999332,
+            "mine_norm": 2967.9373229112834,
+            "ref_norm": 2967.9373229165467,
+            "relative_l2": 3.6861326616821016e-07,
+            "max_abs": 8.636713027954102e-05,
+            "exact": false
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999954,
+            "mine_norm": 247.4917870707452,
+            "ref_norm": 247.4917870707452,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999990446247,
+            "mine_norm": 247.49185838259635,
+            "ref_norm": 247.4917870707452,
+            "relative_l2": 4.371298513179347e-05,
+            "max_abs": 0.0006232261657714844,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999990919173,
+            "mine_norm": 247.49189072113688,
+            "ref_norm": 247.4917870707452,
+            "relative_l2": 4.261845049497197e-05,
+            "max_abs": 0.00066375732421875,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999999999168156,
+            "mine_norm": 247.49196978334498,
+            "ref_norm": 247.4917870707452,
+            "relative_l2": 4.0794910260942274e-05,
+            "max_abs": 0.0006246566772460938,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999995962924,
+            "mine_norm": 247.49196978334498,
+            "ref_norm": 247.49189072113688,
+            "relative_l2": 2.841667978131009e-05,
+            "max_abs": 0.0002237558364868164,
+            "exact": false
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999951,
+            "mine_norm": 9.992454555732682,
+            "ref_norm": 9.992454555732682,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999855038854,
+            "mine_norm": 9.992504841796263,
+            "ref_norm": 9.992454555732682,
+            "relative_l2": 0.0001703457987088182,
+            "max_abs": 6.26295804977417e-05,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999852732822,
+            "mine_norm": 9.992478000412957,
+            "ref_norm": 9.992454555732682,
+            "relative_l2": 0.0001716362433113936,
+            "max_abs": 6.860494613647461e-05,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999846779661,
+            "mine_norm": 9.992392035900146,
+            "ref_norm": 9.992454555732682,
+            "relative_l2": 0.00017516567135981157,
+            "max_abs": 0.0001246035099029541,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999898348083,
+            "mine_norm": 9.992392035900146,
+            "ref_norm": 9.992478000412957,
+            "relative_l2": 0.000142843299964471,
+            "max_abs": 0.0001392662525177002,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999991,
+            "mine_norm": 2967.953406180553,
+            "ref_norm": 2967.953406180553,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999996795,
+            "mine_norm": 2967.953406532327,
+            "ref_norm": 2967.953406180553,
+            "relative_l2": 7.980317806605846e-07,
+            "max_abs": 6.890296936035156e-05,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999996886,
+            "mine_norm": 2967.9531935784435,
+            "ref_norm": 2967.953406180553,
+            "relative_l2": 7.923968614176618e-07,
+            "max_abs": 0.000244140625,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.99999999999969,
+            "mine_norm": 2967.9531932267814,
+            "ref_norm": 2967.953406180553,
+            "relative_l2": 7.884629889480928e-07,
+            "max_abs": 0.000244140625,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.999999999999819,
+            "mine_norm": 2967.9531932267814,
+            "ref_norm": 2967.9531935784435,
+            "relative_l2": 6.009921475122249e-07,
+            "max_abs": 0.00013709068298339844,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999942,
+            "mine_norm": 162.28581322958777,
+            "ref_norm": 162.28581322958777,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999968669188,
+            "mine_norm": 162.28561286168872,
+            "ref_norm": 162.28581322958777,
+            "relative_l2": 7.916860176151642e-05,
+            "max_abs": 0.0003414154052734375,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999969774657,
+            "mine_norm": 162.28561354846516,
+            "ref_norm": 162.28581322958777,
+            "relative_l2": 7.775965005726267e-05,
+            "max_abs": 0.00030803680419921875,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999970022059,
+            "mine_norm": 162.28566616135276,
+            "ref_norm": 162.28581322958777,
+            "relative_l2": 7.743637674811843e-05,
+            "max_abs": 0.0003037452697753906,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999982436233,
+            "mine_norm": 162.28566616135276,
+            "ref_norm": 162.28561354846516,
+            "relative_l2": 5.926927943357905e-05,
+            "max_abs": 0.0002753734588623047,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999956,
+            "mine_norm": 24.726232128176086,
+            "ref_norm": 24.726232128176086,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999973996133,
+            "mine_norm": 24.72630068410855,
+            "ref_norm": 24.726232128176086,
+            "relative_l2": 7.216969833143991e-05,
+            "max_abs": 9.071826934814453e-05,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999974581621,
+            "mine_norm": 24.726277650460265,
+            "ref_norm": 24.726232128176086,
+            "relative_l2": 7.132366506928156e-05,
+            "max_abs": 0.00012919306755065918,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999972093939,
+            "mine_norm": 24.72630640966396,
+            "ref_norm": 24.726232128176086,
+            "relative_l2": 7.476793539017154e-05,
+            "max_abs": 0.00033795833587646484,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999983039203,
+            "mine_norm": 24.72630640966396,
+            "ref_norm": 24.726277650460265,
+            "relative_l2": 5.825380499031318e-05,
+            "max_abs": 0.00033836066722869873,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999958,
+            "mine_norm": 2980.7077202772316,
+            "ref_norm": 2980.7077202772316,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999996092,
+            "mine_norm": 2980.7077222607672,
+            "ref_norm": 2980.7077202772316,
+            "relative_l2": 8.812333800296616e-07,
+            "max_abs": 7.545948028564453e-05,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999996101,
+            "mine_norm": 2980.7075085247307,
+            "ref_norm": 2980.7077202772316,
+            "relative_l2": 8.830688346113765e-07,
+            "max_abs": 0.000244140625,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999995985,
+            "mine_norm": 2980.707509034503,
+            "ref_norm": 2980.7077202772316,
+            "relative_l2": 8.963633459859414e-07,
+            "max_abs": 0.000244140625,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999997654,
+            "mine_norm": 2980.707509034503,
+            "ref_norm": 2980.7075085247307,
+            "relative_l2": 6.850413968753528e-07,
+            "max_abs": 0.0002014636993408203,
+            "exact": false
+          }
+        }
+      },
+      "8": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 1.0000000000000002,
+            "mine_norm": 2996.55391124912,
+            "ref_norm": 2996.55391124912,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999970243,
+            "mine_norm": 2996.5539198586316,
+            "ref_norm": 2996.55391124912,
+            "relative_l2": 2.439318696712756e-06,
+            "max_abs": 0.0006957054138183594,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999955911,
+            "mine_norm": 2996.5537227315294,
+            "ref_norm": 2996.55391124912,
+            "relative_l2": 2.9702406266584264e-06,
+            "max_abs": 0.00042724609375,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999960193,
+            "mine_norm": 2996.553723949451,
+            "ref_norm": 2996.55391124912,
+            "relative_l2": 2.822463809820866e-06,
+            "max_abs": 0.00042057037353515625,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999978593,
+            "mine_norm": 2996.553723949451,
+            "ref_norm": 2996.5537227315294,
+            "relative_l2": 2.069397787791544e-06,
+            "max_abs": 0.0002440810203552246,
+            "exact": false
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999953,
+            "mine_norm": 338.83647431684943,
+            "ref_norm": 338.83647431684943,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999952766283,
+            "mine_norm": 338.8365648855871,
+            "ref_norm": 338.83647431684943,
+            "relative_l2": 9.719469124195393e-05,
+            "max_abs": 0.0030851364135742188,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.999999993648936,
+            "mine_norm": 338.83649391900803,
+            "ref_norm": 338.83647431684943,
+            "relative_l2": 0.0001127036952409294,
+            "max_abs": 0.0013270378112792969,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999942945773,
+            "mine_norm": 338.8364440948888,
+            "ref_norm": 338.83647431684943,
+            "relative_l2": 0.00010682154887960607,
+            "max_abs": 0.0013346672058105469,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999967858971,
+            "mine_norm": 338.8364440948888,
+            "ref_norm": 338.83649391900803,
+            "relative_l2": 8.017616231304718e-05,
+            "max_abs": 0.0013499259948730469,
+            "exact": false
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999963,
+            "mine_norm": 18.776265330991187,
+            "ref_norm": 18.776265330991187,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999714937112,
+            "mine_norm": 18.776165748998444,
+            "ref_norm": 18.776265330991187,
+            "relative_l2": 0.0002388313123902394,
+            "max_abs": 0.00023427605628967285,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999514843885,
+            "mine_norm": 18.776290241916612,
+            "ref_norm": 18.776265330991187,
+            "relative_l2": 0.00031150137048836617,
+            "max_abs": 0.00017410516738891602,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999999948481659,
+            "mine_norm": 18.77639950600669,
+            "ref_norm": 18.776265330991187,
+            "relative_l2": 0.0003210739411885907,
+            "max_abs": 0.00015112757682800293,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999780102636,
+            "mine_norm": 18.77639950600669,
+            "ref_norm": 18.776290241916612,
+            "relative_l2": 0.00020979414515196357,
+            "max_abs": 0.00014476478099822998,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 1.0000000000000009,
+            "mine_norm": 2996.490919163995,
+            "ref_norm": 2996.490919163995,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999960413,
+            "mine_norm": 2996.490925553558,
+            "ref_norm": 2996.490919163995,
+            "relative_l2": 2.813280471272488e-06,
+            "max_abs": 0.0005502700805664062,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999938247,
+            "mine_norm": 2996.490732493692,
+            "ref_norm": 2996.490919163995,
+            "relative_l2": 3.5145497032510944e-06,
+            "max_abs": 0.0003986358642578125,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999941811,
+            "mine_norm": 2996.4907348888464,
+            "ref_norm": 2996.490919163995,
+            "relative_l2": 3.411879545582182e-06,
+            "max_abs": 0.0002694129943847656,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999970302,
+            "mine_norm": 2996.4907348888464,
+            "ref_norm": 2996.490732493692,
+            "relative_l2": 2.436194142341271e-06,
+            "max_abs": 0.00029021501541137695,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999954,
+            "mine_norm": 227.35129319183616,
+            "ref_norm": 227.35129319183616,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999906308835,
+            "mine_norm": 227.35114674028952,
+            "ref_norm": 227.35129319183616,
+            "relative_l2": 0.00013688910354811497,
+            "max_abs": 0.0005047321319580078,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.999999986306303,
+            "mine_norm": 227.35109481832052,
+            "ref_norm": 227.35129319183616,
+            "relative_l2": 0.00016549357214310162,
+            "max_abs": 0.0006929636001586914,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999870594392,
+            "mine_norm": 227.3514273609926,
+            "ref_norm": 227.35129319183616,
+            "relative_l2": 0.00016087720750562097,
+            "max_abs": 0.00047767162322998047,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.999999992967921,
+            "mine_norm": 227.3514273609926,
+            "ref_norm": 227.35109481832052,
+            "relative_l2": 0.00011860147203895241,
+            "max_abs": 0.000579833984375,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999967,
+            "mine_norm": 33.224299906009136,
+            "ref_norm": 33.224299906009136,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999871603363,
+            "mine_norm": 33.22425456630798,
+            "ref_norm": 33.224299906009136,
+            "relative_l2": 0.00016025338685788764,
+            "max_abs": 0.0003083348274230957,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999784164657,
+            "mine_norm": 33.224247285010144,
+            "ref_norm": 33.224299906009136,
+            "relative_l2": 0.00020777271658386855,
+            "max_abs": 0.0005094408988952637,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999999980010683,
+            "mine_norm": 33.22435464696015,
+            "ref_norm": 33.224299906009136,
+            "relative_l2": 0.00019995351408919656,
+            "max_abs": 0.0006059631705284119,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999902586483,
+            "mine_norm": 33.22435464696015,
+            "ref_norm": 33.224247285010144,
+            "relative_l2": 0.00013961805453542177,
+            "max_abs": 0.0001818239688873291,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999979,
+            "mine_norm": 2998.2261900441063,
+            "ref_norm": 2998.2261900441063,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999958348,
+            "mine_norm": 2998.22620009869,
+            "ref_norm": 2998.2261900441063,
+            "relative_l2": 2.886173659883362e-06,
+            "max_abs": 0.0003333091735839844,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999931166,
+            "mine_norm": 2998.2260091785456,
+            "ref_norm": 2998.2261900441063,
+            "relative_l2": 3.710288612067439e-06,
+            "max_abs": 0.0005795955657958984,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999934954,
+            "mine_norm": 2998.226009012385,
+            "ref_norm": 2998.2261900441063,
+            "relative_l2": 3.607214518019172e-06,
+            "max_abs": 0.0006499290466308594,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999967962,
+            "mine_norm": 2998.226009012385,
+            "ref_norm": 2998.2260091785456,
+            "relative_l2": 2.531014782360149e-06,
+            "max_abs": 0.0003535747528076172,
+            "exact": false
+          }
+        }
+      },
+      "16": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 0.999999999999998,
+            "mine_norm": 3028.2998949255525,
+            "ref_norm": 3028.2998949255525,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999634487,
+            "mine_norm": 3028.2999319888827,
+            "ref_norm": 3028.2998949255525,
+            "relative_l2": 8.54984873340194e-06,
+            "max_abs": 0.001433730125427246,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999514152,
+            "mine_norm": 3028.3001493022957,
+            "ref_norm": 3028.2998949255525,
+            "relative_l2": 9.857820497894635e-06,
+            "max_abs": 0.0016055107116699219,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999582834,
+            "mine_norm": 3028.3001742956803,
+            "ref_norm": 3028.2998949255525,
+            "relative_l2": 9.134429685633882e-06,
+            "max_abs": 0.0019931793212890625,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999999691274,
+            "mine_norm": 3028.3001742956803,
+            "ref_norm": 3028.3001493022957,
+            "relative_l2": 7.857776359373925e-06,
+            "max_abs": 0.0014033317565917969,
+            "exact": false
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999949,
+            "mine_norm": 420.1100830893019,
+            "ref_norm": 420.1100830893019,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999732257862,
+            "mine_norm": 420.11039060560114,
+            "ref_norm": 420.1100830893019,
+            "relative_l2": 0.00023140655195852397,
+            "max_abs": 0.004131793975830078,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999648182032,
+            "mine_norm": 420.1115835997498,
+            "ref_norm": 420.1100830893019,
+            "relative_l2": 0.0002652858677088137,
+            "max_abs": 0.0028634071350097656,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999699057585,
+            "mine_norm": 420.1115124152879,
+            "ref_norm": 420.1100830893019,
+            "relative_l2": 0.0002453573975941708,
+            "max_abs": 0.005973339080810547,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999766295057,
+            "mine_norm": 420.1115124152879,
+            "ref_norm": 420.1115835997498,
+            "relative_l2": 0.00021619666663808747,
+            "max_abs": 0.0031099319458007812,
+            "exact": false
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999967,
+            "mine_norm": 27.40423801530001,
+            "ref_norm": 27.40423801530001,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999998865194117,
+            "mine_norm": 27.404972514251536,
+            "ref_norm": 27.40423801530001,
+            "relative_l2": 0.0004771641445554682,
+            "max_abs": 0.0014252662658691406,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999998659947766,
+            "mine_norm": 27.403786426477662,
+            "ref_norm": 27.40423801530001,
+            "relative_l2": 0.0005179551855786931,
+            "max_abs": 0.001817941665649414,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999998742234292,
+            "mine_norm": 27.40419206783486,
+            "ref_norm": 27.40423801530001,
+            "relative_l2": 0.000501553112463531,
+            "max_abs": 0.0018053054809570312,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999250164209,
+            "mine_norm": 27.40419206783486,
+            "ref_norm": 27.403786426477662,
+            "relative_l2": 0.0003875415871387617,
+            "max_abs": 0.0012516975402832031,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999961,
+            "mine_norm": 3027.402129942544,
+            "ref_norm": 3027.402129942544,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999559867,
+            "mine_norm": 3027.402155609287,
+            "ref_norm": 3027.402129942544,
+            "relative_l2": 9.382142810160866e-06,
+            "max_abs": 0.001911938190460205,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.999999999942669,
+            "mine_norm": 3027.4023752508965,
+            "ref_norm": 3027.402129942544,
+            "relative_l2": 1.070802973768797e-05,
+            "max_abs": 0.0021262168884277344,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999505291,
+            "mine_norm": 3027.402401268017,
+            "ref_norm": 3027.402129942544,
+            "relative_l2": 9.94726163378821e-06,
+            "max_abs": 0.0014840364456176758,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.999999999964398,
+            "mine_norm": 3027.402401268017,
+            "ref_norm": 3027.4023752508965,
+            "relative_l2": 8.438177023659596e-06,
+            "max_abs": 0.0022754669189453125,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.999999999999995,
+            "mine_norm": 279.80489372527217,
+            "ref_norm": 279.80489372527217,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999576149078,
+            "mine_norm": 279.8051508985327,
+            "ref_norm": 279.80489372527217,
+            "relative_l2": 0.00029115476511752566,
+            "max_abs": 0.001203000545501709,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999457775862,
+            "mine_norm": 279.8050328194633,
+            "ref_norm": 279.80489372527217,
+            "relative_l2": 0.0003293100655309412,
+            "max_abs": 0.0012235641479492188,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999999953584027,
+            "mine_norm": 279.8044387049783,
+            "ref_norm": 279.80489372527217,
+            "relative_l2": 0.0003046874290944087,
+            "max_abs": 0.0016868114471435547,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999654738915,
+            "mine_norm": 279.8044387049783,
+            "ref_norm": 279.8050328194633,
+            "relative_l2": 0.00026278616627651707,
+            "max_abs": 0.0014233589172363281,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999959,
+            "mine_norm": 49.47400174633023,
+            "ref_norm": 49.47400174633023,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999315069027,
+            "mine_norm": 49.474081639892596,
+            "ref_norm": 49.47400174633023,
+            "relative_l2": 0.00037012027160898263,
+            "max_abs": 0.0007073134183883667,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999120467463,
+            "mine_norm": 49.47343598159984,
+            "ref_norm": 49.47400174633023,
+            "relative_l2": 0.0004195655604618373,
+            "max_abs": 0.0012049153447151184,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999235960524,
+            "mine_norm": 49.47331000777363,
+            "ref_norm": 49.47400174633023,
+            "relative_l2": 0.0003911537324841786,
+            "max_abs": 0.0009407028555870056,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999462431037,
+            "mine_norm": 49.47331000777363,
+            "ref_norm": 49.47343598159984,
+            "relative_l2": 0.000327902414206061,
+            "max_abs": 0.0007443428039550781,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 1.000000000000002,
+            "mine_norm": 3030.117336586458,
+            "ref_norm": 3030.117336586458,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999999557316,
+            "mine_norm": 3030.1173578316548,
+            "ref_norm": 3030.117336586458,
+            "relative_l2": 9.40959268700741e-06,
+            "max_abs": 0.001520693302154541,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999999420909,
+            "mine_norm": 3030.1175818508873,
+            "ref_norm": 3030.117336586458,
+            "relative_l2": 1.0762344489718643e-05,
+            "max_abs": 0.00186920166015625,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999999500007,
+            "mine_norm": 3030.1176044373137,
+            "ref_norm": 3030.117336586458,
+            "relative_l2": 1.0000317492016904e-05,
+            "max_abs": 0.0020090341567993164,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.999999999964293,
+            "mine_norm": 3030.1176044373137,
+            "ref_norm": 3030.1175818508873,
+            "relative_l2": 8.450614812918975e-06,
+            "max_abs": 0.0019330978393554688,
+            "exact": false
+          }
+        }
+      },
+      "24": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999967,
+            "mine_norm": 3084.292446707253,
+            "ref_norm": 3084.292446707253,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999998789378,
+            "mine_norm": 3084.292413752848,
+            "ref_norm": 3084.292446707253,
+            "relative_l2": 1.5560079882637804e-05,
+            "max_abs": 0.002211332321166992,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999998396137,
+            "mine_norm": 3084.2925784974263,
+            "ref_norm": 3084.292446707253,
+            "relative_l2": 1.7909942506236767e-05,
+            "max_abs": 0.002873063087463379,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.999999999850839,
+            "mine_norm": 3084.2926065614474,
+            "ref_norm": 3084.292446707253,
+            "relative_l2": 1.727192478379017e-05,
+            "max_abs": 0.0022253990173339844,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999998792478,
+            "mine_norm": 3084.2926065614474,
+            "ref_norm": 3084.2925784974263,
+            "relative_l2": 1.554018280270763e-05,
+            "max_abs": 0.0017337799072265625,
+            "exact": false
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999956,
+            "mine_norm": 491.57577711944697,
+            "ref_norm": 491.57577711944697,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999616132617,
+            "mine_norm": 491.5783879690429,
+            "ref_norm": 491.57577711944697,
+            "relative_l2": 0.00027713188901196817,
+            "max_abs": 0.005436331033706665,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999480748746,
+            "mine_norm": 491.5767524425788,
+            "ref_norm": 491.57577711944697,
+            "relative_l2": 0.00032226446300520997,
+            "max_abs": 0.0076597630977630615,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999530338893,
+            "mine_norm": 491.5776079752355,
+            "ref_norm": 491.57577711944697,
+            "relative_l2": 0.00030650682427310106,
+            "max_abs": 0.005705833435058594,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999607814368,
+            "mine_norm": 491.5776079752355,
+            "ref_norm": 491.5767524425788,
+            "relative_l2": 0.0002800719232726907,
+            "max_abs": 0.0054509639739990234,
+            "exact": false
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999954,
+            "mine_norm": 39.94902303890765,
+            "ref_norm": 39.94902303890765,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999998749415254,
+            "mine_norm": 39.948462994656076,
+            "ref_norm": 39.94902303890765,
+            "relative_l2": 0.0005003098692176653,
+            "max_abs": 0.0010848045349121094,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999998601691718,
+            "mine_norm": 39.947810241350005,
+            "ref_norm": 39.94902303890765,
+            "relative_l2": 0.0005296931220714502,
+            "max_abs": 0.0012641847133636475,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999998558936757,
+            "mine_norm": 39.94630522098517,
+            "ref_norm": 39.94902303890765,
+            "relative_l2": 0.00054112974835681,
+            "max_abs": 0.000551372766494751,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999998701479226,
+            "mine_norm": 39.94630522098517,
+            "ref_norm": 39.947810241350005,
+            "relative_l2": 0.0005109928973653601,
+            "max_abs": 0.0011976361274719238,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999982,
+            "mine_norm": 3083.014974157846,
+            "ref_norm": 3083.014974157846,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999998590626,
+            "mine_norm": 3083.014951095111,
+            "ref_norm": 3083.014974157846,
+            "relative_l2": 1.6789290633444365e-05,
+            "max_abs": 0.0021386146545410156,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999998174383,
+            "mine_norm": 3083.015088571246,
+            "ref_norm": 3083.014974157846,
+            "relative_l2": 1.9108313284385668e-05,
+            "max_abs": 0.0030536651611328125,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999998267233,
+            "mine_norm": 3083.015102092209,
+            "ref_norm": 3083.014974157846,
+            "relative_l2": 1.8616200239391457e-05,
+            "max_abs": 0.002660512924194336,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999998584648,
+            "mine_norm": 3083.015102092209,
+            "ref_norm": 3083.015088571246,
+            "relative_l2": 1.6825126972517724e-05,
+            "max_abs": 0.0017127394676208496,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999938,
+            "mine_norm": 335.41315128010683,
+            "ref_norm": 335.41315128010683,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999372750727,
+            "mine_norm": 335.413899696693,
+            "ref_norm": 335.41315128010683,
+            "relative_l2": 0.00035419641650858704,
+            "max_abs": 0.002423882484436035,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999179643847,
+            "mine_norm": 335.4125803903124,
+            "ref_norm": 335.41315128010683,
+            "relative_l2": 0.00040506028741498694,
+            "max_abs": 0.002986431121826172,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999243639056,
+            "mine_norm": 335.41288892947034,
+            "ref_norm": 335.41315128010683,
+            "relative_l2": 0.0003889378748066353,
+            "max_abs": 0.0019097626209259033,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999366614735,
+            "mine_norm": 335.41288892947034,
+            "ref_norm": 335.4125803903124,
+            "relative_l2": 0.00035591853665240393,
+            "max_abs": 0.0024434924125671387,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999957,
+            "mine_norm": 68.1426960574003,
+            "ref_norm": 68.1426960574003,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999041329513,
+            "mine_norm": 68.14260239144687,
+            "ref_norm": 68.1426960574003,
+            "relative_l2": 0.00043787636987960765,
+            "max_abs": 0.0009483098983764648,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999998708624273,
+            "mine_norm": 68.14219823577693,
+            "ref_norm": 68.1426960574003,
+            "relative_l2": 0.0005082584196100285,
+            "max_abs": 0.0009984374046325684,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999998770958997,
+            "mine_norm": 68.14177176421074,
+            "ref_norm": 68.1426960574003,
+            "relative_l2": 0.0004959726226533181,
+            "max_abs": 0.0013021528720855713,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999009710452,
+            "mine_norm": 68.14177176421074,
+            "ref_norm": 68.14219823577693,
+            "relative_l2": 0.0004450795775255085,
+            "max_abs": 0.0008696317672729492,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 0.999999999999992,
+            "mine_norm": 3084.150078617394,
+            "ref_norm": 3084.150078617394,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999998422964,
+            "mine_norm": 3084.1500393926276,
+            "ref_norm": 3084.150078617394,
+            "relative_l2": 1.775960514575261e-05,
+            "max_abs": 0.0024449825286865234,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999997922975,
+            "mine_norm": 3084.1501839879074,
+            "ref_norm": 3084.150078617394,
+            "relative_l2": 2.038130534401749e-05,
+            "max_abs": 0.0035467147827148438,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999998036386,
+            "mine_norm": 3084.1501845067155,
+            "ref_norm": 3084.150078617394,
+            "relative_l2": 1.9816959408712772e-05,
+            "max_abs": 0.002849578857421875,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999998398064,
+            "mine_norm": 3084.1501845067155,
+            "ref_norm": 3084.1501839879074,
+            "relative_l2": 1.7899251904234376e-05,
+            "max_abs": 0.0016856193542480469,
+            "exact": false
+          }
+        }
+      },
+      "35": {
+        "input": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999936,
+            "mine_norm": 2998.8024853513834,
+            "ref_norm": 2998.8024853513834,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999952427929,
+            "mine_norm": 2998.8017451302458,
+            "ref_norm": 2998.8024853513834,
+            "relative_l2": 9.754211980491951e-05,
+            "max_abs": 0.013503074645996094,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999935252706,
+            "mine_norm": 2998.8015431599624,
+            "ref_norm": 2998.8024853513834,
+            "relative_l2": 0.00011379607439483698,
+            "max_abs": 0.026746749877929688,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999943285376,
+            "mine_norm": 2998.8029523597706,
+            "ref_norm": 2998.8024853513834,
+            "relative_l2": 0.00010650325384455136,
+            "max_abs": 0.016408920288085938,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999948813528,
+            "mine_norm": 2998.8029523597706,
+            "ref_norm": 2998.8015431599624,
+            "relative_l2": 0.000101180616016605,
+            "max_abs": 0.02330780029296875,
+            "exact": false
+          }
+        },
+        "attn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999944,
+            "mine_norm": 702.5104101437369,
+            "ref_norm": 702.5104101437369,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999056112626,
+            "mine_norm": 702.5138284349175,
+            "ref_norm": 702.5104101437369,
+            "relative_l2": 0.0004345135885403584,
+            "max_abs": 0.009244561195373535,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999998714169784,
+            "mine_norm": 702.5099190907221,
+            "ref_norm": 702.5104101437369,
+            "relative_l2": 0.0005071157082519449,
+            "max_abs": 0.010120391845703125,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999998810041572,
+            "mine_norm": 702.506609259265,
+            "ref_norm": 702.5104101437369,
+            "relative_l2": 0.00048787258565704785,
+            "max_abs": 0.01961517333984375,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999998993181282,
+            "mine_norm": 702.506609259265,
+            "ref_norm": 702.5099190907221,
+            "relative_l2": 0.0004487593811548263,
+            "max_abs": 0.01049041748046875,
+            "exact": false
+          }
+        },
+        "attn_out": {
+          "cpu-flash": {
+            "cosine": 1.000000000000002,
+            "mine_norm": 1034.8939394736126,
+            "ref_norm": 1034.8939394736126,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999897502347,
+            "mine_norm": 1034.8928374417656,
+            "ref_norm": 1034.8939394736126,
+            "relative_l2": 0.0001431804622703955,
+            "max_abs": 0.010705947875976562,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.999999987410655,
+            "mine_norm": 1034.8933272548352,
+            "ref_norm": 1034.8939394736126,
+            "relative_l2": 0.00015867898079892085,
+            "max_abs": 0.02880692481994629,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999875433097,
+            "mine_norm": 1034.8929849012654,
+            "ref_norm": 1034.8939394736126,
+            "relative_l2": 0.00015784235452016032,
+            "max_abs": 0.025606632232666016,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999896645594,
+            "mine_norm": 1034.8929849012654,
+            "ref_norm": 1034.8933272548352,
+            "relative_l2": 0.00014377404082323766,
+            "max_abs": 0.02796626091003418,
+            "exact": false
+          }
+        },
+        "post_attn": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999958,
+            "mine_norm": 2089.467449472342,
+            "ref_norm": 2089.467449472342,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999879397339,
+            "mine_norm": 2089.4654882264713,
+            "ref_norm": 2089.467449472342,
+            "relative_l2": 0.00015531061261499422,
+            "max_abs": 0.017131805419921875,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999839355193,
+            "mine_norm": 2089.464865675579,
+            "ref_norm": 2089.467449472342,
+            "relative_l2": 0.00017924966915641057,
+            "max_abs": 0.035530805587768555,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999854917304,
+            "mine_norm": 2089.4656753252284,
+            "ref_norm": 2089.467449472342,
+            "relative_l2": 0.00017034445223391165,
+            "max_abs": 0.035332679748535156,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999872874978,
+            "mine_norm": 2089.4656753252284,
+            "ref_norm": 2089.464865675579,
+            "relative_l2": 0.0001594526976938531,
+            "max_abs": 0.025758743286132812,
+            "exact": false
+          }
+        },
+        "ffn_norm": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999949,
+            "mine_norm": 726.6062596703192,
+            "ref_norm": 726.6062596703192,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999998986682898,
+            "mine_norm": 726.6058751929702,
+            "ref_norm": 726.6062596703192,
+            "relative_l2": 0.0004501817218650841,
+            "max_abs": 0.016544342041015625,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999998702045867,
+            "mine_norm": 726.6044877727734,
+            "ref_norm": 726.6062596703192,
+            "relative_l2": 0.0005095057711153148,
+            "max_abs": 0.03246307373046875,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999998740301472,
+            "mine_norm": 726.6110248976677,
+            "ref_norm": 726.6062596703192,
+            "relative_l2": 0.0005019804356213637,
+            "max_abs": 0.031940460205078125,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999998938799363,
+            "mine_norm": 726.6110248976677,
+            "ref_norm": 726.6044877727734,
+            "relative_l2": 0.0004607851669961626,
+            "max_abs": 0.033888816833496094,
+            "exact": false
+          }
+        },
+        "mlp_out": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999976,
+            "mine_norm": 572.9060391737681,
+            "ref_norm": 572.9060391737681,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999283079972,
+            "mine_norm": 572.9021507108077,
+            "ref_norm": 572.9060391737681,
+            "relative_l2": 0.0003787203378244396,
+            "max_abs": 0.0282745361328125,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.99999990130711,
+            "mine_norm": 572.9160851632644,
+            "ref_norm": 572.9060391737681,
+            "relative_l2": 0.00044463098930329586,
+            "max_abs": 0.03435230255126953,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999051484804,
+            "mine_norm": 572.9123938145663,
+            "ref_norm": 572.9060391737681,
+            "relative_l2": 0.0004356927465319532,
+            "max_abs": 0.0546417236328125,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.99999992222076,
+            "mine_norm": 572.9123938145663,
+            "ref_norm": 572.9160851632644,
+            "relative_l2": 0.000394460371316189,
+            "max_abs": 0.052989959716796875,
+            "exact": false
+          }
+        },
+        "output": {
+          "cpu-flash": {
+            "cosine": 0.9999999999999991,
+            "mine_norm": 2048.800636714677,
+            "ref_norm": 2048.800636714677,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "exact": true
+          },
+          "cpu-eager": {
+            "cosine": 0.9999999831024192,
+            "mine_norm": 2048.795564663674,
+            "ref_norm": 2048.800636714677,
+            "relative_l2": 0.00018385104150043434,
+            "max_abs": 0.03389739990234375,
+            "exact": false
+          },
+          "blas-flash": {
+            "cosine": 0.9999999768724454,
+            "mine_norm": 2048.7971957124537,
+            "ref_norm": 2048.800636714677,
+            "relative_l2": 0.00021507638438774714,
+            "max_abs": 0.048557281494140625,
+            "exact": false
+          },
+          "blas-eager": {
+            "cosine": 0.9999999795723222,
+            "mine_norm": 2048.799169783337,
+            "ref_norm": 2048.800636714677,
+            "relative_l2": 0.00020212826480073281,
+            "max_abs": 0.0446624755859375,
+            "exact": false
+          },
+          "blas_eager_vs_flash": {
+            "cosine": 0.9999999819682751,
+            "mine_norm": 2048.799169783337,
+            "ref_norm": 2048.7971957124537,
+            "relative_l2": 0.00018990631775955204,
+            "max_abs": 0.035709381103515625,
+            "exact": false
+          }
+        }
+      }
+    }
+  },
+  "patched_sha256": "5f90b512eafe017ed4e995f110109e85909299b9dc46981ed01b8da3cb1400ff",
+  "canonical": {
+    "q4_k": {
+      "cpu-flash": {
+        "prefill_audio_features": {
+          "seconds": 5.733248553999999,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9990188670170734,
+            "mine_norm": 6.152528058656769,
+            "ref_norm": 6.171803832209731,
+            "relative_l2": 0.04433837832088689,
+            "max_abs": 0.009288221597671509,
+            "exact": false
+          }
+        },
+        "prefill_text_embeds": {
+          "seconds": 5.667898840000021,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9970077582696135,
+            "mine_norm": 2.837039588007749,
+            "ref_norm": 2.8365383933301365,
+            "relative_l2": 0.07736647913341997,
+            "max_abs": 0.0072362422943115234,
+            "exact": false
+          }
+        },
+        "prefill_inputs_embeds": {
+          "seconds": 5.674847027999988,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9986664006197074,
+            "mine_norm": 6.775130636119278,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.05164196418027642,
+            "max_abs": 0.009288221597671509,
+            "exact": false
+          }
+        },
+        "prefill_last_hidden": {
+          "seconds": 5.662823878999973,
+          "elements": 4096,
+          "python_reference": {
+            "cosine": 0.9629347332333309,
+            "mine_norm": 247.59081435870507,
+            "ref_norm": 245.29708260654803,
+            "relative_l2": 0.2736990203414217,
+            "max_abs": 8.442626953125,
+            "exact": false
+          }
+        },
+        "prefill_text_logits_step0": {
+          "seconds": 5.61633267000002,
+          "elements": 151680,
+          "python_reference": {
+            "cosine": 0.9811692967346963,
+            "mine_norm": 1154.230373263767,
+            "ref_norm": 1048.5014301249141,
+            "relative_l2": 0.22721673635417908,
+            "max_abs": 2.698958158493042,
+            "exact": false
+          }
+        },
+        "lm_layer_0_output": {
+          "seconds": 0.7618408320000185,
+          "elements": 290816
+        },
+        "lm_layer_1_output": {
+          "seconds": 0.7829203860000007,
+          "elements": 290816
+        },
+        "lm_layer_4_output": {
+          "seconds": 1.2329362240000137,
+          "elements": 290816
+        },
+        "lm_layer_8_output": {
+          "seconds": 1.7734574169999746,
+          "elements": 290816
+        },
+        "lm_layer_16_output": {
+          "seconds": 2.9131022850000363,
+          "elements": 290816
+        },
+        "lm_layer_24_output": {
+          "seconds": 4.044971996000015,
+          "elements": 290816
+        },
+        "lm_layer_35_output": {
+          "seconds": 5.724301423999975,
+          "elements": 290816
+        }
+      },
+      "cpu-eager": {
+        "prefill_audio_features": {
+          "seconds": 5.945244958999979,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9990187856897825,
+            "mine_norm": 6.152660846462485,
+            "ref_norm": 6.171803832209731,
+            "relative_l2": 0.044339172646664954,
+            "max_abs": 0.00882422924041748,
+            "exact": false
+          }
+        },
+        "prefill_text_embeds": {
+          "seconds": 6.044463581000002,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9970077582696135,
+            "mine_norm": 2.837039588007749,
+            "ref_norm": 2.8365383933301365,
+            "relative_l2": 0.07736647913341997,
+            "max_abs": 0.0072362422943115234,
+            "exact": false
+          }
+        },
+        "prefill_inputs_embeds": {
+          "seconds": 6.064944701000002,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.998666350031599,
+            "mine_norm": 6.775251221579585,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.05164252723557281,
+            "max_abs": 0.00882422924041748,
+            "exact": false
+          }
+        },
+        "prefill_last_hidden": {
+          "seconds": 5.98234949700003,
+          "elements": 4096,
+          "python_reference": {
+            "cosine": 0.9630705480094307,
+            "mine_norm": 247.69011695548178,
+            "ref_norm": 245.29708260654803,
+            "relative_l2": 0.2732665713448736,
+            "max_abs": 6.8598480224609375,
+            "exact": false
+          }
+        },
+        "prefill_text_logits_step0": {
+          "seconds": 5.7913923059999775,
+          "elements": 151680,
+          "python_reference": {
+            "cosine": 0.9814208468438491,
+            "mine_norm": 1116.418575450207,
+            "ref_norm": 1048.5014301249141,
+            "relative_l2": 0.2091915633872823,
+            "max_abs": 2.7997002601623535,
+            "exact": false
+          }
+        },
+        "lm_layer_0_output": {
+          "seconds": 0.8260419509999792,
+          "elements": 290816
+        },
+        "lm_layer_1_output": {
+          "seconds": 0.8420293049999827,
+          "elements": 290816
+        },
+        "lm_layer_4_output": {
+          "seconds": 1.2765091960000063,
+          "elements": 290816
+        },
+        "lm_layer_8_output": {
+          "seconds": 1.8533296119999818,
+          "elements": 290816
+        },
+        "lm_layer_16_output": {
+          "seconds": 3.0317754750000177,
+          "elements": 290816
+        },
+        "lm_layer_24_output": {
+          "seconds": 4.183017770000049,
+          "elements": 290816
+        },
+        "lm_layer_35_output": {
+          "seconds": 5.82509507900005,
+          "elements": 290816
+        }
+      },
+      "blas-flash": {
+        "prefill_audio_features": {
+          "seconds": 14.316368205999993,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9990581201797908,
+            "mine_norm": 6.152309874194268,
+            "ref_norm": 6.171803832209731,
+            "relative_l2": 0.043448660906267124,
+            "max_abs": 0.008733987808227539,
+            "exact": false
+          }
+        },
+        "prefill_text_embeds": {
+          "seconds": 14.31855653499997,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9970077582696135,
+            "mine_norm": 2.837039588007749,
+            "ref_norm": 2.8365383933301365,
+            "relative_l2": 0.07736647913341997,
+            "max_abs": 0.0072362422943115234,
+            "exact": false
+          }
+        },
+        "prefill_inputs_embeds": {
+          "seconds": 14.196760486000016,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9986987621268987,
+            "mine_norm": 6.7749325023967195,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.051013800289971024,
+            "max_abs": 0.008733987808227539,
+            "exact": false
+          }
+        },
+        "prefill_last_hidden": {
+          "seconds": 14.025448820000008,
+          "elements": 4096,
+          "python_reference": {
+            "cosine": 0.9646959724119619,
+            "mine_norm": 247.2793787654486,
+            "ref_norm": 245.29708260654803,
+            "relative_l2": 0.2669156407394895,
+            "max_abs": 7.742546081542969,
+            "exact": false
+          }
+        },
+        "prefill_text_logits_step0": {
+          "seconds": 12.731338391999998,
+          "elements": 151680,
+          "python_reference": {
+            "cosine": 0.982168029521091,
+            "mine_norm": 1126.1621819424975,
+            "ref_norm": 1048.5014301249141,
+            "relative_l2": 0.20926449136279596,
+            "max_abs": 2.7529354095458984,
+            "exact": false
+          }
+        },
+        "lm_layer_0_output": {
+          "seconds": 1.4990767379999852,
+          "elements": 290816
+        },
+        "lm_layer_1_output": {
+          "seconds": 1.707457594999994,
+          "elements": 290816
+        },
+        "lm_layer_4_output": {
+          "seconds": 2.811209651000013,
+          "elements": 290816
+        },
+        "lm_layer_8_output": {
+          "seconds": 4.33762834800001,
+          "elements": 290816
+        },
+        "lm_layer_16_output": {
+          "seconds": 7.020583276999957,
+          "elements": 290816
+        },
+        "lm_layer_24_output": {
+          "seconds": 9.830322281999997,
+          "elements": 290816
+        },
+        "lm_layer_35_output": {
+          "seconds": 14.394219292999992,
+          "elements": 290816
+        }
+      },
+      "blas-eager": {
+        "prefill_audio_features": {
+          "seconds": 15.329686239000011,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9990579862802125,
+            "mine_norm": 6.152333925584359,
+            "ref_norm": 6.171803832209731,
+            "relative_l2": 0.043451534235675285,
+            "max_abs": 0.008734017610549927,
+            "exact": false
+          }
+        },
+        "prefill_text_embeds": {
+          "seconds": 15.266257987000017,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9970077582696135,
+            "mine_norm": 2.837039588007749,
+            "ref_norm": 2.8365383933301365,
+            "relative_l2": 0.07736647913341997,
+            "max_abs": 0.0072362422943115234,
+            "exact": false
+          }
+        },
+        "prefill_inputs_embeds": {
+          "seconds": 15.585814603000017,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9986986546820767,
+            "mine_norm": 6.774954343449072,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.051015820766044245,
+            "max_abs": 0.008734017610549927,
+            "exact": false
+          }
+        },
+        "prefill_last_hidden": {
+          "seconds": 15.592114187999982,
+          "elements": 4096,
+          "python_reference": {
+            "cosine": 0.964680300085608,
+            "mine_norm": 247.27650032673864,
+            "ref_norm": 245.29708260654803,
+            "relative_l2": 0.2669729177060408,
+            "max_abs": 7.740264892578125,
+            "exact": false
+          }
+        },
+        "prefill_text_logits_step0": {
+          "seconds": 15.788642937999953,
+          "elements": 151680,
+          "python_reference": {
+            "cosine": 0.9821523684478525,
+            "mine_norm": 1127.78101234342,
+            "ref_norm": 1048.5014301249141,
+            "relative_l2": 0.210027331442447,
+            "max_abs": 2.779287338256836,
+            "exact": false
+          }
+        },
+        "lm_layer_0_output": {
+          "seconds": 1.6841456989999415,
+          "elements": 290816
+        },
+        "lm_layer_1_output": {
+          "seconds": 1.9979244520000066,
+          "elements": 290816
+        },
+        "lm_layer_4_output": {
+          "seconds": 3.0709020929999724,
+          "elements": 290816
+        },
+        "lm_layer_8_output": {
+          "seconds": 4.783551093000028,
+          "elements": 290816
+        },
+        "lm_layer_16_output": {
+          "seconds": 8.129361528999993,
+          "elements": 290816
+        },
+        "lm_layer_24_output": {
+          "seconds": 11.180874217999985,
+          "elements": 290816
+        },
+        "lm_layer_35_output": {
+          "seconds": 15.693230567,
+          "elements": 290816
+        }
+      }
+    },
+    "f16": {
+      "cpu-flash": {
+        "prefill_audio_features": {
+          "seconds": 23.806588094000062,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9999926579075165,
+            "mine_norm": 6.175928426808444,
+            "ref_norm": 6.171803832209731,
+            "relative_l2": 0.0038910947686035817,
+            "max_abs": 0.002899169921875,
+            "exact": false
+          }
+        },
+        "prefill_text_embeds": {
+          "seconds": 19.820892451000077,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.999999069929051,
+            "mine_norm": 2.8365437460049394,
+            "ref_norm": 2.8365383933301365,
+            "relative_l2": 0.0013638727834152265,
+            "max_abs": 0.0001220703125,
+            "exact": false
+          }
+        },
+        "prefill_inputs_embeds": {
+          "seconds": 19.499804841000014,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9999937435635302,
+            "mine_norm": 6.796180718319691,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.0035811463140874265,
+            "max_abs": 0.002899169921875,
+            "exact": false
+          }
+        },
+        "prefill_last_hidden": {
+          "seconds": 19.455150144000072,
+          "elements": 4096,
+          "python_reference": {
+            "cosine": 0.9995717651942053,
+            "mine_norm": 245.53194797201985,
+            "ref_norm": 245.29708260654803,
+            "relative_l2": 0.029295160232106553,
+            "max_abs": 0.5318889617919922,
+            "exact": false
+          }
+        },
+        "prefill_text_logits_step0": {
+          "seconds": 19.40739269200003,
+          "elements": 151680,
+          "python_reference": {
+            "cosine": 0.9997528406440788,
+            "mine_norm": 1043.237393383242,
+            "ref_norm": 1048.5014301249141,
+            "relative_l2": 0.022738573537439417,
+            "max_abs": 0.595977783203125,
+            "exact": false
+          }
+        },
+        "lm_layer_0_output": {
+          "seconds": 1.7394700500000226,
+          "elements": 290816
+        },
+        "lm_layer_1_output": {
+          "seconds": 2.1899973170000067,
+          "elements": 290816
+        },
+        "lm_layer_4_output": {
+          "seconds": 3.7101037340000858,
+          "elements": 290816
+        },
+        "lm_layer_8_output": {
+          "seconds": 5.812112017000004,
+          "elements": 290816
+        },
+        "lm_layer_16_output": {
+          "seconds": 9.785102512000094,
+          "elements": 290816
+        },
+        "lm_layer_24_output": {
+          "seconds": 13.842904778999923,
+          "elements": 290816
+        },
+        "lm_layer_35_output": {
+          "seconds": 19.358141443000022,
+          "elements": 290816
+        }
+      },
+      "cpu-eager": {
+        "prefill_audio_features": {
+          "seconds": 19.93857610500004,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9999926579035956,
+            "mine_norm": 6.175928460374008,
+            "ref_norm": 6.171803832209731,
+            "relative_l2": 0.0038910967211460696,
+            "max_abs": 0.0028992295265197754,
+            "exact": false
+          }
+        },
+        "prefill_text_embeds": {
+          "seconds": 20.472418694999988,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.999999069929051,
+            "mine_norm": 2.8365437460049394,
+            "ref_norm": 2.8365383933301365,
+            "relative_l2": 0.0013638727834152265,
+            "max_abs": 0.0001220703125,
+            "exact": false
+          }
+        },
+        "prefill_inputs_embeds": {
+          "seconds": 19.542378269999972,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9999937435597669,
+            "mine_norm": 6.7961807488219,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.0035811480656435394,
+            "max_abs": 0.0028992295265197754,
+            "exact": false
+          }
+        },
+        "prefill_last_hidden": {
+          "seconds": 19.536767868000084,
+          "elements": 4096,
+          "python_reference": {
+            "cosine": 0.9995718600400616,
+            "mine_norm": 245.52735318437047,
+            "ref_norm": 245.29708260654803,
+            "relative_l2": 0.029291039265847744,
+            "max_abs": 0.5310983657836914,
+            "exact": false
+          }
+        },
+        "prefill_text_logits_step0": {
+          "seconds": 19.453795866000064,
+          "elements": 151680,
+          "python_reference": {
+            "cosine": 0.9997519989429983,
+            "mine_norm": 1043.1329043973496,
+            "ref_norm": 1048.5014301249141,
+            "relative_l2": 0.02279646523145644,
+            "max_abs": 0.5960693359375,
+            "exact": false
+          }
+        },
+        "lm_layer_0_output": {
+          "seconds": 1.805031533000033,
+          "elements": 290816
+        },
+        "lm_layer_1_output": {
+          "seconds": 2.421471593999968,
+          "elements": 290816
+        },
+        "lm_layer_4_output": {
+          "seconds": 3.7636291879999817,
+          "elements": 290816
+        },
+        "lm_layer_8_output": {
+          "seconds": 5.791669000999946,
+          "elements": 290816
+        },
+        "lm_layer_16_output": {
+          "seconds": 9.886447895999936,
+          "elements": 290816
+        },
+        "lm_layer_24_output": {
+          "seconds": 13.930435551000073,
+          "elements": 290816
+        },
+        "lm_layer_35_output": {
+          "seconds": 19.458882544999938,
+          "elements": 290816
+        }
+      },
+      "blas-flash": {
+        "prefill_audio_features": {
+          "seconds": 20.940582895000034,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9999926578970465,
+            "mine_norm": 6.175928492902428,
+            "ref_norm": 6.171803832209731,
+            "relative_l2": 0.0038910993205853494,
+            "max_abs": 0.0028990507125854492,
+            "exact": false
+          }
+        },
+        "prefill_text_embeds": {
+          "seconds": 21.108296152000094,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.999999069929051,
+            "mine_norm": 2.8365437460049394,
+            "ref_norm": 2.8365383933301365,
+            "relative_l2": 0.0013638727834152265,
+            "max_abs": 0.0001220703125,
+            "exact": false
+          }
+        },
+        "prefill_inputs_embeds": {
+          "seconds": 20.459888296999907,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9999937435538494,
+            "mine_norm": 6.796180778381619,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.0035811503975076877,
+            "max_abs": 0.0028990507125854492,
+            "exact": false
+          }
+        },
+        "prefill_last_hidden": {
+          "seconds": 20.979716637000138,
+          "elements": 4096,
+          "python_reference": {
+            "cosine": 0.9995725573749976,
+            "mine_norm": 245.5296411865395,
+            "ref_norm": 245.29708260654803,
+            "relative_l2": 0.029267636994885566,
+            "max_abs": 0.5286369323730469,
+            "exact": false
+          }
+        },
+        "prefill_text_logits_step0": {
+          "seconds": 19.99957139900016,
+          "elements": 151680,
+          "python_reference": {
+            "cosine": 0.9997533425122754,
+            "mine_norm": 1043.155323366308,
+            "ref_norm": 1048.5014301249141,
+            "relative_l2": 0.02273318045175621,
+            "max_abs": 0.5949478149414062,
+            "exact": false
+          }
+        },
+        "lm_layer_0_output": {
+          "seconds": 1.9650619129999995,
+          "elements": 290816
+        },
+        "lm_layer_1_output": {
+          "seconds": 2.579872875000092,
+          "elements": 290816
+        },
+        "lm_layer_4_output": {
+          "seconds": 4.2122110150000935,
+          "elements": 290816
+        },
+        "lm_layer_8_output": {
+          "seconds": 6.0937020020001,
+          "elements": 290816
+        },
+        "lm_layer_16_output": {
+          "seconds": 10.646657758999936,
+          "elements": 290816
+        },
+        "lm_layer_24_output": {
+          "seconds": 14.955482301999837,
+          "elements": 290816
+        },
+        "lm_layer_35_output": {
+          "seconds": 21.413340641000104,
+          "elements": 290816
+        }
+      },
+      "blas-eager": {
+        "prefill_audio_features": {
+          "seconds": 22.67025574199988,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9999926579003221,
+            "mine_norm": 6.175928520587302,
+            "ref_norm": 6.171803832209731,
+            "relative_l2": 0.0038910992571672097,
+            "max_abs": 0.002899080514907837,
+            "exact": false
+          }
+        },
+        "prefill_text_embeds": {
+          "seconds": 22.460056203000022,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.999999069929051,
+            "mine_norm": 2.8365437460049394,
+            "ref_norm": 2.8365383933301365,
+            "relative_l2": 0.0013638727834152265,
+            "max_abs": 0.0001220703125,
+            "exact": false
+          }
+        },
+        "prefill_inputs_embeds": {
+          "seconds": 22.512691370999846,
+          "elements": 290816,
+          "python_reference": {
+            "cosine": 0.9999937435561204,
+            "mine_norm": 6.796180803539838,
+            "ref_norm": 6.792430537010639,
+            "relative_l2": 0.003581150340617539,
+            "max_abs": 0.002899080514907837,
+            "exact": false
+          }
+        },
+        "prefill_last_hidden": {
+          "seconds": 22.681771387000026,
+          "elements": 4096,
+          "python_reference": {
+            "cosine": 0.9995718538504735,
+            "mine_norm": 245.53104488058273,
+            "ref_norm": 245.29708260654803,
+            "relative_l2": 0.029291956944082764,
+            "max_abs": 0.5285816192626953,
+            "exact": false
+          }
+        },
+        "prefill_text_logits_step0": {
+          "seconds": 22.595687176000183,
+          "elements": 151680,
+          "python_reference": {
+            "cosine": 0.999752715339781,
+            "mine_norm": 1043.2184805760196,
+            "ref_norm": 1048.5014301249141,
+            "relative_l2": 0.022747848282027975,
+            "max_abs": 0.5967941284179688,
+            "exact": false
+          }
+        },
+        "lm_layer_0_output": {
+          "seconds": 2.2658284859999185,
+          "elements": 290816
+        },
+        "lm_layer_1_output": {
+          "seconds": 2.871187781999879,
+          "elements": 290816
+        },
+        "lm_layer_4_output": {
+          "seconds": 4.30670742999996,
+          "elements": 290816
+        },
+        "lm_layer_8_output": {
+          "seconds": 6.947557042999961,
+          "elements": 290816
+        },
+        "lm_layer_16_output": {
+          "seconds": 11.249173129999917,
+          "elements": 290816
+        },
+        "lm_layer_24_output": {
+          "seconds": 16.031785767999963,
+          "elements": 290816
+        },
+        "lm_layer_35_output": {
+          "seconds": 22.095616525999958,
+          "elements": 290816
+        }
+      }
+    }
+  },
+  "scale_negative_control": {
+    "cosine": 1.0,
+    "mine_norm": 7.483314773547883,
+    "ref_norm": 3.7416573867739413,
+    "relative_l2": 1.0,
+    "max_abs": 3.0,
+    "exact": false
+  },
+  "acceptance_scope": "Capture invariants only; not model or PR acceptance",
+  "public_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "file": "mimo-pr492/lm-first-divergence-20261009/proof.zip",
+    "revision": "0cc90e960e751e6320a5c4df92c762c30002f472",
+    "sha256": "d8bde5583c89379502e9fa5f288d239221fb9feb3e5482d3cbbde080380d3dae",
+    "bytes": 445205014
+  }
+}
