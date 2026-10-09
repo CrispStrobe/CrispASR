@@ -1,0 +1,26 @@
+{
+  "status": "hosted probe queued; not accepted",
+  "workflow": "release.yml",
+  "run": 37968611724,
+  "source": "65de05e08f2cd582ba36694c4135bc2aa96d2259",
+  "only": "build-python-linux",
+  "publication_requested": false,
+  "checkout_sites_pinned": 33,
+  "before": {
+    "run": 37958100129,
+    "workflow_event_head_sha": "23b401b3d20a2ef794a88ade6a261369e899359d",
+    "observed_cpu_vulkan_shared_sha": "3b814f780277286ece56e8cdee6bdc435e07ae4d",
+    "observed_python_sha": "be13df2d3b0796b3b0bc23c5df714382a2acca28",
+    "observed_source_drift_documentation_only": true
+  },
+  "lint": {
+    "new_diagnostics": 0,
+    "unchanged_existing_diagnostics": 24,
+    "syntax_and_expressions_pass": true,
+    "syntax_check_shellcheck_disabled": true,
+    "hosted_intel_label_supplied_locally": true
+  },
+  "predeclared_control": "Advance this branch with this documentation-only receipt after dispatch. Hosted checkout must still select the dispatch source SHA, not the later branch commit.",
+  "hosted_checkout_verified": false,
+  "native_model_inference_tested": false
+}
