@@ -7,6 +7,34 @@ technical deep-dives are in `LEARNINGS.md`.
 ---
 
 
+## DONE 2026-10-09 — opt-in MiMo cached GPU decode and credited mel projection
+
+[PR #519](https://github.com/CrispStrobe/CrispASR/pull/519) merged as
+`aa061178da754af443c0134aa0983e466571e844`. Actual T4 ABBA acceptance preserves
+all 64 EN/ZH speech calls, eight CLI/session pairs and 114 full-vocabulary
+comparisons byte-exact (cosine 1, relative L2 zero, identical norms/argmax).
+Cached text-only step decoding improves warm medians 2.4–2.7%, sampled GPU
+peak +18 MiB; compute remains dominant. `CRISPASR_MIMO_ASR_GPU_STEP_GRAPH=1`
+is opt-in, default OFF, with existing prefill retained and cache invalidated
+before each transcription. No CANN/quant or P100 acceptance claim.
+
+[PR #520](https://github.com/CrispStrobe/CrispASR/pull/520) merged as
+`02e4045387dc48482aa5220b7f6e36c0274e83f9`, retaining KokerZhou's independent
+mel commit from #492. All 144 hosted ABBA cases are bit-exact; unchanged Qwen3
+stage gates and CLI transcripts pass. Four-thread scalar projection gains
+3.30–3.58× at 64 frames, 3.05–3.50× at 3000; the local contended VPS regresses
+at 64. `CRISPASR_MEL_PROJECTION_PARALLEL=1` remains opt-in/default OFF,
+serial below 64/no OpenMP, BLAS unaffected. No end-to-end ASR gain claim.
+
+All applicable PR CI checks pass across native platforms, lint and bindings;
+mel's six selected model regressions pass. Integrated native hashes exactly
+match accepted sources. CI/merge evidence:
+`docs/mimo-cached-step-integration-2026-10-09.json`,
+`docs/mel-projection-integration-2026-10-09.json`; numerical raw proof remains
+in `docs/mimo-gpu-cached-step-2026-10-08.json` and
+`docs/mel-projection-2026-10-08.json`. These changes are after v0.8.42;
+that tag/release is unchanged. Combined-main CI is a separate pending check.
+
 ## DONE 2026-10-08 — manifest-specific regression coverage
 
 Integrated `2592e2401` compares complete ASR/TTS manifest entries at the Git

@@ -22,25 +22,12 @@ GH CPU and the one-account Kaggle real-GPU protocol apply. Every terminal GPU
 run is archived before reuse, including rejected speech results; successful
 actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
 
-- **MiMo cached GPU decode — accepted T4 experiment, integration pending.**
-  Draft [PR #519](https://github.com/CrispStrobe/CrispASR/pull/519), head
-  `04b2601e2`, isolates the validated source from VoxCPM2. All 64 EN/ZH calls,
-  eight CLI/session pairs and 114 full-vocabulary comparisons are byte-exact
-  (cosine 1, relative L2 zero, identical norms/argmax). Warm medians improve
-  2.4–2.7%, sampled GPU peak +18 MiB. Default remains OFF. Await refreshed
-  native CI before merging. Phase profile identifies compute (~96–101 ms)
-  as dominant over graph build/allocation (~2 ms/token). Immutable proof:
-  `docs/mimo-gpu-cached-step-2026-10-08.json` and
-  `docs/mimo-graph-profile-2026-10-08.json`.
-- **Mel projection — accepted opt-in experiment, integration pending.**
-  Draft [PR #520](https://github.com/CrispStrobe/CrispASR/pull/520), head
-  `2a12970c0`, preserves KokerZhou's independent author commit. Hosted GH
-  `37852305513` passes all 144 bitwise ABBA cases plus unchanged Qwen3 stage
-  gates/exact CLI speech. Four-thread component gains 3.30–3.58× at 64 frames,
-  3.05–3.50× at 3000; the local contended VPS regresses at 64. Default OFF,
-  serial fallback below 64/no OpenMP, BLAS unaffected; no end-to-end speed
-  claim. Await refreshed native/regression CI. Public proof:
-  `docs/mel-projection-2026-10-08.json`.
+- **MiMo/mel opt-ins integrated.** PR #519 merged as `aa061178d`; PR #520
+  merged as `02e404538`, preserving the mel author's original commit. All
+  applicable PR native/lint/binding and selected regression checks passed.
+  Integrated native file hashes match accepted T4/CPU proof exactly. Both
+  defaults remain OFF; measured gains and hardware limits are in HISTORY.
+  Final combined-main CI remains a separate checkpoint.
 - **OmniVoice #518 — DSP exact, cloned speech rejected.** Draft
   [PR #521](https://github.com/CrispStrobe/CrispASR/pull/521) ports pinned
   upstream audio/text utilities with config opt-outs and processed-PCM cache
@@ -50,7 +37,10 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   marked speech all WER zero. Session raw/marked and CLI clones all substitute
   fox/dog -> fix/dig, WER 2/9=.2222, failing the unchanged <=.2 gate. Issue
   remains open; no native integration. Diagnostic worker `1b0ea317f`, GH
-  `37891923274` queued: same seed 42/32 steps, isolate punctuation, reference
+  `37891923274` COMPLETE: legacy and punctuation-only clones also fail at
+  WER 2/9; reference/output cleanup fail at the same WER, with output-only
+  codes identical. The rejected baseline error predates this DSP port.
+  Next ASR-front-door diagnostic retains same seed 42/32 steps, isolate punctuation, reference
   silence and output cleanup; identical-code assertion for output-only toggle.
   No lucky-seed selection. Public proof:
   `docs/omnivoice-clone-failure-2026-10-09.json` and
@@ -76,9 +66,12 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   batch/split Vulkan/CUDA paths, two models/texts/two byte-exact repeats.
   Six/sixteen exact ASR cases pass; every short case repeats final syllables.
   Disabling CFM fusion alone does not fix it. Native arithmetic/defaults stay
-  unchanged. GH original-controls `37892473946` queued at worker `08be8c020`:
+  unchanged. GH original-controls `37892473946` COMPLETE at worker `08be8c020`:
   pinned official Python BF16 full generation and native F16/Q8 CPU controls,
   same seed 2/ten steps/texts/repeats, full PCM/latent and ASR evidence.
+  Official Python BF16 and native F16/Q8 short output all repeat sent in the
+  Nemotron transcript; all three long controls pass. This does not establish
+  whether the audio stutters or the recognizer/front door causes the repeats.
   Public proof/cache: `docs/voxcpm2-path-v6-diagnostic-2026-10-09.json`;
   earlier failed receipts remain in docs. Public model card now qualifies
   historical timings and discloses failed current GPU speech; no weights
@@ -93,7 +86,7 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   oracle claim. Raw proof: `docs/mimo-lm-first-divergence-2026-10-09.json`.
 
 The unchanged secret scanner passes after account-placeholder repair
-`731593dda`; refreshed #519/#520 checks are progressing without failures.
+`731593dda`; #519/#520 checks passed and both PRs are merged.
 PR #492's CANN RVQ/F16 embeddings and ggml NZ require actual Ascend evidence;
 CUDA is not a substitute. Native/worker hashes on isolated branches match
 accepted proof. v0.8.42 excludes these new changes: its release publication
@@ -102,6 +95,17 @@ is COMPLETE SUCCESS with 53 assets; full proof is in
 verified inactive files, original source paths remain symlinks; local receipts
 are under the task proof root. External reporter hardware retests and #456
 remain pending/deferred; do not archive them as resolved.
+
+Next diagnostic in the claimed profile worktree: cross-recognize immutable
+OmniVoice/VoxCPM2 PCM with Nemotron, Parakeet and Qwen3, holding speech fixed,
+comparing the Python binding's unfiltered linear interpolation to native
+polyphase audio-load and scipy polyphase. Python still uses np.interp at both
+Session/Whisper ndarray front doors, although the native loader was repaired
+in August (LEARNINGS L342). Record every transcript and sampler hash; this is
+not permission to switch recognizers or relax existing acceptance gates.
+If the resampler explains a failure, fix both Python ndarray paths with the
+shared native resampler and meaningful alias-rejection/binding speech checks.
+
 
 ## VALIDATED 2026-10-08 — MiMo full CUDA speech acceptance and precision profile
 
