@@ -66,6 +66,42 @@
       "startup_and_dependency_checks_passed": true,
       "source_git_sha": "3b814f780277286ece56e8cdee6bdc435e07ae4d",
       "source_evidence": "Checkout git log -1 --format=%H in job 113913673245"
+    },
+    "wasm": {
+      "archive": "crispasr-wasm.tar.gz",
+      "bytes": 4181944,
+      "sha256": "717cdf913a1eb8af5fbbcb55ddf366098ab8fa4e0e8575129d7daf06724fcf95",
+      "source_git_sha": "9431cef65f974fdc28757cd5626a6f2731990629",
+      "source_evidence": "Checkout git log -1 --format=%H in release job 113913672712",
+      "node_version": "v20.20.2",
+      "files": {
+        "README.txt": 346,
+        "libwhisper.js": 109706,
+        "libwhisper.wasm": 11470985
+      },
+      "native_module_checks": {
+        "runtime": "Node",
+        "module_initialized": true,
+        "verified_exports": [
+          "sessionInputSampleRate",
+          "sessionOutputSampleRate",
+          "sessionInputChannels",
+          "sessionOutputChannels",
+          "ttsOpenExplicit",
+          "ttsSetVoice",
+          "ttsSynthesize",
+          "ttsClose",
+          "FS_createDataFile"
+        ],
+        "unopened_session_getters_zero": true,
+        "real_tts_inference_tested": false,
+        "browser_threading_tested": false
+      },
+      "existing_piano_tests_returncode": 0,
+      "existing_piano_tests_output": "WASM piano bindings: 3 assertions passed\n",
+      "packaged_readme_fixed_rate_incorrect": true,
+      "candidate_guidance": "Module.sessionOutputSampleRate() after opening the model (backend dependent).",
+      "candidate_readme_not_rebuilt_yet": true
     }
   },
   "full_matrix_complete": false,

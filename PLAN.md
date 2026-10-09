@@ -53,6 +53,12 @@ Replace it with the actual `sessionOutputSampleRate()` getter guidance;
 verify module initialization, exported TTS/getter/file-loading API and existing
 model-free WASM assertions against the staged release artifact. The Kokoro-only
 demo correctly uses 24 kHz and does not need this generic-package repair.
+Actual staged WASM archive passes module initialization, all nine required
+TTS/getter/file-loading exports, four unopened-session getter checks and the
+three existing piano-binding assertions under Node v20.20.2. Observed artifact
+source is `9431cef65` (from its checkout log). This is model-free API validation,
+not browser threading or synthesis acceptance. The README correction is in
+PR #527; the old archive is unchanged. Receipt: `docs/release-package-dry-run-2026-10-09.json`.
 
 ## Release preparation checkpoint 2026-10-09
 
