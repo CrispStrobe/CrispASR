@@ -11,6 +11,15 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-09 — Packaged Python helper discovery
+
+Worktree: `/mnt/storage/crispasr/salvage-20261008/python-package-helpers`.
+Release dry-run Linux Python artifact loads its bundled native library, but
+`CrispASR()` without an explicit library path skips the adjacent helpers library.
+Fix platform-aware adjacent helper discovery, preserve explicit overrides and
+repo build fallback, and validate the actual staged package plus model-free
+constructor-path and native resampling regressions before merging.
+
 ## Release preparation checkpoint 2026-10-09
 
 Comprehensive `RELEASE_NOTES_v0.8.43.md` is committed before any version bump.
