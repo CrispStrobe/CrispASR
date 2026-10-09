@@ -829,6 +829,12 @@ static std::vector<float> nemotron_compute_mel_impl(nemotron_context* ctx, const
 
     auto mel = core_mel::compute(samples, n_samples, window_raw.data(), win, mel_fb.data(), n_freqs, nemotron_fft_r2c,
                                  p, T_out);
+    // NeMo FilterbankFeatures.get_seq_len uses floor(n_samples / hop) with
+    // centered STFT, then masks frames at/after that length to pad_value=0.
+    // Keep the STFT shape; its extra terminal frame is not a valid feature.
+    const int valid_frames = n_samples / hop;
+    if (valid_frames < T_out)
+        std::fill(mel.begin() + (size_t)valid_frames * n_mels, mel.end(), 0.0f);
     return mel;
 }
 
