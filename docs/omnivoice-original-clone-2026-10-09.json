@@ -1,0 +1,108 @@
+{
+  "run": 37957953495,
+  "receipt": {
+    "diagnostic_complete": true,
+    "native_accepted": false,
+    "defaults_changed": false,
+    "source_commit": "381f3a3aeb5fc9f5e87d8b2408fcdf69875c0f47",
+    "upstream_revision": "08be0b4ccbac3e13e374e86fbfead4b4cac343e2",
+    "model_revision": "c5fdb5ccb189668d56333f77ba2629f4cd7535f4",
+    "fixture_revision": "d0a7d7a8be318a5841dfdbe6ad37d3acf75523e3",
+    "asr_revision": "ea30d66debe3740a08b573244286791d423d6b3e",
+    "dtype": "torch.float32",
+    "device": "cpu",
+    "seed": 42,
+    "steps": 32,
+    "text": "The quick brown fox jumps over the lazy dog.",
+    "arms": {
+      "unprocessed": {
+        "preprocess_prompt": false,
+        "postprocess_output": false,
+        "ref_text": "The quick brown fox jumps over the lazy dog",
+        "capture_pcm_exact": true,
+        "samples": 68160,
+        "pcm_sha256": "adf95a170167bd135a7d2e9c7cdab108bf126f7e931776006c1aa5a3e4471630",
+        "codes_shape": [
+          8,
+          66
+        ],
+        "codes_sha256": "0d6aa43af5e0668e03267bc8e2ce8d63f8b9f71bb9eb1e1386faca211117ff92",
+        "transcript": "The quick brown fix jumps over the lazy dig. ",
+        "wer": 0.2222222222222222,
+        "meets_existing_gate": false,
+        "asr_pcm_sha256": "be2da073043b9dd8c844942bd95b7a28872eb02f9adb2b61aecda41d4148cbf9"
+      },
+      "full-cleanup": {
+        "preprocess_prompt": true,
+        "postprocess_output": true,
+        "ref_text": "The quick brown fox jumps over the lazy dog.",
+        "capture_pcm_exact": true,
+        "samples": 66960,
+        "pcm_sha256": "323053af8e332e3ebb35a99e7ab077eba2c636716fc1e216f94edf5d5d51c45c",
+        "codes_shape": [
+          8,
+          66
+        ],
+        "codes_sha256": "25a71fae0b730afe0622e432a6f15a0026f14eb8d16924e1e4a1ce7a25e73dfe",
+        "transcript": "The quick brown fect jumps over the lazy dig. ",
+        "wer": 0.2222222222222222,
+        "meets_existing_gate": false,
+        "asr_pcm_sha256": "62f4f8697bc3483da5e93f9e3ebeaccc612dbb088e59403ff26d946ae90dc983"
+      }
+    },
+    "packages": {
+      "omnivoice": "0.2.1",
+      "torch": "2.8.0+cpu",
+      "torchaudio": "2.8.0+cpu",
+      "transformers": "5.19.0",
+      "numpy": "2.5.3",
+      "huggingface_hub": "2.2.0"
+    },
+    "reference": {
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "audio": "fox.wav",
+      "seconds": 2.67025,
+      "sha256": "2922b7cd5360b373a650d8bf1ea39de16aa3d49e7a44cdec5f350d46c15556ff"
+    },
+    "model_files": {
+      "model.safetensors": {
+        "bytes": 2450344112,
+        "sha256": "730839316de585f4c8298ec0e1712efc10fb19c6fa4e36eb741cb8d51ebcf6aa"
+      },
+      "tokenizer.json": {
+        "bytes": 11423986,
+        "sha256": "408f669b7e2b045fdf54201d815bd364e6667dbd845115da81239c40bc6dcfd1"
+      },
+      "chat_template.jinja": {
+        "bytes": 4168,
+        "sha256": "a55ee1b1660128b7098723e0abcd92caa0788061051c62d51cbe87d9cf1974d8"
+      },
+      "config.json": {
+        "bytes": 2238,
+        "sha256": "5e359117e13b420c5e0c925d4aba650d624767131f1d1746928f8b850d5dc372"
+      },
+      "tokenizer_config.json": {
+        "bytes": 533,
+        "sha256": "49f78845596a82bf15c83673794bdf9f76f812b11f60ab6a2239d9be65b00676"
+      },
+      "audio_tokenizer/model.safetensors": {
+        "bytes": 805665628,
+        "sha256": "fe7c5e8785e0a05833e1bfc3e002ec7f55af21e306b2e7154a448c1f54ccfb0d"
+      },
+      "audio_tokenizer/preprocessor_config.json": {
+        "bytes": 206,
+        "sha256": "ae61eea88558608ee2fa86d2aec9fce8d99a5ff75d09cb7651ccce21ae1d9084"
+      },
+      "audio_tokenizer/config.json": {
+        "bytes": 2531,
+        "sha256": "eefb20806f7104e77c9a5277c9df0f9bb8826b08eb1d4e8ab2b9829b6ef9fac1"
+      }
+    },
+    "blueprint_sha256": "5b3dbff35c041f93c4a5b6f835316abd6038949b8c2a502936d1bac5f7a5f5d8",
+    "asr_control": "And so my fellow Americans ask not what your country can do for you.  Ask what you can do for your country. ",
+    "native_waveform_parity_tested": false,
+    "production_accepted": false,
+    "original_generation_control_only": true
+  },
+  "public_proof_pending": true
+}

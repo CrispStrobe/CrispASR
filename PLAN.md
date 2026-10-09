@@ -19,8 +19,16 @@ production quantization pin. Full no-publication Release dry run
 [GH 37958100129](https://github.com/CrispStrobe/CrispASR/actions/runs/37958100129)
 uses source `23b401b3d20a2ef794a88ade6a261369e899359d`; queued, packages and
 runtime dependencies not yet inspected. Main integration CI is also queued.
-Both Q4 encoder isolation `37957419289` and original OmniVoice generation
-`37957953495` remain queued. Documentation anchors pass (227 across 82 files).
+Q4 encoder isolation `37957419289` and original OmniVoice generation
+`37957953495` completed successfully as diagnostics; quality gates remain
+rejected. Attention-source Q4 encoder gate is 0.891277 at 636,775,328 bytes;
+FFN-source Q4 is 0.993778 at 1,034,709,920 bytes. Capture OFF/ON/OFF controls
+pass, all 24 F16 layers still pass original, and both candidates retain actual
+Q4 payload with physical protected/unrelated byte audits. Original OmniVoice
+F32 seed-42/32-step cloning also fails at 2/9 WER in both unprocessed and full
+cleanup arms; capture OFF/ON PCM is exact and original-ASR JFK control passes.
+The upstream failure does not waive native acceptance. Full proofs are being
+published and SHA-verified. Documentation anchors pass (227 across 82 files).
 Tag only through `scripts/bump-version.sh` after green chosen tip; verify
 release packages before publication. The pending quant/clone experiments are
 excluded from this release scope. Issue #485 has the terminal calibrated-Q4
@@ -104,8 +112,15 @@ retain unchanged F16-first stage gates/capture controls. No defaults or
 model promotion. The two-group worker `1e32cc0af` is pushed and GH CPU
 run `37957419289` has launched. Every candidate must preserve protected source
 bytes, keep unrelated tensors identical to plain Q4, and retain nonzero Q4
-payload. The unchanged F16 stage control and capture OFF/ON/OFF checks remain
-mandatory. Results are pending. Parakeet RNNT preserves joint/embed; GigaAM preserves
+payload. The unchanged F16 stage control and capture OFF/ON/OFF checks pass.
+Both encoder gates fail. Proper frame-axis comparison (separate from unchanged
+CLI layout) shows FFN preservation first failing layer 5, final relative-L2
+0.016656; attention preservation first fails layer 1, final relative-L2
+0.062321. Next this session claims two predeclared FFN projection isolation
+arms in the same experimental worktree: hold attention at source precision,
+then preserve FFN linear1 versus linear2. Retain common RNNT/prompt/preout
+source guards, unchanged F16-first gates, physical source/unrelated-Q4 byte
+checks and nonzero Q4 payload. No production quantization or acceptance claim. Parakeet RNNT preserves joint/embed; GigaAM preserves
 RNNT/prompt-front precision. Those small-head rules do not explain the
 remaining Conformer drift, so isolate learned encoder groups before further
 calibration or guards.
@@ -186,7 +201,9 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   Worker `381f3a3ae` is pushed; GH `37957953495` launched with pinned CPU
   torch/torchaudio 2.8.0, Transformers 5.19.0 and upstream package revision.
   It requires original generation capture OFF/ON PCM equality and a positive
-  original-ASR JFK control before reporting cloned-speech WER. Pending.
+  original-ASR JFK control before reporting cloned-speech WER. COMPLETE:
+  both original arms fail at 2/9 WER, with exact capture controls and positive
+  JFK control. Original model failure is evidence, not a relaxed native gate.
 
   No lucky-seed selection. Public proof:
   `docs/omnivoice-clone-failure-2026-10-09.json` and
