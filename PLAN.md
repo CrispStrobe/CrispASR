@@ -40,7 +40,9 @@ do not weaken the six speech gates or select a lucky seed.
 Echo preparation is public, pinned at `afdef3d4b111aa89e45fc400a03ba31ff54ac1dd`,
 all four remote size/SHA and physical tensor audits pass. Kernel public retry
 v2 launched with entry `845bf2e6d`; accepted F16 control precedes candidates,
-and actual two-T4 guard precedes model pulls. No registry/default changes.
+and actual two-T4 guard precedes model pulls. All four candidates rejected after an accepted F16 control on actual two T4s.
+Middle-FFN Q4 passes all three Piper roundtrips at WER zero, but still fails
+stage/norm and exact complete output/subtitle gates. No registry/default changes.
 VoxCPM2 v4 confirms five of six exact speech gates fail with repeated syllables,
 including explicit Vulkan CLI; all terminal outputs archived and public.
 Next: isolate existing fused/per-step/batch/split CFM paths and CUDA/Vulkan
@@ -57,6 +59,14 @@ not a native fused-graph verdict, and no quality gate is relaxed.
 Typed worker `a232c9bc7` is pushed, uploaded entry `51e45d8ea`; v6 launched
 with refreshed actual Kaggle cache `47cb5a2fa310674b785aa1ff5d1942d16e730134`.
 Public terminal proof/cache pins are in `docs/voxcpm2-path-v5-failure-2026-10-09.json`.
+v6 diagnostic is COMPLETE on T4: all four fused/per-step/batch/split CUDA/Vulkan
+paths repeat short-text syllables; six of sixteen exact ASR cases pass, none
+of the arms passes both models/texts. Disabling CFM fusion alone does not fix it.
+All terminal output/logs archived before reuse; actual successful build cache
+is being refreshed. Next in the claimed profile worktree: GH CPU pinned official
+Python BF16 full generation and native F16/Q8 controls, same seed 2/ten steps/
+short-long texts/two repeats, full PCM/latent and ASR receipts. Establish source
+versus quant/runtime drift before changing production arithmetic.
 MiMo diagnostic capture complete: identical frozen layer-0 input, CPU Q4
 flash/eager first differences at layer-0 attention (relL2 .000146), amplified
 in its MLP (.00183) and subsequent layers. F16 is much smaller. BLAS flash/eager

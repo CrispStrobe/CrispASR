@@ -1,0 +1,59 @@
+{
+  "passed": false,
+  "run": 37889514048,
+  "source": "e81d1f6f72c1cf50e040b379a38b01212f6d726f",
+  "utility_waveform_cases": 738,
+  "utility_text_cases": 18,
+  "decode": {
+    "max_abs": 0.0,
+    "compared_surface": "attested raw C ABI; upstream DSP before automatic watermark",
+    "marked_output_differs": true
+  },
+  "roundtrips": {
+    "session-raw": {
+      "transcript": "The quick brown Fox jumps over the lazy dog.",
+      "wer": 0.0,
+      "samples": 62375,
+      "sha256": "5f43a82e7b25fb1517573e3a93a4a84380fbc9ccfe45f7b015615095dd493596"
+    },
+    "session-full": {
+      "transcript": "The quick brown fox jumps over the lazy dog",
+      "wer": 0.0,
+      "samples": 67176,
+      "sha256": "0bd01967a7d7e63edaef7a483c317929a50a49bfd56e2aa7df65bca45f4a609a"
+    },
+    "session-marked": {
+      "transcript": "The quick brown Fox jumps over the lazy dog",
+      "wer": 0.0,
+      "samples": 67176,
+      "sha256": "38b25324b40a7855eae012aafa8b40c8abe4752df1635a5a803a3e5037a9d202"
+    },
+    "session-clone": {
+      "transcript": "The quick brown fix jumps over the lazy dig.",
+      "wer": 0.2222222222222222,
+      "samples": 68136,
+      "sha256": "052f0192bc8b926e6626ae1cd7438bd27186571a2a321bc8f7811a079055a067"
+    },
+    "session-marked-clone": {
+      "transcript": "The quick, brown fix jumps over the lazy dig.",
+      "wer": 0.2222222222222222,
+      "samples": 68136,
+      "sha256": "387c59e9bbf35d6118bb28215505e60d0aa18ec288b7cd043187354a00a95904"
+    },
+    "cli-clone": {
+      "transcript": "The quick, brown fix jumps over the lazy dig.",
+      "wer": 0.2222222222222222,
+      "samples": 68136,
+      "sha256": "fea12189a8a0fbf4a09757003824319131b10176b56376dcf509ecb938057c15"
+    }
+  },
+  "wer_gate": 0.2,
+  "scope": "DSP exact; clone speech rejected, not accepted or integrated",
+  "public_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "file": "omnivoice/issue518-20261009-clone-failed/proof.zip",
+    "revision": "9e890227fcaf1032b28881c6d9707fd3880bcbec",
+    "sha256": "79048a8aad17bb0df18b65fbf5737f1d8c3048819ac58a5515008dc0f2df7fce",
+    "bytes": 1002964
+  }
+}
