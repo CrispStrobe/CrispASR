@@ -74,6 +74,12 @@ no CPU fallback acceptance. This tests packaged dynamic backend loading and
 CUDA 12.8 artifacts, not new quantization or a Windows package. The 30 recent
 kernels on the single authorized account are terminal; no active GPU session
 observed before this launch preparation. All local scratch stays on storage.
+Worker `7dad6b895` is pushed on `probe/release-cuda-hardware`. New kernel
+`${KAGGLE_ACCOUNT}/crispasr-release-cuda-package-validation` is RUNNING;
+remote script was pulled and verified byte-identical (entry SHA
+`61fee9a144a16f2496cf618a47ac4471de0fab9581c68e86a493879bda1105a2`).
+All four no-secrets checks pass with no skips (48.361 seconds). This is a
+launch checkpoint, not hardware acceptance. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
 
 ## Release preparation checkpoint 2026-10-09
 
