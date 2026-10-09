@@ -52,7 +52,13 @@ preencode/encoder parity; no Q4 promotion. This session claims isolated
 frontend plus additive boundary diagnostic integration in worktree
 `/mnt/storage/crispasr/salvage-20261008/nemotron-frontend-integration`, branch
 `fix/nemotron-frontend-boundaries`. Full PR CI and streaming/GPU validation
-remain required; CPU controls alone do not certify CUDA. All 26 archived
+remain required; CPU controls alone do not certify CUDA. Isolated
+[PR #525](https://github.com/CrispStrobe/CrispASR/pull/525), source
+`1977bd047d73b5e35cf5d267801fe21e859cfc1c`, is open with native cpp/header
+bytes identical to the accepted CPU candidate. Full PR CI is queued.
+GH CUDA bundle `37943881572` builds the exact PR source for subsequent
+actual Kaggle streaming/stage validation; no GPU acceptance claim yet.
+Terminal 26-control proof: `docs/nemotron-frontend-controls-2026-10-09.json`. All 26 archived
 original NVIDIA attention masks independently confirm floor(samples/hop);
 full failed-boundary arrays and logs publicly archived and SHA-verified:
 `docs/nemotron-boundary-diagnostic-2026-10-09.json`.
