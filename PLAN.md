@@ -40,7 +40,10 @@ three clips × 76 stage comparisons in each arm, full file translations,
 CLI/anonymous-model C ABI and TTS-ASR roundtrips all pass, with identical
 decoded receipts. 249 decoder matrices collected; all 96 FFN widths/counts
 valid. Public full proof: `docs/index-echo-calibration-smoke-2026-10-09.json`.
-No quantizer/model/registry/default promotion. Full PR CI is required before merge.
+No quantizer/model/registry/default promotion. [PR #523](https://github.com/CrispStrobe/CrispASR/pull/523),
+source `98088c720`, is open. Native file hashes match the accepted runtime
+exactly; clang-format 18 passes. Full platform/binding/lint CI is queued or
+running and required before merge. No new release tag yet.
 
 ## CLAIMED 2026-10-09 — PR #492 salvage, OmniVoice cleanup and remaining performance work
 
@@ -118,7 +121,7 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   corpus selection unchanged. Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
   Real GPU calibration/coverage/full candidate acceptance still needed.
 
-- **VoxCPM2 — actual step/rate repairs on branch, speech still rejected.**
+- **VoxCPM2 — step/rate repairs on branch; primary Q4 recognizer rejection isolated.**
   Profile branch forwards positive step overrides through native/C ABI/CLI,
   preserves ten-step default and returns actual native 48 kHz session PCM
   (old ABI decimated to 24 kHz while advertising 48). v4 five/six speech gates

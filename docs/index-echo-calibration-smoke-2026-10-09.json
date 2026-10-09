@@ -63,5 +63,18 @@
     "Actual GPU decoder collection, unchanged F16 stage/norm and full decoded gates pass.",
     "The smoke imatrix uses held-out acceptance inputs and must never be used for quantization.",
     "No Q4 recipe or production calibration corpus has passed by this smoke result."
-  ]
+  ],
+  "proposed_integration": {
+    "pr": 523,
+    "head": "98088c720aaacf5e07187366054cce387c746347",
+    "branch": "fix/echo-decoder-calibration",
+    "ci": "pending",
+    "merged": false,
+    "native_files_match_accepted_build": true,
+    "native_sha256": {
+      "src/index_echo.cpp": "9ba35854eb777ad7c23075d8f036a62e2c516077321f60425ab27652c131df8c",
+      "src/crispasr_imatrix.cpp": "d8504a422fae71560328d55aa8e685f427289d4fba227e0c6106befd15fe9c2f",
+      "src/crispasr_imatrix.h": "50d50284d2aababa4c5194184cd4b193aacd562c22dbcdcb76ae38b7172037c7"
+    }
+  }
 }
