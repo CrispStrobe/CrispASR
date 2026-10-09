@@ -116,6 +116,7 @@ add_library(crispasr-lib
             # Lets language wrappers feed `crispasr_session_transcribe`
             # any audio format without bundling an external ffmpeg.
             crispasr_audio.cpp
+            crispasr_audio_resample.cpp
             # Library-level mic capture (PLAN #62d) — wraps miniaudio
             # ma_device for cross-platform live PCM. Symbols share the
             # MINIAUDIO_IMPLEMENTATION already linked from crispasr_audio.cpp.

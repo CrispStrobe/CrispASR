@@ -55,9 +55,15 @@ Or use the unified `Session` API for non-Whisper backends (Qwen3-ASR, FastConfor
 from crispasr import Session
 
 s = Session("qwen3-asr-0.6b-q4_k.gguf")
-for seg in s.transcribe_pcm(pcm_f32, sample_rate=16000):
+for seg in s.transcribe(pcm_f32, sample_rate=16000):
     print(seg.text)
 ```
+
+Mono array inputs at other sample rates are converted to 16 kHz with a
+band-limited Kaiser polyphase filter. Older libraries use the matching NumPy
+fallback, without a SciPy dependency. Strided arrays are made contiguous before
+native inference. See [audio resampling](../docs/python-audio-resampling.md)
+for limits and regression checks.
 
 Index-Echo uses the same `Session` API. Open the tower GGUF with its matching
 decoder beside it, then call `s.set_target_language("en")` (also `ja` or `es`).
