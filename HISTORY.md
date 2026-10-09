@@ -7,6 +7,20 @@ technical deep-dives are in `LEARNINGS.md`.
 ---
 
 
+## DONE 2026-10-09 — Python array audio resampling and contiguous buffers
+
+[PR #522](https://github.com/CrispStrobe/CrispASR/pull/522) merged as
+`5360a96f6d41bd5685a73907b7bab642d4089fd2` after all 50 applicable CI checks
+passed (one intentional skip). Five Python transcription entry points use
+an additive in-memory C API exposing the existing Kaiser polyphase resampler,
+with a bounded NumPy compatibility implementation for older libraries.
+Strided arrays are copied to contiguous float32; exact 16 kHz values are
+preserved. Eight tests pass against the full shared library: alias rejection,
+native/fallback agreement within 1e-7, rate/shape/error contracts and independent
+buffer ownership/free. The separate file loader retains its miniaudio path.
+No model, inference default or speech acceptance threshold changed.
+Documentation: `docs/python-audio-resampling.md`. This is after v0.8.42.
+
 ## DONE 2026-10-09 — opt-in MiMo cached GPU decode and credited mel projection
 
 [PR #519](https://github.com/CrispStrobe/CrispASR/pull/519) merged as
@@ -33,7 +47,8 @@ match accepted sources. CI/merge evidence:
 `docs/mel-projection-integration-2026-10-09.json`; numerical raw proof remains
 in `docs/mimo-gpu-cached-step-2026-10-08.json` and
 `docs/mel-projection-2026-10-08.json`. These changes are after v0.8.42;
-that tag/release is unchanged. Combined-main CI is a separate pending check.
+that tag/release is unchanged. Combined-main CI `37899170996` passes all
+13 jobs on `892dca1a9`; terminal logs/receipt are archived on storage.
 
 ## DONE 2026-10-08 — manifest-specific regression coverage
 

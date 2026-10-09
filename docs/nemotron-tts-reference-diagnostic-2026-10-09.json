@@ -1,0 +1,1514 @@
+{
+  "receipt": {
+    "passed": false,
+    "diagnostic_complete": true,
+    "scope": "Original NVIDIA ASR vs native F16/Q4 on immutable TTS PCM; diagnostic only.",
+    "source_commit": "397334025de2611f6dac320e884cb7206cc28536",
+    "original_model": {
+      "repo": "nvidia/nemotron-3.5-asr-streaming-0.6b",
+      "revision": "ea30d66debe3740a08b573244286791d423d6b3e",
+      "file": "model.safetensors",
+      "sha256": "9eebdd6590289cb3030f310858f3df93256600a800a3e8200c5993d5f967e174",
+      "bytes": 2552062944,
+      "dtype": "torch.float32",
+      "device": "cpu",
+      "lookahead_tokens": 3,
+      "language": "en-US",
+      "generation": "model-card offline generate",
+      "captured_encoder_scope": "stock encoder before language prompt fusion/projector"
+    },
+    "native_models": {
+      "f16": {
+        "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
+        "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
+        "file": "nemotron-3.5-asr-streaming-0.6b-f16.gguf",
+        "sha256": "14cbc98df495d8ab452c6a4ac367136d94ab5da55e73afaa96ba4f749dd95d09",
+        "bytes": 1286368480
+      },
+      "q4_k": {
+        "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
+        "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
+        "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
+        "sha256": "60a2b074cdf46e81d72bc15d3eb79505dafbb697135f558659d9068f651854a2",
+        "bytes": 479337248
+      }
+    },
+    "fixed_audio_proof": [
+      "tts-asr/frontdoor-diagnostic-20261009/proof.zip",
+      "0b434ca1ea6c34c9b462be4d3e689ba1713381e9",
+      "3dd2f988e327dd30bf3ae608edc7611e52aedf3a8374a3ea6e2f288342110b98"
+    ],
+    "cases": {
+      "omnivoice:heavy-37891923274:legacy": {
+        "samples": 42224,
+        "sample_rate": 16000,
+        "sha256": "fece2a7fc0ba75ae9e81230f94a99ce85b8a170a2e3d0cc8490d4912bfab41d9",
+        "expected": "The quick brown fox jumps over the lazy dog.",
+        "original_case": {
+          "sample_rate": 24000,
+          "expected": "The quick brown fox jumps over the lazy dog.",
+          "source_sha256": "87b077a1de8d75438c64925f952d8fc11f0d0dd5688dc8c360d0e017c6b122ce",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 42224,
+              "sha256": "cc9e464ed47ea4a050d3109f6bc7d826b0bfa206ccd7381b423b534bac3cd218"
+            },
+            "scipy-polyphase": {
+              "samples": 42224,
+              "sha256": "fece2a7fc0ba75ae9e81230f94a99ce85b8a170a2e3d0cc8490d4912bfab41d9"
+            }
+          }
+        },
+        "file": "audio-00-16k.npy"
+      },
+      "omnivoice:heavy-37891923274:output-cleanup": {
+        "samples": 45424,
+        "sample_rate": 16000,
+        "sha256": "c54c0419c296d050a363db5b6e9880815e141d97e7f8906b4f7df70a4a8bb8e7",
+        "expected": "The quick brown fox jumps over the lazy dog.",
+        "original_case": {
+          "sample_rate": 24000,
+          "expected": "The quick brown fox jumps over the lazy dog.",
+          "source_sha256": "052f0192bc8b926e6626ae1cd7438bd27186571a2a321bc8f7811a079055a067",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 45424,
+              "sha256": "8385962bebe946505b7ed8f3ee5012b8a93f9f9d8c2722e3e1bd0f64f5997d86"
+            },
+            "scipy-polyphase": {
+              "samples": 45424,
+              "sha256": "c54c0419c296d050a363db5b6e9880815e141d97e7f8906b4f7df70a4a8bb8e7"
+            }
+          }
+        },
+        "file": "audio-01-16k.npy"
+      },
+      "omnivoice:heavy-37891923274:punctuation": {
+        "samples": 42224,
+        "sample_rate": 16000,
+        "sha256": "f452cddc8a3d539913a7100147102c667bfd11298cc45743662edb26a0a9c5a4",
+        "expected": "The quick brown fox jumps over the lazy dog.",
+        "original_case": {
+          "sample_rate": 24000,
+          "expected": "The quick brown fox jumps over the lazy dog.",
+          "source_sha256": "dc0cb1664c8604dfc23f7714e63f66584986d176ef2e243d1882f993138d3592",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 42224,
+              "sha256": "a788f0dd3ea2d0ee0a306f8d3724ff30202056e628643573c2b297a7fa86236c"
+            },
+            "scipy-polyphase": {
+              "samples": 42224,
+              "sha256": "f452cddc8a3d539913a7100147102c667bfd11298cc45743662edb26a0a9c5a4"
+            }
+          }
+        },
+        "file": "audio-02-16k.npy"
+      },
+      "omnivoice:heavy-37891923274:reference-cleanup": {
+        "samples": 42224,
+        "sample_rate": 16000,
+        "sha256": "1f43498a4de2359729ca167354d073663982fcccd46b86f4ec41e69a5c09c0af",
+        "expected": "The quick brown fox jumps over the lazy dog.",
+        "original_case": {
+          "sample_rate": 24000,
+          "expected": "The quick brown fox jumps over the lazy dog.",
+          "source_sha256": "111d0844c71466d04cd34afa7a5e4afa542b71089276677e81bb8e422ea2c4ed",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 42224,
+              "sha256": "26f97814fd4826e73aadcb3525b7ba2cb6d5bf0d1f1325494fa1e977016ebd26"
+            },
+            "scipy-polyphase": {
+              "samples": 42224,
+              "sha256": "1f43498a4de2359729ca167354d073663982fcccd46b86f4ec41e69a5c09c0af"
+            }
+          }
+        },
+        "file": "audio-03-16k.npy"
+      },
+      "voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "samples": 99840,
+        "sample_rate": 16000,
+        "sha256": "0fd9be90795f2e6d072851b8ce2da396446b0a8e0e24318bdd65091a8ef681db",
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "The sun is shining today. Hello, this is a short test sentence.",
+          "source_sha256": "915d38a53f4f4df4a89f2abd6cf78f2abf7fa54697322e70415f5a3b6e966d5a",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 99840,
+              "sha256": "edc35bdf6b1dbd88a5e22e688d5c4a7dcb3355ce4731cb1124e32a2a92f16d18"
+            },
+            "scipy-polyphase": {
+              "samples": 99840,
+              "sha256": "0fd9be90795f2e6d072851b8ce2da396446b0a8e0e24318bdd65091a8ef681db"
+            }
+          }
+        },
+        "file": "audio-04-16k.npy"
+      },
+      "voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "samples": 51200,
+        "sample_rate": 16000,
+        "sha256": "2b192c64e839f9bd6d790025f5befcd50b4caeb966384416db4942e588f2628b",
+        "expected": "Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "Hello, this is a short test sentence.",
+          "source_sha256": "ff8d2761a7ea25336a0e2c35b7ec059f03385ddcfee8f9f7ab929ad174442c7a",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 51200,
+              "sha256": "246c2b110febadf353ced7e7ce22637f7790b1a092ea493174831cd5c19c1484"
+            },
+            "scipy-polyphase": {
+              "samples": 51200,
+              "sha256": "2b192c64e839f9bd6d790025f5befcd50b4caeb966384416db4942e588f2628b"
+            }
+          }
+        },
+        "file": "audio-05-16k.npy"
+      },
+      "voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "samples": 81920,
+        "sample_rate": 16000,
+        "sha256": "d932f52a3244af40b6e218fcf5d08d4ac09dad510fdb6c657648aad7058a052a",
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "The sun is shining today. Hello, this is a short test sentence.",
+          "source_sha256": "d86393c6839abdb63a6a217e6c52455d61ae1f2005cd0651e38e5a25e1dac273",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 81920,
+              "sha256": "0bb7cbb95f80de5d2313644e2fff33ca946f7fafc0d2f3dc644bc3c9bb033b98"
+            },
+            "scipy-polyphase": {
+              "samples": 81920,
+              "sha256": "d932f52a3244af40b6e218fcf5d08d4ac09dad510fdb6c657648aad7058a052a"
+            }
+          }
+        },
+        "file": "audio-06-16k.npy"
+      },
+      "voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "samples": 51200,
+        "sample_rate": 16000,
+        "sha256": "aee4a8dd4bc5e3deb18841096b95cc341b99e699f408089ccd5a53eeefb31004",
+        "expected": "Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "Hello, this is a short test sentence.",
+          "source_sha256": "9b4a2350b9b4796dc0e2b98e89cf9a0b406055451f635b5093a656d7a07c37ad",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 51200,
+              "sha256": "2ad17614dc6b133be0afcf47bfdaac38aa81f84b0b9a075011bb7fd5afa42c74"
+            },
+            "scipy-polyphase": {
+              "samples": 51200,
+              "sha256": "aee4a8dd4bc5e3deb18841096b95cc341b99e699f408089ccd5a53eeefb31004"
+            }
+          }
+        },
+        "file": "audio-07-16k.npy"
+      },
+      "voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "samples": 84480,
+        "sample_rate": 16000,
+        "sha256": "c3c9fe2509f7d4af308c8fc05714b165d91ebdbede9201ec55e5b366b93838bf",
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "The sun is shining today. Hello, this is a short test sentence.",
+          "source_sha256": "086105cea839fd8d5e387ca0d5f54ba1316bf972d4484409de649d66142f56c5",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 84480,
+              "sha256": "9ec3e4aa731dbd1ef3a22dc5f83834a9f19e745ad850b9dddbc24523c0fb923e"
+            },
+            "scipy-polyphase": {
+              "samples": 84480,
+              "sha256": "c3c9fe2509f7d4af308c8fc05714b165d91ebdbede9201ec55e5b366b93838bf"
+            }
+          }
+        },
+        "file": "audio-08-16k.npy"
+      },
+      "voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "samples": 61440,
+        "sample_rate": 16000,
+        "sha256": "faf101bfcb1c500ecda1ad8f4e9736a1814100bd88b8bc686670146679cefd08",
+        "expected": "Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "Hello, this is a short test sentence.",
+          "source_sha256": "6ec25140da83db7232b21afb5c1ffef7b5a3d7bcbe93658bceb61f6ce3954d0c",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 61440,
+              "sha256": "9f1621575cef11df7cba693d7d145c59074fc173ea9806a91c9804160fba94d7"
+            },
+            "scipy-polyphase": {
+              "samples": 61440,
+              "sha256": "faf101bfcb1c500ecda1ad8f4e9736a1814100bd88b8bc686670146679cefd08"
+            }
+          }
+        },
+        "file": "audio-09-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "samples": 94720,
+        "sample_rate": 16000,
+        "sha256": "95560c53214cc223cd7099e436053613ec524eee02482beb5f6b6b47fcab52ae",
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "The sun is shining today. Hello, this is a short test sentence.",
+          "source_sha256": "38f2c1516ee9c3cdbd1bacff4dab994bca418959f2782ec80253666a7628e568",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 94720,
+              "sha256": "96c8f41751635804348f0257e86a4319d63ccfa5e6171d2d6fb4be0195df143a"
+            },
+            "scipy-polyphase": {
+              "samples": 94720,
+              "sha256": "95560c53214cc223cd7099e436053613ec524eee02482beb5f6b6b47fcab52ae"
+            }
+          }
+        },
+        "file": "audio-10-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "samples": 51200,
+        "sample_rate": 16000,
+        "sha256": "28bc80b2acd992a0b0087da6dccca3b84ab3a9a274a02a0cbeb42e40d86809b4",
+        "expected": "Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "Hello, this is a short test sentence.",
+          "source_sha256": "b6035a4ff2bce9bb8ca3b07f150e372dce901f14b2869230f0bbed37a51f562a",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 51200,
+              "sha256": "fc5d5cde2116bb6f2741cfdde720843594a287e70655fc5287f74c97f01d5b6f"
+            },
+            "scipy-polyphase": {
+              "samples": 51200,
+              "sha256": "28bc80b2acd992a0b0087da6dccca3b84ab3a9a274a02a0cbeb42e40d86809b4"
+            }
+          }
+        },
+        "file": "audio-11-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "samples": 94720,
+        "sample_rate": 16000,
+        "sha256": "5f6d3d080fcee6e085ca23ed07d70f1b3edd97b95c0aa63ed42567623f99096a",
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "The sun is shining today. Hello, this is a short test sentence.",
+          "source_sha256": "36ddbdc868db826c4eb5074e96c46f40135d811a985f6dc0a3f7be15cdbedee3",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 94720,
+              "sha256": "4d7ac6dd94b5feaaafa5a29dc8a7ccbbd3074bcc150d1fd190626690f902a8c4"
+            },
+            "scipy-polyphase": {
+              "samples": 94720,
+              "sha256": "5f6d3d080fcee6e085ca23ed07d70f1b3edd97b95c0aa63ed42567623f99096a"
+            }
+          }
+        },
+        "file": "audio-12-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "samples": 51200,
+        "sample_rate": 16000,
+        "sha256": "0f7abbeb3bb017f07a0f92ba1072ed3c4f0c2095cc9b55f6c5fa37463686053e",
+        "expected": "Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "Hello, this is a short test sentence.",
+          "source_sha256": "a62d1880544da3e2570fbb837bb3f3f75b07186f433c316dab3f04f53ec75555",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 51200,
+              "sha256": "7dc46e25366ff4d80c644afb05db929b3c2fa34b5739d7cb9eaf384d9cfc3519"
+            },
+            "scipy-polyphase": {
+              "samples": 51200,
+              "sha256": "0f7abbeb3bb017f07a0f92ba1072ed3c4f0c2095cc9b55f6c5fa37463686053e"
+            }
+          }
+        },
+        "file": "audio-13-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "samples": 92160,
+        "sample_rate": 16000,
+        "sha256": "786be17dec312c0a9e5ef28c46ef03fbf7faf9f7c50fc95bf0225071c326d1c4",
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "The sun is shining today. Hello, this is a short test sentence.",
+          "source_sha256": "ba947d2151dd6f51e5575c232d32ecbd22b0917ffdb6fadbbdd773919ab456e8",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 92160,
+              "sha256": "768b79f473c1b3433703037665717a820995bb134ac5602163ee81017701f942"
+            },
+            "scipy-polyphase": {
+              "samples": 92160,
+              "sha256": "786be17dec312c0a9e5ef28c46ef03fbf7faf9f7c50fc95bf0225071c326d1c4"
+            }
+          }
+        },
+        "file": "audio-14-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "samples": 51200,
+        "sample_rate": 16000,
+        "sha256": "3d536e7d4d053b70fefa7d68d999ac4b1eecfc2f2fd0d4b81b8be949e917bb6f",
+        "expected": "Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "Hello, this is a short test sentence.",
+          "source_sha256": "e9cbe9e29214366453d4a2cee27c37f3ac85fb5ef146091aeeff65566e631d73",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 51200,
+              "sha256": "8d67ac531240a85fa029081ba42c91a42845b1f4797ad4e944da7fce075e1f2b"
+            },
+            "scipy-polyphase": {
+              "samples": 51200,
+              "sha256": "3d536e7d4d053b70fefa7d68d999ac4b1eecfc2f2fd0d4b81b8be949e917bb6f"
+            }
+          }
+        },
+        "file": "audio-15-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "samples": 94720,
+        "sample_rate": 16000,
+        "sha256": "4734265ca2f607ebcf821f168fd5e245db35601575698fb92de9fa9b2a6c08ef",
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "The sun is shining today. Hello, this is a short test sentence.",
+          "source_sha256": "7a74b5eadece48420dcf0b19ae2f2a47905241ae820cdc4a993fdf782ef447c7",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 94720,
+              "sha256": "4c5f9e7f3e133b094a039db2f15dd743235b953c087f93a45ea27f2babc71aa5"
+            },
+            "scipy-polyphase": {
+              "samples": 94720,
+              "sha256": "4734265ca2f607ebcf821f168fd5e245db35601575698fb92de9fa9b2a6c08ef"
+            }
+          }
+        },
+        "file": "audio-16-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "samples": 51200,
+        "sample_rate": 16000,
+        "sha256": "232285570b7932f92c423beeb2e5b7b9642962a3c3ebaf97d7d202e6bd07e750",
+        "expected": "Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "Hello, this is a short test sentence.",
+          "source_sha256": "c811e8f624ab9ddf760e13a6b63c704b887df7cc433b8ca99bbd2d2aa0ce4aa8",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 51200,
+              "sha256": "002b2f5abb6b4e0a971de0371751397d9e136e3036322b1d68cbf2c82b66a89b"
+            },
+            "scipy-polyphase": {
+              "samples": 51200,
+              "sha256": "232285570b7932f92c423beeb2e5b7b9642962a3c3ebaf97d7d202e6bd07e750"
+            }
+          }
+        },
+        "file": "audio-17-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "samples": 99840,
+        "sample_rate": 16000,
+        "sha256": "c727e83580a838fa7d414ee158de1de8807e32089d3298037b285954004435a5",
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "The sun is shining today. Hello, this is a short test sentence.",
+          "source_sha256": "6920e6ed7ed05e97a7e00155f1983ef7dd709c27ea6c8c950fa9d4dc3c4b2d73",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 99840,
+              "sha256": "022857f2b5aad5594cc3072a3d9ce070cbf53f468e93ae3735af428fba92280c"
+            },
+            "scipy-polyphase": {
+              "samples": 99840,
+              "sha256": "c727e83580a838fa7d414ee158de1de8807e32089d3298037b285954004435a5"
+            }
+          }
+        },
+        "file": "audio-18-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "samples": 51200,
+        "sample_rate": 16000,
+        "sha256": "4e558708e6ea6b393b55bfb9ec1692a5014e05d30048e4fec03b7b832dff9cb1",
+        "expected": "Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "Hello, this is a short test sentence.",
+          "source_sha256": "50f52729d765866aa23aa11878136aef6fe87848f262b1a162a4e74cd8f3383d",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 51200,
+              "sha256": "8a8c65cd5ed3db0ac68d1d2a4ec22e5fef64f0ac838b6658d8052257eb83a932"
+            },
+            "scipy-polyphase": {
+              "samples": 51200,
+              "sha256": "4e558708e6ea6b393b55bfb9ec1692a5014e05d30048e4fec03b7b832dff9cb1"
+            }
+          }
+        },
+        "file": "audio-19-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "samples": 81920,
+        "sample_rate": 16000,
+        "sha256": "c1355c689822596e69d706a80118b34ca8c167bb02a77451261c988815df7e18",
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "The sun is shining today. Hello, this is a short test sentence.",
+          "source_sha256": "fb4f2bd37ca56f72203f2213e76f084090e36de87d2cdca76c878b843c12191d",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 81920,
+              "sha256": "2dac25e87c8421f88f227ea6dc0e4601c53c061d6cf5ce843bad5c28083789e5"
+            },
+            "scipy-polyphase": {
+              "samples": 81920,
+              "sha256": "c1355c689822596e69d706a80118b34ca8c167bb02a77451261c988815df7e18"
+            }
+          }
+        },
+        "file": "audio-20-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "samples": 51200,
+        "sample_rate": 16000,
+        "sha256": "5b40932effeb227beed0adcebbf48ad424b11b5d074fb0d05aa12a911e40d943",
+        "expected": "Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "Hello, this is a short test sentence.",
+          "source_sha256": "bb6d63f739f7892e9783befb9250a0a644427239fdeb5fac50d0a5f7ce7e957b",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 51200,
+              "sha256": "03a9d72be638c8c57a900c4d945540c58f3ddef8a59595bc525d456b7ccf06df"
+            },
+            "scipy-polyphase": {
+              "samples": 51200,
+              "sha256": "5b40932effeb227beed0adcebbf48ad424b11b5d074fb0d05aa12a911e40d943"
+            }
+          }
+        },
+        "file": "audio-21-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "samples": 102400,
+        "sample_rate": 16000,
+        "sha256": "fb06053027f5fbcb0b3b7dd6a39b3d7ee0d6484e6b88f5402dd05bae4a0c52ef",
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "The sun is shining today. Hello, this is a short test sentence.",
+          "source_sha256": "2ec34279319a54cce961a0f5009ef46068838a30e8029d906971975711c59ec4",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 102400,
+              "sha256": "b0c2a57cc767f8f56aea52d8f576e07b26dd66ec4c62392664194f748b400e72"
+            },
+            "scipy-polyphase": {
+              "samples": 102400,
+              "sha256": "fb06053027f5fbcb0b3b7dd6a39b3d7ee0d6484e6b88f5402dd05bae4a0c52ef"
+            }
+          }
+        },
+        "file": "audio-22-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "samples": 51200,
+        "sample_rate": 16000,
+        "sha256": "a5f02b1b31e043b42117c0c6946e65a5dc05414aba63f14330bedc97bc01323f",
+        "expected": "Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "Hello, this is a short test sentence.",
+          "source_sha256": "03c2cd28ed50018da26783bfddd8d7f887193dcae9d085026bea1d13faadc1d7",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 51200,
+              "sha256": "8b3add0a83b6631380bbf51fe6d3cc281ad3751f93534895212b2e3370662fbe"
+            },
+            "scipy-polyphase": {
+              "samples": 51200,
+              "sha256": "a5f02b1b31e043b42117c0c6946e65a5dc05414aba63f14330bedc97bc01323f"
+            }
+          }
+        },
+        "file": "audio-23-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "samples": 102400,
+        "sample_rate": 16000,
+        "sha256": "05d8b9b23957ad369d59605ffccd49ff0892919238b65948b092572d21c2da66",
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "The sun is shining today. Hello, this is a short test sentence.",
+          "source_sha256": "7936d152eb47d49d56172e55ae640534183ec1ab51cb7bad451628f16ecc87b5",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 102400,
+              "sha256": "b2214d0e0e44f0f461e6b091861a565dcef0d48c9c12d20bf28e1f51e139b7cd"
+            },
+            "scipy-polyphase": {
+              "samples": 102400,
+              "sha256": "05d8b9b23957ad369d59605ffccd49ff0892919238b65948b092572d21c2da66"
+            }
+          }
+        },
+        "file": "audio-24-16k.npy"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "samples": 51200,
+        "sample_rate": 16000,
+        "sha256": "84e5a23d1976b0fb1e7531043381f6a2a2eae90f302b4557e4ea108226e9b52c",
+        "expected": "Hello, this is a short test sentence.",
+        "original_case": {
+          "sample_rate": 48000,
+          "expected": "Hello, this is a short test sentence.",
+          "source_sha256": "d74319f92ca11882f309bde0fb630e0a1f83fdf0dbac50783a163d6cb7b6f9e5",
+          "resampled": {
+            "native-file-loader": {
+              "samples": 51200,
+              "sha256": "9e03c2a7cc9b49c7ccb67b7d781d5faf31df4defb1c0d8a9ad2e94bcca782dd5"
+            },
+            "scipy-polyphase": {
+              "samples": 51200,
+              "sha256": "84e5a23d1976b0fb1e7531043381f6a2a2eae90f302b4557e4ea108226e9b52c"
+            }
+          }
+        },
+        "file": "audio-25-16k.npy"
+      }
+    },
+    "original": {
+      "omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fect jumps over the lazy dig. ",
+        "wer": 0.2222222222222222,
+        "seconds": 0.5360318460000144,
+        "encoder_shape": [
+          1,
+          34,
+          1024
+        ],
+        "sequence_sha256": "8e541127156879e3155c76e2a4aaf728537ce1f74f370dd59da7f4ffa8ebb137"
+      },
+      "omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig. ",
+        "wer": 0.2222222222222222,
+        "seconds": 0.5453280529999915,
+        "encoder_shape": [
+          1,
+          37,
+          1024
+        ],
+        "sequence_sha256": "e5b608e5207addc4e9c1a7ee9729ae07633ecc3c64ae2d59d7f0cca7ac09f8ae"
+      },
+      "omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick brown fect jumps over the lazy dag. ",
+        "wer": 0.2222222222222222,
+        "seconds": 0.531256365000047,
+        "encoder_shape": [
+          1,
+          34,
+          1024
+        ],
+        "sequence_sha256": "ae56d201e821a4a263ef2801d4510933e1e7c33133b8b2142c6b12e5c4bbdb2e"
+      },
+      "omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig. ",
+        "wer": 0.2222222222222222,
+        "seconds": 0.5405264290000105,
+        "encoder_shape": [
+          1,
+          34,
+          1024
+        ],
+        "sequence_sha256": "68351b9f42c9c8ef98da226aad77b982be46c95720cfe07ef7aa237e10d0b0e8"
+      },
+      "voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today.  Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.7035714790000043,
+        "encoder_shape": [
+          1,
+          79,
+          1024
+        ],
+        "sequence_sha256": "509f3e36e7e34c3823d86a52df405962d000b4314c39c9ba0e4b423ddc6d9f89"
+      },
+      "voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.558804044999988,
+        "encoder_shape": [
+          1,
+          41,
+          1024
+        ],
+        "sequence_sha256": "d5c5ddd1bf64c00eab7692d08a494a2768c857629898c9f1710e615e9cebfb94"
+      },
+      "voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today.  Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.6453525799999511,
+        "encoder_shape": [
+          1,
+          65,
+          1024
+        ],
+        "sequence_sha256": "02be73fa7c579042eb1baa0a8d7135ac6d05f348d830edadcae7703c14490ca4"
+      },
+      "voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.5607057139999938,
+        "encoder_shape": [
+          1,
+          41,
+          1024
+        ],
+        "sequence_sha256": "5c450c938ca98e55bd5ac0da8fe063f0047c5485efc6c81b2c076bff74580bc1"
+      },
+      "voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today.  Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.6580417039999702,
+        "encoder_shape": [
+          1,
+          67,
+          1024
+        ],
+        "sequence_sha256": "8a284ff80e4753a1d6ff1158137d6c4277186dd031921ca0b95473a4114dacd7"
+      },
+      "voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.6002461100000005,
+        "encoder_shape": [
+          1,
+          49,
+          1024
+        ],
+        "sequence_sha256": "fd8f035ab12a2c5fa778fd5738bcb5d0a556347d0a823da259fd60b1dcad2a1a"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today.  Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.663487970999995,
+        "encoder_shape": [
+          1,
+          75,
+          1024
+        ],
+        "sequence_sha256": "b595c6cd652602c3fc17bea9ed5a034ad2318df22fea02f3bb388ea119755219"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.5546809059999873,
+        "encoder_shape": [
+          1,
+          41,
+          1024
+        ],
+        "sequence_sha256": "f877e5fc14e3f6c7ac0e0557c8b456492e16385eb67876714d7a5b7ee8302274"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today.  Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.6680208390000075,
+        "encoder_shape": [
+          1,
+          75,
+          1024
+        ],
+        "sequence_sha256": "b595c6cd652602c3fc17bea9ed5a034ad2318df22fea02f3bb388ea119755219"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.5516853039999887,
+        "encoder_shape": [
+          1,
+          41,
+          1024
+        ],
+        "sequence_sha256": "aab8739d0b9d852fd4253ac04d20bd3653ab715fffb427b6a2097176011ce49b"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today.  Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.6780729449999967,
+        "encoder_shape": [
+          1,
+          73,
+          1024
+        ],
+        "sequence_sha256": "324da8644e9ea390dff2dc3b4e432e4d5aa89e9839e7aa1ab5b7294f27954d6c"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.5629954309999903,
+        "encoder_shape": [
+          1,
+          41,
+          1024
+        ],
+        "sequence_sha256": "5c450c938ca98e55bd5ac0da8fe063f0047c5485efc6c81b2c076bff74580bc1"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today.  Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.6988920070000404,
+        "encoder_shape": [
+          1,
+          75,
+          1024
+        ],
+        "sequence_sha256": "b595c6cd652602c3fc17bea9ed5a034ad2318df22fea02f3bb388ea119755219"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.5702882659999773,
+        "encoder_shape": [
+          1,
+          41,
+          1024
+        ],
+        "sequence_sha256": "46cd9cb209a840b417663eb8808334dd3a4205ff955761a7267eb2d6b2a2c371"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today.  Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.6767102210000076,
+        "encoder_shape": [
+          1,
+          79,
+          1024
+        ],
+        "sequence_sha256": "d1174f4899a004ea89e29bcf07a4cbde95a61b014996c7fc1805183e90ff9001"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.5567345549999914,
+        "encoder_shape": [
+          1,
+          41,
+          1024
+        ],
+        "sequence_sha256": "5c450c938ca98e55bd5ac0da8fe063f0047c5485efc6c81b2c076bff74580bc1"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today.  Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.6138247970000066,
+        "encoder_shape": [
+          1,
+          65,
+          1024
+        ],
+        "sequence_sha256": "90cdc5ea675f107f3679cb3ab21102e395ac83bcfc4d07af9fe0993dd94fce85"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.555996663999963,
+        "encoder_shape": [
+          1,
+          41,
+          1024
+        ],
+        "sequence_sha256": "d5c5ddd1bf64c00eab7692d08a494a2768c857629898c9f1710e615e9cebfb94"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today.  Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.7161490070000127,
+        "encoder_shape": [
+          1,
+          81,
+          1024
+        ],
+        "sequence_sha256": "3d7630f507170ced8731df0d307732b85d95b534200c6c0c328a3394caff1d6f"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.5582958210000015,
+        "encoder_shape": [
+          1,
+          41,
+          1024
+        ],
+        "sequence_sha256": "5c450c938ca98e55bd5ac0da8fe063f0047c5485efc6c81b2c076bff74580bc1"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today.  Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.6839723420000041,
+        "encoder_shape": [
+          1,
+          81,
+          1024
+        ],
+        "sequence_sha256": "b83d3ecf342149dd10439dad9bd9a4a484bb10cb3636b62d457dbe6bc3145202"
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello, this is a short test sentence. ",
+        "wer": 0.0,
+        "seconds": 0.5788586470000041,
+        "encoder_shape": [
+          1,
+          41,
+          1024
+        ],
+        "sequence_sha256": "6c1d18ee2c66474d777018747bb0f07088ee24b124b95d6bed33049e38baaa23"
+      }
+    },
+    "native": {
+      "f16/fresh/omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      },
+      "f16/fresh/omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      },
+      "f16/fresh/omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick brown fect jumps over the lazy dag.",
+        "wer": 0.2222222222222222
+      },
+      "f16/fresh/omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      },
+      "f16/fresh/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "f16/reused/omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      },
+      "f16/reused/omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick brown fect jumps over the lazy dag.",
+        "wer": 0.2222222222222222
+      },
+      "f16/reused/omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      },
+      "f16/reused/omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      },
+      "q4_k/fresh/omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      },
+      "q4_k/fresh/omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      },
+      "q4_k/fresh/omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick, brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      },
+      "q4_k/fresh/omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      },
+      "q4_k/fresh/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/fresh/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571
+      },
+      "q4_k/fresh/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.5
+      },
+      "q4_k/fresh/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/fresh/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/fresh/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a a short test sentence.",
+        "wer": 0.08333333333333333
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.25
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sentence.",
+        "wer": 0.7142857142857143
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/fresh/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sentence.",
+        "wer": 0.7142857142857143
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.25
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a a short test sentence.",
+        "wer": 0.08333333333333333
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/reused/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/reused/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/reused/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/reused/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855
+      },
+      "q4_k/reused/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.5
+      },
+      "q4_k/reused/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571
+      },
+      "q4_k/reused/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0
+      },
+      "q4_k/reused/omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      },
+      "q4_k/reused/omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick, brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      },
+      "q4_k/reused/omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      },
+      "q4_k/reused/omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222
+      }
+    },
+    "state_comparisons": {
+      "f16/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "decoded_equal": true
+      },
+      "f16/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "decoded_equal": true
+      },
+      "f16/omnivoice:heavy-37891923274:reference-cleanup": {
+        "decoded_equal": true
+      },
+      "f16/omnivoice:heavy-37891923274:punctuation": {
+        "decoded_equal": true
+      },
+      "f16/omnivoice:heavy-37891923274:output-cleanup": {
+        "decoded_equal": true
+      },
+      "f16/omnivoice:heavy-37891923274:legacy": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "decoded_equal": true
+      },
+      "q4_k/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "decoded_equal": true
+      },
+      "q4_k/omnivoice:heavy-37891923274:reference-cleanup": {
+        "decoded_equal": true
+      },
+      "q4_k/omnivoice:heavy-37891923274:punctuation": {
+        "decoded_equal": true
+      },
+      "q4_k/omnivoice:heavy-37891923274:output-cleanup": {
+        "decoded_equal": true
+      },
+      "q4_k/omnivoice:heavy-37891923274:legacy": {
+        "decoded_equal": true
+      }
+    },
+    "packages": {
+      "torch": "2.14.1+cpu",
+      "transformers": "5.19.0",
+      "numpy": "2.5.3",
+      "scipy": "1.18.1",
+      "huggingface_hub": "1.33.0"
+    }
+  },
+  "proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "revision": "10e579dedf52a16a159cbc5d35e17f8bffa77190",
+    "path": "tts-asr/nemotron-reference-20261009/proof.zip",
+    "sha256": "7762f2a73d8ae7dad05d667fbf0bca393a0b3b7ad622b1b1f09473fa8f5d0463",
+    "bytes": 17083344,
+    "remote_verified": true,
+    "run": 37904497983
+  },
+  "summary": {
+    "original_voxcpm_exact": 22,
+    "native_f16_voxcpm_exact": 22,
+    "native_q4_voxcpm_exact": 8,
+    "voxcpm_cases": 22,
+    "original_f16_normalized_transcripts_equal": 26,
+    "all_cases": 26,
+    "state_changes": 0,
+    "omnivoice_original_exact": 0,
+    "omnivoice_cases": 4
+  },
+  "interpretation": [
+    "VoxCPM2 repeated transcript tokens are native Nemotron Q4 ASR errors; original NVIDIA F32 and native F16 both read all 22 controls correctly.",
+    "Original NVIDIA and native F16 normalized words agree on all 26 cases.",
+    "No fresh/reused-session transcript differences in either quant.",
+    "OmniVoice clone substitutions also occur in original NVIDIA ASR; full clone gate remains rejected.",
+    "No quantizer, recognizer, TTS optimization or default promoted by this diagnostic."
+  ]
+}

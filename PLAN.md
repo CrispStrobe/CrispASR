@@ -11,18 +11,18 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
-## CLAIMED 2026-10-09 — Band-limited Python array audio inputs
+## CLAIMED 2026-10-09 — Nemotron Q4 RNNT precision repair
 
 Owner: this maintainer session. Worktree
-`/mnt/storage/crispasr/salvage-20261008/bindings-audio`, branch
-`fix/python-bandlimited-resample`. Repair both Whisper and Session ndarray
-inputs using the existing native Kaiser polyphase resampler through an additive
-in-memory C API, with a bounded NumPy compatibility path for older libraries.
-Preserve 16 kHz samples and supply contiguous float32 buffers. [PR #522](https://github.com/CrispStrobe/CrispASR/pull/522), source `84a66a717`, repairs all five transcription methods plus the static WAV helper. Eight local tests pass; hosted tests through the full shared library, Rust/C#/Go/Ruby bindings, ASan and unit CI pass. Remaining platform/regression checks are pending. Validate
-anti-aliasing, native/fallback agreement, ownership/error contracts and both
-binding entry points. This independently fixes the known aliasing defect;
-causation for rejected TTS speech is recorded by the completed fixed-audio diagnostic
-GH `37899546009`, with all existing acceptance thresholds unchanged.
+`/mnt/storage/crispasr/salvage-20261008/nemotron-quant`, branch
+`fix/nemotron-rnnt-quant`. Original NVIDIA/F16 fixed-audio proof is complete:
+all 22 VoxCPM2 controls read correctly; published native Q4 reads only 8/22.
+No fresh/reused state differences. Isolate joint/predictor/prompt critical
+precision using existing quantizer overrides, compare Parakeet RNNT/GigaAM
+rules, physically audit source types and size, retain encoder weight equality,
+and run original stage/norm gates plus full decoded controls. GH CPU only;
+no model publication/default change until acceptance. Pinned public proof:
+`docs/nemotron-tts-reference-diagnostic-2026-10-09.json`.
 
 ## CLAIMED 2026-10-09 — PR #492 salvage, OmniVoice cleanup and remaining performance work
 
@@ -40,7 +40,9 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   applicable PR native/lint/binding and selected regression checks passed.
   Integrated native file hashes match accepted T4/CPU proof exactly. Both
   defaults remain OFF; measured gains and hardware limits are in HISTORY.
-  Final combined-main native CI `37899170996` PASS on `892dca1a9`: all
+  Python array repair [PR #522](https://github.com/CrispStrobe/CrispASR/pull/522)
+  also merged as `5360a96f6` after all 50 applicable CI checks PASS (one skip),
+  including eight tests through the production shared library. Final combined-main native CI `37899170996` PASS on `892dca1a9`: all
   13 platform/unit/ASan/fuzz/dynamic-backend/codec/Vulkan jobs complete.
   Terminal receipt and log are archived on storage.
 - **OmniVoice #518 — DSP exact, cloned speech rejected.** Draft
@@ -87,8 +89,10 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   off/on, identical decoded receipts, and all 96 FFN matrix widths/counts.
   Its held-out statistics are explicitly unsuitable for quantization; a
   disjoint EN/ZH production calibration corpus is still needed. Kaggle
-  `index-echo-calibration-smoke` v1 is RUNNING; assigned hardware is pending
-  progress readback. Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
+  `index-echo-calibration-smoke` v1 is RUNNING; its actual SM75/dual-device
+  guard and full collection-off control passed; collection-on acceptance is
+  in flight. Disjoint 24 EN + 24 ZH CC0 corpus preparation is GH `37905840624`,
+  worker `e35df5895`, queued. Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
   Real GPU calibration/coverage/full candidate acceptance still needed.
 
 - **VoxCPM2 — actual step/rate repairs on branch, speech still rejected.**
@@ -113,7 +117,12 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   ASR plus native F16/Q4 fresh/reused controls: GH `37902211301` stopped
   before inference because `librosa` was missing; all terminal logs/artifacts
   were archived. Retry GH `37904497983` adds pinned `librosa==0.11.0`, with
-  source `397334025`, original weights, inputs and speech gates unchanged. Pending.
+  source `397334025`, original weights, inputs and speech gates unchanged. COMPLETE: original
+  NVIDIA and native F16 read all 22 VoxCPM2 controls correctly and have equal
+  normalized words on all 26 cases. Published Q4 reads only 8/22 Vox controls;
+  fresh/reused transcripts agree. This isolates the transcript repeats to
+  native Nemotron Q4, not synthesis. Original NVIDIA retains all four OmniVoice
+  clone substitutions. Public full proof: `docs/nemotron-tts-reference-diagnostic-2026-10-09.json`.
 
   Public proof/cache: `docs/voxcpm2-path-v6-diagnostic-2026-10-09.json`;
   earlier failed receipts remain in docs. Public model card now qualifies
@@ -149,7 +158,7 @@ aliasing/strided-buffer defect; it does not explain every speech failure.
 Next original ASR diagnostic in profile worktree `397334025`, GH
 `37902211301`: pinned NVIDIA Transformers 5.19 model-card offline generation
 stopped before inference on a missing `librosa` dependency. Retry GH
-`37904497983` adds `librosa==0.11.0` and is running. Identical 16 kHz PCM,
+`37904497983` adds `librosa==0.11.0` and is COMPLETE. Identical 16 kHz PCM,
 native F16/Q4 plus fresh/reversed-reused sessions and full original
 features/encoder/sequence evidence remain required. No recognizer promotion.
 
