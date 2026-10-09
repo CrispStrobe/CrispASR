@@ -4,6 +4,7 @@
 #include "mel.h"
 
 #include "parallel_for.h"
+#include "crispasr_env.h"
 
 #include <algorithm>
 #include <chrono>
@@ -215,8 +216,39 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
     // -----------------------------------------------------------------
     std::vector<float> mel_tn((size_t)T * nmels, 0.0f);
 
+// Independent rows preserve the original reduction order. Keep the
+// author's OpenMP path opt-in until each platform wins the full A/B.
+#ifdef _OPENMP
+    const bool projection_parallel = crispasr_env::truthy("CRISPASR_MEL_PROJECTION_PARALLEL");
+#endif
+    const auto t_projection0 = std::chrono::steady_clock::now();
+    int projection_threads = 1;
     auto do_matmul = [&](auto acc_zero) {
         using Acc = decltype(acc_zero);
+#ifdef _OPENMP
+        if (projection_parallel && T >= 64) {
+            const int omp_nt = p.n_threads > 0 ? p.n_threads : omp_get_max_threads();
+            projection_threads = omp_nt;
+#pragma omp parallel for num_threads(omp_nt) schedule(static)
+            for (int t = 0; t < T; t++) {
+                const float* pp = power.data() + (size_t)t * n_freqs;
+                float* mp = mel_tn.data() + (size_t)t * nmels;
+                for (int m = 0; m < nmels; m++) {
+                    Acc s = 0;
+                    if (p.fb_layout == FbLayout::MelsFreqs) {
+                        const float* fb = mel_fb + (size_t)m * n_freqs;
+                        for (int k = 0; k < n_freqs; k++)
+                            s += static_cast<Acc>(pp[k]) * static_cast<Acc>(fb[k]);
+                    } else {
+                        for (int k = 0; k < n_freqs; k++)
+                            s += static_cast<Acc>(pp[k]) * static_cast<Acc>(mel_fb[(size_t)k * nmels + m]);
+                    }
+                    mp[m] = (float)s;
+                }
+            }
+            return;
+        }
+#endif
         for (int t = 0; t < T; t++) {
             const float* pp = power.data() + (size_t)t * n_freqs;
             float* mp = mel_tn.data() + (size_t)t * nmels;
@@ -253,6 +285,12 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
 #else
         do_matmul(float{0.0f});
 #endif
+    }
+
+    if (mel_timing) {
+        const double ms =
+            std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t_projection0).count();
+        fprintf(stderr, "core_mel: projection %d frames %.3f ms [%d thread(s)]\n", T, ms, projection_threads);
     }
 
     // -----------------------------------------------------------------
