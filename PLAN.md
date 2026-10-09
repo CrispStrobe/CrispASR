@@ -297,6 +297,24 @@ Completed quant diagnosis:
 Pinned original public proof:
 `docs/nemotron-tts-reference-diagnostic-2026-10-09.json`.
 
+Attention isolation is terminal: all three candidates fail the unchanged 0.999
+encoder gate, despite F16 passing all three stages and all 24 frame-layer gates.
+All seven previous baseline arrays and original PCM are byte-exact; tensor audits
+confirm true Q4 payload and byte-identical protected source tensors. Closest
+FFN+QKV-source candidate is 1,143,237,536 bytes with 28,311,552 actual Q4 bytes,
+encoder cosine 0.998536; first proper-frame divergence is layer 21, final
+relative L2 0.00946937. Out-source/pos-source arms at 1,070,885,792 bytes fail
+0.996296/0.987063 respectively. No promotion. Receipt:
+`docs/nemotron-encoder-attention-2026-10-09.json`.
+Next claimed CPU experiment in the same isolated worktree: retain FFN+QKV source,
+then separately retain all attention out or all position matrices, or retain
+both only in late layers 20–23, 16–23, 12–23. These explicitly mostly-source
+hybrids must retain at least 14,155,776 actual Q4 bytes; this payload floor is an
+experimental scope constraint, not a change to any quality gate. Keep all ten
+baselines, F16-first unchanged three-stage controls, tensor equality audits,
+24-layer arrays and capture OFF/ON/OFF controls. No decoded/GPU promotion until
+stage acceptance, and no claim that a near-F16-sized hybrid is a small Q4 model.
+
 ## CLAIMED 2026-10-09 — PR #492 salvage, OmniVoice cleanup and remaining performance work
 
 Owner: this maintainer session, resumed 2026-10-09. Separate worktrees under
