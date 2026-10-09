@@ -19,6 +19,13 @@ Release dry-run Linux Python artifact loads its bundled native library, but
 Fix platform-aware adjacent helper discovery, preserve explicit overrides and
 repo build fallback, and validate the actual staged package plus model-free
 constructor-path and native resampling regressions before merging.
+Candidate now passes all 18 constructor routes (Linux/macOS/Windows names;
+automatic, explicit, environment, helper override, build, legacy). Ten routes
+failed before the fix. Actual staged Linux library/helper loads with loader
+overrides cleared; all eight existing audio resampling tests pass against the
+staged library and candidate binding. Only Python source was overlaid; archive
+bytes stay unchanged. Missing-model initialization is intentional, so this is
+not model inference acceptance. Receipt: `docs/python-package-helpers-2026-10-09.json`.
 
 ## Release preparation checkpoint 2026-10-09
 

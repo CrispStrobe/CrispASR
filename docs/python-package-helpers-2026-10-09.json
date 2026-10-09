@@ -1,0 +1,28 @@
+{
+  "run": 37958100129,
+  "artifact_source": "23b401b3d20a2ef794a88ade6a261369e899359d",
+  "archive": "crispasr-python-linux-x86_64.tar.gz",
+  "sha256": "e26ff3189e8f810c16a92ca4814c9339476efd23d71514be5d07062d2091cdbc",
+  "archive_unmodified": true,
+  "candidate_binding_only_overlay": true,
+  "candidate_binding_sha256": "96267b70d8cc432260b6249f26efca12a342fd7f61e2b3c59f2f02b33fda260c",
+  "loader_environment_overrides_cleared": true,
+  "before": {
+    "binding": "/mnt/storage/crispasr/salvage-20261008/proof/release-dry-37958100129/python-unpacked/crispasr-python-linux-x86_64/crispasr/_binding.py",
+    "loaded": [
+      "/mnt/storage/crispasr/salvage-20261008/proof/release-dry-37958100129/python-unpacked/crispasr-python-linux-x86_64/crispasr/libcrispasr.so"
+    ]
+  },
+  "after": {
+    "binding": "/mnt/storage/crispasr/salvage-20261008/proof/release-dry-37958100129/python-unpacked/crispasr-python-linux-x86_64/crispasr/_binding.py",
+    "loaded": [
+      "/mnt/storage/crispasr/salvage-20261008/proof/release-dry-37958100129/python-unpacked/crispasr-python-linux-x86_64/crispasr/libcrispasr.so",
+      "/mnt/storage/crispasr/salvage-20261008/proof/release-dry-37958100129/python-unpacked/crispasr-python-linux-x86_64/crispasr/libcrispasr_helpers.so"
+    ]
+  },
+  "missing_model_error_expected": true,
+  "resampling_tests_returncode": 0,
+  "resampling_stdout": "/mnt/storage/crispasr/salvage-20261008/proof/release-dry-37958100129/python-unpacked/crispasr-python-linux-x86_64/crispasr/_binding.py\n",
+  "resampling_stderr": "test_anti_alias_and_passband (__main__.AudioResampleTests.test_anti_alias_and_passband) ... ok\ntest_both_front_doors_receive_filtered_contiguous_samples (__main__.AudioResampleTests.test_both_front_doors_receive_filtered_contiguous_samples) ... ok\ntest_contiguous_unchanged_and_ceil_length (__main__.AudioResampleTests.test_contiguous_unchanged_and_ceil_length) ... ok\ntest_invalid_inputs (__main__.AudioResampleTests.test_invalid_inputs) ... ok\ntest_native_failure_does_not_silently_use_fallback (__main__.AudioResampleTests.test_native_failure_does_not_silently_use_fallback) ... ok\ntest_static_wav_loader_is_bandlimited (__main__.AudioResampleTests.test_static_wav_loader_is_bandlimited) ... ok\ntest_error_reset_empty_and_identity_ownership (__main__.NativeAudioResampleTests.test_error_reset_empty_and_identity_ownership) ... ok\ntest_native_fallback_agreement (__main__.NativeAudioResampleTests.test_native_fallback_agreement) ... ok\n\n----------------------------------------------------------------------\nRan 8 tests in 1.306s\n\nOK\n",
+  "real_model_inference_tested": false
+}

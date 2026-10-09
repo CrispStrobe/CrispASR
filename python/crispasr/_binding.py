@@ -223,14 +223,19 @@ class CrispASR:
 
     def __init__(self, model_path: str, lib_path: Optional[str] = None,
                  helpers_lib_path: Optional[str] = None):
-        self._lib = ctypes.CDLL(lib_path or _find_lib())
+        resolved_lib_path = lib_path or _find_lib()
+        self._lib = ctypes.CDLL(resolved_lib_path)
         self._setup_signatures()
 
         # Load helpers library (provides pointer-based wrappers for by-value struct APIs)
+        helpers_name = {
+            "Darwin": "libcrispasr_helpers.dylib",
+            "Windows": "crispasr_helpers.dll",
+        }.get(platform.system(), "libcrispasr_helpers.so")
         helpers_search = [
             helpers_lib_path,
-            str(Path(lib_path).parent / "libcrispasr_helpers.so") if lib_path else None,
-            str(Path(__file__).parent.parent.parent / "build" / "libcrispasr_helpers.so"),
+            str(Path(resolved_lib_path).parent / helpers_name),
+            str(Path(__file__).parent.parent.parent / "build" / helpers_name),
         ]
         self._helpers = None
         for hp in helpers_search:
