@@ -3817,3 +3817,16 @@ stages before decoded testing; the known plain-Q4 negative must reject.
 Every positive must match all 26 original transcripts, all 22 VoxCPM2 controls,
 and reverse-reused fresh outputs before retaining the candidate in the artifact.
 No model/default promotion; public full stage/layer proof is pinned in the receipt.
+
+
+Plugin-discovery correction checkpoint: `37a90a37c9871ff4d4cf915993acec2b734293cd`
+explicitly preserves the UTF-8 byte representation across C++17/C++20;
+standalone warning-as-error compilation and non-ASCII path assertions pass
+under both standards. The actual staged C ABI CI regression now uses a
+non-ASCII package path. Failed hosted job 113979995896 logs are retained in
+storage. Old CUDA build 37977686803 was canceled after its checkout was observed;
+replacement no-publication [37988408052](https://github.com/CrispStrobe/CrispASR/actions/runs/37988408052)
+is queued at the corrected source. Freeze the branch until its checkout is
+observed; no candidate package/GPU acceptance yet.
+The original decoded-control worker's full four-test secret scan passes with
+no skips (137.633 seconds); decoded run 37987517614 remains queued.

@@ -94,5 +94,23 @@
   "repair_pr": "https://github.com/CrispStrobe/CrispASR/pull/528",
   "repair_source": "108e38024befd8f0db5c7e3400b90d6ac93b016b",
   "rebuild_run": 37977686803,
-  "rebuild_status": "queued"
+  "rebuild_status": "queued",
+  "corrected_package_rebuild": {
+    "run": 37988408052,
+    "source": "37a90a37c9871ff4d4cf915993acec2b734293cd",
+    "status": "queued",
+    "publication_requested": false,
+    "previous_attempt": {
+      "run": 37977686803,
+      "source": "108e38024befd8f0db5c7e3400b90d6ac93b016b",
+      "cancellation_requested": true
+    },
+    "ci_compile_failure": {
+      "job": 113979995896,
+      "reason": "C++20 u8string returns char8_t; cannot implicitly assign to std::string",
+      "correction": "Preserve the UTF-8 object representation as char bytes; staged C ABI CI path includes non-ASCII characters",
+      "standalone_cxx17_cxx20_utf8_assertions_passed": true
+    },
+    "package_gpu_validated": false
+  }
 }

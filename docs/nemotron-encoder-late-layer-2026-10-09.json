@@ -6835,6 +6835,11 @@
     "run": 37987517614,
     "source": "b93d60bfe93da80ebac1841df0835277b12ec10c",
     "status": "queued",
-    "candidate_exact_sha_required": "84cefe0658e8d87fc55a704406f92c48224118f916f3d5b47a94817b7e315f28"
+    "candidate_exact_sha_required": "84cefe0658e8d87fc55a704406f92c48224118f916f3d5b47a94817b7e315f28",
+    "secret_scan": {
+      "tests_passed": 4,
+      "skips": 0,
+      "seconds": 137.633
+    }
   }
 }
