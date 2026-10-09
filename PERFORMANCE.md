@@ -25,8 +25,27 @@ There are 576 observed decode steps; each graph has 13 scheduler splits.
 Scheduler pipeline-copy multiplicity is one; it is not a transfer count.
 Construction plus allocation consume about 1.8% of summed decode phase time,
 so caching alone cannot explain a large prospective speedup. The GPU route
-also recomputes a masked-out audio branch. An opt-in text-only cached-graph
-experiment is under validation; no default or speed claim has changed.
+also recomputes a masked-out audio branch.
+
+A subsequent same-binary/file/GPU ABBA run validates the opt-in text-only cached
+step graph: English 3.29871 → 3.21258s (1.0268×), Chinese 1.42840 → 1.39455s
+(1.0243×), 12 warm measured calls per clip/mode. All 64 calls and eight actual
+CLI/session pairs agree. Every captured full-vocabulary logit vector is
+byte-identical: 27 EN and 11 ZH steps across four arms, 114 comparisons,
+relative L2 zero and identical magnitudes. Sampled GPU process peaks increase
+4,932 → 4,950 MiB; these are lower bounds.
+
+Enable with `CRISPASR_MIMO_ASR_GPU_STEP_GRAPH=1`; default OFF retains the
+working prefill route. The experimental path gathers the CPU-resident Q4_K
+text embedding in-graph, skips the zero-valued audio branch, and caches a
+fixed-length masked GPU graph with runtime KV scatter indices. Each new
+transcription invalidates the graph before prefill. This is a modest 2.4–2.7%
+gain on T4, not evidence for P100, CANN or other devices. No weight/download
+size changes or recovered precision are claimed. Use
+`CRISPASR_MIMO_ASR_GRAPH_PROFILE=1` for phases and
+`CRISPASR_MIMO_ASR_DUMP_STEP_LOGITS=<existing-directory>` for diagnostic
+full-vocabulary dumps; disable dumps for timing.
+[Raw logits, repeated speech and immutable proof](https://github.com/CrispStrobe/CrispASR/blob/main/docs/mimo-gpu-cached-step-2026-10-08.json).
 [Immutable public proof, hardware, timings and cache receipt](docs/mimo-graph-profile-2026-10-08.json).
 
 ## MiMo original-Q4 CUDA precision study — 2026-10-08 (#492, diagnostic)
