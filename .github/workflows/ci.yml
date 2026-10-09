@@ -49,7 +49,7 @@ jobs:
 
       - name: Packaged C ABI discovers adjacent plugins outside the package directory
         run: |
-          stage="$RUNNER_TEMP/crispasr-plugin-package"
+          stage="$RUNNER_TEMP/crispasr-plugin-package-é-模型"
           mkdir -p "$stage"
           find build-dl \( -type f -o -type l \) -name '*.so*' -exec cp -L {} "$stage/" \;
           python3 tests/test_packaged_backend_discovery.py --library "$stage/libcrispasr.so"

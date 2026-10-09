@@ -1784,7 +1784,10 @@ static void ensure_dynamic_backends_loaded() {
         }
 #endif
         if (!module_path.empty() && module_path.has_parent_path()) {
-            const std::string directory = module_path.parent_path().u8string();
+            // C++20 uses char8_t here; ggml takes UTF-8 bytes as char in
+            // both C++17 and C++20. Reading the object representation is safe.
+            const auto utf8_directory = module_path.parent_path().u8string();
+            const std::string directory(reinterpret_cast<const char*>(utf8_directory.data()), utf8_directory.size());
             ggml_backend_load_all_from_path(directory.c_str());
         }
 #endif
