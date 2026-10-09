@@ -274,7 +274,7 @@
   "reason": "Capture output flags changed without graph-shape changes; the cached allocation plan reused intermediate buffers. Final output byte equality alone did not validate intermediates.",
   "retry_run": 37953858590,
   "retry_source": "307bcf92dfa3264e51ad6e0d36668797c8a72275",
-  "retry_status": "QUEUED",
+  "retry_status": "SUCCESS",
   "quant_promoted": false,
   "proof": {
     "repo": "cstr/crispasr-regression-fixtures",
@@ -283,6 +283,677 @@
     "path": "tts-asr/nemotron-layer-probe-initial-20261009/proof.zip",
     "sha256": "a792d55ba0e92166f2f57efd8be071b15746fb85a802ececff24b00a2838a671",
     "bytes": 53388645,
+    "remote_verified": true
+  },
+  "native_intermediate_capture_valid": true,
+  "comparison": {
+    "original_run": 37946465069,
+    "native_run": 37953858590,
+    "native_intermediate_capture_valid": true,
+    "models": {
+      "f16": [
+        {
+          "layer": 0,
+          "cosine_min": 0.9999999869745664,
+          "cosine_mean": 0.9999999913073543,
+          "native_norm": 2983.2491825739826,
+          "reference_norm": 2983.234003975985,
+          "relative_l2": 0.00013166129461587666,
+          "max_abs": 0.0078029632568359375
+        },
+        {
+          "layer": 1,
+          "cosine_min": 0.9999999759144813,
+          "cosine_mean": 0.9999999815739226,
+          "native_norm": 3064.202963742973,
+          "reference_norm": 3064.208176079049,
+          "relative_l2": 0.00019152009826014,
+          "max_abs": 0.0136871337890625
+        },
+        {
+          "layer": 2,
+          "cosine_min": 0.9999999634737715,
+          "cosine_mean": 0.9999999755335108,
+          "native_norm": 2801.0543190701055,
+          "reference_norm": 2801.057589806585,
+          "relative_l2": 0.00021956816217384378,
+          "max_abs": 0.011728286743164062
+        },
+        {
+          "layer": 3,
+          "cosine_min": 0.9999999500132598,
+          "cosine_mean": 0.9999999678130694,
+          "native_norm": 2738.400082747464,
+          "reference_norm": 2738.4034171234607,
+          "relative_l2": 0.0002523409655670167,
+          "max_abs": 0.022686004638671875
+        },
+        {
+          "layer": 4,
+          "cosine_min": 0.9999999375172646,
+          "cosine_mean": 0.9999999623055893,
+          "native_norm": 2780.5721458537846,
+          "reference_norm": 2780.573803016556,
+          "relative_l2": 0.0002736359263913634,
+          "max_abs": 0.01680755615234375
+        },
+        {
+          "layer": 5,
+          "cosine_min": 0.9999999104917151,
+          "cosine_mean": 0.9999999583800202,
+          "native_norm": 2800.976856034168,
+          "reference_norm": 2800.990278518803,
+          "relative_l2": 0.00028742702363513707,
+          "max_abs": 0.015273571014404297
+        },
+        {
+          "layer": 6,
+          "cosine_min": 0.9999999136430298,
+          "cosine_mean": 0.9999999572160067,
+          "native_norm": 2793.495117893901,
+          "reference_norm": 2793.50106496633,
+          "relative_l2": 0.00029171419291423037,
+          "max_abs": 0.01904296875
+        },
+        {
+          "layer": 7,
+          "cosine_min": 0.9999999090912225,
+          "cosine_mean": 0.9999999547929578,
+          "native_norm": 2788.0747469044013,
+          "reference_norm": 2788.039610541727,
+          "relative_l2": 0.0002976702001730622,
+          "max_abs": 0.02272796630859375
+        },
+        {
+          "layer": 8,
+          "cosine_min": 0.9999999122093923,
+          "cosine_mean": 0.9999999547281427,
+          "native_norm": 2635.797306506833,
+          "reference_norm": 2635.7877135546382,
+          "relative_l2": 0.0002943401864785095,
+          "max_abs": 0.0284423828125
+        },
+        {
+          "layer": 9,
+          "cosine_min": 0.9999999188757386,
+          "cosine_mean": 0.999999959023676,
+          "native_norm": 2477.6154681966236,
+          "reference_norm": 2477.584277210425,
+          "relative_l2": 0.0002828340051115168,
+          "max_abs": 0.0262451171875
+        },
+        {
+          "layer": 10,
+          "cosine_min": 0.9999999214905446,
+          "cosine_mean": 0.9999999656201133,
+          "native_norm": 2460.117350548213,
+          "reference_norm": 2460.0979445727585,
+          "relative_l2": 0.0002587854113720216,
+          "max_abs": 0.0269927978515625
+        },
+        {
+          "layer": 11,
+          "cosine_min": 0.9999999270982595,
+          "cosine_mean": 0.9999999673629189,
+          "native_norm": 2376.573576072364,
+          "reference_norm": 2376.562391885033,
+          "relative_l2": 0.0002553746919739047,
+          "max_abs": 0.022869110107421875
+        },
+        {
+          "layer": 12,
+          "cosine_min": 0.9999999301330794,
+          "cosine_mean": 0.9999999689574806,
+          "native_norm": 2389.9634878609145,
+          "reference_norm": 2389.954600189384,
+          "relative_l2": 0.00025011071884540904,
+          "max_abs": 0.020227432250976562
+        },
+        {
+          "layer": 13,
+          "cosine_min": 0.9999999329171024,
+          "cosine_mean": 0.999999971237183,
+          "native_norm": 2640.348624589964,
+          "reference_norm": 2640.34461955904,
+          "relative_l2": 0.00023958889899954627,
+          "max_abs": 0.0251617431640625
+        },
+        {
+          "layer": 14,
+          "cosine_min": 0.9999999315584116,
+          "cosine_mean": 0.9999999674338153,
+          "native_norm": 2845.1492803025176,
+          "reference_norm": 2845.1436863027866,
+          "relative_l2": 0.00025427087369366377,
+          "max_abs": 0.024017333984375
+        },
+        {
+          "layer": 15,
+          "cosine_min": 0.9999999437368308,
+          "cosine_mean": 0.9999999691017958,
+          "native_norm": 3097.6501801889826,
+          "reference_norm": 3097.643899473565,
+          "relative_l2": 0.0002445953310835031,
+          "max_abs": 0.0284576416015625
+        },
+        {
+          "layer": 16,
+          "cosine_min": 0.9999999264045404,
+          "cosine_mean": 0.999999965086967,
+          "native_norm": 3106.884338502467,
+          "reference_norm": 3106.8825476499824,
+          "relative_l2": 0.0002605371052976857,
+          "max_abs": 0.026279449462890625
+        },
+        {
+          "layer": 17,
+          "cosine_min": 0.9999999352541378,
+          "cosine_mean": 0.9999999673019364,
+          "native_norm": 3123.544105379518,
+          "reference_norm": 3123.541086121575,
+          "relative_l2": 0.0002516854809290431,
+          "max_abs": 0.0434417724609375
+        },
+        {
+          "layer": 18,
+          "cosine_min": 0.9999999339526706,
+          "cosine_mean": 0.9999999697532369,
+          "native_norm": 3001.0166154365525,
+          "reference_norm": 3001.0264153765233,
+          "relative_l2": 0.00024266976124836465,
+          "max_abs": 0.0535430908203125
+        },
+        {
+          "layer": 19,
+          "cosine_min": 0.9999999280997024,
+          "cosine_mean": 0.9999999704861366,
+          "native_norm": 2759.7552709964657,
+          "reference_norm": 2759.7627378872035,
+          "relative_l2": 0.00023808227813669494,
+          "max_abs": 0.026611328125
+        },
+        {
+          "layer": 20,
+          "cosine_min": 0.9999999123800895,
+          "cosine_mean": 0.9999999643174144,
+          "native_norm": 2442.880092549299,
+          "reference_norm": 2442.89197083095,
+          "relative_l2": 0.00026042550888028606,
+          "max_abs": 0.0282440185546875
+        },
+        {
+          "layer": 21,
+          "cosine_min": 0.9999898207478564,
+          "cosine_mean": 0.9999998165737731,
+          "native_norm": 2140.3660575697013,
+          "reference_norm": 2140.355164053906,
+          "relative_l2": 0.0006485818503615231,
+          "max_abs": 0.488494873046875
+        },
+        {
+          "layer": 22,
+          "cosine_min": 0.9999799704881992,
+          "cosine_mean": 0.9999996453155359,
+          "native_norm": 1932.7054084842985,
+          "reference_norm": 1932.7115239178345,
+          "relative_l2": 0.0008136165700153809,
+          "max_abs": 0.47505950927734375
+        },
+        {
+          "layer": 23,
+          "cosine_min": 0.999997620837262,
+          "cosine_mean": 0.9999999603941069,
+          "native_norm": 16.6130505707005,
+          "reference_norm": 16.612932159975962,
+          "relative_l2": 0.0002802561599659364,
+          "max_abs": 0.0010394155979156494
+        }
+      ],
+      "plain-q4": [
+        {
+          "layer": 0,
+          "cosine_min": 0.9957679160919152,
+          "cosine_mean": 0.9980770720800933,
+          "native_norm": 2986.08843188574,
+          "reference_norm": 2983.234003975985,
+          "relative_l2": 0.06172075073581921,
+          "max_abs": 3.2928333282470703
+        },
+        {
+          "layer": 1,
+          "cosine_min": 0.9942907203832039,
+          "cosine_mean": 0.996764837912816,
+          "native_norm": 3060.7531878427817,
+          "reference_norm": 3064.208176079049,
+          "relative_l2": 0.08017710906766048,
+          "max_abs": 4.385261535644531
+        },
+        {
+          "layer": 2,
+          "cosine_min": 0.9940708553485307,
+          "cosine_mean": 0.9960838459327355,
+          "native_norm": 2797.187791682469,
+          "reference_norm": 2801.057589806585,
+          "relative_l2": 0.08772065382473297,
+          "max_abs": 4.233121871948242
+        },
+        {
+          "layer": 3,
+          "cosine_min": 0.9914984809014185,
+          "cosine_mean": 0.9948876106705916,
+          "native_norm": 2732.538587895098,
+          "reference_norm": 2738.4034171234607,
+          "relative_l2": 0.10047589576110771,
+          "max_abs": 7.201423645019531
+        },
+        {
+          "layer": 4,
+          "cosine_min": 0.9889886142371636,
+          "cosine_mean": 0.9944866668969305,
+          "native_norm": 2776.835659391319,
+          "reference_norm": 2780.573803016556,
+          "relative_l2": 0.10455532716626262,
+          "max_abs": 6.477062225341797
+        },
+        {
+          "layer": 5,
+          "cosine_min": 0.9850156131802059,
+          "cosine_mean": 0.9940369202012745,
+          "native_norm": 2795.3239194447815,
+          "reference_norm": 2800.990278518803,
+          "relative_l2": 0.10865314014342198,
+          "max_abs": 7.182464599609375
+        },
+        {
+          "layer": 6,
+          "cosine_min": 0.9851500225426154,
+          "cosine_mean": 0.9937887831781854,
+          "native_norm": 2789.529894324747,
+          "reference_norm": 2793.50106496633,
+          "relative_l2": 0.11103558311148132,
+          "max_abs": 7.661480903625488
+        },
+        {
+          "layer": 7,
+          "cosine_min": 0.9848349258786773,
+          "cosine_mean": 0.9937815610624114,
+          "native_norm": 2786.935749126546,
+          "reference_norm": 2788.039610541727,
+          "relative_l2": 0.11031758130474707,
+          "max_abs": 8.064248085021973
+        },
+        {
+          "layer": 8,
+          "cosine_min": 0.9850724345325041,
+          "cosine_mean": 0.9940128990585817,
+          "native_norm": 2634.977030844226,
+          "reference_norm": 2635.7877135546382,
+          "relative_l2": 0.10695311989977453,
+          "max_abs": 10.171173095703125
+        },
+        {
+          "layer": 9,
+          "cosine_min": 0.986453067672366,
+          "cosine_mean": 0.9952240820124604,
+          "native_norm": 2483.7486304377207,
+          "reference_norm": 2477.584277210425,
+          "relative_l2": 0.09659571509786789,
+          "max_abs": 10.828117370605469
+        },
+        {
+          "layer": 10,
+          "cosine_min": 0.9879222181779294,
+          "cosine_mean": 0.9960652337586233,
+          "native_norm": 2464.3204826732294,
+          "reference_norm": 2460.0979445727585,
+          "relative_l2": 0.08759066453876133,
+          "max_abs": 12.514350891113281
+        },
+        {
+          "layer": 11,
+          "cosine_min": 0.9887079434315731,
+          "cosine_mean": 0.9962860894458714,
+          "native_norm": 2379.7065157730517,
+          "reference_norm": 2376.562391885033,
+          "relative_l2": 0.08621900853887238,
+          "max_abs": 9.445510864257812
+        },
+        {
+          "layer": 12,
+          "cosine_min": 0.9886443080356876,
+          "cosine_mean": 0.9964315437846898,
+          "native_norm": 2392.336065969368,
+          "reference_norm": 2389.954600189384,
+          "relative_l2": 0.08486456832237683,
+          "max_abs": 8.252769470214844
+        },
+        {
+          "layer": 13,
+          "cosine_min": 0.9885416705843391,
+          "cosine_mean": 0.9967253401522183,
+          "native_norm": 2644.2850957420887,
+          "reference_norm": 2640.34461955904,
+          "relative_l2": 0.08087595038836573,
+          "max_abs": 10.066551208496094
+        },
+        {
+          "layer": 14,
+          "cosine_min": 0.9887480648703769,
+          "cosine_mean": 0.996329131923193,
+          "native_norm": 2847.3394081670513,
+          "reference_norm": 2845.1436863027866,
+          "relative_l2": 0.08519768453446752,
+          "max_abs": 8.888345517218113
+        },
+        {
+          "layer": 15,
+          "cosine_min": 0.9903362749464879,
+          "cosine_mean": 0.9965780879099959,
+          "native_norm": 3100.598976236742,
+          "reference_norm": 3097.643899473565,
+          "relative_l2": 0.0812530747574194,
+          "max_abs": 7.883626937866211
+        },
+        {
+          "layer": 16,
+          "cosine_min": 0.9902078610009449,
+          "cosine_mean": 0.9961337014320674,
+          "native_norm": 3105.4382562351357,
+          "reference_norm": 3106.8825476499824,
+          "relative_l2": 0.08662509091535192,
+          "max_abs": 7.942722320556641
+        },
+        {
+          "layer": 17,
+          "cosine_min": 0.9917198149756195,
+          "cosine_mean": 0.9963796239717024,
+          "native_norm": 3123.2387157634053,
+          "reference_norm": 3123.541086121575,
+          "relative_l2": 0.08365796244376007,
+          "max_abs": 7.5955810546875
+        },
+        {
+          "layer": 18,
+          "cosine_min": 0.9912028992403152,
+          "cosine_mean": 0.9965149749688428,
+          "native_norm": 3003.29415191098,
+          "reference_norm": 3001.0264153765233,
+          "relative_l2": 0.08224581597315749,
+          "max_abs": 9.81829833984375
+        },
+        {
+          "layer": 19,
+          "cosine_min": 0.992662725381954,
+          "cosine_mean": 0.9964935482710651,
+          "native_norm": 2761.7931375402422,
+          "reference_norm": 2759.7627378872035,
+          "relative_l2": 0.08174948931109088,
+          "max_abs": 8.508804321289062
+        },
+        {
+          "layer": 20,
+          "cosine_min": 0.9884251988628338,
+          "cosine_mean": 0.9945052308445559,
+          "native_norm": 2439.3901848576265,
+          "reference_norm": 2442.89197083095,
+          "relative_l2": 0.10222527173772221,
+          "max_abs": 10.677688598632812
+        },
+        {
+          "layer": 21,
+          "cosine_min": 0.9122075247958192,
+          "cosine_mean": 0.9777853149740874,
+          "native_norm": 2149.4643421922747,
+          "reference_norm": 2140.355164053906,
+          "relative_l2": 0.20641867661549185,
+          "max_abs": 34.31026077270508
+        },
+        {
+          "layer": 22,
+          "cosine_min": 0.88197608868507,
+          "cosine_mean": 0.9796126982304637,
+          "native_norm": 1941.5070001285276,
+          "reference_norm": 1932.7115239178345,
+          "relative_l2": 0.2003925903094787,
+          "max_abs": 32.28798961639404
+        },
+        {
+          "layer": 23,
+          "cosine_min": 0.9848097423008978,
+          "cosine_mean": 0.998025137099481,
+          "native_norm": 16.565134751287616,
+          "reference_norm": 16.612932159975962,
+          "relative_l2": 0.06350192122749192,
+          "max_abs": 0.06698659807443619
+        }
+      ],
+      "rnnt-preout-q4": [
+        {
+          "layer": 0,
+          "cosine_min": 0.9991635292898349,
+          "cosine_mean": 0.9994289913487524,
+          "native_norm": 2987.115855908453,
+          "reference_norm": 2983.234003975985,
+          "relative_l2": 0.0335894879497574,
+          "max_abs": 2.9441146850585938
+        },
+        {
+          "layer": 1,
+          "cosine_min": 0.996765850951659,
+          "cosine_mean": 0.9976360394048366,
+          "native_norm": 3061.8247927985217,
+          "reference_norm": 3064.208176079049,
+          "relative_l2": 0.06854713166911909,
+          "max_abs": 4.043312072753906
+        },
+        {
+          "layer": 2,
+          "cosine_min": 0.9948398007223911,
+          "cosine_mean": 0.9967530724131983,
+          "native_norm": 2798.4147833001225,
+          "reference_norm": 2801.057589806585,
+          "relative_l2": 0.0798731926239467,
+          "max_abs": 4.5530242919921875
+        },
+        {
+          "layer": 3,
+          "cosine_min": 0.990637547930477,
+          "cosine_mean": 0.9953621567778641,
+          "native_norm": 2733.844675314973,
+          "reference_norm": 2738.4034171234607,
+          "relative_l2": 0.09570274225972443,
+          "max_abs": 7.539068222045898
+        },
+        {
+          "layer": 4,
+          "cosine_min": 0.9884975336646978,
+          "cosine_mean": 0.9948369066015222,
+          "native_norm": 2777.733910253556,
+          "reference_norm": 2780.573803016556,
+          "relative_l2": 0.10118955767622397,
+          "max_abs": 7.377067565917969
+        },
+        {
+          "layer": 5,
+          "cosine_min": 0.9860284256435549,
+          "cosine_mean": 0.9943423275197575,
+          "native_norm": 2795.4632330868862,
+          "reference_norm": 2800.990278518803,
+          "relative_l2": 0.10584874477208234,
+          "max_abs": 6.662052154541016
+        },
+        {
+          "layer": 6,
+          "cosine_min": 0.9859524222846809,
+          "cosine_mean": 0.9940425310032781,
+          "native_norm": 2788.8983584940215,
+          "reference_norm": 2793.50106496633,
+          "relative_l2": 0.10877435344466554,
+          "max_abs": 7.119614124298096
+        },
+        {
+          "layer": 7,
+          "cosine_min": 0.9845457207502021,
+          "cosine_mean": 0.9939954695487339,
+          "native_norm": 2786.8159660872193,
+          "reference_norm": 2788.039610541727,
+          "relative_l2": 0.10847062522877172,
+          "max_abs": 7.918863296508789
+        },
+        {
+          "layer": 8,
+          "cosine_min": 0.9850016547931195,
+          "cosine_mean": 0.9941497491951963,
+          "native_norm": 2635.11592901225,
+          "reference_norm": 2635.7877135546382,
+          "relative_l2": 0.10578240085863298,
+          "max_abs": 9.693756103515625
+        },
+        {
+          "layer": 9,
+          "cosine_min": 0.9866045024668455,
+          "cosine_mean": 0.9953116394884314,
+          "native_norm": 2483.740122577873,
+          "reference_norm": 2477.584277210425,
+          "relative_l2": 0.095727718098445,
+          "max_abs": 10.105995178222656
+        },
+        {
+          "layer": 10,
+          "cosine_min": 0.9880375215187818,
+          "cosine_mean": 0.9961340207151952,
+          "native_norm": 2464.133120355021,
+          "reference_norm": 2460.0979445727585,
+          "relative_l2": 0.08682877483405865,
+          "max_abs": 11.836814880371094
+        },
+        {
+          "layer": 11,
+          "cosine_min": 0.9887257192994904,
+          "cosine_mean": 0.9963295433208696,
+          "native_norm": 2379.3635811091794,
+          "reference_norm": 2376.562391885033,
+          "relative_l2": 0.08569407119588496,
+          "max_abs": 8.818084716796875
+        },
+        {
+          "layer": 12,
+          "cosine_min": 0.988498503318225,
+          "cosine_mean": 0.9964663880665338,
+          "native_norm": 2392.1548279027056,
+          "reference_norm": 2389.954600189384,
+          "relative_l2": 0.08439413219152124,
+          "max_abs": 8.238147735595703
+        },
+        {
+          "layer": 13,
+          "cosine_min": 0.9883680176938956,
+          "cosine_mean": 0.9967638394317245,
+          "native_norm": 2644.169399462807,
+          "reference_norm": 2640.34461955904,
+          "relative_l2": 0.08038743281245311,
+          "max_abs": 9.675018310546875
+        },
+        {
+          "layer": 14,
+          "cosine_min": 0.9888220355117725,
+          "cosine_mean": 0.9963569076331309,
+          "native_norm": 2847.568056716445,
+          "reference_norm": 2845.1436863027866,
+          "relative_l2": 0.08489897312487774,
+          "max_abs": 8.733863830566406
+        },
+        {
+          "layer": 15,
+          "cosine_min": 0.9906267123104574,
+          "cosine_mean": 0.9966036424788908,
+          "native_norm": 3101.0939236676345,
+          "reference_norm": 3097.643899473565,
+          "relative_l2": 0.0810138181451248,
+          "max_abs": 7.384700775146484
+        },
+        {
+          "layer": 16,
+          "cosine_min": 0.9906559773791436,
+          "cosine_mean": 0.9961343242426054,
+          "native_norm": 3106.0378989480037,
+          "reference_norm": 3106.8825476499824,
+          "relative_l2": 0.08669172416418806,
+          "max_abs": 8.107868194580078
+        },
+        {
+          "layer": 17,
+          "cosine_min": 0.9920082783615698,
+          "cosine_mean": 0.9963805060997285,
+          "native_norm": 3123.640911327447,
+          "reference_norm": 3123.541086121575,
+          "relative_l2": 0.08376399098564141,
+          "max_abs": 8.601753234863281
+        },
+        {
+          "layer": 18,
+          "cosine_min": 0.991615453473122,
+          "cosine_mean": 0.9965141384996775,
+          "native_norm": 3003.1994572101944,
+          "reference_norm": 3001.0264153765233,
+          "relative_l2": 0.08233286745218917,
+          "max_abs": 11.67779541015625
+        },
+        {
+          "layer": 19,
+          "cosine_min": 0.9929406764687971,
+          "cosine_mean": 0.996484171998836,
+          "native_norm": 2761.845879236197,
+          "reference_norm": 2759.7627378872035,
+          "relative_l2": 0.08186503205736441,
+          "max_abs": 9.367713928222656
+        },
+        {
+          "layer": 20,
+          "cosine_min": 0.9882098501061732,
+          "cosine_mean": 0.9945368904302042,
+          "native_norm": 2439.997598888346,
+          "reference_norm": 2442.89197083095,
+          "relative_l2": 0.10195418680632765,
+          "max_abs": 10.148361206054688
+        },
+        {
+          "layer": 21,
+          "cosine_min": 0.9155992663584562,
+          "cosine_mean": 0.9777205098275226,
+          "native_norm": 2149.869747571634,
+          "reference_norm": 2140.355164053906,
+          "relative_l2": 0.2067070474897836,
+          "max_abs": 32.55145454406738
+        },
+        {
+          "layer": 22,
+          "cosine_min": 0.8543023686175291,
+          "cosine_mean": 0.9793969588468145,
+          "native_norm": 1940.6014170795622,
+          "reference_norm": 1932.7115239178345,
+          "relative_l2": 0.2012775722457175,
+          "max_abs": 33.12750244140625
+        },
+        {
+          "layer": 23,
+          "cosine_min": 0.9837810331763917,
+          "cosine_mean": 0.998007972207733,
+          "native_norm": 16.570351950341934,
+          "reference_norm": 16.612932159975962,
+          "relative_l2": 0.06374282062017983,
+          "max_abs": 0.06747586280107498
+        }
+      ]
+    }
+  },
+  "fixed_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "repo_type": "dataset",
+    "revision": "9c0a0f5dca33caef932f7a7139b3a2ec83e3814d",
+    "path": "tts-asr/nemotron-layer-probe-fixed-20261009/proof.zip",
+    "sha256": "bb59fc7439b42e5bfdbec3fd87037a7efafde5400eb4210222ed747be5a79bbb",
+    "bytes": 53583161,
     "remote_verified": true
   }
 }

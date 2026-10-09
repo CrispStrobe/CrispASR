@@ -78,7 +78,21 @@ production capture change. Compare against original layer reference only
 after both workers complete; failed capture controls invalidate the probe. Both layer jobs completed. Original
 capture preserves generation IDs exactly and retains all 24 layers. Initial
 native final output OFF/ON/OFF is byte-exact, but intermediate F16 arrays
-reuse two buffers and are INVALID. No Q4 guard may be chosen from them.
+reuse two buffers and are INVALID. No Q4 guard may be chosen from them. The explicit-reserve rerun
+GH `37953858590` SUCCESS validates every F16 layer against original (all
+minima >0.999) and all capture OFF/ON/OFF controls. Plain Q4 first fails
+layer 0; RNNT+prompt+source-preout Q4 first fails layer 1, cosine minimum
+0.99676585 and relative-L2 0.06854713. Public raw complete arrays and
+per-layer comparison are pinned in the layer-probe diagnostic. Next this
+session claims a predeclared two-group precision isolation in the same
+`nemotron-quant` worktree: retain existing RNNT/prompt/preout guards and
+compare attention-only source preservation versus FFN-only preservation.
+Physically audit source types/bytes, unrelated Q4 identity and actual sizes;
+retain unchanged F16-first stage gates/capture controls. No defaults or
+model promotion. Parakeet RNNT preserves joint/embed; GigaAM preserves
+RNNT/prompt-front precision. Those small-head rules do not explain the
+remaining Conformer drift, so isolate learned encoder groups before further
+calibration or guards.
 Worker `307bcf92d` explicitly reserves diagnostic output lifetimes; rerun
 GH `37953858590` is queued. Raw rejected probe and original gold publicly
 archived: `docs/nemotron-layer-probe-2026-10-09.json`.
