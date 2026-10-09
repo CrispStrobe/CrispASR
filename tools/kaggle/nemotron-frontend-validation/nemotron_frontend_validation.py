@@ -12,7 +12,7 @@ import tarfile
 import wave
 import zipfile
 
-VERSION = '2026-10-09.1'
+VERSION = '2026-10-09.2'
 SOURCE = '1977bd047d73b5e35cf5d267801fe21e859cfc1c'
 BUILD_RUN = 37943881572
 BUNDLE_REV = '7eb6302442d6c3524426de1147d9cb34341221d0'
@@ -66,6 +66,12 @@ archive=fetch('cstr/crispasr-index-echo-cuda-validation','index-echo-cuda-valida
 with tarfile.open(archive) as tar: tar.extractall(TEMP,filter='data')
 bundle=TEMP/'bundle'
 assert json.loads((bundle/'provenance.json').read_text())['sha']==SOURCE
+libraries=list(bundle.glob('libcrispasr.so*'));assert len(libraries)==1,libraries
+library=libraries[0]
+(OUT/'preflight.json').write_text(json.dumps(dict(version=VERSION,source=SOURCE,hardware=hardware,
+    bundle_revision=BUNDLE_REV,bundle_sha256=BUNDLE_SHA,library=library.name,files=sorted(p.name for p in bundle.iterdir())) ,indent=2)+'\n')
+lib=ctypes.CDLL(str(library))  # Check ELF/dependencies before pulling model weights.
+
 original=fetch('cstr/crispasr-regression-fixtures','tts-asr/nemotron-reference-20261009/proof.zip',ORIGINAL_REV,ORIGINAL_SHA)
 with zipfile.ZipFile(original) as z: z.extractall(TEMP/'original')
 original_path=next((TEMP/'original').rglob('nemotron-tts-reference.json'))
@@ -75,7 +81,6 @@ manifest=json.loads((sdk/'tests/regression/manifest.json').read_text())
 entry=next(x for x in manifest['backends'] if x['backend_id']=='nemotron')
 ref_path=fetch(manifest['fixtures']['repo'],entry['fixture_ref_path'],manifest['fixtures']['revision'])
 reference=GGUFReader(str(ref_path))
-lib=ctypes.CDLL(str(bundle/'libcrispasr.so'))
 fp=ctypes.POINTER(ctypes.c_float)
 ip=ctypes.POINTER(ctypes.c_int)
 class Params(ctypes.Structure):
@@ -162,6 +167,7 @@ for preset in [0,2,3]:
             outputs.append(dict(packet_samples=packet,tokens=tokens,text=text,tokens_before_flush=before_flush,final_frames=lib.nemotron_stream_processed_frames(stream)))
         if preset==0:
             assert words(outputs[0]['text'])==words(entry['expected_transcript'])*3,'streamed JFK content mismatch'
+        receipt['streams'][str(preset)]=outputs;save()
         assert outputs[0]['tokens']==outputs[1]['tokens'],'reset/repeat token confidence mismatch'
         assert [x[0] for x in outputs[0]['tokens']]==[x[0] for x in outputs[2]['tokens']],'packet-size token mismatch'
         receipt['streams'][str(preset)]=outputs;save();kh.step('stream.complete',preset=preset)
@@ -175,11 +181,11 @@ for label,case in prior['cases'].items():
 assert len(cases)==26
 words=lambda text:re.findall('[a-z]+',re.sub(r'<[^>]*>','',text).lower())
 for label,data in cases.items():
-    with Session(str(model),lib_path=str(bundle/'libcrispasr.so'),backend='nemotron',n_threads=4) as session:
+    with Session(str(model),lib_path=str(library),backend='nemotron',n_threads=4) as session:
         receipt['fresh'][label]=' '.join(s.text for s in session.transcribe(data,sample_rate=16000,language='en'))
     if words(receipt['fresh'][label])!=words(prior['original'][label]['transcript']): receipt['failed'].append('original:'+label)
     save()
-with Session(str(model),lib_path=str(bundle/'libcrispasr.so'),backend='nemotron',n_threads=4) as session:
+with Session(str(model),lib_path=str(library),backend='nemotron',n_threads=4) as session:
     for label,data in reversed(list(cases.items())):
         receipt['reused'][label]=' '.join(s.text for s in session.transcribe(data,sample_rate=16000,language='en'))
         if receipt['reused'][label]!=receipt['fresh'][label]: receipt['failed'].append('state:'+label)
