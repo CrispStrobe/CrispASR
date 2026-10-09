@@ -7,6 +7,20 @@ technical deep-dives are in `LEARNINGS.md`.
 ---
 
 
+## DONE 2026-10-09 — Echo decoder calibration callback composition
+
+[PR #523](https://github.com/CrispStrobe/CrispASR/pull/523) merged as
+`74a35b198a19a28499e57c51dbc106b25481a53e` after all 42 applicable CI checks
+passed (one intentional skip). Opt-in decoder activation collection composes
+with existing stage capture. The CPU unit checks actual GGUF sums/counts.
+Actual dual-T4 collection off/on passes all three clips × 76 comparisons in
+each arm, full file translations, CLI/anonymous-model C ABI and roundtrips;
+decoded receipts agree. All 96 required FFN matrices have valid widths/counts
+among 249 collected decoder matrices. Native hashes match the accepted build.
+Held-out smoke statistics are excluded from quantization. No Q4 recipe,
+production model or inference default changed. Full public proof:
+`docs/index-echo-calibration-smoke-2026-10-09.json`. This is after v0.8.42.
+
 ## DONE 2026-10-09 — Python array audio resampling and contiguous buffers
 
 [PR #522](https://github.com/CrispStrobe/CrispASR/pull/522) merged as

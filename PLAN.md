@@ -26,24 +26,14 @@ GH `37907322941`, compares F16, published/plain Q4, joint+embed and full
 RNNT+prompt guards on all 26 original controls in fresh/reversed-reused
 sessions. Raw unchanged strict stage/norm logs and per-tensor byte/type
 audits are mandatory; decoded recovery alone cannot promote a failed stage
-gate. Queued. Pinned public proof:
+gate. Completed successfully as a diagnostic: full RNNT+prompt preservation
+recovers original words on 26/26 controls and all 22 VoxCPM2 controls at
+440,576,928 bytes, versus 479,337,248 published Q4 bytes. Fresh/reused outputs
+agree, but encoder cosine minimum 0.947463 fails the unchanged 0.999 gate
+(F16 0.999982). No promotion. Next expose existing preencode diagnostics and
+compare the earliest reference boundary before further encoder guards.
+Pinned original public proof:
 `docs/nemotron-tts-reference-diagnostic-2026-10-09.json`.
-
-## CLAIMED 2026-10-09 — Echo decoder calibration integration
-
-Owner: this maintainer session. Clean worktree
-`/mnt/storage/crispasr/salvage-20261008/echo-calibration-integration`, branch
-`fix/echo-decoder-calibration`. Integrate only the opt-in callback composition,
-actual sums/counts unit and reproducible GPU smoke/corpus tooling from the
-Echo experiment branch. Actual dual-T4 callback off/on acceptance is complete:
-three clips × 76 stage comparisons in each arm, full file translations,
-CLI/anonymous-model C ABI and TTS-ASR roundtrips all pass, with identical
-decoded receipts. 249 decoder matrices collected; all 96 FFN widths/counts
-valid. Public full proof: `docs/index-echo-calibration-smoke-2026-10-09.json`.
-No quantizer/model/registry/default promotion. [PR #523](https://github.com/CrispStrobe/CrispASR/pull/523),
-source `98088c720`, is open. Native file hashes match the accepted runtime
-exactly; clang-format 18 passes. Full platform/binding/lint CI is queued or
-running and required before merge. No new release tag yet.
 
 ## CLAIMED 2026-10-09 — PR #492 salvage, OmniVoice cleanup and remaining performance work
 
@@ -117,8 +107,11 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   from quantization. Full proof: `docs/index-echo-calibration-smoke-2026-10-09.json`. Disjoint 24 EN + 24 ZH CC0 corpus preparation is GH `37905840624`,
   worker `e35df5895`, stopped before preparation because hosted ffmpeg was
   absent; terminal log archived (no artifact emitted). Worker `861b82411`
-  installs the missing tool; retry GH `37907323063` is queued. Inputs and
-  corpus selection unchanged. Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
+  installs the missing tool; retry GH `37907323063` completed successfully:
+  48 clips, 259.176 seconds, all PCM disjoint from held-out acceptance.
+  Inputs and corpus selection unchanged. Publish the corpus and collect fresh
+  actual GPU statistics before quantizing. Callback support merged as PR #523
+  (`74a35b198`) after 42 applicable CI checks passed (one intentional skip). Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
   Real GPU calibration/coverage/full candidate acceptance still needed.
 
 - **VoxCPM2 — step/rate repairs on branch; primary Q4 recognizer rejection isolated.**
