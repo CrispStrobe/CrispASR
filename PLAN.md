@@ -84,14 +84,20 @@ GH `37953858590` is queued. Raw rejected probe and original gold publicly
 archived: `docs/nemotron-layer-probe-2026-10-09.json`.
 CUDA bundle GH `37943881572` SUCCESS at exact PR source `1977bd047`;
 SHA-verified transfer is pinned in `docs/nemotron-frontend-gpu-2026-10-09.json`.
-Kaggle `nemotron-frontend-validation` v1 RUNNING, worker `307bcf92d`, with
+Kaggle `nemotron-frontend-validation` v1 initially ran worker `307bcf92d`, with
 pulled source byte-identical. Actual native CUDA allocation, all three F16
 stage gates, all 26 fresh/reused original words and long-turn streaming
 packet/reset/flush gates are required. No hardware acceptance claim yet. v1 ERROR before inference:
 validator used an unversioned library name, but the bundle's SONAME is
 `libcrispasr.so.1`. Full terminal log/source publicly archived and verified.
 Worker `bbf9f165e` resolves the bundled SONAME and checks ELF loading before
-model downloads; v2 RUNNING on the same immutable source/build/thresholds.
+model downloads; v2 COMPLETE/PASS on actual dual T4s, on the same immutable
+source/build/thresholds. All three stage gates pass; encoder cosine minimum
+0.99999088 and relative-L2 0.00028004. All 26 original words match in fresh
+and reverse-reused sessions. Streaming presets 0/2/3 pass long-turn
+packet-size token equality, byte-exact reset/repeat confidence, live tokens,
+monotonic frames and idempotent final flush. No original streaming parity
+or Q4 acceptance claim. Full public proof is pinned in the GPU diagnostic.
 Remote worker source is byte-identical. All four local no-secrets tests pass
 with the account environment explicitly set (156.584 seconds). All 26 archived
 original NVIDIA attention masks independently confirm floor(samples/hop);

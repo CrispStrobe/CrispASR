@@ -100,8 +100,11 @@ pinned in `docs/index-echo-q4-imatrix-validation-2026-10-09.json`.
 Nemotron RNNT/prompt guards recover all 26 fixed transcripts, but Q4 encoder
 parity remains rejected. A candidate frontend length-mask correction passes
 all three F16 stage gates and all 26 original transcript controls with no
-fresh/reused differences. It remains unmerged pending integration and GPU
-validation; further Q4 encoder precision work is unfinished.
+fresh/reused differences. Actual dual-T4 validation also passes all three stage gates, the 26 original
+transcripts, fresh/reused equality and native streaming packet/reset/flush
+checks for presets 0/2/3. PR #525 remains unmerged pending the remaining
+integration CI; further Q4 encoder precision work is unfinished. Full proof:
+`docs/nemotron-frontend-gpu-2026-10-09.json`.
 OmniVoice PR #521 remains a draft because clone acceptance is unfinished.
 The remaining CANN and hardware-specific work in PR #492 is not included.
 
