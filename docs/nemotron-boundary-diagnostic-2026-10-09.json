@@ -1,0 +1,48 @@
+{
+  "run": 37916931975,
+  "source": "85c04e5ff",
+  "f16_control_passed": false,
+  "production_accepted": false,
+  "stages": {
+    "mel_spectrogram": {
+      "cos_min": 0.993376,
+      "max_abs": 13.76842212677002,
+      "frames_max_abs_above_point1": [
+        1100
+      ]
+    },
+    "pre_encode_output": {
+      "cos_min": 0.943016,
+      "max_abs": 69.86043167114258,
+      "frames_max_abs_above_point1": [
+        138
+      ]
+    },
+    "encoder_output": {
+      "cos_min": 0.999982,
+      "passed": true
+    }
+  },
+  "original_feature_length_audit": {
+    "cases": 26,
+    "rule": "floor(samples / 160)",
+    "all_original_masks_match": true
+  },
+  "proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "repo_type": "dataset",
+    "revision": "b4f1422c9d1023ebb830dc51ddd37ff8cfcb0366",
+    "path": "tts-asr/nemotron-boundaries-20261009/proof.zip",
+    "sha256": "d505c3c26b666d1fcc4e490fda71043bacf1fc774524a85ac95a1be7d79f4dcd",
+    "bytes": 3192402,
+    "remote_verified": true
+  },
+  "candidate": {
+    "source": "464bc0438",
+    "rule": "Zero frames at/after original feature length, retain STFT shape.",
+    "stage_run": 37938926545,
+    "original_control_run": 37939212612,
+    "accepted": false
+  },
+  "upstream": "https://github.com/NVIDIA/NeMo/blob/main/nemo/collections/asr/parts/preprocessing/features.py"
+}
