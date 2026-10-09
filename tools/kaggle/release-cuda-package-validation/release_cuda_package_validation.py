@@ -12,7 +12,7 @@ import tarfile
 import wave
 import zipfile
 
-VERSION = '2026-10-09.release-package.1'
+VERSION = '2026-10-09.release-package.2'
 SOURCE = '3b814f780277286ece56e8cdee6bdc435e07ae4d'
 BUILD_RUN = 37958100129
 ARTIFACT_ID = 11637375498
@@ -68,9 +68,14 @@ def fetch(repo,path,rev,sha=None,kind='model'):
 import requests
 import shutil
 import site
-secret_paths=list(Path('/kaggle/input').rglob('gh_token.txt'))
-gh_token=os.environ.get('GH_TOKEN') or (secret_paths[0].read_text().strip() if len(secret_paths)==1 else None)
-assert gh_token, 'GitHub artifact download token required'
+secret_paths=[Path('/kaggle/input/crispasr-hf-token/gh_token.txt')]
+secret_paths+=list(Path('/kaggle/input/datasets').glob('*/crispasr-hf-token/gh_token.txt'))
+secret_paths+=list(Path('/kaggle/input').rglob('gh_token.txt'))
+# Known mount paths cover directory symlinks; duplicate aliases are harmless.
+mounted_tokens={p.read_text().strip() for p in secret_paths if p.is_file()}
+mounted_tokens.discard('')
+gh_token=os.environ.get('GH_TOKEN') or (next(iter(mounted_tokens)) if len(mounted_tokens)==1 else None)
+assert gh_token, f'GitHub artifact credential unresolved; distinct mounted tokens: {len(mounted_tokens)}'
 try:
     response=requests.get(f'https://api.github.com/repos/CrispStrobe/CrispASR/actions/artifacts/{ARTIFACT_ID}/zip',
         headers={'Authorization':'Bearer '+gh_token,'Accept':'application/vnd.github+json'},
