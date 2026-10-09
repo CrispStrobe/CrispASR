@@ -41,7 +41,8 @@ reference terminal mel frame is zero; native is log-mel. Upstream current
 NeMo uses floor(n_samples/hop) and masks invalid frames to zero. Worker
 `464bc0438` implements that length rule while retaining shape/thresholds;
 GH `37938926545` runs the F16-first three-stage control and guarded Q4
-comparison. No frontend/default or quant promotion before acceptance.
+comparison. GH `37939212612` additionally reruns all 26 original controls
+in fresh/reversed-reused sessions with the same frontend change. No frontend/default or quant promotion before acceptance.
 Completed quant diagnosis:
 `docs/nemotron-q4-precision-diagnostic-2026-10-09.json`.
 Pinned original public proof:
@@ -139,7 +140,11 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   `83ac9d70bd3eaec34cc1dc19dbff605ce5869d85` under
   `experiments/q4-imatrix-20261009/preparation.json`. Actual GPU acceptance
   of all three candidates is the next task in the claimed Echo worktree. All 96 FFN statistics and original-F32 floors are re-audited;
-  imatrix loading/shape evidence is required. No candidate accepted. Callback support merged as PR #523
+  imatrix loading/shape evidence is required. No candidate accepted. GPU
+  worker `c150a6cb5`, Kaggle `index-echo-q4-imatrix` v1 RUNNING, uses the
+  accepted sm75 runtime and unchanged full F16-first candidate gates. Pulled
+  remote source is byte-identical. Release notes for already merged changes
+  are drafted in `docs/release-notes-next.md`; no tag cut. Callback support merged as PR #523
   (`74a35b198`) after 42 applicable CI checks passed (one intentional skip). Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
   Real GPU calibration/coverage/full candidate acceptance still needed.
 
