@@ -1041,7 +1041,7 @@
         "encoder_output": 0.999
       },
       "stage_threshold_default": 0.999,
-      "stage_threshold_note": "Kaggle validate 2026-09-28 (CPU, F16 diff): encoder_output 0.999982. crispasr-diff's nemotron branch emits no mel stage."
+      "stage_threshold_note": "CPU F16 control 2026-10-09: mel/preencode cosine minima round to 1.000000; encoder_output 0.999991. All three stages use unchanged 0.999 gates; native frontend masks invalid centered-STFT frames while retaining shape."
     },
     {
       "name": "index-echo-2b",
