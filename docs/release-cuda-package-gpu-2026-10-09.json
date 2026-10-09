@@ -1,10 +1,10 @@
 {
-  "version": "2026-10-09.release-package.1",
+  "version": "2026-10-09.release-package.2",
   "kernel": "${KAGGLE_ACCOUNT}/crispasr-release-cuda-package-validation",
-  "worker_commit": "7dad6b8956af1395bd23281b6e418b40d37b1b1b",
-  "entry_sha256": "61fee9a144a16f2496cf618a47ac4471de0fab9581c68e86a493879bda1105a2",
+  "worker_commit": "d51058cf63e55c9d7483974248668f1369f940e9",
+  "entry_sha256": "bf8a19e3014d55803bcd21b67d941b145fae62186580c5fea7594fe149848080",
   "remote_source_identical": true,
-  "status": "ERROR",
+  "status": "RUNNING",
   "validated": false,
   "build_run": 37958100129,
   "package_source": "3b814f780277286ece56e8cdee6bdc435e07ae4d",
@@ -13,8 +13,27 @@
   "package_sha256": "60e29fe5efd78979768904566c7b3a05d2387557c36ca2bd927cd6e4887c26fa",
   "scope": "Actual packaged CUDA plugin/C ABI loading, unchanged Nemotron F16 three-stage/26-original-transcript and native streaming controls; no original streaming parity, new quantization, Windows or speed acceptance",
   "no_secrets_tests": "4 pass, 0 skip, 48.361s",
-  "inference_started": false,
-  "package_download_started": false,
-  "failure": "Worker could not resolve the GitHub artifact credential; no GPU model inference started.",
-  "terminal_output_archived": true
+  "token_mount_alias_fixture_pass": true,
+  "previous_runs": [
+    {
+      "version": "2026-10-09.release-package.1",
+      "kernel": "${KAGGLE_ACCOUNT}/crispasr-release-cuda-package-validation",
+      "worker_commit": "7dad6b8956af1395bd23281b6e418b40d37b1b1b",
+      "entry_sha256": "61fee9a144a16f2496cf618a47ac4471de0fab9581c68e86a493879bda1105a2",
+      "remote_source_identical": true,
+      "status": "ERROR",
+      "validated": false,
+      "build_run": 37958100129,
+      "package_source": "3b814f780277286ece56e8cdee6bdc435e07ae4d",
+      "package_artifact_id": 11637375498,
+      "artifact_zip_sha256": "658ee8dd67da3facb1d0fc8498c045293dcd5e3799cb55d36d4aae99338ff758",
+      "package_sha256": "60e29fe5efd78979768904566c7b3a05d2387557c36ca2bd927cd6e4887c26fa",
+      "scope": "Actual packaged CUDA plugin/C ABI loading, unchanged Nemotron F16 three-stage/26-original-transcript and native streaming controls; no original streaming parity, new quantization, Windows or speed acceptance",
+      "no_secrets_tests": "4 pass, 0 skip, 48.361s",
+      "inference_started": false,
+      "package_download_started": false,
+      "failure": "Worker could not resolve the GitHub artifact credential; no GPU model inference started.",
+      "terminal_output_archived": true
+    }
+  ]
 }

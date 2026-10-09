@@ -75,7 +75,7 @@ CUDA 12.8 artifacts, not new quantization or a Windows package. The 30 recent
 kernels on the single authorized account are terminal; no active GPU session
 observed before this launch preparation. All local scratch stays on storage.
 Worker `7dad6b895` is pushed on `probe/release-cuda-hardware`. New kernel
-`${KAGGLE_ACCOUNT}/crispasr-release-cuda-package-validation` is RUNNING;
+`${KAGGLE_ACCOUNT}/crispasr-release-cuda-package-validation` was RUNNING at launch;
 remote script was pulled and verified byte-identical (entry SHA
 `61fee9a144a16f2496cf618a47ac4471de0fab9581c68e86a493879bda1105a2`).
 All four no-secrets checks pass with no skips (48.361 seconds). This is a
@@ -83,7 +83,12 @@ launch checkpoint, not hardware acceptance. The first run is terminal ERROR
 before artifact download or model inference: the worker could not resolve
 the GitHub artifact credential. Log, source and output are archived on storage
 before any repush. Version 2 repair covers both documented mount forms and
-deduplicates token aliases; it preserves the same archive and quality gates. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
+deduplicates token aliases; it preserves the same archive and quality gates. The
+repaired resolver passes a local fixture reproducing directory-symlink
+omission and duplicate aliases. Version 2 (`d51058cf6`) is now RUNNING;
+remote source was pulled and verified byte-identical (entry SHA
+`bf8a19e3014d55803bcd21b67d941b145fae62186580c5fea7594fe149848080`).
+Version 1 terminal output is preserved. No hardware acceptance yet. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
 
 ## Release preparation checkpoint 2026-10-09
 
