@@ -97,8 +97,13 @@ source = GGUFReader(str(f16))
 source_tensors = {t.name: dict(type=t.tensor_type.name, bytes=int(t.n_bytes),
     sha256=hashlib.sha256(t.data.tobytes()).hexdigest()) for t in source.tensors}
 del source
+common_guards = [r'^joint\.', r'^decoder\.', r'^prompt_kernel\.', r'^encoder\.pre\.out\.']
 specs = [('f16', f16, None), ('plain-q4', TEMP / 'plain-q4.gguf', []),
-    ('rnnt-preout-q4', TEMP / 'rnnt-preout-q4.gguf', [r'^joint\.', r'^decoder\.', r'^prompt_kernel\.', r'^encoder\.pre\.out\.'])]
+    ('rnnt-preout-q4', TEMP / 'rnnt-preout-q4.gguf', common_guards),
+    ('attention-source-q4', TEMP / 'attention-source-q4.gguf',
+        common_guards + [r'^encoder\.layers\.[0-9]+\.attn\.']),
+    ('ffn-source-q4', TEMP / 'ffn-source-q4.gguf',
+        common_guards + [r'^encoder\.layers\.[0-9]+\.ff[12]\.'])]
 all_arrays = {'pcm': pcm}
 plain_tensors = None
 for name, path, patterns in specs:
@@ -119,7 +124,10 @@ for name, path, patterns in specs:
     if name == 'plain-q4': plain_tensors = tensors
     if patterns:
         assert all(tensors[k] == v for k, v in plain_tensors.items() if k not in protected)
-    result = dict(bytes=path.stat().st_size, sha256=sha(path), protected=protected,
+    q4_bytes = sum(t['bytes'] for t in tensors.values() if t['type'].startswith('Q4'))
+    if patterns is not None:
+        assert q4_bytes > 0, 'Diagnostic candidate must retain real Q4 tensors'
+    result = dict(bytes=path.stat().st_size, q4_bytes=q4_bytes, sha256=sha(path), protected=protected,
         tensors=tensors, stage_returncode=run([build / 'bin/crispasr-diff', 'nemotron', path, ref,
             ROOT / entry['sample']], name + '-diff'))
     receipt['models'][name] = result
