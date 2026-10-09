@@ -109,7 +109,16 @@ specs = [('f16', f16, None), ('plain-q4', TEMP / 'plain-q4.gguf', []),
                          r'^encoder\.layers\.[0-9]+\.ff[12]\.linear1\.']),
     ('attention-ffn-linear2-source-q4', TEMP / 'attention-ffn-linear2-source-q4.gguf',
         common_guards + [r'^encoder\.layers\.[0-9]+\.attn\.',
-                         r'^encoder\.layers\.[0-9]+\.ff[12]\.linear2\.'])]
+                         r'^encoder\.layers\.[0-9]+\.ff[12]\.linear2\.']),
+    ('ffn-attention-qkv-source-q4', TEMP / 'ffn-attention-qkv-source-q4.gguf',
+        common_guards + [r'^encoder\.layers\.[0-9]+\.ff[12]\.',
+                         r'^encoder\.layers\.[0-9]+\.attn\.[qkv]\.']),
+    ('ffn-attention-out-source-q4', TEMP / 'ffn-attention-out-source-q4.gguf',
+        common_guards + [r'^encoder\.layers\.[0-9]+\.ff[12]\.',
+                         r'^encoder\.layers\.[0-9]+\.attn\.out\.']),
+    ('ffn-attention-pos-source-q4', TEMP / 'ffn-attention-pos-source-q4.gguf',
+        common_guards + [r'^encoder\.layers\.[0-9]+\.ff[12]\.',
+                         r'^encoder\.layers\.[0-9]+\.attn\.pos\.'])]
 all_arrays = {'pcm': pcm}
 plain_tensors = None
 for name, path, patterns in specs:
@@ -133,6 +142,8 @@ for name, path, patterns in specs:
     q4_bytes = sum(t['bytes'] for t in tensors.values() if t['type'].startswith('Q4'))
     if patterns is not None:
         assert q4_bytes > 0, 'Diagnostic candidate must retain real Q4 tensors'
+    if name.startswith('ffn-attention-'):
+        assert q4_bytes >= 28311552, 'Attention isolation must retain substantial Q4 payload'
     result = dict(bytes=path.stat().st_size, q4_bytes=q4_bytes, sha256=sha(path), protected=protected,
         tensors=tensors, stage_returncode=run([build / 'bin/crispasr-diff', 'nemotron', path, ref,
             ROOT / entry['sample']], name + '-diff'))
