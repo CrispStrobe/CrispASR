@@ -45,8 +45,14 @@ Q4 comparison: F16 mel/preencode cosine minima round to 1.000000; encoder
 0.999991. All three unchanged gates PASS. Q4 first diverges at preencode
 output projection (cosine minimum 0.991164). Retaining its actual source F32
 restores preencode parity at 455,895,968 bytes, but encoder still FAILS
-0.938963. No Q4 promotion. Next compare original/native encoder layer outputs. GH `37939212612` additionally reruns all 26 original controls
-in fresh/reversed-reused sessions with the same frontend change. No frontend/default or quant promotion before acceptance. All 26 archived
+0.938963. No Q4 promotion. Next compare original/native encoder layer outputs. GH `37939212612` completed: F16 matches original words on 26/26 controls,
+all 22 VoxCPM2 controls, and fresh/reversed-reused outputs agree. All three
+strict stage gates PASS. RNNT+prompt Q4 still recovers 26/26 words but fails
+preencode/encoder parity; no Q4 promotion. This session claims isolated
+frontend plus additive boundary diagnostic integration in worktree
+`/mnt/storage/crispasr/salvage-20261008/nemotron-frontend-integration`, branch
+`fix/nemotron-frontend-boundaries`. Full PR CI and streaming/GPU validation
+remain required; CPU controls alone do not certify CUDA. All 26 archived
 original NVIDIA attention masks independently confirm floor(samples/hop);
 full failed-boundary arrays and logs publicly archived and SHA-verified:
 `docs/nemotron-boundary-diagnostic-2026-10-09.json`.
@@ -148,9 +154,12 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   `experiments/q4-imatrix-20261009/preparation.json`. Actual GPU acceptance
   of all three candidates is the next task in the claimed Echo worktree. All 96 FFN statistics and original-F32 floors are re-audited;
   imatrix loading/shape evidence is required. No candidate accepted. GPU
-  worker `c150a6cb5`, Kaggle `index-echo-q4-imatrix` v1 RUNNING, uses the
-  accepted sm75 runtime and unchanged full F16-first candidate gates. Pulled
-  remote source is byte-identical. Full preparation proof/pins:
+  worker `c150a6cb5`, Kaggle `index-echo-q4-imatrix` v1 ERROR after complete
+  acceptance on actual dual T4s. F16 full control PASS; all three calibrated
+  candidates REJECTED by stage/magnitude gates and full Chinese translation
+  mismatches. Plain Q4 also fails CLI/C ABI and timestamps. Full terminal
+  outputs archived; next localize decoder magnitude drift before another
+  recipe. Pulled remote source is byte-identical. Full preparation proof/pins:
   `docs/index-echo-q4-imatrix-preparation-2026-10-09.json`. Release notes for already merged changes
   are drafted in `docs/release-notes-next.md`; no tag cut. Callback support merged as PR #523
   (`74a35b198`) after 42 applicable CI checks passed (one intentional skip). Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
