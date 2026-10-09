@@ -4,7 +4,7 @@
   "worker_commit": "9f4f7fee1841d55a0740f3a98025db4b43ac3b87",
   "entry_sha256": "99a64aff61ef379506858e6617cbfaa44a1e91681adb6b518ad6d1e6c22ff303",
   "remote_source_identical": true,
-  "status": "RUNNING",
+  "status": "ERROR",
   "validated": false,
   "build_run": 37958100129,
   "package_source": "3b814f780277286ece56e8cdee6bdc435e07ae4d",
@@ -71,5 +71,13 @@
     "rebuilt": false,
     "unauthenticated_metadata_verified": true
   },
-  "documentation_anchors": "227 pass across 82 files"
+  "documentation_anchors": "227 pass across 82 files",
+  "terminal_output_archived": true,
+  "package_download_started": true,
+  "inference_started": false,
+  "failure": "Exact package downloaded/hashed; C ABI could not discover any ggml CPU backend from Python outside the package directory.",
+  "hardware": "dual Tesla T4",
+  "cuda_runtime_version": 12080,
+  "driver_version": "580.178.04",
+  "next_step": "Fix library-relative dynamic backend discovery; validate C ABI from unrelated cwd and real CUDA package again."
 }

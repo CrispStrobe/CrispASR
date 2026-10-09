@@ -60,6 +60,19 @@ source is `9431cef65` (from its checkout log). This is model-free API validation
 not browser threading or synthesis acceptance. The README correction is in
 PR #527; the old archive is unchanged. Receipt: `docs/release-package-dry-run-2026-10-09.json`.
 
+## CLAIMED 2026-10-09 — Shared-library relative ggml plugin discovery
+
+Worktree: `/mnt/storage/crispasr/salvage-20261008/library-plugin-discovery`.
+The actual CUDA package on dual T4 loads its native library/runtime but Python
+C ABI session initialization discovers zero CPU backends. ggml default search
+uses the process executable directory and cwd, omitting the loaded library directory.
+Resolve the native module location for POSIX/Windows, load adjacent dynamic plugins
+for CPU and GPU session callers, retain default/env discovery and static builds.
+Prove failure before/fix after from an unrelated cwd using actual staged plugins
+through the C ABI, wire that regression into dynamic-backend GH CI, then rebuild
+and run the actual CUDA package hardware controls. Do not accept chdir/environment
+workarounds as the product fix. No gate changes or CUDA fallback acceptance.
+
 ## CLAIMED 2026-10-09 — Actual Linux CUDA release-package hardware validation
 
 Worktree: `/mnt/storage/crispasr/salvage-20261008/release-cuda-hardware`.
@@ -88,7 +101,7 @@ repaired resolver passes a local fixture reproducing directory-symlink
 omission and duplicate aliases. Version 2 (`d51058cf6`) is terminal ERROR before download or inference;
 remote source was pulled and verified byte-identical (entry SHA
 `bf8a19e3014d55803bcd21b67d941b145fae62186580c5fea7594fe149848080`).
-Both terminal outputs are preserved. Version 2 reports zero mounted GitHub token files despite scanning both documented mount forms. Version 3 (`9f4f7fee1`) is RUNNING; pulled source is byte-identical (entry SHA `99a64aff61ef379506858e6617cbfaa44a1e91681adb6b518ad6d1e6c22ff303`). Exact CI tar is mirrored publicly at DATASET `cstr/crispasr-regression-fixtures` commit `a93e0228b081be547ddea2d2c35bec904ed1a4b9`, path `experimental/release-package-37958100129/crispasr-linux-x86_64-cuda.tar.gz`; remote SHA matches the original tar. No secret dataset mutation, binary rebuild or gate change. No hardware acceptance yet. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
+Both terminal outputs are preserved. Version 2 reports zero mounted GitHub token files despite scanning both documented mount forms. Version 3 (`9f4f7fee1`) is terminal ERROR; exact archive hash and CUDA 12.8 preloads pass on dual T4, but the C ABI finds no CPU ggml backend when called from Python outside the package directory. All output is preserved; no inference started. pulled source is byte-identical (entry SHA `99a64aff61ef379506858e6617cbfaa44a1e91681adb6b518ad6d1e6c22ff303`). Exact CI tar is mirrored publicly at DATASET `cstr/crispasr-regression-fixtures` commit `a93e0228b081be547ddea2d2c35bec904ed1a4b9`, path `experimental/release-package-37958100129/crispasr-linux-x86_64-cuda.tar.gz`; remote SHA matches the original tar. No secret dataset mutation, binary rebuild or gate change. No hardware acceptance yet. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
 
 ## Release preparation checkpoint 2026-10-09
 
