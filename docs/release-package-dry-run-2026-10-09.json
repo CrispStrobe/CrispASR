@@ -142,7 +142,7 @@
       "native_model_inference_tested": false
     }
   },
-  "full_matrix_complete": false,
+  "full_matrix_complete": true,
   "production_release_validated": false,
   "actual_vulkan_hardware_tested": false,
   "workflow_event_head_sha": "23b401b3d20a2ef794a88ade6a261369e899359d",
@@ -150,8 +150,9 @@
   "source_provenance_note": "The old workflow checked out the moving branch at each job start. The event head is not the package build SHA. Actual observed package checkout SHAs are recorded per package; this matrix is not immutable source acceptance.",
   "build_and_validation_jobs_passed": 35,
   "artifacts_built": true,
-  "dry_run_publish_job_status": "queued",
+  "dry_run_publish_job_status": "success",
   "cuda_package_pair_run": 37980464852,
-  "cuda_package_pair_status": "queued",
-  "cuda_package_pair_source": "202ac02932908e698fcc254eb16a5c077fb22333"
+  "cuda_package_pair_status": "success",
+  "cuda_package_pair_source": "202ac02932908e698fcc254eb16a5c077fb22333",
+  "workflow_conclusion": "success"
 }

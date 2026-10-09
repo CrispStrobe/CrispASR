@@ -119,7 +119,7 @@ Comprehensive `RELEASE_NOTES_v0.8.43.md` is committed before any version bump.
 Merged scope: PRs #519, #520, #522, #523, #524, #525. No new version/tag or
 production quantization pin. Full no-publication Release dry run
 [GH 37958100129](https://github.com/CrispStrobe/CrispASR/actions/runs/37958100129)
-has workflow event head `23b401b3d20a2ef794a88ade6a261369e899359d`; the old checkout selected the moving branch at each job start. CPU/Vulkan/shared artifacts actually built `3b814f780277286ece56e8cdee6bdc435e07ae4d`; Python built `be13df2d3b0796b3b0bc23c5df714382a2acca28`. Observed changes since the event head are documentation only, but this is not an immutable matrix proof. Checkout repair is claimed above. All 35 build/validation jobs pass; the dry-run publication/no-publication bookkeeping job remains queued. Both CUDA 12.8/12.6 Windows CLI split and library artifacts are present. Actual archive SHA pairing plus mixed-12.8/12.6 rejection control is launched on GH CPU 37980464852, source `202ac02932908e698fcc254eb16a5c077fb22333`; multi-gigabyte archive work stays on GH. Actual CUDA package C ABI discovery failure is tracked in PR #528; this old package is not production acceptance. Linux x86_64 CPU/Vulkan
+has workflow event head `23b401b3d20a2ef794a88ade6a261369e899359d`; the old checkout selected the moving branch at each job start. CPU/Vulkan/shared artifacts actually built `3b814f780277286ece56e8cdee6bdc435e07ae4d`; Python built `be13df2d3b0796b3b0bc23c5df714382a2acca28`. Observed changes since the event head are documentation only, but this is not an immutable matrix proof. Checkout repair is claimed above. All 35 build/validation jobs pass, and the full no-publication workflow including its bookkeeping job is now SUCCESS. Both CUDA 12.8/12.6 Windows CLI split and library artifacts are present. Actual archive SHA pairing plus mixed-12.8/12.6 rejection control passes on GH CPU 37980464852, source `202ac02932908e698fcc254eb16a5c077fb22333`; multi-gigabyte archive work stays on GH. Actual CUDA package C ABI discovery failure is tracked in PR #528; this old package is not production acceptance. Linux x86_64 CPU/Vulkan
 packages have been downloaded and physically inspected: both CLI/quantizer
 start, all loader dependencies resolve, both executables use $ORIGIN without
 build-host paths, and the needed OpenBLAS library is bundled. The shared-library package also loads through ctypes, returns 0.8.42,
@@ -3796,3 +3796,9 @@ ledger stays in the public proof. No new model/default promotion or speed claim.
 
 This checkpoint passes all four full secret-scan tests with no skips
 (93.963 seconds) and all 227 documentation anchors across 82 files.
+
+Windows CUDA package pairing is complete: both CUDA 12.8 and 12.6 runtime ZIPs
+and shared-library archives match all three actual DLL hashes in their CLI
+manifests. A real 12.8 CLI/12.6 library-runtime mismatch is rejected for the
+expected reason. GH CPU 37980464852 is SUCCESS; no Windows GPU inference claim.
+Receipt: `docs/windows-cuda-package-pair-2026-10-09.json`.
