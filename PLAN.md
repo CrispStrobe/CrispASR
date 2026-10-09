@@ -85,10 +85,10 @@ the GitHub artifact credential. Log, source and output are archived on storage
 before any repush. Version 2 repair covers both documented mount forms and
 deduplicates token aliases; it preserves the same archive and quality gates. The
 repaired resolver passes a local fixture reproducing directory-symlink
-omission and duplicate aliases. Version 2 (`d51058cf6`) is now RUNNING;
+omission and duplicate aliases. Version 2 (`d51058cf6`) is terminal ERROR before download or inference;
 remote source was pulled and verified byte-identical (entry SHA
 `bf8a19e3014d55803bcd21b67d941b145fae62186580c5fea7594fe149848080`).
-Version 1 terminal output is preserved. No hardware acceptance yet. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
+Both terminal outputs are preserved. Version 2 reports zero mounted GitHub token files despite scanning both documented mount forms. Next: mirror the exact already-downloaded CI tar to a public experimental fixture path, record its immutable HF commit and enforce the same tar SHA. No secret dataset mutation, binary rebuild or gate change. No hardware acceptance yet. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
 
 ## Release preparation checkpoint 2026-10-09
 
