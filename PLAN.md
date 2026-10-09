@@ -11,9 +11,18 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
-## CLAIMED 2026-10-08 — PR #492 salvage, OmniVoice cleanup and remaining performance work
+## CLAIMED 2026-10-09 — PR #492 salvage, OmniVoice cleanup and remaining performance work
 
-Owner: this maintainer session. Worktrees under
+Owner: this maintainer session, resumed 2026-10-09. Native builds/lint/bindings
+passed for #519/#520, but account-literal scanner fails on shared evidence/docs.
+Sanitize committed account names without weakening the scanner, rerun it, then
+refresh branch CI before integration. Echo public CPU preparation and LM
+capture completed SUCCESS; archive/analyze before GPU launch or acceptance.
+OmniVoice speech worker failed actual decode waveform parity (max_abs .003391);
+fix from independent same-code oracle before integration. VoxCPM2 v4 ERROR;
+archive terminal outputs before any repush.
+
+Worktrees under
 `/mnt/storage/crispasr/salvage-20261008/`: `mel` (`fix/mel-projection-salvage`),
 `omnivoice` (`fix/omnivoice-postprocess-518`), `echo` (`fix/echo-q4-public-transfer`),
 and `profile` (`perf/mimo-voxcpm-profile`). A fifth worktree `lm`
@@ -21,6 +30,9 @@ and `profile` (`perf/mimo-voxcpm-profile`). A fifth worktree `lm`
 A sixth worktree `mimo-integration` (`fix/mimo-gpu-cached-decode`) will isolate
 only the validated MiMo instrumentation/cached-step changes from VoxCPM2's
 still-pending rate/step repairs, for native CI and integration review.
+Isolated draft [PR #519](https://github.com/CrispStrobe/CrispASR/pull/519) is
+pushed at `087b34e15`. Native/worker file SHA256s match the GPU-tested source
+exactly. Await native CI before integration; v0.8.42 excludes these changes.
 PR #492 diagnostics remain in
 `/mnt/storage/crispasr/pr492-acceptance-20261008/worktree`.
 
@@ -39,7 +51,7 @@ Archive only code-audited completed PLAN claims; preserve remaining hardware
 retests and deferred #456. Check release asset publication separately.
 
 MiMo graph-phase profile is pushed and Kaggle v1 launched:
-[crispasr-mimo-graph-profile](https://www.kaggle.com/code/chr1s4/crispasr-mimo-graph-profile).
+[crispasr-mimo-graph-profile](https://www.kaggle.com/code/${KAGGLE_ACCOUNT}/crispasr-mimo-graph-profile).
 Numeric/source pin `b8ab3249d`, uploaded harness `9c978485d`; script SHA and
 actual hardware/submodules/build flags are recorded by the kernel. Production
 Q4 files/arithmetic and defaults stay unchanged. Exact CLI/session EN/ZH
@@ -78,11 +90,14 @@ v2 CUDA acceptance now PASS on T4: all 64 calls/eight CLI pairs exact;
 four ABBA arms (relative L2 zero, norms identical). Warm medians legacy/cached:
 EN 3.29871/3.21258s (1.0268×), ZH 1.42840/1.39455s (1.0243×).
 This is a modest 2.4–2.7% gain, not a large acceleration. Terminal archive
-is complete; immutable public proof/cache upload and isolated integration CI
-are pending. Keep opt-in OFF by default and retain the working GPU route.
+is complete; public proof revision `deceb2e18592ade7ab56094d7158e4fbf47e81f5`
+and refreshed cache `c099a5cab320f929ca8c67171362eea158662009` are pinned in
+`docs/mimo-gpu-cached-step-2026-10-08.json`. Local archival verification checks
+all 114 full-vocabulary array comparisons byte-exact. GPU process peaks
+4,932/4,950 MiB (sampled lower bounds). Isolated integration CI is pending. Keep opt-in OFF by default and retain the working GPU route.
 
 VoxCPM2 ten-step Vulkan profile v1 launched at source `ece203528`, harness
-`323a568ca`: [kernel](https://www.kaggle.com/code/chr1s4/crispasr-voxcpm2-current-profile).
+`323a568ca`: [kernel](https://www.kaggle.com/code/${KAGGLE_ACCOUNT}/crispasr-voxcpm2-current-profile).
 Post-launch audit found the generic session TTS step setter lacks VoxCPM2
 forwarding; v1 must reject rc=-2 and cannot establish ten-step acceptance.
 Fix the native setter, session dispatch and CLI runtime override in the profile
@@ -102,11 +117,22 @@ TTS→ASR gates. Audit found a real session mismatch: synthesize decimated nativ
 `82517f41d` preserves the CLI ten-step default using tts_num_steps's explicit
 sentinel (shared tts_steps defaults to 20). v2 failed output/logs archived and
 public at fixture revision `f5a04b061d6ceb5c090c97a3f3fadfd2066e6398`.
-Next pinned run uses source `ead34fd5d`, uploaded harness `fe6f363b2` and
+Kaggle v3 launched using source `ead34fd5d`, uploaded harness `fe6f363b2` and
 refreshed actual-Kaggle CUDA+Vulkan cache `c32253915bbef81d0d8a9aea39a1fbd43b4cb37c`.
 It must replay v2 PCM at both rates as a negative control, pass
 native-48 kHz session and actual CLI default speech roundtrips, then collect
 separate per-op timings. Do not accept v2 timings as usable speech performance.
+v3 ERROR: historical v2 PCM at 24 kHz is intelligible but repeats "sent" three
+times; at 48 kHz it remains garbage. Strict historical exactness aborted before
+current-output ASR probes; no accepted speech speed or complete repair claim.
+All terminal files archived and public proof/cache pinned in
+`docs/voxcpm2-vulkan-v3-failure-2026-10-08.json`. v3 CLI used CUDA0, whereas
+session generation used Vulkan. Worker `8fb4d1b0b` now records all six current
+roundtrips before asserting the unchanged exact gates and explicitly selects
+CLI Vulkan. v4 launched successfully: numeric/worker `8fb4d1b0b`, uploaded entry
+`ba789cf52`, refreshed actual Kaggle cache `df9e11b0b66d1c87f1e0be5552d2974590e4ae20`.
+No numeric change; complete speech diagnosis and acceptance remain pending.
+Do not lower speech acceptance thresholds to hide repetition.
 
 OmniVoice #518 implementation `a1ae00dff` is pushed on
 `fix/omnivoice-postprocess-518`. Independent pinned upstream functions pass
@@ -125,11 +151,18 @@ Mel salvage retains author commit `3dce5b586` plus opt-in gate/instrumentation
 (OpenMP/no OpenMP; 63/64/65/300/1100/3000 frames; both filter layouts and
 float/double accumulation; 1/2/4 threads). Local four-thread projection gains
 are 1.4–1.7× at 300 frames and 2.1–3.5× at 3000, but 64-frame calls regress:
-keep default OFF and determine a measured minimum useful size. These are
+keep default OFF; a universal useful-size threshold is not established. These are
 local component measurements, not end-to-end ASR performance claims.
 GH CPU [37852305513](https://github.com/CrispStrobe/CrispASR/actions/runs/37852305513)
 runs the component ABBA matrix plus pinned Qwen3 CLI/stage regression with
-BLAS disabled to exercise the changed path. Acceptance pending.
+BLAS disabled to exercise the changed path. COMPLETE SUCCESS: all 144 component
+cases bit-exact across ABBA, both Qwen3 CLI transcripts exact and existing
+reference stage gates unchanged. Hosted four-thread projection gains at 64
+frames are 3.30–3.58× (total component 1.59–1.73×), contrasting with the local
+short-call regression. Keep explicit opt-in and T>=64 guard; no default flip
+or end-to-end speed claim. All terminal files archived; public proof pinned
+in `docs/mel-projection-2026-10-08.json`. Isolated author-credited draft [PR #520](https://github.com/CrispStrobe/CrispASR/pull/520)
+is pushed at `ae486c9a8`; native CI pending before merge.
 
 Echo public Q4 preparation launched on GH CPU run
 [37851965549](https://github.com/CrispStrobe/CrispASR/actions/runs/37851965549),
@@ -142,6 +175,15 @@ Consumer repair `2790778aa` uses the public experimental prefix and each
 candidate's immutable weight revision, checking remote-verification markers
 and path scope. Python syntax passes. Preparation pins remain unset and no
 Echo GPU kernel has been launched while the CPU producer is queued.
+
+Storage maintenance checkpoint: moved inactive (>95h, no open handles)
+root-volume evidence (729,159,979 logical bytes / ~533 MiB allocated) and one
+inactive (>38h) volume1 shared library (24,727,872 bytes) to `/mnt/storage`.
+Every file SHA256 verified; original source paths remain symlinks and original
+mtimes restored (CIFS rounding <100ns). Local receipts remain under the task
+proof root. Root free space rises ~3.3→3.8 GiB; volume1 remains tight (~1.4 GiB).
+Skip directories with internal symlinks where CIFS cannot preserve semantics;
+do not relocate live services, active environments or the original checkout.
 
 ## VALIDATED 2026-10-08 — MiMo full CUDA speech acceptance and precision profile
 

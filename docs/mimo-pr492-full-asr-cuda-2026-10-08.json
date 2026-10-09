@@ -1,7 +1,7 @@
 {
   "scope": "Diagnostic CUDA MiMo full ASR: actual CLI/session readback, then warm A/B.\n\nOriginal pinned Q4 LM/codec, one model lifetime at a time, same GPU and binary.\nThe temporary precision override applies only to tokenizer encoder matrices\n(`enc.blk.*`, plus any quantized `encoder.*` stem weights);\nLM arithmetic is unchanged between default and precise (both flash enabled).\nThe eager control disables flash in both components. No production acceptance\nor recovered original-checkpoint precision is implied by this study.\n",
   "terminal_status": "COMPLETE",
-  "kernel": "chr1s4/crispasr-mimo-pr492-asr-cuda",
+  "kernel": "${KAGGLE_ACCOUNT}/crispasr-mimo-pr492-asr-cuda",
   "kernel_version": 3,
   "numeric_source": "6b90353678f525e634c1a359355ae15c2c815ace",
   "packaging_source": "e77acb058b0c4b44d00a6b3fd149f030e2a46e92",
