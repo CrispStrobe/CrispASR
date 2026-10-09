@@ -114,7 +114,11 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   48 clips, 259.176 seconds, all PCM disjoint from held-out acceptance.
   Inputs and corpus selection unchanged. Publish the corpus and collect fresh
   actual GPU statistics before quantizing. Public corpus with verified checksum:
-  `docs/index-echo-calibration-corpus-2026-10-09.json`. Callback support merged as PR #523
+  `docs/index-echo-calibration-corpus-2026-10-09.json`. GPU collector
+  `93f660df6` is Kaggle `index-echo-calibration-corpus` v1 RUNNING; pulled
+  remote source matches exactly. Same accepted sm75 runtime, fresh statistics
+  path, one model session over all 48 clips, per-PCM hashes and all 96 FFN
+  matrix coverage checks. No calibration result or Q4 acceptance yet. Callback support merged as PR #523
   (`74a35b198`) after 42 applicable CI checks passed (one intentional skip). Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
   Real GPU calibration/coverage/full candidate acceptance still needed.
 

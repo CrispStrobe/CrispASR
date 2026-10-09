@@ -16,5 +16,19 @@
     "repo_type": "dataset"
   },
   "calibration_complete": false,
-  "quantization_accepted": false
+  "quantization_accepted": false,
+  "gpu_launch": {
+    "version": 1,
+    "worker_commit": "93f660df6",
+    "entry_sha256": "faf8a163e8c7e2875ab316cd954f12ff83d006645b68290f04a0bb388a1bf955",
+    "remote_source_identical": true,
+    "kernel": "${KAGGLE_ACCOUNT}/crispasr-index-echo-calibration-corpus",
+    "status": "RUNNING",
+    "status_at_checkpoint": "2026-10-09",
+    "build_commit": "a03820a4fcf32bae0b658b35cf6663e85abcc854",
+    "build_run": 37901223622,
+    "bundle_revision": "b284cbc8727e1f91904a4c2928e6991bd5bea938",
+    "bundle_sha256": "894bf650161f4c672a2992da394cdb8d65cca69af2f17c5b960c52bd4b6826f9",
+    "purpose": "Fresh disjoint corpus statistics; no held-out smoke imatrix, CPU builds, quantization or model publication."
+  }
 }
