@@ -1,0 +1,106 @@
+{
+  "source_commit": "64972cd343be1eaac8993c4f4d26564a42e7a314",
+  "run": 37907322941,
+  "diagnostic_complete": true,
+  "production_accepted": false,
+  "defaults_changed": false,
+  "models": {
+    "f16": {
+      "bytes": 1286368480,
+      "sha256": "14cbc98df495d8ab452c6a4ac367136d94ab5da55e73afaa96ba4f749dd95d09",
+      "protected": [],
+      "original_word_matches": 26,
+      "voxcpm_exact": 22,
+      "voxcpm_cases": 22,
+      "state_changes": [],
+      "decoded_matrix_passed": true,
+      "existing_stage_gate_passed": true
+    },
+    "published-q4": {
+      "bytes": 479337248,
+      "sha256": "60a2b074cdf46e81d72bc15d3eb79505dafbb697135f558659d9068f651854a2",
+      "protected": [],
+      "original_word_matches": 11,
+      "voxcpm_exact": 8,
+      "voxcpm_cases": 22,
+      "state_changes": [],
+      "decoded_matrix_passed": false,
+      "existing_stage_gate_passed": false
+    },
+    "plain-q4": {
+      "bytes": 408557984,
+      "sha256": "22480dd283a3bf1b39e9d2ab86c048b0c1654b2fc280e46627a4cbfded4b46fd",
+      "protected": [],
+      "original_word_matches": 11,
+      "voxcpm_exact": 8,
+      "voxcpm_cases": 22,
+      "state_changes": [],
+      "decoded_matrix_passed": false,
+      "existing_stage_gate_passed": false
+    },
+    "joint-embed-q4": {
+      "bytes": 434170784,
+      "sha256": "e3df2270e8c9a3e735beabf48c6e450383ed8802a4b40fe38c62a774cfb4ef24",
+      "protected": [
+        "decoder.embed.weight",
+        "joint.enc.bias",
+        "joint.enc.weight",
+        "joint.out.bias",
+        "joint.out.weight",
+        "joint.pred.bias",
+        "joint.pred.weight"
+      ],
+      "original_word_matches": 25,
+      "voxcpm_exact": 22,
+      "voxcpm_cases": 22,
+      "state_changes": [],
+      "decoded_matrix_passed": false,
+      "existing_stage_gate_passed": false
+    },
+    "rnnt-prompt-q4": {
+      "bytes": 440576928,
+      "sha256": "5988af742d78c7801ec6feb41f5b5d3a53be2ea7693316b3c2b56cd0c70a0a72",
+      "protected": [
+        "decoder.lstm.0.b_hh",
+        "decoder.lstm.1.b_hh",
+        "decoder.lstm.0.b_ih",
+        "decoder.lstm.1.b_ih",
+        "decoder.lstm.0.w_hh",
+        "decoder.lstm.1.w_hh",
+        "decoder.lstm.0.w_ih",
+        "decoder.lstm.1.w_ih",
+        "decoder.embed.weight",
+        "joint.enc.bias",
+        "joint.enc.weight",
+        "joint.out.bias",
+        "joint.out.weight",
+        "joint.pred.bias",
+        "joint.pred.weight",
+        "prompt_kernel.0.bias",
+        "prompt_kernel.0.weight",
+        "prompt_kernel.2.bias",
+        "prompt_kernel.2.weight"
+      ],
+      "original_word_matches": 26,
+      "voxcpm_exact": 22,
+      "voxcpm_cases": 22,
+      "state_changes": [],
+      "decoded_matrix_passed": true,
+      "existing_stage_gate_passed": false
+    }
+  },
+  "proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "revision": "3dda7df1c20398d868add9ff15e8fb30f0f150fe",
+    "path": "tts-asr/nemotron-q4-precision-20261009/proof.zip",
+    "sha256": "6858b3f4c11711917eb2943c0d0dc90275cab01bc24975c463443b7c3d068e8d",
+    "bytes": 226810,
+    "run": 37907322941,
+    "remote_verified": true,
+    "repo_type": "dataset"
+  },
+  "interpretation": [
+    "Full RNNT/prompt preservation recovers original words on 26/26 controls, including all 22 VoxCPM2 controls, but encoder cosine minimum 0.947463 fails the unchanged 0.999 gate.",
+    "F16 encoder cosine minimum 0.999982 passes. No quantizer default or published model changed."
+  ]
+}

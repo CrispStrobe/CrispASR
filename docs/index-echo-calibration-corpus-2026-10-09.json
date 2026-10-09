@@ -1,0 +1,20 @@
+{
+  "run": 37907323063,
+  "source_commit": "861b82411f763afa5ed068c6061894bf20b6cd3f",
+  "license": "CC0-1.0",
+  "clips": 48,
+  "duration_s": 259.176,
+  "heldout_pcm_disjoint": true,
+  "proof": {
+    "repo": "cstr/crispasr-imatrix-calib",
+    "revision": "06258ecef2dfed2be52ced573ec0dffc2443fabc",
+    "path": "index-echo-en-zh-20261009/index-echo-en-zh-calibration.zip",
+    "sha256": "44680f20e390cc0c6bf5bfcf3e284a1a3feabf118bd1a96e0ab510c682bf2188",
+    "bytes": 6446200,
+    "run": 37907323063,
+    "remote_verified": true,
+    "repo_type": "dataset"
+  },
+  "calibration_complete": false,
+  "quantization_accepted": false
+}

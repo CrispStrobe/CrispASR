@@ -31,7 +31,10 @@ recovers original words on 26/26 controls and all 22 VoxCPM2 controls at
 440,576,928 bytes, versus 479,337,248 published Q4 bytes. Fresh/reused outputs
 agree, but encoder cosine minimum 0.947463 fails the unchanged 0.999 gate
 (F16 0.999982). No promotion. Next expose existing preencode diagnostics and
-compare the earliest reference boundary before further encoder guards.
+compare the earliest reference boundary before further encoder guards. Worker `c9aff16e7`, GH `37915072437`, is
+queued for F16-first mel/preencode/encoder comparison, then source-precision
+subsampling guards. Completed quant diagnosis:
+`docs/nemotron-q4-precision-diagnostic-2026-10-09.json`.
 Pinned original public proof:
 `docs/nemotron-tts-reference-diagnostic-2026-10-09.json`.
 
@@ -110,7 +113,8 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   installs the missing tool; retry GH `37907323063` completed successfully:
   48 clips, 259.176 seconds, all PCM disjoint from held-out acceptance.
   Inputs and corpus selection unchanged. Publish the corpus and collect fresh
-  actual GPU statistics before quantizing. Callback support merged as PR #523
+  actual GPU statistics before quantizing. Public corpus with verified checksum:
+  `docs/index-echo-calibration-corpus-2026-10-09.json`. Callback support merged as PR #523
   (`74a35b198`) after 42 applicable CI checks passed (one intentional skip). Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
   Real GPU calibration/coverage/full candidate acceptance still needed.
 
