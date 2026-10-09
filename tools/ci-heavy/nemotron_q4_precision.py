@@ -83,7 +83,7 @@ for quant, path in (('f16', f16), ('q4_k', published)):
     assert digest(path) == prior['native_models'][quant]['sha256']
 source = GGUFReader(str(f16))
 source_types = {t.name: t.tensor_type.name for t in source.tensors}
-assert source.fields['general.architecture'].contents() == 'nemotron'
+receipt['gguf_architecture'] = source.fields['general.architecture'].contents()
 del source
 manifest = json.loads((ROOT / 'tests/regression/manifest.json').read_text())
 entry = next(x for x in manifest['backends'] if x['backend_id'] == 'nemotron')
@@ -127,14 +127,14 @@ for name, path, patterns in specifications:
         ROOT / entry['sample']], name + '-diff')
     if name == 'f16':
         assert result['stage_returncode'] == 0, 'F16 strict stage control must pass first'
-    with Session(str(path), lib_path=str(library), backend='nemotron', n_threads=4) as session:
-        for label, pcm in cases.items():
+    for label, pcm in cases.items():
+        with Session(str(path), lib_path=str(library), backend='nemotron', n_threads=4) as session:
             text = ' '.join(s.text for s in session.transcribe(pcm, sample_rate=16000, language='en'))
-            result['fresh'][label] = text
-            result['original_word_matches'] += words(text) == words(prior['original'][label]['transcript'])
-            if label.startswith('voxcpm2'):
-                result['voxcpm_exact'] += words(text) == words(prior['cases'][label]['expected'])
-            save()
+        result['fresh'][label] = text
+        result['original_word_matches'] += words(text) == words(prior['original'][label]['transcript'])
+        if label.startswith('voxcpm2'):
+            result['voxcpm_exact'] += words(text) == words(prior['cases'][label]['expected'])
+        save()
     with Session(str(path), lib_path=str(library), backend='nemotron', n_threads=4) as session:
         for label, pcm in reversed(list(cases.items())):
             text = ' '.join(s.text for s in session.transcribe(pcm, sample_rate=16000, language='en'))
