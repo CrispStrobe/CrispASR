@@ -13,14 +13,9 @@ it goes stale for more than a day.
 
 ## CLAIMED 2026-10-09 — PR #492 salvage, OmniVoice cleanup and remaining performance work
 
-Owner: this maintainer session, resumed 2026-10-09. Native builds/lint/bindings
-passed for #519/#520, but account-literal scanner fails on shared evidence/docs.
-Sanitize committed account names without weakening the scanner, rerun it, then
-refresh branch CI before integration. Echo public CPU preparation and LM
-capture completed SUCCESS; archive/analyze before GPU launch or acceptance.
-OmniVoice speech worker failed actual decode waveform parity (max_abs .003391);
-fix from independent same-code oracle before integration. VoxCPM2 v4 ERROR;
-archive terminal outputs before any repush.
+Owner: this maintainer session, resumed 2026-10-09. Current tasks remain
+claimed in the worktrees below; account-placeholder repair and release
+publication are complete. Native integration awaits refreshed checks.
 
 Current 2026-10-09 results: account-literal scanner passes unchanged after
 doc placeholder repair (`731593dda`). Branches #519/#520 refreshed against it
@@ -28,10 +23,13 @@ and native CI is running; previous native/lint/bindings passed.
 OmniVoice worker `3d30ea127` fixes a harness confound: the default session API
 adds watermark after native DSP. Attested raw PCM now feeds the unchanged
 2e-6 upstream waveform gate; two extra default marked roundtrips are included.
-No native arithmetic or thresholds changed. GH run 37888585305 is running.
+No native arithmetic or thresholds changed. GH run 37888585305 completed
+with exact real decode waveform parity (max_abs 0.0) and identical generated
+codes, then failed the anticipated missing CLI cloning attestation.
+All terminal artifacts archived locally; no six-roundtrip acceptance yet.
 CLI audit additionally found the fixture clone must pass --i-have-rights;
 worker `e81d1f6f7` adds that required attestation. Corrected GH run 37889514048
-is serialized behind the first run, which can still expose preceding gates.
+is now running with that required fixture attestation.
 Echo preparation is public, pinned at `afdef3d4b111aa89e45fc400a03ba31ff54ac1dd`,
 all four remote size/SHA and physical tensor audits pass. Kernel public retry
 v2 launched with entry `845bf2e6d`; accepted F16 control precedes candidates,
@@ -43,6 +41,12 @@ at unchanged ten steps/seed/model, two repeats per text, with all 16 ASR results
 recorded. Kaggle v5 launched at worker/source `2ee7212fd`, uploaded entry `3db5808ec`,
 cache `85e6e05e264111f9b2f920b02f99c5b8ebeba935`. It is diagnostic only, not an original Python oracle or
 acceptance; no numerical/default changes. Do not lower quality gates.
+v5 ERROR: first q8 short/long repeated waveforms completed; child segfaulted
+after opening the mixed model, before further path/ASR evidence. All output
+and logs archived. Harness audit found direct step-setter calls without
+ctypes argtypes (possible 64-bit pointer truncation). Fix using the public
+Session setter and typed rc checks; enable faulthandler on the rerun. This is
+not a native fused-graph verdict, and no quality gate is relaxed.
 MiMo diagnostic capture complete: identical frozen layer-0 input, CPU Q4
 flash/eager first differences at layer-0 attention (relL2 .000146), amplified
 in its MLP (.00183) and subsequent layers. F16 is much smaller. BLAS flash/eager
