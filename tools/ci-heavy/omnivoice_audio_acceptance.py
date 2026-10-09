@@ -105,7 +105,7 @@ with Session(paths['omnivoice-q8_0.gguf'],lib_path=str(lib),backend='omnivoice',
 cli_wav = OUT/'cli-clone.wav'
 run([build/'bin/crispasr','--backend','omnivoice','-m',paths['omnivoice-q8_0.gguf'],
      '--codec-model',paths['omnivoice-tokenizer-f16.gguf'],'--no-gpu','-t','4',
-     '--seed','42','--tts-steps','32','--voice',ref_wav,'--ref-text',reference['text'].rstrip('.'),
+     '--seed','42','--tts-steps','32','--i-have-rights','--voice',ref_wav,'--ref-text',reference['text'].rstrip('.'),
      '--tts',TEXT,'--tts-output',cli_wav,'--no-watermark','--no-spoken-disclaimer',
      '--accept-marking-responsibility'], 'cli-clone')
 with wave.open(str(cli_wav)) as wav:
