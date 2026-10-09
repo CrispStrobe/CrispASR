@@ -79,7 +79,11 @@ Worker `7dad6b895` is pushed on `probe/release-cuda-hardware`. New kernel
 remote script was pulled and verified byte-identical (entry SHA
 `61fee9a144a16f2496cf618a47ac4471de0fab9581c68e86a493879bda1105a2`).
 All four no-secrets checks pass with no skips (48.361 seconds). This is a
-launch checkpoint, not hardware acceptance. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
+launch checkpoint, not hardware acceptance. The first run is terminal ERROR
+before artifact download or model inference: the worker could not resolve
+the GitHub artifact credential. Log, source and output are archived on storage
+before any repush. Version 2 repair covers both documented mount forms and
+deduplicates token aliases; it preserves the same archive and quality gates. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
 
 ## Release preparation checkpoint 2026-10-09
 
