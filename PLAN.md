@@ -18,11 +18,11 @@ Owner: this maintainer session. Worktree
 `fix/python-bandlimited-resample`. Repair both Whisper and Session ndarray
 inputs using the existing native Kaiser polyphase resampler through an additive
 in-memory C API, with a bounded NumPy compatibility path for older libraries.
-Preserve 16 kHz samples and supply contiguous float32 buffers. Validate
+Preserve 16 kHz samples and supply contiguous float32 buffers. [PR #522](https://github.com/CrispStrobe/CrispASR/pull/522), source `84a66a717`, repairs all five transcription methods plus the static WAV helper. Eight local tests pass; hosted tests through the full shared library, Rust/C#/Go/Ruby bindings, ASan and unit CI pass. Remaining platform/regression checks are pending. Validate
 anti-aliasing, native/fallback agreement, ownership/error contracts and both
 binding entry points. This independently fixes the known aliasing defect;
-causation for rejected TTS speech remains subject to the fixed-audio diagnostic
-GH `37898319808`, with all existing acceptance thresholds unchanged.
+causation for rejected TTS speech is recorded by the completed fixed-audio diagnostic
+GH `37899546009`, with all existing acceptance thresholds unchanged.
 
 ## CLAIMED 2026-10-09 — PR #492 salvage, OmniVoice cleanup and remaining performance work
 
@@ -40,7 +40,9 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   applicable PR native/lint/binding and selected regression checks passed.
   Integrated native file hashes match accepted T4/CPU proof exactly. Both
   defaults remain OFF; measured gains and hardware limits are in HISTORY.
-  Final combined-main CI remains a separate checkpoint.
+  Final combined-main native CI `37899170996` PASS on `892dca1a9`: all
+  13 platform/unit/ASan/fuzz/dynamic-backend/codec/Vulkan jobs complete.
+  Terminal receipt and log are archived on storage.
 - **OmniVoice #518 — DSP exact, cloned speech rejected.** Draft
   [PR #521](https://github.com/CrispStrobe/CrispASR/pull/521) ports pinned
   upstream audio/text utilities with config opt-outs and processed-PCM cache
@@ -53,8 +55,12 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   `37891923274` COMPLETE: legacy and punctuation-only clones also fail at
   WER 2/9; reference/output cleanup fail at the same WER, with output-only
   codes identical. The rejected baseline error predates this DSP port.
-  Next ASR-front-door diagnostic retains same seed 42/32 steps, isolate punctuation, reference
-  silence and output cleanup; identical-code assertion for output-only toggle.
+  Fixed-audio cross-recognizer/resampling diagnostic is complete: Nemotron and
+  Parakeet retain 2/9 substitutions across all three samplers; Qwen3 reads all
+  four clones correctly. Neither output-only DSP nor resampling clears the
+  unchanged primary gate. All 42 applicable code CI checks pass (one skip);
+  full cloned-speech acceptance still fails. Official ASR diagnosis pending.
+
   No lucky-seed selection. Public proof:
   `docs/omnivoice-clone-failure-2026-10-09.json` and
   `docs/omnivoice-audio-utility-parity-2026-10-08.json`.
@@ -69,7 +75,22 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   `docs/index-echo-q4-preparation-2026-10-09.json` and
   `docs/index-echo-q4-rejection-2026-10-09.json`. Next audit first divergent
   tensors and calibration coverage before another quant recipe; plain
-  `CRISPASR_IMATRIX_OUT` is not yet wired to Echo's decoder callback.
+  `CRISPASR_IMATRIX_OUT` previously collected no decoder statistics. Branch
+  `c247d0135` composes an opt-in collector with stage capture, retaining the
+  original callback without calibration env vars. Actual collector sums/counts
+  unit and fresh sm75 CUDA bundle PASS in GH `37901223622`, packaging `a03820a4f`.
+  The actual CPU unit verifies GGUF activation sums/counts; GPU-less CUDA
+  compilation does not establish GPU acceptance. Logs and bundle are archived
+  on storage. Bundle checksum `894bf650161f4c672a2992da394cdb8d65cca69af2f17c5b960c52bd4b6826f9`,
+  immutable tooling transfer `b284cbc8727e1f91904a4c2928e6991bd5bea938`.
+  GPU worker `e4a64a9b8` runs unchanged full F16 acceptance with collection
+  off/on, identical decoded receipts, and all 96 FFN matrix widths/counts.
+  Its held-out statistics are explicitly unsuitable for quantization; a
+  disjoint EN/ZH production calibration corpus is still needed. Kaggle
+  `index-echo-calibration-smoke` v1 is RUNNING; assigned hardware is pending
+  progress readback. Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
+  Real GPU calibration/coverage/full candidate acceptance still needed.
+
 - **VoxCPM2 — actual step/rate repairs on branch, speech still rejected.**
   Profile branch forwards positive step overrides through native/C ABI/CLI,
   preserves ten-step default and returns actual native 48 kHz session PCM
@@ -77,7 +98,7 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   fail. v5 diagnostic crashed at an untyped ctypes setter; v6 uses the public
   pointer-width-safe setter and completes all four existing fused/per-step/
   batch/split Vulkan/CUDA paths, two models/texts/two byte-exact repeats.
-  Six/sixteen exact ASR cases pass; every short case repeats final syllables.
+  Six/sixteen primary Nemotron ASR cases pass; every short transcript repeats tokens.
   Disabling CFM fusion alone does not fix it. Native arithmetic/defaults stay
   unchanged. GH original-controls `37892473946` COMPLETE at worker `08be8c020`:
   pinned official Python BF16 full generation and native F16/Q8 CPU controls,
@@ -85,6 +106,15 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   Official Python BF16 and native F16/Q8 short output all repeat sent in the
   Nemotron transcript; all three long controls pass. This does not establish
   whether the audio stutters or the recognizer/front door causes the repeats.
+  Fixed-audio GH `37899546009` now shows Parakeet and Qwen3 read every one of
+  22 VoxCPM2 controls exactly across all three samplers (132 transcripts),
+  while Nemotron retains failures. Speech is recognizer-dependent; no synthesis
+  defect or accepted replacement recognizer is established. Official NVIDIA
+  ASR plus native F16/Q4 fresh/reused controls: GH `37902211301` stopped
+  before inference because `librosa` was missing; all terminal logs/artifacts
+  were archived. Retry GH `37904497983` adds pinned `librosa==0.11.0`, with
+  source `397334025`, original weights, inputs and speech gates unchanged. Pending.
+
   Public proof/cache: `docs/voxcpm2-path-v6-diagnostic-2026-10-09.json`;
   earlier failed receipts remain in docs. Public model card now qualifies
   historical timings and discloses failed current GPU speech; no weights
@@ -109,15 +139,20 @@ verified inactive files, original source paths remain symlinks; local receipts
 are under the task proof root. External reporter hardware retests and #456
 remain pending/deferred; do not archive them as resolved.
 
-Next diagnostic in the claimed profile worktree: cross-recognize immutable
-OmniVoice/VoxCPM2 PCM with Nemotron, Parakeet and Qwen3, holding speech fixed,
-comparing the Python binding's unfiltered linear interpolation to native
-polyphase audio-load and scipy polyphase. Python still uses np.interp at both
-Session/Whisper ndarray front doors, although the native loader was repaired
-in August (LEARNINGS L342). Record every transcript and sampler hash; this is
-not permission to switch recognizers or relax existing acceptance gates.
-If the resampler explains a failure, fix both Python ndarray paths with the
-shared native resampler and meaningful alias-rejection/binding speech checks.
+Fixed-audio diagnostic GH `37899546009` COMPLETE (234 transcripts/26 clips),
+source `43dc3194a`, pinned public proof in
+`docs/tts-asr-frontdoor-diagnostic-2026-10-09.json`. The C ABI file loader is
+miniaudio, not the shared CLI Kaiser path; the initial run `37898319808`
+correctly rejected its residual tone level before transcripts and is archived.
+No speech thresholds were relaxed. Python #522 fixes the independently known
+aliasing/strided-buffer defect; it does not explain every speech failure.
+Next original ASR diagnostic in profile worktree `397334025`, GH
+`37902211301`: pinned NVIDIA Transformers 5.19 model-card offline generation
+stopped before inference on a missing `librosa` dependency. Retry GH
+`37904497983` adds `librosa==0.11.0` and is running. Identical 16 kHz PCM,
+native F16/Q4 plus fresh/reversed-reused sessions and full original
+features/encoder/sequence evidence remain required. No recognizer promotion.
+
 
 
 ## VALIDATED 2026-10-08 — MiMo full CUDA speech acceptance and precision profile

@@ -1,0 +1,1791 @@
+{
+  "date": "2026-10-09",
+  "workflow_run": 37899546009,
+  "workflow_url": "https://github.com/CrispStrobe/CrispASR/actions/runs/37899546009",
+  "passed": false,
+  "diagnostic_complete": true,
+  "scope": "Fixed immutable TTS PCM; three recognizers and three resampling paths, no synthesis or gate changes",
+  "proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "file": "tts-asr/frontdoor-diagnostic-20261009/proof.zip",
+    "revision": "0b434ca1ea6c34c9b462be4d3e689ba1713381e9",
+    "sha256": "3dd2f988e327dd30bf3ae608edc7611e52aedf3a8374a3ea6e2f288342110b98",
+    "bytes": 56612,
+    "remote_size_sha256_verified": true
+  },
+  "summary": {
+    "nemotron/python-linear/omnivoice": {
+      "cases": 4,
+      "existing_gate_met": 0,
+      "max_wer": 0.2222222222222222
+    },
+    "nemotron/native-file-loader/omnivoice": {
+      "cases": 4,
+      "existing_gate_met": 0,
+      "max_wer": 0.2222222222222222
+    },
+    "nemotron/scipy-polyphase/omnivoice": {
+      "cases": 4,
+      "existing_gate_met": 0,
+      "max_wer": 0.2222222222222222
+    },
+    "nemotron/python-linear/voxcpm2-original": {
+      "cases": 6,
+      "existing_gate_met": 3,
+      "max_wer": 0.8571428571428571
+    },
+    "nemotron/native-file-loader/voxcpm2-original": {
+      "cases": 6,
+      "existing_gate_met": 3,
+      "max_wer": 0.42857142857142855
+    },
+    "nemotron/scipy-polyphase/voxcpm2-original": {
+      "cases": 6,
+      "existing_gate_met": 2,
+      "max_wer": 0.8571428571428571
+    },
+    "nemotron/python-linear/voxcpm2-gpu": {
+      "cases": 16,
+      "existing_gate_met": 5,
+      "max_wer": 0.8571428571428571
+    },
+    "nemotron/native-file-loader/voxcpm2-gpu": {
+      "cases": 16,
+      "existing_gate_met": 7,
+      "max_wer": 0.8571428571428571
+    },
+    "nemotron/scipy-polyphase/voxcpm2-gpu": {
+      "cases": 16,
+      "existing_gate_met": 6,
+      "max_wer": 0.8571428571428571
+    },
+    "parakeet/python-linear/omnivoice": {
+      "cases": 4,
+      "existing_gate_met": 0,
+      "max_wer": 0.2222222222222222
+    },
+    "parakeet/native-file-loader/omnivoice": {
+      "cases": 4,
+      "existing_gate_met": 0,
+      "max_wer": 0.2222222222222222
+    },
+    "parakeet/scipy-polyphase/omnivoice": {
+      "cases": 4,
+      "existing_gate_met": 0,
+      "max_wer": 0.2222222222222222
+    },
+    "parakeet/python-linear/voxcpm2-original": {
+      "cases": 6,
+      "existing_gate_met": 6,
+      "max_wer": 0.0
+    },
+    "parakeet/native-file-loader/voxcpm2-original": {
+      "cases": 6,
+      "existing_gate_met": 6,
+      "max_wer": 0.0
+    },
+    "parakeet/scipy-polyphase/voxcpm2-original": {
+      "cases": 6,
+      "existing_gate_met": 6,
+      "max_wer": 0.0
+    },
+    "parakeet/python-linear/voxcpm2-gpu": {
+      "cases": 16,
+      "existing_gate_met": 16,
+      "max_wer": 0.0
+    },
+    "parakeet/native-file-loader/voxcpm2-gpu": {
+      "cases": 16,
+      "existing_gate_met": 16,
+      "max_wer": 0.0
+    },
+    "parakeet/scipy-polyphase/voxcpm2-gpu": {
+      "cases": 16,
+      "existing_gate_met": 16,
+      "max_wer": 0.0
+    },
+    "qwen3/python-linear/omnivoice": {
+      "cases": 4,
+      "existing_gate_met": 4,
+      "max_wer": 0.0
+    },
+    "qwen3/native-file-loader/omnivoice": {
+      "cases": 4,
+      "existing_gate_met": 4,
+      "max_wer": 0.0
+    },
+    "qwen3/scipy-polyphase/omnivoice": {
+      "cases": 4,
+      "existing_gate_met": 4,
+      "max_wer": 0.0
+    },
+    "qwen3/python-linear/voxcpm2-original": {
+      "cases": 6,
+      "existing_gate_met": 6,
+      "max_wer": 0.0
+    },
+    "qwen3/native-file-loader/voxcpm2-original": {
+      "cases": 6,
+      "existing_gate_met": 6,
+      "max_wer": 0.0
+    },
+    "qwen3/scipy-polyphase/voxcpm2-original": {
+      "cases": 6,
+      "existing_gate_met": 6,
+      "max_wer": 0.0
+    },
+    "qwen3/python-linear/voxcpm2-gpu": {
+      "cases": 16,
+      "existing_gate_met": 16,
+      "max_wer": 0.0
+    },
+    "qwen3/native-file-loader/voxcpm2-gpu": {
+      "cases": 16,
+      "existing_gate_met": 16,
+      "max_wer": 0.0
+    },
+    "qwen3/scipy-polyphase/voxcpm2-gpu": {
+      "cases": 16,
+      "existing_gate_met": 16,
+      "max_wer": 0.0
+    }
+  },
+  "interpretation": [
+    "Both Parakeet and Qwen3 read every VoxCPM2 original/native CPU/GPU control exactly across all three paths; Nemotron remains recognizer-dependent and cannot alone establish audible synthesis repetitions.",
+    "OmniVoice legacy/cleanup cloning retains fox/dog substitutions in Nemotron and Parakeet at every sampler; Qwen3 reads the intended phrase. This does not certify cloning or justify replacing the unchanged primary gate.",
+    "Python linear interpolation aliases the tone; C ABI file loading uses miniaudio rather than the CLI Kaiser implementation and fails the diagnostic residual <.001 threshold at both rates.",
+    "Correcting resampling alone does not clear the failures. Official NVIDIA original-model/F16-Q4 fresh/reused diagnosis is GH 37902211301 at worker 397334025; results pending.",
+    "PR522 independently repairs Python array/WAV-helper aliasing and strided buffers; eight local tests pass, full shared-library/CI tests pending."
+  ],
+  "receipt": {
+    "passed": false,
+    "diagnostic_complete": true,
+    "scope": "Cross-recognize fixed TTS PCM and isolate resampling; not speech acceptance.",
+    "source_commit": "43dc3194a2c3176d3c0d363d912210872222a3c1",
+    "models": {
+      "nemotron": {
+        "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
+        "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
+        "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
+        "sha256": "60a2b074cdf46e81d72bc15d3eb79505dafbb697135f558659d9068f651854a2"
+      },
+      "parakeet": {
+        "repo": "cstr/parakeet-tdt-0.6b-v3-GGUF",
+        "revision": "815cc1bcb5cfb92f9cd0bbd22c7bc2f6e2d4ec13",
+        "file": "parakeet-tdt-0.6b-v3-q4_k.gguf",
+        "sha256": "1a60f6e53e5781240dde6e69a47a47a8a71995a3a106517b009225afcc514457"
+      },
+      "qwen3": {
+        "repo": "cstr/qwen3-asr-0.6b-GGUF",
+        "revision": "ad086c22597ed47af05cc159dd61c98bd6e945f9",
+        "file": "qwen3-asr-0.6b-q4_k.gguf",
+        "sha256": "4c67426908a518c28c24bc780df27175fcf84ce4d6dbd678133a4531904bbcc9"
+      }
+    },
+    "proofs": {
+      "omnivoice": [
+        "omnivoice/clone-diagnostic-20261009/proof.zip",
+        "3f7d258695ae58be8e0b7b717f4273b8241609a2",
+        "f69d5a1b7e9257c78e3cfc42736ebdcbb22227acbabfb00561c56b0602870b9b"
+      ],
+      "voxcpm2-original": [
+        "voxcpm2/original-controls-20261009/proof.zip",
+        "78790b006e7ee65f6e8975d437000858fb5dfe7a",
+        "2684b0da6981bb36423c9fc3c007d743069462860c7bba5f994bae364d39d234"
+      ],
+      "voxcpm2-gpu": [
+        "voxcpm2/path-diagnostic-20261009-v6/proof.zip",
+        "449ed355010eddb8dcedef6c2ab0fa62431ebeb7",
+        "f52e5fbc49a0654bdcd13da6660c8e0841fbe87e80eb0cc158d74801339a5abc"
+      ]
+    },
+    "cases": {
+      "omnivoice:heavy-37891923274:legacy": {
+        "sample_rate": 24000,
+        "expected": "The quick brown fox jumps over the lazy dog.",
+        "source_sha256": "87b077a1de8d75438c64925f952d8fc11f0d0dd5688dc8c360d0e017c6b122ce",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 42224,
+            "sha256": "cc9e464ed47ea4a050d3109f6bc7d826b0bfa206ccd7381b423b534bac3cd218"
+          },
+          "scipy-polyphase": {
+            "samples": 42224,
+            "sha256": "fece2a7fc0ba75ae9e81230f94a99ce85b8a170a2e3d0cc8490d4912bfab41d9"
+          }
+        }
+      },
+      "omnivoice:heavy-37891923274:output-cleanup": {
+        "sample_rate": 24000,
+        "expected": "The quick brown fox jumps over the lazy dog.",
+        "source_sha256": "052f0192bc8b926e6626ae1cd7438bd27186571a2a321bc8f7811a079055a067",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 45424,
+            "sha256": "8385962bebe946505b7ed8f3ee5012b8a93f9f9d8c2722e3e1bd0f64f5997d86"
+          },
+          "scipy-polyphase": {
+            "samples": 45424,
+            "sha256": "c54c0419c296d050a363db5b6e9880815e141d97e7f8906b4f7df70a4a8bb8e7"
+          }
+        }
+      },
+      "omnivoice:heavy-37891923274:punctuation": {
+        "sample_rate": 24000,
+        "expected": "The quick brown fox jumps over the lazy dog.",
+        "source_sha256": "dc0cb1664c8604dfc23f7714e63f66584986d176ef2e243d1882f993138d3592",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 42224,
+            "sha256": "a788f0dd3ea2d0ee0a306f8d3724ff30202056e628643573c2b297a7fa86236c"
+          },
+          "scipy-polyphase": {
+            "samples": 42224,
+            "sha256": "f452cddc8a3d539913a7100147102c667bfd11298cc45743662edb26a0a9c5a4"
+          }
+        }
+      },
+      "omnivoice:heavy-37891923274:reference-cleanup": {
+        "sample_rate": 24000,
+        "expected": "The quick brown fox jumps over the lazy dog.",
+        "source_sha256": "111d0844c71466d04cd34afa7a5e4afa542b71089276677e81bb8e422ea2c4ed",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 42224,
+            "sha256": "26f97814fd4826e73aadcb3525b7ba2cb6d5bf0d1f1325494fa1e977016ebd26"
+          },
+          "scipy-polyphase": {
+            "samples": 42224,
+            "sha256": "1f43498a4de2359729ca167354d073663982fcccd46b86f4ec41e69a5c09c0af"
+          }
+        }
+      },
+      "voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "sample_rate": 48000,
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "source_sha256": "915d38a53f4f4df4a89f2abd6cf78f2abf7fa54697322e70415f5a3b6e966d5a",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 99840,
+            "sha256": "edc35bdf6b1dbd88a5e22e688d5c4a7dcb3355ce4731cb1124e32a2a92f16d18"
+          },
+          "scipy-polyphase": {
+            "samples": 99840,
+            "sha256": "0fd9be90795f2e6d072851b8ce2da396446b0a8e0e24318bdd65091a8ef681db"
+          }
+        }
+      },
+      "voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "sample_rate": 48000,
+        "expected": "Hello, this is a short test sentence.",
+        "source_sha256": "ff8d2761a7ea25336a0e2c35b7ec059f03385ddcfee8f9f7ab929ad174442c7a",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 51200,
+            "sha256": "246c2b110febadf353ced7e7ce22637f7790b1a092ea493174831cd5c19c1484"
+          },
+          "scipy-polyphase": {
+            "samples": 51200,
+            "sha256": "2b192c64e839f9bd6d790025f5befcd50b4caeb966384416db4942e588f2628b"
+          }
+        }
+      },
+      "voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "sample_rate": 48000,
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "source_sha256": "d86393c6839abdb63a6a217e6c52455d61ae1f2005cd0651e38e5a25e1dac273",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 81920,
+            "sha256": "0bb7cbb95f80de5d2313644e2fff33ca946f7fafc0d2f3dc644bc3c9bb033b98"
+          },
+          "scipy-polyphase": {
+            "samples": 81920,
+            "sha256": "d932f52a3244af40b6e218fcf5d08d4ac09dad510fdb6c657648aad7058a052a"
+          }
+        }
+      },
+      "voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "sample_rate": 48000,
+        "expected": "Hello, this is a short test sentence.",
+        "source_sha256": "9b4a2350b9b4796dc0e2b98e89cf9a0b406055451f635b5093a656d7a07c37ad",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 51200,
+            "sha256": "2ad17614dc6b133be0afcf47bfdaac38aa81f84b0b9a075011bb7fd5afa42c74"
+          },
+          "scipy-polyphase": {
+            "samples": 51200,
+            "sha256": "aee4a8dd4bc5e3deb18841096b95cc341b99e699f408089ccd5a53eeefb31004"
+          }
+        }
+      },
+      "voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "sample_rate": 48000,
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "source_sha256": "086105cea839fd8d5e387ca0d5f54ba1316bf972d4484409de649d66142f56c5",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 84480,
+            "sha256": "9ec3e4aa731dbd1ef3a22dc5f83834a9f19e745ad850b9dddbc24523c0fb923e"
+          },
+          "scipy-polyphase": {
+            "samples": 84480,
+            "sha256": "c3c9fe2509f7d4af308c8fc05714b165d91ebdbede9201ec55e5b366b93838bf"
+          }
+        }
+      },
+      "voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "sample_rate": 48000,
+        "expected": "Hello, this is a short test sentence.",
+        "source_sha256": "6ec25140da83db7232b21afb5c1ffef7b5a3d7bcbe93658bceb61f6ce3954d0c",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 61440,
+            "sha256": "9f1621575cef11df7cba693d7d145c59074fc173ea9806a91c9804160fba94d7"
+          },
+          "scipy-polyphase": {
+            "samples": 61440,
+            "sha256": "faf101bfcb1c500ecda1ad8f4e9736a1814100bd88b8bc686670146679cefd08"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "sample_rate": 48000,
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "source_sha256": "38f2c1516ee9c3cdbd1bacff4dab994bca418959f2782ec80253666a7628e568",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 94720,
+            "sha256": "96c8f41751635804348f0257e86a4319d63ccfa5e6171d2d6fb4be0195df143a"
+          },
+          "scipy-polyphase": {
+            "samples": 94720,
+            "sha256": "95560c53214cc223cd7099e436053613ec524eee02482beb5f6b6b47fcab52ae"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "sample_rate": 48000,
+        "expected": "Hello, this is a short test sentence.",
+        "source_sha256": "b6035a4ff2bce9bb8ca3b07f150e372dce901f14b2869230f0bbed37a51f562a",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 51200,
+            "sha256": "fc5d5cde2116bb6f2741cfdde720843594a287e70655fc5287f74c97f01d5b6f"
+          },
+          "scipy-polyphase": {
+            "samples": 51200,
+            "sha256": "28bc80b2acd992a0b0087da6dccca3b84ab3a9a274a02a0cbeb42e40d86809b4"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "sample_rate": 48000,
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "source_sha256": "36ddbdc868db826c4eb5074e96c46f40135d811a985f6dc0a3f7be15cdbedee3",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 94720,
+            "sha256": "4d7ac6dd94b5feaaafa5a29dc8a7ccbbd3074bcc150d1fd190626690f902a8c4"
+          },
+          "scipy-polyphase": {
+            "samples": 94720,
+            "sha256": "5f6d3d080fcee6e085ca23ed07d70f1b3edd97b95c0aa63ed42567623f99096a"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "sample_rate": 48000,
+        "expected": "Hello, this is a short test sentence.",
+        "source_sha256": "a62d1880544da3e2570fbb837bb3f3f75b07186f433c316dab3f04f53ec75555",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 51200,
+            "sha256": "7dc46e25366ff4d80c644afb05db929b3c2fa34b5739d7cb9eaf384d9cfc3519"
+          },
+          "scipy-polyphase": {
+            "samples": 51200,
+            "sha256": "0f7abbeb3bb017f07a0f92ba1072ed3c4f0c2095cc9b55f6c5fa37463686053e"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "sample_rate": 48000,
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "source_sha256": "ba947d2151dd6f51e5575c232d32ecbd22b0917ffdb6fadbbdd773919ab456e8",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 92160,
+            "sha256": "768b79f473c1b3433703037665717a820995bb134ac5602163ee81017701f942"
+          },
+          "scipy-polyphase": {
+            "samples": 92160,
+            "sha256": "786be17dec312c0a9e5ef28c46ef03fbf7faf9f7c50fc95bf0225071c326d1c4"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "sample_rate": 48000,
+        "expected": "Hello, this is a short test sentence.",
+        "source_sha256": "e9cbe9e29214366453d4a2cee27c37f3ac85fb5ef146091aeeff65566e631d73",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 51200,
+            "sha256": "8d67ac531240a85fa029081ba42c91a42845b1f4797ad4e944da7fce075e1f2b"
+          },
+          "scipy-polyphase": {
+            "samples": 51200,
+            "sha256": "3d536e7d4d053b70fefa7d68d999ac4b1eecfc2f2fd0d4b81b8be949e917bb6f"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "sample_rate": 48000,
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "source_sha256": "7a74b5eadece48420dcf0b19ae2f2a47905241ae820cdc4a993fdf782ef447c7",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 94720,
+            "sha256": "4c5f9e7f3e133b094a039db2f15dd743235b953c087f93a45ea27f2babc71aa5"
+          },
+          "scipy-polyphase": {
+            "samples": 94720,
+            "sha256": "4734265ca2f607ebcf821f168fd5e245db35601575698fb92de9fa9b2a6c08ef"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "sample_rate": 48000,
+        "expected": "Hello, this is a short test sentence.",
+        "source_sha256": "c811e8f624ab9ddf760e13a6b63c704b887df7cc433b8ca99bbd2d2aa0ce4aa8",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 51200,
+            "sha256": "002b2f5abb6b4e0a971de0371751397d9e136e3036322b1d68cbf2c82b66a89b"
+          },
+          "scipy-polyphase": {
+            "samples": 51200,
+            "sha256": "232285570b7932f92c423beeb2e5b7b9642962a3c3ebaf97d7d202e6bd07e750"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "sample_rate": 48000,
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "source_sha256": "6920e6ed7ed05e97a7e00155f1983ef7dd709c27ea6c8c950fa9d4dc3c4b2d73",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 99840,
+            "sha256": "022857f2b5aad5594cc3072a3d9ce070cbf53f468e93ae3735af428fba92280c"
+          },
+          "scipy-polyphase": {
+            "samples": 99840,
+            "sha256": "c727e83580a838fa7d414ee158de1de8807e32089d3298037b285954004435a5"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "sample_rate": 48000,
+        "expected": "Hello, this is a short test sentence.",
+        "source_sha256": "50f52729d765866aa23aa11878136aef6fe87848f262b1a162a4e74cd8f3383d",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 51200,
+            "sha256": "8a8c65cd5ed3db0ac68d1d2a4ec22e5fef64f0ac838b6658d8052257eb83a932"
+          },
+          "scipy-polyphase": {
+            "samples": 51200,
+            "sha256": "4e558708e6ea6b393b55bfb9ec1692a5014e05d30048e4fec03b7b832dff9cb1"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "sample_rate": 48000,
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "source_sha256": "fb4f2bd37ca56f72203f2213e76f084090e36de87d2cdca76c878b843c12191d",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 81920,
+            "sha256": "2dac25e87c8421f88f227ea6dc0e4601c53c061d6cf5ce843bad5c28083789e5"
+          },
+          "scipy-polyphase": {
+            "samples": 81920,
+            "sha256": "c1355c689822596e69d706a80118b34ca8c167bb02a77451261c988815df7e18"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "sample_rate": 48000,
+        "expected": "Hello, this is a short test sentence.",
+        "source_sha256": "bb6d63f739f7892e9783befb9250a0a644427239fdeb5fac50d0a5f7ce7e957b",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 51200,
+            "sha256": "03a9d72be638c8c57a900c4d945540c58f3ddef8a59595bc525d456b7ccf06df"
+          },
+          "scipy-polyphase": {
+            "samples": 51200,
+            "sha256": "5b40932effeb227beed0adcebbf48ad424b11b5d074fb0d05aa12a911e40d943"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "sample_rate": 48000,
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "source_sha256": "2ec34279319a54cce961a0f5009ef46068838a30e8029d906971975711c59ec4",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 102400,
+            "sha256": "b0c2a57cc767f8f56aea52d8f576e07b26dd66ec4c62392664194f748b400e72"
+          },
+          "scipy-polyphase": {
+            "samples": 102400,
+            "sha256": "fb06053027f5fbcb0b3b7dd6a39b3d7ee0d6484e6b88f5402dd05bae4a0c52ef"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "sample_rate": 48000,
+        "expected": "Hello, this is a short test sentence.",
+        "source_sha256": "03c2cd28ed50018da26783bfddd8d7f887193dcae9d085026bea1d13faadc1d7",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 51200,
+            "sha256": "8b3add0a83b6631380bbf51fe6d3cc281ad3751f93534895212b2e3370662fbe"
+          },
+          "scipy-polyphase": {
+            "samples": 51200,
+            "sha256": "a5f02b1b31e043b42117c0c6946e65a5dc05414aba63f14330bedc97bc01323f"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "sample_rate": 48000,
+        "expected": "The sun is shining today. Hello, this is a short test sentence.",
+        "source_sha256": "7936d152eb47d49d56172e55ae640534183ec1ab51cb7bad451628f16ecc87b5",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 102400,
+            "sha256": "b2214d0e0e44f0f461e6b091861a565dcef0d48c9c12d20bf28e1f51e139b7cd"
+          },
+          "scipy-polyphase": {
+            "samples": 102400,
+            "sha256": "05d8b9b23957ad369d59605ffccd49ff0892919238b65948b092572d21c2da66"
+          }
+        }
+      },
+      "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "sample_rate": 48000,
+        "expected": "Hello, this is a short test sentence.",
+        "source_sha256": "d74319f92ca11882f309bde0fb630e0a1f83fdf0dbac50783a163d6cb7b6f9e5",
+        "resampled": {
+          "native-file-loader": {
+            "samples": 51200,
+            "sha256": "9e03c2a7cc9b49c7ccb67b7d781d5faf31df4defb1c0d8a9ad2e94bcca782dd5"
+          },
+          "scipy-polyphase": {
+            "samples": 51200,
+            "sha256": "84e5a23d1976b0fb1e7531043381f6a2a2eae90f302b4557e4ea108226e9b52c"
+          }
+        }
+      }
+    },
+    "alias_controls": {
+      "24000": {
+        "input_hz": 10000,
+        "target_nyquist_hz": 8000,
+        "rms": {
+          "python-linear": 0.2156053303168181,
+          "native-file-loader": 0.011967534523391648
+        },
+        "linear_negative_control_met": true,
+        "file_loader_alias_gate_met": false,
+        "interpretation": "C ABI file loader uses miniaudio, not core Kaiser polyphase; record failures without skipping fixed-audio transcripts"
+      },
+      "48000": {
+        "input_hz": 10000,
+        "target_nyquist_hz": 8000,
+        "rms": {
+          "python-linear": 0.3049329932315203,
+          "native-file-loader": 0.10790887933395694
+        },
+        "linear_negative_control_met": true,
+        "file_loader_alias_gate_met": false,
+        "interpretation": "C ABI file loader uses miniaudio, not core Kaiser polyphase; record failures without skipping fixed-audio transcripts"
+      }
+    },
+    "transcripts": {
+      "nemotron/python-linear/omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fixed jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick, brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick, brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fix jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/native-file-loader/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/scipy-polyphase/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/python-linear/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/native-file-loader/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/scipy-polyphase/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.5,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today. hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/native-file-loader/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/scipy-polyphase/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/python-linear/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.5,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a a short test sentence.",
+        "wer": 0.08333333333333333,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a a short test sentence.",
+        "wer": 0.08333333333333333,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a a short test sentence.",
+        "wer": 0.08333333333333333,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.25,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.25,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.25,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sentence.",
+        "wer": 0.7142857142857143,
+        "existing_gate_met": false
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today. hello! This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "nemotron/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sentence.",
+        "wer": 0.42857142857142855,
+        "existing_gate_met": false
+      },
+      "nemotron/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+        "wer": 0.8571428571428571,
+        "existing_gate_met": false
+      },
+      "parakeet/python-linear/omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "parakeet/native-file-loader/omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "parakeet/scipy-polyphase/omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "parakeet/python-linear/omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick brown fex jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "parakeet/native-file-loader/omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick brown fex jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "parakeet/scipy-polyphase/omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick brown fex jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "parakeet/python-linear/omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "parakeet/native-file-loader/omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "parakeet/scipy-polyphase/omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick brown fect jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "parakeet/python-linear/omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fex jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "parakeet/native-file-loader/omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fex jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "parakeet/scipy-polyphase/omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fex jumps over the lazy dig.",
+        "wer": 0.2222222222222222,
+        "existing_gate_met": false
+      },
+      "parakeet/python-linear/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "parakeet/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/omnivoice:heavy-37891923274:legacy": {
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/omnivoice:heavy-37891923274:output-cleanup": {
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/omnivoice:heavy-37891923274:punctuation": {
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/omnivoice:heavy-37891923274:reference-cleanup": {
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-original:heavy-37892473946:native-f16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-original:heavy-37892473946:native-f16-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-original:heavy-37892473946:native-q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-original:heavy-37892473946:native-q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-original:heavy-37892473946:python-bf16-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-original:heavy-37892473946:python-bf16-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": {
+        "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/python-linear/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/native-file-loader/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      },
+      "qwen3/scipy-polyphase/voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": {
+        "transcript": "Hello. This is a short test sentence.",
+        "wer": 0.0,
+        "existing_gate_met": true
+      }
+    }
+  }
+}

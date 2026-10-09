@@ -1,0 +1,10 @@
+{
+  "repo": "cstr/voxcpm2-GGUF",
+  "previous_revision": "819f1fbf685e0538ad0356504517768dada0a33f",
+  "revision": "1a25f9759e207ed5def2946bf07ca2dc635816b4",
+  "readme_sha256": "a9d8be035cba84112d876c916c6f3d3a13cb03c4ce19695b4712053b73da7719",
+  "bytes": 7035,
+  "all_five_weight_files_unchanged": true,
+  "remote_verified": true,
+  "scope": "README-only qualification: Nemotron ASR repetitions do not establish audible TTS stutter; all five GGUF files unchanged"
+}

@@ -1,0 +1,51 @@
+{
+  "scope": "Calibration callback unit and compiled CUDA tooling; real GPU acceptance pending",
+  "terminal_status": "BUILD_COMPLETE_GPU_PENDING",
+  "callback_source": "c247d0135ebc5fc76403481b7d48d4f313491e1e",
+  "bundle": {
+    "repo": "cstr/crispasr-index-echo-cuda-validation",
+    "repo_type": "dataset",
+    "purpose": "compiled tooling transfer; no model weights",
+    "revision": "b284cbc8727e1f91904a4c2928e6991bd5bea938",
+    "path": "index-echo-cuda-validation.tar.gz",
+    "sha256": "894bf650161f4c672a2992da394cdb8d65cca69af2f17c5b960c52bd4b6826f9",
+    "bytes": 449319728,
+    "remote_verified": true,
+    "build_run": 37901223622,
+    "provenance": {
+      "sha": "a03820a4fcf32bae0b658b35cf6663e85abcc854",
+      "cuda": "12.4.1",
+      "architectures": [
+        75
+      ],
+      "ggml_sha": "c36dab89b662838f0f5d4826c399198c0b90bbfc"
+    },
+    "unit": {
+      "passed": true,
+      "scope": "actual CPU callback and GGUF sums/counts; not GPU model acceptance",
+      "source": "a03820a4fcf32bae0b658b35cf6663e85abcc854"
+    },
+    "gpu_accepted": false
+  },
+  "kernel": "${KAGGLE_ACCOUNT}/crispasr-index-echo-calibration-smoke",
+  "kernel_version": 1,
+  "entry_source": "e4a64a9b8",
+  "runtime_sdk_source": "327be3fda80c44f280bfecab988458f9c3712b08",
+  "last_status": "RUNNING",
+  "gpu_accepted": false,
+  "q4_accepted": false,
+  "heldout_imatrix_suitable_for_quantization": false,
+  "required_gates": [
+    "unchanged independent F16 stage and magnitude acceptance with collection off/on",
+    "exact complete decoded outputs and timestamps in CLI and anonymous-model C ABI",
+    "full file context/translation pipeline and TTS-ASR roundtrips",
+    "identical control/observed decoded receipts",
+    "all 96 decoder FFN activation statistics: matching columns, positive row counts, finite nonnegative nonzero sums"
+  ],
+  "remaining": [
+    "real GPU smoke result",
+    "disjoint representative EN/ZH calibration corpus",
+    "public imatrix-aware Q4 preparation with critical precision audit",
+    "unchanged full independent candidate GPU acceptance"
+  ]
+}
