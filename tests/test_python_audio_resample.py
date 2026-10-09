@@ -3,6 +3,7 @@
 The native subset compiles only the resampler, without a model or full runtime.
 """
 import ctypes as C
+import os
 from pathlib import Path
 import shutil
 import subprocess
@@ -124,6 +125,18 @@ class AudioResampleTests(unittest.TestCase):
 class NativeAudioResampleTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
+        cls.temp = None
+        shipped = os.environ.get('CRISPASR_TEST_LIB')
+        if shipped:
+            cls.lib = C.CDLL(shipped)
+            cls.pointer = C.POINTER(C.c_float)
+            cls.lib.crispasr_audio_resample.argtypes = [cls.pointer, C.c_int, C.c_int,
+                C.c_int, C.POINTER(cls.pointer), C.POINTER(C.c_int)]
+            cls.lib.crispasr_audio_resample.restype = C.c_int
+            cls.lib.crispasr_audio_free.argtypes = [cls.pointer]
+            cls.lib.crispasr_audio_free.restype = None
+            cls.allocator = type('Allocator', (), {'free': cls.lib.crispasr_audio_free})()
+            return
         compiler = shutil.which('c++')
         if not compiler:
             raise RuntimeError('C++ compiler required for native resampling ABI tests')
@@ -150,7 +163,8 @@ class NativeAudioResampleTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
-        cls.temp.cleanup()
+        if cls.temp is not None:
+            cls.temp.cleanup()
 
     def test_native_fallback_agreement(self):
         rng = np.random.default_rng(123)

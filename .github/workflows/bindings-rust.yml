@@ -16,6 +16,8 @@ on:
       - crispasr-sys/**
       - include/**
       - src/crispasr_c_api.cpp
+      - src/crispasr_audio_resample.cpp
+      - tests/test_python_audio_resample.py
       - src/CMakeLists.txt
       # This job runs the backend wiring audit (below), so a change to the
       # audit itself must re-run it — otherwise the gate's own regressions
@@ -28,6 +30,8 @@ on:
       - crispasr-sys/**
       - include/**
       - src/crispasr_c_api.cpp
+      - src/crispasr_audio_resample.cpp
+      - tests/test_python_audio_resample.py
       - src/CMakeLists.txt
       # This job runs the backend wiring audit (below), so a change to the
       # audit itself must re-run it — otherwise the gate's own regressions
@@ -97,6 +101,13 @@ jobs:
         run: |
           python3 tools/check-backend-wiring.py \
             --crispasr ./build/bin/crispasr --require-lib
+
+      - name: Python audio C ABI against the shipped shared library
+        env:
+          CRISPASR_TEST_LIB: ${{ github.workspace }}/build/src/libcrispasr.so
+        run: |
+          python3 -m pip install numpy
+          python3 -m unittest discover -s tests -p test_python_audio_resample.py -v
 
       - name: cargo check (both crates)
         env:

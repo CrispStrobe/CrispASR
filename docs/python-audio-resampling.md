@@ -35,6 +35,8 @@ python -m unittest discover -s tests -p test_python_audio_resample.py -v
 ```
 
 The regression workflow runs these checks with ggml headers initialized.
+The shared-library binding CI repeats them against the actual shipped
+`libcrispasr.so`, including its exported resampling/free functions.
 They verify rejection of a 10 kHz tone when converting to 16 kHz, preserved
 1 kHz/DC signals, native/fallback agreement within 1e-7 absolute error,
 unchanged 16 kHz values, rounded lengths, error resets and independent output
