@@ -7,6 +7,20 @@ technical deep-dives are in `LEARNINGS.md`.
 ---
 
 
+## DONE 2026-10-09 — Nemotron terminal frontend mask and stage diagnostics
+
+[PR #525](https://github.com/CrispStrobe/CrispASR/pull/525) merged as
+`03c22e3f37e3b824d080c925ea067807418c3016` after all 44 applicable CI checks
+passed (one intentional skip), including the Nemotron model regression.
+Invalid terminal mel frames are zeroed using floor(samples/hop), matching
+all 26 pinned original attention masks. The additive preencode API and diff
+stage/shape checks expose all three boundaries. Exact source passes CPU and
+actual dual-T4 F16 stage gates, all 26 original fresh/reverse-reused decoded
+controls, and long-turn streaming presets 0/2/3 packet/reset/flush checks.
+Encoder T4 cosine minimum is 0.99999088, relative L2 0.00028004. No original
+streaming parity, Q4 acceptance or quantization-default claim. Public proof:
+`docs/nemotron-frontend-gpu-2026-10-09.json`. This is after v0.8.42.
+
 ## DONE 2026-10-09 — VoxCPM2 native PCM and live step overrides
 
 [PR #524](https://github.com/CrispStrobe/CrispASR/pull/524) merged as

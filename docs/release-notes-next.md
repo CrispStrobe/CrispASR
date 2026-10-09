@@ -1,6 +1,6 @@
 # Draft release notes — changes after v0.8.42
 
-This draft covers merged PRs #519, #520, #522, #523 and #524. No new tag has
+This draft covers merged PRs #519, #520, #522, #523, #524 and #525. No new tag has
 been cut. Experimental quantization candidates and unfinished hardware
 validation are excluded from the released behavior described below.
 
@@ -24,6 +24,25 @@ all 22 fixed VoxCPM2 controls correctly. This is decoded-output evidence,
 not a claim of full Python/native waveform equality.
 
 Evidence: [session contract and proof pins](voxcpm2-session-contract-2026-10-09.json).
+
+## Nemotron 3.5: correct terminal frontend masking and boundary diagnostics
+
+The frontend now zeroes frames beyond floor(samples/hop), matching the
+pinned original NVIDIA attention mask while retaining the original STFT
+shape. The old terminal frame could carry log-mel values into preencode.
+The diff tool now checks actual mel, preencode and encoder shapes and stages;
+an additive C diagnostic API exposes the preencode output.
+
+PR #525 passed all 44 applicable checks, with one intentional skip. Exact
+source passed all three unchanged F16 stage gates on CPU and actual dual T4s.
+On T4, encoder cosine minimum is 0.99999088 and relative L2 is 0.00028004;
+all 26 original transcript controls agree in fresh and reverse-reused
+sessions. Long-turn streaming presets 0/2/3 pass packet-size token equality,
+byte-exact reset/repeat confidence and idempotent final flush. These streaming
+checks do not claim parity with the original Python streaming implementation.
+
+Evidence: [CUDA stages and streaming proof](nemotron-frontend-gpu-2026-10-09.json),
+[CPU original transcript controls](nemotron-frontend-controls-2026-10-09.json).
 
 ## Python: band-limited array resampling and contiguous input buffers
 
@@ -98,12 +117,11 @@ its full F16 control, but all three candidates failed stage/magnitude and
 complete translation gates. No candidate is promoted; the terminal proof is
 pinned in `docs/index-echo-q4-imatrix-validation-2026-10-09.json`.
 Nemotron RNNT/prompt guards recover all 26 fixed transcripts, but Q4 encoder
-parity remains rejected. A candidate frontend length-mask correction passes
+parity remains rejected. The merged frontend length-mask correction passes
 all three F16 stage gates and all 26 original transcript controls with no
 fresh/reused differences. Actual dual-T4 validation also passes all three stage gates, the 26 original
 transcripts, fresh/reused equality and native streaming packet/reset/flush
-checks for presets 0/2/3. PR #525 remains unmerged pending the remaining
-integration CI; further Q4 encoder precision work is unfinished. Full proof:
+checks for presets 0/2/3. PR #525 is merged; further Q4 encoder precision work is unfinished. Full proof:
 `docs/nemotron-frontend-gpu-2026-10-09.json`.
 OmniVoice PR #521 remains a draft because clone acceptance is unfinished.
 The remaining CANN and hardware-specific work in PR #492 is not included.

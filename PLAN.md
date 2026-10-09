@@ -48,16 +48,13 @@ restores preencode parity at 455,895,968 bytes, but encoder still FAILS
 0.938963. No Q4 promotion. Next compare original/native encoder layer outputs. GH `37939212612` completed: F16 matches original words on 26/26 controls,
 all 22 VoxCPM2 controls, and fresh/reversed-reused outputs agree. All three
 strict stage gates PASS. RNNT+prompt Q4 still recovers 26/26 words but fails
-preencode/encoder parity; no Q4 promotion. This session claims isolated
-frontend plus additive boundary diagnostic integration in worktree
-`/mnt/storage/crispasr/salvage-20261008/nemotron-frontend-integration`, branch
-`fix/nemotron-frontend-boundaries`. Full PR CI and streaming/GPU validation
-remain required; CPU controls alone do not certify CUDA. Isolated
-[PR #525](https://github.com/CrispStrobe/CrispASR/pull/525), source
-`1977bd047d73b5e35cf5d267801fe21e859cfc1c`, is open with native cpp/header
-bytes identical to the accepted CPU candidate. Full PR CI is queued.
-GH CUDA bundle `37943881572` builds the exact PR source for subsequent
-actual Kaggle streaming/stage validation; no GPU acceptance claim yet.
+preencode/encoder parity; no Q4 promotion. The isolated frontend and additive boundary diagnostic are merged in
+[PR #525](https://github.com/CrispStrobe/CrispASR/pull/525), commit
+`03c22e3f37e3b824d080c925ea067807418c3016`. All 44 applicable PR checks
+passed, with one intentional skip. Exact source `1977bd047` passed the CPU
+controls and actual dual-T4 stage/transcript/streaming validation described
+below. The integration claim is complete; encoder Q4 investigation remains
+active in its separate experimental worktree.
 Terminal 26-control proof: `docs/nemotron-frontend-controls-2026-10-09.json`. GPU-only worker draft
 `3f1ef083b` lives in the claimed `nemotron-quant` worktree. It requires
 immutable successful bundle pins before launch, actual SM75 hardware/native
@@ -89,19 +86,23 @@ session claims a predeclared two-group precision isolation in the same
 compare attention-only source preservation versus FFN-only preservation.
 Physically audit source types/bytes, unrelated Q4 identity and actual sizes;
 retain unchanged F16-first stage gates/capture controls. No defaults or
-model promotion. Parakeet RNNT preserves joint/embed; GigaAM preserves
+model promotion. The two-group worker `1e32cc0af` is pushed and GH CPU
+run `37957419289` has launched. Every candidate must preserve protected source
+bytes, keep unrelated tensors identical to plain Q4, and retain nonzero Q4
+payload. The unchanged F16 stage control and capture OFF/ON/OFF checks remain
+mandatory. Results are pending. Parakeet RNNT preserves joint/embed; GigaAM preserves
 RNNT/prompt-front precision. Those small-head rules do not explain the
 remaining Conformer drift, so isolate learned encoder groups before further
 calibration or guards.
 Worker `307bcf92d` explicitly reserves diagnostic output lifetimes; rerun
-GH `37953858590` is queued. Raw rejected probe and original gold publicly
+GH `37953858590` completed successfully, with all 24 F16 layers passing. Raw rejected probe and original gold publicly
 archived: `docs/nemotron-layer-probe-2026-10-09.json`.
 CUDA bundle GH `37943881572` SUCCESS at exact PR source `1977bd047`;
 SHA-verified transfer is pinned in `docs/nemotron-frontend-gpu-2026-10-09.json`.
 Kaggle `nemotron-frontend-validation` v1 initially ran worker `307bcf92d`, with
 pulled source byte-identical. Actual native CUDA allocation, all three F16
 stage gates, all 26 fresh/reused original words and long-turn streaming
-packet/reset/flush gates are required. No hardware acceptance claim yet. v1 ERROR before inference:
+packet/reset/flush gates were required. v1 ERROR before inference:
 validator used an unversioned library name, but the bundle's SONAME is
 `libcrispasr.so.1`. Full terminal log/source publicly archived and verified.
 Worker `bbf9f165e` resolves the bundled SONAME and checks ELF loading before
