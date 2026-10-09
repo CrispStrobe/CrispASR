@@ -3880,6 +3880,29 @@ extern "C" float* nemotron_compute_mel(struct nemotron_context* ctx, const float
     return ret;
 }
 
+extern "C" float* nemotron_run_preencode_ext(struct nemotron_context* ctx, const float* mel, int n_mels, int T_mel,
+                                             int* out_T_enc, int* out_d_model) {
+    if (out_T_enc)
+        *out_T_enc = 0;
+    if (out_d_model)
+        *out_d_model = 0;
+    if (!ctx || !mel || T_mel <= 0 || n_mels != (int)ctx->model.hparams.n_mels)
+        return nullptr;
+    std::vector<float> pre_enc;
+    int T_enc = 0, d_model = 0;
+    if (!nemotron_run_preencode(ctx, mel, T_mel, pre_enc, T_enc, d_model))
+        return nullptr;
+    float* ret = (float*)malloc(pre_enc.size() * sizeof(float));
+    if (!ret)
+        return nullptr;
+    memcpy(ret, pre_enc.data(), pre_enc.size() * sizeof(float));
+    if (out_T_enc)
+        *out_T_enc = T_enc;
+    if (out_d_model)
+        *out_d_model = d_model;
+    return ret;
+}
+
 extern "C" float* nemotron_run_encoder_ext(struct nemotron_context* ctx, const float* mel, int n_mels, int T_mel,
                                            int* out_T_enc, int* out_d_model) {
     if (!ctx || !mel || T_mel <= 0)

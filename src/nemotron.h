@@ -100,6 +100,11 @@ const char* nemotron_token_to_str(struct nemotron_context* ctx, int token_id);
 float* nemotron_compute_mel(struct nemotron_context* ctx, const float* samples, int n_samples, int* out_n_mels,
                             int* out_T_mel);
 
+// Returns frame-major [T_enc, d_model] from the existing subsampling graph.
+// The caller owns the returned allocation and must free it.
+float* nemotron_run_preencode_ext(struct nemotron_context* ctx, const float* mel, int n_mels, int T_mel, int* out_T_enc,
+                                  int* out_d_model);
+
 float* nemotron_run_encoder_ext(struct nemotron_context* ctx, const float* mel, int n_mels, int T_mel, int* out_T_enc,
                                 int* out_d_model);
 

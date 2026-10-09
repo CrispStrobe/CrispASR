@@ -9320,27 +9320,53 @@ int main(int argc, char** argv) {
             printf("transcript: %s\n", r->text);
         }
 
-        // Compare encoder_output if present in ref
-        if (ref.has("encoder_output")) {
-            int n_mels = 0, T_mel = 0;
-            float* mel = nemotron_compute_mel(ctx, samples.data(), (int)samples.size(), &n_mels, &T_mel);
-            if (mel) {
+        int n_mels = 0, T_mel = 0;
+        float* mel = nemotron_compute_mel(ctx, samples.data(), (int)samples.size(), &n_mels, &T_mel);
+        auto compare_stage = [&](const char* name, const float* data, int width, int rows) {
+            if (ref.shape(name) != std::vector<int64_t>{width, rows}) {
+                printf("[ERR ] %-24s native/reference shape mismatch\n", name);
+                n_fail++;
+                return;
+            }
+            auto rep = ref.compare(name, data, (size_t)width * rows);
+            print_row(name, rep, COS_THRESHOLD);
+            record(rep);
+        };
+        if (mel) {
+            if (ref.has("mel_spectrogram")) {
+                // NeMo stores [n_mels, T_mel]; native input is [T_mel, n_mels].
+                std::vector<float> frequency_major((size_t)n_mels * T_mel);
+                for (int m = 0; m < n_mels; ++m)
+                    for (int t = 0; t < T_mel; ++t)
+                        frequency_major[(size_t)m * T_mel + t] = mel[(size_t)t * n_mels + m];
+                compare_stage("mel_spectrogram", frequency_major.data(), T_mel, n_mels);
+            }
+            if (ref.has("pre_encode_output")) {
                 int T_enc = 0, d_model = 0;
-                float* enc = nemotron_run_encoder_ext(ctx, mel, n_mels, T_mel, &T_enc, &d_model);
-                free(mel);
-                if (enc) {
-                    auto rep = ref.compare("encoder_output", enc, (size_t)T_enc * d_model);
-                    print_row("encoder_output", rep, COS_THRESHOLD);
-                    record(rep);
-                    free(enc);
+                float* pre = nemotron_run_preencode_ext(ctx, mel, n_mels, T_mel, &T_enc, &d_model);
+                if (pre) {
+                    compare_stage("pre_encode_output", pre, d_model, T_enc);
+                    free(pre);
                 } else {
-                    printf("[ERR ] encoder_output          nemotron_run_encoder_ext returned null\n");
+                    printf("[ERR ] pre_encode_output        nemotron_run_preencode_ext returned null\n");
                     n_fail++;
                 }
-            } else {
-                printf("[ERR ] encoder_output          nemotron_compute_mel returned null\n");
-                n_fail++;
             }
+            if (ref.has("encoder_output")) {
+                int T_enc = 0, d_model = 0;
+                float* enc = nemotron_run_encoder_ext(ctx, mel, n_mels, T_mel, &T_enc, &d_model);
+                if (enc) {
+                    compare_stage("encoder_output", enc, d_model, T_enc);
+                    free(enc);
+                } else {
+                    printf("[ERR ] encoder_output           nemotron_run_encoder_ext returned null\n");
+                    n_fail++;
+                }
+            }
+            free(mel);
+        } else {
+            printf("[ERR ] frontend                 nemotron_compute_mel returned null\n");
+            n_fail++;
         }
 
         nemotron_result_free(r);
