@@ -119,6 +119,22 @@ specs = [('f16', f16, None), ('plain-q4', TEMP / 'plain-q4.gguf', []),
     ('ffn-attention-pos-source-q4', TEMP / 'ffn-attention-pos-source-q4.gguf',
         common_guards + [r'^encoder\.layers\.[0-9]+\.ff[12]\.',
                          r'^encoder\.layers\.[0-9]+\.attn\.pos\.'])]
+# The prior FFN+QKV arm first fails proper-frame parity at layer 21.
+# Isolate out/position precision and sweep predeclared late-layer source guards.
+# These are explicitly mostly-source hybrids, not a small production Q4 claim.
+ffn_qkv_guards = common_guards + [r'^encoder\.layers\.[0-9]+\.ff[12]\.',
+    r'^encoder\.layers\.[0-9]+\.attn\.[qkv]\.']
+specs += [
+    ('ffn-qkv-out-source-q4', TEMP / 'ffn-qkv-out-source-q4.gguf',
+        ffn_qkv_guards + [r'^encoder\.layers\.[0-9]+\.attn\.out\.']),
+    ('ffn-qkv-pos-source-q4', TEMP / 'ffn-qkv-pos-source-q4.gguf',
+        ffn_qkv_guards + [r'^encoder\.layers\.[0-9]+\.attn\.pos\.']),
+    ('ffn-qkv-late20-source-q4', TEMP / 'ffn-qkv-late20-source-q4.gguf',
+        ffn_qkv_guards + [r'^encoder\.layers\.2[0-3]\.attn\.(out|pos)\.']),
+    ('ffn-qkv-late16-source-q4', TEMP / 'ffn-qkv-late16-source-q4.gguf',
+        ffn_qkv_guards + [r'^encoder\.layers\.(1[6-9]|2[0-3])\.attn\.(out|pos)\.']),
+    ('ffn-qkv-late12-source-q4', TEMP / 'ffn-qkv-late12-source-q4.gguf',
+        ffn_qkv_guards + [r'^encoder\.layers\.(1[2-9]|2[0-3])\.attn\.(out|pos)\.'])]
 all_arrays = {'pcm': pcm}
 plain_tensors = None
 for name, path, patterns in specs:
@@ -144,6 +160,8 @@ for name, path, patterns in specs:
         assert q4_bytes > 0, 'Diagnostic candidate must retain real Q4 tensors'
     if name.startswith('ffn-attention-'):
         assert q4_bytes >= 28311552, 'Attention isolation must retain substantial Q4 payload'
+    if name.startswith('ffn-qkv-'):
+        assert q4_bytes >= 14155776, 'Late-layer hybrids must retain actual Q4 projection payload'
     result = dict(bytes=path.stat().st_size, q4_bytes=q4_bytes, sha256=sha(path), protected=protected,
         tensors=tensors, stage_returncode=run([build / 'bin/crispasr-diff', 'nemotron', path, ref,
             ROOT / entry['sample']], name + '-diff'))
