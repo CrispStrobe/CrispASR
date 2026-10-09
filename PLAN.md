@@ -185,7 +185,13 @@ actual source precision, retaining existing RNNT/prompt/preout/FFN guards.
 All unprotected tensors must stay byte-identical to plain Q4; minimum actual
 Q4 payload is 28,311,552 bytes (the q/k/v-source arm). Keep original F16-first
 three-stage gates, complete layer captures and OFF/ON/OFF controls. These are
-mixed-precision diagnostics, with no speed or production Q4 shipping claim. Parakeet RNNT preserves joint/embed; GigaAM preserves
+mixed-precision diagnostics, with no speed or production Q4 shipping claim. Worker `7b9e0fc25` is pushed;
+[GH CPU 37971678214](https://github.com/CrispStrobe/CrispASR/actions/runs/37971678214)
+is dispatched with all seven existing baselines plus the three attention arms.
+Declarative selection checked against the actual prior physical tensor receipt:
+q/k/v matches 72 additional matrices and retains 28,311,552 Q4 bytes; out/pos
+each matches 24 matrices and retains 56,623,104 Q4 bytes. Native results pending.
+ Parakeet RNNT preserves joint/embed; GigaAM preserves
 RNNT/prompt-front precision. Those small-head rules do not explain the
 remaining Conformer drift, so isolate learned encoder groups before further
 calibration or guards.
