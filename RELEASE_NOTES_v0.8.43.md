@@ -133,3 +133,12 @@ The remaining CANN and hardware-specific work in PR #492 is not included.
 Before publication, finish integration CI for the chosen release commit and
 verify the produced packages and their runtime dependencies. The merged PR
 checks above do not substitute for final release-artifact validation.
+
+The subsequent Nemotron attention isolation also rejects all three source-guarded
+Q4 arms. FFN+QKV source precision is closest at encoder cosine 0.998536 versus
+the unchanged 0.999 gate, with a 1,143,237,536-byte model and only 28,311,552
+bytes of actual Q4 tensor payload. FFN+attention-out and FFN+position-source
+arms fail at 0.996296 and 0.987063. All seven baseline arrays match the prior
+run exactly, F16 passes all three stages, and all 24 original frame-layer
+controls pass for F16. These mostly-source diagnostic hybrids are excluded
+from production quantization and release performance claims. See [nemotron-encoder-attention-2026-10-09.json](docs/nemotron-encoder-attention-2026-10-09.json).

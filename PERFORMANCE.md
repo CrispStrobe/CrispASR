@@ -2631,6 +2631,15 @@ core infrastructure.
   erase (should be ring buffer), custom FFT no SIMD, sinusoidal PE
   recomputed per chunk, flash attn default off
 
+- Quantization acceptance (2026-10-09): preserving RNNT/preout, then FFN
+  and QKV at source precision still fails the unchanged 0.999 encoder gate
+  at 0.998536. This diagnostic is 1,143,237,536 bytes (F16: 1,286,368,480)
+  with only 28,311,552 actual Q4 bytes; it is not a production small-Q4 or
+  speed result. Attention-out/position isolation also fails. F16 passes all
+  three stage gates and all 24 original frame-layer controls; seven previous
+  baseline arrays are exact. Full audit:
+  [attention isolation receipt](docs/nemotron-encoder-attention-2026-10-09.json).
+
 **Gemma4 E2B** (`gemma4_e2b.cpp`):
 - Has: dual KV cache (sliding-window + full-context), KV sharing via
   donor layers, QAT clipping baked per Linear, per_dim_scale baked at

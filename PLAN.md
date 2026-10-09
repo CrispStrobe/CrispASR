@@ -111,7 +111,7 @@ repaired resolver passes a local fixture reproducing directory-symlink
 omission and duplicate aliases. Version 2 (`d51058cf6`) is terminal ERROR before download or inference;
 remote source was pulled and verified byte-identical (entry SHA
 `bf8a19e3014d55803bcd21b67d941b145fae62186580c5fea7594fe149848080`).
-Both terminal outputs are preserved. Version 2 reports zero mounted GitHub token files despite scanning both documented mount forms. Version 3 (`9f4f7fee1`) is terminal ERROR; exact archive hash and CUDA 12.8 preloads pass on dual T4, but the C ABI finds no CPU ggml backend when called from Python outside the package directory. All output is preserved; no inference started. pulled source is byte-identical (entry SHA `99a64aff61ef379506858e6617cbfaa44a1e91681adb6b518ad6d1e6c22ff303`). Exact CI tar is mirrored publicly at DATASET `cstr/crispasr-regression-fixtures` commit `a93e0228b081be547ddea2d2c35bec904ed1a4b9`, path `experimental/release-package-37958100129/crispasr-linux-x86_64-cuda.tar.gz`; remote SHA matches the original tar. No secret dataset mutation, binary rebuild or gate change. No hardware acceptance yet. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
+All three terminal outputs are preserved. Version 2 reports zero mounted GitHub token files despite scanning both documented mount forms. Version 3 (`9f4f7fee1`) is terminal ERROR; exact archive hash and CUDA 12.8 preloads pass on dual T4, but the C ABI finds no CPU ggml backend when called from Python outside the package directory. All output is preserved; no inference started. pulled source is byte-identical (entry SHA `99a64aff61ef379506858e6617cbfaa44a1e91681adb6b518ad6d1e6c22ff303`). Exact CI tar is mirrored publicly at DATASET `cstr/crispasr-regression-fixtures` commit `a93e0228b081be547ddea2d2c35bec904ed1a4b9`, path `experimental/release-package-37958100129/crispasr-linux-x86_64-cuda.tar.gz`; remote SHA matches the original tar. No secret dataset mutation, binary rebuild or gate change. No hardware acceptance yet. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
 
 ## Release preparation checkpoint 2026-10-09
 
@@ -251,7 +251,7 @@ Proper frame-axis first failures are layers 2 and 1; final relative L2 values
 are 0.025868 and 0.059344. Full raw arrays, tensor byte/type/SHA audits,
 original gold and worker are public and remote-SHA verified in
 `docs/nemotron-encoder-projections-2026-10-09.json`. No promotion.
-Next this session claims three predeclared attention precision isolation
+Completed three predeclared attention precision isolation
 arms in the same `nemotron-quant` worktree, starting from the better
 FFN-source baseline: preserve attention q/k/v versus out versus pos at
 actual source precision, retaining existing RNNT/prompt/preout/FFN guards.
@@ -260,10 +260,10 @@ Q4 payload is 28,311,552 bytes (the q/k/v-source arm). Keep original F16-first
 three-stage gates, complete layer captures and OFF/ON/OFF controls. These are
 mixed-precision diagnostics, with no speed or production Q4 shipping claim. Worker `7b9e0fc25` is pushed;
 [GH CPU 37971678214](https://github.com/CrispStrobe/CrispASR/actions/runs/37971678214)
-is dispatched with all seven existing baselines plus the three attention arms.
+completed with all seven existing baselines plus the three attention arms.
 Declarative selection checked against the actual prior physical tensor receipt:
 q/k/v matches 72 additional matrices and retains 28,311,552 Q4 bytes; out/pos
-each matches 24 matrices and retains 56,623,104 Q4 bytes. Native results pending.
+each matches 24 matrices and retains 56,623,104 Q4 bytes. Terminal results are recorded below.
  Parakeet RNNT preserves joint/embed; GigaAM preserves
 RNNT/prompt-front precision. Those small-head rules do not explain the
 remaining Conformer drift, so isolate learned encoder groups before further
@@ -3778,3 +3778,21 @@ by the log-mel HiFT vocoder → flow mel cosine(cpu,vk)=0.961 → garbage. The L
   release was never affected (shims are branch-only).
 - Default stays the shipped all-CPU route under Vulkan — correct, and the right
   answer unless the lever above ever pays off.
+
+## Nemotron late-layer isolation launch checkpoint 2026-10-09
+
+Experimental worker `3bb2b58b0f20c65b8cd0c876d363754a5948ced2` is pushed on
+`fix/nemotron-rnnt-quant`. GH CPU run
+[37981088899](https://github.com/CrispStrobe/CrispASR/actions/runs/37981088899)
+is queued at that exact source. All ten baselines plus five new predeclared
+arms run with unchanged F16-first gates and capture controls. Actual prior
+physical tensor metadata verifies remaining Q4 bytes: out/position isolation
+14,155,776 each; late 20/16/12 guards 23,592,960 / 18,874,368 / 14,155,776.
+The previous attention-isolation raw arrays, complete tensor ledger, original
+gold and exact worker are public and remote-SHA verified in
+`docs/nemotron-encoder-attention-2026-10-09.json`; the tracked receipt keeps
+compact type counts and all 24 layer/norm metrics, while the full physical
+ledger stays in the public proof. No new model/default promotion or speed claim.
+
+This checkpoint passes all four full secret-scan tests with no skips
+(93.963 seconds) and all 227 documentation anchors across 82 files.
