@@ -62,11 +62,17 @@ for legacy in (True,False):
         assert s._lib.crispasr_session_set_tts_seed(s._handle,42) == 0
         s.set_tts_steps(32)
         assert s._lib.crispasr_session_set_tts_steps(s._handle,32) == 0
-        pcm = s.synthesize(TEXT)
+        # Compare native DSP before the default API adds its watermark.
+        s.accept_marking_responsibility('Independent upstream waveform acceptance fixture')
+        pcm = s.synthesize_raw(TEXT)
         assert s.output_sample_rate() == 24000
         assert np.isfinite(pcm).all() and len(pcm) > 24000
         outputs[label] = np.asarray(pcm,dtype=np.float32)
         np.save(OUT/(label+'.npy'),pcm)
+        if not legacy:
+            s.set_tts_seed(42)
+            outputs['session-marked'] = np.asarray(s.synthesize(TEXT),dtype=np.float32)
+            np.save(OUT/'session-marked.npy',outputs['session-marked'])
 assert (OUT/'session-raw.codes').read_bytes() == (OUT/'session-full.codes').read_bytes(), 'Generation changed in decode-only A/B'
 # Load actual upstream utility AST functions through the independent module.
 import runpy
@@ -78,7 +84,11 @@ if peak > 1e-6:
 expected = oracle['fade_and_pad_audio'](expected).ravel()
 assert expected.shape == outputs['session-full'].shape
 error = float(np.max(np.abs(expected-outputs['session-full'])))
+(OUT/'waveform-oracle.json').write_text(json.dumps(dict(max_abs=error,
+    compared_surface='attested raw C ABI; upstream DSP before automatic watermark',
+    marked_output_differs=bool(not np.array_equal(outputs['session-marked'],outputs['session-full']))),indent=2)+'\n')
 assert error <= 2e-6, error
+assert not np.array_equal(outputs['session-marked'],outputs['session-full']), 'Default watermark not exercised'
 # Reference preprocessing must run through both real user surfaces.
 os.environ['CRISPASR_OMNIVOICE_AUDIO_LEGACY'] = '0'
 os.environ.pop('CRISPASR_OMNIVOICE_DUMP_CODES',None)
@@ -87,7 +97,10 @@ with Session(paths['omnivoice-q8_0.gguf'],lib_path=str(lib),backend='omnivoice',
     s.set_tts_seed(42)
     s.set_tts_steps(32)
     s.set_voice(ref_wav,ref_text=reference['text'].rstrip('.'))
-    outputs['session-clone'] = np.asarray(s.synthesize(TEXT),dtype=np.float32)
+    s.accept_marking_responsibility('Reference DSP acceptance fixture')
+    outputs['session-clone'] = np.asarray(s.synthesize_raw(TEXT),dtype=np.float32)
+    s.set_tts_seed(42)
+    outputs['session-marked-clone'] = np.asarray(s.synthesize(TEXT),dtype=np.float32)
     np.save(OUT/'session-clone.npy',outputs['session-clone'])
 cli_wav = OUT/'cli-clone.wav'
 run([build/'bin/crispasr','--backend','omnivoice','-m',paths['omnivoice-q8_0.gguf'],
@@ -104,7 +117,7 @@ results = {}
 with Session(asr,lib_path=str(lib),backend='nemotron',n_threads=4) as s:
     for label,pcm in outputs.items():
         assert np.isfinite(pcm).all() and len(pcm) > 24000, label
-        if label != 'session-raw':
+        if label not in ('session-raw','session-marked','session-marked-clone'):
             assert np.max(np.abs(pcm[:2400])) <= 1/32768 and np.max(np.abs(pcm[-2400:])) <= 1/32768, label
         actual = ' '.join(segment.text for segment in s.transcribe(pcm,sample_rate=24000,language='en'))
         words = lambda text: re.findall('[a-z]+',re.sub(r'<[^>]*>','',text).lower())
@@ -118,7 +131,7 @@ with Session(asr,lib_path=str(lib),backend='nemotron',n_threads=4) as s:
         results[label] = dict(transcript=actual,wer=row[-1]/len(ref),samples=len(pcm),
                               sha256=hashlib.sha256(pcm.tobytes()).hexdigest())
         (OUT/'roundtrips.json').write_text(json.dumps(results,indent=2)+'\n')
-assert all(case['wer'] <= .2 for case in results.values()), results
+assert len(results) == 6 and all(case['wer'] <= .2 for case in results.values()), results
 receipt = dict(passed=True,model_revision=MODEL_PIN,fixture_revision=FIXTURE_PIN,roundtrips=results,
     decode_waveform_max_abs=error,decode_codes_exact=True,
     source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip())
