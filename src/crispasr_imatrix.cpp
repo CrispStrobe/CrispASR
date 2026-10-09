@@ -194,14 +194,21 @@ void merge_existing() {
 
 } // namespace
 
-void crispasr_imatrix_install(ggml_backend_sched_t sched) {
-    if (!is_active() || !sched)
-        return;
-    ggml_backend_sched_set_eval_callback(sched, eval_cb, nullptr);
+ggml_backend_sched_eval_callback crispasr_imatrix_callback(void) {
+    if (!is_active())
+        return nullptr;
     if (!g_atexit) {
         atexit(crispasr_imatrix_flush);
         g_atexit = true;
     }
+    return eval_cb;
+}
+
+void crispasr_imatrix_install(ggml_backend_sched_t sched) {
+    if (!sched)
+        return;
+    if (auto callback = crispasr_imatrix_callback())
+        ggml_backend_sched_set_eval_callback(sched, callback, nullptr);
 }
 
 void crispasr_imatrix_flush(void) {
