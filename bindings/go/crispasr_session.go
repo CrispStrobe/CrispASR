@@ -1121,7 +1121,7 @@ func (s *CrispasrSession) Speakers() []string {
 	return out
 }
 
-// Synthesize converts `text` to 24 kHz mono PCM. Requires a TTS-capable
+// Synthesize converts `text` to mono PCM at OutputSampleRate(). Requires a TTS-capable
 // backend (kokoro / vibevoice / qwen3-tts / orpheus / tada).
 func (s *CrispasrSession) Synthesize(text string) ([]float32, error) {
 	ctext := C.CString(text)
@@ -1182,7 +1182,7 @@ func (s *CrispasrSession) AcceptMarkingResponsibility(attestation string) error 
 	return nil
 }
 
-// SynthesizeRaw converts `text` to UNMARKED 24 kHz mono PCM (no watermark), for
+// SynthesizeRaw converts `text` to UNMARKED mono PCM at OutputSampleRate(), for
 // callers that must post-process (speed/mix/concat) before embedding the mark
 // themselves. It is hard-refused unless AcceptMarkingResponsibility was called
 // first. Most callers should use Synthesize, which watermarks by default.

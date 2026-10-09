@@ -6,6 +6,12 @@ auto-generated list is [`docs/feature-matrix.md`](feature-matrix.md) — behind
 the same `crispasr` binary, each with a distinct voice / quality / footprint
 trade-off:
 
+VoxCPM2 returns native 48 kHz mono PCM through the CLI and session API.
+Bindings should use the output sample rate getter when playing or saving PCM.
+Its CFM solver defaults to ten steps; explicit CLI `--tts-num-steps` and session
+`set_tts_steps` overrides apply to the next synthesis call. Lower step counts
+can reduce speech quality.
+
 ## Contents
 
 - [dots.tts](#dotstts--voice-cloning-and-performance) — voice cloning, mixed quant, flow-match knobs

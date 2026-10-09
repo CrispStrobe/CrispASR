@@ -370,7 +370,7 @@ namespace CrispASR
         // ----------------------------------------------------------------
 
         /// <summary>
-        /// Synthesize text to 24 kHz mono float32 PCM.
+        /// Synthesize text to mono float32 PCM at OutputSampleRate().
         /// Requires a TTS-capable backend (kokoro, vibevoice, qwen3-tts, orpheus, chatterbox).
         /// </summary>
         public float[] Synthesize(string text)
