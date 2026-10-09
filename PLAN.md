@@ -47,6 +47,12 @@ was dispatched at `65de05e08f2cd582ba36694c4135bc2aa96d2259`; branch advanced
 with documentation-only `0df939b42` while jobs remain queued. Predeclared
 acceptance: checkout must select the dispatch SHA despite branch movement.
 No hosted acceptance yet; merge only after green checks and observed checkout.
+Additional claimed package-documentation repair in this same worktree/PR:
+the generic WASM archive README incorrectly specifies fixed 24 kHz output.
+Replace it with the actual `sessionOutputSampleRate()` getter guidance;
+verify module initialization, exported TTS/getter/file-loading API and existing
+model-free WASM assertions against the staged release artifact. The Kokoro-only
+demo correctly uses 24 kHz and does not need this generic-package repair.
 
 ## Release preparation checkpoint 2026-10-09
 
