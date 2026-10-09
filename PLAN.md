@@ -87,7 +87,13 @@ SHA-verified transfer is pinned in `docs/nemotron-frontend-gpu-2026-10-09.json`.
 Kaggle `nemotron-frontend-validation` v1 RUNNING, worker `307bcf92d`, with
 pulled source byte-identical. Actual native CUDA allocation, all three F16
 stage gates, all 26 fresh/reused original words and long-turn streaming
-packet/reset/flush gates are required. No hardware acceptance claim yet. All 26 archived
+packet/reset/flush gates are required. No hardware acceptance claim yet. v1 ERROR before inference:
+validator used an unversioned library name, but the bundle's SONAME is
+`libcrispasr.so.1`. Full terminal log/source publicly archived and verified.
+Worker `bbf9f165e` resolves the bundled SONAME and checks ELF loading before
+model downloads; v2 RUNNING on the same immutable source/build/thresholds.
+Remote worker source is byte-identical. All four local no-secrets tests pass
+with the account environment explicitly set (156.584 seconds). All 26 archived
 original NVIDIA attention masks independently confirm floor(samples/hop);
 full failed-boundary arrays and logs publicly archived and SHA-verified:
 `docs/nemotron-boundary-diagnostic-2026-10-09.json`.

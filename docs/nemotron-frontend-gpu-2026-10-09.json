@@ -1,7 +1,7 @@
 {
-  "version": 1,
-  "worker_commit": "307bcf92dfa3264e51ad6e0d36668797c8a72275",
-  "entry_sha256": "07d1aee7e308c27e12064b61093856f9403af0eb12edad217b946d7d21322322",
+  "version": 2,
+  "worker_commit": "bbf9f165e97d5fe26d214cf77121b6cc4c0dcb5b",
+  "entry_sha256": "7c5e0f05d4188b367d5718d4c57c60b8324de79a9eb2b8b0bcbde4f2ce343b76",
   "remote_source_identical": true,
   "status": "RUNNING",
   "kernel": "${KAGGLE_ACCOUNT}/crispasr-nemotron-frontend-validation",
@@ -18,5 +18,22 @@
     "build_run": 37943881572,
     "remote_verified": true
   },
-  "scope": "F16 original three-stage/26-transcript controls and native streaming packet/reset/flush invariants; no original streaming parity or Q4 promotion"
+  "scope": "F16 original three-stage/26-transcript controls and native streaming packet/reset/flush invariants; no original streaming parity or Q4 promotion",
+  "previous_runs": [
+    {
+      "version": 1,
+      "status": "ERROR",
+      "inference_started": false,
+      "reason": "Validator assumed unversioned libcrispasr.so; bundle contains libcrispasr.so.1",
+      "proof": {
+        "repo": "cstr/crispasr-regression-fixtures",
+        "repo_type": "dataset",
+        "revision": "1fafc5a7f68189b1718e237ef37b9f1a3728d8db",
+        "path": "tts-asr/nemotron-frontend-gpu-v1-20261009/proof.zip",
+        "sha256": "47c618f5ea2a1ca2e4bfacc8b3b5def5f664c9794aacb52520697644773700cd",
+        "bytes": 9750,
+        "remote_verified": true
+      }
+    }
+  ]
 }
