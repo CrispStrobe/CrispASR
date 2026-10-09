@@ -75,7 +75,19 @@ encoder bytes to agree for F16, plain Q4 and RNNT+prompt+source-F32-preout
 Q4. F16 must pass existing original three-stage gates first. Model/tensor
 hashes and complete arrays are archived; no threshold, quant default or
 production capture change. Compare against original layer reference only
-after both workers complete; failed capture controls invalidate the probe. All 26 archived
+after both workers complete; failed capture controls invalidate the probe. Both layer jobs completed. Original
+capture preserves generation IDs exactly and retains all 24 layers. Initial
+native final output OFF/ON/OFF is byte-exact, but intermediate F16 arrays
+reuse two buffers and are INVALID. No Q4 guard may be chosen from them.
+Worker `307bcf92d` explicitly reserves diagnostic output lifetimes; rerun
+GH `37953858590` is queued. Raw rejected probe and original gold publicly
+archived: `docs/nemotron-layer-probe-2026-10-09.json`.
+CUDA bundle GH `37943881572` SUCCESS at exact PR source `1977bd047`;
+SHA-verified transfer is pinned in `docs/nemotron-frontend-gpu-2026-10-09.json`.
+Kaggle `nemotron-frontend-validation` v1 RUNNING, worker `307bcf92d`, with
+pulled source byte-identical. Actual native CUDA allocation, all three F16
+stage gates, all 26 fresh/reused original words and long-turn streaming
+packet/reset/flush gates are required. No hardware acceptance claim yet. All 26 archived
 original NVIDIA attention masks independently confirm floor(samples/hop);
 full failed-boundary arrays and logs publicly archived and SHA-verified:
 `docs/nemotron-boundary-diagnostic-2026-10-09.json`.

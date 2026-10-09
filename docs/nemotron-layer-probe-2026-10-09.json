@@ -1,0 +1,288 @@
+{
+  "original_reference": {
+    "diagnostic_complete": true,
+    "scope": "Capture original NVIDIA Conformer layers before choosing further Q4 guards.",
+    "source": "3ca187201055a00d13469f0f646f361c0604ba6a",
+    "original_model": "nvidia/nemotron-3.5-asr-streaming-0.6b",
+    "original_revision": "ea30d66debe3740a08b573244286791d423d6b3e",
+    "dtype": "torch.float32",
+    "device": "cpu",
+    "lookahead_tokens": 3,
+    "language": "en-US",
+    "transcript": "And so my fellow Americans ask not what your country can do for you.  Ask what you can do for your country. ",
+    "capture_sequence_exact": true,
+    "original_attention_implementation": "sdpa",
+    "input_scale": 1.0,
+    "pcm_sha256": "ebd52851100536db02d12c49fddd010372dcdc70243562e057553d476b706ae0",
+    "archive_sha256": "c12241011c41c5fcf43e7d3a8f8c857e2763b9453f4013a6c76c4ca5f814063c",
+    "stages": {
+      "preencode": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 35037.281908928795
+      },
+      "layer_0": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2983.234003975985
+      },
+      "layer_1": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 3064.208176079049
+      },
+      "layer_2": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2801.057589806585
+      },
+      "layer_3": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2738.4034171234607
+      },
+      "layer_4": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2780.573803016556
+      },
+      "layer_5": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2800.990278518803
+      },
+      "layer_6": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2793.50106496633
+      },
+      "layer_7": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2788.039610541727
+      },
+      "layer_8": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2635.7877135546382
+      },
+      "layer_9": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2477.584277210425
+      },
+      "layer_10": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2460.0979445727585
+      },
+      "layer_11": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2376.562391885033
+      },
+      "layer_12": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2389.954600189384
+      },
+      "layer_13": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2640.34461955904
+      },
+      "layer_14": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2845.1436863027866
+      },
+      "layer_15": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 3097.643899473565
+      },
+      "layer_16": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 3106.8825476499824
+      },
+      "layer_17": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 3123.541086121575
+      },
+      "layer_18": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 3001.0264153765233
+      },
+      "layer_19": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2759.7627378872035
+      },
+      "layer_20": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2442.89197083095
+      },
+      "layer_21": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 2140.355164053906
+      },
+      "layer_22": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 1932.7115239178345
+      },
+      "layer_23": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 16.612932159975962
+      },
+      "encoder": {
+        "shape": [
+          1,
+          139,
+          1024
+        ],
+        "norm": 16.612932159975962
+      },
+      "input_input_features": {
+        "shape": [
+          1,
+          1101,
+          128
+        ],
+        "norm": 3802.327786510394
+      },
+      "input_attention_mask": {
+        "shape": [
+          1,
+          1101
+        ],
+        "norm": 33.166247903554
+      },
+      "input_prompt_ids": {
+        "shape": [
+          1
+        ],
+        "norm": 0.0
+      },
+      "sequence": {
+        "shape": [
+          1,
+          188
+        ],
+        "norm": 155267.99540471952
+      },
+      "pcm": {
+        "shape": [
+          176000
+        ],
+        "norm": 59.614920079166666
+      }
+    },
+    "packages": {
+      "torch": "2.14.1+cpu",
+      "transformers": "5.19.0",
+      "numpy": "2.5.3",
+      "huggingface_hub": "2.2.0"
+    },
+    "native_parity_tested": false,
+    "quant_promoted": false
+  },
+  "initial_native_capture_run": 37947134922,
+  "initial_native_intermediate_capture_valid": false,
+  "initial_native_final_capture_exact": true,
+  "reason": "Capture output flags changed without graph-shape changes; the cached allocation plan reused intermediate buffers. Final output byte equality alone did not validate intermediates.",
+  "retry_run": 37953858590,
+  "retry_source": "307bcf92dfa3264e51ad6e0d36668797c8a72275",
+  "retry_status": "QUEUED",
+  "quant_promoted": false,
+  "proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "repo_type": "dataset",
+    "revision": "60f21b0f3e7917271a28548c90ddef2b15675a52",
+    "path": "tts-asr/nemotron-layer-probe-initial-20261009/proof.zip",
+    "sha256": "a792d55ba0e92166f2f57efd8be071b15746fb85a802ececff24b00a2838a671",
+    "bytes": 53388645,
+    "remote_verified": true
+  }
+}

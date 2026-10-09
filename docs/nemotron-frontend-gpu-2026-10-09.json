@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "worker_commit": "307bcf92dfa3264e51ad6e0d36668797c8a72275",
+  "entry_sha256": "07d1aee7e308c27e12064b61093856f9403af0eb12edad217b946d7d21322322",
+  "remote_source_identical": true,
+  "status": "RUNNING",
+  "kernel": "${KAGGLE_ACCOUNT}/crispasr-nemotron-frontend-validation",
+  "validated": false,
+  "bundle": {
+    "sha": "1977bd047d73b5e35cf5d267801fe21e859cfc1c",
+    "cuda": "12.4.1",
+    "architectures": [
+      75
+    ],
+    "ggml_sha": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+    "bundle_revision": "7eb6302442d6c3524426de1147d9cb34341221d0",
+    "bundle_sha256": "05e41880708d705f96e47e89c3a71a8a940093781ee8a1b3a8ec8ff1e2a5d2c9",
+    "build_run": 37943881572,
+    "remote_verified": true
+  },
+  "scope": "F16 original three-stage/26-transcript controls and native streaming packet/reset/flush invariants; no original streaming parity or Q4 promotion"
+}
