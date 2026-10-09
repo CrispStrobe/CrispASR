@@ -8,10 +8,10 @@ from pathlib import Path
 import subprocess
 import sys
 
-SCRIPT_VERSION = 'voxcpm2-current-profile-v4'
-SOURCE = '8fb4d1b0b19fea3f15c71247121d2c56bed8ebba'
+SCRIPT_VERSION = 'voxcpm2-current-profile-v5-path-diagnostic'
+SOURCE = '2ee7212fd8d22d65132baafa0bb714fb284257dc'
 GGML = 'c36dab89b662838f0f5d4826c399198c0b90bbfc'
-CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'voxcpm2-vulkan/sm75-v3-build.tar', 'revision': 'df9e11b0b66d1c87f1e0be5552d2974590e4ae20', 'sha256': 'a75cd84e3a122271386f68044117167840545696fd83866406b8380e8bac5dc8', 'bytes': 99747840}
+CACHE = {'repo': 'cstr/crispasr-ccache', 'file': 'voxcpm2-vulkan/sm75-v4-build.tar', 'revision': '85e6e05e264111f9b2f920b02f99c5b8ebeba935', 'sha256': '774e310a50b8570ab7f7922f324077b50e5f52bde93d1fc4f1d2b79b15b83e34', 'bytes': 101376000}
 WORK = Path('/kaggle/working')
 SCRATCH = Path('/kaggle/temp/voxcpm2-current-profile')
 REPO = SCRATCH / 'CrispASR'
@@ -22,7 +22,7 @@ def main():
     SCRATCH.mkdir(parents=True, exist_ok=True)
     OUT.mkdir(parents=True, exist_ok=True)
     os.environ.update(PYTHONUNBUFFERED='1', TMPDIR=str(SCRATCH),
-                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='voxcpm2-current-profile-v4')
+                      HF_HOME=str(SCRATCH / 'hf'), KAGGLE_KERNEL_REF='voxcpm2-current-profile-v5-path-diagnostic')
     devices = subprocess.check_output(['nvidia-smi', '--query-gpu=name,compute_cap,memory.total',
                                        '--format=csv'], text=True)
     print(SCRIPT_VERSION, devices, flush=True)
@@ -104,32 +104,17 @@ def main():
     try:
         with kh.build_heartbeat('asr-cuda-validation'):
             with (OUT/'vulkan-worker.log').open('w') as log:
-                result = subprocess.run([sys.executable, REPO / 'tools/ci-heavy/voxcpm2_vulkan_profile.py'],
+                result = subprocess.run([sys.executable, REPO / 'tools/ci-heavy/voxcpm2_path_diagnostic.py'],
                                         cwd=REPO, stdout=log, stderr=subprocess.STDOUT, timeout=7200)
-        if result.returncode == 0:
-            perf = OUT/'per-op'
-            perf.mkdir(exist_ok=True)
-            with kh.build_heartbeat('vulkan-per-op-capture'):
-                with (OUT/'vulkan-per-op.log').open('w') as log:
-                    capture = subprocess.run([sys.executable, REPO/'tools/ci-heavy/voxcpm2_vulkan_profile.py', '--perf-only'],
-                        cwd=REPO, env=dict(os.environ,HEAVY_OUT=str(perf)),
-                        stdout=log,stderr=subprocess.STDOUT,timeout=2400)
-            assert capture.returncode == 0, 'Vulkan per-op capture failed'
-            per_op = (OUT/'vulkan-per-op.log').read_text()
-            assert 'MUL_MAT' in per_op and 'SIN' in per_op, 'Missing LocDiT/VAE per-op evidence'
         kh.step('asr.validation.end', returncode=result.returncode)
     finally:
         kh.export_ccache_tar(OUT / 'ccache.tar')
         kh._push_progress_to_hf(force=True)
     assert result.returncode == 0, 'Vulkan profile/speech acceptance failed'
-    log = (OUT/'vulkan-worker.log').read_text()
-    assert re.search(r'voxcpm2: backend = Vulkan',log), 'VoxCPM2 did not use Vulkan'
-    assert 'falling back to CPU vae_decode' not in log and 'using CPU' not in log, 'VAE CPU fallback invalidates profile'
-    assert 'vae.wn_init' in log and 'vae.compute' in log, 'Missing VAE phase evidence'
-    steps = re.findall(r'voxcpm2\[bench\]: cfm.steps=(\d+)',log)
-    assert steps and set(steps)=={'10'}, 'Native solver did not execute ten steps'
     receipt = json.loads((OUT/'voxcpm2-vulkan-profile.json').read_text())
-    assert receipt['passed'] and receipt['steps']==10
+    assert receipt['diagnostic_complete'] and not receipt['passed']
+    assert len(receipt['roundtrips']) == 16
+    return  # Completion is diagnostic only; every speech exactness result retained.
 
 
 
