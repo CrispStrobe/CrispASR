@@ -50,7 +50,8 @@ def pcm_hash(path):
 
 
 if not shutil.which('ffmpeg'):
-    raise RuntimeError('ffmpeg is required for CPU corpus preparation')
+    subprocess.run(['sudo', 'apt-get', 'update', '-qq'], check=True)
+    subprocess.run(['sudo', 'apt-get', 'install', '-y', '-qq', 'ffmpeg'], check=True)
 # Archive the exact source license and retain both immutable upstream pins.
 license_path = download(CV_REPO, 'README.md', CV_REVISION, True)
 assert 'license: cc0-1.0' in license_path.read_text()
