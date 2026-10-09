@@ -1031,6 +1031,15 @@ CRISPASR_API int crispasr_audio_load(const char* path, float** out_pcm, int* out
 CRISPASR_API int crispasr_audio_load_at_rate(const char* path, int target_rate, float** out_pcm, int* out_samples,
                                              int* out_sample_rate);
 
+// Resample mono float PCM in memory with the CLI's Kaiser polyphase
+// filter. Rates must be positive and <= 384000 Hz; maximum expansion is 64x.
+// Returns 0, -1 for invalid input/size, or -2 for allocation failure. Success
+// returns ceil(n_samples * target_rate / source_rate) samples, malloc-owned
+// (free with crispasr_audio_free). Empty input succeeds with NULL/0. Errors
+// reset non-NULL output arguments to NULL/0. Input is never modified.
+CRISPASR_API int crispasr_audio_resample(const float* pcm, int n_samples, int source_rate, int target_rate,
+                                         float** out_pcm, int* out_samples);
+
 CRISPASR_API void crispasr_audio_free(float* pcm);
 
 // ─── Stereo audio decode ─────────────────────────────────────────────
