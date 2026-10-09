@@ -49,6 +49,8 @@ def session(model, backend, device):
 if '--arm' in sys.argv:
     arm = sys.argv[sys.argv.index('--arm') + 1]
     device, fused, batch = ARMS[arm]
+    import faulthandler
+    faulthandler.enable(all_threads=True)
     os.environ.update(CRISPASR_VOXCPM2_CFM_FUSED=fused, CRISPASR_VOXCPM2_CFG_BATCH=batch,
                       CRISPASR_VOXCPM2_INFERENCE_STEPS='10', CRISPASR_VOXCPM2_BENCH='1')
     rows = {}
@@ -56,9 +58,13 @@ if '--arm' in sys.argv:
         model = hf_hub_download('cstr/voxcpm2-GGUF', name, revision=PIN, local_dir=TEMP / 'models')
         with session(model, 'voxcpm2', device) as s:
             s.accept_marking_responsibility('GPU path diagnostic, private raw waveform comparison')
-            # Exercise a changed solver/cache key, then restore the ten-step recipe.
+            # Exercise setter changes before the retained ten-step recipe.
+            # This does not test an already-built eleven-step graph cache.
+            s.set_tts_steps(11)  # registers pointer-width-safe ctypes signatures
             assert s._lib.crispasr_session_set_tts_steps(s._handle, 11) == 0
+            s.set_tts_steps(10)
             assert s._lib.crispasr_session_set_tts_steps(s._handle, 10) == 0
+            print('VOX_TYPED_STEPS', arm, cohort, hex(s._handle), flush=True)
             for key, text in TEXTS.items():
                 original = None
                 for rep in range(2):
