@@ -1330,7 +1330,7 @@ static ggml_tensor* nemotron_build_block(ggml_context* ctx0, ggml_tensor* cur, g
 
 static const float kLayerNormEps = 1e-5f;
 
-static ggml_cgraph* nemotron_build_graph_encoder(nemotron_context* ctx, int T_mel) {
+static ggml_cgraph* nemotron_build_graph_encoder(nemotron_context* ctx, int T_mel, bool capture_layers = false) {
     const auto& m = ctx->model;
     const auto& hp = m.hparams;
     const int n_mels = (int)hp.n_mels;
@@ -1382,6 +1382,14 @@ static ggml_cgraph* nemotron_build_graph_encoder(nemotron_context* ctx, int T_me
 
     for (uint32_t il = 0; il < hp.n_layers; il++) {
         cur = nemotron_build_block(ctx0, cur, pos_enc, T, m.enc[il], bp, window_mask_t);
+        if (capture_layers) {
+            char name[32];
+            snprintf(name, sizeof(name), "enc_layer_%u", il);
+            ggml_set_name(cur, name);
+            // Keep each diagnostic output alive after compute; otherwise the
+            // allocator may reuse its buffer for a later layer.
+            ggml_set_output(cur);
+        }
     }
 
     ggml_set_name(cur, "enc_out");
@@ -1409,13 +1417,14 @@ static bool nemotron_ensure_sched(nemotron_context* ctx) {
 // ===========================================================================
 
 static bool nemotron_run_encoder(nemotron_context* ctx, const float* mel, int n_mels, int T_mel,
-                                 std::vector<float>& enc_out, int& T_enc, int& d_model_out) {
+                                 std::vector<float>& enc_out, int& T_enc, int& d_model_out,
+                                 std::vector<float>* layer_outputs = nullptr) {
     // #215e UAF fix: always rebuild (sched gallocr regrow frees cached buffers).
     {
         ctx->cached_enc_meta.assign(ctx->compute_meta.size(), 0);
         std::swap(ctx->compute_meta, ctx->cached_enc_meta);
     }
-    ggml_cgraph* gf = nemotron_build_graph_encoder(ctx, T_mel);
+    ggml_cgraph* gf = nemotron_build_graph_encoder(ctx, T_mel, layer_outputs != nullptr);
     {
         std::swap(ctx->compute_meta, ctx->cached_enc_meta);
         ctx->cached_enc_gf = gf;
@@ -1465,6 +1474,22 @@ static bool nemotron_run_encoder(nemotron_context* ctx, const float* mel, int n_
     // Read output: (d_model, T_enc) in column-major → row-major (T_enc, d_model)
     enc_out.resize((size_t)T_enc * d_model_out);
     ggml_backend_tensor_get(enc_out_t, enc_out.data(), 0, enc_out.size() * sizeof(float));
+    if (layer_outputs) {
+        const uint32_t n_layers = ctx->model.hparams.n_layers;
+        if (enc_out.empty() || n_layers == 0 || enc_out.size() > layer_outputs->max_size() / n_layers)
+            return false;
+        layer_outputs->resize(enc_out.size() * n_layers);
+        for (uint32_t il = 0; il < n_layers; ++il) {
+            char name[32];
+            snprintf(name, sizeof(name), "enc_layer_%u", il);
+            ggml_tensor* tensor = il + 1 == n_layers ? enc_out_t : ggml_graph_get_tensor(gf, name);
+            if (!tensor || tensor->type != GGML_TYPE_F32 || tensor->ne[0] != d_model_out || tensor->ne[1] != T_enc ||
+                ggml_nbytes(tensor) != enc_out.size() * sizeof(float))
+                return false;
+            ggml_backend_tensor_get(tensor, layer_outputs->data() + il * enc_out.size(), 0,
+                                    enc_out.size() * sizeof(float));
+        }
+    }
 
     if (getenv("CRISPASR_NEMOTRON_DEBUG")) {
         float emin = 1e30f, emax = -1e30f, esum = 0.0f;
@@ -3923,5 +3948,32 @@ extern "C" float* nemotron_run_encoder_ext(struct nemotron_context* ctx, const f
         *out_d_model = d_model;
     float* ret = (float*)malloc(enc_out.size() * sizeof(float));
     memcpy(ret, enc_out.data(), enc_out.size() * sizeof(float));
+    return ret;
+}
+
+extern "C" float* nemotron_run_encoder_layers_ext(struct nemotron_context* ctx, const float* mel, int n_mels, int T_mel,
+                                                  int* out_n_layers, int* out_T_enc, int* out_d_model) {
+    if (out_n_layers)
+        *out_n_layers = 0;
+    if (out_T_enc)
+        *out_T_enc = 0;
+    if (out_d_model)
+        *out_d_model = 0;
+    if (!ctx || !mel || T_mel <= 0 || n_mels != (int)ctx->model.hparams.n_mels)
+        return nullptr;
+    std::vector<float> enc_out, layers;
+    int T_enc = 0, d_model = 0;
+    if (!nemotron_run_encoder(ctx, mel, n_mels, T_mel, enc_out, T_enc, d_model, &layers))
+        return nullptr;
+    float* ret = (float*)malloc(layers.size() * sizeof(float));
+    if (!ret)
+        return nullptr;
+    memcpy(ret, layers.data(), layers.size() * sizeof(float));
+    if (out_n_layers)
+        *out_n_layers = (int)ctx->model.hparams.n_layers;
+    if (out_T_enc)
+        *out_T_enc = T_enc;
+    if (out_d_model)
+        *out_d_model = d_model;
     return ret;
 }

@@ -108,6 +108,12 @@ float* nemotron_run_preencode_ext(struct nemotron_context* ctx, const float* mel
 float* nemotron_run_encoder_ext(struct nemotron_context* ctx, const float* mel, int n_mels, int T_mel, int* out_T_enc,
                                 int* out_d_model);
 
+// Diagnostic capture of all full-sequence Conformer outputs, layer-major
+// [n_layers, T_enc, d_model]. Normal inference does not retain these buffers.
+// The caller owns the returned allocation and must free it.
+float* nemotron_run_encoder_layers_ext(struct nemotron_context* ctx, const float* mel, int n_mels, int T_mel,
+                                       int* out_n_layers, int* out_T_enc, int* out_d_model);
+
 // Hyper-parameters
 int nemotron_frame_dur_cs(struct nemotron_context* ctx);
 int nemotron_n_mels(struct nemotron_context* ctx);
