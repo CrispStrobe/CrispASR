@@ -11,6 +11,19 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-09 — Band-limited Python array audio inputs
+
+Owner: this maintainer session. Worktree
+`/mnt/storage/crispasr/salvage-20261008/bindings-audio`, branch
+`fix/python-bandlimited-resample`. Repair both Whisper and Session ndarray
+inputs using the existing native Kaiser polyphase resampler through an additive
+in-memory C API, with a bounded NumPy compatibility path for older libraries.
+Preserve 16 kHz samples and supply contiguous float32 buffers. Validate
+anti-aliasing, native/fallback agreement, ownership/error contracts and both
+binding entry points. This independently fixes the known aliasing defect;
+causation for rejected TTS speech remains subject to the fixed-audio diagnostic
+GH `37898319808`, with all existing acceptance thresholds unchanged.
+
 ## CLAIMED 2026-10-09 — PR #492 salvage, OmniVoice cleanup and remaining performance work
 
 Owner: this maintainer session, resumed 2026-10-09. Separate worktrees under
