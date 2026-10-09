@@ -6,7 +6,21 @@ Live work only. Completed threads move to `HISTORY.md`; technical deep-dives to
 `LEARNINGS.md`.
 
 **Before you pick something up:** re-read this section on `origin/main`, add a
-`## CLAIMED <date> — <what>` block naming your worktree, and **push that claim
+`## CLAIMED 2026-10-09 — VoxCPM2 step and native PCM integration
+
+Owner: this maintainer session. Separate worktree
+`/mnt/storage/crispasr/salvage-20261008/voxcpm2-integration`, branch
+`fix/voxcpm2-steps-native-pcm`. Isolate the already validated live step setter,
+explicit CLI override sentinel and native 48 kHz session return from the
+profile branch; preserve the ten-step default. Do not merge MiMo experiments
+or lower-step recipes. Actual dual-T4/Vulkan controls and original NVIDIA/F16
+readbacks are archived: all 22 VoxCPM2 controls decode correctly with the
+original/F16 recognizer; published Nemotron Q4 reads only 8/22. Public proof
+`voxcpm2/path-diagnostic-20261009-v6/proof.zip` at fixtures revision
+`449ed355010eddb8dcedef6c2ab0fa62431ebeb7`. Confirm integrated native hunks
+against accepted sources and require full PR CI. No B390/8-step quality claim.
+
+## CLAIMED <date> — <what>` block naming your worktree, and **push that claim
 to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
@@ -128,7 +142,10 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   No Q4 acceptance. This session claims the next CPU producer in the same
   `echo` worktree: imatrix-aware plain/FFN-guarded/middle recipes, exact
   source-F32 preservation, tensor audits and public experiment-only upload,
-  followed by unchanged actual GPU acceptance. Callback support merged as PR #523
+  followed by unchanged actual GPU acceptance. Worker `72aac76a5`,
+  GH `37917151969`, is queued for calibrated plain/FFN-guarded/middle
+  preparation. All 96 FFN statistics and original-F32 floors are re-audited;
+  imatrix loading/shape evidence is required. No candidate accepted. Callback support merged as PR #523
   (`74a35b198`) after 42 applicable CI checks passed (one intentional skip). Build/launch pins: `docs/index-echo-calibration-build-2026-10-09.json`.
   Real GPU calibration/coverage/full candidate acceptance still needed.
 
