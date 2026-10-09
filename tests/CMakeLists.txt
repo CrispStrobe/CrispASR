@@ -38,6 +38,15 @@ target_include_directories(test-index-echo-batch PRIVATE ${PROJECT_SOURCE_DIR}/s
 target_link_libraries(test-index-echo-batch PRIVATE Catch2::Catch2WithMain crispasr-llama-core)
 catch_discover_tests(test-index-echo-batch PROPERTIES LABELS "unit;index-echo")
 
+# Runtime-owned (llama) scheduler access to the shared activation collector.
+add_executable(test-imatrix-callback
+    test-imatrix-callback.cpp
+    ${PROJECT_SOURCE_DIR}/src/crispasr_imatrix.cpp
+)
+target_include_directories(test-imatrix-callback PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-imatrix-callback PRIVATE Catch2::Catch2WithMain ggml ggml-cpu)
+catch_discover_tests(test-imatrix-callback PROPERTIES LABELS "unit;imatrix")
+
 add_executable(test-index-echo-connector test-index-echo-connector.cpp)
 target_include_directories(test-index-echo-connector PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-index-echo-connector PRIVATE Catch2::Catch2WithMain ggml ggml-cpu)

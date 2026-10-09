@@ -29,6 +29,13 @@ extern "C" {
 // CRISPASR_IMATRIX_OUT is unset. Call once, right after ggml_backend_sched_new.
 void crispasr_imatrix_install(ggml_backend_sched_t sched);
 
+// Obtain the collector for runtimes (e.g. llama) that own their scheduler.
+// NULL when neither imatrix nor activation dumping is enabled; otherwise
+// registers the same exit flush as install(). Compose with existing callbacks
+// rather than replacing stage capture, and pass NULL as collector user data.
+ggml_backend_sched_eval_callback crispasr_imatrix_callback(void);
+
+
 // Merge the accumulated statistics with any existing output file and write it.
 // Registered via atexit() on first install; may also be called explicitly.
 void crispasr_imatrix_flush(void);

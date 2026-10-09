@@ -13,6 +13,23 @@ out = repo / "index-echo-cuda-out"
 out.mkdir(exist_ok=True)
 subprocess.run(["uptime"], check=True)
 subprocess.run(["free", "-h"], check=True)
+# Prove the real callback's activation sums/counts on CPU before packaging.
+# No GPU inference is claimed by this GPU-less build worker.
+unit_build = repo / "index-echo-calibration-unit-build"
+with (out / "imatrix-unit.log").open("w") as log:
+    for command in (
+        ["cmake", "-G", "Ninja", "-S", str(repo), "-B", str(unit_build),
+         "-DCMAKE_BUILD_TYPE=Release", "-DGGML_CUDA=OFF", "-DGGML_NATIVE=OFF",
+         "-DGGML_BLAS=OFF", "-DCRISPASR_BUILD_TESTS=ON", "-DCRISPASR_BUILD_SERVER=OFF"],
+        ["cmake", "--build", str(unit_build), "--target", "test-imatrix-callback", "-j2"],
+        ["ctest", "--test-dir", str(unit_build), "-R", "external scheduler callback",
+         "--output-on-failure", "--no-tests=error"],
+    ):
+        print(command, flush=True)
+        subprocess.run(command, stdout=log, stderr=subprocess.STDOUT, check=True)
+(out / "imatrix-unit.json").write_text(json.dumps({"passed": True,
+    "scope": "actual CPU callback and GGUF sums/counts; not GPU model acceptance",
+    "source": subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()}, indent=2))
 build = repo / "index-echo-cuda-build"
 cuda_root = Path(os.environ.get("CUDA_PATH", "/usr/local/cuda"))
 driver_stubs = list(cuda_root.rglob("stubs/libcuda.so"))
