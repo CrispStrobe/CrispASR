@@ -74,7 +74,15 @@ exports the actual session open/close and additive preencode symbols, and
 successfully enumerates Nemotron/VoxCPM2 through the C ABI. This is package
 startup/dependency validation, not Vulkan hardware/model acceptance. Full
 receipt: `docs/release-package-dry-run-2026-10-09.json`. Main integration CI
-for the final checkpoint still needs to settle.
+for the final checkpoint still needs to settle. Staged WASM initializes under
+Node and passes nine export checks, four unopened-session getter contracts and
+three existing piano assertions. Linux CUDA CLI/quantizer also start with loader
+overrides cleared; baseline x64 CPU fallback is bundled, both executable loader
+closures resolve, and the dependency contract passes. CUDA backend libraries
+correctly retain external driver/runtime/BLAS dependencies (ABI 12); they are
+absent on this CPU host, so this is not GPU loading or inference acceptance.
+Actual CUDA artifact source is `3b814f780`, recorded from the CLI. Latest
+full no-secrets scan passes all four checks without skips (57.145 seconds).
 Q4 encoder isolation `37957419289` and original OmniVoice generation
 `37957953495` completed successfully as diagnostics; quality gates remain
 rejected. Attention-source Q4 encoder gate is 0.891277 at 636,775,328 bytes;
