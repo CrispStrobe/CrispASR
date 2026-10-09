@@ -12,18 +12,18 @@ from pathlib import Path
 import subprocess
 import sys
 
-SCRIPT_VERSION = '2026-10-02.2'
-SOURCE_COMMIT = '9ebb3a7e9406c591a096b082d11b22955b2b7ecd'
+SCRIPT_VERSION = '2026-10-09.3'
+SOURCE_COMMIT = '2790778aa24b09de363c23d9d44661af2a5cb4a6'
 BUILD_COMMIT = '012188eedaff3e027ba5b4e903eab3efafe4a46b'
 BUILD_RUN = 37040196454
 BUNDLE_REVISION = '51158bc93be3e4f2f65a3bde6296bd9a59712968'
 BUNDLE_SHA256 = '0a4f882975c802a4ff3a1932fcb3ecf838cac39c3ccecc181240e331d0432303'
 MODEL_REVISION = 'dffbadf0f173446fee0364a0807803d2b2fb6f49'
 PREPARATION_REPO = 'cstr/index-echo-9b-GGUF'
-# Public CPU retry 37851965549 is pending; do not launch without its pins.
-PREPARATION_RUN = None
-PREPARATION_REVISION = 'PENDING'
-PREPARATION_SHA256 = 'PENDING'
+# Public preparation/audit completed; runtime acceptance is still pending.
+PREPARATION_RUN = 37851965549
+PREPARATION_REVISION = 'afdef3d4b111aa89e45fc400a03ba31ff54ac1dd'
+PREPARATION_SHA256 = 'be7b04f7a1d41843a6140f3b7a61c4758a2086f59fdb07a8964fd59eb06c45b6'
 PREPARATION_PATH = 'experiments/q4-guards-20261008/preparation.json'
 SDK = Path('/kaggle/temp/index-echo-q4-sdk')
 TEMP = Path('/kaggle/temp/index-echo-q4')
