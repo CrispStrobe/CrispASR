@@ -146,7 +146,7 @@ for preset in [0,2,3]:
     lib.nemotron_set_context_preset(ctx,preset);stream=lib.nemotron_stream_create(ctx);assert stream
     outputs=[]
     try:
-        for packet in [1600,1600,3200]:
+        for packet in [1600,1600,3217]:
             lib.nemotron_stream_reset(stream);tokens=[];frames=[]
             @CB
             def callback(token,prob,user): tokens.append([token,float(prob)])
