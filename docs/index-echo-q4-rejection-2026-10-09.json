@@ -1,0 +1,391 @@
+{
+  "script_version": "2026-10-09.3",
+  "source_commit": "2790778aa24b09de363c23d9d44661af2a5cb4a6",
+  "build_commit": "012188eedaff3e027ba5b4e903eab3efafe4a46b",
+  "build_run": 37040196454,
+  "hardware": "Tesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB",
+  "source_model_revision": "dffbadf0f173446fee0364a0807803d2b2fb6f49",
+  "preparation_repo": "cstr/index-echo-9b-GGUF",
+  "preparation_run": 37851965549,
+  "preparation_revision": "afdef3d4b111aa89e45fc400a03ba31ff54ac1dd",
+  "preparation_sha256": "be7b04f7a1d41843a6140f3b7a61c4758a2086f59fdb07a8964fd59eb06c45b6",
+  "control_passed": true,
+  "defaults_changed": false,
+  "candidates": {
+    "q4_k_plain": {
+      "validated": false,
+      "failed": [
+        "q4_k_plain:jfk:stage",
+        "q4_k_plain:zh:stage",
+        "q4_k_plain:jfk-tail:stage",
+        "q4_k_plain:jfk:c-abi",
+        "q4_k_plain:zh:c-abi",
+        "q4_k_plain:jfk:cli",
+        "q4_k_plain:zh:cli",
+        "q4_k_plain:pipeline:jfk-en: full-pipeline decoded mismatch",
+        "q4_k_plain:pipeline:zh-en: full-pipeline decoded mismatch",
+        "q4_k_plain:pipeline:zh-ja: full-pipeline decoded mismatch",
+        "q4_k_plain:pipeline:zh-es: full-pipeline decoded mismatch",
+        "q4_k_plain:pipeline:multi-en: full-pipeline decoded mismatch",
+        "q4_k_plain:pipeline:real CLI decoded text mismatch",
+        "q4_k_plain:pipeline:real CLI decoded text mismatch",
+        "q4_k_plain:pipeline:real CLI exact subtitle/timestamp mismatch"
+      ],
+      "piper_roundtrip": {
+        "model": "index-echo-9b-q4_k_plain.gguf",
+        "gpu": true,
+        "cases": {
+          "fox": {
+            "expected": "The quick brown fox jumps over the lazy dog.",
+            "english": "The quick brown fox jumps over the lazy dog.",
+            "wer": 0.0,
+            "wer_max": 0.1,
+            "segments": [
+              {
+                "start": 0.05,
+                "end": 2.52,
+                "text": "The quick brown fox jumps over the lazy dog.\nThe quick brown fox jumps over the lazy dog."
+              }
+            ],
+            "valid_segments": true,
+            "audio_sha256": "2922b7cd5360b373a650d8bf1ea39de16aa3d49e7a44cdec5f350d46c15556ff",
+            "seconds": 2.67025,
+            "elapsed_seconds": 1.3981299900001432,
+            "cli_rc": 0,
+            "cli_abi_text_match": true,
+            "cli_cuda_used": true,
+            "passed": true
+          },
+          "window": {
+            "expected": "Please close the window before you leave the room.",
+            "english": "Please close the window before you leave the room.",
+            "wer": 0.0,
+            "wer_max": 0.1,
+            "segments": [
+              {
+                "start": 0.05,
+                "end": 2.4,
+                "text": "Please close the window before you leave the room.\u3002\nPlease close the window before you leave the room."
+              }
+            ],
+            "valid_segments": true,
+            "audio_sha256": "6a46a4c0c5b0cd48dfd71d600bcec1b4f44701500b6f3e749cde7fb73f140fa1",
+            "seconds": 2.6006875,
+            "elapsed_seconds": 1.3063478259998647,
+            "cli_rc": 0,
+            "cli_abi_text_match": true,
+            "cli_cuda_used": true,
+            "passed": true
+          },
+          "station": {
+            "expected": "We will meet at the train station tomorrow morning.",
+            "english": "We will meet at the train station tomorrow morning.",
+            "wer": 0.0,
+            "wer_max": 0.1,
+            "segments": [
+              {
+                "start": 0.05,
+                "end": 2.34,
+                "text": "We will meet at the train station tomorrow morning.\nWe will meet at the train station tomorrow morning."
+              }
+            ],
+            "valid_segments": true,
+            "audio_sha256": "3171272c57adafaf73c746322a64240300d7d40f7f42dbfca8c1a9fcc335e32a",
+            "seconds": 2.4729375,
+            "elapsed_seconds": 1.2950882820000515,
+            "cli_rc": 0,
+            "cli_abi_text_match": true,
+            "cli_cuda_used": true,
+            "passed": true
+          }
+        },
+        "failed": [],
+        "source_stage_parity_checked": false,
+        "roundtrip_passed": true
+      },
+      "decoder_bytes": 5051130528
+    },
+    "q4_k_sensitive": {
+      "validated": false,
+      "failed": [
+        "q4_k_sensitive:jfk:stage",
+        "q4_k_sensitive:zh:stage",
+        "q4_k_sensitive:jfk-tail:stage",
+        "q4_k_sensitive:jfk:c-abi",
+        "q4_k_sensitive:zh:c-abi",
+        "q4_k_sensitive:jfk:cli",
+        "q4_k_sensitive:zh:cli",
+        "q4_k_sensitive:pipeline:jfk-en: full-pipeline decoded mismatch",
+        "q4_k_sensitive:pipeline:zh-en: full-pipeline decoded mismatch",
+        "q4_k_sensitive:pipeline:zh-es: full-pipeline decoded mismatch",
+        "q4_k_sensitive:pipeline:multi-en: full-pipeline decoded mismatch",
+        "q4_k_sensitive:pipeline:real CLI decoded text mismatch",
+        "q4_k_sensitive:pipeline:real CLI exact subtitle/timestamp mismatch"
+      ],
+      "piper_roundtrip": {
+        "model": "index-echo-9b-q4_k_sensitive.gguf",
+        "gpu": true,
+        "cases": {
+          "fox": {
+            "expected": "The quick brown fox jumps over the lazy dog.",
+            "english": "The quick brown fox jumps over the lazy dog.",
+            "wer": 0.0,
+            "wer_max": 0.1,
+            "segments": [
+              {
+                "start": 0.05,
+                "end": 2.52,
+                "text": "The quick brown fox jumps over the lazy dog.\u3002\nThe quick brown fox jumps over the lazy dog."
+              }
+            ],
+            "valid_segments": true,
+            "audio_sha256": "2922b7cd5360b373a650d8bf1ea39de16aa3d49e7a44cdec5f350d46c15556ff",
+            "seconds": 2.67025,
+            "elapsed_seconds": 2.036417035000113,
+            "cli_rc": 0,
+            "cli_abi_text_match": true,
+            "cli_cuda_used": true,
+            "passed": true
+          },
+          "window": {
+            "expected": "Please close the window before you leave the room.",
+            "english": "Please close the window before you leave the room.",
+            "wer": 0.0,
+            "wer_max": 0.1,
+            "segments": [
+              {
+                "start": 0.05,
+                "end": 2.4,
+                "text": "Please close the window before you leave the room.\u3002\nPlease close the window before you leave the room."
+              }
+            ],
+            "valid_segments": true,
+            "audio_sha256": "6a46a4c0c5b0cd48dfd71d600bcec1b4f44701500b6f3e749cde7fb73f140fa1",
+            "seconds": 2.6006875,
+            "elapsed_seconds": 1.9566178699999455,
+            "cli_rc": 0,
+            "cli_abi_text_match": true,
+            "cli_cuda_used": true,
+            "passed": true
+          },
+          "station": {
+            "expected": "We will meet at the train station tomorrow morning.",
+            "english": "We will meet at the train station tomorrow morning.",
+            "wer": 0.0,
+            "wer_max": 0.1,
+            "segments": [
+              {
+                "start": 0.05,
+                "end": 2.34,
+                "text": "We will meet at the train station tomorrow morning.\nWe will meet at the train station tomorrow morning."
+              }
+            ],
+            "valid_segments": true,
+            "audio_sha256": "3171272c57adafaf73c746322a64240300d7d40f7f42dbfca8c1a9fcc335e32a",
+            "seconds": 2.4729375,
+            "elapsed_seconds": 1.8863591379999889,
+            "cli_rc": 0,
+            "cli_abi_text_match": true,
+            "cli_cuda_used": true,
+            "passed": true
+          }
+        },
+        "failed": [],
+        "source_stage_parity_checked": false,
+        "roundtrip_passed": true
+      },
+      "decoder_bytes": 10207371936
+    },
+    "q4_k_ffn_guarded": {
+      "validated": false,
+      "failed": [
+        "q4_k_ffn_guarded:jfk:stage",
+        "q4_k_ffn_guarded:zh:stage",
+        "q4_k_ffn_guarded:jfk-tail:stage",
+        "q4_k_ffn_guarded:jfk:c-abi",
+        "q4_k_ffn_guarded:zh:c-abi",
+        "q4_k_ffn_guarded:jfk:cli",
+        "q4_k_ffn_guarded:zh:cli",
+        "q4_k_ffn_guarded:pipeline:jfk-en: full-pipeline decoded mismatch",
+        "q4_k_ffn_guarded:pipeline:zh-en: full-pipeline decoded mismatch",
+        "q4_k_ffn_guarded:pipeline:zh-ja: full-pipeline decoded mismatch",
+        "q4_k_ffn_guarded:pipeline:zh-es: full-pipeline decoded mismatch",
+        "q4_k_ffn_guarded:pipeline:multi-en: full-pipeline decoded mismatch",
+        "q4_k_ffn_guarded:pipeline:real CLI decoded text mismatch",
+        "q4_k_ffn_guarded:pipeline:real CLI exact subtitle/timestamp mismatch"
+      ],
+      "piper_roundtrip": {
+        "model": "index-echo-9b-q4_k_ffn_guarded.gguf",
+        "gpu": true,
+        "cases": {
+          "fox": {
+            "expected": "The quick brown fox jumps over the lazy dog.",
+            "english": "The quick brown fox jumps over the lazy dog.",
+            "wer": 0.0,
+            "wer_max": 0.1,
+            "segments": [
+              {
+                "start": 0.05,
+                "end": 2.52,
+                "text": "The quick brown fox jumps over the lazy dog.\u3002\nThe quick brown fox jumps over the lazy dog."
+              }
+            ],
+            "valid_segments": true,
+            "audio_sha256": "2922b7cd5360b373a650d8bf1ea39de16aa3d49e7a44cdec5f350d46c15556ff",
+            "seconds": 2.67025,
+            "elapsed_seconds": 2.4044558900000084,
+            "cli_rc": 0,
+            "cli_abi_text_match": true,
+            "cli_cuda_used": true,
+            "passed": true
+          },
+          "window": {
+            "expected": "Please close the window before you leave the room.",
+            "english": "Please close the window before you leave the room.",
+            "wer": 0.0,
+            "wer_max": 0.1,
+            "segments": [
+              {
+                "start": 0.05,
+                "end": 2.4,
+                "text": "Please close the window before you leave the room.\u3002\nPlease close the window before you leave the room."
+              }
+            ],
+            "valid_segments": true,
+            "audio_sha256": "6a46a4c0c5b0cd48dfd71d600bcec1b4f44701500b6f3e749cde7fb73f140fa1",
+            "seconds": 2.6006875,
+            "elapsed_seconds": 2.3390645510003196,
+            "cli_rc": 0,
+            "cli_abi_text_match": true,
+            "cli_cuda_used": true,
+            "passed": true
+          },
+          "station": {
+            "expected": "We will meet at the train station tomorrow morning.",
+            "english": "We will meet at the train station tomorrow morning.",
+            "wer": 0.0,
+            "wer_max": 0.1,
+            "segments": [
+              {
+                "start": 0.05,
+                "end": 2.34,
+                "text": "We will meet at the train station tomorrow morning.\nWe will meet at the train station tomorrow morning."
+              }
+            ],
+            "valid_segments": true,
+            "audio_sha256": "3171272c57adafaf73c746322a64240300d7d40f7f42dbfca8c1a9fcc335e32a",
+            "seconds": 2.4729375,
+            "elapsed_seconds": 2.26545810899961,
+            "cli_rc": 0,
+            "cli_abi_text_match": true,
+            "cli_cuda_used": true,
+            "passed": true
+          }
+        },
+        "failed": [],
+        "source_stage_parity_checked": false,
+        "roundtrip_passed": true
+      },
+      "decoder_bytes": 11780235936
+    },
+    "q4_k_middle": {
+      "validated": false,
+      "failed": [
+        "q4_k_middle:jfk:stage",
+        "q4_k_middle:zh:stage",
+        "q4_k_middle:jfk-tail:stage",
+        "q4_k_middle:jfk:c-abi",
+        "q4_k_middle:zh:c-abi",
+        "q4_k_middle:jfk:cli",
+        "q4_k_middle:zh:cli",
+        "q4_k_middle:pipeline:jfk-en: full-pipeline decoded mismatch",
+        "q4_k_middle:pipeline:zh-en: full-pipeline decoded mismatch",
+        "q4_k_middle:pipeline:zh-ja: full-pipeline decoded mismatch",
+        "q4_k_middle:pipeline:zh-es: full-pipeline decoded mismatch",
+        "q4_k_middle:pipeline:multi-en: full-pipeline decoded mismatch",
+        "q4_k_middle:pipeline:real CLI exact subtitle/timestamp mismatch"
+      ],
+      "piper_roundtrip": {
+        "model": "index-echo-9b-q4_k_middle.gguf",
+        "gpu": true,
+        "cases": {
+          "fox": {
+            "expected": "The quick brown fox jumps over the lazy dog.",
+            "english": "The quick brown fox jumps over the lazy dog.",
+            "wer": 0.0,
+            "wer_max": 0.1,
+            "segments": [
+              {
+                "start": 0.05,
+                "end": 2.52,
+                "text": "The quick brown fox jumps over the lazy dog.\u3002\nThe quick brown fox jumps over the lazy dog."
+              }
+            ],
+            "valid_segments": true,
+            "audio_sha256": "2922b7cd5360b373a650d8bf1ea39de16aa3d49e7a44cdec5f350d46c15556ff",
+            "seconds": 2.67025,
+            "elapsed_seconds": 3.243982378000055,
+            "cli_rc": 0,
+            "cli_abi_text_match": true,
+            "cli_cuda_used": true,
+            "passed": true
+          },
+          "window": {
+            "expected": "Please close the window before you leave the room.",
+            "english": "Please close the window before you leave the room.",
+            "wer": 0.0,
+            "wer_max": 0.1,
+            "segments": [
+              {
+                "start": 0.05,
+                "end": 2.4,
+                "text": "Please close the window before you leave the room.\u3002\nPlease close the window before you leave the room."
+              }
+            ],
+            "valid_segments": true,
+            "audio_sha256": "6a46a4c0c5b0cd48dfd71d600bcec1b4f44701500b6f3e749cde7fb73f140fa1",
+            "seconds": 2.6006875,
+            "elapsed_seconds": 3.1178612319999957,
+            "cli_rc": 0,
+            "cli_abi_text_match": true,
+            "cli_cuda_used": true,
+            "passed": true
+          },
+          "station": {
+            "expected": "We will meet at the train station tomorrow morning.",
+            "english": "We will meet at the train station tomorrow morning.",
+            "wer": 0.0,
+            "wer_max": 0.1,
+            "segments": [
+              {
+                "start": 0.05,
+                "end": 2.34,
+                "text": "We will meet at the train station tomorrow morning.\nWe will meet at the train station tomorrow morning."
+              }
+            ],
+            "valid_segments": true,
+            "audio_sha256": "3171272c57adafaf73c746322a64240300d7d40f7f42dbfca8c1a9fcc335e32a",
+            "seconds": 2.4729375,
+            "elapsed_seconds": 2.997967826000149,
+            "cli_rc": 0,
+            "cli_abi_text_match": true,
+            "cli_cuda_used": true,
+            "passed": true
+          }
+        },
+        "failed": [],
+        "source_stage_parity_checked": false,
+        "roundtrip_passed": true
+      },
+      "decoder_bytes": 14447813280
+    }
+  },
+  "any_candidate_passed": false,
+  "public_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "file": "index-echo-9b/q4-guards-20261009-v2-failed/proof.zip",
+    "revision": "a5305679e245ad7b232af84aa2bc841d8e14643c",
+    "sha256": "4c20f77cb164a2a2e1fda4064a69fd9cd384b4f2fe12876545683df81d4edaf5",
+    "bytes": 1886570
+  }
+}

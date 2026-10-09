@@ -1,0 +1,353 @@
+{
+  "source": "a232c9bc737fb43f5beb0cbac4897fcc964b7b3a",
+  "model_revision": "25b5cf03fdbf20011dad9a77def6112023cc0fe3",
+  "scope": "Isolate existing GPU CFM paths; diagnostic completion is not speech acceptance.",
+  "steps": 10,
+  "seed": 2,
+  "passed": false,
+  "diagnostic_complete": true,
+  "defaults_changed": false,
+  "arms": {
+    "vulkan-fused": {
+      "arm": "vulkan-fused",
+      "device": "vulkan",
+      "fused": "1",
+      "batch": "1",
+      "outputs": {
+        "q8-short": {
+          "samples": 153600,
+          "sample_rate": 48000,
+          "sha256": "c811e8f624ab9ddf760e13a6b63c704b887df7cc433b8ca99bbd2d2aa0ce4aa8"
+        },
+        "q8-long": {
+          "samples": 284160,
+          "sample_rate": 48000,
+          "sha256": "7a74b5eadece48420dcf0b19ae2f2a47905241ae820cdc4a993fdf782ef447c7"
+        },
+        "mixed-short": {
+          "samples": 153600,
+          "sample_rate": 48000,
+          "sha256": "e9cbe9e29214366453d4a2cee27c37f3ac85fb5ef146091aeeff65566e631d73"
+        },
+        "mixed-long": {
+          "samples": 276480,
+          "sample_rate": 48000,
+          "sha256": "ba947d2151dd6f51e5575c232d32ecbd22b0917ffdb6fadbbdd773919ab456e8"
+        }
+      }
+    },
+    "vulkan-step-batch": {
+      "arm": "vulkan-step-batch",
+      "device": "vulkan",
+      "fused": "0",
+      "batch": "1",
+      "outputs": {
+        "q8-short": {
+          "samples": 153600,
+          "sample_rate": 48000,
+          "sha256": "bb6d63f739f7892e9783befb9250a0a644427239fdeb5fac50d0a5f7ce7e957b"
+        },
+        "q8-long": {
+          "samples": 245760,
+          "sample_rate": 48000,
+          "sha256": "fb4f2bd37ca56f72203f2213e76f084090e36de87d2cdca76c878b843c12191d"
+        },
+        "mixed-short": {
+          "samples": 153600,
+          "sample_rate": 48000,
+          "sha256": "50f52729d765866aa23aa11878136aef6fe87848f262b1a162a4e74cd8f3383d"
+        },
+        "mixed-long": {
+          "samples": 299520,
+          "sample_rate": 48000,
+          "sha256": "6920e6ed7ed05e97a7e00155f1983ef7dd709c27ea6c8c950fa9d4dc3c4b2d73"
+        }
+      }
+    },
+    "vulkan-step-split": {
+      "arm": "vulkan-step-split",
+      "device": "vulkan",
+      "fused": "0",
+      "batch": "0",
+      "outputs": {
+        "q8-short": {
+          "samples": 153600,
+          "sample_rate": 48000,
+          "sha256": "d74319f92ca11882f309bde0fb630e0a1f83fdf0dbac50783a163d6cb7b6f9e5"
+        },
+        "q8-long": {
+          "samples": 307200,
+          "sample_rate": 48000,
+          "sha256": "7936d152eb47d49d56172e55ae640534183ec1ab51cb7bad451628f16ecc87b5"
+        },
+        "mixed-short": {
+          "samples": 153600,
+          "sample_rate": 48000,
+          "sha256": "03c2cd28ed50018da26783bfddd8d7f887193dcae9d085026bea1d13faadc1d7"
+        },
+        "mixed-long": {
+          "samples": 307200,
+          "sample_rate": 48000,
+          "sha256": "2ec34279319a54cce961a0f5009ef46068838a30e8029d906971975711c59ec4"
+        }
+      }
+    },
+    "cuda-fused": {
+      "arm": "cuda-fused",
+      "device": "cuda",
+      "fused": "1",
+      "batch": "1",
+      "outputs": {
+        "q8-short": {
+          "samples": 153600,
+          "sample_rate": 48000,
+          "sha256": "a62d1880544da3e2570fbb837bb3f3f75b07186f433c316dab3f04f53ec75555"
+        },
+        "q8-long": {
+          "samples": 284160,
+          "sample_rate": 48000,
+          "sha256": "36ddbdc868db826c4eb5074e96c46f40135d811a985f6dc0a3f7be15cdbedee3"
+        },
+        "mixed-short": {
+          "samples": 153600,
+          "sample_rate": 48000,
+          "sha256": "b6035a4ff2bce9bb8ca3b07f150e372dce901f14b2869230f0bbed37a51f562a"
+        },
+        "mixed-long": {
+          "samples": 284160,
+          "sample_rate": 48000,
+          "sha256": "38f2c1516ee9c3cdbd1bacff4dab994bca418959f2782ec80253666a7628e568"
+        }
+      }
+    }
+  },
+  "roundtrips": {
+    "vulkan-fused/q8-short": {
+      "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+      "expected": "Hello, this is a short test sentence.",
+      "exact": false
+    },
+    "vulkan-fused/q8-long": {
+      "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+      "expected": "The sun is shining today. Hello, this is a short test sentence.",
+      "exact": true
+    },
+    "vulkan-fused/mixed-short": {
+      "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+      "expected": "Hello, this is a short test sentence.",
+      "exact": false
+    },
+    "vulkan-fused/mixed-long": {
+      "transcript": "The sun is shining today. Hello, this is a short test sent sent sent sent sent sentence.",
+      "expected": "The sun is shining today. Hello, this is a short test sentence.",
+      "exact": false
+    },
+    "vulkan-step-batch/q8-short": {
+      "transcript": "Hello, this is a short test sent sent sent sent sentence.",
+      "expected": "Hello, this is a short test sentence.",
+      "exact": false
+    },
+    "vulkan-step-batch/q8-long": {
+      "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+      "expected": "The sun is shining today. Hello, this is a short test sentence.",
+      "exact": true
+    },
+    "vulkan-step-batch/mixed-short": {
+      "transcript": "Hello, this is a short test sent sent sent sent sentence.",
+      "expected": "Hello, this is a short test sentence.",
+      "exact": false
+    },
+    "vulkan-step-batch/mixed-long": {
+      "transcript": "The sun is shining today. Hello, this is a short test sentence.",
+      "expected": "The sun is shining today. Hello, this is a short test sentence.",
+      "exact": true
+    },
+    "vulkan-step-split/q8-short": {
+      "transcript": "Hello, this is a short test sent sent sent sentence.",
+      "expected": "Hello, this is a short test sentence.",
+      "exact": false
+    },
+    "vulkan-step-split/q8-long": {
+      "transcript": "The sun is shining today. hello! This is a short test sentence.",
+      "expected": "The sun is shining today. Hello, this is a short test sentence.",
+      "exact": true
+    },
+    "vulkan-step-split/mixed-short": {
+      "transcript": "Hello, this is a short test sent sent sent sentence.",
+      "expected": "Hello, this is a short test sentence.",
+      "exact": false
+    },
+    "vulkan-step-split/mixed-long": {
+      "transcript": "The sun is shining today. Hello, this is a short test sent sent sent sentence.",
+      "expected": "The sun is shining today. Hello, this is a short test sentence.",
+      "exact": false
+    },
+    "cuda-fused/q8-short": {
+      "transcript": "Hello, this is a short test sent sent sent sentence.",
+      "expected": "Hello, this is a short test sentence.",
+      "exact": false
+    },
+    "cuda-fused/q8-long": {
+      "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+      "expected": "The sun is shining today. Hello, this is a short test sentence.",
+      "exact": true
+    },
+    "cuda-fused/mixed-short": {
+      "transcript": "Hello, this is a short test sent sent sent sent sent sent sentence.",
+      "expected": "Hello, this is a short test sentence.",
+      "exact": false
+    },
+    "cuda-fused/mixed-long": {
+      "transcript": "The sun is shining today. Hello! This is a short test sentence.",
+      "expected": "The sun is shining today. Hello, this is a short test sentence.",
+      "exact": true
+    }
+  },
+  "comparisons": {
+    "vulkan-fused/q8-short": {
+      "baseline_samples": 153600,
+      "samples": 153600,
+      "exact": true,
+      "relative_l2": 0.0,
+      "mine_norm": 32.60147831404438,
+      "ref_norm": 32.60147831404438,
+      "cosine": 1.0
+    },
+    "vulkan-fused/q8-long": {
+      "baseline_samples": 284160,
+      "samples": 284160,
+      "exact": true,
+      "relative_l2": 0.0,
+      "mine_norm": 34.8502947830207,
+      "ref_norm": 34.8502947830207,
+      "cosine": 1.0
+    },
+    "vulkan-fused/mixed-short": {
+      "baseline_samples": 153600,
+      "samples": 153600,
+      "exact": true,
+      "relative_l2": 0.0,
+      "mine_norm": 33.55962893255856,
+      "ref_norm": 33.55962893255856,
+      "cosine": 1.0
+    },
+    "vulkan-fused/mixed-long": {
+      "baseline_samples": 276480,
+      "samples": 276480,
+      "exact": true,
+      "relative_l2": 0.0,
+      "mine_norm": 34.95964335425328,
+      "ref_norm": 34.95964335425328,
+      "cosine": 0.9999999999999998
+    },
+    "vulkan-step-batch/q8-short": {
+      "baseline_samples": 153600,
+      "samples": 153600,
+      "exact": false,
+      "relative_l2": 0.03373049089246996,
+      "mine_norm": 32.625287601980126,
+      "ref_norm": 32.60147831404438,
+      "cosine": 0.9994318086283401
+    },
+    "vulkan-step-batch/q8-long": {
+      "baseline_samples": 284160,
+      "samples": 245760,
+      "exact": false
+    },
+    "vulkan-step-batch/mixed-short": {
+      "baseline_samples": 153600,
+      "samples": 153600,
+      "exact": false,
+      "relative_l2": 0.11198967890046223,
+      "mine_norm": 33.14352321742576,
+      "ref_norm": 33.55962893255856,
+      "cosine": 0.9937282601857893
+    },
+    "vulkan-step-batch/mixed-long": {
+      "baseline_samples": 276480,
+      "samples": 299520,
+      "exact": false
+    },
+    "vulkan-step-split/q8-short": {
+      "baseline_samples": 153600,
+      "samples": 153600,
+      "exact": false,
+      "relative_l2": 0.045473299648285545,
+      "mine_norm": 32.386894264722244,
+      "ref_norm": 32.60147831404438,
+      "cosine": 0.9989810442960597
+    },
+    "vulkan-step-split/q8-long": {
+      "baseline_samples": 284160,
+      "samples": 307200,
+      "exact": false
+    },
+    "vulkan-step-split/mixed-short": {
+      "baseline_samples": 153600,
+      "samples": 153600,
+      "exact": false,
+      "relative_l2": 0.05537250919584468,
+      "mine_norm": 33.13406356412861,
+      "ref_norm": 33.55962893255856,
+      "cosine": 0.9985286873457742
+    },
+    "vulkan-step-split/mixed-long": {
+      "baseline_samples": 276480,
+      "samples": 307200,
+      "exact": false
+    },
+    "cuda-fused/q8-short": {
+      "baseline_samples": 153600,
+      "samples": 153600,
+      "exact": false,
+      "relative_l2": 0.17284885742063244,
+      "mine_norm": 32.2973204507588,
+      "ref_norm": 32.60147831404438,
+      "cosine": 0.9849648855137062
+    },
+    "cuda-fused/q8-long": {
+      "baseline_samples": 284160,
+      "samples": 284160,
+      "exact": false,
+      "relative_l2": 0.29907534186171403,
+      "mine_norm": 34.835429498172864,
+      "ref_norm": 34.8502947830207,
+      "cosine": 0.9552579763452415
+    },
+    "cuda-fused/mixed-short": {
+      "baseline_samples": 153600,
+      "samples": 153600,
+      "exact": false,
+      "relative_l2": 0.15535105821267406,
+      "mine_norm": 34.75429655515237,
+      "ref_norm": 33.55962893255856,
+      "cosine": 0.9889596636608412
+    },
+    "cuda-fused/mixed-long": {
+      "baseline_samples": 276480,
+      "samples": 284160,
+      "exact": false
+    }
+  },
+  "speech_exact_by_arm": {
+    "vulkan-fused": false,
+    "vulkan-step-batch": false,
+    "vulkan-step-split": false,
+    "cuda-fused": false
+  },
+  "public_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "file": "voxcpm2/path-diagnostic-20261009-v6/proof.zip",
+    "revision": "449ed355010eddb8dcedef6c2ab0fa62431ebeb7",
+    "sha256": "f52e5fbc49a0654bdcd13da6660c8e0841fbe87e80eb0cc158d74801339a5abc",
+    "bytes": 11760215
+  },
+  "build_cache": {
+    "repo": "cstr/crispasr-ccache",
+    "file": "voxcpm2-vulkan/sm75-v6-build.tar",
+    "revision": "b736b6c06fe693ae1bc67696d1a2dafff99ed0c3",
+    "sha256": "37fa83e2c82fadc7d16182a66bab047f5731402199d0c885fbbb655b1f64e43a",
+    "bytes": 104622080
+  },
+  "interpretation": "All short utterances repeat across existing GPU CFM paths; disabling fusion alone does not resolve speech quality. Diagnostic completion is not acceptance."
+}
