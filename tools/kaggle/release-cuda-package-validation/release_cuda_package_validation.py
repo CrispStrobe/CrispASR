@@ -31,6 +31,7 @@ os.environ.update(TMPDIR=str(TEMP), HF_HOME=str(TEMP/'hf'), HF_XET_CACHE=str(TEM
 assert len(BUNDLE_SHA) == 64 and len(ARTIFACT_ZIP_SHA) == 64
 hardware = subprocess.check_output(['nvidia-smi', '--query-gpu=name,compute_cap,memory.total',
     '--format=csv,noheader'], text=True).strip()
+driver = subprocess.check_output(['nvidia-smi', '--query-gpu=driver_version', '--format=csv,noheader'], text=True).strip()
 if not hardware or any(int(float(row.split(',')[1])*10) not in (60,61,70,75,80,86,89,90,120) for row in hardware.splitlines()):
     (OUT/'inconclusive.json').write_text(json.dumps(dict(hardware=hardware, conclusive=False,
         reason='GPU architecture absent from this actual release package; no models downloaded')))
@@ -143,6 +144,7 @@ receipt=dict(version=VERSION,source=SOURCE,build_run=BUILD_RUN,package_artifact_
     hardware=hardware,model_revision=MODEL_REV,original_revision=ORIGINAL_REV,original_sha256=ORIGINAL_SHA,
     reference_revision=manifest['fixtures']['revision'],artifact_zip_sha256=ARTIFACT_ZIP_SHA,
     cli_version=cli_version,host_libraries=host_libraries,cuda_runtime_version=runtime_version.value,
+    driver_version=driver,cuda_plugin_sha256=digest(bundle/'libggml-cuda.so'),
     entry_sha256=digest(__file__),validated=False,stages={},fresh={},reused={},streams={},failed=[])
 def save(): (OUT/'validation.json').write_text(json.dumps(receipt,indent=2)+'\n')
 save()
@@ -151,7 +153,9 @@ sys.path.insert(0,str(sdk/'python'))
 from crispasr import Session
 with Session(str(model),lib_path=str(library),backend='nemotron',n_threads=4) as packaged_session:
     allocation=subprocess.check_output(['nvidia-smi','--query-compute-apps=pid,used_gpu_memory','--format=csv,noheader,nounits'],text=True)
-    receipt['packaged_cabi_gpu_allocation']=allocation.strip();save()
+    receipt['packaged_cabi_gpu_allocation']=allocation.strip()
+    receipt['loaded_ggml_plugins']=sorted(set(Path(line.split()[-1]).name for line in Path('/proc/self/maps').read_text().splitlines() if str(bundle)+'/libggml' in line))
+    save();assert 'libggml-cuda.so' in receipt['loaded_ggml_plugins'], 'C ABI must load the actual packaged CUDA plugin'
     assert any(int(row.split(',')[0].strip())==os.getpid() and int(row.split(',')[1].strip())>=256 for row in allocation.splitlines()), 'Actual packaged C ABI must allocate on CUDA'
 ctx=lib.nemotron_init_from_file(str(model).encode(),params);assert ctx
 allocation=subprocess.check_output(['nvidia-smi','--query-compute-apps=pid,used_gpu_memory','--format=csv,noheader,nounits'],text=True)
