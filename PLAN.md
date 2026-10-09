@@ -72,6 +72,16 @@ Prove failure before/fix after from an unrelated cwd using actual staged plugins
 through the C ABI, wire that regression into dynamic-backend GH CI, then rebuild
 and run the actual CUDA package hardware controls. Do not accept chdir/environment
 workarounds as the product fix. No gate changes or CUDA fallback acceptance.
+[PR #528](https://github.com/CrispStrobe/CrispASR/pull/528), source
+`108e38024befd8f0db5c7e3400b90d6ac93b016b`, implements POSIX/Windows
+library-relative discovery for unified sessions and direct Nemotron C ABI init.
+Real old package fails both CPU-only/GPU-requested regression routes; test is
+wired into the dynamic-backend CI job. Four no-secrets checks pass with no
+skips (46.633 seconds). Candidate hosted tests pending. Focused actual Linux
+CUDA package rebuild GH 37977686803 is queued at this source; leave this branch
+unchanged until checkout is observed because the old release workflow still
+selects a moving branch. Terminal T4 failure proof is public and hash-verified
+via the hardware receipt. No candidate GPU acceptance yet.
 
 ## CLAIMED 2026-10-09 — Actual Linux CUDA release-package hardware validation
 
