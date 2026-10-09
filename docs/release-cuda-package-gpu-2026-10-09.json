@@ -1,10 +1,10 @@
 {
-  "version": "2026-10-09.release-package.2",
+  "version": "2026-10-09.release-package.3",
   "kernel": "${KAGGLE_ACCOUNT}/crispasr-release-cuda-package-validation",
-  "worker_commit": "d51058cf63e55c9d7483974248668f1369f940e9",
-  "entry_sha256": "bf8a19e3014d55803bcd21b67d941b145fae62186580c5fea7594fe149848080",
+  "worker_commit": "9f4f7fee1841d55a0740f3a98025db4b43ac3b87",
+  "entry_sha256": "99a64aff61ef379506858e6617cbfaa44a1e91681adb6b518ad6d1e6c22ff303",
   "remote_source_identical": true,
-  "status": "ERROR",
+  "status": "RUNNING",
   "validated": false,
   "build_run": 37958100129,
   "package_source": "3b814f780277286ece56e8cdee6bdc435e07ae4d",
@@ -13,7 +13,6 @@
   "package_sha256": "60e29fe5efd78979768904566c7b3a05d2387557c36ca2bd927cd6e4887c26fa",
   "scope": "Actual packaged CUDA plugin/C ABI loading, unchanged Nemotron F16 three-stage/26-original-transcript and native streaming controls; no original streaming parity, new quantization, Windows or speed acceptance",
   "no_secrets_tests": "4 pass, 0 skip, 48.361s",
-  "token_mount_alias_fixture_pass": true,
   "previous_runs": [
     {
       "version": "2026-10-09.release-package.1",
@@ -34,11 +33,41 @@
       "package_download_started": false,
       "failure": "Worker could not resolve the GitHub artifact credential; no GPU model inference started.",
       "terminal_output_archived": true
+    },
+    {
+      "version": "2026-10-09.release-package.2",
+      "kernel": "${KAGGLE_ACCOUNT}/crispasr-release-cuda-package-validation",
+      "worker_commit": "d51058cf63e55c9d7483974248668f1369f940e9",
+      "entry_sha256": "bf8a19e3014d55803bcd21b67d941b145fae62186580c5fea7594fe149848080",
+      "remote_source_identical": true,
+      "status": "ERROR",
+      "validated": false,
+      "build_run": 37958100129,
+      "package_source": "3b814f780277286ece56e8cdee6bdc435e07ae4d",
+      "package_artifact_id": 11637375498,
+      "artifact_zip_sha256": "658ee8dd67da3facb1d0fc8498c045293dcd5e3799cb55d36d4aae99338ff758",
+      "package_sha256": "60e29fe5efd78979768904566c7b3a05d2387557c36ca2bd927cd6e4887c26fa",
+      "scope": "Actual packaged CUDA plugin/C ABI loading, unchanged Nemotron F16 three-stage/26-original-transcript and native streaming controls; no original streaming parity, new quantization, Windows or speed acceptance",
+      "no_secrets_tests": "4 pass, 0 skip, 48.361s",
+      "token_mount_alias_fixture_pass": true,
+      "inference_started": false,
+      "package_download_started": false,
+      "terminal_output_archived": true,
+      "failure": "Both documented mount forms resolve zero GitHub token files; no inference started.",
+      "next_step": "Publish the byte-identical existing CI tar to a public experimental fixture path, pin its HF commit and enforce unchanged tar SHA; no rebuild or new secret."
     }
   ],
-  "inference_started": false,
-  "package_download_started": false,
-  "terminal_output_archived": true,
-  "failure": "Both documented mount forms resolve zero GitHub token files; no inference started.",
-  "next_step": "Publish the byte-identical existing CI tar to a public experimental fixture path, pin its HF commit and enforce unchanged tar SHA; no rebuild or new secret."
+  "package_mirror": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "repo_type": "dataset",
+    "path": "experimental/release-package-37958100129/crispasr-linux-x86_64-cuda.tar.gz",
+    "revision": "a93e0228b081be547ddea2d2c35bec904ed1a4b9",
+    "sha256": "60e29fe5efd78979768904566c7b3a05d2387557c36ca2bd927cd6e4887c26fa",
+    "bytes": 225349486,
+    "remote_sha256_verified": true,
+    "gh_run": 37958100129,
+    "gh_artifact": 11637375498,
+    "source": "3b814f780277286ece56e8cdee6bdc435e07ae4d",
+    "rebuilt": false
+  }
 }

@@ -46,7 +46,7 @@ probe [37968611724](https://github.com/CrispStrobe/CrispASR/actions/runs/3796861
 was dispatched at `65de05e08f2cd582ba36694c4135bc2aa96d2259`; branch advanced
 with documentation-only `0df939b42` while jobs remain queued. Predeclared
 acceptance: checkout must select the dispatch SHA despite branch movement.
-No hosted acceptance yet; merge only after green checks and observed checkout.
+Hosted Python package job 113949199260 succeeded and its complete checkout log verifies the dispatch SHA `65de05e08` despite the later branch head `ba74c8d00`. Glint validation passed; validate-version and final PR CI are still pending. Receipt: `docs/release-checkout-pin-2026-10-09.json`. Merge only after green checks.
 Additional claimed package-documentation repair in this same worktree/PR:
 the generic WASM archive README incorrectly specifies fixed 24 kHz output.
 Replace it with the actual `sessionOutputSampleRate()` getter guidance;
@@ -65,7 +65,7 @@ PR #527; the old archive is unchanged. Receipt: `docs/release-package-dry-run-20
 Worktree: `/mnt/storage/crispasr/salvage-20261008/release-cuda-hardware`.
 Use the already-built Linux CUDA archive from GH 37958100129, artifact
 11637375498, source `3b814f780277286ece56e8cdee6bdc435e07ae4d`.
-Download directly from GitHub on Kaggle and verify artifact ZIP/tar SHA-256;
+Locally verify the GH artifact ZIP/tar SHA-256, mirror the exact tar publicly and pin its HF commit; verify the same tar SHA-256 on Kaggle;
 no rebuild, quantization, original-model computation or torch install there.
 Reuse the accepted Nemotron F16 three-stage/26-transcript and native streaming
 controls with unchanged gates against public immutable original references.
@@ -88,7 +88,7 @@ repaired resolver passes a local fixture reproducing directory-symlink
 omission and duplicate aliases. Version 2 (`d51058cf6`) is terminal ERROR before download or inference;
 remote source was pulled and verified byte-identical (entry SHA
 `bf8a19e3014d55803bcd21b67d941b145fae62186580c5fea7594fe149848080`).
-Both terminal outputs are preserved. Version 2 reports zero mounted GitHub token files despite scanning both documented mount forms. Next: mirror the exact already-downloaded CI tar to a public experimental fixture path, record its immutable HF commit and enforce the same tar SHA. No secret dataset mutation, binary rebuild or gate change. No hardware acceptance yet. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
+Both terminal outputs are preserved. Version 2 reports zero mounted GitHub token files despite scanning both documented mount forms. Version 3 (`9f4f7fee1`) is RUNNING; pulled source is byte-identical (entry SHA `99a64aff61ef379506858e6617cbfaa44a1e91681adb6b518ad6d1e6c22ff303`). Exact CI tar is mirrored publicly at DATASET `cstr/crispasr-regression-fixtures` commit `a93e0228b081be547ddea2d2c35bec904ed1a4b9`, path `experimental/release-package-37958100129/crispasr-linux-x86_64-cuda.tar.gz`; remote SHA matches the original tar. No secret dataset mutation, binary rebuild or gate change. No hardware acceptance yet. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
 
 ## Release preparation checkpoint 2026-10-09
 
