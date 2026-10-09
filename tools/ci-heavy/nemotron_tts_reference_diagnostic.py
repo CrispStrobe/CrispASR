@@ -120,7 +120,8 @@ model.eval()
 assert next(model.parameters()).device.type == 'cpu'
 processor.set_num_lookahead_tokens(3)  # native context preset 0: left56/right3
 receipt['original_model'].update(dtype=str(next(model.parameters()).dtype),
-    device='cpu', lookahead_tokens=3, language='en-US', generation='model-card offline generate')
+    device='cpu', lookahead_tokens=3, language='en-US', generation='model-card offline generate',
+    captured_encoder_scope='stock encoder before language prompt fusion/projector')
 # Capture actual original encoder output before RNNT decoding when exposed by
 # the stock model, retaining full features and sequences for later stage diffs.
 encoders = [(name, module) for name, module in model.named_modules()
@@ -155,7 +156,7 @@ with torch.inference_mode():
         seconds = time.perf_counter() - start
         sequence = output.sequences.cpu().numpy()
         np.save(OUT / (name + '-original-sequence.npy'), sequence)
-        text = processor.decode(output.sequences, skip_special_tokens=True)
+        text = processor.batch_decode(output.sequences, skip_special_tokens=True)[0]
         assert isinstance(text, str) and sequence.size < 512
         receipt['original'][label] = dict(transcript=text, wer=wer(expected, text),
             seconds=seconds, encoder_shape=current.get('encoder_shape'),
