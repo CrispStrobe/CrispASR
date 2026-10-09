@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 """Locate Q4 frontend/subsampling drift under unchanged reference stage gates."""
+import ctypes
 import hashlib
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
+import wave
+
+import numpy as np
 
 from gguf import GGUFReader
 from huggingface_hub import hf_hub_download
@@ -45,9 +49,9 @@ def run(command, label):
 save()
 build = TEMP / 'build'
 assert run(['cmake', '-S', ROOT, '-B', build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
-    '-DGGML_NATIVE=OFF', '-DGGML_CUDA=OFF', '-DGGML_BLAS=OFF', '-DCRISPASR_BUILD_TESTS=OFF',
+    '-DBUILD_SHARED_LIBS=ON', '-DGGML_NATIVE=OFF', '-DGGML_CUDA=OFF', '-DGGML_BLAS=OFF', '-DCRISPASR_BUILD_TESTS=OFF',
     '-DCRISPASR_BUILD_SERVER=OFF'], 'configure') == 0
-assert run(['cmake', '--build', build, '--target', 'crispasr-diff', 'crispasr-quantize', '-j4'], 'build') == 0
+assert run(['cmake', '--build', build, '--target', 'crispasr-lib', 'crispasr-diff', 'crispasr-quantize', '-j4'], 'build') == 0
 manifest = json.loads((ROOT / 'tests/regression/manifest.json').read_text())
 entry = next(x for x in manifest['backends'] if x['backend_id'] == 'nemotron')
 ref = hf_hub_download(manifest['fixtures']['repo'], entry['fixture_ref_path'],
@@ -63,6 +67,74 @@ f16 = Path(hf_hub_download(MODEL, 'nemotron-3.5-asr-streaming-0.6b-f16.gguf', re
 reader = GGUFReader(str(f16))
 source_types = {t.name: t.tensor_type.name for t in reader.tensors}
 del reader
+# Capture full native and reference arrays before judging the newly exposed
+# boundaries. Preserve every sample/frame: no crop, padding or gate change.
+class Params(ctypes.Structure):
+    _fields_ = [('n_threads', ctypes.c_int), ('use_flash', ctypes.c_bool),
+                ('verbosity', ctypes.c_int), ('use_gpu', ctypes.c_bool)]
+
+
+lib = ctypes.CDLL(str(next(build.rglob('libcrispasr.so'))))
+fp = ctypes.POINTER(ctypes.c_float)
+ip = ctypes.POINTER(ctypes.c_int)
+lib.nemotron_context_default_params.argtypes = []
+lib.nemotron_context_default_params.restype = Params
+lib.nemotron_init_from_file.argtypes = [ctypes.c_char_p, Params]
+lib.nemotron_init_from_file.restype = ctypes.c_void_p
+lib.nemotron_free.argtypes = [ctypes.c_void_p]
+lib.nemotron_free.restype = None
+lib.nemotron_compute_mel.argtypes = [ctypes.c_void_p, fp, ctypes.c_int, ip, ip]
+lib.nemotron_compute_mel.restype = fp
+for name in ('nemotron_run_preencode_ext', 'nemotron_run_encoder_ext'):
+    fn = getattr(lib, name)
+    fn.argtypes = [ctypes.c_void_p, fp, ctypes.c_int, ctypes.c_int, ip, ip]
+    fn.restype = fp
+allocator = ctypes.CDLL(None)
+allocator.free.argtypes = [ctypes.c_void_p]
+allocator.free.restype = None
+with wave.open(str(ROOT / entry['sample']), 'rb') as wav:
+    assert wav.getframerate() == 16000 and wav.getnchannels() == 1 and wav.getsampwidth() == 2
+    pcm = np.frombuffer(wav.readframes(wav.getnframes()), dtype='<i2').astype(np.float32) / 32768
+params = lib.nemotron_context_default_params()
+params.n_threads, params.use_flash, params.verbosity, params.use_gpu = 4, False, 0, False
+ctx = lib.nemotron_init_from_file(str(f16).encode(), params)
+assert ctx
+arrays = {}
+try:
+    nm, tm = ctypes.c_int(), ctypes.c_int()
+    mel = lib.nemotron_compute_mel(ctx, pcm.ctypes.data_as(fp), len(pcm), ctypes.byref(nm), ctypes.byref(tm))
+    assert mel
+    try:
+        arrays['native_mel_spectrogram'] = np.ctypeslib.as_array(mel, shape=(tm.value * nm.value,)).copy().reshape(tm.value, nm.value).T.copy()
+        for stage, api_name in [('pre_encode_output', 'nemotron_run_preencode_ext'),
+                                ('encoder_output', 'nemotron_run_encoder_ext')]:
+            te, dm = ctypes.c_int(), ctypes.c_int()
+            output = getattr(lib, api_name)(ctx, mel, nm.value, tm.value, ctypes.byref(te), ctypes.byref(dm))
+            assert output
+            try:
+                arrays['native_' + stage] = np.ctypeslib.as_array(output, shape=(te.value * dm.value,)).copy().reshape(te.value, dm.value)
+            finally:
+                allocator.free(output)
+    finally:
+        allocator.free(mel)
+finally:
+    lib.nemotron_free(ctx)
+reference = GGUFReader(ref)
+for tensor in reference.tensors:
+    arrays['reference_' + tensor.name] = np.asarray(tensor.data).copy().reshape(tuple(reversed(tensor.shape)))
+del reference
+np.savez_compressed(OUT / 'f16-boundary-arrays.npz', **arrays)
+receipt['boundary_capture'] = dict(path='f16-boundary-arrays.npz', sha256=sha(OUT / 'f16-boundary-arrays.npz'),
+    pcm_sha256=hashlib.sha256(pcm.tobytes()).hexdigest(), layout='Full Python logical shapes; no frame removal', stages={})
+for stage in ('mel_spectrogram', 'pre_encode_output', 'encoder_output'):
+    native, target = arrays['native_' + stage], arrays['reference_' + stage]
+    assert native.shape == target.shape
+    error = np.abs(native.astype(np.float64) - target)
+    frame_error = error.max(axis=0 if stage == 'mel_spectrogram' else 1)
+    receipt['boundary_capture']['stages'][stage] = dict(shape=list(native.shape), max_abs=float(error.max()),
+        rms=float(np.sqrt(np.mean(error**2))), per_frame_max_abs=frame_error.tolist(),
+        worst_index=list(map(int, np.unravel_index(error.argmax(), error.shape))))
+save()
 head = [r'^joint\.', r'^decoder\.', r'^prompt_kernel\.']
 specs = [('f16', None), ('plain-q4', []), ('rnnt-prompt-q4', head),
          ('rnnt-prompt-preout-q4', head + [r'^encoder\.pre\.out\.']),
