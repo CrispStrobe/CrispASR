@@ -168,6 +168,10 @@ actual-worker builds refresh their compiler cache. Thresholds stay unchanged.
   32 steps. Compare baseline versus full preprocessing/postprocessing, archive
   complete PCM/codes and recognize with the pinned original NVIDIA F32 model.
   Run on GH CPU; no seed selection, gate relaxation or default promotion.
+  Worker `381f3a3ae` is pushed; GH `37957953495` launched with pinned CPU
+  torch/torchaudio 2.8.0, Transformers 5.19.0 and upstream package revision.
+  It requires original generation capture OFF/ON PCM equality and a positive
+  original-ASR JFK control before reporting cloned-speech WER. Pending.
 
   No lucky-seed selection. Public proof:
   `docs/omnivoice-clone-failure-2026-10-09.json` and
