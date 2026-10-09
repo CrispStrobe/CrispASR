@@ -93,12 +93,15 @@ Evidence: [callback smoke proof](index-echo-calibration-smoke-2026-10-09.json),
 ## Model and validation status
 
 No production model files, registry quantization pins or quality thresholds
-change with these merged PRs. Calibrated Echo Q4 candidates require unchanged
-full GPU stage/norm, decoding, translation and roundtrip acceptance before
-promotion. Nemotron Q4 precision experiments recover all 26 fixed transcripts
-with RNNT/prompt guards, but encoder parity remains rejected. A candidate frontend length-mask correction now passes all three F16 stage
-gates, but remains unmerged pending broader controls; further Q4 encoder
-precision work is unfinished.
+change with these merged PRs. Actual dual-T4 calibrated Echo Q4 testing passed
+its full F16 control, but all three candidates failed stage/magnitude and
+complete translation gates. No candidate is promoted; the terminal proof is
+pinned in `docs/index-echo-q4-imatrix-validation-2026-10-09.json`.
+Nemotron RNNT/prompt guards recover all 26 fixed transcripts, but Q4 encoder
+parity remains rejected. A candidate frontend length-mask correction passes
+all three F16 stage gates and all 26 original transcript controls with no
+fresh/reused differences. It remains unmerged pending integration and GPU
+validation; further Q4 encoder precision work is unfinished.
 OmniVoice PR #521 remains a draft because clone acceptance is unfinished.
 The remaining CANN and hardware-specific work in PR #492 is not included.
 

@@ -1,0 +1,229 @@
+{
+  "worker_commit": "c150a6cb5a6d65f3c54e880b9216a0dcee093acc",
+  "kernel": "${KAGGLE_ACCOUNT}/crispasr-index-echo-q4-imatrix",
+  "version": 1,
+  "status": "ERROR",
+  "diagnostic_complete": true,
+  "validated": false,
+  "defaults_changed": false,
+  "hardware": "Tesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB",
+  "f16_control_passed": true,
+  "calibration_revision": "65bcaed727b355b605b883937b25bf7ce1bb7044",
+  "calibration_sha256": "4cb3e75e9ef3f09ed65860b172d5e0cfb994cca16544db31904e269d91cc9bb4",
+  "candidates": {
+    "q4_k_plain": {
+      "validated": false,
+      "failed": [
+        "q4_k_plain:jfk:stage",
+        "q4_k_plain:zh:stage",
+        "q4_k_plain:jfk-tail:stage",
+        "q4_k_plain:jfk:c-abi",
+        "q4_k_plain:zh:c-abi",
+        "q4_k_plain:jfk:cli",
+        "q4_k_plain:zh:cli",
+        "q4_k_plain:pipeline:jfk-en: full-pipeline decoded mismatch",
+        "q4_k_plain:pipeline:zh-ja: full-pipeline decoded mismatch",
+        "q4_k_plain:pipeline:real CLI decoded text mismatch",
+        "q4_k_plain:pipeline:real CLI decoded text mismatch",
+        "q4_k_plain:pipeline:real CLI exact subtitle/timestamp mismatch"
+      ],
+      "stage_logs": {
+        "q4_k_plain-jfk-diff.log": {
+          "summary": "summary: 75 pass, 34 fail, 0 skip (cos threshold 0.999)",
+          "teacherforced": {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.967303,
+            "relative_l2": 0.11074825
+          },
+          "first_quantized_layer": {
+            "stage": "llm_block_0",
+            "cosine_min": 0.998801,
+            "relative_l2": 0.0522751
+          },
+          "final_layer": {
+            "stage": "llm_block_31",
+            "cosine_min": 0.995724,
+            "relative_l2": 0.09344121
+          }
+        },
+        "q4_k_plain-jfk-tail-diff.log": {
+          "summary": "summary: 75 pass, 32 fail, 0 skip (cos threshold 0.999)",
+          "teacherforced": {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.96391,
+            "relative_l2": 0.12510081
+          },
+          "first_quantized_layer": {
+            "stage": "llm_block_0",
+            "cosine_min": 0.998943,
+            "relative_l2": 0.0497305
+          },
+          "final_layer": {
+            "stage": "llm_block_31",
+            "cosine_min": 0.99396,
+            "relative_l2": 0.10984546
+          }
+        },
+        "q4_k_plain-zh-diff.log": {
+          "summary": "summary: 75 pass, 36 fail, 0 skip (cos threshold 0.999)",
+          "teacherforced": {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.988372,
+            "relative_l2": 0.10911508
+          },
+          "first_quantized_layer": {
+            "stage": "llm_block_0",
+            "cosine_min": 0.998256,
+            "relative_l2": 0.06020949
+          },
+          "final_layer": {
+            "stage": "llm_block_31",
+            "cosine_min": 0.994057,
+            "relative_l2": 0.10960568
+          }
+        }
+      }
+    },
+    "q4_k_ffn_guarded": {
+      "validated": false,
+      "failed": [
+        "q4_k_ffn_guarded:jfk:stage",
+        "q4_k_ffn_guarded:zh:stage",
+        "q4_k_ffn_guarded:jfk-tail:stage",
+        "q4_k_ffn_guarded:pipeline:zh-en: full-pipeline decoded mismatch",
+        "q4_k_ffn_guarded:pipeline:zh-ja: full-pipeline decoded mismatch"
+      ],
+      "stage_logs": {
+        "q4_k_ffn_guarded-jfk-diff.log": {
+          "summary": "summary: 75 pass, 22 fail, 0 skip (cos threshold 0.999)",
+          "teacherforced": {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.983031,
+            "relative_l2": 0.06066685
+          },
+          "first_quantized_layer": {
+            "stage": "llm_block_0",
+            "cosine_min": 0.999981,
+            "relative_l2": 0.00616288
+          },
+          "final_layer": {
+            "stage": "llm_block_31",
+            "cosine_min": 0.998309,
+            "relative_l2": 0.05925956
+          }
+        },
+        "q4_k_ffn_guarded-jfk-tail-diff.log": {
+          "summary": "summary: 75 pass, 21 fail, 0 skip (cos threshold 0.999)",
+          "teacherforced": {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.987214,
+            "relative_l2": 0.07829868
+          },
+          "first_quantized_layer": {
+            "stage": "llm_block_0",
+            "cosine_min": 0.999979,
+            "relative_l2": 0.00652708
+          },
+          "final_layer": {
+            "stage": "llm_block_31",
+            "cosine_min": 0.997938,
+            "relative_l2": 0.06564554
+          }
+        },
+        "q4_k_ffn_guarded-zh-diff.log": {
+          "summary": "summary: 76 pass, 18 fail, 0 skip (cos threshold 0.999)",
+          "teacherforced": {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.996684,
+            "relative_l2": 0.06630357
+          },
+          "first_quantized_layer": {
+            "stage": "llm_block_0",
+            "cosine_min": 0.99998,
+            "relative_l2": 0.00630762
+          },
+          "final_layer": {
+            "stage": "llm_block_31",
+            "cosine_min": 0.998142,
+            "relative_l2": 0.06094965
+          }
+        }
+      }
+    },
+    "q4_k_middle": {
+      "validated": false,
+      "failed": [
+        "q4_k_middle:jfk:stage",
+        "q4_k_middle:zh:stage",
+        "q4_k_middle:jfk-tail:stage",
+        "q4_k_middle:pipeline:zh-en: full-pipeline decoded mismatch",
+        "q4_k_middle:pipeline:zh-ja: full-pipeline decoded mismatch"
+      ],
+      "stage_logs": {
+        "q4_k_middle-jfk-diff.log": {
+          "summary": "summary: 75 pass, 20 fail, 0 skip (cos threshold 0.999)",
+          "teacherforced": {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.979347,
+            "relative_l2": 0.04642225
+          },
+          "first_quantized_layer": {
+            "stage": "llm_block_4",
+            "cosine_min": 0.999908,
+            "relative_l2": 0.01358754
+          },
+          "final_layer": {
+            "stage": "llm_block_31",
+            "cosine_min": 0.999212,
+            "relative_l2": 0.04014406
+          }
+        },
+        "q4_k_middle-jfk-tail-diff.log": {
+          "summary": "summary: 76 pass, 18 fail, 0 skip (cos threshold 0.999)",
+          "teacherforced": {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.995196,
+            "relative_l2": 0.04842645
+          },
+          "first_quantized_layer": {
+            "stage": "llm_block_4",
+            "cosine_min": 0.999895,
+            "relative_l2": 0.01455236
+          },
+          "final_layer": {
+            "stage": "llm_block_31",
+            "cosine_min": 0.998916,
+            "relative_l2": 0.04674823
+          }
+        },
+        "q4_k_middle-zh-diff.log": {
+          "summary": "summary: 76 pass, 15 fail, 0 skip (cos threshold 0.999)",
+          "teacherforced": {
+            "stage": "teacherforced_logits",
+            "cosine_min": 0.994742,
+            "relative_l2": 0.04514996
+          },
+          "first_quantized_layer": {
+            "stage": "llm_block_4",
+            "cosine_min": 0.999899,
+            "relative_l2": 0.01425713
+          },
+          "final_layer": {
+            "stage": "llm_block_31",
+            "cosine_min": 0.999158,
+            "relative_l2": 0.04101959
+          }
+        }
+      }
+    }
+  },
+  "proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "repo_type": "dataset",
+    "revision": "7d02b8c235c512a292db1b4ac1fc038957dd8007",
+    "path": "index-echo-9b/q4-imatrix-validation-20261009/proof.zip",
+    "sha256": "8cb7a9fe6f9be25b85b709dfbf650464abf99df56984d44049fa940189af9322",
+    "bytes": 630151,
+    "remote_verified": true
+  }
+}

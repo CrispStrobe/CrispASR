@@ -81,6 +81,10 @@
     "entry_sha256": "532802e21a5c874a634d625b297586617f403a6a01ca195b084baca38b0b27b0",
     "remote_source_identical": true,
     "kernel": "${KAGGLE_ACCOUNT}/crispasr-index-echo-q4-imatrix",
-    "status": "RUNNING"
+    "status": "ERROR",
+    "diagnostic_complete": true,
+    "f16_control_passed": true,
+    "accepted_candidates": [],
+    "receipt": "docs/index-echo-q4-imatrix-validation-2026-10-09.json"
   }
 }
