@@ -19,13 +19,14 @@ Release dry-run Linux Python artifact loads its bundled native library, but
 Fix platform-aware adjacent helper discovery, preserve explicit overrides and
 repo build fallback, and validate the actual staged package plus model-free
 constructor-path and native resampling regressions before merging.
-Candidate now passes all 18 constructor routes (Linux/macOS/Windows names;
-automatic, explicit, environment, helper override, build, legacy). Ten routes
-failed before the fix. Actual staged Linux library/helper loads with loader
-overrides cleared; all eight existing audio resampling tests pass against the
-staged library and candidate binding. Only Python source was overlaid; archive
-bytes stay unchanged. Missing-model initialization is intentional, so this is
-not model inference acceptance. Receipt: `docs/python-package-helpers-2026-10-09.json`.
+[PR #526](https://github.com/CrispStrobe/CrispASR/pull/526) is open at
+`1c1dae6f6`: all 18 constructor routes pass (10 failed before repair),
+and all eight audio resampling tests pass against the actual staged Linux
+shared library with only the candidate binding overlaid. Actual default
+constructor now loads the packaged helper with loader overrides cleared.
+Missing-model initialization was intentional; no model-inference claim.
+Full no-secrets scan passes all four checks, no skips (54.723 seconds);
+227 documentation anchors pass. CI remains queued; do not merge before green.
 
 ## Release preparation checkpoint 2026-10-09
 
@@ -59,7 +60,7 @@ updated; CPU capture evidence is explicitly not GPU capture acceptance.
 Tag only through `scripts/bump-version.sh` after green chosen tip; verify
 release packages before publication. The pending quant/clone experiments are
 excluded from this release scope. Issue #485 has the terminal calibrated-Q4
-rejection update; draft PR #521 now describes the queued original control.
+rejection update; draft PR #521 records the completed, rejected original control.
 
 ## CLAIMED 2026-10-09 — Nemotron Q4 RNNT precision repair
 
