@@ -265,7 +265,7 @@ jobs:
           mkdir -p release/crispasr-wasm
           cp build-wasm/bin/libwhisper.js build-wasm/bin/libwhisper.wasm release/crispasr-wasm/
           [ -f build-wasm/bin/libwhisper.worker.js ] && cp build-wasm/bin/libwhisper.worker.js release/crispasr-wasm/ || true
-          printf 'CrispASR WebAssembly: libwhisper.js (global whisper_factory) + libwhisper.wasm.\nMultithreaded -> host page must be cross-origin isolated (COOP/COEP).\nTTS: Module.ttsOpenExplicit(model,backend,threads) -> ttsSetVoice(voice,"") -> ttsSynthesize(text) => Float32Array @24kHz.\nLoad files via Module.FS_createDataFile("/models",name,bytes,true,true).\n' > release/crispasr-wasm/README.txt
+          printf 'CrispASR WebAssembly: libwhisper.js (global whisper_factory) + libwhisper.wasm.\nMultithreaded -> host page must be cross-origin isolated (COOP/COEP).\nTTS: Module.ttsOpenExplicit(model,backend,threads) -> ttsSetVoice(voice,"") -> ttsSynthesize(text) => Float32Array.\nPlayback/WAV sample rate: Module.sessionOutputSampleRate() after opening the model (backend dependent).\nLoad files via Module.FS_createDataFile("/models",name,bytes,true,true).\n' > release/crispasr-wasm/README.txt
           cd release && tar czf crispasr-wasm.tar.gz crispasr-wasm/
 
       - uses: actions/upload-artifact@v4
