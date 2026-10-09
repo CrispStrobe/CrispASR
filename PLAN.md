@@ -20,7 +20,9 @@ production quantization pin. Full no-publication Release dry run
 uses source `23b401b3d20a2ef794a88ade6a261369e899359d`; matrix still running, no failed job observed. Linux x86_64 CPU/Vulkan
 packages have been downloaded and physically inspected: both CLI/quantizer
 start, all loader dependencies resolve, both executables use $ORIGIN without
-build-host paths, and the needed OpenBLAS library is bundled. This is package
+build-host paths, and the needed OpenBLAS library is bundled. The shared-library package also loads through ctypes, returns 0.8.42,
+exports the actual session open/close and additive preencode symbols, and
+successfully enumerates Nemotron/VoxCPM2 through the C ABI. This is package
 startup/dependency validation, not Vulkan hardware/model acceptance. Full
 receipt: `docs/release-package-dry-run-2026-10-09.json`. Main integration CI
 for the final checkpoint still needs to settle.
@@ -34,7 +36,10 @@ F32 seed-42/32-step cloning also fails at 2/9 WER in both unprocessed and full
 cleanup arms; capture OFF/ON PCM is exact and original-ASR JFK control passes.
 The upstream failure does not waive native acceptance. Full public proofs
 are pinned and remote-SHA verified in the new original-clone and encoder-group
-diagnostics. Issue #518 and PR #521 now record the terminal original result. Documentation anchors pass (227 across 82 files).
+diagnostics. Issue #518 and PR #521 now record the terminal original result. Documentation anchors pass (227 across 82 files). The current control
+checkpoint passes all four no-secrets tests with the account environment set
+(no skips, 56.378 seconds). The output-lifetime lesson and generated index are
+updated; CPU capture evidence is explicitly not GPU capture acceptance.
 Tag only through `scripts/bump-version.sh` after green chosen tip; verify
 release packages before publication. The pending quant/clone experiments are
 excluded from this release scope. Issue #485 has the terminal calibrated-Q4
