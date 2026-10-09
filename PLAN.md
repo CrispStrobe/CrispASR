@@ -58,7 +58,17 @@ remain required; CPU controls alone do not certify CUDA. Isolated
 bytes identical to the accepted CPU candidate. Full PR CI is queued.
 GH CUDA bundle `37943881572` builds the exact PR source for subsequent
 actual Kaggle streaming/stage validation; no GPU acceptance claim yet.
-Terminal 26-control proof: `docs/nemotron-frontend-controls-2026-10-09.json`. All 26 archived
+Terminal 26-control proof: `docs/nemotron-frontend-controls-2026-10-09.json`. GPU-only worker draft
+`3f1ef083b` lives in the claimed `nemotron-quant` worktree. It requires
+immutable successful bundle pins before launch, actual SM75 hardware/native
+CUDA allocation, full F16 arrays/unchanged 0.999 stage gates, original 26-case
+fresh/reused transcripts, and long-turn packet/reset/flush checks on presets
+0/2/3. No GPU build/quantization, experimental incremental frontend, or claim
+of original streaming parity. The original 24-layer encoder capture worker
+`3ca187201`, GH `37946465069`, is running on CPU with pinned original NVIDIA
+weights and Transformers 5.19.0. Capture must preserve original generation
+IDs exactly; clone subsampling outputs before their in-place input scaling.
+Next compare these original layers to native F16/Q4 before choosing more guards. All 26 archived
 original NVIDIA attention masks independently confirm floor(samples/hop);
 full failed-boundary arrays and logs publicly archived and SHA-verified:
 `docs/nemotron-boundary-diagnostic-2026-10-09.json`.
