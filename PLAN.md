@@ -22,6 +22,32 @@ OmniVoice speech worker failed actual decode waveform parity (max_abs .003391);
 fix from independent same-code oracle before integration. VoxCPM2 v4 ERROR;
 archive terminal outputs before any repush.
 
+Current 2026-10-09 results: account-literal scanner passes unchanged after
+doc placeholder repair (`731593dda`). Branches #519/#520 refreshed against it
+and native CI is running; previous native/lint/bindings passed.
+OmniVoice worker `3d30ea127` fixes a harness confound: the default session API
+adds watermark after native DSP. Attested raw PCM now feeds the unchanged
+2e-6 upstream waveform gate; two extra default marked roundtrips are included.
+No native arithmetic or thresholds changed. GH run 37888585305 queued.
+Echo preparation is public, pinned at `afdef3d4b111aa89e45fc400a03ba31ff54ac1dd`,
+all four remote size/SHA and physical tensor audits pass. Kernel public retry
+v2 launched with entry `845bf2e6d`; accepted F16 control precedes candidates,
+and actual two-T4 guard precedes model pulls. No registry/default changes.
+VoxCPM2 v4 confirms five of six exact speech gates fail with repeated syllables,
+including explicit Vulkan CLI; all terminal outputs archived and public.
+Next: isolate existing fused/per-step/batch/split CFM paths and CUDA/Vulkan
+at unchanged ten steps/seed/model, two repeats per text, with all 16 ASR results
+recorded. `2ee7212fd` is diagnostic only, not an original Python oracle or
+acceptance; no numerical/default changes. Do not lower quality gates.
+MiMo diagnostic capture complete: identical frozen layer-0 input, CPU Q4
+flash/eager first differences at layer-0 attention (relL2 .000146), amplified
+in its MLP (.00183) and subsequent layers. F16 is much smaller. BLAS flash/eager
+drift shrinks but full Q4 Python hidden/logit parity remains below acceptance
+(.965/.982); no production BLAS/default promotion. Public raw proof pinned in
+`docs/mimo-lm-first-divergence-2026-10-09.json`.
+Release workflow is COMPLETE SUCCESS, 53 published assets. Full job/asset
+evidence refreshed; binary-publication task moved to HISTORY.
+
 Worktrees under
 `/mnt/storage/crispasr/salvage-20261008/`: `mel` (`fix/mel-projection-salvage`),
 `omnivoice` (`fix/omnivoice-postprocess-518`), `echo` (`fix/echo-q4-public-transfer`),
@@ -255,14 +281,6 @@ Ascend proof and PR-only/NZ-only/both attribution. The independent mel piece
 is split into the opt-in branch above. Historical numerical/codec experiments
 are archived in HISTORY; the full PR stays open and unmerged.
 
-## OPEN 2026-10-08 — release binary publication
-
-v0.8.42 is published with comprehensive notes and passing native/lint/full33
-release gates. Workflow
-[37850360339](https://github.com/CrispStrobe/CrispASR/actions/runs/37850360339)
-is still building/publishing platforms; check remaining jobs and uploaded
-assets separately. PR #492 and all unaccepted experimental branches remain
-excluded. Receipt: `docs/release-v0.8.42-validation.json`.
 
 ## OPEN 2026-10-08 — #483 reporter GPU comparison
 

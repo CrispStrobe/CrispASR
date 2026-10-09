@@ -1,0 +1,9 @@
+{
+  "repo": "cstr/index-echo-9b-GGUF",
+  "file": "experiments/q4-guards-20261008/preparation.json",
+  "revision": "afdef3d4b111aa89e45fc400a03ba31ff54ac1dd",
+  "sha256": "be7b04f7a1d41843a6140f3b7a61c4758a2086f59fdb07a8964fd59eb06c45b6",
+  "bytes": 328584,
+  "preparation_only": true,
+  "validated": false
+}

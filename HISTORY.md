@@ -23310,3 +23310,10 @@ No new CANN/CUDA correctness or performance claim; combined CANN/NZ timings
 cannot be attributed to this PR alone. PR #492 remains unmerged. #516 Arabic
 alignment is integrated after full runtime acceptance; native main CI and regression pass.
 Full pinned cppcheck 2.7 `37763588589` passes at `2da878e72`.
+
+## 2026-10-09 — v0.8.42 binary publication complete
+
+Release workflow 37850360339 completed SUCCESS; 53 binary/package assets
+are published. All platform jobs are terminal. Immutable tag/source and full
+asset digests are recorded in `docs/release-v0.8.42-validation.json`.
+Pending PR #492 salvage and OmniVoice/VoxCPM2/Echo experiments are excluded.
