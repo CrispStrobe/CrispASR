@@ -43,7 +43,7 @@ Comprehensive `RELEASE_NOTES_v0.8.43.md` is committed before any version bump.
 Merged scope: PRs #519, #520, #522, #523, #524, #525. No new version/tag or
 production quantization pin. Full no-publication Release dry run
 [GH 37958100129](https://github.com/CrispStrobe/CrispASR/actions/runs/37958100129)
-uses source `23b401b3d20a2ef794a88ade6a261369e899359d`; matrix still running, no failed job observed. Linux x86_64 CPU/Vulkan
+has workflow event head `23b401b3d20a2ef794a88ade6a261369e899359d`; the old checkout selected the moving branch at each job start. CPU/Vulkan/shared artifacts actually built `3b814f780277286ece56e8cdee6bdc435e07ae4d`; Python built `be13df2d3b0796b3b0bc23c5df714382a2acca28`. Observed changes since the event head are documentation only, but this is not an immutable matrix proof. Checkout repair is claimed above. Matrix still running, no failed job observed. Linux x86_64 CPU/Vulkan
 packages have been downloaded and physically inspected: both CLI/quantizer
 start, all loader dependencies resolve, both executables use $ORIGIN without
 build-host paths, and the needed OpenBLAS library is bundled. The shared-library package also loads through ctypes, returns 0.8.42,
