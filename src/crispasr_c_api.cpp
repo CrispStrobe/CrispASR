@@ -47,6 +47,15 @@
 #include <utility>
 #include <vector>
 
+#if defined(GGML_BACKEND_DL) && defined(_WIN32)
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#elif defined(GGML_BACKEND_DL) && (defined(__unix__) || defined(__APPLE__))
+#include <dlfcn.h>
+#endif
+
 #include "crispasr.h"
 #include "core/qwen3_prompt.h"
 #include "core/qwen3_stream.h"
@@ -1574,8 +1583,7 @@ static void ensure_dynamic_backends_loaded();
 CA_EXPORT nemotron_context* crispasr_nemotron_init(const char* model_path, int n_threads, int use_gpu) {
     if (!model_path)
         return nullptr;
-    if (use_gpu)
-        ensure_dynamic_backends_loaded();
+    ensure_dynamic_backends_loaded();
     nemotron_context_params p = nemotron_context_default_params();
     p.n_threads = n_threads > 0 ? n_threads : 4;
     p.use_gpu = use_gpu != 0;
@@ -1748,11 +1756,40 @@ static thread_local uint64_t g_open_seed_tls = 0;
 
 // CLI entry points load dynamic GGML plugins during startup, but direct C ABI
 // consumers (Python, Dart, Rust, Go) have no CLI main(). Load them lazily on
-// the first GPU session open, once across all caller threads.
+// the first session open, including CPU-only callers, once across threads.
 static std::once_flag g_dynamic_backends_once;
 
 static void ensure_dynamic_backends_loaded() {
-    std::call_once(g_dynamic_backends_once, []() { ggml_backend_load_all(); });
+    std::call_once(g_dynamic_backends_once, []() {
+    // ggml defaults to the process executable directory and cwd. For an
+    // embedded library those belong to Python/Dart/etc., not our package.
+    // Use a private data address to identify this module without PLT or
+    // symbol-interposition ambiguity; retain ggml's normal search afterward.
+#if defined(GGML_BACKEND_DL)
+        std::filesystem::path module_path;
+#if defined(_WIN32)
+        HMODULE module = nullptr;
+        if (GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                               reinterpret_cast<LPCWSTR>(&g_dynamic_backends_once), &module)) {
+            std::vector<wchar_t> path(32768);
+            DWORD length = GetModuleFileNameW(module, path.data(), static_cast<DWORD>(path.size()));
+            if (length > 0 && length < path.size()) {
+                module_path = std::filesystem::path(std::wstring(path.data(), length));
+            }
+        }
+#elif defined(__unix__) || defined(__APPLE__)
+        Dl_info info{};
+        if (dladdr(&g_dynamic_backends_once, &info) != 0 && info.dli_fname) {
+            module_path = info.dli_fname;
+        }
+#endif
+        if (!module_path.empty() && module_path.has_parent_path()) {
+            const std::string directory = module_path.parent_path().u8string();
+            ggml_backend_load_all_from_path(directory.c_str());
+        }
+#endif
+        ggml_backend_load_all();
+    });
 }
 
 // Defined ahead of crispasr_session so the session can hold its own
@@ -2706,8 +2743,7 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
     if (!model_path || !backend_name)
         return nullptr;
 
-    if (g_open_use_gpu_tls)
-        ensure_dynamic_backends_loaded();
+    ensure_dynamic_backends_loaded();
 
     auto* s = new crispasr_session();
     s->model_path = model_path;
