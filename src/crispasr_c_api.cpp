@@ -9706,8 +9706,9 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         if (!ends_with_wav(path))
             return -2;
         float* pcm = nullptr;
+        int input_sr = crispasr_session_input_sample_rate(s);
         int n = 0, sr = 0;
-        if (crispasr_audio_load_at_rate(path, 24000, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
+        if (crispasr_audio_load_at_rate(path, input_sr, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
             if (pcm)
                 free(pcm);
             return -1;
@@ -9727,9 +9728,9 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         if (!ends_with_wav(path))
             return -2;
         float* pcm = nullptr;
+        int input_sr = crispasr_session_input_sample_rate(s);
         int n = 0, sr = 0;
-        const int model_sr = f5_tts_sample_rate(s->f5tts_ctx);
-        if (crispasr_audio_load_at_rate(path, model_sr > 0 ? model_sr : 24000, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
+        if (crispasr_audio_load_at_rate(path, input_sr, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
             if (pcm)
                 free(pcm);
             return -1;
@@ -9778,8 +9779,9 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         if (!ends_with_wav(path))
             return -2;
         float* pcm = nullptr;
+        int input_sr = crispasr_session_input_sample_rate(s);
         int n = 0, sr = 0;
-        if (crispasr_audio_load_at_rate(path, 24000, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
+        if (crispasr_audio_load_at_rate(path, input_sr, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
             if (pcm)
                 free(pcm);
             return -1;
