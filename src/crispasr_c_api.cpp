@@ -249,6 +249,10 @@
 #include "melotts.h"
 #define CA_HAVE_MELOTTS 1
 #endif
+#if __has_include("openvoice2.h")
+#include "openvoice2.h"
+#define CA_HAVE_OPEN_VOICE2 1
+#endif
 #if __has_include("chatterbox.h")
 #include "chatterbox.h"
 #define CA_HAVE_CHATTERBOX 1
@@ -2373,6 +2377,10 @@ struct crispasr_session {
 #endif
 #ifdef CA_HAVE_MELOTTS
     melotts_context* melotts_ctx = nullptr;
+#endif
+#ifdef CA_HAVE_OPEN_VOICE2
+    openvoice2_context* ov2_ctx = nullptr;
+    std::vector<float> ov2_ref_pcm; // ref pcm data from  *.wav (set_voice)
 #endif
 #ifdef CA_HAVE_M2M100
     m2m100_context* m2m100_ctx = nullptr;
@@ -4725,6 +4733,9 @@ CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
         return supertonic_sample_rate(s->supertonic_ctx);
 #endif
 #ifdef CA_HAVE_MELOTTS
+    // NOTE: It's 22050 natively if voice cloning is on, but since making this
+    // value dynamic would complicate API usage, we will upsample to 44100
+    // when voice cloning is enabled to get a consistent output sample rate.
     if (s->melotts_ctx)
         return melotts_sample_rate(s->melotts_ctx);
 #endif
@@ -9149,6 +9160,39 @@ CA_EXPORT int crispasr_session_set_parakeet_att_context(crispasr_session* s, int
 CA_EXPORT int crispasr_session_set_codec_path(crispasr_session* s, const char* path) {
     if (!s || !path)
         return -1;
+#ifdef CA_HAVE_MELOTTS // uses ov2
+#ifdef CA_HAVE_OPEN_VOICE2
+    if (s->melotts_ctx) {
+        // already loaded
+        if (s->ov2_ctx) {
+            return 0;
+        }
+
+        FILE* test = fopen(path, "rb");
+        if (test) {
+            fclose(test);
+            auto cp = openvoice2_context_default_params();
+
+            cp.n_threads = s->n_threads;
+            cp.use_gpu = s->use_gpu;
+
+            s->ov2_ctx = openvoice2_init_from_file(path, cp);
+
+            if (s->ov2_ctx) {
+                const char* dd = crispasr_env::get("CRISPASR_OV2_DUMP_DIR");
+                if (dd) {
+                    openvoice2_set_dump_dir(s->ov2_ctx, dd);
+                }
+                fprintf(stderr, "crispasr[melo-tts]: OpenVoice2 TCC loaded as codec from '%s'\n", path);
+                return 0;
+            }
+        }
+
+        fprintf(stderr, "crispasr[melo-tts]: failed loading codec model path '%s' as OpenVoice2 TCC\n", path);
+        return -1;
+    }
+#endif
+#endif
 #ifdef CA_HAVE_QWEN3_TTS
     if (s->qwen3_tts_ctx)
         return qwen3_tts_set_codec_path(s->qwen3_tts_ctx, path);
@@ -9395,6 +9439,36 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
     if (s->supertonic_ctx) {
         // `path` is a preset name (F1..F5 / M1..M5); Supertonic-3 has no cloning.
         return supertonic_set_voice(s->supertonic_ctx, path);
+    }
+#endif
+#ifdef CA_HAVE_MELOTTS
+    if (s->melotts_ctx) {
+#ifdef CA_HAVE_OPEN_VOICE2
+        // Stash a 22050 Hz mono reference for voice cloning.
+        if (!ends_with_wav(path)) {
+            fprintf(stderr, "crispasr[melo-tts]: expected a wav file instead of '%s' as a reference\n", path);
+            return -2;
+        }
+        if (!s->ov2_ctx) {
+            fprintf(stderr, "crispasr[melo-tts]: OpenVoice2 model must be loaded as a codec for voice cloning\n");
+            return -2;
+        }
+        float* pcm = nullptr;
+        int input_sr = crispasr_session_input_sample_rate(s);
+        int n = 0, sr = 0;
+        if (crispasr_audio_load_at_rate(path, input_sr, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
+            fprintf(stderr, "crispasr[melo-tts]: got a error loading '%s' as a reference\n", path);
+            if (pcm)
+                free(pcm);
+            return -1;
+        }
+        s->ov2_ref_pcm.assign(pcm, pcm + n);
+        free(pcm);
+        return 0;
+#else
+        fprintf(stderr, "melo-tts requires OpenVoice2 for voice cloning.\n");
+        return -2;
+#endif
     }
 #endif
 #ifdef CA_HAVE_COSYVOICE3
@@ -10480,35 +10554,41 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
 #endif
 #ifdef CA_HAVE_MELOTTS
     if (s->melotts_ctx) {
-        // MeloTTS synthesises at 44.1 kHz; resample to 24 kHz for session contract.
         float* src = nullptr;
         int sr = 0;
-        const int nIn = melotts_synthesize(s->melotts_ctx, text, &src, &sr);
-        if (!src || nIn <= 0) {
+        int n = melotts_synthesize(s->melotts_ctx, text, &src, &sr);
+        if (!src || n <= 0) {
             if (src)
                 free(src);
             return nullptr;
         }
-        if (sr <= 0)
-            sr = 44100;
-        const int64_t nOut = (int64_t)nIn * 24000 / sr;
-        float* dst = (float*)malloc((size_t)(nOut > 0 ? nOut : 1) * sizeof(float));
-        if (!dst) {
+        if (s->ov2_ctx && !s->ov2_ref_pcm.empty()) {
+            int in_sr = crispasr_session_input_sample_rate(s);
+            int out_sr = crispasr_session_output_sample_rate(s);
+
+            float* out_pcm = nullptr;
+            bool converted = openvoice2_convert(s->ov2_ctx, src, n, out_sr, s->ov2_ref_pcm.data(),
+                                                (int)s->ov2_ref_pcm.size(), in_sr, &out_pcm, &n);
+
             free(src);
-            return nullptr;
+
+            if (!converted) {
+                // NOTE: In the cli, non-converted audio is returned. Here, we fail instead.
+                fprintf(stderr, "crispasr[melo-tts]: voice conversion/cloning failed.\n");
+                n = 0;
+                return nullptr;
+            }
+            // resample to out_sr
+            std::vector<float> out_pcm_resampled = core_audio::resample_polyphase(out_pcm, n, in_sr, out_sr);
+            n = out_pcm_resampled.size();
+            src = static_cast<float*>(std::malloc(out_pcm_resampled.size() * sizeof(float)));
+            if (src)
+                std::memcpy(src, out_pcm_resampled.data(), out_pcm_resampled.size() * sizeof(float));
+            out_pcm_resampled = {};
         }
-        const double ratio = (double)sr / 24000.0;
-        for (int64_t j = 0; j < nOut; ++j) {
-            const double pos = (double)j * ratio;
-            const int64_t i0 = (int64_t)pos;
-            const int64_t i1 = (i0 + 1 < nIn) ? i0 + 1 : nIn - 1;
-            const double frac = pos - (double)i0;
-            dst[j] = (float)((double)src[i0] * (1.0 - frac) + (double)src[i1] * frac);
-        }
-        melotts_pcm_free(src);
-        if (out_n_samples)
-            *out_n_samples = (int)nOut;
-        return dst;
+        if (src && out_n_samples)
+            *out_n_samples = n;
+        return src;
     }
 #endif
     return nullptr;
@@ -12373,6 +12453,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_MELOTTS
     if (s->melotts_ctx)
         melotts_free(s->melotts_ctx);
+#endif
+#ifdef CA_HAVE_OPEN_VOICE2
+    if (s->ov2_ctx)
+        openvoice2_free(s->ov2_ctx);
 #endif
 #ifdef CA_HAVE_M2M100
     if (s->m2m100_ctx)
