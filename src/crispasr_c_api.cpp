@@ -10477,42 +10477,18 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
 #endif
 #ifdef CA_HAVE_PIPER
     if (s->piper_ctx) {
-        // Piper synthesises at 22.05 kHz mono; the session synth contract
-        // (and the Dart `synthesize` path) is a fixed 24 kHz. Resample with
-        // linear interpolation so the host's 24 kHz playback stays correct.
+        // Piper synthesises at 22.05 kHz mono
         float* src = nullptr;
         int sr = 0;
-        const int nIn = piper_tts_synthesize(s->piper_ctx, text, &src, &sr);
-        if (!src || nIn <= 0) {
+        const int n = piper_tts_synthesize(s->piper_ctx, text, &src, &sr);
+        if (!src || n <= 0) {
             if (src)
                 free(src);
             return nullptr;
         }
-        if (sr <= 0)
-            sr = 22050;
-        if (sr == 24000) {
-            if (out_n_samples)
-                *out_n_samples = nIn;
-            return src; // already the host rate — pass through
-        }
-        const int64_t nOut = (int64_t)nIn * 24000 / sr;
-        float* dst = (float*)malloc((size_t)(nOut > 0 ? nOut : 1) * sizeof(float));
-        if (!dst) {
-            free(src);
-            return nullptr;
-        }
-        const double ratio = (double)sr / 24000.0;
-        for (int64_t j = 0; j < nOut; ++j) {
-            const double pos = (double)j * ratio;
-            const int64_t i0 = (int64_t)pos;
-            const int64_t i1 = (i0 + 1 < nIn) ? i0 + 1 : nIn - 1;
-            const double frac = pos - (double)i0;
-            dst[j] = (float)((double)src[i0] * (1.0 - frac) + (double)src[i1] * frac);
-        }
-        free(src);
         if (out_n_samples)
-            *out_n_samples = (int)nOut;
-        return dst;
+            *out_n_samples = n;
+        return src;
     }
 #endif
 #ifdef CA_HAVE_MELOTTS
