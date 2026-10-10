@@ -1228,6 +1228,10 @@ static bool openvoice2_target_se(openvoice2_context* ctx, const float* ref_pcm, 
 
 // ── Main voice conversion API ────────────────────────────────────────
 
+extern "C" int openvoice2_sample_rate(const struct openvoice2_context* ctx) {
+    return ctx ? ctx->hp.sample_rate : 0;
+}
+
 extern "C" bool openvoice2_convert(struct openvoice2_context* ctx, const float* src_pcm, int n_src, int src_sr,
                                    const float* ref_pcm, int n_ref, int ref_sr, float** out_pcm, int* n_out) {
     if (!ctx || !src_pcm || !ref_pcm || !out_pcm || !n_out)

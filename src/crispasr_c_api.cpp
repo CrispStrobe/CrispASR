@@ -24,7 +24,7 @@
 #include "core/ngram_loop_fix.h"
 #include "core/asr_time_order.h"
 #include "core/segment_hygiene.h" // §W2/§W5/§W6 opt-in segment cleanup    // fix/session-long-audio: collapse decode loops in merged chunks (issue #218)
-#include "parakeet_orchestrate.h"  // improvements Phase 1: shared parakeet transcribe orchestration
+#include "parakeet_orchestrate.h" // improvements Phase 1: shared parakeet transcribe orchestration
 #include "core/gpu_backend_pref.h" // crispasr_set_gpu_backend_pref (#214)
 #include "core/audio_resample.h"   // Sidon S2S input-rate conversion
 #include "core/wav_reader.h"       // fireredtts3 set_voice WAV decode
@@ -4595,7 +4595,7 @@ CA_EXPORT int crispasr_session_input_sample_rate(crispasr_session* s) {
     if (s->backend.find("melo") == 0 && s->melotts_ctx)
         return 22050;
 #endif
-    // Backends that operate at 24 kHz internally.
+        // Backends that operate at 24 kHz internally.
 #ifdef CA_HAVE_BT2_TTS
     if (s->backend.find("bt2-tts") == 0 && s->bt2_ctx)
         return 24000;
@@ -4640,7 +4640,7 @@ CA_EXPORT int crispasr_session_input_sample_rate(crispasr_session* s) {
     if (s->kyutai_ctx)
         return 24000;
 #endif
-    // Backends with model-level sample_rate hparams.
+        // Backends with model-level sample_rate hparams.
 #ifdef CA_HAVE_MOSS_TTS
     // Same for input and output (24 kHz)
     if (s->moss_tts_ctx)
@@ -4714,7 +4714,11 @@ CA_EXPORT int crispasr_session_set_pcm_sample_rate(crispasr_session* s, int rate
 CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
     if (!s)
         return 0;
-    // Rate is a model hparam — ask the context (CLI-adapter fallbacks kept).
+        // Rate is a model hparam — ask the context (CLI-adapter fallbacks kept).
+#if defined(CA_HAVE_MELOTTS) && defined(CA_HAVE_OPEN_VOICE2)
+    if (s->melotts_ctx && s->ov2_ctx && !s->ov2_ref_pcm.empty())
+        return openvoice2_sample_rate(s->ov2_ctx);
+#endif
 #ifdef CA_HAVE_BANANAMIND_TTS
     if (s->bananamind_tts_ctx)
         return bananamind_tts_sample_rate(s->bananamind_tts_ctx);
@@ -4754,7 +4758,7 @@ CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
     if (s->piper_ctx)
         return piper_tts_sample_rate(s->piper_ctx);
 #endif
-    // Fixed non-24 kHz rates (same constants as the CLI adapters).
+        // Fixed non-24 kHz rates (same constants as the CLI adapters).
 #ifdef CA_HAVE_DIA
     if (s->dia_tts_ctx)
         return 44100;
@@ -4791,7 +4795,7 @@ CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
     if (s->speecht5_ctx)
         return 16000;
 #endif
-    // Every remaining audio-producing ctx uses the 24 kHz adapter default.
+        // Every remaining audio-producing ctx uses the 24 kHz adapter default.
 #ifdef CA_HAVE_BT2_TTS
     // Breeze-TTS-2 renders through the qwen3-tts-tokenizer-12hz codec (24 kHz),
     // as its CLI adapter's tts_sample_rate() says. It had no arm here and
@@ -9216,7 +9220,9 @@ CA_EXPORT int crispasr_session_set_codec_path(crispasr_session* s, const char* p
     if (s->mini_omni2_ctx) {
         if (!mini_omni2_load_snac(s->mini_omni2_ctx, path)) {
             fprintf(stderr, "crispasr[mini-omni2]: failed loading SNAC codec from '%s'\n", path);
+            return -1;
         }
+        return 0;
     }
 #endif
 #ifdef CA_HAVE_ORPHEUS
@@ -9372,6 +9378,40 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         return true;
     };
 
+#ifdef CA_HAVE_BT2_TTS
+    std::vector<float> bt2_ref_pcm;
+    std::string bt2_ref_text;
+    if (s->bt2_ctx) {
+        // Stash a 24 kHz mono reference for voice cloning.
+        if (!ends_with_wav(path)) {
+            fprintf(stderr, "crispasr[bt2-tts]: expected a wav file instead of '%s' as a reference\n", path);
+            return -2;
+        }
+        // ref_text is required
+        std::string ref_text = ref_text_or_null ? ref_text_or_null : "";
+        if (ref_text.empty()) {
+            fprintf(stderr,
+                    "crispasr[bt2-tts]: cloning from '%s' needs a transcript of that clip, and none "
+                    "was given.\n"
+                    "  Pass the exact transcript as the ref_text argument.\n",
+                    path);
+            return -2;
+        }
+        float* pcm = nullptr;
+        int input_sr = crispasr_session_input_sample_rate(s);
+        int n = 0, sr = 0;
+        if (crispasr_audio_load_at_rate(path, input_sr, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
+            fprintf(stderr, "crispasr[bt2-tts]: got a error loading '%s' as a reference\n", path);
+            if (pcm)
+                free(pcm);
+            return -1;
+        }
+        bt2_ref_pcm.assign(pcm, pcm + n);
+        free(pcm);
+        bt2_ref_text = std::move(ref_text);
+    }
+#endif
+
     // Record whether this is a voice CLONE (reference WAV) as opposed to a
     // preset/bank voice name. Every backend arm below reaches the same
     // conclusion from the same test, so it is done once here — the arms then
@@ -9454,6 +9494,7 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
             return -1;
         }
         if (irodori_tts_set_reference(s->irodori_ctx, pcm, n, sr)) {
+            free(pcm);
             fprintf(stderr, "crispasr[irodori-tts]: got a error setting pcm data from '%s' as a reference\n", path);
             return -1;
         }
@@ -9493,33 +9534,8 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
 #endif
 #ifdef CA_HAVE_BT2_TTS
     if (s->bt2_ctx) {
-        // Stash a 24 kHz mono reference for voice cloning.
-        if (!ends_with_wav(path)) {
-            fprintf(stderr, "crispasr[bt2-tts]: expected a wav file instead of '%s' as a reference\n", path);
-            return -2;
-        }
-        float* pcm = nullptr;
-        int input_sr = crispasr_session_input_sample_rate(s);
-        int n = 0, sr = 0;
-        if (crispasr_audio_load_at_rate(path, input_sr, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
-            fprintf(stderr, "crispasr[bt2-tts]: got a error loading '%s' as a reference\n", path);
-            if (pcm)
-                free(pcm);
-            return -1;
-        }
-        s->bt2_ref_pcm.assign(pcm, pcm + n);
-        free(pcm);
-        // ref_text is required
-        std::string ref_text = ref_text_or_null ? ref_text_or_null : "";
-        if (ref_text.empty()) {
-            fprintf(stderr,
-                    "crispasr[bt2-tts]: cloning from '%s' needs a transcript of that clip, and none "
-                    "was given.\n"
-                    "  Pass the exact transcript as the ref_text argument.\n",
-                    path);
-            return -2;
-        }
-        s->bt2_ref_text = ref_text;
+        s->bt2_ref_pcm.swap(bt2_ref_pcm);
+        s->bt2_ref_text.swap(bt2_ref_text);
         return 0;
     }
 #endif
@@ -9706,7 +9722,9 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         int ref_n_vq = 0, ref_t_audio = 0;
         int32_t* ref_codes =
             moss_tts_local_encode_reference(s->moss_tts_local_ctx, pcm, n, sr, &ref_n_vq, &ref_t_audio);
-        if (!ref_codes) {
+        free(pcm);
+        if (!ref_codes || ref_n_vq <= 0 || ref_t_audio <= 0) {
+            free(ref_codes);
             fprintf(stderr, "crispasr[moss-tts-local]: failed to set reference voice from '%s'\n", path);
             return -1;
         }
@@ -9716,12 +9734,17 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         p.ref_n_vq = ref_n_vq;
         p.ref_t_audio = ref_t_audio;
 
-        s->moss_tts_local_params =
-            static_cast<moss_tts_local_synth_params*>(std::malloc(sizeof(moss_tts_local_synth_params)));
-        if (s->moss_tts_local_params) {
-            *s->moss_tts_local_params = p;
+        auto* replacement = static_cast<moss_tts_local_synth_params*>(std::malloc(sizeof(moss_tts_local_synth_params)));
+        if (!replacement) {
+            free(ref_codes);
+            return -1;
         }
-        free(pcm);
+        *replacement = p;
+        if (s->moss_tts_local_params) {
+            std::free(const_cast<int32_t*>(s->moss_tts_local_params->ref_codes));
+            std::free(s->moss_tts_local_params);
+        }
+        s->moss_tts_local_params = replacement;
         return 0;
     }
 #endif
@@ -10635,30 +10658,27 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
                 free(src);
             return nullptr;
         }
+#ifdef CA_HAVE_OPEN_VOICE2
         if (s->ov2_ctx && !s->ov2_ref_pcm.empty()) {
             int in_sr = crispasr_session_input_sample_rate(s);
-            int out_sr = crispasr_session_output_sample_rate(s);
 
             float* out_pcm = nullptr;
-            bool converted = openvoice2_convert(s->ov2_ctx, src, n, out_sr, s->ov2_ref_pcm.data(),
+            bool converted = openvoice2_convert(s->ov2_ctx, src, n, sr, s->ov2_ref_pcm.data(),
                                                 (int)s->ov2_ref_pcm.size(), in_sr, &out_pcm, &n);
 
             free(src);
 
-            if (!converted) {
+            if (!converted || !out_pcm || n <= 0) {
+                free(out_pcm);
                 // NOTE: In the cli, non-converted audio is returned. Here, we fail instead.
                 fprintf(stderr, "crispasr[melo-tts]: voice conversion/cloning failed.\n");
                 n = 0;
                 return nullptr;
             }
-            // resample to out_sr
-            std::vector<float> out_pcm_resampled = core_audio::resample_polyphase(out_pcm, n, in_sr, out_sr);
-            n = out_pcm_resampled.size();
-            src = static_cast<float*>(std::malloc(out_pcm_resampled.size() * sizeof(float)));
-            if (src)
-                std::memcpy(src, out_pcm_resampled.data(), out_pcm_resampled.size() * sizeof(float));
-            out_pcm_resampled = {};
+            // Return the converter's native PCM; the rate getter reports it.
+            src = out_pcm;
         }
+#endif
         if (src && out_n_samples)
             *out_n_samples = n;
         return src;
@@ -12350,8 +12370,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_MOSS_TTS_LOCAL
     if (s->moss_tts_local_ctx)
         moss_tts_local_free(s->moss_tts_local_ctx);
-    if (s->moss_tts_local_params)
+    if (s->moss_tts_local_params) {
+        std::free(const_cast<int32_t*>(s->moss_tts_local_params->ref_codes));
         std::free(s->moss_tts_local_params);
+    }
 #endif
 #ifdef CA_HAVE_OMNIVOICE
     if (s->omnivoice_ctx)
@@ -12911,7 +12933,7 @@ CA_EXPORT int crispasr_session_set_punctuation(crispasr_session* s, int enable) 
 CA_EXPORT int crispasr_session_set_punc_model(crispasr_session* s, const char* punc_model) {
     if (!s)
         return -1;
-    // Unload any currently-resident context first.
+        // Unload any currently-resident context first.
 #ifdef CA_HAVE_FIREREDPUNC
     if (s->punc_ctx) {
         fireredpunc_free((fireredpunc_context*)s->punc_ctx);

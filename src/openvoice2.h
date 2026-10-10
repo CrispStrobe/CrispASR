@@ -34,6 +34,9 @@ struct openvoice2_context_params openvoice2_context_default_params(void);
 // Load the Tone Color Converter GGUF model.
 struct openvoice2_context* openvoice2_init_from_file(const char* path, struct openvoice2_context_params params);
 
+// Native converted output rate from the loaded model metadata (0 for null).
+int openvoice2_sample_rate(const struct openvoice2_context* ctx);
+
 // Convert source audio to match reference speaker's voice.
 // src_pcm/ref_pcm: mono float PCM (any sample rate, resampled internally to 22050).
 // out_pcm: allocated by callee, caller must free().

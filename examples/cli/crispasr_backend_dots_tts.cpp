@@ -72,7 +72,7 @@ public:
 
     const char* name() const override { return "dots-tts"; }
 
-    uint32_t capabilities() const override { return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE; }
+    uint32_t capabilities() const override { return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_VOICE_CLONING; }
 
     int tts_sample_rate() const override { return 48000; }
 

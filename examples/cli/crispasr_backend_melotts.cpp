@@ -229,8 +229,8 @@ public:
                                    ref_sr_, &cloned_pcm, &n_cloned)) {
                 out.assign(cloned_pcm, cloned_pcm + n_cloned);
                 free(cloned_pcm);
-                // Output sample rate changes to OpenVoice2's rate (22050)
-                ov2_output_sr_ = 22050;
+                // Output sample rate follows the companion model metadata.
+                ov2_output_sr_ = openvoice2_sample_rate(ov2_ctx_);
             } else {
                 fprintf(stderr, "melotts: OpenVoice2 voice conversion failed, "
                                 "returning original audio\n");

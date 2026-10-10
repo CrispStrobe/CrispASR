@@ -143,6 +143,9 @@ jobs:
       - name: Run the unit tier
         run: ctest --test-dir build -L unit -E live --output-on-failure --timeout 300
 
+      - name: TTS session failure, ownership and conversion contracts
+        run: python3 tests/test_tts_session_contracts.py -v
+
   # ===========================================================================
   # The -DCRISPASR_AMR_FETCH=ON path compiles opencore-amr from source (for
   # platforms without a system libopencore-amr). It is OFF by default, so the
