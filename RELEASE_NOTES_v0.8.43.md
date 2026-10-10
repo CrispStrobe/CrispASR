@@ -173,18 +173,15 @@ run exactly, F16 passes all three stages, and all 24 original frame-layer
 controls pass for F16. These mostly-source diagnostic hybrids are excluded
 from production quantization and release performance claims. See [nemotron-encoder-attention-2026-10-09.json](docs/nemotron-encoder-attention-2026-10-09.json).
 
-A subsequent mostly-source Nemotron hybrid, retaining FFN/QKV/attention-out
-precision and quantizing position projections to Q4_K, passes all three
-unchanged stage gates (encoder cosine 0.999842) and all 24 original layer
-comparisons. Final relative L2 is 0.00309294. This 1,179,413,408-byte artifact
-contains only 14,155,776 bytes of Q4 tensors; its 8.3% saving from F16 is not
-a compact production Q4 or speed claim. Full original transcript/state and
-actual GPU validation remain pending; it is excluded from release quant pins.
-See [late-layer proof](docs/nemotron-encoder-late-layer-2026-10-09.json).
+A mostly-source Nemotron hybrid, retaining FFN/QKV/attention-out precision
+and quantizing position projections to Q4_K, passes all three unchanged CPU
+stage gates (encoder cosine 0.999842) and all 24 original layer comparisons.
+Final relative L2 is 0.00309294. It also matches 26/26 original word controls,
+22/22 VoxCPM2 controls and exact fresh/reverse-reused outputs. Its model hash
+and protected/unprotected tensor ledger were independently verified.
 
-The mostly-source Nemotron position-Q4 candidate subsequently passed CPU
-original decoded controls: 26/26 original word matches, 22/22 VoxCPM2 controls,
-and exact fresh/reverse-reused outputs after unchanged stage gates. Its exact
-model hash and protected/unprotected tensor ledger were independently verified.
-It remains experimental and unpromoted pending actual GPU validation.
-Proof: [original decoded controls](docs/nemotron-q4-original-controls-2026-10-10.json).
+This 1,179,413,408-byte artifact contains only 14,155,776 bytes of Q4 tensors;
+its 8.3% saving from F16 is not a compact production Q4 or speed claim. Actual
+GPU validation remains pending, and it is excluded from release quant pins.
+See [stage/layer proof](docs/nemotron-encoder-late-layer-2026-10-09.json)
+and [original decoded controls](docs/nemotron-q4-original-controls-2026-10-10.json).

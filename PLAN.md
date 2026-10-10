@@ -3868,3 +3868,30 @@ F16 first, then pinned candidate, save separate full stage arrays/decoded/state/
 streaming results, and accept only if both complete. Gate quantized hardware
 validation below compute capability 6.1 as inconclusive; do not fish for hardware.
 No CPU build/quant/reference work on Kaggle and no production quant pin.
+
+
+Corrected real CUDA package version 4 is terminal COMPLETE on dual Tesla T4
+with CUDA runtime 12.8/driver 580.178.04. Exact archive/source/plugin hashes and
+pulled worker bytes agree. Actual C ABI loads packaged CPU/CUDA plugins and
+allocates 1,330 MiB on its own PID. All three unchanged F16 stage gates pass
+(encoder .99999088, relative L2 .000280039); 26 original fresh/reused controls
+and native streaming presets 0/2/3 pass. Public full arrays/output/source proof
+DATASET `cstr/crispasr-regression-fixtures@ce47022770e44caa5da782490ed7b7b6466388ef`,
+path `experimental/release-package-37988408052/cuda-package-hardware-proof.zip`,
+SHA `def2692c3663fc6f11da2d0d8863c98c11d2361bd9c861f99232b4b9e7789504`.
+All 50 applicable PR #528 checks now pass (one intentional skip); old Docker
+HTTP 429 failures passed unchanged-source reruns. Accepted for integration,
+not yet final release-tip matrix validation.
+Candidate GPU worker `2edfd1c5a` is pushed on `probe/release-cuda-hardware`.
+Each F16/candidate arm runs in a fresh process, so cached allocations cannot
+satisfy another model's proof. Syntax/diff and all four secret checks pass,
+no skips (53.975 seconds). Predeclared kernel
+`${KAGGLE_ACCOUNT}/crispasr-nemotron-position-q4-validation` remains prepared
+for launch; both arms must pass separately before a combined verdict.
+
+Contributor reviews posted: [#529](https://github.com/CrispStrobe/CrispASR/pull/529#pullrequestreview-5477583473)
+requests preserved exported C API and original guided model parity; [#530](https://github.com/CrispStrobe/CrispASR/pull/530#pullrequestreview-5477583717)
+requests atomic Breeze reference setters, owned Moss/OpenVoice buffers,
+propagated SNAC load errors and regenerated CLI capability data. Twelve pending
+fork workflow runs were approved after the full patch review; CI is running.
+Do not merge these contributor PRs based on generic build checks alone.
