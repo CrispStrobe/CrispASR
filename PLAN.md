@@ -3828,14 +3828,26 @@ failed jobs rerun without changing source or acceptance gates. Other checks,
 including the actual dynamic C ABI regression, pass.
 
 
-## CLAIMED 2026-10-10 — Index-Echo 9B model card history cleanup
+CUDA package worker `759b421362f17dfa7d50da3958ee138211c31ad8` is pushed,
+version `2026-10-10.release-package.4`. Syntax/diff checks and all four secret
+checks pass with no skips (166.763 seconds). The exact corrected archive
+passes dependency closure and actual local C ABI CPU-plugin initialization on
+both CPU/GPU-requested routes after extraction completes. Public byte-identical
+mirror DATASET `cstr/crispasr-regression-fixtures@67b9fb956ee5498be8f97567d27c2a607155bb4d`,
+path `experimental/release-package-37988408052/crispasr-linux-x86_64-cuda.tar.gz`,
+remote SHA `a38c111037c8a6ae7b46c0a9bd1553271890daf72a42d893b74df76ccf7de79d`
+is verified. Single-account scan of 30 recent kernels found no active sessions.
+Predeclared launch retains unchanged F16 stages/transcripts/state/streaming and
+requires actual packaged CUDA plugin loading plus allocations on its own PID.
+No new package GPU acceptance until terminal proof.
 
-User requests moving historical notes from `cstr/index-echo-9b-GGUF` into
-CrispASR `HISTORY.md`. Work in the existing storage docs worktree. Archive the
-full acceptance/performance narrative from immutable HF README revision
-`83ac9d70bd3eaec34cc1dc19dbff605ce5869d85`, preserving proof links and rejected
-experiments. Keep the HF card focused on current files, usage, memory,
-compatibility, accepted precision and provenance; link to the committed history.
-Publish the shortened card only after the archive is committed/pushed, using
-HF parent-commit protection to avoid overwriting concurrent edits. No model
-binary, license, quantization default or validation verdict changes.
+## CLAIMED 2026-10-10 — Review contributor PRs #529 and #530
+
+Inspect exact heads `08ff8c5c492031ea94a42964f8fa21cd11dd2691` and
+`5fce2351533617e35bba13711ac3319dbe870e08`, including all comments/reviews,
+full diffs and CI. #529 has 49 successful checks and one intentional skip;
+new two-branch guidance lacks original model parity and changes existing
+exported C APIs. #530 fork workflows required maintainer approval; approved
+only unchanged checks after reading code. Review the sample-rate fixes,
+reference-buffer lifetime and failure-state contracts before integration.
+No new contributor PR merge or acceptance from generic build checks alone.

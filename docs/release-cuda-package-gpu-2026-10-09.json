@@ -98,7 +98,7 @@
   "corrected_package_rebuild": {
     "run": 37988408052,
     "source": "37a90a37c9871ff4d4cf915993acec2b734293cd",
-    "status": "queued",
+    "status": "success",
     "publication_requested": false,
     "previous_attempt": {
       "run": 37977686803,
@@ -117,6 +117,76 @@
       "skips": 0,
       "seconds": 122.715
     },
-    "ci_run": 37988394079
+    "ci_run": 37988394079,
+    "inspection": {
+      "gh_run": 37988408052,
+      "gh_artifact": 11648407040,
+      "source": "37a90a37c9871ff4d4cf915993acec2b734293cd",
+      "artifact_zip_sha256": "9fb257ffcf9e2f06abf2c82a58d9aca34188a4301e49444ae61b01c25bc124fe",
+      "tar": "/mnt/storage/crispasr/salvage-20261008/proof/release-cuda-37988408052/archive/crispasr-linux-x86_64-cuda.tar.gz",
+      "tar_sha256": "a38c111037c8a6ae7b46c0a9bd1553271890daf72a42d893b74df76ccf7de79d",
+      "tar_bytes": 225372192,
+      "cli_version": "=== build info ===\n  version       : 0.8.42\n  git sha       : 37a90a37\n  git date      : 2026-10-09T20:38:52Z\n  git subject   : fix-_preserve_UTF-8_plugin_paths_under_C..17_and_C..20\n  build date    : 2026-10-09T21:06:19Z\n  build type    : Release\n  compiler      : gcc 11.4.0\n  os            : linux\n  arch          : x86_64\n  ggml backends : cpu,cuda\n  cuda toolkit  : 12.8.93 (build/link target)\n  cuda runtime ABI: 12 (matching major-version runtime libraries required)\n  cuda archs    : 60-real,61-real,70-real,75-real,80-real,86-real,89-real,90-real,90-virtual,120-real,120-virtual\n\n",
+      "cuda_plugin_sha256": "523580f83e8d62308c8a826a028d68ecaf16b287b40d6b80e371ad72762c6bc7",
+      "files": [
+        "LICENSE",
+        "THIRD_PARTY_NOTICES.txt",
+        "crispasr",
+        "crispasr-quantize",
+        "libc2pa_c.so",
+        "libcrispasr.so.1",
+        "libgfortran.so.5",
+        "libggml-base.so.0",
+        "libggml-cpu-alderlake.so",
+        "libggml-cpu-cannonlake.so",
+        "libggml-cpu-cascadelake.so",
+        "libggml-cpu-cooperlake.so",
+        "libggml-cpu-haswell.so",
+        "libggml-cpu-icelake.so",
+        "libggml-cpu-ivybridge.so",
+        "libggml-cpu-piledriver.so",
+        "libggml-cpu-sandybridge.so",
+        "libggml-cpu-sapphirerapids.so",
+        "libggml-cpu-skylakex.so",
+        "libggml-cpu-sse42.so",
+        "libggml-cpu-x64.so",
+        "libggml-cpu-zen4.so",
+        "libggml-cuda.so",
+        "libggml.so.0",
+        "libgomp.so.1",
+        "libopenblas.so.0",
+        "libquadmath.so.0"
+      ],
+      "rebuilt": false,
+      "gpu_validated": false
+    },
+    "public_mirror": {
+      "repo": "cstr/crispasr-regression-fixtures",
+      "repo_type": "dataset",
+      "path": "experimental/release-package-37988408052/crispasr-linux-x86_64-cuda.tar.gz",
+      "revision": "67b9fb956ee5498be8f97567d27c2a607155bb4d",
+      "sha256": "a38c111037c8a6ae7b46c0a9bd1553271890daf72a42d893b74df76ccf7de79d",
+      "bytes": 225372192,
+      "remote_sha256_verified": true,
+      "gh_run": 37988408052,
+      "gh_artifact": 11648407040,
+      "source": "37a90a37c9871ff4d4cf915993acec2b734293cd",
+      "rebuilt": false
+    },
+    "local_cpu_plugin_routes_passed": [
+      0,
+      1
+    ],
+    "gpu_worker": {
+      "source": "759b421362f17dfa7d50da3958ee138211c31ad8",
+      "version": "2026-10-10.release-package.4",
+      "entry_sha256": "41bb2cb97f82b74ac1b3161844b6cf8fbb4f78c0a62f444afdcf6831094a28b5",
+      "secret_tests_passed": 4,
+      "secret_skips": 0,
+      "secret_seconds": 166.763,
+      "status": "prepared",
+      "kernel": "${KAGGLE_ACCOUNT}/crispasr-release-cuda-package-validation",
+      "gpu_validated": false
+    }
   }
 }

@@ -15,6 +15,7 @@ card to this development archive. Original card:
 This preserves its acceptance evidence, failed controls, proof links and measured
 performance. Current file/usage guidance remains on the Hugging Face model card.
 These are historical results from the recorded builds, rather than new validation.
+The shortened card is published at HF `70cbee15fa7fadb85829d9d8d3439a5cb8fbe52b`: 2,365 bytes versus 5,949 before (60.2% smaller). Only README changed; downloaded published bytes were verified. Receipt: `docs/index-echo-9b-model-card-2026-10-10.json`.
 
 ### Independent acceptance
 
