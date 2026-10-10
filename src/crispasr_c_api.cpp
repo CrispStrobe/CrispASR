@@ -10461,8 +10461,7 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
 #endif
 #ifdef CA_HAVE_PARLER_TTS
     if (s->parler_tts_ctx) {
-        // Parler outputs 44.1 kHz mono. Resample to 24 kHz for the session
-        // contract (Dart/Python playback path assumes 24 kHz).
+        // Parler outputs 44.1 kHz mono.
         // Temperature/seed set at open time or via set_temperature/set_tts_seed
         int n44 = 0;
         float* pcm44 = parler_tts_synthesize(s->parler_tts_ctx, text, &n44);
@@ -10471,25 +10470,9 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
                 parler_tts_pcm_free(pcm44);
             return nullptr;
         }
-        // 44100 → 24000 linear interpolation
-        const int64_t nOut = (int64_t)n44 * 24000 / 44100;
-        float* dst = (float*)malloc((size_t)(nOut > 0 ? nOut : 1) * sizeof(float));
-        if (!dst) {
-            parler_tts_pcm_free(pcm44);
-            return nullptr;
-        }
-        const double ratio = 44100.0 / 24000.0;
-        for (int64_t j = 0; j < nOut; ++j) {
-            const double pos = (double)j * ratio;
-            const int64_t i0 = (int64_t)pos;
-            const int64_t i1 = (i0 + 1 < n44) ? i0 + 1 : n44 - 1;
-            const double frac = pos - (double)i0;
-            dst[j] = (float)((double)pcm44[i0] * (1.0 - frac) + (double)pcm44[i1] * frac);
-        }
-        parler_tts_pcm_free(pcm44);
         if (out_n_samples)
-            *out_n_samples = (int)nOut;
-        return dst;
+            *out_n_samples = n44;
+        return pcm44;
     }
 #endif
 #ifdef CA_HAVE_PIPER
