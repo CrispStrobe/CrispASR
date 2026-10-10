@@ -1,0 +1,12 @@
+{
+  "repo": "cstr/index-echo-9b-GGUF",
+  "before_revision": "83ac9d70bd3eaec34cc1dc19dbff605ce5869d85",
+  "after_revision": "70cbee15fa7fadb85829d9d8d3439a5cb8fbe52b",
+  "before_bytes": 5949,
+  "after_bytes": 2365,
+  "readme_sha256": "239f388529af14ab5355dbae66e4050910dbb406f9c9eb42e68ef2fc997827ac",
+  "remote_bytes_verified": true,
+  "archive_commit": "9fd7dce0d",
+  "archive_url": "https://github.com/CrispStrobe/CrispASR/blob/main/HISTORY.md#index-echo-9b-model-card-archive-2026-10-10",
+  "only_readme_changed": true
+}

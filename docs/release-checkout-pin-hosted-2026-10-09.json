@@ -32,5 +32,12 @@
   "hosted_glint_validation": "success",
   "hosted_version_validation": "success",
   "hosted_python_package": "success",
-  "hosted_publication_requested": false
+  "hosted_publication_requested": false,
+  "integration": {
+    "pr": 527,
+    "tested_head": "ba74c8d009df080b4ed4cbaaeb8eef0247c8e0c5",
+    "merge_commit": "de24df02af46e68505d3dd7dc90d582b746192e3",
+    "applicable_checks_passed": 32,
+    "intentional_skips": 1
+  }
 }

@@ -1,0 +1,157 @@
+{
+  "version": "2026-10-10.nemotron-position-q4.1",
+  "kernel": "${KAGGLE_ACCOUNT}/crispasr-nemotron-position-q4-validation",
+  "status": "COMPLETE",
+  "validated": true,
+  "independently_verified": true,
+  "production_accepted": false,
+  "defaults_changed": false,
+  "models": {
+    "f16": {
+      "model_sha256": "14cbc98df495d8ab452c6a4ac367136d94ab5da55e73afaa96ba4f749dd95d09",
+      "model_revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
+      "source": "37a90a37c9871ff4d4cf915993acec2b734293cd",
+      "hardware": "Tesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB",
+      "cuda_runtime_version": 12080,
+      "driver_version": "580.178.04\n580.178.04",
+      "package_sha256": "a38c111037c8a6ae7b46c0a9bd1553271890daf72a42d893b74df76ccf7de79d",
+      "cuda_plugin_sha256": "523580f83e8d62308c8a826a028d68ecaf16b287b40d6b80e371ad72762c6bc7",
+      "entry_sha256": "7ecf19832c9fff76cf83d4c81e9812d5966e4aa80b072e7ab800168e4b48583b",
+      "loaded_ggml_plugins": [
+        "libggml-base.so.0",
+        "libggml-cpu-skylakex.so",
+        "libggml-cuda.so",
+        "libggml.so.0"
+      ],
+      "packaged_cabi_gpu_allocation": "9, 1330",
+      "gpu_process_allocations": "9, 1330",
+      "validated": true,
+      "stages": {
+        "mel_spectrogram": {
+          "cosine_min": 1.0,
+          "native_norm": 3802.327423724644,
+          "reference_norm": 3802.3278125707384,
+          "relative_l2": 1.0037382467243056e-05,
+          "max_abs": 0.006104469299316406,
+          "shape": [
+            128,
+            1101
+          ],
+          "passed": true
+        },
+        "pre_encode_output": {
+          "cosine_min": 1.0,
+          "native_norm": 35037.27131994719,
+          "reference_norm": 35037.281174288575,
+          "relative_l2": 4.749317146031651e-05,
+          "max_abs": 0.046783447265625,
+          "shape": [
+            139,
+            1024
+          ],
+          "passed": true
+        },
+        "encoder_output": {
+          "cosine_min": 0.9999908804893494,
+          "native_norm": 16.613050709011176,
+          "reference_norm": 16.612932357599302,
+          "relative_l2": 0.00028003937974455275,
+          "max_abs": 0.001037895679473877,
+          "shape": [
+            139,
+            1024
+          ],
+          "passed": true
+        }
+      },
+      "original_word_controls": 26,
+      "fresh_reused_exact": 26,
+      "native_streaming_presets": [
+        0,
+        2,
+        3
+      ],
+      "original_streaming_parity": false
+    },
+    "position-q4": {
+      "model_sha256": "84cefe0658e8d87fc55a704406f92c48224118f916f3d5b47a94817b7e315f28",
+      "model_revision": "545fbcf4615470b62aa6bca840c7444949acfa00",
+      "source": "37a90a37c9871ff4d4cf915993acec2b734293cd",
+      "hardware": "Tesla T4, 7.5, 15360 MiB\nTesla T4, 7.5, 15360 MiB",
+      "cuda_runtime_version": 12080,
+      "driver_version": "580.178.04\n580.178.04",
+      "package_sha256": "a38c111037c8a6ae7b46c0a9bd1553271890daf72a42d893b74df76ccf7de79d",
+      "cuda_plugin_sha256": "523580f83e8d62308c8a826a028d68ecaf16b287b40d6b80e371ad72762c6bc7",
+      "entry_sha256": "7ecf19832c9fff76cf83d4c81e9812d5966e4aa80b072e7ab800168e4b48583b",
+      "loaded_ggml_plugins": [
+        "libggml-base.so.0",
+        "libggml-cpu-skylakex.so",
+        "libggml-cuda.so",
+        "libggml.so.0"
+      ],
+      "packaged_cabi_gpu_allocation": "130, 1228",
+      "gpu_process_allocations": "130, 1228",
+      "validated": true,
+      "stages": {
+        "mel_spectrogram": {
+          "cosine_min": 1.0,
+          "native_norm": 3802.327423724644,
+          "reference_norm": 3802.3278125707384,
+          "relative_l2": 1.0037382467243056e-05,
+          "max_abs": 0.006104469299316406,
+          "shape": [
+            128,
+            1101
+          ],
+          "passed": true
+        },
+        "pre_encode_output": {
+          "cosine_min": 1.0,
+          "native_norm": 35037.27131994719,
+          "reference_norm": 35037.281174288575,
+          "relative_l2": 4.749317146031651e-05,
+          "max_abs": 0.046783447265625,
+          "shape": [
+            139,
+            1024
+          ],
+          "passed": true
+        },
+        "encoder_output": {
+          "cosine_min": 0.9997343420982361,
+          "native_norm": 16.612700792321405,
+          "reference_norm": 16.612932357599302,
+          "relative_l2": 0.0033563884837226905,
+          "max_abs": 0.004210218787193298,
+          "shape": [
+            139,
+            1024
+          ],
+          "passed": true
+        }
+      },
+      "original_word_controls": 26,
+      "fresh_reused_exact": 26,
+      "native_streaming_presets": [
+        0,
+        2,
+        3
+      ],
+      "original_streaming_parity": false
+    }
+  },
+  "limits": [
+    "Mostly source precision; only 14,155,776 bytes of Q4 payload",
+    "8.3% size saving, no speed claim",
+    "No specific MMQ kernel tracing or original streaming parity",
+    "No full 24-layer GPU capture validation"
+  ],
+  "public_proof": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "repo_type": "dataset",
+    "revision": "77235249ea4436b63dfd41b2048752c84aee789b",
+    "path": "experimental/nemotron-position-q4-20261010/cuda-hardware-proof.zip",
+    "sha256": "1bc7b09cc33932125151cc9fc2eec7c66851dc4b5339f71f023c8f9a5c9e7e55",
+    "bytes": 6279694
+  }
+}

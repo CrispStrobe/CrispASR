@@ -7,6 +7,65 @@ technical deep-dives are in `LEARNINGS.md`.
 ---
 
 
+## Index-Echo 9B model card archive (2026-10-10)
+
+The detailed validation and profiling notes below moved from the public model
+card to this development archive. Original card:
+[`cstr/index-echo-9b-GGUF@83ac9d70bd3eaec34cc1dc19dbff605ce5869d85`](https://huggingface.co/cstr/index-echo-9b-GGUF/blob/83ac9d70bd3eaec34cc1dc19dbff605ce5869d85/README.md).
+This preserves its acceptance evidence, failed controls, proof links and measured
+performance. Current file/usage guidance remains on the Hugging Face model card.
+These are historical results from the recorded builds, rather than new validation.
+The shortened card is published at HF `70cbee15fa7fadb85829d9d8d3439a5cb8fbe52b`: 2,365 bytes versus 5,949 before (60.2% smaller). Only README changed; downloaded published bytes were verified. Receipt: `docs/index-echo-9b-model-card-2026-10-10.json`.
+
+### Independent acceptance
+
+`acceptance.json` records immutable model/reference/source/build pins, artifact hashes, every stage cosine/magnitude check and retained evidence hashes. Independent reference captures call the original released `translate_window` generation and full-file VAD/context recipe, with all source parameters explicitly audited as F32. Original arithmetic, prompts and the 2000-token generation cap are preserved. Accelerate parent preloading prevents functional GDN convolution reads from offloaded meta weights; a real CPU/disk A/B verifies that fix.
+
+Across JFK, Chinese and a short tail, each device passes 225 numerical rows plus three prompt checks (228 reported checks), all 32 encoder and all 32 decoder layers, and 48 cached greedy predictions. Complete direct text and timestamps match through anonymous-filename C ABI loading and the CLI. The published download was independently revalidated on CUDA (script 2026-10-02.4), including all three stage/cache/direct clips, five full-file cases and three Piper roundtrips. The public pinned [9B nightly regression](https://github.com/CrispStrobe/CrispASR/actions/runs/37008624536) and protected [2B Q8 regression](https://github.com/CrispStrobe/CrispASR/actions/runs/37006905046) also pass. Green ARM CPU run [37002813123](https://github.com/CrispStrobe/CrispASR/actions/runs/37002813123) and real CUDA both match all five complete F32 file cases at the unchanged 5.1 ms timestamp bound: English control, Chinese → English/Japanese/Spanish, and two distinct Chinese phrases separated by a pause with prior-window context. VAD frame probabilities meet independent numerical bounds; GPU-requested VAD remains on its CPU scheduler and matches CPU-requested probabilities exactly. Three real Piper speech roundtrips pass English WER 0 and exact CLI/C ABI agreement.
+
+The earlier strict BF16 full-file comparisons remain retained as failed diagnostics: their last Chinese → English/Spanish boundaries differ by 20/40 ms from F32. Acceptance compares whole independent F32 cases, without mixing cues or relaxing tolerances. The fully resident released-default BF16 source is also retained separately.
+
+Plain Q8, selective Q8 and FFN-only Q8 are rejected because they change exact output; none is published here. Passing numerical or TTS checks alone does not accept a quantization. The original source also fails a separately preserved synthetic repeated-English context stress with repetitive output, parser warnings and out-of-recording timestamps. That failed source output is never an acceptance golden. Focused parity and three TTS cases are not a broad accuracy benchmark.
+
+### Provenance and license
+
+Source: [`IndexTeam/Index-Echo-S2TT-9B`](https://huggingface.co/IndexTeam/Index-Echo-S2TT-9B/tree/b8ac6fb7d3dc17cee48a52201bd3d93dc86b0dba), revision `b8ac6fb7d3dc17cee48a52201bd3d93dc86b0dba`. Decoder converter: `ggml-org/llama.cpp@42d958167a748f2c04b1f888e84e7a58f609ddcb`, F16 with `--no-mtp`. Apache-2.0 license copied from the pinned [upstream Index-Translate repository](https://github.com/bilibili/Index-Translate/blob/8168c799051b4180c32c4c0469d255e80fdb2b2d/LICENSE).
+
+CrispASR issue: [#485](https://github.com/CrispStrobe/CrispASR/issues/485). This receipt proves the listed focused cases; no speedup is inferred from the offloaded F32 source capture timings.
+
+### Measured GPU performance
+
+On the same two Tesla T4 GPUs, every timed output matches its independent direct reference in both execution orders. Three warm calls per clip: original resident BF16 Python 16.21–16.24 s versus native F16 12.20–12.24 s for JFK (1.33×), and 18.86–18.96 s versus 13.87–13.96 s for Chinese (1.36×). These compare actual implementations at different activation precision and default layer placement; loading/first calls are separate. Native inference here is slightly slower than realtime. Decoder generation accounts for about 86% of Chinese inference. Complete iterations and recorded placements are retained in [CrispASR's profile receipt](https://github.com/CrispStrobe/CrispASR/blob/main/docs/index-echo-9b-profile-2026-10-02.json). No timing from the offloaded F32 reference is used as a speed baseline.
+
+## DONE 2026-10-10 — Shared-library relative ggml plugin discovery
+
+[PR #528](https://github.com/CrispStrobe/CrispASR/pull/528) merged as
+`cf9f61c29a6ec4f19291f12611ce6bee9ff0add3` after all 50 applicable checks
+passed (one intentional skip). Python/other C ABI callers load adjacent ggml
+plugins for CPU-only and GPU sessions; POSIX/Windows module-location code
+preserves UTF-8 under C++17/C++20. The real staged C ABI regression fails
+against the old CUDA archive and passes after repair from a non-ASCII path
+without loader overrides. Exact corrected package source `37a90a37c` passes
+actual dual-T4 CUDA 12.8 hardware controls: its own PID allocates 1,330 MiB,
+all three F16 stage gates pass (encoder .99999088, relative L2 .000280039),
+26 original word controls match, with exact fresh/reused outputs and native long-turn streaming
+presets 0/2/3 pass packet/reset/flush checks. Public full arrays/receipts/source
+are pinned in `docs/release-cuda-package-gpu-2026-10-09.json`; older failed
+attempts remain archived there. No Windows GPU, original streaming parity,
+speed or new quantization claim. This is after v0.8.42.
+
+## DONE 2026-10-10 — Immutable release checkouts and WASM rate guidance
+
+[PR #527](https://github.com/CrispStrobe/CrispASR/pull/527) merged as
+`de24df02af46e68505d3dd7dc90d582b746192e3` after all 32 applicable checks
+passed (one intentional skip), including Windows CUDA 13 verification.
+All 33 release checkouts select the explicit tag or immutable event SHA.
+A hosted Python package probe preserved its dispatch source despite a later
+branch push. The generic WASM archive README uses the model output-rate getter;
+actual staged model-free API checks pass, without a synthesis/browser claim.
+Proof: `docs/release-checkout-pin-hosted-2026-10-09.json`.
+This is after v0.8.42.
+
 ## DONE 2026-10-09 — Packaged Python helper discovery
 
 [PR #526](https://github.com/CrispStrobe/CrispASR/pull/526) merged as
@@ -23415,3 +23474,21 @@ Release workflow 37850360339 completed SUCCESS; 53 binary/package assets
 are published. All platform jobs are terminal. Immutable tag/source and full
 asset digests are recorded in `docs/release-v0.8.42-validation.json`.
 Pending PR #492 salvage and OmniVoice/VoxCPM2/Echo experiments are excluded.
+
+
+## Nemotron position-Q4 hybrid CUDA control — 2026-10-10
+
+Fresh-process Kaggle version 1 completed on dual Tesla T4. Independently
+recomputed all six arrays per arm against the immutable original GGUF; F16
+encoder cosine 0.9999908805 and candidate 0.9997343421 pass unchanged 0.999
+gates. Candidate relative L2 is 0.0033563885; native/reference norms are
+16.61270079/16.61293236. Both arms reproduce all 26 original normalized-word
+controls and exact fresh/reverse-reused outputs. Native streaming presets
+0/2/3 pass reset/repeat-confidence, packet and final-flush controls. Separate
+PIDs allocate 1330/1228 MiB through the actual packaged C ABI CUDA plugin.
+Worker/source/package/model hashes and all full arrays agree. Full public
+proof is SHA/size verified; see `docs/nemotron-position-q4-gpu-2026-10-10.json`.
+The 1,179,413,408-byte hybrid retains only 14,155,776 bytes of Q4 payload:
+8.3% smaller than F16, mostly source precision, no compact-Q4/default pin or
+speed claim. No original streaming parity, specific MMQ trace, or full
+24-layer GPU capture validation is claimed.

@@ -1,6 +1,6 @@
 # v0.8.43 — audio correctness, frontend parity and measured opt-in optimizations
 
-This release covers merged PRs #519, #520, #522, #523, #524, #525 and #526. Experimental quantization candidates and unfinished hardware
+This release covers merged PRs #519, #520, #522, #523, #524, #525, #526, #527 and #528. Experimental quantization candidates and unfinished hardware
 validation are excluded from the released behavior described below.
 
 ## VoxCPM2: correct session audio rate and configurable CFM steps
@@ -76,6 +76,38 @@ proves package loading and resampling, without claiming native Windows/macOS
 execution or model inference.
 
 Evidence: [actual package helper proof](docs/python-package-helpers-2026-10-09.json).
+
+## Release packages: immutable source and WASM output-rate guidance
+
+All 33 release workflow checkouts now select the explicit requested tag or the
+immutable workflow event commit. Queued dry-run jobs previously selected a
+moving branch, allowing one matrix to contain packages from different commits.
+A hosted package probe verified the fix while the branch advanced after dispatch.
+
+The generic WASM archive README now uses `Module.sessionOutputSampleRate()`
+after opening a model, rather than assuming every backend returns 24 kHz.
+PR #527 passed all 32 applicable checks, with one intentional skip, including
+Windows CUDA 13 verification. Actual staged WASM model-free API checks pass;
+these do not establish synthesis or browser threading acceptance.
+
+Evidence: [immutable checkout probe](docs/release-checkout-pin-hosted-2026-10-09.json).
+
+## Bindings: discover bundled ggml CPU and GPU plugins
+
+C ABI sessions now discover ggml plugins beside the loaded native library,
+including CPU-only callers and direct Nemotron initialization. Previously the
+loader searched the process executable directory and current directory, so a
+Python process outside the CUDA package directory could find no backend.
+Module-path discovery preserves UTF-8 under C++17 and C++20.
+
+PR #528 passed all 50 applicable checks, with one intentional skip. The actual
+rebuilt CUDA archive passes dual-T4 validation with the installed CUDA 12.8
+runtime: its C ABI loads bundled CPU/CUDA plugins and allocates 1,330 MiB on its
+own PID. All three unchanged F16 stage gates pass; 26 original word controls with exact fresh/reused
+output, and native streaming packet/reset/flush checks pass. These results
+do not establish Windows GPU execution, original streaming parity or speedups.
+
+Evidence: [actual package CUDA proof](docs/release-cuda-package-gpu-2026-10-09.json).
 
 ## MiMo-ASR: opt-in cached GPU decode
 
@@ -158,11 +190,20 @@ run exactly, F16 passes all three stages, and all 24 original frame-layer
 controls pass for F16. These mostly-source diagnostic hybrids are excluded
 from production quantization and release performance claims. See [nemotron-encoder-attention-2026-10-09.json](docs/nemotron-encoder-attention-2026-10-09.json).
 
-A subsequent mostly-source Nemotron hybrid, retaining FFN/QKV/attention-out
-precision and quantizing position projections to Q4_K, passes all three
-unchanged stage gates (encoder cosine 0.999842) and all 24 original layer
-comparisons. Final relative L2 is 0.00309294. This 1,179,413,408-byte artifact
-contains only 14,155,776 bytes of Q4 tensors; its 8.3% saving from F16 is not
-a compact production Q4 or speed claim. Full original transcript/state and
-actual GPU validation remain pending; it is excluded from release quant pins.
-See [late-layer proof](docs/nemotron-encoder-late-layer-2026-10-09.json).
+A mostly-source Nemotron hybrid, retaining FFN/QKV/attention-out precision
+and quantizing position projections to Q4_K, passes all three unchanged CPU
+stage gates (encoder cosine 0.999842) and all 24 original layer comparisons.
+Final relative L2 is 0.00309294. It also matches 26/26 original word controls,
+22/22 VoxCPM2 controls and exact fresh/reverse-reused outputs. Its model hash
+and protected/unprotected tensor ledger were independently verified.
+
+This 1,179,413,408-byte artifact contains only 14,155,776 bytes of Q4 tensors;
+its 8.3% saving from F16 is not a compact production Q4 or speed claim. Actual dual-T4 GPU validation now passes all three unchanged stage gates
+(encoder cosine 0.999734, relative L2 0.003356), 26 original word controls,
+exact fresh/reused state and native streaming presets 0/2/3 in separate F16
+and candidate processes. Full arrays and independently verified public proof:
+`docs/nemotron-position-q4-gpu-2026-10-10.json`. It remains excluded from
+release quant pins; no speed, original streaming parity or full-layer GPU
+capture claim.
+See [stage/layer proof](docs/nemotron-encoder-late-layer-2026-10-09.json)
+and [original decoded controls](docs/nemotron-q4-original-controls-2026-10-10.json).
