@@ -48,7 +48,7 @@ against the old CUDA archive and passes after repair from a non-ASCII path
 without loader overrides. Exact corrected package source `37a90a37c` passes
 actual dual-T4 CUDA 12.8 hardware controls: its own PID allocates 1,330 MiB,
 all three F16 stage gates pass (encoder .99999088, relative L2 .000280039),
-26 original fresh/reused transcripts agree and native long-turn streaming
+26 original word controls match, with exact fresh/reused outputs and native long-turn streaming
 presets 0/2/3 pass packet/reset/flush checks. Public full arrays/receipts/source
 are pinned in `docs/release-cuda-package-gpu-2026-10-09.json`; older failed
 attempts remain archived there. No Windows GPU, original streaming parity,

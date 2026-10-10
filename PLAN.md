@@ -3853,3 +3853,12 @@ Next claim: full no-publication release dry-run matrix on this integrated main
 source, now using immutable checkouts from merged #527. Native plugin source
 is identical to the accepted package; verify all final-tip artifacts/packages
 and main CI before bumping/tagging. Contributor #529/#530 changes remain excluded.
+
+
+Integrated full no-publication release matrix [38024994245](https://github.com/CrispStrobe/CrispASR/actions/runs/38024994245)
+is queued at immutable event source `f51dc777018483a6719ff32159141c513e70e542`.
+Both input tag and job filter are empty, so all packages are requested and
+publication is disabled. No v0.8.43 bump/tag has been made.
+PR #530 CI now reports clang-format 18 violations in its C ABI source; remaining
+build/model checks are running or queued. Exact review findings remain recorded
+in the posted request-changes reviews; no contributor patch was merged.

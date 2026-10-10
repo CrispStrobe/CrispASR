@@ -104,8 +104,8 @@ Module-path discovery preserves UTF-8 under C++17 and C++20.
 PR #528 passed all 50 applicable checks, with one intentional skip. The actual
 rebuilt CUDA archive passes dual-T4 validation with the installed CUDA 12.8
 runtime: its C ABI loads bundled CPU/CUDA plugins and allocates 1,330 MiB on its
-own PID. All three unchanged F16 stage gates pass; 26 original fresh/reused
-transcripts and native streaming packet/reset/flush checks pass. These results
+own PID. All three unchanged F16 stage gates pass; 26 original word controls with exact fresh/reused
+output, and native streaming packet/reset/flush checks pass. These results
 do not establish Windows GPU execution, original streaming parity or speedups.
 
 Evidence: [actual package CUDA proof](release-cuda-package-gpu-2026-10-09.json).
