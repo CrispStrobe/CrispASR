@@ -12,16 +12,16 @@ import tarfile
 import wave
 import zipfile
 
-VERSION = '2026-10-09.release-package.3'
-SOURCE = '3b814f780277286ece56e8cdee6bdc435e07ae4d'
-BUILD_RUN = 37958100129
-ARTIFACT_ID = 11637375498
-ARTIFACT_ZIP_SHA = '658ee8dd67da3facb1d0fc8498c045293dcd5e3799cb55d36d4aae99338ff758'
-BUNDLE_SHA = '60e29fe5efd78979768904566c7b3a05d2387557c36ca2bd927cd6e4887c26fa'
+VERSION = '2026-10-10.release-package.4'
+SOURCE = '37a90a37c9871ff4d4cf915993acec2b734293cd'
+BUILD_RUN = 37988408052
+ARTIFACT_ID = 11648407040
+ARTIFACT_ZIP_SHA = '9fb257ffcf9e2f06abf2c82a58d9aca34188a4301e49444ae61b01c25bc124fe'
+BUNDLE_SHA = 'a38c111037c8a6ae7b46c0a9bd1553271890daf72a42d893b74df76ccf7de79d'
 ORIGINAL_REV = '10e579dedf52a16a159cbc5d35e17f8bffa77190'
 ORIGINAL_SHA = '7762f2a73d8ae7dad05d667fbf0bca393a0b3b7ad622b1b1f09473fa8f5d0463'
-PACKAGE_MIRROR_REV = 'a93e0228b081be547ddea2d2c35bec904ed1a4b9'
-PACKAGE_MIRROR_PATH = 'experimental/release-package-37958100129/crispasr-linux-x86_64-cuda.tar.gz'
+PACKAGE_MIRROR_REV = '67b9fb956ee5498be8f97567d27c2a607155bb4d'
+PACKAGE_MIRROR_PATH = 'experimental/release-package-37988408052/crispasr-linux-x86_64-cuda.tar.gz'
 MODEL_REV = 'bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2'
 TEMP = Path('/kaggle/temp/release-cuda-package')
 OUT = Path('/kaggle/working')
