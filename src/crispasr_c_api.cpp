@@ -285,10 +285,6 @@
 #include "fastpitch_tts.h"
 #define CA_HAVE_FASTPITCH 1
 #endif
-#if __has_include("parler_tts.h")
-#include "parler_tts.h"
-#define CA_HAVE_PARLER 1
-#endif
 #if __has_include("speecht5_tts.h")
 #include "speecht5_tts.h"
 #define CA_HAVE_SPEECHT5 1
@@ -2327,9 +2323,6 @@ struct crispasr_session {
 #ifdef CA_HAVE_FASTPITCH
     fastpitch_tts_context* fastpitch_ctx = nullptr;
 #endif
-#ifdef CA_HAVE_PARLER
-    parler_tts_context* parler_ctx = nullptr;
-#endif
 #ifdef CA_HAVE_SPEECHT5
     speecht5_tts_context* speecht5_ctx = nullptr;
     std::vector<float> speecht5_speaker; // 512-d x-vector
@@ -3986,21 +3979,6 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         return s;
     }
 #endif
-#ifdef CA_HAVE_PARLER
-    if (s->backend == "parler-tts" || s->backend == "parler_tts" || s->backend == "parler") {
-        s->backend = "parler-tts";
-        parler_tts_context_params p = parler_tts_context_default_params();
-        p.n_threads = s->n_threads;
-        p.verbosity = g_open_verbosity_tls;
-        p.use_gpu = g_open_use_gpu_tls;
-        s->parler_ctx = parler_tts_init_from_file(model_path, p);
-        if (!s->parler_ctx) {
-            delete s;
-            return nullptr;
-        }
-        return s;
-    }
-#endif
 #ifdef CA_HAVE_SPEECHT5
     if (s->backend == "speecht5" || s->backend == "speecht5-tts" || s->backend == "speecht5_tts") {
         s->backend = "speecht5";
@@ -4711,10 +4689,6 @@ CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
     if (s->dia_tts_ctx)
         return 44100;
 #endif
-#ifdef CA_HAVE_PARLER
-    if (s->parler_ctx)
-        return 44100;
-#endif
 #ifdef CA_HAVE_PARLER_TTS
     if (s->parler_tts_ctx)
         return 44100;
@@ -5098,9 +5072,6 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_FASTPITCH
     list += ",fastpitch";
-#endif
-#ifdef CA_HAVE_PARLER
-    list += ",parler-tts";
 #endif
 #ifdef CA_HAVE_SPEECHT5
     list += ",speecht5";
@@ -10300,12 +10271,6 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
         return pcm;
     }
 #endif
-#ifdef CA_HAVE_PARLER
-    if (s->parler_ctx) {
-        // Parler TTS emits 24 kHz mono float; PCM is malloc'd, freed via crispasr_pcm_free.
-        return parler_tts_synthesize(s->parler_ctx, text, out_n_samples);
-    }
-#endif
 #ifdef CA_HAVE_SPEECHT5
     if (s->speecht5_ctx) {
         // SpeechT5 emits 16 kHz mono float; PCM is malloc'd, freed via crispasr_pcm_free.
@@ -12304,10 +12269,6 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_FASTPITCH
     if (s->fastpitch_ctx)
         fastpitch_tts_free(s->fastpitch_ctx);
-#endif
-#ifdef CA_HAVE_PARLER
-    if (s->parler_ctx)
-        parler_tts_free(s->parler_ctx);
 #endif
 #ifdef CA_HAVE_SPEECHT5
     if (s->speecht5_ctx)
