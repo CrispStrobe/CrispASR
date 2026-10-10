@@ -9345,6 +9345,14 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         return (tail[0] == '.' && (tail[1] == 'w' || tail[1] == 'W') && (tail[2] == 'a' || tail[2] == 'A') &&
                 (tail[3] == 'v' || tail[3] == 'V'));
     };
+    auto ends_with_npz = [](const char* p) {
+        size_t n = std::strlen(p);
+        if (n < 4)
+            return false;
+        const char* tail = p + n - 4;
+        return (tail[0] == '.' && (tail[1] == 'n' || tail[1] == 'N') && (tail[2] == 'p' || tail[2] == 'P') &&
+                (tail[3] == 'z' || tail[3] == 'Z'));
+    };
     auto ends_with_safetensors = [](const char* p) {
         static const char suffix[] = ".safetensors";
         size_t n = std::strlen(p), m = sizeof(suffix) - 1;
@@ -9504,6 +9512,20 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
             return -2;
         }
         s->bt2_ref_text = ref_text;
+        return 0;
+    }
+#endif
+#ifdef CA_HAVE_BARK
+    if (s->bark_ctx && path) {
+        if (!ends_with_npz(path)) {
+            fprintf(stderr, "crispasr[bark]: expected an '.npz' but '%s' was passed\n", path);
+            return -2;
+        }
+        //bark_clear_speaker(s->bark_ctx);
+        if (bark_set_speaker_npz(s->bark_ctx, path)) {
+            fprintf(stderr, "crispasr[bark]: failed to load speaker from '%s'\n", path);
+            return -1;
+        }
         return 0;
     }
 #endif
