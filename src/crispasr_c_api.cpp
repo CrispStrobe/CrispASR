@@ -9272,28 +9272,6 @@ extern "C" int crispasr_audio_load_at_rate(const char* path, int target_rate, fl
                                            int* out_sample_rate);
 #endif
 
-#ifdef CA_HAVE_INDEXTTS
-// Linear-resample 16 kHz → 24 kHz (3:2). indextts's ECAPA speaker
-// encoder + conditioning mel expect a 24 kHz reference ("resampled by
-// the backend caller", indextts_voc.cpp); the shared decoder only emits
-// 16 kHz, so upsample here before handing the clip to indextts.
-static std::vector<float> indextts_resample_16k_to_24k(const float* in, int n) {
-    std::vector<float> out;
-    if (!in || n <= 0)
-        return out;
-    const int outN = (int)((int64_t)n * 24000 / 16000);
-    out.resize(outN);
-    for (int j = 0; j < outN; ++j) {
-        const double srcPos = (double)j * 16000.0 / 24000.0;
-        const int i0 = (int)srcPos;
-        const int i1 = (i0 + 1 < n) ? i0 + 1 : n - 1;
-        const double frac = srcPos - (double)i0;
-        out[j] = (float)((double)in[i0] * (1.0 - frac) + (double)in[i1] * frac);
-    }
-    return out;
-}
-#endif
-
 // #432: set the reference voice from IN-MEMORY samples.
 //
 // rslife: passing a reference only as a path "forces going through filesystem
