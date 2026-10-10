@@ -185,7 +185,7 @@ static const BackendCaps k_backend_caps[] = {
     {"supertonic", 536944640u, "auto-download,tts,tts-speed"},
     {"supertonic-tts", 536944640u, "auto-download,tts,tts-speed"},
     {"tabcnn", 269492224u, "auto-download,tab"},
-    {"tada", 73984u, "temperature,auto-download,tts"},
+    {"tada", 73984u, "temperature,auto-download,tts,voice-cloning"},
     {"tada-1b", 73984u, "temperature,auto-download,tts"},
     {"tada-3b-ml", 73984u, "temperature,auto-download,tts"},
     {"tada-tts-1b", 73984u, "temperature,auto-download,tts"},
