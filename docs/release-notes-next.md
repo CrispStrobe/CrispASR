@@ -1,6 +1,6 @@
 # Draft release notes — changes after v0.8.42
 
-This draft covers merged PRs #519, #520, #522, #523, #524, #525 and #526. No new tag has
+This draft covers merged PRs #519, #520, #522, #523, #524, #525, #526 and #527. No new tag has
 been cut. Experimental quantization candidates and unfinished hardware
 validation are excluded from the released behavior described below.
 
@@ -77,6 +77,21 @@ proves package loading and resampling, without claiming native Windows/macOS
 execution or model inference.
 
 Evidence: [actual package helper proof](python-package-helpers-2026-10-09.json).
+
+## Release packages: immutable source and WASM output-rate guidance
+
+All 33 release workflow checkouts now select the explicit requested tag or the
+immutable workflow event commit. Queued dry-run jobs previously selected a
+moving branch, allowing one matrix to contain packages from different commits.
+A hosted package probe verified the fix while the branch advanced after dispatch.
+
+The generic WASM archive README now uses `Module.sessionOutputSampleRate()`
+after opening a model, rather than assuming every backend returns 24 kHz.
+PR #527 passed all 32 applicable checks, with one intentional skip, including
+Windows CUDA 13 verification. Actual staged WASM model-free API checks pass;
+these do not establish synthesis or browser threading acceptance.
+
+Evidence: [immutable checkout probe](release-checkout-pin-hosted-2026-10-09.json).
 
 ## MiMo-ASR: opt-in cached GPU decode
 

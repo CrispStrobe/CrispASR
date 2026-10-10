@@ -7,6 +7,18 @@ technical deep-dives are in `LEARNINGS.md`.
 ---
 
 
+## DONE 2026-10-10 — Immutable release checkouts and WASM rate guidance
+
+[PR #527](https://github.com/CrispStrobe/CrispASR/pull/527) merged as
+`de24df02af46e68505d3dd7dc90d582b746192e3` after all 32 applicable checks
+passed (one intentional skip), including Windows CUDA 13 verification.
+All 33 release checkouts select the explicit tag or immutable event SHA.
+A hosted Python package probe preserved its dispatch source despite a later
+branch push. The generic WASM archive README uses the model output-rate getter;
+actual staged model-free API checks pass, without a synthesis/browser claim.
+Proof: `docs/release-checkout-pin-hosted-2026-10-09.json`.
+This is after v0.8.42.
+
 ## DONE 2026-10-09 — Packaged Python helper discovery
 
 [PR #526](https://github.com/CrispStrobe/CrispASR/pull/526) merged as

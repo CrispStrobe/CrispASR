@@ -11,36 +11,6 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
-## CLAIMED 2026-10-09 — Pin release dry-run checkout source
-
-Worktree: `/mnt/storage/crispasr/salvage-20261008/release-checkout-pin`.
-The no-publication release matrix checks out `github.ref` at job start, so
-queued jobs can build later branch commits than the workflow event SHA.
-Linux CLI build metadata confirms this drift in run 37958100129. Pin the
-fallback checkout to `github.sha`, retain explicit-tag selection, lint all
-checkout sites, and correct dry-run provenance receipts before release.
-[PR #527](https://github.com/CrispStrobe/CrispASR/pull/527) pins all 33
-checkouts, including publishing notes. Syntax/expression lint passes; full
-lint has the same 24 existing diagnostics before/after. All four no-secrets
-checks pass, no skips (55.010 seconds). Focused no-publication Linux Python
-probe [37968611724](https://github.com/CrispStrobe/CrispASR/actions/runs/37968611724)
-was dispatched at `65de05e08f2cd582ba36694c4135bc2aa96d2259`; branch advanced
-with documentation-only `0df939b42` while jobs remain queued. Predeclared
-acceptance: checkout must select the dispatch SHA despite branch movement.
-Hosted Python package job 113949199260 succeeded and its complete checkout log verifies the dispatch SHA `65de05e08` despite the later branch head `ba74c8d00`. The full hosted probe is SUCCESS: Python package, glint and version validation all passed, with no publication requested. Current proof: `docs/release-checkout-pin-hosted-2026-10-09.json`; `docs/release-checkout-pin-2026-10-09.json` remains the archived, predeclared launch receipt from the PR. This separates the historical receipt from the completed result and resolves the documentation-only add/add conflict without changing the PR build source. Final PR CI remains pending; merge only after green checks.
-Additional claimed package-documentation repair in this same worktree/PR:
-the generic WASM archive README incorrectly specifies fixed 24 kHz output.
-Replace it with the actual `sessionOutputSampleRate()` getter guidance;
-verify module initialization, exported TTS/getter/file-loading API and existing
-model-free WASM assertions against the staged release artifact. The Kokoro-only
-demo correctly uses 24 kHz and does not need this generic-package repair.
-Actual staged WASM archive passes module initialization, all nine required
-TTS/getter/file-loading exports, four unopened-session getter checks and the
-three existing piano-binding assertions under Node v20.20.2. Observed artifact
-source is `9431cef65` (from its checkout log). This is model-free API validation,
-not browser threading or synthesis acceptance. The README correction is in
-PR #527; the old archive is unchanged. Receipt: `docs/release-package-dry-run-2026-10-09.json`.
-
 ## CLAIMED 2026-10-09 — Shared-library relative ggml plugin discovery
 
 Worktree: `/mnt/storage/crispasr/salvage-20261008/library-plugin-discovery`.
@@ -3835,3 +3805,24 @@ Corrected plugin source passes all four no-secrets tests with the account
 environment set, no skips (122.715 seconds). Documentation checkpoint resolves
 all 227 internal anchors. Candidate CI 37988394079 and CUDA package
 37988408052 are queued; decoded Q4 run 37987517614 is queued.
+
+
+## CLAIMED 2026-10-10 — Corrected package and stage-passing hybrid CUDA controls
+
+Continue in `/mnt/storage/crispasr/salvage-20261008/release-cuda-hardware`.
+Corrected source `37a90a37c9871ff4d4cf915993acec2b734293cd` passes the
+actual staged C ABI regression through CPU-only and GPU-requested routes from
+a non-ASCII package path, with no loader overrides. GH CUDA build 37988408052
+is SUCCESS. Download artifact 11648407040 to storage, audit exact source and
+archive/dependency hashes, mirror the exact tar at a public immutable HF path,
+then launch version 4 against unchanged F16 stages, original transcripts and
+native streaming controls on the single authorized Kaggle account.
+Original decoded-control GH 37987517614 is SUCCESS. Verify full receipts and
+retained candidate SHA before publishing it under a public experimental model
+path. Extend hardware controls only after its CPU acceptance is independently
+confirmed; retain F16-first, unchanged stage gates and all decoded/state checks.
+No model/default promotion, original model compute, quantization or compilation
+on Kaggle. Archive every terminal kernel output before repushing.
+PR #528 Docker checks failed on Docker Hub HTTP 429 before compilation;
+failed jobs rerun without changing source or acceptance gates. Other checks,
+including the actual dynamic C ABI regression, pass.
