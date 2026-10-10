@@ -48,7 +48,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
       # A dry run (empty tag, dispatched from a branch) has no tag to match, so
       # this compared VERSION against a branch name and failed every time —
       # which made the run red and the one job you dispatched it for unreadable
@@ -75,7 +75,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
       - name: Verify in-tree glint matches upstream main
         run: |
           synced="$(sed -n 's/.*Synced at upstream commit: `\([0-9a-f]*\)`.*/\1/p' glint/README.md)"
@@ -98,7 +98,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y cmake g++ patchelf libopenblas-dev
@@ -168,7 +168,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y cmake g++ patchelf libopenblas-dev
@@ -238,7 +238,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       # Same live-download flakiness as build-wasm.yml: cache the toolchain and
       # retry once. A 503 here would fail a RELEASE, so the retry matters more.
@@ -265,7 +265,7 @@ jobs:
           mkdir -p release/crispasr-wasm
           cp build-wasm/bin/libwhisper.js build-wasm/bin/libwhisper.wasm release/crispasr-wasm/
           [ -f build-wasm/bin/libwhisper.worker.js ] && cp build-wasm/bin/libwhisper.worker.js release/crispasr-wasm/ || true
-          printf 'CrispASR WebAssembly: libwhisper.js (global whisper_factory) + libwhisper.wasm.\nMultithreaded -> host page must be cross-origin isolated (COOP/COEP).\nTTS: Module.ttsOpenExplicit(model,backend,threads) -> ttsSetVoice(voice,"") -> ttsSynthesize(text) => Float32Array @24kHz.\nLoad files via Module.FS_createDataFile("/models",name,bytes,true,true).\n' > release/crispasr-wasm/README.txt
+          printf 'CrispASR WebAssembly: libwhisper.js (global whisper_factory) + libwhisper.wasm.\nMultithreaded -> host page must be cross-origin isolated (COOP/COEP).\nTTS: Module.ttsOpenExplicit(model,backend,threads) -> ttsSetVoice(voice,"") -> ttsSynthesize(text) => Float32Array.\nPlayback/WAV sample rate: Module.sessionOutputSampleRate() after opening the model (backend dependent).\nLoad files via Module.FS_createDataFile("/models",name,bytes,true,true).\n' > release/crispasr-wasm/README.txt
           cd release && tar czf crispasr-wasm.tar.gz crispasr-wasm/
 
       - uses: actions/upload-artifact@v4
@@ -298,7 +298,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y cmake g++ patchelf libopenblas-dev
@@ -368,7 +368,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y cmake g++ patchelf libopenblas-dev
@@ -476,7 +476,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y cmake g++ patchelf libopenblas-dev
@@ -560,7 +560,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         # The slim rocm/dev image ships the HIP compiler + runtime but NOT the
@@ -649,7 +649,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         # See build-linux-x86_64-hip: the slim rocm/dev image lacks hipBLAS/
@@ -741,7 +741,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps + Vulkan SDK
         run: |
@@ -819,7 +819,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y cmake g++ patchelf libopenblas-dev
@@ -882,7 +882,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y cmake g++ patchelf
@@ -966,7 +966,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y cmake g++ patchelf
@@ -1040,7 +1040,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Build (arm64)
         run: |
@@ -1114,7 +1114,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install build tools
         run: brew install ninja ccache
@@ -1183,7 +1183,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Build xcframework
         run: |
@@ -1244,7 +1244,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Build (shared libs, Metal + Accelerate)
         # Add Apple Accelerate BLAS so the GPU-not-eligible matmuls fall
@@ -1348,7 +1348,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libopenblas-dev patchelf
@@ -1430,7 +1430,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libopenblas-dev patchelf
@@ -1508,7 +1508,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y cmake g++ libopenblas-dev patchelf
@@ -1591,7 +1591,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Build (shared libs, CPU)
         run: |
@@ -1659,7 +1659,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install Vulkan SDK
         shell: pwsh
@@ -1757,7 +1757,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install deps
         run: sudo apt-get update && sudo apt-get install -y cmake g++ patchelf
@@ -1866,7 +1866,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install CUDA Toolkit ${{ matrix.toolkit }}
         uses: Jimver/cuda-toolkit@v0.2.35
@@ -2023,7 +2023,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Build (shared libs, generic CPU legacy)
         run: |
@@ -2080,7 +2080,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       # #296: OpenBLAS makes mel-band-roformer --separate ~26x faster (SGEMM).
       # Non-fatal: if this fails, the CMake below silently falls back to the
@@ -2144,7 +2144,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Build
         run: |
@@ -2198,7 +2198,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       # #483: keep CUDA 12.8/Blackwell and add a coherent CUDA 12.6.3
       # legacy package. CLI, shared libraries and bundled runtime use the same
@@ -2370,7 +2370,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install CUDA Toolkit 13.0.0
         uses: Jimver/cuda-toolkit@v0.2.35
@@ -2494,7 +2494,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Install Vulkan SDK
         shell: pwsh
@@ -2573,7 +2573,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-          ref: ${{ inputs.tag || github.ref }}
+          ref: ${{ inputs.tag || github.sha }}
 
       - name: Set up NDK
         uses: nttld/setup-ndk@v1
@@ -2647,6 +2647,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
+          ref: ${{ inputs.tag || github.sha }}
           fetch-depth: 1
 
       - uses: actions/download-artifact@v4
