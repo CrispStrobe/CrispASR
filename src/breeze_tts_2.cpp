@@ -28,6 +28,7 @@
 
 #include "core/attention.h"
 #include "core/bpe.h"
+#include "core/breeze_cfg.h"
 #include "core/crispasr_env.h"
 #include "core/ffn.h"
 #include "core/ggml_cpu_backend.h"
@@ -277,7 +278,8 @@ struct breeze_tts_2_context {
     // Backbone KV cache. The trailing dim is n_layers * n_branch, so CFG
     // branches get independent histories without touching core_attn: it takes
     // `il` as the trailing index, and il = layer * n_branch + branch is just
-    // arithmetic at the call site.
+    // arithmetic at the call site. n_branch grows on demand, see
+    // ensure_branches().
     ggml_context* bb_kv_ctx = nullptr;
     ggml_backend_buffer_t bb_kv_buf = nullptr;
     ggml_tensor* bb_kv_k = nullptr;
@@ -682,6 +684,34 @@ static bool alloc_kv(breeze_tts_2_context* c, ggml_context** kctx, ggml_backend_
     }
     ggml_backend_buffer_clear(*kbuf, 0);
     return true;
+}
+
+// Size the backbone and depth-decoder caches for n_branch guidance branches.
+// Grown on demand and never shrunk: a second branch doubles the backbone
+// cache, which plain synthesis and Voice Clone should not pay for.
+static bool ensure_branches(breeze_tts_2_context* c, int n_branch) {
+    if (c->bb_kv_buf && c->dd_kv_buf && c->n_branch >= n_branch)
+        return true;
+    const auto& hp = c->model.hp;
+    for (auto* buf : {&c->bb_kv_buf, &c->dd_kv_buf}) {
+        if (*buf)
+            ggml_backend_buffer_free(*buf);
+        *buf = nullptr;
+    }
+    for (auto* kctx : {&c->bb_kv_ctx, &c->dd_kv_ctx}) {
+        if (*kctx)
+            ggml_free(*kctx);
+        *kctx = nullptr;
+    }
+    c->n_branch = n_branch;
+    const bool ok =
+        alloc_kv(c, &c->bb_kv_ctx, &c->bb_kv_buf, &c->bb_kv_k, &c->bb_kv_v, (int)hp.bb_head_dim, c->bb_kv_max_ctx,
+                 (int)hp.bb_n_kv_heads, (int)hp.bb_n_layers * n_branch, "breeze_bb") &&
+        alloc_kv(c, &c->dd_kv_ctx, &c->dd_kv_buf, &c->dd_kv_k, &c->dd_kv_v, (int)hp.dd_head_dim,
+                 (int)hp.num_codebooks + 1, (int)hp.dd_n_kv_heads, (int)hp.dd_n_layers * n_branch, "breeze_dd");
+    if (!ok)
+        fprintf(stderr, "breeze_tts_2: failed to allocate the KV caches for %d prompt branch(es)\n", n_branch);
+    return ok;
 }
 
 // ===========================================================================
@@ -1597,21 +1627,26 @@ static std::vector<ggml_fp16_t> build_causal_mask(int T, int Lk, int n_past) {
 // One frame of the depth decoder
 // ===========================================================================
 //
-// 15 sequential steps, each conditioned on the previous pick. `branch` selects
-// the KV slice; the CFG combine, when it is wired, happens on the logits of
-// each step across branches, which is why this returns per-step logits.
-static bool depth_decode_frame(breeze_tts_2_context* c, const float* bb_hidden, int32_t cb0, float temperature,
-                               std::vector<int32_t>& codes, std::vector<std::vector<float>>* out_logits, int branch) {
+// 15 sequential steps, each conditioned on the previous pick. Every guidance
+// branch runs every step on its own KV slice: the branches share the code
+// history and differ only in the backbone hidden state at position 0, and
+// their logits are combined before each pick. bb_hidden is
+// [branches.size(), dd_backbone_hidden].
+static bool depth_decode_frame(breeze_tts_2_context* c, const float* bb_hidden,
+                               const std::vector<breeze_cfg::Branch>& branches, int32_t cb0, float temperature,
+                               std::vector<int32_t>& codes, std::vector<std::vector<float>>* out_logits) {
     const auto& hp = c->model.hp;
     const int n_cb = (int)hp.num_codebooks;
     const int vocab = (int)hp.dd_vocab_size;
     const int dbb = (int)hp.dd_backbone_hidden;
+    const int n_branch = (int)branches.size();
 
     ggml_backend_buffer_clear(c->dd_kv_buf, 0);
     codes.assign((size_t)n_cb, 0);
     codes[0] = cb0;
     if (out_logits)
         out_logits->assign((size_t)n_cb - 1, {});
+    std::vector<float> rows((size_t)n_branch * vocab, 0.0f);
 
     for (int cbi = 1; cbi < n_cb; cbi++) {
         std::vector<float> embeds;
@@ -1626,7 +1661,6 @@ static bool depth_decode_frame(breeze_tts_2_context* c, const float* bb_hidden, 
             n_past = 0;
             positions = {0, 1};
             embeds.assign((size_t)dbb * 2, 0.0f);
-            std::memcpy(&embeds[0], bb_hidden, (size_t)dbb * sizeof(float));
             const int32_t id = codes[0]; // offset = clamp(1-1,0)*vocab = 0
             std::vector<float> row;
             if (!embed_rows(c, &id, 1, row))
@@ -1643,25 +1677,30 @@ static bool depth_decode_frame(breeze_tts_2_context* c, const float* bb_hidden, 
             embeds = std::move(row);
         }
 
-        ggml_cgraph* gf = build_depth_graph(c, T, n_past, cbi, branch);
-        std::vector<GraphInput> in = {
-            {"dd_embeds_bb", embeds.data(), embeds.size() * sizeof(float)},
-            {"dd_positions", positions.data(), positions.size() * sizeof(int32_t)},
-        };
         std::vector<ggml_fp16_t> mask;
-        if (T > 1) {
+        if (T > 1)
             mask = build_causal_mask(T, n_past + T, n_past);
-            in.push_back({"dd_mask", mask.data(), mask.size() * sizeof(ggml_fp16_t)});
+        for (int b = 0; b < n_branch; b++) {
+            if (cbi == 1)
+                std::memcpy(&embeds[0], bb_hidden + (size_t)b * dbb, (size_t)dbb * sizeof(float));
+            ggml_cgraph* gf = build_depth_graph(c, T, n_past, cbi, b);
+            std::vector<GraphInput> in = {
+                {"dd_embeds_bb", embeds.data(), embeds.size() * sizeof(float)},
+                {"dd_positions", positions.data(), positions.size() * sizeof(int32_t)},
+            };
+            if (T > 1)
+                in.push_back({"dd_mask", mask.data(), mask.size() * sizeof(ggml_fp16_t)});
+            if (!c->dd_rope_freq_factors.empty())
+                in.push_back(
+                    {"dd_rope_ff", c->dd_rope_freq_factors.data(), c->dd_rope_freq_factors.size() * sizeof(float)});
+            if (!run_graph(c, gf, in, "depth decoder"))
+                return false;
+            if (!fetch(gf, "dd_logits", &rows[(size_t)b * vocab], (size_t)vocab))
+                return false;
         }
-        if (!c->dd_rope_freq_factors.empty())
-            in.push_back(
-                {"dd_rope_ff", c->dd_rope_freq_factors.data(), c->dd_rope_freq_factors.size() * sizeof(float)});
-        if (!run_graph(c, gf, in, "depth decoder"))
-            return false;
 
         std::vector<float> logits((size_t)vocab, 0.0f);
-        if (!fetch(gf, "dd_logits", logits.data(), logits.size()))
-            return false;
+        breeze_cfg::combine(rows.data(), vocab, branches, logits.data());
         // Dump the RAW logits, then mask a COPY for sampling. The reserved-id
         // mask writes -inf into [2048, 2051), and the reference dumps its
         // logits before its own suppression — so masking in place made |cpp|
@@ -1690,53 +1729,76 @@ struct GenOptions {
     // because they answer different questions and the diff harness needs both
     // set deliberately. See the call sites.
     float repetition_penalty = 1.0f;
+    // Diff harness: receives the frame-0 codebook-0 logits after the guidance
+    // combine, before masking.
+    float* dump_cb0_logits = nullptr;
 };
 
-static bool generate_codes(breeze_tts_2_context* c, const AssembledPrompt& prompt, const GenOptions& opt,
+// One backbone pass over T new positions of one guidance branch, leaving the
+// last position's final-norm hidden state and codebook-0 logits.
+static bool backbone_forward(breeze_tts_2_context* c, const float* embeds, int T, int n_past, int branch,
+                             float* out_hidden, float* out_logits, const char* what) {
+    const auto& hp = c->model.hp;
+    std::vector<int32_t> positions((size_t)T);
+    for (int i = 0; i < T; i++)
+        positions[(size_t)i] = n_past + i;
+    ggml_cgraph* gf = build_backbone_graph(c, n_past, T, branch, /*dump_layers*/ false);
+    std::vector<GraphInput> in = {{"bb_embeds", embeds, (size_t)T * hp.bb_d_model * sizeof(float)},
+                                  {"bb_positions", positions.data(), positions.size() * sizeof(int32_t)}};
+    std::vector<ggml_fp16_t> mask;
+    if (T > 1) {
+        mask = build_causal_mask(T, n_past + T, n_past);
+        in.push_back({"bb_mask", mask.data(), mask.size() * sizeof(ggml_fp16_t)});
+    }
+    return run_graph(c, gf, in, what) && fetch(gf, "bb_hidden", out_hidden, hp.bb_d_model) &&
+           fetch(gf, "bb_logits", out_logits, hp.lm_head_out);
+}
+
+// prompts[b] is the prompt of branches[b]. The branches have different prompt
+// lengths, so each keeps its own n_past for the whole generation; they share
+// every sampled frame.
+static bool generate_codes(breeze_tts_2_context* c, const std::vector<AssembledPrompt>& prompts,
+                           const std::vector<breeze_cfg::Branch>& branches, const GenOptions& opt,
                            std::vector<std::vector<int32_t>>& out_frames) {
     const auto& hp = c->model.hp;
     const int d = (int)hp.bb_d_model;
     const int n_logits = (int)hp.lm_head_out; // 2052: 2051 codes + the EOS class
     const int n_cb = (int)hp.num_codebooks;
+    const int n_branch = (int)branches.size();
 
     const float bb_temp = opt.greedy ? 0.0f : opt.temperature;
     const float dd_temp = opt.greedy ? 0.0f : opt.depth_temperature;
 
-    ggml_backend_buffer_clear(c->bb_kv_buf, 0);
     out_frames.clear();
-
-    if (prompt.L > c->bb_kv_max_ctx) {
-        fprintf(stderr, "breeze_tts_2: prompt of %d tokens exceeds the backbone cache (%d)\n", prompt.L,
-                c->bb_kv_max_ctx);
+    if (!ensure_branches(c, n_branch))
         return false;
-    }
+    ggml_backend_buffer_clear(c->bb_kv_buf, 0);
 
     // ---- prefill ----
-    std::vector<float> bb_hidden((size_t)d, 0.0f);
+    std::vector<float> bb_hidden((size_t)n_branch * d, 0.0f);
+    std::vector<float> bb_rows((size_t)n_branch * n_logits, 0.0f);
     std::vector<float> bb_logits((size_t)n_logits, 0.0f);
-    {
+    std::vector<int> n_past((size_t)n_branch, 0);
+    for (int b = 0; b < n_branch; b++) {
+        const AssembledPrompt& prompt = prompts[(size_t)b];
+        if (prompt.L > c->bb_kv_max_ctx) {
+            fprintf(stderr, "breeze_tts_2: prompt of %d tokens exceeds the backbone cache (%d)\n", prompt.L,
+                    c->bb_kv_max_ctx);
+            return false;
+        }
         breeze_bench_stage _b("backbone_prefill");
-        std::vector<int32_t> positions((size_t)prompt.L);
-        for (int i = 0; i < prompt.L; i++)
-            positions[(size_t)i] = i;
-        auto mask = build_causal_mask(prompt.L, prompt.L, 0);
-        ggml_cgraph* gf = build_backbone_graph(c, 0, prompt.L, /*branch*/ 0, /*dump_layers*/ false);
-        if (!run_graph(c, gf,
-                       {{"bb_embeds", prompt.embeds.data(), prompt.embeds.size() * sizeof(float)},
-                        {"bb_positions", positions.data(), positions.size() * sizeof(int32_t)},
-                        {"bb_mask", mask.data(), mask.size() * sizeof(ggml_fp16_t)}},
-                       "backbone prefill"))
+        if (!backbone_forward(c, prompt.embeds.data(), prompt.L, 0, b, &bb_hidden[(size_t)b * d],
+                              &bb_rows[(size_t)b * n_logits], "backbone prefill"))
             return false;
-        if (!fetch(gf, "bb_hidden", bb_hidden.data(), bb_hidden.size()))
-            return false;
-        if (!fetch(gf, "bb_logits", bb_logits.data(), bb_logits.size()))
-            return false;
+        n_past[(size_t)b] = prompt.L;
     }
 
-    int n_past = prompt.L;
     std::vector<int32_t> cb0_history;
 
     for (int f = 0; f < opt.max_frames; f++) {
+        breeze_cfg::combine(bb_rows.data(), n_logits, branches, bb_logits.data());
+        if (f == 0 && opt.dump_cb0_logits)
+            std::memcpy(opt.dump_cb0_logits, bb_logits.data(), bb_logits.size() * sizeof(float));
         mask_reserved(bb_logits.data(), n_logits, hp);
         apply_repetition_penalty(bb_logits.data(), n_logits, cb0_history, opt.repetition_penalty);
         const int32_t cb0 =
@@ -1748,7 +1810,7 @@ static bool generate_codes(breeze_tts_2_context* c, const AssembledPrompt& promp
         std::vector<int32_t> frame;
         {
             breeze_bench_stage _b("depth_frame");
-            if (!depth_decode_frame(c, bb_hidden.data(), cb0, dd_temp, frame, nullptr, /*branch*/ 0))
+            if (!depth_decode_frame(c, bb_hidden.data(), branches, cb0, dd_temp, frame, nullptr))
                 return false;
         }
         // A frame of all pad is the EOS frame; it must not reach the codec.
@@ -1760,24 +1822,19 @@ static bool generate_codes(breeze_tts_2_context* c, const AssembledPrompt& promp
             break;
         out_frames.push_back(frame);
 
-        if (n_past + 1 > c->bb_kv_max_ctx)
+        if (*std::max_element(n_past.begin(), n_past.end()) + 1 > c->bb_kv_max_ctx)
             break;
 
-        // Feed the frame back and step the backbone once.
+        // Feed the frame back and step every branch's backbone once.
         std::vector<float> emb;
         if (!embed_frames(c, frame.data(), 1, emb))
             return false;
-        const int32_t pos = n_past;
-        ggml_cgraph* gf = build_backbone_graph(c, n_past, 1, /*branch*/ 0, /*dump_layers*/ false);
-        if (!run_graph(c, gf,
-                       {{"bb_embeds", emb.data(), emb.size() * sizeof(float)}, {"bb_positions", &pos, sizeof(int32_t)}},
-                       "backbone step"))
-            return false;
-        if (!fetch(gf, "bb_hidden", bb_hidden.data(), bb_hidden.size()))
-            return false;
-        if (!fetch(gf, "bb_logits", bb_logits.data(), bb_logits.size()))
-            return false;
-        n_past++;
+        for (int b = 0; b < n_branch; b++) {
+            if (!backbone_forward(c, emb.data(), 1, n_past[(size_t)b], b, &bb_hidden[(size_t)b * d],
+                                  &bb_rows[(size_t)b * n_logits], "backbone step"))
+                return false;
+            n_past[(size_t)b]++;
+        }
     }
     return true;
 }
@@ -1909,7 +1966,6 @@ extern "C" struct breeze_tts_2_context* breeze_tts_2_init_from_file(const char* 
         ggml_backend_tensor_get(c->model.te_eoi_embd, c->te_eoi_host.data(), 0, c->te_eoi_host.size() * sizeof(float));
     }
 
-    c->n_branch = 1; // see breeze_tts_2_capabilities()
     c->max_new_tokens = params.max_new_tokens > 0 ? params.max_new_tokens : (int)hp.s_max_new_tokens;
 
     const int te_ctx = std::min<int>((int)hp.te_max_pos, 2048);
@@ -1924,17 +1980,8 @@ extern "C" struct breeze_tts_2_context* breeze_tts_2_init_from_file(const char* 
     int bb_ctx = (int)hp.s_max_seq_len;
     if (params.max_new_tokens > 0 && params.max_new_tokens + 1024 > bb_ctx)
         bb_ctx = params.max_new_tokens + 1024;
-    if (!alloc_kv(c, &c->bb_kv_ctx, &c->bb_kv_buf, &c->bb_kv_k, &c->bb_kv_v, (int)hp.bb_head_dim, bb_ctx,
-                  (int)hp.bb_n_kv_heads, (int)hp.bb_n_layers * c->n_branch, "breeze_bb")) {
-        fprintf(stderr, "breeze_tts_2: failed to allocate the backbone KV cache\n");
-        delete c;
-        return nullptr;
-    }
     c->bb_kv_max_ctx = bb_ctx;
-
-    if (!alloc_kv(c, &c->dd_kv_ctx, &c->dd_kv_buf, &c->dd_kv_k, &c->dd_kv_v, (int)hp.dd_head_dim,
-                  (int)hp.num_codebooks + 1, (int)hp.dd_n_kv_heads, (int)hp.dd_n_layers * c->n_branch, "breeze_dd")) {
-        fprintf(stderr, "breeze_tts_2: failed to allocate the depth-decoder KV cache\n");
+    if (!ensure_branches(c, 1)) {
         delete c;
         return nullptr;
     }
@@ -1961,23 +2008,6 @@ extern "C" struct breeze_tts_2_context* breeze_tts_2_init_from_file(const char* 
 
 extern "C" void breeze_tts_2_free(struct breeze_tts_2_context* ctx) {
     delete ctx;
-}
-
-extern "C" uint32_t breeze_tts_2_capabilities(const struct breeze_tts_2_context* ctx) {
-    (void)ctx;
-    // ⚠ SINGLE BRANCH ONLY — and that is a scope statement, not a stub to be
-    // read past. The KV caches are already allocated with an n_branch slice
-    // dimension and both graph builders take a branch index, so the multi-
-    // branch structure is present; what is NOT implemented is the per-branch
-    // prompt assembly and the logits combine
-    //     logits = uncond + s_ref*(ref - uncond) + s_ins*(ins - uncond)
-    // at every backbone step and again per codebook inside the depth decoder.
-    //
-    // So this build reaches Voice Clone and plain TTS, and does NOT reach
-    // Voice Design or Voice Direction. Those callers get a refusal from
-    // breeze_tts_2_synthesize_guided rather than a single-branch result that
-    // would sound plausible and ignore the instruction entirely.
-    return 1u << BREEZE_CFG_NONE;
 }
 
 extern "C" void breeze_tts_2_pcm_free(float* pcm) {
@@ -2011,11 +2041,13 @@ extern "C" void breeze_tts_2_set_max_new_tokens(struct breeze_tts_2_context* ctx
 
 namespace {
 
-// Shared body for every synthesis entry point.
-static float* synth_impl(breeze_tts_2_context* c, const char* text, const char* instruction, const float* ref_pcm,
-                         int ref_n_samples, const char* ref_text, int* out_n_samples, bool greedy, int frame_cap,
-                         std::vector<std::vector<int32_t>>* out_frames, const int32_t* pre_ref_codes = nullptr,
-                         int pre_ref_frames = 0) {
+// Shared body for every synthesis entry point. cfg_scale only matters when an
+// instruction is given, see core/breeze_cfg.h.
+static float* synth_impl(breeze_tts_2_context* c, const char* text, const char* instruction, float cfg_scale,
+                         const float* ref_pcm, int ref_n_samples, const char* ref_text, int* out_n_samples, bool greedy,
+                         int frame_cap, std::vector<std::vector<int32_t>>* out_frames,
+                         const int32_t* pre_ref_codes = nullptr, int pre_ref_frames = 0,
+                         float* out_cb0_logits = nullptr) {
     if (out_n_samples)
         *out_n_samples = 0;
     if (!c || !text || !*text)
@@ -2048,12 +2080,14 @@ static float* synth_impl(breeze_tts_2_context* c, const char* text, const char* 
         ref_frames = n_frames;
     }
 
-    auto segs =
-        build_segments(c->model, "S0", text, ref_text ? ref_text : "", ref_frames, instruction ? instruction : "");
-    AssembledPrompt prompt;
-    {
+    const std::string ins = instruction ? instruction : "";
+    const auto branches = breeze_cfg::plan(!ins.empty(), cfg_scale);
+    std::vector<AssembledPrompt> prompts(branches.size());
+    for (size_t b = 0; b < branches.size(); b++) {
         breeze_bench_stage _b("prompt_assembly");
-        if (!assemble_prompt(c, segs, ref_codes.empty() ? nullptr : ref_codes.data(), ref_frames, prompt))
+        auto segs = build_segments(c->model, "S0", text, ref_text ? ref_text : "", ref_frames,
+                                   branches[b].instruction ? ins : std::string());
+        if (!assemble_prompt(c, segs, ref_codes.empty() ? nullptr : ref_codes.data(), ref_frames, prompts[b]))
             return nullptr;
     }
 
@@ -2070,9 +2104,10 @@ static float* synth_impl(breeze_tts_2_context* c, const char* text, const char* 
     // from the fixture by construction and send the first bisect chasing a
     // difference that is ours, not the model's.
     opt.repetition_penalty = greedy ? 1.0f : c->model.hp.s_repetition_penalty;
+    opt.dump_cb0_logits = out_cb0_logits;
 
     std::vector<std::vector<int32_t>> frames;
-    if (!generate_codes(c, prompt, opt, frames))
+    if (!generate_codes(c, prompts, branches, opt, frames))
         return nullptr;
     c->last_codes = frames;
     if (out_frames)
@@ -2080,47 +2115,76 @@ static float* synth_impl(breeze_tts_2_context* c, const char* text, const char* 
     return decode_to_pcm(c, frames, out_n_samples);
 }
 
+// Greedy generation for the diff harness, by reference clip or by pre-encoded
+// reference codes. Writes row-major [n_frames * 16] codes and returns n_frames.
+static int greedy_codes(breeze_tts_2_context* c, const char* text, const char* instruction, float cfg_scale,
+                        const float* ref_pcm, int ref_n_samples, const char* ref_text, const int32_t* ref_codes,
+                        int ref_frames, int32_t* out_codes, int max_frames_cap, float* out_cb0_logits) {
+    if (!c || !text || !out_codes || max_frames_cap <= 0)
+        return -1;
+    std::vector<std::vector<int32_t>> frames;
+    int n_samples = 0;
+    float* pcm = synth_impl(c, text, instruction, cfg_scale, ref_pcm, ref_n_samples, ref_text, &n_samples,
+                            /*greedy*/ true, max_frames_cap, &frames, ref_codes, ref_frames, out_cb0_logits);
+    if (pcm)
+        qwen3_tts_pcm_free(pcm);
+    // No codec is not a failure here: the fixture stage is the CODES.
+    if (frames.empty())
+        return -1;
+    const int n_cb = (int)c->model.hp.num_codebooks;
+    const int n = std::min((int)frames.size(), max_frames_cap);
+    for (int f = 0; f < n; f++)
+        std::memcpy(out_codes + (size_t)f * n_cb, frames[(size_t)f].data(), (size_t)n_cb * sizeof(int32_t));
+    return n;
+}
+
 } // namespace
 
+extern "C" uint32_t breeze_tts_2_capabilities(const struct breeze_tts_2_context* ctx) {
+    (void)ctx;
+    // Every mode breeze_cfg::plan() can produce. BREEZE_CFG_REF is absent on
+    // purpose, see the header.
+    return (1u << BREEZE_CFG_NONE) | (1u << BREEZE_CFG_INS) | (1u << BREEZE_CFG_BOTH);
+}
+
 extern "C" float* breeze_tts_2_synthesize(struct breeze_tts_2_context* ctx, const char* text, int* out_n_samples) {
-    return synth_impl(ctx, text, nullptr, nullptr, 0, nullptr, out_n_samples, /*greedy*/ false, 0, nullptr);
+    return breeze_tts_2_synthesize_instructed(ctx, text, nullptr, nullptr, 0, nullptr, 1.0f, out_n_samples);
 }
 
 extern "C" float* breeze_tts_2_synthesize_with_reference(struct breeze_tts_2_context* ctx, const char* text,
                                                          const float* ref_pcm, int ref_n_samples, const char* ref_text,
                                                          int* out_n_samples) {
-    return synth_impl(ctx, text, nullptr, ref_pcm, ref_n_samples, ref_text, out_n_samples, false, 0, nullptr);
+    return breeze_tts_2_synthesize_instructed(ctx, text, nullptr, ref_pcm, ref_n_samples, ref_text, 1.0f,
+                                              out_n_samples);
+}
+
+extern "C" float* breeze_tts_2_synthesize_instructed(struct breeze_tts_2_context* ctx, const char* text,
+                                                     const char* instruction, const float* ref_pcm, int ref_n_samples,
+                                                     const char* ref_text, float cfg_scale, int* out_n_samples) {
+    return synth_impl(ctx, text, instruction, cfg_scale, ref_pcm, ref_n_samples, ref_text, out_n_samples,
+                      /*greedy*/ false, 0, nullptr);
 }
 
 extern "C" float* breeze_tts_2_synthesize_guided(struct breeze_tts_2_context* ctx, const char* text,
                                                  const char* instruction, const float* ref_pcm, int ref_n_samples,
                                                  const char* ref_text, float cfg_scale_ref, float cfg_scale_ins,
                                                  int* out_n_samples) {
+    (void)cfg_scale_ref;
     if (out_n_samples)
         *out_n_samples = 0;
-    if (!ctx)
-        return nullptr;
     const bool wants_ins = instruction && *instruction;
     const bool wants_ref = ref_pcm && ref_n_samples > 0;
     const breeze_cfg_mode mode =
         wants_ins ? (wants_ref ? BREEZE_CFG_BOTH : BREEZE_CFG_INS) : (wants_ref ? BREEZE_CFG_REF : BREEZE_CFG_NONE);
-    const uint32_t caps = breeze_tts_2_capabilities(ctx);
-    if ((caps & (1u << mode)) == 0) {
-        // Refuse rather than downgrade. A single-branch run of a Voice Design
-        // request produces fluent speech that ignores the instruction, and
-        // nothing about the output says so.
-        fprintf(stderr,
-                "breeze_tts_2: this build does not implement classifier-free guidance (%s needs %d prompt "
-                "branches). Voice Clone and plain TTS work; Voice Design and Voice Direction do not. "
-                "Refusing rather than returning an unguided result that would sound fine and ignore the "
-                "instruction.\n",
-                mode == BREEZE_CFG_BOTH ? "Voice Direction" : (mode == BREEZE_CFG_INS ? "Voice Design" : "guidance"),
-                mode == BREEZE_CFG_BOTH ? 3 : 2);
+    if ((breeze_tts_2_capabilities(ctx) & (1u << mode)) == 0) {
+        // Refuse rather than downgrade: an unguided clone sounds fine and is
+        // not what a caller asking for reference guidance requested.
+        fprintf(stderr, "breeze_tts_2: guidance toward a reference clip without an instruction is not implemented. "
+                        "Use breeze_tts_2_synthesize_with_reference() for Voice Clone.\n");
         return nullptr;
     }
-    (void)cfg_scale_ref;
-    (void)cfg_scale_ins;
-    return synth_impl(ctx, text, instruction, ref_pcm, ref_n_samples, ref_text, out_n_samples, false, 0, nullptr);
+    return breeze_tts_2_synthesize_instructed(ctx, text, instruction, ref_pcm, ref_n_samples, ref_text, cfg_scale_ins,
+                                              out_n_samples);
 }
 
 // ===========================================================================
@@ -2199,12 +2263,12 @@ extern "C" int breeze_tts_2_run_depth_dump(struct breeze_tts_2_context* ctx, con
                                            float** out_logits_cb, int32_t* out_codes) {
     if (!ctx || !backbone_hidden)
         return -1;
-    const auto& hp = ctx->model.hp;
     std::vector<int32_t> codes;
     std::vector<std::vector<float>> logits;
     // Greedy: the acceptance criterion for this stage is argmax equality per
     // codebook, which a sampled pick cannot be held to.
-    if (!depth_decode_frame(ctx, backbone_hidden, cb0, /*temperature*/ 0.0f, codes, &logits, 0))
+    if (!depth_decode_frame(ctx, backbone_hidden, breeze_cfg::plan(false, 1.0f), cb0, /*temperature*/ 0.0f, codes,
+                            &logits))
         return -1;
     if (out_codes)
         std::memcpy(out_codes, codes.data(), codes.size() * sizeof(int32_t));
@@ -2220,22 +2284,8 @@ extern "C" int breeze_tts_2_run_depth_dump(struct breeze_tts_2_context* ctx, con
 extern "C" int breeze_tts_2_run_generate_codes(struct breeze_tts_2_context* ctx, const char* text, const float* ref_pcm,
                                                int ref_n_samples, const char* ref_text, int32_t* out_codes,
                                                int max_frames_cap) {
-    if (!ctx || !text || !out_codes || max_frames_cap <= 0)
-        return -1;
-    std::vector<std::vector<int32_t>> frames;
-    int n_samples = 0;
-    float* pcm = synth_impl(ctx, text, nullptr, ref_pcm, ref_n_samples, ref_text, &n_samples,
-                            /*greedy*/ true, max_frames_cap, &frames);
-    if (pcm)
-        qwen3_tts_pcm_free(pcm);
-    // No codec is not a failure here: the fixture stage is the CODES.
-    if (frames.empty())
-        return -1;
-    const int n_cb = (int)ctx->model.hp.num_codebooks;
-    const int n = std::min((int)frames.size(), max_frames_cap);
-    for (int f = 0; f < n; f++)
-        std::memcpy(out_codes + (size_t)f * n_cb, frames[(size_t)f].data(), (size_t)n_cb * sizeof(int32_t));
-    return n;
+    return greedy_codes(ctx, text, nullptr, 1.0f, ref_pcm, ref_n_samples, ref_text, nullptr, 0, out_codes,
+                        max_frames_cap, nullptr);
 }
 
 extern "C" int breeze_tts_2_run_prefill_embeds_dump(struct breeze_tts_2_context* ctx, const int32_t* ids,
@@ -2273,21 +2323,16 @@ extern "C" int breeze_tts_2_run_prefill_embeds_dump(struct breeze_tts_2_context*
 extern "C" int breeze_tts_2_run_generate_codes_ref(struct breeze_tts_2_context* ctx, const char* text,
                                                    const char* ref_text, const int32_t* ref_codes, int ref_frames,
                                                    int32_t* out_codes, int max_frames_cap) {
-    if (!ctx || !text || !out_codes || max_frames_cap <= 0)
-        return -1;
-    std::vector<std::vector<int32_t>> frames;
-    int n_samples = 0;
-    float* pcm = synth_impl(ctx, text, nullptr, nullptr, 0, ref_text, &n_samples, /*greedy*/ true, max_frames_cap,
-                            &frames, ref_codes, ref_frames);
-    if (pcm)
-        qwen3_tts_pcm_free(pcm);
-    if (frames.empty())
-        return -1;
-    const int n_cb = (int)ctx->model.hp.num_codebooks;
-    const int n = std::min((int)frames.size(), max_frames_cap);
-    for (int f = 0; f < n; f++)
-        std::memcpy(out_codes + (size_t)f * n_cb, frames[(size_t)f].data(), (size_t)n_cb * sizeof(int32_t));
-    return n;
+    return breeze_tts_2_run_generate_codes_guided(ctx, text, nullptr, 1.0f, ref_text, ref_codes, ref_frames, out_codes,
+                                                  max_frames_cap, nullptr);
+}
+
+extern "C" int breeze_tts_2_run_generate_codes_guided(struct breeze_tts_2_context* ctx, const char* text,
+                                                      const char* instruction, float cfg_scale, const char* ref_text,
+                                                      const int32_t* ref_codes, int ref_frames, int32_t* out_codes,
+                                                      int max_frames_cap, float* out_cb0_logits) {
+    return greedy_codes(ctx, text, instruction, cfg_scale, nullptr, 0, ref_text, ref_codes, ref_frames, out_codes,
+                        max_frames_cap, out_cb0_logits);
 }
 
 extern "C" int breeze_tts_2_run_prompt_dump(struct breeze_tts_2_context* ctx, const char* text, const char* ref_text,

@@ -52,18 +52,19 @@ extern "C" {
 
 struct breeze_tts_2_context;
 
-// Classifier-free guidance branches. Breeze runs the backbone over 2-3
-// INDEPENDENT prompts per step — not one prompt with different conditioning
-// vectors — and combines the logits as
-//     logits = uncond + s_ref * (ref - uncond) + s_ins * (ins - uncond)
-// at every backbone step AND again inside the depth decoder, per codebook.
-// Which capabilities are reachable is therefore a function of how many
-// branches the runtime can carry:
+// Classifier-free guidance modes. Breeze guides by running INDEPENDENT
+// prompts through the backbone — not one prompt with different conditioning
+// vectors — and combining their logits at every backbone step AND again
+// inside the depth decoder, per codebook. This port runs upstream's
+// single-scale shape, the one infer.py and api.py use:
+//     logits = negative + cfg_scale * (positive - negative)
+// where the negative prompt is the positive one minus the instruction.
 //
-//   BREEZE_CFG_NONE   1 branch   Voice Clone, and plain text-to-speech
-//   BREEZE_CFG_REF    2 branches Voice Clone with guidance
-//   BREEZE_CFG_INS    2 branches Voice Design   (instruction only)
-//   BREEZE_CFG_BOTH   3 branches Voice Direction (reference + instruction)
+//   BREEZE_CFG_NONE   plain text-to-speech and Voice Clone: one prompt
+//   BREEZE_CFG_REF    guidance toward a reference clip alone
+//   BREEZE_CFG_INS    Voice Design: instruction, guided against the plain prompt
+//   BREEZE_CFG_BOTH   Voice Direction: reference + instruction, guided
+//                     against the clone prompt, so the clip is in both branches
 //
 // See breeze_tts_2_capabilities() for what this build actually implements —
 // the enum describes the model, not a promise about the port.
@@ -98,10 +99,12 @@ struct breeze_tts_2_context* breeze_tts_2_init_from_file(const char* path_model,
 
 void breeze_tts_2_free(struct breeze_tts_2_context* ctx);
 
-// Bitmask of the CFG modes this BUILD can actually run, so a caller can refuse
-// a request instead of silently downgrading it. A capability that is not
-// implemented must be visibly absent — never quietly answered with the
-// single-branch result, which sounds plausible and is not what was asked for.
+// Bitmask (1 << breeze_cfg_mode) of the modes this BUILD can actually run, so
+// a caller can refuse a request instead of silently downgrading it. NONE, INS
+// and BOTH are set. REF is not: upstream defines no negative prompt for a
+// reference without an instruction. Nor is the three-branch combine
+//     uncond + s_ref * (ref - uncond) + s_ins * (ins - uncond)
+// ported; it sits behind two scales that neither upstream entry point passes.
 uint32_t breeze_tts_2_capabilities(const struct breeze_tts_2_context* ctx);
 
 // Plain text-to-speech. Caller frees with breeze_tts_2_pcm_free().
@@ -112,9 +115,28 @@ float* breeze_tts_2_synthesize(struct breeze_tts_2_context* ctx, const char* tex
 float* breeze_tts_2_synthesize_with_reference(struct breeze_tts_2_context* ctx, const char* text, const float* ref_pcm,
                                               int ref_n_samples, const char* ref_text, int* out_n_samples);
 
-// Voice Design / Voice Direction. `instruction` is the natural-language style
-// prompt; ref_pcm may be NULL for Voice Design. Returns NULL and logs when the
-// requested CFG mode is not in breeze_tts_2_capabilities().
+// Voice Design (instruction only) / Voice Direction (reference + instruction).
+// `instruction` is the natural-language style prompt; ref_pcm may be NULL.
+//
+// cfg_scale is the classifier-free guidance scale, as upstream's --cfg-scale.
+// At 1.0 (upstream's default) the instruction prompt runs alone. Any other
+// value also runs the same prompt WITHOUT the instruction and combines
+//     logits = negative + cfg_scale * (positive - negative)
+// at every backbone step and again per codebook inside the depth decoder,
+// which doubles the decode cost and the backbone KV cache. Upstream recommends
+// 4 to strengthen instruction-following. Ignored without an instruction, which
+// makes this the one entry point that reaches every mode in
+// breeze_tts_2_capabilities().
+float* breeze_tts_2_synthesize_instructed(struct breeze_tts_2_context* ctx, const char* text, const char* instruction,
+                                          const float* ref_pcm, int ref_n_samples, const char* ref_text,
+                                          float cfg_scale, int* out_n_samples);
+
+// The two-scale form of the call above, kept for existing callers.
+// cfg_scale_ins is the cfg_scale of breeze_tts_2_synthesize_instructed();
+// cfg_scale_ref is IGNORED, because the reference conditions both branches
+// instead of being guided on its own. Returns NULL and logs when the requested
+// mode is not in breeze_tts_2_capabilities(), which here means a reference
+// without an instruction: use breeze_tts_2_synthesize_with_reference().
 float* breeze_tts_2_synthesize_guided(struct breeze_tts_2_context* ctx, const char* text, const char* instruction,
                                       const float* ref_pcm, int ref_n_samples, const char* ref_text,
                                       float cfg_scale_ref, float cfg_scale_ins, int* out_n_samples);
@@ -188,6 +210,18 @@ int breeze_tts_2_run_prefill_embeds_dump(struct breeze_tts_2_context* ctx, const
 int breeze_tts_2_run_generate_codes_ref(struct breeze_tts_2_context* ctx, const char* text, const char* ref_text,
                                         const int32_t* ref_codes, int ref_frames, int32_t* out_codes,
                                         int max_frames_cap);
+
+// Stage 5c: stage 5b for the guided paths. `instruction` and cfg_scale are
+// those of breeze_tts_2_synthesize_instructed(); ref_codes may be NULL for
+// plain text-to-speech and Voice Design. out_cb0_logits, when non-NULL,
+// receives the frame-0 codebook-0 logits ([2052]) AFTER the guidance combine
+// and before any masking, which is where a wrong negative prompt or a wrong
+// KV slice first shows. Calls may be mixed freely on one context: that is the
+// point, since the branch count changes between them.
+int breeze_tts_2_run_generate_codes_guided(struct breeze_tts_2_context* ctx, const char* text, const char* instruction,
+                                           float cfg_scale, const char* ref_text, const int32_t* ref_codes,
+                                           int ref_frames, int32_t* out_codes, int max_frames_cap,
+                                           float* out_cb0_logits);
 
 // Prompt assembly, exposed on its own because it is invisible until the audio
 // is garbage. Writes the flattened prompt token ids, the per-position text

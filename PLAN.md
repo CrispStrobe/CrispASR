@@ -749,12 +749,22 @@ sequence is strict:
    pointwise matrices (~300 MiB). Granite and Moonshine have no large F16
    residuals; Paraformer's are mostly tiny FSMN kernels.
 
-## OPEN — #412 Breeze TTS 2 follow-up: CFG multi-branch
+## OPEN — #412 Breeze TTS 2 follow-up: validate guided synthesis
 
 The port shipped (issue closed; record in HISTORY "PLAN compaction 2026-09-30").
-Voice Design and Voice Direction are REFUSED rather than downgraded: the cache
-topology and branch index exist, per-branch prompt assembly and the logits
-combine do not.
+`--tts-instruct` (Voice Design / Voice Direction) is implemented 2026-10-09 as
+serial prompt branches with upstream's single-CFG combine; see "Scope decision
+on CFG" in `docs/breeze-tts-2-port-notes.md`. Status:
+
+- reused-session transitions (one -> two -> one branches) and the scale 0 / 1 /
+  4 semantics pass on the weights through the server
+  (`tests/test-server-bt2-instruct.py`);
+- parity against the original is WIRED and NOT YET RUN: the guided matrix
+  (plain, clone, instruction at scale 0 / 1 / 4 with and without a reference)
+  is dumped by `tools/kaggle/breeze-refdump` under `guided/` and compared by
+  `crispasr-diff bt2-tts-guided` + `breeze_tts_2.py --guided`; both kernels
+  still have to be pushed by the maintainer;
+- the three-branch dual CFG is not ported (no upstream entry point uses it).
 
 ## OPEN (optional) — #416 Sidon quant: CUDA MMQ arm
 

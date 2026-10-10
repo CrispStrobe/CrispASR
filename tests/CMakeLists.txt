@@ -4544,6 +4544,31 @@ catch_discover_tests(test-core-bpe
     PROPERTIES LABELS "unit;bpe"
 )
 
+# ─── test-breeze-cfg — core/breeze_cfg.h bt2-tts guidance plan + combine ─────
+# Pins the prompt branches and the logits combine to upstream breeze-tts.
+# No model load, pure CPU.
+add_executable(test-breeze-cfg test-breeze-cfg.cpp)
+target_include_directories(test-breeze-cfg PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-breeze-cfg PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-breeze-cfg
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;breeze-cfg"
+)
+
+# ─── test-breeze-abi — src/breeze_tts_2.h exported C entry points ────────────
+# Compiles and links against the declarations other code depends on. NULL
+# context throughout, no model load.
+if (TARGET breeze_tts_2)
+    add_executable(test-breeze-abi test-breeze-abi.cpp)
+    target_link_libraries(test-breeze-abi PRIVATE breeze_tts_2 Catch2::Catch2WithMain)
+    catch_discover_tests(test-breeze-abi
+        TEST_SPEC "[unit]"
+        PROPERTIES LABELS "unit;breeze-abi"
+    )
+endif()
+
 # ─── test-core-wordpiece — core/wordpiece.h BERT WordPiece tokenizer ─────────
 # Verifies build_map, lookup, cased/uncased detection, BasicTokenizer,
 # WordPiece greedy subword splitting, [UNK] fallback. No model load, pure CPU.

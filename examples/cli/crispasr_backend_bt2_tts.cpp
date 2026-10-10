@@ -9,11 +9,11 @@
 // prose, so crispasr_license_requires_acceptance() makes -m auto demand
 // CRISPASR_ACCEPT_LICENSE before the download.
 //
-// Capabilities that ship here: plain text-to-speech, and Voice Clone via
-// --voice ref.wav (+ --ref-text). Voice Design (--tts-instruct) and Voice
-// Direction need 2-3 CFG prompt branches per decode step, which this build
-// does not implement; those requests are REFUSED rather than quietly answered
-// with an unguided result. See breeze_tts_2_capabilities().
+// Capabilities: plain text-to-speech, Voice Clone via --voice ref.wav
+// (+ --ref-text), Voice Design via --tts-instruct, and Voice Direction via
+// both. --tts-cfg-scale is upstream's --cfg-scale: unset or 1 runs the
+// instruction prompt alone, anything else guides against the instruction-free
+// prompt at twice the decode cost. See breeze_tts_2_synthesize_instructed().
 //
 // The codec is not in the model file: Breeze's bundled audio tokenizer is
 // bit-identical to Qwen3-TTS-Tokenizer-12Hz, which CrispASR already ships, so
@@ -133,12 +133,6 @@ public:
             }
         }
 
-        if (!p.tts_instruct.empty()) {
-            fprintf(stderr, "crispasr[bt2-tts]: --tts-instruct (Voice Design/Direction) needs classifier-free guidance "
-                            "over 2-3 prompt branches, which this build does not implement. Refusing rather than "
-                            "synthesizing an unguided result that would sound fine and ignore the instruction.\n");
-            return false;
-        }
         return true;
     }
 
@@ -160,10 +154,11 @@ public:
         if (p.seed != 0)
             breeze_tts_2_set_seed(ctx_, (uint64_t)p.seed);
         int n = 0;
-        float* pcm = ref_pcm_.empty()
-                         ? breeze_tts_2_synthesize(ctx_, text.c_str(), &n)
-                         : breeze_tts_2_synthesize_with_reference(ctx_, text.c_str(), ref_pcm_.data(),
-                                                                  (int)ref_pcm_.size(), ref_text_.c_str(), &n);
+        // Read per call, not at init: the server maps a request's
+        // `instructions` field onto params.tts_instruct.
+        float* pcm = breeze_tts_2_synthesize_instructed(
+            ctx_, text.c_str(), p.tts_instruct.c_str(), ref_pcm_.empty() ? nullptr : ref_pcm_.data(),
+            (int)ref_pcm_.size(), ref_text_.c_str(), p.tts_cfg_scale < 0.0f ? 1.0f : p.tts_cfg_scale, &n);
         if (!pcm || n <= 0)
             return {};
         std::vector<float> out(pcm, pcm + n);

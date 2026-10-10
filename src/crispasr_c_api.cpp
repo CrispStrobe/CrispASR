@@ -2145,6 +2145,8 @@ struct crispasr_session {
 #endif
 #ifdef CA_HAVE_BT2_TTS
     breeze_tts_2_context* bt2_ctx = nullptr;
+    std::string bt2_instruct;
+    float bt2_cfg_scale = 1.0f; // upstream's default: the instruction prompt alone
 #endif
 #ifdef CA_HAVE_PIANO_TRANSCRIPTION
     piano_transcription_ctx* piano_ctx = nullptr;
@@ -9877,10 +9879,10 @@ CA_EXPORT const char* crispasr_session_get_speaker_name(crispasr_session* s, int
 }
 
 // Set the voice description / style instruct for instruct-capable TTS
-// backends: qwen3-tts VoiceDesign, parler-tts, omnivoice. Required before
-// crispasr_session_synthesize when the loaded backend is VoiceDesign.
+// backends: qwen3-tts VoiceDesign, parler-tts, omnivoice, bt2-tts. Required
+// before crispasr_session_synthesize when the loaded backend is VoiceDesign.
 //
-// ⚠ The contract differs by backend. qwen3-tts and parler take free
+// ⚠ The contract differs by backend. qwen3-tts, parler and bt2-tts take free
 // natural-language prose; **omnivoice takes a closed 48-item vocabulary**
 // ("male", "elderly", "british accent", "河南话", …, comma-separated, at most
 // one per category) and REJECTS anything else, because the string reaches its
@@ -9917,6 +9919,13 @@ CA_EXPORT int crispasr_session_set_instruct(crispasr_session* s, const char* ins
     // reason on stderr rather than being silently ignored.
     if (s->omnivoice_ctx)
         return omnivoice_set_instruct(s->omnivoice_ctx, instruct);
+#endif
+#ifdef CA_HAVE_BT2_TTS
+    // Free prose, held on the session because the backend takes it per call.
+    if (s->bt2_ctx) {
+        s->bt2_instruct = instruct;
+        return 0;
+    }
 #endif
     return -3;
 }
@@ -10098,12 +10107,13 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
 #ifdef CA_HAVE_BT2_TTS
     if (s->bt2_ctx) {
         int n = 0;
-        // Plain TTS only here. Voice Clone / Voice Design need a reference clip
-        // and an instruction string, which this ABI has no way to carry --
-        // exposing them through a text-only entry point would silently answer a
-        // different question than the caller asked. They stay CLI-only until
-        // the ABI grows a way to pass them.
-        float* pcm = breeze_tts_2_synthesize(s->bt2_ctx, text, &n);
+        // Plain TTS, or Voice Design once crispasr_session_set_instruct has
+        // been called. Voice Clone / Voice Direction need a reference clip,
+        // which this arm has no way to carry; they stay CLI-only. A clip
+        // belongs in THIS call next to the instruction, not in a second
+        // branch that picks one or the other: the model takes both at once.
+        float* pcm = breeze_tts_2_synthesize_instructed(s->bt2_ctx, text, s->bt2_instruct.c_str(), nullptr, 0, nullptr,
+                                                        s->bt2_cfg_scale, &n);
         if (out_n_samples)
             *out_n_samples = n;
         return pcm;
@@ -13191,8 +13201,9 @@ CA_EXPORT int crispasr_session_set_tts_steps(crispasr_session* s, int steps) {
 // TTS CFG guidance scale. Honoured by vibevoice (0 = model default:
 // 1.3 base / 3.0 realtime; upstream's realtime demo uses 1.5).
 // Spontaneous BGM onsets are documented VibeVoice model behavior —
-// lowering cfg or changing the seed re-rolls them. Other TTS
-// backends no-op (rc=-2).
+// lowering cfg or changing the seed re-rolls them. bt2-tts applies it
+// to requests that carry an instruction (default 1.0, upstream suggests
+// 4). Other TTS backends no-op (rc=-2).
 CA_EXPORT int crispasr_session_set_tts_cfg_scale(crispasr_session* s, float scale) {
     if (!s)
         return -1;
@@ -13209,6 +13220,13 @@ CA_EXPORT int crispasr_session_set_tts_cfg_scale(crispasr_session* s, float scal
         // speaker CFG (default 5.0) is reachable only via the CLI env override
         // CRISPASR_IRODORI_CFG_SPEAKER — the single generic knob can't carry it (#241).
         irodori_tts_set_cfg_scale_text(s->irodori_ctx, scale);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_BT2_TTS
+    // Only acts on a request that carries an instruction; 1.0 is unguided.
+    if (s->bt2_ctx) {
+        s->bt2_cfg_scale = scale;
         touched++;
     }
 #endif
