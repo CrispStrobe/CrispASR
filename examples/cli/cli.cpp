@@ -1591,12 +1591,13 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             "moss-tts-local). Units are the backend's AR decode step, NOT samples or ms: one codec frame, "
             "12.5 Hz on the shipped models, so 80 ms each and N=25 floors at ~2 s. -1 = model default\n",
             params.tts_min_speech_tokens);
-    fprintf(
-        out,
-        "             --tts-cfg-scale X        [%-7s] TTS CFG guidance scale (vibevoice/chatterbox/f5/tada/irodori; "
-        "irodori: text CFG (default 3.0); speaker CFG via CRISPASR_IRODORI_CFG_SPEAKER; "
-        "vibevoice: 0 = model default, try 1.5 or a new --seed to re-roll BGM onsets)\n",
-        "default");
+    fprintf(out,
+            "             --tts-cfg-scale X        [%-7s] TTS CFG guidance scale "
+            "(vibevoice/chatterbox/f5/tada/irodori/bt2-tts; "
+            "irodori: text CFG (default 3.0); speaker CFG via CRISPASR_IRODORI_CFG_SPEAKER; "
+            "bt2-tts: applies with --tts-instruct (default 1 = unguided, try 4); "
+            "vibevoice: 0 = model default, try 1.5 or a new --seed to re-roll BGM onsets)\n",
+            "default");
     fprintf(
         out,
         "             --tts-speed X            [%-7.2f] speaking-rate multiplier (kokoro/omnivoice/f5/piper/melotts/"

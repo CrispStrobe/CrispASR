@@ -48,6 +48,14 @@ STAGE CONTRACT (must match breeze_refdump.py exactly)
   codes                     (T, 16)       i32
   codec_audio               (N_out,)      f32
 
+  guided/{CASE}/            one directory per guided request shape (plain,
+                            clone, instruction at cfg_scale 0 / 1 / 4 with and
+                            without the reference), compared with --guided:
+    prompt_input_ids        (L,)          i32
+    neg_prompt_input_ids    (L_neg,)      i32   only when a negative prompt runs
+    backbone_logits_frame0  (2052,)       f32   AFTER the guidance combine
+    codes                   (T, 16)       i32
+
 ACCEPTANCE (docs/breeze-tts-2-feasibility.md §4)
   every float stage         cos >= 0.999
   backbone_logits_frame0    argmax must match exactly
@@ -82,8 +90,12 @@ INT_STAGES = {
     "prompt_input_ids",
     "prompt_text_ids_mask",
     "prompt_text_ids_len",
+    "neg_prompt_input_ids",
     "codes",
 }
+
+# Fixture subdirectory holding one directory of stages per guided case.
+GUIDED_DIR = "guided"
 
 
 def _is_int_stage(name: str) -> bool:
@@ -141,9 +153,10 @@ def fixture_dir(download: bool = True) -> Path:
 
 
 def load_fixtures(stages: Optional[Set[str]] = None,
-                  download: bool = True) -> Dict[str, np.ndarray]:
-    """Load every .npy in the fixture dir (optionally filtered by `stages`)."""
-    d = fixture_dir(download=download)
+                  download: bool = True, sub: str = "") -> Dict[str, np.ndarray]:
+    """Load every .npy in the fixture dir, or in its `sub` directory
+    (optionally filtered by `stages`)."""
+    d = fixture_dir(download=download) / sub
     out: Dict[str, np.ndarray] = {}
     for p in sorted(d.glob("*.npy")):
         name = p.stem
@@ -248,18 +261,19 @@ def compare_stage(name: str, ref: np.ndarray, cpp: np.ndarray) -> dict:
 
 
 def compare(cpp_dump: Path, download: bool = True,
-            only: Optional[Set[str]] = None) -> int:
-    """Diff a C++ dump directory against the reference fixtures.
+            only: Optional[Set[str]] = None, sub: str = "") -> int:
+    """Diff a C++ dump directory against the reference fixtures, or the `sub`
+    directory of both.
 
     Returns a process exit code: 0 = every present stage passed.
     """
-    ref = load_fixtures(download=download)
+    ref = load_fixtures(download=download, sub=sub)
     meta = load_meta(download=download)
-    if meta:
+    if meta and not sub:
         print(f"fixture: seed={meta.get('seed')} greedy={meta.get('greedy')} "
               f"text={meta.get('syn_text')!r}")
         print(f"         template={meta.get('template')}")
-    cpp_dump = Path(cpp_dump)
+    cpp_dump = Path(cpp_dump) / sub
     if not cpp_dump.is_dir():
         raise NotADirectoryError(cpp_dump)
 
@@ -305,6 +319,28 @@ def compare(cpp_dump: Path, download: bool = True,
     return 1 if failures else 0
 
 
+def compare_guided(cpp_dump: Path, download: bool = True) -> int:
+    """Diff every guided case (`crispasr-diff bt2-tts-guided`) against its
+    fixture directory. A case the C++ dump lacks is a failure: the guided
+    matrix exists to be run whole.
+    """
+    root = fixture_dir(download=download) / GUIDED_DIR
+    cases = sorted(p.name for p in root.iterdir() if p.is_dir()) if root.is_dir() else []
+    if not cases:
+        print(f"no guided fixtures under {root}; run tools/kaggle/breeze-refdump")
+        return 1
+    guided = load_meta(download=download).get("guided", {})
+    failed = []
+    for case in cases:
+        print(f"\n== {case} {json.dumps(guided.get(case, {}))}")
+        sub = f"{GUIDED_DIR}/{case}"
+        if not (Path(cpp_dump) / sub).is_dir() or compare(cpp_dump, download=download, sub=sub):
+            failed.append(case)
+    print(f"\n{len(cases) - len(failed)}/{len(cases)} guided cases passed"
+          + (f"; FAILED: {', '.join(failed)}" if failed else ""))
+    return 1 if failed else 0
+
+
 def main() -> None:
     import argparse
 
@@ -317,6 +353,9 @@ def main() -> None:
                     help="list the fixture stages and their shapes, then exit")
     ap.add_argument("--stage", action="append", default=None,
                     help="restrict the comparison to this stage (repeatable)")
+    ap.add_argument("--guided", action="store_true",
+                    help="compare the guided cases under <cpp-dump>/guided "
+                         "instead of the base stages")
     ap.add_argument("--no-download", action="store_true",
                     help="require BREEZE_FIXTURE_DIR instead of hitting HF")
     args = ap.parse_args()
@@ -332,6 +371,8 @@ def main() -> None:
             print(f"  {k:34s} {fx[k].shape}  {fx[k].dtype}")
         raise SystemExit(0)
 
+    if args.guided:
+        raise SystemExit(compare_guided(args.cpp_dump, download=download))
     raise SystemExit(compare(args.cpp_dump, download=download,
                              only=set(args.stage) if args.stage else None))
 

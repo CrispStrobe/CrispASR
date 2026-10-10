@@ -43,7 +43,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-SCRIPT_VERSION = "2026-09-17.1"
+SCRIPT_VERSION = "2026-10-10.1"
 WORK = Path("/kaggle/working")
 TEMP = Path("/kaggle/temp") if Path("/kaggle/temp").is_dir() else WORK
 REPO = WORK / "CrispASR"
@@ -231,6 +231,31 @@ if c.stderr:
     print("CMP STDERR:", c.stderr[-4000:], flush=True)
 verdict["compare_rc"] = c.returncode
 (WORK / "compare.txt").write_text(c.stdout + "\n" + c.stderr)
+
+# ── guided paths: Voice Design / Voice Direction and their controls ─────────
+# The stage dump above is one request shape, a single branch. This runs the
+# matrix the reference dumped under guided/ — plain, clone, and instruction
+# requests at cfg_scale 0 / 1 / 4 with and without the reference — on ONE
+# context, so the two-branch combine and the transitions between branch counts
+# are held to the original's greedy codes. The dump's own exit code carries
+# the checks that need no reference (repeatability on the reused context).
+kh.step("guided dump")
+g = subprocess.run([str(diffbin), "bt2-tts-guided", model, fixdir, str(dump)],
+                   capture_output=True, text=True, timeout=5400, env=env)
+print(g.stdout[-16000:], flush=True)
+if g.returncode != 0:
+    print("GUIDED STDERR:", g.stderr[-8000:], flush=True)
+verdict["guided_selfcheck_rc"] = g.returncode
+
+kh.step("guided compare")
+gc = subprocess.run([sys.executable, str(REPO / "tools" / "reference_backends" / "breeze_tts_2.py"),
+                     "--cpp-dump", str(dump), "--guided"],
+                    capture_output=True, text=True, timeout=1800, env=cmp_env)
+print(gc.stdout[-20000:], flush=True)
+if gc.stderr:
+    print("GUIDED CMP STDERR:", gc.stderr[-4000:], flush=True)
+verdict["guided_compare_rc"] = gc.returncode
+(WORK / "compare-guided.txt").write_text(gc.stdout + "\n" + gc.stderr)
 
 # ── synthesis + ASR roundtrip ───────────────────────────────────────────────
 # This is the question the owner actually asked. It runs even if parity failed,
