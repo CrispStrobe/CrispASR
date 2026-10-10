@@ -4579,16 +4579,72 @@ CA_EXPORT int crispasr_session_detected_language(crispasr_session* s, char* out_
 CA_EXPORT int crispasr_session_input_sample_rate(crispasr_session* s) {
     if (!s)
         return 0;
-        // Backends that operate at 24 kHz internally.
+#ifdef CA_HAVE_MELOTTS
+    // uses OpenVoice2
+    if (s->backend.find("melo") == 0 && s->melotts_ctx)
+        return 22050;
+#endif
+    // Backends that operate at 24 kHz internally.
+#ifdef CA_HAVE_BT2_TTS
+    if (s->backend.find("bt2-tts") == 0 && s->bt2_ctx)
+        return 24000;
+#endif
+#ifdef CA_HAVE_POCKET
+    if (s->backend.find("pocket-tts") == 0 && s->pocket_tts_ctx)
+        return 24000;
+#endif
 #ifdef CA_HAVE_VIBEVOICE
     if (s->backend.find("vibevoice") == 0 && s->vibevoice_ctx)
+        return 24000;
+#endif
+#ifdef CA_HAVE_QWEN3_TTS
+    if (s->backend.find("qwen3-tts") == 0 && s->qwen3_tts_ctx)
+        return 24000;
+#endif
+#ifdef CA_HAVE_OMNIVOICE
+    if (s->backend.find("omnivoice") == 0 && s->omnivoice_ctx)
+        return 24000;
+#endif
+#ifdef CA_HAVE_F5TTS
+    // match set_voice logic
+    if (s->f5tts_ctx) {
+        int from_model = f5_tts_sample_rate(s->f5tts_ctx);
+        return from_model > 0 ? from_model : 24000;
+    }
+#endif
+#ifdef CA_HAVE_INDEXTTS
+    if (s->backend.find("indextts") == 0 && s->indextts_ctx)
+        return 24000;
+#endif
+#ifdef CA_HAVE_TADA
+    if (s->backend.find("tada") == 0 && s->tada_ctx)
+        return 24000;
+#endif
+#ifdef CA_HAVE_CHATTERBOX
+    // Both 24 kHz and 16 kHz are used in generating a voice reference, so using the higher of the two.
+    if (s->backend.find("chatterbox") == 0 && s->chatterbox_ctx)
         return 24000;
 #endif
 #ifdef CA_HAVE_KYUTAI_STT
     if (s->kyutai_ctx)
         return 24000;
 #endif
-        // Backends with model-level sample_rate hparams.
+    // Backends with model-level sample_rate hparams.
+#ifdef CA_HAVE_MOSS_TTS
+    // Same for input and output (24 kHz)
+    if (s->moss_tts_ctx)
+        return moss_tts_sampling_rate(s->moss_tts_ctx);
+#endif
+#ifdef CA_HAVE_MOSS_TTS_LOCAL
+    // Same for input and output (48 kHz)
+    if (s->moss_tts_local_ctx)
+        return moss_tts_local_sampling_rate(s->moss_tts_local_ctx);
+#endif
+#ifdef CA_HAVE_IRODORI_TTS
+    // Same for input and output (48 kHz)
+    if (s->irodori_ctx)
+        return irodori_tts_sample_rate(s->irodori_ctx);
+#endif
 #ifdef CA_HAVE_PARAKEET
     if (s->parakeet_ctx)
         return parakeet_sample_rate(s->parakeet_ctx);
