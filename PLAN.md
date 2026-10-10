@@ -3862,3 +3862,8 @@ publication is disabled. No v0.8.43 bump/tag has been made.
 PR #530 CI now reports clang-format 18 violations in its C ABI source; remaining
 build/model checks are running or queued. Exact review findings remain recorded
 in the posted request-changes reviews; no contributor patch was merged.
+
+Integrated package/GPU documentation passes all four secret-scan tests with
+the account environment set, no skips (112.083 seconds). Documentation
+anchors pass (227). Subsequent checkpoint changes only status/wording; the
+release matrix and candidate GPU run remain pending, with no publication.
