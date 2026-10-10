@@ -9589,9 +9589,9 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         if (ends_with_wav(path)) {
             // 1.5B/7B base model: WAV reference → env var for vibevoice_synthesize
 #if defined(_WIN32)
-            _putenv_s("VIBEVOICE_VOICE_AUDIO", path);
+            _putenv_s("CRISPASR_VIBEVOICE_VOICE_AUDIO", path);
 #else
-            setenv("VIBEVOICE_VOICE_AUDIO", path, 1);
+            setenv("CRISPASR_VIBEVOICE_VOICE_AUDIO", path, 1);
 #endif
             return 0;
         }
