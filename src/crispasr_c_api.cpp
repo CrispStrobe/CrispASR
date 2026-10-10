@@ -9421,6 +9421,30 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         return supertonic_set_voice(s->supertonic_ctx, path);
     }
 #endif
+#ifdef CA_HAVE_IRODORI_TTS
+    if (s->irodori_ctx) {
+        // Stash a 48 kHz mono reference for voice cloning.
+        if (!ends_with_wav(path)) {
+            fprintf(stderr, "crispasr[irodori-tts]: expected a wav file instead of '%s' as a reference\n", path);
+            return -2;
+        }
+        float* pcm = nullptr;
+        int input_sr = crispasr_session_input_sample_rate(s);
+        int n = 0, sr = 0;
+        if (crispasr_audio_load_at_rate(path, input_sr, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
+            fprintf(stderr, "crispasr[irodori-tts]: got a error loading '%s' as a reference\n", path);
+            if (pcm)
+                free(pcm);
+            return -1;
+        }
+        if (irodori_tts_set_reference(s->irodori_ctx, pcm, n, sr)) {
+            fprintf(stderr, "crispasr[irodori-tts]: got a error setting pcm data from '%s' as a reference\n", path);
+            return -1;
+        }
+        free(pcm);
+        return 0;
+    }
+#endif
 #ifdef CA_HAVE_MELOTTS
     if (s->melotts_ctx) {
 #ifdef CA_HAVE_OPEN_VOICE2
