@@ -3897,3 +3897,23 @@ SHA `1bc7b09cc33932125151cc9fc2eec7c66851dc4b5339f71f023c8f9a5c9e7e55`,
 This completes the launched candidate hardware controls, not production/default
 promotion or speed proof. Contributor fixes remain active in the claimed
 separate worktree; final integrated release matrix remains pending.
+
+
+Contributor corrections are prepared in draft [PR #531](https://github.com/CrispStrobe/CrispASR/pull/531),
+source `c222540e1cdef04d011807040a44030ff8ba9228`. Original #530 commits
+are preserved and current main merged. Four actual-dispatch failure/ownership
+contracts reject original #530 source and pass fixed code, including 100 Moss
+replacements and 100 OpenVoice conversions, failed allocation/encode, Breeze
+reference/provenance rollback and SNAC errors. The OpenVoice rate-getter path
+also repairs #530's observed linux-unit failure. Formatting 18/syntax/diff
+and all four tracked secret checks pass (50.743 seconds, no skips).
+Hosted [GH 38026088284](https://github.com/CrispStrobe/CrispASR/actions/runs/38026088284)
+builds actual CLI/shared library, generates capability/feature tables and
+checks CLI/C ABI parity; tables must be copied from its terminal artifact
+and rechecked before acceptance. Earlier queued dispatch 38026075171 was
+cancelled before work to use Ubuntu 24's packaged clang-format 18.
+Receipt: `docs/contributor-tts-contracts-2026-10-10.json`. No contributor
+merge, original guided-stage or actual decoded/clone acceptance yet. #529
+exported-API compatibility and reference+instruction composition still pending.
+Integrated release matrix 38024994245 has 12 successful jobs and no failures
+at this checkpoint; immutable source stays f51dc7770. No bump/tag yet.

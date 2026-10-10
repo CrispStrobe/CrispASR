@@ -1,0 +1,45 @@
+{
+  "source": "c222540e1cdef04d011807040a44030ff8ba9228",
+  "original_pr": 530,
+  "original_head": "5fce2351533617e35bba13711ac3319dbe870e08",
+  "integration_pr": 531,
+  "branch": "fix/contributor-tts-contracts",
+  "worktree": "/mnt/storage/crispasr/salvage-20261008/contributor-tts-fixes",
+  "local_contracts": {
+    "tests": 4,
+    "passed": 4,
+    "original_source_rejected": 4,
+    "repeat_replacements": 100,
+    "repeat_conversions": 100,
+    "production_dispatch_compiled": true,
+    "backend_stubs": true,
+    "model_weights": false
+  },
+  "secret_scan": {
+    "tests": 4,
+    "passed": 4,
+    "skips": 0,
+    "seconds": 50.743,
+    "account_environment_set": true
+  },
+  "clang_format_major": 18,
+  "heavy_build": {
+    "run": 38026088284,
+    "source": "c222540e1cdef04d011807040a44030ff8ba9228",
+    "runner": "ubuntu-latest",
+    "status": "launched",
+    "generated_tables_pending": true,
+    "cli_cabi_parity_pending": true,
+    "previous_dispatch": {
+      "run": 38026075171,
+      "status": "cancelled before work",
+      "reason": "Use Ubuntu 24 runner with packaged clang-format 18"
+    }
+  },
+  "limits": [
+    "Not merged",
+    "No original guided-stage or real decoded/clone acceptance",
+    "PR 529 API compatibility and reference/instruction composition pending",
+    "Separate backend GPU/model reports remain open"
+  ]
+}
