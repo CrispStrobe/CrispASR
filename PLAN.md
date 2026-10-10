@@ -3867,3 +3867,20 @@ Integrated package/GPU documentation passes all four secret-scan tests with
 the account environment set, no skips (112.083 seconds). Documentation
 anchors pass (227). Subsequent checkpoint changes only status/wording; the
 release matrix and candidate GPU run remain pending, with no publication.
+
+
+## CLAIMED 2026-10-10 — Contributor TTS ownership and compatibility corrections
+
+Owner: this maintainer session. Worktree
+`/mnt/storage/crispasr/salvage-20261008/contributor-tts-fixes`, branch
+`fix/contributor-tts-contracts`. Start from reviewed PR #530 head
+`5fce2351533617e35bba13711ac3319dbe870e08`, preserve contributor commits,
+and correct atomic reference state, Moss/OpenVoice ownership, SNAC error
+propagation and generated capabilities/style. Preserve/compose #529's existing
+exported API and reference+instruction paths in a separate integration step.
+Require meaningful failure/replacement/lifetime controls before accepting fixes;
+model changes still require original diff and decoded/clone controls on GH,
+with heavy GPU work only on the authorized Kaggle account. No merge or release
+claim from generic builds alone. The Nemotron fresh-process candidate GPU run
+is terminal COMPLETE; verify full arrays, source/hash and decoded/state receipts
+and publish its proof before recording acceptance.
