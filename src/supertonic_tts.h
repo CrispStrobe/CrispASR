@@ -49,6 +49,8 @@ struct supertonic_context* supertonic_init_from_file(const char* path_model, str
 void supertonic_free(struct supertonic_context* ctx);
 
 void supertonic_set_n_threads(struct supertonic_context* ctx, int n_threads);
+int supertonic_n_speakers(struct supertonic_context* ctx);
+const char* supertonic_get_speaker_name(struct supertonic_context* ctx, int i);
 int supertonic_set_voice(struct supertonic_context* ctx, const char* voice);   // 0 on success
 int supertonic_set_language(struct supertonic_context* ctx, const char* lang); // 0 on success
 void supertonic_set_speed(struct supertonic_context* ctx, float speed);

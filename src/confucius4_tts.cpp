@@ -3539,6 +3539,18 @@ float* confucius4_tts_synthesize(confucius4_tts_context* ctx, const char* text, 
     if (!ctx || !text || !out_n_samples)
         return nullptr;
 
+    if (!ctx->s2a.loaded) {
+        fprintf(stderr, "S2A not loaded — pass --codec-model\n");
+        *out_n_samples = 0;
+        return nullptr;
+    }
+
+    if (!ctx->vocoder) {
+        fprintf(stderr, "BigVGAN vocoder gguf not loaded\n");
+        *out_n_samples = 0;
+        return nullptr;
+    }
+
     const int vb = ctx->params.verbosity;
 
     load_conditioning_from_env(ctx);
@@ -3640,8 +3652,6 @@ float* confucius4_tts_synthesize(confucius4_tts_context* ctx, const char* text, 
         if (vb >= 1)
             fprintf(stderr, "confucius4: tokenized '%s' → %zu tokens (SP-BPE + bos/eos)\n", text, text_ids.size());
     } else {
-        fprintf(stderr, "confucius4: no tokenizer. Set CRISPASR_CONFUCIUS4_TEXT_IDS=id1,id2,... "
-                        "or bake vocab into the GGUF.\n");
         *out_n_samples = 0;
         return nullptr;
     }
@@ -3668,12 +3678,6 @@ float* confucius4_tts_synthesize(confucius4_tts_context* ctx, const char* text, 
     //   7. Strip prompt portion → mel (80, T_target)
     //
     // Step 4: BigVGAN vocoder → PCM @ 22050 Hz (external companion GGUF)
-    if (!ctx->s2a.loaded) {
-        fprintf(stderr, "confucius4: generated %zu semantic codes (S2A not loaded — pass --codec-model)\n",
-                semantic_codes.size());
-        *out_n_samples = 0;
-        return nullptr;
-    }
 
     // Run S2A flow-matching → mel
     if (vb >= 1 && !lm_latent.empty())
@@ -3702,22 +3706,6 @@ float* confucius4_tts_synthesize(confucius4_tts_context* ctx, const char* text, 
             fprintf(stderr, "confucius4: BigVGAN: %d mel frames → %d PCM samples @ %d Hz (%.2fs)\n", T_mel, n_pcm, sr,
                     (float)n_pcm / sr);
     }
-
-    if (!pcm) {
-        // Fallback: output silence at the right duration
-        const int hop = 256;
-        n_pcm = T_mel * hop;
-        pcm = (float*)calloc(n_pcm, sizeof(float));
-        if (!pcm) {
-            *out_n_samples = 0;
-            return nullptr;
-        }
-        if (vb >= 1)
-            fprintf(stderr,
-                    "confucius4: output: %d mel frames → %d PCM samples @ %d Hz (%.2fs, silence — no vocoder)\n", T_mel,
-                    n_pcm, sr, (float)n_pcm / sr);
-    }
-
     *out_n_samples = n_pcm;
     return pcm;
 }
