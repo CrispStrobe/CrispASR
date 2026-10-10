@@ -3826,3 +3826,16 @@ on Kaggle. Archive every terminal kernel output before repushing.
 PR #528 Docker checks failed on Docker Hub HTTP 429 before compilation;
 failed jobs rerun without changing source or acceptance gates. Other checks,
 including the actual dynamic C ABI regression, pass.
+
+
+## CLAIMED 2026-10-10 — Index-Echo 9B model card history cleanup
+
+User requests moving historical notes from `cstr/index-echo-9b-GGUF` into
+CrispASR `HISTORY.md`. Work in the existing storage docs worktree. Archive the
+full acceptance/performance narrative from immutable HF README revision
+`83ac9d70bd3eaec34cc1dc19dbff605ce5869d85`, preserving proof links and rejected
+experiments. Keep the HF card focused on current files, usage, memory,
+compatibility, accepted precision and provenance; link to the committed history.
+Publish the shortened card only after the archive is committed/pushed, using
+HF parent-commit protection to avoid overwriting concurrent edits. No model
+binary, license, quantization default or validation verdict changes.
