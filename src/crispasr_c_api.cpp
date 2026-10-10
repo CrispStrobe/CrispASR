@@ -24,7 +24,7 @@
 #include "core/ngram_loop_fix.h"
 #include "core/asr_time_order.h"
 #include "core/segment_hygiene.h" // §W2/§W5/§W6 opt-in segment cleanup    // fix/session-long-audio: collapse decode loops in merged chunks (issue #218)
-#include "parakeet_orchestrate.h" // improvements Phase 1: shared parakeet transcribe orchestration
+#include "parakeet_orchestrate.h"  // improvements Phase 1: shared parakeet transcribe orchestration
 #include "core/gpu_backend_pref.h" // crispasr_set_gpu_backend_pref (#214)
 #include "core/audio_resample.h"   // Sidon S2S input-rate conversion
 #include "core/wav_reader.h"       // fireredtts3 set_voice WAV decode
@@ -4714,7 +4714,7 @@ CA_EXPORT int crispasr_session_set_pcm_sample_rate(crispasr_session* s, int rate
 CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
     if (!s)
         return 0;
-        // Rate is a model hparam — ask the context (CLI-adapter fallbacks kept).
+    // Rate is a model hparam — ask the context (CLI-adapter fallbacks kept).
 #ifdef CA_HAVE_BANANAMIND_TTS
     if (s->bananamind_tts_ctx)
         return bananamind_tts_sample_rate(s->bananamind_tts_ctx);
@@ -4754,7 +4754,7 @@ CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
     if (s->piper_ctx)
         return piper_tts_sample_rate(s->piper_ctx);
 #endif
-        // Fixed non-24 kHz rates (same constants as the CLI adapters).
+    // Fixed non-24 kHz rates (same constants as the CLI adapters).
 #ifdef CA_HAVE_DIA
     if (s->dia_tts_ctx)
         return 44100;
@@ -4791,7 +4791,7 @@ CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
     if (s->speecht5_ctx)
         return 16000;
 #endif
-        // Every remaining audio-producing ctx uses the 24 kHz adapter default.
+    // Every remaining audio-producing ctx uses the 24 kHz adapter default.
 #ifdef CA_HAVE_BT2_TTS
     // Breeze-TTS-2 renders through the qwen3-tts-tokenizer-12hz codec (24 kHz),
     // as its CLI adapter's tts_sample_rate() says. It had no arm here and
@@ -12911,7 +12911,7 @@ CA_EXPORT int crispasr_session_set_punctuation(crispasr_session* s, int enable) 
 CA_EXPORT int crispasr_session_set_punc_model(crispasr_session* s, const char* punc_model) {
     if (!s)
         return -1;
-        // Unload any currently-resident context first.
+    // Unload any currently-resident context first.
 #ifdef CA_HAVE_FIREREDPUNC
     if (s->punc_ctx) {
         fireredpunc_free((fireredpunc_context*)s->punc_ctx);
