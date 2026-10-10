@@ -2182,6 +2182,7 @@ struct crispasr_session {
 #endif
 #ifdef CA_HAVE_MOSS_TTS_LOCAL
     moss_tts_local_context* moss_tts_local_ctx = nullptr;
+    moss_tts_local_synth_params* moss_tts_local_params = nullptr;
 #endif
 #ifdef CA_HAVE_OMNIVOICE
     omnivoice_context* omnivoice_ctx = nullptr;
@@ -9678,6 +9679,45 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
         return moss_tts_set_reference_wav_file(s->moss_tts_ctx, path) ? 0 : -1;
     }
 #endif
+#ifdef CA_HAVE_MOSS_TTS_LOCAL
+    if (s->moss_tts_local_ctx) {
+        if (!ends_with_wav(path))
+            return -2;
+        if (!moss_tts_local_can_clone(s->moss_tts_local_ctx)) {
+            fprintf(stderr, "crispasr[moss-tts-local]: this codec GGUF is decode-only (no encoder tensors)\n");
+            return -1;
+        }
+        float* pcm = nullptr;
+        int input_sr = crispasr_session_input_sample_rate(s);
+        int n = 0, sr = 0;
+        if (crispasr_audio_load_at_rate(path, input_sr, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
+            if (pcm)
+                free(pcm);
+            return -1;
+        }
+
+        int ref_n_vq = 0, ref_t_audio = 0;
+        int32_t* ref_codes =
+            moss_tts_local_encode_reference(s->moss_tts_local_ctx, pcm, n, sr, &ref_n_vq, &ref_t_audio);
+        if (!ref_codes) {
+            fprintf(stderr, "crispasr[moss-tts-local]: failed to set reference voice from '%s'\n", path);
+            return -1;
+        }
+
+        moss_tts_local_synth_params p = moss_tts_local_synth_default_params();
+        p.ref_codes = ref_codes;
+        p.ref_n_vq = ref_n_vq;
+        p.ref_t_audio = ref_t_audio;
+
+        s->moss_tts_local_params =
+            static_cast<moss_tts_local_synth_params*>(std::malloc(sizeof(moss_tts_local_synth_params)));
+        if (s->moss_tts_local_params) {
+            *s->moss_tts_local_params = p;
+        }
+        free(pcm);
+        return 0;
+    }
+#endif
 #ifdef CA_HAVE_TADA
     if (s->tada_ctx) {
         if (!ends_with_wav(path)) {
@@ -10304,7 +10344,8 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
 #endif
 #ifdef CA_HAVE_MOSS_TTS_LOCAL
     if (s->moss_tts_local_ctx) {
-        moss_tts_local_synth_params p = moss_tts_local_synth_default_params();
+        moss_tts_local_synth_params p =
+            s->moss_tts_local_params ? *s->moss_tts_local_params : moss_tts_local_synth_default_params();
         if (s->tts_min_speech_tokens >= 0)
             p.min_audio_frames = s->tts_min_speech_tokens;
         const std::string tts_lang = !s->target_language.empty() ? s->target_language : s->source_language;
@@ -12302,6 +12343,8 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
 #ifdef CA_HAVE_MOSS_TTS_LOCAL
     if (s->moss_tts_local_ctx)
         moss_tts_local_free(s->moss_tts_local_ctx);
+    if (s->moss_tts_local_params)
+        std::free(s->moss_tts_local_params);
 #endif
 #ifdef CA_HAVE_OMNIVOICE
     if (s->omnivoice_ctx)
