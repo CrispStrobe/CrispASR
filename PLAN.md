@@ -3851,3 +3851,20 @@ exported C APIs. #530 fork workflows required maintainer approval; approved
 only unchanged checks after reading code. Review the sample-rate fixes,
 reference-buffer lifetime and failure-state contracts before integration.
 No new contributor PR merge or acceptance from generic build checks alone.
+
+
+Nemotron original decoded control is independently verified: F16 and the exact
+1,179,413,408-byte position-Q4 hybrid pass all unchanged stages, 26/26 original
+word controls, 22/22 VoxCPM2 controls and all 26 fresh/reverse-reused outputs.
+Known plain-Q4 negative rejects (rc 6). Candidate SHA matches the stage proof;
+all protected tensors equal the F16/source ledger and all unprotected tensors
+equal plain Q4. Full proof plus experimental candidate are public at DATASET
+`cstr/crispasr-regression-fixtures@545fbcf4615470b62aa6bca840c7444949acfa00`,
+under `experimental/nemotron-position-q4-20261010/`, with remote SHA verified.
+Receipt: `docs/nemotron-q4-original-controls-2026-10-10.json`.
+Claimed next worker: `tools/kaggle/nemotron-position-q4-validation` in the
+storage hardware worktree. Reuse exact corrected CUDA package controls with
+F16 first, then pinned candidate, save separate full stage arrays/decoded/state/
+streaming results, and accept only if both complete. Gate quantized hardware
+validation below compute capability 6.1 as inconclusive; do not fish for hardware.
+No CPU build/quant/reference work on Kaggle and no production quant pin.

@@ -182,3 +182,10 @@ contains only 14,155,776 bytes of Q4 tensors; its 8.3% saving from F16 is not
 a compact production Q4 or speed claim. Full original transcript/state and
 actual GPU validation remain pending; it is excluded from release quant pins.
 See [late-layer proof](nemotron-encoder-late-layer-2026-10-09.json).
+
+The mostly-source Nemotron position-Q4 candidate subsequently passed CPU
+original decoded controls: 26/26 original word matches, 22/22 VoxCPM2 controls,
+and exact fresh/reverse-reused outputs after unchanged stage gates. Its exact
+model hash and protected/unprotected tensor ledger were independently verified.
+It remains experimental and unpromoted pending actual GPU validation.
+Proof: [original decoded controls](nemotron-q4-original-controls-2026-10-10.json).
