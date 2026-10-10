@@ -5149,6 +5149,13 @@
       "sha256": "def2692c3663fc6f11da2d0d8863c98c11d2361bd9c861f99232b4b9e7789504",
       "bytes": 3144313,
       "remote_sha256_verified": true
+    },
+    "integration": {
+      "pr": 528,
+      "tested_source": "37a90a37c9871ff4d4cf915993acec2b734293cd",
+      "merge_commit": "cf9f61c29a6ec4f19291f12611ce6bee9ff0add3",
+      "checks_passed": 50,
+      "intentional_skips": 1
     }
   }
 }

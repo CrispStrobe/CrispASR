@@ -37,6 +37,23 @@ CrispASR issue: [#485](https://github.com/CrispStrobe/CrispASR/issues/485). This
 
 On the same two Tesla T4 GPUs, every timed output matches its independent direct reference in both execution orders. Three warm calls per clip: original resident BF16 Python 16.21–16.24 s versus native F16 12.20–12.24 s for JFK (1.33×), and 18.86–18.96 s versus 13.87–13.96 s for Chinese (1.36×). These compare actual implementations at different activation precision and default layer placement; loading/first calls are separate. Native inference here is slightly slower than realtime. Decoder generation accounts for about 86% of Chinese inference. Complete iterations and recorded placements are retained in [CrispASR's profile receipt](https://github.com/CrispStrobe/CrispASR/blob/main/docs/index-echo-9b-profile-2026-10-02.json). No timing from the offloaded F32 reference is used as a speed baseline.
 
+## DONE 2026-10-10 — Shared-library relative ggml plugin discovery
+
+[PR #528](https://github.com/CrispStrobe/CrispASR/pull/528) merged as
+`cf9f61c29a6ec4f19291f12611ce6bee9ff0add3` after all 50 applicable checks
+passed (one intentional skip). Python/other C ABI callers load adjacent ggml
+plugins for CPU-only and GPU sessions; POSIX/Windows module-location code
+preserves UTF-8 under C++17/C++20. The real staged C ABI regression fails
+against the old CUDA archive and passes after repair from a non-ASCII path
+without loader overrides. Exact corrected package source `37a90a37c` passes
+actual dual-T4 CUDA 12.8 hardware controls: its own PID allocates 1,330 MiB,
+all three F16 stage gates pass (encoder .99999088, relative L2 .000280039),
+26 original fresh/reused transcripts agree and native long-turn streaming
+presets 0/2/3 pass packet/reset/flush checks. Public full arrays/receipts/source
+are pinned in `docs/release-cuda-package-gpu-2026-10-09.json`; older failed
+attempts remain archived there. No Windows GPU, original streaming parity,
+speed or new quantization claim. This is after v0.8.42.
+
 ## DONE 2026-10-10 — Immutable release checkouts and WASM rate guidance
 
 [PR #527](https://github.com/CrispStrobe/CrispASR/pull/527) merged as

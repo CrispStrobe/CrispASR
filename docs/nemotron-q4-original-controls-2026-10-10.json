@@ -414,5 +414,18 @@
     "protected_source_equal": true,
     "unprotected_plain_q4_equal": true,
     "protected_count": 213
+  },
+  "gpu_launch": {
+    "worker_source": "2edfd1c5a",
+    "version": "2026-10-10.nemotron-position-q4.1",
+    "kernel": "${KAGGLE_ACCOUNT}/crispasr-nemotron-position-q4-validation",
+    "entry_sha256": "7ecf19832c9fff76cf83d4c81e9812d5966e4aa80b072e7ab800168e4b48583b",
+    "pulled_source_byte_identical": true,
+    "status": "launched",
+    "secret_tests_passed": 4,
+    "secret_skips": 0,
+    "secret_seconds": 53.975,
+    "isolated_model_processes": true,
+    "production_accepted": false
   }
 }

@@ -11,60 +11,6 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
-## CLAIMED 2026-10-09 — Shared-library relative ggml plugin discovery
-
-Worktree: `/mnt/storage/crispasr/salvage-20261008/library-plugin-discovery`.
-The actual CUDA package on dual T4 loads its native library/runtime but Python
-C ABI session initialization discovers zero CPU backends. ggml default search
-uses the process executable directory and cwd, omitting the loaded library directory.
-Resolve the native module location for POSIX/Windows, load adjacent dynamic plugins
-for CPU and GPU session callers, retain default/env discovery and static builds.
-Prove failure before/fix after from an unrelated cwd using actual staged plugins
-through the C ABI, wire that regression into dynamic-backend GH CI, then rebuild
-and run the actual CUDA package hardware controls. Do not accept chdir/environment
-workarounds as the product fix. No gate changes or CUDA fallback acceptance.
-[PR #528](https://github.com/CrispStrobe/CrispASR/pull/528), source
-`108e38024befd8f0db5c7e3400b90d6ac93b016b`, implements POSIX/Windows
-library-relative discovery for unified sessions and direct Nemotron C ABI init.
-Real old package fails both CPU-only/GPU-requested regression routes; test is
-wired into the dynamic-backend CI job. Four no-secrets checks pass with no
-skips (46.633 seconds). Candidate hosted tests pending. Focused actual Linux
-CUDA package rebuild GH 37977686803 is queued at this source; leave this branch
-unchanged until checkout is observed because the old release workflow still
-selects a moving branch. Terminal T4 failure proof is public and hash-verified
-via the hardware receipt. No candidate GPU acceptance yet.
-Hosted dynamic-backend job 113979995896 failed at compilation: C++20 returns `std::u8string`, which cannot implicitly convert to `std::string`. Claim includes preserving UTF-8 bytes explicitly across C++17/C++20, then rerunning dynamic-backend and actual-package validation. The original CUDA rebuild already checked out `108e38024`; it remains a historical attempt, not acceptance of the forthcoming correction.
-
-## CLAIMED 2026-10-09 — Actual Linux CUDA release-package hardware validation
-
-Worktree: `/mnt/storage/crispasr/salvage-20261008/release-cuda-hardware`.
-Use the already-built Linux CUDA archive from GH 37958100129, artifact
-11637375498, source `3b814f780277286ece56e8cdee6bdc435e07ae4d`.
-Locally verify the GH artifact ZIP/tar SHA-256, mirror the exact tar publicly and pin its HF commit; verify the same tar SHA-256 on Kaggle;
-no rebuild, quantization, original-model computation or torch install there.
-Reuse the accepted Nemotron F16 three-stage/26-transcript and native streaming
-controls with unchanged gates against public immutable original references.
-Require real CUDA allocation and record device/driver/runtime/plugin metadata;
-no CPU fallback acceptance. This tests packaged dynamic backend loading and
-CUDA 12.8 artifacts, not new quantization or a Windows package. The 30 recent
-kernels on the single authorized account are terminal; no active GPU session
-observed before this launch preparation. All local scratch stays on storage.
-Worker `7dad6b895` is pushed on `probe/release-cuda-hardware`. New kernel
-`${KAGGLE_ACCOUNT}/crispasr-release-cuda-package-validation` was RUNNING at launch;
-remote script was pulled and verified byte-identical (entry SHA
-`61fee9a144a16f2496cf618a47ac4471de0fab9581c68e86a493879bda1105a2`).
-All four no-secrets checks pass with no skips (48.361 seconds). This is a
-launch checkpoint, not hardware acceptance. The first run is terminal ERROR
-before artifact download or model inference: the worker could not resolve
-the GitHub artifact credential. Log, source and output are archived on storage
-before any repush. Version 2 repair covers both documented mount forms and
-deduplicates token aliases; it preserves the same archive and quality gates. The
-repaired resolver passes a local fixture reproducing directory-symlink
-omission and duplicate aliases. Version 2 (`d51058cf6`) is terminal ERROR before download or inference;
-remote source was pulled and verified byte-identical (entry SHA
-`bf8a19e3014d55803bcd21b67d941b145fae62186580c5fea7594fe149848080`).
-All three terminal outputs are preserved. Version 2 reports zero mounted GitHub token files despite scanning both documented mount forms. Version 3 (`9f4f7fee1`) is terminal ERROR; exact archive hash and CUDA 12.8 preloads pass on dual T4, but the C ABI finds no CPU ggml backend when called from Python outside the package directory. All output is preserved; no inference started. pulled source is byte-identical (entry SHA `99a64aff61ef379506858e6617cbfaa44a1e91681adb6b518ad6d1e6c22ff303`). Exact CI tar is mirrored publicly at DATASET `cstr/crispasr-regression-fixtures` commit `a93e0228b081be547ddea2d2c35bec904ed1a4b9`, path `experimental/release-package-37958100129/crispasr-linux-x86_64-cuda.tar.gz`; remote SHA matches the original tar. No secret dataset mutation, binary rebuild or gate change. No hardware acceptance yet. Receipt: `docs/release-cuda-package-gpu-2026-10-09.json`.
-
 ## Release preparation checkpoint 2026-10-09
 
 Comprehensive `RELEASE_NOTES_v0.8.43.md` is committed before any version bump.
@@ -3841,7 +3787,7 @@ Predeclared launch retains unchanged F16 stages/transcripts/state/streaming and
 requires actual packaged CUDA plugin loading plus allocations on its own PID.
 No new package GPU acceptance until terminal proof.
 
-## CLAIMED 2026-10-10 — Review contributor PRs #529 and #530
+## OPEN 2026-10-10 — Contributor PR corrections after review
 
 Inspect exact heads `08ff8c5c492031ea94a42964f8fa21cd11dd2691` and
 `5fce2351533617e35bba13711ac3319dbe870e08`, including all comments/reviews,
@@ -3895,3 +3841,15 @@ requests atomic Breeze reference setters, owned Moss/OpenVoice buffers,
 propagated SNAC load errors and regenerated CLI capability data. Twelve pending
 fork workflow runs were approved after the full patch review; CI is running.
 Do not merge these contributor PRs based on generic build checks alone.
+
+
+PR #528 merged as `cf9f61c29a6ec4f19291f12611ce6bee9ff0add3`; accepted
+package hardware evidence is archived in HISTORY and its receipt. The fresh
+process candidate kernel version 1 is launched; pulled source is byte-identical
+to worker `2edfd1c5a`, entry hash recorded in its CPU proof receipt. All 30 recent
+single-account kernels were terminal before launch. No candidate GPU acceptance
+or production/default promotion yet.
+Next claim: full no-publication release dry-run matrix on this integrated main
+source, now using immutable checkouts from merged #527. Native plugin source
+is identical to the accepted package; verify all final-tip artifacts/packages
+and main CI before bumping/tagging. Contributor #529/#530 changes remain excluded.

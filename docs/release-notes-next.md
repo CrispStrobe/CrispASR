@@ -1,6 +1,6 @@
 # Draft release notes — changes after v0.8.42
 
-This draft covers merged PRs #519, #520, #522, #523, #524, #525, #526 and #527. No new tag has
+This draft covers merged PRs #519, #520, #522, #523, #524, #525, #526, #527 and #528. No new tag has
 been cut. Experimental quantization candidates and unfinished hardware
 validation are excluded from the released behavior described below.
 
@@ -92,6 +92,23 @@ Windows CUDA 13 verification. Actual staged WASM model-free API checks pass;
 these do not establish synthesis or browser threading acceptance.
 
 Evidence: [immutable checkout probe](release-checkout-pin-hosted-2026-10-09.json).
+
+## Bindings: discover bundled ggml CPU and GPU plugins
+
+C ABI sessions now discover ggml plugins beside the loaded native library,
+including CPU-only callers and direct Nemotron initialization. Previously the
+loader searched the process executable directory and current directory, so a
+Python process outside the CUDA package directory could find no backend.
+Module-path discovery preserves UTF-8 under C++17 and C++20.
+
+PR #528 passed all 50 applicable checks, with one intentional skip. The actual
+rebuilt CUDA archive passes dual-T4 validation with the installed CUDA 12.8
+runtime: its C ABI loads bundled CPU/CUDA plugins and allocates 1,330 MiB on its
+own PID. All three unchanged F16 stage gates pass; 26 original fresh/reused
+transcripts and native streaming packet/reset/flush checks pass. These results
+do not establish Windows GPU execution, original streaming parity or speedups.
+
+Evidence: [actual package CUDA proof](release-cuda-package-gpu-2026-10-09.json).
 
 ## MiMo-ASR: opt-in cached GPU decode
 
