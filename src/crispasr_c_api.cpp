@@ -9212,6 +9212,13 @@ CA_EXPORT int crispasr_session_set_codec_path(crispasr_session* s, const char* p
     if (s->omnivoice_ctx)
         return omnivoice_set_tokenizer_path(s->omnivoice_ctx, path);
 #endif
+#ifdef CA_HAVE_MINI_OMNI2
+    if (s->mini_omni2_ctx) {
+        if (!mini_omni2_load_snac(s->mini_omni2_ctx, path)) {
+            fprintf(stderr, "crispasr[mini-omni2]: failed loading SNAC codec from '%s'\n", path);
+        }
+    }
+#endif
 #ifdef CA_HAVE_ORPHEUS
     if (s->orpheus_ctx) {
         int rc = orpheus_set_codec_path(s->orpheus_ctx, path);
