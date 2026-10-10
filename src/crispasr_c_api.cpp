@@ -2145,6 +2145,8 @@ struct crispasr_session {
 #endif
 #ifdef CA_HAVE_BT2_TTS
     breeze_tts_2_context* bt2_ctx = nullptr;
+    std::vector<float> bt2_ref_pcm; // ref pcm data from  *.wav (set_voice)
+    std::string bt2_ref_text;       // ref transcription for *.wav cloning
 #endif
 #ifdef CA_HAVE_PIANO_TRANSCRIPTION
     piano_transcription_ctx* piano_ctx = nullptr;
@@ -9449,6 +9451,38 @@ CA_EXPORT int crispasr_session_set_voice(crispasr_session* s, const char* path, 
 #endif
     }
 #endif
+#ifdef CA_HAVE_BT2_TTS
+    if (s->bt2_ctx) {
+        // Stash a 24 kHz mono reference for voice cloning.
+        if (!ends_with_wav(path)) {
+            fprintf(stderr, "crispasr[bt2-tts]: expected a wav file instead of '%s' as a reference\n", path);
+            return -2;
+        }
+        float* pcm = nullptr;
+        int input_sr = crispasr_session_input_sample_rate(s);
+        int n = 0, sr = 0;
+        if (crispasr_audio_load_at_rate(path, input_sr, &pcm, &n, &sr) != 0 || !pcm || n <= 0) {
+            fprintf(stderr, "crispasr[bt2-tts]: got a error loading '%s' as a reference\n", path);
+            if (pcm)
+                free(pcm);
+            return -1;
+        }
+        s->bt2_ref_pcm.assign(pcm, pcm + n);
+        free(pcm);
+        // ref_text is required
+        std::string ref_text = ref_text_or_null ? ref_text_or_null : "";
+        if (ref_text.empty()) {
+            fprintf(stderr,
+                    "crispasr[bt2-tts]: cloning from '%s' needs a transcript of that clip, and none "
+                    "was given.\n"
+                    "  Pass the exact transcript as the ref_text argument.\n",
+                    path);
+            return -2;
+        }
+        s->bt2_ref_text = ref_text;
+        return 0;
+    }
+#endif
 #ifdef CA_HAVE_COSYVOICE3
     if (s->cosyvoice3_ctx) {
         // `path` is either a baked-bank voice name (e.g. "fleurs-en") or a
@@ -10197,9 +10231,15 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
         // exposing them through a text-only entry point would silently answer a
         // different question than the caller asked. They stay CLI-only until
         // the ABI grows a way to pass them.
-        float* pcm = breeze_tts_2_synthesize(s->bt2_ctx, text, &n);
-        if (out_n_samples)
+        float* pcm =
+            s->bt2_ref_pcm.empty()
+                ? breeze_tts_2_synthesize(s->bt2_ctx, text, &n)
+                : breeze_tts_2_synthesize_with_reference(s->bt2_ctx, text, s->bt2_ref_pcm.data(),
+                                                         (int)s->bt2_ref_pcm.size(), s->bt2_ref_text.c_str(), &n);
+
+        if (pcm && out_n_samples) {
             *out_n_samples = n;
+        }
         return pcm;
     }
 #endif
