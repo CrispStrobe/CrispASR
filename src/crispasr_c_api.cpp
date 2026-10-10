@@ -9776,6 +9776,11 @@ CA_EXPORT int crispasr_session_set_tts_phonemes(crispasr_session* s, const char*
 CA_EXPORT int crispasr_session_set_speaker_name(crispasr_session* s, const char* name) {
     if (!s || !name)
         return -1;
+#ifdef CA_HAVE_SUPERTONIC
+    if (s->supertonic_ctx) {
+        return supertonic_set_voice(s->supertonic_ctx, name);
+    }
+#endif
 #ifdef CA_HAVE_ORPHEUS
     if (s->orpheus_ctx) {
         return orpheus_set_speaker_by_name(s->orpheus_ctx, name);
@@ -9836,6 +9841,10 @@ CA_EXPORT int crispasr_session_set_speaker_id(crispasr_session* s, int id) {
 CA_EXPORT int crispasr_session_n_speakers(crispasr_session* s) {
     if (!s)
         return 0;
+#ifdef CA_HAVE_SUPERTONIC
+    if (s->supertonic_ctx)
+        return supertonic_n_speakers(s->supertonic_ctx);
+#endif
 #ifdef CA_HAVE_ORPHEUS
     if (s->orpheus_ctx)
         return orpheus_n_speakers(s->orpheus_ctx);
@@ -9865,6 +9874,10 @@ CA_EXPORT int crispasr_session_n_speakers(crispasr_session* s) {
 CA_EXPORT const char* crispasr_session_get_speaker_name(crispasr_session* s, int i) {
     if (!s || i < 0)
         return nullptr;
+#ifdef CA_HAVE_SUPERTONIC
+    if (s->supertonic_ctx)
+        return supertonic_get_speaker_name(s->supertonic_ctx, i);
+#endif
 #ifdef CA_HAVE_ORPHEUS
     if (s->orpheus_ctx)
         return orpheus_get_speaker_name(s->orpheus_ctx, i);
