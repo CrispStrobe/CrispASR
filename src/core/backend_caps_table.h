@@ -52,7 +52,7 @@ static const BackendCaps k_backend_caps[] = {
     {"dia", 73984u, "temperature,auto-download,tts"},
     {"dia-tts", 73984u, "temperature,auto-download,tts"},
     {"dolphin", 270848u, "beam-search,punctuation-native,auto-download"},
-    {"dots-tts", 73984u, "temperature,auto-download,tts"},
+    {"dots-tts", 73984u, "temperature,auto-download,tts,voice-cloning"},
     {"f5-tts", 204800u, "auto-download,tts,voice-cloning"},
     {"fastconformer-ctc", 1597514u, "timestamps-ctc,token-confidence,diarize,auto-download,parallel-processors"},
     {"fastpitch", 65536u, "tts"},
