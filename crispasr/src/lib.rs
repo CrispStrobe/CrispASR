@@ -1023,6 +1023,17 @@ impl Session {
         }
     }
 
+    /// Return the number of speakers for the active backend.
+    /// A speaker can be named, and/or settable via id.
+    pub fn num_speakers(&self) -> usize {
+        // compile-time check to make sure all i32 values >= 0 fit in a usize
+        const _: () = assert!(std::mem::size_of::<usize>() >= std::mem::size_of::<i32>());
+
+        let n = unsafe { crispasr_sys::crispasr_session_n_speakers(self.handle) };
+        assert!(n >= 0);
+        usize::try_from(n).expect("impossible: all valid values fit in a usize")
+    }
+
     /// Return the list of preset speaker names for the active backend.
     /// Empty if the backend has no preset-speaker contract.
     pub fn speakers(&self) -> Vec<String> {
