@@ -199,7 +199,12 @@ Final relative L2 is 0.00309294. It also matches 26/26 original word controls,
 and protected/unprotected tensor ledger were independently verified.
 
 This 1,179,413,408-byte artifact contains only 14,155,776 bytes of Q4 tensors;
-its 8.3% saving from F16 is not a compact production Q4 or speed claim. Actual
-GPU validation remains pending, and it is excluded from release quant pins.
+its 8.3% saving from F16 is not a compact production Q4 or speed claim. Actual dual-T4 GPU validation now passes all three unchanged stage gates
+(encoder cosine 0.999734, relative L2 0.003356), 26 original word controls,
+exact fresh/reused state and native streaming presets 0/2/3 in separate F16
+and candidate processes. Full arrays and independently verified public proof:
+`docs/nemotron-position-q4-gpu-2026-10-10.json`. It remains excluded from
+release quant pins; no speed, original streaming parity or full-layer GPU
+capture claim.
 See [stage/layer proof](nemotron-encoder-late-layer-2026-10-09.json)
 and [original decoded controls](nemotron-q4-original-controls-2026-10-10.json).

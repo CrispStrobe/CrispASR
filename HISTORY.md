@@ -23474,3 +23474,21 @@ Release workflow 37850360339 completed SUCCESS; 53 binary/package assets
 are published. All platform jobs are terminal. Immutable tag/source and full
 asset digests are recorded in `docs/release-v0.8.42-validation.json`.
 Pending PR #492 salvage and OmniVoice/VoxCPM2/Echo experiments are excluded.
+
+
+## Nemotron position-Q4 hybrid CUDA control — 2026-10-10
+
+Fresh-process Kaggle version 1 completed on dual Tesla T4. Independently
+recomputed all six arrays per arm against the immutable original GGUF; F16
+encoder cosine 0.9999908805 and candidate 0.9997343421 pass unchanged 0.999
+gates. Candidate relative L2 is 0.0033563885; native/reference norms are
+16.61270079/16.61293236. Both arms reproduce all 26 original normalized-word
+controls and exact fresh/reverse-reused outputs. Native streaming presets
+0/2/3 pass reset/repeat-confidence, packet and final-flush controls. Separate
+PIDs allocate 1330/1228 MiB through the actual packaged C ABI CUDA plugin.
+Worker/source/package/model hashes and all full arrays agree. Full public
+proof is SHA/size verified; see `docs/nemotron-position-q4-gpu-2026-10-10.json`.
+The 1,179,413,408-byte hybrid retains only 14,155,776 bytes of Q4 payload:
+8.3% smaller than F16, mostly source precision, no compact-Q4/default pin or
+speed claim. No original streaming parity, specific MMQ trace, or full
+24-layer GPU capture validation is claimed.

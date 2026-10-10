@@ -3884,3 +3884,16 @@ with heavy GPU work only on the authorized Kaggle account. No merge or release
 claim from generic builds alone. The Nemotron fresh-process candidate GPU run
 is terminal COMPLETE; verify full arrays, source/hash and decoded/state receipts
 and publish its proof before recording acceptance.
+
+
+Nemotron candidate GPU version 1 is terminal COMPLETE and independently
+verified. Both F16/candidate arms pass full original stage arrays, all 26
+normalized-word controls, exact fresh/reused state and native streaming
+presets 0/2/3. Distinct PIDs allocate 1330/1228 MiB through the packaged CUDA
+C ABI. Public proof DATASET @77235249ea4436b63dfd41b2048752c84aee789b,
+`experimental/nemotron-position-q4-20261010/cuda-hardware-proof.zip`,
+SHA `1bc7b09cc33932125151cc9fc2eec7c66851dc4b5339f71f023c8f9a5c9e7e55`,
+6,279,694 bytes. Receipt: `docs/nemotron-position-q4-gpu-2026-10-10.json`.
+This completes the launched candidate hardware controls, not production/default
+promotion or speed proof. Contributor fixes remain active in the claimed
+separate worktree; final integrated release matrix remains pending.

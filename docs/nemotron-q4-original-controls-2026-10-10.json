@@ -427,5 +427,19 @@
     "secret_seconds": 53.975,
     "isolated_model_processes": true,
     "production_accepted": false
+  },
+  "gpu_terminal": {
+    "status": "COMPLETE",
+    "validated": true,
+    "receipt": "docs/nemotron-position-q4-gpu-2026-10-10.json",
+    "public_proof": {
+      "repo": "cstr/crispasr-regression-fixtures",
+      "repo_type": "dataset",
+      "revision": "77235249ea4436b63dfd41b2048752c84aee789b",
+      "path": "experimental/nemotron-position-q4-20261010/cuda-hardware-proof.zip",
+      "sha256": "1bc7b09cc33932125151cc9fc2eec7c66851dc4b5339f71f023c8f9a5c9e7e55",
+      "bytes": 6279694
+    },
+    "production_accepted": false
   }
 }
