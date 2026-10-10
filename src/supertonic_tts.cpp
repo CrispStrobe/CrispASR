@@ -1244,6 +1244,19 @@ void supertonic_set_n_threads(struct supertonic_context* ctx, int n_threads) {
         core_cpu_backend::set_n_threads(ctx->backend, n_threads);
 }
 
+int supertonic_n_speakers(struct supertonic_context* ctx) {
+    return ctx->voices.size();
+}
+
+const char* supertonic_get_speaker_name(struct supertonic_context* ctx, int i) {
+    if (i >= (int)ctx->voices.size()) {
+        return nullptr;
+    }
+    auto iter = ctx->voices.begin();
+    std::advance(iter, i);
+    return iter->first.c_str();
+}
+
 int supertonic_set_voice(struct supertonic_context* ctx, const char* voice) {
     if (!ctx || !voice || ctx->voices.find(voice) == ctx->voices.end())
         return -1;

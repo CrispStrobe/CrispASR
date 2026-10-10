@@ -103,7 +103,7 @@ public:
 
     const char* name() const override { return "tada"; }
 
-    uint32_t capabilities() const override { return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE; }
+    uint32_t capabilities() const override { return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_VOICE_CLONING; }
 
     std::vector<crispasr_segment> transcribe(const float*, int, int64_t, const whisper_params&) override {
         fprintf(stderr, "crispasr[tada]: transcription not supported\n");
