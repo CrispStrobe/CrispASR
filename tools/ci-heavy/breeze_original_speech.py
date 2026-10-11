@@ -36,6 +36,24 @@ CASES = [('plain', False, False), ('clone', True, False),
          ('design', False, True), ('direction', True, True)]
 
 
+class GeneratedBackbonePenalty:
+    """Use the original streaming helper on generated codebook-zero history.
+
+    Breeze full generate starts with mixed-vocabulary 2-D prompt IDs, then
+    replaces them with 3-D generated codec frames. Prompt/reference tokens
+    must never enter the audio-only repetition penalty.
+    """
+    def __init__(self, apply_penalty, penalty):
+        self.apply_penalty = apply_penalty
+        self.penalty = penalty
+
+    def __call__(self, input_ids, scores):
+        if input_ids.ndim == 2:
+            return scores
+        assert input_ids.ndim == 3 and input_ids.shape[0] == 1 and input_ids.shape[2] == 16
+        return self.apply_penalty(scores, input_ids[0, :, 0], self.penalty)
+
+
 def sha(path):
     h = hashlib.sha256()
     with Path(path).open('rb') as stream:
@@ -96,6 +114,8 @@ def original():
         step=lambda name, **kw: print(name, json.dumps(kw), flush=True))
     exec(compile(code, str(dumper), 'exec'), env)
     model, codec = env['model'], env['audio_tokenizer']
+    from models.cudagraph.sampling import apply_repetition_penalty
+    from transformers import LogitsProcessorList
     assert next(model.parameters()).dtype == torch.bfloat16
     receipt['original_runtime'] = dict(dtype='BF16', attention='eager', device='CPU',
         packages={p: importlib.metadata.version(p) for p in
@@ -105,6 +125,12 @@ def original():
         checkpoint_sha256={str(p.relative_to(SCRATCH/'checkpoint')): sha(p)
                            for p in sorted((SCRATCH/'checkpoint').rglob('*.safetensors'))})
     receipt['original_cases'] = {}
+    receipt['sampler_adapter'] = dict(
+        generic_transformers_repetition_penalty=1.0,
+        effective_generated_backbone_repetition_penalty=1.1,
+        implementation='Pinned upstream apply_repetition_penalty via custom logits processor',
+        upstream_helper_sha256=sha(upstream/'models/cudagraph/sampling.py'),
+        history='Generated codec frame codebook zero only; prompt/reference excluded')
     def save():
         (OUT/'validation.json').write_text(json.dumps(receipt, indent=2)+'\n')
     save()
@@ -126,7 +152,8 @@ def original():
         generated = model.generate(**{k: v for k, v in inputs.items() if v is not None},
             output_audio=True, audio_tokenizer=codec, return_dict_in_generate=True,
             max_new_tokens=None, max_length=int(inputs['input_ids'].shape[1])+LIMIT,
-            do_sample=True, temperature=.9, top_k=50, top_p=1., repetition_penalty=1.1)
+            do_sample=True, temperature=.9, top_k=50, top_p=1., repetition_penalty=1.0,
+            logits_processor=LogitsProcessorList([GeneratedBackbonePenalty(apply_repetition_penalty, 1.1)]))
         codes = generated.sequences[0].detach().cpu().numpy().astype(np.int32)
         assert codes.ndim == 2 and codes.shape[1] == 16
         pads = (codes == int(model.config.codebook_pad_token_id)).all(axis=1)
