@@ -33,6 +33,33 @@ def run(cmd, name, cwd=ROOT):
                        stderr=subprocess.STDOUT, check=True, timeout=7200)
 
 
+def check_original_boundary(dest, ids, logits, fixture):
+    """Retain both sides before enforcing the unchanged byte-equality gate."""
+    import numpy as np
+    expected_ids = np.load(fixture / 'guided/design-s1/prompt_input_ids.npy', allow_pickle=False)
+    expected_logits = np.load(fixture / 'guided/design-s1/backbone_logits_frame0.npy', allow_pickle=False)
+    for name, value in [('prompt_input_ids', ids), ('backbone_logits', logits),
+                        ('canonical_prompt_input_ids', expected_ids),
+                        ('canonical_backbone_logits', expected_logits)]:
+        np.save(dest / (name + '.npy'), value)
+    finite = bool(np.isfinite(logits).all() and np.isfinite(expected_logits).all())
+    same_shape = logits.shape == expected_logits.shape
+    report = dict(prompt_byte_exact=bool(np.array_equal(ids, expected_ids)),
+                  logits_byte_exact=bool(np.array_equal(logits, expected_logits)),
+                  finite=finite, shape=list(logits.shape), expected_shape=list(expected_logits.shape))
+    if finite and same_shape:
+        a, b = logits.astype(np.float64), expected_logits.astype(np.float64)
+        report.update(cosine=float(np.dot(a, b)/np.linalg.norm(a)/np.linalg.norm(b)),
+                      norm_ratio=float(np.linalg.norm(a)/np.linalg.norm(b)),
+                      relative_l2=float(np.linalg.norm(a-b)/np.linalg.norm(b)),
+                      maximum_error=float(np.max(np.abs(a-b))),
+                      unequal_values=int(np.count_nonzero(a != b)),
+                      actual_argmax=int(a.argmax()), expected_argmax=int(b.argmax()))
+    (dest / 'original-equivalence.json').write_text(json.dumps(report, indent=2)+'\n')
+    assert finite and report['prompt_byte_exact'] and report['logits_byte_exact'], (
+        'Original forward differs from immutable fixture; inspect original-equivalence.json')
+
+
 def reference():
     import numpy as np
     import torch
@@ -81,6 +108,16 @@ def reference():
     exec(compile(code, str(dumper), 'exec'), env)
     model = env['model']
     assert next(model.parameters()).dtype == torch.bfloat16
+    import importlib.metadata
+    (dest / 'runtime-provenance.json').write_text(json.dumps(dict(
+        packages={p: importlib.metadata.version(p) for p in
+                  ('torch', 'torchaudio', 'transformers', 'qwen-tts', 'numpy', 'safetensors')},
+        torch_cpu_capability=torch.backends.cpu.get_cpu_capability(),
+        torch_config=torch.__config__.show(), threads=torch.get_num_threads(),
+        cpuinfo=Path('/proc/cpuinfo').read_text(),
+        checkpoint_sha256={str(p.relative_to(SCRATCH / 'checkpoint')): sha(p)
+                           for p in sorted((SCRATCH / 'checkpoint').rglob('*.safetensors'))},
+        ), indent=2)+'\n')
     meta = json.loads((fixture / 'meta.json').read_text())
     req = dict(id='design-s1', text=meta['syn_text'], instruction=meta['instruction'], speaker='S0')
     template = env['select_template_name'](req)
@@ -98,13 +135,13 @@ def reference():
                               use_cache=False, return_dict=True)
     hidden = bb.last_hidden_state[0, -1]
     logits = model.lm_head(hidden).float().cpu().numpy()
-    assert np.array_equal(logits, np.load(fixture / 'guided/design-s1/backbone_logits_frame0.npy'))
     for name, a in dict(prompt_input_ids=ids,
                         prompt_text_mask=inputs['text_ids_mask'][0].cpu().numpy().astype(np.int32),
                         backbone_inputs_embeds=embeds[0].float().cpu().numpy(),
                         backbone_hidden=hidden.float().cpu().numpy(), backbone_logits=logits,
                         history_codes=history).items():
         np.save(dest / (name + '.npy'), a)
+    check_original_boundary(dest, ids, logits, fixture)
     if os.environ.get('BREEZE_BACKBONE_BOUNDARIES') == '1':
         assert len(model.backbone_model.layers) == 28
         def capture_backbone(label):
@@ -363,6 +400,17 @@ def main():
         receipt['error'] = f'{type(exc).__name__}: {exc}'
         raise
     finally:
+        # Failed controls must retain their arrays and hashes too.
+        try:
+            import numpy as np
+            receipt['arrays'] = {}
+            for path in sorted(OUT.rglob('*.npy')):
+                a = np.load(path, allow_pickle=False)
+                receipt['arrays'][str(path.relative_to(OUT))] = dict(
+                    sha256=sha(path), shape=list(a.shape), dtype=str(a.dtype),
+                    finite=bool(np.isfinite(a).all()))
+        except Exception as exc:
+            receipt['array_index_error'] = f'{type(exc).__name__}: {exc}'
         (OUT/'validation.json').write_text(json.dumps(receipt, indent=2)+'\n')
 
 
