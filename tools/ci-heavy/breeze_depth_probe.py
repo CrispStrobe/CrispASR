@@ -187,13 +187,17 @@ def reference():
             layer_slots='raw post-block residual, before final norm',
             promoted_control='FP32 backbone arithmetic, BF16-rounded weights/embeddings'), indent=2)+'\n')
     dd = model.depth_decoder
-    def full_prefix(label):
-        h = hidden.unsqueeze(0).to(next(dd.parameters()).dtype)
+    def full_prefix(label, state=None):
+        h = (hidden if state is None else state).unsqueeze(0).to(next(dd.parameters()).dtype)
         for cb in range(1, 16):
             seq = torch.tensor([[0, *history[:cb]]], dtype=torch.long)
             o = dd(input_ids=seq, backbone_last_hidden_state=h, use_cache=False, return_dict=True)
             np.save(dest / f'{label}_cb{cb}.npy', o.logits[0, -1].float().cpu().numpy())
     full_prefix('bf16_full')
+    if os.environ.get('BREEZE_PRECISION_DECISIONS') == '1':
+        promoted_hidden = torch.from_numpy(np.load(dest / 'bb_promoted_f32_hidden.npy', allow_pickle=False))
+        assert promoted_hidden.shape == hidden.shape and torch.isfinite(promoted_hidden).all()
+        full_prefix('promoted_backbone_bf16_depth', promoted_hidden)
     cache = None
     for cb in range(1, 16):
         seq = [[0, int(history[0])]] if cb == 1 else [[int(history[cb - 1])]]
@@ -209,6 +213,8 @@ def reference():
     # weights and captured BF16 backbone state. This is not a new F32 oracle.
     dd.float()
     full_prefix('promoted_depth_f32_full')
+    if os.environ.get('BREEZE_PRECISION_DECISIONS') == '1':
+        full_prefix('promoted_backbone_f32_depth', promoted_hidden)
     (dest / 'provenance.json').write_text(json.dumps(dict(upstream=UPSTREAM,
         model_revision=MODEL, reviewed_loader_sha256=DUMPER_SHA, template=template,
         canonical_precision='BF16 eager CPU', history='original design-s1 frame zero',
@@ -291,6 +297,10 @@ def native():
         np.save(dest / 'ordinary_depth_logits.npy', ordinary)
         np.save(dest / 'changed_history_logits.npy', controlled)
         depth('oracle_hidden', hidden)
+        if os.environ.get('BREEZE_PRECISION_DECISIONS') == '1':
+            promoted_hidden = load('bb_promoted_f32_hidden')
+            assert promoted_hidden.shape == hidden.shape and np.isfinite(promoted_hidden).all()
+            depth('promoted_backbone_hidden', promoted_hidden)
         ids, mask = load('prompt_input_ids'), load('prompt_text_mask')
         assembled = np.empty_like(embeds)
         assert lib.breeze_tts_2_run_prefill_embeds_dump(ctx, iptr(ids), iptr(mask), len(ids),
@@ -330,12 +340,17 @@ def summarize():
     import numpy as np
     history = np.load(OUT / 'reference/history_codes.npy')
     rows = []
+    variants = [('reference', 'bf16_cached'), ('reference', 'bf16_full'),
+                ('reference', 'promoted_depth_f32_full'),
+                ('native', 'oracle_hidden'), ('native', 'oracle_embeds'), ('native', 'native_embeds')]
+    if os.environ.get('BREEZE_PRECISION_DECISIONS') == '1':
+        variants += [('reference', 'promoted_backbone_bf16_depth'),
+                     ('reference', 'promoted_backbone_f32_depth'),
+                     ('native', 'promoted_backbone_hidden')]
     for cb in range(1, 16):
         original = np.load(OUT / f'reference/bf16_cached_cb{cb}.npy')
         assert original.shape == (2051,) and np.isfinite(original).all() and np.linalg.norm(original) > 0
-        for side, label in [('reference', 'bf16_cached'), ('reference', 'bf16_full'),
-                            ('reference', 'promoted_depth_f32_full'),
-                            ('native', 'oracle_hidden'), ('native', 'oracle_embeds'), ('native', 'native_embeds')]:
+        for side, label in variants:
             a = np.load(OUT / side / f'{label}_cb{cb}.npy')
             assert np.isfinite(a).all() and a.shape == (2051,)
             scores = a[:2048]
@@ -375,16 +390,21 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--phase', choices=['reference', 'native'])
     ap.add_argument('--backbone-boundaries', action='store_true')
+    ap.add_argument('--precision-decisions', action='store_true',
+                    help='Trace original FP32 backbone hidden into original/native depth decisions')
     args = ap.parse_args()
-    if args.backbone_boundaries:
+    if args.backbone_boundaries or args.precision_decisions:
         os.environ['BREEZE_BACKBONE_BOUNDARIES'] = '1'
+    if args.precision_decisions:
+        os.environ['BREEZE_PRECISION_DECISIONS'] = '1'
     OUT.mkdir(parents=True, exist_ok=True)
     SCRATCH.mkdir(parents=True, exist_ok=True)
     if args.phase:
         return globals()[args.phase]()
     receipt = dict(source=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         ggml=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT/'ggml', text=True).strip(),
-        complete=False, full_speech_asr_tested=False)
+        complete=False, full_speech_asr_tested=False,
+        precision_decisions=os.environ.get('BREEZE_PRECISION_DECISIONS') == '1')
     try:
         for phase in ('reference', 'native'):
             run([sys.executable, '-u', __file__, '--phase', phase], phase)
