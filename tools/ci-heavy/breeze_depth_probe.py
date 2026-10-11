@@ -131,9 +131,16 @@ def reference():
         assert torch.equal(captured, hidden), 'Backbone hook changed canonical hidden'
         # Same BF16-rounded weights and already assembled embeddings; only
         # backbone arithmetic is promoted. Canonical captures remain intact.
+        parameters = dict(model.backbone_model.named_parameters())
+        buffers = dict(model.backbone_model.named_buffers())
+        parameter_dtypes = {name: tensor.dtype for name, tensor in parameters.items()}
+        buffer_dtypes = {name: tensor.dtype for name, tensor in buffers.items()}
         model.backbone_model.float()
         capture_backbone('bb_promoted_f32')
-        model.backbone_model.to(torch.bfloat16)
+        for name, tensor in model.backbone_model.named_parameters():
+            tensor.data = tensor.data.to(parameter_dtypes[name])
+        for name, tensor in model.backbone_model.named_buffers():
+            tensor.data = tensor.data.to(buffer_dtypes[name])
         restored = model.backbone_model(inputs_embeds=embeds,
             attention_mask=inputs['attention_mask'], use_cache=False, return_dict=True)
         assert torch.equal(restored.last_hidden_state[0, -1], hidden)
