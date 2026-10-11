@@ -105,6 +105,43 @@ def reference():
                         backbone_hidden=hidden.float().cpu().numpy(), backbone_logits=logits,
                         history_codes=history).items():
         np.save(dest / (name + '.npy'), a)
+    if os.environ.get('BREEZE_BACKBONE_BOUNDARIES') == '1':
+        assert len(model.backbone_model.layers) == 28
+        def capture_backbone(label):
+            handles = []
+            def hook(index):
+                def save(module, arguments, output):
+                    value = output[0] if isinstance(output, tuple) else output
+                    np.save(dest / f'{label}_layer{index}.npy',
+                            value[0, -1].detach().clone().float().cpu().numpy())
+                return save
+            try:
+                for index, layer in enumerate(model.backbone_model.layers):
+                    handles.append(layer.register_forward_hook(hook(index)))
+                result = model.backbone_model(
+                    inputs_embeds=embeds.to(next(model.backbone_model.parameters()).dtype),
+                    attention_mask=inputs['attention_mask'], use_cache=False, return_dict=True)
+                state = result.last_hidden_state[0, -1].detach().clone()
+                np.save(dest / f'{label}_hidden.npy', state.float().cpu().numpy())
+                return state
+            finally:
+                for handle in handles:
+                    handle.remove()
+        captured = capture_backbone('bb_bf16')
+        assert torch.equal(captured, hidden), 'Backbone hook changed canonical hidden'
+        # Same BF16-rounded weights and already assembled embeddings; only
+        # backbone arithmetic is promoted. Canonical captures remain intact.
+        model.backbone_model.float()
+        capture_backbone('bb_promoted_f32')
+        model.backbone_model.to(torch.bfloat16)
+        restored = model.backbone_model(inputs_embeds=embeds,
+            attention_mask=inputs['attention_mask'], use_cache=False, return_dict=True)
+        assert torch.equal(restored.last_hidden_state[0, -1], hidden)
+        (dest / 'backbone-provenance.json').write_text(json.dumps(dict(
+            layers=len(model.backbone_model.layers), capture_on_off_hidden_exact=True,
+            promotion_restore_hidden_exact=True,
+            layer_slots='raw post-block residual, before final norm',
+            promoted_control='FP32 backbone arithmetic, BF16-rounded weights/embeddings'), indent=2)+'\n')
     dd = model.depth_decoder
     def full_prefix(label):
         h = hidden.unsqueeze(0).to(next(dd.parameters()).dtype)
@@ -218,6 +255,23 @@ def native():
         for label, e in [('oracle_embeds', embeds), ('native_embeds', assembled)]:
             h, lg = np.empty(2048, np.float32), np.empty(2052, np.float32)
             assert lib.breeze_tts_2_run_backbone_dump(ctx, ptr(e), len(e), ptr(h), ptr(lg), None, 0) == len(e)
+            if os.environ.get('BREEZE_BACKBONE_BOUNDARIES') == '1':
+                layers = np.full((28, 2048), np.nan, np.float32)
+                pointers = (F * 28)(*[ptr(row) for row in layers])
+                captured_h, captured_lg = np.empty_like(h), np.empty_like(lg)
+                assert lib.breeze_tts_2_run_backbone_dump(ctx, ptr(e), len(e),
+                    ptr(captured_h), ptr(captured_lg), pointers, 28) == len(e)
+                assert np.isfinite(layers).all(), 'Missing or invalid backbone capture'
+                assert np.array_equal(captured_h, h) and np.array_equal(captured_lg, lg)
+                after_h, after_lg = np.empty_like(h), np.empty_like(lg)
+                assert lib.breeze_tts_2_run_backbone_dump(ctx, ptr(e), len(e),
+                    ptr(after_h), ptr(after_lg), None, 0) == len(e)
+                assert np.array_equal(after_h, h) and np.array_equal(after_lg, lg)
+                for index, row in enumerate(layers):
+                    np.save(dest / f'{label}_bb_layer{index}.npy', row)
+                (dest / f'{label}_backbone-controls.json').write_text(json.dumps(dict(
+                    layers=28, capture_off_on_off_hidden_logits_exact=True,
+                    layer_slots='raw post-block residual, before final norm'), indent=2)+'\n')
             np.save(dest / (label + '_hidden.npy'), h)
             np.save(dest / (label + '_backbone_logits.npy'), lg)
             depth(label, h)
@@ -248,6 +302,25 @@ def summarize():
                 gap_to_best=float(scores[pick]-scores[target]),
                 cos_to_bf16_cached=float(np.dot(a, original)/np.linalg.norm(a)/np.linalg.norm(original)),
                 norm_ratio=float(np.linalg.norm(a)/np.linalg.norm(original))))
+    if os.environ.get('BREEZE_BACKBONE_BOUNDARIES') == '1':
+        boundaries = []
+        for index in range(29):
+            slot = f'layer{index}' if index < 28 else 'hidden'
+            canonical = np.load(OUT / f'reference/bb_bf16_{slot}.npy')
+            promoted = np.load(OUT / f'reference/bb_promoted_f32_{slot}.npy')
+            for label in ['oracle_embeds', 'native_embeds']:
+                name = f'{label}_bb_{slot}' if index < 28 else f'{label}_hidden'
+                value = np.load(OUT / f'native/{name}.npy')
+                assert value.shape == canonical.shape == promoted.shape == (2048,)
+                for array in (value, canonical, promoted):
+                    assert np.isfinite(array).all() and np.linalg.norm(array) > 0
+                for precision, target in [('canonical_bf16', canonical), ('promoted_f32', promoted)]:
+                    boundaries.append(dict(slot=slot, variant=label, reference=precision,
+                        cosine=float(np.dot(value, target)/np.linalg.norm(value)/np.linalg.norm(target)),
+                        norm_ratio=float(np.linalg.norm(value)/np.linalg.norm(target)),
+                        relative_l2=float(np.linalg.norm(value-target)/np.linalg.norm(target)),
+                        maximum_error=float(np.max(np.abs(value-target)))))
+        (OUT / 'backbone-boundaries.json').write_text(json.dumps(boundaries, indent=2)+'\n')
     (OUT / 'decisions.json').write_text(json.dumps(rows, indent=2)+'\n')
     (OUT / 'summary.md').write_text('Design-s1 frame-zero depth decision probe completed. '
         'All variants use the original code history. See decisions.json for ranks/gaps and raw arrays; '
@@ -257,7 +330,10 @@ def summarize():
 def main():
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument('--phase', choices=['reference', 'native'])
+    ap.add_argument('--backbone-boundaries', action='store_true')
     args = ap.parse_args()
+    if args.backbone_boundaries:
+        os.environ['BREEZE_BACKBONE_BOUNDARIES'] = '1'
     OUT.mkdir(parents=True, exist_ok=True)
     SCRATCH.mkdir(parents=True, exist_ok=True)
     if args.phase:
