@@ -19,7 +19,11 @@ SCRATCH = Path(os.environ['HEAVY_SCRATCH'])
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--tokens', type=int, default=128)
 parser.add_argument('--child-reference', action='store_true')
+parser.add_argument('--full-short-speech', action='store_true',
+                    help='require 3072-step original capacity and unchanged independent ASR acceptance')
 args = parser.parse_args()
+if args.full_short_speech:
+    assert args.tokens == 3072, 'Full short-speech control must use the original complete capacity'
 OUT.mkdir(parents=True, exist_ok=True)
 SCRATCH.mkdir(parents=True, exist_ok=True)
 sys.path.insert(0, str(ROOT / 'tools'))
@@ -53,6 +57,16 @@ if args.child_reference:
     captures['encoder_output'] *= 2
     write_gguf_archive(captures, metadata, OUT / 'scaled-ref.gguf')
     np.save(OUT / 'original-pcm.npy', captures['decoded_audio'])
+    if args.full_short_speech:
+        assert metadata['dia_text'] == '[S1] We are committed to making it secure.'
+        pcm = captures['decoded_audio']
+        np.save(OUT / 'original-reported.npy', pcm)
+        (OUT / 'original-reported.json').write_text(json.dumps({
+            'phrase': 'We are committed to making it secure.', 'source_pin': reference.SOURCE_PIN,
+            'model_pin': reference.MODEL_PIN, 'seed': 42, 'capacity': args.tokens,
+            'audio_seconds': len(pcm) / 44100,
+            'rms': float(np.sqrt(np.mean(pcm.astype(np.float64) ** 2))),
+            'finite': bool(np.isfinite(pcm).all()), 'scope': 'Actual original generate and real DAC'}, indent=2) + '\n')
     (OUT / 'reference.json').write_text(json.dumps(metadata, indent=2) + '\n')
     sys.exit(0)
 
@@ -80,7 +94,8 @@ os.environ['DIA_SOURCE'] = str(source)
 os.environ['DIA_DEVICE'] = 'cpu'
 run([sys.executable, ROOT / 'tests/test_dia_reference_capture.py', '-v'], 'tiny-original-contracts')
 # Child exits before native loading; the 1.6B original never coexists in RAM.
-run([sys.executable, __file__, '--child-reference', '--tokens', str(args.tokens)], 'original-reference')
+run([sys.executable, __file__, '--child-reference', '--tokens', str(args.tokens)]
+    + (['--full-short-speech'] if args.full_short_speech else []), 'original-reference')
 build = SCRATCH / 'dia-diff-build'
 run(['cmake', '-S', ROOT, '-B', build, '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_SHARED_LIBS=ON',
      '-DGGML_NATIVE=OFF', '-DGGML_CUDA=OFF', '-DGGML_VULKAN=OFF', '-DGGML_BLAS=OFF',
@@ -92,6 +107,16 @@ repo, revision = 'cstr/dia-1.6b-GGUF', '3233fbcb32be47761d2e736857b6d1a075b9ba7e
 codec = hf_hub_download(repo, 'dac-44khz.gguf', revision=revision)
 os.environ['DIA_CODEC'] = codec
 failed = []
+if args.full_short_speech:
+    asr = hf_hub_download('cstr/nemotron-3.5-asr-streaming-GGUF', 'nemotron-3.5-asr-streaming-0.6b-q4_k.gguf',
+                         revision='bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2')
+    lib = next(build.rglob('libcrispasr.so'))
+    code, _ = run([sys.executable, ROOT / 'tools/ci-heavy/dia_full_speech.py', '--child', 'recognize',
+                   '--model', asr, '--lib', lib, '--phrase', 'reported', '--audio-tag', 'original-reported'],
+                  'original-full-short-speech-asr', True)
+    receipt['original_full_short_speech_acceptance'] = code == 0
+    if code:
+        failed.append('original-full-short-speech')
 for quant in ('f16', 'q4_k'):
     model = hf_hub_download(repo, f'dia-1.6b-{quant}.gguf', revision=revision)
     code, log = run([build / 'bin/crispasr-diff', 'dia', model, OUT / 'ref.gguf'], quant + '-diff', True)
@@ -99,14 +124,14 @@ for quant in ('f16', 'q4_k'):
         failed.append(quant)
     # Reject a scale defect even when cosine is unchanged, and reject a missing
     # stage even when every other comparison passes.
-    if quant == 'f16' and code == 0:
+    if quant == 'f16' and '[PASS] encoder_output' in log:
         negative_code, negative_log = run([build / 'bin/crispasr-diff', 'dia', model, OUT / 'scaled-ref.gguf'],
                                           'scaled-reference-negative', True)
         assert negative_code != 0 and '[FAIL] encoder_output' in negative_log, negative_log
         missing_code, missing_log = run([build / 'bin/crispasr-diff', 'dia', model, OUT / 'missing-ref.gguf'],
                                         'missing-stage-negative', True)
         assert missing_code != 0 and '[FAIL] encoder_output' in missing_log, missing_log
-receipt['numerical_codec_pass'] = not failed
+receipt['numerical_codec_pass'] = not any(name in failed for name in ('f16', 'q4_k'))
 receipt['complete_free_speech_acceptance'] = False
 receipt['scope'] = 'Pinned original generate and real DAC, exact-history F16/Q4_K numerical/codec comparison. Full native short speech is a separate worker.'
 (OUT / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
