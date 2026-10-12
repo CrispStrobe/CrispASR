@@ -12,19 +12,28 @@ import tarfile
 import wave
 import zipfile
 
-VERSION = '2026-10-12.release-package.6'
+VERSION = '2026-10-12.release-package.7'
 SOURCE = 'eb633d908120cc5f44b8af8cd4aeb1191f16bfd8'
-BUILD_RUN = 38173750598
-ARTIFACT_ID = 11719048109
-ARTIFACT_ZIP_SHA = '1c030aeb15fc11b9c4344865923165106d09decd1309036010d4066be63a388e'
-BUNDLE_SHA = 'e4dbbd20a50ad498a1da6daeed998195c7327e18b427bdc6e7a061e110ca2dec'
+BUILD_RUN = 38199002944
+ARTIFACT_ID = 11727998351
+ARTIFACT_ZIP_SHA = 'dc94a9d0c57c04c82f19cf6d2b252ff9282bdb1a3d9f18fd9e480308e12884e5'
+BUNDLE_SHA = 'abeb01ea8c5183685ef05d5f167ee2b51dfcf83a67aedfbdd2e0802683f0a178'
 ORIGINAL_REV = '10e579dedf52a16a159cbc5d35e17f8bffa77190'
 ORIGINAL_SHA = '7762f2a73d8ae7dad05d667fbf0bca393a0b3b7ad622b1b1f09473fa8f5d0463'
-PACKAGE_MIRROR_REV = '52f609a43c2318812415126c1b36aa601e70e972'
-PACKAGE_MIRROR_PATH = 'release/38173750598/crispasr-linux-x86_64-cuda.tar.gz'
+PACKAGE_MIRROR_REV = 'c00064122d9327d3b72be260e21ddc529b1ca054'
+PACKAGE_MIRROR_PATH = 'release/38199002944/crispasr-linux-x86_64-cuda.tar.gz'
 MODEL_REV = 'bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2'
-TEMP = Path('/kaggle/temp/release-cuda-package')
-OUT = Path('/kaggle/working')
+VARIANT = os.environ.get('CRISPASR_PACKAGE_VARIANT', 'cli')
+assert VARIANT in ('cli', 'shared')
+if VARIANT == 'shared':
+    ARTIFACT_ID = 11727819539
+    ARTIFACT_ZIP_SHA = 'eff8bbab95f526fd39624e7f94da461bf249c7ea36330a991a21e49614bf4fb0'
+    BUNDLE_SHA = 'faf67fd049098fdf346e922906b93b5119e1a04d080c945a8690338009451cb6'
+    PACKAGE_MIRROR_REV = '3d3eb4124764e335df430132a9116e985c41bd7f'
+    PACKAGE_MIRROR_PATH = 'release/38199002944/libcrispasr-linux-x86_64-cuda.tar.gz'
+TEMP = Path('/kaggle/temp/release-cuda-package') / VARIANT
+OUT = Path('/kaggle/working') if VARIANT == 'cli' else Path('/kaggle/working/shared')
+OUT.mkdir(parents=True, exist_ok=True)
 TEMP.mkdir(parents=True, exist_ok=True)
 os.environ.update(TMPDIR=str(TEMP), HF_HOME=str(TEMP/'hf'), HF_XET_CACHE=str(TEMP/'xet'),
     OMP_NUM_THREADS='4', CRISPASR_NEMOTRON_CONTEXT_PRESET='0',
@@ -73,8 +82,9 @@ import site
 archive=fetch('cstr/crispasr-regression-fixtures',PACKAGE_MIRROR_PATH,
     PACKAGE_MIRROR_REV,BUNDLE_SHA,kind='dataset')
 with tarfile.open(archive) as tar: tar.extractall(TEMP,filter='data')
-bundle=TEMP/'crispasr-linux-x86_64-cuda'
-cli_version=subprocess.check_output([str(bundle/'crispasr'),'--version'],text=True)
+bundle = TEMP / ('crispasr-linux-x86_64-cuda' if VARIANT == 'cli' else 'libcrispasr-linux-x86_64-cuda/lib')
+version_cli = bundle/'crispasr' if VARIANT == 'cli' else TEMP.parent/'cli/crispasr-linux-x86_64-cuda/crispasr'
+cli_version=subprocess.check_output([str(version_cli),'--version'],text=True)
 assert re.search(r'git sha\s*:\s*'+SOURCE[:8],cli_version), 'Package source mismatch'
 # This Linux package deliberately requires installed CUDA 12 runtime/BLAS.
 # Preload only existing host libraries; do not install torch or a new toolkit.
@@ -89,11 +99,15 @@ runtime=ctypes.CDLL(host_libraries['libcudart.so.12']);runtime.cudaRuntimeGetVer
 runtime.cudaRuntimeGetVersion.restype=ctypes.c_int;runtime_version=ctypes.c_int()
 assert runtime.cudaRuntimeGetVersion(ctypes.byref(runtime_version))==0
 assert 12000<=runtime_version.value<13000
-libraries=list(bundle.glob('libcrispasr.so*'));assert len(libraries)==1,libraries
-library=libraries[0]
+library = bundle / ('libcrispasr.so.1' if VARIANT == 'cli' else 'libcrispasr.so')
+assert library.is_file(), library
 (OUT/'preflight.json').write_text(json.dumps(dict(version=VERSION,source=SOURCE,hardware=hardware,
     package_artifact_id=ARTIFACT_ID,package_sha256=BUNDLE_SHA,library=library.name,files=sorted(p.name for p in bundle.iterdir())) ,indent=2)+'\n')
 lib=ctypes.CDLL(str(library))  # Check ELF/dependencies before pulling model weights.
+lib.whisper_version.restype = ctypes.c_char_p
+lib.crispasr_c_api_version.restype = ctypes.c_char_p
+assert lib.whisper_version().decode() == '0.8.43'
+assert lib.crispasr_c_api_version().decode() == '0.7.0'
 
 original=fetch('cstr/crispasr-regression-fixtures','tts-asr/nemotron-reference-20261009/proof.zip',ORIGINAL_REV,ORIGINAL_SHA)
 with zipfile.ZipFile(original) as z: z.extractall(TEMP/'original')
@@ -120,7 +134,7 @@ for name in ['nemotron_run_preencode_ext','nemotron_run_encoder_ext']:
     fn=getattr(lib,name);fn.argtypes=[ctypes.c_void_p,fp,ctypes.c_int,ctypes.c_int,ip,ip];fn.restype=fp
 allocator=ctypes.CDLL(None);allocator.free.argtypes=[ctypes.c_void_p];allocator.free.restype=None
 params=lib.nemotron_context_default_params();params.n_threads=4;params.use_gpu=True;params.verbosity=1
-receipt=dict(version=VERSION,source=SOURCE,build_run=BUILD_RUN,package_artifact_id=ARTIFACT_ID,package_sha256=BUNDLE_SHA,
+receipt=dict(version=VERSION,package_variant=VARIANT,source=SOURCE,build_run=BUILD_RUN,package_artifact_id=ARTIFACT_ID,package_sha256=BUNDLE_SHA,
     package_mirror_revision=PACKAGE_MIRROR_REV,package_mirror_path=PACKAGE_MIRROR_PATH,
     package_transport='public byte-identical CI archive mirror',
     hardware=hardware,model_revision=MODEL_REV,original_revision=ORIGINAL_REV,original_sha256=ORIGINAL_SHA,
@@ -230,3 +244,14 @@ with Session(str(model),lib_path=str(library),backend='nemotron',n_threads=4) as
 receipt['validated']=not receipt['failed'];save()
 if not receipt['validated']: raise RuntimeError('F16 GPU validation failed: '+str(receipt['failed']))
 kh.step('all.complete',validated=True)
+
+# ggml registers backend plugins process-wide. Validate the second independently
+# in a fresh interpreter so it cannot reuse the CLI archive's registered plugin.
+if VARIANT == 'cli':
+    child_env = dict(os.environ, CRISPASR_PACKAGE_VARIANT='shared')
+    subprocess.run([sys.executable, str(Path(__file__).resolve())], env=child_env, check=True)
+    shared = json.loads((OUT/'shared/validation.json').read_text())
+    assert shared['validated'] and shared['package_variant'] == 'shared'
+    (OUT/'combined-validation.json').write_text(json.dumps(dict(version=VERSION,
+        source=SOURCE, build_run=BUILD_RUN, validated=True, fresh_processes=True,
+        cli_package_sha256=BUNDLE_SHA, shared_package_sha256=shared['package_sha256']), indent=2)+'\n')
