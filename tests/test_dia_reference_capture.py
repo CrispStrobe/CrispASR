@@ -9,6 +9,7 @@ from pathlib import Path
 import sys
 import types
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -103,11 +104,22 @@ class DiaCaptureTest(unittest.TestCase):
             self.dia.generate = generate
 
     def test_unaligned_text_and_unknown_stage_are_rejected(self):
-        for text in ["Test.", "[S1] Test", "[S1] A\x00B."]:
-            with self.assertRaises(ValueError):
-                reference.capture(self.dia, text, max_tokens=32)
+        for text in ["", "Test.", "[S1] Test", "[S1] A\x00B.",
+                     " [S1] Test.", "\t[S1] Test.", "\n[S1] Test.",
+                     "[S1] Test. ", "[S1] Test.\n"]:
+            with self.subTest(text=repr(text)):
+                with mock.patch.object(self.dia, "generate", side_effect=AssertionError("unaligned prompt reached generation")):
+                    with self.assertRaises(ValueError):
+                        reference.capture(self.dia, text, max_tokens=32)
         with self.assertRaisesRegex(ValueError, "Unsupported"):
             reference.capture(self.dia, "[S1] Test.", max_tokens=32, stages={"invented_stage"})
+
+    def test_dump_rejects_unaligned_text_before_source_or_model_loading(self):
+        with mock.patch.dict(os.environ, {"DIA_TEXT": "[S1] Test. "}):
+            with mock.patch.object(reference, "verify_source", side_effect=AssertionError("invalid prompt reached source loading")) as verify:
+                with self.assertRaisesRegex(ValueError, "DIA_TEXT"):
+                    reference.dump("nari-labs/Dia-1.6B", None)
+                verify.assert_not_called()
 
 
 if __name__ == "__main__":

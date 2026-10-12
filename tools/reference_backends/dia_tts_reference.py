@@ -58,6 +58,15 @@ def verify_source(source):
     return source, hashes
 
 
+def validate_text(text):
+    # Native trims leading ASCII whitespace and adds punctuation using the
+    # actual last byte; original generate() tokenizes the text unchanged.
+    # Reject disagreement instead of silently normalizing the blueprint input.
+    if (not text.startswith(("[S1]", "[S2]")) or text[-1:] not in (".", "!", "?")
+            or "\x00" in text):
+        raise ValueError("DIA_TEXT must start with [S1]/[S2], end in .!?, and contain no NUL for native alignment")
+
+
 def capture(dia, text, *, max_tokens=128, seed=42, temperature=1.2, top_p=.95,
             top_k=45, cfg_scale=3., stages=None):
     """Capture actual original calls, owning every array and restoring hooks."""
@@ -67,8 +76,7 @@ def capture(dia, text, *, max_tokens=128, seed=42, temperature=1.2, top_p=.95,
     stages = set(available if stages is None else stages)
     if stages - set(available):
         raise ValueError(f"Unsupported Dia stages: {sorted(stages - set(available))}")
-    if not text.strip().startswith(("[S1]", "[S2]")) or text.rstrip()[-1] not in ".!?":
-        raise ValueError("DIA_TEXT must start with [S1]/[S2] and end in .!? for native alignment")
+    validate_text(text)
     if not max(dia.config.data.delay_pattern) < max_tokens <= dia.config.data.audio_length:
         raise ValueError("DIA_MAX_TOKENS must exceed the delay and fit the model capacity")
     results, inputs, logits, handles, replacements = {}, [], [], [], []
@@ -167,6 +175,8 @@ def capture(dia, text, *, max_tokens=128, seed=42, temperature=1.2, top_p=.95,
 
 def dump(model_dir, audio, stages=None, **kwargs):
     """Generic dispatcher entry; audio is unused for text-only synthesis."""
+    text = os.environ.get("DIA_TEXT", "[S1] We are committed to making it secure.")
+    validate_text(text)
     if "DIA_SOURCE" not in os.environ:
         raise ValueError("Set DIA_SOURCE to the clean pinned original checkout")
     source, source_hashes = verify_source(os.environ["DIA_SOURCE"])
@@ -204,7 +214,6 @@ def dump(model_dir, audio, stages=None, **kwargs):
     dia.config, dia.model, dia.device, dia.compute_dtype = config, model, device, torch.float32
     checkpoint = Path(os.environ["DIA_DAC_CHECKPOINT"]) if "DIA_DAC_CHECKPOINT" in os.environ else Path(dac.utils.download())
     dia.dac_model = dac.DAC.load(str(checkpoint)).to(device).eval()
-    text = os.environ.get("DIA_TEXT", "[S1] We are committed to making it secure.")
     settings = dict(max_tokens=int(os.environ.get("DIA_MAX_TOKENS", "128")),
                     seed=int(os.environ.get("DIA_SEED", "42")),
                     temperature=float(os.environ.get("DIA_TEMPERATURE", "1.2")),

@@ -17,8 +17,10 @@ The reference observes the original `generate()` and codec calls. It preserves
 the original encoder masks, padding and unconditional/conditional order.
 Captured encoder and cross-cache views trim padding to the native sequence
 length. The actual tokenized input determines that length. Text must already
-have `[S1]`/`[S2]` and final punctuation, matching native preparation. Interior
-padding is rejected. Captures own storage; hooks/methods are restored on failure.
+have `[S1]`/`[S2]` at its actual start and punctuation at its actual end,
+with no NUL bytes, matching native preparation. Leading/trailing whitespace
+is rejected before source or model loading rather than silently normalizing
+the original input. Interior padding is rejected. Captures own storage; hooks/methods are restored on failure.
 The decoder input/logit arrays preserve every captured step and all nine heads
 in both CFG branches. Original decoded PCM comes from the real DAC.
 
@@ -45,7 +47,13 @@ reject both even when other stages, or cosine alone, would pass. Its default
 128-step probe is bounded numerical/codec evidence, not full short-speech
 acceptance. `--tokens 3072` requests a full-capacity original generation.
 
-Local validation: three tiny-original neural capture tests, production boundary
+Local validation: four tiny-original neural capture tests, production boundary
 regression, C++ syntax checks and Python compilation. Only the tiny test's final
 DAC is a dummy code projection; it provides no PCM/quality evidence. Hosted
 real-weight/DAC numerical and negative-control results are pending.
+
+The input guard was tested before fixing it: five whitespace-altered prompts
+and a NUL-containing prompt reached generation, and an invalid dump reached
+source loading. All seven regression assertions fail before the guard and pass
+after it; unchanged valid-prompt generation remains array-identical. These
+checks establish input/capture behavior, not real-weight speech quality.
