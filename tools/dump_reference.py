@@ -92,6 +92,7 @@ import numpy as np
 #   1. tools/reference_backends/<name>.py  with dump() + DEFAULT_STAGES
 #   2. one line here.
 REGISTERED_BACKENDS: Dict[str, str] = {
+    "dia": "reference_backends.dia_tts_reference",
     "index-echo": "reference_backends.index_echo",
     # Dolphin (DataoceanAI) E-Branchformer + Transformer decoder + CTC (#436).
     # model_dir holds <name>.pt + train.yaml + units.txt + global_cmvn;

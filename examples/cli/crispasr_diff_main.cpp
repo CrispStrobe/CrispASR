@@ -34,6 +34,7 @@
 #include <cmath>
 
 #include "crispasr_diff.h"
+#include "crispasr_dia_diff.h"
 #include "gguf.h"
 
 #include "voxtral.h"
@@ -1622,6 +1623,8 @@ int main(int argc, char** argv) {
     // dispatched before the 5-arg gate rather than made to carry a dummy path.
     if (argc >= 4) {
         const std::string b = argv[1];
+        if (b == "dia")
+            return dia_diff::run(argv[2], argv[3]);
         if (b == "madlad" || b == "t5")
             return t5_translate_diff(argv[2], argv[3], /*verbosity=*/2);
         // #412. Dispatched here because its 3rd and 4th args are a fixture
@@ -1642,8 +1645,9 @@ int main(int argc, char** argv) {
                 "granite-nle, parakeet, gigaam, wespeaker, chatterbox, voxcpm2-tts, "
                 "canary, cohere, gemma4, mimo-tokenizer, mimo-asr, orpheus, moonshine, moonshine-onnx, "
                 "moonshine-streaming, "
-                "kyutai-stt, parler-tts, moss-audio, madlad\n"
+                "kyutai-stt, parler-tts, moss-audio, madlad, dia\n"
                 "                (madlad/t5 is a text model: pass only <model.gguf> <reference.gguf>)\n"
+                "                (dia is text-only: pass <model.gguf> <reference.gguf>; optional DIA_CODEC)\n"
                 "  model.gguf    crispasr-compatible model weights\n"
                 "  reference.gguf  archive produced by tools/dump_reference.py\n"
                 "  audio.wav     16 kHz mono WAV\n",

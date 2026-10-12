@@ -522,6 +522,10 @@ static ggml_tensor* build_dia_encoder(ggml_context* ctx, dia_model& m,
     // Embedding lookup: (enc_hidden, T, B)
     ggml_tensor* cur =
         ggml_reshape_3d(ctx, ggml_get_rows(ctx, m.encoder.embedding, inp_tokens), m.encoder_hidden_size, T, B);
+    if (crispasr_env::get("CRISPASR_DIA_DUMP_DIR")) {
+        ggml_set_name(cur, "dia_encoder_embedding");
+        ggml_set_output(cur);
+    }
 
     int layer_idx = 0;
     for (auto& layer : m.encoder.layers) {
@@ -586,6 +590,11 @@ static ggml_tensor* build_dia_encoder(ggml_context* ctx, dia_model& m,
         }
 
         cur = ggml_add(ctx, cur, residual_mlp);
+        if (crispasr_env::get("CRISPASR_DIA_DUMP_DIR")) {
+            const std::string name = "dia_encoder_layer_" + std::to_string(layer_idx);
+            ggml_set_name(cur, name.c_str());
+            ggml_set_output(cur);
+        }
         layer_idx++;
     }
 
@@ -1404,6 +1413,33 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
         encoder_output.resize(enc_hidden * T_enc * B);
         ggml_backend_tensor_get(enc_result, encoder_output.data(), 0, encoder_output.size() * sizeof(float));
 
+        if (dia_dump_dir) {
+            auto write = [&](const char* name, const float* data, size_t count) {
+                if (FILE* f = fopen(dia_dpath(name).c_str(), "wb")) {
+                    fwrite(data, sizeof(float), count, f);
+                    fclose(f);
+                }
+            };
+            std::vector<float> ids(enc_input.begin(), enc_input.end());
+            write("cpp_encoder_tokens.f32", ids.data(), ids.size());
+            write("cpp_encoder_output.f32", encoder_output.data(), encoder_output.size());
+            for (int l = 0; l < (int)m.n_encoder_layers; ++l) {
+                const std::string name = "dia_encoder_layer_" + std::to_string(l);
+                ggml_tensor* layer = ggml_graph_get_tensor(gf, name.c_str());
+                if (layer) {
+                    std::vector<float> values(encoder_output.size());
+                    ggml_backend_tensor_get(layer, values.data(), 0, values.size() * sizeof(float));
+                    write(("cpp_encoder_layer_" + std::to_string(l) + ".f32").c_str(), values.data(), values.size());
+                }
+            }
+            ggml_tensor* embedding = ggml_graph_get_tensor(gf, "dia_encoder_embedding");
+            if (embedding) {
+                std::vector<float> values(encoder_output.size());
+                ggml_backend_tensor_get(embedding, values.data(), 0, values.size() * sizeof(float));
+                write("cpp_encoder_embedding.f32", values.data(), values.size());
+            }
+        }
+
         ggml_free(ctx0);
     }
 
@@ -1788,6 +1824,11 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                 }
 
                 cur = ggml_add(ctx0, cur, residual);
+                if (step == 0 && dia_dump_dir) {
+                    const std::string name = "dia_decoder_layer_" + std::to_string(l);
+                    ggml_set_name(cur, name.c_str());
+                    ggml_set_output(cur);
+                }
             }
 
             // Final norm
@@ -1888,6 +1929,19 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
             }
 
             if (step == 0 && dia_dump_dir) {
+                for (int l = 0; l < (int)m.n_decoder_layers; ++l) {
+                    const std::string name = "dia_decoder_layer_" + std::to_string(l);
+                    ggml_tensor* layer = ggml_graph_get_tensor(gf, name.c_str());
+                    if (layer) {
+                        std::vector<float> values(dec_hidden * B);
+                        ggml_backend_tensor_get(layer, values.data(), 0, values.size() * sizeof(float));
+                        if (FILE* f = fopen(
+                                dia_dpath(("cpp_decoder_layer_" + std::to_string(l) + ".f32").c_str()).c_str(), "wb")) {
+                            fwrite(values.data(), sizeof(float), values.size(), f);
+                            fclose(f);
+                        }
+                    }
+                }
                 ggml_tensor* fh = ggml_graph_get_tensor(gf, "dia_final_hidden");
                 if (fh) {
                     std::vector<float> hbuf(dec_hidden * B);
