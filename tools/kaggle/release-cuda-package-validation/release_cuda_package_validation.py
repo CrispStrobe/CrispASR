@@ -12,7 +12,7 @@ import tarfile
 import wave
 import zipfile
 
-VERSION = '2026-10-12.release-package.7'
+VERSION = '2026-10-12.release-package.8'
 SOURCE = 'eb633d908120cc5f44b8af8cd4aeb1191f16bfd8'
 BUILD_RUN = 38199002944
 ARTIFACT_ID = 11727998351
@@ -151,7 +151,12 @@ with Session(str(model),lib_path=str(library),backend='nemotron',n_threads=4) as
     allocation=subprocess.check_output(['nvidia-smi','--query-compute-apps=pid,used_gpu_memory','--format=csv,noheader,nounits'],text=True)
     receipt['packaged_cabi_gpu_allocation']=allocation.strip()
     receipt['loaded_ggml_plugins']=sorted(set(Path(line.split()[-1]).name for line in Path('/proc/self/maps').read_text().splitlines() if str(bundle)+'/libggml' in line))
-    save();assert 'libggml-cuda.so' in receipt['loaded_ggml_plugins'], 'C ABI must load the actual packaged CUDA plugin'
+    mapped_paths = {line.split()[-1] for line in Path('/proc/self/maps').read_text().splitlines() if str(bundle)+'/libggml' in line}
+    actual_plugin = (bundle/'libggml-cuda.so').resolve()
+    receipt['loaded_cuda_plugin_path'] = str(actual_plugin)
+    receipt['loaded_cuda_plugin_sha256'] = digest(actual_plugin)
+    save();assert str(actual_plugin) in mapped_paths, 'C ABI must load this package CUDA library, including its real SONAME'
+    assert receipt['loaded_cuda_plugin_sha256'] == receipt['cuda_plugin_sha256']
     assert any(int(row.split(',')[0].strip())==os.getpid() and int(row.split(',')[1].strip())>=256 for row in allocation.splitlines()), 'Actual packaged C ABI must allocate on CUDA'
 ctx=lib.nemotron_init_from_file(str(model).encode(),params);assert ctx
 allocation=subprocess.check_output(['nvidia-smi','--query-compute-apps=pid,used_gpu_memory','--format=csv,noheader,nounits'],text=True)
