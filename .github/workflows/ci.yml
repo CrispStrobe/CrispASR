@@ -1,544 +1,69 @@
-name: CI
+name: CANN compile validation
 
+# Official SDK images are large; opt in explicitly without duplicating the
+# normal platform matrix. Hosted runners have no NPU: this is a compile gate.
 on:
-  # Manual runs on a feature branch: heavy builds and tests belong on CI, not
-  # on the shared dev box (`gh workflow run ci.yml --ref <branch>`).
   workflow_dispatch:
-  push:
-    branches: [main, master, integrated_cli]
-  pull_request:
-    branches: [main, master]
+
+permissions:
+  contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: cann-compile-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  # The configuration the shipped CUDA packages are built in — and, until
-  # v0.8.30, the one configuration NOTHING compiled before release day.
-  #
-  # GGML_BACKEND_DL makes every ggml backend a dlopen'd module, including
-  # ggml-cpu, so `ggml_cpu_has_*` / `ggml_backend_is_cpu` stop being linkable
-  # and must go through src/core/ggml_cpu_backend.h. Two files added after
-  # v0.8.29 called them directly; nothing noticed until
-  # `build-linux-x86_64-cuda` failed to link during the v0.8.30 release run,
-  # after the tag was already public. x86-64 specifically: the ISA predicates
-  # live behind `#if CRISPASR_ISA_X86`, so an arm64 build compiles the whole
-  # block out and links clean either way.
-  linux-backend-dl:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install dependencies
-        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake g++
-
-      - name: Configure (GGML_BACKEND_DL, as the CUDA packages are built)
-        run: |
-          cmake -S . -B build-dl -DCMAKE_BUILD_TYPE=Release \
-            -DGGML_BACKEND_DL=ON -DGGML_NATIVE=OFF \
-            -DCRISPASR_BUILD_TESTS=OFF -DCRISPASR_BUILD_SERVER=OFF
-
-      - name: Build (the link is the test)
-        run: cmake --build build-dl --target crispasr-cli -j $(nproc)
-
-      - name: Smoke test - the CPU backend still loads as a module
-        run: ./build-dl/bin/crispasr --list-backends
-
-      - name: Packaged C ABI discovers adjacent plugins outside the package directory
-        run: |
-          stage="$RUNNER_TEMP/crispasr-plugin-package-é-模型"
-          mkdir -p "$stage"
-          find build-dl \( -type f -o -type l \) -name '*.so*' -exec cp -L {} "$stage/" \;
-          python3 tests/test_packaged_backend_discovery.py --library "$stage/libcrispasr.so"
-
-  # ====================================================================
-  # Linux x86_64 (CPU)
-  # ====================================================================
-  linux-x86_64:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install dependencies
-        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake g++ libopenblas-dev
-
-      - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_OPENBLAS=ON -DCRISPASR_BUILD_TESTS=OFF -DGGML_NATIVE=OFF
-
-      - name: Build
-        run: cmake --build build --target crispasr-cli crispasr-diff crispasr-quantize -j $(nproc)
-
-      - name: Smoke test - help
-        run: ./build/bin/crispasr --help
-
-      - name: Smoke test - list backends
-        run: ./build/bin/crispasr --list-backends
-
-      # Guards the drift docs/contributing.md warns about: a backend reachable
-      # from the CLI factory but missing from the c_api dispatch, the
-      # available_backends list, or the generated feature matrix (and the
-      # reverse — advertised by the C ABI but unreachable from the CLI). Exits 1
-      # only on a REQUIRED gap; registry/test/README gaps stay advisory. Run on
-      # Linux deliberately: the script's Go cgo-LDFLAGS drift check is unreliable
-      # on macOS, where Metal/BLAS default on and pollute the linux link line.
-      #
-      # NOT covered here: the script's shipped-library check, which reads a
-      # built libcrispasr's symbol table. This job configures without
-      # BUILD_SHARED_LIBS, so there is no .so to read and that one check prints
-      # "skipped". It has teeth in bindings-rust.yml, the job that does build a
-      # shared libcrispasr on Linux — and which triggers on exactly the paths a
-      # new backend touches (src/crispasr_c_api.cpp, src/CMakeLists.txt).
-      - name: Backend wiring audit
-        run: python3 tools/check-backend-wiring.py --crispasr ./build/bin/crispasr
-
-  # ====================================================================
-  # Linux x86_64 — AMR opencore FetchContent static build (opt-in gate guard)
-  # ====================================================================
-  # Linux x86_64 — the unit test tier
-  # ====================================================================
-  # 162 of the 192 targets in tests/ are labelled "unit" (weight-free, no models,
-  # seconds to run) and CI executed exactly ONE of them before this job existed.
-  #
-  # The only ctest invocations were `-L gh` in build.yml plus a Windows leg that
-  # builds three named targets. build.yml is NOT a substitute: its push trigger is
-  # path-filtered to ggml/.gitmodules/build.yml, so it does not run on a source
-  # change at all — wiring the unit tier in there alone would have been another
-  # check that never fires. ci.yml has no path filter, so this job runs on every
-  # push and PR, which is the whole point.
-  #
-  # CLAUDE.md tells contributors to run `ctest --test-dir build -L unit` and
-  # nothing enforced it, so every weight-free test passed once on its author's
-  # machine and was never executed again.
-  #
-  # Kept as its OWN job rather than folded into linux-x86_64: it runs in parallel,
-  # so it adds no wall-clock to the critical path, and a unit failure is
-  # attributable at a glance instead of buried in a build log.
-  linux-unit:
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      # patchelf is for test-bundle-linux-runtime, which exercises the release
-      # packaging scripts. Without it that test SKIPs, and a skip is
-      # indistinguishable from a pass in the summary — which is how the release
-      # packaging went unobserved in the first place.
-      - name: Install dependencies
-        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake ninja-build g++ libopenblas-dev patchelf
-
-      - name: Install pinned capability-table formatter
-        run: |
-          python3 -m pip install clang-format==18.1.8
-          ln -s "$(command -v clang-format)" "$RUNNER_TEMP/clang-format-18"
-          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
-
-      # The generated capability catalogue includes the optional ONNX adapters.
-      # Its exact drift check needs the same complete roster, not a native-only
-      # build that omits four rows. Other platform jobs retain native-only builds.
-      - name: Fetch pinned ONNX Runtime SDK for the complete capability check
-        run: bash scripts/fetch_onnxruntime.sh "$RUNNER_TEMP/onnxruntime-sdk"
-
-      # Examples/server stay at their defaults: some tests link `common`, which
-      # lives under examples/, so switching them off would break configure.
-      - name: Configure (tests ON)
-        run: >
-          cmake -S . -B build -G Ninja
-          -DCMAKE_BUILD_TYPE=Release
-          -DGGML_NATIVE=OFF
-          -DGGML_OPENBLAS=ON
-          -DCRISPASR_BUILD_TESTS=ON
-          -DCRISPASR_ONNXRUNTIME_ROOT="$RUNNER_TEMP/onnxruntime-sdk"
-
-      - name: Build
-        run: cmake --build build -j $(nproc)
-
-      # Compare real compiled artifacts; missing CLI/shared library is a failure.
-      - name: Check generated capability table and C ABI
-        run: |
-          python3 tools/gen-backend-caps-table.py --check --crispasr build/bin/crispasr
-          python3 tests/test_backend_caps_abi.py --cli build/bin/crispasr --build-dir build
-
-      - name: Check production GPU backend/device selection without hardware
-        run: python3 tests/test_gpu_backend_selection.py -v
-
-      # -E live: model-dependent tests need weights this job has no business
-      # downloading. --timeout: a hung unit test must not eat the runner.
-      - name: Run the unit tier
-        run: ctest --test-dir build -L unit -E live --output-on-failure --timeout 300
-
-      - name: TTS session failure, ownership and conversion contracts
-        run: python3 tests/test_tts_session_contracts.py -v
-
-      - name: Supertonic speaker API null and bounds contracts
-        run: python3 tests/test_supertonic_speaker_contracts.py -v
-
-      - name: UTF-8 loop cleanup under platform ctype classification
-        run: python3 tests/test_ngram_locale.py -v
-
-      - name: Breeze session sampler controls
-        run: python3 tests/test_breeze_session_controls.py -v
-
-      - name: Session result UTF-8 contract (native functions and strict Python decode)
-        run: python3 tests/test_session_utf8.py -v
-
-  # ====================================================================
-  # The -DCRISPASR_AMR_FETCH=ON path compiles opencore-amr from source (for
-  # platforms without a system libopencore-amr). It is OFF by default, so the
-  # rest of the matrix never exercises it — and it silently broke once (§219):
-  # an over-inclusive common/src glob pulled in files upstream excludes
-  # (bits2prm.cpp → missing header), and an unanchored exclusion regex also
-  # matched dtx_decoder_amr_wb.cpp (link error). Neither surfaced until the
-  # static sources were actually compiled + linked + run. This job builds that
-  # path and decodes samples/jfk.amr end-to-end so a regression fails CI at
-  # authoring time. NOTE: the configure step asserts the gate genuinely turned
-  # ON — otherwise the [amr] test WARN-skips and hides the regression (a false
-  # green), which is precisely how the original break went unnoticed.
-  #
-  # RUN IT UNDER BOTH COMPILER FAMILIES (#314). This job existed and still went
-  # green while the path was broken for every clang user: opencore-amr declares
-  # locals `register`, which C++17 REMOVED — clang makes that a hard error
-  # ("ISO C++17 does not allow 'register' storage class specifier"), GCC only
-  # warns. With g++ alone the job proves nothing about the toolchain the report
-  # came from (clang 21 on Termux). Both compilers default to C++17 here, so the
-  # matrix is the whole guard.
-  linux-amr-fetch:
-    runs-on: ubuntu-latest
+  linux-cann:
     strategy:
       fail-fast: false
       matrix:
         include:
-          - { cc: gcc,   cxx: g++     }
-          - { cc: clang, cxx: clang++ }
-    name: linux-amr-fetch (${{ matrix.cxx }})
+          - runner: ubuntu-24.04
+            chip: 910b
+            acl_graph: 'on'
+          - runner: ubuntu-24.04-arm
+            chip: 310p
+            acl_graph: 'off'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      CANN_IMAGE: swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:9.2.0-beta.2-${{ matrix.chip }}-openeuler24.03-py3.12
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
 
-      - name: Install dependencies
-        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake g++ clang libopenblas-dev
-
-      - name: Configure (AMR FetchContent static) + assert gate enabled
-        run: |
-          cmake -S . -B build-amr \
-            -DCMAKE_C_COMPILER=${{ matrix.cc }} -DCMAKE_CXX_COMPILER=${{ matrix.cxx }} \
-            -DCMAKE_BUILD_TYPE=Release -DGGML_OPENBLAS=ON -DGGML_NATIVE=OFF \
-            -DCRISPASR_BUILD_TESTS=ON -DCRISPASR_AMR=ON -DCRISPASR_AMR_FETCH=ON \
-            2>&1 | tee cfg.log
-          grep -q "AMR via FetchContent" cfg.log || {
-            echo "::error::CRISPASR_AMR_FETCH did not enable — the AMR static gate is not actually being tested (would give a false green)";
-            exit 1;
-          }
-
-      - name: Build audio-format tests (compiles + links opencore-amr static)
-        run: cmake --build build-amr --target test-audio-formats -j $(nproc)
-
-      - name: Decode AMR end-to-end (samples/jfk.amr)
-        run: ./build-amr/bin/test-audio-formats "[amr]"
-
-  # ====================================================================
-  # Linux x86_64 — Opus FetchContent static build (opt-in gate guard)
-  # ====================================================================
-  # Sibling of linux-amr-fetch: -DCRISPASR_OPUS_FETCH=ON statically builds
-  # ogg + opus + opusfile (for platforms without a system opusfile). OFF by
-  # default, so nothing else in the matrix compiles it — same rot risk as the
-  # AMR path (opusfile is autotools-only, so its sources are hand-listed in
-  # src/CMakeLists.txt: an upstream layout change or a missing symbol would
-  # only surface here). This job builds it and decodes samples/jfk.webm
-  # (Opus-in-WebM) through the static libs. Same false-green guard: the
-  # configure step asserts the gate actually turned ON.
-  linux-opus-fetch:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
+      - name: Free disk space
+        uses: ggml-org/free-disk-space@v1.3.1
         with:
-          submodules: recursive
+          tool-cache: true
 
-      - name: Install dependencies
-        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake g++ libopenblas-dev
-
-      - name: Configure (Opus FetchContent static) + assert gate enabled
-        run: |
-          cmake -S . -B build-opus \
-            -DCMAKE_BUILD_TYPE=Release -DGGML_OPENBLAS=ON -DGGML_NATIVE=OFF \
-            -DCRISPASR_BUILD_TESTS=ON -DCRISPASR_OPUS=ON -DCRISPASR_OPUS_FETCH=ON \
-            2>&1 | tee cfg.log
-          grep -q "\.opus via FetchContent static" cfg.log || {
-            echo "::error::CRISPASR_OPUS_FETCH did not enable — the Opus static gate is not actually being tested (would give a false green)";
-            exit 1;
-          }
-
-      - name: Build audio-format tests (compiles + links opus/ogg/opusfile static)
-        run: cmake --build build-opus --target test-audio-formats -j $(nproc)
-
-      - name: Decode Opus-in-WebM end-to-end (samples/jfk.webm)
-        run: ./build-opus/bin/test-audio-formats "[webm]"
-
-  # ====================================================================
-  # Linux x86_64 — ASan/UBSan on the audio-format decoders (untrusted input)
-  # ====================================================================
-  # crispasr_audio_load parses untrusted file bytes with hand-rolled decoders
-  # (EBML/WebM demux, MP4 box parser, Sun-AU header). The default matrix builds
-  # them only in Release, so a heap overflow / UB in that attack surface would
-  # not surface. Build the audio-format tests with CRISPASR_SANITIZE_ADDRESS +
-  # _UNDEFINED and decode the committed samples under the sanitizer. Also guards
-  # the sanitizer build gate itself from rotting. (Scoped to the audio decoders
-  # — the fuzzable surface — which keeps the job fast; broaden to the full unit
-  # lane later if desired.)
-  linux-asan-audio:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install dependencies
-        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake g++ libopenblas-dev libopusfile-dev
-
-      - name: Configure (ASan + UBSan)
-        run: >
-          cmake -S . -B build-asan
-          -DCMAKE_BUILD_TYPE=Debug
-          -DGGML_NATIVE=OFF
-          -DCRISPASR_BUILD_TESTS=ON
-          -DCRISPASR_SANITIZE_ADDRESS=ON
-          -DCRISPASR_SANITIZE_UNDEFINED=ON
-
-      - name: Build audio-format tests under sanitizers
-        run: cmake --build build-asan --target test-audio-formats -j $(nproc)
-
-      - name: Decode samples under ASan/UBSan
+      - name: Build
         env:
-          ASAN_OPTIONS: detect_leaks=0
-          UBSAN_OPTIONS: halt_on_error=1:print_stacktrace=1
-        run: ./build-asan/bin/test-audio-formats "[audio]"
-
-  # ====================================================================
-  # Linux x86_64 — libFuzzer smoke run over crispasr_audio_load (untrusted input)
-  # ====================================================================
-  # tests/fuzz/fuzz_audio_load.cpp fuzzes the one entry point that reaches every
-  # hand-rolled audio parser (AU/AMR/WebM/MP4 + miniaudio). Build it with clang
-  # (Linux clang ships the libFuzzer runtime; Apple Clang does not) and run a
-  # short, seeded smoke pass under ASan/UBSan — a new crash fails CI. This is a
-  # regression gate, not a fuzzing campaign; run it longer out of band for depth.
-  linux-fuzz-smoke:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install dependencies
-        run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake clang libopenblas-dev libopusfile-dev
-
-      - name: Configure (fuzzer + ASan/UBSan, clang)
-        env:
-          CC: clang
-          CXX: clang++
-        run: >
-          cmake -S . -B build-fuzz
-          -DCMAKE_BUILD_TYPE=Debug
-          -DGGML_NATIVE=OFF
-          -DCRISPASR_BUILD_TESTS=ON
-          -DCRISPASR_FUZZ=ON
-          -DCRISPASR_SANITIZE_ADDRESS=ON
-          -DCRISPASR_SANITIZE_UNDEFINED=ON
-
-      - name: Build the fuzz harness
-        run: cmake --build build-fuzz --target crispasr-fuzz-audio -j $(nproc)
-
-      - name: Smoke fuzz (seeded from samples/, ~45s; a crash fails CI)
-        env:
-          # allocator_may_return_null=1: a malformed WAV/metadata chunk-size field can
-          # drive miniaudio's metadata pool to request a multi-exabyte allocation; the
-          # parser CHECKS the malloc result and returns MA_OUT_OF_MEMORY gracefully
-          # (ma_dr_wav__metadata_alloc), so "allocation-size-too-big" is a graceful OOM,
-          # not memory corruption. Let the allocation return null instead of aborting —
-          # the fuzzing-standard config for parsers over untrusted size fields.
-          ASAN_OPTIONS: detect_leaks=0:allocator_may_return_null=1
+          SOC_TYPE: ascend${{ matrix.chip }}
+          USE_ACL_GRAPH: ${{ matrix.acl_graph }}
         run: |
-          mkdir -p fuzz-corpus fuzz-artifacts
-          cp samples/jfk.wav samples/jfk.au samples/jfk.amr samples/jfk.webm \
-             samples/jfk-vorbis.webm samples/jfk.m4a fuzz-corpus/ 2>/dev/null || true
-          # Inputs that once crashed a parser. A seeded 45 s run rediscovers a
-          # crash only by luck — replaying these makes each fixed bug a
-          # deterministic gate instead of a coin flip.
-          #
-          # COUNTED, not globbed-and-hoped. The previous form was
-          # `cp .../*.ogg ... || true`, and tests/.gitignore excludes *.ogg, so
-          # the one documented seed was never committed and the glob matched
-          # nothing on every run since. A gate that replays an empty set reports
-          # exactly what a passing gate reports, so it has to be able to say so.
-          n_seeds=0
-          for f in tests/fuzz/regressions/*; do
-            case "$f" in *README.md|*.gitignore) continue ;; esac
-            [ -f "$f" ] || continue
-            cp "$f" fuzz-corpus/
-            n_seeds=$((n_seeds + 1))
-          done
-          echo "replaying $n_seeds regression seed(s)"
-          if [ "$n_seeds" -eq 0 ]; then
-            echo "::error::tests/fuzz/regressions/ contributed no seeds — check tests/.gitignore"
-            exit 1
-          fi
-          ./build-fuzz/bin/crispasr-fuzz-audio -max_total_time=45 -max_len=1048576 \
-             -rss_limit_mb=4096 -artifact_prefix=fuzz-artifacts/ fuzz-corpus
-
-      # Without this the crash input dies with the runner and all you have is a
-      # stack trace — which is how the stb_vorbis SEGV went unchased: the job
-      # is stochastic, so "re-run it" is not a reproduction strategy. Keep the
-      # input that actually crashed.
-      - name: Upload the crashing input
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: fuzz-crash-audio
-          path: fuzz-artifacts/
-          if-no-files-found: ignore
-
-  # ====================================================================
-  # Linux x86_64 + Vulkan
-  # ====================================================================
-  linux-vulkan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Install Vulkan SDK + glslc
-        run: |
-          # Install the Vulkan headers/loader + glslc shader compiler.
-          # ubuntu-latest (24.04) ships libvulkan-dev but not glslc;
-          # the glslc binary is in the `glslc` or `shaderc` package
-          # depending on the distro version.
-          bash tools/ci-apt.sh update
-          bash tools/ci-apt.sh install -y cmake g++ libvulkan-dev spirv-headers glslc || \
-          bash tools/ci-apt.sh install -y cmake g++ libvulkan-dev spirv-headers glslang-tools || \
-          bash tools/ci-apt.sh install -y cmake g++ libvulkan-dev spirv-headers shaderc
-
-      - name: Configure with Vulkan
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON -DCRISPASR_BUILD_TESTS=OFF
-
-      - name: Build
-        run: cmake --build build --target crispasr-cli -j $(nproc)
-
-      - name: Smoke test
-        run: ./build/bin/crispasr --list-backends
-
-  # ====================================================================
-  # macOS (Apple Silicon / x86_64)
-  # ====================================================================
-  macos:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Configure with Metal
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON -DCRISPASR_BUILD_TESTS=OFF
-
-      - name: Build
-        run: cmake --build build --target crispasr-cli -j $(sysctl -n hw.logicalcpu)
-
-      - name: Smoke test
-        run: ./build/bin/crispasr --list-backends
-
-  # ====================================================================
-  # Windows (MSVC)
-  # ====================================================================
-  windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Vulkan SDK download retry checks
-        run: python tools/test_vulkan_sdk_download.py
-
-      # CRISPASR_BUILD_TESTS stays ON here (unlike the other smoke-only
-      # platform jobs) so the speaker-db unit tests below actually run.
-      # This is the only CI leg that exercises the .spkr v2 Windows write
-      # path (CreateDirectoryA branch in src/speaker_db.cpp) and the
-      # tests/test-speaker-db.cpp _WIN32 make_temp_dir() path.
-      - name: Configure
-        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=ON
-
-      - name: Build
-        run: cmake --build build --config Release --target crispasr-cli -j $env:NUMBER_OF_PROCESSORS
-
-      - name: Smoke test
-        run: .\build\bin\Release\crispasr.exe --list-backends
-
-      # Scoped, low-risk unit-test leg: build only the speaker-db-related
-      # Catch2 targets (not the full, never-Windows-tested tests/ suite) and
-      # filter ctest to just their test cases. test-params/test-speaker-db/
-      # test-speaker-cluster are self-contained (Catch2 + crispasr-lib only,
-      # test-params also links `common`); no POSIX-only helpers are compiled
-      # into them. Untouched targets elsewhere in tests/CMakeLists.txt are
-      # configured but never built, so their (OPTIONAL) ctest discovery
-      # files are simply absent — ctest -R below only ever sees tests from
-      # the three targets built here.
-      - name: Build speaker-db unit tests
-        run: cmake --build build --config Release --target test-speaker-db --target test-speaker-cluster --target test-params -j $env:NUMBER_OF_PROCESSORS
-
-      - name: Run speaker-db unit tests
-        run: ctest --test-dir build -C Release -R "speaker|cluster|centroid|whisper_params" -E "live|NOT_BUILT" --output-on-failure --timeout 120
-
-  # ====================================================================
-  # iOS (cross-compile gate — no runtime test)
-  # ====================================================================
-  ios:
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Configure for iOS
-        run: |
-          cmake -S . -B build-ios \
-            -DCMAKE_SYSTEM_NAME=iOS \
-            -DCMAKE_OSX_DEPLOYMENT_TARGET=15.0 \
-            -DCMAKE_OSX_ARCHITECTURES=arm64 \
-            -DGGML_METAL=OFF \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DCRISPASR_BUILD_TESTS=OFF
-
-      - name: Build
-        run: cmake --build build-ios --target crispasr-lib -j $(sysctl -n hw.logicalcpu)
-
-  # ====================================================================
-  # Android (cross-compile gate — no runtime test)
-  # ====================================================================
-  android:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-
-      - name: Set up NDK
-        uses: nttld/setup-ndk@v1
-        with:
-          ndk-version: r26d
-
-      - name: Configure for Android arm64
-        run: |
-          cmake -S . -B build-android \
-            -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK_HOME/build/cmake/android.toolchain.cmake \
-            -DANDROID_ABI=arm64-v8a \
-            -DANDROID_PLATFORM=android-24 \
-            -DBUILD_SHARED_LIBS=OFF \
-            -DCRISPASR_BUILD_TESTS=OFF
-
-      - name: Build
-        run: cmake --build build-android --target crispasr-lib -j $(nproc)
+          HOST_UID=$(id -u)
+          HOST_GID=$(id -g)
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e SOC_TYPE \
+            -e USE_ACL_GRAPH \
+            "$CANN_IMAGE" \
+            bash -lc '
+              set -euo pipefail
+              git config --global --add safe.directory /workspace
+              export LD_LIBRARY_PATH="${ASCEND_TOOLKIT_HOME}/lib64:${ASCEND_TOOLKIT_HOME}/$(uname -m)-linux/devlib:${LD_LIBRARY_PATH:-}"
+              cmake -S . -B build-cann \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DGGML_CANN=ON \
+                -DSOC_TYPE="${SOC_TYPE}" \
+                -DUSE_ACL_GRAPH="${USE_ACL_GRAPH}" \
+                -DCRISPASR_BUILD_TESTS=OFF \
+                -DCRISPASR_BUILD_SERVER=OFF
+              cmake --build build-cann \
+                --target crispasr-cli crispasr-lib crispasr-diff crispasr-quantize \
+                -j "$(nproc)"
+              chown -R '"${HOST_UID}"':'"${HOST_GID}"' /workspace/build-cann
+            '
