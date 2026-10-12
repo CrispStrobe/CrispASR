@@ -1,0 +1,12 @@
+{
+  "upstream": "78ea615194777f91a3970ff010b5d678d0bbf5f0",
+  "source_sha256": "bad508847e2d341af12d852053f9de4e48ad3fe3b3366ea1a96fad7dcf5163a7",
+  "torch": "2.9.1+cu128",
+  "seed": 42,
+  "cases": 12,
+  "modules": [
+    "ConvolutionalSpatialGatingUnit",
+    "EBranchformerEncoderLayer"
+  ],
+  "method": "Execute original CSGU.forward and EBranchformerEncoderLayer._forward with captured actual merge convolution; no model checkpoints"
+}

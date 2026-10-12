@@ -3,6 +3,7 @@
 // d the fast axis (ggml ne[0]).
 
 #include "dolphin.h"
+#include "dolphin_depthwise.h"
 
 #include "core/ggml_cpu_backend.h"
 #include "core/gguf_loader.h"
@@ -260,20 +261,6 @@ ggml_tensor* sdpa(ggml_context* g, ggml_tensor* q, ggml_tensor* k, ggml_tensor* 
     return ggml_reshape_2d(g, o, hd * H, Tq);
 }
 
-// Causal depthwise conv over time on (C, T): left-pad K-1 zero frames, then
-// ggml_ssm_conv (out[c,t] = sum_k x[t+k, c] * w[k, c]) — PyTorch Conv1d with
-// groups=C over the padded input. `pre` runs on the padded (C, T+K-1) tensor
-// before the conv (the CSGU's LayerNorm, which upstream applies AFTER padding).
-template <typename F>
-ggml_tensor* causal_dwconv(ggml_context* g, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int K, F pre) {
-    const int C = (int)x->ne[0], T = (int)x->ne[1];
-    ggml_tensor* xp = ggml_pad_ext(g, ggml_cont(g, x), 0, 0, K - 1, 0, 0, 0, 0, 0); // (C, T+K-1)
-    xp = pre(xp);
-    ggml_tensor* xt = ggml_cont(g, ggml_transpose(g, xp));                         // (T+K-1, C)
-    ggml_tensor* y = ggml_ssm_conv(g, ggml_reshape_3d(g, xt, T + K - 1, C, 1), w); // (C, T, 1)
-    return ggml_add(g, ggml_reshape_2d(g, y, C, T), b);
-}
-
 // ---- encoder ---------------------------------------------------------------
 
 ggml_cgraph* build_encoder(dolphin_context* c, int T, bool dump, int* out_T_enc) {
@@ -337,14 +324,14 @@ ggml_cgraph* build_encoder(dolphin_context* c, int T, bool dump, int* out_T_enc)
         const int U2 = (int)hp.cgmlp_units / 2;
         ggml_tensor* xr = ggml_cont(g, ggml_view_2d(g, x2, U2, T2, x2->nb[1], 0));
         ggml_tensor* xg = ggml_view_2d(g, x2, U2, T2, x2->nb[1], (size_t)U2 * ggml_element_size(x2));
-        xg = causal_dwconv(g, xg, b.csgu_conv_w, b.csgu_conv_b, (int)hp.cgmlp_kernel,
-                           [&](ggml_tensor* t) { return ln(g, t, b.csgu_norm_w, b.csgu_norm_b); });
+        xg = dolphin_detail::depthwise_conv(g, xg, b.csgu_conv_w, b.csgu_conv_b, (int)hp.cgmlp_kernel, hp.causal,
+                                            [&](ggml_tensor* t) { return ln(g, t, b.csgu_norm_w, b.csgu_norm_b); });
         x2 = lin(g, ggml_mul(g, xr, xg), b.proj2_w, b.proj2_b);
 
-        // merge: merge_proj(concat + dwconv(concat)), causal, no norm
+        // merge: merge_proj(concat + dwconv(concat)), checkpoint padding, no norm
         ggml_tensor* cat = ggml_concat(g, x1, x2, 0); // (2d, T2)
-        ggml_tensor* conv = causal_dwconv(g, cat, b.merge_conv_w, b.merge_conv_b, (int)hp.merge_kernel,
-                                          [](ggml_tensor* t) { return t; });
+        ggml_tensor* conv = dolphin_detail::depthwise_conv(g, cat, b.merge_conv_w, b.merge_conv_b, (int)hp.merge_kernel,
+                                                           hp.causal, [](ggml_tensor* t) { return t; });
         x = ggml_add(g, x, lin(g, ggml_add(g, cat, conv), b.merge_proj_w, b.merge_proj_b));
 
         // FFN, half step, then the per-layer final norm

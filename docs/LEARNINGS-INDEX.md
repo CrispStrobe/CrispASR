@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (329 lessons)
+## Index by topic (330 lessons)
 
 **Security & untrusted input** (2)
 
@@ -378,7 +378,7 @@ cross-reference when you already know which model you are touching.
 - L19253 — 2026-10-01 — Parakeet / Phonon-2 CPU decoding: probe the production projection and SOS
 - L19552 — 2026-10-06 — A GGUF's `block_count` can include blocks that are not part of the trunk (Qwen3.5 MTP)
 
-**Uncategorised** (12)
+**Uncategorised** (13)
 
 - L67 — A stage timer can hide per-process setup — two very different GPUs showing the same time is the tell (2026-09-29, #461)
 - L85 — Keeping the old path "for safety" and re-running it can double the cost (2026-09-30, #478)
@@ -392,6 +392,7 @@ cross-reference when you already know which model you are touching.
 - L19503 — 2026-10-06 — Lining up a new hypothesis with committed text needs an alignment, and word lists need the same attribution as the text
 - L19538 — 2026-10-06 — A diagnosis is a prediction: test the prediction before shipping the fix (moonshine-de, and a loaded box)
 - L19582 — 2026-10-06 — A revision pin can be 12 real characters and 28 invented ones
+- L19615 — Dolphin noncausal CSGU needs padding after LayerNorm (2026-10-12, #540)
 
 ## Cross-reference by model / family
 

@@ -6230,3 +6230,10 @@ if(MSVC)
 endif()
 add_test(NAME test-align-characters COMMAND test-align-characters)
 set_tests_properties(test-align-characters PROPERTIES LABELS "unit;align")
+
+# #540: actual upstream CSGU/merge fixtures, including normalization at edges.
+add_executable(test-dolphin-depthwise test-dolphin-depthwise.cpp)
+target_include_directories(test-dolphin-depthwise PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-dolphin-depthwise PRIVATE ggml ggml-cpu)
+add_test(NAME dolphin-depthwise-checkpoint-padding COMMAND test-dolphin-depthwise)
+set_tests_properties(dolphin-depthwise-checkpoint-padding PROPERTIES LABELS "unit;dolphin")

@@ -93,3 +93,26 @@ a CIFS download silently corrupted a checkpoint on 2026-09-23).
     rescoring: score(hyp) = Σ decoder log-p of hyp tokens at offset 4 + log-p(eos);
     ctc_weight 0, reverse_weight 0. Output tokens keep the 4 prefix tokens.
     core_ctc::prefix_beam_search and core_kaldi fbank exist and are reusable.
+
+## 2026-10-12 — Noncausal checkpoints (#540)
+
+The runtime read `dolphin.causal` but both CSGU and merge always used causal
+padding. The fix branches both sites on the checkpoint flag. Upstream
+`model.py` @ `78ea615194777f91a3970ff010b5d678d0bbf5f0` also requires a different
+CSGU normalization order: causal explicit left padding precedes LayerNorm;
+noncausal symmetric Conv1d zero padding follows LayerNorm. Padding the
+noncausal gate before LayerNorm incorrectly turns edge zeros into learned bias.
+
+Twelve fixtures execute the original upstream CSGU and encoder layer (capturing
+its actual merge convolution), for both causal modes, 1/5/7-frame inputs and
+kernels 3/31. The native ggml helper passes all twelve (maximum error 1.79e-7).
+Forcing the previous causal-only behavior fails all six noncausal controls;
+changing padding but retaining the wrong normalization order fails all three
+noncausal CSGU controls. No checkpoint or GPU was used in these small controls.
+
+`tools/ci-heavy/dolphin_noncausal.py` performs pinned conversion, fresh original
+reference dumps, diff, full native per-stage cosine/magnitude arrays and actual
+C ABI automatic detection/transcripts, on both non-streaming and streaming
+checkpoints and Chinese/JFK samples. Heavy results are pending. The reporter's
+private `0.wav` and Kylin/GCC9 environment are not yet reproduced. This fix is
+separate from the frozen v0.8.43 release; no new quantization claim.
