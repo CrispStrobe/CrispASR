@@ -42,7 +42,9 @@ def main():
                 # ISA environment is set before the first Torch import.
                 bootstrap = ('import random, numpy as np, torch, runpy, sys; '
                     'random.seed(42); np.random.seed(42); torch.manual_seed(42); '
-                    'sys.argv=sys.argv[1:]; runpy.run_path(sys.argv[0], run_name="__main__")')
+                    'sys.argv=sys.argv[1:]; '
+                    'sys.path.insert(0, __import__("pathlib").Path(sys.argv[0]).resolve().parent.as_posix()); '
+                    'runpy.run_path(sys.argv[0], run_name="__main__")')
                 result = subprocess.run([sys.executable, '-u', '-c', bootstrap,
                     str(Path(__file__).with_name('breeze_depth_probe.py')),
                     '--phase', 'reference'], cwd=ROOT, env=environment,
