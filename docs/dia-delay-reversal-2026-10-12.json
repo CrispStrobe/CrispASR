@@ -1,0 +1,26 @@
+{
+  "date": "2026-10-12",
+  "report_pr": 530,
+  "reported_prompt": "We are committed to making it secure.",
+  "baseline_source": "e06c80a00",
+  "official_source_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+  "official_model_source_sha256": "6bc51e6e5ff58ca9ed66431773df6cda954afee3d4b7ea515c1363b73ca82926",
+  "official_audio_source_sha256": "a4a92aba2e0b45a3da2ac8c27c36002501a0500a528eb9e613661f7d9a057875",
+  "fixture": "tests/fixtures/dia-delay-reference.json",
+  "fixture_bytes": 26792,
+  "fixture_sha256": "7dc9543c9e03afeb39c7446ede1c67227c30bd28cf9098ba92fc52138953385a",
+  "boundary": "Actual pinned Dia._generate_output raw tokens to DAC input; original PyTorch CPU helpers, no model weights",
+  "regression": {
+    "cases": 8,
+    "before_failures": 5,
+    "after_failures": 0,
+    "before_log_sha256": "5c43592aa7ca8c1e748f59bd2e7feb119fccaadcceaf1df8b78e23dc4c5ff8e0",
+    "after_log_sha256": "9ef6f13e1eed277d906b687aa0147cb84c8d9ac87c994dd8d46599aa21b0ad12"
+  },
+  "change": "Keep every aligned code frame; replace only invalid codebook entries with zero rather than discard the entire frame. Shared native function covers CLI and C ABI.",
+  "generation_recipe_changed": false,
+  "full_speech_gates_changed": false,
+  "full_speech_validation": "Pending hosted F16/Q8 generation and exact short-prompt CLI/C ABI roundtrips",
+  "reported_silence_resolved": false,
+  "physical_gpu_validation": false
+}

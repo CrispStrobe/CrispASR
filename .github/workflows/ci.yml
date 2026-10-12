@@ -175,6 +175,9 @@ jobs:
       - name: Supertonic speaker API null and bounds contracts
         run: python3 tests/test_supertonic_speaker_contracts.py -v
 
+      - name: Dia delay reversal matches official codec inputs
+        run: python3 tests/test_dia_delay_reversal.py -v
+
       - name: UTF-8 loop cleanup under platform ctype classification
         run: python3 tests/test_ngram_locale.py -v
 

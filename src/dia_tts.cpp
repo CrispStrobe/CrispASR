@@ -665,21 +665,15 @@ static void dia_revert_delay(const std::vector<uint32_t>& raw_tokens, std::vecto
     filtered.reserve(valid_steps * m.n_output_heads);
 
     for (size_t t = 0; t < valid_steps; t++) {
-        bool skip = false;
         for (int c = 0; c < (int)m.n_output_heads; c++) {
             size_t src_t = t + m.delay_pattern[c];
             size_t idx = src_t * m.n_output_heads + c;
-            if (idx >= raw_tokens.size() || raw_tokens[idx] >= m.audio_vocab_size) {
-                skip = true;
-                break;
-            }
-        }
-        if (!skip) {
-            for (int c = 0; c < (int)m.n_output_heads; c++) {
-                size_t src_t = t + m.delay_pattern[c];
-                size_t idx = src_t * m.n_output_heads + c;
-                filtered.push_back(raw_tokens[idx]);
-            }
+            // The pinned official _generate_output keeps every aligned frame
+            // and replaces only invalid codebook entries with zero. Dropping
+            // the whole frame also discards its valid residual codebooks and
+            // can leave a short generation with no DAC input at all.
+            const uint32_t token = idx < raw_tokens.size() ? raw_tokens[idx] : m.audio_vocab_size;
+            filtered.push_back(token < m.audio_vocab_size ? token : 0);
         }
     }
 }
