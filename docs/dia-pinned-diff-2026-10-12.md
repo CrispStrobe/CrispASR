@@ -96,3 +96,36 @@ unknown-name rejection. The previous mapper produces 19 errors (18 missing
 input-projection parameters plus the replay contract). The heavy worker runs
 these contracts before downloads and actual-weight controls. This fixes
 diagnostic coverage; no production codec/math/default or gate changes.
+
+Full-capacity original run `38285566623` has completed. The actual pinned
+Torch F32 original generates 1,210 DAC frames (14.048 seconds, RMS 0.073534)
+for the reported short sentence, recognized verbatim with WER 0. Native F16
+replaying this exact original history passes all 40 comparisons; minimum logit
+cosine is 0.9999989 and maximum logit norm error is 0.0008548312. Isolated
+full-utterance DAC replay passes at cosine 0.9999999 and norm error 0.00004443983.
+Q4_K passes only 13/40; the earliest failure is `encoder_layer_6`, cosine
+0.9993770 and norm error 0.009455288. Missing/scaled encoder controls correctly
+fail. The workflow remains failed on Q4_K. These full-utterance results do not
+erase the different 128-step startup-codec failure or accept native free speech.
+Main retains all 21 proof-file hashes and full stage metrics in
+`docs/dia-full-original-short-2026-10-12.json`.
+
+`tools/ci-heavy/dia_native_sampler_control.py` isolates the random stream with
+a separately labelled original-model control. A small compiled adapter calls
+the actual production `dia_sample_token` function in `src/dia_sampling.h`;
+it replaces only the original `_sample_next_token` during this control and
+restores it on exit. The canonical Torch generation is preserved separately,
+with its reference and PCM hashes verified. The fixed original/native seed is
+42, temperature 1.2, top-p 0.95, top-k 45, CFG 3 and capacity 3,072. No seed or
+prompt selection, production change, forced native history or quality waiver.
+
+The hosted worker generates original-control and native C ABI speech in
+separate processes, recognizes both plus the canonical original, and preserves
+complete input histories, raw conditional/unconditional logits, pre-override
+samples, code grids and PCM. It reports the first discrete divergence and
+per-row cosine and magnitude over the identical input prefix under the existing
+gates. The trace parser rejects missing, reordered and malformed sample rows.
+Tiny tests cover actual-header RNG continuity, invalid-input state preservation,
+observer lifetime, unchanged actual tiny original generation and trace rejection.
+Their dummy DAC is excluded from speech-quality evidence. Actual heavy results
+remain pending; a single successful prompt would still not accept the full model.
