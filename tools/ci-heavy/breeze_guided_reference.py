@@ -32,8 +32,9 @@ def digest(path):
     return h.hexdigest()
 
 
-def main(*, promote_joint_arithmetic=False, kv_control_installer=None):
+def main(*, promote_joint_arithmetic=False, kv_control_installer=None, promote_all_inference=False):
     assert kv_control_installer is None or promote_joint_arithmetic
+    assert not promote_all_inference or promote_joint_arithmetic
     import numpy as np
     import soundfile as sf
     import torch
@@ -82,6 +83,23 @@ def promote_backbone_inputs(module, args, kwargs):
 model.backbone_model.register_forward_pre_hook(promote_backbone_inputs, with_kwargs=True)
 assert next(model.backbone_model.parameters()).dtype == torch.float32
 assert next(model.depth_decoder.parameters()).dtype == torch.float32
+if promote_all_inference:
+    # The reviewed recipe passes the separate Qwen audio tokenizer. Keep
+    # its unused training codec intact while widening every inference module,
+    # including text encoding and audio-embedding averaging.
+    unused_codec = model.codec_model
+    codec_state = [(p.data_ptr(), p.dtype) for p in unused_codec.parameters()]
+    before_bytes = sum(p.numel() * p.element_size() for p in model.parameters())
+    model.codec_model = None
+    model.float()
+    model.codec_model = unused_codec
+    assert codec_state == [(p.data_ptr(), p.dtype) for p in unused_codec.parameters()]
+    assert all(p.dtype == torch.float32 for name, p in model.named_parameters()
+               if not name.startswith('codec_model.'))
+    full_inference_control = dict(active_parameter_dtype='torch.float32',
+        unused_training_codec_preserved=True,
+        parameter_bytes_before=before_bytes,
+        parameter_bytes_after=sum(p.numel() * p.element_size() for p in model.parameters()))
 if kv_control_installer is not None:
     kv_control_installer()
 ''' + needle)
@@ -108,6 +126,7 @@ if kv_control_installer is not None:
                MAX_FRAMES=24, DUMP_TE_LAYERS=True, N_DUMP_FRAMES=5,
                active_prompt_length=active_prompt_length,
                kv_control_installer=kv_control_installer,
+               promote_all_inference=promote_all_inference,
                SCRIPT_VERSION=SCRIPT_VERSION,
                SYN_TEXT='The quick brown fox jumps over the lazy dog.',
                REF_TEXT='And so my fellow Americans, ask not what your country can do for you, '
@@ -122,8 +141,13 @@ if kv_control_installer is not None:
                              ('torch', 'torchaudio', 'transformers', 'qwen-tts', 'numpy')},
                    native_parity_tested=False, full_speech_asr_tested=False,
                    canonical_reference=not promote_joint_arithmetic,
-                   arithmetic_control='joint F32 backbone/depth/LM-head, BF16-rounded weights; unchanged text/codec' if promote_joint_arithmetic else None,
+                   arithmetic_control=(
+                       'all inference F32, preserved loaded weights; external audio tokenizer and unused training codec unchanged'
+                       if promote_all_inference else
+                       'joint F32 backbone/depth/LM-head, BF16-rounded weights; unchanged text/codec'
+                   ) if promote_joint_arithmetic else None,
                    kv_storage_control=getattr(kv_control_installer, 'description', None),
+                   full_inference_f32_control=promote_all_inference,
                    complete=False)
     try:
         exec(compile(code, str(dumper), 'exec'), env)
@@ -156,6 +180,8 @@ if kv_control_installer is not None:
         receipt['error'] = f'{type(exc).__name__}: {exc}'
         raise
     finally:
+        if promote_all_inference:
+            receipt['full_inference_control'] = env.get('full_inference_control')
         if kv_control_installer is not None:
             receipt['kv_storage_witness'] = kv_control_installer.witness
         (OUT / 'validation.json').write_text(json.dumps(receipt, indent=2) + '\n')
