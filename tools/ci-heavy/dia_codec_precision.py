@@ -38,28 +38,7 @@ def digest(path):
     return sha.hexdigest()
 
 
-def parameter(codec, name):
-    """Native loader names -> actual original modules, no reconstructed math."""
-    match = re.fullmatch(r'quantizer\.quantizers\.(\d+)\.(codebook|in_proj|out_proj)\.(weight|bias)', name)
-    if match:
-        module = getattr(codec.quantizer.quantizers[int(match[1])], match[2])
-        return getattr(module, match[3])
-    if name.startswith('decoder.conv1.'):
-        return getattr(codec.decoder.model[0], name.rsplit('.', 1)[1])
-    if name.startswith('decoder.snake1.'):
-        return getattr(codec.decoder.model[5], name.rsplit('.', 1)[1])
-    if name.startswith('decoder.conv2.'):
-        return getattr(codec.decoder.model[6], name.rsplit('.', 1)[1])
-    match = re.fullmatch(r'decoder\.block\.(\d+)\.(snake1|conv_t1)\.(alpha|weight|bias)', name)
-    if match:
-        block = codec.decoder.model[int(match[1]) + 1].block
-        return getattr(block[0 if match[2] == 'snake1' else 1], match[3])
-    match = re.fullmatch(r'decoder\.block\.(\d+)\.res_unit([123])\.(snake1|conv1|snake2|conv2)\.(alpha|weight|bias)', name)
-    if match:
-        block = codec.decoder.model[int(match[1]) + 1].block[int(match[2]) + 1].block
-        index = {'snake1': 0, 'conv1': 1, 'snake2': 2, 'conv2': 3}[match[3]]
-        return getattr(block[index], match[4])
-    raise ValueError(f'Unmapped published DAC tensor: {name}')
+from dia_dac_export import parameter
 
 
 if args.child:

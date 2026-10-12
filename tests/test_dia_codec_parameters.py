@@ -2,15 +2,14 @@
 """Exercise diagnostic tensor lookup against tiny actual DAC 1.0.0 modules.
 
 No checkpoint, audio tooling, reconstructed neural math, or native build. Only
-original source classes are loaded; the heavy worker's lookup function is
-compiled without executing its command-line pipeline.
+original source classes and the shared export lookup are loaded; no heavy
+command-line pipeline executes.
 """
 import ast
 import importlib.metadata
 import importlib.util
 import math
 from pathlib import Path
-import re
 import sys
 import types
 import unittest
@@ -19,13 +18,8 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def parameter_function():
-    path = ROOT / 'tools/ci-heavy/dia_codec_precision.py'
-    tree = ast.parse(path.read_text())
-    node = next(node for node in tree.body if isinstance(node, ast.FunctionDef) and node.name == 'parameter')
-    namespace = {'re': re}
-    exec(compile(ast.Module(body=[node], type_ignores=[]), str(path), 'exec'), namespace)
-    return namespace['parameter']
+sys.path.insert(0, str(ROOT / 'tools'))
+from dia_dac_export import parameter
 
 
 def source_module(name, path):
@@ -69,7 +63,7 @@ class CodecParameterTest(unittest.TestCase):
         for module in [*cls.quantizer.modules(), *cls.decoder.modules()]:
             if hasattr(module, 'weight_g'):
                 torch.nn.utils.remove_weight_norm(module)
-        cls.parameter = staticmethod(parameter_function())
+        cls.parameter = staticmethod(parameter)
 
     def test_complete_quantizer_and_decoder_parameter_identity(self):
         expected = {}

@@ -52,3 +52,11 @@ transcript using pinned logits/vocabulary/sample hashes, rejects four broken
 provenance/target controls, then runs the actual Q4 CLI and F16 stage regression.
 Zero-WER upstream parity remains hard; the original model's 4.55% human WER
 is reported separately. Run with `-f pip="numpy gguf huggingface_hub"`.
+
+`dia_dac_export_validate.py` validates the explicit original critical-output
+DAC conversion against retained startup and complete-original-utterance
+references. It requires exact bytes from the prior validated diagnostic and
+physically audits original F32 promoted coefficients plus unchanged unrelated
+payloads. This does not establish native free speech or GPU execution and
+does not update production model pins. Run with
+`-f pip="numpy torch==2.6.0 torchaudio==2.6.0 torchvision==0.21.0 pydantic safetensors huggingface_hub descript-audio-codec==1.0.0 gguf"`.

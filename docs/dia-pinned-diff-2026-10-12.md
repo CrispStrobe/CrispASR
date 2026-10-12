@@ -129,3 +129,33 @@ Tiny tests cover actual-header RNG continuity, invalid-input state preservation,
 observer lifetime, unchanged actual tiny original generation and trace rejection.
 Their dummy DAC is excluded from speech-quality evidence. Actual heavy results
 remain pending; a single successful prompt would still not accept the full model.
+
+The repaired codec worker `38294496529` completed successfully. All eight
+original/native boundaries localize the published startup failure to
+`dac_output_conv` and PCM: published weights pass against the actual original
+modules loaded with those same rounded weights. Original all-F32 weights pass
+48/48 canonical comparisons. Preserving only `decoder.snake1.alpha` and
+`decoder.conv2.weight`/`bias` as original F32 also passes 48/48, at PCM cosine
+0.9999927 and norm error 0.002027489. Published PCM remains a recorded failure
+(cosine 0.9976444, norm error 0.04271824). All 134 published coefficients exactly
+match rounded original values; four missing/scaled negatives correctly fail.
+The narrow candidate is 108,697,184 bytes versus 108,695,872 published:
+only 1,312 extra bytes, including its diagnostic metadata/alignment.
+
+`models/convert-dia-dac-to-gguf.py` makes the original critical-output export
+reproducible, using `descript-audio-codec==1.0.0` and the exact original checkpoint
+SHA256. It requires an explicit precision policy and a new output/receipt path.
+The shared lookup covers all 134 actual Parameters and rejects unknown names.
+Torch's original weight-normalization removal supplies effective weights;
+rounded published weights are never cast back to F32 as a substitute. Physical
+audits require exact original promoted payloads and unchanged unrelated tensor
+types/bytes. Reader mappings close deterministically, including on CIFS errors.
+Six tiny real-module/physical-export contracts pass, without actual-checkpoint
+speech evidence.
+
+The hosted `dia_dac_export_validate.py` worker must reproduce the already tested
+candidate byte for byte, then run fresh strict startup and full-utterance
+original-history comparisons. This is an explicit diagnostic conversion;
+published models, pins, defaults, original references and thresholds remain
+unchanged. Native free speech, Q4 neural parity and physical GPU behavior are
+separate unresolved acceptance gates.
