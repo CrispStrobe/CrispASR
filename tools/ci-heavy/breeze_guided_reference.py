@@ -32,7 +32,8 @@ def digest(path):
     return h.hexdigest()
 
 
-def main(*, promote_joint_arithmetic=False):
+def main(*, promote_joint_arithmetic=False, kv_control_installer=None):
+    assert kv_control_installer is None or promote_joint_arithmetic
     import numpy as np
     import soundfile as sf
     import torch
@@ -81,6 +82,8 @@ def promote_backbone_inputs(module, args, kwargs):
 model.backbone_model.register_forward_pre_hook(promote_backbone_inputs, with_kwargs=True)
 assert next(model.backbone_model.parameters()).dtype == torch.float32
 assert next(model.depth_decoder.parameters()).dtype == torch.float32
+if kv_control_installer is not None:
+    kv_control_installer()
 ''' + needle)
     def active_prompt_length(inputs):
         ids = inputs['input_ids']
@@ -104,6 +107,7 @@ assert next(model.depth_decoder.parameters()).dtype == torch.float32
                DEVICE='cpu', RUN_DEVICE='cpu', RUN_GPU=None, SEED=42, GREEDY=True,
                MAX_FRAMES=24, DUMP_TE_LAYERS=True, N_DUMP_FRAMES=5,
                active_prompt_length=active_prompt_length,
+               kv_control_installer=kv_control_installer,
                SCRIPT_VERSION=SCRIPT_VERSION,
                SYN_TEXT='The quick brown fox jumps over the lazy dog.',
                REF_TEXT='And so my fellow Americans, ask not what your country can do for you, '
@@ -119,6 +123,7 @@ assert next(model.depth_decoder.parameters()).dtype == torch.float32
                    native_parity_tested=False, full_speech_asr_tested=False,
                    canonical_reference=not promote_joint_arithmetic,
                    arithmetic_control='joint F32 backbone/depth/LM-head, BF16-rounded weights; unchanged text/codec' if promote_joint_arithmetic else None,
+                   kv_storage_control=getattr(kv_control_installer, 'description', None),
                    complete=False)
     try:
         exec(compile(code, str(dumper), 'exec'), env)
@@ -151,6 +156,8 @@ assert next(model.depth_decoder.parameters()).dtype == torch.float32
         receipt['error'] = f'{type(exc).__name__}: {exc}'
         raise
     finally:
+        if kv_control_installer is not None:
+            receipt['kv_storage_witness'] = kv_control_installer.witness
         (OUT / 'validation.json').write_text(json.dumps(receipt, indent=2) + '\n')
         (OUT / 'summary.md').write_text(
             f"Breeze original guidance reference: complete={receipt['complete']}. "
