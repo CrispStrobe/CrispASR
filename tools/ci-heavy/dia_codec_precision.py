@@ -40,7 +40,7 @@ def digest(path):
 
 def parameter(codec, name):
     """Native loader names -> actual original modules, no reconstructed math."""
-    match = re.fullmatch(r'quantizer\.quantizers\.(\d+)\.(codebook|out_proj)\.(weight|bias)', name)
+    match = re.fullmatch(r'quantizer\.quantizers\.(\d+)\.(codebook|in_proj|out_proj)\.(weight|bias)', name)
     if match:
         module = getattr(codec.quantizer.quantizers[int(match[1])], match[2])
         return getattr(module, match[3])
@@ -204,6 +204,7 @@ def run(command, name, allow_failure=False):
 
 
 archive = SCRATCH / 'preserved-reference'
+run([sys.executable, ROOT / 'tests/test_dia_codec_parameters.py', '-v'], 'codec-parameter-contracts')
 run([sys.executable, ROOT / 'tests/test_dia_reference_capture.py', 'CodecCaptureOwnershipTest', '-v'],
     'codec-capture-contracts')
 run(['gh', 'run', 'download', args.reference_run, '-R', 'CrispStrobe/CrispASR', '-D', archive], 'reference-download')

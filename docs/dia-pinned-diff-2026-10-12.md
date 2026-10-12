@@ -83,3 +83,16 @@ and a NUL-containing prompt reached generation, and an invalid dump reached
 source loading. All seven regression assertions fail before the guard and pass
 after it; unchanged valid-prompt generation remains array-identical. These
 checks establish input/capture behavior, not real-weight speech quality.
+
+
+The eight-boundary worker at `24468e487` stopped before native comparison
+when mapping published `quantizer.quantizers.0.in_proj.bias`. Its complete
+original-only captures are retained; the original checkpoint reproduction and
+weight-norm removal checks completed before that exception. The diagnostic
+mapper now includes both input/output projections and the codebook for every
+quantizer. Three tiny-original-module contracts cover all 134 quantizer/decoder
+Parameters, exact code-replay independence from input-projection bias, and
+unknown-name rejection. The previous mapper produces 19 errors (18 missing
+input-projection parameters plus the replay contract). The heavy worker runs
+these contracts before downloads and actual-weight controls. This fixes
+diagnostic coverage; no production codec/math/default or gate changes.
