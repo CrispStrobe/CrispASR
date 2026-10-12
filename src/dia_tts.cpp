@@ -1312,6 +1312,8 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
     // DIA_FORCE_TOKENS=f   : teacher-force per-step input from file f (N*9 int32 raw); caps max_gen=N
     // DIA_DUMP_STEPLOGITS=f: append per-step [uncond(9*V) | cond(9*V)] f32 to file f
     // DIA_DUMP_DIR=d       : write step-0 stage dumps (encoder/cross/ca/final/logits) under dir d
+    const char* portable_rng_env = crispasr_env::get("CRISPASR_DIA_PORTABLE_RNG");
+    const bool portable_rng = portable_rng_env && std::strcmp(portable_rng_env, "1") == 0;
     const bool dia_greedy = crispasr_env::get("CRISPASR_DIA_GREEDY") != nullptr;
     const bool dia_dump_tokens = crispasr_env::get("CRISPASR_DIA_DUMP_TOKENS") != nullptr;
     const char* dia_dump_dir = crispasr_env::get("CRISPASR_DIA_DUMP_DIR");
@@ -2043,6 +2045,13 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                 dump_cond.resize((size_t)m.n_output_heads * m.output_vocab_size);
                 dump_uncond.resize((size_t)m.n_output_heads * m.output_vocab_size);
             }
+            // The original CPU multinomial draws one contiguous C x V tensor,
+            // consuming one MT word for all heads, including masked vocabulary.
+            std::vector<float> exponential_noise;
+            if (portable_rng && !dia_greedy && p.temperature > 0.0f) {
+                exponential_noise.resize((size_t)m.n_output_heads * m.output_vocab_size);
+                dia_rng::exponential_batch(exponential_noise.data(), exponential_noise.size(), ctx->rng);
+            }
             for (int h = 0; h < (int)m.n_output_heads; h++) {
                 std::string hn = "logits_" + std::to_string(h);
                 // Logits shape: (output_vocab_size, 1, B) = (1028, 1, 2)
@@ -2088,8 +2097,10 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                 }
 
                 // Sample token for this codebook
-                uint32_t token = dia_sample_token(final_logits.data(), m.output_vocab_size,
-                                                  dia_greedy ? 0.0f : p.temperature, p.top_p, p.top_k, ctx->rng);
+                uint32_t token = dia_sample_token(
+                    final_logits.data(), m.output_vocab_size, dia_greedy ? 0.0f : p.temperature, p.top_p, p.top_k,
+                    ctx->rng,
+                    exponential_noise.empty() ? nullptr : exponential_noise.data() + (size_t)h * m.output_vocab_size);
                 ctx->current_audio_tokens[h] = token;
             }
 

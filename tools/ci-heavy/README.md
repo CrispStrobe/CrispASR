@@ -70,3 +70,20 @@ against actual multinomial, and retains a fixed row-split RNG negative control.
 Use `-f pip="numpy torch==2.6.0 pydantic==2.11.3 gguf"`. Other Torch versions
 are recorded and may fail; this never establishes native free speech or PCM
 acceptance, changes production defaults, or supplies forced production tokens.
+
+
+`dia_portable_random_control.py` validates the compiled MCG31/exponential-race
+candidate against all 11,034 pinned original draws, using both actual original
+probabilities and actual native filtering. Every original decoder transition
+and final codec code must agree. Use `-f pip="numpy torch==2.6.0 pydantic==2.11.3 gguf==0.18.0"`.
+No model weights are loaded and this does not establish speech acceptance.
+
+`dia_portable_speech_control.py` runs the fixed canonical short prompt through
+actual original neural/DAC generation with the gated native candidate, then
+actual native F16 C ABI and CLI generation with the validated critical-output
+DAC export. It requires canonical original codes and original/native/CLI ASR
+roundtrips. `CRISPASR_DIA_PORTABLE_RNG=1` selects the experimental candidate;
+the default remains the existing sampler. Use the DAC exporter dependency set
+with pinned Torch/torchaudio 2.6.0, torchvision 0.21.0, DAC 1.0.0, Pydantic 2.11.3
+and GGUF 0.18.0. This fixed-prompt CPU control does not establish full model,
+GPU or Q4 acceptance or change production model pins.

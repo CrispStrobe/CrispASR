@@ -5213,3 +5213,34 @@ Keep existing full-speech gates and sampling defaults unchanged. Patch runtime
 only after the earliest divergence or a source-compiled failing control identifies
 a defect. Heavy models/builds run on GH CI or actual Kaggle GPU; large local
 artifacts stay on /mnt/storage.
+
+### 2026-10-12 portable Dia sampler candidate ready for hosted validation
+
+Main claim `24b1453c9` precedes implementation. The documented MCG31 stream plus
+scalar F32 exponential race reproduces all 11,034 canonical original draws,
+all 1,226 decoder transitions and the final 1,210-frame grid in the actual
+original feedback loop. Both original-probability and actual native-filter
+arms agree exactly. Noise cosine is 0.9999999999999962 and relative norm error
+3.2631726210041734e-9; final F32 bits are not byte-identical to MKL vector log.
+The fixed row-split negative differs on 9,090 draws. Full weight-free replay
+artifacts and exact executed worker/header sources are retained under storage.
+
+`CRISPASR_DIA_PORTABLE_RNG=1` now gates the candidate at the shared native
+synthesis loop: one draw of all head/vocabulary noise per step, including
+masked tokens. Existing default sampling, greedy behavior, model pins and
+neural graphs remain unchanged. The diagnostic original-model bridge uses
+that same header and filter. Source-only runtime compilation, clang18 format,
+Python syntax and six tiny original/native contracts pass (14.834 s).
+The candidate-specific contract is additionally checked against compiled
+unmodified 75fcdc70f sampler source as a rejecting negative control.
+
+Next exact-source hosted checks: `dia_portable_random_control.py` repeats the
+complete weight-free original/native-filter witness; then
+`dia_portable_speech_control.py` requires real original-neural/DAC canonical
+codes and original/native C ABI/CLI ASR roundtrips with the validated +1,312-byte
+critical-output DAC export. Full-model work runs on GitHub CI, not this VPS.
+Applicable contributing audit: shared library implementation reaches existing
+CLI/C-ABI/server/bindings through their synthesis calls; no new backend,
+architecture, CMake library, model registry, converter schema or quantizer rule
+is introduced. No speech, GPU, Q4 or complete model acceptance is claimed, and
+this experimental runtime branch remains unmerged pending real output proof.

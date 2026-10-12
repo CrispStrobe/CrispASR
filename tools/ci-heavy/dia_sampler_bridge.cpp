@@ -2,6 +2,8 @@
 // No probability/filter implementation is duplicated here.
 #include "../../src/dia_sampling.h"
 #include <new>
+#include <cstdlib>
+#include <cstring>
 
 extern "C" {
 void* dia_sampler_create(uint32_t seed) {
@@ -31,9 +33,15 @@ int dia_sampler_rows(void* handle, const float* logits, int rows, int vocab, flo
     }
     try {
         auto& rng = *static_cast<std::mt19937*>(handle);
+        std::vector<float> noise;
+        const char* candidate = std::getenv("CRISPASR_DIA_PORTABLE_RNG");
+        if (candidate && std::strcmp(candidate, "1") == 0 && temperature > 0.0f) {
+            noise.resize((size_t)rows * vocab);
+            dia_rng::exponential_batch(noise.data(), noise.size(), rng);
+        }
         for (int row = 0; row < rows; ++row)
-            output[row] =
-                dia_sample_token(logits + (size_t)row * vocab, (uint32_t)vocab, temperature, top_p, top_k, rng);
+            output[row] = dia_sample_token(logits + (size_t)row * vocab, (uint32_t)vocab, temperature, top_p, top_k,
+                                           rng, noise.empty() ? nullptr : noise.data() + (size_t)row * vocab);
     } catch (...) {
         return 3;
     }

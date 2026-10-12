@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
 """Tiny actual-header/original-neural contracts; no real-model PCM claim."""
+import ast
 import importlib
 import os
 from pathlib import Path
 import sys
 import types
 import unittest
+from unittest import mock
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from dia_native_sampler import NativeSampler, install_native_sampler, native_sample_rows
@@ -45,6 +47,25 @@ class NativeSamplerTest(unittest.TestCase):
             self.assertTrue((batch.samples[0] == frozen).all())
         with self.assertRaisesRegex(RuntimeError, 'closed'):
             batch(logits, 1.2, .95, 5)
+
+    def test_portable_candidate_matches_original_batched_draws(self):
+        torch = self.torch
+        source = Path(os.environ['DIA_SOURCE']) / 'dia/model.py'
+        tree = ast.parse(source.read_text())
+        function = next(node for node in tree.body if isinstance(node, ast.FunctionDef)
+                        and node.name == '_sample_next_token')
+        namespace = dict(torch=torch)
+        exec(compile(ast.Module(body=[function], type_ignores=[]), str(source), 'exec'), namespace)
+        original = namespace['_sample_next_token']
+        logits = torch.arange(9 * 1028).float().reshape(9, 1028).sin() * 3
+        logits[:, 1025:] = -torch.inf
+        with mock.patch.dict(os.environ, {'CRISPASR_DIA_PORTABLE_RNG': '1'}):
+            with NativeSampler(self.library) as candidate:
+                torch.manual_seed(42)
+                for _ in range(4):
+                    expected = original(logits, temperature=1.2, top_p=.95, cfg_filter_top_k=45)
+                    actual = candidate(logits, 1.2, .95, 45)
+                    torch.testing.assert_close(actual, expected, rtol=0, atol=0)
 
     def test_masked_dominant_token_and_invalid_input_state(self):
         torch = self.torch

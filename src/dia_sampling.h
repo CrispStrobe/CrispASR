@@ -7,9 +7,10 @@
 #include <random>
 #include <utility>
 #include <vector>
+#include "dia_exponential_rng.h"
 
 static uint32_t dia_sample_token(const float* logits, uint32_t vocab_size, float temperature, float top_p, int top_k,
-                                 std::mt19937& rng) {
+                                 std::mt19937& rng, const float* exponential_noise = nullptr) {
     if (temperature <= 0.0f) {
         // Greedy
         return (uint32_t)(std::max_element(logits, logits + vocab_size) - logits);
@@ -86,6 +87,12 @@ static uint32_t dia_sample_token(const float* logits, uint32_t vocab_size, float
             for (uint32_t i = 0; i < vocab_size; i++)
                 probs[i] /= sum;
         }
+    }
+
+    // An explicitly supplied batch-noise slice selects the candidate;
+    // existing callers retain their distribution and state consumption.
+    if (exponential_noise) {
+        return dia_rng::exponential_race(probs.data(), exponential_noise, vocab_size);
     }
 
     // Sample
