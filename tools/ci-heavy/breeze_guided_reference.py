@@ -32,7 +32,7 @@ def digest(path):
     return h.hexdigest()
 
 
-def main():
+def main(*, promote_joint_arithmetic=False):
     import numpy as np
     import soundfile as sf
     import torch
@@ -63,6 +63,25 @@ def main():
     assert code.count(needle) == 1
     code = code.replace(needle, 'return_dict_in_generate=True, max_new_tokens=None, '
                         'max_length=active_prompt_length(gen_inputs) + MAX_FRAMES)')
+    if promote_joint_arithmetic:
+        # Original-only control: preserve the loader's BF16-rounded weights
+        # and text/codec arithmetic. Change only backbone/depth/LM-head
+        # arithmetic, including the backbone input cast used by the isolated
+        # precision probe. These outputs never replace canonical fixtures.
+        needle = 'update_generation_config_for_breeze(model)'
+        assert code.count(needle) == 1
+        code = code.replace(needle, '''assert next(model.backbone_model.parameters()).dtype == torch.bfloat16
+model.backbone_model.float()
+model.depth_decoder.float()
+model.lm_head.float()
+def promote_backbone_inputs(module, args, kwargs):
+    if kwargs.get('inputs_embeds') is not None:
+        kwargs['inputs_embeds'] = kwargs['inputs_embeds'].float()
+    return args, kwargs
+model.backbone_model.register_forward_pre_hook(promote_backbone_inputs, with_kwargs=True)
+assert next(model.backbone_model.parameters()).dtype == torch.float32
+assert next(model.depth_decoder.parameters()).dtype == torch.float32
+''' + needle)
     def active_prompt_length(inputs):
         ids = inputs['input_ids']
         if inputs.get('cfg_scale', 1.0) == 0.0 and inputs.get('cfg_negative_prompt_ids') is not None:
@@ -98,6 +117,8 @@ def main():
                    packages={p: importlib.metadata.version(p) for p in
                              ('torch', 'torchaudio', 'transformers', 'qwen-tts', 'numpy')},
                    native_parity_tested=False, full_speech_asr_tested=False,
+                   canonical_reference=not promote_joint_arithmetic,
+                   arithmetic_control='joint F32 backbone/depth/LM-head, BF16-rounded weights; unchanged text/codec' if promote_joint_arithmetic else None,
                    complete=False)
     try:
         exec(compile(code, str(dumper), 'exec'), env)
