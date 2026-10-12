@@ -65,6 +65,15 @@ def reference():
     import torch
     from huggingface_hub import hf_hub_download
     from breeze_guided_reference import UPSTREAM, MODEL, DUMPER_SHA
+    # Optional initialization control, inherited by the fresh reference process.
+    # Ordinary probes preserve their existing initialization behavior.
+    initialization_seed = os.environ.get('BREEZE_REFERENCE_INITIALIZATION_SEED')
+    if initialization_seed is not None:
+        import random
+        seed = int(initialization_seed)
+        random.seed(seed)
+        np.random.seed(seed)
+        torch.manual_seed(seed)
     archive = Path(hf_hub_download('cstr/crispasr-regression-fixtures',
         'breeze-guided-20261011/matched-budget-failed-parity-proof.zip', repo_type='dataset',
         revision='27896a1fab69d45c8b246eb659823f92a5e0e458'))
@@ -113,6 +122,7 @@ def reference():
         packages={p: importlib.metadata.version(p) for p in
                   ('torch', 'torchaudio', 'transformers', 'qwen-tts', 'numpy', 'safetensors')},
         torch_cpu_capability=torch.backends.cpu.get_cpu_capability(),
+        initialization_seed=initialization_seed,
         torch_config=torch.__config__.show(), threads=torch.get_num_threads(),
         cpuinfo=Path('/proc/cpuinfo').read_text(),
         checkpoint_sha256={str(p.relative_to(SCRATCH / 'checkpoint')): sha(p)
