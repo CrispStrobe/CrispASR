@@ -87,6 +87,7 @@ with mapped_gguf(ref) as reader:
     logits = tensors['decoder_step_logits']
     canonical_codes = tensors['decoder_codes_rev']
     assert inputs.shape == (1226, 9) and logits.shape == (1226, 2, 9, 1028)
+    assert canonical_codes.shape == (1210, 9), 'Reference code grid must use captured time/codebook order'
     fake = types.SimpleNamespace(config=config, device=torch.device('cpu'))
     fake.model = types.SimpleNamespace(eval=lambda: None,
         decoder=types.SimpleNamespace(decode_step=None))
@@ -149,7 +150,8 @@ with mapped_gguf(ref) as reader:
                 codes = fake.generate('[S1] We are committed to making it secure.', max_tokens=3072,
                     cfg_scale=3., temperature=1.2, top_p=.95, cfg_filter_top_k=45, use_torch_compile=False)
             assert len(input_rows) == len(inputs), 'Canonical replay terminated at a different step'
-            assert np.array_equal(codes, canonical_codes), 'Canonical final codec grid differs'
+            assert codes.shape == (9, 1210), 'Identity codec must retain original codebook/time order'
+            assert np.array_equal(codes.T, canonical_codes), 'Canonical final codec grid differs'
             report.update(canonical_input_transitions_exact=True, canonical_final_codes_exact=True,
                           exponential_race_samples_and_rng_state_exact=True, steps=len(draws),
                           sampled_rows=len(draws) * 9, rng_state_bytes=torch.get_rng_state().numel(),
@@ -158,7 +160,7 @@ with mapped_gguf(ref) as reader:
             report['split_row_negative'] = dict(sample_mismatches=int(np.count_nonzero(split_array != np.asarray(draws))),
                 scope='Fixed row-by-row Torch sampling from each same pre-batch RNG state; diagnostic only, never used for feedback.')
             assert report['split_row_negative']['sample_mismatches'] > 0, 'Row-split negative failed to distinguish batch RNG'
-            np.save(OUT / 'replayed-code-grid.npy', codes)
+            np.save(OUT / 'replayed-code-grid.npy', codes.T)
         except Exception as error:
             report.update(component_replay_pass=False, failed_after_steps=len(input_rows), error=str(error))
             raise
