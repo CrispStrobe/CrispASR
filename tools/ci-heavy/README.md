@@ -60,3 +60,13 @@ physically audits original F32 promoted coefficients plus unchanged unrelated
 payloads. This does not establish native free speech or GPU execution and
 does not update production model pins. Run with
 `-f pip="numpy torch==2.6.0 torchaudio==2.6.0 torchvision==0.21.0 pydantic safetensors huggingface_hub descript-audio-codec==1.0.0 gguf"`.
+
+`dia_canonical_random_control.py` replays the complete accepted original history
+without model weights. It executes actual pinned generation, sampling, BOS/EOS
+feedback and delay reversal on retained original logits, requiring all 1,226
+decoder inputs and the final 1,210-frame code grid to match exactly. It observes
+actual Torch exponential noise and RNG states, verifies the source-derived race
+against actual multinomial, and retains a fixed row-split RNG negative control.
+Use `-f pip="numpy torch==2.6.0 pydantic==2.11.3 gguf"`. Other Torch versions
+are recorded and may fail; this never establishes native free speech or PCM
+acceptance, changes production defaults, or supplies forced production tokens.
