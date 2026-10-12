@@ -204,7 +204,7 @@ def main():
         run(['uname', '-a'], 'host-platform')
         run(['sudo', 'bash', 'tools/ci-apt.sh', 'update'], 'apt-update')
         run(['sudo', 'bash', 'tools/ci-apt.sh', 'install', '-y', 'cmake', 'ninja-build', 'g++', 'libopenblas-dev', 'ffmpeg'], 'apt-install')
-        run([sys.executable, '-m', 'pip', 'install', '--no-deps',
+        run([sys.executable, '-m', 'pip', 'install', '--no-deps', '--no-build-isolation',
              'git+https://github.com/DataoceanAI/Dolphin.git@'+UPSTREAM], 'install-original')
         build = SCRATCH/'build'
         run(['cmake', '-S', ROOT, '-B', build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
