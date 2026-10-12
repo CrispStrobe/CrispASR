@@ -1838,10 +1838,15 @@ extern "C" struct breeze_tts_2_context* breeze_tts_2_init_from_file(const char* 
     if (params.seed != 0)
         c->rng_state = params.seed;
 
+    // Dynamic builds register device plugins during CPU initialization. Do
+    // this before choosing the GPU, including direct C callers whose codec
+    // has not initialized the registry yet.
+    c->backend_cpu = core_cpu_backend::init();
     c->backend = params.use_gpu ? crispasr_init_gpu_backend() : core_cpu_backend::init();
     if (!c->backend)
         c->backend = core_cpu_backend::init();
-    c->backend_cpu = core_cpu_backend::init();
+    if (params.verbosity > 0)
+        fprintf(stderr, "breeze_tts_2: compute backend = %s\n", ggml_backend_name(c->backend));
     core_cpu_backend::set_n_threads(c->backend_cpu, c->n_threads);
     if (core_cpu_backend::is_cpu(c->backend))
         core_cpu_backend::set_n_threads(c->backend, c->n_threads);
