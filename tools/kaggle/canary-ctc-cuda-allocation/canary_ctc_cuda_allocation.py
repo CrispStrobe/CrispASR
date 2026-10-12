@@ -13,7 +13,7 @@ import tarfile
 import wave
 import zipfile
 
-VERSION = '2026-10-12.canary-ctc-cuda.1'
+VERSION = '2026-10-12.canary-ctc-cuda.2'
 SOURCE = 'eb633d908120cc5f44b8af8cd4aeb1191f16bfd8'
 PACKAGE_REV = 'c00064122d9327d3b72be260e21ddc529b1ca054'
 PACKAGE_PATH = 'release/38199002944/crispasr-linux-x86_64-cuda.tar.gz'
@@ -128,5 +128,18 @@ try:
         cos=np.divide((aa*bb).sum(axis=1),na*nb,out=np.ones_like(na),where=na*nb>0)
         row['cpu_gpu_diagnostic']=dict(row_cosine_min=float(cos.min()),norm_ratio=float(np.linalg.norm(aa)/np.linalg.norm(bb)),relative_l2=float(np.linalg.norm(aa-bb)/np.linalg.norm(bb)),argmax_exact=bool(np.array_equal(a.argmax(-1),b.argmax(-1))))
         receipt['cases'].append(row);save();print('case complete',bucket,seq,seconds,flush=True)
+    # Prior lengths always changed the rounded bucket. Exercise the cached
+    # graph itself with adjacent lengths in the same 128-frame bucket.
+    receipt['same_bucket_cases'] = []
+    for seq,count in enumerate((176000,176800,176000)):
+        receipt['current'] = dict(same_bucket_seq=seq, samples=count, phase='cached graph reuse')
+        save()
+        pcm=np.resize(base,count);a=compute(ctx,pcm);assert np.isfinite(a).all()
+        path=DEST/f'same-bucket-{seq}.npy';np.save(path,a)
+        fresh=lib.canary_ctc_init_from_file(model,params);assert fresh
+        try:exact=bool(np.array_equal(a,compute(fresh,pcm)))
+        finally:lib.canary_ctc_free(fresh)
+        receipt['same_bucket_cases'].append(dict(samples=count,shape=list(a.shape),sha256=sha(path),fresh_reused_exact=exact))
+        save();assert exact, 'Cached graph must match a fresh context at the same input length'
     receipt.update(complete=True,passed=True);save()
 finally:lib.canary_ctc_free(ctx)
