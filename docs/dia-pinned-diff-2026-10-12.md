@@ -159,3 +159,24 @@ original-history comparisons. This is an explicit diagnostic conversion;
 published models, pins, defaults, original references and thresholds remain
 unchanged. Native free speech, Q4 neural parity and physical GPU behavior are
 separate unresolved acceptance gates.
+
+Sampler run `38299826144` completed with speech rejection. Canonical Torch
+original remains WER 0; original neural/DAC using the actual compiled native
+sampler and native free generation both have WER 1. Exact input prefix is
+37 steps, minimum neural cosine 0.9999993818 and maximum norm error
+0.0006661525. First sampled difference is step 36/head 8 (226 versus 221),
+with first input difference at step 37. These preceding neural rows pass.
+The native sampling path alone can trigger quiet short audio with original
+modules; this does not isolate random-stream behavior from probability filtering
+or waive native speech acceptance.
+
+`tools/ci-heavy/dia_sampling_probability_control.py` replays the complete shared
+prefix of retained logits without loading model weights. It executes the
+actual pinned `_decoder_step` CFG/masking and `_sample_next_token` functions,
+intercepts Torch's final multinomial probabilities, and observes the real
+native distribution by mechanically inserting a read into the unchanged
+sampler header. It also requires exact replay of all 333 retained native
+pre-override draws for each original/native-logit arm. Full probability,
+support and variation arrays are retained. It records the actual Torch version,
+script/source hashes and dirty-worktree state; local component results do not
+substitute for the hosted pinned Torch 2.6 run or establish speech/RNG acceptance.
