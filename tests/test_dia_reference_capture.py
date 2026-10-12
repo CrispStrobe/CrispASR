@@ -121,6 +121,64 @@ class DiaCaptureTest(unittest.TestCase):
                     reference.dump("nari-labs/Dia-1.6B", None)
                 verify.assert_not_called()
 
+    def test_actual_generate_observes_all_declared_codec_modules(self):
+        torch = self.torch
+        class SumChannels(torch.nn.Module):
+            def forward(self, value):
+                return value.sum(dim=1, keepdim=True)
+        modules = torch.nn.Sequential(SumChannels(), *[torch.nn.Identity() for _ in range(6)], torch.nn.Tanh())
+        original = self.dia.dac_model
+        codec = types.SimpleNamespace(decoder=types.SimpleNamespace(model=modules),
+                                      quantizer=types.SimpleNamespace(from_codes=lambda codes: (codes.float(),)),
+                                      decode=modules)
+        self.dia.dac_model = codec
+        try:
+            torch.manual_seed(42)
+            plain = self.dia.generate("[S1] Test.", max_tokens=32, temperature=1.2,
+                                      top_p=.95, cfg_filter_top_k=45)
+            trace = reference.capture(self.dia, "[S1] Test.", max_tokens=32)
+            self.assertTrue(set(reference.CODEC_STAGES) <= trace.keys())
+            np.testing.assert_array_equal(trace["decoded_audio"], plain)
+            np.testing.assert_array_equal(trace["dac_latent"], trace["decoder_codes_rev"].T)
+            self.assertTrue(all(not module._forward_hooks for module in modules))
+        finally:
+            self.dia.dac_model = original
+
+
+class CodecCaptureOwnershipTest(unittest.TestCase):
+    """Small module plumbing tests; these are not original DAC PCM parity."""
+    def codec(self):
+        import torch
+        decoder = torch.nn.Sequential(torch.nn.Conv1d(2, 2, 3, padding=1),
+                                      *[torch.nn.Identity() for _ in range(6)], torch.nn.Tanh())
+        codec = types.SimpleNamespace(decoder=types.SimpleNamespace(model=decoder),
+                                      quantizer=types.SimpleNamespace(from_codes=lambda x: (x.float(),)),
+                                      decode=decoder)
+        return codec, torch.arange(14).reshape(1, 2, 7)
+
+    def test_trace_owns_complete_channels_and_preserves_actual_calls(self):
+        codec, codes = self.codec()
+        plain = codec.decode(codes.float()).detach().numpy().reshape(-1)
+        trace = reference.capture_codec(codec, codes)
+        self.assertEqual(set(trace), set(reference.CODEC_STAGES) | {"decoded_audio"})
+        np.testing.assert_array_equal(trace["decoded_audio"], plain)
+        np.testing.assert_array_equal(trace["dac_latent"], codes[0].numpy())
+        self.assertEqual(trace["dac_output_conv"].shape, (2, 7))
+        frozen = {name: value.copy() for name, value in trace.items()}
+        codec.decode(codes.float() * 2)
+        for name, value in trace.items():
+            np.testing.assert_array_equal(value, frozen[name])
+        self.assertTrue(all(not module._forward_hooks for module in codec.decoder.model))
+
+    def test_failure_removes_all_observers(self):
+        codec, codes = self.codec()
+        def fail(*args):
+            raise RuntimeError("deliberate codec failure")
+        codec.decode = fail
+        with self.assertRaisesRegex(RuntimeError, "deliberate codec failure"):
+            reference.capture_codec(codec, codes)
+        self.assertTrue(all(not module._forward_hooks for module in codec.decoder.model))
+
 
 if __name__ == "__main__":
     unittest.main()

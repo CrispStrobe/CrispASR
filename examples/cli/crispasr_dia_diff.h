@@ -36,8 +36,9 @@ struct Environment {
     };
     std::vector<Saved> saved;
     Environment() {
-        for (const char* suffix : {"DUMP_DIR", "FORCE_TOKENS", "FORCE_OUTPUT_TOKENS", "DUMP_INPUT_TOKENS",
-                                   "DUMP_STEPLOGITS", "DECODE_CODES", "MAX_STEPS", "GREEDY", "TTS_GPU"}) {
+        for (const char* suffix :
+             {"DUMP_DIR", "FORCE_TOKENS", "FORCE_OUTPUT_TOKENS", "DUMP_INPUT_TOKENS", "DUMP_STEPLOGITS",
+              "DAC_TRACE_DIR", "DECODE_CODES", "MAX_STEPS", "GREEDY", "TTS_GPU"}) {
             for (const char* prefix : {"CRISPASR_DIA_", "DIA_"}) {
                 std::string name = std::string(prefix) + suffix;
                 const char* value = std::getenv(name.c_str());
@@ -145,6 +146,11 @@ inline int run(const std::string& model, const std::string& archive) {
     if (!ref.load(archive))
         return 1;
     const std::string text = ref.meta("dia_text");
+    const std::string codec_trace_schema = ref.meta("dia_dac_stage_trace");
+    if (!codec_trace_schema.empty() && codec_trace_schema != "rvq+decoder-v1") {
+        fprintf(stderr, "Dia diff: unknown required DAC trace schema\n");
+        return 1;
+    }
     if (ref.meta("dia_source_pin") != "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8" || text.empty()) {
         fprintf(stderr, "Dia diff requires a pinned original archive and its exact dia_text\n");
         return 1;
@@ -207,12 +213,19 @@ inline int run(const std::string& model, const std::string& archive) {
         set_env("CRISPASR_DIA_DUMP_STEPLOGITS", nullptr);
         set_env("CRISPASR_DIA_DUMP_INPUT_TOKENS", nullptr);
         set_env("CRISPASR_DIA_DECODE_CODES", codes.string().c_str());
+        if (!codec_trace_schema.empty())
+            set_env("CRISPASR_DIA_DAC_TRACE_DIR", scratch.path.string().c_str());
         printf("[REPLAY] decoder_codes_rev: exact original codes drive the isolated DAC; delay reversal is tested "
                "separately.\n");
         std::unique_ptr<float, decltype(&dia_tts_pcm_free)> pcm(dia_tts_synthesize(ctx.get(), text.c_str(), &samples),
                                                                 dia_tts_pcm_free);
         if (!pcm || samples <= 0)
             return 1;
+        if (!codec_trace_schema.empty()) {
+            for (const char* name : {"dac_latent", "dac_input_conv", "dac_block_0", "dac_block_1", "dac_block_2",
+                                     "dac_block_3", "dac_output_snake", "dac_output_conv"})
+                pass = compare(ref, name, read_floats(scratch.path / (std::string(name) + ".f32"))) && pass;
+        }
         pass = compare(ref, "decoded_audio", std::vector<float>(pcm.get(), pcm.get() + samples)) && pass;
         printf("Dia diff scope: original decoder-input replay and DAC-code replay; free-running speech is separate.\n");
         return pass ? 0 : 1;

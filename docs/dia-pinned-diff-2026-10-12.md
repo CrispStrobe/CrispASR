@@ -47,10 +47,36 @@ reject both even when other stages, or cosine alone, would pass. Its default
 128-step probe is bounded numerical/codec evidence, not full short-speech
 acceptance. `--tokens 3072` requests a full-capacity original generation.
 
-Local validation: four tiny-original neural capture tests, production boundary
+Local validation: five tiny-original generation/capture tests and two codec observer
+ownership/failure tests, production boundary
 regression, C++ syntax checks and Python compilation. Only the tiny test's final
 DAC is a dummy code projection; it provides no PCM/quality evidence. Hosted
-real-weight/DAC numerical and negative-control results are pending.
+run `38278884937` rejects published DAC PCM (cosine 0.9976444, norm error
+0.04271824) despite passing F16 neural stages. Complete native speech run
+`38272642504` rejects the reported short sentence through CLI/C ABI for all
+three quants. Long controls pass. These results do not accept the runtime.
+
+The generic dumper includes all eight DAC boundaries in its default stages and
+labels their required schema in archive metadata. The codec-precision worker
+additionally calls actual original `from_codes()`
+and decoder modules to observe `dac_latent`, `dac_input_conv`, `dac_block_0`
+through `dac_block_3`, `dac_output_snake` and `dac_output_conv`. Original
+weight-normalization removal and capture must preserve the actual PCM exactly.
+Canonical PCM/code arrays in the preserved archive remain unchanged; additional
+boundaries supplement them. Precision-matched original-module archives remain
+separately labelled controls. Each trace is complete channel/time data `(C,T)`;
+the native dump transposes its channel-fast layout to the same ordering.
+The existing cosine and magnitude thresholds apply per complete channel.
+
+`CRISPASR_DIA_DAC_TRACE_DIR` gates native tracing. Captured graph tensors are
+marked as outputs before allocation; missing tensors or incomplete files fail.
+Diff enables the trace only for archives explicitly declaring
+`dia_dac_stage_trace=rvq+decoder-v1`, requires every declared stage and restores
+the caller's environment. The worker rejects a missing codec block and a latent
+scaled by two; preserved encoder missing/scale controls remain separate.
+The two small module tests cover storage ownership, unchanged calls and observer
+cleanup; they do not execute the real DAC checkpoint or establish codec parity.
+Fresh real-weight boundary/precision results are pending.
 
 The input guard was tested before fixing it: five whitespace-altered prompts
 and a NUL-containing prompt reached generation, and an invalid dump reached

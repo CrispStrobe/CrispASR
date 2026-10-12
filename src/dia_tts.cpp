@@ -1017,6 +1017,16 @@ static ggml_tensor* dac_decoder_block(ggml_context* ctx, ggml_tensor* x, const c
 }
 
 // Build DAC decode graph: codes (n_codebooks, n_frames) -> PCM (n_frames * 512)
+static const char* const dac_trace_stages[] = {"dac_latent",  "dac_input_conv", "dac_block_0",      "dac_block_1",
+                                               "dac_block_2", "dac_block_3",    "dac_output_snake", "dac_output_conv"};
+
+static void dac_trace_output(ggml_tensor* tensor, const char* name) {
+    if (crispasr_env::get("CRISPASR_DIA_DAC_TRACE_DIR")) {
+        ggml_set_name(tensor, name);
+        ggml_set_output(tensor); // Preserve the real result before allocator reuse.
+    }
+}
+
 static ggml_cgraph* dac_build_decode_graph(const core_dac::DacWeights& dac, ggml_context* ctx0, int n_frames) {
     const auto& cfg = dac.config;
     const int n_cb = cfg.n_codebooks;
@@ -1056,19 +1066,25 @@ static ggml_cgraph* dac_build_decode_graph(const core_dac::DacWeights& dac, ggml
         }
     }
     z_q = ggml_cont(ctx0, z_q); // (1024, n_frames)
+    dac_trace_output(z_q, "dac_latent");
 
     // Decoder input conv: Conv1d(1024, 1536, k=7, p=3)
     ggml_tensor* h = dac_conv1d(ctx0, z_q, dac.in_conv_w, dac.in_conv_b, /*pad*/ 3, /*dil*/ 1);
+    dac_trace_output(h, "dac_input_conv");
 
     // 4 decoder blocks with strides [8, 8, 4, 2]
     for (int b = 0; b < cfg.n_decoder_blocks; b++) {
         h = dac_decoder_block(ctx0, h, dac.blocks[b], cfg.upsampling_ratios[b]);
         h = ggml_cont(ctx0, h);
+        const std::string name = "dac_block_" + std::to_string(b);
+        dac_trace_output(h, name.c_str());
     }
 
     // Output: Snake1d -> Conv1d(96, 1, k=7, p=3) -> tanh
     h = core_act::snake_alpha(ctx0, h, dac.out_snake_alpha);
+    dac_trace_output(h, "dac_output_snake");
     h = dac_conv1d(ctx0, h, dac.out_conv_w, dac.out_conv_b, /*pad*/ 3, /*dil*/ 1);
+    dac_trace_output(h, "dac_output_conv");
     h = ggml_tanh(ctx0, h);
 
     // Reshape to 1D PCM
@@ -1155,6 +1171,38 @@ static float* dac_decode(dia_tts_context* ctx, const std::vector<uint32_t>& filt
     }
 
     // Extract PCM output
+    if (const char* dir = crispasr_env::get("CRISPASR_DIA_DAC_TRACE_DIR")) {
+        for (const char* name : dac_trace_stages) {
+            ggml_tensor* stage = ggml_graph_get_tensor(gf, name);
+            if (!stage || stage->type != GGML_TYPE_F32) {
+                fprintf(stderr, "dia_dac: missing F32 trace stage %s\n", name);
+                ggml_free(ctx0);
+                return nullptr;
+            }
+            const size_t channels = (size_t)stage->ne[0], frames = (size_t)stage->ne[1];
+            std::vector<float> raw(channels * frames), values(raw.size());
+            ggml_backend_tensor_get(stage, raw.data(), 0, raw.size() * sizeof(float));
+            // ggml stores (T,C) row-major; retain actual Python (C,T) for
+            // complete per-channel waveform cosine/magnitude comparisons.
+            for (size_t channel = 0; channel < channels; ++channel)
+                for (size_t frame = 0; frame < frames; ++frame)
+                    values[channel * frames + frame] = raw[frame * channels + channel];
+            const std::string path = std::string(dir) + "/" + name + ".f32";
+            FILE* file = fopen(path.c_str(), "wb");
+            if (!file) {
+                fprintf(stderr, "dia_dac: cannot write trace %s\n", path.c_str());
+                ggml_free(ctx0);
+                return nullptr;
+            }
+            const bool written = fwrite(values.data(), sizeof(float), values.size(), file) == values.size();
+            const int closed = fclose(file);
+            if (!written || closed != 0) {
+                fprintf(stderr, "dia_dac: incomplete trace %s\n", path.c_str());
+                ggml_free(ctx0);
+                return nullptr;
+            }
+        }
+    }
     ggml_tensor* pcm_out = ggml_graph_get_tensor(gf, "dac_pcm");
     if (!pcm_out) {
         fprintf(stderr, "dia_dac: pcm output tensor not in graph\n");

@@ -27,7 +27,53 @@ BOUNDARY_STAGES = [
     "cross_v0", "decoder_ca0", "decoder_hidden", "decoder_input_tokens",
     "decoder_step_logits", "decoder_codes_rev", "decoded_audio",
 ]
-DEFAULT_STAGES = BOUNDARY_STAGES + [f"encoder_layer_{i}" for i in range(12)] + [f"decoder_layer_{i}" for i in range(18)]
+CODEC_STAGES = ["dac_latent", "dac_input_conv"] + [f"dac_block_{i}" for i in range(4)] + ["dac_output_snake", "dac_output_conv"]
+DEFAULT_STAGES = BOUNDARY_STAGES + [f"encoder_layer_{i}" for i in range(12)] + [f"decoder_layer_{i}" for i in range(18)] + CODEC_STAGES
+
+
+def _codec_array(value, name):
+    if value.ndim != 3 or value.shape[0] != 1:
+        raise ValueError(f"Unexpected actual DAC shape for {name}: {tuple(value.shape)}")
+    return value[0].detach().cpu().float().numpy().copy()
+
+
+def capture_codec(codec, codes):
+    """Observe actual DAC modules on an exact code grid; no reconstructed math.
+
+    Arrays retain original channel/time order (C,T); each comparison row is
+    one complete channel waveform. Hooks own their arrays and always restore.
+    This bounded replay is separate from Dia's free-running generation.
+    """
+    import torch
+    results, handles = {}, []
+
+    def save(name, value):
+        results[name] = _codec_array(value, name)
+
+    def hook(name):
+        def observe(_module, _args, output):
+            save(name, output)
+        return observe
+
+    modules = codec.decoder.model
+    if len(modules) != 8:
+        raise ValueError("DAC trace requires the pinned four-block decoder")
+    try:
+        for name, module in zip(CODEC_STAGES[1:], list(modules)[:7]):
+            handles.append(module.register_forward_hook(hook(name)))
+        with torch.inference_mode():
+            latent = codec.quantizer.from_codes(codes)[0]
+            save("dac_latent", latent)
+            pcm = codec.decode(latent)
+        results["decoded_audio"] = pcm.detach().cpu().float().numpy().reshape(-1).copy()
+        if any(value.size == 0 or not np.isfinite(value).all() for value in results.values()):
+            raise ValueError("DAC trace contains empty or nonfinite arrays")
+        if set(results) != set(CODEC_STAGES) | {"decoded_audio"}:
+            raise ValueError("Actual DAC did not execute all requested trace modules")
+        return results
+    finally:
+        for handle in handles:
+            handle.remove()
 
 
 def required_packages():
@@ -73,6 +119,9 @@ def capture(dia, text, *, max_tokens=128, seed=42, temperature=1.2, top_p=.95,
     import torch
     available = BOUNDARY_STAGES + [f"encoder_layer_{i}" for i in range(len(dia.model.encoder.layers))]
     available += [f"decoder_layer_{i}" for i in range(len(dia.model.decoder.layers))]
+    codec_modules = getattr(getattr(dia.dac_model, "decoder", None), "model", None)
+    if codec_modules is not None and len(codec_modules) == 8:
+        available += CODEC_STAGES
     stages = set(available if stages is None else stages)
     if stages - set(available):
         raise ValueError(f"Unsupported Dia stages: {sorted(stages - set(available))}")
@@ -133,14 +182,25 @@ def capture(dia, text, *, max_tokens=128, seed=42, temperature=1.2, top_p=.95,
     def codes(original):
         def wrapped(value):
             save("decoder_codes_rev", value[0].transpose(0, 1))
-            return original(value)
+            output = original(value)
+            if "dac_latent" in available:
+                results["dac_latent"] = _codec_array(output[0], "dac_latent")
+            return output
         return wrapped
+
+    def codec_hook(name):
+        def observe(_module, _args, output):
+            results[name] = _codec_array(output, name)
+        return observe
 
     try:
         replace(dia, "_prepare_text_input", prepare)
         replace(dia.model.decoder, "precompute_cross_attn_cache", cross)
         replace(dia.model.decoder, "decode_step", step)
         replace(dia.dac_model.quantizer, "from_codes", codes)
+        if "dac_latent" in available:
+            for name, module in zip(CODEC_STAGES[1:], list(codec_modules)[:7]):
+                handles.append(module.register_forward_hook(codec_hook(name)))
         handles.append(dia.model.encoder.embedding.register_forward_hook(encoder_hook("encoder_embedding")))
         handles.append(dia.model.encoder.register_forward_hook(encoder_hook("encoder_output")))
         handles.append(dia.model.decoder.layers[0].cross_attention.register_forward_hook(first_hook("decoder_ca0")))
@@ -221,6 +281,8 @@ def dump(model_dir, audio, stages=None, **kwargs):
                     top_k=int(os.environ.get("DIA_TOP_K", "45")),
                     cfg_scale=float(os.environ.get("DIA_CFG_SCALE", "3")))
     result = capture(dia, text, stages=stages, **settings)
+    if set(CODEC_STAGES) <= result.keys():
+        result["dia_dac_stage_trace"] = "rvq+decoder-v1"
     def digest(path):
         sha = hashlib.sha256()
         with path.open("rb") as file:

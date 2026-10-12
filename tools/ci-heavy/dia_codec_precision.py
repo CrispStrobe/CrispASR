@@ -66,6 +66,7 @@ if args.child:
     import numpy as np
     import torch
     import dac
+    import importlib.metadata
     from gguf import GGUFReader, GGUFWriter, GGMLQuantizationType
     import dump_reference
     torch.set_num_threads(4)
@@ -76,6 +77,7 @@ if args.child:
         return bytes(value.parts[value.data[0]]).decode()
     assert metadata_value('dia_source_pin') == reference.SOURCE_PIN
     assert metadata_value('dia_model_revision') == reference.MODEL_PIN
+    assert importlib.metadata.version('descript-audio-codec') == metadata_value('dia_dac_package') == '1.0.0'
     checkpoint = Path(dac.utils.download(model_type='44khz', model_bitrate='8kbps', tag='0.0.1'))
     assert digest(checkpoint) == metadata_value('dia_dac_sha256')
     codec = dac.DAC.load(str(checkpoint)).cpu().eval()
@@ -102,6 +104,20 @@ if args.child:
         if hasattr(module, 'weight_g'):
             torch.nn.utils.remove_weight_norm(module)
     np.testing.assert_array_equal(decode(), original)
+    original_trace = reference.capture_codec(codec, codes)
+    np.testing.assert_array_equal(original_trace['decoded_audio'], original)
+    metadata = json.loads((args.reference.parent / 'reference.json').read_text())
+    trace_metadata = dict(metadata, dia_dac_stage_trace='rvq+decoder-v1')
+    # Keep the preserved canonical PCM bytes. Newly observed intermediate
+    # modules supplement that archive; they never replace its ground truth.
+    extended = dict(tensors, **{name: value for name, value in original_trace.items() if name != 'decoded_audio'})
+    dump_reference.write_gguf_archive(extended, trace_metadata, OUT / 'canonical-codec-ref.gguf')
+    for name, value in original_trace.items():
+        np.save(OUT / f'original-{name}.npy', value)
+    dump_reference.write_gguf_archive({name: value for name, value in extended.items() if name != 'dac_block_0'},
+                                     trace_metadata, OUT / 'missing-codec-stage-ref.gguf')
+    scaled = dict(extended, dac_latent=original_trace['dac_latent'] * 2)
+    dump_reference.write_gguf_archive(scaled, trace_metadata, OUT / 'scaled-codec-stage-ref.gguf')
     published = GGUFReader(str(args.codec))
     weights = {}
     coefficients = []
@@ -132,7 +148,6 @@ if args.child:
         path = OUT / f'original-dac-{name}.py'
         path.write_text(inspect.getsource(module))
         stats['source_files'][path.name] = digest(path)
-    metadata = json.loads((args.reference.parent / 'reference.json').read_text())
     for variant in ('published', 'f32', 'output-f32', 'rvq-output-f32'):
         def promote(name):
             return (variant == 'f32' or variant in ('output-f32', 'rvq-output-f32')
@@ -159,8 +174,10 @@ if args.child:
             writer.close()
         pcm = decode()
         np.save(OUT / f'original-{variant}-pcm.npy', pcm)
-        control = dict(tensors, decoded_audio=pcm)
-        control_metadata = dict(metadata, dia_dac_control_mode='precision-matched-original-modules',
+        trace = reference.capture_codec(codec, codes)
+        np.testing.assert_array_equal(trace['decoded_audio'], pcm)
+        control = dict(tensors, **trace)
+        control_metadata = dict(trace_metadata, dia_dac_control_mode='precision-matched-original-modules',
                                 dia_dac_weight_variant=variant, dia_dac_weight_sha256=digest(path))
         dump_reference.write_gguf_archive(control, control_metadata, OUT / f'{variant}-control-ref.gguf')
         stats['variants'].append({'variant': variant, 'codec': str(path), 'codec_sha256': digest(path),
@@ -187,6 +204,8 @@ def run(command, name, allow_failure=False):
 
 
 archive = SCRATCH / 'preserved-reference'
+run([sys.executable, ROOT / 'tests/test_dia_reference_capture.py', 'CodecCaptureOwnershipTest', '-v'],
+    'codec-capture-contracts')
 run(['gh', 'run', 'download', args.reference_run, '-R', 'CrispStrobe/CrispASR', '-D', archive], 'reference-download')
 folder = next(archive.glob('heavy-*'))
 assert digest(folder / 'ref.gguf') == 'fd2f6ce7a82de51060578665cf5b49d3170d8a95ab0b0f021cc9288212e92767'
@@ -206,7 +225,7 @@ failed = []
 for variant in controls['variants']:
     name = variant['variant']
     os.environ['DIA_CODEC'] = variant['codec']
-    canonical_code, canonical_log = run([build / 'bin/crispasr-diff', 'dia', model, folder / 'ref.gguf'],
+    canonical_code, canonical_log = run([build / 'bin/crispasr-diff', 'dia', model, OUT / 'canonical-codec-ref.gguf'],
                                         name + '-canonical', True)
     control_code, control_log = run([build / 'bin/crispasr-diff', 'dia', model, OUT / f'{name}-control-ref.gguf'],
                                     name + '-precision-control', True)
@@ -216,6 +235,11 @@ for variant in controls['variants']:
         for negative, file in [('scaled', 'scaled-ref.gguf'), ('missing', 'missing-ref.gguf')]:
             code, log = run([build / 'bin/crispasr-diff', 'dia', model, folder / file], negative + '-negative', True)
             assert code != 0 and '[FAIL] encoder_output' in log, negative
+    if name == 'f32' and '[PASS] dac_latent' in canonical_log:
+        for negative, file, stage in [('scaled-codec', 'scaled-codec-stage-ref.gguf', 'dac_latent'),
+                                     ('missing-codec', 'missing-codec-stage-ref.gguf', 'dac_block_0')]:
+            code, log = run([build / 'bin/crispasr-diff', 'dia', model, OUT / file], negative + '-negative', True)
+            assert code != 0 and '[FAIL] ' + stage in log, negative
 receipt['codec_diagnostic_pass'] = not failed
 receipt['scope'] = 'Preserved code replay with original, published, F32 and narrow F32 codec weights; canonical and precision-matched original PCM are distinct.'
 (OUT / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
