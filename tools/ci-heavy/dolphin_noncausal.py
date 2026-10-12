@@ -175,6 +175,9 @@ def native(library, model, audio, reference_dir, dest):
             lib.dolphin_result_free(result)
     finally:
         lib.dolphin_free(ctx)
+    # Preserve the full low-level result even if the independent binding path fails.
+    checkpoint = dict(stages=rows, speech=speech, session_complete=False, passed=False)
+    (dest/'validation.json').write_text(json.dumps(checkpoint, indent=2, ensure_ascii=False)+'\n')
     # The automatic architecture path through the actual session binding.
     sys.path.insert(0, str(ROOT / 'python'))
     from crispasr import Session
@@ -184,7 +187,9 @@ def native(library, model, audio, reference_dir, dest):
         speech['session_text'] = ''.join(s.text for s in session.transcribe(pcm, sample_rate=16000)).strip()
         speech['session_matches_native'] = speech['session_text'] == speech['native_text'].strip()
     passed = all(r['passed'] for r in rows.values()) and speech['original_raw_exact'] and speech['session_matches_native']
-    return dict(stages=rows, speech=speech, passed=passed)
+    checkpoint.update(speech=speech, session_complete=True, passed=passed)
+    (dest/'validation.json').write_text(json.dumps(checkpoint, indent=2, ensure_ascii=False)+'\n')
+    return checkpoint
 
 
 def main():
@@ -212,8 +217,8 @@ def main():
              '-DGGML_CUDA=OFF', '-DGGML_VULKAN=OFF', '-DGGML_METAL=OFF',
              '-DCRISPASR_BUILD_TESTS=ON', '-DCRISPASR_BUILD_SERVER=OFF'], 'configure')
         run(['cmake', '--build', build, '--target', 'crispasr-cli', 'crispasr-lib',
-             'crispasr-diff', 'test-dolphin-depthwise', '-j4'], 'build')
-        run(['ctest', '--test-dir', build, '-R', 'dolphin-depthwise-checkpoint-padding',
+             'crispasr-diff', 'test-dolphin-depthwise', 'test-arch-backend-map', '-j4'], 'build')
+        run(['ctest', '--test-dir', build, '-R', 'dolphin-depthwise-checkpoint-padding|every converter-written architecture resolves|every emitted backend name is a name a surface can open|crispasr_detect_backend_from_gguf reads the shared table',
              '--output-on-failure', '--no-tests=error'], 'native-unit')
         receipt['native_unit_passed'] = True
         receipt['library_sha256'] = sha(build/'src/libcrispasr.so')

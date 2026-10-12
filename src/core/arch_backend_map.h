@@ -66,6 +66,7 @@ inline const entry* table(size_t* n_out) {
         {"nemotron-asr",              "nemotron"},
         {"nemotron-streaming",        "nemotron"},
         {"gigaam",                    "gigaam"},
+        {"dolphin",                   "dolphin"},
         {"parakeet",                  "parakeet"},
         {"parakeet-tdt",              "parakeet"},
         {"parakeet-ja",               "parakeet"},

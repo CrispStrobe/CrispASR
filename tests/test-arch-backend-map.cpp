@@ -46,6 +46,7 @@ static const std::vector<std::pair<std::string, std::string>>& converter_archs()
         {"parakeet", "parakeet"},
         {"nemotron", "nemotron"},
         {"gigaam", "gigaam"},
+        {"dolphin", "dolphin"},
         {"canary", "canary"},
         {"canary_qwen", "canary-qwen"},
         {"index_echo", "index-echo"},
@@ -185,6 +186,7 @@ TEST_CASE("every emitted backend name is a name a surface can open", "[unit][arc
         "parakeet",
         "nemotron",
         "gigaam",
+        "dolphin",
         "canary",
         "canary-qwen",
         "index-echo",
@@ -354,6 +356,7 @@ TEST_CASE("crispasr_detect_backend_from_gguf reads the shared table", "[unit][ar
     const probe probes[] = {
         {"granite_speech", "granite"}, // #335
         {"nemotron", "nemotron"},      // was CLI-only too
+        {"dolphin", "dolphin"},        // #540: full model passed diff, automatic bindings failed
         {"qwen3tts", "qwen3-tts"},     // ditto
         {"whisper", "whisper"},        // was already shared — must not regress
         {"not-a-real-architecture", ""},
