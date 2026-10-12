@@ -139,6 +139,7 @@ OVERRIDES = {
 
 # Families to cross-reference. Order matters only for readability.
 MODELS = [
+    ("dolphin", r"[Dd]olphin"),
     ("chatterbox", r"[Cc]hatterbox|CAMPPlus|S3Tokenizer|S3Gen|HiFT"),
     ("cosyvoice3", r"cosyvoice|CosyVoice|CFM Euler"),
     ("vibevoice", r"vibevoice|VibeVoice"),
