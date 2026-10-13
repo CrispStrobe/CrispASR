@@ -36,6 +36,15 @@ class RuntimePinTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'candidate bytes'):
             bundle.pinned_runtime_sources(self.root)
 
+    def test_changed_capture_dispatch_is_rejected(self):
+        path = self.root / 'examples/cli/crispasr_dia_diff.h'
+        original = path.read_text()
+        needle = 'const bool capture_sa = capture_flag && std::strcmp(capture_flag, "1") == 0;'
+        self.assertIn(needle, original)
+        path.write_text(original.replace(needle, 'const bool capture_sa = true;', 1))
+        with self.assertRaisesRegex(ValueError, 'candidate bytes'):
+            bundle.pinned_runtime_sources(self.root)
+
     def test_missing_sampler_source_is_rejected(self):
         (self.root / 'src/dia_exponential_rng.h').unlink()
         with self.assertRaises(FileNotFoundError):

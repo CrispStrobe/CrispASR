@@ -37,10 +37,12 @@ def run(command, label):
 def pinned_runtime_sources(root):
     """Reject a different neural/cache implementation before expensive builds."""
     expected_runtime = {
-        'src/dia_tts.cpp': 'b403a704ac8ce15c2f81c80c1e1b6e808359435682bff00c31d93d826d084a17',
+        'src/dia_tts.cpp': '9c7b837e1e08a22eb08d8ebecb5eb03a9dac3ec9dfd86944c1ba58ca5f4781f3',
         'src/dia_sampling.h': 'ad23c213ed9fde411f4ce6648cd3383470dc4fb4504195794bce96b2c655f6cf',
         'src/dia_exponential_rng.h': 'e2d42a64b8b4d0bbc3948c4da29b8395d42f20b4df10b80bec1b101c41b7df0e',
-        'examples/cli/crispasr_dia_diff.h': '0f1da1ae457bf5bb7e85f275fcca1cf9cc076bcf211683a0fa4d95e238663b2e',
+        'examples/cli/crispasr_dia_diff.h': '08f7d4e54569b15b90f1465d275e80ec1f3bade259aa30b7d757a3a839607b44',
+        'src/crispasr_c_api.cpp': '632c98246d014548f2c8f5abc75cf084426e3141a0997b5c084cfcaa60b77d95',
+        'python/crispasr/_binding.py': 'a503bc93652f4fa3c788a1e6e6aeb8b3faa2b130e25bc5ac723fdfd17e0c5ade',
     }
     actual = {name: sha(root / name) for name in expected_runtime}
     if actual != expected_runtime:
@@ -54,7 +56,10 @@ def main():
     receipt = dict(source=source, ggml=ggml, cuda='12.4.1', architectures=[60, 75],
                    cpu_control_source='2205d920d879108b73651ebb9f3eb9499da4e5f5',
                    cpu_control_run=38357576078, cpu_control_accepted=False,
-                   scope='CUDA compilation/closure of source-RoPE CPU candidate plus explicit GPU request; all model diagnostics remain unaccepted',
+                   scope='CUDA compilation/closure of frozen late-attention capture runtime; all model diagnostics remain unaccepted',
+                   attention_capture_source='42b111c5e6006e7dcc82afff2b1b43da7c15861c',
+                   attention_capture_cpu_run=38438623888, attention_capture_cpu_accepted=False,
+                   attention_capture_runtime_bytes_match_cpu_source=True,
                    cpu_rope_source='ead5a5d5dab77e8d2e2c22a4fbb7450d44abc492',
                    cpu_rope_run=38382524080,
                    cpu_diff_dispatch_sha256='d2b5d639f35f4c9b5e5430f881692c90268812a0eee7b25f7b25f57de2701f2e',
