@@ -1794,6 +1794,15 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
             // --- New K/V outputs for self-attention (to append to cache) ---
             std::vector<ggml_tensor*> new_k_outputs(m.n_decoder_layers);
             std::vector<ggml_tensor*> new_v_outputs(m.n_decoder_layers);
+            const char* sa_capture = getenv("CRISPASR_DIA_DUMP_SELF_ATTN");
+            const bool capture_sa = step == dia_dump_step && dia_dump_dir && sa_capture && strcmp(sa_capture, "1") == 0;
+            auto mark_sa = [&](ggml_tensor* tensor, int layer, const char* part) {
+                if (capture_sa) {
+                    const std::string name = "dia_decoder_sa" + std::to_string(layer) + "_" + part;
+                    ggml_set_name(tensor, name.c_str());
+                    ggml_set_output(tensor);
+                }
+            };
 
             // --- Decoder layers ---
             for (int l = 0; l < (int)m.n_decoder_layers; l++) {
@@ -1853,6 +1862,10 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                         V_full = ggml_reshape_4d(ctx0, V_cur, head_dim, n_kv_heads, T_cur, B);
                     }
 
+                    mark_sa(Q, l, "q");
+                    mark_sa(K_full, l, "k");
+                    mark_sa(V_full, l, "v");
+
                     // GQA: repeat_interleave K/V heads to match Q heads
                     // n_heads=16, n_kv_heads=4 -> each KV head maps to 4 consecutive Q heads
                     // Pattern: insert unit dim before n_kv, repeat, flatten
@@ -1891,6 +1904,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                     // Permute to (head_dim, n_heads, 1, B) then reshape to (dec_hidden, 1, B)
                     kqv = ggml_cont(ctx0, ggml_permute(ctx0, kqv, 0, 2, 1, 3));
                     cur = ggml_reshape_3d(ctx0, kqv, dec_hidden, T_cur, B);
+                    mark_sa(cur, l, "attention");
                     cur = ggml_mul_mat(ctx0, layer.self_o_proj, cur);
                 }
 
@@ -2071,6 +2085,31 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                         if (FILE* f = fopen(
                                 dia_dpath(("cpp_decoder_layer_" + std::to_string(l) + ".f32").c_str()).c_str(), "wb")) {
                             fwrite(values.data(), sizeof(float), values.size(), f);
+                            fclose(f);
+                        }
+                    }
+                }
+                if (capture_sa) {
+                    for (int l = 0; l < (int)m.n_decoder_layers; ++l) {
+                        for (const char* part : {"q", "k", "v", "attention"}) {
+                            const std::string name = "dia_decoder_sa" + std::to_string(l) + "_" + part;
+                            ggml_tensor* tensor = ggml_graph_get_tensor(gf, name.c_str());
+                            if (!tensor || tensor->type != GGML_TYPE_F32) {
+                                fprintf(stderr, "dia_tts: missing self-attention capture %s\n", name.c_str());
+                                ggml_free(ctx0);
+                                return nullptr;
+                            }
+                            std::vector<float> values(ggml_nelements(tensor));
+                            ggml_backend_tensor_get(tensor, values.data(), 0, values.size() * sizeof(float));
+                            const std::string file = "cpp_decoder_sa" + std::to_string(l) + "_" + part + ".f32";
+                            FILE* f = fopen(dia_dpath(file.c_str()).c_str(), "wb");
+                            if (!f || fwrite(values.data(), sizeof(float), values.size(), f) != values.size()) {
+                                if (f)
+                                    fclose(f);
+                                fprintf(stderr, "dia_tts: cannot write self-attention capture %s\n", file.c_str());
+                                ggml_free(ctx0);
+                                return nullptr;
+                            }
                             fclose(f);
                         }
                     }

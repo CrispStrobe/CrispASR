@@ -45,7 +45,7 @@ class DiaCaptureTest(unittest.TestCase):
             "data": {"text_length": 128, "audio_length": 128},
             "model": {
                 "encoder": {"n_layer": 1, "n_embd": 8, "n_hidden": 16, "n_head": 2, "head_dim": 4},
-                "decoder": {"n_layer": 1, "n_embd": 8, "n_hidden": 16, "gqa_query_heads": 2,
+                "decoder": {"n_layer": 2, "n_embd": 8, "n_hidden": 16, "gqa_query_heads": 2,
                             "kv_heads": 1, "gqa_head_dim": 4, "cross_query_heads": 2, "cross_head_dim": 4},
                 "src_vocab_size": 256, "tgt_vocab_size": 1028,
             },
@@ -77,7 +77,7 @@ class DiaCaptureTest(unittest.TestCase):
         captured = reference.capture(self.dia, text, max_tokens=32)
         np.testing.assert_array_equal(captured["decoded_audio"], plain)
         self.assertEqual(self.dia.model.decoder.decode_step, original)
-        self.assertEqual(set(captured), set(reference.BOUNDARY_STAGES) | {"encoder_layer_0", "decoder_layer_0"})
+        self.assertEqual(set(captured), set(reference.BOUNDARY_STAGES) | {"encoder_layer_0", "decoder_layer_0", "decoder_layer_1"})
         tokens = captured["encoder_tokens"]
         self.assertEqual(tokens.shape[0], 2)
         self.assertTrue((tokens[0] == 0).all())
@@ -147,6 +147,68 @@ class DiaCaptureTest(unittest.TestCase):
                         reference.capture(self.dia, text, max_tokens=32)
         with self.assertRaisesRegex(ValueError, "Unsupported"):
             reference.capture(self.dia, "[S1] Test.", max_tokens=32, stages={"invented_stage"})
+
+    def test_attention_capture_matches_actual_calls_and_keeps_full_trajectory(self):
+        from dia_attention_capture import attention_stages
+        text, step = "[S1] Tiny capture test.", 5
+        attention = self.dia.model.decoder.layers[0].self_attention
+        calls, projected = [], []
+        def observe(_m, _args, kwargs, _output):
+            cache = kwargs["cache"]
+            if int(cache.current_idx) == step + 1:
+                calls.append((cache.k[:, :, :step + 1].transpose(1, 2).detach().numpy().copy(),
+                              cache.v[:, :, :step + 1].transpose(1, 2).detach().numpy().copy()))
+        handles = [attention.register_forward_hook(observe, with_kwargs=True),
+                   attention.o_proj.register_forward_pre_hook(
+                       lambda _m, args: projected.append(args[0].detach().numpy().copy()))]
+        self.torch.manual_seed(42)
+        try:
+            plain = self.dia.generate(text, max_tokens=32, temperature=1.2, top_p=.95, cfg_filter_top_k=45)
+        finally:
+            for h in handles:
+                h.remove()
+        off = reference.capture(self.dia, text, max_tokens=32, capture_step=step)
+        on = reference.capture(self.dia, text, max_tokens=32, capture_step=step, attention_layers=(0, 1))
+        repeat = reference.capture(self.dia, text, max_tokens=32, capture_step=step)
+        for key in off:
+            self.assertEqual(off[key].tobytes(), on[key].tobytes(), key)
+            self.assertEqual(off[key].tobytes(), repeat[key].tobytes(), key)
+        np.testing.assert_array_equal(on["decoded_audio"], plain)
+        self.assertTrue(set(attention_stages((0,))) <= on.keys())
+        np.testing.assert_array_equal(on["decoder_sa0_k"], calls[0][0])
+        np.testing.assert_array_equal(on["decoder_sa0_v"], calls[0][1])
+        np.testing.assert_array_equal(on["decoder_sa0_attention"], projected[step])
+        self.assertEqual(on["decoder_sa0_q"].shape, (2, 1, 2, 4))
+        self.assertEqual(on["decoder_sa0_k"].shape, (2, step + 1, 1, 4))
+        self.assertTrue((on["decoder_sa1_q"][0] != on["decoder_sa1_q"][1]).any())
+        frozen = {k: on[k].copy() for k in attention_stages((0, 1))}
+        self.dia.generate("[S2] Different.", max_tokens=32, temperature=0)
+        for k in frozen:
+            self.assertEqual(on[k].tobytes(), frozen[k].tobytes())
+        for module in (attention, attention.rotary_emb, attention.o_proj):
+            self.assertFalse(module._forward_hooks)
+            self.assertFalse(module._forward_pre_hooks)
+
+    def test_attention_capture_rejects_bad_layers_and_restores_on_inner_failure(self):
+        for layers in ((-1,), (2,), (0, 0), (True,)):
+            with self.subTest(layers=layers), self.assertRaisesRegex(ValueError, "layer"):
+                reference.capture(self.dia, "[S1] Test.", max_tokens=32, attention_layers=layers)
+        attention = self.dia.model.decoder.layers[0].self_attention
+        original = self.dia.model.decoder.decode_step
+        with mock.patch.object(attention.o_proj, "forward", side_effect=RuntimeError("projection failure")):
+            with self.assertRaisesRegex(RuntimeError, "projection failure"):
+                reference.capture(self.dia, "[S1] Test.", max_tokens=32, attention_layers=(0,))
+        self.assertEqual(self.dia.model.decoder.decode_step, original)
+        for module in (attention, attention.rotary_emb, attention.o_proj):
+            self.assertFalse(module._forward_hooks)
+            self.assertFalse(module._forward_pre_hooks)
+
+    def test_dump_rejects_bad_attention_indices_before_loading(self):
+        for value in ("-1", "0,0", "0,", "0, 1", "１", "true"):
+            with self.subTest(value=value), mock.patch.dict(os.environ, {"DIA_CAPTURE_ATTENTION_LAYERS": value}):
+                with mock.patch.object(reference, "verify_source", side_effect=AssertionError("bad layer reached loading")):
+                    with self.assertRaisesRegex(ValueError, "DIA_CAPTURE_ATTENTION_LAYERS"):
+                        reference.dump("nari-labs/Dia-1.6B", None)
 
     def test_dump_rejects_unaligned_text_before_source_or_model_loading(self):
         with mock.patch.dict(os.environ, {"DIA_TEXT": "[S1] Test. "}):

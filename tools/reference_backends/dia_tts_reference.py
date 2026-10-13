@@ -114,14 +114,17 @@ def validate_text(text):
 
 
 def capture(dia, text, *, max_tokens=128, seed=42, temperature=1.2, top_p=.95,
-            top_k=45, cfg_scale=3., stages=None, capture_step=0):
+            top_k=45, cfg_scale=3., stages=None, capture_step=0, attention_layers=()):
     """Capture actual original calls, owning every array and restoring hooks."""
     import torch
+    from dia_attention_capture import attention_stages, install_attention_hooks, validate_attention_layers
+    attention_layers = validate_attention_layers(attention_layers, len(dia.model.decoder.layers))
     available = BOUNDARY_STAGES + [f"encoder_layer_{i}" for i in range(len(dia.model.encoder.layers))]
     available += [f"decoder_layer_{i}" for i in range(len(dia.model.decoder.layers))]
     codec_modules = getattr(getattr(dia.dac_model, "decoder", None), "model", None)
     if codec_modules is not None and len(codec_modules) == 8:
         available += CODEC_STAGES
+    available += attention_stages(attention_layers)
     stages = set(available if stages is None else stages)
     if stages - set(available):
         raise ValueError(f"Unsupported Dia stages: {sorted(stages - set(available))}")
@@ -211,6 +214,8 @@ def capture(dia, text, *, max_tokens=128, seed=42, temperature=1.2, top_p=.95,
             handles.append(layer.register_forward_hook(encoder_hook(f"encoder_layer_{i}")))
         for i, layer in enumerate(dia.model.decoder.layers):
             handles.append(layer.register_forward_hook(decoder_hook(f"decoder_layer_{i}")))
+        handles.extend(install_attention_hooks(dia.model.decoder.layers, attention_layers, capture_step,
+                                               lambda: len(inputs) - 1 == capture_step, save))
         torch.manual_seed(seed)
         with torch.inference_mode():
             pcm = dia.generate(text, max_tokens=max_tokens, cfg_scale=cfg_scale,
@@ -239,6 +244,8 @@ def capture(dia, text, *, max_tokens=128, seed=42, temperature=1.2, top_p=.95,
 
 def dump(model_dir, audio, stages=None, **kwargs):
     """Generic dispatcher entry; audio is unused for text-only synthesis."""
+    from dia_attention_capture import parse_attention_layers, validate_attention_layers
+    attention_layers = parse_attention_layers(os.environ.get("DIA_CAPTURE_ATTENTION_LAYERS", ""))
     text = os.environ.get("DIA_TEXT", "[S1] We are committed to making it secure.")
     validate_text(text)
     capture_index = os.environ.get("DIA_CAPTURE_STEP", "0")
@@ -267,6 +274,7 @@ def dump(model_dir, audio, stages=None, **kwargs):
         revision = MODEL_PIN
     config_path, weights_path = location / "config.json", location / "model.safetensors"
     config = DiaConfig.load(str(config_path))
+    validate_attention_layers(attention_layers, config.model.decoder.n_layer)
     device = torch.device(os.environ.get("DIA_DEVICE", "cpu"))
     with torch.device("meta"):
         model = DiaModel(config, torch.float32)
@@ -288,7 +296,8 @@ def dump(model_dir, audio, stages=None, **kwargs):
                     top_p=float(os.environ.get("DIA_TOP_P", ".95")),
                     top_k=int(os.environ.get("DIA_TOP_K", "45")),
                     cfg_scale=float(os.environ.get("DIA_CFG_SCALE", "3")),
-                    capture_step=int(os.environ.get("DIA_CAPTURE_STEP", "0")))
+                    capture_step=int(os.environ.get("DIA_CAPTURE_STEP", "0")),
+                    attention_layers=attention_layers)
     result = capture(dia, text, stages=stages, **settings)
     if set(CODEC_STAGES) <= result.keys():
         result["dia_dac_stage_trace"] = "rvq+decoder-v1"
@@ -305,5 +314,6 @@ def dump(model_dir, audio, stages=None, **kwargs):
                   dia_dac_package=importlib.metadata.version("descript-audio-codec"),
                   dia_generation_settings=json.dumps(settings, sort_keys=True),
                   dia_decoder_capture_step=str(settings["capture_step"]),
+                  dia_attention_capture_layers=",".join(map(str, attention_layers)),
                   dia_device=str(device))
     return result

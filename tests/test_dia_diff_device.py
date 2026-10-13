@@ -43,6 +43,17 @@ int main() {
     set_env("CRISPASR_DIA_TTS_GPU", nullptr); set_env("DIA_TTS_GPU", nullptr);
     { Environment guard; apply_replay_device(false); if (requested_gpu()) return 9; }
     if (std::getenv("CRISPASR_DIA_TTS_GPU") || std::getenv("DIA_TTS_GPU")) return 10;
+    set_env("CRISPASR_DIA_DUMP_SELF_ATTN", "1"); set_env("DIA_DUMP_SELF_ATTN", "parent-value");
+    {
+        Environment guard;
+        if (std::getenv("CRISPASR_DIA_DUMP_SELF_ATTN") || std::getenv("DIA_DUMP_SELF_ATTN")) return 11;
+        set_env("CRISPASR_DIA_DUMP_SELF_ATTN", "1");
+    }
+    if (std::string(std::getenv("CRISPASR_DIA_DUMP_SELF_ATTN")) != "1" ||
+        std::string(std::getenv("DIA_DUMP_SELF_ATTN")) != "parent-value") return 12;
+    set_env("CRISPASR_DIA_DUMP_SELF_ATTN", nullptr); set_env("DIA_DUMP_SELF_ATTN", nullptr);
+    { Environment guard; set_env("CRISPASR_DIA_DUMP_SELF_ATTN", "1"); }
+    if (std::getenv("CRISPASR_DIA_DUMP_SELF_ATTN") || std::getenv("DIA_DUMP_SELF_ATTN")) return 13;
     return 0;
 }
 '''

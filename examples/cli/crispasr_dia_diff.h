@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <filesystem>
 #include <fstream>
 #include <memory>
@@ -50,9 +51,9 @@ struct Environment {
     };
     std::vector<Saved> saved;
     Environment() {
-        for (const char* suffix :
-             {"DUMP_DIR", "DUMP_STEP", "DIFF_DUMP_DIR", "FORCE_TOKENS", "FORCE_OUTPUT_TOKENS", "DUMP_INPUT_TOKENS",
-              "DUMP_STEPLOGITS", "DAC_TRACE_DIR", "DECODE_CODES", "MAX_STEPS", "GREEDY", "TTS_GPU"}) {
+        for (const char* suffix : {"DUMP_DIR", "DUMP_STEP", "DUMP_SELF_ATTN", "DIFF_DUMP_DIR", "FORCE_TOKENS",
+                                   "FORCE_OUTPUT_TOKENS", "DUMP_INPUT_TOKENS", "DUMP_STEPLOGITS", "DAC_TRACE_DIR",
+                                   "DECODE_CODES", "MAX_STEPS", "GREEDY", "TTS_GPU"}) {
             for (const char* prefix : {"CRISPASR_DIA_", "DIA_"}) {
                 std::string name = std::string(prefix) + suffix;
                 const char* value = std::getenv(name.c_str());
@@ -182,12 +183,17 @@ inline int run(const std::string& model, const std::string& archive) {
     }
     try {
         const bool gpu = requested_gpu();
+        const char* capture_flag = std::getenv("CRISPASR_DIA_DUMP_SELF_ATTN");
+        const bool capture_sa = capture_flag && std::strcmp(capture_flag, "1") == 0;
+
         const char* keep = std::getenv("CRISPASR_DIA_DIFF_DUMP_DIR");
         if (!keep)
             keep = std::getenv("DIA_DIFF_DUMP_DIR");
         const std::string retained = keep ? keep : "";
         Environment environment;
         apply_replay_device(gpu);
+        if (capture_sa)
+            set_env("CRISPASR_DIA_DUMP_SELF_ATTN", "1");
         Scratch scratch(retained);
         const auto inputs = scratch.path / "inputs.i32";
         const auto codes = scratch.path / "codes.i32";

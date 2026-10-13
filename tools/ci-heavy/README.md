@@ -112,3 +112,11 @@ every failed arm. Run with the portable speech worker's pinned dependency set,
 `-f timeout_minutes=240`. Diagnostic models stay out of production registries;
 no RNG, seed, top-k/top-p or reference/gate changes are made, and this does not
 establish GPU, Q4 or complete model acceptance.
+
+`dia_attention_history_control.py` runs actual original and native step-978
+self-attention snapshots with full-trajectory OFF/ON/OFF controls. It observes
+post-rotation queries, complete K/V histories and pre-output-projection attention
+in all 18 layers; preserves canonical input/code grids and the original ASR
+positive control; records cosine, magnitudes and complete failed runs. Diagnostic
+snapshots are not free-speech acceptance or a new model/default. Run the diagnostic
+source branch with `-f pip="numpy torch==2.6.0 torchaudio==2.6.0 torchvision==0.21.0 pydantic safetensors huggingface_hub descript-audio-codec==1.0.0 gguf"`.
