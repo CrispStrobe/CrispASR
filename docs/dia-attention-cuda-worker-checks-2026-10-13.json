@@ -1,0 +1,81 @@
+{
+  "scope": "Prepared CUDA worker/kernel and weight-free input/source guards; no GPU or model execution",
+  "checks": [
+    {
+      "test": "test_dia_attention_cuda_inputs.py",
+      "count": 8,
+      "exit": 0,
+      "log": "/mnt/storage/crispasr/dia-attention-delivery-20261013/final-test_dia_attention_cuda_inputs.py.log",
+      "log_sha256": "ed794b3584cfbacc482d85724f425219f989548cb91c031e0a174e1bece397e1"
+    },
+    {
+      "test": "test_dia_cuda_bundle.py",
+      "count": 4,
+      "exit": 0,
+      "log": "/mnt/storage/crispasr/dia-attention-delivery-20261013/final-test_dia_cuda_bundle.py.log",
+      "log_sha256": "42932bc9e3b8ab42fe8f88f2bd2856340a6c54ba2f4654592dc9281797d8eab6"
+    },
+    {
+      "test": "test_dia_diff_device.py",
+      "count": 1,
+      "exit": 0,
+      "log": "/mnt/storage/crispasr/dia-attention-delivery-20261013/final-test_dia_diff_device.py.log",
+      "log_sha256": "8ab07fd445b3711742b09b94ec2a598ca692075fb87ea5646e9b51880aed2637"
+    },
+    {
+      "test": "test_dia_dump_step.py",
+      "count": 2,
+      "exit": 0,
+      "log": "/mnt/storage/crispasr/dia-attention-delivery-20261013/final-test_dia_dump_step.py.log",
+      "log_sha256": "1193ddbfe1f1697d4cfca27d29a53d2c186057e9ceb3a3e41379e97e40130401"
+    },
+    {
+      "test": "test_dia_rotary_dispatch.py",
+      "count": 1,
+      "exit": 0,
+      "log": "/mnt/storage/crispasr/dia-attention-delivery-20261013/final-test_dia_rotary_dispatch.py.log",
+      "log_sha256": "2a1d5de710a3c566389fc4caad8aca3cd80b92a63af51a7e72b9dcb42ee519fc"
+    }
+  ],
+  "runtime_bytes_match_cpu_and_package": true,
+  "runtime_sha256": {
+    "src/dia_tts.cpp": "9c7b837e1e08a22eb08d8ebecb5eb03a9dac3ec9dfd86944c1ba58ca5f4781f3",
+    "src/dia_sampling.h": "ad23c213ed9fde411f4ce6648cd3383470dc4fb4504195794bce96b2c655f6cf",
+    "src/dia_exponential_rng.h": "e2d42a64b8b4d0bbc3948c4da29b8395d42f20b4df10b80bec1b101c41b7df0e",
+    "examples/cli/crispasr_dia_diff.h": "08f7d4e54569b15b90f1465d275e80ec1f3bade259aa30b7d757a3a839607b44",
+    "src/crispasr_c_api.cpp": "632c98246d014548f2c8f5abc75cf084426e3141a0997b5c084cfcaa60b77d95",
+    "python/crispasr/_binding.py": "a503bc93652f4fa3c788a1e6e6aeb8b3faa2b130e25bc5ac723fdfd17e0c5ade"
+  },
+  "initial_attempts": [
+    {
+      "check": "symlink root-escape fixture on CIFS",
+      "result": "Errno 5; corrected fixture location on local storage; check not skipped"
+    },
+    {
+      "check": "additional bundle guards",
+      "result": "TMPDIR applied only to first shell command; four setup errors; corrected subprocess environment for every test"
+    }
+  ],
+  "files": [
+    {
+      "path": "tools/ci-heavy/dia_attention_cuda_control.py",
+      "bytes": 16233,
+      "sha256": "5e315cd927caf0190e78bb6c34cf0158dca68a086b01dd9c3cd577e8ae1b208a"
+    },
+    {
+      "path": "tools/kaggle/dia-attention-cuda-control/dia_attention_cuda_control.py",
+      "bytes": 6906,
+      "sha256": "c7acdb1d04dbdc43d01fd4d2e444abf0d85c563b75801b274472dab0dc35e1bc"
+    },
+    {
+      "path": "tools/kaggle/dia-attention-cuda-control/kernel-metadata.json",
+      "bytes": 428,
+      "sha256": "2a3bbd5f532dfe06da19642a52bc5242660a62619ed0e3c396baace2df6e62bc"
+    },
+    {
+      "path": "tests/test_dia_attention_cuda_inputs.py",
+      "bytes": 5793,
+      "sha256": "30ab021846a1b159beee875a6c3e279e1923cec2e66df7f8449bb2dfd27cc5d5"
+    }
+  ]
+}
