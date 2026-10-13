@@ -2165,7 +2165,7 @@ class Session:
             raise RuntimeError(f"set_speaker_id failed (rc={rc}) for backend {self.backend!r}")
 
     def set_instruct(self, instruct: str) -> None:
-        """Set the voice description / style instruct (qwen3-tts, parler, omnivoice).
+        """Set the voice description / style instruct (qwen3-tts, parler, omnivoice, bt2-tts).
 
         VoiceDesign generates speech in a voice **described by a
         natural-language instruction** — no reference WAV, no preset

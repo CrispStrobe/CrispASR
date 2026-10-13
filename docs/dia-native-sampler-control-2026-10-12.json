@@ -1,0 +1,318 @@
+{
+  "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38299826144",
+  "source": "1d8d5bbc2351b74721abb11d0a39d2b8f86f2441",
+  "conclusion": "failure",
+  "artifact": {
+    "id": 11771928729,
+    "zip_bytes": 178270032,
+    "zip_sha256": "ddd1a96d6f7a1360bfdd2b4fb2a10d81a90893b3b8aacfcaa3c4e2ba145fa9b9",
+    "zip_digest_source": "GitHub artifact metadata; extracted files independently hashed locally"
+  },
+  "worker_receipt": {
+    "source": "1d8d5bbc2351b74721abb11d0a39d2b8f86f2441",
+    "control_mode": "original-neural-with-compiled-production-sampler",
+    "canonical_original_run": 38285566623,
+    "production_defaults_changed": false,
+    "full_speech_acceptance": false,
+    "runs": [
+      {
+        "name": "canonical-download",
+        "exit": 0,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "source-clone",
+        "exit": 0,
+        "log_sha256": "571a93ec73f7315903ea1fa9fabbefc82c4cb76b0161250b9b50c148629b3628"
+      },
+      {
+        "name": "source-pin",
+        "exit": 0,
+        "log_sha256": "f0942a9cddd60829668ddd4ba0579d062f9c02c3ad16981bca0e3b81fb7c1e35"
+      },
+      {
+        "name": "compile-actual-sampler",
+        "exit": 0,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "tiny-sampler-contracts",
+        "exit": 0,
+        "log_sha256": "55103d2588fb5bc7a4e0659439cfc52ab40cfbf78e571ab97ca0369ad40e659c"
+      },
+      {
+        "name": "original-native-sampler-generation",
+        "exit": 0,
+        "log_sha256": "31c5bcc1982f6ba85f8de5dccad7d5e05842cff35e514de0c4bf558885b7d400"
+      },
+      {
+        "name": "configure",
+        "exit": 0,
+        "log_sha256": "b8752d74a7c3b71f731cb6751263fabf7ba9121b2e2d4d434a3351c24bcc1531"
+      },
+      {
+        "name": "build",
+        "exit": 0,
+        "log_sha256": "16428d49a160747331ee079b48edb3ba0621087869175089ed1700c432e6e093"
+      },
+      {
+        "name": "native-free-generation",
+        "exit": 0,
+        "log_sha256": "9ee589c0a10ba0bd0b6d83111c773c8c7a58dbd8da2f53546d1f07da7cd68336"
+      },
+      {
+        "name": "canonical-original-asr",
+        "exit": 0,
+        "log_sha256": "8415be37ca8674e30f051983c0323d04f63e622ff99d691be2a4d673d8188a0d"
+      },
+      {
+        "name": "original-native-sampler-asr",
+        "exit": 1,
+        "log_sha256": "7c2b2d1387b5b4b47313bd26cc1e548973f329bc52a556b000b740375b1009cb"
+      },
+      {
+        "name": "native-free-asr",
+        "exit": 1,
+        "log_sha256": "20a06f48420c47e8d8d371709264885c1a040ae69592c30b622a337d9ee9e134"
+      }
+    ],
+    "canonical-original": {
+      "phrase": "We are committed to making it secure.",
+      "source_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+      "model_pin": "257bc72f9b78182ccc6fa07675a9ae4c1a44e2cd",
+      "seed": 42,
+      "capacity": 3072,
+      "audio_seconds": 14.048072562358277,
+      "rms": 0.07353386128903242,
+      "finite": true,
+      "scope": "Actual original generate and real DAC",
+      "transcript": "We are committed to making it secure.",
+      "wer": 0.0
+    },
+    "original-native-sampler": {
+      "phrase": "We are committed to making it secure.",
+      "seed": 42,
+      "capacity": 3072,
+      "audio_seconds": 16.520997732426302,
+      "rms": 0.00017083895015496396,
+      "finite": true,
+      "scope": "original-neural-with-compiled-production-sampler",
+      "source_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+      "model_pin": "257bc72f9b78182ccc6fa07675a9ae4c1a44e2cd",
+      "transcript": "",
+      "wer": 1.0
+    },
+    "native-free": {
+      "phrase": "We are committed to making it secure.",
+      "seed": 42,
+      "capacity": 3072,
+      "audio_seconds": 13.305034013605443,
+      "rms": 0.00038494089519638665,
+      "finite": true,
+      "scope": "Actual native C ABI free generation",
+      "transcript": "",
+      "wer": 1.0
+    },
+    "paired_generation": {
+      "original_control_steps": 1439,
+      "native_steps": 1161,
+      "aligned_input_prefix_steps": 37,
+      "first_input_divergence": {
+        "step": 37,
+        "codebook": 8,
+        "original_control": 226,
+        "native": 221
+      },
+      "minimum_prefix_cosine": 0.9999993817837588,
+      "maximum_prefix_norm_error": 0.0006661524562158183,
+      "aligned_prefix_neural_pass": true,
+      "complete_input_histories_equal": false,
+      "first_pre_override_sample_divergence": {
+        "step": 36,
+        "codebook": 8,
+        "original_control": 226,
+        "native": 221,
+        "shared_input_history": true
+      },
+      "complete_pre_override_samples_equal": false
+    },
+    "failures": [
+      "original-native-sampler-speech",
+      "native-free-speech"
+    ],
+    "sampler_diagnostic_pass": false,
+    "scope": "Single fixed short prompt: canonical Torch, original with actual native sampler, and actual native C ABI free generation; not complete model acceptance."
+  },
+  "files": [
+    {
+      "path": "heavy-38299826144/aligned-prefix-cosine.npy",
+      "bytes": 5456,
+      "sha256": "4986879ef68efe3ee993ecd72bb0c77025f49169c17472077a1363b309cda93a"
+    },
+    {
+      "path": "heavy-38299826144/aligned-prefix-norm-ratio.npy",
+      "bytes": 5456,
+      "sha256": "316a7c94c99e0577d6c0b28c318ed6cb2b9253495083b974c5f81008a9a1fea3"
+    },
+    {
+      "path": "heavy-38299826144/build.log",
+      "bytes": 416321,
+      "sha256": "16428d49a160747331ee079b48edb3ba0621087869175089ed1700c432e6e093"
+    },
+    {
+      "path": "heavy-38299826144/canonical-download.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "heavy-38299826144/canonical-original-asr.log",
+      "bytes": 769,
+      "sha256": "8415be37ca8674e30f051983c0323d04f63e622ff99d691be2a4d673d8188a0d"
+    },
+    {
+      "path": "heavy-38299826144/canonical-original.json",
+      "bytes": 419,
+      "sha256": "7c760de3cb029e37c2f512dcbcf37be328bd0d8ef9c414f7a0c3634f5762ac14"
+    },
+    {
+      "path": "heavy-38299826144/canonical-original.npy",
+      "bytes": 2478208,
+      "sha256": "5c4331e165afa1e5342cf4cf3f9c50e7100e3a192a4835beb8e7c66d4fa13d6d"
+    },
+    {
+      "path": "heavy-38299826144/compile-actual-sampler.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "heavy-38299826144/configure.log",
+      "bytes": 2474,
+      "sha256": "b8752d74a7c3b71f731cb6751263fabf7ba9121b2e2d4d434a3351c24bcc1531"
+    },
+    {
+      "path": "heavy-38299826144/dia_native_sampler.py",
+      "bytes": 3858,
+      "sha256": "20dcc5fd1cc120302a3b1a386860195a39089e614e006a93a8e1a5d9f2fc7714"
+    },
+    {
+      "path": "heavy-38299826144/dia_sampler_bridge.cpp",
+      "bytes": 1541,
+      "sha256": "6a98968764fc0b2bb68778ece087c968110db1158431c33770326e85eec6220f"
+    },
+    {
+      "path": "heavy-38299826144/dia_sampling.h",
+      "bytes": 3200,
+      "sha256": "ff0953df65d9dc16cbea97fd5a0f5c7c70ccb0b4da4b8903b2247021b186b1b6"
+    },
+    {
+      "path": "heavy-38299826144/native-free-asr.log",
+      "bytes": 1084,
+      "sha256": "20a06f48420c47e8d8d371709264885c1a040ae69592c30b622a337d9ee9e134"
+    },
+    {
+      "path": "heavy-38299826144/native-free-generation.log",
+      "bytes": 61672,
+      "sha256": "9ee589c0a10ba0bd0b6d83111c773c8c7a58dbd8da2f53546d1f07da7cd68336"
+    },
+    {
+      "path": "heavy-38299826144/native-free.json",
+      "bytes": 264,
+      "sha256": "5c9b79074d403d691dbbb5f7ba33be6c56acf6e54117d29f224981e340f0a4ef"
+    },
+    {
+      "path": "heavy-38299826144/native-free.npy",
+      "bytes": 2347136,
+      "sha256": "ea07a3004d7ee060612c7990ce1f6e28b79e0733babc1ac48a1bc17d290b377a"
+    },
+    {
+      "path": "heavy-38299826144/native-inputs.i32",
+      "bytes": 41796,
+      "sha256": "8138145c9dce6577404f041456b6e7ad98c951f39f43c9037f962726cc31dbfc"
+    },
+    {
+      "path": "heavy-38299826144/native-logits.f32",
+      "bytes": 85932576,
+      "sha256": "febf202cc075becfa6c491fd6a25afef806d41069f61d8d4d505602c9faeebe1"
+    },
+    {
+      "path": "heavy-38299826144/native-pre-override-samples.npy",
+      "bytes": 83720,
+      "sha256": "1e6cdf0cd3eb3fc696373f541f4d3b6460fb0f21591fa295c7cab0948bdd2962"
+    },
+    {
+      "path": "heavy-38299826144/original-control-codes.npy",
+      "bytes": 51356,
+      "sha256": "08105a67b2460ac549719e0eccf04d65e56e7aca4ec364d64fb50348caf6ed9b"
+    },
+    {
+      "path": "heavy-38299826144/original-control-inputs.i32",
+      "bytes": 51804,
+      "sha256": "bcdef26b150571889a829bad1e3460b744c111bbfcdee02f8a644b6504681eb9"
+    },
+    {
+      "path": "heavy-38299826144/original-control-logits.f32",
+      "bytes": 106509024,
+      "sha256": "52ef36ce2051b67912f180c5403c0624b2452aa0cc8fdb021c5d6b089df16c8a"
+    },
+    {
+      "path": "heavy-38299826144/original-control-pre-override-samples.npy",
+      "bytes": 103736,
+      "sha256": "9e10e73b445b6f4c3124d2007196a7014bbd71c2ebe4c3db67c24778a9b92d05"
+    },
+    {
+      "path": "heavy-38299826144/original-control-provenance.json",
+      "bytes": 1478,
+      "sha256": "537e73b79dddb83b76e4d7c82427970de39d38927afa3e08588347a049c3e8cc"
+    },
+    {
+      "path": "heavy-38299826144/original-native-sampler-asr.log",
+      "bytes": 1340,
+      "sha256": "7c2b2d1387b5b4b47313bd26cc1e548973f329bc52a556b000b740375b1009cb"
+    },
+    {
+      "path": "heavy-38299826144/original-native-sampler-generation.log",
+      "bytes": 558,
+      "sha256": "31c5bcc1982f6ba85f8de5dccad7d5e05842cff35e514de0c4bf558885b7d400"
+    },
+    {
+      "path": "heavy-38299826144/original-native-sampler.json",
+      "bytes": 396,
+      "sha256": "9dde123fdc484c2dcac453fd3f523af82509696225e6ee117fc02dbf6c15c2d7"
+    },
+    {
+      "path": "heavy-38299826144/original-native-sampler.npy",
+      "bytes": 2914432,
+      "sha256": "cd08767c6fe6f9a65693e6c91f055718e314f3f05ef79466642681026f2118d4"
+    },
+    {
+      "path": "heavy-38299826144/receipt.json",
+      "bytes": 4283,
+      "sha256": "27de0972e396b46f23a2416b888888fa2b5d84210e47244691c555904670e2b8"
+    },
+    {
+      "path": "heavy-38299826144/source-clone.log",
+      "bytes": 50,
+      "sha256": "571a93ec73f7315903ea1fa9fabbefc82c4cb76b0161250b9b50c148629b3628"
+    },
+    {
+      "path": "heavy-38299826144/source-pin.log",
+      "bytes": 69,
+      "sha256": "f0942a9cddd60829668ddd4ba0579d062f9c02c3ad16981bca0e3b81fb7c1e35"
+    },
+    {
+      "path": "heavy-38299826144/tiny-sampler-contracts.log",
+      "bytes": 830,
+      "sha256": "55103d2588fb5bc7a4e0659439cfc52ab40cfbf78e571ab97ca0369ad40e659c"
+    },
+    {
+      "path": "hosted.log",
+      "bytes": 67432,
+      "sha256": "4348589e83e425f1bdff4595036cc0d29d23ad4ea8b3a7daf5cf019498a2e721"
+    }
+  ],
+  "total_bytes": 201092738,
+  "original_neural_native_sampler_also_fails_short_speech": true,
+  "pure_rng_cause_not_yet_established": true,
+  "full_speech_acceptance": false,
+  "production_defaults_changed": false
+}

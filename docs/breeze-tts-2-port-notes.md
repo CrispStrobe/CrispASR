@@ -613,29 +613,72 @@ it. So the primary key is `bt2-tts` and `breeze-tts-2` / `breeze-tts2` /
 published name while the name CrispASR presents is not theirs. The HF repo
 `cstr/breeze-tts-2-GGUF` is unchanged — a repo name IS descriptive attribution.
 
-### Scope decision on CFG: neither Option A nor Option B, yet
+### Scope decision on CFG: Option B, upstream's single-CFG shape
 
-§5 recommended shipping Option B (serial branches) behind
-`CRISPASR_BREEZE_CFG_BRANCHES`. Phase 2 has **not** done that. What is in the
-tree:
+Phase 2 shipped without guidance and refused `--tts-instruct`. That refusal
+rested on a misreading corrected here: at `cfg_scale == 1.0`, which is
+upstream's default in both `infer.py` and `api.py`, an instruction request is a
+SINGLE branch whose prompt carries the instruction
+(`templates.py::prepare_inputs` only builds the negative prompt when
+`guidance_scale != 1.0`). The reference fixture is exactly that shape. A
+single-branch run is therefore upstream's own default behaviour, and the
+instruction reaches the model through the prompt.
 
-* both KV caches are allocated with a trailing dim of `n_layers * n_branch`
-  and both graph builders take a `branch` index, so the cache topology and the
-  `il = layer * n_branch + branch` arithmetic are already in place and cost
-  nothing at `n_branch == 1`;
-* `n_branch` is pinned to 1, and the two things Option B still needs are
-  per-branch prompt assembly (three different prompts, three different lengths,
-  three different `n_past`) and the logits combine at every backbone step plus
-  every depth step.
+What is in the tree now (`src/core/breeze_cfg.h` holds the plan and the
+combine, pinned by `tests/test-breeze-cfg.cpp`):
 
-So this build reaches **Voice Clone and plain TTS**, and does not reach **Voice
-Design or Voice Direction**. That is enforced rather than documented:
-`breeze_tts_2_capabilities()` returns only `1 << BREEZE_CFG_NONE`,
-`breeze_tts_2_synthesize_guided()` refuses anything else, and the CLI adapter
-refuses `--tts-instruct` at init. The reason to refuse rather than downgrade is
-specific to this failure mode: a single-branch run of a Voice Design request
-produces fluent, natural speech that ignores the instruction entirely, and no
-property of the output reveals it.
+| request | `cfg_scale` | branches |
+|---|---|---|
+| no instruction | any | 1: plain, or clone with a reference |
+| instruction | 1.0 | 1: the instruction prompt |
+| instruction | 0.0 | 1: the negative prompt |
+| instruction | other | 2: negative, then positive |
+
+* the negative prompt is the positive one minus the instruction, so a
+  reference clip sits in BOTH branches (`ref_edit_tata` against
+  `ref_clone_tata`). Voice Direction is two branches, as upstream's CLI, API
+  and fast path run it;
+* branches run serially (Option B): each keeps its own KV slice and its own
+  `n_past`, and the logits are combined as
+  `negative + cfg_scale * (positive - negative)` before every backbone pick
+  and before every depth-decoder pick;
+* `n_branch` grows on first use (`ensure_branches`), so plain synthesis and
+  Voice Clone do not pay for the second backbone cache;
+* there is no `CRISPASR_BREEZE_CFG_BRANCHES` gate: the branch count follows
+  from the request, exactly as upstream.
+
+NOT ported: the three-branch dual CFG of §5
+(`uncond + s_ref * (ref - uncond) + s_ins * (ins - uncond)`). It exists only on
+upstream's slow `generate()` path, behind `guidance_scale_ref` /
+`guidance_scale_ins`, which neither upstream entry point ever passes.
+
+The C interface kept its shape through this: `breeze_tts_2_synthesize_guided`
+still takes two scales and `breeze_tts_2_capabilities` still answers, now with
+`NONE | INS | BOTH`. The single-scale call is the additive
+`breeze_tts_2_synthesize_instructed`. `tests/test-breeze-abi.cpp` pins all
+three.
+
+How the guided path is checked:
+
+* `tests/test-server-bt2-instruct.py` runs seeded requests through one server
+  session: plain and scale-4 requests repeat byte for byte across
+  one -> two -> one -> two branch changes, scale 0 is byte-identical to the
+  plain request, and scales 1 and 4 each differ from it. Passes on the q8_0
+  weights.
+* `crispasr-diff bt2-tts-guided` runs eight request shapes greedily on ONE
+  context (plain, clone, and an instruction at scale 0 / 1 / 4 with and
+  without the reference) and writes prompt ids, the combined frame-0 logits
+  and the codes per case. It also fails on its own when a case does not repeat
+  on the reused context, when scale 0 is not the plain / clone case, or when
+  two branches at a scale one ulp above 1 do not reproduce the one-branch run
+  (a stale or shared second KV slice cannot).
+* `tools/kaggle/breeze-refdump` dumps the same eight cases from the original
+  under `guided/`, and `tools/reference_backends/breeze_tts_2.py --guided`
+  compares them.
+
+NOT yet measured: the last two need the weights and a Kaggle push, and neither
+has run. Until they have, the two-branch path is repeatable and self-consistent
+but not parity-checked against the original.
 
 ### Two decisions worth not re-deriving
 

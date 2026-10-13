@@ -1,0 +1,278 @@
+{
+  "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38281476089",
+  "tested_source": "e5652705bac011aafe0806228e38b4e8a86410e2",
+  "ggml_source": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+  "rebased_source": "7bc05dbd84821f9bec69b3193e4019b6b69b9136",
+  "scope": "Wrapper behavior tested with real upstream CPU binary on ARM64, no physical Ascend/model/performance validation",
+  "binary_sha256": "f8e265e05570e5ddaa739b05436dbab98d11e4239b35b4abd9f79a049ec90dc3",
+  "source_files": {
+    "tools/validate_backend_ops.py": {
+      "sha256": "c30fb97a5a969e7a279cd6eaae0c83d2ba6f12084d7a3bb5f5a1eda0e64cc2d0",
+      "identical_to_hosted_source": true
+    },
+    "tools/ci-heavy/backend_ops_wrapper.py": {
+      "sha256": "abdf01182d6c2ea2d45535be716d24b9ea28dd5afd57e5afe33c9ba3e8d9123d",
+      "identical_to_hosted_source": true
+    }
+  },
+  "proof_files": {
+    "build.log": {
+      "bytes": 2452,
+      "sha256": "788e6def4346dd98b3f6356c2021b8d645a27160f35ad82af84e6a68fc874a81"
+    },
+    "configure.log": {
+      "bytes": 1918,
+      "sha256": "07263942a9e8886ddaab406dee921e893caefb9ea065a0f05c10f969de043761"
+    },
+    "controls.json": {
+      "bytes": 5915,
+      "sha256": "2bfec0b8332901de71980279c6fdaae42f525ae1dd9ef5cbd43dbf35837a4d26"
+    },
+    "missing-backend/add.log": {
+      "bytes": 81,
+      "sha256": "300fc88d0db762011e0b77736038864800f161f8562ec4395a45d1bdde4aaae9"
+    },
+    "missing-backend/receipt.json": {
+      "bytes": 1232,
+      "sha256": "a4c9d09d10e573cba02991974ff22cf32c67ab8b7bc1e978229e0a471551f889"
+    },
+    "missing-backend-upstream.log": {
+      "bytes": 81,
+      "sha256": "300fc88d0db762011e0b77736038864800f161f8562ec4395a45d1bdde4aaae9"
+    },
+    "missing-backend-wrapper.log": {
+      "bytes": 35,
+      "sha256": "ce5dd3b4abb0939dddec6a6ab8ea25a656be5e24515ed15ee3cef1407ec9c5f1"
+    },
+    "positive/add.log": {
+      "bytes": 272,
+      "sha256": "5b60798906fc8ee60ec78d0cb4be612fbec2a0aa502f9c60e957eb79a1699965"
+    },
+    "positive/receipt.json": {
+      "bytes": 1168,
+      "sha256": "3b681c28ea7ed1d284eb6765c58656d698eef08b865762f953d3efc59172ea89"
+    },
+    "positive-upstream.log": {
+      "bytes": 272,
+      "sha256": "5b60798906fc8ee60ec78d0cb4be612fbec2a0aa502f9c60e957eb79a1699965"
+    },
+    "positive-wrapper.log": {
+      "bytes": 29,
+      "sha256": "121d5c33a61fe334456099cdecec94327ab64259a8e24585f8c8a08521693af1"
+    },
+    "unknown-operator/receipt.json": {
+      "bytes": 1232,
+      "sha256": "d5d852762bf05413e851222a90922f4568b2460834e9a9bb6d6d0fd05600ac4d"
+    },
+    "unknown-operator/unknown_operator_negative_control.log": {
+      "bytes": 187,
+      "sha256": "636874228dbc0c77d2e67a542e54e523d997f02c291d1ad09b4b07f7789cf409"
+    },
+    "unknown-operator-upstream.log": {
+      "bytes": 187,
+      "sha256": "636874228dbc0c77d2e67a542e54e523d997f02c291d1ad09b4b07f7789cf409"
+    },
+    "unknown-operator-wrapper.log": {
+      "bytes": 59,
+      "sha256": "c8cea01d6ecb66acb04b37c30954f968d1284ac49cfd101936280e0430cab6de"
+    },
+    "zero-cases/add.log": {
+      "bytes": 187,
+      "sha256": "636874228dbc0c77d2e67a542e54e523d997f02c291d1ad09b4b07f7789cf409"
+    },
+    "zero-cases/receipt.json": {
+      "bytes": 1128,
+      "sha256": "7989d992beed816601216080d61b8753c8fb20ea9bec388b1ceefa4813707152"
+    },
+    "zero-cases-upstream.log": {
+      "bytes": 187,
+      "sha256": "636874228dbc0c77d2e67a542e54e523d997f02c291d1ad09b4b07f7789cf409"
+    },
+    "zero-cases-wrapper.log": {
+      "bytes": 29,
+      "sha256": "e704f1b37bdddb37d5cbc4532d472c3b7746572a56cceb9f78d82d5389539bf4"
+    }
+  },
+  "controls": [
+    {
+      "control": "positive",
+      "upstream_exit": 0,
+      "wrapper_exit": 0,
+      "expected_acceptance": true,
+      "receipt": {
+        "harness_source": "e5652705bac011aafe0806228e38b4e8a86410e2",
+        "checkout_ggml_source": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+        "binary_sha256": "f8e265e05570e5ddaa739b05436dbab98d11e4239b35b4abd9f79a049ec90dc3",
+        "system": "Linux",
+        "architecture": "aarch64",
+        "backend": "CPU",
+        "scope": "Existing ggml operator correctness against CPU reference",
+        "model_inference_validated": false,
+        "quantized_model_quality_validated": false,
+        "performance_validated": false,
+        "runs": [
+          {
+            "exit": 0,
+            "selected_backend_completed": true,
+            "cases_passed": 1,
+            "cases_run": 1,
+            "observed_operator_cases": 1,
+            "unsupported_cases": 0,
+            "pass": true,
+            "operator": "ADD",
+            "command": [
+              "/mnt/heavy/scratch/ggml-ops-build/bin/test-backend-ops",
+              "test",
+              "-b",
+              "CPU",
+              "-o",
+              "ADD",
+              "-j",
+              "1",
+              "-p",
+              "^type=f32,ne=\\[1,1,1,1\\],nr=\\[32,1,1,1\\],nf=1,perm1=0,src_overlap=0$"
+            ],
+            "log_sha256": "5b60798906fc8ee60ec78d0cb4be612fbec2a0aa502f9c60e957eb79a1699965",
+            "elapsed_seconds": 0.265505552000036
+          }
+        ],
+        "pass": true
+      }
+    },
+    {
+      "control": "missing-backend",
+      "upstream_exit": 0,
+      "wrapper_exit": 1,
+      "expected_acceptance": false,
+      "receipt": {
+        "harness_source": "e5652705bac011aafe0806228e38b4e8a86410e2",
+        "checkout_ggml_source": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+        "binary_sha256": "f8e265e05570e5ddaa739b05436dbab98d11e4239b35b4abd9f79a049ec90dc3",
+        "system": "Linux",
+        "architecture": "aarch64",
+        "backend": "CANN_MISSING_NEGATIVE_CONTROL",
+        "scope": "Existing ggml operator correctness against CPU reference",
+        "model_inference_validated": false,
+        "quantized_model_quality_validated": false,
+        "performance_validated": false,
+        "runs": [
+          {
+            "exit": 0,
+            "selected_backend_completed": false,
+            "cases_passed": null,
+            "cases_run": null,
+            "observed_operator_cases": 0,
+            "unsupported_cases": 0,
+            "pass": false,
+            "operator": "ADD",
+            "command": [
+              "/mnt/heavy/scratch/ggml-ops-build/bin/test-backend-ops",
+              "test",
+              "-b",
+              "CANN_MISSING_NEGATIVE_CONTROL",
+              "-o",
+              "ADD",
+              "-j",
+              "1",
+              "-p",
+              "^type=f32,ne=\\[1,1,1,1\\],nr=\\[32,1,1,1\\],nf=1,perm1=0,src_overlap=0$"
+            ],
+            "log_sha256": "300fc88d0db762011e0b77736038864800f161f8562ec4395a45d1bdde4aaae9",
+            "elapsed_seconds": 0.007920479000063096
+          }
+        ],
+        "pass": false
+      }
+    },
+    {
+      "control": "zero-cases",
+      "upstream_exit": 0,
+      "wrapper_exit": 1,
+      "expected_acceptance": false,
+      "receipt": {
+        "harness_source": "e5652705bac011aafe0806228e38b4e8a86410e2",
+        "checkout_ggml_source": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+        "binary_sha256": "f8e265e05570e5ddaa739b05436dbab98d11e4239b35b4abd9f79a049ec90dc3",
+        "system": "Linux",
+        "architecture": "aarch64",
+        "backend": "CPU",
+        "scope": "Existing ggml operator correctness against CPU reference",
+        "model_inference_validated": false,
+        "quantized_model_quality_validated": false,
+        "performance_validated": false,
+        "runs": [
+          {
+            "exit": 0,
+            "selected_backend_completed": true,
+            "cases_passed": 0,
+            "cases_run": 0,
+            "observed_operator_cases": 0,
+            "unsupported_cases": 0,
+            "pass": false,
+            "operator": "ADD",
+            "command": [
+              "/mnt/heavy/scratch/ggml-ops-build/bin/test-backend-ops",
+              "test",
+              "-b",
+              "CPU",
+              "-o",
+              "ADD",
+              "-j",
+              "1",
+              "-p",
+              "NO_PARAMETERS_CAN_MATCH_THIS"
+            ],
+            "log_sha256": "636874228dbc0c77d2e67a542e54e523d997f02c291d1ad09b4b07f7789cf409",
+            "elapsed_seconds": 0.26506945900007395
+          }
+        ],
+        "pass": false
+      }
+    },
+    {
+      "control": "unknown-operator",
+      "upstream_exit": 0,
+      "wrapper_exit": 1,
+      "expected_acceptance": false,
+      "receipt": {
+        "harness_source": "e5652705bac011aafe0806228e38b4e8a86410e2",
+        "checkout_ggml_source": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+        "binary_sha256": "f8e265e05570e5ddaa739b05436dbab98d11e4239b35b4abd9f79a049ec90dc3",
+        "system": "Linux",
+        "architecture": "aarch64",
+        "backend": "CPU",
+        "scope": "Existing ggml operator correctness against CPU reference",
+        "model_inference_validated": false,
+        "quantized_model_quality_validated": false,
+        "performance_validated": false,
+        "runs": [
+          {
+            "exit": 0,
+            "selected_backend_completed": true,
+            "cases_passed": 0,
+            "cases_run": 0,
+            "observed_operator_cases": 0,
+            "unsupported_cases": 0,
+            "pass": false,
+            "operator": "UNKNOWN_OPERATOR_NEGATIVE_CONTROL",
+            "command": [
+              "/mnt/heavy/scratch/ggml-ops-build/bin/test-backend-ops",
+              "test",
+              "-b",
+              "CPU",
+              "-o",
+              "UNKNOWN_OPERATOR_NEGATIVE_CONTROL",
+              "-j",
+              "1",
+              "-p",
+              "^type=f32,ne=\\[1,1,1,1\\],nr=\\[32,1,1,1\\],nf=1,perm1=0,src_overlap=0$"
+            ],
+            "log_sha256": "636874228dbc0c77d2e67a542e54e523d997f02c291d1ad09b4b07f7789cf409",
+            "elapsed_seconds": 0.26513290299999426
+          }
+        ],
+        "pass": false
+      }
+    }
+  ]
+}

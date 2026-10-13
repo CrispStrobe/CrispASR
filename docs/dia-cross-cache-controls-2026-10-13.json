@@ -1,0 +1,52 @@
+{
+  "scope": "Unmerged opt-in F32 cross-cache candidate, hosted OFF/ON/OFF validation queued. No native speech acceptance.",
+  "source": "2205d920d879108b73651ebb9f3eb9499da4e5f5",
+  "preimplementation_main_claim": "873b1254e",
+  "hosted_run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38357576078",
+  "status_at_checkpoint": "queued",
+  "source_files": {
+    "src/dia_tts.cpp": "fc91490e1f4e9c842e208f07ed7335e10cfa18d43d4eef67cf697652088d973d",
+    "tools/ci-heavy/dia_neural_precision_control.py": "3e076b41620cd5066a8cbb230eaff4baad72701c323d645744eddfca2ce84227"
+  },
+  "local_checks": {
+    "cpp_source_syntax": "PASS",
+    "clang_format": 18,
+    "python_syntax": "PASS",
+    "sampler_contracts": {
+      "passed": 6,
+      "skipped": 0,
+      "seconds": 14.178,
+      "log_sha256": "e8eb7f4a1752dee49924a0243075efaf0a832eff48379ec927e142b2e21a9305"
+    },
+    "secrets": {
+      "passed": 4,
+      "skipped": 0,
+      "seconds": 73.48,
+      "log_sha256": "45cb4926212bb1a707967324bd169d1f3f6e11660830bd6aa297532332181d02"
+    }
+  },
+  "env_gate": "CRISPASR_DIA_CROSS_CACHE_F32=1",
+  "default_cache": "F16",
+  "worker_args": "--cross-cache-control",
+  "validation": [
+    "One immutable original F32 neural export matching prior full physical audit and SHA",
+    "Same binary/host F16/F32/F16-repeat caches",
+    "40/40 strict canonical replay stages including cosine and magnitude in each arm",
+    "Actual native CLI and C ABI free speech/ASR for each arm",
+    "F32 cache must pass existing ASR gate",
+    "F16 cache arms retain prior WER 1 rejection",
+    "OFF repeats have exact inputs/logits/native PCM/CLI PCM",
+    "Actual host cross-cache vector-byte receipt verifies doubling"
+  ],
+  "expected_fixed_prompt_host_cache_bytes": {
+    "f16": 11501568,
+    "f32": 23003136,
+    "delta": 11501568,
+    "scope": "Arithmetic expectation for 39 encoder tokens, two batches, 18 layers and two 2048-wide cache streams; actual receipts pending. Excludes scheduler buffers and unused context cache allocations."
+  },
+  "production_defaults_changed": false,
+  "model_pins_changed": false,
+  "full_model_acceptance": false,
+  "gpu_acceptance": false,
+  "q4_acceptance": false
+}

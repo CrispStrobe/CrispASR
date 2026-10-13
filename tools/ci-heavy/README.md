@@ -28,6 +28,16 @@ gh run download <run-id>           # the $HEAVY_OUT artifact
 
 ## Script contract
 
+`dia_dac_converter_validate.py` checks the isolated Dia DAC conversion tool on
+main without needing the diagnostic runtime branch. It runs seven tiny actual
+original-module/CLI contracts, then converts the pinned published template using
+the original DAC checkpoint. The GGUF SHA/size and all 134 physical audit rows
+must match the prior standalone candidate that passed startup/full-history
+numerical comparisons. `dia-dac-export.yml` calls this worker automatically on
+converter/helper/test changes. Run manually with
+`-f pip="numpy torch==2.6.0 torchaudio==2.6.0 torchvision==0.21.0 pydantic safetensors huggingface_hub descript-audio-codec==1.0.0 gguf"`.
+This is conversion integration evidence, not new free-speech or GPU acceptance.
+
 - **`$HEAVY_OUT`**: write results here. The whole directory becomes the run's artifact, kept for 14 days.
 - **`$HEAVY_SCRATCH`**: large scratch space for models, builds and caches. Not uploaded. `HF_HOME` points inside it.
 - **`$HF_TOKEN`**: the repository secret (fine-grained, CI-scoped); may be empty.

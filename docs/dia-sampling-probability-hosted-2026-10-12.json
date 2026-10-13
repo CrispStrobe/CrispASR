@@ -1,0 +1,148 @@
+{
+  "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38307628341",
+  "source": "2cdf631b36821604d894f9775df7db679ea57d2e",
+  "conclusion": "success",
+  "worker_receipt": {
+    "source": "2cdf631b36821604d894f9775df7db679ea57d2e",
+    "probe_script_sha256": "bcb16944cd8d4c67addf8f01048d58d2de1eeaec9e5a88d2e7b01e918a73f28b",
+    "source_worktree_dirty": false,
+    "original_source_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+    "original_source_sha256": "6bc51e6e5ff58ca9ed66431773df6cda954afee3d4b7ea515c1363b73ca82926",
+    "native_header_sha256": "ff0953df65d9dc16cbea97fd5a0f5c7c70ccb0b4da4b8903b2247021b186b1b6",
+    "observer_sha256": "9329603f91cc9cd902e303cae515245912998a6452180e60eac25f9ae12cfc4e",
+    "torch_version": "2.6.0+cpu",
+    "actual_original_logits_run": 38299826144,
+    "prefix_steps": 37,
+    "probability_arms": [
+      {
+        "label": "original-control",
+        "sampled_rows": 333,
+        "support_mismatching_rows": 0,
+        "maximum_absolute_probability_error": 1.7881393432617188e-07,
+        "maximum_total_variation": 2.0702321526511192e-07,
+        "actual_native_samples_reproduced": true,
+        "first_divergence_row": {
+          "step": 36,
+          "codebook": 8,
+          "support_difference": 0,
+          "maximum_absolute_error": 6.133224574045304e-09,
+          "total_variation": 5.953073436981704e-08
+        }
+      },
+      {
+        "label": "native",
+        "sampled_rows": 333,
+        "support_mismatching_rows": 0,
+        "maximum_absolute_probability_error": 3.607609151412561e-07,
+        "maximum_total_variation": 3.2257668959763397e-07,
+        "actual_native_samples_reproduced": true,
+        "first_divergence_row": {
+          "step": 36,
+          "codebook": 8,
+          "support_difference": 0,
+          "maximum_absolute_error": 1.0324502950492809e-08,
+          "total_variation": 7.145273500826221e-08
+        }
+      }
+    ],
+    "production_defaults_changed": false,
+    "speech_acceptance": false,
+    "model_weights_loaded": false,
+    "scope": "Actual probability/filter component replay on the complete identical input prefix; no speech acceptance, RNG compatibility or model-quality waiver."
+  },
+  "files": [
+    {
+      "path": "heavy-38307628341/actual-sampler-probability-observer.cpp",
+      "bytes": 3931,
+      "sha256": "9329603f91cc9cd902e303cae515245912998a6452180e60eac25f9ae12cfc4e"
+    },
+    {
+      "path": "heavy-38307628341/compile.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "heavy-38307628341/native-actual-original-cfg-inputs.f32",
+      "bytes": 1369296,
+      "sha256": "f669ddf1683c6e1a6fee2e1ab4d2789a32ec287adc5ba2eac4cd3a699590f6ad"
+    },
+    {
+      "path": "heavy-38307628341/native-maximum-probability-error.npy",
+      "bytes": 2792,
+      "sha256": "40b615db65f31b5c4a18f743f1681e6ab8318d65e588cbaa86b9773b8755858d"
+    },
+    {
+      "path": "heavy-38307628341/native-native-probabilities.f64",
+      "bytes": 2738592,
+      "sha256": "089a0a15201148cf0513146b0e4f5f80839adbca784a5c67b2c9810bca381b15"
+    },
+    {
+      "path": "heavy-38307628341/native-original-probabilities.npy",
+      "bytes": 1369424,
+      "sha256": "fd76f6dd3ea9556bd22846cbbd76ee73edb84f19c56c24e9c2af32128de24dfe"
+    },
+    {
+      "path": "heavy-38307628341/native-replayed-samples.u32",
+      "bytes": 1332,
+      "sha256": "e5defdc983ad7af9d291a5d17714fb0c36048a67910e639b2f19f5201adfa7db"
+    },
+    {
+      "path": "heavy-38307628341/native-support-difference.npy",
+      "bytes": 2792,
+      "sha256": "2643e33adebf5036fa02320f944c3622b33a3c6a5f23cd3a15728034f4c160d9"
+    },
+    {
+      "path": "heavy-38307628341/native-total-variation.npy",
+      "bytes": 2792,
+      "sha256": "32468abfedec07d56db0dde821357a5a570f60a737a06bead97321d38b081bc0"
+    },
+    {
+      "path": "heavy-38307628341/original-control-actual-original-cfg-inputs.f32",
+      "bytes": 1369296,
+      "sha256": "ed8c93e769b92e6e09255b25fb18004ea04d14a6210a82c3442b30b3b8c9c842"
+    },
+    {
+      "path": "heavy-38307628341/original-control-maximum-probability-error.npy",
+      "bytes": 2792,
+      "sha256": "de84b58730b64a3768191ec61abbaabecd124ff656ab7908c2126fde3249d92b"
+    },
+    {
+      "path": "heavy-38307628341/original-control-native-probabilities.f64",
+      "bytes": 2738592,
+      "sha256": "e1f9d6e3ba3c8dd0704fb59ff1be25e059909c34b946e163368456f04c9fc558"
+    },
+    {
+      "path": "heavy-38307628341/original-control-original-probabilities.npy",
+      "bytes": 1369424,
+      "sha256": "809e171ac5fe2cf048d36c560fd4dca7b2db7c546e0bcdac937bb32e0f074490"
+    },
+    {
+      "path": "heavy-38307628341/original-control-replayed-samples.u32",
+      "bytes": 1332,
+      "sha256": "7383a2e226a9bbc87560e6477cb9402875e99861387b020add3537473ad9a85a"
+    },
+    {
+      "path": "heavy-38307628341/original-control-support-difference.npy",
+      "bytes": 2792,
+      "sha256": "2643e33adebf5036fa02320f944c3622b33a3c6a5f23cd3a15728034f4c160d9"
+    },
+    {
+      "path": "heavy-38307628341/original-control-total-variation.npy",
+      "bytes": 2792,
+      "sha256": "b70f113d1f2dea581935daf1840112d13431a196ca8a1c6f1ae887dc1b7b4ba3"
+    },
+    {
+      "path": "heavy-38307628341/receipt.json",
+      "bytes": 1930,
+      "sha256": "6a844a77a301df0276eb487ff3b60af1b8679fd08cbc72927f1bf9b78b22b87f"
+    },
+    {
+      "path": "hosted.log",
+      "bytes": 48904,
+      "sha256": "87be410830d469960b1c2e22db04379e36d1419309a130ffce5dba46647c9626"
+    }
+  ],
+  "total_files": 18,
+  "total_bytes": 11028805,
+  "scope": "Actual probability/filter component replay on the complete identical input prefix; no speech acceptance, RNG compatibility or model-quality waiver."
+}

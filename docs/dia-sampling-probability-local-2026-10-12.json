@@ -1,0 +1,141 @@
+{
+  "scope": "Local weight-free probability component replay; actual local Torch differs from hosted 2.6.0, so not pinned-hosted acceptance.",
+  "receipt": {
+    "source": "a0b702d0d26b543a82bee689c69ac296d319e5b2",
+    "probe_script_sha256": "bcb16944cd8d4c67addf8f01048d58d2de1eeaec9e5a88d2e7b01e918a73f28b",
+    "source_worktree_dirty": true,
+    "original_source_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+    "original_source_sha256": "6bc51e6e5ff58ca9ed66431773df6cda954afee3d4b7ea515c1363b73ca82926",
+    "native_header_sha256": "ff0953df65d9dc16cbea97fd5a0f5c7c70ccb0b4da4b8903b2247021b186b1b6",
+    "observer_sha256": "9329603f91cc9cd902e303cae515245912998a6452180e60eac25f9ae12cfc4e",
+    "torch_version": "2.11.0+cu130",
+    "actual_original_logits_run": 38299826144,
+    "prefix_steps": 37,
+    "probability_arms": [
+      {
+        "label": "original-control",
+        "sampled_rows": 333,
+        "support_mismatching_rows": 0,
+        "maximum_absolute_probability_error": 1.7881393432617188e-07,
+        "maximum_total_variation": 2.0702321526511192e-07,
+        "actual_native_samples_reproduced": true,
+        "first_divergence_row": {
+          "step": 36,
+          "codebook": 8,
+          "support_difference": 0,
+          "maximum_absolute_error": 6.133224574045304e-09,
+          "total_variation": 5.953073436981704e-08
+        }
+      },
+      {
+        "label": "native",
+        "sampled_rows": 333,
+        "support_mismatching_rows": 0,
+        "maximum_absolute_probability_error": 3.607609151412561e-07,
+        "maximum_total_variation": 3.2257668959763397e-07,
+        "actual_native_samples_reproduced": true,
+        "first_divergence_row": {
+          "step": 36,
+          "codebook": 8,
+          "support_difference": 0,
+          "maximum_absolute_error": 1.0324502950492809e-08,
+          "total_variation": 7.145273500826221e-08
+        }
+      }
+    ],
+    "production_defaults_changed": false,
+    "speech_acceptance": false,
+    "model_weights_loaded": false,
+    "scope": "Actual probability/filter component replay on the complete identical input prefix; no speech acceptance, RNG compatibility or model-quality waiver."
+  },
+  "files": [
+    {
+      "path": "actual-sampler-probability-observer.cpp",
+      "bytes": 3931,
+      "sha256": "9329603f91cc9cd902e303cae515245912998a6452180e60eac25f9ae12cfc4e"
+    },
+    {
+      "path": "compile.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "native-actual-original-cfg-inputs.f32",
+      "bytes": 1369296,
+      "sha256": "f669ddf1683c6e1a6fee2e1ab4d2789a32ec287adc5ba2eac4cd3a699590f6ad"
+    },
+    {
+      "path": "native-maximum-probability-error.npy",
+      "bytes": 2792,
+      "sha256": "f4dec421aeebab6ce3cc5bc3ea0c8bc54d4f39a877d5aa2890e814f5b398adea"
+    },
+    {
+      "path": "native-native-probabilities.f64",
+      "bytes": 2738592,
+      "sha256": "089a0a15201148cf0513146b0e4f5f80839adbca784a5c67b2c9810bca381b15"
+    },
+    {
+      "path": "native-original-probabilities.npy",
+      "bytes": 1369424,
+      "sha256": "d5cfe1d67e9678f2bd4df7f763b33bca4dfb74dfce0001e3348d0300a20e216e"
+    },
+    {
+      "path": "native-replayed-samples.u32",
+      "bytes": 1332,
+      "sha256": "e5defdc983ad7af9d291a5d17714fb0c36048a67910e639b2f19f5201adfa7db"
+    },
+    {
+      "path": "native-support-difference.npy",
+      "bytes": 2792,
+      "sha256": "2643e33adebf5036fa02320f944c3622b33a3c6a5f23cd3a15728034f4c160d9"
+    },
+    {
+      "path": "native-total-variation.npy",
+      "bytes": 2792,
+      "sha256": "8bf9357886a6aeea931d735c92055c4bc94e3d74601782a9f0866f410ae9a566"
+    },
+    {
+      "path": "original-control-actual-original-cfg-inputs.f32",
+      "bytes": 1369296,
+      "sha256": "ed8c93e769b92e6e09255b25fb18004ea04d14a6210a82c3442b30b3b8c9c842"
+    },
+    {
+      "path": "original-control-maximum-probability-error.npy",
+      "bytes": 2792,
+      "sha256": "ae0ce3649e9b9e7443717fb4e36d0feb7a2a08670bfdfdb2d27c0603a5ab7b46"
+    },
+    {
+      "path": "original-control-native-probabilities.f64",
+      "bytes": 2738592,
+      "sha256": "e1f9d6e3ba3c8dd0704fb59ff1be25e059909c34b946e163368456f04c9fc558"
+    },
+    {
+      "path": "original-control-original-probabilities.npy",
+      "bytes": 1369424,
+      "sha256": "316be4444341c1151e455ad072a767eef1de9f9faff476babd89488fd1120eae"
+    },
+    {
+      "path": "original-control-replayed-samples.u32",
+      "bytes": 1332,
+      "sha256": "7383a2e226a9bbc87560e6477cb9402875e99861387b020add3537473ad9a85a"
+    },
+    {
+      "path": "original-control-support-difference.npy",
+      "bytes": 2792,
+      "sha256": "2643e33adebf5036fa02320f944c3622b33a3c6a5f23cd3a15728034f4c160d9"
+    },
+    {
+      "path": "original-control-total-variation.npy",
+      "bytes": 2792,
+      "sha256": "e6530dbb90111fe466fa495c1858265d244b371672adfa5ff028e32c9a877721"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1932,
+      "sha256": "7f074a94a4bcf1a963afdecaadfd9d5951fa2c47ae61b71ee507ae41eb7f318f"
+    }
+  ],
+  "total_bytes": 10979903,
+  "speech_acceptance": false,
+  "pinned_torch_2_6_result_pending": true
+}

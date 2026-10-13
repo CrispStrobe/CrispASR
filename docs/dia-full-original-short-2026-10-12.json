@@ -1,0 +1,869 @@
+{
+  "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38285566623",
+  "source": "3fb35f49e371e4e85e981b00195f391d235a43da",
+  "conclusion": "failure",
+  "original_short_speech": {
+    "phrase": "We are committed to making it secure.",
+    "source_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+    "model_pin": "257bc72f9b78182ccc6fa07675a9ae4c1a44e2cd",
+    "seed": 42,
+    "capacity": 3072,
+    "audio_seconds": 14.048072562358277,
+    "rms": 0.07353386128903242,
+    "finite": true,
+    "scope": "Actual original generate and real DAC",
+    "transcript": "We are committed to making it secure.",
+    "wer": 0.0
+  },
+  "stages": {
+    "f16-diff": {
+      "stages": [
+        {
+          "status": "PASS",
+          "stage": "encoder_tokens",
+          "cos_min": 1.0,
+          "native_rms": 67.03683,
+          "original_rms": 67.03683,
+          "max_row_norm_error": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_input_tokens",
+          "cos_min": 1.0,
+          "native_rms": 615.6529,
+          "original_rms": 615.6529,
+          "max_row_norm_error": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_embedding",
+          "cos_min": 1.0,
+          "native_rms": 0.02740572,
+          "original_rms": 0.02740607,
+          "max_row_norm_error": 7.910275e-05,
+          "max_abs": 0.000104934
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_0",
+          "cos_min": 1.0,
+          "native_rms": 0.2136117,
+          "original_rms": 0.2136083,
+          "max_row_norm_error": 8.246704e-05,
+          "max_abs": 0.000120461
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_1",
+          "cos_min": 1.0,
+          "native_rms": 0.2300532,
+          "original_rms": 0.2300504,
+          "max_row_norm_error": 6.990083e-05,
+          "max_abs": 0.0002167225
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_2",
+          "cos_min": 1.0,
+          "native_rms": 0.2477169,
+          "original_rms": 0.2477142,
+          "max_row_norm_error": 4.644984e-05,
+          "max_abs": 0.0002355576
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_3",
+          "cos_min": 1.0,
+          "native_rms": 0.2691223,
+          "original_rms": 0.2691199,
+          "max_row_norm_error": 4.221436e-05,
+          "max_abs": 0.0002622604
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_4",
+          "cos_min": 1.0,
+          "native_rms": 0.6312048,
+          "original_rms": 0.6312184,
+          "max_row_norm_error": 3.922291e-05,
+          "max_abs": 0.002169609
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_5",
+          "cos_min": 1.0,
+          "native_rms": 0.6449732,
+          "original_rms": 0.644986,
+          "max_row_norm_error": 2.781989e-05,
+          "max_abs": 0.002159119
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_6",
+          "cos_min": 1.0,
+          "native_rms": 0.7165993,
+          "original_rms": 0.716609,
+          "max_row_norm_error": 2.408506e-05,
+          "max_abs": 0.002223969
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_7",
+          "cos_min": 1.0,
+          "native_rms": 0.7797792,
+          "original_rms": 0.7797877,
+          "max_row_norm_error": 2.043225e-05,
+          "max_abs": 0.002223969
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_8",
+          "cos_min": 1.0,
+          "native_rms": 1.10315,
+          "original_rms": 1.103144,
+          "max_row_norm_error": 3.241776e-05,
+          "max_abs": 0.001663208
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_9",
+          "cos_min": 1.0,
+          "native_rms": 1.311736,
+          "original_rms": 1.311728,
+          "max_row_norm_error": 4.435907e-05,
+          "max_abs": 0.00163269
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_10",
+          "cos_min": 1.0,
+          "native_rms": 2.509866,
+          "original_rms": 2.509912,
+          "max_row_norm_error": 4.285698e-05,
+          "max_abs": 0.004646301
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_11",
+          "cos_min": 1.0,
+          "native_rms": 99.14437,
+          "original_rms": 99.1452,
+          "max_row_norm_error": 9.548834e-05,
+          "max_abs": 0.1907959
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_output",
+          "cos_min": 1.0,
+          "native_rms": 0.06661072,
+          "original_rms": 0.06661054,
+          "max_row_norm_error": 0.0001056409,
+          "max_abs": 7.724762e-05
+        },
+        {
+          "status": "PASS",
+          "stage": "cross_k0",
+          "cos_min": 0.9999999,
+          "native_rms": 0.0938918,
+          "original_rms": 0.0938895,
+          "max_row_norm_error": 0.0002152159,
+          "max_abs": 0.0006908178
+        },
+        {
+          "status": "PASS",
+          "stage": "cross_v0",
+          "cos_min": 0.9999999,
+          "native_rms": 0.02553369,
+          "original_rms": 0.02553382,
+          "max_row_norm_error": 7.901426e-05,
+          "max_abs": 0.0002186298
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_ca0",
+          "cos_min": 1.0,
+          "native_rms": 0.05514443,
+          "original_rms": 0.05514473,
+          "max_row_norm_error": 5.485466e-05,
+          "max_abs": 4.762411e-05
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_0",
+          "cos_min": 1.0,
+          "native_rms": 1.07509,
+          "original_rms": 1.075173,
+          "max_row_norm_error": 7.738495e-05,
+          "max_abs": 0.002828598
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_1",
+          "cos_min": 1.0,
+          "native_rms": 1.26808,
+          "original_rms": 1.26816,
+          "max_row_norm_error": 6.370483e-05,
+          "max_abs": 0.002826691
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_2",
+          "cos_min": 1.0,
+          "native_rms": 1.313092,
+          "original_rms": 1.313169,
+          "max_row_norm_error": 5.928144e-05,
+          "max_abs": 0.002723694
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_3",
+          "cos_min": 1.0,
+          "native_rms": 1.27197,
+          "original_rms": 1.272056,
+          "max_row_norm_error": 7.061888e-05,
+          "max_abs": 0.003261566
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_4",
+          "cos_min": 1.0,
+          "native_rms": 1.305629,
+          "original_rms": 1.305711,
+          "max_row_norm_error": 6.361011e-05,
+          "max_abs": 0.003250122
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_5",
+          "cos_min": 1.0,
+          "native_rms": 1.170317,
+          "original_rms": 1.170384,
+          "max_row_norm_error": 6.028194e-05,
+          "max_abs": 0.002767563
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_6",
+          "cos_min": 1.0,
+          "native_rms": 1.177974,
+          "original_rms": 1.178037,
+          "max_row_norm_error": 5.685091e-05,
+          "max_abs": 0.002759933
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_7",
+          "cos_min": 1.0,
+          "native_rms": 1.233156,
+          "original_rms": 1.233209,
+          "max_row_norm_error": 4.271316e-05,
+          "max_abs": 0.001831055
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_8",
+          "cos_min": 1.0,
+          "native_rms": 1.363376,
+          "original_rms": 1.363418,
+          "max_row_norm_error": 3.200017e-05,
+          "max_abs": 0.001728058
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_9",
+          "cos_min": 1.0,
+          "native_rms": 1.580461,
+          "original_rms": 1.580486,
+          "max_row_norm_error": 1.662279e-05,
+          "max_abs": 0.001132488
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_10",
+          "cos_min": 1.0,
+          "native_rms": 1.617412,
+          "original_rms": 1.617447,
+          "max_row_norm_error": 2.864786e-05,
+          "max_abs": 0.002632141
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_11",
+          "cos_min": 1.0,
+          "native_rms": 1.757319,
+          "original_rms": 1.757326,
+          "max_row_norm_error": 1.025947e-05,
+          "max_abs": 0.00113678
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_12",
+          "cos_min": 1.0,
+          "native_rms": 1.784979,
+          "original_rms": 1.784995,
+          "max_row_norm_error": 1.596586e-05,
+          "max_abs": 0.001773834
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_13",
+          "cos_min": 1.0,
+          "native_rms": 1.830634,
+          "original_rms": 1.83064,
+          "max_row_norm_error": 1.01066e-05,
+          "max_abs": 0.001514435
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_14",
+          "cos_min": 1.0,
+          "native_rms": 1.923517,
+          "original_rms": 1.92351,
+          "max_row_norm_error": 1.313328e-05,
+          "max_abs": 0.001737595
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_15",
+          "cos_min": 1.0,
+          "native_rms": 2.056698,
+          "original_rms": 2.056668,
+          "max_row_norm_error": 3.397167e-05,
+          "max_abs": 0.002725601
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_16",
+          "cos_min": 1.0,
+          "native_rms": 2.326066,
+          "original_rms": 2.326075,
+          "max_row_norm_error": 3.350189e-05,
+          "max_abs": 0.003442764
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_17",
+          "cos_min": 1.0,
+          "native_rms": 5.352449,
+          "original_rms": 5.352228,
+          "max_row_norm_error": 4.522814e-05,
+          "max_abs": 0.006912231
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_hidden",
+          "cos_min": 1.0,
+          "native_rms": 0.2808864,
+          "original_rms": 0.2809017,
+          "max_row_norm_error": 6.445025e-05,
+          "max_abs": 0.0003884137
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_step_logits",
+          "cos_min": 0.9999989,
+          "native_rms": 6.966298,
+          "original_rms": 6.966216,
+          "max_row_norm_error": 0.0008548312,
+          "max_abs": 0.02109241
+        },
+        {
+          "status": "PASS",
+          "stage": "decoded_audio",
+          "cos_min": 0.9999999,
+          "native_rms": 0.07353059,
+          "original_rms": 0.07353386,
+          "max_row_norm_error": 4.443983e-05,
+          "max_abs": 0.0002500415
+        }
+      ],
+      "passed": 40,
+      "earliest_failure": null
+    },
+    "q4_k-diff": {
+      "stages": [
+        {
+          "status": "PASS",
+          "stage": "encoder_tokens",
+          "cos_min": 1.0,
+          "native_rms": 67.03683,
+          "original_rms": 67.03683,
+          "max_row_norm_error": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_input_tokens",
+          "cos_min": 1.0,
+          "native_rms": 615.6529,
+          "original_rms": 615.6529,
+          "max_row_norm_error": 0.0,
+          "max_abs": 0.0
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_embedding",
+          "cos_min": 1.0,
+          "native_rms": 0.02740572,
+          "original_rms": 0.02740607,
+          "max_row_norm_error": 7.910275e-05,
+          "max_abs": 0.000104934
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_0",
+          "cos_min": 0.9999247,
+          "native_rms": 0.2121767,
+          "original_rms": 0.2136083,
+          "max_row_norm_error": 0.010224,
+          "max_abs": 0.02596402
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_1",
+          "cos_min": 0.9999298,
+          "native_rms": 0.22853,
+          "original_rms": 0.2300504,
+          "max_row_norm_error": 0.01048386,
+          "max_abs": 0.02558517
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_2",
+          "cos_min": 0.9998315,
+          "native_rms": 0.2460566,
+          "original_rms": 0.2477142,
+          "max_row_norm_error": 0.01035845,
+          "max_abs": 0.02713728
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_3",
+          "cos_min": 0.999846,
+          "native_rms": 0.267328,
+          "original_rms": 0.2691199,
+          "max_row_norm_error": 0.009445402,
+          "max_abs": 0.02765465
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_4",
+          "cos_min": 0.9998322,
+          "native_rms": 0.6261221,
+          "original_rms": 0.6312184,
+          "max_row_norm_error": 0.010453,
+          "max_abs": 0.1148548
+        },
+        {
+          "status": "PASS",
+          "stage": "encoder_layer_5",
+          "cos_min": 0.999804,
+          "native_rms": 0.639926,
+          "original_rms": 0.644986,
+          "max_row_norm_error": 0.01011369,
+          "max_abs": 0.1144886
+        },
+        {
+          "status": "FAIL",
+          "stage": "encoder_layer_6",
+          "cos_min": 0.999377,
+          "native_rms": 0.7114094,
+          "original_rms": 0.716609,
+          "max_row_norm_error": 0.009455288,
+          "max_abs": 0.1141863
+        },
+        {
+          "status": "FAIL",
+          "stage": "encoder_layer_7",
+          "cos_min": 0.9989184,
+          "native_rms": 0.7740094,
+          "original_rms": 0.7797877,
+          "max_row_norm_error": 0.01111893,
+          "max_abs": 0.1234741
+        },
+        {
+          "status": "FAIL",
+          "stage": "encoder_layer_8",
+          "cos_min": 0.9981003,
+          "native_rms": 1.094337,
+          "original_rms": 1.103144,
+          "max_row_norm_error": 0.0189042,
+          "max_abs": 0.1654282
+        },
+        {
+          "status": "FAIL",
+          "stage": "encoder_layer_9",
+          "cos_min": 0.9975773,
+          "native_rms": 1.301574,
+          "original_rms": 1.311728,
+          "max_row_norm_error": 0.01681487,
+          "max_abs": 0.3067258
+        },
+        {
+          "status": "FAIL",
+          "stage": "encoder_layer_10",
+          "cos_min": 0.9978366,
+          "native_rms": 2.478698,
+          "original_rms": 2.509912,
+          "max_row_norm_error": 0.02004952,
+          "max_abs": 0.5881497
+        },
+        {
+          "status": "FAIL",
+          "stage": "encoder_layer_11",
+          "cos_min": 0.9983521,
+          "native_rms": 97.94216,
+          "original_rms": 99.1452,
+          "max_row_norm_error": 0.02031708,
+          "max_abs": 16.27136
+        },
+        {
+          "status": "FAIL",
+          "stage": "encoder_output",
+          "cos_min": 0.9695488,
+          "native_rms": 0.06662235,
+          "original_rms": 0.06661054,
+          "max_row_norm_error": 0.04687009,
+          "max_abs": 0.02861953
+        },
+        {
+          "status": "FAIL",
+          "stage": "cross_k0",
+          "cos_min": 0.9975261,
+          "native_rms": 0.09338794,
+          "original_rms": 0.0938895,
+          "max_row_norm_error": 0.0211326,
+          "max_abs": 0.05932412
+        },
+        {
+          "status": "FAIL",
+          "stage": "cross_v0",
+          "cos_min": 0.9919656,
+          "native_rms": 0.0255704,
+          "original_rms": 0.02553382,
+          "max_row_norm_error": 0.01253727,
+          "max_abs": 0.03384875
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_ca0",
+          "cos_min": 0.9996486,
+          "native_rms": 0.05422011,
+          "original_rms": 0.05514473,
+          "max_row_norm_error": 0.02704732,
+          "max_abs": 0.03540844
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_0",
+          "cos_min": 0.9995364,
+          "native_rms": 1.053133,
+          "original_rms": 1.075173,
+          "max_row_norm_error": 0.02186032,
+          "max_abs": 0.8622417
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_1",
+          "cos_min": 0.9996702,
+          "native_rms": 1.250676,
+          "original_rms": 1.26816,
+          "max_row_norm_error": 0.0147863,
+          "max_abs": 0.6907921
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_2",
+          "cos_min": 0.9996732,
+          "native_rms": 1.298364,
+          "original_rms": 1.313169,
+          "max_row_norm_error": 0.01268219,
+          "max_abs": 0.6568642
+        },
+        {
+          "status": "PASS",
+          "stage": "decoder_layer_3",
+          "cos_min": 0.999577,
+          "native_rms": 1.259954,
+          "original_rms": 1.272056,
+          "max_row_norm_error": 0.01176439,
+          "max_abs": 0.599617
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_4",
+          "cos_min": 0.9994162,
+          "native_rms": 1.296679,
+          "original_rms": 1.305711,
+          "max_row_norm_error": 0.007366512,
+          "max_abs": 0.3369789
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_5",
+          "cos_min": 0.9990306,
+          "native_rms": 1.160923,
+          "original_rms": 1.170384,
+          "max_row_norm_error": 0.008764358,
+          "max_abs": 0.4685822
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_6",
+          "cos_min": 0.998647,
+          "native_rms": 1.164347,
+          "original_rms": 1.178037,
+          "max_row_norm_error": 0.01231718,
+          "max_abs": 0.7619572
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_7",
+          "cos_min": 0.9985576,
+          "native_rms": 1.224759,
+          "original_rms": 1.233209,
+          "max_row_norm_error": 0.008779432,
+          "max_abs": 0.4352894
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_8",
+          "cos_min": 0.9982656,
+          "native_rms": 1.35406,
+          "original_rms": 1.363418,
+          "max_row_norm_error": 0.008234131,
+          "max_abs": 0.4920645
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_9",
+          "cos_min": 0.9984691,
+          "native_rms": 1.561594,
+          "original_rms": 1.580486,
+          "max_row_norm_error": 0.01285166,
+          "max_abs": 0.6653709
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_10",
+          "cos_min": 0.9979354,
+          "native_rms": 1.602512,
+          "original_rms": 1.617447,
+          "max_row_norm_error": 0.009820824,
+          "max_abs": 0.5855684
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_11",
+          "cos_min": 0.9980802,
+          "native_rms": 1.751945,
+          "original_rms": 1.757326,
+          "max_row_norm_error": 0.004800306,
+          "max_abs": 0.5885201
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_12",
+          "cos_min": 0.997937,
+          "native_rms": 1.775764,
+          "original_rms": 1.784995,
+          "max_row_norm_error": 0.007407652,
+          "max_abs": 0.7150288
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_13",
+          "cos_min": 0.9960122,
+          "native_rms": 1.822745,
+          "original_rms": 1.83064,
+          "max_row_norm_error": 0.005630581,
+          "max_abs": 0.6927452
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_14",
+          "cos_min": 0.9959038,
+          "native_rms": 1.920617,
+          "original_rms": 1.92351,
+          "max_row_norm_error": 0.002618426,
+          "max_abs": 0.8945122
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_15",
+          "cos_min": 0.9966255,
+          "native_rms": 2.05127,
+          "original_rms": 2.056668,
+          "max_row_norm_error": 0.003726442,
+          "max_abs": 0.8925552
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_16",
+          "cos_min": 0.9963875,
+          "native_rms": 2.311409,
+          "original_rms": 2.326075,
+          "max_row_norm_error": 0.007364269,
+          "max_abs": 1.081142
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_layer_17",
+          "cos_min": 0.998198,
+          "native_rms": 5.463028,
+          "original_rms": 5.352228,
+          "max_row_norm_error": 0.02561664,
+          "max_abs": 2.871681
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_hidden",
+          "cos_min": 0.9876548,
+          "native_rms": 0.2757167,
+          "original_rms": 0.2809017,
+          "max_row_norm_error": 0.02124209,
+          "max_abs": 0.2591808
+        },
+        {
+          "status": "FAIL",
+          "stage": "decoder_step_logits",
+          "cos_min": 0.9732252,
+          "native_rms": 6.923172,
+          "original_rms": 6.966216,
+          "max_row_norm_error": 0.1251981,
+          "max_abs": 3.392615
+        },
+        {
+          "status": "PASS",
+          "stage": "decoded_audio",
+          "cos_min": 0.9999999,
+          "native_rms": 0.07353059,
+          "original_rms": 0.07353386,
+          "max_row_norm_error": 4.443983e-05,
+          "max_abs": 0.0002500415
+        }
+      ],
+      "passed": 13,
+      "earliest_failure": {
+        "status": "FAIL",
+        "stage": "encoder_layer_6",
+        "cos_min": 0.999377,
+        "native_rms": 0.7114094,
+        "original_rms": 0.716609,
+        "max_row_norm_error": 0.009455288,
+        "max_abs": 0.1141863
+      }
+    }
+  },
+  "native_free_speech_acceptance": false,
+  "startup_128_step_codec_failure_superseded": false,
+  "files": [
+    {
+      "path": "failed-step.log",
+      "bytes": 39911,
+      "sha256": "4c52c20b89316efcf7d4e417c677f16792d9325bb65600517368e316929bd011"
+    },
+    {
+      "path": "heavy-38285566623/build-diff.log",
+      "bytes": 420489,
+      "sha256": "0d8150d0af4f6833fe32471ed2febf7cf1152d23003e656bca03e20a8f13c666"
+    },
+    {
+      "path": "heavy-38285566623/configure.log",
+      "bytes": 2472,
+      "sha256": "49cbed03098a770b31a9401b4cb3e220c47b6095a72cf3b1f718e1fcf92e5045"
+    },
+    {
+      "path": "heavy-38285566623/f16-diff.log",
+      "bytes": 5797,
+      "sha256": "eace043480916e1dece73b0fee1f28205f795c45f8d62fe891d17223d3146523"
+    },
+    {
+      "path": "heavy-38285566623/missing-ref.gguf",
+      "bytes": 99073216,
+      "sha256": "50d9a9684ac56fd7fc61d7da1dba502b602d56b5e2de5b3ba8e12a28da02ee38"
+    },
+    {
+      "path": "heavy-38285566623/missing-stage-negative.log",
+      "bytes": 5742,
+      "sha256": "6193b3aeaa4256045997506ff8c6bc72a205c8fd5cb0812088eb48da980a267d"
+    },
+    {
+      "path": "heavy-38285566623/original-full-short-speech-asr.log",
+      "bytes": 769,
+      "sha256": "8415be37ca8674e30f051983c0323d04f63e622ff99d691be2a4d673d8188a0d"
+    },
+    {
+      "path": "heavy-38285566623/original-pcm.npy",
+      "bytes": 2478208,
+      "sha256": "5c4331e165afa1e5342cf4cf3f9c50e7100e3a192a4835beb8e7c66d4fa13d6d"
+    },
+    {
+      "path": "heavy-38285566623/original-reference.log",
+      "bytes": 3950,
+      "sha256": "3a9b677fba62c7d0a7b08d2b97d57cab36f3269173657de2b401ec70f6044d18"
+    },
+    {
+      "path": "heavy-38285566623/original-reported.json",
+      "bytes": 419,
+      "sha256": "7c760de3cb029e37c2f512dcbcf37be328bd0d8ef9c414f7a0c3634f5762ac14"
+    },
+    {
+      "path": "heavy-38285566623/original-reported.npy",
+      "bytes": 2478208,
+      "sha256": "5c4331e165afa1e5342cf4cf3f9c50e7100e3a192a4835beb8e7c66d4fa13d6d"
+    },
+    {
+      "path": "heavy-38285566623/q4_k-diff.log",
+      "bytes": 5657,
+      "sha256": "6a1115244e196fdc8d2cc657e902386303d1871e7f36630d0cc8b002fbf15506"
+    },
+    {
+      "path": "heavy-38285566623/receipt.json",
+      "bytes": 2193,
+      "sha256": "e04ff12fb81089d4879ab0a3932b65f45f6812093dba7cb3d287082e18dbd7ae"
+    },
+    {
+      "path": "heavy-38285566623/ref.gguf",
+      "bytes": 99392768,
+      "sha256": "3db6f8923abffd612e6c83d7036debebd10ed28b77c3eb9ec3d91fec1ce1a542"
+    },
+    {
+      "path": "heavy-38285566623/reference.json",
+      "bytes": 1630,
+      "sha256": "ef06abcadae3a2ba99952454c33add17108d75db8b660c92fd4ca09247b41a80"
+    },
+    {
+      "path": "heavy-38285566623/scaled-ref.gguf",
+      "bytes": 99392768,
+      "sha256": "a5499ac62af86e6c3a52781265800ef3b99bb53ff691fd1bbaaf8dc66c002ca1"
+    },
+    {
+      "path": "heavy-38285566623/scaled-reference-negative.log",
+      "bytes": 5789,
+      "sha256": "4e38f4cee8096c1a0266ca900798d1a9fb002c89b90efe6346f976e2b9e12e75"
+    },
+    {
+      "path": "heavy-38285566623/source-clone.log",
+      "bytes": 50,
+      "sha256": "571a93ec73f7315903ea1fa9fabbefc82c4cb76b0161250b9b50c148629b3628"
+    },
+    {
+      "path": "heavy-38285566623/source-pin.log",
+      "bytes": 69,
+      "sha256": "f0942a9cddd60829668ddd4ba0579d062f9c02c3ad16981bca0e3b81fb7c1e35"
+    },
+    {
+      "path": "heavy-38285566623/tiny-original-contracts.log",
+      "bytes": 676,
+      "sha256": "0919527dcb41db6e5a67ba401f741782bd2874c72bd266d82e285ec9e6374529"
+    },
+    {
+      "path": "hosted.log",
+      "bytes": 82181,
+      "sha256": "72666403fa62eaf5b198d596801a984d55e1c621b578388ef00ae5a8261300cd"
+    }
+  ]
+}

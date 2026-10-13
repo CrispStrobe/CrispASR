@@ -1,0 +1,35 @@
+name: Dia public proof retrieval
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'tools/dia_proof_archives.py'
+      - 'tests/test_dia_proof_archives.py'
+      - 'docs/dia-public-proof-archives-2026-10-13.json'
+      - '.github/workflows/dia-proof-archives.yml'
+  pull_request:
+    paths:
+      - 'tools/dia_proof_archives.py'
+      - 'tests/test_dia_proof_archives.py'
+      - 'docs/dia-public-proof-archives-2026-10-13.json'
+      - '.github/workflows/dia-proof-archives.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - name: Corruption and extraction contracts
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python3 tests/test_dia_proof_archives.py -v
+      - name: Retrieve full pinned public RNG proof anonymously
+        env:
+          TMPDIR: ${{ runner.temp }}
+        run: python3 tools/dia_proof_archives.py portable-rng "$RUNNER_TEMP/dia-proof"

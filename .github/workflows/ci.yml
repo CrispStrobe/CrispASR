@@ -164,8 +164,16 @@ jobs:
           python3 tools/gen-backend-caps-table.py --check --crispasr build/bin/crispasr
           python3 tests/test_backend_caps_abi.py --cli build/bin/crispasr --build-dir build
 
+      - name: Check production GPU backend/device selection without hardware
+        run: python3 tests/test_gpu_backend_selection.py -v
+
       # -E live: model-dependent tests need weights this job has no business
       # downloading. --timeout: a hung unit test must not eat the runner.
+      - name: Breeze guided acceptance deletion controls
+        run: |
+          python3 -m pip install numpy
+          python3 tests/test_breeze_guided_validation.py -v
+
       - name: Run the unit tier
         run: ctest --test-dir build -L unit -E live --output-on-failure --timeout 300
 
@@ -186,6 +194,10 @@ jobs:
 
       - name: Session result UTF-8 contract (native functions and strict Python decode)
         run: python3 tests/test_session_utf8.py -v
+
+
+      - name: Breeze session reference and instruction composition
+        run: python3 tests/test_breeze_session_modes.py -v
 
   # ====================================================================
   # The -DCRISPASR_AMR_FETCH=ON path compiles opencore-amr from source (for

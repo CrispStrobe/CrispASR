@@ -49,20 +49,47 @@
         "architecture": "arm64",
         "chip": "310p",
         "acl_graph": "off",
-        "status": "queued"
+        "status": "completed",
+        "conclusion": "success",
+        "log_bytes": 992014,
+        "log_sha256": "41ecf99c968ffa89fbf74a9e8290f89feeeec7207217baeeb110aef4a7027549",
+        "compiled_targets": [
+          "ggml-cann",
+          "crispasr-cli",
+          "crispasr-lib",
+          "crispasr-diff",
+          "crispasr-quantize"
+        ],
+        "image_digests": [
+          "sha256:c2c20af86d7737ebf2373ebe0bf226edae80896e6de943d82fb50ccd08252a86"
+        ]
       },
       {
         "id": 114869221253,
         "architecture": "x86_64",
         "chip": "910b",
         "acl_graph": "on",
-        "status": "queued"
+        "status": "completed",
+        "conclusion": "success",
+        "log_bytes": 962729,
+        "log_sha256": "a1d28ff181867015a1ed5bf527db443e17d6896307e88baea777a2a5cdda3a38",
+        "compiled_targets": [
+          "ggml-cann",
+          "crispasr-cli",
+          "crispasr-lib",
+          "crispasr-diff",
+          "crispasr-quantize"
+        ],
+        "image_digests": [
+          "sha256:0c8097e72727bfcc2f761b11abdceb9a1a54f6b1061341c7d3a78dbcee2dba3a"
+        ]
       }
     ],
     "secret_checks": {
       "passed": 4,
       "skips": 0,
       "seconds": 51.2
-    }
+    },
+    "conclusion": "success"
   }
 }

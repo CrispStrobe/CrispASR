@@ -1,0 +1,71 @@
+{
+  "scope": "Tiny pinned-original neural model, fixture seed 17. Fixed first decoder input, F32 original versus only cross-cache F16 roundtrip; no native execution, real model weights, sampler, speech, GPU or acceptance proof.",
+  "torch_version": "2.6.0+cpu",
+  "blueprint_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+  "blueprint_hashes": {
+    "dia/__init__.py": "d6cc98eb95ccf0123697c036df7759db197d5424aa9eb52f75e8d4f88d736b6a",
+    "dia/audio.py": "a4a92aba2e0b45a3da2ac8c27c36002501a0500a528eb9e613661f7d9a057875",
+    "dia/config.py": "6bbdb7c764e11b9b9f4170948cb06da5a4dec00b2c080090ce96975fce731698",
+    "dia/layers.py": "9b77d590101783a7e570bd9889afb09b85912d05072313c32a984dbfe9323024",
+    "dia/model.py": "6bc51e6e5ff58ca9ed66431773df6cda954afee3d4b7ea515c1363b73ca82926",
+    "dia/state.py": "83d0ddc651bab76afe91c8851b515f12863d1221778765a6d9d4462581f5d13f"
+  },
+  "runtime_branch_parent": "9b6870bf44c198860de81b24227527d04e457fbb",
+  "text": "[S1] We are committed to making it secure.",
+  "arms": [
+    {
+      "arm": "original-f32",
+      "cache_dtype": "torch.float32"
+    },
+    {
+      "arm": "rounded-cross-cache",
+      "cache_dtype": "torch.float32"
+    },
+    {
+      "arm": "repeat-original-f32",
+      "cache_dtype": "torch.float32"
+    }
+  ],
+  "original_repeat_byte_identical": true,
+  "fixed_decoder_inputs_exact": true,
+  "comparisons": [
+    {
+      "name": "k0",
+      "changed_values": 2046,
+      "values": 2048,
+      "max_abs": 5.6371092796325684e-05,
+      "cosine": 0.9999999794944655,
+      "relative_norm_error": 9.578904068385796e-06,
+      "relative_l2": 0.0002027392851969473
+    },
+    {
+      "name": "v0",
+      "changed_values": 2048,
+      "values": 2048,
+      "max_abs": 4.945695400238037e-05,
+      "cosine": 0.9999999934277979,
+      "relative_norm_error": 7.453881377605942e-05,
+      "relative_l2": 0.0001367459644389256
+    },
+    {
+      "name": "logits",
+      "changed_values": 18393,
+      "values": 18504,
+      "max_abs": 2.1494925022125244e-06,
+      "cosine": 0.9999999999778083,
+      "relative_norm_error": 5.134578073828777e-08,
+      "relative_l2": 6.662349808979184e-06
+    }
+  ],
+  "actual_arrays_sha256": "6d0447006a7794383c7fd7e15e93835db45496afb90147bc7866ea1d79e60a48",
+  "probe_sha256": "bd5555399adfd1dfcac23a2a91146bab1910f7b25bcc3541279cd4de586af6fc",
+  "retained_proof_folder": "/mnt/storage/crispasr/dia-short-20261012/cross-cache-original-probe",
+  "native_source_observation": {
+    "path": "src/dia_tts.cpp",
+    "source": "9b6870bf44c198860de81b24227527d04e457fbb",
+    "projection_readback": "F32 projections rounded to ggml_fp16_t vectors",
+    "decoder_inputs": "GGML_TYPE_F16 cross-attention inputs",
+    "original_source_observation": "precompute_cross_attn_cache passes projected tensors to KVCache.from_kv without dtype conversion"
+  },
+  "next_control": "If the executing fixed neural precision arms reject speech, isolate cross-cache F32 with unchanged model/input/sampler/ASR gates after a separate preimplementation claim. No runtime graph change from this probe."
+}

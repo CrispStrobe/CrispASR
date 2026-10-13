@@ -1,14 +1,36 @@
 #!/usr/bin/env python3
 """Physical mixed-precision exports from tiny actual DAC original modules."""
 import os
+import importlib.util
 from pathlib import Path
+import sys
 import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
 import test_dia_codec_parameters as fixtures
 from dia_dac_export import CHECKPOINT_SHA, OUTPUT_NAMES, export_precision, mapped_gguf
+
+
+class ConverterCLITest(unittest.TestCase):
+    def test_wrong_template_fails_before_loading_model_dependencies(self):
+        path = Path(__file__).resolve().parents[1] / 'models/convert-dia-dac-to-gguf.py'
+        spec = importlib.util.spec_from_file_location('dia_dac_converter', path)
+        converter = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(converter)
+        with tempfile.TemporaryDirectory(dir=os.environ['TMPDIR']) as directory:
+            template, output, receipt = [Path(directory) / name for name in ('wrong.gguf', 'output.gguf', 'audit.json')]
+            template.write_bytes(b'not the pinned published DAC template')
+            argv = [str(path), '--template', str(template), '--output', str(output),
+                    '--precision', 'output-f32', '--receipt', str(receipt)]
+            with mock.patch.object(sys, 'argv', argv), mock.patch.dict(sys.modules, {'torch': None, 'dac': None}):
+                with self.assertRaises(SystemExit) as caught:
+                    converter.main()
+            self.assertEqual(caught.exception.code, 2)
+            self.assertFalse(output.exists())
+            self.assertFalse(receipt.exists())
 
 
 class CodecExportTest(fixtures.CodecParameterTest):

@@ -4,6 +4,21 @@ Test audio: jfk.wav (11.0s), Q4_K quantization, greedy decode (`-bs 1`).
 
 ---
 
+## Dia precision and speech gate — 2026-10-13
+
+Profiling and optimization follow actual speech acceptance. The fixed original
+heads-only F32 model is 3,260,520,512 bytes (+37,896,192 versus published F16);
+all-original-F32 is 6,444,668,992 bytes (+3,222,044,672). Both physically audited
+exports pass 40/40 canonical replay stages but fail free CLI/C-ABI ASR with
+empty transcripts/WER 1. Full F32 reaches 865 exact shared-input steps before
+branching, versus 77 for heads-only F32. Aligned full-F32 logit minimum cosine
+is 0.9999999992869937 and maximum relative norm error 2.40027e-5; this does not
+establish recognizable output. The canonical prompt has quiet leading complete
+seconds 0–11, so a long matched input prefix alone is not speech acceptance.
+These sizes are diagnostic exports, not new
+recommended downloads; no speedup or production model-pin change is claimed.
+[Complete original coefficients, stage/norm rows and speech receipts](docs/dia-neural-precision-hosted-2026-10-13.json).
+
 ## MiMo CUDA graph phases — 2026-10-08
 
 Actual Tesla T4, original Q4 files, unchanged arithmetic and production decode

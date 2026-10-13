@@ -1,0 +1,123 @@
+{
+  "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38317325099",
+  "worker_receipt": {
+    "source": "3ba3a317ab5d2996adfde1efef2c23811fc9e049",
+    "source_worktree_dirty": false,
+    "script_sha256": "f4c90010e0f1b5e31f6df69a53e1ea711b8fb306b851ef7c68b55917a9b248ba",
+    "original_source_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+    "original_source_files": {
+      "dia/__init__.py": "d6cc98eb95ccf0123697c036df7759db197d5424aa9eb52f75e8d4f88d736b6a",
+      "dia/audio.py": "a4a92aba2e0b45a3da2ac8c27c36002501a0500a528eb9e613661f7d9a057875",
+      "dia/config.py": "6bbdb7c764e11b9b9f4170948cb06da5a4dec00b2c080090ce96975fce731698",
+      "dia/layers.py": "9b77d590101783a7e570bd9889afb09b85912d05072313c32a984dbfe9323024",
+      "dia/model.py": "6bc51e6e5ff58ca9ed66431773df6cda954afee3d4b7ea515c1363b73ca82926",
+      "dia/state.py": "83d0ddc651bab76afe91c8851b515f12863d1221778765a6d9d4462581f5d13f"
+    },
+    "reference_sha256": "3db6f8923abffd612e6c83d7036debebd10ed28b77c3eb9ec3d91fec1ce1a542",
+    "original_run": 38285566623,
+    "torch_version": "2.6.0+cpu",
+    "mkl_available": true,
+    "model_weights_loaded": false,
+    "production_defaults_changed": false,
+    "speech_acceptance": false,
+    "scope": "Compiled portable RNG candidate with actual original filtering/generate/delay feedback; no neural, PCM or native free-generation acceptance.",
+    "candidate_header_sha256": "e2d42a64b8b4d0bbc3948c4da29b8395d42f20b4df10b80bec1b101c41b7df0e",
+    "candidate_bridge_sha256": "24d5a6b32074f116df9e68146782a762662768bf166334aea430e27423cb593d",
+    "candidate_binary_sha256": "90e9a06dde3d404bc446d59e8520e008c69546b5b0ce24c29c607a3d48aca5e5",
+    "candidate_filter_header_sha256": "ad23c213ed9fde411f4ce6648cd3383470dc4fb4504195794bce96b2c655f6cf",
+    "production_calls_changed": false,
+    "compiled_candidate_draws_exact": true,
+    "native_filter_and_candidate_draws_exact": true,
+    "canonical_input_transitions_exact": true,
+    "canonical_final_codes_exact": true,
+    "exponential_race_samples_and_rng_state_exact": true,
+    "steps": 1226,
+    "sampled_rows": 11034,
+    "rng_state_bytes": 5056,
+    "codec_frames": 1210,
+    "component_replay_pass": true,
+    "split_row_negative": {
+      "sample_mismatches": 9090,
+      "scope": "Fixed row-by-row Torch sampling from each same pre-batch RNG state; diagnostic only, never used for feedback."
+    },
+    "noise_comparison": {
+      "values": 11342952,
+      "bit_differences": 964677,
+      "maximum_absolute_error": 9.5367431640625e-07,
+      "maximum_relative_error": 0.0026954703498631716,
+      "norm_relative_error": 7.682645630779916e-10,
+      "cosine": 0.9999999999999941
+    },
+    "actual-torch-exponential-noise.f32": {
+      "bytes": 45371808,
+      "sha256": "6a64367db8f4ce9ab9efe5b43d00e708ede3e625ac00e18058a51c7c2622fce8"
+    },
+    "actual-torch-rng-states.u8": {
+      "bytes": 6198656,
+      "sha256": "40472b37eed418f252efbe9851a231d2edf683fe6666bfc702c6095822428c1d"
+    },
+    "portable-exponential-noise.f32": {
+      "bytes": 45371808,
+      "sha256": "043808949bf0fc51206bc154a5755fb80d44127326bc7419c0ca4c635cf77dba"
+    }
+  },
+  "files": [
+    {
+      "path": "actual-torch-exponential-noise.f32",
+      "bytes": 45371808,
+      "sha256": "6a64367db8f4ce9ab9efe5b43d00e708ede3e625ac00e18058a51c7c2622fce8"
+    },
+    {
+      "path": "actual-torch-rng-states.u8",
+      "bytes": 6198656,
+      "sha256": "40472b37eed418f252efbe9851a231d2edf683fe6666bfc702c6095822428c1d"
+    },
+    {
+      "path": "compile.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "portable-exponential-noise.f32",
+      "bytes": 45371808,
+      "sha256": "043808949bf0fc51206bc154a5755fb80d44127326bc7419c0ca4c635cf77dba"
+    },
+    {
+      "path": "portable-sampler-bridge.cpp",
+      "bytes": 1269,
+      "sha256": "24d5a6b32074f116df9e68146782a762662768bf166334aea430e27423cb593d"
+    },
+    {
+      "path": "pre-override-samples.npy",
+      "bytes": 88400,
+      "sha256": "6bb123f842cac731412a39fb8ce2fdf14550c4b3d1e2cbd71e95ef7f30c191cd"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 2940,
+      "sha256": "9828d1f6a099999d42fb1ffd8cdfa3d6ffff4996d8462dcb63faabea896e4b01"
+    },
+    {
+      "path": "replayed-code-grid.npy",
+      "bytes": 43688,
+      "sha256": "eae764db7bf2e1786f546ab5dc48b6804a081b5645b9191fdae496031741d8a4"
+    },
+    {
+      "path": "replayed-decoder-inputs.npy",
+      "bytes": 44264,
+      "sha256": "6fa578f4629a9ad03bff4187f254cf9769566a8ba7441fbacc97ee54a6ab18c6"
+    },
+    {
+      "path": "split-row-negative-samples.npy",
+      "bytes": 88400,
+      "sha256": "2f7414ef3bdb74a680ef32820835ad340aa7667c955aa1b3d51076dd721bfed8"
+    },
+    {
+      "path": "torch-build-config.txt",
+      "bytes": 1664,
+      "sha256": "325519a78f24e00e291496c5cdee3ac6123898433818b9054a82182bda70ea8e"
+    }
+  ],
+  "total_files": 11,
+  "total_bytes": 97212897
+}

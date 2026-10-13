@@ -1,0 +1,35 @@
+name: Dia DAC conversion
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'models/convert-dia-dac-to-gguf.py'
+      - 'tools/dia_dac_export.py'
+      - 'tests/test_dia_codec_parameters.py'
+      - 'tests/test_dia_dac_export.py'
+      - 'tools/ci-heavy/dia_dac_converter_validate.py'
+      - '.github/workflows/dia-dac-export.yml'
+      - '.github/workflows/heavy-cpu.yml'
+  pull_request:
+    paths:
+      - 'models/convert-dia-dac-to-gguf.py'
+      - 'tools/dia_dac_export.py'
+      - 'tests/test_dia_codec_parameters.py'
+      - 'tests/test_dia_dac_export.py'
+      - 'tools/ci-heavy/dia_dac_converter_validate.py'
+      - '.github/workflows/dia-dac-export.yml'
+      - '.github/workflows/heavy-cpu.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  original-export:
+    uses: ./.github/workflows/heavy-cpu.yml
+    with:
+      script: tools/ci-heavy/dia_dac_converter_validate.py
+      pip: numpy torch==2.6.0 torchaudio==2.6.0 torchvision==0.21.0 pydantic safetensors huggingface_hub descript-audio-codec==1.0.0 gguf
+      timeout_minutes: '30'

@@ -1,3 +1,10 @@
+## Dia DAC companion precision export
+
+[convert-dia-dac-to-gguf.py](convert-dia-dac-to-gguf.py) exports the original
+critical F32 output weights into the pinned published Dia DAC layout. The narrow
+candidate adds 1,312 bytes and passes both retained original-reference numerical
+comparisons. See [conversion instructions and acceptance limits](../docs/dia-dac-conversion.md).
+
 ## Whisper model files in custom `ggml` format
 
 The [original Whisper PyTorch models provided by OpenAI](https://github.com/openai/whisper/blob/main/whisper/__init__.py#L17-L30)

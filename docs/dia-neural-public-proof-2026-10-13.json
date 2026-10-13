@@ -1,0 +1,294 @@
+{
+  "scope": "Durable complete rejected neural precision proof and tiny-original cache control. All archive and source hashes verified, full public ZIPs anonymously re-read. No native speech/GPU/Q4 acceptance.",
+  "publication": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "folder": "dia-20261013-neural",
+    "uploads": [
+      {
+        "path": "neural-precision-rejection.zip",
+        "revision": "1d7701df55fc74de5b75ddf0bc4169d61fc9bf67"
+      },
+      {
+        "path": "tiny-original-cross-cache.zip",
+        "revision": "41da8eb07cdf239d020ac348a40a77c8c4ca4445"
+      }
+    ],
+    "anonymous_verified": [
+      {
+        "path": "neural-precision-rejection.zip",
+        "bytes": 244971833,
+        "sha256": "a5f7a2fda3ec064f795ae819ad564f3bab8f2673ee3168d796b3a787f06d220a",
+        "url": "https://huggingface.co/datasets/cstr/crispasr-regression-fixtures/resolve/68873c45c08a36372667fa6b62e746072b9bf1f5/dia-20261013-neural/neural-precision-rejection.zip",
+        "authorization_header": false
+      },
+      {
+        "path": "tiny-original-cross-cache.zip",
+        "bytes": 231179,
+        "sha256": "e074d9d095b2193c117e6a32dd341f487d7976a8e968dcbc79e83548605abcc5",
+        "url": "https://huggingface.co/datasets/cstr/crispasr-regression-fixtures/resolve/68873c45c08a36372667fa6b62e746072b9bf1f5/dia-20261013-neural/tiny-original-cross-cache.zip",
+        "authorization_header": false
+      }
+    ],
+    "revision": "68873c45c08a36372667fa6b62e746072b9bf1f5",
+    "publication_pass": true
+  },
+  "archives": [
+    {
+      "name": "neural-precision-rejection",
+      "path": "neural-precision-rejection.zip",
+      "bytes": 244971833,
+      "sha256": "a5f7a2fda3ec064f795ae819ad564f3bab8f2673ee3168d796b3a787f06d220a",
+      "source_files": 42,
+      "source_bytes": 278125133,
+      "scope": "Both fixed neural precision exports pass 40/40 canonical replay stages; all native CLI/C-ABI free speech arms fail with empty transcripts/WER 1. Original coefficients, full raw arrays and failures are preserved.",
+      "files": [
+        {
+          "path": "build-dependencies-install.log",
+          "bytes": 2502,
+          "sha256": "628990043a2a3dce5ee2df3ab48e318003527789bb5cf6e0ba70610b468d9b95"
+        },
+        {
+          "path": "build-dependencies-update.log",
+          "bytes": 2453,
+          "sha256": "21ceb74512882f03b66dfddab453f1f22a4e9d49c48bc608afdb48aa8a80f8a7"
+        },
+        {
+          "path": "build.log",
+          "bytes": 430220,
+          "sha256": "7a23522d482a139263a22181302b822a30862c95d37257612d078414d57f1538"
+        },
+        {
+          "path": "canonical-download.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "canonical-ref.gguf",
+          "bytes": 99392768,
+          "sha256": "3db6f8923abffd612e6c83d7036debebd10ed28b77c3eb9ec3d91fec1ce1a542"
+        },
+        {
+          "path": "configure.log",
+          "bytes": 2348,
+          "sha256": "86d47d92480ff1a8eefe33c184c2edb06066019bce40499697a4f70186e18f74"
+        },
+        {
+          "path": "critical-codec-export.log",
+          "bytes": 723,
+          "sha256": "5e8986143eb5d51da28cb39cb725dad16c0e3ffa4644aab4699a0880ba220ca6"
+        },
+        {
+          "path": "f32-cli-asr.log",
+          "bytes": 1148,
+          "sha256": "15bbab60473cb4bff07d441cdefd7368d6e9abc6f0b79a1479f66a317f7b5fa6"
+        },
+        {
+          "path": "f32-cli-generation.log",
+          "bytes": 2066,
+          "sha256": "17d5691e0fb2b15141b54c1ab618a3e5ba91d7de71cb19c66b47914b767508c1"
+        },
+        {
+          "path": "f32-export.log",
+          "bytes": 531,
+          "sha256": "f3e2cb14be1b8824838a82e4bd1477e352ef5c054269dfa59b021082a4dbb8db"
+        },
+        {
+          "path": "f32-native-asr.log",
+          "bytes": 1082,
+          "sha256": "e25a096955c92535b9f0a58532ef109dc2e658155f44dfa9f07bd2690b244f54"
+        },
+        {
+          "path": "f32-native-generation.log",
+          "bytes": 59604,
+          "sha256": "2fbe6a4a48ba636665ac16e1d8e619e7b494bdff46b021687f77e60c615784f6"
+        },
+        {
+          "path": "f32-strict-diff.log",
+          "bytes": 5793,
+          "sha256": "8902838444735b0e6ec0c618ad7c8af56319a0fffa756f31f23a531306aea6e9"
+        },
+        {
+          "path": "f32/native-cli.json",
+          "bytes": 296,
+          "sha256": "1ebac650aca2fb8e30a7df1e19851f1652e2db8db47e26c82cdd0e75ea0cd87c"
+        },
+        {
+          "path": "f32/native-cli.npy",
+          "bytes": 2252928,
+          "sha256": "7df4ab1834e82982045b31b09d2e6f8259a9e923f004068374e92e5be8894218"
+        },
+        {
+          "path": "f32/native-cli.wav",
+          "bytes": 1128284,
+          "sha256": "3df89bec4ce3ec137b526f45b927f6fd35ee99e4a3fba2421004afd439856290"
+        },
+        {
+          "path": "f32/native-free.json",
+          "bytes": 263,
+          "sha256": "85dcafb7a893a12302392dc551ed9b3a8b90cd72a80f45fad4e8ceec09316918"
+        },
+        {
+          "path": "f32/native-free.npy",
+          "bytes": 2252928,
+          "sha256": "8e312ca560c2022a7ccd01d8c16ce74e54c1971112c76f79fbb7c120b4ecbee2"
+        },
+        {
+          "path": "f32/native-inputs.i32",
+          "bytes": 40140,
+          "sha256": "543eab8f546086767e40d199e34a0acddeda236bc6e5000e914d125e35050c07"
+        },
+        {
+          "path": "f32/native-logits.f32",
+          "bytes": 82527840,
+          "sha256": "c4849b654d7d42b41f20ab70e868218c0ef38118157186a5c860785e36c609c0"
+        },
+        {
+          "path": "heads-f32-cli-asr.log",
+          "bytes": 1146,
+          "sha256": "622b9ecfb87a6dd4494a1fb67d5d4e0014ddb61a67a5d02f85c87cbf9a873508"
+        },
+        {
+          "path": "heads-f32-cli-generation.log",
+          "bytes": 2096,
+          "sha256": "90fff84d0a17e3de9de96a90e1fc932e7d5787e1c8d57fd71398d884a59bb3ba"
+        },
+        {
+          "path": "heads-f32-export.log",
+          "bytes": 535,
+          "sha256": "48b8f1d9902cddf97772cddd890b695fb6f7d82b4766a460c0b8f9978247f865"
+        },
+        {
+          "path": "heads-f32-native-asr.log",
+          "bytes": 1084,
+          "sha256": "50762496ab309c3f12290f3a5d1e7a875c1e8250a263c7f2cb689549dc42d6ae"
+        },
+        {
+          "path": "heads-f32-native-generation.log",
+          "bytes": 60543,
+          "sha256": "d587d53fa3fb1713d92234ca663633134db8fa6e924b87b803914f71d806d267"
+        },
+        {
+          "path": "heads-f32-strict-diff.log",
+          "bytes": 5794,
+          "sha256": "36fbf2dc81c87e0ee4d84602c5bb5c967e2c2d0c44f073d2617b798895fcd4cd"
+        },
+        {
+          "path": "heads-f32/native-cli.json",
+          "bytes": 295,
+          "sha256": "ed973438b4d8623305911944960eada084f187ac51c4b86240af7c04ed146d2d"
+        },
+        {
+          "path": "heads-f32/native-cli.npy",
+          "bytes": 2289792,
+          "sha256": "b8de19b97c8bc997599b155ed911df2797c1f8a29e4393720ef5e363b79acd90"
+        },
+        {
+          "path": "heads-f32/native-cli.wav",
+          "bytes": 1146716,
+          "sha256": "ee25e5408bbe12f312b2d514d069ff366bbfd4646e7b099abdbaf4911b5444d5"
+        },
+        {
+          "path": "heads-f32/native-free.json",
+          "bytes": 264,
+          "sha256": "b5146d59b34458a6d970dffe74181564b676f3ac661bc7ff5ecfe43549ae13c6"
+        },
+        {
+          "path": "heads-f32/native-free.npy",
+          "bytes": 2289792,
+          "sha256": "3d544f136da57bc9eaf1e90f41cae0f176ac2930925d004ea36b3498f293f56c"
+        },
+        {
+          "path": "heads-f32/native-inputs.i32",
+          "bytes": 40788,
+          "sha256": "db3f9a6f118a506caa2db379a34c6228d20fcbcf1a7ad0ff2d242efb6170e90c"
+        },
+        {
+          "path": "heads-f32/native-logits.f32",
+          "bytes": 83860128,
+          "sha256": "90ffebdab504cbc3a3b14bde7f7064b83ddd13cebe6193f56b9b3ecffd12fafe"
+        },
+        {
+          "path": "hosted-failed-step.log",
+          "bytes": 73684,
+          "sha256": "52d2e71826e4750303e018f48d1e6660446ea178798c4a99215dd1e3e354fe32"
+        },
+        {
+          "path": "neural-f32-physical-audit.json",
+          "bytes": 99324,
+          "sha256": "dadd2c11b1437c146c0bda7ecaa8e8a2573b09318210cc5ae00d1dcc98bf3932"
+        },
+        {
+          "path": "neural-heads-f32-physical-audit.json",
+          "bytes": 99408,
+          "sha256": "ed3b2a9c63691ed316f4ef31b912b784d9e9738d68a7d9c3759ef5527264bae7"
+        },
+        {
+          "path": "physical-codec-audit.json",
+          "bytes": 36108,
+          "sha256": "8832b98c4bb0ec036accd3bd5a6ca151c1ffa04f1465b72b4f6af3a8c8e9970a"
+        },
+        {
+          "path": "receipt.json",
+          "bytes": 12796,
+          "sha256": "7b58e9f4186a41161adb0fc7ad02079c134518abc1b5996179376a653abf5b71"
+        },
+        {
+          "path": "rejected-download.log",
+          "bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        {
+          "path": "source-clone.log",
+          "bytes": 50,
+          "sha256": "571a93ec73f7315903ea1fa9fabbefc82c4cb76b0161250b9b50c148629b3628"
+        },
+        {
+          "path": "source-pin.log",
+          "bytes": 69,
+          "sha256": "f0942a9cddd60829668ddd4ba0579d062f9c02c3ad16981bca0e3b81fb7c1e35"
+        },
+        {
+          "path": "tiny-neural-export-contracts.log",
+          "bytes": 804,
+          "sha256": "af09fb18559c876272ac4117fbd347afd7373901aa3a110273ab9c97040a4bed"
+        }
+      ]
+    },
+    {
+      "name": "tiny-original-cross-cache",
+      "path": "tiny-original-cross-cache.zip",
+      "bytes": 231179,
+      "sha256": "e074d9d095b2193c117e6a32dd341f487d7976a8e968dcbc79e83548605abcc5",
+      "source_files": 4,
+      "source_bytes": 283110,
+      "scope": "Tiny pinned-original model F32/rounded-cache/F32-repeat causal control only. Fixed first input, exact F32 repeat, measured logit differences. No native execution, real weights or speech acceptance.",
+      "files": [
+        {
+          "path": "actual-original-arrays.npz",
+          "bytes": 274742,
+          "sha256": "6d0447006a7794383c7fd7e15e93835db45496afb90147bc7866ea1d79e60a48"
+        },
+        {
+          "path": "probe.log",
+          "bytes": 2340,
+          "sha256": "e4bb2b17fc38ca3a89c1165f8a309ddb70dba50ee7391c017d7c5ed3c6c44c5d"
+        },
+        {
+          "path": "probe.py",
+          "bytes": 3688,
+          "sha256": "bd5555399adfd1dfcac23a2a91146bab1910f7b25bcc3541279cd4de586af6fc"
+        },
+        {
+          "path": "receipt.json",
+          "bytes": 2340,
+          "sha256": "e4bb2b17fc38ca3a89c1165f8a309ddb70dba50ee7391c017d7c5ed3c6c44c5d"
+        }
+      ]
+    }
+  ],
+  "retained_package_folder": "/mnt/storage/crispasr/dia-short-20261012/public-neural-proof-20261013",
+  "package_script_sha256": "9da4674774b174b696269a18292ae7c20da88cf76121575f5ce9259d7e2c0207",
+  "source_files_total": 46,
+  "source_bytes_total": 278408243,
+  "zip_bytes_total": 245203012
+}

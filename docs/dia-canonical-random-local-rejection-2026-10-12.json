@@ -1,0 +1,119 @@
+{
+  "scope": "Rejected local Torch 2.11 replay: canonical decoder input differs at step 1. Actual multinomial/exponential race and RNG states match each other; this is not pinned Torch 2.6 acceptance.",
+  "worker_receipt": {
+    "source": "2cdf631b36821604d894f9775df7db679ea57d2e",
+    "source_worktree_dirty": true,
+    "script_sha256": "67fc527d6d167434b626121e14426559e12475114cd677d1866f68e3a197b658",
+    "original_source_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+    "original_source_files": {
+      "dia/__init__.py": "d6cc98eb95ccf0123697c036df7759db197d5424aa9eb52f75e8d4f88d736b6a",
+      "dia/audio.py": "a4a92aba2e0b45a3da2ac8c27c36002501a0500a528eb9e613661f7d9a057875",
+      "dia/config.py": "6bbdb7c764e11b9b9f4170948cb06da5a4dec00b2c080090ce96975fce731698",
+      "dia/layers.py": "9b77d590101783a7e570bd9889afb09b85912d05072313c32a984dbfe9323024",
+      "dia/model.py": "6bc51e6e5ff58ca9ed66431773df6cda954afee3d4b7ea515c1363b73ca82926",
+      "dia/state.py": "83d0ddc651bab76afe91c8851b515f12863d1221778765a6d9d4462581f5d13f"
+    },
+    "reference_sha256": "3db6f8923abffd612e6c83d7036debebd10ed28b77c3eb9ec3d91fec1ce1a542",
+    "original_run": 38285566623,
+    "torch_version": "2.11.0+cu130",
+    "mkl_available": true,
+    "model_weights_loaded": false,
+    "production_defaults_changed": false,
+    "speech_acceptance": false,
+    "scope": "Actual canonical sampling/delay feedback replay and RNG witness; no neural, PCM or native free-generation acceptance.",
+    "component_replay_pass": false,
+    "failed_after_steps": 2,
+    "error": "Canonical feedback mismatch at step 1"
+  },
+  "files": [
+    {
+      "path": "actual-torch-exponential-noise.f32",
+      "bytes": 37008,
+      "sha256": "62189187e462cf9e17836afc852f33ec35382b4f8adc682670493a927cc18e89"
+    },
+    {
+      "path": "actual-torch-rng-states.u8",
+      "bytes": 5056,
+      "sha256": "5feb54a46230d321d888e9b43cf5a57492665f199e4377408d79ee460e36679c"
+    },
+    {
+      "path": "executed-script.py",
+      "bytes": 9061,
+      "sha256": "67fc527d6d167434b626121e14426559e12475114cd677d1866f68e3a197b658"
+    },
+    {
+      "path": "local-failure.log",
+      "bytes": 1254,
+      "sha256": "5f941b1badcfd4c7f34e4dc78c11847c0e73dc85331937629e4535d9bcba926c"
+    },
+    {
+      "path": "pre-override-samples.npy",
+      "bytes": 200,
+      "sha256": "ddf3b94a5ebdbf458c5651d32f14f56392bf05763ca2c0e5fd9bdd20b2a633be"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1343,
+      "sha256": "727d4d2b2f8f520a86d6810e52f06180f9120adadfa11e33f39ee383ec596e9c"
+    },
+    {
+      "path": "replayed-decoder-inputs.npy",
+      "bytes": 200,
+      "sha256": "0779b02f16133eab42d8f7699608a0ce31f600d5555338b3ea9d4b86b3f9bf0a"
+    },
+    {
+      "path": "torch-build-config.txt",
+      "bytes": 1652,
+      "sha256": "8aa06ae673479f3c9724d5894a9c5582e4cc3dc8f627edbfa7d6f4abd5824cfa"
+    }
+  ],
+  "total_files": 8,
+  "total_bytes": 55774,
+  "inspected_pytorch_source": {
+    "tag": "v2.6.0",
+    "url": "https://github.com/pytorch/pytorch/tree/v2.6.0/aten/src/ATen",
+    "files": [
+      {
+        "path": "CPUGeneratorImpl.cpp",
+        "bytes": 12115,
+        "sha256": "1812b5f59e8f1a22a4182f678cbc09c3e2ba8f7a083c01f11707c062bf9d165b"
+      },
+      {
+        "path": "DistributionKernels.cpp",
+        "bytes": 10760,
+        "sha256": "f726d3bedf6d9d4febe673403ab2ebe0f4b8e135b9dbd94c2c50d5c639d57f17"
+      },
+      {
+        "path": "DistributionTemplates.h",
+        "bytes": 16464,
+        "sha256": "56a7c0636bb33c55453be0b9be85f1525e63722924ed5b1ccc1607eb2f15b09e"
+      },
+      {
+        "path": "Distributions.cpp",
+        "bytes": 24749,
+        "sha256": "98e2c65578c4778a1ee0890b8a75ab4ad0a2126c9d414c7cf4bf951e2a19f6b3"
+      },
+      {
+        "path": "DistributionsHelper.h",
+        "bytes": 12510,
+        "sha256": "81ecfe382101b708307b8abcb05a54bc4c9d8bf2cb5234975a3032a90285c7ee"
+      },
+      {
+        "path": "TransformationHelper.h",
+        "bytes": 6854,
+        "sha256": "77ba7f2ca028c5258f8cf0cfb26354f71a2a93369e0b82c8f7c09ca1ca1c7b45"
+      }
+    ]
+  },
+  "pinned_hosted_repeat": {
+    "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38311994907",
+    "source": "60a95cbb581b1123c4c0e23aa780aeab19ece1b7",
+    "status_at_checkpoint": "cancelled before execution after code-grid layout audit"
+  },
+  "corrected_pinned_hosted_repeat": {
+    "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38312385854",
+    "source": "75fcdc70fffeff48609bf5befe171a9ca01a172a",
+    "status_at_checkpoint": "queued",
+    "reason": "Compare actual codebook/time output against time/codebook capture by explicit transpose; no math/reference/gate change."
+  }
+}
