@@ -10,7 +10,7 @@
 //                                              ggml_backend_init_best()
 //
 // The preference is matched against ggml backend registry names
-// (case-insensitive). Common values: "cuda", "vulkan", "metal", "cpu".
+// (case-insensitive). Common values: "cuda", "vulkan", "metal", "cann", "cpu".
 // Empty or null = auto (same as ggml_backend_init_best).
 
 #include "ggml.h"
@@ -55,6 +55,15 @@ inline std::string crispasr_get_gpu_backend_pref() {
     return crispasr_gpu_pref::pref_storage();
 }
 
+inline int& crispasr_gpu_device_pref_storage() {
+    static int device = 0;
+    return device;
+}
+
+inline void crispasr_set_gpu_device_pref(int device) {
+    crispasr_gpu_device_pref_storage() = device;
+}
+
 // Case-insensitive prefix check: does `haystack` start with `needle`?
 inline bool ci_starts_with(const char* haystack, const char* needle) {
     for (; *needle; ++haystack, ++needle) {
@@ -68,7 +77,7 @@ inline bool ci_starts_with(const char* haystack, const char* needle) {
 
 // Drop-in replacement for ggml_backend_init_best().
 // If a gpu_backend preference is set, iterate registered devices and
-// pick the first GPU/iGPU device whose name starts with the preference
+// pick the requested GPU/iGPU device whose name starts with the preference
 // (e.g. "vulkan" matches "Vulkan0", "Vulkan1", …).
 // Falls back to ggml_backend_init_best() when no preference is set or
 // the preferred backend isn't found.
@@ -116,6 +125,8 @@ inline ggml_backend_t crispasr_init_gpu_backend() {
         pref = "mtl";
 
     if (!pref.empty()) {
+        const int preferred_device = crispasr_gpu_device_pref_storage();
+        int matching_device = 0;
         // Iterate all registered devices and find the first GPU whose
         // name starts with the preference string.
         for (size_t i = 0; i < ggml_backend_dev_count(); ++i) {
@@ -125,6 +136,8 @@ inline ggml_backend_t crispasr_init_gpu_backend() {
                 continue;
             const char* dev_name = ggml_backend_dev_name(dev);
             if (ci_starts_with(dev_name, pref.c_str())) {
+                if (matching_device++ != preferred_device)
+                    continue;
                 ggml_backend_t result = ggml_backend_dev_init(dev, nullptr);
                 if (result) {
                     fprintf(stderr, "%s: using preferred GPU backend: %s\n", __func__, dev_name);
@@ -136,6 +149,7 @@ inline ggml_backend_t crispasr_init_gpu_backend() {
 
         // Also try matching against the registry (backend library) name,
         // e.g. the user writes "vulkan" and the registry name is "Vulkan".
+        matching_device = 0;
         for (size_t i = 0; i < ggml_backend_reg_count(); ++i) {
             ggml_backend_reg_t reg = ggml_backend_reg_get(i);
             const char* reg_name = ggml_backend_reg_name(reg);
@@ -146,6 +160,8 @@ inline ggml_backend_t crispasr_init_gpu_backend() {
                 ggml_backend_dev_t dev = ggml_backend_reg_dev_get(reg, j);
                 enum ggml_backend_dev_type dt = ggml_backend_dev_type(dev);
                 if (dt != GGML_BACKEND_DEVICE_TYPE_GPU && dt != GGML_BACKEND_DEVICE_TYPE_IGPU)
+                    continue;
+                if (matching_device++ != preferred_device)
                     continue;
                 ggml_backend_t result = ggml_backend_dev_init(dev, nullptr);
                 if (result) {

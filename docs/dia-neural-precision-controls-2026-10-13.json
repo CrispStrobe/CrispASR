@@ -1,0 +1,128 @@
+{
+  "scope": "Two fixed original-neural precision controls queued, not accepted native speech. Five tiny original-module physical export contracts pass. Existing native F16 speech rejection remains unchanged.",
+  "source": "5a8fe578e6a7d16b68cbb3de3398f3c704191cd4",
+  "merged_to_main": false,
+  "source_files": {
+    "tools/dia_model_precision.py": "2d2bbda8ea5d8c807e8393a7ffe6368a70e831196f8fa0263bb9227b7d1e5507",
+    "tests/test_dia_model_precision.py": "30c2de805f65072a7b42eec59294c79acad5b693ae7d51b6d82dbbb19e9bb075",
+    "tools/ci-heavy/dia_neural_precision_control.py": "4c021266877c25ad5117480f9d687104c50c1a54d3e1ae03ca79d76c997538f4"
+  },
+  "local_contracts": {
+    "passed": 5,
+    "skipped": 0,
+    "seconds": 36.01,
+    "log_sha256": "c1e1c552e837b3fc844ababda627f6c521a2aec61ee1c159a923e1b794f90278"
+  },
+  "secret_scans": [
+    {
+      "passed": 4,
+      "skipped": 0,
+      "seconds": 80.219,
+      "log_sha256": "6440dac9f38714b67f4a125a842c182e504d667851eb732277afaef08719d507"
+    },
+    {
+      "passed": 4,
+      "skipped": 0,
+      "seconds": 51.262,
+      "log_sha256": "e8a9d6ff0d197701c592f153ba8bec6ffe343ac9b253203da813ea0a201531f9"
+    }
+  ],
+  "first_nucleus_boundary": {
+    "scope": "Actual pinned original decoder-step/filter replay on shared-history step 76/head 5. Neither seed nor inference is changed. No neural weights loaded.",
+    "top_k": 45,
+    "top_p": 0.95,
+    "temperature": 1.2,
+    "cfg_scale": 3.0,
+    "rows": [
+      {
+        "label": "original",
+        "rank606": 41,
+        "previous_cumulative_probability": 0.9442790150642395,
+        "cumulative_probability_606": 0.9555368423461914,
+        "post_nucleus_probability_606": 0.011781688779592514,
+        "boundary": [
+          {
+            "token": 754,
+            "probability": 0.011415987275540829,
+            "cumulative": 0.9442790150642395
+          },
+          {
+            "token": 606,
+            "probability": 0.011257837526500225,
+            "cumulative": 0.9555368423461914
+          },
+          {
+            "token": 594,
+            "probability": 0.01125294715166092,
+            "cumulative": 0.9667897820472717
+          },
+          {
+            "token": 395,
+            "probability": 0.011185487732291222,
+            "cumulative": 0.9779752492904663
+          }
+        ]
+      },
+      {
+        "label": "native",
+        "rank606": 42,
+        "previous_cumulative_probability": 0.9555037021636963,
+        "cumulative_probability_606": 0.9667649865150452,
+        "post_nucleus_probability_606": 0.0,
+        "boundary": [
+          {
+            "token": 754,
+            "probability": 0.011424075812101364,
+            "cumulative": 0.9442352652549744
+          },
+          {
+            "token": 594,
+            "probability": 0.01126844808459282,
+            "cumulative": 0.9555037021636963
+          },
+          {
+            "token": 606,
+            "probability": 0.01126131135970354,
+            "cumulative": 0.9667649865150452
+          },
+          {
+            "token": 395,
+            "probability": 0.01119735836982727,
+            "cumulative": 0.9779623746871948
+          }
+        ]
+      }
+    ]
+  },
+  "original_with_candidate_pcm_byte_identical_to_canonical": true,
+  "policies": [
+    {
+      "precision": "heads-f32",
+      "selected_original_tensors": 9,
+      "expected_byte_delta": 37896192
+    },
+    {
+      "precision": "f32",
+      "selected_original_tensors": 381
+    }
+  ],
+  "hosted_run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38343667254",
+  "status_at_checkpoint": "queued",
+  "hosted_requirements": [
+    "pinned original checkpoint SHA and all 381 physical tensor rows",
+    "strict canonical stage diff, cosine and magnitude",
+    "actual native C ABI free speech and ASR",
+    "actual native CLI free speech and ASR"
+  ],
+  "original_seed": 42,
+  "top_k": 45,
+  "top_p": 0.95,
+  "temperature": 1.2,
+  "cfg_scale": 3.0,
+  "build": "Ninja + ccache; hosted dependencies installed only if absent",
+  "production_defaults_changed": false,
+  "production_model_pins_changed": false,
+  "gpu_acceptance": false,
+  "q4_acceptance": false,
+  "full_model_acceptance": false
+}

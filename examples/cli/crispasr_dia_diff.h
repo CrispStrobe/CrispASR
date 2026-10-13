@@ -29,6 +29,19 @@ inline void set_env(const std::string& name, const char* value) {
 #endif
 }
 
+inline bool requested_gpu() {
+    const char* value = std::getenv("CRISPASR_DIA_TTS_GPU");
+    if (!value)
+        value = std::getenv("DIA_TTS_GPU");
+    return value && std::string(value) == "1";
+}
+
+inline void apply_replay_device(bool gpu) {
+    // The runtime intentionally limits implicit GPU selection to Metal.
+    // Preserve an explicit CUDA request through its existing force-GPU gate.
+    set_env("CRISPASR_DIA_TTS_GPU", gpu ? "1" : "0");
+}
+
 // Replay must neither inherit unrelated debug hooks nor leak them to callers.
 struct Environment {
     struct Saved {
@@ -168,11 +181,13 @@ inline int run(const std::string& model, const std::string& archive) {
         return 1;
     }
     try {
+        const bool gpu = requested_gpu();
         const char* keep = std::getenv("CRISPASR_DIA_DIFF_DUMP_DIR");
         if (!keep)
             keep = std::getenv("DIA_DIFF_DUMP_DIR");
         const std::string retained = keep ? keep : "";
         Environment environment;
+        apply_replay_device(gpu);
         Scratch scratch(retained);
         const auto inputs = scratch.path / "inputs.i32";
         const auto codes = scratch.path / "codes.i32";
@@ -188,7 +203,7 @@ inline int run(const std::string& model, const std::string& archive) {
             return 1;
         }
         auto params = dia_tts_context_default_params();
-        params.use_gpu = false;
+        params.use_gpu = gpu;
         params.n_threads = 4;
         params.verbosity = 0;
         std::unique_ptr<dia_tts_context, decltype(&dia_tts_free)> ctx(dia_tts_init_from_file(model.c_str(), params),

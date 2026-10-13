@@ -1,0 +1,389 @@
+{
+  "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38317327337",
+  "worker_receipt": {
+    "source": "3ba3a317ab5d2996adfde1efef2c23811fc9e049",
+    "source_worktree_dirty": false,
+    "worker_sha256": "fc950aff43ba25cc38fdfbd901592b12ce2fe274f3af3c25a142b23e53660a61",
+    "candidate_header_sha256": "e2d42a64b8b4d0bbc3948c4da29b8395d42f20b4df10b80bec1b101c41b7df0e",
+    "runtime_sha256": "500849c53e786b5490d5e08d8fac0e304d065d1893b1489428e6165b822c5158",
+    "control_mode": "original-neural-with-gated-portable-candidate-sampler",
+    "canonical_original_run": 38285566623,
+    "production_defaults_changed": false,
+    "full_speech_acceptance": false,
+    "runs": [
+      {
+        "name": "canonical-download",
+        "exit": 0,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "source-clone",
+        "exit": 0,
+        "log_sha256": "571a93ec73f7315903ea1fa9fabbefc82c4cb76b0161250b9b50c148629b3628"
+      },
+      {
+        "name": "source-pin",
+        "exit": 0,
+        "log_sha256": "f0942a9cddd60829668ddd4ba0579d062f9c02c3ad16981bca0e3b81fb7c1e35"
+      },
+      {
+        "name": "compile-actual-sampler",
+        "exit": 0,
+        "log_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "name": "tiny-sampler-contracts",
+        "exit": 0,
+        "log_sha256": "50b0656c60fef2ce6ecbbdede50810a8b7bc71bb985389c32375be744847982b"
+      },
+      {
+        "name": "original-native-sampler-generation",
+        "exit": 0,
+        "log_sha256": "29bf085c0a3648035fa1fc11c66ba04129f31c8121172633fa1fee208f71dd3b"
+      },
+      {
+        "name": "configure",
+        "exit": 0,
+        "log_sha256": "2291d79280314f00ee437744f9f9e2778ff4d427c4b31892ab3d3dda961497f5"
+      },
+      {
+        "name": "build",
+        "exit": 0,
+        "log_sha256": "46de8d437cc5989248c05a57d2c67a265e10f74ebd3e97ce077200e01920d6c9"
+      },
+      {
+        "name": "candidate-codec-export",
+        "exit": 0,
+        "log_sha256": "5e8986143eb5d51da28cb39cb725dad16c0e3ffa4644aab4699a0880ba220ca6"
+      },
+      {
+        "name": "native-free-generation",
+        "exit": 0,
+        "log_sha256": "ea08774afb86ac35d53ba8da9f51f9a60c1a77666c086963dd5b0b28cda42dc1"
+      },
+      {
+        "name": "native-cli-generation",
+        "exit": 0,
+        "log_sha256": "fb4c82225f3548218037832e933735fd012c966e8cad72a319a4a147bcceb9d8"
+      },
+      {
+        "name": "canonical-original-asr",
+        "exit": 0,
+        "log_sha256": "8415be37ca8674e30f051983c0323d04f63e622ff99d691be2a4d673d8188a0d"
+      },
+      {
+        "name": "original-native-sampler-asr",
+        "exit": 0,
+        "log_sha256": "f10604740e9f7b0118a0f9fe92426808d52d1a31e7846c961fabdce4c0a641af"
+      },
+      {
+        "name": "native-free-asr",
+        "exit": 1,
+        "log_sha256": "16eeefc990b60488d227c076c920633afe59df1625de01371fdf6e6981ce1525"
+      },
+      {
+        "name": "native-cli-asr",
+        "exit": 1,
+        "log_sha256": "82513acfb44c63f4dfd524e4fab95e6075d14097161e3e2f83d456fcaf262128"
+      }
+    ],
+    "original_candidate_codes_exact": true,
+    "native_library_sha256": "0c17d9fde57b3129d42d513f175103d1f18456b511e2a56d60696c381e3430bf",
+    "native_cli_sha256": "eddbe8ab199d5a0c8fa836a9381654271401786ca444ed27a7286050bcbfcc55",
+    "canonical-original": {
+      "phrase": "We are committed to making it secure.",
+      "source_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+      "model_pin": "257bc72f9b78182ccc6fa07675a9ae4c1a44e2cd",
+      "seed": 42,
+      "capacity": 3072,
+      "audio_seconds": 14.048072562358277,
+      "rms": 0.07353386128903242,
+      "finite": true,
+      "scope": "Actual original generate and real DAC",
+      "transcript": "We are committed to making it secure.",
+      "wer": 0.0
+    },
+    "original-native-sampler": {
+      "phrase": "We are committed to making it secure.",
+      "seed": 42,
+      "capacity": 3072,
+      "audio_seconds": 14.048072562358277,
+      "rms": 0.07353386128903242,
+      "finite": true,
+      "scope": "original-neural-with-gated-portable-candidate-sampler",
+      "source_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+      "model_pin": "257bc72f9b78182ccc6fa07675a9ae4c1a44e2cd",
+      "transcript": "We are committed to making it secure.",
+      "wer": 0.0
+    },
+    "native-free": {
+      "phrase": "We are committed to making it secure.",
+      "seed": 42,
+      "capacity": 3072,
+      "audio_seconds": 12.979954648526077,
+      "rms": 0.00015620221962711443,
+      "finite": true,
+      "scope": "Actual native C ABI free generation",
+      "transcript": "",
+      "wer": 1.0
+    },
+    "native-cli": {
+      "phrase": "We are committed to making it secure.",
+      "seed": 42,
+      "capacity": 3072,
+      "audio_seconds": 12.979954648526077,
+      "rms": 0.00015641841993880253,
+      "finite": true,
+      "scope": "Actual native CLI free generation with gated portable sampler",
+      "transcript": "",
+      "wer": 1.0
+    },
+    "paired_generation": {
+      "original_control_steps": 1226,
+      "native_steps": 1133,
+      "aligned_input_prefix_steps": 77,
+      "first_input_divergence": {
+        "step": 77,
+        "codebook": 5,
+        "original_control": 606,
+        "native": 843
+      },
+      "minimum_prefix_cosine": 0.9999989197073994,
+      "maximum_prefix_norm_error": 0.000854831188613514,
+      "aligned_prefix_neural_pass": true,
+      "complete_input_histories_equal": false,
+      "first_pre_override_sample_divergence": {
+        "step": 76,
+        "codebook": 5,
+        "original_control": 606,
+        "native": 843,
+        "shared_input_history": true
+      },
+      "complete_pre_override_samples_equal": false
+    },
+    "failures": [
+      "native-free-speech",
+      "native-cli-speech"
+    ],
+    "sampler_diagnostic_pass": false,
+    "scope": "Single fixed short prompt: canonical Torch, original with actual native sampler, and actual native C ABI and CLI free generation with the gated portable sampler; not complete model or GPU acceptance."
+  },
+  "files": [
+    {
+      "path": "aligned-prefix-cosine.npy",
+      "bytes": 11216,
+      "sha256": "c9b45d5b3a91c999159043c72b5eb4dc21dbb8fe6a2dd9619db8c8d9a8732b3d"
+    },
+    {
+      "path": "aligned-prefix-norm-ratio.npy",
+      "bytes": 11216,
+      "sha256": "bb3cbdaa5241e5971106d7435fdfc8479e2bb30c1edd96a8fc277befb7dc0402"
+    },
+    {
+      "path": "build.log",
+      "bytes": 431173,
+      "sha256": "46de8d437cc5989248c05a57d2c67a265e10f74ebd3e97ce077200e01920d6c9"
+    },
+    {
+      "path": "candidate-codec-export.log",
+      "bytes": 723,
+      "sha256": "5e8986143eb5d51da28cb39cb725dad16c0e3ffa4644aab4699a0880ba220ca6"
+    },
+    {
+      "path": "candidate-codec.json",
+      "bytes": 36108,
+      "sha256": "8832b98c4bb0ec036accd3bd5a6ca151c1ffa04f1465b72b4f6af3a8c8e9970a"
+    },
+    {
+      "path": "canonical-download.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "canonical-original-asr.log",
+      "bytes": 769,
+      "sha256": "8415be37ca8674e30f051983c0323d04f63e622ff99d691be2a4d673d8188a0d"
+    },
+    {
+      "path": "canonical-original.json",
+      "bytes": 419,
+      "sha256": "7c760de3cb029e37c2f512dcbcf37be328bd0d8ef9c414f7a0c3634f5762ac14"
+    },
+    {
+      "path": "canonical-original.npy",
+      "bytes": 2478208,
+      "sha256": "5c4331e165afa1e5342cf4cf3f9c50e7100e3a192a4835beb8e7c66d4fa13d6d"
+    },
+    {
+      "path": "compile-actual-sampler.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "configure.log",
+      "bytes": 2474,
+      "sha256": "2291d79280314f00ee437744f9f9e2778ff4d427c4b31892ab3d3dda961497f5"
+    },
+    {
+      "path": "dia_exponential_rng.h",
+      "bytes": 1709,
+      "sha256": "e2d42a64b8b4d0bbc3948c4da29b8395d42f20b4df10b80bec1b101c41b7df0e"
+    },
+    {
+      "path": "dia_native_sampler.py",
+      "bytes": 3858,
+      "sha256": "20dcc5fd1cc120302a3b1a386860195a39089e614e006a93a8e1a5d9f2fc7714"
+    },
+    {
+      "path": "dia_sampler_bridge.cpp",
+      "bytes": 1990,
+      "sha256": "cb6091f995fbfe83705e26363e573f0cfc5890494ba34aec4371697e44667b96"
+    },
+    {
+      "path": "dia_sampling.h",
+      "bytes": 3542,
+      "sha256": "ad23c213ed9fde411f4ce6648cd3383470dc4fb4504195794bce96b2c655f6cf"
+    },
+    {
+      "path": "native-cli-asr.log",
+      "bytes": 1136,
+      "sha256": "82513acfb44c63f4dfd524e4fab95e6075d14097161e3e2f83d456fcaf262128"
+    },
+    {
+      "path": "native-cli-generation.log",
+      "bytes": 2248,
+      "sha256": "fb4c82225f3548218037832e933735fd012c966e8cad72a319a4a147bcceb9d8"
+    },
+    {
+      "path": "native-cli.json",
+      "bytes": 290,
+      "sha256": "c0ef1c6061192bdcaea5adb23628de44b9a47e1f269f5b1af6e5c2b0a509e9ef"
+    },
+    {
+      "path": "native-cli.npy",
+      "bytes": 2289792,
+      "sha256": "9aa5d127453ef9aa93c82b4340038396ab6d08529ef01788016e9435afe8f516"
+    },
+    {
+      "path": "native-cli.wav",
+      "bytes": 1146716,
+      "sha256": "4ea83d6edf60756680f7393649b16e8d281b056bec5b5eb5b0d1742e42d383d2"
+    },
+    {
+      "path": "native-free-asr.log",
+      "bytes": 1084,
+      "sha256": "16eeefc990b60488d227c076c920633afe59df1625de01371fdf6e6981ce1525"
+    },
+    {
+      "path": "native-free-generation.log",
+      "bytes": 60538,
+      "sha256": "ea08774afb86ac35d53ba8da9f51f9a60c1a77666c086963dd5b0b28cda42dc1"
+    },
+    {
+      "path": "native-free.json",
+      "bytes": 264,
+      "sha256": "cb4f27d39b9df0062e37b6aa3f30d4481c8dd563c7f140f19ed6898f9b835e18"
+    },
+    {
+      "path": "native-free.npy",
+      "bytes": 2289792,
+      "sha256": "c421ff1199d11168fd3ffb0d4e1e3b493bd8917b7538c2591cf5dc066bcec437"
+    },
+    {
+      "path": "native-inputs.i32",
+      "bytes": 40788,
+      "sha256": "b164818bf1d1297372a29339c99dfb3b53a06ec94c6bac44452e1ec507b4bbc6"
+    },
+    {
+      "path": "native-logits.f32",
+      "bytes": 83860128,
+      "sha256": "78c8d3f630ff4ff9067b57081d92a99c34ddc74b6c84274adcf042ef841990a0"
+    },
+    {
+      "path": "native-pre-override-samples.npy",
+      "bytes": 81704,
+      "sha256": "75e54088f568585f628c0b7e1834e2796bb64f6d2e9cb9ee0dd8ba6f96bbe86a"
+    },
+    {
+      "path": "original-control-codes.npy",
+      "bytes": 43688,
+      "sha256": "126ad3468126fc7a7e2b53a9f87f8412256a88d9e092da806510f824006ba0b9"
+    },
+    {
+      "path": "original-control-inputs.i32",
+      "bytes": 44136,
+      "sha256": "e7b946e6f8679a887e56127306fed09bce3dadc58f3d635614539f4464f4fb88"
+    },
+    {
+      "path": "original-control-logits.f32",
+      "bytes": 90743616,
+      "sha256": "dccf02811732961781e60e0bf270943fac208d27817086088b2263035e8c15d4"
+    },
+    {
+      "path": "original-control-pre-override-samples.npy",
+      "bytes": 88400,
+      "sha256": "6bb123f842cac731412a39fb8ce2fdf14550c4b3d1e2cbd71e95ef7f30c191cd"
+    },
+    {
+      "path": "original-control-provenance.json",
+      "bytes": 1483,
+      "sha256": "422248b4f985958dccad6662ad7f1f02b2cb9028ce201f6bc1393aa956aed1b5"
+    },
+    {
+      "path": "original-native-sampler-asr.log",
+      "bytes": 785,
+      "sha256": "f10604740e9f7b0118a0f9fe92426808d52d1a31e7846c961fabdce4c0a641af"
+    },
+    {
+      "path": "original-native-sampler-generation.log",
+      "bytes": 484,
+      "sha256": "29bf085c0a3648035fa1fc11c66ba04129f31c8121172633fa1fee208f71dd3b"
+    },
+    {
+      "path": "original-native-sampler.json",
+      "bytes": 435,
+      "sha256": "15804df81ff0cc70ca50a0134d69307ea1e50e4121f5a8684bd42958fd58b78b"
+    },
+    {
+      "path": "original-native-sampler.npy",
+      "bytes": 2478208,
+      "sha256": "5c4331e165afa1e5342cf4cf3f9c50e7100e3a192a4835beb8e7c66d4fa13d6d"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 5683,
+      "sha256": "7dc5713308df83731addb01655a32c45a486e25f5439aec29fe556757869806f"
+    },
+    {
+      "path": "source-clone.log",
+      "bytes": 50,
+      "sha256": "571a93ec73f7315903ea1fa9fabbefc82c4cb76b0161250b9b50c148629b3628"
+    },
+    {
+      "path": "source-pin.log",
+      "bytes": 69,
+      "sha256": "f0942a9cddd60829668ddd4ba0579d062f9c02c3ad16981bca0e3b81fb7c1e35"
+    },
+    {
+      "path": "tiny-sampler-contracts.log",
+      "bytes": 976,
+      "sha256": "50b0656c60fef2ce6ecbbdede50810a8b7bc71bb985389c32375be744847982b"
+    }
+  ],
+  "total_files": 40,
+  "total_bytes": 186165898,
+  "scope": "Rejected native CLI/C-ABI speech: original neural with portable native sampler reproduces canonical codes and recognized audio exactly; native F16 still fails.",
+  "first_draw_analysis": {
+    "step": 76,
+    "codebook": 5,
+    "original_token": 606,
+    "native_token": 843,
+    "shared_history_steps": 77,
+    "original_probability_606": 0.011781688779592514,
+    "native_probability_606": 0.0,
+    "original_race_score_606": 1.1023101806640625,
+    "original_race_score_843": 0.3985785245895386,
+    "native_race_score_843": 0.3983287215232849,
+    "scope": "Actual pinned original filter applied to each retained shared-history CFG-logit arm with retained portable noise; support differs by two entries over all heads. Neural precision/support boundary needs isolation, not a seed or threshold change."
+  }
+}

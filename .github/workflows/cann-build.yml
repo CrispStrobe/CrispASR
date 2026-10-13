@@ -1,0 +1,69 @@
+name: CANN compile validation
+
+# Official SDK images are large; opt in explicitly without duplicating the
+# normal platform matrix. Hosted runners have no NPU: this is a compile gate.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cann-compile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux-cann:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: ubuntu-24.04
+            chip: 910b
+            acl_graph: 'on'
+          - runner: ubuntu-24.04-arm
+            chip: 310p
+            acl_graph: 'off'
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 120
+    env:
+      CANN_IMAGE: swr.cn-south-1.myhuaweicloud.com/ascendhub/cann:9.2.0-beta.2-${{ matrix.chip }}-openeuler24.03-py3.12
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+
+      - name: Free disk space
+        uses: ggml-org/free-disk-space@v1.3.1
+        with:
+          tool-cache: true
+
+      - name: Build
+        env:
+          SOC_TYPE: ascend${{ matrix.chip }}
+          USE_ACL_GRAPH: ${{ matrix.acl_graph }}
+        run: |
+          HOST_UID=$(id -u)
+          HOST_GID=$(id -g)
+          docker run --rm \
+            -v "$PWD:/workspace" \
+            -w /workspace \
+            -e SOC_TYPE \
+            -e USE_ACL_GRAPH \
+            "$CANN_IMAGE" \
+            bash -lc '
+              set -euo pipefail
+              git config --global --add safe.directory /workspace
+              export LD_LIBRARY_PATH="${ASCEND_TOOLKIT_HOME}/lib64:${ASCEND_TOOLKIT_HOME}/$(uname -m)-linux/devlib:${LD_LIBRARY_PATH:-}"
+              cmake -S . -B build-cann \
+                -DCMAKE_BUILD_TYPE=Release \
+                -DGGML_CANN=ON \
+                -DSOC_TYPE="${SOC_TYPE}" \
+                -DUSE_ACL_GRAPH="${USE_ACL_GRAPH}" \
+                -DCRISPASR_BUILD_TESTS=OFF \
+                -DCRISPASR_BUILD_SERVER=OFF
+              cmake --build build-cann \
+                --target crispasr-cli crispasr-lib crispasr-diff crispasr-quantize \
+                -j "$(nproc)"
+              chown -R '"${HOST_UID}"':'"${HOST_GID}"' /workspace/build-cann
+            '

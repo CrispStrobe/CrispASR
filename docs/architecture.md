@@ -1232,7 +1232,8 @@ speaker tags. Architecture:
   both work.
 
 Classifier-Free Guidance (CFG) runs batch=2 (conditional + unconditional);
-`logits = uncond + cfg_scale * (cond - uncond)`, default `cfg_scale=3.0`.
+`logits = cond + cfg_scale * (cond - uncond)`, default `cfg_scale=3.0`.
+This is the pinned original Dia-1.6B checkpoint recipe.
 Sampling: temperature (default 1.2), top-p (0.95), top-k (45), seedable.
 
 ### speecht5

@@ -1,0 +1,47 @@
+{
+  "scope": "Isolated DAC converter integration: seven tiny actual-original-module/CLI contracts and exact preservation of previously real-weight validated exporter; fresh hosted wrapper validation pending.",
+  "base": "5e7c74ff869c740318473fe27a4b049a4d72ff2d",
+  "source_worktree_dirty": true,
+  "unchanged_validated_source": "a0b702d0d26b543a82bee689c69ac296d319e5b2",
+  "numerical_proof_run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38306172119",
+  "numerical_reference_stages": {
+    "startup": 48,
+    "full": 40
+  },
+  "tests": {
+    "before": "Wrong-template CLI guard: 1 ERROR (model dependencies reached) as required before guard.",
+    "after": "7 PASS, 33.292 seconds; no skips"
+  },
+  "files": [
+    {
+      "path": "complete-after.log",
+      "bytes": 2231,
+      "sha256": "f18ee2f72c0f1fa6df7e7333d829414d973e4d6a213e4b803ebf318dce630c74"
+    },
+    {
+      "path": "wrong-template-before.log",
+      "bytes": 1015,
+      "sha256": "89726052bdad5a08bf3f941377ab8cad57f241ff0e46ed7215545121ea1c588c"
+    }
+  ],
+  "source_files": {
+    "tools/dia_dac_export.py": "10f3a77342fcdf862d8bdbce99adcff090ee6c148882cfd345e06faa3dbb79da",
+    "models/convert-dia-dac-to-gguf.py": "d954d3c82c24e6ffd6479f868d21bc7269902e496da6942e347a798d1860915d",
+    "tests/test_dia_codec_parameters.py": "9be96f1100fae15993c623274062280bf356675857805cd9c5b6ac92de570c75",
+    "tests/test_dia_dac_export.py": "d799fde0ed02fe9e7b25a878757d6f9eafdb97bcf69df8005849155cd560f0ad",
+    "tools/ci-heavy/dia_dac_converter_validate.py": "3f4223fa7487b5119d65c2ef03543fe6467fea9fc820634461d86326de510938",
+    ".github/workflows/dia-dac-export.yml": "be2b9938fd4cd176db3c1ac398e38a6d74621bf7053b9ecdad255e28ad8dd206"
+  },
+  "contributing_audit": {
+    "converter": "Standalone original checkpoint/template pins and complete physical tensor audit",
+    "runtime": "Existing dac-44khz architecture and payload layout; no new backend",
+    "cli_cabi_server_bindings": "Existing explicit codec path routes consume the same schema",
+    "quantizer": "Existing standalone DAC conv/codebook block-quantization restrictions remain applicable",
+    "reference": "Retained original startup/full-utterance references unchanged; prior real export numerical proof preserved",
+    "ci": "Path-filtered reusable hosted workflow runs tiny contracts and real byte-identical export",
+    "documentation": "Dedicated instructions plus models/README.md and docs/tts.md links"
+  },
+  "production_pins_changed": false,
+  "native_free_speech_acceptance": false,
+  "physical_gpu_acceptance": false
+}

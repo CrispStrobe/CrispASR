@@ -1,0 +1,101 @@
+{
+  "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38289295345",
+  "source": "24468e4876009a6d7688ca3324193e5f0d197714",
+  "conclusion": "failure",
+  "failure": "Unmapped published DAC tensor: quantizer.quantizers.0.in_proj.bias",
+  "native_comparison_executed": false,
+  "full_speech_acceptance": false,
+  "files": [
+    {
+      "path": "heavy-38289295345/canonical-codec-ref.gguf",
+      "bytes": 96193856,
+      "sha256": "5e82e524e2737c2e42d662acca56d0d1b6e149495191bd5dc7942efe2722bdaa"
+    },
+    {
+      "path": "heavy-38289295345/codec-capture-contracts.log",
+      "bytes": 378,
+      "sha256": "5c810290426d982d562e6d9846cc0e2efd1ec06a4f726c6a779df3cbb71ea6b0"
+    },
+    {
+      "path": "heavy-38289295345/missing-codec-stage-ref.gguf",
+      "bytes": 93465888,
+      "sha256": "dd371409c0573f4a3f6e99b3b0f97f5dffba70b957b39c3dd9f5faafa7b65f37"
+    },
+    {
+      "path": "heavy-38289295345/original-codec-controls.log",
+      "bytes": 770,
+      "sha256": "542329324b9dabf3863adbb990b16c773c234d4f8a0ff43be3d7bb59b65fea7a"
+    },
+    {
+      "path": "heavy-38289295345/original-dac_block_0.npy",
+      "bytes": 2728064,
+      "sha256": "0ff64996f73ecb7e576a0aba0ee5d13a656bf400b6e3f8e638880420f6d79043"
+    },
+    {
+      "path": "heavy-38289295345/original-dac_block_1.npy",
+      "bytes": 10911872,
+      "sha256": "95a14051ab70841fd2195589394ab5360f31f35c4b9bc37b64e4ddedeb156e5f"
+    },
+    {
+      "path": "heavy-38289295345/original-dac_block_2.npy",
+      "bytes": 21823616,
+      "sha256": "9ef09f88de954553b7f4e1843f8e593791d419feffc32dbcdb4970edff9ac881"
+    },
+    {
+      "path": "heavy-38289295345/original-dac_block_3.npy",
+      "bytes": 21823616,
+      "sha256": "1c55f42fe66fdb10a77a5b2823edcd1e5c8ee488ae5c56b8255c296f5d910d22"
+    },
+    {
+      "path": "heavy-38289295345/original-dac_input_conv.npy",
+      "bytes": 682112,
+      "sha256": "f56d7280b8241c5024b1edf3c683985cd6326ea939d9c26e031fd824a40bbedf"
+    },
+    {
+      "path": "heavy-38289295345/original-dac_latent.npy",
+      "bytes": 454784,
+      "sha256": "bb4ded63653dcb191297dc73daea97761c6a4c5c989a31c883d885b98ee03a76"
+    },
+    {
+      "path": "heavy-38289295345/original-dac_output_conv.npy",
+      "bytes": 227456,
+      "sha256": "a8cc5ae7bcce74c6776e1f2ed27accb0704607b1eec7bfe9e5c04435d73b83c5"
+    },
+    {
+      "path": "heavy-38289295345/original-dac_output_snake.npy",
+      "bytes": 21823616,
+      "sha256": "83bf2d46f503b3959ee4b118561e5a36c08e86480f3e1a95eecf0e4b64a83828"
+    },
+    {
+      "path": "heavy-38289295345/original-decoded_audio.npy",
+      "bytes": 227456,
+      "sha256": "eee6496c54307d8966f2f44734c0fd5d478da01a251d3ede5908ce86e5c096a5"
+    },
+    {
+      "path": "heavy-38289295345/receipt.json",
+      "bytes": 653,
+      "sha256": "7a106d9e95a563f8f5813e349bf54de99273bcc3654e68ddd6a50279fd7c700e"
+    },
+    {
+      "path": "heavy-38289295345/reference-download.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "heavy-38289295345/scaled-codec-stage-ref.gguf",
+      "bytes": 96193856,
+      "sha256": "534aee708cccfb4b0ccd9f26bd6807c4a414489e158ec00e3692914ff94e47c0"
+    },
+    {
+      "path": "hosted.log",
+      "bytes": 49580,
+      "sha256": "ed172cbfc1b70d0493b874e2cb67ffc13fff9c9a84def256e1a88db6f3ab1963"
+    }
+  ],
+  "github_artifact": {
+    "id": 11767387065,
+    "name": "heavy-38289295345",
+    "bytes": 280767348
+  },
+  "retained_file_bytes": 366607573
+}

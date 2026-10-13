@@ -61,6 +61,10 @@ STAGES DUMPED (all float32, row-major, batch dim dropped)
   codec_audio                (N_out,)        24 kHz PCM from the Qwen3-TTS
                                              tokenizer decode
   meta.json                  the constants + shapes + the exact prompt
+  guided/{CASE}/...          prompt ids, combined frame-0 logits and greedy
+                             codes for plain, clone, and instruction requests
+                             at cfg_scale 0 / 1 / 4 with and without the
+                             reference; see GUIDED_CASES
 
 ENV
   BREEZE_TEXT        target text (default: a short EN line)
@@ -150,7 +154,7 @@ import kaggle_harness as kh  # noqa: E402
 
 kh.init_progress()
 # Bump when the arms, capture or predicate change (see kh.provenance).
-SCRIPT_VERSION = "2026-09-17.2"
+SCRIPT_VERSION = "2026-10-10.1"
 # kh.provenance landed in the harness AFTER this kernel was first pushed, so the
 # 2026-09-02 run died in 10 s with AttributeError against its own fresh clone
 # (gotcha #24, the two-halves trap). Never let provenance logging be fatal.
@@ -241,7 +245,9 @@ sys.path.insert(0, str(BREEZE))
 from breeze_infer.runtime import (  # noqa: E402
     load_runtime, set_all_seeds, update_generation_config_for_breeze,
 )
-from breeze_infer.templates import get_template, prepare_inputs  # noqa: E402
+from breeze_infer.templates import (  # noqa: E402
+    get_template, prepare_inputs, select_template_name,
+)
 
 tokenizer, model, audio_tokenizer = load_runtime(
     CKPT, device=DEVICE, attn_implementation="eager",
@@ -524,30 +530,34 @@ save("dd_codes_frame0_stepwise", np.asarray(frame0, dtype=np.int32))
 step("depth_decoder_frame0_done", codes=frame0)
 
 # ── stage 5: full generate (codes) + codec decode ─────────────────────────
-set_all_seeds(SEED)
-# generate() takes an `audio_tokenizer` kwarg (generation_breeze.py:1100) and
-# WITHOUT it falls into the `audio_tokenizer is None` branch, which reaches for
-# self.codec_model.quantizer.cardinality — an attribute the bundled Mimi class
-# does not have on this transformers version. That branch is dead weight
-# anyway: runtime.py always loads the Qwen3 tokenizer, and the Mimi codec in
-# the checkpoint is a training leftover we drop from the GGUF entirely. Pass
-# the real tokenizer and the whole branch is skipped.
-gen = model.generate(**{k: v for k, v in inputs.items() if v is not None},
-                     output_audio=True, audio_tokenizer=audio_tokenizer,
-                     return_dict_in_generate=True)
-codes = gen.sequences                                      # (B, T, 16)
-if codes.ndim == 3:
-    codes = codes[0]
-codes = codes.detach().cpu().numpy().astype(np.int32)      # (T, 16)
-# Truncate at the first all-pad frame, exactly like the codec path does
-# (generation_breeze.py:1238-1248) — EOS frames are stored as all
-# codebook_pad_token_id and must not reach the codec.
-pad = int(model.config.codebook_pad_token_id)
-is_pad = (codes == pad).all(axis=-1)
-cut = int(np.argmax(is_pad)) if is_pad.any() else codes.shape[0]
-if cut != codes.shape[0]:
-    print(f"  truncating codes at first pad frame: {codes.shape[0]} -> {cut}", flush=True)
-codes = codes[:cut]
+def generate_codes(gen_inputs):
+    """generate() over prepare_inputs() output -> ((T, 16) int32 codes, raw output)."""
+    set_all_seeds(SEED)
+    # generate() takes an `audio_tokenizer` kwarg (generation_breeze.py:1100) and
+    # WITHOUT it falls into the `audio_tokenizer is None` branch, which reaches for
+    # self.codec_model.quantizer.cardinality — an attribute the bundled Mimi class
+    # does not have on this transformers version. That branch is dead weight
+    # anyway: runtime.py always loads the Qwen3 tokenizer, and the Mimi codec in
+    # the checkpoint is a training leftover we drop from the GGUF entirely. Pass
+    # the real tokenizer and the whole branch is skipped.
+    out = model.generate(**{k: v for k, v in gen_inputs.items() if v is not None},
+                         output_audio=True, audio_tokenizer=audio_tokenizer,
+                         return_dict_in_generate=True)
+    grid = out.sequences                                   # (B, T, 16)
+    if grid.ndim == 3:
+        grid = grid[0]
+    grid = grid.detach().cpu().numpy().astype(np.int32)    # (T, 16)
+    # Truncate at the first all-pad frame, exactly like the codec path does
+    # (generation_breeze.py:1238-1248) — EOS frames are stored as all
+    # codebook_pad_token_id and must not reach the codec.
+    is_pad = (grid == int(model.config.codebook_pad_token_id)).all(axis=-1)
+    cut = int(np.argmax(is_pad)) if is_pad.any() else grid.shape[0]
+    if cut != grid.shape[0]:
+        print(f"  truncating codes at first pad frame: {grid.shape[0]} -> {cut}", flush=True)
+    return grid[:cut], out
+
+
+codes, gen = generate_codes(inputs)
 save("codes", codes)
 for f in range(min(N_DUMP_FRAMES, codes.shape[0])):
     save(f"dd_codes_frame{f}", codes[f])
@@ -567,6 +577,98 @@ audio = to_np(audio, np.float32).reshape(-1)
 save("codec_audio", audio)
 sf.write(str(WORK / "breeze-ref.wav"), audio, 24000, subtype="PCM_16")
 step("generate_done", frames=int(codes.shape[0]), n_samples=int(audio.shape[0]))
+
+# ── guided matrix: Voice Design / Voice Direction and their controls ──────
+# Everything above is ONE request shape: reference + instruction at
+# cfg_scale=1.0, a single branch. The C++ port also runs the two-branch
+# combine `negative + cfg_scale * (positive - negative)`, and nothing above
+# can tell whether that is right. Each case here is a request as infer.py
+# would build it (select_template_name picks the template), greedy, and lands
+# in guided/<name>/ for `crispasr-diff bt2-tts-guided`:
+#
+#   prompt_input_ids         the template's own prompt
+#   neg_prompt_input_ids     the negative prompt, when prepare_inputs builds one
+#   backbone_logits_frame0   frame-0 lm_head logits AFTER the combine
+#   codes                    greedy code grid
+#
+# cfg_scale=0 is refused by infer.py and api.py but is a real generate() mode
+# (it swaps the negative prompt in as the only branch), and it is the control
+# that says the negative prompt is the plain / clone request and nothing else.
+GUIDED_CASES = [  # (name, has_reference, has_instruction, cfg_scale)
+    ("plain", False, False, 1.0),
+    ("clone", True, False, 1.0),
+    ("design-s0", False, True, 0.0),
+    ("design-s1", False, True, 1.0),
+    ("design-s4", False, True, 4.0),
+    ("direct-s0", True, True, 0.0),
+    ("direct-s1", True, True, 1.0),
+    ("direct-s4", True, True, 4.0),
+]
+
+
+def prefill_logits(ids, text_mask, text_len, attn, values):
+    """lm_head logits at the last prefill position of one prompt."""
+    merged_ = model._merge_input_ids_with_input_values(
+        input_ids=ids, input_values=values, text_ids_mask=text_mask,
+        text_ids_len=text_len, attention_mask=attn,
+    )
+    embeds = merged_["inputs_embeds"] if isinstance(merged_, dict) else merged_
+    out = model.backbone_model(inputs_embeds=embeds, attention_mask=attn,
+                               use_cache=False, return_dict=True)
+    return model.lm_head(out.last_hidden_state[0, -1]).float()
+
+
+def dump_guided_case(name, has_ref, has_ins, scale):
+    req = {"id": name, "text": SYN_TEXT, "speaker": "S0"}
+    if has_ins:
+        req["instruction"] = request["instruction"]
+    if has_ref:
+        req["ref_audio_path"] = str(REF_WAV_24K)
+        req["ref_text"] = REF_TEXT
+    template_name = select_template_name(req)
+    case_inputs = prepare_inputs(
+        tokenizer, audio_tokenizer, model, [req], get_template(template_name),
+        guidance_scale=scale, guidance_scale_ref=None, guidance_scale_ins=None,
+    )
+    pos = prefill_logits(case_inputs["input_ids"], case_inputs["text_ids_mask"],
+                         case_inputs["text_ids_len"], case_inputs["attention_mask"],
+                         case_inputs["input_values"])
+    combined = pos
+    neg_ids = case_inputs.get("cfg_negative_prompt_ids")
+    if neg_ids is not None:
+        neg = prefill_logits(neg_ids, case_inputs["cfg_negative_text_ids_mask"],
+                             case_inputs["cfg_negative_text_ids_len"],
+                             case_inputs["cfg_negative_prompt_attention_mask"],
+                             case_inputs.get("cfg_negative_input_values", case_inputs["input_values"]))
+        combined = neg + scale * (pos - neg)
+    grid, _ = generate_codes(case_inputs)
+
+    sub = f"guided/{name}"
+    (DUMPS / sub).mkdir(parents=True, exist_ok=True)
+    save(f"{sub}/prompt_input_ids", f32(case_inputs["input_ids"][0]).astype(np.int32))
+    if neg_ids is not None:
+        save(f"{sub}/neg_prompt_input_ids", f32(neg_ids[0]).astype(np.int32))
+    save(f"{sub}/backbone_logits_frame0", f32(combined))
+    save(f"{sub}/codes", grid)
+    return {"template": template_name, "cfg_scale": scale, "frames": int(grid.shape[0]),
+            "branches": 2 if neg_ids is not None and scale != 0.0 else 1,
+            "argmax_cb0": int(combined.argmax().item())}
+
+
+# A case that dies must not take the base fixture, or the other cases, with
+# it: the session behind this point cost a 7 GB download. The failure is
+# recorded in meta.json and fails the kernel AFTER the upload.
+guided_meta, guided_errors = {}, {}
+for _name, _has_ref, _has_ins, _scale in GUIDED_CASES:
+    try:
+        guided_meta[_name] = dump_guided_case(_name, _has_ref, _has_ins, _scale)
+        step("guided_case_done", case=_name, **guided_meta[_name])
+    except Exception as exc:  # noqa: BLE001
+        import traceback
+
+        traceback.print_exc()
+        guided_errors[_name] = repr(exc)
+        step("guided_case_FAILED", case=_name, error=repr(exc))
 
 # ── meta ──────────────────────────────────────────────────────────────────
 cfg = model.config
@@ -597,6 +699,8 @@ meta = {
                      else cfg.backbone_config.num_hidden_layers),
     "dd_layers": int(cfg.depth_decoder_config.num_hidden_layers),
     "shapes": {p.stem: list(np.load(p).shape) for p in sorted(DUMPS.glob("*.npy"))},
+    "guided": guided_meta,
+    "guided_errors": guided_errors,
 }
 (DUMPS / "meta.json").write_text(json.dumps(meta, indent=2), encoding="utf-8")
 step("meta_written", n_dumps=len(meta["shapes"]))
@@ -624,5 +728,7 @@ if HF_TOKEN:
 else:
     step("no_hf_token_staged_locally", dir=str(DUMPS))
 
+if guided_errors:
+    raise SystemExit(f"guided cases failed: {sorted(guided_errors)}")
 step("done")
 print("[DONE]", flush=True)

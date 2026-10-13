@@ -1,0 +1,557 @@
+{
+  "headRefOid": "3042d533a4b6f4f03c172c6328fdcdd0431d2553",
+  "mergeCommit": {
+    "oid": "8dfa0d72cbe5cc24d7853d4631fa758a4134b927"
+  },
+  "mergedAt": "2026-10-12T17:38:48Z",
+  "state": "MERGED",
+  "statusCheckRollup": [
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:39:38Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034913/job/114868312697",
+      "name": "ubuntu",
+      "startedAt": "2026-10-12T15:35:45Z",
+      "status": "COMPLETED",
+      "workflowName": "Bindings Tests (C#)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:31:42Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034804/job/114868311718",
+      "name": "ubuntu-22",
+      "startedAt": "2026-10-12T15:27:07Z",
+      "status": "COMPLETED",
+      "workflowName": "Bindings Tests (Dart)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:40:53Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034664/job/114868311665",
+      "name": "ubuntu-22",
+      "startedAt": "2026-10-12T15:22:02Z",
+      "status": "COMPLETED",
+      "workflowName": "Bindings Tests (Ruby)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:35:18Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034860/job/114868311632",
+      "name": "ubuntu-22",
+      "startedAt": "2026-10-12T15:29:39Z",
+      "status": "COMPLETED",
+      "workflowName": "Bindings Tests (Rust)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:54:22Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035932/job/114868317096",
+      "name": "build-wasm (default)",
+      "startedAt": "2026-10-12T15:45:53Z",
+      "status": "COMPLETED",
+      "workflowName": "Build WASM"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:58:33Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035119/job/114868313899",
+      "name": "linux-backend-dl",
+      "startedAt": "2026-10-12T15:51:21Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:47:49Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035167/job/114868315420",
+      "name": "arabic-q4 / run",
+      "startedAt": "2026-10-12T15:36:17Z",
+      "status": "COMPLETED",
+      "workflowName": "CTC character alignment"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:39:56Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034869/job/114868312420",
+      "name": "smoke",
+      "startedAt": "2026-10-12T15:32:29Z",
+      "status": "COMPLETED",
+      "workflowName": "Docker Smoke"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:35:16Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034661/job/114868313061",
+      "name": "clang-format (style)",
+      "startedAt": "2026-10-12T15:34:49Z",
+      "status": "COMPLETED",
+      "workflowName": "Lint"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:27:26Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034880/job/114868313232",
+      "name": "compile-and-test (ON)",
+      "startedAt": "2026-10-12T15:25:53Z",
+      "status": "COMPLETED",
+      "workflowName": "Metal cache test"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T16:18:35Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034794/job/114868409688",
+      "name": "cpu-acceptance / run",
+      "startedAt": "2026-10-12T16:07:12Z",
+      "status": "COMPLETED",
+      "workflowName": "Moonshine ONNX and native stream acceptance"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:51:31Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035566/job/114868805408",
+      "name": "smoke",
+      "startedAt": "2026-10-12T15:51:18Z",
+      "status": "COMPLETED",
+      "workflowName": "Regression (nightly)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:30:10Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034653/job/114868311472",
+      "name": "scan",
+      "startedAt": "2026-10-12T15:29:57Z",
+      "status": "COMPLETED",
+      "workflowName": "Secret scan"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:35:44Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266024907/job/114868279824",
+      "name": "scan",
+      "startedAt": "2026-10-12T15:35:30Z",
+      "status": "COMPLETED",
+      "workflowName": "Secret scan"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:49:06Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035932/job/114868317175",
+      "name": "build-wasm (single-thread)",
+      "startedAt": "2026-10-12T15:40:54Z",
+      "status": "COMPLETED",
+      "workflowName": "Build WASM"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:27:35Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034880/job/114868313237",
+      "name": "compile-and-test (OFF)",
+      "startedAt": "2026-10-12T15:25:52Z",
+      "status": "COMPLETED",
+      "workflowName": "Metal cache test"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:46:07Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035932/job/114868317043",
+      "name": "build-wasm (proxy-to-pthread)",
+      "startedAt": "2026-10-12T15:38:22Z",
+      "status": "COMPLETED",
+      "workflowName": "Build WASM"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:39:02Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035932/job/114868316592",
+      "name": "build-wasm (single-thread-lowheap)",
+      "startedAt": "2026-10-12T15:30:26Z",
+      "status": "COMPLETED",
+      "workflowName": "Build WASM"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:57:34Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035932/job/114868317180",
+      "name": "build-wasm (proxy-to-pthread-lowheap)",
+      "startedAt": "2026-10-12T15:48:48Z",
+      "status": "COMPLETED",
+      "workflowName": "Build WASM"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:34:17Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034913/job/114868312541",
+      "name": "windows",
+      "startedAt": "2026-10-12T15:25:14Z",
+      "status": "COMPLETED",
+      "workflowName": "Bindings Tests (C#)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T16:07:28Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035119/job/114868313933",
+      "name": "linux-x86_64",
+      "startedAt": "2026-10-12T15:59:33Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:31:40Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034869/job/114868312126",
+      "name": "hf-space-build",
+      "startedAt": "2026-10-12T15:30:12Z",
+      "status": "COMPLETED",
+      "workflowName": "Docker Smoke"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T16:05:52Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034661/job/114868313187",
+      "name": "clang-tidy (lint / types / security)",
+      "startedAt": "2026-10-12T15:49:29Z",
+      "status": "COMPLETED",
+      "workflowName": "Lint"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:49:18Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035566/job/114868805368",
+      "name": "unit-tests",
+      "startedAt": "2026-10-12T15:48:53Z",
+      "status": "COMPLETED",
+      "workflowName": "Regression (nightly)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:42:29Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035119/job/114868313796",
+      "name": "linux-unit",
+      "startedAt": "2026-10-12T15:31:39Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:40:06Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034661/job/114868312932",
+      "name": "kaggle_harness bundled-copy sync",
+      "startedAt": "2026-10-12T15:39:58Z",
+      "status": "COMPLETED",
+      "workflowName": "Lint"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:41:18Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035566/job/114868804967",
+      "name": "select",
+      "startedAt": "2026-10-12T15:41:06Z",
+      "status": "COMPLETED",
+      "workflowName": "Regression (nightly)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T16:10:10Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035119/job/114868314269",
+      "name": "linux-amr-fetch (g++)",
+      "startedAt": "2026-10-12T16:04:21Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:50:37Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034661/job/114868313429",
+      "name": "doc anchors resolve",
+      "startedAt": "2026-10-12T15:50:30Z",
+      "status": "COMPLETED",
+      "workflowName": "Lint"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T16:24:38Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035566/job/114892496596",
+      "name": "preflight",
+      "startedAt": "2026-10-12T16:24:15Z",
+      "status": "COMPLETED",
+      "workflowName": "Regression (nightly)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:41:05Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035119/job/114868313790",
+      "name": "linux-amr-fetch (clang++)",
+      "startedAt": "2026-10-12T15:35:32Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T16:08:22Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035119/job/114868313775",
+      "name": "linux-opus-fetch",
+      "startedAt": "2026-10-12T16:02:07Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:58:04Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034661/job/114868313388",
+      "name": "core_cpu_backend header reachable everywhere",
+      "startedAt": "2026-10-12T15:57:57Z",
+      "status": "COMPLETED",
+      "workflowName": "Lint"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T16:45:46Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035566/job/114892496879",
+      "name": "regression (moonshine-tiny)",
+      "startedAt": "2026-10-12T16:38:30Z",
+      "status": "COMPLETED",
+      "workflowName": "Regression (nightly)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T16:58:23Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035566/job/114892496954",
+      "name": "regression (parakeet-tdt-0.6b-en)",
+      "startedAt": "2026-10-12T16:45:58Z",
+      "status": "COMPLETED",
+      "workflowName": "Regression (nightly)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T16:38:58Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035566/job/114892496895",
+      "name": "regression (canary-1b-v2)",
+      "startedAt": "2026-10-12T16:31:25Z",
+      "status": "COMPLETED",
+      "workflowName": "Regression (nightly)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T16:32:57Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035566/job/114892496771",
+      "name": "regression (wav2vec2-xlsr-en)",
+      "startedAt": "2026-10-12T16:25:15Z",
+      "status": "COMPLETED",
+      "workflowName": "Regression (nightly)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T17:15:37Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035566/job/114892496946",
+      "name": "regression (qwen3-asr-0.6b)",
+      "startedAt": "2026-10-12T17:10:18Z",
+      "status": "COMPLETED",
+      "workflowName": "Regression (nightly)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T17:27:34Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035566/job/114892496863",
+      "name": "regression (kokoro-82m-en)",
+      "startedAt": "2026-10-12T17:20:11Z",
+      "status": "COMPLETED",
+      "workflowName": "Regression (nightly)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T17:32:59Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035566/job/114892496897",
+      "name": "regression (qwen3-tts-0.6b-customvoice-eric)",
+      "startedAt": "2026-10-12T17:25:29Z",
+      "status": "COMPLETED",
+      "workflowName": "Regression (nightly)"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:45:22Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035119/job/114868313610",
+      "name": "linux-asan-audio",
+      "startedAt": "2026-10-12T15:39:39Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T16:08:28Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034661/job/114868313404",
+      "name": "CUDA runtime ships split from every package",
+      "startedAt": "2026-10-12T16:08:18Z",
+      "status": "COMPLETED",
+      "workflowName": "Lint"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:43:30Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035119/job/114868313808",
+      "name": "linux-fuzz-smoke",
+      "startedAt": "2026-10-12T15:35:56Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:57:45Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034661/job/114868313207",
+      "name": "chat ABI bound by every binding",
+      "startedAt": "2026-10-12T15:57:36Z",
+      "status": "COMPLETED",
+      "workflowName": "Lint"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T14:52:06Z",
+      "conclusion": "SKIPPED",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034661/job/114868314866",
+      "name": "model-registry URLs resolve",
+      "startedAt": "2026-10-12T14:52:06Z",
+      "status": "COMPLETED",
+      "workflowName": "Lint"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T16:04:19Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035119/job/114868313851",
+      "name": "linux-vulkan",
+      "startedAt": "2026-10-12T15:58:07Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:35:54Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035119/job/114868314199",
+      "name": "macos",
+      "startedAt": "2026-10-12T15:28:25Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T16:05:55Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034661/job/114868313667",
+      "name": "version files agree with VERSION",
+      "startedAt": "2026-10-12T16:05:48Z",
+      "status": "COMPLETED",
+      "workflowName": "Lint"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:40:18Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035119/job/114868313951",
+      "name": "windows",
+      "startedAt": "2026-10-12T15:26:44Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:33:37Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266034661/job/114868313144",
+      "name": "README language metadata",
+      "startedAt": "2026-10-12T15:33:18Z",
+      "status": "COMPLETED",
+      "workflowName": "Lint"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:36:15Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035119/job/114868314338",
+      "name": "ios",
+      "startedAt": "2026-10-12T15:31:46Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    },
+    {
+      "__typename": "CheckRun",
+      "completedAt": "2026-10-12T15:48:51Z",
+      "conclusion": "SUCCESS",
+      "detailsUrl": "https://github.com/CrispStrobe/CrispASR/actions/runs/38266035119/job/114868313950",
+      "name": "android",
+      "startedAt": "2026-10-12T15:42:30Z",
+      "status": "COMPLETED",
+      "workflowName": "CI"
+    }
+  ],
+  "runtime_files": {
+    "src/breeze_tts_2.cpp": {
+      "bytes": 104546,
+      "sha256": "0adf36b11b96b2913a1567bad4e2774128f9e595ba460d974f931ae44fa69535",
+      "byte_identical_to_gpu_tested_source": true
+    },
+    "src/breeze_tts_2.h": {
+      "bytes": 14522,
+      "sha256": "334aa09828600f4e2e335597b67bb5f9d46f94eb5e9005bf54dba9f5b75d2129",
+      "byte_identical_to_gpu_tested_source": true
+    },
+    "src/core/breeze_cfg.h": {
+      "bytes": 1850,
+      "sha256": "9c836c8671db9e5f3b7f9d943ced3fa26db161fac0d6737a56506c5aa836d3f6",
+      "byte_identical_to_gpu_tested_source": true
+    },
+    "examples/cli/crispasr_backend_bt2_tts.cpp": {
+      "bytes": 9367,
+      "sha256": "bfc01f5953abd15ccae584f8b4b1feee22def549fd561f88933dac60b6b0a798",
+      "byte_identical_to_gpu_tested_source": true
+    }
+  },
+  "gpu_tested_source": "e6b4ce362d69d7965f57896466228af71b2ece1c",
+  "canonical_bf16_exact_code_cases_passed": 0,
+  "canonical_bf16_exact_code_cases_total": 8,
+  "canonical_gate_changed": false,
+  "scope": "Validated composed Breeze features; unrelated model-quality reports remain unresolved."
+}

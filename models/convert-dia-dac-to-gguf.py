@@ -13,6 +13,8 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from dia_dac_export import CHECKPOINT_SHA, digest, export_precision
 
+TEMPLATE_SHA = '6f62c6dbb26fd69f0634db3c7f044464cfbd9a5b8806eb621f8be7034d869a3e'
+
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
@@ -26,6 +28,8 @@ def main():
         parser.error('Input must exist; output and receipt must be new paths')
     if args.receipt.resolve() in (args.output.resolve(), args.template.resolve()):
         parser.error('Receipt, output and template paths must be distinct')
+    if digest(args.template) != TEMPLATE_SHA:
+        parser.error('Template must be the pinned published Dia dac-44khz.gguf (SHA256 ' + TEMPLATE_SHA + ')')
     if importlib.metadata.version('descript-audio-codec') != '1.0.0':
         raise ValueError('Requires original descript-audio-codec==1.0.0')
     import torch

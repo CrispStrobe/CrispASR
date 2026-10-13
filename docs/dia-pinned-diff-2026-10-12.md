@@ -160,23 +160,25 @@ published models, pins, defaults, original references and thresholds remain
 unchanged. Native free speech, Q4 neural parity and physical GPU behavior are
 separate unresolved acceptance gates.
 
-Sampler run `38299826144` completed with speech rejection. Canonical Torch
-original remains WER 0; original neural/DAC using the actual compiled native
-sampler and native free generation both have WER 1. Exact input prefix is
-37 steps, minimum neural cosine 0.9999993818 and maximum norm error
-0.0006661525. First sampled difference is step 36/head 8 (226 versus 221),
-with first input difference at step 37. These preceding neural rows pass.
-The native sampling path alone can trigger quiet short audio with original
-modules; this does not isolate random-stream behavior from probability filtering
-or waive native speech acceptance.
+Sampler control `38299826144` finished with speech rejection: canonical Torch
+original WER 0; original neural/DAC using the compiled native sampler and
+native free generation both WER 1. Exact input prefix is 37 steps; minimum
+neural cosine 0.9999993818 and maximum norm error 0.0006661525 pass. First
+pre-override sample difference is step 36/head 8 (226 versus 221), with first
+input difference at step 37. Original/native-sampler PCM is 16.521 seconds,
+RMS 0.000170839, versus native 13.305 seconds, RMS 0.000384941. This establishes
+that the native sampling path can trigger quiet short output independently of
+the native neural graph or codec. Exact probability/filter and random-stream
+effects still need isolation; failed original controls never waive native gates.
+The complete proof is retained in `docs/dia-native-sampler-control-2026-10-12.json`.
 
-`tools/ci-heavy/dia_sampling_probability_control.py` replays the complete shared
-prefix of retained logits without loading model weights. It executes the
-actual pinned `_decoder_step` CFG/masking and `_sample_next_token` functions,
-intercepts Torch's final multinomial probabilities, and observes the real
-native distribution by mechanically inserting a read into the unchanged
-sampler header. It also requires exact replay of all 333 retained native
-pre-override draws for each original/native-logit arm. Full probability,
-support and variation arrays are retained. It records the actual Torch version,
-script/source hashes and dirty-worktree state; local component results do not
-substitute for the hosted pinned Torch 2.6 run or establish speech/RNG acceptance.
+The real-logit probability observer at `2cdf631b3` executes the actual pinned
+CFG/masking/sampler source and reads the native distribution through a
+mechanically instrumented actual header. Local weight-free replay reproduces
+all 333 retained native samples in both arms, with zero support mismatches and
+maximum probability error 3.6076092e-7. Local Torch is actually 2.11.0+cu130;
+this does not establish the pinned hosted 2.6.0 result. Complete probability,
+support and variation arrays plus source/observer hashes are retained in
+`docs/dia-sampling-probability-local-2026-10-12.json`. Hosted run `38307628341`
+repeats the component check under Torch 2.6. No model weights are loaded;
+speech, native RNG compatibility and production acceptance remain separate.

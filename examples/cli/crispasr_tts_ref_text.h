@@ -28,10 +28,25 @@
 #include "core/tts_ref_cache.h"
 
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <vector>
 
 namespace crispasr_ref_text {
+
+// The transcript stored beside a reference clip, <voice>.wav -> <voice>.txt,
+// which is where the server's POST /v1/voices writes its `transcript` field.
+// Returns "" when there is none.
+inline std::string sidecar(const std::string& voice_path) {
+    std::ifstream f(std::filesystem::path(voice_path).replace_extension(".txt"));
+    std::stringstream ss;
+    ss << f.rdbuf();
+    const std::string text = ss.str();
+    const size_t end = text.find_last_not_of(" \t\r\n");
+    return end == std::string::npos ? "" : text.substr(0, end + 1);
+}
 
 // Transcribe 16 kHz mono PCM with `asr_backend`. `log_tag` is the caller's
 // "crispasr[<backend>]" prefix so diagnostics name the backend the user asked

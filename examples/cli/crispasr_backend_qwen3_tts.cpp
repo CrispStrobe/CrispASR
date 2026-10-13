@@ -12,6 +12,7 @@
 #include "crispasr_model_registry.h"
 #include "whisper_params.h"
 
+#include "core/tts_voice_policy.h"
 #include "qwen3_tts.h"
 
 #include <cstdio>
@@ -246,7 +247,7 @@ public:
             // Include instruct in key so a style change triggers a re-load.
             voice_key = "cv:" + params.tts_voice + "\x01" + params.tts_instruct;
         } else {
-            voice_key = "base:" + resolved_voice + "\x01" + resolved_ref_text;
+            voice_key = "base:" + core_tts_voice::reference_key(resolved_voice, resolved_ref_text);
         }
         if (voice_key != last_voice_key_) {
             if (qwen3_tts_is_voice_design(ctx_)) {

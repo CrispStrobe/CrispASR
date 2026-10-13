@@ -1,0 +1,192 @@
+{
+  "scope": "Pinned original sampling/delay feedback component replay; no neural, decoded speech, native sampler or GPU acceptance.",
+  "hosted_run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38312385854",
+  "hosted_receipt": {
+    "source": "75fcdc70fffeff48609bf5befe171a9ca01a172a",
+    "source_worktree_dirty": false,
+    "script_sha256": "911af928f33cf99df42e6cd7c429706ec05e70841efd4c4fc81187c7bd043b0b",
+    "original_source_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+    "original_source_files": {
+      "dia/__init__.py": "d6cc98eb95ccf0123697c036df7759db197d5424aa9eb52f75e8d4f88d736b6a",
+      "dia/audio.py": "a4a92aba2e0b45a3da2ac8c27c36002501a0500a528eb9e613661f7d9a057875",
+      "dia/config.py": "6bbdb7c764e11b9b9f4170948cb06da5a4dec00b2c080090ce96975fce731698",
+      "dia/layers.py": "9b77d590101783a7e570bd9889afb09b85912d05072313c32a984dbfe9323024",
+      "dia/model.py": "6bc51e6e5ff58ca9ed66431773df6cda954afee3d4b7ea515c1363b73ca82926",
+      "dia/state.py": "83d0ddc651bab76afe91c8851b515f12863d1221778765a6d9d4462581f5d13f"
+    },
+    "reference_sha256": "3db6f8923abffd612e6c83d7036debebd10ed28b77c3eb9ec3d91fec1ce1a542",
+    "original_run": 38285566623,
+    "torch_version": "2.6.0+cpu",
+    "mkl_available": true,
+    "model_weights_loaded": false,
+    "production_defaults_changed": false,
+    "speech_acceptance": false,
+    "scope": "Actual canonical sampling/delay feedback replay and RNG witness; no neural, PCM or native free-generation acceptance.",
+    "canonical_input_transitions_exact": true,
+    "canonical_final_codes_exact": true,
+    "exponential_race_samples_and_rng_state_exact": true,
+    "steps": 1226,
+    "sampled_rows": 11034,
+    "rng_state_bytes": 5056,
+    "codec_frames": 1210,
+    "component_replay_pass": true,
+    "split_row_negative": {
+      "sample_mismatches": 9090,
+      "scope": "Fixed row-by-row Torch sampling from each same pre-batch RNG state; diagnostic only, never used for feedback."
+    },
+    "actual-torch-exponential-noise.f32": {
+      "bytes": 45371808,
+      "sha256": "6a64367db8f4ce9ab9efe5b43d00e708ede3e625ac00e18058a51c7c2622fce8"
+    },
+    "actual-torch-rng-states.u8": {
+      "bytes": 6198656,
+      "sha256": "40472b37eed418f252efbe9851a231d2edf683fe6666bfc702c6095822428c1d"
+    }
+  },
+  "hosted_files": [
+    {
+      "path": "actual-torch-exponential-noise.f32",
+      "bytes": 45371808,
+      "sha256": "6a64367db8f4ce9ab9efe5b43d00e708ede3e625ac00e18058a51c7c2622fce8"
+    },
+    {
+      "path": "actual-torch-rng-states.u8",
+      "bytes": 6198656,
+      "sha256": "40472b37eed418f252efbe9851a231d2edf683fe6666bfc702c6095822428c1d"
+    },
+    {
+      "path": "pre-override-samples.npy",
+      "bytes": 88400,
+      "sha256": "6bb123f842cac731412a39fb8ce2fdf14550c4b3d1e2cbd71e95ef7f30c191cd"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1974,
+      "sha256": "d581ab34f4cb6d446c0a279188be9797a5f912155e69c2429ace365ea8ba6d70"
+    },
+    {
+      "path": "replayed-code-grid.npy",
+      "bytes": 43688,
+      "sha256": "eae764db7bf2e1786f546ab5dc48b6804a081b5645b9191fdae496031741d8a4"
+    },
+    {
+      "path": "replayed-decoder-inputs.npy",
+      "bytes": 44264,
+      "sha256": "6fa578f4629a9ad03bff4187f254cf9769566a8ba7441fbacc97ee54a6ab18c6"
+    },
+    {
+      "path": "split-row-negative-samples.npy",
+      "bytes": 88400,
+      "sha256": "2f7414ef3bdb74a680ef32820835ad340aa7667c955aa1b3d51076dd721bfed8"
+    },
+    {
+      "path": "torch-build-config.txt",
+      "bytes": 1664,
+      "sha256": "325519a78f24e00e291496c5cdee3ac6123898433818b9054a82182bda70ea8e"
+    }
+  ],
+  "local_receipt": {
+    "source": "75fcdc70fffeff48609bf5befe171a9ca01a172a",
+    "source_worktree_dirty": false,
+    "script_sha256": "911af928f33cf99df42e6cd7c429706ec05e70841efd4c4fc81187c7bd043b0b",
+    "original_source_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+    "original_source_files": {
+      "dia/__init__.py": "d6cc98eb95ccf0123697c036df7759db197d5424aa9eb52f75e8d4f88d736b6a",
+      "dia/audio.py": "a4a92aba2e0b45a3da2ac8c27c36002501a0500a528eb9e613661f7d9a057875",
+      "dia/config.py": "6bbdb7c764e11b9b9f4170948cb06da5a4dec00b2c080090ce96975fce731698",
+      "dia/layers.py": "9b77d590101783a7e570bd9889afb09b85912d05072313c32a984dbfe9323024",
+      "dia/model.py": "6bc51e6e5ff58ca9ed66431773df6cda954afee3d4b7ea515c1363b73ca82926",
+      "dia/state.py": "83d0ddc651bab76afe91c8851b515f12863d1221778765a6d9d4462581f5d13f"
+    },
+    "reference_sha256": "3db6f8923abffd612e6c83d7036debebd10ed28b77c3eb9ec3d91fec1ce1a542",
+    "original_run": 38285566623,
+    "torch_version": "2.6.0+cpu",
+    "mkl_available": true,
+    "model_weights_loaded": false,
+    "production_defaults_changed": false,
+    "speech_acceptance": false,
+    "scope": "Actual canonical sampling/delay feedback replay and RNG witness; no neural, PCM or native free-generation acceptance.",
+    "canonical_input_transitions_exact": true,
+    "canonical_final_codes_exact": true,
+    "exponential_race_samples_and_rng_state_exact": true,
+    "steps": 1226,
+    "sampled_rows": 11034,
+    "rng_state_bytes": 5056,
+    "codec_frames": 1210,
+    "component_replay_pass": true,
+    "split_row_negative": {
+      "sample_mismatches": 9090,
+      "scope": "Fixed row-by-row Torch sampling from each same pre-batch RNG state; diagnostic only, never used for feedback."
+    },
+    "actual-torch-exponential-noise.f32": {
+      "bytes": 45371808,
+      "sha256": "464e6429714546b613aef7e6d93bd45ee99bfa91151d2672800b21f01858cc80"
+    },
+    "actual-torch-rng-states.u8": {
+      "bytes": 6198656,
+      "sha256": "40472b37eed418f252efbe9851a231d2edf683fe6666bfc702c6095822428c1d"
+    }
+  },
+  "local_files": [
+    {
+      "path": "actual-torch-exponential-noise.f32",
+      "bytes": 45371808,
+      "sha256": "464e6429714546b613aef7e6d93bd45ee99bfa91151d2672800b21f01858cc80"
+    },
+    {
+      "path": "actual-torch-rng-states.u8",
+      "bytes": 6198656,
+      "sha256": "40472b37eed418f252efbe9851a231d2edf683fe6666bfc702c6095822428c1d"
+    },
+    {
+      "path": "pre-override-samples.npy",
+      "bytes": 88400,
+      "sha256": "6bb123f842cac731412a39fb8ce2fdf14550c4b3d1e2cbd71e95ef7f30c191cd"
+    },
+    {
+      "path": "receipt.json",
+      "bytes": 1974,
+      "sha256": "cb92edab0b8a66423b76f44c27e5640a4a780b2b14dbef027013ac9397ae30be"
+    },
+    {
+      "path": "replayed-code-grid.npy",
+      "bytes": 43688,
+      "sha256": "eae764db7bf2e1786f546ab5dc48b6804a081b5645b9191fdae496031741d8a4"
+    },
+    {
+      "path": "replayed-decoder-inputs.npy",
+      "bytes": 44264,
+      "sha256": "6fa578f4629a9ad03bff4187f254cf9769566a8ba7441fbacc97ee54a6ab18c6"
+    },
+    {
+      "path": "split-row-negative-samples.npy",
+      "bytes": 88400,
+      "sha256": "2f7414ef3bdb74a680ef32820835ad340aa7667c955aa1b3d51076dd721bfed8"
+    },
+    {
+      "path": "torch-build-config.txt",
+      "bytes": 1666,
+      "sha256": "7e0305bf5875b2359d81529e09004eaba80fef4e1adf6177ed2b0553c9b31e27"
+    }
+  ],
+  "private_environment": {
+    "python": "/usr/bin/python3.12",
+    "torch": "2.6.0+cpu",
+    "pydantic": "2.11.3",
+    "gguf": "0.18.0",
+    "numpy": "1.26.4",
+    "environment_log_sha256": "8b4624f6ffb5e95a906f5e2897dcf89b57647ca85c1d65d60136469042fcac30",
+    "torch_install_log_sha256": "5e6b112ed901eb00e35ce71bf852317b1bbda63d48f1fef615f760ccda4cc8ec",
+    "dependencies_install_log_sha256": "3e975629b79be0c6640e14b2ca02d1b3a2f06004b0412e6d46971013fc76a394",
+    "shared_environment_modified": false
+  },
+  "cross_host": {
+    "discrete_draws_decoder_inputs_and_code_grid_exact": true,
+    "mt_state_bytes_exact": true,
+    "noise_values": 11342952,
+    "noise_values_different": 2153802,
+    "max_absolute_noise_difference": 9.5367431640625e-07,
+    "max_relative_noise_difference": 0.0026954703498631716,
+    "scope": "Host-dependent floating-point exponential noise differs; all draws and feedback agree. Exact noise bytes are not portable acceptance."
+  }
+}

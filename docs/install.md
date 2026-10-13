@@ -332,6 +332,7 @@ cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_METAL=ON    # Apple Silicon
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON   # cross-vendor
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_MUSA=ON     # Moore Threads
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_SYCL=ON     # Intel oneAPI
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DGGML_CANN=ON     # Huawei Ascend
 ```
 
 You can compile multiple backends into one binary; ggml will pick the
@@ -342,8 +343,15 @@ with `--gpu-backend <name>`, and pin a device with `-dev N`:
 
 ```bash
 crispasr --gpu-backend vulkan -dev 1 -m model.gguf -f audio.wav
+crispasr --gpu-backend cann -dev 0 -m model.gguf -f audio.wav
 crispasr --gpu-backend cpu -m model.gguf -f audio.wav        # benchmarking
 ```
+
+The manual [CANN compile workflow](../.github/workflows/cann-build.yml) builds
+CLI, shared library, diff and quantizer with the official CANN SDK images on
+x86_64/910B (ACL graphs enabled) and arm64/310P (ACL graphs disabled). Run it
+with `gh workflow run cann-build.yml --ref <branch>`. Hosted runners have no
+Ascend NPU, so a successful build does not establish inference or performance.
 
 ## Opus / AAC support (default, no ffmpeg, no libopus)
 

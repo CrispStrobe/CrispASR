@@ -11,6 +11,62 @@ to main before you start**. Several agents run here at once; a claim that lands
 with the work is a claim that did nothing. Delete it when the work lands, or if
 it goes stale for more than a day.
 
+## CLAIMED 2026-10-13 — Ordered maintenance roadmap and Dia F32 cache control
+
+Owner: this maintainer session. Controller worktree
+`/mnt/storage/crispasr/triage-20261007/worktree`; Dia runtime worktree
+`/mnt/storage/crispasr/dia-short-20261012/reference-worktree`, branch
+`fix/dia-pinned-diff`. User authorizes the following order and corresponding
+Markdown updates; each acceptance gate precedes the dependent step.
+
+1. Collect complete fixed Dia neural precision controls. DONE as an experiment:
+   GH `38343667254`, exact clean source `5a8fe578e`, retains all 41 files and
+   both 381-tensor audits. Both arms pass 40/40 replay stages; both native CLI
+   and C ABI arms reject speech with empty transcripts/WER 1. Full F32 extends
+   shared original input history to 865 steps versus 77 for heads-only F32;
+   first differing draw is step 864/head 6, original 55/native 938. These are
+   rejected speech controls, not an accepted runtime fix. Receipt:
+   `docs/dia-neural-precision-hosted-2026-10-13.json`.
+2. NOW IN FLIGHT: candidate `2205d920d`, GH `38357576078` (queued).
+   Preserve F32 cross-attention caches behind an opt-in gate,
+   keeping the existing F16 path/default. The actual pinned original preserves
+   F32 projections; the tiny original F32/rounded/F32-repeat control is retained.
+   Audit the full actual native projection/readback/graph-input/upload path.
+   Compare fixed full-F32 neural weights with cache OFF/ON, strict canonical
+   cosine/magnitude and actual free CLI/C-ABI ASR. Retain complete raw inputs,
+   logits, PCM and physical audits. Do not alter reference/seed/top-k/top-p or
+   quality thresholds. Measure actual cache bytes; no GPU/model-pin promotion.
+3. After fixed-prompt success, validate multiple prompts, speakers, lengths and
+   reused sessions; actual DAC/ASR and CUDA hardware must pass before acceptance.
+4. Only after correctness, profile graph construction, cache traffic, scheduler
+   and attention; A/B each gated optimization at identical load and quality.
+5. Review full current #492/#521 threads; salvage validated work without enabling
+   slower or quality-rejected paths. Keep contributor history and scoped proof.
+6. Revisit Echo/Nemotron Q4 and remaining reporter/hardware/asset constraints.
+   Distinguish doable code repairs from unprovided clips, physical hardware and
+   missing licensed assets. Use GH/Kaggle for heavy work, storage for artifacts.
+7. Integrate only accepted changes, update all affected Markdown and complete
+   final-main CI/package validation; release through `scripts/bump-version.sh`.
+   No release tag until that final gate passes.
+
+Public archive-retrieval CI `38346489272` is SUCCESS at `bff87788e`.
+The ordered roadmap is not a claim that pending models, PRs or hardware pass.
+
+## CLAIMED 2026-10-13 — Prepare Dia CUDA package while CPU control is queued
+
+Owner: this maintainer session. New storage worktree
+`/mnt/storage/crispasr/dia-cuda-prep-20261013`, branch
+`prepare/dia-cuda-20261013`, based on runtime candidate `2205d920d`.
+CPU OFF/ON/OFF job `38357576078` remains unchanged and awaits a GH runner.
+The fully read Kaggle guide reserves Kaggle for actual GPU work; the CPU
+control stays on GH. Prepare a compile-only CUDA 12.4 SM60/SM75 package on GH
+using the existing validated Breeze bundle/closure pattern, including CLI,
+shared C ABI, diff, quantizer and same-source Python bindings. Record exact
+runtime/source/submodule/ELF hashes and keep the driver outside the package.
+This prepares the next ordered hardware step and does not accept model speech.
+No Kaggle model test or profiling starts until the CPU speech gate passes.
+Keep all large artifacts under storage; no local CUDA/heavy model build.
+
 ## Release preparation checkpoint 2026-10-09
 
 Comprehensive `RELEASE_NOTES_v0.8.43.md` is committed before any version bump.
@@ -668,12 +724,22 @@ sequence is strict:
    pointwise matrices (~300 MiB). Granite and Moonshine have no large F16
    residuals; Paraformer's are mostly tiny FSMN kernels.
 
-## OPEN — #412 Breeze TTS 2 follow-up: CFG multi-branch
+## OPEN — #412 Breeze TTS 2 follow-up: validate guided synthesis
 
 The port shipped (issue closed; record in HISTORY "PLAN compaction 2026-09-30").
-Voice Design and Voice Direction are REFUSED rather than downgraded: the cache
-topology and branch index exist, per-branch prompt assembly and the logits
-combine do not.
+`--tts-instruct` (Voice Design / Voice Direction) is implemented 2026-10-09 as
+serial prompt branches with upstream's single-CFG combine; see "Scope decision
+on CFG" in `docs/breeze-tts-2-port-notes.md`. Status:
+
+- reused-session transitions (one -> two -> one branches) and the scale 0 / 1 /
+  4 semantics pass on the weights through the server
+  (`tests/test-server-bt2-instruct.py`);
+- parity against the original is WIRED and NOT YET RUN: the guided matrix
+  (plain, clone, instruction at scale 0 / 1 / 4 with and without a reference)
+  is dumped by `tools/kaggle/breeze-refdump` under `guided/` and compared by
+  `crispasr-diff bt2-tts-guided` + `breeze_tts_2.py --guided`; both kernels
+  still have to be pushed by the maintainer;
+- the three-branch dual CFG is not ported (no upstream entry point uses it).
 
 ## OPEN (optional) — #416 Sidon quant: CUDA MMQ arm
 
@@ -5214,95 +5280,879 @@ only after the earliest divergence or a source-compiled failing control identifi
 a defect. Heavy models/builds run on GH CI or actual Kaggle GPU; large local
 artifacts stay on /mnt/storage.
 
-### 2026-10-12 portable Dia sampler candidate ready for hosted validation
 
-Main claim `24b1453c9` precedes implementation. The documented MCG31 stream plus
-scalar F32 exponential race reproduces all 11,034 canonical original draws,
-all 1,226 decoder transitions and the final 1,210-frame grid in the actual
-original feedback loop. Both original-probability and actual native-filter
-arms agree exactly. Noise cosine is 0.9999999999999962 and relative norm error
-3.2631726210041734e-9; final F32 bits are not byte-identical to MKL vector log.
-The fixed row-split negative differs on 9,090 draws. Full weight-free replay
-artifacts and exact executed worker/header sources are retained under storage.
+## UPDATE 2026-10-12 — Dia delayed-code boundary fix under speech validation
 
-`CRISPASR_DIA_PORTABLE_RNG=1` now gates the candidate at the shared native
-synthesis loop: one draw of all head/vocabulary noise per step, including
-masked tokens. Existing default sampling, greedy behavior, model pins and
-neural graphs remain unchanged. The diagnostic original-model bridge uses
-that same header and filter. Source-only runtime compilation, clang18 format,
-Python syntax and six tiny original/native contracts pass (14.834 s).
-The candidate-specific contract is additionally checked against compiled
-unmodified 75fcdc70f sampler source as a rejecting negative control.
+Branch `fix/dia-delay-frame-preservation`, source
+`6aa849b5320af4da7cdfa9c25d25e31469230b2e`, fixes a concrete mismatch
+with pinned official Dia source `4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8`.
+Native delay reversal dropped a whole aligned frame when one codebook contained
+a special/invalid token; the original zeros only that entry and preserves the
+remaining frame. A fixture captured by executing the actual original output
+method fails five of eight cases against the old production function and passes
+all eight against the fix. This verifies exact codec-input codes, not neural
+stages or PCM. Both CLI and C ABI share the corrected function.
 
-Next exact-source hosted checks: `dia_portable_random_control.py` repeats the
-complete weight-free original/native-filter witness; then
-`dia_portable_speech_control.py` requires real original-neural/DAC canonical
-codes and original/native C ABI/CLI ASR roundtrips with the validated +1,312-byte
-critical-output DAC export. Full-model work runs on GitHub CI, not this VPS.
-Applicable contributing audit: shared library implementation reaches existing
-CLI/C-ABI/server/bindings through their synthesis calls; no new backend,
-architecture, CMake library, model registry, converter schema or quantizer rule
-is introduced. No speech, GPU, Q4 or complete model acceptance is claimed, and
-this experimental runtime branch remains unmerged pending real output proof.
+The normal CI run is `38272645874`; heavy CPU run `38272642504` validates
+F16, Q8_0 and Q4_K sequentially. It adds the reporter's exact short prompt,
+"We are committed to making it secure.", through CLI and C ABI, retaining
+existing long-speech controls, independent ASR, WER limits and sampler defaults.
+Both runs were accepted for the exact source above and remain queued at this
+checkpoint. Local compiled reference controls, formatting, Python compilation,
+documentation anchors and all four staged secret tests pass without skips.
+Receipt on the branch: `docs/dia-delay-reversal-2026-10-12.json`.
 
-### 2026-10-13 fixed original-head/full-F32 controls ready
+The old generic Dia reference module is incomplete and unregistered in both
+the reference dispatcher and crispasr-diff. Existing accepted numerical proof
+uses the dedicated pinned source-parity worker; it does not establish complete
+generic harness wiring. That integration remains pending. The reporter's
+short-speech silence is not yet claimed resolved; no merge or release tag.
 
-Main claim `8c1dcde06` precedes the implementation. Detailed original-filter
-replay corrects the earlier top-k description: token 606 remains within top-k
-(rank 41 original, 42 native) but is removed by the shifted nucleus/top-p mask
-on native logits. Preserve the accepted source/reference and both cutoffs.
 
-`tools/dia_model_precision.py` streams mapped original neural coefficients,
-using actual existing converter mapping functions verbatim. It requires the
-pinned original weight checksum, exact template coverage/rounded coefficients,
-unchanged shapes/order/metadata and a physical byte/type audit for every tensor.
-Heads-only promotion has an exact expected +37,896,192-byte delta; full-F32 is
-an independent fixed diagnostic, not a model-pin promotion. Five tiny actual
-pinned-original-module export/layout/metadata and rejection contracts pass in
-36.010 s. No local real-model export or neural inference is run.
+## UPDATE 2026-10-12 — Current-source CANN compilation complete; Dia harness next
 
-`dia_neural_precision_control.py` prepares those two controls sequentially on
-GH CPU, verifies all 381 physical tensors, runs strict original-reference stage
-diff, then free native C ABI and CLI generation plus ASR for each arm. Original
-weights/source/reference/ASR and validated critical DAC pins are unchanged.
-The sampler remains gated on this unmerged branch; actual native speech and
-Q4/GPU quality are still unaccepted until the controls return. Existing C API,
-CLI/bindings/server/backend factory/registry/CMake/quantizer integration remains
-unchanged by these diagnostic helpers. Python syntax and staged secret gates
-are checked before pushing the exact source for the hosted run.
+CANN run `38266299769` completed successfully on both architectures at
+validation commit `03e605b64447228a193cb72a9565a54ee60baf70`, whose production
+files are unchanged from #544 head `4149be6261b599a1a4e64fdc1d1e13e14454d801`.
+ARM64/310P (ACL graph off), job `114869220977`, and x86_64/910B (ACL graph on),
+job `114869221253`, built ggml-cann, CLI, shared library, diff and quantizer.
+Complete logs, SHA256 and image digests are retained; the receipt above records
+them. General PR CI is still in flight; compilation is not Ascend inference.
 
-Hosted precision control uses Ninja and ccache per the development guide; installs those tools on the hosted runner only if missing. No local build or shared-package change.
+Dia boundary source `6aa849b53` is under hosted CI/full speech validation.
+Continue the claimed reference repair in a separate branch from that source,
+so active exact-source tests remain intact. Replace the orphan's unpinned
+load and invented batch preparation with actual pinned generate() captures;
+wire the generic dispatcher and native diff with teacher-forced history,
+explicit input alignment, cosine AND magnitude. Validate original decoded
+codec output separately from free-running speech. Preserve source/model pins
+and all existing sampler/quality gates; no performance/default change.
 
-### 2026-10-13 future Dia controls consume immutable public inputs
 
-Independent retrieval tooling is integrated on main `bff87788e`. Eight negative/
-positive contracts pass, real anonymous RNG retrieval checks 11 source files,
-and canonical extraction checks all 21 files. Both actual archive layouts retain
-the expected heavy-run folder. Source syntax, actionlint, 227 doc anchors and
-four staged no-secrets tests pass without skips (81.453 s).
+## UPDATE 2026-10-12 — Dia generic harness implemented; hosted proof dispatched
 
-This branch now uses the same helper and immutable public index for future
-canonical/portable RNG, old/new native sampler speech and neural-precision
-controls. Canonical data bytes/SHA and rejection-source assertions remain exact;
-only archive transport changes, without a GH token or retention expiry. Old
-historical codec-startup/probability diagnostics with distinct unarchived input
-runs retain their existing transport. Currently executing precision run
-38343667254 stays on immutable `5a8fe578e`, unmodified and uncancelled. No new
-production C++/default/seed/weights/ref/gate change, or speech/GPU/Q4 acceptance.
+Source `9dd9715cf9ee8d7c7d5c194ca270a75ad8819024` on
+`fix/dia-pinned-diff` replaces the orphaned reference stub with a clean-source
+verified original generate() capture and registers `dia` in both the generic
+reference dispatcher and native diff. It records exact text/model/code/DAC
+provenance, preserves both CFG branches, and captures all 12 encoder blocks,
+all 18 decoder blocks at step zero, every decoder input/logit pair and actual
+original DAC PCM. New native snapshots are debug-gated and marked as outputs;
+production arithmetic, sampling recipes and GPU defaults are unchanged.
 
-### 2026-10-13 F32 cross-cache control candidate
+Diff gates input alignment before numerical interpretation, then checks cosine
+and per-row magnitude under existing strict F16 source-parity thresholds.
+Decoder history and DAC codes are replayed separately. This does not establish
+free-running sampler equality or replace complete CLI/C ABI ASR acceptance.
+Three tiny-original neural transparency/ownership/error-restoration controls
+pass (the final DAC in those tests is a dummy, no speech claim), as do actual
+boundary controls, C++ syntax, formatting, Python compilation, anchors and all
+four staged secret tests without skips (53.442 s).
 
-Main preimplementation claim `873b1254e` precedes this runtime change.
-`CRISPASR_DIA_CROSS_CACHE_F32=1` preserves F32 projection readback, decoder
-graph inputs and upload payloads; unset/other values retain the F16 path.
-The shared synthesis implementation serves CLI and C ABI/bindings/server.
-No backend/factory/registry/CMake/quantizer/API addition is involved.
+Heavy generic-diff run `38278884937` tests actual pinned original weights/DAC
+and F16/Q4_K sequentially, including missing-stage and uniform-scale negative
+controls. It exercises the actual reference dispatcher and builds crispasr-diff.
+Default reference length 128 is bounded numerical/codec evidence, not full
+short-speech acceptance. Exact-source general CI is `38278888334`. Both accepted
+runs are queued. The earlier complete speech worker `38272642504` is running at
+boundary-fix source `6aa849b53`; that source's hosted linux-unit, Windows, macOS
+and iOS checks pass, with other platform jobs still in flight. No reported
+silence resolution, merge or release is claimed before actual decoded proof.
 
-The hosted neural worker adds `--cross-cache-control`: one fixed physical
-all-original-F32 model, F16/F32/F16-repeat cache arms in the same binary/host.
-Each arm requires complete 40-stage strict diff and actual CLI/C-ABI speech.
-F32 speech must pass; F16 arms must retain their known rejection and repeat
-exact inputs, logits, native PCM and CLI PCM. Actual vector-byte receipts must
-show the expected doubling. Whole runtime/worker/export sources are retained
-with all arrays/audits. No seed/filter/reference/gate/default change or model
-promotion; broad speech and real CUDA validation remain subsequent gates.
+
+## UPDATE 2026-10-12 — Dia early alignment guard; Ascend validation follow-up claimed
+
+Dia reference source `bdbf899cb910b7c85103b62ad5f80918518cb8d4` rejects
+leading/trailing whitespace and NUL before source/model loading. Seven
+regression assertions fail on the preceding source; all four tiny-original
+capture tests pass after the fix. All four staged no-secrets tests pass without
+skips (55.194 s). Current-source normal CI is `38280449012`; earlier generic
+CI `38278888334` is cancelled/superseded. Actual-weight generic diff
+`38278884937` remains queued at `9dd9715cf`; its valid default prompt and native
+runtime are unchanged. Full native speech run `38272642504` remains in progress.
+No numerical or speech acceptance is inferred from the small guard tests.
+
+#544's contributor offered real Ascend testing in comment `6128212082`. Claim
+a separate storage-worktree validation script that executes existing ggml
+CPU-reference operator tests, retains complete logs and source provenance, and
+requires proof the selected backend actually ran nonzero cases. The upstream
+test binary returns success when an unknown backend or empty operator filter
+skips every case; reject those false positives. Validate the wrapper against
+the actual binary on hosted CPU before sending a hardware procedure. This is
+operator correctness evidence, not model speech acceptance or NPU performance.
+
+
+## UPDATE 2026-10-12 — Non-vacuous Ascend operator wrapper dispatched
+
+Source `e5652705bac011aafe0806228e38b4e8a86410e2` on
+`validation/cann-hardware-ops` adds `tools/validate_backend_ops.py`. It executes
+the existing upstream CPU-reference tests without changing their math or
+tolerances, requires a completed selected backend plus nonzero successful
+operator cases, and saves complete logs/hashes and incremental receipts even
+after failure/timeout. Operator coverage is separate from full-model speech,
+quantized-model quality and performance. No physical Ascend claim is made.
+
+Hosted ARM CPU worker `38281476089` compiles the actual upstream tester and
+checks one tiny real positive case plus three real false-success controls:
+missing backend, unmatched parameters and unknown operator. All raw negative
+probes must return zero upstream, while the wrapper must reject each. This
+run is queued; the hardware procedure has not been sent to the contributor
+pending that validation. Python compilation/help and all four staged secret
+tests pass without skips (50.094 s). The draft release notes now record both
+completed CANN architectures and separate the unmerged Dia work from release
+acceptance. Actual-weight Dia diff `38278884937` has started; complete native
+speech `38272642504` remains running. Breeze #543 has three nightly model
+checks left; CANN #544 has four. No failure, merge or new release tag is claimed.
+
+
+## UPDATE 2026-10-12 — Dia actual-weight diff rejected at DAC; codec A/B claimed
+
+Run `38278884937` completed with failure at source `9dd9715cf`. F16 passes
+exact encoder/decoder inputs and all captured neural boundaries, including all
+encoder/decoder blocks and every replayed logit (minimum logit cosine
+0.9999989, maximum norm error 0.0008548312). Isolated published DAC replay fails
+against actual original F32 PCM: cosine 0.9976444, norm error 0.04271824, maximum
+absolute error 1.69772e-05. Q4_K retains multiple strict neural failures and the
+same isolated codec failure. Complete 39 MB hosted artifact and logs are stored
+on CIFS at `dia-short-20261012/generic-proof`. No gate relaxation or acceptance.
+
+Continue the claimed Dia investigation with an original-codec A/B using the
+exact preserved code grid/reference archive. Verify original checkpoint SHA,
+read the actual DAC layers/quantizer/decoder/weight-normalization path, compare
+published GGUF weights to the actual effective original weights, and decode
+them through original modules. Export diagnostic F32 and narrowly promoted
+codec variants; replay the unchanged code grid through native diff on GH.
+This distinguishes checkpoint/conversion/precision drift from a codec graph
+defect before modifying production math. Preserve full existing thresholds,
+recipes and speech gates; this is bounded codec evidence, not full speech.
+Also exercise missing-stage/scale negatives once the corresponding positive
+encoder stage passes, even when an independent codec stage fails.
+
+
+## UPDATE 2026-10-12 — Dia complete short speech still rejected; original control next
+
+Complete CPU run `38272642504` is rejected at boundary source `6aa849b53`.
+F16, Q8_0 and Q4_K preserve successful long-prompt C ABI/CLI speech and explicit
+limit/reset controls. All three fail the reporter's short sentence through both
+C ABI and actual CLI: ASR returns empty text, WER 1.0. F16/Q8 PCM is quiet
+(RMS 0.00038494 / 0.00016538); Q4 produces non-speech with RMS 0.33368743. The code-entry zeroing repair does not resolve that silence. Full immutable
+run output is retained on CIFS under `dia-short-20261012/full-speech-proof`.
+
+Extend the generic original worker with an explicit full-capacity (3072-step)
+short-prompt generation and the existing unchanged independent ASR child/gate.
+Preserve actual original PCM/codes, source/model pins, same prompt/seed/recipe
+and ASR metadata before failure. Continue numerical comparisons after the ASR
+probe so upstream output failure cannot hide native boundaries. No prompt
+padding, seed selection, comparator relaxation or sampling/default change.
+The 128-step original archive remains bounded codec evidence only.
+
+
+## UPDATE 2026-10-12 — Ascend operator wrapper verified on real ARM CPU binary
+
+Run `38281476089` passes at `e5652705b`: the actual upstream ADD case runs
+1/1, and three actual upstream false-success probes each return zero while
+the wrapper correctly returns failure. Source hashes, full control receipts
+and complete artifact hashes are in `docs/cann-hardware-wrapper-2026-10-12.json`.
+The rebased script/worker are byte-identical to that tested source; ggml stays
+at `c36dab89b662838f0f5d4826c399198c0b90bbfc`. Integrate the validated wrapper,
+then send the available hardware experiment to #544's contributor. This proves
+wrapper behavior, not physical Ascend operators, inference, speech or speed.
+
+
+## UPDATE 2026-10-12 — Breeze integration merged; Dia diagnostic workers queued
+
+PR #543 merged as `8dfa0d72cbe5cc24d7853d4631fa758a4134b927` after all
+51 applicable checks passed, one intentional skip. #529 and #536 now report
+MERGED through preserved ancestry. Runtime files remain byte-identical to the
+actual T4 proof; unrelated #530 model reports and canonical BF16 0/8 diagnostic
+remain unresolved. Receipt: `docs/breeze-merge-2026-10-12.json`.
+
+The hosted-validated operator wrapper/procedure landed on main through
+`e636f3d02`; #544 contributor received commands in comment 6129427689.
+Physical Ascend results remain pending. #544's final Kokoro regression is running.
+
+Dia source `3fb35f49e371e4e85e981b00195f391d235a43da` is pushed. Actual
+original/published/F32/narrow-F32 codec control run 38285563002 and complete
+3072-capacity original short-speech run 38285566623 are queued on GH. The latter
+uses the existing unchanged ASR gate before continuing strict numerical checks.
+Fresh source CI 38285708592 is queued. These runs have no acceptance result yet;
+prior codec and complete native short-speech failures remain rejected. No new tag.
+
+
+## UPDATE 2026-10-12 — CANN merged; rejected Dia proof publicly preserved
+
+PR #544 merged as `a86e366043f4a23251f10b67d982778cd89f83dd` after all
+46 applicable checks passed, one intentional skip. Contributor history is intact;
+physical Ascend results remain pending comment 6129427689's concrete procedure.
+The latest main must still complete its post-merge CI before a release tag.
+
+Complete failed Dia codec/numerical run 38278884937 and complete native speech
+run 38272642504 are archived publicly at dataset revision
+`43b643898356a14c9d7a8aa0168ef5ea0d64261d`,
+`dia-20261012/rejected-codec-and-short-speech-proof.zip`. All 54,845,734 bytes
+were anonymously re-downloaded and SHA256 verified:
+`7fadc88620221fa66cd7f4151260ef7020f49bcc95199ab0bb0dfd7b5fa5328e`.
+Receipt `docs/dia-rejected-proof-2026-10-12.json` retains complete file hashes,
+failures and source. Follow-up codec/full-original runs remain queued; these
+failed outputs are proof of rejection, not accepted fixtures or a default change.
+
+
+## CLAIMED 2026-10-12 — Dia original/native DAC boundary tracing
+
+While the preserved-grid weight-precision and complete original short-speech
+workers are queued, extend the existing codec diagnostic with actual original
+RVQ latent, input convolution, four decoder block and output snake/convolution
+captures. Add gated native dumps of those same graph tensors, marking them as
+outputs before allocation. Compare complete aligned arrays with the unchanged
+cosine/magnitude gates to identify the earliest codec divergence. Preserve the
+canonical PCM/code archive and separately label precision-matched controls;
+no decoder math, sampler, production default or threshold changes. Work stays
+in the existing storage reference worktree; fresh hosted validation follows.
+
+
+## UPDATE 2026-10-12 — Eight DAC boundaries wired; strict hosted replay queued
+
+Dia source `24468e4876009a6d7688ca3324193e5f0d197714` extends generic default capture to 49 stages,
+including eight actual DAC boundaries: RVQ latent, input conv, four decoder
+blocks, output snake and output conv. Native tracing is gated by
+`CRISPASR_DIA_DAC_TRACE_DIR`, marks real outputs before allocation, and serializes
+complete channel/time arrays to original ordering. Archives explicitly declare
+the required trace schema; missing stages and uniform scaling keep failing under
+the unchanged cosine/magnitude gates. No graph arithmetic or sampler changed.
+
+Seven local tests pass (five tiny-original generation/capture, two small-module
+observer ownership/failure); both new observer contracts reject previous source.
+Native source/header C++ syntax and clang-format 18 pass; the DAC graph's 23
+arithmetic call sites retain their original sequence. All four final staged
+secret checks pass without skips (53.081 s). These are capture/compilation
+checks, not real-checkpoint codec or full-speech acceptance.
+
+Fresh strict original/published/F32/narrow-F32 codec replay is queued as
+`38289295345`; source CI is `38289298320`. Superseded codec-only run
+`38285563002` was cancelled while still queued, before a runner started. Complete
+original short speech `38285566623` remains queued at unchanged `3fb35f49e`.
+Earlier numerical and native short-speech rejections remain public and rejected.
+Release tagging still requires green final-main CI; no tag or runtime merge.
+
+
+## UPDATE 2026-10-12 — Concrete v0.8.44 notes; original Dia speech running
+
+Prepared root `RELEASE_NOTES_v0.8.44.md` from the actual v0.8.43..main
+commit range and complete merge/validation receipts. It covers accepted
+#541/#542/#531/#543/#544 and the backend-operator wrapper, preserving
+contributors and distinguishing SDK compilation, source controls, real
+T4 stage/speech proof, canonical BF16 diagnostic failures and unmerged
+model work. No version bump, tag, asset publication or pending-model merge.
+
+Complete original Dia short-speech run 38285566623 at unchanged
+3fb35f49e started its hosted script at 18:23:30 UTC. Fresh eight-boundary
+codec run 38289295345 at 24468e487 remains queued. No follow-up result
+is available yet; prior short-speech and DAC failures remain rejected.
+Final integrated CI must pass before the version-bump/tag step.
+
+
+## CLAIMED 2026-10-12 — Repair Dia codec diagnostic parameter coverage
+
+Run 38289295345 at 24468e487 failed before native comparison: published
+DAC includes `quantizer.quantizers.0.in_proj.bias`, which the diagnostic
+parameter mapper did not cover. Complete artifacts and terminal logs are
+preserved on storage; full file hashes are recorded in
+`docs/dia-codec-trace-harness-failure-2026-10-12.json`. Actual original
+DAC reproduction, weight-norm removal, and eight original boundary captures
+completed before the mapping exception. These are original-only controls,
+not native parity or speech acceptance.
+
+Extend the diagnostic mapping against the actual original DAC quantizer
+modules, exercise every exported quantizer/decoder mapping with tiny
+original modules, retain strict rejection of unknown tensors, and rerun
+the hosted comparison. Do not skip weights or change graph math, canonical
+PCM, production codecs/defaults or thresholds. Complete original short
+speech 38285566623 continues independently on unchanged 3fb35f49e.
+
+
+## UPDATE 2026-10-12 — Dia diagnostic parameter coverage repaired and rerun
+
+Source `778dac9ccbd4dae8592117e8e2cc2f76c608a3b2` maps the published
+DAC input-projection weights/biases to actual original modules, preserving
+every tensor and existing output/codebook mapping. Three tiny-original DAC
+contracts pass across all 134 Parameters, exact code-replay independence
+from input-projection bias, and unknown-name rejection. Old source fails
+19 assertions/subtests: 18 missing input-projection Parameters plus the
+replay contract. The seven existing tiny-original generation/observer
+tests also pass. Python syntax, 227 documentation anchors and all four
+staged secret checks pass without skips (50.007 s). No graph arithmetic,
+production codec, sampler, canonical PCM or threshold changed.
+
+Fresh hosted codec run 38294496529 is queued at that exact source; both
+new parameter and existing observer tests run before its downloads/weight
+comparisons. Complete original short speech 38285566623 remains running
+independently on unchanged 3fb35f49e. Failed run 38289295345's complete
+17 files (366,607,573 bytes), full hashes and GitHub artifact 11767387065
+remain recorded. No native/full-speech acceptance or release tag claimed.
+
+
+## CLAIMED 2026-10-12 — Dia full original speech proven; isolate native sampling
+
+Run 38285566623 at 3fb35f49e finished with failure only on Q4_K numerical
+parity. Actual original seed-42 short speech has WER 0, RMS 0.0735338613,
+14.048073 seconds and 1226 captured decoder steps. F16 passes all 40
+strict neural/boundary/complete-DAC comparisons; isolated PCM cosine
+0.9999999 and norm error 0.00004443983. Missing/scaled encoder negatives
+fail as required. Q4_K first fails encoder_layer_6 (cosine 0.9993770),
+then later neural stages. This does not resolve the distinct 128-step
+startup codec failure or failed native free-running short speech. Complete
+artifacts/logs/full file hashes: docs/dia-full-original-short-2026-10-12.json.
+
+Next isolate stochastic sampling from native free-generation math/bookkeeping:
+compile the actual production dia_sampling.h into a tiny diagnostic adapter,
+then use that exact sampler/seed in the actual pinned original generate()
+without modifying its neural/CFG/mask/delay/DAC source. Label this as a
+separate native-sampler control, preserving the canonical original Torch
+reference. Compare original/control/native speech through the unchanged ASR
+gate and capture the first discrete input divergence plus preceding logits.
+Add small actual-header/original-neural plumbing tests, and run real models
+only on GH. No seed/prompt selection, original fixture replacement, sampler
+production change or acceptance waiver. Codec run 38294496529 remains queued
+independently at fixed 778dac9cc.
+
+### 2026-10-12 actual-native-sampler control dispatch
+
+Source `1d8d5bbc2351b74721abb11d0a39d2b8f86f2441` is pushed on
+`fix/dia-pinned-diff`, storage reference worktree. GH heavy run
+[38299826144](https://github.com/CrispStrobe/CrispASR/actions/runs/38299826144)
+is queued at that immutable source. It preserves the completed canonical
+Torch short-speech PCM/reference hashes and uses the actual production sampler
+header through a compiled adapter only in a separately labelled original
+neural control. Native C ABI remains free-running. Same fixed prompt, seed 42,
+sampling recipe and unchanged ASR gate; three actual speech recognition arms.
+Complete decoder inputs, raw logits, pre-override draws and PCM are retained,
+with first discrete divergence and cosine/magnitude over the identical prefix.
+Five tiny actual-header/original-neural/trace contracts pass (30.082 s);
+malformed/incomplete token traces fail. C++ clang18 format, Python compilation,
+227 documentation anchors and all four staged secret checks pass without skips
+(45.284 s). These local tests have no actual-checkpoint speech-quality claim.
+
+The independent eight-boundary codec run 38294496529 at fixed `778dac9cc`
+started on GH at 19:44:36 UTC; it is currently preparing runner scratch space,
+with no native comparison result yet. Main was fetched and already matches
+origin (`d8031fa8b`); current main CI 38298556509 and secret scan 38298556537
+remain queued. Both release-note drafts now distinguish the completed original
+WER-0/F16 full-utterance replay from the failed startup codec and native free
+short speech. No unmerged Dia production change, accepted Q4 fix or new tag.
+Open issues/PRs were checked again; no new external follow-up to act on.
+
+## CLAIMED 2026-10-12 — reproducible Dia DAC critical-output precision export
+
+Codec run 38294496529 at `778dac9cc` completed SUCCESS. The published codec
+fails canonical startup `dac_output_conv` and PCM (cosine 0.9976444, norm error
+0.04271824), while the same native graph passes against actual original
+modules loaded with the published rounded weights. All-F32 original weights
+pass canonical PCM at cosine 1.0000000 and norm error 0.000001932156.
+The narrow original-F32 final Snake/output-convolution export also passes
+canonical PCM at cosine 0.9999927 and norm error 0.002027489. This isolates
+the startup failure to exported weight precision rather than decoder graph
+math. Complete source-original controls and four missing/scaled negatives
+are retained in artifact 11770585576 (981,046,884-byte ZIP); full download and
+file-hash audit are in progress on storage. No released codec/default changes.
+
+Make this exact export reproducible with a dedicated conversion CLI using
+the actual original DAC package/checkpoint and existing verified tensor mapping,
+preserving published unrelated weights and unknown-name rejection. Add tiny
+real-module coverage and physical tensor-type/byte audit; no reconstructed
+weight-normalization math. Work in storage `reference-worktree` on
+`fix/dia-pinned-diff`. Real-checkpoint export and stage validation run on GH,
+with canonical startup and full-utterance references unchanged. Actual sampler
+control 38299826144 has started independently; native short-speech acceptance
+and Q4 neural repair remain separate pending gates. Production promotion
+requires full speech and hardware validation; no gate relaxation or new tag.
+
+### 2026-10-12 critical-output export and proof checkpoint
+
+Complete codec proof is retained on storage: 47 files, 1,188,061,032 bytes,
+all full SHA256s and every canonical/control stage metric in
+`docs/dia-codec-precision-2026-10-12.json`. All eight variant comparisons have
+48 rows each; published canonical has two failures (output convolution/PCM),
+the seven other variant/reference comparisons pass all rows. Four missing/
+scaled encoder/codec negative runs exit 1 as required. Original coefficients
+round exactly to all 134 published tensors. Physical narrow-candidate audit
+verifies three original F32 payloads and 131 unrelated preserved payloads/types.
+Its 108,697,184-byte GGUF is only 1,312 bytes larger than published. Final
+PCM cosine 0.9999927 and norm error 0.002027489 pass unchanged startup gates;
+this is not native free-speech acceptance.
+
+Standalone converter/shared parameter lookup and full tensor audit are pushed
+at `a0b702d0d26b543a82bee689c69ac296d319e5b2`, `fix/dia-pinned-diff`.
+Six tiny original-module/export contracts pass (30.849 s), Python compilation,
+CLI help and 227 documentation anchors pass. All four staged no-secrets tests
+pass without skips (68.410 s). Initial local export assertions passed but
+cleanup failed because reader maps remained open on CIFS; the shared reader
+context now closes them deterministically, and the complete rerun passes.
+
+Fresh hosted standalone export run
+[38306172119](https://github.com/CrispStrobe/CrispASR/actions/runs/38306172119)
+is queued at that exact source. It requires the byte-identical previously
+validated narrow candidate, then fresh strict comparisons against both retained
+startup and full-utterance original references. The original/native-sampler
+control 38299826144 remains running at fixed `1d8d5bbc2`; no source change to
+that active run. Original speech, startup precision, native free speech, Q4
+neural parity and physical GPU behavior remain distinct gates. Updated notes
+and proof receipts describe the accepted numerical control without promoting
+production codec pins, merging unvalidated runtime changes or cutting a tag.
+
+### 2026-10-12 sampler control rejects short speech; inspect real distributions
+
+Run 38299826144 at fixed `1d8d5bbc2` completed FAILURE on both original-model/
+native-sampler and native free-speech ASR, with WER 1 and empty transcripts.
+The preserved canonical Torch original still reads verbatim (WER 0). Original
+neural/DAC using the compiled actual native sampler produces 16.521 s at RMS
+0.000170839; native produces 13.305 s at RMS 0.000384941. They share 37 exact
+input steps, prefix minimum cosine 0.9999993818 and max norm error 0.0006661525
+(PASS). The first sampled difference is step 36/head 8: original control 226,
+native 221; inputs first differ at step 37. All complete inputs, logits, draws,
+PCM, source/header copies and logs are retained on storage and hashed in
+`docs/dia-native-sampler-control-2026-10-12.json`. This demonstrates that the
+native sampling path alone can trigger quiet short output even with original
+neural/codec modules, but does not yet isolate random-stream versus probability
+filter/numerical differences, accept native speech, or waive a gate.
+
+Next inspect exact final probability/support distributions at step zero and
+the first observed divergence, using actual pinned original sampler/CFG source
+and a mechanically instrumented actual native header. This is weight-free
+replay of a few retained logits, not a new local model run. Preserve canonical
+defaults and failed speech, and establish whether any filter/normalization
+defect exists before changing RNG or production sampling. Work continues in
+the claimed storage reference worktree; standalone codec run 38306172119 is
+independently queued at immutable `a0b702d0d`.
+
+### 2026-10-12 real-logit probability replay checkpoint
+
+Probability observer source is pushed at
+`2cdf631b36821604d894f9775df7db679ea57d2e`, branch `fix/dia-pinned-diff`.
+It executes actual pinned original CFG/masking and sampler functions, with only
+the final Torch multinomial intercepted to retain probabilities. The actual
+native header is mechanically instrumented to observe `dist.probabilities()`;
+its RNG is untouched, and no filter/math is reconstructed. Both retained
+original-control/native logit arms cover all 37 shared input steps (333 rows
+each), with exact replay of every saved native pre-override sample required.
+
+Local weight-free execution reproduces every sample, with zero support
+mismatches for both arms. Maximum probability error is 1.7881393e-7 for the
+original-control arm and 3.6076092e-7 for native; first divergent step/head
+has error 6.1332246e-9 and 1.0324503e-8 respectively. Actual local Torch is
+2.11.0+cu130, differing from hosted original 2.6.0; it is explicitly not
+pinned-original acceptance. The uncommitted-script SHA/dirty state, original
+source/header/observer hashes, complete probability/support/variation arrays
+and all 17 files (10,979,903 bytes) are retained in
+`docs/dia-sampling-probability-local-2026-10-12.json`. No model weights loaded.
+
+Pinned Torch 2.6 hosted run
+[38307628341](https://github.com/CrispStrobe/CrispASR/actions/runs/38307628341)
+is queued at exact `2cdf631b3` to repeat this component check. Python syntax,
+227 documentation anchors and all four staged no-secrets tests pass without
+skips (69.953 s). Standalone critical-codec export run 38306172119 remains
+queued at unchanged `a0b702d0d`. Failed short speech and Q4 neural gates remain
+failed, with no production sampler, recipe, model-pin or release-tag change.
+No new external issue/PR replies were found during this continuation.
+
+### 2026-10-12 pinned probability and standalone codec controls accepted
+
+Standalone export run 38306172119 completed SUCCESS at exact `a0b702d0d`.
+The converter reproduces the validated candidate byte for byte, audits all 134
+tensors (three original F32 output payloads, 131 unrelated payloads unchanged),
+and adds 1,312 bytes. The selected bias was already F32 and byte-identical;
+only the other two selected payloads change. Six tiny contracts pass. Fresh
+strict native comparisons pass startup 48/48 and full canonical history 40/40;
+full PCM cosine 1.0000000, norm error 0.00005458190. Complete stage tables,
+physical audit, logs and all file SHAs are in
+`docs/dia-dac-standalone-export-2026-10-12.json`. Free speech/GPU remain unaccepted.
+
+Pinned Torch 2.6.0+cpu run 38307628341 completed SUCCESS at clean `2cdf631b3`.
+Both 333-row arms reproduce every saved native sample, have zero support
+mismatch, and max absolute probability errors 1.7881393e-7 / 3.6076092e-7.
+Complete distributions/receipt/logs/file SHAs are in
+`docs/dia-sampling-probability-hosted-2026-10-12.json`.
+
+CLAIM next: weight-free canonical stochastic-draw replay in the storage reference
+worktree. Actual pinned PyTorch v2.6.0 multinomial/exponential CPU sources read:
+single-sample multinomial uses exponential race; MKL-enabled F32 CPU uses one MT
+word to seed a fresh MCG31 VSL stream per tensor. Native instead uses
+std::discrete_distribution. Observe actual Torch draws/noise/state against
+retained canonical history before implementing a portable sampler. Require exact
+original input transitions and retain failures/source/build versions. No seed
+selection, recipe/default change, fabricated reference or acceptance waiver.
+
+### 2026-10-12 canonical random witness pushed and pinned repeat dispatched
+
+Source `60a95cbb581b1123c4c0e23aa780aeab19ece1b7` adds the weight-free canonical
+random control. Actual pinned original generate, sampler, audio delay and output
+state code execute unchanged on retained logits; every original decoder input
+and final code grid must match. The observer verifies actual Torch multinomial
+against its source-derived exponential race, including exact consumed RNG
+state, and retains all exponential noise/states/pre-override draws. A fixed
+row-by-row negative control distinguishes the original batch RNG contract.
+No weights or PCM are computed, no random noise/forced tokens enter production,
+and this is not neural/native speech acceptance.
+
+Initial local Torch 2.11.0+cu130 run failed canonical input step 1, while its
+multinomial/exponential-race samples and states agreed. Preserve this version
+boundary rather than treating local Torch as the original 2.6 control. The exact
+initially executed dirty-script bytes (full hash verified), partial witness,
+complete error/build config and all 8 file hashes are retained in
+`docs/dia-canonical-random-local-rejection-2026-10-12.json`. Source inspection
+hashes identify the actual official v2.6.0 CPU multinomial/exponential/RNG files.
+
+Pinned Torch 2.6 repeat [38311994907](https://github.com/CrispStrobe/CrispASR/actions/runs/38311994907)
+is queued at exact clean `60a95cbb5`, requiring all 1,226 input transitions and
+1,210 codec frames. Script syntax, 227 documentation anchors and all four staged
+no-secrets tests pass without skips (56.992 s). No production/default/pin/tag
+change. Current open issues/PR heads are unchanged. Final-main CI remains pending;
+prior 4923f00 run was superseded after twelve successful jobs, not falsely green.
+
+Canonical replay layout correction before execution: run 38311994907 was still
+queued when audit of the actual retained GGUF showed `decoder_codes_rev` shape
+(1210, 9), while the identity codec returns (9, 1210). Cancelled that unstarted
+run, require both actual shapes explicitly, transpose only at the comparison/
+artifact boundary, and redispatch corrected source. Original generate/delay/
+sampler code, reference arrays, probabilities and gates remain unchanged.
+
+Corrected replay source `75fcdc70f` is pushed. Replacement pinned Torch 2.6
+run [38312385854](https://github.com/CrispStrobe/CrispASR/actions/runs/38312385854)
+is queued; cancelled 38311994907 never executed. Python syntax and all four
+staged no-secrets tests pass without skips (55.747 s). The actual retained GGUF
+shape inspection is the evidence for the boundary-only layout correction.
+
+### 2026-10-12 CLAIM independently validated Dia DAC converter integration
+
+While pinned RNG witness 38312385854 waits for a hosted runner, salvage the
+standalone DAC exporter/helper and tiny actual-original-module contracts into a
+new storage worktree based on current main. Preserve the tested converter bytes/
+134-tensor map and critical original checkpoint pin; add explicit user-facing
+conversion instructions and require the CLI's published template hash before
+loading original dependencies. Validate the wrong-template rejection before the
+guard, then rerun complete tiny physical-export contracts. Existing full hosted
+converter proof 38306172119 requires byte-identical candidate output and passes
+startup 48/48 plus full canonical history 40/40. Integrate this conversion tool
+alone after validation, using rebase/fast-forward and no internal PR. Do not
+merge the diagnostic/runtime/RNG branch, promote model pins, claim native free
+speech/GPU/Q4 acceptance or tag a release. Check all applicable contributing
+integration points; no new backend/ABI/registry entry is introduced.
+
+### 2026-10-12 independent DAC converter ready for integration
+
+The new storage worktree `dia-dac-converter-20261012`, branch
+`fix/dia-dac-converter`, contains only the validated export helper/converter,
+tiny parameter/export contracts, a real-conversion CI worker/workflow, and
+user-facing docs/notes. Export helper and 134-parameter contract source are
+byte-identical to validated `a0b702d0d`. The added CLI template pin rejects an
+unsupported file before loading Torch/DAC: the new case first fails with one
+ERROR on the old CLI, then all seven actual-original-module/export/CLI contracts
+pass in 33.292 s. Python compilation and CLI help pass. Both submodules are
+initialized at existing pins; no local full-model load or native build runs.
+
+The standalone exporter is already proven with real original weights in run
+38306172119 (candidate bytes exact, startup 48/48, full-history 40/40). Dedicated
+`dia-dac-export.yml` uses the existing hosted worker infrastructure to check the
+isolated integration with seven contracts, real pinned conversion, exact model
+SHA/size and all 134 audit rows. Actionlint and workflow contract checks pass;
+227 internal anchors pass across 85 files. The full local before/after logs,
+source hashes and applicable contributing audit are retained in
+`docs/dia-dac-converter-integration-2026-10-12.json`. Prior staged no-secrets run
+passes all four tests without skips (47.225 s). New comprehensive release notes
+include the conversion tool separately from unmerged runtime/RNG changes.
+
+Pinned RNG witness 38312385854 remains queued at unchanged `75fcdc70f`.
+No production/default/pin change or speech/GPU/Q4 acceptance waiver.
+
+### 2026-10-12 pinned canonical RNG witness and portable sampler CLAIM
+
+Pinned clean source `75fcdc70f` now passes hosted run
+[38312385854](https://github.com/CrispStrobe/CrispASR/actions/runs/38312385854).
+The unchanged worker also passes locally using private Torch 2.6.0+cpu,
+Pydantic 2.11.3 and GGUF 0.18.0 under storage, without changing shared packages.
+Both reproduce all 1,226 actual original decoder transitions, all 1,210 codec
+frames, and every exponential-race draw plus MT state transition. The fixed
+row-split negative differs on 9,090 of 11,034 draws on both hosts. Complete
+receipts and file hashes are in `docs/dia-canonical-random-hosted-2026-10-12.json`.
+Noise is not byte-portable across hosts: 2,153,802 of 11,342,952 F32 values differ,
+maximum absolute error 9.5367431640625e-7, despite identical discrete outcomes.
+This is a retained-logit component proof, not new neural/PCM/free-speech acceptance.
+
+CLAIM next: implement and validate a portable batched exponential-race sampler
+against the pinned actual provider sequence, first in a weight-free diagnostic
+on the runtime worktree. Read PyTorch 2.6 CPU source and Intel's documented
+MCG31 initialization, recurrence and exponential transform; compare the actual
+retained noise, every draw and state consumption before touching production.
+Keep existing path/defaults while establishing the candidate. Then actual
+original-neural and native CLI/C-ABI speech roundtrips remain required on hosted
+hardware; no changed seed, canonical inputs, reference, thresholds or gate waiver.
+
+Standalone converter is integrated on main `4e5d3d5c7`; dedicated real-conversion
+run 38314778401 and final-main CI remain queued at this checkpoint. Current open
+issues and PR heads are unchanged. No release tag is created.
+
+### 2026-10-12 portable Dia candidate `3ba3a317a` — hosted checks queued
+
+The claimed candidate is pushed on `fix/dia-pinned-diff`, remains unmerged, and
+is gated by `CRISPASR_DIA_PORTABLE_RNG=1` in the shared synthesis loop. Its actual
+native filter plus compiled MCG31/exponential race reproduces all 11,034 original
+draws, 1,226 decoder transitions and 1,210 codec frames in complete weight-free
+feedback. Noise cosine 0.9999999999999962 and norm error 3.2631726210041734e-9 are
+both retained; final F32 noise bits differ from MKL. Six tiny actual contracts
+pass in 14.834 s; the new candidate contract rejects compiled unmodified
+75fcdc70f on 9/9 first draws (1 FAIL, 9.352 s). Source-only native compilation,
+clang18 formatting, syntax and four staged no-secrets tests pass (53.159 s).
+Full source/array/log hashes are in
+`docs/dia-portable-sampler-candidate-2026-10-12.json`.
+
+Clean source `3ba3a317ab5d2996adfde1efef2c23811fc9e049` is queued for:
+- [38317325099](https://github.com/CrispStrobe/CrispASR/actions/runs/38317325099):
+  complete original/native-filter portable RNG replay, pinned Torch 2.6 CPU;
+- [38317327337](https://github.com/CrispStrobe/CrispASR/actions/runs/38317327337):
+  actual original-neural/DAC canonical code check, freshly built native F16
+  C ABI and CLI generation, validated +1,312-byte DAC export and all four ASR
+  controls, with original seed/reference/thresholds unchanged.
+
+Neither queued run is a validation result. Default sampler, production model
+pins and acceptance gates remain unchanged. Shared runtime reaches existing
+CLI, C-ABI/server and bindings without a new backend/registry/CMake/schema or
+quantization entry. Actual free speech, GPU and Q4 acceptance remain pending.
+Dedicated converter run 38314778401 is still queued; final-main CI is pending,
+so no 0.8.44 release tag is created. Current outside issues/PR heads are unchanged.
+
+### 2026-10-13 Dia hosted results and neural-precision diagnostic CLAIM
+
+Exact `3ba3a317a`: portable replay 38317325099 PASS, but actual speech control
+38317327337 FAIL. Original neural/DAC with the compiled portable sampler matches
+all canonical codes and the original 619,520 PCM samples (same RMS .0735338613,
+verbatim ASR, WER 0). Native C ABI and CLI both produce 12.98 s quiet audio,
+empty transcripts and WER 1. Shared input history lasts 77 steps, prefix cosine
+min .9999989197 and norm error max .0008548312. First draw differs at step 76,
+head 5: original 606 vs native 843. Actual original-filter replay shows token
+606 probability .0117816888 on original logits but zero on native logits; the
+original winning exponential score is 1.10231, not a near tie with .398579.
+Discrete support changes despite close neural logits. Preserve failed output.
+Full receipts/all file hashes are in `docs/dia-portable-speech-hosted-2026-10-13.json`
+and `docs/dia-portable-random-hosted-2026-10-13.json`.
+
+Main converter integration 38314778401 PASS: actual original export is byte-exact,
+all 134 physical tensors agree and seven contracts pass. Complete receipt/audit
+is in `docs/dia-dac-converter-hosted-2026-10-13.json`. Current main 80b2b8340 CI,
+lint, Ruby, secrets and Pages all pass; no new outside issue/PR update.
+
+CLAIM: isolate the remaining precision/support boundary with two fixed native
+controls, first original F32 output heads (+37.9 MB over published F16), then
+full original F32 neural weights as a diagnostic. Read actual converter mapping
+and pinned original inference before implementing streaming original exports.
+Audit every promoted tensor against original checkpoint and preserve unrelated
+payloads. Run strict canonical stage diff plus native free CLI/C-ABI ASR on GH
+CPU, sequential contexts. Existing portable sampler remains opt-in, original
+seed/top-k/top-p/reference and quality gates stay unchanged. This is not a native
+speech/Q4/GPU acceptance claim or a promotion of new model pins; runtime remains
+unmerged. A precision control must explain the failure before any default change.
+
+### 2026-10-13 precision controls `5a8fe578e` queued, evidence checkpoint
+
+[38343667254](https://github.com/CrispStrobe/CrispASR/actions/runs/38343667254)
+is queued at exact clean source `5a8fe578e6a7d16b68cbb3de3398f3c704191cd4`.
+Two fixed controls promote nine original F32 heads (+37,896,192 bytes), then all
+original neural coefficients to F32. Streaming export requires the original
+checkpoint SHA, all 381 mapped template tensors/rounded original coefficients,
+metadata/shape/order preservation and complete physical byte/type audits. Each
+arm gets strict original stage diff plus real native C ABI/CLI generation and
+ASR. Native contexts/exporter children run sequentially; hosted build uses
+Ninja/ccache. No large neural model is exported or loaded locally.
+
+Five tiny actual original-module contracts pass (36.010 s); source syntax and
+diff checks pass, and both staged source pushes pass all four no-secrets tests
+without skips (80.219 / 51.262 s). Full source and log hashes plus the actual
+boundary analysis are in `docs/dia-neural-precision-controls-2026-10-13.json`.
+Original token 606 has rank 41 and preceding cumulative probability .944279015,
+so the original shifted top-p mask keeps it as the crossing token. Native
+ranking moves it to 42 after token 594; preceding cumulative .955503702 exceeds
+.95, so it is removed. Both retain top-k=45; no cutoff/seed/reference was changed.
+Original-model portable-sampler PCM is independently confirmed byte-identical
+to canonical PCM. This local boundary analysis does not accept native speech.
+
+Existing native F16 C ABI/CLI rejection (empty transcripts, WER 1) remains
+recorded; candidate remains unmerged and opt-in. The new hosted control is not
+a result, and no production model pin, Q4/GPU gate or release tag is promoted.
+Current main CI is running after the result/claim checkpoint; previous main
+80b2b8340 was fully green. Open outside issue/PR heads remain unchanged.
+
+### 2026-10-13 CLAIM durable public Dia proof archives
+
+While precision run 38343667254 remains queued at unchanged `5a8fe578e`, retain
+current complete canonical original, portable RNG replay, rejected native speech
+and freshly accepted DAC-converter proof folders in the existing public dataset
+`cstr/crispasr-regression-fixtures`. Do not upload credentials/account names,
+alter reference arrays or relabel negative results. Verify each source file
+against its tracked receipt, scan artifact text using the existing credential
+patterns and account guard, build complete per-file SHA manifests, then publish
+four independent ZIPs and a concise scoped index. Re-read every public ZIP
+anonymously at the returned immutable revision and require full byte count/SHA.
+This prevents 14-day GitHub artifact expiry from losing reproducibility; no new
+neural inference, production model pins or speech/Q4/GPU acceptance is involved.
+All temporary/package data stays under storage. Record only actually published
+and verified revisions. Current outside issue/PR heads remain unchanged.
+
+### 2026-10-13 complete public Dia archives verified; retrieval helper CLAIM
+
+Four independent ZIPs are published in public `cstr/crispasr-regression-fixtures`
+at immutable revision `6693718d8112b62425dfab5b941e61fb7b0334eb`, folder
+`dia-20261013`. Canonical original, compiled portable RNG replay, rejected native
+speech and real DAC conversion contain all 77 recorded source files,
+695,547,328 source bytes and 619,724,990 ZIP bytes. Every source file matches its
+tracked size/SHA; each ZIP is CRC and inner-file-hash checked. Artifact text
+passes the existing credential patterns and account guard. Every full public
+ZIP is anonymously re-read and has exact size/SHA. Full URLs, revisions, hashes
+and preserved acceptance scopes are in `docs/dia-public-proof-archives-2026-10-13.json`.
+No reference arrays, thresholds, production model pins or defaults changed.
+
+CLAIM next: add a small pinned anonymous archive-retrieval helper with strict
+size/hash, extraction-path and per-file manifest checks; test corrupt/missing/
+unsafe archive negatives before accepting any extraction. Use it for future
+Dia control inputs instead of expiring GitHub run downloads. Do not modify or
+cancel the currently executing precision run 38343667254, pinned at `5a8fe578e`.
+The public negative native F16 speech remains WER 1, not accepted or superseded.
+
+### 2026-10-13 verified public proof retrieval ready for integration
+
+Main claim `7ec0e8362` precedes the storage worktree `dia-proof-retrieval-20261013`.
+The new stdlib-only helper pins the public revision/size/SHA, downloads without
+an HF SDK/token/session, checks archive path/type/duplicate/coverage guards and
+every inner payload before placing a new proof folder. Existing paths are
+rejected before replacement; private temporary downloads are removed. Eight
+corruption/missing/unsafe/coverage/payload/old-path contracts pass in 1.626 s.
+The real anonymous 82,612,394-byte RNG archive retrieves and verifies all 11
+source files; the previously anonymously verified 270,894,795-byte canonical
+archive also extracts and verifies its distinct 21-file layout. Both preserve
+original `heavy-<run>` paths, arrays and metadata. No local neural inference.
+
+`docs/dia-proof-archives.md` documents the executed commands and positive/negative
+scopes. A path-filtered stdlib-only CI workflow guards the helper/index/contracts
+and actual full anonymous RNG retrieval. Actionlint's initial job-env context
+error was corrected to step-level runner contexts; final workflow validation
+must pass before integration. Both submodules initialize at existing pins.
+Integrate this independent tooling by fast-forward after staged secret/doc checks;
+then use it for future Dia control inputs while the exact `5a8fe578e` neural
+precision job 38343667254 continues unchanged. No runtime/default/model-pin or
+native speech/Q4/GPU acceptance is inferred from successful archive retrieval.
+
+### 2026-10-13 public retrieval integrated and future input replay proven
+
+Main `bff87788e` integrates only verified archive retrieval/docs/CI; no runtime
+math or default changes. Eight negative/positive contracts pass (1.626 s),
+actual anonymous RNG download validates 11 files, canonical extraction validates
+its 21-file layout, actionlint and 227 anchors pass, both submodules use existing
+pins and all four staged secrets checks pass without skips (81.453 s).
+Dedicated CI [38346489272](https://github.com/CrispStrobe/CrispASR/actions/runs/38346489272)
+is queued at this checkpoint; local checks are not presented as hosted success.
+
+Future validation branch `9b6870bf4` replaces current canonical/rejected-control
+GH artifact downloads with the same immutable anonymous helper. Canonical/
+portable RNG, original/native sampler speech and neural-precision workers now
+retain exact pinned input bytes without GH-token/retention dependencies. Old
+historical startup/probability inputs outside the four current archives remain
+unchanged. Default-path local retained-logit replay actually downloads the
+public canonical ZIP and then reproduces all 11,034 draws, 1,226 transitions and
+1,210 frames, with the unchanged 9,090-draw row-split negative. Exact executed
+worker/helper/index, full receipt and array hashes are retained in
+`docs/dia-public-input-replay-2026-10-13.json`. All four staged branch no-secrets
+tests pass without skips (54.699 s). No neural weights are loaded locally.
+
+Original precision job 38343667254 remains executing at `5a8fe578e`; future
+transport changes do not modify/cancel that run or qualify as a model result.
+Native F16 quiet speech/WER 1 remains unaccepted until actual precision controls
+return. Production model pins/defaults, original seed/reference and Q4/GPU gates
+remain unchanged. Main release notes distinguish durable tooling from the
+unmerged runtime investigation; no release tag is created.
+
+### 2026-10-13 original cross-cache precision isolation, tiny-model scope
+
+The source audit confirms native cross-attention projection readback rounds to
+F16 vectors and decoder inputs remain F16 even for original F32 weights. The
+pinned original `precompute_cross_attn_cache` and `KVCache.from_kv` retain the
+projected F32 tensors. A weight-free tiny actual-original model (fixture seed
+17, pinned Torch 2.6.0 CPU) compares F32 / cross-cache-only F16 roundtrip / F32
+repeat with identical first decoder inputs. The repeats are byte-identical;
+cache rounding changes 18,393 of 18,504 logits, max absolute 2.14949e-6,
+cosine 0.9999999999778083 and relative norm error 5.13458e-8. These are
+tiny-model causal measurements, not full-model/native speech acceptance.
+Complete raw arrays and executed probe are retained on storage; source pins,
+hashes and all comparisons are in
+`docs/dia-cross-cache-original-probe-2026-10-13.json`. Running neural precision
+job 38343667254 is unchanged. No runtime graph/default or model-pin change.
+If its F32 arm rejects speech, separately claim the F32 cross-cache isolation
+before implementation and retain unchanged stage, C ABI/CLI and ASR gates.
+
+### 2026-10-13 F32 cache isolation queued and durable result archive CLAIM
+
+Preimplementation main claim `873b1254e` precedes runtime source `2205d920d`.
+GH `38357576078` uses exactly that source with `--cross-cache-control`; queued
+at this checkpoint. OFF/ON/OFF uses one fixed all-original-F32 model and the
+same binary/host, strict 40-stage cosine/magnitude and CLI/C-ABI ASR gates.
+The candidate retains the F16 default, original seed/filter/reference and model
+pins. Local source-only compilation, clang18, Python syntax, six actual sampler
+contracts (14.178 s) and four staged secret tests (73.480 s, zero skips) pass.
+The first sampler invocation lacked its required bridge environment; the
+corrected invocation uses a freshly compiled actual header bridge and passes.
+Complete candidate checks and pending scopes are in
+`docs/dia-cross-cache-controls-2026-10-13.json`. No runtime merge or release tag.
+
+CLAIM next while hosted results are pending: durably publish the complete
+41-file rejected neural precision proof and the tiny original cache probe in
+the existing public regression dataset. Verify all source sizes/hashes, scan
+text for credentials/account names, record per-file ZIP manifests, and require
+full anonymous remote size/SHA verification. Preserve old source paths and
+negative acceptance scopes. No fresh local real-model work or model publication.
+
+### 2026-10-13 durable neural proof published; user docs reconciled
+
+Main claim `67b505c27` precedes publication. Complete neural artifact (41 files
+plus full hosted log) and tiny original probe (four files) are public in the
+existing regression dataset at revision `68873c45c08a36372667fa6b62e746072b9bf1f5`.
+All 46 source files/278,408,243 bytes match per-file hashes; ZIP CRC/payload
+checks pass and both full ZIPs/245,203,012 bytes are anonymously re-read with
+exact size/SHA. Old source paths and all failures are preserved. Receipt:
+`docs/dia-neural-public-proof-2026-10-13.json`. The standalone helper's original
+four archive aliases remain at their original immutable revision.
+
+`docs/tts.md` now links the actual rejected short-prompt result and pending
+cache control. `docs/architecture.md` corrects the old-checkpoint CFG equation
+to actual original/native `cond + scale*(cond-uncond)`. Inspection of retained
+PCM confirms the canonical recognized prompt is quiet in complete seconds
+0–11 and speaks near its end; the 865-step shared history is mostly quiet
+leading frames, not an accepted native speech prefix. No audio/reference/gate
+change. Cache control 38357576078 remains pending; later ordered phases await
+its actual result. No runtime merge, version bump or release tag.
+
+### 2026-10-13 composed Dia CUDA package preparation
+
+Preimplementation claim `7852fa3cd` precedes this worktree. Candidate `2205d920d`
+is composed with accepted main `7852fa3cd`. Keep main’s standalone DAC template
+guard/test and current status docs when resolving add/add or append conflicts.
+Four Dia runtime/diff source files remain byte-identical to the CPU candidate.
+The package builds CLI/server/shared C ABI/diff/quantizer and same-source Python
+bindings using CUDA 12.4.1, SM60/SM75, Ninja/ccache and dependency closure.
+It checks actual nvcc version, retains exact sources/ELF hashes/SONAME aliases
+and excludes driver stubs. Compilation accepts no model or GPU behavior.
+Physical GPU testing and profiling remain gated on the actual CPU result.
+The composed main interface also needs fresh CPU speech checks before acceptance.
+
+### 2026-10-13 real-CUDA cache driver prepared
+
+Main claim `7f1793ad6` follows the user's explicit Kaggle steering. The shared
+neural worker adds CUDA/prebuilt flags, preserves the current fixed model and
+all stage/CLI/C-ABI ASR gates, and observes native GPU process allocation plus
+actual CUDA scheduler splits. CUDA F16 quality is measured, rather than
+presuming its outcome matches the CPU negative. The ON arm and exact OFF
+repeats remain mandatory; no CPU or broad-model acceptance follows.
+
+The Kaggle driver checks actual device/compiler compatibility before heavy
+downloads, clones an immutable rendered source pin, uses the shared harness
+for toolchain/CUDA/cache/heartbeat, and never reinstalls Torch. It reuses the
+public byte-verified critical-DAC model instead of recalculating weights under
+a different Torch version. Full source/worker/kernel hashes, arrays, allocation
+and failed/partial receipts remain in output; model/build/cache scratch stays
+off the working output volume. The push helper requires clean pushed source
+and renders its exact SHA, avoiding a moving branch or circular source pin.
