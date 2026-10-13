@@ -120,3 +120,15 @@ in all 18 layers; preserves canonical input/code grids and the original ASR
 positive control; records cosine, magnitudes and complete failed runs. Diagnostic
 snapshots are not free-speech acceptance or a new model/default. Run the diagnostic
 source branch with `-f pip="numpy torch==2.6.0 torchaudio==2.6.0 torchvision==0.21.0 pydantic safetensors huggingface_hub descript-audio-codec==1.0.0 gguf"`.
+
+`dia_decoder_boundary_control.py` uses the same pinned original/canonical
+history, F32 neural export and critical-F32 DAC to capture 16 block-zero
+boundaries at step 978. Original hooks observe actual norm residual inputs,
+self/cross output projections and fused MLP gate/up/down inputs; native
+snapshots retain existing tensors without adding arithmetic. It requires
+original/native OFF/ON/OFF complete-trajectory equality, 120 ordinary stage
+passes, 16 ON-only native snapshots, old quality/index negatives and
+scale-aware per-boundary metrics. Tiny actual-original hook tests run before
+full-model inference. Use the same pip arguments and a 350-minute timeout.
+These are teacher-history diagnostics; native free speech/Q4 and performance
+remain separate acceptance gates.

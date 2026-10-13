@@ -43,17 +43,21 @@ int main() {
     set_env("CRISPASR_DIA_TTS_GPU", nullptr); set_env("DIA_TTS_GPU", nullptr);
     { Environment guard; apply_replay_device(false); if (requested_gpu()) return 9; }
     if (std::getenv("CRISPASR_DIA_TTS_GPU") || std::getenv("DIA_TTS_GPU")) return 10;
-    set_env("CRISPASR_DIA_DUMP_SELF_ATTN", "1"); set_env("DIA_DUMP_SELF_ATTN", "parent-value");
+    for (const char* suffix : {"DUMP_SELF_ATTN", "DUMP_DECODER_BOUNDARIES"}) {
+    const std::string modern = std::string("CRISPASR_DIA_") + suffix;
+    const std::string legacy = std::string("DIA_") + suffix;
+    set_env(modern.c_str(), "1"); set_env(legacy.c_str(), "parent-value");
     {
         Environment guard;
-        if (std::getenv("CRISPASR_DIA_DUMP_SELF_ATTN") || std::getenv("DIA_DUMP_SELF_ATTN")) return 11;
-        set_env("CRISPASR_DIA_DUMP_SELF_ATTN", "1");
+        if (std::getenv(modern.c_str()) || std::getenv(legacy.c_str())) return 11;
+        set_env(modern.c_str(), "1");
     }
-    if (std::string(std::getenv("CRISPASR_DIA_DUMP_SELF_ATTN")) != "1" ||
-        std::string(std::getenv("DIA_DUMP_SELF_ATTN")) != "parent-value") return 12;
-    set_env("CRISPASR_DIA_DUMP_SELF_ATTN", nullptr); set_env("DIA_DUMP_SELF_ATTN", nullptr);
-    { Environment guard; set_env("CRISPASR_DIA_DUMP_SELF_ATTN", "1"); }
-    if (std::getenv("CRISPASR_DIA_DUMP_SELF_ATTN") || std::getenv("DIA_DUMP_SELF_ATTN")) return 13;
+    if (std::string(std::getenv(modern.c_str())) != "1" ||
+        std::string(std::getenv(legacy.c_str())) != "parent-value") return 12;
+    set_env(modern.c_str(), nullptr); set_env(legacy.c_str(), nullptr);
+    { Environment guard; set_env(modern.c_str(), "1"); }
+    if (std::getenv(modern.c_str()) || std::getenv(legacy.c_str())) return 13;
+    }
     return 0;
 }
 '''

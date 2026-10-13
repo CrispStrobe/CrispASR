@@ -210,6 +210,70 @@ class DiaCaptureTest(unittest.TestCase):
                     with self.assertRaisesRegex(ValueError, "DIA_CAPTURE_ATTENTION_LAYERS"):
                         reference.dump("nari-labs/Dia-1.6B", None)
 
+    def test_boundary_hooks_observe_fused_original_mlp_and_preserve_trajectory(self):
+        from dia_decoder_capture import PARTS, boundary_stages
+        text, step = "[S1] Tiny capture test.", 5
+        layer = self.dia.model.decoder.layers[0]
+        fused, hidden, residual, outputs = [], [], [], []
+        def owned(value):
+            return value.detach().numpy().copy()
+        handles = [
+            layer.mlp.wi_fused.register_forward_hook(lambda _m, _a, y: fused.append(owned(y))),
+            layer.mlp.wo.register_forward_pre_hook(lambda _m, a: hidden.append(owned(a[0]))),
+            layer.pre_ca_norm.register_forward_pre_hook(lambda _m, a: residual.append(owned(a[0]))),
+            layer.register_forward_hook(lambda _m, _a, y: outputs.append(owned(y))),
+        ]
+        self.torch.manual_seed(42)
+        try:
+            plain = self.dia.generate(text, max_tokens=32, temperature=1.2, top_p=.95, cfg_filter_top_k=45)
+        finally:
+            for handle in handles:
+                handle.remove()
+        off = reference.capture(self.dia, text, max_tokens=32, capture_step=step)
+        on = reference.capture(self.dia, text, max_tokens=32, capture_step=step,
+                               boundary_layers=(0, 1), attention_layers=(0,))
+        repeat = reference.capture(self.dia, text, max_tokens=32, capture_step=step)
+        for name in off:
+            self.assertEqual(off[name].tobytes(), on[name].tobytes(), name)
+            self.assertEqual(off[name].tobytes(), repeat[name].tobytes(), name)
+        np.testing.assert_array_equal(on['decoded_audio'], plain)
+        self.assertEqual(len(PARTS), 16)
+        self.assertTrue(set(boundary_stages((0, 1))) <= on.keys())
+        np.testing.assert_array_equal(on['decoder_block0_mlp_gate'], fused[step][..., 0, :])
+        np.testing.assert_array_equal(on['decoder_block0_mlp_up'], fused[step][..., 1, :])
+        np.testing.assert_array_equal(on['decoder_block0_mlp_hidden'], hidden[step])
+        np.testing.assert_array_equal(on['decoder_block0_sa_residual'], residual[step])
+        np.testing.assert_array_equal(on['decoder_block0_output'], outputs[step])
+        np.testing.assert_array_equal(on['decoder_block0_sa_attention'], on['decoder_sa0_attention'])
+        frozen = {name: on[name].copy() for name in boundary_stages((0, 1))}
+        self.dia.generate('[S2] Different.', max_tokens=32, temperature=0)
+        for name in frozen:
+            self.assertEqual(on[name].tobytes(), frozen[name].tobytes())
+        for module in layer.modules():
+            self.assertFalse(module._forward_hooks)
+            self.assertFalse(module._forward_pre_hooks)
+
+    def test_boundary_hooks_reject_bad_layers_and_clean_up_after_inner_failure(self):
+        for layers in ((-1,), (2,), (0, 0), (True,)):
+            with self.subTest(layers=layers), self.assertRaisesRegex(ValueError, 'layer'):
+                reference.capture(self.dia, '[S1] Test.', max_tokens=32, boundary_layers=layers)
+        layer = self.dia.model.decoder.layers[0]
+        original = self.dia.model.decoder.decode_step
+        with mock.patch.object(layer.mlp.wo, 'forward', side_effect=RuntimeError('original MLP failure')):
+            with self.assertRaisesRegex(RuntimeError, 'original MLP failure'):
+                reference.capture(self.dia, '[S1] Test.', max_tokens=32, boundary_layers=(0,))
+        self.assertEqual(self.dia.model.decoder.decode_step, original)
+        for module in layer.modules():
+            self.assertFalse(module._forward_hooks)
+            self.assertFalse(module._forward_pre_hooks)
+
+    def test_dump_rejects_bad_boundary_indices_before_loading(self):
+        for value in ('-1', '0,0', '0,', '0, 1', '１', 'true'):
+            with self.subTest(value=value), mock.patch.dict(os.environ, {'DIA_CAPTURE_BOUNDARY_LAYERS': value}):
+                with mock.patch.object(reference, 'verify_source', side_effect=AssertionError('invalid layer reached loading')):
+                    with self.assertRaisesRegex(ValueError, 'DIA_CAPTURE_BOUNDARY_LAYERS'):
+                        reference.dump('nari-labs/Dia-1.6B', None)
+
     def test_dump_rejects_unaligned_text_before_source_or_model_loading(self):
         with mock.patch.dict(os.environ, {"DIA_TEXT": "[S1] Test. "}):
             with mock.patch.object(reference, "verify_source", side_effect=AssertionError("invalid prompt reached source loading")) as verify:

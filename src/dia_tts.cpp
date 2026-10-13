@@ -57,6 +57,7 @@
 #include <cstring>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 #include "core/ggml_cpu_backend.h"
 
@@ -1803,6 +1804,18 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                     ggml_set_output(tensor);
                 }
             };
+            const char* boundary_capture = crispasr_env::get("CRISPASR_DIA_DUMP_DECODER_BOUNDARIES");
+            const bool capture_boundaries =
+                step == dia_dump_step && dia_dump_dir && boundary_capture && std::strcmp(boundary_capture, "1") == 0;
+            std::vector<std::pair<std::string, ggml_tensor*>> boundary_outputs;
+            auto mark_boundary = [&](ggml_tensor* tensor, int layer, const char* part) {
+                if (capture_boundaries && layer == 0) {
+                    // Retain pointers: existing stage names may share a tensor.
+                    // No extra graph operator or tensor rename is needed.
+                    ggml_set_output(tensor);
+                    boundary_outputs.emplace_back("decoder_block0_" + std::string(part), tensor);
+                }
+            };
 
             // --- Decoder layers ---
             for (int l = 0; l < (int)m.n_decoder_layers; l++) {
@@ -1810,7 +1823,9 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                 ggml_tensor* residual = cur;
 
                 // Pre self-attention norm
+                mark_boundary(cur, l, "input");
                 cur = dia_rms_norm(ctx0, cur, layer.pre_sa_norm, m.rms_norm_eps);
+                mark_boundary(cur, l, "pre_sa_norm");
 
                 // Self-attention
                 {
@@ -1905,14 +1920,18 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                     kqv = ggml_cont(ctx0, ggml_permute(ctx0, kqv, 0, 2, 1, 3));
                     cur = ggml_reshape_3d(ctx0, kqv, dec_hidden, T_cur, B);
                     mark_sa(cur, l, "attention");
+                    mark_boundary(cur, l, "sa_attention");
                     cur = ggml_mul_mat(ctx0, layer.self_o_proj, cur);
+                    mark_boundary(cur, l, "sa_output");
                 }
 
                 cur = ggml_add(ctx0, cur, residual);
                 residual = cur;
 
                 // Pre cross-attention norm
+                mark_boundary(cur, l, "sa_residual");
                 cur = dia_rms_norm(ctx0, cur, layer.pre_ca_norm, m.rms_norm_eps);
+                mark_boundary(cur, l, "pre_ca_norm");
 
                 // Cross-attention
                 {
@@ -1920,6 +1939,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                     ggml_tensor* Q = ggml_mul_mat(ctx0, layer.cross_q_proj, cur); // (dec_hidden, 1, B)
                     Q = ggml_reshape_4d(ctx0, Q, head_dim, n_heads, T_cur, B);
                     Q = dia_rotary(ctx0, ggml_cont(ctx0, Q), dec_pos, head_dim, DIA_ROPE_MODE, m, source_rope);
+                    mark_boundary(Q, l, "cross_q");
 
                     // K/V from precomputed cross-attention cache
                     // cross_k: (cross_kv_dim=2048, T_enc, B) -> (hd, n_heads, T_enc, B)
@@ -1939,7 +1959,9 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                     ggml_tensor* kqv = ggml_mul_mat(ctx0, v_t, kq);
                     kqv = ggml_cont(ctx0, ggml_permute(ctx0, kqv, 0, 2, 1, 3));
                     cur = ggml_reshape_3d(ctx0, kqv, dec_hidden, T_cur, B);
+                    mark_boundary(cur, l, "cross_attention");
                     cur = ggml_mul_mat(ctx0, layer.cross_o_proj, cur);
+                    mark_boundary(cur, l, "cross_output");
                     if (step == dia_dump_step && l == 0 && dia_dump_dir) {
                         ggml_set_name(cur, "ca0_out");
                         ggml_set_output(cur);
@@ -1950,16 +1972,23 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                 residual = cur;
 
                 // Pre MLP norm
+                mark_boundary(cur, l, "ca_residual");
                 cur = dia_rms_norm(ctx0, cur, layer.pre_mlp_norm, m.rms_norm_eps);
+                mark_boundary(cur, l, "pre_mlp_norm");
 
                 // MLP: SiLU(gate(x)) * up(x), then down
                 {
                     cur = ggml_mul(ctx0, ggml_silu(ctx0, ggml_mul_mat(ctx0, layer.gate, cur)),
                                    ggml_mul_mat(ctx0, layer.up, cur));
+                    mark_boundary(cur->src[0]->src[0], l, "mlp_gate");
+                    mark_boundary(cur->src[1], l, "mlp_up");
+                    mark_boundary(cur, l, "mlp_hidden");
                     cur = ggml_mul_mat(ctx0, layer.wo_mlp, cur);
+                    mark_boundary(cur, l, "mlp_output");
                 }
 
                 cur = ggml_add(ctx0, cur, residual);
+                mark_boundary(cur, l, "output");
                 if (step == dia_dump_step && dia_dump_dir) {
                     const std::string name = "dia_decoder_layer_" + std::to_string(l);
                     ggml_set_name(cur, name.c_str());
@@ -2112,6 +2141,33 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                             }
                             fclose(f);
                         }
+                    }
+                }
+                if (capture_boundaries) {
+                    if (boundary_outputs.size() != 16) {
+                        fprintf(stderr, "dia_tts: incomplete decoder boundary capture\n");
+                        ggml_free(ctx0);
+                        return nullptr;
+                    }
+                    for (const auto& entry : boundary_outputs) {
+                        ggml_tensor* tensor = entry.second;
+                        if (!tensor || tensor->type != GGML_TYPE_F32 || !ggml_is_contiguous(tensor)) {
+                            fprintf(stderr, "dia_tts: invalid decoder boundary %s\n", entry.first.c_str());
+                            ggml_free(ctx0);
+                            return nullptr;
+                        }
+                        std::vector<float> values(ggml_nelements(tensor));
+                        ggml_backend_tensor_get(tensor, values.data(), 0, values.size() * sizeof(float));
+                        const std::string file = "cpp_" + entry.first + ".f32";
+                        FILE* f = fopen(dia_dpath(file.c_str()).c_str(), "wb");
+                        if (!f || fwrite(values.data(), sizeof(float), values.size(), f) != values.size()) {
+                            if (f)
+                                fclose(f);
+                            fprintf(stderr, "dia_tts: cannot write decoder boundary %s\n", file.c_str());
+                            ggml_free(ctx0);
+                            return nullptr;
+                        }
+                        fclose(f);
                     }
                 }
                 ggml_tensor* fh = ggml_graph_get_tensor(gf, "dia_final_hidden");
