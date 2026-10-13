@@ -106,8 +106,12 @@ assert digest(codec) == '6db51da2333868918b6d476008d92036a53400bc816ff7e1d2b1e97
 report.update(template_sha256=digest(template), original_weights_sha256=WEIGHTS_SHA,
               codec_sha256=digest(codec), canonical_reference_sha256=digest(ref))
 checkpoint()
+if not shutil.which('ninja') or not shutil.which('ccache'):
+    run(['sudo', 'apt-get', 'update', '-q'], 'build-dependencies-update')
+    run(['sudo', 'apt-get', 'install', '-y', 'ninja-build', 'ccache'], 'build-dependencies-install')
 build = SCRATCH / 'native-build'
-run(['cmake', '-S', ROOT, '-B', build, '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_SHARED_LIBS=ON',
+run(['cmake', '-G', 'Ninja', '-S', ROOT, '-B', build,
+     '-DCMAKE_C_COMPILER_LAUNCHER=ccache', '-DCMAKE_CXX_COMPILER_LAUNCHER=ccache', '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_SHARED_LIBS=ON',
      '-DGGML_NATIVE=OFF', '-DGGML_CUDA=OFF', '-DGGML_VULKAN=OFF', '-DGGML_BLAS=OFF',
      '-DCRISPASR_BUILD_TESTS=OFF', '-DCRISPASR_BUILD_SERVER=OFF', '-DCRISPASR_OPUS=OFF', '-DCRISPASR_AMR=OFF'], 'configure')
 run(['cmake', '--build', build, '--target', 'crispasr-lib', 'crispasr-cli', 'crispasr-diff', '-j4'], 'build')

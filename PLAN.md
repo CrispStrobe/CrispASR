@@ -5270,3 +5270,5 @@ Q4/GPU quality are still unaccepted until the controls return. Existing C API,
 CLI/bindings/server/backend factory/registry/CMake/quantizer integration remains
 unchanged by these diagnostic helpers. Python syntax and staged secret gates
 are checked before pushing the exact source for the hosted run.
+
+Hosted precision control uses Ninja and ccache per the development guide; installs those tools on the hosted runner only if missing. No local build or shared-package change.
