@@ -3,10 +3,10 @@
   "checks": [
     {
       "test": "test_dia_attention_cuda_inputs.py",
-      "count": 9,
+      "count": 11,
       "exit": 0,
-      "log": "/mnt/storage/crispasr/dia-attention-gpu-proof-20261013/driver-fix-tests.log",
-      "log_sha256": "257e11718b66f90b51f4aa43f03474be7355cf135ca600c436fcf96b0b8185cd"
+      "log": "/mnt/storage/crispasr/dia-attention-gpu-proof-v5-20261013/shape-repair-tests.log",
+      "log_sha256": "06d3ef928621fcce3a5cccec72a94c7af869f08da07b3943ae33616c9a285188"
     },
     {
       "test": "test_dia_cuda_bundle.py",
@@ -59,8 +59,8 @@
   "files": [
     {
       "path": "tools/ci-heavy/dia_attention_cuda_control.py",
-      "bytes": 17485,
-      "sha256": "48ce8001ccff133c08a7a0fc249d5d0fc9af0d0a9d6fe9d7edbf45bd0691162a"
+      "bytes": 17919,
+      "sha256": "7995b7b7b2d6e62e113aaf245eaaf257aee96d8455aad894f0f60e1272a1f28d"
     },
     {
       "path": "tools/kaggle/dia-attention-cuda-control/dia_attention_cuda_control.py",
@@ -74,8 +74,8 @@
     },
     {
       "path": "tests/test_dia_attention_cuda_inputs.py",
-      "bytes": 7551,
-      "sha256": "2cdeaf5c996cd04aa9e417ea4929322d7c617173c55ca9feedea5fda488d12ae"
+      "bytes": 9145,
+      "sha256": "279502fff014af66d48cefe97a09db110dff9b60057faaf2facb6fe0bd39bcb9"
     }
   ],
   "driver_lookup_repair": {
@@ -86,5 +86,16 @@
     "new_input_guards_pass": 9,
     "runtime_bytes_unchanged": true,
     "actual_gpu_retest_pending": true
+  },
+  "shape_receipt_repair": {
+    "actual_v5_terminal": "ERROR",
+    "actual_v5_gpu_controls_independently_verified": true,
+    "all_72_saved_snapshots_available": true,
+    "json_uint64_shape_failure_reproduced": true,
+    "explicit_python_integer_shape_roundtrip_pass": true,
+    "uniform_scale_negative_pass": true,
+    "atomic_prior_checkpoint_preserved_on_serialization_failure": true,
+    "all_input_tests_pass": 11,
+    "new_gpu_run_required_for_metadata": false
   }
 }

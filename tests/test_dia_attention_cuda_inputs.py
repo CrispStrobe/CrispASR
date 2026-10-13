@@ -7,6 +7,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -129,6 +130,35 @@ class InputGuards(unittest.TestCase):
         fixed = subprocess.run(command, env=worker.runtime_environment(self.bundle, parent), capture_output=True)
         self.assertEqual(fixed.returncode, 0, fixed.stderr.decode())
         self.assertEqual(parent['LD_LIBRARY_PATH'], str(driver_dir))
+
+    def test_numpy_uint64_shape_json_roundtrip_and_scale_negative(self):
+        import numpy as np
+        data = np.arange(1, 513, dtype=np.float32)
+        tensor = SimpleNamespace(shape=np.array([128, 2, 1, 2], dtype=np.uint64), data=data)
+        # Reproduce the original failure without a model or GPU.
+        with self.assertRaises(TypeError):
+            json.dumps({'original_shape': list(reversed(tensor.shape))})
+        file = self.root / 'attention.f32'; data.tofile(file)
+        row = worker.attention_row(0, 'attention', tensor, file)
+        self.assertEqual(json.loads(json.dumps(row))['original_shape'], [2, 1, 2, 128])
+        self.assertTrue(all(type(n) is int for n in row['original_shape']))
+        self.assertEqual(row['relative_l2'], 0)
+        (data * 2).tofile(file)
+        negative = worker.attention_row(0, 'attention', tensor, file)
+        self.assertAlmostEqual(negative['cosine_min'], 1)
+        self.assertEqual(negative['max_row_norm_error'], 1)
+        self.assertEqual(negative['relative_l2'], 1)
+
+    def test_invalid_checkpoint_preserves_prior_receipt(self):
+        file = self.root / 'receipt.json'
+        worker.write_checkpoint(file, {'complete': True})
+        previous = file.read_bytes()
+        with self.assertRaises(TypeError):
+            worker.write_checkpoint(file, {'bad': object()})
+        self.assertEqual(file.read_bytes(), previous)
+        with self.assertRaises(ValueError):
+            worker.write_checkpoint(file, {'bad': float('nan')})
+        self.assertEqual(file.read_bytes(), previous)
 
 
 if __name__ == '__main__':

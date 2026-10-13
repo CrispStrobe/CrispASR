@@ -40,6 +40,33 @@ def digest(path):
     return h.hexdigest()
 
 
+def write_checkpoint(path, report):
+    # Serialize before touching the previous checkpoint, then replace atomically.
+    payload = json.dumps(report, indent=2, allow_nan=False) + '\n'
+    temporary = path.with_name(path.name + '.tmp')
+    temporary.write_text(payload)
+    temporary.replace(path)
+
+
+def attention_row(layer, part, tensor, file):
+    import numpy as np
+    # GGUF dimensions are NumPy uint64 on some reader versions. Keep shapes
+    # explicitly portable in JSON without coercing unrelated report values.
+    shape = tuple(int(n) for n in reversed(tensor.shape))
+    expected = np.asarray(tensor.data).reshape(shape)
+    assert file.stat().st_size == expected.size * 4
+    actual = np.fromfile(file, dtype='<f4').reshape(shape)
+    assert np.isfinite(expected).all() and np.isfinite(actual).all()
+    x, y = expected.astype('f8').reshape(-1, 128), actual.astype('f8').reshape(-1, 128)
+    xn, yn = np.linalg.norm(x, axis=1), np.linalg.norm(y, axis=1)
+    assert (xn > 0).all() and (yn > 0).all()
+    return dict(layer=layer, part=part, original_shape=list(shape), values=int(expected.size),
+                cosine_min=float(np.min(np.sum(x*y, axis=1)/(xn*yn))),
+                max_row_norm_error=float(np.max(abs(yn/xn-1))), max_abs=float(abs(x-y).max()),
+                relative_l2=float(np.linalg.norm(x-y)/np.linalg.norm(x)),
+                changed_values=int(np.count_nonzero(expected != actual)), file_sha256=digest(file))
+
+
 def checked_file(root, name, facts):
     relative = Path(name)
     if relative.is_absolute() or '..' in relative.parts:
@@ -141,7 +168,7 @@ def main():
         shutil.copy2(ROOT / name, path)
 
     def checkpoint():
-        (out / 'receipt.json').write_text(json.dumps(report, indent=2) + '\n')
+        write_checkpoint(out / 'receipt.json', report)
 
     def run(command, label, env=None, negative=False, cuda=False):
         log = out / (label + '.log')
@@ -266,20 +293,8 @@ print('ACTUAL_CUDA_DRIVER_AND_PACKAGE_PLUGIN_LOAD_PASS', count.value)
     for layer in range(18):
         for part in ('q', 'k', 'v', 'attention'):
             name = f'decoder_sa{layer}_{part}'
-            tensor = tensors[name]; shape = tuple(reversed(tensor.shape))
-            expected = np.asarray(tensor.data).reshape(shape)
             file = out / 'attention-on' / ('cpp_' + name + '.f32')
-            assert file.stat().st_size == expected.size * 4
-            actual = np.fromfile(file, dtype='<f4').reshape(shape)
-            assert np.isfinite(expected).all() and np.isfinite(actual).all()
-            x, y = expected.astype('f8').reshape(-1, 128), actual.astype('f8').reshape(-1, 128)
-            xn, yn = np.linalg.norm(x, axis=1), np.linalg.norm(y, axis=1)
-            assert (xn > 0).all() and (yn > 0).all()
-            rows.append(dict(layer=layer, part=part, original_shape=list(shape), values=int(expected.size),
-                             cosine_min=float(np.min(np.sum(x*y, axis=1)/(xn*yn))),
-                             max_row_norm_error=float(np.max(abs(yn/xn-1))), max_abs=float(abs(x-y).max()),
-                             relative_l2=float(np.linalg.norm(x-y)/np.linalg.norm(x)),
-                             changed_values=int(np.count_nonzero(expected != actual)), file_sha256=digest(file)))
+            rows.append(attention_row(layer, part, tensors[name], file))
             report['attention_history_rows'] = rows; checkpoint()
     report['cuda_late_attention_diagnostic_capture_pass'] = True; checkpoint()
     print('DIA_CUDA_LATE_ATTENTION_DIAGNOSTIC_PASS; native free speech is not accepted', flush=True)

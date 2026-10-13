@@ -59,3 +59,17 @@ dependency fixture fails with the old path and passes with the repaired path;
 all nine input guards pass. No runtime/reference/package bytes or thresholds
 change. Metadata now follows the returned attention-control slug. Actual GPU
 retest remains required.
+
+## Retain version 5 computations; repair metadata serialization
+
+Version 5 did execute on T4: original GPU ASR is WER 0; all three normal
+replays pass 40/40 stages, each with 11,037 CUDA splits and 8,736 MiB peak
+allocation. Full OFF/ON/OFF arrays are identical and all 72 attention snapshots
+exist. Its terminal ERROR is retained: JSON serialization failed on a NumPy
+uint64 GGUF dimension after computation. Independent audit of complete saved
+outputs verifies the controls and recomputes the metrics, without rerunning
+GPU inference or changing the original receipt/status. Dimensions are now
+explicit Python integers; atomic checkpoints preserve the prior receipt when
+serialization fails. Eleven input tests pass, including the exact uint64
+failure/roundtrip and a scale negative. Runtime/model/reference bytes and
+quality gates remain unchanged. No native free-speech/Q4 acceptance.
