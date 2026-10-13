@@ -3,10 +3,10 @@
   "checks": [
     {
       "test": "test_dia_attention_cuda_inputs.py",
-      "count": 8,
+      "count": 9,
       "exit": 0,
-      "log": "/mnt/storage/crispasr/dia-attention-delivery-20261013/final-test_dia_attention_cuda_inputs.py.log",
-      "log_sha256": "ed794b3584cfbacc482d85724f425219f989548cb91c031e0a174e1bece397e1"
+      "log": "/mnt/storage/crispasr/dia-attention-gpu-proof-20261013/driver-fix-tests.log",
+      "log_sha256": "257e11718b66f90b51f4aa43f03474be7355cf135ca600c436fcf96b0b8185cd"
     },
     {
       "test": "test_dia_cuda_bundle.py",
@@ -59,23 +59,32 @@
   "files": [
     {
       "path": "tools/ci-heavy/dia_attention_cuda_control.py",
-      "bytes": 16233,
-      "sha256": "5e315cd927caf0190e78bb6c34cf0158dca68a086b01dd9c3cd577e8ae1b208a"
+      "bytes": 17485,
+      "sha256": "48ce8001ccff133c08a7a0fc249d5d0fc9af0d0a9d6fe9d7edbf45bd0691162a"
     },
     {
       "path": "tools/kaggle/dia-attention-cuda-control/dia_attention_cuda_control.py",
       "bytes": 6906,
-      "sha256": "c7acdb1d04dbdc43d01fd4d2e444abf0d85c563b75801b274472dab0dc35e1bc"
+      "sha256": "7942b39e1d56bc978d746645ab604d50b588a94496ab958f5e4c52875d68dc34"
     },
     {
       "path": "tools/kaggle/dia-attention-cuda-control/kernel-metadata.json",
-      "bytes": 428,
-      "sha256": "2a3bbd5f532dfe06da19642a52bc5242660a62619ed0e3c396baace2df6e62bc"
+      "bytes": 432,
+      "sha256": "d4de3d122cbb581b3a93d7dcd8a876232d814a7bfc3d762094da2d63871e558b"
     },
     {
       "path": "tests/test_dia_attention_cuda_inputs.py",
-      "bytes": 5793,
-      "sha256": "30ab021846a1b159beee875a6c3e279e1923cec2e66df7f8449bb2dfd27cc5d5"
+      "bytes": 7551,
+      "sha256": "2cdeaf5c996cd04aa9e417ea4929322d7c617173c55ca9feedea5fda488d12ae"
     }
-  ]
+  ],
+  "driver_lookup_repair": {
+    "v4_terminal": "ERROR",
+    "gpu_executed": false,
+    "cause": "Inherited driver library search path replaced; libcuda.so.1 unavailable to CUDA plugin",
+    "real_elf_negative_and_positive_pass": true,
+    "new_input_guards_pass": 9,
+    "runtime_bytes_unchanged": true,
+    "actual_gpu_retest_pending": true
+  }
 }

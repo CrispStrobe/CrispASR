@@ -1,5 +1,5 @@
 {
-  "id": "${KAGGLE_ACCOUNT}/crispasr-dia-cuda-cache-control",
+  "id": "${KAGGLE_ACCOUNT}/crispasr-dia-cuda-attention-control",
   "title": "CrispASR Dia CUDA Attention Control",
   "code_file": "dia_attention_cuda_control.py",
   "language": "python",

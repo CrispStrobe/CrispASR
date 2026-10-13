@@ -46,3 +46,16 @@ TMPDIR in additional test commands. Tests were rerun with one explicit local
 small-fixture environment; no checks were skipped or thresholds changed.
 Models and delivered artifacts remain on storage/hosted scratch. The prepared
 bootstrap and full worker still require end-to-end hardware validation.
+
+## Driver lookup repair after actual version 4
+
+The T4 run failed before Dia capture: the worker replaced inherited
+LD_LIBRARY_PATH, hiding libcuda.so.1. ASR produced WER 0 through CPU fallback;
+the strict CUDA witness correctly rejected it. All 18 terminal outputs and
+complete raw/decoded logs remain preserved. Version 5 prepends bundle libraries
+while retaining inherited driver paths and checks actual driver initialization,
+device count and CUDA plugin loading before model downloads. A real ELF
+dependency fixture fails with the old path and passes with the repaired path;
+all nine input guards pass. No runtime/reference/package bytes or thresholds
+change. Metadata now follows the returned attention-control slug. Actual GPU
+retest remains required.

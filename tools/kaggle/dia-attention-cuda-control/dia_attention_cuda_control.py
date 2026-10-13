@@ -11,7 +11,7 @@ import sys
 import tarfile
 import zipfile
 
-VERSION = '2026-10-13.dia-cuda-attention.4'
+VERSION = '2026-10-13.dia-cuda-attention.5'
 SOURCE = 'PENDING_SOURCE_PIN'
 INPUT_REVISION = 'PENDING_INPUT_REVISION'
 MANIFEST_SHA256 = 'PENDING_MANIFEST_SHA256'

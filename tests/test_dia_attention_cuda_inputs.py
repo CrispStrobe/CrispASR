@@ -4,6 +4,8 @@ import importlib.util
 import json
 import os
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 
@@ -105,6 +107,28 @@ class InputGuards(unittest.TestCase):
         for name in ('../bundle/secret', '/absolute', 'bundle/../../secret', 'bundle\\secret'):
             with self.subTest(name=name), self.assertRaises(ValueError):
                 kernel.safe_path(name)
+
+    @unittest.skipUnless(sys.platform.startswith('linux'), 'ELF loader regression requires Linux')
+    def test_actual_elf_loader_needs_inherited_driver_directory(self):
+        # Tiny ELF fixtures test dependency lookup, never emulate a GPU.
+        driver_dir = self.root / 'host-driver'; driver_dir.mkdir()
+        driver_c = self.root / 'driver.c'; driver_c.write_text('int fixture_driver(void) { return 4242; }\n')
+        plugin_c = self.root / 'plugin.c'
+        plugin_c.write_text('extern int fixture_driver(void); int fixture_plugin(void) { return fixture_driver(); }\n')
+        subprocess.run(['cc', '-shared', '-fPIC', str(driver_c), '-Wl,-soname,libfixture-driver.so.1',
+                        '-o', str(driver_dir / 'libfixture-driver.so.1')], check=True)
+        plugin = self.bundle / 'libfixture-plugin.so'
+        subprocess.run(['cc', '-shared', '-fPIC', str(plugin_c), '-L' + str(driver_dir),
+                        '-Wl,--no-as-needed', '-l:libfixture-driver.so.1', '-o', str(plugin)], check=True)
+        command = [sys.executable, '-c',
+                   'import ctypes,sys; lib=ctypes.CDLL(sys.argv[1]); assert lib.fixture_plugin()==4242', str(plugin)]
+        parent = dict(os.environ, LD_LIBRARY_PATH=str(driver_dir))
+        broken = subprocess.run(command, env=dict(parent, LD_LIBRARY_PATH=str(self.bundle)), capture_output=True)
+        self.assertNotEqual(broken.returncode, 0)
+        self.assertIn(b'libfixture-driver.so.1', broken.stderr)
+        fixed = subprocess.run(command, env=worker.runtime_environment(self.bundle, parent), capture_output=True)
+        self.assertEqual(fixed.returncode, 0, fixed.stderr.decode())
+        self.assertEqual(parent['LD_LIBRARY_PATH'], str(driver_dir))
 
 
 if __name__ == '__main__':

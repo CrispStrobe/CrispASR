@@ -23,6 +23,15 @@ RUNTIME_FILES = {'src/dia_tts.cpp', 'src/dia_sampling.h', 'src/dia_exponential_r
                  'examples/cli/crispasr_dia_diff.h', 'src/crispasr_c_api.cpp', 'python/crispasr/_binding.py'}
 
 
+def runtime_environment(bundle, parent=None):
+    """Keep host driver lookup while preferring the audited user-space bundle."""
+    env = dict(os.environ if parent is None else parent)
+    inherited = env.get('LD_LIBRARY_PATH', '')
+    env['LD_LIBRARY_PATH'] = os.pathsep.join([str(bundle)] + ([inherited] if inherited else []))
+    env['GGML_BACKEND_PATH'] = str(bundle / 'libggml-cuda.so')
+    return env
+
+
 def digest(path):
     h = hashlib.sha256()
     with Path(path).open('rb') as f:
@@ -167,6 +176,24 @@ def main():
         return record
 
     checkpoint()
+    # CUDA drivers are host-provided, deliberately outside the delivered
+    # toolkit bundle. Reject missing/unusable drivers before downloading weights.
+    driver_check = '''import ctypes, sys
+driver = ctypes.CDLL('libcuda.so.1')
+driver.cuInit.argtypes = [ctypes.c_uint]
+driver.cuInit.restype = ctypes.c_int
+assert driver.cuInit(0) == 0, 'CUDA driver initialization failed'
+count = ctypes.c_int()
+driver.cuDeviceGetCount.argtypes = [ctypes.POINTER(ctypes.c_int)]
+driver.cuDeviceGetCount.restype = ctypes.c_int
+assert driver.cuDeviceGetCount(ctypes.byref(count)) == 0 and count.value > 0
+ctypes.CDLL(sys.argv[1])
+print('ACTUAL_CUDA_DRIVER_AND_PACKAGE_PLUGIN_LOAD_PASS', count.value)
+'''
+    run([sys.executable, '-c', driver_check, a.bundle / 'libggml-cuda.so'],
+        'cuda-driver-plugin-preflight', runtime_environment(a.bundle))
+    report['cuda_driver_plugin_preflight_pass'] = True
+    checkpoint()
     sys.path.insert(0, str(ROOT / 'tools'))
     import numpy as np
     from gguf import GGUFReader
@@ -210,7 +237,7 @@ def main():
     assert digest(codec) == cpu_receipt['codec_sha256'] == '6db51da2333868918b6d476008d92036a53400bc816ff7e1d2b1e973499e4135'
     report.update(model_sha256=digest(model), codec_sha256=digest(codec), original_weights_sha256=WEIGHTS_SHA)
     lib, diff = a.bundle / 'libcrispasr.so', a.bundle / 'crispasr-diff'
-    env = dict(os.environ, LD_LIBRARY_PATH=str(a.bundle), GGML_BACKEND_PATH=str(a.bundle / 'libggml-cuda.so'),
+    env = dict(runtime_environment(a.bundle),
                GGML_SCHED_DEBUG='1', CRISPASR_DIA_TTS_GPU='1', CRISPASR_DIA_CROSS_CACHE_F32='1',
                CRISPASR_DIA_PORTABLE_RNG='1', CRISPASR_DIA_SOURCE_ROPE='0', DIA_CODEC=str(codec))
     asr = hf_hub_download('cstr/nemotron-3.5-asr-streaming-GGUF', 'nemotron-3.5-asr-streaming-0.6b-q4_k.gguf',
