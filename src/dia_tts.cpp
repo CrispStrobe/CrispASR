@@ -1314,6 +1314,9 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
     // DIA_DUMP_DIR=d       : write step-0 stage dumps (encoder/cross/ca/final/logits) under dir d
     const char* portable_rng_env = crispasr_env::get("CRISPASR_DIA_PORTABLE_RNG");
     const bool portable_rng = portable_rng_env && std::strcmp(portable_rng_env, "1") == 0;
+    const char* cross_f32_env = crispasr_env::get("CRISPASR_DIA_CROSS_CACHE_F32");
+    const bool cross_f32 = cross_f32_env && std::strcmp(cross_f32_env, "1") == 0;
+    const ggml_type cross_type = cross_f32 ? GGML_TYPE_F32 : GGML_TYPE_F16;
     const bool dia_greedy = crispasr_env::get("CRISPASR_DIA_GREEDY") != nullptr;
     const bool dia_dump_tokens = crispasr_env::get("CRISPASR_DIA_DUMP_TOKENS") != nullptr;
     const char* dia_dump_dir = crispasr_env::get("CRISPASR_DIA_DUMP_DIR");
@@ -1518,9 +1521,11 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
     // ===================================================================
     // cross_k[layer]: (cross_kv_dim=2048, T_enc, B) — projected from encoder output
     // cross_v[layer]: (cross_kv_dim=2048, T_enc, B)
-    // Stored as F16 (§176i: read-only after projection, halves memory)
+    // Default F16 (§176i); opt-in F32 preserves the original F32 projections.
     std::vector<std::vector<ggml_fp16_t>> cross_k(m.n_decoder_layers);
     std::vector<std::vector<ggml_fp16_t>> cross_v(m.n_decoder_layers);
+    std::vector<std::vector<float>> cross_k_f32(m.n_decoder_layers);
+    std::vector<std::vector<float>> cross_v_f32(m.n_decoder_layers);
 
     {
         dia_bench_stage _b("cross_attn_kv");
@@ -1589,6 +1594,15 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
             std::string kname = "cross_k_" + std::to_string(l);
             std::string vname = "cross_v_" + std::to_string(l);
             const size_t n_elem = (size_t)cross_kv_dim * T_enc * B;
+            if (cross_f32) {
+                cross_k_f32[l].resize(n_elem);
+                cross_v_f32[l].resize(n_elem);
+                ggml_backend_tensor_get(ggml_graph_get_tensor(gf, kname.c_str()), cross_k_f32[l].data(), 0,
+                                        n_elem * sizeof(float));
+                ggml_backend_tensor_get(ggml_graph_get_tensor(gf, vname.c_str()), cross_v_f32[l].data(), 0,
+                                        n_elem * sizeof(float));
+                continue;
+            }
             std::vector<float> tmp(n_elem);
             cross_k[l].resize(n_elem);
             cross_v[l].resize(n_elem);
@@ -1599,18 +1613,24 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
         }
 
         if (dia_dump_dir) {
-            // cross_k[0]/cross_v[0] layout (cross_kv_dim, T_enc, B) — stored as F16
-            // dump as F32 for diff-harness compatibility
-            std::vector<float> dump(cross_k[0].size());
+            // Both cache representations dump F32 in (cross_kv_dim, T_enc, B)
+            // layout for the existing diff harness.
+            std::vector<float> dump(cross_f32 ? cross_k_f32[0].size() : cross_k[0].size());
             FILE* fk = fopen(dia_dpath("cpp_cross_k0.f32").c_str(), "wb");
             FILE* fv = fopen(dia_dpath("cpp_cross_v0.f32").c_str(), "wb");
             if (fk) {
-                ggml_fp16_to_fp32_row(cross_k[0].data(), dump.data(), (int)dump.size());
+                if (cross_f32)
+                    dump = cross_k_f32[0];
+                else
+                    ggml_fp16_to_fp32_row(cross_k[0].data(), dump.data(), (int)dump.size());
                 fwrite(dump.data(), sizeof(float), dump.size(), fk);
                 fclose(fk);
             }
             if (fv) {
-                ggml_fp16_to_fp32_row(cross_v[0].data(), dump.data(), (int)dump.size());
+                if (cross_f32)
+                    dump = cross_v_f32[0];
+                else
+                    ggml_fp16_to_fp32_row(cross_v[0].data(), dump.data(), (int)dump.size());
                 fwrite(dump.data(), sizeof(float), dump.size(), fv);
                 fclose(fv);
             }
@@ -1622,6 +1642,14 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
 
     if (p.verbosity >= 1) {
         fprintf(stderr, "dia_tts: cross-attention K/V cached for %u layers\n", m.n_decoder_layers);
+    }
+    if (dia_dump_tokens) {
+        size_t cache_bytes = 0;
+        for (size_t l = 0; l < m.n_decoder_layers; ++l)
+            cache_bytes += cross_f32 ? (cross_k_f32[l].size() + cross_v_f32[l].size()) * sizeof(float)
+                                     : (cross_k[l].size() + cross_v[l].size()) * sizeof(ggml_fp16_t);
+        fprintf(stderr, "DIA_CROSS_CACHE: type=%s bytes=%zu encoder_steps=%d layers=%u\n", cross_f32 ? "F32" : "F16",
+                cache_bytes, T_enc, m.n_decoder_layers);
     }
 
     // ===================================================================
@@ -1704,8 +1732,8 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                     ggml_set_input(past_k_inputs[l]);
                     ggml_set_input(past_v_inputs[l]);
                 }
-                cross_k_inputs[l] = ggml_new_tensor_3d(ctx0, GGML_TYPE_F16, cross_kv_dim, T_enc, B);
-                cross_v_inputs[l] = ggml_new_tensor_3d(ctx0, GGML_TYPE_F16, cross_kv_dim, T_enc, B);
+                cross_k_inputs[l] = ggml_new_tensor_3d(ctx0, cross_type, cross_kv_dim, T_enc, B);
+                cross_v_inputs[l] = ggml_new_tensor_3d(ctx0, cross_type, cross_kv_dim, T_enc, B);
                 std::string ckn = "cross_k_in_" + std::to_string(l);
                 std::string cvn = "cross_v_in_" + std::to_string(l);
                 ggml_set_name(cross_k_inputs[l], ckn.c_str());
@@ -1964,10 +1992,17 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                 // Cross-attention K/V
                 std::string ckn = "cross_k_in_" + std::to_string(l);
                 std::string cvn = "cross_v_in_" + std::to_string(l);
-                ggml_backend_tensor_set(ggml_graph_get_tensor(gf, ckn.c_str()), cross_k[l].data(), 0,
-                                        cross_k[l].size() * sizeof(ggml_fp16_t));
-                ggml_backend_tensor_set(ggml_graph_get_tensor(gf, cvn.c_str()), cross_v[l].data(), 0,
-                                        cross_v[l].size() * sizeof(ggml_fp16_t));
+                if (cross_f32) {
+                    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, ckn.c_str()), cross_k_f32[l].data(), 0,
+                                            cross_k_f32[l].size() * sizeof(float));
+                    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, cvn.c_str()), cross_v_f32[l].data(), 0,
+                                            cross_v_f32[l].size() * sizeof(float));
+                } else {
+                    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, ckn.c_str()), cross_k[l].data(), 0,
+                                            cross_k[l].size() * sizeof(ggml_fp16_t));
+                    ggml_backend_tensor_set(ggml_graph_get_tensor(gf, cvn.c_str()), cross_v[l].data(), 0,
+                                            cross_v[l].size() * sizeof(ggml_fp16_t));
+                }
             }
 
             // Compute

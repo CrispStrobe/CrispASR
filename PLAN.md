@@ -5289,3 +5289,20 @@ historical codec-startup/probability diagnostics with distinct unarchived input
 runs retain their existing transport. Currently executing precision run
 38343667254 stays on immutable `5a8fe578e`, unmodified and uncancelled. No new
 production C++/default/seed/weights/ref/gate change, or speech/GPU/Q4 acceptance.
+
+### 2026-10-13 F32 cross-cache control candidate
+
+Main preimplementation claim `873b1254e` precedes this runtime change.
+`CRISPASR_DIA_CROSS_CACHE_F32=1` preserves F32 projection readback, decoder
+graph inputs and upload payloads; unset/other values retain the F16 path.
+The shared synthesis implementation serves CLI and C ABI/bindings/server.
+No backend/factory/registry/CMake/quantizer/API addition is involved.
+
+The hosted neural worker adds `--cross-cache-control`: one fixed physical
+all-original-F32 model, F16/F32/F16-repeat cache arms in the same binary/host.
+Each arm requires complete 40-stage strict diff and actual CLI/C-ABI speech.
+F32 speech must pass; F16 arms must retain their known rejection and repeat
+exact inputs, logits, native PCM and CLI PCM. Actual vector-byte receipts must
+show the expected doubling. Whole runtime/worker/export sources are retained
+with all arrays/audits. No seed/filter/reference/gate/default change or model
+promotion; broad speech and real CUDA validation remain subsequent gates.

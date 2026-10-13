@@ -8,6 +8,7 @@ run only on hosted hardware; each failed arm remains a failed control.
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -28,6 +29,8 @@ from dia_model_precision import export_precision, WEIGHTS_SHA
 from reference_backends import dia_tts_reference as reference
 
 parser = argparse.ArgumentParser(description=__doc__)
+parser.add_argument('--cross-cache-control', action='store_true',
+                    help='Fixed F32 neural weights, F16/F32/F16-repeat cross-cache isolation')
 parser.add_argument('--export', choices=('heads-f32', 'f32'))
 parser.add_argument('--weights', type=Path)
 parser.add_argument('--template', type=Path)
@@ -51,7 +54,11 @@ report = dict(source=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=R
               source_worktree_dirty=bool(subprocess.check_output(['git', 'status', '--porcelain'], cwd=ROOT)),
               worker_sha256=digest(Path(__file__)), export_helper_sha256=digest(ROOT / 'tools/dia_model_precision.py'),
               production_defaults_changed=False, production_model_pins_changed=False,
-              full_model_acceptance=False, gpu_acceptance=False, q4_acceptance=False, runs=[], arms=[])
+              full_model_acceptance=False, gpu_acceptance=False, q4_acceptance=False,
+              cross_cache_control=a.cross_cache_control, runs=[], arms=[])
+for path in ('src/dia_tts.cpp', 'tools/ci-heavy/dia_neural_precision_control.py',
+             'tools/dia_model_precision.py'):
+    shutil.copyfile(ROOT / path, OUT / Path(path).name)
 
 
 def checkpoint():
@@ -119,7 +126,7 @@ lib, cli, diff = next(build.rglob('libcrispasr.so')), build / 'bin/crispasr', bu
 report.update(native_library_sha256=digest(lib), native_cli_sha256=digest(cli), native_diff_sha256=digest(diff))
 asr = hf_hub_download('cstr/nemotron-3.5-asr-streaming-GGUF', 'nemotron-3.5-asr-streaming-0.6b-q4_k.gguf',
                       revision='bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2')
-for precision in ('heads-f32', 'f32'):
+for precision in (('f32',) if a.cross_cache_control else ('heads-f32', 'f32')):
     model_dir = SCRATCH / precision
     model_dir.mkdir()
     model = model_dir / ('dia-1.6b-' + precision + '.gguf')
@@ -129,44 +136,74 @@ for precision in ('heads-f32', 'f32'):
          '--template', template, '--output', model], precision + '-export')
     audit = json.loads((OUT / ('neural-' + precision + '-physical-audit.json')).read_text())
     assert digest(model) == audit['export_sha256']
-    arm_out = OUT / precision
-    arm_out.mkdir()
-    env = os.environ.copy()
-    env.update(HEAVY_OUT=str(arm_out), CRISPASR_DIA_PORTABLE_RNG='1', DIA_CODEC=str(codec))
-    for prefix in ('DIA_', 'CRISPASR_DIA_'):
-        for suffix in ('FORCE_TOKENS', 'FORCE_OUTPUT_TOKENS', 'DECODE_CODES', 'GREEDY', 'MAX_STEPS'):
-            assert not env.get(prefix + suffix), 'Forced free-generation input rejected'
-    arm = dict(precision=precision, model_sha256=audit['export_sha256'], model_bytes=model.stat().st_size,
-               byte_delta=audit['byte_delta'], strict_diff_exit=run([diff, 'dia', model, ref], precision + '-strict-diff', env, True))
-    report['arms'].append(arm)
-    checkpoint()
-    run([sys.executable, ROOT / 'tools/ci-heavy/dia_portable_speech_control.py', '--child', 'native',
-         '--model', model, '--lib', lib], precision + '-native-generation', env)
-    arm['native_asr_exit'] = run([sys.executable, ROOT / 'tools/ci-heavy/dia_full_speech.py', '--child', 'recognize',
-         '--model', asr, '--lib', lib, '--phrase', 'reported', '--audio-tag', 'native-free'], precision + '-native-asr', env, True)
-    arm['native'] = json.loads((arm_out / 'native-free.json').read_text())
-    checkpoint()
-    wav = arm_out / 'native-cli.wav'
-    run([cli, '--no-gpu', '-m', model, '--codec-model', codec, '--tts-output', wav, '-l', 'en',
-         '--tts', '[S1] We are committed to making it secure.', '-t', '4', '--seed', '42', '--temperature', '1.2',
-         '--no-spoken-disclaimer', '--accept-marking-responsibility'], precision + '-cli-generation', env)
-    with wave.open(str(wav), 'rb') as audio:
-        assert audio.getnchannels() == 1 and audio.getsampwidth() == 2 and audio.getframerate() == 44100
-        pcm = np.frombuffer(audio.readframes(audio.getnframes()), dtype='<i2').astype(np.float32) / 32768.
-    np.save(arm_out / 'native-cli.npy', pcm)
-    (arm_out / 'native-cli.json').write_text(json.dumps(dict(phrase='We are committed to making it secure.',
-        seed=42, capacity=3072, audio_seconds=len(pcm)/44100, rms=float(np.sqrt(np.mean(pcm.astype('f8')**2))),
-        finite=bool(np.isfinite(pcm).all()), scope='Actual native CLI free generation in fixed neural precision control')))
-    arm['cli_asr_exit'] = run([sys.executable, ROOT / 'tools/ci-heavy/dia_full_speech.py', '--child', 'recognize',
-         '--model', asr, '--lib', lib, '--phrase', 'reported', '--audio-tag', 'native-cli'], precision + '-cli-asr', env, True)
-    arm['cli'] = json.loads((arm_out / 'native-cli.json').read_text())
-    arm['fixed_prompt_pass'] = arm['strict_diff_exit'] == arm['native_asr_exit'] == arm['cli_asr_exit'] == 0
-    checkpoint()
+    if a.cross_cache_control:
+        assert audit['export_sha256'] == '8128132c538e1aef83f2fb5257b4f71d28a67c2a5a0d54d0a1f0a3b0f5d6b73d', 'Fixed original F32 model changed'
+    for cache in (('f16', 'f32', 'f16-repeat') if a.cross_cache_control else ('f16',)):
+        label = precision + '-cross-' + cache if a.cross_cache_control else precision
+        arm_out = OUT / label
+        arm_out.mkdir()
+        env = os.environ.copy()
+        env.update(HEAVY_OUT=str(arm_out), CRISPASR_DIA_PORTABLE_RNG='1', DIA_CODEC=str(codec))
+        env.pop('CRISPASR_DIA_CROSS_CACHE_F32', None)
+        if cache == 'f32':
+            env['CRISPASR_DIA_CROSS_CACHE_F32'] = '1'
+        for prefix in ('DIA_', 'CRISPASR_DIA_'):
+            for suffix in ('FORCE_TOKENS', 'FORCE_OUTPUT_TOKENS', 'DECODE_CODES', 'GREEDY', 'MAX_STEPS'):
+                assert not env.get(prefix + suffix), 'Forced free-generation input rejected'
+        arm = dict(precision=precision, cross_cache_precision='f32' if cache == 'f32' else 'f16', model_sha256=audit['export_sha256'], model_bytes=model.stat().st_size,
+                   byte_delta=audit['byte_delta'], strict_diff_exit=run([diff, 'dia', model, ref], label + '-strict-diff', env, True))
+        diff_log = (OUT / (label + '-strict-diff.log')).read_text()
+        arm['strict_stage_passes'] = len(re.findall(r'\[PASS\]', diff_log))
+        if arm['strict_diff_exit'] == 0:
+            assert arm['strict_stage_passes'] == 40 and '[FAIL]' not in diff_log, 'Incomplete canonical diff'
+        report['arms'].append(arm)
+        checkpoint()
+        run([sys.executable, ROOT / 'tools/ci-heavy/dia_portable_speech_control.py', '--child', 'native',
+             '--model', model, '--lib', lib], label + '-native-generation', env)
+        arm['native_asr_exit'] = run([sys.executable, ROOT / 'tools/ci-heavy/dia_full_speech.py', '--child', 'recognize',
+             '--model', asr, '--lib', lib, '--phrase', 'reported', '--audio-tag', 'native-free'], label + '-native-asr', env, True)
+        arm['native'] = json.loads((arm_out / 'native-free.json').read_text())
+        matches = re.findall(r'DIA_CROSS_CACHE: type=(F16|F32) bytes=(\d+) encoder_steps=(\d+) layers=(\d+)',
+                             (OUT / (label + '-native-generation.log')).read_text())
+        assert len(matches) == 1, 'Missing actual cross-cache allocation receipt'
+        kind, size, steps, layers = matches[0]
+        assert kind == ('F32' if cache == 'f32' else 'F16')
+        arm['cross_cache'] = dict(type=kind, bytes=int(size), encoder_steps=int(steps), layers=int(layers))
+        checkpoint()
+        wav = arm_out / 'native-cli.wav'
+        run([cli, '--no-gpu', '-m', model, '--codec-model', codec, '--tts-output', wav, '-l', 'en',
+             '--tts', '[S1] We are committed to making it secure.', '-t', '4', '--seed', '42', '--temperature', '1.2',
+             '--no-spoken-disclaimer', '--accept-marking-responsibility'], label + '-cli-generation', env)
+        with wave.open(str(wav), 'rb') as audio:
+            assert audio.getnchannels() == 1 and audio.getsampwidth() == 2 and audio.getframerate() == 44100
+            pcm = np.frombuffer(audio.readframes(audio.getnframes()), dtype='<i2').astype(np.float32) / 32768.
+        np.save(arm_out / 'native-cli.npy', pcm)
+        (arm_out / 'native-cli.json').write_text(json.dumps(dict(phrase='We are committed to making it secure.',
+            seed=42, capacity=3072, audio_seconds=len(pcm)/44100, rms=float(np.sqrt(np.mean(pcm.astype('f8')**2))),
+            finite=bool(np.isfinite(pcm).all()), scope='Actual native CLI free generation in fixed neural precision control')))
+        arm['cli_asr_exit'] = run([sys.executable, ROOT / 'tools/ci-heavy/dia_full_speech.py', '--child', 'recognize',
+             '--model', asr, '--lib', lib, '--phrase', 'reported', '--audio-tag', 'native-cli'], label + '-cli-asr', env, True)
+        arm['cli'] = json.loads((arm_out / 'native-cli.json').read_text())
+        arm['fixed_prompt_pass'] = arm['strict_diff_exit'] == arm['native_asr_exit'] == arm['cli_asr_exit'] == 0
+        checkpoint()
     # The audited diagnostic is reproducible from immutable original weights;
     # do not retain multiple large native model controls in hosted scratch.
     model.unlink()
-report['precision_controls_pass'] = all(arm['fixed_prompt_pass'] for arm in report['arms'])
-report['scope'] = 'Two fixed CPU precision controls with physical original tensor audits, strict canonical stages and actual native CLI/C-ABI ASR; no full-model/GPU/Q4 acceptance or model-pin promotion.'
+if a.cross_cache_control:
+    off, on, repeat = report['arms']
+    first, last = OUT / 'f32-cross-f16', OUT / 'f32-cross-f16-repeat'
+    repeated = ('native-inputs.i32', 'native-logits.f32', 'native-free.npy', 'native-cli.npy')
+    report['cache_off_repeat_exact'] = all(digest(first / name) == digest(last / name) for name in repeated)
+    report['negative_cache_f16_retains_rejection'] = all(
+        arm['strict_diff_exit'] == 0 and arm['native']['wer'] == arm['cli']['wer'] == 1
+        for arm in (off, repeat))
+    assert on['cross_cache']['bytes'] == 2 * off['cross_cache']['bytes'] == 2 * repeat['cross_cache']['bytes']
+    report['cache_byte_delta'] = on['cross_cache']['bytes'] - off['cross_cache']['bytes']
+    report['precision_controls_pass'] = (on['fixed_prompt_pass'] and report['cache_off_repeat_exact']
+                                        and report['negative_cache_f16_retains_rejection'])
+else:
+    report['precision_controls_pass'] = all(arm['fixed_prompt_pass'] for arm in report['arms'])
+report['scope'] = ('Fixed F32 neural weights with F16/F32/F16-repeat cache control; ' if a.cross_cache_control else 'Two fixed CPU precision controls; ') + 'CPU controls with physical original tensor audits, strict canonical stages and actual native CLI/C-ABI ASR; no full-model/GPU/Q4 acceptance or model-pin promotion.'
 checkpoint()
 assert report['precision_controls_pass'], 'One or more fixed precision controls failed; preserve all results'
 print('DIA_NEURAL_PRECISION_CONTROL_PASS; fixed-prompt CPU scope only', flush=True)
