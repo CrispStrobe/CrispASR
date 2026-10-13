@@ -143,7 +143,7 @@ base_env = os.environ.copy(); base_env.update(CRISPASR_DIA_CROSS_CACHE_F32='1', 
 for label, ref in [('default', canonical), ('late', OUT / 'original-step978-ref.gguf'), ('repeat-default', canonical)]:
     env = dict(base_env, CRISPASR_DIA_DIFF_DUMP_DIR=str(OUT / label), CRISPASR_DIA_DUMP_STEP='malformed-inherited-control')
     run([diff, 'dia', model, ref], label + '-diff', env)
-    log = (OUT / (label + '-diff.log')).read_text()
+    log = (OUT / (label + '-diff.log')).read_text().replace('DIA_DECODE_CODES: 1210 frames\n', '')
     assert len(re.findall(r'\[PASS\]', log)) == 40 and '[FAIL]' not in log
     assert (OUT / label / 'capture-step.txt').read_text().strip() == ('978' if label == 'late' else '0')
 for name in ('logits.f32', 'feedback.i32', 'decoded_audio.f32'):

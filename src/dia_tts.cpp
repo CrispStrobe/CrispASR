@@ -167,6 +167,7 @@ struct dia_model {
     dia_encoder encoder;
     dia_decoder decoder;
     core_dac::DacWeights dac;
+    ggml_tensor* rope_timescale = nullptr; // original nonpersistent F32 rotary buffer
 
     bool has_dac = false;
 
@@ -369,6 +370,11 @@ static void dia_assign_weight(dia_model& m, const std::string& name, ggml_tensor
         return;
     }
 
+    if (name == "dia.rope.timescale") {
+        m.rope_timescale = tensor;
+        return;
+    }
+
     if (parts[1] == "encoder") {
         if (parts[2] == "embedding") {
             m.encoder.embedding = tensor;
@@ -512,11 +518,21 @@ static bool dia_kv_cache_init(dia_kv_cache& cache, const dia_model& m) {
 // Dia uses NeoX-style RoPE (mode=2 in ggml_rope)
 static const int DIA_ROPE_MODE = 2; // first-half/second-half pairing (ggml NeoX mode)
 
+static ggml_tensor* dia_rotary(ggml_context* ctx, ggml_tensor* value, ggml_tensor* positions, int dims, int mode,
+                               const dia_model& model, bool source_rope) {
+    if (!source_rope)
+        return ggml_rope(ctx, value, positions, dims, mode);
+    // The original divides positions by its generated timescale buffer. Base
+    // one removes ggml's repeated geometric multiplication without a custom op.
+    return ggml_rope_ext(ctx, value, positions, model.rope_timescale, dims, mode, 0, 1.0f, 1.0f, 0.0f, 1.0f, 32.0f,
+                         1.0f);
+}
+
 static ggml_tensor* build_dia_encoder(ggml_context* ctx, dia_model& m,
                                       ggml_tensor* inp_tokens, // (max_enc_ctx * 2,) I32
                                       ggml_tensor* positions,  // (max_enc_ctx,) I32
-                                      ggml_tensor* attn_mask   // (max_enc_ctx, max_enc_ctx) F32
-) {
+                                      ggml_tensor* attn_mask,  // (max_enc_ctx, max_enc_ctx) F32
+                                      bool source_rope) {
     const int B = 2;                            // conditional + unconditional
     const int T = (int)(inp_tokens->ne[0] / B); // actual sequence length
 
@@ -550,10 +566,10 @@ static ggml_tensor* build_dia_encoder(ggml_context* ctx, dia_model& m,
             ggml_tensor* V = ggml_mul_mat(ctx, layer.v_proj, cur);
 
             // Reshape to (head_dim, n_heads, T, B) and apply RoPE
-            Q = ggml_rope(ctx, ggml_cont(ctx, ggml_reshape_4d(ctx, Q, m.head_dim, m.encoder_attn_heads, T, B)),
-                          positions, m.head_dim, DIA_ROPE_MODE);
-            K = ggml_rope(ctx, ggml_cont(ctx, ggml_reshape_4d(ctx, K, m.head_dim, m.encoder_attn_heads, T, B)),
-                          positions, m.head_dim, DIA_ROPE_MODE);
+            Q = dia_rotary(ctx, ggml_cont(ctx, ggml_reshape_4d(ctx, Q, m.head_dim, m.encoder_attn_heads, T, B)),
+                           positions, m.head_dim, DIA_ROPE_MODE, m, source_rope);
+            K = dia_rotary(ctx, ggml_cont(ctx, ggml_reshape_4d(ctx, K, m.head_dim, m.encoder_attn_heads, T, B)),
+                           positions, m.head_dim, DIA_ROPE_MODE, m, source_rope);
 
             // Attention: Q K^T / sqrt(d)
             ggml_tensor* q = ggml_cont(ctx, ggml_permute(ctx, Q, 0, 2, 1, 3));
@@ -1319,6 +1335,22 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
     const char* cross_f32_env = crispasr_env::get("CRISPASR_DIA_CROSS_CACHE_F32");
     const bool cross_f32 = cross_f32_env && std::strcmp(cross_f32_env, "1") == 0;
     const ggml_type cross_type = cross_f32 ? GGML_TYPE_F32 : GGML_TYPE_F16;
+    const char* source_rope_env = crispasr_env::get("CRISPASR_DIA_SOURCE_ROPE");
+    const bool source_rope = source_rope_env && std::strcmp(source_rope_env, "1") == 0;
+    if (source_rope) {
+        if (!m.rope_timescale || m.rope_timescale->type != GGML_TYPE_F32 || ggml_n_dims(m.rope_timescale) != 1 ||
+            m.rope_timescale->ne[0] != m.head_dim / 2) {
+            fprintf(stderr, "dia_tts: source rotary mode requires the original F32 timescale tensor\n");
+            return nullptr;
+        }
+        std::vector<float> timescales(m.head_dim / 2);
+        ggml_backend_tensor_get(m.rope_timescale, timescales.data(), 0, timescales.size() * sizeof(float));
+        if (!std::all_of(timescales.begin(), timescales.end(), [](float x) { return std::isfinite(x) && x > 0; })) {
+            fprintf(stderr, "dia_tts: invalid original rotary timescales\n");
+            return nullptr;
+        }
+    }
+
     const bool dia_greedy = crispasr_env::get("CRISPASR_DIA_GREEDY") != nullptr;
     const bool dia_dump_tokens = crispasr_env::get("CRISPASR_DIA_DUMP_TOKENS") != nullptr;
     const char* dia_dump_dir = crispasr_env::get("CRISPASR_DIA_DUMP_DIR");
@@ -1438,7 +1470,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
         ggml_set_name(mask_t, "enc_mask");
         ggml_set_input(mask_t);
 
-        ggml_tensor* enc_out = build_dia_encoder(ctx0, m, inp_tokens_t, positions_t, mask_t);
+        ggml_tensor* enc_out = build_dia_encoder(ctx0, m, inp_tokens_t, positions_t, mask_t, source_rope);
         ggml_set_name(enc_out, "enc_output");
         ggml_set_output(enc_out);
 
@@ -1563,8 +1595,8 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
         for (int l = 0; l < (int)m.n_decoder_layers; l++) {
             auto& layer = m.decoder.layers[l];
             ggml_tensor* ck = ggml_mul_mat(ctx0, layer.cross_k_proj, enc_in);
-            ck = ggml_rope(ctx0, ggml_cont(ctx0, ggml_reshape_4d(ctx0, ck, head_dim, n_heads, T_enc, B)),
-                           cross_positions, head_dim, DIA_ROPE_MODE);
+            ck = dia_rotary(ctx0, ggml_cont(ctx0, ggml_reshape_4d(ctx0, ck, head_dim, n_heads, T_enc, B)),
+                            cross_positions, head_dim, DIA_ROPE_MODE, m, source_rope);
             ck = ggml_reshape_3d(ctx0, ggml_cont(ctx0, ck), cross_kv_dim, T_enc, B);
             ggml_tensor* cv = ggml_mul_mat(ctx0, layer.cross_v_proj, enc_in);
             std::string kname = "cross_k_" + std::to_string(l);
@@ -1654,6 +1686,8 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
         fprintf(stderr, "dia_tts: cross-attention K/V cached for %u layers\n", m.n_decoder_layers);
     }
     if (dia_dump_tokens) {
+        fprintf(stderr, "DIA_ROTARY: source=%d head_dim=%u timescale_bytes=%zu\n", source_rope ? 1 : 0, m.head_dim,
+                source_rope ? (size_t)(m.head_dim / 2) * sizeof(float) : 0);
         size_t cache_bytes = 0;
         for (size_t l = 0; l < m.n_decoder_layers; ++l)
             cache_bytes += cross_f32 ? (cross_k_f32[l].size() + cross_v_f32[l].size()) * sizeof(float)
@@ -1778,11 +1812,11 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
 
                     // Reshape Q to (head_dim, n_heads, 1, B) and apply RoPE
                     Q = ggml_reshape_4d(ctx0, Q, head_dim, n_heads, T_cur, B);
-                    Q = ggml_rope(ctx0, Q, dec_pos, head_dim, DIA_ROPE_MODE);
+                    Q = dia_rotary(ctx0, Q, dec_pos, head_dim, DIA_ROPE_MODE, m, source_rope);
 
                     // Reshape K to (head_dim, n_kv_heads, 1, B) and apply RoPE
                     K_cur = ggml_reshape_4d(ctx0, K_cur, head_dim, n_kv_heads, T_cur, B);
-                    K_cur = ggml_rope(ctx0, K_cur, dec_pos, head_dim, DIA_ROPE_MODE);
+                    K_cur = dia_rotary(ctx0, K_cur, dec_pos, head_dim, DIA_ROPE_MODE, m, source_rope);
 
                     // Store new K/V for cache (flatten back)
                     ggml_tensor* k_out = ggml_reshape_3d(ctx0, ggml_cont(ctx0, K_cur), kv_dim, T_cur, B);
@@ -1871,7 +1905,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                     // Q from decoder hidden state
                     ggml_tensor* Q = ggml_mul_mat(ctx0, layer.cross_q_proj, cur); // (dec_hidden, 1, B)
                     Q = ggml_reshape_4d(ctx0, Q, head_dim, n_heads, T_cur, B);
-                    Q = ggml_rope(ctx0, ggml_cont(ctx0, Q), dec_pos, head_dim, DIA_ROPE_MODE);
+                    Q = dia_rotary(ctx0, ggml_cont(ctx0, Q), dec_pos, head_dim, DIA_ROPE_MODE, m, source_rope);
 
                     // K/V from precomputed cross-attention cache
                     // cross_k: (cross_kv_dim=2048, T_enc, B) -> (hd, n_heads, T_enc, B)

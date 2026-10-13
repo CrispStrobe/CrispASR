@@ -248,6 +248,7 @@ inline int run(const std::string& model, const std::string& archive) {
             set_env("CRISPASR_DIA_DAC_TRACE_DIR", scratch.path.string().c_str());
         printf("[REPLAY] decoder_codes_rev: exact original codes drive the isolated DAC; delay reversal is tested "
                "separately.\n");
+        fflush(stdout); // prevent the decoder's stderr marker from splitting a stage row
         std::unique_ptr<float, decltype(&dia_tts_pcm_free)> pcm(dia_tts_synthesize(ctx.get(), text.c_str(), &samples),
                                                                 dia_tts_pcm_free);
         if (!pcm || samples <= 0)

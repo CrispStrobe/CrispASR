@@ -10,7 +10,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'tools'))
 from dia_dac_export import mapped_gguf
-from dia_model_precision import parameter_catalog, original_array, export_precision
+from dia_model_precision import parameter_catalog, original_array, export_precision, original_timescales
 
 
 class NeuralPrecisionTest(unittest.TestCase):
@@ -32,6 +32,7 @@ class NeuralPrecisionTest(unittest.TestCase):
         from gguf import GGUFWriter
         writer = GGUFWriter(str(self.template), 'dia')
         writer.add_uint32('dia.decoder.output_heads', 9)
+        writer.add_uint32('dia.attn_head_size', 4)
         writer.add_array('test.metadata', [1, 2, 3])
         for name, original in self.originals.items():
             writer.add_tensor(name, original.astype(np.float16 if original.ndim > 1 else np.float32))
@@ -86,6 +87,32 @@ class NeuralPrecisionTest(unittest.TestCase):
             array = self.parameters[name].copy(); array.flat[0] = np.nan; return array
         with self.assertRaisesRegex(ValueError, 'finite F32'):
             self.export('f32', getter=bad)
+
+    def test_actual_original_timescale_is_auxiliary_and_existing_tensors_are_identical(self):
+        scale, meta = original_timescales(os.environ['DIA_SOURCE'], 4)
+        baseline = self.root / 'baseline.gguf'; candidate = self.root / 'candidate.gguf'
+        self.export('f32', output=baseline)
+        audit = self.export('f32', output=candidate, timescales=scale, timescale_metadata=meta)
+        self.assertEqual(len(audit['auxiliary_tensors']), 1)
+        with mapped_gguf(baseline) as old, mapped_gguf(candidate) as new:
+            self.assertEqual(len(new.tensors), len(old.tensors) + 1)
+            for left, right in zip(old.tensors, new.tensors):
+                self.assertEqual(left.name, right.name)
+                self.assertEqual(left.data.tobytes(), right.data.tobytes())
+                self.assertEqual(left.tensor_type, right.tensor_type)
+            np.testing.assert_array_equal(new.tensors[-1].data, scale)
+            self.assertEqual(new.tensors[-1].tensor_type.name, 'F32')
+            self.assertEqual(new.tensors[-1].name, 'dia.rope.timescale')
+
+    def test_bad_source_buffer_or_dimension_is_rejected(self):
+        scale, meta = original_timescales(os.environ['DIA_SOURCE'], 4)
+        for bad in (scale.astype('f2'), scale * np.nan, scale * -1):
+            with self.subTest(dtype=bad.dtype):
+                with self.assertRaisesRegex(ValueError, 'timescale'):
+                    self.export('f32', timescales=bad, timescale_metadata=meta)
+        with self.assertRaisesRegex(ValueError, 'dimension'):
+            scale, meta = original_timescales(os.environ['DIA_SOURCE'], 8)
+            self.export('f32', timescales=scale, timescale_metadata=meta)
 
 
 if __name__ == '__main__':

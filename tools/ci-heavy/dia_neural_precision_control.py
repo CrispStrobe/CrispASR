@@ -25,23 +25,34 @@ SCRATCH.mkdir(parents=True, exist_ok=True)
 os.environ['TMPDIR'] = str(SCRATCH)
 sys.path.insert(0, str(ROOT / 'tools'))
 from dia_dac_export import digest
-from dia_model_precision import export_precision, WEIGHTS_SHA
+from dia_model_precision import export_precision, WEIGHTS_SHA, original_timescales
 from reference_backends import dia_tts_reference as reference
 
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--cross-cache-control', action='store_true',
                     help='Fixed F32 neural weights, F16/F32/F16-repeat cross-cache isolation')
+parser.add_argument('--source-rope-control', action='store_true', help='Fixed F32/cross-F32 source rotary OFF/ON/OFF control')
+parser.add_argument('--add-original-timescales', action='store_true')
 parser.add_argument('--export', choices=('heads-f32', 'f32'))
 parser.add_argument('--weights', type=Path)
 parser.add_argument('--template', type=Path)
 parser.add_argument('--output', type=Path)
 a = parser.parse_args()
+if a.source_rope_control:
+    assert a.cross_cache_control, 'Source rotary control requires the fixed cross-cache control pipeline'
 if a.export:
+    auxiliary = {}
+    if a.add_original_timescales:
+        from dia_dac_export import mapped_gguf
+        with mapped_gguf(a.template) as reader:
+            head_dim = reader.fields['dia.attn_head_size'].contents()
+        scales, provenance = original_timescales(os.environ['DIA_SOURCE'], int(head_dim))
+        auxiliary = dict(timescales=scales, timescale_metadata=provenance)
     from safetensors import safe_open
     assert digest(a.weights) == WEIGHTS_SHA, 'Original neural checkpoint changed'
     with safe_open(str(a.weights), framework='pt', device='cpu') as weights:
         audit = export_precision(weights.keys(), lambda key: weights.get_tensor(key).float().numpy(),
-                                 a.template, a.output, a.export, checkpoint_sha=digest(a.weights))
+                                 a.template, a.output, a.export, checkpoint_sha=digest(a.weights), **auxiliary)
     assert len(audit['tensors']) == 381
     assert sum(row['selected'] for row in audit['tensors']) == (9 if a.export == 'heads-f32' else 381)
     if a.export == 'heads-f32':
@@ -55,7 +66,7 @@ report = dict(source=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=R
               worker_sha256=digest(Path(__file__)), export_helper_sha256=digest(ROOT / 'tools/dia_model_precision.py'),
               production_defaults_changed=False, production_model_pins_changed=False,
               full_model_acceptance=False, gpu_acceptance=False, q4_acceptance=False,
-              cross_cache_control=a.cross_cache_control, runs=[], arms=[])
+              cross_cache_control=a.cross_cache_control, source_rope_control=a.source_rope_control, runs=[], arms=[])
 for path in ('src/dia_tts.cpp', 'tools/ci-heavy/dia_neural_precision_control.py',
              'tools/dia_model_precision.py'):
     shutil.copyfile(ROOT / path, OUT / Path(path).name)
@@ -132,27 +143,36 @@ for precision in (('f32',) if a.cross_cache_control else ('heads-f32', 'f32')):
     model = model_dir / ('dia-1.6b-' + precision + '.gguf')
     (model_dir / 'dac-44khz.gguf').symlink_to(codec)
     # Each exporter child releases its mappings/Torch before native model loading.
-    run([sys.executable, __file__, '--export', precision, '--weights', weights,
-         '--template', template, '--output', model], precision + '-export')
+    command = [sys.executable, __file__, '--export', precision, '--weights', weights,
+               '--template', template, '--output', model]
+    if a.source_rope_control:
+        command.append('--add-original-timescales')
+    run(command, precision + '-export')
     audit = json.loads((OUT / ('neural-' + precision + '-physical-audit.json')).read_text())
     assert digest(model) == audit['export_sha256']
-    if a.cross_cache_control:
+    if a.source_rope_control:
+        assert len(audit['auxiliary_tensors']) == 1 and audit['auxiliary_tensors'][0]['name'] == 'dia.rope.timescale'
+    elif a.cross_cache_control:
         assert audit['export_sha256'] == '8128132c538e1aef83f2fb5257b4f71d28a67c2a5a0d54d0a1f0a3b0f5d6b73d', 'Fixed original F32 model changed'
-    for cache in (('f16', 'f32', 'f16-repeat') if a.cross_cache_control else ('f16',)):
-        label = precision + '-cross-' + cache if a.cross_cache_control else precision
+    caches = ('legacy', 'source', 'legacy-repeat') if a.source_rope_control else (('f16', 'f32', 'f16-repeat') if a.cross_cache_control else ('f16',))
+    for cache in caches:
+        label = precision + '-rope-' + cache if a.source_rope_control else (precision + '-cross-' + cache if a.cross_cache_control else precision)
         arm_out = OUT / label
         arm_out.mkdir()
         env = os.environ.copy()
         env.update(HEAVY_OUT=str(arm_out), CRISPASR_DIA_PORTABLE_RNG='1', DIA_CODEC=str(codec))
         env.pop('CRISPASR_DIA_CROSS_CACHE_F32', None)
-        if cache == 'f32':
+        if cache == 'f32' or a.source_rope_control:
             env['CRISPASR_DIA_CROSS_CACHE_F32'] = '1'
+        env.pop('CRISPASR_DIA_SOURCE_ROPE', None)
+        if a.source_rope_control and cache == 'source':
+            env['CRISPASR_DIA_SOURCE_ROPE'] = '1'
         for prefix in ('DIA_', 'CRISPASR_DIA_'):
             for suffix in ('FORCE_TOKENS', 'FORCE_OUTPUT_TOKENS', 'DECODE_CODES', 'GREEDY', 'MAX_STEPS'):
                 assert not env.get(prefix + suffix), 'Forced free-generation input rejected'
-        arm = dict(precision=precision, cross_cache_precision='f32' if cache == 'f32' else 'f16', model_sha256=audit['export_sha256'], model_bytes=model.stat().st_size,
+        arm = dict(label=label, precision=precision, source_rope=a.source_rope_control and cache == 'source', cross_cache_precision='f32' if cache == 'f32' or a.source_rope_control else 'f16', model_sha256=audit['export_sha256'], model_bytes=model.stat().st_size,
                    byte_delta=audit['byte_delta'], strict_diff_exit=run([diff, 'dia', model, ref], label + '-strict-diff', env, True))
-        diff_log = (OUT / (label + '-strict-diff.log')).read_text()
+        diff_log = (OUT / (label + '-strict-diff.log')).read_text().replace('DIA_DECODE_CODES: 1210 frames\n', '')
         arm['strict_stage_passes'] = len(re.findall(r'\[PASS\]', diff_log))
         if arm['strict_diff_exit'] == 0:
             assert arm['strict_stage_passes'] == 40 and '[FAIL]' not in diff_log, 'Incomplete canonical diff'
@@ -167,8 +187,15 @@ for precision in (('f32',) if a.cross_cache_control else ('heads-f32', 'f32')):
                              (OUT / (label + '-native-generation.log')).read_text())
         assert len(matches) == 1, 'Missing actual cross-cache allocation receipt'
         kind, size, steps, layers = matches[0]
-        assert kind == ('F32' if cache == 'f32' else 'F16')
+        assert kind == ('F32' if cache == 'f32' or a.source_rope_control else 'F16')
         arm['cross_cache'] = dict(type=kind, bytes=int(size), encoder_steps=int(steps), layers=int(layers))
+        if a.source_rope_control:
+            rotary = re.findall(r'DIA_ROTARY: source=(\d+) head_dim=(\d+) timescale_bytes=(\d+)',
+                                (OUT / (label + '-native-generation.log')).read_text())
+            assert len(rotary) == 1
+            enabled, dim, size = map(int, rotary[0])
+            assert dim == 128 and enabled == int(cache == 'source') and size == (256 if enabled else 0)
+            arm['rotary'] = dict(source=bool(enabled), head_dim=dim, timescale_bytes=size)
         checkpoint()
         wav = arm_out / 'native-cli.wav'
         run([cli, '--no-gpu', '-m', model, '--codec-model', codec, '--tts-output', wav, '-l', 'en',
@@ -191,19 +218,24 @@ for precision in (('f32',) if a.cross_cache_control else ('heads-f32', 'f32')):
     model.unlink()
 if a.cross_cache_control:
     off, on, repeat = report['arms']
-    first, last = OUT / 'f32-cross-f16', OUT / 'f32-cross-f16-repeat'
+    first, last = OUT / off['label'], OUT / repeat['label']
     repeated = ('native-inputs.i32', 'native-logits.f32', 'native-free.npy', 'native-cli.npy')
-    report['cache_off_repeat_exact'] = all(digest(first / name) == digest(last / name) for name in repeated)
-    report['negative_cache_f16_retains_rejection'] = all(
+    repeat_key = 'rotary_off_repeat_exact' if a.source_rope_control else 'cache_off_repeat_exact'
+    negative_key = 'negative_legacy_rotary_retains_rejection' if a.source_rope_control else 'negative_cache_f16_retains_rejection'
+    report[repeat_key] = all(digest(first / name) == digest(last / name) for name in repeated)
+    report[negative_key] = all(
         arm['strict_diff_exit'] == 0 and arm['native']['wer'] == arm['cli']['wer'] == 1
         for arm in (off, repeat))
-    assert on['cross_cache']['bytes'] == 2 * off['cross_cache']['bytes'] == 2 * repeat['cross_cache']['bytes']
+    if a.source_rope_control:
+        assert on['cross_cache']['bytes'] == off['cross_cache']['bytes'] == repeat['cross_cache']['bytes']
+    else:
+        assert on['cross_cache']['bytes'] == 2 * off['cross_cache']['bytes'] == 2 * repeat['cross_cache']['bytes']
     report['cache_byte_delta'] = on['cross_cache']['bytes'] - off['cross_cache']['bytes']
-    report['precision_controls_pass'] = (on['fixed_prompt_pass'] and report['cache_off_repeat_exact']
-                                        and report['negative_cache_f16_retains_rejection'])
+    report['precision_controls_pass'] = (on['fixed_prompt_pass'] and report[repeat_key]
+                                        and report[negative_key])
 else:
     report['precision_controls_pass'] = all(arm['fixed_prompt_pass'] for arm in report['arms'])
-report['scope'] = ('Fixed F32 neural weights with F16/F32/F16-repeat cache control; ' if a.cross_cache_control else 'Two fixed CPU precision controls; ') + 'CPU controls with physical original tensor audits, strict canonical stages and actual native CLI/C-ABI ASR; no full-model/GPU/Q4 acceptance or model-pin promotion.'
+report['scope'] = ('Fixed F32 weights/cross-cache with original source rotary OFF/ON/OFF; ' if a.source_rope_control else ('Fixed F32 neural weights with F16/F32/F16-repeat cache control; ' if a.cross_cache_control else 'Two fixed CPU precision controls; ')) + 'CPU controls with physical original tensor audits, strict canonical stages and actual native CLI/C-ABI ASR; no full-model/GPU/Q4 acceptance or model-pin promotion.'
 checkpoint()
 assert report['precision_controls_pass'], 'One or more fixed precision controls failed; preserve all results'
 print('DIA_NEURAL_PRECISION_CONTROL_PASS; fixed-prompt CPU scope only', flush=True)
