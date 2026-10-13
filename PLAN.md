@@ -5244,3 +5244,29 @@ CLI/C-ABI/server/bindings through their synthesis calls; no new backend,
 architecture, CMake library, model registry, converter schema or quantizer rule
 is introduced. No speech, GPU, Q4 or complete model acceptance is claimed, and
 this experimental runtime branch remains unmerged pending real output proof.
+
+### 2026-10-13 fixed original-head/full-F32 controls ready
+
+Main claim `8c1dcde06` precedes the implementation. Detailed original-filter
+replay corrects the earlier top-k description: token 606 remains within top-k
+(rank 41 original, 42 native) but is removed by the shifted nucleus/top-p mask
+on native logits. Preserve the accepted source/reference and both cutoffs.
+
+`tools/dia_model_precision.py` streams mapped original neural coefficients,
+using actual existing converter mapping functions verbatim. It requires the
+pinned original weight checksum, exact template coverage/rounded coefficients,
+unchanged shapes/order/metadata and a physical byte/type audit for every tensor.
+Heads-only promotion has an exact expected +37,896,192-byte delta; full-F32 is
+an independent fixed diagnostic, not a model-pin promotion. Five tiny actual
+pinned-original-module export/layout/metadata and rejection contracts pass in
+36.010 s. No local real-model export or neural inference is run.
+
+`dia_neural_precision_control.py` prepares those two controls sequentially on
+GH CPU, verifies all 381 physical tensors, runs strict original-reference stage
+diff, then free native C ABI and CLI generation plus ASR for each arm. Original
+weights/source/reference/ASR and validated critical DAC pins are unchanged.
+The sampler remains gated on this unmerged branch; actual native speech and
+Q4/GPU quality are still unaccepted until the controls return. Existing C API,
+CLI/bindings/server/backend factory/registry/CMake/quantizer integration remains
+unchanged by these diagnostic helpers. Python syntax and staged secret gates
+are checked before pushing the exact source for the hosted run.

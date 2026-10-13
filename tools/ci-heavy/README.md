@@ -87,3 +87,18 @@ the default remains the existing sampler. Use the DAC exporter dependency set
 with pinned Torch/torchaudio 2.6.0, torchvision 0.21.0, DAC 1.0.0, Pydantic 2.11.3
 and GGUF 0.18.0. This fixed-prompt CPU control does not establish full model,
 GPU or Q4 acceptance or change production model pins.
+
+
+`dia_neural_precision_control.py` isolates the remaining short-speech failure
+with two fixed original-neural coefficient policies: nine original F32 output
+heads (+37,896,192 bytes), and full original F32. The streaming helper uses the
+existing converter's actual parameter mappings, preserves template metadata and
+unselected payloads, and physically verifies all 381 tensors against the pinned
+original checkpoint before native execution. Five tiny actual original-module
+contracts cover coefficient/layout/metadata preservation and reject changed
+weights, nonfinite values and bad pins. Sequential hosted exports, strict
+canonical `crispasr-diff`, actual native C ABI/CLI generation and ASR preserve
+every failed arm. Run with the portable speech worker's pinned dependency set,
+`-f timeout_minutes=240`. Diagnostic models stay out of production registries;
+no RNG, seed, top-k/top-p or reference/gate changes are made, and this does not
+establish GPU, Q4 or complete model acceptance.
