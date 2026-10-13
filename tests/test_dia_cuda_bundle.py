@@ -24,7 +24,7 @@ class RuntimePinTest(unittest.TestCase):
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, target)
 
-    def test_actual_cpu_candidate_sources_are_accepted(self):
+    def test_actual_candidate_sources_are_accepted(self):
         self.assertEqual(bundle.pinned_runtime_sources(self.root), bundle.pinned_runtime_sources(ROOT))
 
     def test_changed_actual_cache_precision_is_rejected(self):

@@ -178,6 +178,19 @@ for precision in (('f32',) if a.cross_cache_control else ('heads-f32', 'f32')):
     assert digest(model) == audit['export_sha256']
     if a.cross_cache_control:
         assert audit['export_sha256'] == '8128132c538e1aef83f2fb5257b4f71d28a67c2a5a0d54d0a1f0a3b0f5d6b73d', 'Fixed original F32 model changed'
+    if a.cuda_control:
+        # Exporter children have exited and all coefficients are audited.
+        # Release only this run's reconstructible checkpoint/template blobs,
+        # preserving their immutable pins/hashes in the receipt before inference.
+        released = []
+        for cached in (weights, Path(template)):
+            blob = cached.resolve()
+            if blob.is_relative_to(SCRATCH.resolve()):
+                released.append(dict(sha256=digest(blob), bytes=blob.stat().st_size))
+                blob.unlink()
+                cached.unlink(missing_ok=True)
+        report['released_immutable_downloads'] = released
+        checkpoint()
     for cache in (('f16', 'f32', 'f16-repeat') if a.cross_cache_control else ('f16',)):
         label = precision + '-cross-' + cache if a.cross_cache_control else precision
         arm_out = OUT / label

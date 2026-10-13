@@ -8,8 +8,10 @@ import re
 import shlex
 import subprocess
 import sys
+import tarfile
+import shutil
 
-VERSION = '2026-10-13.dia-cuda-cache.1'
+VERSION = '2026-10-13.dia-cuda-cache.2'
 # Filled from the pushed composed source before kernel submission.
 SOURCE = os.environ.get('DIA_CUDA_SOURCE', 'PENDING_SOURCE_PIN')
 OUT = Path('/kaggle/working')
@@ -19,7 +21,8 @@ BUILD = SCRATCH / 'native-build'
 SCRATCH.mkdir(parents=True, exist_ok=True)
 OUT.mkdir(parents=True, exist_ok=True)
 os.environ.update(TMPDIR=str(SCRATCH), HF_HOME=str(SCRATCH / 'hf'), HF_XET_CACHE=str(SCRATCH / 'xet'),
-                  HEAVY_OUT=str(OUT), HEAVY_SCRATCH=str(SCRATCH),
+                  HEAVY_OUT=str(OUT), HEAVY_SCRATCH=str(SCRATCH), HF_HUB_DISABLE_XET='1',
+                  HF_XET_CHUNK_CACHE_SIZE_BYTES='0',
                   OMP_NUM_THREADS='4', OPENBLAS_NUM_THREADS='1', MKL_NUM_THREADS='4')
 assert re.fullmatch('[0-9a-f]{40}', SOURCE), 'Immutable source pin required before kernel launch'
 hardware = subprocess.check_output(['nvidia-smi', '--query-gpu=name,compute_cap,memory.total,driver_version',
@@ -51,6 +54,34 @@ subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', 'gguf==0.18.0', 'p
                 'safetensors', 'huggingface_hub'], check=True)
 kh.step('dia.cuda.toolchain', source=SOURCE, hardware=hardware)
 kh.install_build_toolchain()
+os.environ["CCACHE_BASEDIR"] = str(SCRATCH)
+# Small source guards prevent a stale/wrong runtime from consuming model/GPU time.
+subprocess.run([sys.executable, ROOT / 'tests/test_dia_cuda_bundle.py', '-v'], check=True)
+subprocess.run([sys.executable, ROOT / 'tests/test_dia_diff_device.py', '-v'], check=True)
+# The maintainer guide moved compiler caches off Kaggle datasets to this
+# existing private HF cache. Preserve immutable revision/hash provenance.
+from huggingface_hub import HfApi, hf_hub_download
+cache_api = HfApi(token=os.environ['HF_TOKEN'])
+try:
+    with kh.build_heartbeat('dia.cuda.ccache.warm'):
+        cache_revision = cache_api.repo_info('cstr/crispasr-ccache', repo_type='dataset').sha
+        cache_seed = Path(hf_hub_download('cstr/crispasr-ccache', 'ccache.tar', repo_type='dataset', revision=cache_revision))
+        cache_sha = hashlib.sha256()
+        with cache_seed.open('rb') as stream:
+            for block in iter(lambda: stream.read(4*1024*1024), b''):
+                cache_sha.update(block)
+        stage = SCRATCH / 'compiler-cache-seed'; stage.mkdir()
+        with tarfile.open(cache_seed) as archive:
+            for entry in archive.getmembers():
+                assert not entry.name.startswith('/') and '..' not in Path(entry.name).parts
+                assert Path(entry.name).parts[0] == '.ccache' and (entry.isfile() or entry.isdir())
+            archive.extractall(stage)
+        shutil.copytree(stage / '.ccache', os.environ['CCACHE_DIR'], dirs_exist_ok=True)
+        shutil.rmtree(stage)
+        (OUT / 'compiler-cache-input.json').write_text(json.dumps(dict(revision=cache_revision, sha256=cache_sha.hexdigest())) + '\n')
+        kh.step('dia.cuda.ccache.warm.pass', revision=cache_revision)
+except Exception as error:
+    kh.step('dia.cuda.ccache.warm.unavailable', error_type=type(error).__name__)
 assert kh.detect_cuda_arch() == str(arch), 'Detected GPU architecture changed'
 configure = ['cmake', '-G', 'Ninja', '-S', ROOT, '-B', BUILD, '-DCMAKE_BUILD_TYPE=Release',
              '-DBUILD_SHARED_LIBS=ON', '-DGGML_NATIVE=OFF', '-DGGML_BLAS=OFF', '-DGGML_VULKAN=OFF',
@@ -61,8 +92,23 @@ with kh.build_heartbeat('dia.cuda.configure'):
 with kh.build_heartbeat('dia.cuda.build'):
     kh.sh_with_progress(shlex.join(['cmake', '--build', str(BUILD), '--target', 'crispasr-cli',
                                     'crispasr-lib', 'crispasr-diff', '-j' + kh.safe_build_jobs(gpu=True)]))
-# Small source guards prevent a stale/wrong runtime from consuming model/GPU time.
-subprocess.run([sys.executable, ROOT / 'tests/test_dia_cuda_bundle.py', '-v'], check=True)
+# Refresh from the actual successful native CUDA build, even if model gates
+# later reject. No new private model/proof repo or Kaggle tooling dataset.
+with kh.build_heartbeat('dia.cuda.ccache.refresh'):
+    cache = kh.export_ccache_tar(SCRATCH / 'ccache.tar')
+    if cache:
+        try:
+            cache_sha = hashlib.sha256()
+            with Path(cache).open('rb') as stream:
+                for block in iter(lambda: stream.read(4*1024*1024), b''):
+                    cache_sha.update(block)
+            commit = cache_api.upload_file(path_or_fileobj=cache, path_in_repo='ccache.tar',
+                repo_id='cstr/crispasr-ccache', repo_type='dataset', commit_message='Refresh from pinned actual Dia CUDA build')
+            (OUT / 'compiler-cache-output.json').write_text(json.dumps(dict(revision=commit.oid, sha256=cache_sha.hexdigest(), source=SOURCE)) + '\n')
+            Path(cache).unlink()
+            kh.step('dia.cuda.ccache.refresh.pass', revision=commit.oid)
+        except Exception as error:
+            kh.step('dia.cuda.ccache.refresh.failed', error_type=type(error).__name__)
 command = [sys.executable, '-u', ROOT / 'tools/ci-heavy/dia_neural_precision_control.py',
            '--cross-cache-control', '--cuda-control', '--prebuilt', BUILD]
 kh.step('dia.cuda.model-controls.begin', source=SOURCE)

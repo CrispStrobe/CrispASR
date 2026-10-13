@@ -40,11 +40,11 @@ def pinned_runtime_sources(root):
         'src/dia_tts.cpp': 'fc91490e1f4e9c842e208f07ed7335e10cfa18d43d4eef67cf697652088d973d',
         'src/dia_sampling.h': 'ad23c213ed9fde411f4ce6648cd3383470dc4fb4504195794bce96b2c655f6cf',
         'src/dia_exponential_rng.h': 'e2d42a64b8b4d0bbc3948c4da29b8395d42f20b4df10b80bec1b101c41b7df0e',
-        'examples/cli/crispasr_dia_diff.h': 'd2b5d639f35f4c9b5e5430f881692c90268812a0eee7b25f7b25f57de2701f2e',
+        'examples/cli/crispasr_dia_diff.h': 'd8e896fe52982107da26fa1fb8d857bd312113417484e6475172ca6d0249d364',
     }
     actual = {name: sha(root / name) for name in expected_runtime}
     if actual != expected_runtime:
-        raise ValueError('Pinned Dia CPU candidate bytes changed')
+        raise ValueError('Pinned Dia candidate bytes changed')
     return actual
 
 
@@ -54,7 +54,9 @@ def main():
     receipt = dict(source=source, ggml=ggml, cuda='12.4.1', architectures=[60, 75],
                    cpu_control_source='2205d920d879108b73651ebb9f3eb9499da4e5f5',
                    cpu_control_run=38357576078, cpu_control_accepted=False,
-                   scope='CUDA compilation and dependency closure only; model execution awaits CPU acceptance',
+                   scope='CUDA compilation/dependency closure; explicit GPU replay request repaired; separate model diagnostics remain unaccepted',
+                   cpu_diff_dispatch_sha256='d2b5d639f35f4c9b5e5430f881692c90268812a0eee7b25f7b25f57de2701f2e',
+                   diff_device_dispatch_changed=True,
                    build_complete=False, gpu_executed=False, model_acceptance=False)
     receipt['tracked_worktree_dirty'] = bool(subprocess.check_output(
         ['git', 'status', '--porcelain', '--untracked-files=no'], cwd=ROOT))

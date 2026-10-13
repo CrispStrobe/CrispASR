@@ -31,7 +31,9 @@ jobs:
       - name: Check exact runtime source guards
         env:
           TMPDIR: ${{ runner.temp }}
-        run: python3 tests/test_dia_cuda_bundle.py -v
+        run: |
+          python3 tests/test_dia_cuda_bundle.py -v
+          python3 tests/test_dia_diff_device.py -v
       - name: Install build dependencies
         run: sudo apt-get update && sudo apt-get install -y ninja-build ccache patchelf
       - uses: Jimver/cuda-toolkit@v0.2.35

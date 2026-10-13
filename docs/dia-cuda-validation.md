@@ -39,3 +39,25 @@ full-F32 model and actual CUDA scheduler splits. The model and sampler/ASR
 gates remain fixed. It records compiler/physical-device incompatibility before
 large downloads and does not retry to select hardware. The push helper renders
 an immutable source pin only from clean, pushed source.
+
+## Explicit replay device correction
+
+The first actual T4 run uses source 3595fa25b. Its diff dispatcher clears the
+GPU environment request and forces CPU; the worker's allocation/scheduler
+checks must reject that path. Complete v1 terminal logs/output must be saved
+before resubmitting. It cannot establish CUDA model execution.
+
+The replacement captures the explicit GPU request before the replay guard,
+applies the existing force-GPU gate and context flag, and restores the parent
+environment. Default replay remains CPU. Source-compiled controls cover request
+aliases, precedence, malformed settings, force handoff and restoration. Neural,
+cache and sampler implementation files remain identical to the fixed CPU control;
+the changed diff dispatcher is independently hashed in package provenance.
+
+The kernel keeps the same fixed model/ref/prompt/seed/filter controls and checks
+actual process GPU memory and CUDA scheduler splits. It warms and refreshes the
+existing HF compiler-cache dataset per the maintainer guide; cache artifacts
+are separate from public model proofs. Audited source-weight/template blobs
+inside this run's ephemeral scratch may be released after the export child
+exits, with size/hash receipts, to leave space for native models and outputs.
+No external/shared cache path is deleted. No Torch reinstall is performed.
