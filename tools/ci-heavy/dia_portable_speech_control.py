@@ -127,7 +127,7 @@ os.environ.pop('CRISPASR_DIA_PORTABLE_RNG', None)
 
 # Preserve and hash the complete existing canonical generation; no replacement.
 archive = SCRATCH / 'canonical-proof'
-run(['gh', 'run', 'download', '38285566623', '-R', 'CrispStrobe/CrispASR', '-D', archive], 'canonical-download')
+run([sys.executable, ROOT / 'tools/dia_proof_archives.py', 'canonical-original', archive], 'canonical-download')
 canonical = next(archive.glob('heavy-*'))
 assert digest(canonical / 'ref.gguf') == '3db6f8923abffd612e6c83d7036debebd10ed28b77c3eb9ec3d91fec1ce1a542'
 assert digest(canonical / 'original-reported.npy') == '5c4331e165afa1e5342cf4cf3f9c50e7100e3a192a4835beb8e7c66d4fa13d6d'

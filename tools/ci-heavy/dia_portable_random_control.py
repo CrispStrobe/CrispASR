@@ -38,8 +38,8 @@ args = parser.parse_args()
 folder = args.proof_folder
 if folder is None:
     archive = SCRATCH / 'canonical-proof'
-    subprocess.run(['gh', 'run', 'download', '38285566623', '-R', 'CrispStrobe/CrispASR', '-D', archive], check=True)
-    folder = next(archive.glob('heavy-*'))
+    from dia_proof_archives import fetch
+    folder = fetch('canonical-original', archive)
 ref = folder / 'ref.gguf'
 assert digest(ref) == '3db6f8923abffd612e6c83d7036debebd10ed28b77c3eb9ec3d91fec1ce1a542'
 previous = json.loads((folder / 'original-reported.json').read_text())

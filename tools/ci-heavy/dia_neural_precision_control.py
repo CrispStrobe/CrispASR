@@ -73,8 +73,8 @@ def run(command, name, env=None, allowed_failure=False):
 
 canonical_dir = SCRATCH / 'canonical-proof'
 rejected_dir = SCRATCH / 'rejected-proof'
-run(['gh', 'run', 'download', '38285566623', '-R', 'CrispStrobe/CrispASR', '-D', canonical_dir], 'canonical-download')
-run(['gh', 'run', 'download', '38317327337', '-R', 'CrispStrobe/CrispASR', '-D', rejected_dir], 'rejected-download')
+run([sys.executable, ROOT / 'tools/dia_proof_archives.py', 'canonical-original', canonical_dir], 'canonical-download')
+run([sys.executable, ROOT / 'tools/dia_proof_archives.py', 'native-speech-rejection', rejected_dir], 'rejected-download')
 canonical, rejected = next(canonical_dir.glob('heavy-*')), next(rejected_dir.glob('heavy-*'))
 ref = canonical / 'ref.gguf'
 assert digest(ref) == '3db6f8923abffd612e6c83d7036debebd10ed28b77c3eb9ec3d91fec1ce1a542'

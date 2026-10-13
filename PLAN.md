@@ -5272,3 +5272,20 @@ unchanged by these diagnostic helpers. Python syntax and staged secret gates
 are checked before pushing the exact source for the hosted run.
 
 Hosted precision control uses Ninja and ccache per the development guide; installs those tools on the hosted runner only if missing. No local build or shared-package change.
+
+### 2026-10-13 future Dia controls consume immutable public inputs
+
+Independent retrieval tooling is integrated on main `bff87788e`. Eight negative/
+positive contracts pass, real anonymous RNG retrieval checks 11 source files,
+and canonical extraction checks all 21 files. Both actual archive layouts retain
+the expected heavy-run folder. Source syntax, actionlint, 227 doc anchors and
+four staged no-secrets tests pass without skips (81.453 s).
+
+This branch now uses the same helper and immutable public index for future
+canonical/portable RNG, old/new native sampler speech and neural-precision
+controls. Canonical data bytes/SHA and rejection-source assertions remain exact;
+only archive transport changes, without a GH token or retention expiry. Old
+historical codec-startup/probability diagnostics with distinct unarchived input
+runs retain their existing transport. Currently executing precision run
+38343667254 stays on immutable `5a8fe578e`, unmodified and uncancelled. No new
+production C++/default/seed/weights/ref/gate change, or speech/GPU/Q4 acceptance.

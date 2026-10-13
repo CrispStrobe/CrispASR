@@ -1,0 +1,118 @@
+{
+  "scope": "Complete canonical, component-pass, native-speech-rejection and DAC-converter archives. Native speech/GPU/Q4 acceptance is not claimed.",
+  "publication": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "folder": "dia-20261013",
+    "uploads": [
+      {
+        "path": "canonical-original.zip",
+        "revision": "f481f49ef25740a1ce0a9eb6e842ad07b8670945"
+      },
+      {
+        "path": "portable-rng.zip",
+        "revision": "b626bf1b2662434cac02d2834694cca3ac0a6627"
+      },
+      {
+        "path": "native-speech-rejection.zip",
+        "revision": "ba734b11b561a26b72561e4c7c01275863b8828c"
+      },
+      {
+        "path": "dac-converter.zip",
+        "revision": "a33d6418430ca5e5ff4460c6fa15a366e75b4f38"
+      }
+    ],
+    "anonymous_verified": [
+      {
+        "path": "canonical-original.zip",
+        "bytes": 270894795,
+        "sha256": "4cc37ba208c193933dd76ee2b82554cb749002bf1634a935fbd09d8d1d7cd2d1",
+        "url": "https://huggingface.co/datasets/cstr/crispasr-regression-fixtures/resolve/6693718d8112b62425dfab5b941e61fb7b0334eb/dia-20261013/canonical-original.zip",
+        "authorization_header": false
+      },
+      {
+        "path": "portable-rng.zip",
+        "bytes": 82612394,
+        "sha256": "8f840ce5f0f788e5efaddecd48bc70898ff3a4acf889389127a2cda14644904d",
+        "url": "https://huggingface.co/datasets/cstr/crispasr-regression-fixtures/resolve/6693718d8112b62425dfab5b941e61fb7b0334eb/dia-20261013/portable-rng.zip",
+        "authorization_header": false
+      },
+      {
+        "path": "native-speech-rejection.zip",
+        "bytes": 165548653,
+        "sha256": "0d3ea4b535297d924de44620018b300d4accfd95c4f0c03374b370e9563fc466",
+        "url": "https://huggingface.co/datasets/cstr/crispasr-regression-fixtures/resolve/6693718d8112b62425dfab5b941e61fb7b0334eb/dia-20261013/native-speech-rejection.zip",
+        "authorization_header": false
+      },
+      {
+        "path": "dac-converter.zip",
+        "bytes": 100669148,
+        "sha256": "99c73cfe8c2c891c851e76cf82faccf1f2ca83cd3b222f61df0929d75ca9d8a6",
+        "url": "https://huggingface.co/datasets/cstr/crispasr-regression-fixtures/resolve/6693718d8112b62425dfab5b941e61fb7b0334eb/dia-20261013/dac-converter.zip",
+        "authorization_header": false
+      }
+    ],
+    "revision": "6693718d8112b62425dfab5b941e61fb7b0334eb",
+    "publication_pass": true
+  },
+  "archives": [
+    {
+      "name": "canonical-original",
+      "path": "canonical-original.zip",
+      "bytes": 270894795,
+      "sha256": "4cc37ba208c193933dd76ee2b82554cb749002bf1634a935fbd09d8d1d7cd2d1",
+      "source_files": 21,
+      "source_bytes": 303392962,
+      "scope": "Canonical original F32 speech WER 0; native F16 stage replay passes 40/40; Q4 fails 13/40. No native free-speech acceptance.",
+      "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38285566623",
+      "archive_member_prefix": "",
+      "proof_folder": "heavy-38285566623"
+    },
+    {
+      "name": "portable-rng",
+      "path": "portable-rng.zip",
+      "bytes": 82612394,
+      "sha256": "8f840ce5f0f788e5efaddecd48bc70898ff3a4acf889389127a2cda14644904d",
+      "source_files": 11,
+      "source_bytes": 97212897,
+      "scope": "Compiled portable RNG plus native filtering exactly reproduces all 11,034 draws and 1,210 codec frames. Retained-logit component proof; no native speech acceptance.",
+      "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38317325099",
+      "archive_member_prefix": "heavy-38317325099/",
+      "proof_folder": "heavy-38317325099"
+    },
+    {
+      "name": "native-speech-rejection",
+      "path": "native-speech-rejection.zip",
+      "bytes": 165548653,
+      "sha256": "0d3ea4b535297d924de44620018b300d4accfd95c4f0c03374b370e9563fc466",
+      "source_files": 40,
+      "source_bytes": 186165898,
+      "scope": "Original neural model with portable sampler produces byte-identical canonical audio and WER 0. Native F16 CLI/C-ABI quiet speech fails with WER 1; preserve both failures.",
+      "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38317327337",
+      "archive_member_prefix": "heavy-38317327337/",
+      "proof_folder": "heavy-38317327337"
+    },
+    {
+      "name": "dac-converter",
+      "path": "dac-converter.zip",
+      "bytes": 100669148,
+      "sha256": "99c73cfe8c2c891c851e76cf82faccf1f2ca83cd3b222f61df0929d75ca9d8a6",
+      "source_files": 5,
+      "source_bytes": 108775571,
+      "scope": "Fresh real conversion reproduces the accepted critical-output F32 DAC candidate (+1,312 bytes), all 134 physical tensor rows and seven tiny contracts. No native speech/GPU/Q4 acceptance.",
+      "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38314778401",
+      "archive_member_prefix": "heavy-38314778401/",
+      "proof_folder": "heavy-38314778401"
+    }
+  ],
+  "source_files": 77,
+  "source_bytes": 695547328,
+  "zip_bytes": 619724990,
+  "source_files_match_tracked_receipts": true,
+  "archive_inner_file_hashes_verified": true,
+  "artifact_text_credential_and_account_scan_pass": true,
+  "packaging_script_sha256": "6b8831ae0879404c8465a3d440e8ef7ca526a96a82dfd85257f01a0e818880d0",
+  "publication_script_sha256": "2853dfc263c1df5e7569871639d2cad35c989be8800e2bd11513971bbb683342",
+  "original_arrays_changed": false,
+  "production_defaults_changed": false,
+  "production_model_pins_changed": false
+}
