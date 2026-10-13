@@ -6138,3 +6138,21 @@ It checks actual nvcc version, retains exact sources/ELF hashes/SONAME aliases
 and excludes driver stubs. Compilation accepts no model or GPU behavior.
 Physical GPU testing and profiling remain gated on the actual CPU result.
 The composed main interface also needs fresh CPU speech checks before acceptance.
+
+### 2026-10-13 real-CUDA cache driver prepared
+
+Main claim `7f1793ad6` follows the user's explicit Kaggle steering. The shared
+neural worker adds CUDA/prebuilt flags, preserves the current fixed model and
+all stage/CLI/C-ABI ASR gates, and observes native GPU process allocation plus
+actual CUDA scheduler splits. CUDA F16 quality is measured, rather than
+presuming its outcome matches the CPU negative. The ON arm and exact OFF
+repeats remain mandatory; no CPU or broad-model acceptance follows.
+
+The Kaggle driver checks actual device/compiler compatibility before heavy
+downloads, clones an immutable rendered source pin, uses the shared harness
+for toolchain/CUDA/cache/heartbeat, and never reinstalls Torch. It reuses the
+public byte-verified critical-DAC model instead of recalculating weights under
+a different Torch version. Full source/worker/kernel hashes, arrays, allocation
+and failed/partial receipts remain in output; model/build/cache scratch stays
+off the working output volume. The push helper requires clean pushed source
+and renders its exact SHA, avoiding a moving branch or circular source pin.

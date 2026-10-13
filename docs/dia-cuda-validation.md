@@ -15,8 +15,9 @@ version, library hashes and archive size/SHA are retained in the artifact.
 
 A successful build establishes compilation and packaging only. CPU cache
 control [38357576078](https://github.com/CrispStrobe/CrispASR/actions/runs/38357576078)
-and the composed interface require actual speech acceptance before physical
-GPU model tests. The CUDA hardware step must prove real native device
+and the composed interface remain separate acceptance requirements.
+Per the user’s explicit steering, actual GPU cache triage can run while CPU
+controls execute; broader model acceptance still follows their results. The CUDA hardware step must prove real native device
 allocation and retain strict original cosine/magnitude plus actual CLI/C-ABI
 ASR results. Profiling follows correctness. Kaggle is reserved for real GPU
 work; CPU validation remains on GitHub. Production model pins/defaults and
@@ -30,3 +31,11 @@ TMPDIR=/mnt/storage/dia-scratch python3 tests/test_dia_cuda_bundle.py -v
 
 Use an existing writable scratch directory. The guard loads no weights and
 builds no native runtime. The workflow runs it in the runner’s scratch area.
+
+The `dia-cuda-cache-control` Kaggle driver uses the shared harness and existing
+Torch installation. It runs native CUDA cache OFF/ON/OFF stages and real
+CLI/C-ABI speech, requiring at least 6,000 MiB observed allocation for the
+full-F32 model and actual CUDA scheduler splits. The model and sampler/ASR
+gates remain fixed. It records compiler/physical-device incompatibility before
+large downloads and does not retry to select hardware. The push helper renders
+an immutable source pin only from clean, pushed source.
