@@ -114,7 +114,7 @@ def validate_text(text):
 
 
 def capture(dia, text, *, max_tokens=128, seed=42, temperature=1.2, top_p=.95,
-            top_k=45, cfg_scale=3., stages=None):
+            top_k=45, cfg_scale=3., stages=None, capture_step=0):
     """Capture actual original calls, owning every array and restoring hooks."""
     import torch
     available = BOUNDARY_STAGES + [f"encoder_layer_{i}" for i in range(len(dia.model.encoder.layers))]
@@ -128,6 +128,8 @@ def capture(dia, text, *, max_tokens=128, seed=42, temperature=1.2, top_p=.95,
     validate_text(text)
     if not max(dia.config.data.delay_pattern) < max_tokens <= dia.config.data.audio_length:
         raise ValueError("DIA_MAX_TOKENS must exceed the delay and fit the model capacity")
+    if type(capture_step) is not int or not 0 <= capture_step < max_tokens:
+        raise ValueError("Dia capture step must be an integer inside the generation capacity")
     results, inputs, logits, handles, replacements = {}, [], [], [], []
     length = None
 
@@ -156,9 +158,9 @@ def capture(dia, text, *, max_tokens=128, seed=42, temperature=1.2, top_p=.95,
             save(name, output[:, :length])
         return hook
 
-    def first_hook(name):
+    def decoder_hook(name):
         def hook(_module, _args, output):
-            if name not in results:
+            if len(inputs) - 1 == capture_step:
                 save(name, output[:, 0])
         return hook
 
@@ -203,12 +205,12 @@ def capture(dia, text, *, max_tokens=128, seed=42, temperature=1.2, top_p=.95,
                 handles.append(module.register_forward_hook(codec_hook(name)))
         handles.append(dia.model.encoder.embedding.register_forward_hook(encoder_hook("encoder_embedding")))
         handles.append(dia.model.encoder.register_forward_hook(encoder_hook("encoder_output")))
-        handles.append(dia.model.decoder.layers[0].cross_attention.register_forward_hook(first_hook("decoder_ca0")))
-        handles.append(dia.model.decoder.norm.register_forward_hook(first_hook("decoder_hidden")))
+        handles.append(dia.model.decoder.layers[0].cross_attention.register_forward_hook(decoder_hook("decoder_ca0")))
+        handles.append(dia.model.decoder.norm.register_forward_hook(decoder_hook("decoder_hidden")))
         for i, layer in enumerate(dia.model.encoder.layers):
             handles.append(layer.register_forward_hook(encoder_hook(f"encoder_layer_{i}")))
         for i, layer in enumerate(dia.model.decoder.layers):
-            handles.append(layer.register_forward_hook(first_hook(f"decoder_layer_{i}")))
+            handles.append(layer.register_forward_hook(decoder_hook(f"decoder_layer_{i}")))
         torch.manual_seed(seed)
         with torch.inference_mode():
             pcm = dia.generate(text, max_tokens=max_tokens, cfg_scale=cfg_scale,
@@ -216,6 +218,8 @@ def capture(dia, text, *, max_tokens=128, seed=42, temperature=1.2, top_p=.95,
                                cfg_filter_top_k=top_k, use_torch_compile=False)
         if pcm is None or not inputs:
             raise RuntimeError("Original Dia generated no audio/logits")
+        if len(inputs) <= capture_step:
+            raise RuntimeError("Original Dia did not reach the requested capture step")
         results["decoder_input_tokens"] = np.stack(inputs).astype(np.float32)
         results["decoder_step_logits"] = np.stack(logits).astype(np.float32)
         results["decoded_audio"] = np.asarray(pcm, dtype=np.float32).reshape(-1).copy()
@@ -237,6 +241,10 @@ def dump(model_dir, audio, stages=None, **kwargs):
     """Generic dispatcher entry; audio is unused for text-only synthesis."""
     text = os.environ.get("DIA_TEXT", "[S1] We are committed to making it secure.")
     validate_text(text)
+    capture_index = os.environ.get("DIA_CAPTURE_STEP", "0")
+    if (not capture_index.isascii() or not capture_index.isdecimal()
+            or int(capture_index) >= int(os.environ.get("DIA_MAX_TOKENS", "128"))):
+        raise ValueError("DIA_CAPTURE_STEP must be an exact index inside DIA_MAX_TOKENS")
     if "DIA_SOURCE" not in os.environ:
         raise ValueError("Set DIA_SOURCE to the clean pinned original checkout")
     source, source_hashes = verify_source(os.environ["DIA_SOURCE"])
@@ -279,7 +287,8 @@ def dump(model_dir, audio, stages=None, **kwargs):
                     temperature=float(os.environ.get("DIA_TEMPERATURE", "1.2")),
                     top_p=float(os.environ.get("DIA_TOP_P", ".95")),
                     top_k=int(os.environ.get("DIA_TOP_K", "45")),
-                    cfg_scale=float(os.environ.get("DIA_CFG_SCALE", "3")))
+                    cfg_scale=float(os.environ.get("DIA_CFG_SCALE", "3")),
+                    capture_step=int(os.environ.get("DIA_CAPTURE_STEP", "0")))
     result = capture(dia, text, stages=stages, **settings)
     if set(CODEC_STAGES) <= result.keys():
         result["dia_dac_stage_trace"] = "rvq+decoder-v1"
@@ -295,5 +304,6 @@ def dump(model_dir, audio, stages=None, **kwargs):
                   dia_dac_sha256=digest(checkpoint), dia_torch_version=str(torch.__version__),
                   dia_dac_package=importlib.metadata.version("descript-audio-codec"),
                   dia_generation_settings=json.dumps(settings, sort_keys=True),
+                  dia_decoder_capture_step=str(settings["capture_step"]),
                   dia_device=str(device))
     return result

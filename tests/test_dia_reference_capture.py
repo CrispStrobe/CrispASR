@@ -103,6 +103,40 @@ class DiaCaptureTest(unittest.TestCase):
         finally:
             self.dia.generate = generate
 
+    def test_late_capture_matches_actual_call_and_preserves_generation(self):
+        text = "[S1] Tiny capture test."
+        layer_calls, hidden_calls = [], []
+        handles = [
+            self.dia.model.decoder.layers[0].register_forward_hook(
+                lambda _m, _a, output: layer_calls.append(output[:, 0].detach().numpy().copy())),
+            self.dia.model.decoder.norm.register_forward_hook(
+                lambda _m, _a, output: hidden_calls.append(output[:, 0].detach().numpy().copy())),
+        ]
+        self.torch.manual_seed(42)
+        try:
+            plain = self.dia.generate(text, max_tokens=32, temperature=1.2, top_p=.95, cfg_filter_top_k=45)
+        finally:
+            for handle in handles:
+                handle.remove()
+        first = reference.capture(self.dia, text, max_tokens=32)
+        late = reference.capture(self.dia, text, max_tokens=32, capture_step=7)
+        repeat = reference.capture(self.dia, text, max_tokens=32)
+        np.testing.assert_array_equal(late["decoder_layer_0"], layer_calls[7])
+        np.testing.assert_array_equal(late["decoder_hidden"], hidden_calls[7])
+        np.testing.assert_array_equal(late["decoded_audio"], plain)
+        for name in first:
+            np.testing.assert_array_equal(first[name], repeat[name])
+        for name in ("decoder_step_logits", "decoder_input_tokens", "decoder_codes_rev", "decoded_audio"):
+            np.testing.assert_array_equal(first[name], late[name])
+        self.assertTrue(all(not module._forward_hooks for module in self.dia.model.decoder.modules()))
+
+    def test_invalid_capture_step_is_rejected_before_generation(self):
+        for step in (-1, 32, True, "7", 7.5):
+            with self.subTest(step=step):
+                with mock.patch.object(self.dia, "generate", side_effect=AssertionError("invalid index reached generation")):
+                    with self.assertRaisesRegex(ValueError, "capture step"):
+                        reference.capture(self.dia, "[S1] Test.", max_tokens=32, capture_step=step)
+
     def test_unaligned_text_and_unknown_stage_are_rejected(self):
         for text in ["", "Test.", "[S1] Test", "[S1] A\x00B.",
                      " [S1] Test.", "\t[S1] Test.", "\n[S1] Test.",
@@ -120,6 +154,13 @@ class DiaCaptureTest(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "DIA_TEXT"):
                     reference.dump("nari-labs/Dia-1.6B", None)
                 verify.assert_not_called()
+
+    def test_dump_rejects_bad_capture_step_before_model_loading(self):
+        for step in ("-1", "128", "1x", "", "１"):
+            with self.subTest(step=step), mock.patch.dict(os.environ, {"DIA_TEXT": "[S1] Test.", "DIA_CAPTURE_STEP": step, "DIA_MAX_TOKENS": "128"}):
+                with mock.patch.object(reference, "verify_source", side_effect=AssertionError("bad index reached model loading")):
+                    with self.assertRaisesRegex(ValueError, "DIA_CAPTURE_STEP"):
+                        reference.dump("nari-labs/Dia-1.6B", None)
 
     def test_actual_generate_observes_all_declared_codec_modules(self):
         torch = self.torch

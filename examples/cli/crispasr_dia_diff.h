@@ -2,6 +2,7 @@
 
 #include "crispasr_diff.h"
 #include "dia_tts.h"
+#include "dia_dump_step.h"
 
 #include <algorithm>
 #include <chrono>
@@ -37,8 +38,8 @@ struct Environment {
     std::vector<Saved> saved;
     Environment() {
         for (const char* suffix :
-             {"DUMP_DIR", "FORCE_TOKENS", "FORCE_OUTPUT_TOKENS", "DUMP_INPUT_TOKENS", "DUMP_STEPLOGITS",
-              "DAC_TRACE_DIR", "DECODE_CODES", "MAX_STEPS", "GREEDY", "TTS_GPU"}) {
+             {"DUMP_DIR", "DUMP_STEP", "DIFF_DUMP_DIR", "FORCE_TOKENS", "FORCE_OUTPUT_TOKENS", "DUMP_INPUT_TOKENS",
+              "DUMP_STEPLOGITS", "DAC_TRACE_DIR", "DECODE_CODES", "MAX_STEPS", "GREEDY", "TTS_GPU"}) {
             for (const char* prefix : {"CRISPASR_DIA_", "DIA_"}) {
                 std::string name = std::string(prefix) + suffix;
                 const char* value = std::getenv(name.c_str());
@@ -55,7 +56,16 @@ struct Environment {
 
 struct Scratch {
     std::filesystem::path path;
-    Scratch() {
+    bool retain = false;
+    Scratch(const std::string& destination = {}) {
+        if (!destination.empty()) {
+            path = std::filesystem::absolute(destination);
+            if (!std::filesystem::create_directory(path))
+                throw std::runtime_error("Dia diff dump destination must be a new directory");
+            retain = true;
+            fprintf(stderr, "Dia diff: retaining complete diagnostic tensors in %s\n", path.string().c_str());
+            return;
+        }
         const auto nonce = std::chrono::steady_clock::now().time_since_epoch().count();
         for (int i = 0; i < 20; ++i) {
             auto candidate = std::filesystem::temp_directory_path() /
@@ -68,6 +78,8 @@ struct Scratch {
         throw std::runtime_error("Cannot create Dia diff scratch directory");
     }
     ~Scratch() {
+        if (retain)
+            return;
         std::error_code error;
         std::filesystem::remove_all(path, error);
     }
@@ -156,12 +168,23 @@ inline int run(const std::string& model, const std::string& archive) {
         return 1;
     }
     try {
+        const char* keep = std::getenv("CRISPASR_DIA_DIFF_DUMP_DIR");
+        if (!keep)
+            keep = std::getenv("DIA_DIFF_DUMP_DIR");
+        const std::string retained = keep ? keep : "";
         Environment environment;
-        Scratch scratch;
+        Scratch scratch(retained);
         const auto inputs = scratch.path / "inputs.i32";
         const auto codes = scratch.path / "codes.i32";
         if (!write_codes(ref, "decoder_input_tokens", inputs) || !write_codes(ref, "decoder_codes_rev", codes)) {
             fprintf(stderr, "Dia diff requires complete valid input/code grids\n");
+            return 1;
+        }
+        const std::string capture = ref.meta("dia_decoder_capture_step");
+        size_t capture_step = 0;
+        if (!dia_debug::parse_dump_step(capture.empty() ? nullptr : capture.c_str(),
+                                        ref.get_f32("decoder_input_tokens").second / 9, capture_step)) {
+            fprintf(stderr, "Dia diff: invalid decoder capture step metadata\n");
             return 1;
         }
         auto params = dia_tts_context_default_params();
@@ -174,12 +197,19 @@ inline int run(const std::string& model, const std::string& archive) {
             return 1;
         set_env("CRISPASR_DIA_FORCE_TOKENS", inputs.string().c_str());
         set_env("CRISPASR_DIA_DUMP_DIR", scratch.path.string().c_str());
+        set_env("CRISPASR_DIA_DUMP_STEP", std::to_string(capture_step).c_str());
         set_env("CRISPASR_DIA_DUMP_STEPLOGITS", (scratch.path / "logits.f32").string().c_str());
         set_env("CRISPASR_DIA_DUMP_INPUT_TOKENS", (scratch.path / "feedback.i32").string().c_str());
         int samples = 0;
         // A separate DAC is unnecessary for the forced-logit pass. Null PCM
         // is expected for those files; complete stage files are mandatory.
         dia_tts_pcm_free(dia_tts_synthesize(ctx.get(), text.c_str(), &samples));
+        std::ifstream marker(scratch.path / "capture-step.txt");
+        size_t observed_step = 0;
+        if (!(marker >> observed_step) || observed_step != capture_step) {
+            fprintf(stderr, "Dia diff: requested decoder capture was not observed\n");
+            return 1;
+        }
         bool pass = compare(ref, "encoder_tokens", read_floats(scratch.path / "cpp_encoder_tokens.f32"), true);
         pass = compare(ref, "decoder_input_tokens", read_floats(scratch.path / "feedback.i32", true), true) && pass;
         if (!pass) {
@@ -210,6 +240,7 @@ inline int run(const std::string& model, const std::string& archive) {
             return 1;
         set_env("CRISPASR_DIA_FORCE_TOKENS", nullptr);
         set_env("CRISPASR_DIA_DUMP_DIR", nullptr);
+        set_env("CRISPASR_DIA_DUMP_STEP", nullptr);
         set_env("CRISPASR_DIA_DUMP_STEPLOGITS", nullptr);
         set_env("CRISPASR_DIA_DUMP_INPUT_TOKENS", nullptr);
         set_env("CRISPASR_DIA_DECODE_CODES", codes.string().c_str());
@@ -221,6 +252,12 @@ inline int run(const std::string& model, const std::string& archive) {
                                                                 dia_tts_pcm_free);
         if (!pcm || samples <= 0)
             return 1;
+        if (scratch.retain) {
+            std::ofstream audio(scratch.path / "decoded_audio.f32", std::ios::binary);
+            audio.write(reinterpret_cast<const char*>(pcm.get()), (size_t)samples * sizeof(float));
+            if (!audio.good())
+                return 1;
+        }
         if (!codec_trace_schema.empty()) {
             for (const char* name : {"dac_latent", "dac_input_conv", "dac_block_0", "dac_block_1", "dac_block_2",
                                      "dac_block_3", "dac_output_snake", "dac_output_conv"})

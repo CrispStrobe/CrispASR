@@ -23,13 +23,14 @@
 //    steps to flush the delayed channels.
 //
 // 4. CFG is applied at each step: the batch dimension is always 2
-//    (conditional + unconditional). Final logits = uncond + cfg_scale * (cond - uncond).
+//    (conditional + unconditional). Final logits = cond + cfg_scale * (cond - uncond).
 //
 // 5. DAC codec decodes the generated codes to 44.1 kHz PCM, reusing
 //    the shared core_dac implementation from dac_decoder.h.
 
 #include "dia_tts.h"
 #include "dia_sampling.h"
+#include "dia_dump_step.h"
 
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
@@ -630,7 +631,7 @@ static ggml_tensor* build_dia_decoder_embedding(ggml_context* ctx, dia_model& m,
 }
 
 // -----------------------------------------------------------------------
-// CFG scale: logits = uncond + cfg_scale * (cond - uncond)
+// CFG scale: logits = cond + cfg_scale * (cond - uncond)
 // -----------------------------------------------------------------------
 
 // We apply CFG after getting per-head logits from the decoder.
@@ -1311,7 +1312,8 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
     // DIA_DUMP_TOKENS=1    : print emitted 9-channel tokens per step to stderr
     // DIA_FORCE_TOKENS=f   : teacher-force per-step input from file f (N*9 int32 raw); caps max_gen=N
     // DIA_DUMP_STEPLOGITS=f: append per-step [uncond(9*V) | cond(9*V)] f32 to file f
-    // DIA_DUMP_DIR=d       : write step-0 stage dumps (encoder/cross/ca/final/logits) under dir d
+    // DIA_DUMP_DIR=d       : write encoder/cross and selected decoder stage dumps under dir d
+    // DIA_DUMP_STEP=N      : decoder capture index; defaults to zero, must be inside the history
     const char* portable_rng_env = crispasr_env::get("CRISPASR_DIA_PORTABLE_RNG");
     const bool portable_rng = portable_rng_env && std::strcmp(portable_rng_env, "1") == 0;
     const char* cross_f32_env = crispasr_env::get("CRISPASR_DIA_CROSS_CACHE_F32");
@@ -1356,6 +1358,14 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
         max_gen = (uint32_t)std::min((size_t)m.max_generation_size, dia_forced.size() / m.n_output_heads);
     if (dia_steplogits_path)
         remove(dia_steplogits_path); // truncate; we append per step
+
+    size_t dia_dump_step = 0;
+    const char* dia_dump_step_env = crispasr_env::get("CRISPASR_DIA_DUMP_STEP");
+    if ((dia_dump_step_env && !dia_dump_dir) ||
+        !dia_debug::parse_dump_step(dia_dump_step_env, max_gen, dia_dump_step)) {
+        fprintf(stderr, "dia_tts: dump step requires a dump directory and a valid index inside the history\n");
+        return nullptr;
+    }
 
     // Delayed-domain token buffer (mirrors Python dec_output.generated_tokens).
     // The model is trained in the delay domain: channel c's INPUT is held at BOS
@@ -1882,7 +1892,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                     kqv = ggml_cont(ctx0, ggml_permute(ctx0, kqv, 0, 2, 1, 3));
                     cur = ggml_reshape_3d(ctx0, kqv, dec_hidden, T_cur, B);
                     cur = ggml_mul_mat(ctx0, layer.cross_o_proj, cur);
-                    if (step == 0 && l == 0 && dia_dump_dir) {
+                    if (step == dia_dump_step && l == 0 && dia_dump_dir) {
                         ggml_set_name(cur, "ca0_out");
                         ggml_set_output(cur);
                     }
@@ -1902,7 +1912,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                 }
 
                 cur = ggml_add(ctx0, cur, residual);
-                if (step == 0 && dia_dump_dir) {
+                if (step == dia_dump_step && dia_dump_dir) {
                     const std::string name = "dia_decoder_layer_" + std::to_string(l);
                     ggml_set_name(cur, name.c_str());
                     ggml_set_output(cur);
@@ -1912,7 +1922,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
             // Final norm
             cur = dia_rms_norm(ctx0, cur, m.decoder.norm, m.rms_norm_eps);
             // cur: (dec_hidden, 1, B)
-            if (step == 0 && dia_dump_dir) {
+            if (step == dia_dump_step && dia_dump_dir) {
                 ggml_set_name(cur, "dia_final_hidden");
                 ggml_set_output(cur);
             }
@@ -2013,7 +2023,11 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                 return nullptr;
             }
 
-            if (step == 0 && dia_dump_dir) {
+            if (step == dia_dump_step && dia_dump_dir) {
+                if (FILE* marker = fopen(dia_dpath("capture-step.txt").c_str(), "wb")) {
+                    fprintf(marker, "%zu\n", dia_dump_step);
+                    fclose(marker);
+                }
                 for (int l = 0; l < (int)m.n_decoder_layers; ++l) {
                     const std::string name = "dia_decoder_layer_" + std::to_string(l);
                     ggml_tensor* layer = ggml_graph_get_tensor(gf, name.c_str());
@@ -2073,7 +2087,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                 fprintf(stderr, "dia_tts: decoder step 0 logits dump (for diff-testing):\n");
             }
             // Capture step-0 cond+uncond logits (9 x V) for DIA_DUMP_DIR, and per-step for STEPLOGITS.
-            const bool dia_dump_logits = (step == 0) && (dia_dump_dir != nullptr);
+            const bool dia_dump_logits = (step == dia_dump_step) && (dia_dump_dir != nullptr);
             const bool dia_cap = dia_dump_logits || (dia_steplogits_path != nullptr);
             std::vector<float> dump_cond, dump_uncond;
             if (dia_cap) {
@@ -2147,8 +2161,8 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
             }
 
             if (dia_dump_logits) {
-                FILE* fc = fopen(dia_dpath("cpp_step0_cond.f32").c_str(), "wb");
-                FILE* fu = fopen(dia_dpath("cpp_step0_uncond.f32").c_str(), "wb");
+                FILE* fc = fopen(dia_dpath(("cpp_step" + std::to_string(step) + "_cond.f32").c_str()).c_str(), "wb");
+                FILE* fu = fopen(dia_dpath(("cpp_step" + std::to_string(step) + "_uncond.f32").c_str()).c_str(), "wb");
                 if (fc) {
                     fwrite(dump_cond.data(), sizeof(float), dump_cond.size(), fc);
                     fclose(fc);
@@ -2157,7 +2171,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                     fwrite(dump_uncond.data(), sizeof(float), dump_uncond.size(), fu);
                     fclose(fu);
                 }
-                fprintf(stderr, "DIA_DUMP_DIR: wrote cpp_step0_{cond,uncond}.f32 (%zu floats each)\n",
+                fprintf(stderr, "DIA_DUMP_DIR: wrote cpp_step%u_{cond,uncond}.f32 (%zu floats each)\n", step,
                         dump_cond.size());
             }
             if (dia_steplogits_path) {
