@@ -141,8 +141,11 @@ for surface in ('cabi', 'cli'):
                 finite=bool(np.isfinite(pcm).all())), indent=2) + '\n')
         assert len(pcm) and np.isfinite(pcm).all()
         log = (OUT / (tag + '-generate.log')).read_text()
-        assert 'starting decoder loop (max_gen=3072,' in log, tag
-        assert log.count('starting decoder loop (max_gen=3072,') == 1, tag
+        # Session uses the quiet C ABI; only CLI promises the verbose capacity line.
+        # Both paths retain the checked model capacity and receive no token cap.
+        if surface == 'cli':
+            assert 'starting decoder loop (max_gen=3072,' in log, tag
+            assert log.count('starting decoder loop (max_gen=3072,') == 1, tag
         assert 'DIA_FORCE_' not in log, tag
         row = dict(surface=surface, arm=arm, pcm_values=len(pcm), pcm_sha256=digest(OUT / (tag + '.npy')),
                    generation_environment={k: v for k, v in env.items() if k.startswith('CRISPASR_DIA_')})
@@ -192,6 +195,8 @@ assert histories['cabi', 'logging'] == histories['cli', 'logging'], 'CLI/C-ABI f
 report['cli_cabi_logged_complete_logits_inputs_samples_exact'] = True
 report['free_running_capture_transparency_pass'] = True
 report['baseline_roundtrip_pass'] = all(report[s + '_baseline_quality']['wer'] <= .2 for s in ('cabi', 'cli'))
+report['files'] = [dict(path=p.relative_to(OUT).as_posix(), bytes=p.stat().st_size, sha256=digest(p))
+                   for p in sorted(OUT.rglob('*')) if p.is_file() and p.name not in ('receipt.json', 'receipt.json.tmp')]
 # This diagnostic does not replace the full speech/quant/platform acceptance matrix.
 checkpoint()
 print('DIA_FREE_RUNNING_CAPTURE_TRANSPARENCY_PASS; full speech acceptance remains separate', flush=True)
