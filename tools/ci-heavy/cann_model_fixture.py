@@ -141,13 +141,14 @@ def main():
     entry = next(e for e in manifest['backends'] if e['name']=='moonshine-tiny')
     model_dir = scratch/'model'; model_dir.mkdir(exist_ok=True)
     model = model_dir/'moonshine-tiny.gguf'
-    # Fresh conversion from the pinned original; keep published regression weights separately.
-    run([sys.executable,ROOT/'models/convert-moonshine-to-gguf.py','--model',snapshot,'--outfile',model,'--outtype','f16'],'convert-f16')
+    # The published regression file is physically F32 despite its old manifest note.
+    run([sys.executable,ROOT/'models/convert-moonshine-to-gguf.py','--model',snapshot,'--outfile',model,'--outtype','f32'],'convert-f32')
     (out/model.name).write_bytes(model.read_bytes())
     (out/'tokenizer.bin').write_bytes((model_dir/'tokenizer.bin').read_bytes())
     published = Path(hf_hub_download(entry['gguf']['repo'],entry['gguf']['file'],revision=entry['gguf']['revision']))
     fresh={t.name:hashlib.sha256(t.data.tobytes()).hexdigest() for t in GGUFReader(str(model)).tensors}
     existing={t.name:hashlib.sha256(t.data.tobytes()).hexdigest() for t in GGUFReader(str(published)).tensors}
+    assert len(existing)==160 and all(int(t.tensor_type)==0 for t in GGUFReader(str(published)).tensors)
     assert fresh == existing, 'Fresh original conversion differs from pinned regression coefficients'
     receipt['physical_converted_tensors']=fresh
     sample=ROOT/'samples/jfk.wav';pcm=audio(sample)
@@ -204,7 +205,7 @@ def main():
     receipt['model']=dict(bytes=model.stat().st_size,sha256=digest(model),tokenizer_sha256=digest(model_dir/'tokenizer.bin'))
     receipt['libraries']=[dict(path=str(p.relative_to(build)),bytes=p.stat().st_size,sha256=digest(p)) for p in sorted(build.rglob('*.so'))]
     receipt['passed']=True;save()
-    (out/'summary.md').write_text('CPU-only Moonshine Tiny fresh conversion, original generation/dumper, magnitude-sensitive encoder parity, diff, CLI and auto/explicit Session checks pass. This is not CANN hardware acceptance.\n')
+    (out/'summary.md').write_text('CPU-only Moonshine Tiny fresh F32 conversion, original generation/dumper, magnitude-sensitive encoder parity, diff, CLI and auto/explicit Session checks pass. This is not CANN hardware acceptance.\n')
 
 
 if __name__ == '__main__':

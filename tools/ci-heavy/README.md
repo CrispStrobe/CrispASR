@@ -30,7 +30,7 @@ gh run download <run-id>           # the $HEAVY_OUT artifact
 
 `cann_model_fixture.py` prepares a CPU-only Moonshine Tiny fixture for future
 CANN model validation. It freshly converts immutable original weights, checks
-every converted coefficient against the pinned F16 regression model, uses the
+every converted coefficient against the physically F32 regression model, uses the
 original model-card generation recipe and `dump_reference.py`, and compares
 native encoder arrays with cosine, norm and relative-error gates. It also runs
 `crispasr-diff`, CLI and repeated auto/explicit Python Session dispatch. Full

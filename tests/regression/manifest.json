@@ -48,7 +48,7 @@
         "revision": "28281de882bac021e9241e640f44a9a289607e03",
         "file": "moonshine-tiny.gguf",
         "approx_size_mb": 104,
-        "_file_note": "F16 GGUF used for diff regression (cos=1.000 vs PyTorch). The q4_k variant uses Q4_0 for attn weights, giving cos_min~0.79 — not suitable for diff. Transcript is identical between F16 and Q4K.",
+        "_file_note": "F32 GGUF used for diff regression: immutable header inspected 2026-10-14, all 160 tensors are F32; the previous F16 description was incorrect. The q4_k variant uses Q4_0 for attn weights, giving cos_min~0.79 — not suitable for this floating-point diff baseline.",
         "companion_files": [
           "tokenizer.bin"
         ]
@@ -60,7 +60,7 @@
       "diff_thresholds": {
         "encoder_output": 0.999
       },
-      "diff_thresholds_note": "F16 GGUF vs PyTorch reference gives cos_min=1.000. Threshold set at 0.999 to absorb any future F16 rounding."
+      "diff_thresholds_note": "The pinned model is F32 (all 160 tensors), compared with the Python reference. Existing 0.999 encoder gate is retained; this entry does not validate F16 or Q4_K coefficients."
     },
     {
       "name": "moonshine-base",
