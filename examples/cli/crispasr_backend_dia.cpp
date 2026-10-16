@@ -80,6 +80,10 @@ public:
         if (p.temperature > 0.0f) {
             cp.temperature = p.temperature;
         }
+        if (p.tts_top_p >= 0.0f)
+            cp.top_p = p.tts_top_p;
+        if (p.tts_top_k >= 0)
+            cp.top_k = p.tts_top_k;
 
         ctx_ = dia_tts_init_from_file(p.model.c_str(), cp);
         if (!ctx_) {
@@ -125,6 +129,10 @@ public:
         if (params.temperature > 0.0f) {
             dia_tts_set_temperature(ctx_, params.temperature);
         }
+        if (params.tts_top_p >= 0.0f)
+            dia_tts_set_top_p(ctx_, params.tts_top_p);
+        if (params.tts_top_k >= 0)
+            dia_tts_set_top_k(ctx_, params.tts_top_k);
         dia_tts_set_seed(ctx_, params.seed);
 
         int n = 0;

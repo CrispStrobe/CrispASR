@@ -137,6 +137,13 @@ object pipeline. To test raw streaming in `cmd.exe`, request
 
 All backends write mono WAV via `--tts-output` (22 kHz for piper/fastpitch/bananamind-tts/confucius4-tts, 16 kHz for speecht5, 44.1 kHz for melotts/dia/parler-tts/zonos-tts/supertonic, 48 kHz for voxcpm2-tts/dots-tts/irodori-tts/moss-tts-local/sidon, 24 kHz for most others). Programmatic callers don't need this table: `crispasr_session_output_sample_rate()` returns the active backend's output rate, with `crispasr_session_input_channels()` / `output_channels()` alongside (everything is mono today) — #332.
 
+Dia sampling overrides use `--tts-top-k` / `--tts-top-p` on the CLI and
+`Session.set_top_k()` / `Session.set_top_p()` through the C ABI. Zero top-k
+disables that filter; top-p 1 disables nucleus filtering. Current native defaults
+remain temperature 1.2, top-k 45 and top-p 0.95. The pinned original Python
+generator defaults to temperature 1.3/top-k 35; testing that recipe remains
+pending and does not establish broader speech acceptance.
+
 Dia's explicit [DAC companion conversion](dia-dac-conversion.md) preserves
 critical original F32 output weights with a 1,312-byte size increase. Numerical
 startup and full-history checks pass; registry companion pins are unchanged.

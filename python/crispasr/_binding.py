@@ -2457,7 +2457,7 @@ class Session:
             raise RuntimeError(f"set_tts_num_candidates failed (rc={rc})")
 
     def set_top_p(self, top_p: float) -> None:
-        """Set the top-p nucleus-sampling threshold. Honoured by chatterbox."""
+        """Set the top-p nucleus threshold. Honoured by chatterbox, TADA and Dia."""
         if not hasattr(self._lib, "crispasr_session_set_top_p"):
             return
         self._lib.crispasr_session_set_top_p.argtypes = [ctypes.c_void_p, ctypes.c_float]
@@ -2467,7 +2467,7 @@ class Session:
             raise RuntimeError(f"set_top_p failed (rc={rc})")
 
     def set_top_k(self, top_k: int) -> None:
-        """Set the top-k sampling cutoff (0 = disabled). Honoured by TADA."""
+        """Set the top-k sampling cutoff (0 = disabled). Honoured by TADA and Dia."""
         if not hasattr(self._lib, "crispasr_session_set_top_k"):
             return
         self._lib.crispasr_session_set_top_k.argtypes = [ctypes.c_void_p, ctypes.c_int]
