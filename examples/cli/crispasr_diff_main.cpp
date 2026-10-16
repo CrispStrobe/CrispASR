@@ -2098,8 +2098,8 @@ int main(int argc, char** argv) {
             auto report = ref.compare(name, data, count, crispasr_diff::Ref::COS_FIRST_DIM);
             const bool frontend =
                 name == "mel_spectrogram" || name == "conv1_out" || name == "conv2_out" || name == "conv3_out";
-            const bool decoder_stage =
-                name == "llm_logits" || name == "teacherforced_logits" || name.compare(0, 10, "llm_block_") == 0;
+            const bool decoder_stage = name == "llm_logits" || name == "teacherforced_logits" ||
+                                       name.compare(0, 10, "llm_block_") == 0 || name.compare(0, 8, "llm_ffn_") == 0;
             // Decoder stages also inherit error from quantized audio inputs.
             const bool quantized = audio_quantized || (decoder_stage && decoder_quantized);
             // The guide's F16-vs-F32 range is .998-.999. Cached weak logits
@@ -2137,6 +2137,14 @@ int main(int argc, char** argv) {
         const char* old_audio = getenv("CRISP_AUDIO_DUMP_STAGES");
         const char* old_decoder = getenv("CRISPASR_INDEX_ECHO_DUMP_STAGES");
         std::string saved_audio = old_audio ? old_audio : "", saved_decoder = old_decoder ? old_decoder : "";
+        const char* old_ffn = getenv("CRISPASR_INDEX_ECHO_DUMP_FFN");
+        const std::string saved_ffn = old_ffn ? old_ffn : "";
+        for (int i = 0; i < index_echo_decoder_layers(ctx.get()); ++i) {
+            if (ref.has("llm_ffn_" + std::to_string(i) + "_mlp_in")) {
+                setenv("CRISPASR_INDEX_ECHO_DUMP_FFN", "1", 1);
+                break;
+            }
+        }
         setenv("CRISP_AUDIO_DUMP_STAGES", directory, 1);
         setenv("CRISPASR_INDEX_ECHO_DUMP_STAGES", directory, 1);
         int mels = 0, frames = 0, rows = 0, dim = 0, vocab = 0;
@@ -2198,6 +2206,13 @@ int main(int argc, char** argv) {
             std::string name = "llm_block_" + std::to_string(i);
             const float* data = index_echo_stage(ctx.get(), name.c_str(), &count);
             check(name, data, data ? count : 0);
+            for (const char* suffix : {"mlp_in", "gate_out", "up_out", "down_in", "down_out", "mlp_out"}) {
+                const std::string ffn_name = "llm_ffn_" + std::to_string(i) + "_" + suffix;
+                if (ref.has(ffn_name)) {
+                    data = index_echo_stage(ctx.get(), ffn_name.c_str(), &count);
+                    check(ffn_name, data, data ? count : 0);
+                }
+            }
         }
         if (ref.has("teacherforced_logits") && logits) {
             auto generated = ref.get_f32("generated_ids");
@@ -2243,6 +2258,10 @@ int main(int argc, char** argv) {
             setenv("CRISPASR_INDEX_ECHO_DUMP_STAGES", saved_decoder.c_str(), 1);
         else
             unsetenv("CRISPASR_INDEX_ECHO_DUMP_STAGES");
+        if (old_ffn)
+            setenv("CRISPASR_INDEX_ECHO_DUMP_FFN", saved_ffn.c_str(), 1);
+        else
+            unsetenv("CRISPASR_INDEX_ECHO_DUMP_FFN");
         std::filesystem::remove_all(directory);
     } else if (backend_name == "voxtral") {
         auto cp = voxtral_context_default_params();
