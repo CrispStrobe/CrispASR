@@ -13540,13 +13540,17 @@ CA_EXPORT int crispasr_session_set_g2p_dict(crispasr_session* s, const char* sou
     return 0;
 }
 
-// Set the top-p nucleus-sampling threshold. Honoured by chatterbox;
-// other backends no-op (their AR loops use top-k or hardcoded
-// sampling parameters today).
+// Set the top-p nucleus-sampling threshold. Honoured by chatterbox, tada and dia.
 CA_EXPORT int crispasr_session_set_top_p(crispasr_session* s, float top_p) {
     if (!s)
         return -1;
     int touched = 0;
+#ifdef CA_HAVE_DIA
+    if (s->dia_tts_ctx) {
+        dia_tts_set_top_p(s->dia_tts_ctx, top_p);
+        touched++;
+    }
+#endif
 #ifdef CA_HAVE_CHATTERBOX
     if (s->chatterbox_ctx) {
         chatterbox_set_top_p((chatterbox_context*)s->chatterbox_ctx, top_p);
@@ -13597,11 +13601,17 @@ CA_EXPORT int crispasr_session_set_repetition_penalty(crispasr_session* s, float
     return touched > 0 ? 0 : -2;
 }
 
-// Set the top-k sampling cutoff (0 = disabled). Honoured by tada.
+// Set the top-k sampling cutoff (0 = disabled). Honoured by tada and dia.
 CA_EXPORT int crispasr_session_set_top_k(crispasr_session* s, int top_k) {
     if (!s)
         return -1;
     int touched = 0;
+#ifdef CA_HAVE_DIA
+    if (s->dia_tts_ctx) {
+        dia_tts_set_top_k(s->dia_tts_ctx, top_k);
+        touched++;
+    }
+#endif
 #ifdef CA_HAVE_TADA
     if (s->tada_ctx) {
         tada_set_top_k(s->tada_ctx, top_k);

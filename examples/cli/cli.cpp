@@ -587,6 +587,21 @@ static bool whisper_params_parse_arg_backend_vad(int argc, char** argv, int& i, 
 #undef ARGV_NEXT
 }
 
+// TTS sampling controls shared with the server and Session API.
+static bool whisper_params_parse_arg_tts_sampling(int argc, char** argv, int& i, whisper_params& params) {
+    std::string arg = argv[i];
+#define ARGV_NEXT (((i + 1) < argc) ? argv[++i] : requires_value_error(arg))
+    if (arg == "--tts-top-k") {
+        params.tts_top_k = std::stoi(ARGV_NEXT);
+    } else if (arg == "--tts-top-p") {
+        params.tts_top_p = std::stof(ARGV_NEXT);
+    } else {
+        return false;
+    }
+    return true;
+#undef ARGV_NEXT
+}
+
 // Continuation of whisper_params_parse_arg_backend_vad — split off so the
 // `else if` chain doesn't trip MSVC's C1061 "blocks nested too deeply"
 // limit. MSVC parses `else if` as `else { if ... }`, so each branch adds
@@ -1045,6 +1060,9 @@ static bool whisper_params_parse(int argc, char** argv, whisper_params& params) 
             continue;
         }
         if (whisper_params_parse_arg_backend_vad(argc, argv, i, params)) {
+            continue;
+        }
+        if (whisper_params_parse_arg_tts_sampling(argc, argv, i, params)) {
             continue;
         }
         if (whisper_params_parse_arg_streaming_tts(argc, argv, i, params)) {
@@ -1592,6 +1610,14 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             "moss-tts-local). Units are the backend's AR decode step, NOT samples or ms: one codec frame, "
             "12.5 Hz on the shipped models, so 80 ms each and N=25 floors at ~2 s. -1 = model default\n",
             params.tts_min_speech_tokens);
+    fprintf(out,
+            "             --tts-top-k N            [%-7s] TTS top-k cutoff (dia/tada/chatterbox/moss-tts); "
+            "0 disables filtering\n",
+            "default");
+    fprintf(out,
+            "             --tts-top-p X            [%-7s] TTS nucleus threshold (dia/tada/chatterbox/moss-tts); "
+            "1 disables filtering\n",
+            "default");
     fprintf(out,
             "             --tts-cfg-scale X        [%-7s] TTS CFG guidance scale "
             "(vibevoice/chatterbox/f5/tada/irodori/bt2-tts; "

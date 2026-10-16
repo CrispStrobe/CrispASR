@@ -2442,6 +2442,16 @@ void dia_tts_set_temperature(struct dia_tts_context* ctx, float temperature) {
         ctx->params.temperature = temperature;
 }
 
+void dia_tts_set_top_p(struct dia_tts_context* ctx, float top_p) {
+    if (ctx)
+        ctx->params.top_p = top_p;
+}
+
+void dia_tts_set_top_k(struct dia_tts_context* ctx, int top_k) {
+    if (ctx)
+        ctx->params.top_k = top_k;
+}
+
 void dia_tts_set_cfg_scale(struct dia_tts_context* ctx, float cfg_scale) {
     if (ctx)
         ctx->params.cfg_scale = cfg_scale;

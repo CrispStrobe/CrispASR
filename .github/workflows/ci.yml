@@ -74,7 +74,7 @@ jobs:
         run: cmake --build build --target crispasr-cli crispasr-diff crispasr-quantize -j $(nproc)
 
       - name: Smoke test - help
-        run: ./build/bin/crispasr --help
+        run: ./build/bin/crispasr --tts-top-k 35 --tts-top-p 0.8 --help
 
       - name: Smoke test - list backends
         run: ./build/bin/crispasr --list-backends
@@ -188,6 +188,7 @@ jobs:
           python3 tests/test_dia_diff_compare.py -v
           python3 tests/test_dia_reference_dispatch.py -v
           python3 tests/test_dia_capture_neutrality.py -v
+          python3 tests/test_dia_sampling_controls.py -v
 
       - name: Dia original generation and codec-input protocol
         run: python3 tests/test_dia_output_protocol.py -v
