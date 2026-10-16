@@ -42,5 +42,26 @@ try:
 finally:
     handle.remove()
 worker.no_hooks(direct.model)
+# Real DAC uses torch.nn.utils.weight_norm pre-hooks. The control must
+# preserve those actual hooks while rejecting an added observation hook.
+from torch.nn.utils import weight_norm
+codec = torch.nn.Sequential(weight_norm(torch.nn.Conv1d(1, 2, 3)))
+baseline = worker.codec_hooks(codec)
+assert any(hooks for _, hooks in baseline)
+with torch.inference_mode():
+    codec(torch.ones(1, 1, 8))
+assert worker.codec_hooks(codec) == baseline
+observer = codec[0].register_forward_pre_hook(lambda *args: None)
+try:
+    try:
+        worker.codec_hooks(codec)
+    except ValueError:
+        pass
+    else:
+        raise AssertionError('Added observer accepted on weight-normalized codec')
+finally:
+    observer.remove()
+assert worker.codec_hooks(codec) == baseline
+print('REAL_WEIGHTNORM_HOOKS_PRESERVED_ADDED_OBSERVER_REJECTED')
 worker.selftest()
 print('DIRECT_ORIGINAL_REAL_TINY_NEURAL_CONTROL_PASS_NO_REAL_DAC_OR_SPEECH_ACCEPTANCE')

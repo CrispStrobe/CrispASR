@@ -44,6 +44,20 @@ def no_hooks(model):
             raise ValueError('Observer hooks present in direct original control')
 
 
+def codec_hooks(model):
+    """Preserve original DAC WeightNorm pre-hooks; reject added observers."""
+    from torch.nn.utils.weight_norm import WeightNorm
+    signature = []
+    for name, module in model.named_modules():
+        if module._forward_hooks or module._backward_hooks:
+            raise ValueError('Observer hooks present in original DAC')
+        hooks = tuple(module._forward_pre_hooks.items())
+        if any(not isinstance(hook, WeightNorm) for _, hook in hooks):
+            raise ValueError('Unexpected DAC pre-hook instead of original WeightNorm')
+        signature.append((name, hooks))
+    return tuple(signature)
+
+
 def selftest():
     x = np.array([.25, -.5, 0], dtype='f4')
     assert compare_pcm(x, x.copy())['exact']
@@ -84,14 +98,16 @@ def generate(args):
     assert all(p.dtype == torch.float32 for p in dia.model.parameters())
     assert type(dia).generate is Dia.generate and '_generate_output' not in dia.__dict__
     no_hooks(dia.model)
-    no_hooks(dia.dac_model)
+    original_codec_hooks = codec_hooks(dia.dac_model)
+    assert any(hooks for _, hooks in original_codec_hooks), "Expected actual original DAC WeightNorm hooks"
     provenance = dict(source=ORIGINAL, torch_version=torch.__version__, weights_sha256=WEIGHTS_SHA,
         dac_sha256=DAC_SHA, config_sha256=crossed.sha(args.weights / 'config.json'),
         methods={name: hashlib.sha256(inspect.getsource(getattr(Dia, name)).encode()).hexdigest()
                  for name in ['__init__', 'generate', '_decoder_step', '_generate_output']},
         environment={k: os.environ.get(k) for k in ['OMP_NUM_THREADS', 'MKL_NUM_THREADS', 'MKL_CBWR', 'ATEN_CPU_CAPABILITY']},
         constructor='actual Dia(config, compute_dtype=float32, device=cpu)',
-        hooks=False, meta=False, assign=False, buffer_replacement=False, cases=CASES)
+        observation_hooks=False, original_codec_weightnorm_hooks=sum(len(h) for _, h in original_codec_hooks),
+        meta=False, assign=False, buffer_replacement=False, cases=CASES)
     (args.output / 'original-provenance.json').write_text(json.dumps(provenance, indent=2) + '\n')
     for key, case in CASES.items():
         torch.manual_seed(case['seed'])
@@ -102,7 +118,7 @@ def generate(args):
         pcm = np.asarray(pcm)
         compare_pcm(pcm, pcm)
         no_hooks(dia.model)
-        no_hooks(dia.dac_model)
+        assert codec_hooks(dia.dac_model) == original_codec_hooks, "Original DAC WeightNorm hooks changed"
         np.save(args.output / (key + '.npy'), pcm, allow_pickle=False)
         print('DIRECT_ORIGINAL_SAVED', key, pcm.size, flush=True)
 

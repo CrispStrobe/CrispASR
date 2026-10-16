@@ -3,7 +3,9 @@
 `dia_direct_original.py` runs only on GH CPU. It uses the actual pinned original
 `Dia(config, compute_dtype='float32', device=cpu)` constructor, copies the pinned
 safetensors state through normal strict `load_state_dict`, attaches the real
-pinned DAC and calls untouched `generate()` without observation hooks. There is
+pinned DAC and calls untouched `generate()` without observation hooks. Required original DAC WeightNorm pre-hooks are
+retained unchanged; an actual tiny weight-normalized convolution checks both
+preservation and rejection of an added observer. There is
 no meta allocation, `__new__`, parameter assignment or rotary-buffer replacement.
 
 The preregistered legacy seed42 and hello/fox seeds42/123 retain temperature1.2,
