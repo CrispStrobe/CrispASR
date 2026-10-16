@@ -1,6 +1,7 @@
 #pragma once
 
 // Private Dia sampler shared by the runtime and its probability regression tests.
+#include "dia_exponential_rng.h"
 #include <algorithm>
 #include <cmath>
 #include <cstdint>
@@ -9,7 +10,7 @@
 #include <vector>
 
 static uint32_t dia_sample_token(const float* logits, uint32_t vocab_size, float temperature, float top_p, int top_k,
-                                 std::mt19937& rng) {
+                                 std::mt19937& rng, const float* exponential_noise = nullptr) {
     if (temperature <= 0.0f) {
         // Greedy
         return (uint32_t)(std::max_element(logits, logits + vocab_size) - logits);
@@ -94,6 +95,10 @@ static uint32_t dia_sample_token(const float* logits, uint32_t vocab_size, float
             for (uint32_t i = 0; i < vocab_size; i++)
                 probs[i] /= sum;
         }
+    }
+
+    if (exponential_noise) {
+        return dia_rng::exponential_race(probs.data(), exponential_noise, vocab_size);
     }
 
     // Sample

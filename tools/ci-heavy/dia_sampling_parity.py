@@ -25,7 +25,7 @@ reference = namespace['_sample_next_token']
 production = (ROOT / 'src/dia_sampling.h').read_text()
 function = production[production.index('static uint32_t dia_sample_token('):]
 # Compile the actual production function; no copied filter implementation.
-cpp = '#include <algorithm>\n#include <cmath>\n#include <cstdint>\n#include <iostream>\n#include <random>\n#include <vector>\n' + function + '''
+cpp = '#include "dia_exponential_rng.h"\n#include <algorithm>\n#include <cmath>\n#include <cstdint>\n#include <iostream>\n#include <random>\n#include <vector>\n' + function + '''
 int main() {
     int n, k, draws; float temperature, p;
     std::cin >> n >> k >> draws >> temperature >> p;
@@ -36,7 +36,7 @@ int main() {
 }
 '''
 (SCRATCH / 'sampling.cpp').write_text(cpp)
-subprocess.run(['g++', '-std=c++17', '-O2', SCRATCH / 'sampling.cpp', '-o', SCRATCH / 'sampling'], check=True)
+subprocess.run(['g++', '-std=c++17', '-O2', '-I', ROOT/'src', SCRATCH / 'sampling.cpp', '-o', SCRATCH / 'sampling'], check=True)
 fixtures = [([20, 0, -1], 1.2, .95, 0), ([0, -1, 20], 1.2, .95, 0), ([2, 1, 0, -1], 1., .5, 0),
             ([2, 1, 0, -1], 1., .95, 2), ([2, 1, 0, -1], 0., .95, 2)]
 for seed in range(8):
@@ -76,7 +76,7 @@ subprocess.run(['git', 'fetch', '--depth', '1', 'origin', BASELINE], check=True)
 old = subprocess.check_output(['git', 'show', BASELINE + ':src/dia_tts.cpp'], text=True)
 old_function = old[old.index('static uint32_t dia_sample_token('):old.index('// Weight loading')]
 (SCRATCH / 'baseline.cpp').write_text(cpp.replace(function, old_function))
-subprocess.run(['g++', '-std=c++17', '-O2', SCRATCH / 'baseline.cpp', '-o', SCRATCH / 'baseline'], check=True)
+subprocess.run(['g++', '-std=c++17', '-O2', '-I', ROOT/'src', SCRATCH / 'baseline.cpp', '-o', SCRATCH / 'baseline'], check=True)
 raw = subprocess.check_output([SCRATCH / 'baseline'], input='3 0 1000 1.2 0.95 0 -1 20', text=True)
 counts = [int(n) for n in raw.split()]
 receipt['baseline'] = {'sha': BASELINE, 'dominant_token_2_counts': counts}
