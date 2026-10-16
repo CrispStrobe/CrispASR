@@ -43,6 +43,12 @@ def sha(path):
         return hashlib.file_digest(stream, 'sha256').hexdigest()
 
 
+def payload_inventory(out):
+    """Index every file, including nested receipts; exclude only this root receipt."""
+    return [dict(path=p.relative_to(out).as_posix(), bytes=p.stat().st_size, sha256=sha(p))
+            for p in sorted(out.rglob('*')) if p.is_file() and p != out/'receipt.json']
+
+
 def exact(a, b):
     assert a.shape == b.shape and a.dtype == b.dtype and a.tobytes() == b.tobytes()
 
@@ -60,8 +66,9 @@ def grid_from_inputs(inputs):
     return np.where(aligned < 1024, aligned, 0).astype('<u4')
 
 
-def score(text):
-    expected, actual = 'we are committed to making it secure'.split(), re.findall('[a-z]+', text.lower())
+def score(text, expected_text=TEXT):
+    expected = re.findall('[a-z]+', re.sub(r'\[S[12]\]', '', expected_text).lower())
+    actual = re.findall('[a-z]+', text.lower())
     dp = list(range(len(actual)+1))
     for i, a in enumerate(expected, 1):
         row = [i]
@@ -108,8 +115,8 @@ def child(args, out):
         else:
             os.environ['CRISPASR_DIA_DECODE_CODES'] = str(directory/'codes.u32')
         with Session(str(args.model), lib_path=str(args.lib), backend='dia', n_threads=4) as session:
-            session.set_temperature(1.2, seed=42)
-            pcm = session.synthesize(TEXT)
+            session.set_temperature(1.2, seed=getattr(args, 'seed', 42))
+            pcm = session.synthesize(getattr(args, 'text', TEXT))
             assert session.output_sample_rate() == 44100
         pcm = np.asarray(pcm, dtype='f4')
         assert pcm.ndim == 1 and len(pcm) and np.isfinite(pcm).all()
@@ -145,7 +152,7 @@ def child(args, out):
         pcm = np.load(directory/args.audio, allow_pickle=False)
         with Session(str(args.model), lib_path=str(args.lib), backend='nemotron', n_threads=4) as session:
             text = ' '.join(s.text for s in session.transcribe(pcm, sample_rate=44100, language='en')).strip()
-        row = dict(transcript=text, wer=score(text), pcm_sha256=sha(directory/args.audio),
+        row = dict(transcript=text, wer=score(text, getattr(args, 'text', TEXT)), pcm_sha256=sha(directory/args.audio),
             asr_sha256=sha(args.model), library_sha256=sha(args.lib), seconds=len(pcm)/44100,
             rms=float(np.sqrt(np.mean(pcm.astype('f8')**2))))
         (directory/(args.audio+'.asr.json')).write_text(json.dumps(row, indent=2)+'\n')
@@ -327,8 +334,7 @@ def main():
         ['native-pcm.npy', 'original-dac-pcm.npy', 'cli-pcm.npy']) for arm in FACTORIAL}
     report['f32_portable_both_decoders_and_cli_wer_zero']=report['speech_pass_by_arm']['serial-f32-portable']
     report['complete_diagnostic']=True
-    report['payloads']=[dict(path=p.relative_to(out).as_posix(), bytes=p.stat().st_size, sha256=sha(p))
-                        for p in sorted(out.rglob('*')) if p.is_file() and p.name!='receipt.json']
+    report['payloads']=payload_inventory(out)
     checkpoint()
     print('DIA_CACHE_SAMPLER_FACTORIAL_COMPLETE', json.dumps(report['speech_pass_by_arm']), flush=True)
     assert report['stage_gate_pass'], 'Current-main stage gate failed; complete evidence retained'
