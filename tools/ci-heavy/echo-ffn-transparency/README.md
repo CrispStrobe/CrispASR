@@ -1,6 +1,6 @@
 # Echo full-model observer controls
 
-This is a CPU-only hosted preparation worker, based on capture sourced8183cf9
+This is a CPU-only hosted preparation worker, based on capture source0dfccc7d
 and GGML0a862076. No runtime graph, model, quantization or default changes.
 
 It executes the actual public reference dumper at original HF5d98a34d using
@@ -35,6 +35,9 @@ source controls. Hosted success requires a separate official-artifact audit.
 
 Small selftests calibrate the gates and compile the actual native header to
 verify all ctypes struct sizes/offsets. They do not establish model acceptance.
+Before loading weights, the worker also executes the complete vendored FFN
+builder body on tiny ggml inputs. The retained old observer must fail (five
+captures); the repaired observer must capture all six via ffn_swiglu.
 The prior actual-class/ggml tiny proof remains separate. Returned artifacts
 retain full references, all native arrays, audio, decoded/CLI outputs, sources,
 physical/provenance ledgers, native executables/libraries and licenses. Large

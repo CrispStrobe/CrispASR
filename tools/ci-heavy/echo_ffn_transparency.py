@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 GGML = '0a862076567afd8468822ccc512c97ac6a69b340'
 SOURCE = '5d98a34d9685869b11e9c94d01dee22a8b8e53b5'
 MODEL = 'b34538267099a6769111aada860d57f312894510'
-CAPTURE_SOURCE = 'd8183cf92abc24eeeb6c969db563e968c5345d46'
+CAPTURE_SOURCE = '0dfccc7d01b94a8975c0cc9c6afac83471660833'
 TRANSFORMERS = '5.6.0'
 MODELING_SHA = '3e2b6239e4b2c3e512d4f9836a1dba12e975ae652407e84f2d3c2beebf0c9528'
 MLP_SHA = 'c4e763e69d5676e71d222060e36258f6b2cc939a3597118c4207d370d120a265'
@@ -311,7 +311,10 @@ def main():
         for name in ['tools/ci-heavy/echo_ffn_transparency.py', 'tools/ci-heavy/echo-ffn-transparency/selftest.py',
                      'tools/dump_reference.py', 'tools/reference_backends/index_echo.py',
                      'tools/reference_backends/index_echo_ffn_capture.py', 'src/index_echo.cpp', 'src/index_echo.h',
-                     'src/core/index_echo_ffn_capture.h', 'examples/cli/crispasr_diff_main.cpp']:
+                     'src/core/index_echo_ffn_capture.h', 'examples/cli/crispasr_diff_main.cpp',
+                     'tools/ci-heavy/echo_ffn_literal_graph.py', 'tests/test-index-echo-ffn-capture.cpp',
+                     'examples/talk-llama/llama-graph.cpp', 'examples/talk-llama/llama-graph.h',
+                     'examples/talk-llama/models/qwen35.cpp']:
             dest = method / name
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.copyfile(ROOT / name, dest)
@@ -364,6 +367,9 @@ def main():
                         assert sha(p) == sha(dest)
                     else:
                         shutil.copyfile(p, dest)
+        run('fetch-old-observer', ['git', 'fetch', '--depth=1', 'origin', 'd8183cf92abc24eeeb6c969db563e968c5345d46'])
+        run('literal-builder-controls', [sys.executable, ROOT / 'tools/ci-heavy/echo_ffn_literal_graph.py',
+            '--libraries', libs, '--output', out / 'literal-builder'])
         run('wiring', [sys.executable, ROOT / 'tools/check-backend-wiring.py', '--crispasr', build / 'bin/crispasr',
                        '--lib', library, '--require-lib'])
         api = HfApi()
