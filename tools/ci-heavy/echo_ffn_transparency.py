@@ -312,7 +312,7 @@ def main():
                      'tools/dump_reference.py', 'tools/reference_backends/index_echo.py',
                      'tools/reference_backends/index_echo_ffn_capture.py', 'src/index_echo.cpp', 'src/index_echo.h',
                      'src/core/index_echo_ffn_capture.h', 'examples/cli/crispasr_diff_main.cpp',
-                     'tools/ci-heavy/echo_ffn_literal_graph.py', 'tests/test-index-echo-ffn-capture.cpp',
+                     'tools/ci-heavy/echo_ffn_literal_graph.py', 'tests/test-index-echo-ffn-capture.cpp', 'tools/ci-apt.sh',
                      'examples/talk-llama/llama-graph.cpp', 'examples/talk-llama/llama-graph.h',
                      'examples/talk-llama/models/qwen35.cpp']:
             dest = method / name
@@ -332,7 +332,11 @@ def main():
         for name in ['LICENSE', 'ggml/LICENSE']:
             shutil.copyfile(ROOT / name, out / ('GGML-LICENSE' if '/' in name else 'CrispASR-LICENSE'))
         run('worker-selftest', [sys.executable, ROOT / 'tools/ci-heavy/echo-ffn-transparency/selftest.py'])
+        if not shutil.which('ffmpeg'):
+            run('apt-update-audio-tools', ['bash', ROOT / 'tools/ci-apt.sh', 'update'])
+            run('install-ffmpeg', ['bash', ROOT / 'tools/ci-apt.sh', 'install', '-y', 'ffmpeg'])
         assert shutil.which('ffmpeg'), 'Original encode_audio requires the actual ffmpeg executable'
+        run('ffmpeg-version', [shutil.which('ffmpeg'), '-version'])
         run('fetch-capture-source', ['git', 'fetch', '--depth=1', 'origin', CAPTURE_SOURCE])
         run('capture-runtime-identity', ['git', 'diff', '--exit-code', CAPTURE_SOURCE, 'HEAD', '--',
             'src', 'include', 'ggml', 'examples', 'python', 'bindings', 'tools/dump_reference.py', 'tools/reference_backends'])

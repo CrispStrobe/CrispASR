@@ -47,3 +47,9 @@ weights/builds stay in hosted scratch; local evidence belongs under
 This control is scoped to2B observer transparency. It does not perform
 same-original-input projection attribution, validate9B/Q4/GPU, change a shipped
 recipe, or claim a performance improvement. Those remain later gates.
+
+The worker installs missing system ffmpeg with the repository's bounded
+ci-apt.sh helper before attempting original audio loading, then retains the
+actual executable version output. Original encode_audio still uses ffmpeg; no
+substitute audio loader or changed frontend is introduced. Failed hosted
+38931686491 is preserved separately and executed no model cases.
