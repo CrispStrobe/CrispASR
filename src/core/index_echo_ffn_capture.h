@@ -19,8 +19,9 @@ inline bool ffn_capture_name(const char* name, std::string& key, bool& input, bo
         const char* prefix;
         const char* suffix;
     };
-    for (const Stage stage : {Stage{"ffn_up-", "up_out"}, Stage{"ffn_gate-", "gate_out"},
-                              Stage{"ffn_gate_par-", "down_in"}, Stage{"ffn_out-", "down_out"}}) {
+    for (const Stage stage :
+         {Stage{"ffn_up-", "up_out"}, Stage{"ffn_gate-", "gate_out"}, Stage{"ffn_swiglu-", "down_in"},
+          Stage{"ffn_gate_par-", "down_in"}, Stage{"ffn_out-", "down_out"}}) {
         const size_t n = std::strlen(stage.prefix);
         if (std::strncmp(name, stage.prefix, n) != 0)
             continue;

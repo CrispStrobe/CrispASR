@@ -41,7 +41,9 @@ method=out/'method';method.mkdir()
 for name in ['src/index_echo.cpp','src/index_echo.h','src/core/index_echo_ffn_capture.h',
     'examples/cli/crispasr_diff_main.cpp','tools/reference_backends/index_echo.py',
     'tools/reference_backends/index_echo_ffn_capture.py','tests/test-index-echo-ffn-capture.cpp',
-    'tests/test_index_echo_ffn_capture.py','tests/CMakeLists.txt','tools/ci-heavy/echo_ffn_capture_check.py']:
+    'tests/test_index_echo_ffn_capture.py','tests/CMakeLists.txt','tools/ci-heavy/echo_ffn_capture_check.py',
+    'tools/ci-heavy/echo_ffn_literal_graph.py','examples/talk-llama/llama-graph.cpp',
+    'examples/talk-llama/llama-graph.h','examples/talk-llama/models/qwen35.cpp']:
     dest=method/name;dest.parent.mkdir(parents=True,exist_ok=True);shutil.copyfile(ROOT/name,dest)
 # Retain the released source, not a handwritten substitute or dev distribution.
 dist=importlib.metadata.distribution('transformers')
@@ -70,6 +72,9 @@ for pattern in ['*.dylib','*.so*']:
             target=libs/file.name
             if target.exists():assert sha(target)==sha(file)
             else:shutil.copyfile(file,target)
+run('fetch-capture-baseline',['git','fetch','--depth=1','origin','d8183cf92abc24eeeb6c969db563e968c5345d46'])
+run('literal-builder-controls',[sys.executable,ROOT/'tools/ci-heavy/echo_ffn_literal_graph.py',
+    '--libraries',libs,'--output',out/'literal-builder'])
 shutil.copyfile(ROOT/'LICENSE',out/'CrispASR-LICENSE');shutil.copyfile(ROOT/'ggml/LICENSE',out/'GGML-LICENSE')
 report['passed']=True
 report['payloads']=[dict(path=p.relative_to(out).as_posix(),bytes=p.stat().st_size,sha256=sha(p))
