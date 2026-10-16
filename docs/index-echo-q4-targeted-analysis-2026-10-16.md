@@ -64,12 +64,25 @@ latency, full-model performance or quantization quality. Initial harness attempt
 between scheduler computations; failed logs/executables are preserved. The
 corrected harness reapplies identical inputs, without changing tolerance.
 
-This is capture preparation. Separate native/original full-model inputs can
-already differ because of earlier quantization. The next attribution must
-replay projections on the same original FFN inputs and distinguish component
-matmul behavior from full-model prefill behavior. Hosted F16 identity, complete
-EN/ZH stage/output checks and actual dual-T4 validation remain required before
-any Q4 recipe, size, speech-quality or speed claim.
+The full-model F16 observer control is now independently audited. Frozen
+sourcea1d84150/run38938983824 and artifact12066499638 pass1946 payload checks,
+including17 exact repository snapshots. On both JFK and Mandarin audio, original
+69-array and native68-array OFF/ON/OFF controls are byte-exact; enabling capture
+adds exactly144 FFN vectors. All690 numerical comparisons pass unchanged cosine
+and magnitude gates, including16 cached greedy decisions, generation-prefill
+identity, raw original/native text, CLI SRT and metadata-detected Session output.
+
+| Case | Worst cosine | Relative L2 at that stage | Native / original norm |
+|---|---:|---:|---:|
+| JFK | 0.9999866486 | 0.0053496438 | 4.566902 / 4.560633 |
+| Mandarin | 0.9999853969 | 0.0054465674 | 3.644588 / 3.642302 |
+
+Both worst rows are `llm_ffn_3_down_in`. This validates the 2B F16 observer,
+without attributing the rejected 9B Q4 recipes. Separate native/original inputs
+can already differ because of earlier quantization. Next replay projections on
+the same original FFN inputs and distinguish component matmul behavior from
+full-model prefill behavior. Complete EN/ZH/cache/output/roundtrip and actual
+dual-T4 validation remain required before any new Q4 recipe or speed claim.
 
 The Hermes worker's final local source is5020e60d; rejectedf642293f and its generic
 inspector remain excluded. Coordinator integration adds native observation,
