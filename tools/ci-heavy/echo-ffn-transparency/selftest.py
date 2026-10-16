@@ -3,6 +3,8 @@
 import importlib.util
 import ctypes
 import os
+import json
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -75,6 +77,33 @@ class ControlTest(unittest.TestCase):
             module.compare_capture(self.before, self.enabled, self.after, 1, required_old={'missing'})
         with self.assertRaises(ValueError):
             module.compare_capture(self.before, self.enabled, self.after, 1, widths=(2048, 6144))
+
+    def test_cue_text_against_actual_cli_and_session_source(self):
+        # Compile the actual formatting statements from both production paths.
+        # Tiny carrier structs stand in only for their string/const-char fields.
+        files = ['src/crispasr_c_api.cpp', 'examples/cli/crispasr_backend_index_echo.cpp']
+        fixtures = [dict(transcript='Hello', translation=''),
+                    dict(transcript='Guten Tag', translation='Good day')]
+        pattern = r'segment\.text = cue\.transcript;\s*if \(\*cue\.translation\)\s*segment\.text \+= std::string\("\\n"\) \+ cue\.translation;'
+        source = '#include <iostream>\n#include <string>\nstruct Cue{const char* transcript;const char* translation;};\nstruct Segment{std::string text;};\n'
+        for i, name in enumerate(files):
+            matches = re.findall(pattern, (module.ROOT / name).read_text())
+            self.assertEqual(len(matches), 1, name)
+            source += f'std::string render{i}(const Cue& cue){{Segment segment;{matches[0]} return segment.text;}}\n'
+        source += 'int main(){\n'
+        for i in range(len(files)):
+            for cue in fixtures:
+                source += 'std::cout << render' + str(i) + '({' + json.dumps(cue['transcript']) + ',' + json.dumps(cue['translation']) + "}); std::cout.put('\\0');\n"
+        source += '}\n'
+        with tempfile.TemporaryDirectory(dir=os.getenv('TMPDIR')) as temp:
+            cpp, exe = Path(temp) / 'cue.cpp', Path(temp) / 'cue'
+            cpp.write_text(source)
+            subprocess.run([shutil.which('c++'), '-std=c++17', str(cpp), '-o', str(exe)], check=True)
+            actual = subprocess.check_output([str(exe)]).split(b'\0')
+        expected = [module.cue_text(c).encode() for _ in files for c in fixtures] + [b'']
+        self.assertEqual(actual, expected)
+        # The previous expectation fails the actual empty-translation contract.
+        self.assertNotEqual(fixtures[0]['transcript'] + '\n' + fixtures[0]['translation'], actual[0].decode())
 
     def test_ctypes_layout_against_actual_native_header(self):
         # Compile the actual public declarations, never a duplicated C struct.

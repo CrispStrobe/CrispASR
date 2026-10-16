@@ -53,3 +53,9 @@ ci-apt.sh helper before attempting original audio loading, then retains the
 actual executable version output. Original encode_audio still uses ffmpeg; no
 substitute audio loader or changed frontend is introduced. Failed hosted
 38931686491 is preserved separately and executed no model cases.
+
+Cue expectations follow both production CLI and Session: append newline plus
+translation only when translation is nonempty. A tiny test compiles the actual
+formatting statements from both production sources and compares translated and
+untranslated cues against the worker expectation. The old unconditional-newline
+expectation fails that actual untranslated control. Runtime sources are unchanged.

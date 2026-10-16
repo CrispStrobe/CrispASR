@@ -106,6 +106,11 @@ def observer_environment(parent, enabled, directory):
     return env
 
 
+def cue_text(cue):
+    """CLI and Session append translation only when it is nonempty."""
+    return cue['transcript'] + ('\n' + cue['translation'] if cue['translation'] else '')
+
+
 class Params(C.Structure):
     _fields_ = [('n_threads', C.c_int), ('verbosity', C.c_int), ('use_gpu', C.c_bool), ('flash_attn', C.c_bool)]
 
@@ -246,7 +251,7 @@ def native_child(args):
             segments = session.transcribe(audio)
             actual = [dict(start=s.start, end=s.end, text=s.text) for s in segments]
         expected = json.loads((directory / 'on' / 'decoded.json').read_text())
-        golden = [dict(start=c['start'], end=c['end'], text=c['transcript'] + '\n' + c['translation']) for c in expected['cues']]
+        golden = [dict(start=c['start'], end=c['end'], text=cue_text(c)) for c in expected['cues']]
         assert len(actual) == len(golden) and all(a['text'] == b['text'] and abs(a['start']-b['start']) <= .0051
             and abs(a['end']-b['end']) <= .0051 for a, b in zip(actual, golden))
         (directory / 'session.json').write_text(json.dumps(dict(backend='index-echo', segments=actual), ensure_ascii=False, indent=2) + '\n')
@@ -312,6 +317,7 @@ def main():
                      'tools/dump_reference.py', 'tools/reference_backends/index_echo.py',
                      'tools/reference_backends/index_echo_ffn_capture.py', 'src/index_echo.cpp', 'src/index_echo.h',
                      'src/core/index_echo_ffn_capture.h', 'examples/cli/crispasr_diff_main.cpp',
+                     'src/crispasr_c_api.cpp', 'examples/cli/crispasr_backend_index_echo.cpp',
                      'tools/ci-heavy/echo_ffn_literal_graph.py', 'tests/test-index-echo-ffn-capture.cpp', 'tools/ci-apt.sh',
                      'examples/talk-llama/llama-graph.cpp', 'examples/talk-llama/llama-graph.h',
                      'examples/talk-llama/models/qwen35.cpp']:
