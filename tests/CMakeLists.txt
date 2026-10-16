@@ -2146,6 +2146,13 @@ catch_discover_tests(test-speecht5-params
     PROPERTIES LABELS "unit;speecht5"
 )
 
+# Actual optional Dia CPU head graph; tiny analytic tensors, no model weights.
+add_executable(test-dia-serial-head test-dia-serial-head.cpp)
+target_include_directories(test-dia-serial-head PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-dia-serial-head PRIVATE ggml ggml-cpu)
+add_test(NAME test-dia-serial-head COMMAND test-dia-serial-head)
+set_tests_properties(test-dia-serial-head PROPERTIES LABELS "unit;dia")
+
 # ─── test-dia-params — Catch2 unit tests for dia_tts_context_params defaults
 # and null-guard coverage. No GGUF required. ───────────────────────────────────
 add_executable(test-dia-params

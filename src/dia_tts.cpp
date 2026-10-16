@@ -23,13 +23,14 @@
 //    steps to flush the delayed channels.
 //
 // 4. CFG is applied at each step: the batch dimension is always 2
-//    (conditional + unconditional). Final logits = uncond + cfg_scale * (cond - uncond).
+//    (conditional + unconditional). Final logits = cond + cfg_scale * (cond - uncond).
 //
 // 5. DAC codec decodes the generated codes to 44.1 kHz PCM, reusing
 //    the shared core_dac implementation from dac_decoder.h.
 
 #include "dia_tts.h"
 #include "dia_sampling.h"
+#include "dia_serial_head.h"
 
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
@@ -621,7 +622,7 @@ static ggml_tensor* build_dia_decoder_embedding(ggml_context* ctx, dia_model& m,
 }
 
 // -----------------------------------------------------------------------
-// CFG scale: logits = uncond + cfg_scale * (cond - uncond)
+// CFG scale: logits = cond + cfg_scale * (cond - uncond)
 // -----------------------------------------------------------------------
 
 // We apply CFG after getting per-head logits from the decoder.
@@ -1179,6 +1180,16 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
 
     auto& m = ctx->model;
     auto& p = ctx->params;
+
+    const char* serial_head_env = crispasr_env::get("CRISPASR_DIA_SERIAL_HEAD");
+    const int serial_head_mode = dia_serial_head::mode(serial_head_env);
+    if (!dia_serial_head::supported(serial_head_mode, ctx->backend == ctx->backend_cpu, m.decoder.heads,
+                                    m.decoder_hidden_size, m.output_vocab_size)) {
+        fprintf(stderr, "dia_tts: serial head requires off/identity/serial and CPU F32 head weights\n");
+        return nullptr;
+    }
+    if (serial_head_env)
+        fprintf(stderr, "DIA_SERIAL_HEAD: mode=%d CPU_graph_diagnostic=1\n", serial_head_mode);
 
     // DIA_DECODE_CODES=path: isolate the DAC. Load post-revert codebook (T*9 int32,
     // interleaved [frame*9+ch]) and decode it directly, bypassing generation.
@@ -1803,6 +1814,8 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
             std::vector<ggml_tensor*> head_logits(m.n_output_heads);
             for (int h = 0; h < (int)m.n_output_heads; h++) {
                 head_logits[h] = ggml_mul_mat(ctx0, m.decoder.heads[h], cur); // (output_vocab_size, 1, B)
+                head_logits[h] =
+                    dia_serial_head::apply(ctx0, head_logits[h], m.decoder.heads[h], cur, serial_head_mode);
                 std::string hn = "logits_" + std::to_string(h);
                 ggml_set_name(head_logits[h], hn.c_str());
                 ggml_set_output(head_logits[h]);
@@ -1949,9 +1962,8 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                 ggml_backend_tensor_get(ggml_graph_get_tensor(gf, hn.c_str()), logits_raw.data(), 0,
                                         logits_raw.size() * sizeof(float));
 
-                // CFG filtering (matching Python _decoder_step lines 442-445):
-                // 1. Compute CFG logits for top-k selection
-                // 2. Apply mask to CONDITIONAL logits (not CFG) for sampling
+                // The pinned original samples the combined CFG logits after
+                // special-token masking, temperature, top-k and nucleus filtering.
                 float* uncond = logits_raw.data();                     // batch 0
                 float* cond = logits_raw.data() + m.output_vocab_size; // batch 1
                 if (dia_cap) {

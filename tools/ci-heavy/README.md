@@ -101,6 +101,13 @@ converter/helper/test changes. Run manually with
 `-f pip="numpy torch==2.6.0 torchaudio==2.6.0 torchvision==0.21.0 pydantic safetensors huggingface_hub descript-audio-codec==1.0.0 gguf"`.
 This is conversion integration evidence, not new free-speech or GPU acceptance.
 
+`dia_main_head_validate.py` compiles the current Dia library and its actual
+CMake-registered tiny CPU graph test, then verifies the optional serial F32 head
+against both captured original projection inputs. It retains libraries/sources,
+exact identity/thread controls and an intentionally removed GPU-guard rejection.
+Run with `-f pip="numpy==1.26.4"`; this loads no full neural model and establishes
+no free-speech/default/GPU/Q4 acceptance. [Method](dia-main-head/README.md).
+
 - **`$HEAVY_OUT`**: write results here. The whole directory becomes the run's artifact, kept for 14 days.
 - **`$HEAVY_SCRATCH`**: large scratch space for models, builds and caches. Not uploaded. `HF_HOME` points inside it.
 - **`$HF_TOKEN`**: the repository secret (fine-grained, CI-scoped); may be empty.
