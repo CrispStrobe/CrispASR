@@ -118,6 +118,17 @@ int main(int argc,char** argv) {
         assert(crispasr_session_set_top_p(&s,.95f)==0);
         assert(context.params.top_k==45 && context.params.top_p==.95f);
 #endif
+    } else if(mode=="cli-reset-default" || mode=="cli-reset-configured") {
+        auto backend=crispasr_make_dia_backend();whisper_params configured;
+        if(mode=="cli-reset-configured") {configured.tts_top_k=35;configured.tts_top_p=.8f;}
+        assert(backend->init(configured));
+        whisper_params request;request.tts_top_k=0;request.tts_top_p=1.f;
+        backend->synthesize("[S1] hello",request);
+        assert(synthesized.top_k==0 && synthesized.top_p==1.f);
+        whisper_params omitted;
+        backend->synthesize("[S1] hello",omitted);
+        assert(synthesized.top_k==(mode=="cli-reset-configured"?35:45));
+        assert(synthesized.top_p==(mode=="cli-reset-configured"?.8f:.95f));
     } else if(mode=="cli-default" || mode=="cli-explicit" || mode=="cli-repeated") {
         auto backend=crispasr_make_dia_backend();whisper_params p;
         if(mode!="cli-default") {
@@ -188,7 +199,8 @@ class DiaSamplingControls(unittest.TestCase):
         cls.tmp.cleanup()
 
     def test_native_session_cli_controls(self):
-        for mode in ['default', 'null', 'unsupported', 'session', 'cli-default', 'cli-explicit', 'cli-repeated']:
+        for mode in ['default', 'null', 'unsupported', 'session', 'cli-default', 'cli-explicit',
+                     'cli-repeated', 'cli-reset-default', 'cli-reset-configured']:
             with self.subTest(mode=mode):
                 subprocess.run([str(self.enabled), mode], check=True)
 
