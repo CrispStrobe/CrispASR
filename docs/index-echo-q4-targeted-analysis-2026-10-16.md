@@ -56,7 +56,11 @@ The Python tiny controls mechanically execute the actual installed original
 class source with real PyTorch/ACT2FN; they do not load model weights. Native
 tiny controls execute actual ggml tensors through its scheduler, checking six
 boundaries, exact OFF/ON/OFF, ownership, padded rows and rejection cases. A
-first-row mutation must fail. Initial harness attempts omitted input reset
+first-row mutation must fail. All18 local Python controls pass. Last-token
+slicing precedes device transfer: on the actual37-token tiny original MLP,
+old/new captures and outputs are byte-identical, while observed copy sizes fall
+from10656 to288 bytes (37× fewer elements). This measures copied data, not GPU
+latency, full-model performance or quantization quality. Initial harness attempts omitted input reset
 between scheduler computations; failed logs/executables are preserved. The
 corrected harness reapplies identical inputs, without changing tolerance.
 
