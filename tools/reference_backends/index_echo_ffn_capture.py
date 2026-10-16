@@ -282,13 +282,9 @@ class FFNCapture:
                 inp = inp[0]
             out = output[0] if isinstance(output, tuple) else output
             # Owned copies; last_token_only handling without modifying originals
-            arr_in = inp.detach().float().cpu().numpy().copy()
-            arr_out = out.detach().float().cpu().numpy().copy()
+            arr_in = self._owned(inp)
+            arr_out = self._owned(out)
             # Do not mutate original tensors; just capture
-            if self.last_token_only and arr_in.ndim == 3:
-                arr_in = arr_in[:, -1:, :].copy()
-            if self.last_token_only and arr_out.ndim == 3:
-                arr_out = arr_out[:, -1:, :].copy()
             self.store[f"blk{idx}_mlp_in"] = arr_in
             self.store[f"blk{idx}_mlp_out"] = arr_out
             self._save(f"blk{idx}_mlp_in", arr_in)
@@ -306,23 +302,25 @@ class FFNCapture:
                 inp = inp[0]
             out = output[0] if isinstance(output, tuple) else output
             if kind == "down":
-                arr_in = inp.detach().float().cpu().numpy().copy()
-                arr_out = out.detach().float().cpu().numpy().copy()
-                if self.last_token_only and arr_in.ndim == 3:
-                    arr_in = arr_in[:, -1:, :].copy()
-                if self.last_token_only and arr_out.ndim == 3:
-                    arr_out = arr_out[:, -1:, :].copy()
+                arr_in = self._owned(inp)
+                arr_out = self._owned(out)
                 self.store[f"blk{idx}_down_in"] = arr_in
                 self.store[f"blk{idx}_down_out"] = arr_out
                 self._save(f"blk{idx}_down_in", arr_in)
                 self._save(f"blk{idx}_down_out", arr_out)
             else:
-                arr_out = out.detach().float().cpu().numpy().copy()
-                if self.last_token_only and arr_out.ndim == 3:
-                    arr_out = arr_out[:, -1:, :].copy()
+                arr_out = self._owned(out)
                 self.store[f"blk{idx}_{kind}_out"] = arr_out
                 self._save(f"blk{idx}_{kind}_out", arr_out)
         return hook
+
+    def _owned(self, tensor):
+        value = tensor.detach()
+        # Slice before conversion/transfer; a final-token diagnostic must not
+        # copy the full prefill matrix from GPU to CPU for each projection.
+        if self.last_token_only and value.ndim == 3:
+            value = value[:, -1:, :]
+        return value.float().cpu().numpy().copy()
 
     def _save(self, name, array):
         if self.out_dir is not None:

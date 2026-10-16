@@ -448,3 +448,22 @@ def test_subclass_cannot_inherit_verified_source_provenance():
         with cap:
             pass
     assert not cap.handles and not llm.model.layers[0].mlp._forward_hooks
+
+
+def test_last_token_capture_transfers_only_requested_rows(monkeypatch):
+    ver, fsha, csha, _ = _current_provenance()
+    llm = _make_llm_with_mlps(n_layers=1)
+    original_cpu = torch.Tensor.cpu
+    copied = []
+    def observed_cpu(tensor, *args, **kwargs):
+        copied.append(tensor.numel())
+        return original_cpu(tensor, *args, **kwargs)
+    monkeypatch.setattr(torch.Tensor, 'cpu', observed_cpu)
+    from tools.reference_backends.index_echo_ffn_capture import FFNCapture
+    with FFNCapture(llm, [0], expected_version=ver,
+                    expected_modeling_sha256=fsha, expected_class_sha256=csha,
+                    last_token_only=True):
+        with torch.no_grad():
+            llm.model.layers[0].mlp(torch.randn(1, 37, 8))
+    assert len(copied) == 6
+    assert sorted(copied) == [8, 8, 8, 16, 16, 16]
