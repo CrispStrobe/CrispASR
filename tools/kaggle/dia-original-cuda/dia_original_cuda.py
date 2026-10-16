@@ -13,15 +13,15 @@ import sys
 import time
 import zipfile
 
-VERSION = 'dia-original-cuda-v1'
+VERSION = 'dia-original-cuda-v2'
 BASE = 'abeee3e8eb5121e0f80bbe8a4a8f6f245fc8fb3f'
 ORIGINAL = '4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8'
 WHISPER = '31243bad24cc746f07d4c8bfdd2d974872cb1803'
 ASR_SHA = '25a8566e1d0c1e2231d1c762132cd20e0f96a85d16145c3a00adf5d1ac670ead'
 DATASET = 'cstr/crispasr-regression-fixtures'
-PREFIX = 'dia-20261016-original-cuda/f16-defaults-v1'
-SCRATCH = Path('/kaggle/temp/dia-original-cuda-v1')
-OUT = Path('/kaggle/working/dia-original-cuda-v1')
+PREFIX = 'dia-20261016-original-cuda/f16-defaults-v2'
+SCRATCH = Path('/kaggle/temp/dia-original-cuda-v2')
+OUT = Path('/kaggle/working/dia-original-cuda-v2')
 OPTIONS = dict(language='en', task='transcribe', temperature=0.,
                condition_on_previous_text=False, initial_prompt=None, fp16=False, verbose=None)
 
@@ -43,6 +43,14 @@ def score(text, expected):
     return row[-1] / len(a)
 
 
+def validate_install_plan(planned, installed_stack):
+    core = {'torch', 'torchaudio', 'torchvision', 'triton', 'pytorch-triton', 'pytorch-triton-rocm'}
+    for item in planned:
+        name = item['metadata']['name'].lower().replace('_', '-')
+        if name in installed_stack or name in core or name.startswith('nvidia-'):
+            raise ValueError('Resolver would change installed CUDA/numerical stack: ' + name)
+
+
 def main():
     import torch
     sys.dont_write_bytecode = True
@@ -60,6 +68,9 @@ def main():
     # Prove a real installed CUDA kernel works before downloads or installation.
     assert torch.exp(torch.zeros(1, device='cuda')).item() == 1
     torch.cuda.synchronize()
+    (OUT / 'gpu-preflight.json').write_text(json.dumps(dict(version=VERSION,
+        torch=torch.__version__, cuda=torch.version.cuda, capability=device,
+        gpu=torch.cuda.get_device_name(), actual_cuda_probe_passed=True), indent=2) + '\n')
     clone = SCRATCH / 'CrispASR'
     subprocess.run(['git', 'clone', '--filter=blob:none', 'https://github.com/CrispStrobe/CrispASR', clone], check=True)
     subprocess.run(['git', '-C', clone, 'checkout', '--detach', BASE], check=True)
@@ -87,9 +98,7 @@ def main():
     with (OUT / 'pip-resolve.log').open('xb') as stream:
         subprocess.run(command + ['--dry-run', '--report', str(proposal)], stdout=stream, stderr=subprocess.STDOUT, check=True)
     planned = json.loads(proposal.read_text())['install']
-    for item in planned:
-        name = item['metadata']['name'].lower().replace('_', '-')
-        assert name not in stack and not name.startswith(('torch', 'nvidia-', 'triton')), name
+    validate_install_plan(planned, stack)
     with (OUT / 'pip-install.log').open('xb') as stream:
         subprocess.run(command, stdout=stream, stderr=subprocess.STDOUT, check=True)
     assert all(metadata.version(name) == value for name, value in stack.items())
