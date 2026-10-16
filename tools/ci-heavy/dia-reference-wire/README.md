@@ -34,3 +34,20 @@ Free-running speech/ASR, broader prompts/seeds, Q4, GPU and speed are separate
 acceptance tasks.32 steps are intentionally too short to establish speech
 quality. Successful forced-input replay does not establish sampler parity or
 delay reversal; the production protocol test and speech worker cover those.
+
+
+The composed-source worker also retains the actual diff ELF, head header and
+all three licenses. An extra native identity-head arm enables captures and
+must remain byte-identical to pristine inputs/logits/PCM. A second public diff
+replays original inputs through the serial head with the same stage gates,
+retaining a separate complete tensor directory. These checks validate the
+composition of the accepted head diagnostic with capture instrumentation;
+none enables a production default or establishes unforced speech quality.
+
+
+Local combined-source preparation passes the actual30-check head unit,
+17 original-class observer tests and237 unchanged computation-call guards.
+Actual tiny GQA runtime replay passes1194 complete comparisons across capture
+ON, identity-head+capture and serial-head+capture modes. OFF/ON/OFF/identity
+input/logit files are exact to the earlier accepted candidate. This is local
+synthetic composition proof; the combined full-model hosted run remains required.

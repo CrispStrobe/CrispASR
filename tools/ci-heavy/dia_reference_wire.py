@@ -39,7 +39,9 @@ def child(args, out):
     os.environ.update(CRISPASR_DIA_MAX_STEPS='32', CRISPASR_DIA_TTS_GPU='0',
         CRISPASR_DIA_DUMP_INPUT_TOKENS=str(directory/'inputs.i32'),
         CRISPASR_DIA_DUMP_STEPLOGITS=str(directory/'logits.f32'))
-    if args.arm == 'on':
+    if args.arm == 'on-identity':
+        os.environ['CRISPASR_DIA_SERIAL_HEAD'] = 'identity'
+    if args.arm in ['on', 'on-identity']:
         stages = directory/'stages'; stages.mkdir()
         os.environ.update(CRISPASR_DIA_DUMP_DIR=str(stages), CRISPASR_DIA_DUMP_STEP='5',
             CRISPASR_DIA_DUMP_SELF_ATTN='1', CRISPASR_DIA_DUMP_DECODER_BOUNDARIES='1',
@@ -87,7 +89,7 @@ def main():
     method=out/'method'; method.mkdir()
     for folder in ['src', 'examples/cli', 'tools', 'tests']:
         for p in (ROOT/folder).rglob('*'):
-            if p.is_file() and (p.name in ['dia_tts.cpp', 'dia_sampling.h', 'dia_dump_step.h', 'crispasr_dia_diff.h',
+            if p.is_file() and (p.name in ['dia_tts.cpp', 'dia_sampling.h', 'dia_dump_step.h', 'dia_serial_head.h', 'crispasr_dia_diff.h',
                 'crispasr_diff.cpp', 'crispasr_diff.h', 'crispasr_diff_main.cpp', 'dump_reference.py',
                 'dia_tts_reference.py', 'dia_attention_capture.py', 'dia_decoder_capture.py', 'dia_reference_wire.py']
                 or p.name.startswith('test_dia_') or p.name == 'dia-capture-pristine-main.json'):
@@ -116,6 +118,8 @@ def main():
     build_dir, lib = build(ROOT, 'candidate', ['crispasr-lib', 'crispasr-diff'])
     diff = build_dir/'bin/crispasr-diff'
     assert diff.is_file()
+    (out/'bin').mkdir()
+    shutil.copyfile(diff, out/'bin/crispasr-diff')
     from huggingface_hub import hf_hub_download, snapshot_download
     weights=Path(snapshot_download('nari-labs/Dia-1.6B', revision='257bc72f9b78182ccc6fa07675a9ae4c1a44e2cd', allow_patterns=['config.json', 'model.safetensors']))
     template=hf_hub_download('cstr/dia-1.6b-GGUF', 'dia-1.6b-f16.gguf', revision='3233fbcb32be47761d2e736857b6d1a075b9ba7e')
@@ -133,15 +137,17 @@ def main():
     run('clone-original', ['git', 'clone', '--filter=blob:none', 'https://github.com/nari-labs/dia', blueprint])
     run('pin-original', ['git', '-C', blueprint, 'checkout', '--detach', ORIGINAL])
     shutil.copytree(blueprint/'dia', method/'original-dia', ignore=shutil.ignore_patterns('__pycache__'))
+    for name,path in [('CrispASR-LICENSE',ROOT/'LICENSE'),('GGML-LICENSE',ROOT/'ggml/LICENSE'),('Dia-LICENSE',blueprint/'LICENSE')]:
+        shutil.copyfile(path,out/name)
     clean={k:v for k,v in os.environ.items() if not k.startswith(('DIA_', 'CRISPASR_DIA_'))}
     tests_env=clean|dict(DIA_SOURCE=str(blueprint), CRISPASR_DIA_DIFF_GGML_BUILD=str(build_dir/'ggml'))
     for test in ['capture_neutrality', 'dump_step', 'diff_device', 'diff_compare', 'reference_dispatch', 'reference_capture', 'output_protocol']:
         run('test-'+test, [sys.executable, ROOT/('tests/test_dia_'+test+'.py'), '-v'], tests_env)
-    for arm in ['pristine', 'off-before', 'on', 'off-after']:
+    for arm in ['pristine', 'off-before', 'on', 'off-after', 'on-identity']:
         run('native-'+arm, [sys.executable, __file__, '--child', '--arm', arm, '--runtime', pristine if arm=='pristine' else ROOT,
             '--model', model, '--lib', plib if arm=='pristine' else lib], clean)
     report['transparency_checks']=[dict(arm=arm, file=name, exact=sha(out/'pristine'/name)==sha(out/arm/name))
-        for arm in ['off-before', 'on', 'off-after'] for name in ['inputs.i32', 'logits.f32', 'pcm.f32']]
+        for arm in ['off-before', 'on', 'off-after', 'on-identity'] for name in ['inputs.i32', 'logits.f32', 'pcm.f32']]
     report['pristine_off_on_off_exact']=all(row['exact'] for row in report['transparency_checks']); checkpoint()
     archive=out/'ref.gguf'
     env=clean|dict(DIA_SOURCE=str(blueprint), DIA_DEVICE='cpu', DIA_MAX_TOKENS='32', DIA_CAPTURE_STEP='5',
@@ -159,6 +165,16 @@ def main():
     report.update(diff_exit=code, compared_stages=rows, missing_stages=sorted(expected-{name for _,name in rows}),
                   failing_stages=[name for result,name in rows if result=='FAIL'])
     checkpoint()
+    # Exercise the independently integrated head node together with captures.
+    # Keep original input replay and the exact same cosine/magnitude gates.
+    serial_env=clean|dict(DIA_CODEC=str(codec), CRISPASR_DIA_SERIAL_HEAD='serial',
+        CRISPASR_DIA_DIFF_DUMP_DIR=str(out/'serial-diff-tensors'))
+    serial_code=run('public-serial-diff', [diff, 'dia', model, archive], serial_env, expected=None)
+    serial_rows=re.findall(r'^\[(PASS|FAIL)\]\s+(\S+)\s+cos_min=',(out/'public-serial-diff.log').read_text(),re.M)
+    report.update(serial_diff_exit=serial_code, serial_compared_stages=serial_rows,
+        serial_missing_stages=sorted(expected-{name for _,name in serial_rows}),
+        serial_failing_stages=[name for result,name in serial_rows if result=='FAIL'])
+    checkpoint()
     # Missing references must fail through the real text-only dispatch.
     rejected=run('missing-reference-control', [diff, 'dia', model, out/'missing.gguf'], clean, expected=None)
     assert rejected != 0 and 'Usage:' not in (out/'missing-reference-control.log').read_text()
@@ -168,6 +184,7 @@ def main():
     checkpoint()
     assert report['pristine_off_on_off_exact'], 'Capture changed actual full-model output; raw evidence retained'
     assert not report['missing_stages'] and not report['failing_stages'] and code==0, 'Strict harness parity failed; raw evidence retained'
+    assert not report['serial_missing_stages'] and not report['serial_failing_stages'] and serial_code==0, 'Composed serial head/capture parity failed; raw evidence retained'
     report['bounded_harness_pass']=True; checkpoint()
     print('DIA_REFERENCE_WIRE_COMPLETE', len(rows), flush=True)
 
