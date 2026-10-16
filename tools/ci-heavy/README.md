@@ -17,6 +17,12 @@ Runners are free for public repos and a job can run up to 6 h.
 speed and parity on hardware, and PyTorch on CUDA. Kaggle allows one account per
 person, with GPU sessions used for GPU work.
 
+`dia_reference_wire.py` exercises the public text-only Dia reference dumper
+and strict diff route on actual pinned weights, with fresh original hooks and
+pristine/OFF/ON/OFF instrumentation controls. Complete raw evidence is retained;
+bounded replay is separate from free-running speech acceptance. See the
+[reference wiring method](dia-reference-wire/README.md).
+
 ## Running a job
 
 ```bash

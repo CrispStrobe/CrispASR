@@ -301,6 +301,7 @@ target_link_libraries(crispasr-diff PRIVATE
     crispasr-diff-lib
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}
+    dia-tts
 )
 install(TARGETS crispasr-diff RUNTIME BUNDLE DESTINATION bin)
 

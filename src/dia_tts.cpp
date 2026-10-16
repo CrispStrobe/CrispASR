@@ -30,6 +30,7 @@
 
 #include "dia_tts.h"
 #include "dia_sampling.h"
+#include "dia_dump_step.h"
 #include "dia_serial_head.h"
 
 #include "ggml-alloc.h"
@@ -57,6 +58,7 @@
 #include <cstring>
 #include <random>
 #include <string>
+#include <utility>
 #include <vector>
 #include "core/ggml_cpu_backend.h"
 
@@ -523,6 +525,10 @@ static ggml_tensor* build_dia_encoder(ggml_context* ctx, dia_model& m,
     // Embedding lookup: (enc_hidden, T, B)
     ggml_tensor* cur =
         ggml_reshape_3d(ctx, ggml_get_rows(ctx, m.encoder.embedding, inp_tokens), m.encoder_hidden_size, T, B);
+    if (crispasr_env::get("CRISPASR_DIA_DUMP_DIR")) {
+        ggml_set_name(cur, "dia_encoder_embedding");
+        ggml_set_output(cur);
+    }
 
     int layer_idx = 0;
     for (auto& layer : m.encoder.layers) {
@@ -587,6 +593,11 @@ static ggml_tensor* build_dia_encoder(ggml_context* ctx, dia_model& m,
         }
 
         cur = ggml_add(ctx, cur, residual_mlp);
+        if (crispasr_env::get("CRISPASR_DIA_DUMP_DIR")) {
+            const std::string name = "dia_encoder_layer_" + std::to_string(layer_idx);
+            ggml_set_name(cur, name.c_str());
+            ggml_set_output(cur);
+        }
         layer_idx++;
     }
 
@@ -1009,6 +1020,16 @@ static ggml_tensor* dac_decoder_block(ggml_context* ctx, ggml_tensor* x, const c
 }
 
 // Build DAC decode graph: codes (n_codebooks, n_frames) -> PCM (n_frames * 512)
+static const char* const dac_trace_stages[] = {"dac_latent",  "dac_input_conv", "dac_block_0",      "dac_block_1",
+                                               "dac_block_2", "dac_block_3",    "dac_output_snake", "dac_output_conv"};
+
+static void dac_trace_output(ggml_tensor* tensor, const char* name) {
+    if (crispasr_env::get("CRISPASR_DIA_DAC_TRACE_DIR")) {
+        ggml_set_name(tensor, name);
+        ggml_set_output(tensor); // Preserve the real result before allocator reuse.
+    }
+}
+
 static ggml_cgraph* dac_build_decode_graph(const core_dac::DacWeights& dac, ggml_context* ctx0, int n_frames) {
     const auto& cfg = dac.config;
     const int n_cb = cfg.n_codebooks;
@@ -1048,19 +1069,25 @@ static ggml_cgraph* dac_build_decode_graph(const core_dac::DacWeights& dac, ggml
         }
     }
     z_q = ggml_cont(ctx0, z_q); // (1024, n_frames)
+    dac_trace_output(z_q, "dac_latent");
 
     // Decoder input conv: Conv1d(1024, 1536, k=7, p=3)
     ggml_tensor* h = dac_conv1d(ctx0, z_q, dac.in_conv_w, dac.in_conv_b, /*pad*/ 3, /*dil*/ 1);
+    dac_trace_output(h, "dac_input_conv");
 
     // 4 decoder blocks with strides [8, 8, 4, 2]
     for (int b = 0; b < cfg.n_decoder_blocks; b++) {
         h = dac_decoder_block(ctx0, h, dac.blocks[b], cfg.upsampling_ratios[b]);
         h = ggml_cont(ctx0, h);
+        const std::string name = "dac_block_" + std::to_string(b);
+        dac_trace_output(h, name.c_str());
     }
 
     // Output: Snake1d -> Conv1d(96, 1, k=7, p=3) -> tanh
     h = core_act::snake_alpha(ctx0, h, dac.out_snake_alpha);
+    dac_trace_output(h, "dac_output_snake");
     h = dac_conv1d(ctx0, h, dac.out_conv_w, dac.out_conv_b, /*pad*/ 3, /*dil*/ 1);
+    dac_trace_output(h, "dac_output_conv");
     h = ggml_tanh(ctx0, h);
 
     // Reshape to 1D PCM
@@ -1147,6 +1174,38 @@ static float* dac_decode(dia_tts_context* ctx, const std::vector<uint32_t>& filt
     }
 
     // Extract PCM output
+    if (const char* dir = crispasr_env::get("CRISPASR_DIA_DAC_TRACE_DIR")) {
+        for (const char* name : dac_trace_stages) {
+            ggml_tensor* stage = ggml_graph_get_tensor(gf, name);
+            if (!stage || stage->type != GGML_TYPE_F32) {
+                fprintf(stderr, "dia_dac: missing F32 trace stage %s\n", name);
+                ggml_free(ctx0);
+                return nullptr;
+            }
+            const size_t channels = (size_t)stage->ne[0], frames = (size_t)stage->ne[1];
+            std::vector<float> raw(channels * frames), values(raw.size());
+            ggml_backend_tensor_get(stage, raw.data(), 0, raw.size() * sizeof(float));
+            // ggml stores (T,C) row-major; retain actual Python (C,T) for
+            // complete per-channel waveform cosine/magnitude comparisons.
+            for (size_t channel = 0; channel < channels; ++channel)
+                for (size_t frame = 0; frame < frames; ++frame)
+                    values[channel * frames + frame] = raw[frame * channels + channel];
+            const std::string path = std::string(dir) + "/" + name + ".f32";
+            FILE* file = fopen(path.c_str(), "wb");
+            if (!file) {
+                fprintf(stderr, "dia_dac: cannot write trace %s\n", path.c_str());
+                ggml_free(ctx0);
+                return nullptr;
+            }
+            const bool written = fwrite(values.data(), sizeof(float), values.size(), file) == values.size();
+            const int closed = fclose(file);
+            if (!written || closed != 0) {
+                fprintf(stderr, "dia_dac: incomplete trace %s\n", path.c_str());
+                ggml_free(ctx0);
+                return nullptr;
+            }
+        }
+    }
     ggml_tensor* pcm_out = ggml_graph_get_tensor(gf, "dac_pcm");
     if (!pcm_out) {
         fprintf(stderr, "dia_dac: pcm output tensor not in graph\n");
@@ -1265,7 +1324,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
     // DIA_DUMP_TOKENS=1    : print emitted 9-channel tokens per step to stderr
     // DIA_FORCE_TOKENS=f   : teacher-force per-step input from file f (N*9 int32 raw); caps max_gen=N
     // DIA_DUMP_STEPLOGITS=f: append per-step [uncond(9*V) | cond(9*V)] f32 to file f
-    // DIA_DUMP_DIR=d       : write step-0 stage dumps (encoder/cross/ca/final/logits) under dir d
+    // DIA_DUMP_DIR=d       : write encoder/cache and selected-step decoder stages under dir d
     const bool dia_greedy = crispasr_env::get("CRISPASR_DIA_GREEDY") != nullptr;
     const bool dia_dump_tokens = crispasr_env::get("CRISPASR_DIA_DUMP_TOKENS") != nullptr;
     const char* dia_dump_dir = crispasr_env::get("CRISPASR_DIA_DUMP_DIR");
@@ -1305,6 +1364,14 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
         max_gen = (uint32_t)std::min((size_t)m.max_generation_size, dia_forced.size() / m.n_output_heads);
     if (dia_steplogits_path)
         remove(dia_steplogits_path); // truncate; we append per step
+
+    size_t dia_dump_step = 0;
+    const char* dia_dump_step_env = crispasr_env::get("CRISPASR_DIA_DUMP_STEP");
+    if ((dia_dump_step_env && !dia_dump_dir) ||
+        !dia_debug::parse_dump_step(dia_dump_step_env, max_gen, dia_dump_step)) {
+        fprintf(stderr, "dia_tts: dump step requires a dump directory and a valid index inside the history\n");
+        return nullptr;
+    }
 
     // Delayed-domain token buffer (mirrors Python dec_output.generated_tokens).
     // The model is trained in the delay domain: channel c's INPUT is held at BOS
@@ -1414,6 +1481,33 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
         ggml_tensor* enc_result = ggml_graph_get_tensor(gf, "enc_output");
         encoder_output.resize(enc_hidden * T_enc * B);
         ggml_backend_tensor_get(enc_result, encoder_output.data(), 0, encoder_output.size() * sizeof(float));
+
+        if (dia_dump_dir) {
+            auto write = [&](const char* name, const float* data, size_t count) {
+                if (FILE* f = fopen(dia_dpath(name).c_str(), "wb")) {
+                    fwrite(data, sizeof(float), count, f);
+                    fclose(f);
+                }
+            };
+            std::vector<float> ids(enc_input.begin(), enc_input.end());
+            write("cpp_encoder_tokens.f32", ids.data(), ids.size());
+            write("cpp_encoder_output.f32", encoder_output.data(), encoder_output.size());
+            for (int l = 0; l < (int)m.n_encoder_layers; ++l) {
+                const std::string name = "dia_encoder_layer_" + std::to_string(l);
+                ggml_tensor* layer = ggml_graph_get_tensor(gf, name.c_str());
+                if (layer) {
+                    std::vector<float> values(encoder_output.size());
+                    ggml_backend_tensor_get(layer, values.data(), 0, values.size() * sizeof(float));
+                    write(("cpp_encoder_layer_" + std::to_string(l) + ".f32").c_str(), values.data(), values.size());
+                }
+            }
+            ggml_tensor* embedding = ggml_graph_get_tensor(gf, "dia_encoder_embedding");
+            if (embedding) {
+                std::vector<float> values(encoder_output.size());
+                ggml_backend_tensor_get(embedding, values.data(), 0, values.size() * sizeof(float));
+                write("cpp_encoder_embedding.f32", values.data(), values.size());
+            }
+        }
 
         ggml_free(ctx0);
     }
@@ -1647,6 +1741,28 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
             // --- New K/V outputs for self-attention (to append to cache) ---
             std::vector<ggml_tensor*> new_k_outputs(m.n_decoder_layers);
             std::vector<ggml_tensor*> new_v_outputs(m.n_decoder_layers);
+            const char* sa_capture = crispasr_env::get("CRISPASR_DIA_DUMP_SELF_ATTN");
+            const bool capture_sa = step == dia_dump_step && dia_dump_dir && sa_capture && strcmp(sa_capture, "1") == 0;
+            auto mark_sa = [&](ggml_tensor* tensor, int layer, const char* part) {
+                if (capture_sa) {
+                    const std::string name = "dia_decoder_sa" + std::to_string(layer) + "_" + part;
+                    ggml_set_name(tensor, name.c_str());
+                    ggml_set_output(tensor);
+                }
+            };
+            const char* boundary_capture = crispasr_env::get("CRISPASR_DIA_DUMP_DECODER_BOUNDARIES");
+            const bool capture_boundaries =
+                step == dia_dump_step && dia_dump_dir && boundary_capture && std::strcmp(boundary_capture, "1") == 0;
+            std::vector<std::pair<std::string, ggml_tensor*>> boundary_outputs;
+            auto mark_boundary = [&](ggml_tensor* tensor, int layer, const char* part) {
+                if (capture_boundaries) {
+                    // Retain pointers: existing stage names may share a tensor.
+                    // No extra graph operator or tensor rename is needed.
+                    ggml_set_output(tensor);
+                    boundary_outputs.emplace_back("decoder_block" + std::to_string(layer) + "_" + std::string(part),
+                                                  tensor);
+                }
+            };
 
             // --- Decoder layers ---
             for (int l = 0; l < (int)m.n_decoder_layers; l++) {
@@ -1654,7 +1770,9 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                 ggml_tensor* residual = cur;
 
                 // Pre self-attention norm
+                mark_boundary(cur, l, "input");
                 cur = dia_rms_norm(ctx0, cur, layer.pre_sa_norm, m.rms_norm_eps);
+                mark_boundary(cur, l, "pre_sa_norm");
 
                 // Self-attention
                 {
@@ -1706,6 +1824,10 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                         V_full = ggml_reshape_4d(ctx0, V_cur, head_dim, n_kv_heads, T_cur, B);
                     }
 
+                    mark_sa(Q, l, "q");
+                    mark_sa(K_full, l, "k");
+                    mark_sa(V_full, l, "v");
+
                     // GQA: repeat_interleave K/V heads to match Q heads
                     // n_heads=16, n_kv_heads=4 -> each KV head maps to 4 consecutive Q heads
                     // Pattern: insert unit dim before n_kv, repeat, flatten
@@ -1744,14 +1866,19 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                     // Permute to (head_dim, n_heads, 1, B) then reshape to (dec_hidden, 1, B)
                     kqv = ggml_cont(ctx0, ggml_permute(ctx0, kqv, 0, 2, 1, 3));
                     cur = ggml_reshape_3d(ctx0, kqv, dec_hidden, T_cur, B);
+                    mark_sa(cur, l, "attention");
+                    mark_boundary(cur, l, "sa_attention");
                     cur = ggml_mul_mat(ctx0, layer.self_o_proj, cur);
+                    mark_boundary(cur, l, "sa_output");
                 }
 
                 cur = ggml_add(ctx0, cur, residual);
                 residual = cur;
 
                 // Pre cross-attention norm
+                mark_boundary(cur, l, "sa_residual");
                 cur = dia_rms_norm(ctx0, cur, layer.pre_ca_norm, m.rms_norm_eps);
+                mark_boundary(cur, l, "pre_ca_norm");
 
                 // Cross-attention
                 {
@@ -1759,6 +1886,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                     ggml_tensor* Q = ggml_mul_mat(ctx0, layer.cross_q_proj, cur); // (dec_hidden, 1, B)
                     Q = ggml_reshape_4d(ctx0, Q, head_dim, n_heads, T_cur, B);
                     Q = ggml_rope(ctx0, ggml_cont(ctx0, Q), dec_pos, head_dim, DIA_ROPE_MODE);
+                    mark_boundary(Q, l, "cross_q");
 
                     // K/V from precomputed cross-attention cache
                     // cross_k: (cross_kv_dim=2048, T_enc, B) -> (hd, n_heads, T_enc, B)
@@ -1778,8 +1906,10 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                     ggml_tensor* kqv = ggml_mul_mat(ctx0, v_t, kq);
                     kqv = ggml_cont(ctx0, ggml_permute(ctx0, kqv, 0, 2, 1, 3));
                     cur = ggml_reshape_3d(ctx0, kqv, dec_hidden, T_cur, B);
+                    mark_boundary(cur, l, "cross_attention");
                     cur = ggml_mul_mat(ctx0, layer.cross_o_proj, cur);
-                    if (step == 0 && l == 0 && dia_dump_dir) {
+                    mark_boundary(cur, l, "cross_output");
+                    if (step == dia_dump_step && l == 0 && dia_dump_dir) {
                         ggml_set_name(cur, "ca0_out");
                         ggml_set_output(cur);
                     }
@@ -1789,22 +1919,34 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                 residual = cur;
 
                 // Pre MLP norm
+                mark_boundary(cur, l, "ca_residual");
                 cur = dia_rms_norm(ctx0, cur, layer.pre_mlp_norm, m.rms_norm_eps);
+                mark_boundary(cur, l, "pre_mlp_norm");
 
                 // MLP: SiLU(gate(x)) * up(x), then down
                 {
                     cur = ggml_mul(ctx0, ggml_silu(ctx0, ggml_mul_mat(ctx0, layer.gate, cur)),
                                    ggml_mul_mat(ctx0, layer.up, cur));
+                    mark_boundary(cur->src[0]->src[0], l, "mlp_gate");
+                    mark_boundary(cur->src[1], l, "mlp_up");
+                    mark_boundary(cur, l, "mlp_hidden");
                     cur = ggml_mul_mat(ctx0, layer.wo_mlp, cur);
+                    mark_boundary(cur, l, "mlp_output");
                 }
 
                 cur = ggml_add(ctx0, cur, residual);
+                mark_boundary(cur, l, "output");
+                if (step == dia_dump_step && dia_dump_dir) {
+                    const std::string name = "dia_decoder_layer_" + std::to_string(l);
+                    ggml_set_name(cur, name.c_str());
+                    ggml_set_output(cur);
+                }
             }
 
             // Final norm
             cur = dia_rms_norm(ctx0, cur, m.decoder.norm, m.rms_norm_eps);
             // cur: (dec_hidden, 1, B)
-            if (step == 0 && dia_dump_dir) {
+            if (step == dia_dump_step && dia_dump_dir) {
                 ggml_set_name(cur, "dia_final_hidden");
                 ggml_set_output(cur);
             }
@@ -1900,7 +2042,76 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                 return nullptr;
             }
 
-            if (step == 0 && dia_dump_dir) {
+            if (step == dia_dump_step && dia_dump_dir) {
+                if (FILE* marker = fopen(dia_dpath("capture-step.txt").c_str(), "wb")) {
+                    fprintf(marker, "%zu\n", dia_dump_step);
+                    fclose(marker);
+                }
+                for (int l = 0; l < (int)m.n_decoder_layers; ++l) {
+                    const std::string name = "dia_decoder_layer_" + std::to_string(l);
+                    ggml_tensor* layer = ggml_graph_get_tensor(gf, name.c_str());
+                    if (layer) {
+                        std::vector<float> values(dec_hidden * B);
+                        ggml_backend_tensor_get(layer, values.data(), 0, values.size() * sizeof(float));
+                        if (FILE* f = fopen(
+                                dia_dpath(("cpp_decoder_layer_" + std::to_string(l) + ".f32").c_str()).c_str(), "wb")) {
+                            fwrite(values.data(), sizeof(float), values.size(), f);
+                            fclose(f);
+                        }
+                    }
+                }
+                if (capture_sa) {
+                    for (int l = 0; l < (int)m.n_decoder_layers; ++l) {
+                        for (const char* part : {"q", "k", "v", "attention"}) {
+                            const std::string name = "dia_decoder_sa" + std::to_string(l) + "_" + part;
+                            ggml_tensor* tensor = ggml_graph_get_tensor(gf, name.c_str());
+                            if (!tensor || tensor->type != GGML_TYPE_F32) {
+                                fprintf(stderr, "dia_tts: missing self-attention capture %s\n", name.c_str());
+                                ggml_free(ctx0);
+                                return nullptr;
+                            }
+                            std::vector<float> values(ggml_nelements(tensor));
+                            ggml_backend_tensor_get(tensor, values.data(), 0, values.size() * sizeof(float));
+                            const std::string file = "cpp_decoder_sa" + std::to_string(l) + "_" + part + ".f32";
+                            FILE* f = fopen(dia_dpath(file.c_str()).c_str(), "wb");
+                            if (!f || fwrite(values.data(), sizeof(float), values.size(), f) != values.size()) {
+                                if (f)
+                                    fclose(f);
+                                fprintf(stderr, "dia_tts: cannot write self-attention capture %s\n", file.c_str());
+                                ggml_free(ctx0);
+                                return nullptr;
+                            }
+                            fclose(f);
+                        }
+                    }
+                }
+                if (capture_boundaries) {
+                    if (boundary_outputs.size() != (size_t)m.n_decoder_layers * 16) {
+                        fprintf(stderr, "dia_tts: incomplete decoder boundary capture\n");
+                        ggml_free(ctx0);
+                        return nullptr;
+                    }
+                    for (const auto& entry : boundary_outputs) {
+                        ggml_tensor* tensor = entry.second;
+                        if (!tensor || tensor->type != GGML_TYPE_F32 || !ggml_is_contiguous(tensor)) {
+                            fprintf(stderr, "dia_tts: invalid decoder boundary %s\n", entry.first.c_str());
+                            ggml_free(ctx0);
+                            return nullptr;
+                        }
+                        std::vector<float> values(ggml_nelements(tensor));
+                        ggml_backend_tensor_get(tensor, values.data(), 0, values.size() * sizeof(float));
+                        const std::string file = "cpp_" + entry.first + ".f32";
+                        FILE* f = fopen(dia_dpath(file.c_str()).c_str(), "wb");
+                        if (!f || fwrite(values.data(), sizeof(float), values.size(), f) != values.size()) {
+                            if (f)
+                                fclose(f);
+                            fprintf(stderr, "dia_tts: cannot write decoder boundary %s\n", file.c_str());
+                            ggml_free(ctx0);
+                            return nullptr;
+                        }
+                        fclose(f);
+                    }
+                }
                 ggml_tensor* fh = ggml_graph_get_tensor(gf, "dia_final_hidden");
                 if (fh) {
                     std::vector<float> hbuf(dec_hidden * B);
@@ -1946,8 +2157,8 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
             if (step == 0 && p.verbosity >= 1) {
                 fprintf(stderr, "dia_tts: decoder step 0 logits dump (for diff-testing):\n");
             }
-            // Capture step-0 cond+uncond logits (9 x V) for DIA_DUMP_DIR, and per-step for STEPLOGITS.
-            const bool dia_dump_logits = (step == 0) && (dia_dump_dir != nullptr);
+            // Capture selected-step cond+uncond logits (9 x V); STEPLOGITS records every step.
+            const bool dia_dump_logits = (step == dia_dump_step) && (dia_dump_dir != nullptr);
             const bool dia_cap = dia_dump_logits || (dia_steplogits_path != nullptr);
             std::vector<float> dump_cond, dump_uncond;
             if (dia_cap) {
@@ -2011,8 +2222,8 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
             }
 
             if (dia_dump_logits) {
-                FILE* fc = fopen(dia_dpath("cpp_step0_cond.f32").c_str(), "wb");
-                FILE* fu = fopen(dia_dpath("cpp_step0_uncond.f32").c_str(), "wb");
+                FILE* fc = fopen(dia_dpath(("cpp_step" + std::to_string(step) + "_cond.f32").c_str()).c_str(), "wb");
+                FILE* fu = fopen(dia_dpath(("cpp_step" + std::to_string(step) + "_uncond.f32").c_str()).c_str(), "wb");
                 if (fc) {
                     fwrite(dump_cond.data(), sizeof(float), dump_cond.size(), fc);
                     fclose(fc);
@@ -2021,7 +2232,7 @@ float* dia_tts_synthesize(struct dia_tts_context* ctx, const char* text, int* ou
                     fwrite(dump_uncond.data(), sizeof(float), dump_uncond.size(), fu);
                     fclose(fu);
                 }
-                fprintf(stderr, "DIA_DUMP_DIR: wrote cpp_step0_{cond,uncond}.f32 (%zu floats each)\n",
+                fprintf(stderr, "DIA_DUMP_DIR: wrote cpp_step%u_{cond,uncond}.f32 (%zu floats each)\n", step,
                         dump_cond.size());
             }
             if (dia_steplogits_path) {

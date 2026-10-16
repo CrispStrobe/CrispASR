@@ -2354,7 +2354,7 @@ endif()
 # ---------------------------------------------------------------------------
 # dia-tts — Nari Labs Dia TTS (native ggml runtime)
 # ---------------------------------------------------------------------------
-add_library(dia-tts STATIC dia_tts.h dia_tts.cpp)
+add_library(dia-tts STATIC dia_tts.h dia_tts.cpp dia_dump_step.h)
 set_target_properties(dia-tts PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_include_directories(dia-tts PUBLIC .)
 target_compile_features   (dia-tts PUBLIC cxx_std_17)

@@ -92,6 +92,7 @@ import numpy as np
 #   1. tools/reference_backends/<name>.py  with dump() + DEFAULT_STAGES
 #   2. one line here.
 REGISTERED_BACKENDS: Dict[str, str] = {
+    "dia": "reference_backends.dia_tts_reference",
     "index-echo": "reference_backends.index_echo",
     # Dolphin (DataoceanAI) E-Branchformer + Transformer decoder + CTC (#436).
     # model_dir holds <name>.pt + train.yaml + units.txt + global_cmvn;
@@ -573,8 +574,9 @@ def main() -> None:
             print(f"  {name:10s}  -> tools/{mod_path.replace('.', '/')}.py")
         return
 
-    if not (args.backend and args.model_dir and args.audio and args.output):
-        p.error("--backend, --model-dir, --audio, --output are all required "
+    if not (args.backend and args.model_dir and args.output) or (args.backend != "dia" and not args.audio):
+        p.error("--backend, --model-dir and --output are required; "
+                "--audio is also required except for text-only dia "
                 "(unless --list-backends is set)")
 
     mod = _resolve_backend(args.backend)
@@ -590,9 +592,13 @@ def main() -> None:
                          f"has empty DEFAULT_STAGES and --stages is empty)")
 
     # Load audio
-    print(f"Loading audio: {args.audio}")
-    audio = load_audio_16k_mono(args.audio)
-    print(f"  samples: {len(audio)}  ({len(audio)/16000:.2f} s)")
+    if args.backend == "dia":
+        audio = np.empty(0, dtype=np.float32)
+        print("Text-only Dia input; audio is unused.")
+    else:
+        print(f"Loading audio: {args.audio}")
+        audio = load_audio_16k_mono(args.audio)
+        print(f"  samples: {len(audio)}  ({len(audio)/16000:.2f} s)")
 
     # Run backend dump
     print(f"Running {args.backend} reference forward pass ...")
@@ -632,9 +638,9 @@ def main() -> None:
         "aliasing_after_capture": alias_note,
         "backend":  args.backend,
         "model_dir": str(args.model_dir.resolve()),
-        "audio":    str(args.audio.resolve()),
+        "audio":    str(args.audio.resolve()) if args.audio else "",
         "n_samples": int(len(audio)),
-        "sample_rate": 16000,
+        "sample_rate": 0 if args.backend == "dia" else 16000,
         "generated_text": str(captures.pop("generated_text", "")) if "generated_text" in captures else "",
     }
     # Any other str-typed captures get routed into metadata too so the

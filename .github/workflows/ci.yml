@@ -180,6 +180,15 @@ jobs:
       - name: Run the unit tier
         run: ctest --test-dir build -L unit -E live --output-on-failure --timeout 300
 
+      - name: Dia diagnostic parser, environment, archive and source contracts
+        run: |
+          python3 -m pip install gguf
+          python3 tests/test_dia_dump_step.py -v
+          python3 tests/test_dia_diff_device.py -v
+          python3 tests/test_dia_diff_compare.py -v
+          python3 tests/test_dia_reference_dispatch.py -v
+          python3 tests/test_dia_capture_neutrality.py -v
+
       - name: Dia original generation and codec-input protocol
         run: python3 tests/test_dia_output_protocol.py -v
 
