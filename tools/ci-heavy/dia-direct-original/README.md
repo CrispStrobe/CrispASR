@@ -27,3 +27,8 @@ GH dependencies: torch==2.6.0 torchaudio==2.6.0 numpy==1.26.4
 huggingface_hub==1.5.0 safetensors pydantic descript-audio-codec==1.0.0
 scipy==1.15.3. No local model download/build is needed. Output is diagnostic,
 not a replacement for pinned original→GGUF stage, magnitude and decoded gates.
+
+The hosted checkout is depth one. The worker explicitly fetches the immutable
+crossed-ASR source before its exact helper-byte check; no local parent-object
+availability is assumed. The source check remains mandatory. Run38936657203
+failed at this prerequisite before downloads or synthesis and is retained.

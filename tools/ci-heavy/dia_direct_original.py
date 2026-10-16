@@ -170,6 +170,7 @@ def main():
         for name in ['dia_attention_capture.py', 'dia_decoder_capture.py']:
             shutil.copyfile(ROOT / 'tools' / name, method / name)
         shutil.copyfile(ROOT / 'python/crispasr/_binding.py', method / '_binding.py')
+        run('fetch-crossed-source', ['git', 'fetch', '--depth=1', 'origin', CROSSED_SOURCE])
         assert (method / 'dia_asr_crosscheck.py').read_bytes() == subprocess.check_output(
             ['git', 'show', CROSSED_SOURCE + ':tools/ci-heavy/dia_asr_crosscheck.py'], cwd=ROOT)
         bundle = scratch / 'crossed.zip'
