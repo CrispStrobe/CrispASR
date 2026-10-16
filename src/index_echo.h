@@ -47,6 +47,8 @@ float* index_echo_run_encoder(struct index_echo_context*, const float* mel, int 
                               int* dim);
 float* index_echo_prefill(struct index_echo_context*, const float* audio_embd, int rows, int dim, int* n_vocab);
 float* index_echo_decode_token(struct index_echo_context*, int32_t token, int* n_vocab);
+// Optional CRISPASR_INDEX_ECHO_DUMP_FFN=1 adds llm_ffn_LAYER_SUFFIX stages
+// for the final prefill token; all returned storage is owned by the context.
 const float* index_echo_stage(struct index_echo_context*, const char* name, int* count);
 const int32_t* index_echo_prompt_ids(struct index_echo_context*, int* count);
 int index_echo_decoder_layers(struct index_echo_context*);

@@ -47,6 +47,12 @@ target_include_directories(test-imatrix-callback PRIVATE ${PROJECT_SOURCE_DIR}/s
 target_link_libraries(test-imatrix-callback PRIVATE Catch2::Catch2WithMain ggml ggml-cpu)
 catch_discover_tests(test-imatrix-callback PROPERTIES LABELS "unit;imatrix")
 
+add_executable(test-index-echo-ffn-capture test-index-echo-ffn-capture.cpp)
+target_include_directories(test-index-echo-ffn-capture PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-index-echo-ffn-capture PRIVATE ggml ggml-cpu)
+add_test(NAME test-index-echo-ffn-capture COMMAND test-index-echo-ffn-capture)
+set_tests_properties(test-index-echo-ffn-capture PROPERTIES LABELS "unit;index-echo")
+
 add_executable(test-index-echo-connector test-index-echo-connector.cpp)
 target_include_directories(test-index-echo-connector PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-index-echo-connector PRIVATE Catch2::Catch2WithMain ggml ggml-cpu)

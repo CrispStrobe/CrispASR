@@ -5,6 +5,7 @@ Capture full audio stages, last prompt-token decoder states, logits and text.
 """
 import importlib.util
 import functools
+from contextlib import nullcontext
 import json
 import os
 import tempfile
@@ -116,7 +117,17 @@ def precision_audit(model):
 
 def dump(model_dir, audio, stages, **kwargs):
     if os.getenv('INDEX_ECHO_REF_CAPTURE_GENERATION') == '1':
+        if os.getenv('INDEX_ECHO_REF_CAPTURE_FFN') == '1':
+            raise ValueError('FFN capture currently supports only the initial-prefill reference')
         return dump_generation(model_dir, audio, stages, **kwargs)
+    ffn_options = None
+    if os.getenv('INDEX_ECHO_REF_CAPTURE_FFN') == '1':
+        from .index_echo_ffn_capture import verify_source
+        ffn_options = dict(
+            expected_version=os.environ['INDEX_ECHO_REF_TRANSFORMERS_VERSION'],
+            expected_modeling_sha256=os.environ['INDEX_ECHO_REF_MODELING_SHA256'],
+            expected_class_sha256=os.environ['INDEX_ECHO_REF_MLP_SHA256'])
+        verify_source(**ffn_options)  # Reject wrong source before loading weights.
     import soundfile as sf
     import torch
     torch.set_num_threads(int(os.getenv('INDEX_ECHO_REF_THREADS', '4')))
@@ -171,7 +182,18 @@ def dump(model_dir, audio, stages, **kwargs):
     values['prompt_ids'] = ids.cpu().numpy().astype(np.int32)
     for i, layer in enumerate(model.llm.model.layers):
         handles.append(layer.register_forward_hook(hook(f'llm_block_{i}', last=True)))
-    out = model.llm(inputs_embeds=x, attention_mask=torch.ones_like(ids), use_cache=True, logits_to_keep=1)
+    ffn_capture = None
+    if ffn_options is not None:
+        from .index_echo_ffn_capture import FFNCapture
+        ffn_capture = FFNCapture(model.llm, list(range(len(model.llm.model.layers))),
+            **ffn_options, call_index=0, last_token_only=True)
+    with ffn_capture if ffn_capture is not None else nullcontext():
+        out = model.llm(inputs_embeds=x, attention_mask=torch.ones_like(ids), use_cache=True, logits_to_keep=1)
+    if ffn_capture is not None:
+        values['ffn_source_provenance'] = json.dumps(ffn_capture.provenance, sort_keys=True)
+        for name, array in ffn_capture.captured().items():
+            layer, suffix = name[3:].split('_', 1)
+            values[f'llm_ffn_{layer}_{suffix}'] = array.reshape(-1).copy()
     values['llm_logits'] = out.logits[0, -1].float().cpu().numpy().copy()
     for h in handles:
         h.remove()

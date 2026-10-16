@@ -6,6 +6,7 @@
 #include "core/silero_context.h"
 #include "core/index_echo_batch.h"
 #include "core/index_echo_connector.h"
+#include "core/index_echo_ffn_capture.h"
 #include "crispasr.h"
 #include "crispasr_imatrix.h"
 #include "ggml-alloc.h"
@@ -45,6 +46,7 @@ struct index_echo_context {
     int position = 0;
     llama_token audio_pad = LLAMA_TOKEN_NULL, im_end = LLAMA_TOKEN_NULL;
     bool capture = false;
+    bool capture_ffn = false;
     ggml_backend_sched_eval_callback imatrix = nullptr;
     bool projection = false;
     std::map<std::string, std::vector<float>> stages;
@@ -134,7 +136,15 @@ float* copy_floats(const float* x, size_t count) {
 // callback reads before scratch reuse; no production synchronization overhead.
 bool capture_decoder(ggml_tensor* t, bool ask, void* user) {
     auto* ctx = (index_echo_context*)user;
-    if (!ctx->capture || strncmp(t->name, "post_ffn-", 9) != 0)
+    if (!ctx->capture)
+        return false;
+    if (ctx->capture_ffn) {
+        std::string key;
+        bool input, output;
+        if (core_index_echo::ffn_capture_name(t->name, key, input, output))
+            return core_index_echo::capture_ffn(t, ask, ctx->stages);
+    }
+    if (strncmp(t->name, "post_ffn-", 9) != 0)
         return false;
     if (ask)
         return true;
@@ -564,11 +574,14 @@ float* index_echo_prefill(index_echo_context* ctx, const float* audio, int rows,
     }
     llama_memory_clear(llama_get_memory(ctx->decoder), true);
     ctx->position = 0;
-    ctx->capture = getenv("CRISPASR_INDEX_ECHO_DUMP_STAGES") != nullptr;
+    const char* ffn = getenv("CRISPASR_INDEX_ECHO_DUMP_FFN");
+    ctx->capture_ffn = ffn && strcmp(ffn, "1") == 0;
+    ctx->capture = ctx->capture_ffn || getenv("CRISPASR_INDEX_ECHO_DUMP_STAGES") != nullptr;
     bool ok =
         decode(ctx, ctx->prompt_ids.data(), nullptr, (int)begin, 0) && decode(ctx, nullptr, audio, rows, dim) &&
         decode(ctx, ctx->prompt_ids.data() + begin + rows, nullptr, (int)(ctx->prompt_ids.size() - begin - rows), 0);
     ctx->capture = false;
+    ctx->capture_ffn = false;
     if (!ok)
         return nullptr;
     *n_vocab = llama_vocab_n_tokens(ctx->vocab);
