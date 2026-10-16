@@ -6,6 +6,10 @@
 #include <cstdio>
 #include <stdexcept>
 
+#ifdef CRISPASR_INDEX_ECHO_LITERAL_FFN
+#include CRISPASR_INDEX_ECHO_LITERAL_FFN
+#endif
+
 using Stages = std::map<std::string, std::vector<float>>;
 static void check(bool ok, int line) {
     if (!ok)
@@ -39,14 +43,20 @@ int main() {
         ggml_backend_tensor_set(down, matrix, 0, 8 * sizeof(float));
         auto* x = ggml_new_tensor_2d(graph_ctx, GGML_TYPE_F32, 3, 3);
         ggml_set_input(x);
+#ifdef CRISPASR_INDEX_ECHO_LITERAL_FFN
+        auto* out = crispasr_literal_ffn(graph_ctx, up, gate, down, x, 4);
+        auto* u = ggml_get_tensor(graph_ctx, "ffn_up-4");
+        require(u);
+#else
         auto* u = ggml_mul_mat(graph_ctx, up, x);
         ggml_set_name(u, "ffn_up-4");
         auto* g = ggml_mul_mat(graph_ctx, gate, x);
         ggml_set_name(g, "ffn_gate-4");
-        auto* product = ggml_mul(graph_ctx, ggml_silu(graph_ctx, g), u);
-        ggml_set_name(product, "ffn_gate_par-4");
+        auto* product = ggml_swiglu_split(graph_ctx, g, u);
+        ggml_set_name(product, "ffn_swiglu-4");
         auto* out = ggml_mul_mat(graph_ctx, down, product);
         ggml_set_name(out, "ffn_out-4");
+#endif
         ggml_set_output(out);
         auto* graph = ggml_new_graph(graph_ctx);
         ggml_build_forward_expand(graph, out);
@@ -123,7 +133,8 @@ int main() {
         ggml_backend_free(cpu);
         ggml_free(graph_ctx);
         ggml_free(weights);
-        std::puts("ECHO_FFN_CAPTURE_PASS: actual scheduler OFF/ON/OFF, six boundaries, ownership, stride and rejection controls");
+        std::puts("ECHO_FFN_CAPTURE_PASS: actual scheduler OFF/ON/OFF, six boundaries, ownership, stride and rejection "
+                  "controls");
         return 0;
     } catch (const std::exception& error) {
         std::fprintf(stderr, "%s\n", error.what());
