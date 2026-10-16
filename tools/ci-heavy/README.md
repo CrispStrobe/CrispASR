@@ -101,6 +101,12 @@ converter/helper/test changes. Run manually with
 `-f pip="numpy torch==2.6.0 torchaudio==2.6.0 torchvision==0.21.0 pydantic safetensors huggingface_hub descript-audio-codec==1.0.0 gguf"`.
 This is conversion integration evidence, not new free-speech or GPU acceptance.
 
+`dia_main_speech.py` tests current-main pristine/OFF/identity/serial native
+speech with existing F16 cross caches and sampler, actual CLI/Session controls,
+original DAC and same-recognizer positives. It retains all outcomes before
+quality gates; reference-harness reconciliation and broader quality remain
+separate. [Frozen recipe and scope](dia-main-head/SPEECH.md).
+
 `dia_main_head_validate.py` compiles the current Dia library and its actual
 CMake-registered tiny CPU graph test, then verifies the optional serial F32 head
 against both captured original projection inputs. It retains libraries/sources,
