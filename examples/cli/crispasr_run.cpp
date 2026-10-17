@@ -5040,7 +5040,21 @@ int crispasr_run_backend(const whisper_params& params_in) {
                         // 32000 samples = 2 s @ 16 kHz, comfortably
                         // above every supported backend's encoder
                         // minimum.
-                        if (!allow_partial_decode) {
+                        // #547: the cadence throttle must not starve the decode
+                        // that OPENS an utterance. `final_silence_due` already
+                        // bypasses it for the tail of an open utterance, but a
+                        // step with no utterance open — or a slice that starts a
+                        // new one past the silence gap — got no decode at all.
+                        // The new utterance then had no `partial` text, and a VAD
+                        // span below the redecode floor finalized with an empty
+                        // `final`, silently dropping the speech. This is what a
+                        // multi-turn `--stream --vad` session hit whenever a step
+                        // shorter than `--stream-partial-decode-ms` carried the
+                        // onset (typically the final, partial read at EOF).
+                        const bool opens_utterance = crispasr_stream_partial_decode_opens_utterance(
+                            have_open_utterance, s_start_abs, last_speech_end_sample, params.stream_final_silence_ms,
+                            SR);
+                        if (!allow_partial_decode && !opens_utterance) {
                             // Keep VAD slice timing in the JSON state machine
                             // but skip the expensive ASR partial decode for
                             // this step.
