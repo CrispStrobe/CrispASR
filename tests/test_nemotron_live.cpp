@@ -228,6 +228,112 @@ TEST_CASE("nemotron: persistent stream matches one-shot chunked decode", "[nemot
     nemotron_free(ctx);
 }
 
+// A real conversation is short utterance -> silence -> short utterance -> ... A
+// turn that transcribes fine alone must also transcribe as the 2nd/3rd turn of
+// a session. Issue #547's reporter suspected the encoder cache was corrupted
+// turn-to-turn; this pins that invariant directly, on both the shared one-shot
+// context and the persistent stream reset between turns. (The empty `final` the
+// report actually saw was the CLI cadence throttle skipping a short step's
+// decode, not backend state — see `crispasr_stream_partial_decode.h` and
+// `tools/ci-heavy/issue547_nemotron_multiturn.py` for that guard.)
+static std::vector<std::vector<float>> jfk_utterance_segments(const std::vector<float>& jfk, int sample_rate) {
+    auto seg = [&](double a, double b) {
+        const int s = (int)(a * sample_rate);
+        const int e = std::min<int>((int)(b * sample_rate), (int)jfk.size());
+        return std::vector<float>(jfk.begin() + s, jfk.begin() + e);
+    };
+    // Four distinct speech regions of the 11 s JFK clip.
+    return {seg(0.0, 2.0), seg(2.5, 5.8), seg(6.2, 8.2), seg(8.6, 11.0)};
+}
+
+static std::string collect_transcribe(nemotron_context* ctx, const float* pcm, int n) {
+    std::string text;
+    auto cb = [](int id, float, void* ud) {
+        auto* pair = static_cast<std::pair<nemotron_context*, std::string*>*>(ud);
+        std::string piece = nemotron_token_to_str(pair->first, id);
+        size_t pos = 0;
+        while ((pos = piece.find("\xe2\x96\x81", pos)) != std::string::npos) {
+            piece.replace(pos, 3, " ");
+            pos++;
+        }
+        *pair->second += piece;
+    };
+    std::pair<nemotron_context*, std::string*> state{ctx, &text};
+    nemotron_transcribe_cb(ctx, pcm, n, cb, &state);
+    while (!text.empty() && text.front() == ' ')
+        text.erase(text.begin());
+    return text;
+}
+
+TEST_CASE("nemotron: every turn of a multi-utterance session transcribes", "[nemotron][.live][streaming]") {
+    std::string model = get_env("CRISPASR_MODEL_NEMOTRON");
+    if (model.empty())
+        SKIP("CRISPASR_MODEL_NEMOTRON not set");
+    auto jfk = load_wav_16k_mono("samples/jfk.wav");
+    REQUIRE(!jfk.empty());
+    auto utts = jfk_utterance_segments(jfk, 16000);
+    REQUIRE(utts.size() == 4);
+
+    nemotron_context_params cp = nemotron_context_default_params();
+    cp.n_threads = std::max(1, std::atoi(get_env("CRISPASR_TEST_N_THREADS", "4").c_str()));
+    cp.use_gpu = get_env("CRISPASR_TEST_CPU_ONLY") != "1";
+    cp.verbosity = 0;
+    scoped_env step_env("CRISPASR_NEMOTRON_STREAM_CHUNKS_PER_STEP", "4");
+
+    // (a) Shared one-shot context: consecutive calls must stay independent.
+    {
+        nemotron_context* ctx = nemotron_init_from_file(model.c_str(), cp);
+        REQUIRE(ctx != nullptr);
+        nemotron_set_context_preset(ctx, 0);
+        for (size_t i = 0; i < utts.size(); i++) {
+            const std::string got = collect_transcribe(ctx, utts[i].data(), (int)utts[i].size());
+            INFO("one-shot turn " << i + 1 << ": " << got);
+            CHECK(!got.empty());
+        }
+        nemotron_free(ctx);
+    }
+
+    // (b) Persistent stream reset between turns, fed in live-client-sized
+    // pieces. This is the path the streaming session uses and the one whose
+    // cache reset the report suspected.
+    {
+        nemotron_context* ctx = nemotron_init_from_file(model.c_str(), cp);
+        REQUIRE(ctx != nullptr);
+        nemotron_set_context_preset(ctx, 0);
+        nemotron_stream* stream = nemotron_stream_create(ctx);
+        REQUIRE(stream != nullptr);
+        for (size_t i = 0; i < utts.size(); i++) {
+            const auto& u = utts[i];
+            std::string text;
+            auto cb = [](int id, float, void* ud) {
+                auto* pair = static_cast<std::pair<nemotron_context*, std::string*>*>(ud);
+                std::string piece = nemotron_token_to_str(pair->first, id);
+                size_t pos = 0;
+                while ((pos = piece.find("\xe2\x96\x81", pos)) != std::string::npos) {
+                    piece.replace(pos, 3, " ");
+                    pos++;
+                }
+                *pair->second += piece;
+            };
+            std::pair<nemotron_context*, std::string*> state{ctx, &text};
+            const int piece = 1600; // 100 ms, like a live client
+            for (size_t off = 0; off < u.size(); off += piece) {
+                const int count = (int)std::min((size_t)piece, u.size() - off);
+                REQUIRE(nemotron_stream_append(stream, u.data() + off, count, false, cb, &state));
+            }
+            REQUIRE(nemotron_stream_append(stream, nullptr, 0, true, cb, &state));
+            while (!text.empty() && text.front() == ' ')
+                text.erase(text.begin());
+            INFO("stream turn " << i + 1 << ": " << text);
+            CHECK(!text.empty());
+            nemotron_stream_reset(stream);
+            CHECK(nemotron_stream_processed_frames(stream) == 0);
+        }
+        nemotron_stream_free(stream);
+        nemotron_free(ctx);
+    }
+}
+
 struct stream_output {
     std::string text;
     std::string tokens; // "id:probability" in hex float, so rounding differences show

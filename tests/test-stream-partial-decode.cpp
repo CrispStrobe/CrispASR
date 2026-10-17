@@ -143,3 +143,74 @@ TEST_CASE("partial-decode: default 0 + step 500 still throttles every step (no-o
     }
     REQUIRE(decoded == 6);
 }
+
+// ---------------------------------------------------------------------------
+// Issue #547: the throttle may not skip the decode that OPENS an utterance.
+// ---------------------------------------------------------------------------
+
+TEST_CASE("partial-decode: a slice opens an utterance when none is open (#547)", "[unit][stream-partial-decode]") {
+    // Nothing open -> whatever else is true, the slice opens the utterance
+    // and its decode has to run.
+    REQUIRE(crispasr_stream_partial_decode_opens_utterance(/*have_open_utterance=*/false, /*slice_start=*/1000,
+                                                           /*last_speech_end=*/0, /*final_silence_ms=*/400, kSR));
+    REQUIRE(crispasr_stream_partial_decode_opens_utterance(false, 1000, 900, 400, kSR));
+    REQUIRE(crispasr_stream_partial_decode_opens_utterance(false, 1000, 900, /*final_silence_ms=*/0, kSR));
+}
+
+TEST_CASE("partial-decode: a slice past the silence gap opens a new utterance (#547)",
+          "[unit][stream-partial-decode]") {
+    constexpr int64_t last_end = 2 * kSR; // 2.0 s
+    constexpr int final_silence_ms = 400;
+
+    // Gap below the finalize threshold: still part of the open utterance.
+    REQUIRE_FALSE(crispasr_stream_partial_decode_opens_utterance(true, last_end + kSR / 10, last_end, final_silence_ms,
+                                                                 kSR)); // +100 ms
+    REQUIRE_FALSE(crispasr_stream_partial_decode_opens_utterance(true, last_end + 6399, last_end, final_silence_ms,
+                                                                 kSR)); // +399.9 ms
+
+    // Gap at/above the threshold: the state machine will finalize the open
+    // utterance and open a new one on this slice.
+    REQUIRE(crispasr_stream_partial_decode_opens_utterance(true, last_end + 6400, last_end, final_silence_ms,
+                                                           kSR)); // +400 ms
+    REQUIRE(crispasr_stream_partial_decode_opens_utterance(true, last_end + 3 * kSR, last_end, final_silence_ms,
+                                                           kSR)); // +3 s
+}
+
+TEST_CASE("partial-decode: degenerate inputs never claim a slice opens an utterance (#547)",
+          "[unit][stream-partial-decode]") {
+    // With an utterance open, only a positive gap threshold on a positive
+    // sample rate can prove a new utterance starts here.
+    REQUIRE_FALSE(crispasr_stream_partial_decode_opens_utterance(true, 999999, 0, 400, kSR));
+    REQUIRE_FALSE(crispasr_stream_partial_decode_opens_utterance(true, 999999, 32000, 0, kSR));
+    REQUIRE_FALSE(crispasr_stream_partial_decode_opens_utterance(true, 999999, 32000, 400, 0));
+}
+
+// End-to-end shape of the report: a 3 s step cadence, an utterance that opens
+// on the FINAL, partial step (here 1.6 s). Without the #547 override the step
+// is throttled and the utterance opens with no decoded text; the redecode floor
+// (< 2 s) then also declines to run, and finalize emits an empty `final`.
+TEST_CASE("partial-decode: a short final step still decodes the utterance it opens (#547)",
+          "[unit][stream-partial-decode]") {
+    const int64_t interval = crispasr_stream_partial_decode_interval_samples(/*ms=*/0, /*step_ms=*/3000, kSR);
+    REQUIRE(interval == 48000);
+
+    // Full steps at 3 s: each one is exactly the interval, so it decodes.
+    int64_t last_decode = -1;
+    int64_t cumulative = 0;
+    for (int step = 0; step < 4; step++) {
+        cumulative += 48000;
+        REQUIRE(crispasr_stream_partial_decode_allow(true, last_decode, false, cumulative, interval));
+        last_decode = cumulative;
+    }
+
+    // Final partial step: only 26112 samples of audio left. The bare throttle
+    // says no...
+    cumulative += 26112;
+    const bool bare = crispasr_stream_partial_decode_allow(true, last_decode, false, cumulative, interval);
+    REQUIRE_FALSE(bare);
+
+    // ...but the step carries the onset of a new utterance, and with the #547
+    // override the decode runs, so the utterance is never text-free.
+    REQUIRE(crispasr_stream_partial_decode_opens_utterance(/*have_open_utterance=*/false, cumulative, last_decode,
+                                                           /*final_silence_ms=*/400, kSR));
+}
