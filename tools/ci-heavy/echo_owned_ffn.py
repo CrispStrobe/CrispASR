@@ -10,6 +10,21 @@ MLP_SHA = 'c4e763e69d5676e71d222060e36258f6b2cc939a3597118c4207d370d120a265'
 SUFFIXES = ['mlp_in', 'gate_out', 'up_out', 'down_in', 'down_out', 'mlp_out']
 
 
+def native_observer_environment(arm):
+    assert arm in ['off', 'on', 'off2']
+    # OFF refers only to FFN capture. Block outputs remain observed in every arm.
+    values = {'CRISPASR_INDEX_ECHO_DUMP_STAGES': '1'}
+    if arm == 'on':
+        values['CRISPASR_INDEX_ECHO_DUMP_FFN'] = '1'
+    return values
+
+
+def validate_native_observers(arm, environment):
+    assert arm in ['off', 'on', 'off2']
+    assert environment.get('CRISPASR_INDEX_ECHO_DUMP_STAGES') is not None, 'Block observer must remain enabled'
+    assert (environment.get('CRISPASR_INDEX_ECHO_DUMP_FFN') == '1') == (arm == 'on'), 'Wrong FFN observer arm'
+
+
 def array_sha(value):
     return hashlib.sha256(value.tobytes()).hexdigest()
 

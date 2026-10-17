@@ -80,6 +80,20 @@ class OwnedFFN(unittest.TestCase):
         mlp,_=self.load();native=worker.capture(mlp,np.ones(4,dtype='f4'));native['gate_out']=np.ones(7,dtype='f4')
         with self.assertRaises(AssertionError):worker.attribute(mlp,native,worker.array_sha(native['mlp_in']),self.path/'bad-shape')
 
+    def test_block_observer_survives_ffn_off_on_off(self):
+        environment = {}
+        for arm in ['off', 'on', 'off2']:
+            environment.pop('CRISPASR_INDEX_ECHO_DUMP_FFN', None)
+            environment.update(worker.native_observer_environment(arm))
+            worker.validate_native_observers(arm, environment)
+            self.assertEqual(environment['CRISPASR_INDEX_ECHO_DUMP_STAGES'], '1')
+            self.assertEqual(environment.get('CRISPASR_INDEX_ECHO_DUMP_FFN'), '1' if arm == 'on' else None)
+        # The first hosted worker cleared both observers in its OFF arm.
+        with self.assertRaisesRegex(AssertionError, 'Block observer'):
+            worker.validate_native_observers('off', {})
+        with self.assertRaisesRegex(AssertionError, 'Wrong FFN observer'):
+            worker.validate_native_observers('off2', worker.native_observer_environment('on'))
+
 
 if __name__=='__main__':
     unittest.main()

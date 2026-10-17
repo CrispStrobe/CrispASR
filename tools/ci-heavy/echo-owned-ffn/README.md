@@ -3,6 +3,8 @@
 `echo_owned_ffn_run.py` uses the existing public native stage API to capture
 JFK/ZH prefill OFF/ON/OFF with the failed calibrated plain-Q4 decoder. Existing
 stages, prompt IDs and logits must be byte-identical across capture modes.
+OFF/ON/OFF toggles only FFN capture: the existing block-stage observer remains
+enabled identically in every arm, with a prefill setup guard and negative control.
 The original F16 primary file keeps its metadata unchanged; its decoder companion
 symlink explicitly points to the physically audited Q4 bytes.
 
@@ -25,7 +27,7 @@ The hosted worker verifies hashes, source/class provenance, physical types,
 owned-input ledgers, ABI exports and the actual compiled library. It checkpoints
 new arrays and receipts publicly before later phases. Weights and builds remain
 in `HEAVY_SCRATCH`; proof files go in `HEAVY_OUT` and the immutable fixture prefix
-`index-echo-9b/owned-ffn-20261017/v1`. The original whole 9B Python model is never
+`index-echo-9b/owned-ffn-20261017/v2`. The original whole 9B Python model is never
 constructed. The three source weight files total about24.3GB; a disk guard adds
 8GiB headroom before downloading. One original MLP's F32 parameters occupy604MB.
 
@@ -40,3 +42,8 @@ Run the worker using `heavy-cpu.yml` with script
 The workflow selects the existing Index-Echo publishing credential for this
 script; preflight proves public fixture write access before builds or downloads.
 A prepared/dispatched job is not evidence of completed model attribution.
+
+The frozen v1 worker967a62e0 failed on its first OFF arm because both observers
+were disabled while block tensors were required. Its failed partial proof at
+v1 remains intact. The v2 repair changes only observer setup and retains every
+native/source identity and numerical gate; runtime code and recipe are unchanged.

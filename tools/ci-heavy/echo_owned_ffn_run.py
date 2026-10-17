@@ -11,14 +11,15 @@ import shutil
 import subprocess
 import sys
 import numpy as np
-from echo_owned_ffn import SUFFIXES, TRANSFORMERS, MODELING_SHA, MLP_SHA, array_sha, exact
+from echo_owned_ffn import (SUFFIXES, TRANSFORMERS, MODELING_SHA, MLP_SHA, array_sha, exact,
+                            native_observer_environment, validate_native_observers)
 
 ROOT = Path(__file__).resolve().parents[2]
 ORIGINAL = 'b8ac6fb7d3dc17cee48a52201bd3d93dc86b0dba'
 CONVERTED = '70cbee15fa7fadb85829d9d8d3439a5cb8fbe52b'
 GGML = '0a862076567afd8468822ccc512c97ac6a69b340'
 DATASET = 'cstr/crispasr-regression-fixtures'
-PREFIX = 'index-echo-9b/owned-ffn-20261017/v1'
+PREFIX = 'index-echo-9b/owned-ffn-20261017/v2'
 FILES = {
     'primary': ('cstr/index-echo-9b-GGUF', CONVERTED, 'index-echo-9b-f16.gguf', 1313848736,
                 'e4b1dd177211ba5d8eb0ea7140ac2f813ddc68b55381f050ecf7ddab3e83172f'),
@@ -80,8 +81,8 @@ def native(args):
     try:
         for arm in ['off', 'on', 'off2']:
             os.environ.pop('CRISPASR_INDEX_ECHO_DUMP_FFN', None)
-            if arm == 'on':
-                os.environ['CRISPASR_INDEX_ECHO_DUMP_FFN'] = '1'
+            os.environ.update(native_observer_environment(arm))
+            validate_native_observers(arm, os.environ)
             folder = args.output/arm
             folder.mkdir(parents=True, exist_ok=False)
             mels, frames, rows, width, vocab = [C.c_int() for _ in range(5)]
