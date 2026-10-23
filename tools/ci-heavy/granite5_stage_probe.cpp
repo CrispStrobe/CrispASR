@@ -1,6 +1,7 @@
 // Actual public pipeline stages and both decoder paths, using original inputs.
 #include "granite_speech.h"
 #include "ggml.h"
+#include "ggml-backend.h"
 #include "gguf.h"
 #include "core/granite_prompt.h"
 #include <algorithm>
@@ -45,6 +46,13 @@ int main(int argc, char** argv) {
         auto* original_embeds = tensor("llm_inputs_embeds", GGML_TYPE_F32);
         auto cp = granite_speech_context_default_params();
         cp.use_gpu = std::string(argv[5]) == "cuda";
+        // In a DL build the registry starts empty. Load the packaged modules
+        // before init_best(); the later CPU helper otherwise discovers CUDA
+        // only after the model has already selected its CPU fallback.
+        if (cp.use_gpu) {
+            ggml_backend_load_all();
+            require(ggml_backend_dev_by_name("CUDA0") != nullptr, "CUDA0 registry device");
+        }
         cp.n_threads = 4;
         cp.verbosity = 2;
         auto* ctx = granite_speech_init_from_file(argv[1], cp);
