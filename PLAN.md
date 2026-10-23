@@ -37,13 +37,30 @@ still used16 tokens and omitted a space in custom asks; share the proven
 constants/formatting between surfaces. Local native parameter/prompt tests
 pass39 assertions/9 cases; NAR defaults pass5/4. The model-free shared-attention
 probe passes the original YaRN arrays and rejects all four incorrect controls.
-Public producer39964199536 at a02a0dd92 is queued. The native CPU worker is
-prepared to consume only its successful source-pinned receipt, freshly convert
-the original weights, prove unchanged F16 tensor payloads, then validate F16/Q8/Q4
-stage magnitudes, exact prompt IDs, original-input prefill, both decoder paths,
-normal CLI output and repeated renamed-model Session autodetection. Its actual
-public-stage probe compiles locally; weighted gates have not run. CUDA follows
-CPU acceptance and independent review of the retained arrays/logs.
+Public producer39964199536 at a02a0dd92 succeeded: original F32 reference,
+F16 baseline and Q8/Q4 checkpoints are retained. Native CPU39970747786 at
+c433b9f57 proved all940 F16 tensor payloads unchanged and all three profiles
+reproduced the original27 generated IDs, including EOS. F16 passed numerical
+and full CLI/Session checks. CPU acceptance remains false: Q4 teacher-prefill
+norm ratio0.974441 fails the unchanged1% gate; independent review also found
+Q8 pipeline-prefill ratio1.010201 outside it. Exact words alone do not waive
+these gates. Q4 CLI/Session checks did not run after the numerical failure.
+
+Hosted precision diagnostic39979238513 at7287199c319f0c6534e2d64732cf385f1c58fbdb
+has started, comparing base/head/embedding/both F16 substitutions within Q8 and Q4.
+Other tensor payloads must remain unchanged. These are diagnostic candidates,
+not approved models. Choose a recipe only from measured stage and decoded-output
+results, then repeat CLI/Session acceptance. The legacy raw-transcription prompt
+and the publisher's punctuation/capitalization prompt request different styles.
+
+CUDA build-only workflow is registered separately from the unaccepted
+native feature on main atfc12c52a7. Build39980261207 is queued against exact
+source7287199c319f0c6534e2d64732cf385f1c58fbdb. It builds exact pinned source on GitHub, includes external
+runtime license notices and verified corresponding sources, and omits NVIDIA
+libraries. Kaggle must resolve its own CUDA libraries before real GPU validation.
+No GPU acceptance has run. Resource policy: check load and available memory
+before local compile/inference; keep large model work off this small host.
+CPU conversion/reference/diff runs on GitHub; actual CUDA runs on Kaggle.
 
 
 ## Issue555 model-sized designed defaults — shipped; Granite5 next (2026-10-23)
