@@ -103,7 +103,13 @@ all4 CUDA negative controls before real model acceptance. No CUDA model
 acceptance has passed yet. Build39994202206 at
 999c56805ff903b86b076b03d87da8cd4f90858a is preparing the revised probe.
 V2 will additionally require actual CUDA0-assigned matrix-operation traces per
-native process, beyond residency and decoder backend logs.
+native process, beyond residency and decoder backend logs. A concrete CUB notice omission
+was found in the prebuilt capsules: compiled SSM templates require the BSD
+notice despite no NVIDIA shared-library files. The actual official
+cuda-cccl12.4.127-1 package reports CUB2.3.2 (the release-note table says2.3.1),
+and its complete BSD text is now retained in project notices. Licensing-only
+repackaging preserves every compiled ELF byte; v2 stays unlaunchable until its
+corrected capsule is qualified. Future builds also verify the SDK version header.
 
 Resource policy: check load and available memory before local compile/inference;
 keep large model work off this small host. CPU conversion/reference/diff runs on
