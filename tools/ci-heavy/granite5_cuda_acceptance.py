@@ -6,14 +6,25 @@ Uses prebuilt binaries and host NVIDIA libraries. No compiler or Torch required.
 import argparse
 import json
 import os
+import shutil
+import subprocess
 from pathlib import Path
 import sys
 
 from granite5_cuda_preflight import run_preflight
-from granite5_execution import validate_case
+from granite5_execution import resources, validate_case
 from granite5_native_acceptance import sha
 
 ROOT = Path(__file__).resolve().parents[2]
+
+ORACLE = dict(repo='cstr/crispasr-regression-fixtures', repo_type='dataset',
+    path='granite-speech-5.0-2b/a02a0dd9299e0b759704f520fe3959f50a764f71/original-yarn.npz',
+    revision='49334e0bb83a5f04c33d5def4251b6efd2f059d9', bytes=24054,
+    sha256='4589e1a785fff344f75054530a282f01e4150ceb1d337f43d26f5c226b3859ae')
+ORACLE_METADATA = dict(repo='cstr/crispasr-granite5-validation-public', repo_type='model',
+    path='granite-speech-5.0-2b/a02a0dd9299e0b759704f520fe3959f50a764f71/evidence/original-yarn.npz.json',
+    revision='99bc8384b8ce3807731e1c13a9e96de391fa22a0', bytes=431,
+    sha256='6d52e2799d0c0d5e547547d0a5aabff7443ef80b81bae3c46bcfda9537922a71')
 
 
 def main():
@@ -38,6 +49,10 @@ def main():
                       if p.is_file() and p.suffix in {'.cpp', '.c', '.h', '.hpp'}}
     if not (cpu['runtime_sources'] == provenance['runtime_sources'] == actual_sources):
         raise ValueError('CPU/GPU/runtime source payloads differ')
+    expected_probes = {name: sha(ROOT / 'tools/ci-heavy' / name)
+                       for name in ('granite5_stage_probe.cpp', 'granite5_rope_probe.cpp')}
+    if provenance.get('probe_sources') != expected_probes:
+        raise ValueError('CUDA capsule probe sources differ from the checked-out validators')
     for name, record in provenance['files'].items():
         path = args.bundle / name
         if (Path(name).is_absolute() or '..' in Path(name).parts or not path.is_file() or
@@ -76,6 +91,26 @@ def main():
             raise ValueError('CPU-approved artifact hash/size mismatch')
         return path
 
+    # Exercise the actual shared Q/K attention path through original position
+    # 16383, including four incorrect controls, before loading trained weights.
+    oracle = fetch(ORACLE)
+    metadata = fetch(ORACLE_METADATA)
+    shutil.copyfile(metadata, Path(str(oracle) + '.json'))
+    snapshot = resources('cuda')
+    receipt['rope_resources'] = snapshot
+    save()
+    if (snapshot['memory_available_kib'] < 5 * 1024 * 1024 or
+            snapshot['load_average'][0] > 2 * snapshot['cpus']):
+        raise RuntimeError('Insufficient headroom before CUDA RoPE component inference')
+    with (args.out / 'rope-parity.log').open('w') as log:
+        subprocess.run([sys.executable, str(ROOT / 'tools/ci-heavy/granite5_rope_parity.py'),
+                        '--probe', str(args.bundle / 'granite5-rope-probe'), '--oracle', str(oracle),
+                        '--out', str(args.out / 'rope-parity'), '--device', 'cuda'],
+                       env=environment, stdout=log, stderr=subprocess.STDOUT, timeout=300, check=True)
+    receipt['rope_parity'] = json.loads((args.out / 'rope-parity/receipt.json').read_text())
+    if not (receipt['rope_parity']['complete'] and receipt['rope_parity']['device'] == 'cuda'):
+        raise ValueError('CUDA RoPE controls were not completed')
+    save()
     reference = fetch(cpu['reference'])
     for quant in ('f16', 'q8_0'):
         record = cpu['profiles'][quant]['file']

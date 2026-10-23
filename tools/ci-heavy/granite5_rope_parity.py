@@ -19,6 +19,7 @@ def main():
     parser.add_argument("--probe", type=Path, required=True)
     parser.add_argument("--oracle", type=Path, required=True)
     parser.add_argument("--out", type=Path, required=True)
+    parser.add_argument("--device", choices=("cpu", "cuda"), default="cpu")
     args = parser.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     origin = json.loads(Path(str(args.oracle) + ".json").read_text())
@@ -38,13 +39,15 @@ def main():
             assert arrays[key].shape == (1, 1, 7, 128) and np.isfinite(arrays[key]).all()
             stream.write(arrays[key].astype("<f4").tobytes())
     receipt = {"oracle_sha256": sha(args.oracle), "probe_sha256": sha(args.probe),
-               "fixture_sha256": sha(fixture), "native_model_acceptance": False,
+               "fixture_sha256": sha(fixture), "native_model_acceptance": False, "device": args.device,
                "complete": False, "cases": []}
     for mode, name in enumerate(("unscaled_rejected", "yarn_matches", "wrong_context_rejected",
                                   "double_magnitude_rejected", "wrong_pairing_rejected")):
-        result = subprocess.run([str(args.probe), str(fixture), str(mode)], capture_output=True, text=True)
+        result = subprocess.run([str(args.probe), str(fixture), str(mode), args.device], capture_output=True, text=True)
         (args.out / f"{name}.log").write_text(result.stdout + result.stderr)
         metrics = json.loads(result.stdout)
+        if args.device == "cuda":
+            assert metrics["backend"] == "CUDA0", metrics
         assert result.returncode == (0 if mode == 1 else 1), (name, result.returncode, metrics)
         receipt["cases"].append({"case": name, "exit_code": result.returncode, **metrics})
     receipt["complete"] = True

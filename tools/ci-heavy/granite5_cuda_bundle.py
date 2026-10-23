@@ -140,6 +140,10 @@ def main():
         for folder in [ROOT / 'src', ROOT / 'examples/cli']
         for p in folder.rglob('*') if p.is_file() and p.suffix in {'.cpp', '.c', '.h', '.hpp'}
     }
+    receipt['probe_sources'] = {
+        name: sha(ROOT / 'tools/ci-heavy' / name)
+        for name in ('granite5_stage_probe.cpp', 'granite5_rope_probe.cpp')
+    }
     receipt['host_provided_nvidia_libraries'] = True
     receipt['external_runtime_packages'] = runtime_licenses['packages']
     receipt['build_complete'] = True

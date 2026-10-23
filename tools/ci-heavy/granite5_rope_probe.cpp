@@ -9,10 +9,14 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include <cstring>
 #include <vector>
 
 int main(int argc, char** argv) {
-    if (argc != 3)
+    if (argc != 3 && argc != 4)
+        return 2;
+    const bool cuda = argc == 4 && std::strcmp(argv[3], "cuda") == 0;
+    if (argc == 4 && !cuda && std::strcmp(argv[3], "cpu") != 0)
         return 2;
     FILE* f = std::fopen(argv[1], "rb");
     if (!f)
@@ -35,7 +39,18 @@ int main(int argc, char** argv) {
                 return 13;
     const int mode = std::atoi(argv[2]);
     const bool yarn = mode != 0;
-    auto* be = core_cpu_backend::init();
+    ggml_backend_t be = nullptr;
+    if (cuda) {
+        ggml_backend_load_all();
+        auto* device = ggml_backend_dev_by_name("CUDA0");
+        if (device)
+            be = ggml_backend_dev_init(device, nullptr);
+        // Direct backend dispatch below has no scheduler CPU fallback.
+        if (!be || std::strcmp(ggml_backend_name(be), "CUDA0") != 0)
+            return 14;
+    } else {
+        be = core_cpu_backend::init();
+    }
     auto* ctx = ggml_init({1024 * 1024, nullptr, true});
     if (!be || !ctx)
         return 7;
@@ -111,9 +126,9 @@ int main(int argc, char** argv) {
             err2 += diff * diff;
         }
     }
-    std::printf("{\"mode\":%d,\"maxabs\":%.10g,\"low_position_maxabs\":%.10g,"
+    std::printf("{\"backend\":\"%s\",\"mode\":%d,\"maxabs\":%.10g,\"low_position_maxabs\":%.10g,"
                 "\"norm_ratio\":%.10g,\"relative_l2\":%.10g}\n",
-                mode, maxabs, lowmaxabs, std::sqrt(mine2 / ref2), std::sqrt(err2 / ref2));
+                ggml_backend_name(be), mode, maxabs, lowmaxabs, std::sqrt(mine2 / ref2), std::sqrt(err2 / ref2));
     ggml_backend_buffer_free(buf);
     ggml_free(ctx);
     ggml_backend_free(be);

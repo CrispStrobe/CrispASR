@@ -11,18 +11,20 @@ import tarfile
 
 VERSION = 'granite5-cuda-acceptance-v1'
 SOURCE = '1bad3b2dbe8b5ce55cc5dfafcec25610d442ee95'
+CPU_SOURCE = '1bad3b2dbe8b5ce55cc5dfafcec25610d442ee95'
 CPU_RUN = 39984477044
 CPU_REVISION = ''  # Fill only after this exact run passes and its full outputs are reviewed.
 CPU_SHA256 = ''
-RUNTIME_REVISION = ''  # Immutable checkpoint of the qualified build archive.
-RUNTIME_SHA256 = 'da2d442c11938ceb283bb82491df468a54099088a29a2bf73fefe473c6134042'
+RUNTIME_SOURCE = ''  # Replacement capsule must include the CUDA RoPE probe.
+RUNTIME_REVISION = ''
+RUNTIME_SHA256 = ''
 STAGING = 'cstr/crispasr-granite5-validation-public'
-RUNTIME_PATH = 'runtime/7287199c319f0c6534e2d64732cf385f1c58fbdb/granite5-cuda-validation.tar.gz'
+RUNTIME_PATH = f'runtime/{RUNTIME_SOURCE}/granite5-cuda-validation.tar.gz'
 # Deliberately unlaunchable until reviewed immutable CPU/runtime pins exist.
-for value in (CPU_REVISION, RUNTIME_REVISION):
+for value in (SOURCE, CPU_SOURCE, RUNTIME_SOURCE, CPU_REVISION, RUNTIME_REVISION):
     if not re.fullmatch('[0-9a-f]{40}', value):
         raise RuntimeError('Reviewed immutable CPU and runtime revisions are required before pushing this kernel')
-if not re.fullmatch('[0-9a-f]{64}', CPU_SHA256):
+if not all(re.fullmatch('[0-9a-f]{64}', value) for value in (CPU_SHA256, RUNTIME_SHA256)):
     raise RuntimeError('Reviewed CPU receipt hash is required before pushing this kernel')
 OUT = Path('/kaggle/working')
 SCRATCH = Path('/kaggle/temp/granite5-acceptance')
@@ -60,20 +62,22 @@ def sha(path):
     return digest.hexdigest()
 
 
-cpu_path = f'profiles/{SOURCE}/cpu-evidence/receipt.json'
+cpu_path = f'profiles/{CPU_SOURCE}/cpu-evidence/receipt.json'
 cpu = Path(hf_hub_download(STAGING, cpu_path, revision=CPU_REVISION, local_dir=SCRATCH / 'inputs'))
 runtime = Path(hf_hub_download(STAGING, RUNTIME_PATH, revision=RUNTIME_REVISION, local_dir=SCRATCH / 'inputs'))
 if sha(cpu) != CPU_SHA256 or sha(runtime) != RUNTIME_SHA256:
     raise RuntimeError('Pinned CPU or runtime content mismatch')
 evidence = json.loads(cpu.read_text())
-if not (evidence['source'] == SOURCE and evidence['cpu_acceptance'] and evidence['complete']):
+if not (evidence['source'] == CPU_SOURCE and evidence['cpu_acceptance'] and evidence['complete']):
     raise RuntimeError('CPU acceptance has not been established')
 with tarfile.open(runtime) as archive:
     archive.extractall(SCRATCH, filter='data')
 bundle = SCRATCH / 'bundle'
+if json.loads((bundle / 'provenance.json').read_text())['source'] != RUNTIME_SOURCE:
+    raise RuntimeError('Runtime build source pin mismatch')
 (OUT / 'entry-provenance.json').write_text(json.dumps(dict(version=VERSION, source=SOURCE,
-    cpu_run=CPU_RUN, cpu_revision=CPU_REVISION, cpu_sha256=CPU_SHA256,
-    runtime_revision=RUNTIME_REVISION, runtime_sha256=RUNTIME_SHA256,
+    cpu_run=CPU_RUN, cpu_source=CPU_SOURCE, cpu_revision=CPU_REVISION, cpu_sha256=CPU_SHA256,
+    runtime_source=RUNTIME_SOURCE, runtime_revision=RUNTIME_REVISION, runtime_sha256=RUNTIME_SHA256,
     entry_sha256=sha(__file__), hardware=hardware), indent=2) + '\n')
 command = [sys.executable, repo / 'tools/ci-heavy/granite5_cuda_acceptance.py', '--bundle', bundle,
            '--cpu-receipt', cpu, '--scratch', SCRATCH / 'models', '--out', OUT / 'cuda']
