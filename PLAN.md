@@ -32,6 +32,11 @@ agree through position16383: relativeL2 0.000405, norm ratio0.999999996.
 Unscaled, wrong-context, double-magnitude and wrong-pairing controls all reject.
 Native YaRN fields are in development on the feature branch; full model stage,
 decoded-output, legacy and real CUDA acceptance remain pending. No registry entry.
+Original5 tokenizer also confirms the CLI's15-token legacy suffix. The C ABI
+still used16 tokens and omitted a space in custom asks; share the proven
+constants/formatting between surfaces. Local native parameter/prompt tests
+pass39 assertions/9 cases; NAR defaults pass5/4. The model-free shared-attention
+probe passes the original YaRN arrays and rejects all four incorrect controls.
 
 
 ## Issue555 model-sized designed defaults — shipped; Granite5 next (2026-10-23)

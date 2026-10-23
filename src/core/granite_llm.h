@@ -17,6 +17,7 @@
 
 #pragma once
 
+#include <cmath>
 #include <vector>
 
 #include "ggml.h"
@@ -25,6 +26,35 @@
 #include "core/ffn.h"
 
 namespace core_granite_llm {
+
+struct RopeScaling {
+    int n_ctx_orig = 0;
+    float freq_scale = 1.0f;
+    float ext_factor = 0.0f;
+    float attn_factor = 1.0f;
+    float beta_fast = 0.0f;
+    float beta_slow = 0.0f;
+};
+
+// Match transformers' GraniteRotaryEmbedding / _compute_yarn_parameters.
+// ggml already multiplies cos/sin by 1 + .1*log(factor): do not apply it twice.
+static inline bool configure_yarn(RopeScaling& out, float factor, int original_ctx, float attention_factor,
+                                  float beta_fast, float beta_slow) {
+    if (!std::isfinite(factor) || factor < 1.0f || original_ctx <= 0 || !std::isfinite(attention_factor) ||
+        attention_factor <= 0.0f || !std::isfinite(beta_fast) || !std::isfinite(beta_slow) || beta_fast < beta_slow ||
+        beta_slow <= 0.0f) {
+        return false;
+    }
+    RopeScaling next;
+    next.n_ctx_orig = original_ctx;
+    next.freq_scale = 1.0f / factor;
+    next.ext_factor = 1.0f;
+    next.attn_factor = attention_factor / (1.0f + 0.1f * std::log(factor));
+    next.beta_fast = beta_fast;
+    next.beta_slow = beta_slow;
+    out = next;
+    return true;
+}
 
 struct Hparams {
     int n_layers;
@@ -37,7 +67,26 @@ struct Hparams {
     float embedding_multiplier;
     float attention_multiplier;
     float residual_multiplier;
+    RopeScaling rope;
 };
+
+static inline core_attn::KvSelfAttnParams attention_params(const Hparams& hp) {
+    core_attn::KvSelfAttnParams p = {};
+    p.n_heads = hp.n_heads;
+    p.n_kv_heads = hp.n_kv_heads;
+    p.head_dim = hp.head_dim;
+    p.n_kv_grp = hp.n_heads / hp.n_kv_heads;
+    p.n_ctx_orig = hp.rope.n_ctx_orig;
+    p.rope_theta = hp.rope_theta;
+    p.rope_beta_fast = hp.rope.beta_fast;
+    p.rope_beta_slow = hp.rope.beta_slow;
+    p.rope_freq_scale = hp.rope.freq_scale;
+    p.rope_ext_factor = hp.rope.ext_factor;
+    p.rope_attn_factor = hp.rope.attn_factor;
+    p.attn_scale = hp.attention_multiplier;
+    p.gqa_mode = core_attn::GQA_NATIVE;
+    return p;
+}
 
 // Per-layer weights. NAR's `granite_nle_llm_block` uses `attn_o_w`;
 // granite_speech's `granite_llm_block` uses `attn_out_w`. The caller
@@ -59,7 +108,7 @@ struct LayerWeights {
 // expansion is handled by flash. Used by granite-nle's editing pass.
 static inline ggml_tensor* attn_noncausal(ggml_context* ctx0, ggml_tensor* x, const LayerWeights& b,
                                           ggml_tensor* positions, int n_q, int n_kv, int hd, float rope_theta,
-                                          float attn_scale) {
+                                          float attn_scale, const RopeScaling& rope) {
     const int T = (int)x->ne[1];
 
     ggml_tensor* Q = ggml_mul_mat(ctx0, b.attn_q_w, x);
@@ -70,10 +119,10 @@ static inline ggml_tensor* attn_noncausal(ggml_context* ctx0, ggml_tensor* x, co
     K = ggml_reshape_3d(ctx0, K, hd, n_kv, T);
     V = ggml_reshape_3d(ctx0, V, hd, n_kv, T);
 
-    Q = ggml_rope_ext(ctx0, Q, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, 0, rope_theta, 1.0f, 0.0f, 1.0f, 0.0f,
-                      0.0f);
-    K = ggml_rope_ext(ctx0, K, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, 0, rope_theta, 1.0f, 0.0f, 1.0f, 0.0f,
-                      0.0f);
+    Q = ggml_rope_ext(ctx0, Q, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, rope.n_ctx_orig, rope_theta,
+                      rope.freq_scale, rope.ext_factor, rope.attn_factor, rope.beta_fast, rope.beta_slow);
+    K = ggml_rope_ext(ctx0, K, positions, nullptr, hd, GGML_ROPE_TYPE_NEOX, rope.n_ctx_orig, rope_theta,
+                      rope.freq_scale, rope.ext_factor, rope.attn_factor, rope.beta_fast, rope.beta_slow);
 
     Q = ggml_cont(ctx0, ggml_permute(ctx0, Q, 0, 2, 1, 3));
     K = ggml_cont(ctx0, ggml_permute(ctx0, K, 0, 2, 1, 3));
@@ -115,18 +164,7 @@ static inline ggml_tensor* build_decoder(ggml_context* ctx0, ggml_cgraph* gf, gg
     ggml_tensor* cur = ggml_scale(ctx0, inputs_embeds, hp.embedding_multiplier);
     ggml_set_name(cur, "emb_scaled");
 
-    core_attn::KvSelfAttnParams kvp = {};
-    kvp.n_heads = n_q;
-    kvp.n_kv_heads = n_kv;
-    kvp.head_dim = hd;
-    kvp.n_kv_grp = n_q / n_kv;
-    kvp.n_ctx_orig = 0;
-    kvp.rope_theta = hp.rope_theta;
-    kvp.rope_beta_fast = 0.0f;
-    kvp.rope_beta_slow = 0.0f;
-    kvp.attn_scale = hp.attention_multiplier;
-    kvp.qk_norm_eps = 0.0f;
-    kvp.gqa_mode = core_attn::GQA_NATIVE;
+    const auto kvp = attention_params(hp);
 
     for (int il = 0; il < hp.n_layers; il++) {
         const auto& b = blocks[il];
@@ -142,7 +180,8 @@ static inline ggml_tensor* build_decoder(ggml_context* ctx0, ggml_cgraph* gf, gg
                                            kv_v, il, n_past, kvp,
                                            /*qkv_w=*/nullptr, fixed_kv_len, kv_indices);
         } else {
-            attn = attn_noncausal(ctx0, cur, b, positions, n_q, n_kv, hd, hp.rope_theta, hp.attention_multiplier);
+            attn =
+                attn_noncausal(ctx0, cur, b, positions, n_q, n_kv, hd, hp.rope_theta, hp.attention_multiplier, hp.rope);
         }
 
         cur = ggml_add(ctx0, residual, ggml_scale(ctx0, attn, hp.residual_multiplier));

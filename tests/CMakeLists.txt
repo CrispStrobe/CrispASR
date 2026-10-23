@@ -2706,6 +2706,10 @@ catch_discover_tests(test-glmasr-params
 
 # ─── test-granitespeech-params — Catch2 unit tests for granite_speech_context_params defaults
 # and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(granite5-rope-probe ../tools/ci-heavy/granite5_rope_probe.cpp)
+target_include_directories(granite5-rope-probe PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(granite5-rope-probe PRIVATE ggml ggml-base crispasr_link_ggml_cpu)
+
 add_executable(test-granitespeech-params
     test-granitespeech-params.cpp
 )

@@ -24,6 +24,7 @@
 #include "core/ngram_loop_fix.h" // core_ngram::fix_loops (issue #218)
 
 #include "granite_speech.h"
+#include "core/granite_prompt.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -44,15 +45,10 @@ namespace {
 // merges-table conversion still work unchanged (they fall through to
 // the hardcoded kPrefix4/kSuffix4 arrays), while granite-3.x / any
 // future release dispatches through the tokenizer path.
-constexpr int32_t kPrefix4[] = {6584, 25, 220}; // "USER: "
-constexpr int kNumPrefix4 = 3;
-// "can you transcribe the speech into a written format?\n ASSISTANT:" exactly as
-// transformers' apply_chat_template tokenizes it for ibm-granite/granite-4.0-1b-
-// speech: "?\n" is ONE token (5380). This list had "?" (30) + "\n" (198), a
-// prompt the model never saw in training - found by the beam A/B, where the
-// output style (punctuation, "mr.") differed from upstream generate().
-constexpr int32_t kSuffix4[] = {4919, 499, 1380, 3191, 279, 8982, 1139, 264, 5439, 3645, 5380, 36660, 3931, 2891, 25};
-constexpr int kNumSuffix4 = 15;
+using core_granite_prompt::kNumPrefix4;
+using core_granite_prompt::kNumSuffix4;
+using core_granite_prompt::kPrefix4;
+using core_granite_prompt::kSuffix4;
 
 // Legacy token ids for granite-4.0-1b. Only used when the GGUF doesn't
 // export granite_speech.llm.audio_token_index / eos_token_id (i.e. it
@@ -251,7 +247,7 @@ public:
                                              ? std::string("can you transcribe the speech into a written format?")
                                              : user_content;
                 // prefix_text (#205) seeds the assistant turn for incremental decoding.
-                const std::string instr = base + "\n ASSISTANT:" + params.prefix_text;
+                const std::string instr = core_granite_prompt::legacy_suffix(base, params.prefix_text);
                 int n = 0;
                 int32_t* a = granite_speech_tokenize(ctx_, instr.c_str(), &n);
                 if (a && n > 0) {
@@ -801,7 +797,7 @@ public:
                 const std::string base = user_content.empty()
                                              ? std::string("can you transcribe the speech into a written format?")
                                              : user_content;
-                const std::string instr = base + "\n ASSISTANT:" + params.prefix_text;
+                const std::string instr = core_granite_prompt::legacy_suffix(base, params.prefix_text);
                 int n = 0;
                 int32_t* a = granite_speech_tokenize(ctx_, instr.c_str(), &n);
                 if (a && n > 0) {

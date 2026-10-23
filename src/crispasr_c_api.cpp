@@ -151,6 +151,7 @@
 #endif
 #if __has_include("granite_speech.h")
 #include "granite_speech.h"
+#include "core/granite_prompt.h"
 #define CA_HAVE_GRANITE 1
 #endif
 #if __has_include("granite_nle.h")
@@ -7431,13 +7432,14 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
                 std::free(a);
         } else {
             // granite-4.0-1b legacy hardcoded ids: "USER: " + transcription request.
-            static const int32_t kPrefix4[] = {6584, 25, 220};
+            using core_granite_prompt::kPrefix4;
+            using core_granite_prompt::kSuffix4;
             prefix_ids.assign(kPrefix4, kPrefix4 + (sizeof(kPrefix4) / sizeof(kPrefix4[0])));
             if (!s->ask.empty() || want_lang) {
                 const std::string instr =
                     !s->ask.empty() ? s->ask
                                     : "can you transcribe the speech into " + ca_iso_to_english_lang(eff_lang) + "?";
-                const std::string suffix4_str = instr + "\nASSISTANT:";
+                const std::string suffix4_str = core_granite_prompt::legacy_suffix(instr);
                 int n = 0;
                 int32_t* a = granite_speech_tokenize(s->granite_ctx, suffix4_str.c_str(), &n);
                 if (a && n > 0) {
@@ -7446,8 +7448,6 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
                 } else if (a)
                     std::free(a);
             } else {
-                static const int32_t kSuffix4[] = {4919, 499,  1380, 3191, 279,   8982, 1139, 264,
-                                                   5439, 3645, 30,   198,  36660, 3931, 2891, 25};
                 suffix_ids.assign(kSuffix4, kSuffix4 + (sizeof(kSuffix4) / sizeof(kSuffix4[0])));
             }
         }
