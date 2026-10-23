@@ -54,8 +54,9 @@ Q4 remains unaccepted. A new quantizer rule preserves token embeddings only for
 Granite YaRN profiles, leaving legacy Granite recipes unchanged. Explicit
 per-tensor overrides retain an A/B route to the old recipe.
 
-Full profile validation is being prepared for F16 and corrected Q8, plus a
-separate Q6 candidate. The shared runner checks all frontend stages, teacher and
+Full profile validation39984477044 is queued for F16 and corrected Q8;
+separate Q6 candidate39984512161 is queued behind it. Both use exact
+source1bad3b2dbe8b5ce55cc5dfafcec25610d442ee95. The shared runner checks all frontend stages, teacher and
 pipeline logits, exact prompt IDs, both decoder paths, repeated renamed-model
 Session autodetection and the real CLI. Fresh Q8 quantization must match all940
 controlled-profile tensor payloads. Precision-factorial success alone does not
@@ -66,7 +67,9 @@ complete external runtime notices and verified corresponding sources for
 OpenBLAS, libgfortran, libquadmath and libgomp. NVIDIA libraries are omitted;
 Kaggle must resolve its own CUDA libraries. Its prepared model-free preflight
 rejects stubs, unresolved dependencies and library interposition, and records
-actual loaded paths/hashes. No actual CUDA model acceptance has run.
+actual loaded paths/hashes. The Kaggle entry/validator is implemented but
+requires reviewed immutable CPU receipt and runtime checkpoint pins before
+launch. No actual CUDA model acceptance has run.
 
 Resource policy: check load and available memory before local compile/inference;
 keep large model work off this small host. CPU conversion/reference/diff runs on
