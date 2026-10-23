@@ -129,6 +129,17 @@ corresponding-source packets and complete CUB notice are independently verified.
 Anonymous full-byte readback passed at immutable diagnostic revision
 b73f461c80abc95bae34d7cb45a2bed18b433f1d. V3 uses this exact corrected capsule
 and the same CPU-approved model files; no model gate has changed.
+V3 passed every F16 original stage/magnitude gate and both exact27-token
+decodes on actual T4 CUDA. Its renamed C ABI Session returned the exact official
+text twice and expected raw-task words. Both processes executed CUDA-assigned
+language-head matmuls (55/82) with5552/5858 MiB peak GPU residency. The run
+nevertheless stopped before CLI/Q8 because a required backend-profile message
+exists only on the bucketed path. Logs and outputs are preserved. Worker42abcbd62
+now requires actual CUDA0 language-head operations on each process, alongside
+its matrix assignments and VRAM, rather than that path-specific message.
+Model-free controls reject CPU-assigned operations, GPU inputs alone, encoder
+work alone and backend labels alone. V4 uses this Python evidence correction
+with the unchanged2f73af3d4 compiled capsule; full acceptance remains pending.
 
 Resource policy: check load and available memory before local compile/inference;
 keep large model work off this small host. CPU conversion/reference/diff runs on
