@@ -41,6 +41,9 @@ def run(command, label, out, environment, device, timeout=3600):
         free = int(record['resources']['gpu0'].split(',')[1].strip())
         if free < 7000:
             raise RuntimeError(f'Insufficient GPU0 memory before {label}')
+    print(f"{label}: starting {device}, available RAM "
+          f"{record['resources']['memory_available_kib'] // 1024} MiB, "
+          f"load {record['resources']['load_average'][0]:.2f}", flush=True)
     log_path = out / (label + '.log')
     deadline = time.monotonic() + timeout
     child = None
@@ -60,6 +63,7 @@ def run(command, label, out, environment, device, timeout=3600):
                     raise TimeoutError(label)
                 time.sleep(.25)
         record['returncode'] = child.returncode
+        print(f"{label}: exit {child.returncode}, peak GPU0 {record['peak_gpu_mib']} MiB", flush=True)
         if child.returncode:
             raise RuntimeError(f'{label} failed; see retained log')
         text = log_path.read_text(errors='replace')

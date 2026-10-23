@@ -40,7 +40,8 @@ def main():
     scratch.mkdir(parents=True, exist_ok=True)
     os.environ.update(TMPDIR=str(scratch), OPENBLAS_NUM_THREADS='1', OMP_NUM_THREADS='4')
     source = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()
-    receipt = dict(source=source, complete=False, cpu_acceptance=False, cuda_acceptance=False,
+    run_id = int(os.environ['GITHUB_RUN_ID'])
+    receipt = dict(source=source, run=run_id, complete=False, cpu_acceptance=False, cuda_acceptance=False,
                    production_release=False, profiles={}, requested_profiles=args.profiles)
     def save():
         (out / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
@@ -120,8 +121,14 @@ def main():
             record = dict(repo=STAGING, repo_type='model', path=f'profiles/{source}/{model.name}',
                           sha256=sha(model), bytes=model.stat().st_size)
             # Checkpoint before inference so later failures do not lose a produced model.
-            commit = api.upload_file(path_or_fileobj=model, path_in_repo=record['path'], repo_id=STAGING,
-                                     commit_message='Checkpoint unaccepted Granite5 precision profile')
+            try:
+                commit = api.upload_file(path_or_fileobj=model, path_in_repo=record['path'], repo_id=STAGING,
+                                         commit_message='Checkpoint unaccepted Granite5 precision profile')
+            except Exception:
+                fallback = out / 'failed-transfer'
+                fallback.mkdir(exist_ok=True)
+                shutil.copyfile(model, fallback / model.name)
+                raise
             record['revision'] = commit.oid
         row = dict(file=record, accepted=False)
         receipt['profiles'][quant] = row
@@ -149,7 +156,7 @@ def main():
             model.unlink()
     receipt.update(complete=True, cpu_acceptance=True)
     save()
-    api.upload_folder(folder_path=out, path_in_repo=f'profiles/{source}/cpu-evidence', repo_id=STAGING)
+    api.upload_folder(folder_path=out, path_in_repo=f'profiles/{source}/runs/{run_id}/cpu-evidence', repo_id=STAGING)
     (out / 'summary.md').write_text('Granite5 requested profiles pass full original-reference CPU gates; CUDA pending.\n')
 
 
