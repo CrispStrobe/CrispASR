@@ -9,8 +9,8 @@ import subprocess
 import sys
 import tarfile
 
-VERSION = 'granite5-cuda-acceptance-v3'
-SOURCE = '2f73af3d4537ee69417d845d3318186134d0c629'
+VERSION = 'granite5-cuda-acceptance-v4'
+SOURCE = '42abcbd62346635b53bc28578493ae1bdb7434de'
 CPU_SOURCE = '1bad3b2dbe8b5ce55cc5dfafcec25610d442ee95'
 CPU_RUN = 39984477044
 CPU_REVISION = 'b99c15b3719518846a90402447cee58331470ed7'
