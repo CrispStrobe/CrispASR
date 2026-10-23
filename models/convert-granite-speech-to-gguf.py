@@ -35,6 +35,8 @@ import re
 import sys
 from pathlib import Path
 
+from granite_rope import rope_scaling_metadata
+
 import numpy as np
 
 try:
@@ -442,14 +444,13 @@ def _apply_lora(name: str, arr, lora_map) -> any:
 
     delta = (B @ A).astype(arr.dtype) * np.array(scale, dtype=arr.dtype)
     return arr + delta
-
-
 def convert(input_dir: Path, out_path: Path) -> None:
     print(f"Loading: {input_dir}")
     with open(input_dir / "config.json", encoding="utf-8") as f:
         cfg = json.load(f)
     enc_cfg = cfg.get("encoder_config", {})
     text_cfg = cfg.get("text_config", {})
+    rope_metadata = rope_scaling_metadata(text_cfg)
     proj_cfg = cfg.get("projector_config", {})
 
     # Some HF snapshots (granite-speech-3.3-*) ship BOTH a model-*-of-N
@@ -554,6 +555,14 @@ def convert(input_dir: Path, out_path: Path) -> None:
     writer.add_float32(
         "granite_speech.llm.rope_theta", float(text_cfg.get("rope_theta", 10000))
     )
+    for name, value in rope_metadata.items():
+        key = f"granite_speech.llm.rope_scaling.{name}"
+        if isinstance(value, str):
+            writer.add_string(key, value)
+        elif isinstance(value, int):
+            writer.add_uint32(key, value)
+        else:
+            writer.add_float32(key, value)
     writer.add_float32(
         "granite_speech.llm.rms_norm_eps", float(text_cfg.get("rms_norm_eps", 1e-5))
     )
