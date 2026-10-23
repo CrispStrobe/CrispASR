@@ -49,12 +49,16 @@ def readback(repo, revision, name, expected_sha, expected_bytes=None):
     return dict(sha256=digest.hexdigest(), bytes=count, anonymous_full_byte_readback=True)
 
 
-def qualify(cpu, gpu, preflight, gpu_root):
+def qualify(cpu, gpu, preflight, gpu_root, profiles=('f16', 'q8_0')):
     """Reject partial/stale records before creating a production repository."""
+    if tuple(profiles) not in (('f16',), ('f16', 'q8_0')):
+        raise ValueError('Declare either the F16 release or the fully qualified F16/Q8 release')
     if not (cpu['source'] == CPU_SOURCE and cpu['complete'] and cpu['cpu_acceptance'] and
-            not cpu['cuda_acceptance'] and gpu['complete'] and gpu['cuda_acceptance'] and
+            not cpu['cuda_acceptance'] and
             gpu['cpu_source'] == CPU_SOURCE and gpu['cpu_receipt_sha256'] == CPU_SHA):
-        raise ValueError('Complete linked CPU and actual CUDA approval is required')
+        raise ValueError('Linked CPU and actual CUDA approval is required')
+    if tuple(profiles) == ('f16', 'q8_0') and not (gpu['complete'] and gpu['cuda_acceptance']):
+        raise ValueError('The entire F16/Q8 matrix must pass before publishing both profiles')
     if not (preflight['runtime_preflight_pass'] and preflight['gpu0']['uuid'] == gpu['hardware']['uuid']):
         raise ValueError('Loader/hardware evidence mismatch')
     cub = gpu.get('compiler_header_components', {}).get('CUB', {})
@@ -74,9 +78,11 @@ def qualify(cpu, gpu, preflight, gpu_root):
         if (case['mode'] != index or case['backend'] != 'CUDA0' or case['exit_code'] != (0 if index == 1 else 1) or
                 not all(math.isfinite(v) for v in values) or numeric_pass != (index == 1)):
             raise ValueError('Wrong CUDA RoPE control outcomes')
-    for quant in ('f16', 'q8_0'):
+    for quant in profiles:
         c, g = cpu['profiles'][quant], gpu['profiles'][quant]
-        if not (c['accepted'] and g['accepted'] and g['validation']['accepted'] and g['validation']['device'] == 'cuda' and c['file'] == g['file']):
+        if not (c['accepted'] and c['validation']['complete'] and g['accepted'] and
+                g['validation']['complete'] and g['validation']['accepted'] and
+                g['validation']['device'] == 'cuda' and c['file'] == g['file']):
             raise ValueError('CPU/GPU weight or acceptance mismatch')
         for label in ('stages', 'session', 'cli'):
             execution = g['validation']['executions'][label]
@@ -96,6 +102,7 @@ def main():
     parser.add_argument('--cuda-prefix', required=True)
     parser.add_argument('--cuda-receipt-sha', required=True)
     parser.add_argument('--publish', action='store_true')
+    parser.add_argument('--profiles', nargs='+', choices=['f16', 'q8_0'], default=['f16', 'q8_0'])
     args = parser.parse_args()
     if not (re.fullmatch('[0-9a-f]{40}', args.cuda_revision) and
             re.fullmatch('[0-9a-f]{64}', args.cuda_receipt_sha)):
@@ -120,7 +127,7 @@ def main():
         raise ValueError('Reviewed CUDA receipt mismatch')
     gpu = json.loads(gpu_path.read_text())
     preflight = json.loads((gpu_root / 'runtime-preflight.json').read_text())
-    qualify(cpu, gpu, preflight, gpu_root)
+    qualify(cpu, gpu, preflight, gpu_root, args.profiles)
     actual_sources = {str(p.relative_to(ROOT)): sha(p)
         for folder in [ROOT / 'src', ROOT / 'examples/cli'] for p in folder.rglob('*')
         if p.is_file() and p.suffix in {'.cpp', '.c', '.h', '.hpp'}}
@@ -137,7 +144,7 @@ def main():
     reference = fetch(cpu['reference'])
     audit = out / 'independent-gpu-audit.json'
     subprocess.run([sys.executable, ROOT / 'tools/ci-heavy/granite5_result_audit.py', '--reference', reference,
-                    '--results-root', gpu_root, '--quants', 'f16', 'q8_0', '--output', audit], check=True)
+                    '--results-root', gpu_root, '--quants', *args.profiles, '--output', audit], check=True)
     report = json.loads(audit.read_text())
     if not all(c['official_request_text_exact'] and c['original_vs_bucketed']['exact'] and
                c['original_vs_dynamic']['exact'] for c in report['cases'].values()):
@@ -162,9 +169,12 @@ def main():
                     runtime_source=gpu['runtime_source'], hardware=gpu['hardware'],
                     runtime_provenance_sha256=gpu['runtime_provenance_sha256'],
                     compiler_header_components=gpu['compiler_header_components'],
-                    profiles={q: cpu['profiles'][q]['file'] for q in ('f16', 'q8_0')},
+                    profiles={q: cpu['profiles'][q]['file'] for q in args.profiles},
+                    parent_cuda_complete=gpu['complete'], parent_cuda_acceptance=gpu['cuda_acceptance'],
                     cpu_acceptance=True, cuda_acceptance=True, production_release=False,
-                    unaccepted_profiles=['q4_k', 'q6_k'], native_context_limit=4096,
+                    unaccepted_profiles=[q for q in ('q8_0', 'q4_k', 'q6_k') if q not in args.profiles],
+                    qualification_scope='Only the explicitly selected profiles; rejected parent-matrix cases remain rejected',
+                    native_context_limit=4096,
                     full_16k_context_qualified=False)
     (assets / 'validation-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
 
@@ -181,14 +191,16 @@ crispasr_native_acceptance: {str(complete).lower()}
 Independent conversion of [{ORIGINAL}](https://huggingface.co/{ORIGINAL}/tree/{ORIGINAL_REVISION}).
 Requires a CrispASR build with Granite5 YaRN metadata support.
 
-Validated formats: F16 and Q8_0 with token embeddings retained at F16.
+Validated formats: {', '.join(args.profiles)}.
+{'Q8_0 retains token embeddings at F16.' if 'q8_0' in args.profiles else 'Q8_0 is not qualified on CUDA: its pipeline-logit magnitude gate failed.'}
 Q4_K and Q6_K are not qualified: their reference magnitude gates failed.
 Original F32 stage comparisons, exact generated tokens, repeated C ABI Session,
 and CLI transcripts pass on CPU and actual CUDA for the JFK English fixture.
 The native context limit remains 4096. The separate rotary component was checked
 through position 16383; full 16k-context inference is not qualified.
 See validation-evidence.json for immutable inputs and test provenance.
-Publication complete: {complete}.
+Publication complete: {complete}. Qualification applies only to the files listed above.
+{'The linked parent CUDA matrix also tested Q8_0; its failure remains in the evidence.' if 'q8_0' not in args.profiles else 'Both profiles passed the complete parent CUDA matrix.'}
 
 Model weights: Apache-2.0 (LICENSE), inherited from the pinned IBM publisher.
 Conversion recipes: MIT (LICENSE-RECIPE.txt). Preserve NOTICE and the original
@@ -209,7 +221,7 @@ No runtime binaries or NVIDIA libraries are included in this repository.
     if initial.card_data['license'] != 'apache-2.0' or initial.card_data['crispasr_native_acceptance'] is not False:
         raise ValueError('Pending-release license/scope card did not land before model transfer')
     published = {}
-    for quant in ('f16', 'q8_0'):
+    for quant in args.profiles:
         record = cpu['profiles'][quant]['file']
         model = fetch(record)
         commit = api.upload_file(path_or_fileobj=model, path_in_repo=model.name, repo_id=DESTINATION,
@@ -222,7 +234,7 @@ No runtime binaries or NVIDIA libraries are included in this repository.
     (assets / 'validation-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
     (assets / 'README.md').write_text(card(True))
     final = api.upload_folder(folder_path=assets, repo_id=DESTINATION,
-                              commit_message='Complete qualified Granite5 F16/Q8 release and provenance')
+                              commit_message='Complete qualified Granite5 selected-profile release and provenance')
     info = api.model_info(DESTINATION, revision=final.oid)
     if info.card_data['license'] != 'apache-2.0' or not info.card_data['crispasr_native_acceptance']:
         raise ValueError('Production license/acceptance card did not land')
