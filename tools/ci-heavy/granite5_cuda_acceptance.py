@@ -27,20 +27,8 @@ ORACLE_METADATA = dict(repo='cstr/crispasr-granite5-validation-public', repo_typ
     sha256='6d52e2799d0c0d5e547547d0a5aabff7443ef80b81bae3c46bcfda9537922a71')
 
 
-def main():
-    from huggingface_hub import hf_hub_download
-    parser = argparse.ArgumentParser(description=__doc__)
-    for name in ('bundle', 'cpu-receipt', 'scratch', 'out'):
-        parser.add_argument('--' + name, type=Path, required=True)
-    args = parser.parse_args()
-    args.out.mkdir(parents=True, exist_ok=True)
-    args.scratch.mkdir(parents=True, exist_ok=True)
-    cpu = json.loads(args.cpu_receipt.read_text())
-    if not (cpu['complete'] and cpu['cpu_acceptance'] and not cpu['cuda_acceptance'] and
-            not cpu['production_release'] and set(cpu['profiles']) == {'f16', 'q8_0'} and
-            all(row['accepted'] and row['validation']['accepted'] for row in cpu['profiles'].values())):
-        raise ValueError('A complete F16/Q8 CPU acceptance receipt is required')
-    provenance = json.loads((args.bundle / 'provenance.json').read_text())
+def qualify_runtime(bundle, cpu):
+    provenance = json.loads((bundle / 'provenance.json').read_text())
     if not (provenance['build_complete'] and not provenance['gpu_executed'] and
             not provenance['model_acceptance'] and provenance['host_provided_nvidia_libraries']):
         raise ValueError('Unexpected runtime provenance scope')
@@ -54,17 +42,34 @@ def main():
     if provenance.get('probe_sources') != expected_probes:
         raise ValueError('CUDA capsule probe sources differ from the checked-out validators')
     for name, record in provenance['files'].items():
-        path = args.bundle / name
+        path = bundle / name
         if (Path(name).is_absolute() or '..' in Path(name).parts or not path.is_file() or
-                not path.resolve().is_relative_to(args.bundle.resolve()) or
+                not path.resolve().is_relative_to(bundle.resolve()) or
                 sha(path) != record['sha256'] or path.stat().st_size != record['bytes']):
             raise ValueError(f'Runtime manifest mismatch: {name}')
     cub = provenance.get('compiler_header_components', {}).get('CUB', {})
     if not (cub.get('version') == '2.3.2' and cub.get('license') == 'BSD-3-Clause' and
             cub.get('notice') == 'licenses/CUB-2.3.2.txt' and
             cub.get('license_sha256') == '2e15eba2e130f3e80d9e91724c7dce3781ce99316324681ff54b00c1fc9759b3' and
-            sha(args.bundle / cub['notice']) == cub['license_sha256']):
+            sha(bundle / cub['notice']) == cub['license_sha256']):
         raise ValueError('The compiled CUB templates require their verified BSD notice')
+    return provenance
+
+
+def main():
+    from huggingface_hub import hf_hub_download
+    parser = argparse.ArgumentParser(description=__doc__)
+    for name in ('bundle', 'cpu-receipt', 'scratch', 'out'):
+        parser.add_argument('--' + name, type=Path, required=True)
+    args = parser.parse_args()
+    args.out.mkdir(parents=True, exist_ok=True)
+    args.scratch.mkdir(parents=True, exist_ok=True)
+    cpu = json.loads(args.cpu_receipt.read_text())
+    if not (cpu['complete'] and cpu['cpu_acceptance'] and not cpu['cuda_acceptance'] and
+            not cpu['production_release'] and set(cpu['profiles']) == {'f16', 'q8_0'} and
+            all(row['accepted'] and row['validation']['accepted'] for row in cpu['profiles'].values())):
+        raise ValueError('A complete F16/Q8 CPU acceptance receipt is required')
+    provenance = qualify_runtime(args.bundle, cpu)
     receipt = dict(complete=False, cuda_acceptance=False, production_release=False,
                    cpu_source=cpu['source'], runtime_source=provenance['source'],
                    cpu_receipt_sha256=sha(args.cpu_receipt),
