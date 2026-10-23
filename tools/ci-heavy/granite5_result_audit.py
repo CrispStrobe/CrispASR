@@ -102,13 +102,14 @@ def audit_case(directory, expected_logits, expected_ids, expected_text):
                 result["missing_checks"].append(name)
             return None
 
-    def pipeline_check():
-        pipeline = read("pipeline_prefill_logits.bin", "<f4")
-        numerical = metrics(expected_logits, pipeline)
-        numerical.update(rank(pipeline, int(np.argmax(expected_logits))))
+    def logits_check(name):
+        logits = read(name, "<f4")
+        numerical = metrics(expected_logits, logits)
+        numerical.update(rank(logits, int(np.argmax(expected_logits))))
         return numerical
 
-    result["pipeline_prefill"] = check("pipeline_prefill", pipeline_check)
+    result["teacher_prefill"] = check("teacher_prefill", lambda: logits_check("llm_prefill_logits.bin"))
+    result["pipeline_prefill"] = check("pipeline_prefill", lambda: logits_check("pipeline_prefill_logits.bin"))
 
     def tokens(name):
         values = read(name, "<i4")
@@ -159,7 +160,7 @@ def audit_case(directory, expected_logits, expected_ids, expected_text):
     result["all_text_normalized_words_equal"] = (
         text_checks_complete and all(t["normalized_words_equal"] for t in all_texts))
     result["structural_numerical_content_pass"] = (
-        result["checks_complete"] and result["pipeline_prefill"]["pass"] and paths_equal
+        result["checks_complete"] and result["teacher_prefill"]["pass"] and result["pipeline_prefill"]["pass"] and paths_equal
         and result["all_text_normalized_words_equal"])
     return result
 
@@ -169,18 +170,21 @@ def main():
     parser.add_argument("--reference", type=Path, required=True)
     parser.add_argument("--results-root", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--quants", nargs="+", choices=(*QUANTS, "q6_k"), default=QUANTS)
     args = parser.parse_args()
     from gguf import GGUFReader
 
-    report = {"schema_version": 1, "model_free": True, "full_acceptance_established": False,
-              "scope": "Retained pipeline logits, native decoder paths, and transcript fidelity only",
+    report = {"schema_version": 2, "model_free": True, "full_acceptance_established": False,
+              "scope": "Retained frontend stages, teacher/pipeline logits, native decoder paths, and transcript fidelity",
               "fidelity_policy": "Exact token/case/punctuation differences require review; quantization can change greedy output",
-              "reference": args.reference.name, "results_root": args.results_root.name, "cases": {}}
+              "reference": args.reference.name, "results_root": args.results_root.name,
+              "requested_quants": list(args.quants), "cases": {}}
     try:
         report["reference_sha256"] = hashlib.sha256(args.reference.read_bytes()).hexdigest()
         ref = GGUFReader(args.reference)
         tensors = {t.name: t.data.reshape(-1).copy() for t in ref.tensors
-                   if t.name in ("llm_prefill_logits", "llm_argmax", "prompt_ids")}
+                   if t.name in ("llm_prefill_logits", "llm_argmax", "prompt_ids", "mel_spectrogram",
+                                 "encoder_out", "projector_out", "llm_inputs_embeds")}
         logits, ids, prompt = (tensors[name] for name in ("llm_prefill_logits", "llm_argmax", "prompt_ids"))
         if not np.issubdtype(ids.dtype, np.integer) or not np.issubdtype(prompt.dtype, np.integer):
             raise ValueError("reference token tensors must be integer")
@@ -195,10 +199,36 @@ def main():
                               "generated_tokens": len(ids) - len(prompt),
                               "first_token": int(np.argmax(logits)),
                               "top_two_logit_margin": float(top[-1] - top[-2])}
-        for quant in QUANTS:
+        for quant in args.quants:
             try:
                 report["cases"][quant] = audit_case(args.results_root / quant, logits, ids[len(prompt):], expected)
                 report["cases"][quant]["quantized"] = quant != "f16"
+                case = report["cases"][quant]
+                case["stages"] = {}
+                for name in ("mel_spectrogram", "encoder_out", "projector_out", "llm_inputs_embeds"):
+                    try:
+                        path = args.results_root / quant / (name + ".bin")
+                        if path.stat().st_size != tensors[name].size * 4:
+                            raise ValueError("stage byte length does not match reference")
+                        actual = np.fromfile(path, dtype="<f4")
+                        result = metrics(tensors[name], actual)
+                        if name == "llm_inputs_embeds" and quant == "f16":
+                            result["pass"] = result["pass"] and result["cosine"] >= .99999
+                        case["stages"][name] = result
+                    except (OSError, ValueError, KeyError, TypeError) as error:
+                        message = str(error).replace(str(args.results_root), "${RESULTS}")
+                        case["stages"][name] = {"pass": False, "error": message}
+                        case["check_errors"][name] = message
+                        if isinstance(error, FileNotFoundError):
+                            case["missing_checks"].append(name)
+                ranks = [case["teacher_prefill"], case["pipeline_prefill"]]
+                case["first_token_rank_pass"] = all(
+                    value is not None and value["source_token_rank"] <= (1 if quant == "f16" else 2)
+                    and value["gap_to_native_max"] < 1.0 for value in ranks)
+                case["checks_complete"] = not case["check_errors"]
+                case["structural_numerical_content_pass"] = (
+                    case["structural_numerical_content_pass"] and case["checks_complete"]
+                    and case["first_token_rank_pass"] and all(v["pass"] for v in case["stages"].values()))
             except (OSError, ValueError, KeyError, TypeError) as error:
                 report["cases"][quant] = {"structural_numerical_content_pass": False, "error": str(error)}
         report["structural_numerical_content_pass"] = all(

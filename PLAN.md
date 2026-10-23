@@ -57,13 +57,19 @@ regression test fails against the original code and passes all8 cases after
 the fix, checking preserved F16 bytes, legacy/NAR behavior, unrelated metadata
 and the explicit old-policy override.
 
-Full profile validation39984477044 is running for F16 and corrected Q8;
+Full profile validation39984477044 succeeded for F16 and corrected Q8;
 separate Q6 candidate39984512161 is queued behind it. Both use exact
 source1bad3b2dbe8b5ce55cc5dfafcec25610d442ee95. The shared runner checks all frontend stages, teacher and
 pipeline logits, exact prompt IDs, both decoder paths, repeated renamed-model
 Session autodetection and the real CLI. Fresh Q8 quantization must match all940
-controlled-profile tensor payloads. Precision-factorial success alone does not
-establish full CPU or CUDA acceptance.
+controlled-profile tensor payloads. Independent retained-array review also passes
+all frontend stages, teacher/pipeline magnitude and cosine gates, first-token
+ranks, exact prompt and both27-token decodes, repeated official Session and CLI
+text. Q8 teacher/pipeline norm ratios remain1.005482/1.008909. CPU acceptance is
+established for these two profiles; immutable receipt b99c15b3719518846a90402447cee58331470ed7
+has anonymous byte readback. Later profile jobs cannot invalidate that pinned
+receipt. Future workers publish evidence under per-run paths to separate Q6
+from F16/Q8 approval. CUDA and production acceptance remain false.
 
 CUDA build39980261207 succeeded at exact7287199c3. The build-only capsule has
 complete external runtime notices and verified corresponding sources for
@@ -75,7 +81,8 @@ requires reviewed immutable CPU receipt and runtime checkpoint pins before
 launch. Runtime checkpoint99bc8384b has a verified anonymous full-byte readback.
 The shared attention probe now accepts explicit CUDA0 dispatch and retains
 unchanged high-position tolerances plus four incorrect controls; its CPU path
-still passes. A replacement capsule will carry probe source hashes, and GPU
+still passes. Replacement CUDA build39987283644 at8920fa6c038eedb80997a955b1f6d76133abb0c0
+is running and will carry probe source hashes. GPU
 validation will require this original-module check through position16383 before
 loading trained weights. Kaggle pins stay empty until that capsule and the CPU
 receipt are independently qualified. No actual CUDA model acceptance has run.
@@ -1148,9 +1155,14 @@ prevent full-runtime/default acceptance. Do not repeat accepted utility proof.
   Eight-step RTF1.019 and poorer reported quality do not justify changing the
   ten-step quality default. Issue478 Windows/Khmer retest, Q4 batching and
   other-ISA/GPU coverage remain separate; verify current issue state first.
-- **Issue456 / Nyra:** deferred for separate research/output-license review;
-  this is not an approved ordinary-NC integration. No port or conversion is
-  queued; espeak-ng cannot be assumed bundled.
+- **Issue456 / Nyra:** deferred. The [published model/output terms](https://huggingface.co/nyralabs/nyra_forced_aligner_en/blob/9c8e724072261c30641a91ca365ce4f7b4ae7f83/LICENSE.md)
+  restrict production/operational and hosted/API uses, not just paid use, and
+  cover lexicon/configuration assets and generated outputs. MIT code does not
+  remove those restrictions. A production port requires appropriate written
+  rights; no such agreement was found or obtained. Research-only redistribution
+  also requires separate review of recipient/output obligations and unresolved
+  bundled WavLM provenance. No port, conversion or registry entry is queued;
+  espeak-ng/phonemizer bundling requires its own GPL compliance review.
 - **Dolphin:** merged original-reference fix does not prove reporter Kylin/GCC9,
   private clips or GPU behavior. Obtain those inputs if further work is needed.
 
