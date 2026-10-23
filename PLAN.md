@@ -82,10 +82,13 @@ launch. Runtime checkpoint99bc8384b has a verified anonymous full-byte readback.
 The shared attention probe now accepts explicit CUDA0 dispatch and retains
 unchanged high-position tolerances plus four incorrect controls; its CPU path
 still passes. Replacement CUDA build39987283644 at8920fa6c038eedb80997a955b1f6d76133abb0c0
-is running and will carry probe source hashes. GPU
+succeeded; all69 capsule file hashes and700 runtime source hashes match
+the manifest and approved CPU sources, with both source packets verified. GPU
 validation will require this original-module check through position16383 before
-loading trained weights. Kaggle pins stay empty until that capsule and the CPU
-receipt are independently qualified. No actual CUDA model acceptance has run.
+loading trained weights. Kaggle v1 is pinned to reviewed CPU revisionb99c15b3719518846a90402447cee58331470ed7
+and runtime revisiond90703f4029055bdc1cb3e3064ff9e5549422dde; both have
+anonymous byte readback. A read-only slot check found no active kernels among
+the20 most recent; recheck at actual launch. No actual CUDA model acceptance has run.
 
 Resource policy: check load and available memory before local compile/inference;
 keep large model work off this small host. CPU conversion/reference/diff runs on
