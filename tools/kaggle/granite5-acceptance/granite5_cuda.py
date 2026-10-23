@@ -10,14 +10,14 @@ import sys
 import tarfile
 
 VERSION = 'granite5-cuda-acceptance-v2'
-SOURCE = '8920fa6c038eedb80997a955b1f6d76133abb0c0'
+SOURCE = '617766e7c80f72a5e0683dc83778958d8721f506'
 CPU_SOURCE = '1bad3b2dbe8b5ce55cc5dfafcec25610d442ee95'
 CPU_RUN = 39984477044
 CPU_REVISION = 'b99c15b3719518846a90402447cee58331470ed7'
 CPU_SHA256 = 'bb8e17e1e4fc81fdb85bbdcab84ae91f01833d30d4da9135f2ea2af4874bfdea'
-RUNTIME_SOURCE = ''
-RUNTIME_REVISION = ''
-RUNTIME_SHA256 = ''
+RUNTIME_SOURCE = '999c56805ff903b86b076b03d87da8cd4f90858a'
+RUNTIME_REVISION = '74882ee2f82c891a845a2ae71d26819d2c93d29c'
+RUNTIME_SHA256 = '6823fc1fdeccd9b4276b43267d001156d3dc7faf24deed6652b356219e4e9b5d'
 STAGING = 'cstr/crispasr-granite5-validation-public'
 RUNTIME_PATH = f'runtime/{RUNTIME_SOURCE}/granite5-cuda-validation.tar.gz'
 # Deliberately unlaunchable until reviewed immutable CPU/runtime pins exist.
