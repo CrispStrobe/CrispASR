@@ -91,35 +91,77 @@ def audit_case(directory, expected_logits, expected_ids, expected_text):
             raise ValueError(f"invalid byte length: {name}")
         return np.fromfile(path, dtype=dtype)
 
-    pipeline = read("pipeline_prefill_logits.bin", "<f4")
-    numerical = metrics(expected_logits, pipeline)
-    numerical.update(rank(pipeline, int(np.argmax(expected_logits))))
-    bucket = read("generated_ids.bin", "<i4")
-    dynamic = read("dynamic_generated_ids.bin", "<i4")
-    if not len(bucket) or not len(dynamic):
-        raise ValueError("empty generated token sequence")
-    native_text = (directory / "generated_text.txt").read_text()
-    sessions = json.loads((directory / "session.json").read_text())
-    official = sessions["official"]
-    if not isinstance(official, list) or len(official) != 2:
-        raise ValueError("expected two official Session repetitions")
-    texts = {"native": text_comparison(expected_text, native_text),
-             "session_official": [text_comparison(expected_text, text) for text in official],
-             "session_legacy_default": text_comparison(expected_text, sessions["legacy_default"]),
-             "cli": text_comparison(expected_text, (directory / "cli-official.txt").read_text())}
-    all_texts = [texts["native"], *texts["session_official"], texts["session_legacy_default"], texts["cli"]]
-    paths_equal = bool(np.array_equal(bucket, dynamic))
-    return {"directory": directory.name, "pipeline_prefill": numerical,
-            "bucketed_vs_dynamic_exact": paths_equal,
-            "original_vs_bucketed": token_comparison(expected_ids, bucket),
-            "original_vs_dynamic": token_comparison(expected_ids, dynamic),
-            "texts": texts, "all_text_exact_stripped": all(t["exact_stripped"] for t in all_texts),
-            "official_request_text_exact": all(t["exact_stripped"] for t in
-                                                [texts["native"], *texts["session_official"], texts["cli"]]),
-            "legacy_default_note": "Different request: publisher's raw-transcript prompt, not the punctuation/case reference request",
-            "all_text_normalized_words_equal": all(t["normalized_words_equal"] for t in all_texts),
-            "structural_numerical_content_pass": numerical["pass"] and paths_equal
-            and all(t["normalized_words_equal"] for t in all_texts)}
+    result = {"directory": directory.name, "missing_checks": [], "check_errors": {}, "texts": {}}
+
+    def check(name, operation):
+        try:
+            return operation()
+        except (OSError, ValueError, KeyError, TypeError) as error:
+            result["check_errors"][name] = str(error).replace(str(directory), "${CASE}")
+            if isinstance(error, FileNotFoundError):
+                result["missing_checks"].append(name)
+            return None
+
+    def pipeline_check():
+        pipeline = read("pipeline_prefill_logits.bin", "<f4")
+        numerical = metrics(expected_logits, pipeline)
+        numerical.update(rank(pipeline, int(np.argmax(expected_logits))))
+        return numerical
+
+    result["pipeline_prefill"] = check("pipeline_prefill", pipeline_check)
+
+    def tokens(name):
+        values = read(name, "<i4")
+        if not len(values):
+            raise ValueError("empty generated token sequence")
+        return values
+
+    bucket = check("bucketed_tokens", lambda: tokens("generated_ids.bin"))
+    dynamic = check("dynamic_tokens", lambda: tokens("dynamic_generated_ids.bin"))
+    result["original_vs_bucketed"] = token_comparison(expected_ids, bucket) if bucket is not None else None
+    result["original_vs_dynamic"] = token_comparison(expected_ids, dynamic) if dynamic is not None else None
+    paths_equal = bucket is not None and dynamic is not None and bool(np.array_equal(bucket, dynamic))
+    result["bucketed_vs_dynamic_exact"] = paths_equal
+    texts = result["texts"]
+    texts["native"] = check("native_text", lambda: text_comparison(
+        expected_text, (directory / "generated_text.txt").read_text()))
+    def session_outputs():
+        outputs = json.loads((directory / "session.json").read_text())
+        if not isinstance(outputs, dict):
+            raise ValueError("Session outputs must be a JSON object")
+        return outputs
+
+    sessions = check("session_outputs", session_outputs)
+
+    def official_check():
+        official = sessions["official"]
+        if not isinstance(official, list) or len(official) != 2:
+            raise ValueError("expected two official Session repetitions")
+        return [text_comparison(expected_text, text) for text in official]
+
+    if sessions is not None:
+        texts["session_official"] = check("session_official", official_check)
+        texts["session_legacy_default"] = check("session_legacy_default", lambda: text_comparison(
+            expected_text, sessions["legacy_default"]))
+    else:
+        texts["session_official"] = None
+        texts["session_legacy_default"] = None
+    texts["cli"] = check("cli_text", lambda: text_comparison(
+        expected_text, (directory / "cli-official.txt").read_text()))
+    official_texts = [texts["native"], *(texts["session_official"] or []), texts["cli"]]
+    all_texts = [*official_texts, texts["session_legacy_default"]]
+    text_checks_complete = len(all_texts) == 5 and all(t is not None for t in all_texts)
+    result["checks_complete"] = not result["check_errors"]
+    result["all_text_exact_stripped"] = text_checks_complete and all(t["exact_stripped"] for t in all_texts)
+    result["official_request_text_exact"] = (
+        len(official_texts) == 4 and all(t is not None and t["exact_stripped"] for t in official_texts))
+    result["legacy_default_note"] = "Different request: publisher's raw-transcript prompt, not the punctuation/case reference request"
+    result["all_text_normalized_words_equal"] = (
+        text_checks_complete and all(t["normalized_words_equal"] for t in all_texts))
+    result["structural_numerical_content_pass"] = (
+        result["checks_complete"] and result["pipeline_prefill"]["pass"] and paths_equal
+        and result["all_text_normalized_words_equal"])
+    return result
 
 
 def main():
