@@ -47,20 +47,31 @@ Q8 pipeline-prefill ratio1.010201 outside it. Exact words alone do not waive
 these gates. Q4 CLI/Session checks did not run after the numerical failure.
 
 Hosted precision diagnostic39979238513 at7287199c319f0c6534e2d64732cf385f1c58fbdb
-has started, comparing base/head/embedding/both F16 substitutions within Q8 and Q4.
-Other tensor payloads must remain unchanged. These are diagnostic candidates,
-not approved models. Choose a recipe only from measured stage and decoded-output
-results, then repeat CLI/Session acceptance. The legacy raw-transcription prompt
-and the publisher's punctuation/capitalization prompt request different styles.
+completed. Q8 embedding-only F16 retention passes teacher/pipeline norm ratios
+1.005482/1.008909; keeping the head alone fails. None of the four Q4 arms passes.
+All arms retain the exact source transcript; no numerical threshold was lowered.
+Q4 remains unaccepted. A new quantizer rule preserves token embeddings only for
+Granite YaRN profiles, leaving legacy Granite recipes unchanged. Explicit
+per-tensor overrides retain an A/B route to the old recipe.
 
-CUDA build-only workflow is registered separately from the unaccepted
-native feature on main atfc12c52a7. Build39980261207 is queued against exact
-source7287199c319f0c6534e2d64732cf385f1c58fbdb. It builds exact pinned source on GitHub, includes external
-runtime license notices and verified corresponding sources, and omits NVIDIA
-libraries. Kaggle must resolve its own CUDA libraries before real GPU validation.
-No GPU acceptance has run. Resource policy: check load and available memory
-before local compile/inference; keep large model work off this small host.
-CPU conversion/reference/diff runs on GitHub; actual CUDA runs on Kaggle.
+Full profile validation is being prepared for F16 and corrected Q8, plus a
+separate Q6 candidate. The shared runner checks all frontend stages, teacher and
+pipeline logits, exact prompt IDs, both decoder paths, repeated renamed-model
+Session autodetection and the real CLI. Fresh Q8 quantization must match all940
+controlled-profile tensor payloads. Precision-factorial success alone does not
+establish full CPU or CUDA acceptance.
+
+CUDA build39980261207 succeeded at exact7287199c3. The build-only capsule has
+complete external runtime notices and verified corresponding sources for
+OpenBLAS, libgfortran, libquadmath and libgomp. NVIDIA libraries are omitted;
+Kaggle must resolve its own CUDA libraries. Its prepared model-free preflight
+rejects stubs, unresolved dependencies and library interposition, and records
+actual loaded paths/hashes. No actual CUDA model acceptance has run.
+
+Resource policy: check load and available memory before local compile/inference;
+keep large model work off this small host. CPU conversion/reference/diff runs on
+GitHub; actual CUDA runs on Kaggle only after checking a free slot. Up to two
+Luna/Sol agents may do lightweight work if local resources allow.
 
 
 ## Issue555 model-sized designed defaults — shipped; Granite5 next (2026-10-23)

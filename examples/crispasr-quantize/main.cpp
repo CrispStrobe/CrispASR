@@ -300,6 +300,14 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     // rules apply: skip enc.* / proj.* unless explicitly overridden.
     const bool is_granite_family =
         (arch.find("granite_speech") != std::string::npos) || (arch.find("granite_nle") != std::string::npos);
+    // Granite5's input embeddings are sensitive even at Q8_0: the controlled
+    // embedding-only F16 substitution brings pipeline logit norms back inside
+    // the reference gate (hosted precision diagnostic39979238513). Scope this
+    // to the new YaRN profile so existing Granite quants remain unchanged.
+    const int granite_rope_type_key = gguf_find_key(ctx_in, "granite_speech.llm.rope_scaling.type");
+    const bool granite_yarn = is_granite_family && granite_rope_type_key >= 0 &&
+                              gguf_get_kv_type(ctx_in, granite_rope_type_key) == GGUF_TYPE_STRING &&
+                              std::string(gguf_get_val_str(ctx_in, granite_rope_type_key)) == "yarn";
     // Optional: downcast granite-family encoder F32 weights to F16 instead of
     // preserving F32. Halves the encoder footprint (~960 MB on 4.1-2b) at
     // negligible quality cost — F16 is what every Whisper / Llama / parakeet
@@ -906,6 +914,7 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             // Supertonic-3: allow-list vf.*/voc.* (see is_supertonic note).
             !(is_supertonic && !(sname.rfind("vf.", 0) == 0 || sname.rfind("voc.", 0) == 0)) &&
             !(is_granite_family && !granite_quant_all && sname.find("enc.") == 0) &&
+            !(granite_yarn && !granite_quant_all && sname == "token_embd.weight") &&
             // MOSS-Audio: keep encoder + adapter + deepstack at F16
             !(arch == "moss_audio" &&
               (sname.find("enc.") == 0 || sname.find("adapter.") == 0 || sname.find("deepstack.") == 0)) &&
