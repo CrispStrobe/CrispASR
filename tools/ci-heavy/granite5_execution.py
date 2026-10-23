@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 from pathlib import Path
 import subprocess
 import sys
@@ -13,6 +14,14 @@ import numpy as np
 from granite5_result_audit import metrics, token_comparison, words
 
 ROOT = Path(__file__).resolve().parents[2]
+
+
+def gpu_matmul_nodes(text):
+    # Match the NODE assignment before use=, not a later GPU source tensor
+    # belonging to a CPU-assigned operation on the same debug line.
+    return len(re.findall(
+        r'node\s+#\s*\d+\s+\(\s*MUL_MAT(?:_ID)?\s*\):[^\n]*'
+        r'\[\s*CUDA0\b[^\]]*\]\s+use=', text))
 
 
 def resources(device):
@@ -67,8 +76,11 @@ def run(command, label, out, environment, device, timeout=3600):
         if child.returncode:
             raise RuntimeError(f'{label} failed; see retained log')
         text = log_path.read_text(errors='replace')
-        if device == 'cuda' and (record['peak_gpu_mib'] < 512 or 'backend=CUDA0 split=0' not in text):
-            raise RuntimeError(f'{label} lacks actual GPU0 residency/backend evidence')
+        if device == 'cuda':
+            record['gpu_matmul_nodes'] = gpu_matmul_nodes(text)
+            if (record['peak_gpu_mib'] < 512 or 'backend=CUDA0 split=0' not in text or
+                    record['gpu_matmul_nodes'] == 0):
+                raise RuntimeError(f'{label} lacks actual GPU0 residency/matmul/backend evidence')
         return record
     finally:
         if child is not None and child.poll() is None:
@@ -99,7 +111,7 @@ def validate_case(model, reference, instruction, bundle, python_root, wav, out, 
     from gguf import GGUFReader
     out.mkdir(parents=True, exist_ok=True)
     if device == 'cuda':
-        environment = dict(environment, CRISPASR_GRANITE_DEC_PROFILE='1')
+        environment = dict(environment, CRISPASR_GRANITE_DEC_PROFILE='1', GGML_SCHED_DEBUG='2')
     receipt = dict(complete=False, accepted=False, device=device, stages={}, executions={})
     def save():
         (out / 'acceptance.json').write_text(json.dumps(receipt, indent=2) + '\n')
@@ -160,7 +172,7 @@ def validate_case(model, reference, instruction, bundle, python_root, wav, out, 
         raise ValueError(f'{quant} Session transcript mismatch')
     cli_base = out / 'cli-official'
     command = [bundle / 'crispasr', '-m', model, '-f', wav, '-l', 'en', '--ask', instruction,
-               '--max-new-tokens', '96', '--no-prints', '-otxt', '-of', cli_base, '-t', '4']
+               '--max-new-tokens', '96', '-otxt', '-of', cli_base, '-t', '4']
     if device == 'cpu':
         command.append('--no-gpu')
     receipt['executions']['cli'] = run(command, 'cli', out, environment, device)
