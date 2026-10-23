@@ -59,9 +59,17 @@ def main():
                 not path.resolve().is_relative_to(args.bundle.resolve()) or
                 sha(path) != record['sha256'] or path.stat().st_size != record['bytes']):
             raise ValueError(f'Runtime manifest mismatch: {name}')
+    cub = provenance.get('compiler_header_components', {}).get('CUB', {})
+    if not (cub.get('version') == '2.3.2' and cub.get('license') == 'BSD-3-Clause' and
+            cub.get('notice') == 'licenses/CUB-2.3.2.txt' and
+            cub.get('license_sha256') == '2e15eba2e130f3e80d9e91724c7dce3781ce99316324681ff54b00c1fc9759b3' and
+            sha(args.bundle / cub['notice']) == cub['license_sha256']):
+        raise ValueError('The compiled CUB templates require their verified BSD notice')
     receipt = dict(complete=False, cuda_acceptance=False, production_release=False,
                    cpu_source=cpu['source'], runtime_source=provenance['source'],
-                   cpu_receipt_sha256=sha(args.cpu_receipt), profiles={})
+                   cpu_receipt_sha256=sha(args.cpu_receipt),
+                   runtime_provenance_sha256=sha(args.bundle / 'provenance.json'),
+                   compiler_header_components=provenance['compiler_header_components'], profiles={})
     def save():
         (args.out / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
     save()
