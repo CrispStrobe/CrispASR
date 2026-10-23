@@ -100,7 +100,10 @@ peak0.00002, retaining the same1ppm norm invariant. All4 wrong configurations
 still reject on CPU under this same budget. Full model cosine/norm/decoded
 output gates are unchanged. V2 requires a newly compiled, pinned capsule and
 all4 CUDA negative controls before real model acceptance. No CUDA model
-acceptance has passed yet.
+acceptance has passed yet. Build39994202206 at
+999c56805ff903b86b076b03d87da8cd4f90858a is preparing the revised probe.
+V2 will additionally require actual CUDA0-assigned matrix-operation traces per
+native process, beyond residency and decoder backend logs.
 
 Resource policy: check load and available memory before local compile/inference;
 keep large model work off this small host. CPU conversion/reference/diff runs on
