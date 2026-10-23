@@ -58,7 +58,8 @@ the fix, checking preserved F16 bytes, legacy/NAR behavior, unrelated metadata
 and the explicit old-policy override.
 
 Full profile validation39984477044 succeeded for F16 and corrected Q8;
-separate Q6 candidate39984512161 is queued behind it. Both use exact
+separate Q6 candidate39984512161 failed the fixed teacher-logit magnitude
+gate (ratio0.960814) after its frontend stages passed. Q6 remains unaccepted. Both use exact
 source1bad3b2dbe8b5ce55cc5dfafcec25610d442ee95. The shared runner checks all frontend stages, teacher and
 pipeline logits, exact prompt IDs, both decoder paths, repeated renamed-model
 Session autodetection and the real CLI. Fresh Q8 quantization must match all940
@@ -80,7 +81,7 @@ actual loaded paths/hashes. The Kaggle entry/validator is implemented but
 requires reviewed immutable CPU receipt and runtime checkpoint pins before
 launch. Runtime checkpoint99bc8384b has a verified anonymous full-byte readback.
 The shared attention probe now accepts explicit CUDA0 dispatch and retains
-unchanged high-position tolerances plus four incorrect controls; its CPU path
+a declared FP32 high-position budget plus four incorrect controls; its CPU path
 still passes. Replacement CUDA build39987283644 at8920fa6c038eedb80997a955b1f6d76133abb0c0
 succeeded; all69 capsule file hashes and700 runtime source hashes match
 the manifest and approved CPU sources, with both source packets verified. GPU
@@ -88,7 +89,18 @@ validation will require this original-module check through position16383 before
 loading trained weights. Kaggle v1 is pinned to reviewed CPU revisionb99c15b3719518846a90402447cee58331470ed7
 and runtime revisiond90703f4029055bdc1cb3e3064ff9e5549422dde; both have
 anonymous byte readback. A read-only slot check found no active kernels among
-the20 most recent; recheck at actual launch. No actual CUDA model acceptance has run.
+the20 most recent; actual prelaunch check also found zero active sessions.
+Kaggle kernel `crispasr-granite5-acceptance` v1 ended ERROR on a T4; terminal
+logs and outputs are preserved. Actual host-library loading passed. Its correct
+YaRN component had norm ratio0.9999999545, relativeL2 0.0007615, peak0.003943 and
+low-position peak0.00001315, exceeding the CPU-derived0.003/0.0005 limits.
+GGML CUDA enables fast math; [NVIDIA documents the lower-accuracy intrinsics](https://docs.nvidia.com/cuda/archive/12.4.1/pdf/CUDA_C_Programming_Guide.pdf).
+The normalized FP32 component budget is now RMS0.1%/peak0.5%, low-position
+peak0.00002, retaining the same1ppm norm invariant. All4 wrong configurations
+still reject on CPU under this same budget. Full model cosine/norm/decoded
+output gates are unchanged. V2 requires a newly compiled, pinned capsule and
+all4 CUDA negative controls before real model acceptance. No CUDA model
+acceptance has passed yet.
 
 Resource policy: check load and available memory before local compile/inference;
 keep large model work off this small host. CPU conversion/reference/diff runs on

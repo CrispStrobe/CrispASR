@@ -40,6 +40,9 @@ def main():
             stream.write(arrays[key].astype("<f4").tobytes())
     receipt = {"oracle_sha256": sha(args.oracle), "probe_sha256": sha(args.probe),
                "fixture_sha256": sha(fixture), "native_model_acceptance": False, "device": args.device,
+               "precision_budget": {"maxabs": .005, "low_position_maxabs": 2e-5,
+                                    "relative_l2": .001, "norm_error": 1e-6},
+               "precision_basis": "Normalized FP32 fixture; CUDA uses fast pow/trig intrinsics, phase roundoff grows with position",
                "complete": False, "cases": []}
     for mode, name in enumerate(("unscaled_rejected", "yarn_matches", "wrong_context_rejected",
                                   "double_magnitude_rejected", "wrong_pairing_rejected")):
