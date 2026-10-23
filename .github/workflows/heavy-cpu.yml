@@ -93,7 +93,7 @@ jobs:
       # standard CI token can read models but cannot upload its Xet weights.
       # Granite's producers have their own checkpoint credential; ordinary jobs
       # continue to receive only the existing read-only token.
-      HF_TOKEN: ${{ (inputs.script == 'tools/ci-heavy/granite5_baseline_reference.py' || inputs.script == 'tools/ci-heavy/granite5_native_acceptance.py') && secrets.GRANITE5_HF_TOKEN || (inputs.script == 'tools/ci-heavy/index_echo_produce.py' || inputs.script == 'tools/ci-heavy/index_echo_publish.py' || inputs.script == 'tools/ci-heavy/index_echo_q4_prepare.py' || inputs.script == 'tools/ci-heavy/echo_owned_ffn_run.py') && secrets.INDEX_ECHO_HF_TOKEN || secrets.HF_TOKEN }}
+      HF_TOKEN: ${{ (inputs.script == 'tools/ci-heavy/granite5_baseline_reference.py' || inputs.script == 'tools/ci-heavy/granite5_native_acceptance.py' || inputs.script == 'tools/ci-heavy/granite5_quant_precision.py') && secrets.GRANITE5_HF_TOKEN || (inputs.script == 'tools/ci-heavy/index_echo_produce.py' || inputs.script == 'tools/ci-heavy/index_echo_publish.py' || inputs.script == 'tools/ci-heavy/index_echo_q4_prepare.py' || inputs.script == 'tools/ci-heavy/echo_owned_ffn_run.py') && secrets.INDEX_ECHO_HF_TOKEN || secrets.HF_TOKEN }}
       GH_TOKEN: ${{ github.token }}
     steps:
       - uses: actions/checkout@v4
