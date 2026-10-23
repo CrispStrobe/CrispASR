@@ -17,6 +17,7 @@ import sys
 import requests
 
 from granite5_native_acceptance import sha
+from granite5_execution import gpu_matmul_nodes
 
 ROOT = Path(__file__).resolve().parents[2]
 STAGING = 'cstr/crispasr-granite5-validation-public'
@@ -56,6 +57,11 @@ def qualify(cpu, gpu, preflight, gpu_root):
         raise ValueError('Complete linked CPU and actual CUDA approval is required')
     if not (preflight['runtime_preflight_pass'] and preflight['gpu0']['uuid'] == gpu['hardware']['uuid']):
         raise ValueError('Loader/hardware evidence mismatch')
+    cub = gpu.get('compiler_header_components', {}).get('CUB', {})
+    if not (cub.get('version') == '2.3.2' and cub.get('license') == 'BSD-3-Clause' and
+            cub.get('license_sha256') == '2e15eba2e130f3e80d9e91724c7dce3781ce99316324681ff54b00c1fc9759b3' and
+            re.fullmatch('[0-9a-f]{64}', gpu.get('runtime_provenance_sha256', ''))):
+        raise ValueError('CUDA proof must identify the licensing-complete runtime')
     if set(cpu['profiles']) != {'f16', 'q8_0'} or set(gpu['profiles']) != {'f16', 'q8_0'}:
         raise ValueError('Only the qualified F16/Q8 profiles may be published')
     rope = gpu['rope_parity']
@@ -75,8 +81,9 @@ def qualify(cpu, gpu, preflight, gpu_root):
         for label in ('stages', 'session', 'cli'):
             execution = g['validation']['executions'][label]
             log = (gpu_root / quant / (label + '.log')).read_text()
+            actual_nodes = gpu_matmul_nodes(log)
             if not (execution['returncode'] == 0 and execution['peak_gpu_mib'] >= 512 and execution['gpu_matmul_nodes'] > 0 and
-                    'backend=CUDA0 split=0' in log):
+                    execution['gpu_matmul_nodes'] == actual_nodes and 'backend=CUDA0 split=0' in log):
                 raise ValueError('Actual per-process GPU0 work evidence is missing')
 
 
@@ -151,6 +158,8 @@ def main():
                     cpu_run=39984477044, cpu_source=CPU_SOURCE, cpu_revision=CPU_REVISION, cpu_receipt_sha256=CPU_SHA,
                     cuda_revision=args.cuda_revision, cuda_prefix=str(prefix), cuda_receipt_sha256=args.cuda_receipt_sha,
                     runtime_source=gpu['runtime_source'], hardware=gpu['hardware'],
+                    runtime_provenance_sha256=gpu['runtime_provenance_sha256'],
+                    compiler_header_components=gpu['compiler_header_components'],
                     profiles={q: cpu['profiles'][q]['file'] for q in ('f16', 'q8_0')},
                     cpu_acceptance=True, cuda_acceptance=True, production_release=False,
                     unaccepted_profiles=['q4_k', 'q6_k'], native_context_limit=4096,

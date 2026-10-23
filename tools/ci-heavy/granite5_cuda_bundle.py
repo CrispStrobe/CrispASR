@@ -11,6 +11,7 @@ from pathlib import Path
 import shutil
 import subprocess
 import tarfile
+import urllib.request
 from granite5_runtime_licenses import collect_corresponding_sources, collect_licenses, snapshot_dependencies
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -149,9 +150,15 @@ def main():
             cub_versions[str(header.relative_to(CUDA))] = dict(version=int(match.group(1)), sha256=sha(header))
     assert cub_versions and all(v['version'] == 200302 for v in cub_versions.values()), cub_versions
     assert 'NVIDIA CUB 2.3.2' in (bundle / 'THIRD_PARTY_NOTICES.txt').read_text()
+    cub_url = 'https://raw.githubusercontent.com/NVIDIA/cccl/v2.3.2/cub/LICENSE.TXT'
+    cub_sha = '2e15eba2e130f3e80d9e91724c7dce3781ce99316324681ff54b00c1fc9759b3'
+    with urllib.request.urlopen(cub_url, timeout=120) as response:
+        cub_license = response.read()
+    assert hashlib.sha256(cub_license).hexdigest() == cub_sha
+    (bundle / 'licenses/CUB-2.3.2.txt').write_bytes(cub_license)
     receipt['compiler_header_components'] = dict(CUB=dict(version='2.3.2', headers=cub_versions,
-        notice='THIRD_PARTY_NOTICES.txt', license='BSD-3-Clause',
-        source='https://github.com/NVIDIA/cccl/blob/v2.3.2/cub/LICENSE.TXT'))
+        notice='licenses/CUB-2.3.2.txt', license='BSD-3-Clause',
+        license_source=cub_url, license_sha256=cub_sha))
     receipt['probe_sources'] = {
         name: sha(ROOT / 'tools/ci-heavy' / name)
         for name in ('granite5_stage_probe.cpp', 'granite5_rope_probe.cpp')
