@@ -17,7 +17,7 @@ import sys
 import requests
 
 from granite5_native_acceptance import sha
-from granite5_execution import gpu_matmul_nodes
+from granite5_execution import gpu_matmul_nodes, gpu_decoder_matmul_nodes
 
 ROOT = Path(__file__).resolve().parents[2]
 STAGING = 'cstr/crispasr-granite5-validation-public'
@@ -82,8 +82,10 @@ def qualify(cpu, gpu, preflight, gpu_root):
             execution = g['validation']['executions'][label]
             log = (gpu_root / quant / (label + '.log')).read_text()
             actual_nodes = gpu_matmul_nodes(log)
+            decoder_nodes = gpu_decoder_matmul_nodes(log)
             if not (execution['returncode'] == 0 and execution['peak_gpu_mib'] >= 512 and execution['gpu_matmul_nodes'] > 0 and
-                    execution['gpu_matmul_nodes'] == actual_nodes and 'backend=CUDA0 split=0' in log):
+                    execution['gpu_matmul_nodes'] == actual_nodes and decoder_nodes > 0 and
+                    execution['gpu_decoder_matmul_nodes'] == decoder_nodes):
                 raise ValueError('Actual per-process GPU0 work evidence is missing')
 
 
