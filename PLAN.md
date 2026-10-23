@@ -119,6 +119,16 @@ a notice supplement for earlier copies. Anonymous full-byte readback passed
 for the v2 archive (SHA256 6823fc1fdeccd9b4276b43267d001156d3dc7faf24deed6652b356219e4e9b5d).
 V2 worker617766e7c requires the exact compiled CUB notice before inference;
 it uses the immutable approved CPU receipt and revised runtime999c56805.
+V2 ended ERROR after all five actual CUDA rotary controls passed: the stage
+probe selected CPU before loading the dynamic backend registry. The required
+per-process GPU checks correctly rejected it (CPU matrix assignments, zero GPU
+residency). Logs and all outputs are preserved. Probe2f73af3d4 now explicitly
+loads the packaged backend modules before device selection. Hosted build
+40004231666 succeeded; its70 capsule files,700 unchanged runtime sources,
+corresponding-source packets and complete CUB notice are independently verified.
+Anonymous full-byte readback passed at immutable diagnostic revision
+b73f461c80abc95bae34d7cb45a2bed18b433f1d. V3 uses this exact corrected capsule
+and the same CPU-approved model files; no model gate has changed.
 
 Resource policy: check load and available memory before local compile/inference;
 keep large model work off this small host. CPU conversion/reference/diff runs on
