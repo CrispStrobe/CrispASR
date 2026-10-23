@@ -140,6 +140,15 @@ its matrix assignments and VRAM, rather than that path-specific message.
 Model-free controls reject CPU-assigned operations, GPU inputs alone, encoder
 work alone and backend labels alone. V4 uses this Python evidence correction
 with the unchanged2f73af3d4 compiled capsule; full acceptance remains pending.
+V4 established full F16 CUDA acceptance: all stages, both decoders, repeated
+renamed C ABI Session and CLI pass, with actual CUDA language-head work in all
+three processes. Q8 then failed its actual pipeline-logit norm gate at
+1.010822821 (teacher1.006127581); all frontend tensors match F16. Q8 remains
+unqualified for CUDA despite exact decoded words. All terminal logs/outputs
+are preserved. A separate GPU-only precision diagnostic at aadf868a4 compares
+the same embedding-only candidate with the already checkpointed candidate
+retaining both embeddings and output head at F16. It retains the same gates
+and reports diagnostic-only results, never full/production acceptance.
 
 Resource policy: check load and available memory before local compile/inference;
 keep large model work off this small host. CPU conversion/reference/diff runs on
