@@ -10,14 +10,14 @@ import sys
 import tarfile
 
 VERSION = 'granite5-cuda-acceptance-v1'
-SOURCE = '1bad3b2dbe8b5ce55cc5dfafcec25610d442ee95'
+SOURCE = '8920fa6c038eedb80997a955b1f6d76133abb0c0'
 CPU_SOURCE = '1bad3b2dbe8b5ce55cc5dfafcec25610d442ee95'
 CPU_RUN = 39984477044
-CPU_REVISION = ''  # Fill only after this exact run passes and its full outputs are reviewed.
-CPU_SHA256 = ''
-RUNTIME_SOURCE = ''  # Replacement capsule must include the CUDA RoPE probe.
-RUNTIME_REVISION = ''
-RUNTIME_SHA256 = ''
+CPU_REVISION = 'b99c15b3719518846a90402447cee58331470ed7'
+CPU_SHA256 = 'bb8e17e1e4fc81fdb85bbdcab84ae91f01833d30d4da9135f2ea2af4874bfdea'
+RUNTIME_SOURCE = '8920fa6c038eedb80997a955b1f6d76133abb0c0'
+RUNTIME_REVISION = 'd90703f4029055bdc1cb3e3064ff9e5549422dde'
+RUNTIME_SHA256 = 'a0b8f242e97e69aab3b1882c97a80ada0f88498fb45b868923efc249540e3dd8'
 STAGING = 'cstr/crispasr-granite5-validation-public'
 RUNTIME_PATH = f'runtime/{RUNTIME_SOURCE}/granite5-cuda-validation.tar.gz'
 # Deliberately unlaunchable until reviewed immutable CPU/runtime pins exist.
