@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (335 lessons)
+## Index by topic (336 lessons)
 
 **Security & untrusted input** (2)
 
@@ -198,7 +198,7 @@ cross-reference when you already know which model you are touching.
 - L19638 — 2026-10-06 — A graph allocated twice keeps its first addresses (nemotron GPU graph reuse)
 - L19665 — 2026-10-09 — Output flags do not invalidate a cached graph allocation plan (Nemotron layer diagnostics)
 
-**GPU portability — Metal / CUDA / Vulkan** (28)
+**GPU portability — Metal / CUDA / Vulkan** (29)
 
 - L174 — A GPU decoder can spend most of its time in one scalar CPU projection before the decode loop
 - L1871 — When the full system needs an unavailable resource (model / GPU), factor the risky logic into a pure helper and prove IT on synthetic data
@@ -228,6 +228,7 @@ cross-reference when you already know which model you are touching.
 - L19434 — 2026-10-02 — CUDA package coherence includes the CPU floor and architecture coverage (#483)
 - L19546 — 2026-10-06 — A carried patch in two files loses one half when upstream splits a file (ggml Metal `_hp` kernel)
 - L19594 — 2026-10-06 — Before blaming a dependency bump for a red GPU suite, check what the suite does not do, then run the baseline
+- L19743 — Granite5 quantization and actual CUDA work evidence
 
 **Quantization** (11)
 
@@ -435,7 +436,7 @@ lookup, not a partition.
 - **audioseal** (1) — L13230
 - **cohere** (7) — L967, L4014, L11545, L13201, L15265, L15545, L17093
 - **voxtral** (12) — L3911, L4014, L4062, L4222, L4614, L11481, L11545, L11572, L11707, L16390, L17594, L19176
-- **granite** (3) — L2654, L3911, L15265
+- **granite** (4) — L2654, L3911, L15265, L19743
 - **ark-asr** (3) — L506, L16870, L17594
 - **higgs-stt** (2) — L1343, L17967
 - **dots-tts** (2) — L2218, L17594

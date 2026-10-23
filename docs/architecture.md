@@ -481,6 +481,27 @@ runtime, and the APK has been exercised on a real Android device.
 **granite** (`granite-speech-{3.2-8b, 3.3-2b, 3.3-8b}`, `granite-4.0-1b-speech`):
 Conformer encoder + BLIP-2 Q-Former + Granite LLM (μP scaling).
 
+**Granite Speech 5.0 2B** uses the same `granite` runtime with explicit YaRN
+metadata: factor 4, original context 4096, NEOX pairing and the original
+attention-magnitude correction. Conversion validates these fields instead of
+silently dropping an unknown scaling scheme. Prefill, bucketed decode and
+dynamic decode share the same rotary parameters; older models without YaRN
+metadata retain their original parameters. The native context limit remains
+4096. Component agreement through position 16383 does not qualify full 16k
+inference.
+
+F16 passes the independent original F32 stage, magnitude, prompt-token,
+decoded-token, C ABI and CLI checks on CPU and actual CUDA. Q8_0 with F16 token
+embeddings passes CPU but fails the CUDA pipeline-logit magnitude gate;
+retaining its output head at F16 does not fix that failure. Q4_K and Q6_K also
+fail fixed magnitude gates. Only F16 is qualified for publication. Use
+`--ask "transcribe the speech with proper punctuation and capitalization."`
+for the publisher's punctuated/capitalized task; the legacy default request
+uses its raw transcription task. Both CLI and C ABI format the same prompt.
+The dedicated Granite5 regression adapter repeats all frontend and decoder
+checks, repeated renamed-model Session calls and the actual CLI; the generic
+Granite frontend diff alone does not cover these requirements.
+
 **granite-4.1** (`granite-speech-4.1-2b`): Same architecture as 4.0
 (16-layer Conformer + Q-Former + Granite LLM); "2B" = full system.
 Encoder runs as a single ggml graph by default with per-layer Shaw RPE

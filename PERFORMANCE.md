@@ -2746,6 +2746,14 @@ core infrastructure.
   replay (no KV snapshots)
 
 **Granite Speech** (`granite_speech.cpp`):
+- Speech5.0-2B ships F16 (5.58 GB). Original F32 stage/magnitude comparisons,
+  exact prompt and27-token decodes, repeated C ABI Session and CLI pass on CPU
+  and actual T4 CUDA. This is quality acceptance, not an RTF benchmark. The
+  native context limit remains4096; rotary component tests through16383 do not
+  establish full16k inference. Q8 with F16 embeddings passes CPU (pipeline norm
+  ratio1.008909) but fails CUDA (1.010823, fixed maximum1.01). Retaining the head
+  at F16 also fails that CUDA gate. Q4/Q6 fail magnitude gates too, so the
+  registry offers only F16 for5.0. Explicit4.1 defaults remain unchanged.
 - Has: BN folding, Shaw RPE precomputed per layer, KV cache (quant),
   KV on-CPU, layer offload, flash attn (LLM), dual encoder paths
   (CPU/ggml graph), block-local attention (ctx=200), frame stacking 2×,

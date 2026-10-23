@@ -37,6 +37,11 @@ on:
   schedule:
     - cron: '0 4 * * *'  # 04:00 UTC daily
   workflow_dispatch:
+    inputs:
+      granite5_only:
+        description: 'Run the complete published Granite5 acceptance regression only'
+        type: boolean
+        default: false
   # PR / push: smoke + unit + preflight, plus the per-backend regression for
   # only the backends the change can affect (tools/regression_select.py; shared
   # code selects a small core set). Docs-only changes do not trigger it.
@@ -55,6 +60,8 @@ on:
       - 'CMakeLists.txt'
       - 'ggml'
       - 'tools/regression_select.py'
+      - 'tools/ci-heavy/granite5*'
+      - 'tests/test_granite5_regression.py'
       - 'tools/reference_backends/phonon2/**'
       - 'tools/reference_backends/parakeet_hf.py'
       - 'tools/reference_backends/index_echo.py'
@@ -79,6 +86,8 @@ on:
       - 'ggml'
       - 'tests/regression/**'
       - 'tools/regression_select.py'
+      - 'tools/ci-heavy/granite5*'
+      - 'tests/test_granite5_regression.py'
       - 'tools/reference_backends/phonon2/**'
       - 'tools/reference_backends/parakeet_hf.py'
       - 'tools/reference_backends/index_echo.py'
@@ -136,6 +145,8 @@ jobs:
         run: python -m unittest discover -s tests -p test_phonon2_container.py -v
       - name: Index-Echo numerical acceptance bounds
         run: python -m unittest discover -s tests -p 'test_index_echo*acceptance.py' -v
+      - name: Granite5 immutable regression input controls
+        run: python -m unittest discover -s tests -p 'test_granite5_*.py' -v
       # Chat binding (#362). 891 lines of tests that nothing invoked: this file
       # is not named by any workflow and regression.yml pytests two files by
       # name rather than a directory, so it could only ever run by hand. With
@@ -178,6 +189,7 @@ jobs:
       actions: read
     outputs:
       matrix: ${{ steps.pick.outputs.matrix }}
+      granite5: ${{ steps.pick.outputs.granite5 }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -187,7 +199,13 @@ jobs:
           EVENT: ${{ github.event_name }}
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           GH_TOKEN: ${{ github.token }}
+          GRANITE5_ONLY: ${{ inputs.granite5_only }}
         run: |
+          if [ "$GRANITE5_ONLY" = true ]; then
+            echo 'matrix=[]' >> "$GITHUB_OUTPUT"
+            echo 'granite5=true' >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           # Push: diff against the head of the newest SUCCESSFUL Regression run
           # on main that is an ancestor of this commit, not just the previous
           # push. Consecutive pushes cancel each other (concurrency), and a
@@ -203,6 +221,8 @@ jobs:
           echo "base: $BASE"
           m=$(python3 tools/regression_select.py --event "$EVENT" --base "$BASE" --head HEAD)
           echo "matrix=$m" >> "$GITHUB_OUTPUT"
+          granite5=$(python3 tools/regression_select.py --granite5 --event "$EVENT" --base "$BASE" --head HEAD)
+          echo "granite5=$granite5" >> "$GITHUB_OUTPUT"
           echo "selected: $m"
 
   # Dry-run preflight: confirm every pinned HF artifact in the
@@ -248,6 +268,52 @@ jobs:
   # voxtral4b 4 GB) that don't fit reliably on the GitHub free-tier
   # 14 GB ubuntu-latest scratch should go through the weekly Kaggle
   # full-sweep job (`tools/test-all-backends.py` on a Kaggle kernel) instead.
+  granite5:
+    needs: [smoke, unit-tests, select]
+    if: needs.select.outputs.granite5 == 'true'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 45
+    env:
+      HF_TOKEN: ${{ secrets.HF_TOKEN }}
+      HF_HUB_DOWNLOAD_TIMEOUT: '120'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Install hosted CPU dependencies
+        run: |
+          bash tools/ci-apt.sh update
+          bash tools/ci-apt.sh install -y ninja-build libopenblas-dev
+          python -m pip install 'numpy<3' 'gguf==0.17.1' 'huggingface_hub>=0.36,<2'
+      - name: Build public CPU surfaces and stage probe
+        run: |
+          uptime
+          free -m
+          python - <<'PY'
+          import os
+          from pathlib import Path
+          available = next(int(s.split()[1]) for s in Path('/proc/meminfo').read_text().splitlines()
+                           if s.startswith('MemAvailable:'))
+          assert available >= 6 * 1024 * 1024 and os.getloadavg()[0] <= 2 * os.cpu_count()
+          PY
+          cmake -S . -B build-granite5 -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PROJECT_crispasr_INCLUDE="$PWD/tools/ci-heavy/granite5_regression_targets.cmake" \
+            -DBUILD_SHARED_LIBS=ON -DCRISPASR_BUILD_TESTS=OFF -DCRISPASR_BUILD_SERVER=OFF \
+            -DGGML_NATIVE=OFF -DGGML_BLAS=OFF
+          cmake --build build-granite5 --target crispasr-cli crispasr-lib granite5-stage-probe -j2
+      - name: Replay all accepted CPU gates for published profiles
+        run: |
+          export HF_HOME="$RUNNER_TEMP/granite5-hf"
+          python tools/ci-heavy/granite5_regression.py \
+            --pins tests/regression/granite5.json --build-root build-granite5 \
+            --scratch "${{ runner.temp }}/granite5-inputs" --out granite5-regression-out
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: granite5-regression
+          path: granite5-regression-out/
+          if-no-files-found: warn
+
   regression:
     # NOT `needs: preflight`: one transient HF/GitHub-storage error in the
     # preflight used to skip every backend (Sep 13, 15, 16, 17 tested nothing).

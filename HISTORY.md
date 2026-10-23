@@ -1,3 +1,23 @@
+## 2026-10-23 — Granite Speech5.0 F16 (#552)
+
+YaRN factor4/original-context4096 metadata now reaches every Granite prefill,
+bucketed and dynamic decoder path. Shared prompt formatting fixes the C ABI
+legacy suffix length and custom-ask spacing. F16 passes original F32 stage and
+magnitude checks, exact prompt/both27-token decodes, renamed C ABI Session and
+CLI on hosted CPU and actual T4 CUDA. Native context remains4096; the rotary
+component's16383-position test does not qualify full16k inference.
+
+Published F16 is the pinned `granite` default, with Apache model/MIT recipe
+licenses, notices, original publisher card and provenance downloaded alongside
+it. Anonymous full-byte readbacks pass. Q8/Q6/Q4 are excluded after fixed
+magnitude-gate failures; exact words do not waive those gates. A declared
+F16-only qualification preserves the failed Q8 parent matrix verbatim. Registry
+and CLI preview/resolver guards prevent rejected quant URLs or cached-default
+substitution. Explicit legacy4.0 filenames and4.1 defaults remain unchanged.
+Dedicated hosted regression repeats all accepted gates on the published model.
+CUDA capsules also retain compiled CUB2.3.2 BSD notices and external-runtime
+corresponding sources. [Receipt](docs/granite5-2026-10-23.json).
+
 ## 2026-10-23 — Listened OmniVoice Metal encoder defaults
 
 ## 2026-10-23 — Qwen Base model-sized designed defaults (#555)

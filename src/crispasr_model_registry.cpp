@@ -14,6 +14,7 @@
 #include <unistd.h>
 #endif
 #include <cstdio>
+#include <utility>
 #include <vector>
 
 namespace {
@@ -25,8 +26,9 @@ struct Entry {
     const char* approx_size;
     const char* companion_file; // optional extra file (e.g. tokenizer.bin, primary voice). NULL if none.
     const char* companion_url;
-    const char* companion_size; // size of the companion file; NULL = falls back to approx_size
-    const char* license;        // NULL = permissive; otherwise SPDX-ish tag + source/license URL
+    const char* companion_size;   // size of the companion file; NULL = falls back to approx_size
+    const char* license;          // NULL = permissive; otherwise SPDX-ish tag + source/license URL
+    const char* supported_quants; // Optional comma-delimited allowlist; NULL preserves legacy rewriting.
 };
 
 // Extra companion files beyond the single inline `companion_file/url` slot.
@@ -167,6 +169,10 @@ constexpr Entry k_registry[] = {
     {"voxtral4b", "voxtral-mini-4b-realtime-f16.gguf",
      "https://huggingface.co/cstr/voxtral-mini-4b-realtime-GGUF/resolve/main/voxtral-mini-4b-realtime-f16.gguf",
      "~8.3 GB", nullptr, nullptr},
+    // Only F16 passes all CPU/CUDA stage, magnitude, token and API gates.
+    {"granite", "granite-speech-5.0-2b-f16.gguf",
+     "https://huggingface.co/cstr/granite-speech-5.0-2b-GGUF/resolve/701f5529d8459412cc1b6053b5880c630125b138/granite-speech-5.0-2b-f16.gguf",
+     "~5.58 GB", nullptr, nullptr, nullptr, "Apache-2.0", ",f16,"},
     {"granite", "granite-speech-4.0-1b-q4_k.gguf",
      "https://huggingface.co/cstr/granite-speech-4.0-1b-GGUF/resolve/main/granite-speech-4.0-1b-q4_k.gguf", "~2.94 GB", nullptr, nullptr},
     {"granite-4.1", "granite-speech-4.1-2b-q4_k.gguf",
@@ -1873,7 +1879,17 @@ constexpr ExtraCompanion k_moonshine_streaming_small_de_onnx_f32_extras[] = {
     {nullptr, nullptr},
 };
 
+constexpr ExtraCompanion k_granite5_extras[] = {
+    {"granite-speech-5.0-2b/LICENSE", "https://huggingface.co/cstr/granite-speech-5.0-2b-GGUF/resolve/701f5529d8459412cc1b6053b5880c630125b138/LICENSE"},
+    {"granite-speech-5.0-2b/LICENSE-RECIPE.txt", "https://huggingface.co/cstr/granite-speech-5.0-2b-GGUF/resolve/701f5529d8459412cc1b6053b5880c630125b138/LICENSE-RECIPE.txt"},
+    {"granite-speech-5.0-2b/NOTICE", "https://huggingface.co/cstr/granite-speech-5.0-2b-GGUF/resolve/701f5529d8459412cc1b6053b5880c630125b138/NOTICE"},
+    {"granite-speech-5.0-2b/original-publisher-README.md", "https://huggingface.co/cstr/granite-speech-5.0-2b-GGUF/resolve/701f5529d8459412cc1b6053b5880c630125b138/original-publisher-README.md"},
+    {"granite-speech-5.0-2b/validation-evidence.json", "https://huggingface.co/cstr/granite-speech-5.0-2b-GGUF/resolve/701f5529d8459412cc1b6053b5880c630125b138/validation-evidence.json"},
+    {nullptr, nullptr},
+};
+
 constexpr ExtraList k_extras[] = {
+    {"granite", k_granite5_extras},
     {"moonshine-streaming-small-de-onnx-f32", k_moonshine_streaming_small_de_onnx_f32_extras},
     {"moonshine-streaming-tiny-de-onnx-f32", k_moonshine_streaming_tiny_de_onnx_f32_extras},
     {"moonshine-streaming-tiny-de-onnx", k_moonshine_streaming_tiny_de_onnx_extras},
@@ -2005,7 +2021,20 @@ std::string replace_tail_filename(const std::string& url, const std::string& old
 
 static std::string effective_license(const Entry& e);
 
-void fill(CrispasrRegistryEntry& out, const Entry& e, const std::string& preferred_quant) {
+bool fill(CrispasrRegistryEntry& out, const Entry& input, const std::string& preferred_quant) {
+    if (input.supported_quants && !preferred_quant.empty() &&
+        std::string(input.supported_quants).find("," + preferred_quant + ",") == std::string::npos)
+        return false;
+    // Qualified profiles have explicit rows with measured sizes. Resolve the
+    // selected row rather than inventing a filename or losing its size.
+    const Entry* selected = &input;
+    if (input.supported_quants && !preferred_quant.empty()) {
+        const std::string target = apply_quant_to_filename(input.filename, preferred_quant);
+        selected = find_by_filename(target);
+        if (!selected || std::string(selected->backend) != input.backend || !selected->supported_quants)
+            return false;
+    }
+    const Entry& e = *selected;
     const std::string filename = apply_quant_to_filename(e.filename, preferred_quant);
     out.backend = e.backend;
     out.filename = filename;
@@ -2031,6 +2060,7 @@ void fill(CrispasrRegistryEntry& out, const Entry& e, const std::string& preferr
         out.companion_approx_size.clear();
     }
     out.license = effective_license(e);
+    return true;
 }
 
 // A few families have many quant/alias rows. Keep their license metadata
@@ -2068,8 +2098,11 @@ static std::string effective_license(const Entry& e) {
     return "";
 }
 
-const ExtraCompanion* find_extras(const char* backend) {
+const ExtraCompanion* find_extras(const char* backend, const char* filename) {
     if (!backend)
+        return nullptr;
+    if (std::string(backend) == "granite" &&
+        (!filename || std::string(filename).rfind("granite-speech-5.0-2b-", 0) != 0))
         return nullptr;
     for (const auto& x : k_extras) {
         if (!x.backend)
@@ -2227,8 +2260,7 @@ bool crispasr_registry_lookup(const std::string& backend, CrispasrRegistryEntry&
     const Entry* e = find_by_backend(backend);
     if (!e)
         return false;
-    fill(out, *e, preferred_quant);
-    return true;
+    return fill(out, *e, preferred_quant);
 }
 
 bool crispasr_registry_default_bundle(const std::string& backend, CrispasrRegistryBundle& out) {
@@ -2248,7 +2280,7 @@ bool crispasr_registry_default_bundle(const std::string& backend, CrispasrRegist
                                  e->companion_size ? e->companion_size : (e->approx_size ? e->approx_size : "")});
     }
 
-    if (const ExtraCompanion* extras = find_extras(e->backend)) {
+    if (const ExtraCompanion* extras = find_extras(e->backend, e->filename)) {
         for (const ExtraCompanion* it = extras; it->file && it->url; ++it)
             out.artifacts.push_back({CrispasrRegistryArtifactKind::Extra, it->file, it->url, ""});
     }
@@ -2259,8 +2291,7 @@ bool crispasr_registry_lookup_by_filename(const std::string& filename, CrispasrR
                                           const std::string& preferred_quant) {
     const Entry* e = find_by_filename(filename);
     if (e) {
-        fill(out, *e, preferred_quant);
-        return true;
+        return fill(out, *e, preferred_quant);
     }
 
     const std::string base = basename_of(filename);
@@ -2291,8 +2322,7 @@ int crispasr_registry_count() {
 bool crispasr_registry_get_at(int i, CrispasrRegistryEntry& out, const std::string& preferred_quant) {
     if (i < 0 || i >= crispasr_registry_count())
         return false;
-    fill(out, k_registry[i], preferred_quant);
-    return true;
+    return fill(out, k_registry[i], preferred_quant);
 }
 
 bool crispasr_find_cached_model(CrispasrRegistryEntry& out, const std::string& cache_dir_override,
@@ -2301,9 +2331,12 @@ bool crispasr_find_cached_model(CrispasrRegistryEntry& out, const std::string& c
     // first entry wins, which matches the documented preference.
     const std::string dir = crispasr_cache::dir(cache_dir_override);
     for (const auto& e : k_registry) {
-        const std::string path = dir + "/" + apply_quant_to_filename(e.filename, preferred_quant);
+        CrispasrRegistryEntry candidate;
+        if (!fill(candidate, e, preferred_quant))
+            continue;
+        const std::string path = dir + "/" + candidate.filename;
         if (crispasr_cache::file_present(path)) {
-            fill(out, e, preferred_quant);
+            out = std::move(candidate);
             return true;
         }
     }
@@ -2325,7 +2358,7 @@ std::string crispasr_resolve_model(const std::string& model_arg, const std::stri
         if (!entry.companion_filename.empty() && !entry.companion_url.empty() &&
             !fetch(entry.companion_filename, entry.companion_url))
             return false;
-        if (const ExtraCompanion* extras = find_extras(entry.backend.c_str())) {
+        if (const ExtraCompanion* extras = find_extras(entry.backend.c_str(), entry.filename.c_str())) {
             for (const ExtraCompanion* it = extras; it->file && it->url; ++it)
                 if (!fetch(it->file, it->url))
                     return false;
@@ -2359,6 +2392,10 @@ std::string crispasr_resolve_model(const std::string& model_arg, const std::stri
         // sub-variant keys like "parakeet-v2" / "parakeet-tdt-1.1b" / etc.
         CrispasrRegistryEntry match;
         bool have_match = crispasr_registry_lookup_by_filename(model_arg, match, preferred_quant);
+        // A named Granite5 profile must never fall back to a different model
+        // merely because its rejected/unpublished quant has no registry row.
+        if (!have_match && basename_of(model_arg).rfind("granite-speech-5.0-2b-", 0) == 0)
+            return model_arg;
         if (!have_match)
             have_match = crispasr_registry_lookup(model_arg, match, preferred_quant);
         if (!have_match && !backend_name.empty())
@@ -2402,8 +2439,8 @@ std::string crispasr_resolve_model(const std::string& model_arg, const std::stri
 
     CrispasrRegistryEntry e;
     if (!crispasr_registry_lookup(backend_name, e, preferred_quant)) {
-        fprintf(stderr, "crispasr: -m auto not supported for backend '%s' (no default model registered)\n",
-                backend_name.c_str());
+        fprintf(stderr, "crispasr: no model registered for backend '%s' with quantization '%s'\n", backend_name.c_str(),
+                preferred_quant.empty() ? "default" : preferred_quant.c_str());
         return "";
     }
 

@@ -1,0 +1,184 @@
+{
+  "schema": 1,
+  "issue": 552,
+  "release": {
+    "repo": "cstr/granite-speech-5.0-2b-GGUF",
+    "revision": "701f5529d8459412cc1b6053b5880c630125b138",
+    "models": {
+      "f16": {
+        "filename": "granite-speech-5.0-2b-f16.gguf",
+        "revision": "68bfc1859eaca70fb0d83122120e81867dd9a114",
+        "sha256": "2b9095b27d6a22f63a2b9dd6d8014611a71565c28fd71e19d7381eb55cc68351",
+        "bytes": 5581888128,
+        "anonymous_full_byte_readback": true
+      }
+    },
+    "run": 40009546796
+  },
+  "original_model": "ibm-granite/granite-speech-5.0-2b",
+  "original_revision": "c075cf19e041a2e4d16c5ee24763e5b037d8f479",
+  "cpu": {
+    "run": 39984477044,
+    "source": "1bad3b2dbe8b5ce55cc5dfafcec25610d442ee95",
+    "revision": "b99c15b3719518846a90402447cee58331470ed7",
+    "receipt_sha256": "bb8e17e1e4fc81fdb85bbdcab84ae91f01833d30d4da9135f2ea2af4874bfdea"
+  },
+  "cuda": {
+    "kernel": "crispasr-granite5-acceptance",
+    "version": 4,
+    "source": "42abcbd62346635b53bc28578493ae1bdb7434de",
+    "runtime_source": "2f73af3d4537ee69417d845d3318186134d0c629",
+    "evidence_revision": "4e88d28c30b7d81bb2ee664e070b4ce3d11ca653",
+    "evidence_prefix": "gpu/42abcbd62346635b53bc28578493ae1bdb7434de/v4",
+    "receipt_sha256": "0c54b29e9982548bd53f9697d1e9e7daea333986c7a74f6e140607c18f85444d",
+    "parent_matrix_complete": false,
+    "parent_matrix_accepted": false,
+    "selected_profile": "f16",
+    "selected_profile_complete": true,
+    "selected_profile_accepted": true,
+    "hardware": {
+      "name": "Tesla T4",
+      "compute_capability": "7.5",
+      "driver_version": "580.178.04"
+    },
+    "stages": {
+      "mel_spectrogram": {
+        "cosine": 0.9999999781546894,
+        "norm_ratio": 1.0000001324384455,
+        "relative_l2": 0.00020902307078891384,
+        "maxabs": 0.02021205425262451,
+        "pass": true
+      },
+      "encoder_out": {
+        "cosine": 0.9999999610954918,
+        "norm_ratio": 0.9999992392624993,
+        "relative_l2": 0.00027894352476746036,
+        "maxabs": 0.016364097595214844,
+        "pass": true
+      },
+      "projector_out": {
+        "cosine": 0.9999999360370057,
+        "norm_ratio": 1.0000157050312433,
+        "relative_l2": 0.0003580148454135577,
+        "maxabs": 0.0005548000335693359,
+        "pass": true
+      },
+      "llm_inputs_embeds": {
+        "cosine": 0.9999999423833847,
+        "norm_ratio": 1.000014144063678,
+        "relative_l2": 0.0003397571187686514,
+        "maxabs": 0.0005548000335693359,
+        "pass": true
+      },
+      "llm_prefill_logits": {
+        "cosine": 0.9999999439336502,
+        "norm_ratio": 0.9999725838739155,
+        "relative_l2": 0.0003359780784384159,
+        "maxabs": 0.0062825679779052734,
+        "pass": true
+      },
+      "pipeline_prefill_logits": {
+        "cosine": 0.9999999287824843,
+        "norm_ratio": 0.9998757518652319,
+        "relative_l2": 0.00039730961868042844,
+        "maxabs": 0.006472110748291016,
+        "pass": true
+      }
+    },
+    "prompt_ids_exact": true,
+    "bucketed": {
+      "exact": true,
+      "expected_count": 27,
+      "actual_count": 27,
+      "matching_prefix_count": 27,
+      "first_difference": null,
+      "expected_token": null,
+      "actual_token": null
+    },
+    "dynamic": {
+      "exact": true,
+      "expected_count": 27,
+      "actual_count": 27,
+      "matching_prefix_count": 27,
+      "first_difference": null,
+      "expected_token": null,
+      "actual_token": null
+    },
+    "session": {
+      "official": [
+        "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+        "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+      ],
+      "legacy_default": "and so, my fellow americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    "cli_text": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.\n",
+    "executions": {
+      "stages": {
+        "returncode": 0,
+        "peak_gpu_mib": 5552,
+        "gpu_matmul_nodes": 16523,
+        "gpu_decoder_matmul_nodes": 55
+      },
+      "session": {
+        "returncode": 0,
+        "peak_gpu_mib": 5858,
+        "gpu_matmul_nodes": 26246,
+        "gpu_decoder_matmul_nodes": 82
+      },
+      "cli": {
+        "returncode": 0,
+        "peak_gpu_mib": 5844,
+        "gpu_matmul_nodes": 8655,
+        "gpu_decoder_matmul_nodes": 27
+      }
+    }
+  },
+  "license": {
+    "weights": "Apache-2.0",
+    "recipes": "MIT",
+    "assets": {
+      "NOTICE": {
+        "sha256": "ebfa1eb6afd8d479af5f54b1231840acd5a789daf61b743fcbd383a50da36609",
+        "bytes": 399
+      },
+      "original-publisher-README.md": {
+        "sha256": "7de30987be095cfc7e417b82710a607d7e838cc64fdeaeaa11b06ee939fdf8aa",
+        "bytes": 24532
+      },
+      "validation-evidence.json": {
+        "sha256": "22b4e3cdbe16cc2d8a8f819686379591918a22da2b17569c9fa67163b98a0e51",
+        "bytes": 2710
+      },
+      "LICENSE-RECIPE.txt": {
+        "sha256": "aa918fb53ff1948e12cdae8136e045210fb6db222a1f6f0c14bad48e6de2100e",
+        "bytes": 1184
+      },
+      "LICENSE": {
+        "sha256": "a44a6081c73ad75f0255bb2bb5cab74ef1829565a895a24e53a4f11290ab7655",
+        "bytes": 11343
+      },
+      "README.md": {
+        "sha256": "d99ea1aa60a57f324d89c7e018f51361d770b0449a2c360ca6bdbd878177255d",
+        "bytes": 1493
+      }
+    }
+  },
+  "limits": {
+    "native_context": 4096,
+    "full_16k_context_qualified": false,
+    "acceptance_fixture": "English JFK; original F32 reference and publisher punctuation/capitalization prompt",
+    "unaccepted_profiles": [
+      "q8_0",
+      "q6_k",
+      "q4_k"
+    ]
+  },
+  "reference": {
+    "sha256": "ec91b6de806a1919d41edeb604e0aba8b636f3eadc7a4be487c8bd2ff57d5d84",
+    "bytes": 19195808,
+    "repo": "cstr/crispasr-regression-fixtures",
+    "repo_type": "dataset",
+    "path": "granite-speech-5.0-2b/a02a0dd9299e0b759704f520fe3959f50a764f71/jfk-ref.gguf",
+    "revision": "0426caae5f4f536d87058f5cb36d77525dd5bcde"
+  }
+}

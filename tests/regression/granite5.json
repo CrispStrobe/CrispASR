@@ -1,0 +1,37 @@
+{
+  "repo": "cstr/granite-speech-5.0-2b-GGUF",
+  "revision": "701f5529d8459412cc1b6053b5880c630125b138",
+  "profiles": [
+    "f16"
+  ],
+  "models": {
+    "f16": {
+      "filename": "granite-speech-5.0-2b-f16.gguf",
+      "sha256": "2b9095b27d6a22f63a2b9dd6d8014611a71565c28fd71e19d7381eb55cc68351",
+      "bytes": 5581888128
+    }
+  },
+  "reference": {
+    "sha256": "ec91b6de806a1919d41edeb604e0aba8b636f3eadc7a4be487c8bd2ff57d5d84",
+    "bytes": 19195808,
+    "repo": "cstr/crispasr-regression-fixtures",
+    "repo_type": "dataset",
+    "path": "granite-speech-5.0-2b/a02a0dd9299e0b759704f520fe3959f50a764f71/jfk-ref.gguf",
+    "revision": "0426caae5f4f536d87058f5cb36d77525dd5bcde"
+  },
+  "instruction": "transcribe the speech with proper punctuation and capitalization.",
+  "source_model": "ibm-granite/granite-speech-5.0-2b",
+  "source_revision": "c075cf19e041a2e4d16c5ee24763e5b037d8f479",
+  "native_context_limit": 4096,
+  "cuda_evidence": {
+    "repo": "cstr/crispasr-granite5-validation-public",
+    "revision": "4e88d28c30b7d81bb2ee664e070b4ce3d11ca653",
+    "prefix": "gpu/42abcbd62346635b53bc28578493ae1bdb7434de/v4",
+    "receipt_sha256": "0c54b29e9982548bd53f9697d1e9e7daea333986c7a74f6e140607c18f85444d"
+  },
+  "unaccepted_profiles": [
+    "q8_0",
+    "q6_k",
+    "q4_k"
+  ]
+}

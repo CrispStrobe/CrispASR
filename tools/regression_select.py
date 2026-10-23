@@ -14,6 +14,7 @@ push / pull_request          -> only the nightly backends the change can affect:
 
     python tools/regression_select.py --event push --base <sha> [--head HEAD]
 Prints a JSON list (GitHub Actions `fromJSON` input) on stdout.
+With --granite5, prints true/false for the separate Granite5 acceptance job.
 """
 import argparse, json, subprocess, sys
 from pathlib import Path
@@ -44,6 +45,36 @@ SHARED_PREFIXES = ("src/core/", "src/CMakeLists.txt", "CMakeLists.txt", "ggml", 
                    "examples/cli/CMakeLists.txt", "examples/cli/crispasr_backend.", "examples/cli/whisper_params",
                    "tests/regression/", "tools/regression_select.py", ".github/workflows/regression.yml",
                    "examples/crispasr-diff", "examples/cli/crispasr_diff")
+
+GRANITE5_PREFIXES = (
+    "src/core/", "src/granite_speech", "src/crispasr_model_registry", "src/crispasr_c_api",
+    "examples/cli/crispasr_backend_granite", "examples/crispasr-quantize/",
+    "models/convert-granite", "tools/ci-heavy/granite5", "tests/test_granite",
+    "tests/test-registry", "python/crispasr/", "ggml", "cmake/",
+)
+GRANITE5_FILES = {
+    "examples/cli/cli.cpp", "models/granite_rope.py", "tests/regression/granite5.json",
+    ".github/workflows/regression.yml", "CMakeLists.txt", "src/CMakeLists.txt", "tests/CMakeLists.txt",
+    "examples/cli/CMakeLists.txt", "tools/regression_select.py",
+}
+
+
+def select_granite5(event, changed=None, base="", head="HEAD"):
+    """Select the dedicated acceptance job, failing safe when Git cannot compare."""
+    if event in ("schedule", "workflow_dispatch", "dispatch"):
+        return True
+    if changed is None:
+        if not base or set(base) == {"0"}:
+            return True
+        try:
+            result = subprocess.run(["git", "diff", "--name-only", base, head],
+                                    capture_output=True, text=True, cwd=ROOT)
+        except OSError:
+            return True
+        if result.returncode != 0:
+            return True
+        changed = result.stdout.splitlines()
+    return any(path in GRANITE5_FILES or path.startswith(GRANITE5_PREFIXES) for path in changed)
 
 
 def manifest_ids():
@@ -111,7 +142,11 @@ def main():
     ap.add_argument("--base", default="")
     ap.add_argument("--head", default="HEAD")
     ap.add_argument("--changed", nargs="*", help="explicit changed-file list (tests)")
+    ap.add_argument("--granite5", action="store_true", help="print the Granite5 acceptance selection as true/false")
     a = ap.parse_args()
+    if a.granite5:
+        print("true" if select_granite5(a.event, a.changed, a.base, a.head) else "false")
+        return
     nightly = json.loads((ROOT / "tests/regression/nightly_matrix.json").read_text())["nightly"]
     if a.event in ("schedule", "workflow_dispatch"):
         print(json.dumps(nightly))

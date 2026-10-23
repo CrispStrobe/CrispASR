@@ -55,6 +55,21 @@ tests/regression/
 
 Sample WAVs live in `samples/` (already in-repo).
 
+Granite Speech5 uses a separate hosted CPU job in `regression.yml`, with release
+and reference content pins in `granite5.json`. Its adapter,
+`tools/ci-heavy/granite5_regression.py`, reuses the full acceptance checks:
+frontend stages, teacher/pipeline logit cosine and magnitude, exact prompt and
+both decoder token sequences, repeated renamed-file C ABI Sessions and CLI text
+for the original punctuation/capitalization instruction. It also checks the
+legacy raw-task words. Only the explicitly qualified published profiles run;
+the initial release includes F16. Q8_0 failed the CUDA magnitude gate.
+The retained original F32 reference is verified by SHA-256; it is not rebaked.
+The generic Granite frontend diff does not exercise these decoder gates.
+Changes to the runtime, binding, quantizer, converter or Granite5 validators
+select this job; scheduled/manual regression runs always include it. Its CPU
+receipt does not establish CUDA acceptance. Real GPU validation remains a
+separate Kaggle run using the prebuilt, source-matched validation capsule.
+
 The reference-dump archives (`ref.gguf` containing encoder_output +
 mel_spectrogram + per-layer captures) live in the HuggingFace repo
 [`cstr/crispasr-regression-fixtures`](https://huggingface.co/cstr/crispasr-regression-fixtures)

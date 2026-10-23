@@ -1,159 +1,44 @@
 # CrispASR — Pending work
 
-## NOW — Granite Speech5.0 (#552), original baseline/reference (2026-10-23)
+## NOW — Granite Speech5.0 F16 (#552), final integration checks (2026-10-23)
 
-Owner: Codex, branch `feat/granite5-20261023`. Issue description and all
-comments reread (none). Original source pinned to
-`c075cf19e041a2e4d16c5ee24763e5b037d8f479`, Apache-2.0. Existing native
-converter/runtime omit YaRN factor4/originalctx4096/maxctx16384. Read the
-original Transformer4.57 implementation and first capture the existing
-convert baseline and actual original F32 references; then quantize/diff and
-port the missing fields with old-default A/B controls. Do not present a
-registry alias or foreign llama.cpp GGUF as model support. Heavy work stays
-on GitHub; actual CUDA only after CPU parity. Voice checkpoint8bc09441a
-remains frozen on main while this isolated feature is developed.
+Owner: Codex, isolated feature worktree. Native YaRN conversion/runtime support
+and shared CLI/C ABI prompts are implemented. Only F16 qualifies for publication:
+full original F32 stage/magnitude, prompt IDs, both27-token decodes, repeated
+renamed-model C ABI Sessions and CLI checks pass on hosted CPU39984477044 and
+actual T4 CUDA v4. Native context remains4096; rotary testing through16383 does
+not qualify full16k inference. Legacy non-YaRN and NAR defaults retain their
+original parameters.
 
-Baseline producer39956092100 stopped at its deliberate write-access preflight
-with HTTP403, before any weight download or conversion. Give only this worker
-a dedicated checkpoint credential; normal heavy jobs keep the read-only token.
-Voice checkpoint8bc09441a now passes main CI39950301114, Lint39950300946,
-Secret39950301100 and nightly regression39950301071.
+Hosted publication40009546796 succeeded. Model repo
+`cstr/granite-speech-5.0-2b-GGUF` revision
+`701f5529d8459412cc1b6053b5880c630125b138` contains the5.58 GB F16 model, full
+Apache model license, separate MIT recipe license, NOTICE, original publisher
+card and selected-profile validation provenance. Anonymous full-byte model and
+metadata readbacks pass. The failed parent matrix remains unchanged in public
+evidence; only its fully accepted F16 profile is released. Corrected CUDA
+capsules retain the actual SDK CUB2.3.2 BSD notice and corresponding sources for
+the external runtimes; all old capsule ELF payloads remain byte-identical.
 
-Replacement39961385660 passed write access and produced5.58 GB baseline F16,
-then hit the account's private LFS storage quota. That model was not checkpointed
-and no reference/quant/native acceptance followed. Public diagnostic staging
-preserves Apache/MIT notices and IBM attribution, declares acceptance false,
-and passes an actual LFS upload preflight. Freeze the pre-YaRN converter at49c5d562c
-while development continues. The next producer also captures original prompt IDs,
-merged embeddings and first-prefill logits for input and decoder comparison.
+Integration sets the `granite` default to pinned F16, with pinned legal extras.
+Unqualified Q8/Q6/Q4 downloads and silent filename-to-default substitutions are
+rejected. Explicit legacy4.0 filenames and4.1 defaults are preserved. Registry
+checks pass6938 assertions/68 cases. A dedicated hosted nightly regression
+repeats the full accepted F16 gates; generic Granite frontend diff is insufficient.
+Remaining required work: hosted final CI/lint/regression, then rebase and fast
+forward main. No release tag, PR or issue comments are part of this task.
 
-The actual Transformer4.57.3 RoPE oracle and actual shared native attention now
-agree through position16383: relativeL2 0.000405, norm ratio0.999999996.
-Unscaled, wrong-context, double-magnitude and wrong-pairing controls all reject.
-Native YaRN fields are in development on the feature branch; full model stage,
-decoded-output, legacy and real CUDA acceptance remain pending. No registry entry.
-Original5 tokenizer also confirms the CLI's15-token legacy suffix. The C ABI
-still used16 tokens and omitted a space in custom asks; share the proven
-constants/formatting between surfaces. Local native parameter/prompt tests
-pass39 assertions/9 cases; NAR defaults pass5/4. The model-free shared-attention
-probe passes the original YaRN arrays and rejects all four incorrect controls.
-Public producer39964199536 at a02a0dd92 succeeded: original F32 reference,
-F16 baseline and Q8/Q4 checkpoints are retained. Native CPU39970747786 at
-c433b9f57 proved all940 F16 tensor payloads unchanged and all three profiles
-reproduced the original27 generated IDs, including EOS. F16 passed numerical
-and full CLI/Session checks. CPU acceptance remains false: Q4 teacher-prefill
-norm ratio0.974441 fails the unchanged1% gate; independent review also found
-Q8 pipeline-prefill ratio1.010201 outside it. Exact words alone do not waive
-these gates. Q4 CLI/Session checks did not run after the numerical failure.
+Open precision follow-up: Q8 retaining F16 embeddings passes CPU but fails the
+actual CUDA pipeline-logit norm gate at1.010822821 (maximum1.01). Keeping the
+head at F16 also fails at1.010823834 in the controlled GPU comparison. Both
+retain exact words; that does not waive the magnitude gate. Q6 and every Q4
+head/embedding arm are also unaccepted. Keep these profiles out of the registry
+until a new recipe passes full CPU and actual CUDA acceptance.
 
-Hosted precision diagnostic39979238513 at7287199c319f0c6534e2d64732cf385f1c58fbdb
-completed. Q8 embedding-only F16 retention passes teacher/pipeline norm ratios
-1.005482/1.008909; keeping the head alone fails. None of the four Q4 arms passes.
-All arms retain the exact source transcript; no numerical threshold was lowered.
-Q4 remains unaccepted. A new quantizer rule preserves token embeddings only for
-Granite YaRN profiles, leaving legacy Granite recipes unchanged. Explicit
-per-tensor overrides retain an A/B route to the old recipe. An actual-quantizer
-regression test fails against the original code and passes all8 cases after
-the fix, checking preserved F16 bytes, legacy/NAR behavior, unrelated metadata
-and the explicit old-policy override.
-
-Full profile validation39984477044 succeeded for F16 and corrected Q8;
-separate Q6 candidate39984512161 failed the fixed teacher-logit magnitude
-gate (ratio0.960814) after its frontend stages passed. Q6 remains unaccepted. Both use exact
-source1bad3b2dbe8b5ce55cc5dfafcec25610d442ee95. The shared runner checks all frontend stages, teacher and
-pipeline logits, exact prompt IDs, both decoder paths, repeated renamed-model
-Session autodetection and the real CLI. Fresh Q8 quantization must match all940
-controlled-profile tensor payloads. Independent retained-array review also passes
-all frontend stages, teacher/pipeline magnitude and cosine gates, first-token
-ranks, exact prompt and both27-token decodes, repeated official Session and CLI
-text. Q8 teacher/pipeline norm ratios remain1.005482/1.008909. CPU acceptance is
-established for these two profiles; immutable receipt b99c15b3719518846a90402447cee58331470ed7
-has anonymous byte readback. Later profile jobs cannot invalidate that pinned
-receipt. Future workers publish evidence under per-run paths to separate Q6
-from F16/Q8 approval. CUDA and production acceptance remain false.
-
-CUDA build39980261207 succeeded at exact7287199c3. The build-only capsule has
-complete external runtime notices and verified corresponding sources for
-OpenBLAS, libgfortran, libquadmath and libgomp. NVIDIA libraries are omitted;
-Kaggle must resolve its own CUDA libraries. Its prepared model-free preflight
-rejects stubs, unresolved dependencies and library interposition, and records
-actual loaded paths/hashes. The Kaggle entry/validator is implemented but
-requires reviewed immutable CPU receipt and runtime checkpoint pins before
-launch. Runtime checkpoint99bc8384b has a verified anonymous full-byte readback.
-The shared attention probe now accepts explicit CUDA0 dispatch and retains
-a declared FP32 high-position budget plus four incorrect controls; its CPU path
-still passes. Replacement CUDA build39987283644 at8920fa6c038eedb80997a955b1f6d76133abb0c0
-succeeded; all69 capsule file hashes and700 runtime source hashes match
-the manifest and approved CPU sources, with both source packets verified. GPU
-validation will require this original-module check through position16383 before
-loading trained weights. Kaggle v1 is pinned to reviewed CPU revisionb99c15b3719518846a90402447cee58331470ed7
-and runtime revisiond90703f4029055bdc1cb3e3064ff9e5549422dde; both have
-anonymous byte readback. A read-only slot check found no active kernels among
-the20 most recent; actual prelaunch check also found zero active sessions.
-Kaggle kernel `crispasr-granite5-acceptance` v1 ended ERROR on a T4; terminal
-logs and outputs are preserved. Actual host-library loading passed. Its correct
-YaRN component had norm ratio0.9999999545, relativeL2 0.0007615, peak0.003943 and
-low-position peak0.00001315, exceeding the CPU-derived0.003/0.0005 limits.
-GGML CUDA enables fast math; [NVIDIA documents the lower-accuracy intrinsics](https://docs.nvidia.com/cuda/archive/12.4.1/pdf/CUDA_C_Programming_Guide.pdf).
-The normalized FP32 component budget is now RMS0.1%/peak0.5%, low-position
-peak0.00002, retaining the same1ppm norm invariant. All4 wrong configurations
-still reject on CPU under this same budget. Full model cosine/norm/decoded
-output gates are unchanged. V2 requires a newly compiled, pinned capsule and
-all4 CUDA negative controls before real model acceptance. No CUDA model
-acceptance has passed yet. Build39994202206 at
-999c56805ff903b86b076b03d87da8cd4f90858a is preparing the revised probe.
-V2 will additionally require actual CUDA0-assigned matrix-operation traces per
-native process, beyond residency and decoder backend logs. A concrete CUB notice omission
-was found in the prebuilt capsules: compiled SSM templates require the BSD
-notice despite no NVIDIA shared-library files. The actual official
-cuda-cccl12.4.127-1 package reports CUB2.3.2 (the release-note table says2.3.1),
-and its complete BSD text is now retained in project notices. Licensing-only
-repackaging preserves every compiled ELF byte; v2 stays unlaunchable until its
-corrected capsule is qualified. Future builds also verify the SDK version header.
-The licensing-only repack is complete for all three capsules, with all12 ELF
-payloads unchanged in each. Revised probe build39994202206 succeeded; its
-corrected archive has71 verified files,700 sources matching CPU approval and
-both corresponding-source packets verified. Immutable diagnostic revision
-74882ee2f82c891a845a2ae71d26819d2c93d29c retains all corrected archives and
-a notice supplement for earlier copies. Anonymous full-byte readback passed
-for the v2 archive (SHA256 6823fc1fdeccd9b4276b43267d001156d3dc7faf24deed6652b356219e4e9b5d).
-V2 worker617766e7c requires the exact compiled CUB notice before inference;
-it uses the immutable approved CPU receipt and revised runtime999c56805.
-V2 ended ERROR after all five actual CUDA rotary controls passed: the stage
-probe selected CPU before loading the dynamic backend registry. The required
-per-process GPU checks correctly rejected it (CPU matrix assignments, zero GPU
-residency). Logs and all outputs are preserved. Probe2f73af3d4 now explicitly
-loads the packaged backend modules before device selection. Hosted build
-40004231666 succeeded; its70 capsule files,700 unchanged runtime sources,
-corresponding-source packets and complete CUB notice are independently verified.
-Anonymous full-byte readback passed at immutable diagnostic revision
-b73f461c80abc95bae34d7cb45a2bed18b433f1d. V3 uses this exact corrected capsule
-and the same CPU-approved model files; no model gate has changed.
-V3 passed every F16 original stage/magnitude gate and both exact27-token
-decodes on actual T4 CUDA. Its renamed C ABI Session returned the exact official
-text twice and expected raw-task words. Both processes executed CUDA-assigned
-language-head matmuls (55/82) with5552/5858 MiB peak GPU residency. The run
-nevertheless stopped before CLI/Q8 because a required backend-profile message
-exists only on the bucketed path. Logs and outputs are preserved. Worker42abcbd62
-now requires actual CUDA0 language-head operations on each process, alongside
-its matrix assignments and VRAM, rather than that path-specific message.
-Model-free controls reject CPU-assigned operations, GPU inputs alone, encoder
-work alone and backend labels alone. V4 uses this Python evidence correction
-with the unchanged2f73af3d4 compiled capsule; full acceptance remains pending.
-V4 established full F16 CUDA acceptance: all stages, both decoders, repeated
-renamed C ABI Session and CLI pass, with actual CUDA language-head work in all
-three processes. Q8 then failed its actual pipeline-logit norm gate at
-1.010822821 (teacher1.006127581); all frontend tensors match F16. Q8 remains
-unqualified for CUDA despite exact decoded words. All terminal logs/outputs
-are preserved. A separate GPU-only precision diagnostic at aadf868a4 compares
-the same embedding-only candidate with the already checkpointed candidate
-retaining both embeddings and output head at F16. It retains the same gates
-and reports diagnostic-only results, never full/production acceptance.
-
-Resource policy: check load and available memory before local compile/inference;
-keep large model work off this small host. CPU conversion/reference/diff runs on
-GitHub; actual CUDA runs on Kaggle only after checking a free slot. Up to two
-Luna/Sol agents may do lightweight work if local resources allow.
+Resource policy: check load and available memory immediately before local
+compile/inference. Large CPU work stays on GitHub; actual GPU work stays on
+Kaggle, using a free slot on the single configured account. Up to two Luna/Sol
+agents may do small tasks when local resources permit; no NN math delegation.
 
 
 ## Issue555 model-sized designed defaults — shipped; Granite5 next (2026-10-23)
@@ -174,7 +59,7 @@ uses separate immutable URLs and includes notices/provenance. Speaker identity
 stays unknown; human listening feedback is pending, not inferred as approval.
 Publisher grants do not independently clear upstream training or likeness rights.
 [Method](docs/qwen3-designed-voices.md), [receipt](docs/qwen3-designed-voices-2026-10-23.json).
-Granite5 remains the next feature per user priority after the final wiring checks.
+Granite5 F16 is now qualified; final integration checks are tracked above.
 
 ## OmniVoice listened Metal default promotion — completed (2026-10-23)
 
@@ -247,7 +132,7 @@ and replay pass. Full platform CI/lint on the final documentation tip remain
 to be collected; the direct-header lint finding is fixed and passes locally.
 1.7B requires a matching voice pack or reference WAV/transcript. No release tag
 or Vulkan-hardware acceptance. Issue551's13 CI/10 lint jobs pass; issue552
-Granite5 feature support remains deferred per user priority.
+Granite5 F16 support is implemented; see the current integration task above.
 
 ## M1 OmniVoice longer inputs and parameter reference — completed (2026-10-23)
 

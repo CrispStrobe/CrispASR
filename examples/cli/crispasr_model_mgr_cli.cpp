@@ -47,6 +47,15 @@ static std::string probe_explicit_model_filename(const std::string& model_arg, c
     return crispasr_cache::probe_cached_file(model_arg, cache_dir_override);
 }
 
+static bool unavailable_granite5_profile(const std::string& model_arg, const std::string& quant) {
+    const size_t slash = model_arg.find_last_of("/\\");
+    const std::string base = slash == std::string::npos ? model_arg : model_arg.substr(slash + 1);
+    if (base.rfind("granite-speech-5.0-2b-", 0) != 0)
+        return false;
+    CrispasrRegistryEntry entry;
+    return !crispasr_registry_lookup_by_filename(model_arg, entry, quant);
+}
+
 static CrispasrResolvePreview build_preview(const std::string& model_arg, const std::string& backend_name,
                                             const std::string& cache_dir_override, const std::string& preferred_quant,
                                             bool ignore_cache) {
@@ -88,6 +97,11 @@ static CrispasrResolvePreview build_preview(const std::string& model_arg, const 
 
     CrispasrRegistryEntry match;
     bool have_match = false;
+    if (unavailable_granite5_profile(effective_model_arg, effective_quant)) {
+        out.unresolved = true;
+        out.resolved_path = effective_model_arg;
+        return out;
+    }
     if (effective_model_arg == "auto" || effective_model_arg == "default") {
         have_match = crispasr_registry_lookup(backend_name, match, effective_quant);
     } else {
@@ -201,6 +215,11 @@ std::string crispasr_resolve_model_cli(const std::string& model_arg, const std::
     // Step 2 must precede step 3, otherwise the CLI's filename-inferred
     // backend (always "parakeet" for any "parakeet*" arg) would shadow
     // sub-variant keys like "parakeet-v2" / "parakeet-tdt-1.1b" / etc.
+    if (unavailable_granite5_profile(effective_model_arg, effective_quant)) {
+        fprintf(stderr, "crispasr: requested Granite5 profile is not qualified for download: %s\n",
+                effective_model_arg.c_str());
+        return effective_model_arg;
+    }
     CrispasrRegistryEntry match;
     bool have_match = crispasr_registry_lookup_by_filename(effective_model_arg, match, effective_quant);
     if (!have_match)
