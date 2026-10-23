@@ -110,6 +110,15 @@ cuda-cccl12.4.127-1 package reports CUB2.3.2 (the release-note table says2.3.1),
 and its complete BSD text is now retained in project notices. Licensing-only
 repackaging preserves every compiled ELF byte; v2 stays unlaunchable until its
 corrected capsule is qualified. Future builds also verify the SDK version header.
+The licensing-only repack is complete for all three capsules, with all12 ELF
+payloads unchanged in each. Revised probe build39994202206 succeeded; its
+corrected archive has71 verified files,700 sources matching CPU approval and
+both corresponding-source packets verified. Immutable diagnostic revision
+74882ee2f82c891a845a2ae71d26819d2c93d29c retains all corrected archives and
+a notice supplement for earlier copies. Anonymous full-byte readback passed
+for the v2 archive (SHA256 6823fc1fdeccd9b4276b43267d001156d3dc7faf24deed6652b356219e4e9b5d).
+V2 worker617766e7c requires the exact compiled CUB notice before inference;
+it uses the immutable approved CPU receipt and revised runtime999c56805.
 
 Resource policy: check load and available memory before local compile/inference;
 keep large model work off this small host. CPU conversion/reference/diff runs on
