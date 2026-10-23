@@ -24,6 +24,15 @@ def gpu_matmul_nodes(text):
         r'\[\s*CUDA0\b[^\]]*\]\s+use=', text))
 
 
+def gpu_decoder_matmul_nodes(text):
+    # The LM head runs in both dynamic Session/CLI and bucketed decoding.
+    # A bucket-only profile message cannot prove which device the public
+    # Session path used. Require actual CUDA-assigned language-head nodes.
+    return sum(bool(gpu_matmul_nodes(line)) and
+               bool(re.search(r'\boutput\.weight\b', line.split('use=', 1)[-1]))
+               for line in text.splitlines())
+
+
 def resources(device):
     meminfo = Path('/proc/meminfo').read_text()
     available = next(int(line.split()[1]) for line in meminfo.splitlines() if line.startswith('MemAvailable:'))
@@ -78,8 +87,9 @@ def run(command, label, out, environment, device, timeout=3600):
         text = log_path.read_text(errors='replace')
         if device == 'cuda':
             record['gpu_matmul_nodes'] = gpu_matmul_nodes(text)
-            if (record['peak_gpu_mib'] < 512 or 'backend=CUDA0 split=0' not in text or
-                    record['gpu_matmul_nodes'] == 0):
+            record['gpu_decoder_matmul_nodes'] = gpu_decoder_matmul_nodes(text)
+            if (record['peak_gpu_mib'] < 512 or record['gpu_matmul_nodes'] == 0 or
+                    record['gpu_decoder_matmul_nodes'] == 0):
                 raise RuntimeError(f'{label} lacks actual GPU0 residency/matmul/backend evidence')
         return record
     finally:
