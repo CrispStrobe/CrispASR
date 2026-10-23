@@ -1,0 +1,71 @@
+name: Granite5 CUDA validation bundle
+
+on:
+  workflow_dispatch:
+    inputs:
+      source:
+        description: 'Exact source commit containing the native Granite5 probes'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: granite5-cuda-validation-${{ inputs.source }}
+  cancel-in-progress: false
+
+jobs:
+  bundle:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          ref: ${{ inputs.source }}
+      - name: Verify pinned checkout
+        env:
+          EXPECTED_SOURCE: ${{ inputs.source }}
+        run: |
+          [[ "$EXPECTED_SOURCE" =~ ^[0-9a-f]{40}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SOURCE"
+      - name: Install build dependencies
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc
+          sudo tee /etc/apt/sources.list.d/granite5-source.list >/dev/null <<'EOF'
+          deb-src http://archive.ubuntu.com/ubuntu jammy main universe restricted multiverse
+          deb-src http://archive.ubuntu.com/ubuntu jammy-updates main universe restricted multiverse
+          deb-src http://security.ubuntu.com/ubuntu jammy-security main universe restricted multiverse
+          EOF
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache patchelf libgomp1 libgfortran5 libquadmath0 libopenblas-dev
+          df -h /
+      - uses: Jimver/cuda-toolkit@v0.2.35
+        with:
+          cuda: '12.4.1'
+          method: network
+          sub-packages: '["nvcc", "cudart", "cudart-dev", "nvrtc", "nvrtc-dev"]'
+          non-cuda-sub-packages: '["libcublas", "libcublas-dev"]'
+      - uses: actions/cache/restore@v4
+        id: ccache
+        with:
+          path: ~/.cache/ccache
+          key: granite5-cuda124-${{ runner.os }}-${{ inputs.source }}
+          restore-keys: |
+            granite5-cuda124-${{ runner.os }}-
+            qwen3-voice-pack-cuda124-${{ runner.os }}-
+      - name: Build targeted CUDA probes and package runtime
+        run: python3 tools/ci-heavy/granite5_cuda_bundle.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: granite5-runtime-${{ inputs.source }}
+          path: granite5-cuda-out/
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ~/.cache/ccache
+          key: ${{ steps.ccache.outputs.cache-primary-key }}

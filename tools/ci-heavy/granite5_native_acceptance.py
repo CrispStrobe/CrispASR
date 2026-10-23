@@ -77,6 +77,12 @@ def main():
         (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
 
     def run(command, label, env=None, timeout=7200):
+        meminfo = Path("/proc/meminfo").read_text()
+        resources = {"load_average": os.getloadavg(), "cpus": os.cpu_count(), "meminfo": meminfo}
+        (out / f"{label}-resources.json").write_text(json.dumps(resources, indent=2) + "\n")
+        available = int(next(line.split()[1] for line in meminfo.splitlines() if line.startswith("MemAvailable:")))
+        if available < 8 * 1024 * 1024 or resources["load_average"][0] > 2 * resources["cpus"]:
+            raise RuntimeError(f"Insufficient hosted resource headroom before {label}")
         with (out / f"{label}.log").open("wb") as log:
             result = subprocess.run(list(map(str, command)), cwd=ROOT, stdout=log,
                                     stderr=subprocess.STDOUT, env=env, timeout=timeout)
