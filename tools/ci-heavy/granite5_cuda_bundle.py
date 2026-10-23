@@ -6,6 +6,7 @@ NVIDIA user-space libraries are host-provided, never included in this capsule.
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -140,6 +141,17 @@ def main():
         for folder in [ROOT / 'src', ROOT / 'examples/cli']
         for p in folder.rglob('*') if p.is_file() and p.suffix in {'.cpp', '.c', '.h', '.hpp'}
     }
+    cub_headers = [p for p in CUDA.rglob('version.cuh') if p.parent.name == 'cub']
+    cub_versions = {}
+    for header in cub_headers:
+        match = re.search(r'^\s*#\s*define\s+CUB_VERSION\s+(\d+)', header.read_text(), re.MULTILINE)
+        if match:
+            cub_versions[str(header.relative_to(CUDA))] = dict(version=int(match.group(1)), sha256=sha(header))
+    assert cub_versions and all(v['version'] == 200302 for v in cub_versions.values()), cub_versions
+    assert 'NVIDIA CUB 2.3.2' in (bundle / 'THIRD_PARTY_NOTICES.txt').read_text()
+    receipt['compiler_header_components'] = dict(CUB=dict(version='2.3.2', headers=cub_versions,
+        notice='THIRD_PARTY_NOTICES.txt', license='BSD-3-Clause',
+        source='https://github.com/NVIDIA/cccl/blob/v2.3.2/cub/LICENSE.TXT'))
     receipt['probe_sources'] = {
         name: sha(ROOT / 'tools/ci-heavy' / name)
         for name in ('granite5_stage_probe.cpp', 'granite5_rope_probe.cpp')
