@@ -2709,6 +2709,9 @@ catch_discover_tests(test-glmasr-params
 add_executable(granite5-rope-probe ../tools/ci-heavy/granite5_rope_probe.cpp)
 target_include_directories(granite5-rope-probe PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(granite5-rope-probe PRIVATE ggml ggml-base crispasr_link_ggml_cpu)
+add_executable(granite5-stage-probe ../tools/ci-heavy/granite5_stage_probe.cpp)
+target_include_directories(granite5-stage-probe PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(granite5-stage-probe PRIVATE granite_speech ggml-base)
 
 add_executable(test-granitespeech-params
     test-granitespeech-params.cpp

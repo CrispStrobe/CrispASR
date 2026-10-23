@@ -37,6 +37,13 @@ still used16 tokens and omitted a space in custom asks; share the proven
 constants/formatting between surfaces. Local native parameter/prompt tests
 pass39 assertions/9 cases; NAR defaults pass5/4. The model-free shared-attention
 probe passes the original YaRN arrays and rejects all four incorrect controls.
+Public producer39964199536 at a02a0dd92 is queued. The native CPU worker is
+prepared to consume only its successful source-pinned receipt, freshly convert
+the original weights, prove unchanged F16 tensor payloads, then validate F16/Q8/Q4
+stage magnitudes, exact prompt IDs, original-input prefill, both decoder paths,
+normal CLI output and repeated renamed-model Session autodetection. Its actual
+public-stage probe compiles locally; weighted gates have not run. CUDA follows
+CPU acceptance and independent review of the retained arrays/logs.
 
 
 ## Issue555 model-sized designed defaults — shipped; Granite5 next (2026-10-23)
