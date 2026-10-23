@@ -5465,6 +5465,12 @@ set_tests_properties(test-package-lib-bundle PROPERTIES
 # Discover Python before constructing commands or guarding their registration.
 # A later find_package leaves clean builds without the guarded unit tests.
 find_package(Python3 COMPONENTS Interpreter QUIET)
+if(Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES)
+    add_test(NAME granite-quant-policy
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-granite-quant-policy.py
+            $<TARGET_FILE:crispasr-quantize>)
+    set_tests_properties(granite-quant-policy PROPERTIES LABELS "unit;gh;granite;regression-552" TIMEOUT 120)
+endif()
 if(Python3_Interpreter_FOUND)
     add_test(NAME omnivoice-acceptance-policy
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_omnivoice_acceptance_policy.py -v)

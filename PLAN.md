@@ -52,9 +52,12 @@ completed. Q8 embedding-only F16 retention passes teacher/pipeline norm ratios
 All arms retain the exact source transcript; no numerical threshold was lowered.
 Q4 remains unaccepted. A new quantizer rule preserves token embeddings only for
 Granite YaRN profiles, leaving legacy Granite recipes unchanged. Explicit
-per-tensor overrides retain an A/B route to the old recipe.
+per-tensor overrides retain an A/B route to the old recipe. An actual-quantizer
+regression test fails against the original code and passes all8 cases after
+the fix, checking preserved F16 bytes, legacy/NAR behavior, unrelated metadata
+and the explicit old-policy override.
 
-Full profile validation39984477044 is queued for F16 and corrected Q8;
+Full profile validation39984477044 is running for F16 and corrected Q8;
 separate Q6 candidate39984512161 is queued behind it. Both use exact
 source1bad3b2dbe8b5ce55cc5dfafcec25610d442ee95. The shared runner checks all frontend stages, teacher and
 pipeline logits, exact prompt IDs, both decoder paths, repeated renamed-model
@@ -69,7 +72,13 @@ Kaggle must resolve its own CUDA libraries. Its prepared model-free preflight
 rejects stubs, unresolved dependencies and library interposition, and records
 actual loaded paths/hashes. The Kaggle entry/validator is implemented but
 requires reviewed immutable CPU receipt and runtime checkpoint pins before
-launch. No actual CUDA model acceptance has run.
+launch. Runtime checkpoint99bc8384b has a verified anonymous full-byte readback.
+The shared attention probe now accepts explicit CUDA0 dispatch and retains
+unchanged high-position tolerances plus four incorrect controls; its CPU path
+still passes. A replacement capsule will carry probe source hashes, and GPU
+validation will require this original-module check through position16383 before
+loading trained weights. Kaggle pins stay empty until that capsule and the CPU
+receipt are independently qualified. No actual CUDA model acceptance has run.
 
 Resource policy: check load and available memory before local compile/inference;
 keep large model work off this small host. CPU conversion/reference/diff runs on
