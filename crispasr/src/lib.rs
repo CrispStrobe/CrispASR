@@ -1786,8 +1786,13 @@ impl Session {
             if !ptr.is_null() {
                 unsafe { crispasr_sys::crispasr_pcm_free(ptr) };
             }
+            let last_err = unsafe { crispasr_sys::crispasr_session_last_synth_error(self.handle) };
+            let err_msg = match last_err {
+                c_str if !c_str.is_null() => unsafe { CStr::from_ptr(c_str) }.to_string_lossy(),
+                _ => "call accept_marking_responsibility first?".into(),
+            };
             return Err(format!(
-                "synthesize_raw returned no audio for backend {:?} (call accept_marking_responsibility first?)",
+                "synthesize_raw returned no audio for backend {:?} ({err_msg})",
                 self.backend()
             ));
         }
