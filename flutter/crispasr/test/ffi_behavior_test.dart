@@ -592,6 +592,18 @@ void main() {
       expect(t1.p, closeTo(0.75, 1e-6));
     });
 
+    test('text cut inside a UTF-8 character decodes to U+FFFD, not a throw',
+        () {
+      _setMode(3);
+      addTearDown(() => _setMode(0));
+      final s = CrispasrSession.open('dummy.gguf', libPath: probePath);
+      addTearDown(() => s.close());
+      final seg = s.transcribe(_pcm123()).single;
+      expect(seg.text, '�');
+      expect(seg.words.single.text, '�');
+      expect(seg.words.single.alts.single.text, '�');
+    });
+
     test(
         'copy before free - mutate after transcribe retains Dart copy and frees count increments',
         () {

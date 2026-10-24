@@ -142,6 +142,9 @@ static const char* seg_text = "\xe4\xb8\x96"; // "世" in UTF-8 via bytes, but p
 static int64_t seg_t0 = 100, seg_t1 = 200;
 static const char* seg_speaker = "(Speaker 1) ";
 static const char* word_text = "\xe4\xb8\x96";
+// mode 3: segment, word and alt text cut after two of the three bytes of "世",
+// like a byte-level BPE decode capped inside a multibyte character
+static const char* cut_text = "\xe4\xb8";
 static int64_t word_t0 = -1, word_t1 = -1;
 static float word_p = 0.9f;
 static int64_t token_t0s[2] = {-1, -1};
@@ -163,7 +166,7 @@ int crispasr_session_result_n_segments(crispasr_session_result* r) {
 const char* crispasr_session_result_segment_text(crispasr_session_result* r, int i) {
     if (!r || i != 0 || !(*(int*)r))
         return "";
-    return seg_text;
+    return g_mode == 3 ? cut_text : seg_text;
 }
 int64_t crispasr_session_result_segment_t0(crispasr_session_result* r, int i) {
     (void)i;
@@ -199,7 +202,7 @@ const char* crispasr_session_result_word_text(crispasr_session_result* r, int i,
     (void)w;
     if (!r || !(*(int*)r))
         return "";
-    return word_text;
+    return g_mode == 3 ? cut_text : word_text;
 }
 int64_t crispasr_session_result_word_t0(crispasr_session_result* r, int i, int w) {
     (void)i;
@@ -238,7 +241,7 @@ const char* crispasr_session_result_word_alt_text(crispasr_session_result* r, in
     (void)i;
     (void)w;
     (void)a;
-    return "alternative";
+    return g_mode == 3 ? cut_text : "alternative";
 }
 float crispasr_session_result_word_alt_p(crispasr_session_result* r, int i, int w, int a) {
     (void)r;
