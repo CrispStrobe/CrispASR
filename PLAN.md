@@ -1,179 +1,47 @@
 # CrispASR — Pending work
 
-## NOW — recurring CSM failure and next-release preparation (2026-10-25)
+## NOW — CSM qualified; preparing the next release (2026-10-25)
 
-Owner: Codex, branch `fix/csm-recurring-nightly-20261025`, base `f469d6dd8`.
-The user authorized the recommended agenda and requires closure only after the
-last item, followed by a fresh issue/PR sweep. No early closures are planned.
+Owner: Codex, branch `fix/csm-recurring-nightly-20261025`.
+The authorized agenda reaches release preparation before supported closures and
+then a fresh issue/PR sweep. No issue closures occurred during qualification.
 
-1. Diagnose and repair the recurring CSM nightly failure40178598589 (job
-   121126870389): sampled Q4 output scores WER0.6667, unchanged limit0.15.
-   First retain exact WAV/PCM, stdout/stderr, CPU/ISA and compiler commands.
-   The passing AMD EPYC7763 A/B40171767752 does not clear this new failure.
-2. Run one bounded same-host native/portable CPU comparison with unchanged
-   model, seed, text and gates. Cross-score two WAVs per build with both
-   ASR executables to separate synthesis drift from judge drift. Do not apply
-   speculative NN changes or change expected text, seeds or thresholds.
-3. Review the four existing reproducer/hardware/license dependencies, keeping
-   unsupported resolutions open. Preserve Nyra's separate license hold.
-4. After CSM acceptance and required checks, prepare the next release from
-   current main using the repository release method. No release artifact or
-   tag is published while the CSM gate remains failed.
-5. Reach the last item, close only supported resolutions, then perform a fresh
-   issue/PR sweep and continue errors before features.
+1. **Complete: recurring CSM speech failure.** Both original transformer stacks
+   require Llama-3 rotary scaling that conversion/runtime had dropped. Restore
+   the original factors, separate depth theta and CLI/C ABI corrected defaults;
+   explicit `CRISPASR_CSM_ORIGINAL_ROPE=0` remains a diagnostic legacy control.
+   Sampling, model bytes, seed and0.15 speech limit were not changed.
+2. **Complete: original and actual-device qualification.** Full original HF F32
+   model hooks supply19 stages. Fresh F16 passes magnitude/relative-error gates;
+   actual quantization with the three existing Q8 embedding tables reproduces
+   all442 published payloads. Opt-in AVX512 speech passes WER0 and AVX2 WER1/9;
+   final-source bare/ON CPU defaults match PCM and pass all8 speech cells.
+   Tesla T4 version1 passes original/generated rotary gates and unscaled controls,
+   both bare/ON speech cases atWER0 with exact PCM. Synth GPU peaks1696/1590MiB
+   exceed physical model bytes. Uploaded entry and raw evidence were independently
+   rechecked. See [complete qualification ledger](docs/csm-cpu-profile-2026-10-25.json).
+3. **Complete: four existing dependencies reviewed in full.** Descriptions, all
+   comments, timelines and latest owner/reporter requirements remain unchanged.
+   Keep#532 open for the German crash reproducer, #483 for actual GTX1660/MX150
+   MMQ measurements, #461 for B390 Vulkan quality/performance evidence, and#456
+   for its separate research/output license review. No speculative resolution.
+4. **In progress: integration and0.8.45 preparation.** Exact NN source
+   `2c118384014e2d11c371533bdc6dc3447cb1ba3f` passes all13 CI jobs40220615289,
+   all10 lint jobs40220617460, ordinary CSM40220623142, default matrix40220619349,
+   F16/lineage40220621471 and actual T4 validation. CUDA builder40220671948
+   produces archive SHA256
+   `71ab4f8ef5b9ddd029cd3a461c9c6518812ed4735d013efb98509643759fa630`;
+   all69 file hashes, notices and exact Debian runtime source packets verify.
+   NVIDIA runtime libraries are host-provided. Inputs/raw proof remain private;
+   public records use portable aliases and public Actions IDs. VERSION is0.8.44
+   until the repository bump script prepares the next version.
+5. **After the last item:** close only supported resolutions, then perform the
+   requested fresh issue/PR sweep. The four dependencies above remain open.
 
-Resources at start: load0.50 on four CPUs,4792MiB available. Two Sol agents
-handle read-only diagnosis and diagnostic retention; root owns NN changes and
-release integration. Heavy CPU work runs on Actions; real CUDA work requires
-an available Kaggle slot. Check local load/memory before compiles or inference.
-
-Diagnostic retention is implemented: optional bounded command logs and failed
-TTS WAVs survive cleanup; failed CSM/data2vec jobs upload host and compiler
-evidence for seven days. Five new model-free controls and 56 existing driver
-tests pass. `csm_cpu_profile_ab.py` prepares four sampled WAVs and eight ASR
-cells on Actions, with explicit compiler-flag verification. This is diagnostic
-infrastructure, not a CSM fix or release acceptance.
-
-Hosted factorial40202774412 is dispatched from worker `8eca86f32`, testing
-unchanged model code at `f469d6dd8`. The same worker source has fresh ordinary
-regression40202758265 and CI40202758268 in flight. A concrete
-`RELEASE_NOTES_v0.8.45.md` draft records the qualified changes and explicitly
-retains the CSM release blocker. VERSION remains0.8.44; no tag exists for0.8.45.
-
-Worker-source CI40202758268's hosted unit job passes all2095 selected CTests
-(four existing optional-dictionary skips), including the actual new diagnostics
-CTest, and189 Python tests/34 subtests. This does not clear the CSM speech gate.
-The ordinary push regression selects the six-model core, not CSM; a validated
-manual `diagnostic_backend` choice is prepared for CSM/data2vec-only capture.
-Its six actual shell controls and actionlint pass. It will be dispatched after
-the current regression settles, preserving that in-flight core/Granite evidence.
-
-**Reproduced:** factorial40202774412 completed on AMD EPYC9V74 with AVX512.
-Both native syntheses produce identical30.4s PCM and WER2/3 under BOTH ASR
-executables. Both explicit AVX2 syntheses produce identical4.72s PCM and WER0
-under BOTH ASR executables, matching the prior passing PCM hash exactly.
-Raw PCM hashes, eight ASR logs and compiler commands were independently
-checked. See `docs/csm-cpu-profile-2026-10-25.json`. This isolates the observed
-profile difference to synthesis, without yet identifying a faulty operation.
-Root is adding opt-in read-only sampled logits/RNG/code capture; the original
-sampling arithmetic/RNG function body remains byte-identical. Instrumented
-controls must retain untraced/traced PCM identity before traces are interpreted.
-
-Baseline `8eca86f32` now passes all13 CI jobs, all10 lint jobs and the complete
-selected regression40202758265 (six core models plus Granite5 acceptance).
-These checks precede sampled-path instrumentation and do not override the
-reproduced CSM native-profile failure. The next hosted trace experiment requires
-an AVX512-capable host before any heavy work, tests traced/untraced PCM identity,
-and includes a separate two-repeat existing eager-F32 attention control on the
-same native executable. The original eight speech gates remain unchanged.
-
-Trace source/worker `4fce8a1cdf8ac6083284c7707441204348af0931` is dispatched
-as40205080441 (`--trace --attention-control`). CSM-only ordinary regression
-40205082453 exercises the manual selector and failure retention. Fresh CI
-40205060514, lint40205060534 and push regression40205060538 are pending on
-that same instrumentation source. No numerical fix is claimed. A hosted-only
-existing-API prefill helper is prepared locally for the next boundary check,
-but has not loaded a model or qualified its dump graph against real synthesis.
-
-Instrumentation source `4fce8a1cd` passes all13 CI and all10 lint jobs. Ordinary
-CSM40205082453 reproduces on an AVX512 EPYC9V74 with the exact original30.4s
-PCM hash and WER2/3; the failed artifact retains the WAV/argv/CPU/build evidence.
-Three trace hardware draws40205080441/40206350669/40207535671 exposed noAVX512
-(one masked9V74, two7763), and stopped before model downloads/builds. This is
-an ISA-availability limit, not three new speech regressions.
-
-The next diagnostic-only change enables bounded sampled capture on ordinary
-CSM CI and retains both outcomes for explicit manual CSM controls, so passing
-AVX2 data and failing native data can be collected without discarding a runner.
-Six model-free capture tests (including explicit/default success retention),
-56 existing driver tests and actionlint pass. No source math or gates change.
-The published Q4 card does not pin its exact original-checkpoint revision;
-verify official Q/K permutation and coefficient lineage before treating the
-recovered original checkpoint as an exact oracle. Release remains blocked.
-
-Sampled native failure40208525637 at `f42006e3f` now retains valid14-token
-prompt IDs,380 code frames and2048 sampled records. Its30.4s PCM hash exactly
-matches the original untraced native failure, establishing noninterference for
-this request. Both RCs are0; ASR remains WER2/3. The next source-pinned Actions
-comparison explicitly permits a portable-host trace baseline (never a native
-resolution) and adds existing-C-ABI prefill capture. Every prefill c0 vector
-must byte-match the actual sampled trace before its intermediate stages are
-interpreted. The helper is hosted-only and requires8GiB available before load.
-Its syntax/40-byte ABI layout, local refusal and the driver's three actual
-pre-heavy ISA controls pass without model loading. No numerical fix is claimed.
-
-Trace40209553208 reproduces the same native/AVX2 PCM hashes on an AVX512 EPYC
-9V45. The first choice already differs: native1842 versusAVX2384, same draw;
-c0 logits relative error0.0156181. Existing eager-F32 attention passes all four
-speech cells (WER0/native judge,1/9/AVX2 judge), without qualifying a fix.
-All traced/untraced PCM pairs match. Prefill capture stopped before model load
-because its basename check rejected HF's resolved cache-blob name; use the
-already-required physical SHA instead. No stage arrays were interpreted.
-
-**Claimed next: original CSM RoPE fidelity.** The immutable original config
-declares llama3 factor32 for both stacks (backbone old-context1024, low0.125,
-high0.5; depth old-context16, low0.001953125, high0.0078125). Current conversion
-drops these fields and the CSM graph supplies no frequency factors. Root owns
-original-operator reference and any NN/math intervention; a Sol agent may handle
-only converter parameter transport/tests. This is a separate confirmed transport
-omission, not yet an established cause of the speech failure. Keep defaults and
-sampling unchanged until reference and controlled model checks qualify a fix.
-
-Converter transport is prepared with six model-free checks: original BB/DD
-scaling fields and scalar types, explicit unscaled metadata, independent depth
-theta, and fail-closed malformed configs. Two capture guards prove local
-invocations never load a library and HF cache symlinks reach the physical-SHA
-check. The filename defect is fixed. Original RoPE reference worker executes
-unmodified pinned HF AST operator bodies and immutable authenticated config;
-it loads no weights and retains original licenses/model card. This is an
-operator reference, not full-model initialization or coefficient-lineage proof.
-
-Original operator reference40213576399 is complete: pinned source/config,
-full F32 inputs/outputs, both licenses and failing unscaled controls retained.
-Its complete BB/DD frequency tables exactly match the bounded C++ helper check
-(relative L2=0, max absolute error=0). Prefill40213578893 validates the dump
-against real sampled logits on a portable host; it cannot clear AVX512 failure.
-Root has prepared an experimental `CRISPASR_CSM_ORIGINAL_ROPE=1` correction,
-OFF by default, covering both stacks and every generation/dump graph. The next
-Actions matrix gates actual GGML rotary outputs before opt-in speech cells,
-retains legacy eight speech cells separately, and checks traced/untraced PCM
-and diagnostic/sampled logits. No full-model, CUDA or default acceptance yet.
-
-Experimental native source `4fcce3495` passes all13 CI jobs40218162927.
-Sampled component/speech matrix40218140553 remains running at that source.
-Full original HF F32 prefill40218575515 (`f9c4f69f9`) succeeds: exact pinned
-source modules/config,1,632,100,161 CPU F32 parameters, independently recovered
-fourteen-token prompt and all19 stage arrays. Independent raw/npy shape,
-finite-value and hash checks pass. Original receipt SHA256
-`c2e4641fa73181f874c0ccb781629113922588436981030be940396c2a07ea6c`.
-Fresh conversion/actual-Q4 quantization/native parity40218903577 is running;
-its F16 gates were committed before observing outputs. No release acceptance
-is inferred from the original reference or ordinary CI. CUDA build/packaging
-and a strict GPU-only consumer are prepared, with no GPU job/session launched.
-
-Opt-in matrix40218140553 completes on AVX512: original/generated operator gates
-pass in both profiles, native speech WER0 and AVX2 WER1/9 across both repeats
-and both ASR judges; untraced/traced PCM and sampled/dump logits match. The job
-is intentionally red from retained legacy cells, not candidate acceptance.
-F16 parity40218903577 passes all19 stages under default/eager attention;
-legacy logits fail the same limits. Fresh quantization matches439/442 published
-payloads; the other3 are published Q8 embeddings. Exact-recipe lineage rerun
-40220292768 is in flight. CUDA builder40219829666 runs on source `fe2ee5ca9`;
-no GPU inference has run. The feature branch now prepares corrected defaults
-for CLI/C ABI with explicit legacy0 control; exact-source default-vs-ON CPU,
-F16/Q4 lineage and CUDA checks must finish before integration/release.
-
-Exact-recipe40220292768 succeeds: all442 published physical tensor payloads,
-types and shapes match fresh quantization of the original coefficients, with
-three existing Q8 embedding overrides and Q4_K body. Independent inventory
-comparison confirms the result. Final-source `2c1183840` CUDA bundle40220671948
-also builds successfully (no GPU execution): archive SHA256
-`71ab4f8ef5b9ddd029cd3a461c9c6518812ed4735d013efb98509643759fa630`.
-All final-source default-vs-ON speech, F16 port, ordinary regression, CI and
-lint checks remain in flight before integration. A configured-account read-only
-Kaggle audit found20 recent kernels terminal, none running/queued; recheck slots
-immediately before the actual GPU launch. No issues have been closed in this
-agenda, and VERSION remains0.8.44 while release preparation is pending.
+Large CPU work ran on Actions and actual CUDA only on an available Kaggle slot.
+No full model was loaded locally. Parent wrote NN/math changes; one Sol agent
+handled metadata, capture/build plumbing and read-only review. Load/memory guards
+protect compiles/inference. All five privacy guards pass before every push.
 
 ## Release and error follow-up — completed (2026-10-25)
 

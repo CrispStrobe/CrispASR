@@ -702,9 +702,9 @@
     "ordinary_regression_run": 40220623142,
     "cuda_bundle_run": 40220671948,
     "cpu_default_acceptance": true,
-    "cuda_acceptance": false,
+    "cuda_acceptance": true,
     "release_acceptance": false,
-    "status": "Final-source CPU default, original port and published lineage pass. CUDA bundle qualified as a build; actual GPU execution pending.",
+    "status": "Exact-source CPU defaults, original F16 port, published Q4 coefficient lineage and actual Tesla T4 CUDA all pass. Release-source metadata/checks remain separate.",
     "cpu_matrix_receipt_sha256": "23fe54fe323dfa3c1dc79417eebf99c4a9c5a341787eacaaf866e3c4b81b1061",
     "cpu_matrix_host_avx512f": false,
     "original_port_acceptance": true,
@@ -719,6 +719,74 @@
       "passed_jobs": 10
     },
     "cuda_bundle_sha256": "71ab4f8ef5b9ddd029cd3a461c9c6518812ed4735d013efb98509643759fa630",
-    "cuda_bundle_file_hashes_verified": 69
+    "cuda_bundle_file_hashes_verified": 69,
+    "cuda": {
+      "kernel": "${KAGGLE_ACCOUNT}/crispasr-csm-original-rope",
+      "version": 1,
+      "entry_source": "717db6b03",
+      "entry_sha256": "f1b8ab606a82c99ef275b3946e5deee9b51138eafda74be9d2af3db27b184011",
+      "source": "2c118384014e2d11c371533bdc6dc3447cb1ba3f",
+      "hardware": "Tesla T4, 7.5, 580.178.04",
+      "receipt_sha256": "971ed23b2dac8e54d91ea77bfefacc26900090296b7d91f511b7b23999b50a8f",
+      "complete": true,
+      "acceptance": true,
+      "identical_repeat_pcm": true,
+      "speech": {
+        "0": {
+          "wav": {
+            "exists": true,
+            "sha256": "42e464a58cde7f7c4c43ac2fd2fe3344303d1448f3ac89acfb782722171bb671",
+            "bytes": 136284,
+            "channels": 1,
+            "rate": 24000,
+            "frames": 67200,
+            "duration_s": 2.8,
+            "sample_width": 2,
+            "pcm_sha256": "1ff0edac99ab28fe8f0681cda34b23bfe3fd9e2e4a114ece70eb8f502dfa4709"
+          },
+          "transcript": "The quick brown fox jumps over the lazy dog.",
+          "wer": 0.0,
+          "wer_max": 0.15,
+          "gate": true
+        },
+        "1": {
+          "wav": {
+            "exists": true,
+            "sha256": "f94da7bd1db3c73ca3640c9e1c22b03e1146a9c55f1ba6dc96384a89f212c4ce",
+            "bytes": 136284,
+            "channels": 1,
+            "rate": 24000,
+            "frames": 67200,
+            "duration_s": 2.8,
+            "sample_width": 2,
+            "pcm_sha256": "1ff0edac99ab28fe8f0681cda34b23bfe3fd9e2e4a114ece70eb8f502dfa4709"
+          },
+          "transcript": "The quick brown fox jumps over the lazy dog.",
+          "wer": 0.0,
+          "wer_max": 0.15,
+          "gate": true
+        }
+      },
+      "peak_gpu_mib": {
+        "synth-0": 1696,
+        "judge-0": 908,
+        "synth-1": 1590,
+        "judge-1": 932
+      },
+      "component_original_pass": true,
+      "component_generated_pass": true,
+      "component_unscaled_controls_pass": true,
+      "independent_raw_audit": {
+        "complete": true,
+        "runtime_inventory_identity_verified": true,
+        "entry_identity_verified": true,
+        "cpu_port_input_hashes_verified": true,
+        "original_and_generated_operator_arrays_replayed": true,
+        "unscaled_negative_and_original_unscaled_positive_controls": true,
+        "both_raw_pcm_hashes_verified": true,
+        "both_raw_transcripts_exact_nine_words": true,
+        "synth_gpu_residency_exceeds_physical_model_bytes": true
+      }
+    }
   }
 }

@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.8.45
+
+* **Native speech:** restore original CSM rotary scaling for both transformer
+  stacks and shared CLI/C ABI initialization.
+* **Models:** add the qualified Granite Speech5 F16/Q4_K profiles and model-matched
+  Qwen3-TTS designed voice packs with retained source/license provenance.
+* **Bindings:** decode incomplete UTF-8 safely in Dart results and preserve
+  native synthesis errors in the Rust wrapper. Public Dart interfaces are unchanged.
+
 ## 0.8.44
 
 * **Native results and alignment:** preserve owned Session token metadata and

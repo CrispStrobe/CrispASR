@@ -1,3 +1,27 @@
+## 2026-10-25 — Original CSM rotary scaling qualified on CPU and Tesla T4
+
+Restored original Llama-3 frequency scaling for CSM backbone/depth graphs,
+converter metadata and independent depth theta. Corrected initialization is
+shared by CLI and C ABI callers; explicit0 retains a legacy diagnostic path.
+The original sampler and published weights are preserved. The reproduced
+AVX512 WER2/3 failure becomesWER0, with AVX2 atWER1/9 under both judges/repeats.
+
+Pinned original operators and the full original F32 model provide independent
+references. All19 fresh F16 stages pass fixed magnitude/relative-error limits;
+actual quantization reproduces all442 published tensor payloads, including
+three existing Q8 embeddings. Final bare/ON CPU defaults have exact PCM and all
+8 cells pass. Actual Tesla T4 validation passes original/generated/unscaled
+operator controls and both speech cases atWER0 with identical PCM; GPU model
+residency, source/input identities and raw arrays/audio/logs are independently
+verified. This is bounded original fidelity and speech evidence, not general
+speech accuracy, performance or untested hardware support.
+
+Qualified NN source `2c1183840` passes13 CI and10 lint jobs and ordinary CSM
+regression. The prebuilt CUDA capsule retains all69 verified file hashes,
+component notices and exact Debian source packets; NVIDIA libraries remain
+host-provided. The four reporter/hardware/license dependencies remain open.
+[Complete CSM qualification ledger](docs/csm-cpu-profile-2026-10-25.json).
+
 ## 2026-10-25 — CPU publication restored and binding errors fixed
 
 Published the original 0.8.44 CPU wheels and sdist after excluding ABI receipts

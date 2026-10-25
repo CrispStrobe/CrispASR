@@ -1,8 +1,8 @@
-# v0.8.45 — draft, not released
+# v0.8.45 — CSM speech fidelity and Granite Q4_K
 
-**Final qualification pending.** The recurring CSM-1B nightly regression in [run 40178598589](https://github.com/CrispStrobe/CrispASR/actions/runs/40178598589) produced “The grip brown fox.” for the pinned nine-word phrase (WER 0.6667; required maximum 0.15). Restoring the original model's missing rotary scaling passes the controlled AVX512/AVX2 speech checks and the original F32-to-native F16 stage checks. Final default-path, exact published-weight recipe and actual CUDA checks must finish before release preparation is completed.
+CSM synthesis now applies the original model's rotary scaling in both transformer stacks through CLI and C ABI defaults. The reproduced native AVX512 failure improves from WER2/3 toWER0; AVX2 passes atWER1/9, and actual Tesla T4 repeats pass atWER0. The existing0.15 limit, seed and published model bytes are preserved. Full original F32 references, fresh F16 stages and all442 published tensor payloads have been verified.
 
-These notes describe the changes after `v0.8.44` and the CSM correction under qualification on the working branch. Final source and validation receipts must be recorded before publication.
+These notes cover the validated changes after `v0.8.44`. Exact NN source `2c118384014e2d11c371533bdc6dc3447cb1ba3f` passes all13 CI jobs and all10 lint jobs, ordinary CSM regression, default-vs-explicit CPU controls and actual CUDA validation. Release metadata is prepared separately using the repository version script.
 
 The bounded [CPU-profile experiment](docs/csm-cpu-profile-2026-10-25.json)
 reproduces the failure on an AMD EPYC 9V74 with native flags. Two native
@@ -14,7 +14,7 @@ rotary scaling in both CSM transformer stacks.
 ## CSM speech correction
 
 - The converter preserves the original model's scaling parameters and separate depth-decoder theta. The runtime applies the original frequency factors to backbone and depth graphs, including generation and C ABI diagnostic paths. Existing published CSM weights use canonical original parameters when the older GGUF lacks scaling metadata; malformed or unsupported new metadata is rejected.
-- Pinned original operators, full F32 model hooks and magnitude-sensitive F16 stage checks qualify the corrected computation. The controlled AVX512 native speech path scores WER0 and AVX2 scores WER1/9, across both repeats and both ASR judges at the unchanged0.15 limit. Traced/untraced PCM and actual-synthesis/diagnostic logits agree. Final corrected-default and actual CUDA acceptance remain pending in this draft. See the [CSM evidence](docs/csm-cpu-profile-2026-10-25.json).
+- Pinned original operators, full F32 model hooks and magnitude-sensitive F16 stage checks qualify the corrected computation. The controlled AVX512 native speech path scores WER0 and AVX2 scores WER1/9, across both repeats and both ASR judges at the unchanged0.15 limit. Traced/untraced PCM and actual-synthesis/diagnostic logits agree. Corrected bare defaults match explicit ON; Tesla T4 operator controls and both full speech repeats pass with identical PCM. See the [CSM evidence](docs/csm-cpu-profile-2026-10-25.json).
 
 ## Granite Speech 5.0
 
@@ -37,6 +37,6 @@ rotary scaling in both CSM transformer stacks.
 
 - Dart Session results decode incomplete UTF-8 safely. Rust `synthesize_raw` reports the actual last native synthesis error on failure. The contributor fixes retain their original authorship and passed hosted native binding and ABI controls.
 - C# managed speaker-roster tests enforce validation without native-test skips. Wheel publication checks validate platform ABI floors and isolate CPU distributions from non-wheel receipts; Python 3.10 remains supported by those checks. The original `v0.8.44` CPU wheels and sdist were recovered and anonymously byte-verified. That recovery is **not** a `v0.8.45` publication.
-- Source `008b421e7` passed all 13 CI jobs and its secret scan. Separate source `85a620366` lint and deep-analysis runs and hosted binding/ABI jobs passed. Those checks predate the current CSM investigation and do not clear the later recurring nightly failure. A fresh final-source check is required after its resolution.
+- Source `008b421e7` passed all 13 CI jobs and its secret scan. Separate source `85a620366` lint and deep-analysis runs and hosted binding/ABI jobs passed. The CSM correction is separately qualified at source `2c1183840` with13 CI jobs,10 lint jobs, original-model/weight-lineage checks, ordinary regression and actual T4 execution.
 
-Known open dependencies remain the reporter-specific #532 reproducer, #483 GTX 1660/MX150 MMQ evidence, #461 B390 Vulkan quality trace and #456 license review. None is represented here as resolved by this draft.
+Known open dependencies remain the reporter-specific #532 reproducer, #483 GTX 1660/MX150 MMQ evidence, #461 B390 Vulkan quality trace and #456 license review. They remain open for the required external evidence or license decision.
