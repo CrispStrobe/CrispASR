@@ -72,6 +72,33 @@ CSM/data2vec failures now retain bounded evidence for seven days.
 CSM CI also captures the actual sampled logits, RNG states, prompt IDs and
 codes, capped at2048 records per synthesis, so a failing runner supplies the
 next numerical boundary without another ISA draw.
+`--original-rope-control` on the profile worker first checks actual GGML F32
+rotary outputs against original operator artifact40213576399, including
+unscaled negative controls, before running eight separate candidate speech
+cells. `CRISPASR_CSM_ORIGINAL_ROPE=1` is experimental and OFF by default.
+The original eight legacy cells still decide that diagnostic job's exit code;
+candidate acceptance is a separate receipt field, never inferred from green CI.
+
+`csm_original_prefill.py` executes the complete pinned HF CSM class in CPU F32,
+using the exact fourteen-token native prompt and nineteen original stage hooks.
+It explicitly selects `transformers.safetensors.index.json` through a loader
+alias, excluding the repository's original-format `model.safetensors`.
+The worker checks installed source hashes, physical checkpoint hashes, exact
+tokenizer IDs and finite array shapes, retaining source/model licenses.
+It requires12GiB available before loading and runs no sampling or codec.
+Install Torch2.6.0 and transformers from commit
+`798f948e88fd0b93fc515ec6b96e0503b78ad6ba`, plus numpy/safetensors/accelerate.
+
+`csm_prefill_parity.py --producer-run <run> --producer-source <full-sha>` requires
+a successful original producer at that exact source. It converts the identical
+HF coefficients to F16, runs actual `crispasr-quantize q4_k`, inventories fresh
+and published Q4 payloads, and captures original/legacy RoPE through the C ABI.
+Both default and eager-F32 attention are checked for the corrected F16 port.
+Stage gates include magnitude and relative error as well as cosine; Q4 metrics
+are diagnostic and do not substitute for the unchanged0.15 speech gate.
+Its dependencies are `torch==2.6.0 numpy gguf==0.17.1 safetensors huggingface_hub`.
+Weights and build trees stay in scratch. CUDA qualification is separate and
+requires a prebuilt licensed runtime and actual GPU execution on Kaggle.
 To capture one ordinary nightly path, dispatch `regression.yml` with
 `-f diagnostic_backend=csm-1b` (or `data2vec-base`). This keeps the existing
 model pins and gates, cannot be combined with `granite5_only`, and never

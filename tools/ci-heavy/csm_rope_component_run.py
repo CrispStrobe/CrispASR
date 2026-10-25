@@ -152,7 +152,7 @@ def run(source, build, profile, reference, out):
             shutil.copy2(_required_file(source / source_file), out / dest)
         probe_source = _required_file(source / "tools/ci-heavy/csm_rope_probe.cpp")
         probe = out / "csm-rope-probe"
-        argv = ["c++", "-std=c++17", "-O2", "-DCSM_GENERATED_ROPE",
+        argv = ["c++", "-std=c++17", "-O2", "-DCSM_GENERATED_ROPE", "-DGGML_MAX_NAME=128",
                 "-I", source / "src", "-I", source / "ggml/include", probe_source,
                 libs / "libggml.so.0", libs / "libggml-base.so.0", libs / "libggml-cpu.so.0",
                 "-Wl,-rpath,$ORIGIN/libs", "-ldl", "-pthread", "-o", probe]
