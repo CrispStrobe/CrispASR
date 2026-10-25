@@ -50,6 +50,8 @@ Env:
                   tests/regression/manifest.json).
   REGRESSION_DIAGNOSTICS_DIR  Optional directory outside WORK_DIR for bounded
                   command logs and a failed TTS roundtrip's generated WAV.
+  REGRESSION_KEEP_TTS_WAV  Set to 1 with the diagnostics directory to retain
+                  a successful roundtrip's WAV as an explicit manual control.
 """
 
 from __future__ import annotations
@@ -120,7 +122,7 @@ def _run_captured(argv: list[str], *, check: bool, timeout: int, label: str) -> 
     return proc
 
 
-def _preserve_failure_wav(name: str, wav: Path) -> None:
+def _preserve_tts_wav(name: str, wav: Path) -> None:
     """Keep only a small generated WAV, never model or downloaded input files."""
     diag = _diagnostics_dir()
     if diag is None or not wav.is_file():
@@ -724,19 +726,19 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
     try:
         proc = _run_captured(syn_cmd, check=False, timeout=300, label="tts-synth")
     except subprocess.TimeoutExpired:
-        _preserve_failure_wav(name, out_wav)
+        _preserve_tts_wav(name, out_wav)
         if advisory:
             return advisory_skip("TTS synth timed out after 300 s")
         die(f"{name}: TTS synth timed out after 300 s")
     if proc.returncode != 0:
-        _preserve_failure_wav(name, out_wav)
+        _preserve_tts_wav(name, out_wav)
         if advisory:
             return advisory_skip(f"TTS synth crashed (rc={proc.returncode})")
         print(f"\033[31m  FAIL\033[0m  TTS synth crashed (rc={proc.returncode})")
         print(f"    stderr tail: ...{(proc.stderr or '')[-300:]}")
         return 1
     if not out_wav.is_file() or out_wav.stat().st_size < 1000:
-        _preserve_failure_wav(name, out_wav)
+        _preserve_tts_wav(name, out_wav)
         if advisory:
             return advisory_skip(f"TTS produced no usable output: {out_wav}")
         print(f"\033[31m  FAIL\033[0m  TTS produced no usable output: {out_wav}")
@@ -751,12 +753,12 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
     try:
         proc = _run_captured(asr_cmd, check=False, timeout=180, label="roundtrip-asr")
     except subprocess.TimeoutExpired:
-        _preserve_failure_wav(name, out_wav)
+        _preserve_tts_wav(name, out_wav)
         if advisory:
             return advisory_skip("ASR roundtrip timed out after 180 s")
         die(f"{name}: ASR roundtrip timed out after 180 s")
     if proc.returncode != 0:
-        _preserve_failure_wav(name, out_wav)
+        _preserve_tts_wav(name, out_wav)
         if advisory:
             return advisory_skip(f"ASR roundtrip crashed (rc={proc.returncode})")
         print(f"\033[31m  FAIL\033[0m  ASR roundtrip crashed (rc={proc.returncode})")
@@ -772,8 +774,8 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
     wer_max = float(entry["wer_max"])
     _, wer = compute_transcript_metrics(tts_phrase, transcript)
     ok = wer <= wer_max
-    if not ok:
-        _preserve_failure_wav(name, out_wav)
+    if not ok or os.environ.get("REGRESSION_KEEP_TTS_WAV") == "1":
+        _preserve_tts_wav(name, out_wav)
     # `advisory: true` entries report their WER but never fail the run — for
     # legitimately weak / high-variance TTS models (e.g. bark-small) whose
     # roundtrip can't clear a tight cross-platform bar. NOT for masking a real

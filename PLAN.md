@@ -75,6 +75,22 @@ that same instrumentation source. No numerical fix is claimed. A hosted-only
 existing-API prefill helper is prepared locally for the next boundary check,
 but has not loaded a model or qualified its dump graph against real synthesis.
 
+Instrumentation source `4fce8a1cd` passes all13 CI and all10 lint jobs. Ordinary
+CSM40205082453 reproduces on an AVX512 EPYC9V74 with the exact original30.4s
+PCM hash and WER2/3; the failed artifact retains the WAV/argv/CPU/build evidence.
+Three trace hardware draws40205080441/40206350669/40207535671 exposed noAVX512
+(one masked9V74, two7763), and stopped before model downloads/builds. This is
+an ISA-availability limit, not three new speech regressions.
+
+The next diagnostic-only change enables bounded sampled capture on ordinary
+CSM CI and retains both outcomes for explicit manual CSM controls, so passing
+AVX2 data and failing native data can be collected without discarding a runner.
+Six model-free capture tests (including explicit/default success retention),
+56 existing driver tests and actionlint pass. No source math or gates change.
+The published Q4 card does not pin its exact original-checkpoint revision;
+verify official Q/K permutation and coefficient lineage before treating the
+recovered original checkpoint as an exact oracle. Release remains blocked.
+
 ## Release and error follow-up — completed (2026-10-25)
 
 The reviewed agenda was processed through the final license item before any

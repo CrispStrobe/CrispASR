@@ -69,10 +69,17 @@ flags survive failures; models and build trees stay in scratch. Run with
 `-f pip="numpy huggingface_hub"` on Linux x86. A passing host does not establish
 the cause or resolution of a failure on an unidentified host. Ordinary nightly
 CSM/data2vec failures now retain bounded evidence for seven days.
+CSM CI also captures the actual sampled logits, RNG states, prompt IDs and
+codes, capped at2048 records per synthesis, so a failing runner supplies the
+next numerical boundary without another ISA draw.
 To capture one ordinary nightly path, dispatch `regression.yml` with
 `-f diagnostic_backend=csm-1b` (or `data2vec-base`). This keeps the existing
 model pins and gates, cannot be combined with `granite5_only`, and never
 advances the successful automatic-push baseline used for core selection.
+Explicit manual CSM diagnostics retain both passing and failing WAVs/traces
+for seven days as `regression-diagnostics-csm-1b`; ordinary automatic successes
+upload no diagnostic artifact. `REGRESSION_KEEP_TTS_WAV=1` provides the same
+bounded successful-WAV control when running the driver directly.
 After reproducing native-profile drift, `--trace --source <full-commit>`
 captures the actual sampled path in the second repeat, requiring PCM identity
 with the untraced repeat and the retained AVX2 baseline before interpretation.

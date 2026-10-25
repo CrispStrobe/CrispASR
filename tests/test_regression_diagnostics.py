@@ -22,6 +22,15 @@ SPEC.loader.exec_module(run_one)
 class RegressionDiagnosticsTests(unittest.TestCase):
     @unittest.skipUnless(os.name == "posix", "fake CLI uses a POSIX shebang and chmod")
     def test_failed_tts_roundtrip_keeps_commands_and_wav_after_work_cleanup(self):
+        self._roundtrip_control(successful=False, keep_wav=False)
+
+    @unittest.skipUnless(os.name == "posix", "fake CLI uses a POSIX shebang and chmod")
+    def test_successful_roundtrip_keeps_wav_only_when_explicitly_requested(self):
+        for keep_wav in (False, True):
+            with self.subTest(keep_wav=keep_wav):
+                self._roundtrip_control(successful=True, keep_wav=keep_wav)
+
+    def _roundtrip_control(self, *, successful, keep_wav):
         with tempfile.TemporaryDirectory(prefix="regression-diagnostics-test-") as temp:
             root = Path(temp)
             work = root / "work"
@@ -37,7 +46,7 @@ if '--tts-output' in sys.argv:
     out.write_bytes(b'RIFF' + b'\\0' * 2048)
     print('synth complete')
 else:
-    print('the grip brown fox')
+    print(os.environ['FAKE_TRANSCRIPT'])
 """)
             fake_cli.chmod(0o755)
             manifest = {
@@ -68,11 +77,13 @@ else:
                 "REGRESSION_DIAGNOSTICS_DIR": str(diag),
                 "FAKE_ARGV_LOG": str(argv_log),
                 "KEEP_WORK": "0",
+                "REGRESSION_KEEP_TTS_WAV": "1" if keep_wav else "0",
+                "FAKE_TRANSCRIPT": "The quick brown fox" if successful else "the grip brown fox",
             }
             with patch.dict(os.environ, env), patch.object(sys, "argv", ["run_one.py", "csm-1b"]), \
                     patch.object(run_one, "hf_download", side_effect=fake_download), \
                     contextlib.redirect_stdout(io.StringIO()):
-                self.assertEqual(run_one.main(), 1)
+                self.assertEqual(run_one.main(), 0 if successful else 1)
 
             self.assertFalse(work.exists())
             actual_argv = [json.loads(line) for line in argv_log.read_text().splitlines()]
@@ -85,9 +96,11 @@ else:
             self.assertEqual(asr["argv"][1:3], ["--backend", "parakeet"])
             self.assertEqual(synth["returncode"], 0)
             self.assertEqual(asr["returncode"], 0)
-            self.assertEqual((diag / "tts_csm-1b.wav").read_bytes(), b"RIFF" + b"\0" * 2048)
-            self.assertEqual(sorted(p.name for p in diag.iterdir()),
-                             ["roundtrip-asr.json", "tts-synth.json", "tts_csm-1b.wav"])
+            expected = ["roundtrip-asr.json", "tts-synth.json"]
+            if not successful or keep_wav:
+                self.assertEqual((diag / "tts_csm-1b.wav").read_bytes(), b"RIFF" + b"\0" * 2048)
+                expected.append("tts_csm-1b.wav")
+            self.assertEqual(sorted(p.name for p in diag.iterdir()), expected)
 
     @unittest.skipUnless(os.name == "posix", "fake CLI uses a POSIX shebang and chmod")
     def test_command_log_is_bounded_and_retains_failure_status(self):

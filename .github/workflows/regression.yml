@@ -416,13 +416,22 @@ jobs:
           HUGGING_FACE_HUB_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_HUB_ENABLE_HF_TRANSFER: "0"
           HF_HUB_DOWNLOAD_TIMEOUT: "120"
+          REGRESSION_BACKEND: ${{ matrix.backend }}
           REGRESSION_DIAGNOSTICS_DIR: ${{ runner.temp }}/regression-diagnostics-${{ matrix.backend }}
+          REGRESSION_KEEP_TTS_WAV: ${{ inputs.diagnostic_backend == 'csm-1b' && '1' || '0' }}
         run: |
           mkdir -p "$WORK_DIR"
-          tests/regression/run_one.py "${{ matrix.backend }}"
+          # Capture the real sampled path whenever CSM fails on a runner whose
+          # ISA cannot be requested in advance. Each trace is bounded to2048
+          # sampling records. Explicit manual CSM controls retain both outcomes.
+          if [ "$REGRESSION_BACKEND" = csm-1b ]; then
+            mkdir -p "$REGRESSION_DIAGNOSTICS_DIR"
+            export CRISPASR_CSM_TRACE_PREFIX="$REGRESSION_DIAGNOSTICS_DIR/sampled"
+          fi
+          tests/regression/run_one.py "$REGRESSION_BACKEND"
 
-      - name: Retain failed CSM/data2vec host and build evidence
-        if: failure() && (matrix.backend == 'csm-1b' || matrix.backend == 'data2vec-base')
+      - name: Retain CSM/data2vec diagnostics and host/build evidence
+        if: (failure() || inputs.diagnostic_backend == 'csm-1b') && (matrix.backend == 'csm-1b' || matrix.backend == 'data2vec-base')
         env:
           REGRESSION_DIAGNOSTICS_DIR: ${{ runner.temp }}/regression-diagnostics-${{ matrix.backend }}
         run: |
@@ -456,9 +465,9 @@ jobs:
           PY
 
       - uses: actions/upload-artifact@v4
-        if: failure() && (matrix.backend == 'csm-1b' || matrix.backend == 'data2vec-base')
+        if: (failure() || inputs.diagnostic_backend == 'csm-1b') && (matrix.backend == 'csm-1b' || matrix.backend == 'data2vec-base')
         with:
-          name: regression-failure-${{ matrix.backend }}
+          name: regression-diagnostics-${{ matrix.backend }}
           path: ${{ runner.temp }}/regression-diagnostics-${{ matrix.backend }}/
           if-no-files-found: error
           retention-days: 7

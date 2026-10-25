@@ -283,5 +283,55 @@
     "Cross-scoring isolates the observed profile difference to synthesis rather than the ASR judge.",
     "This does not identify the first numerical divergence, establish a particular faulty kernel, or qualify a production fix. No gate, seed, model pin or production default was changed."
   ],
-  "next": "Read-only sampled-path trace and first-divergence/reference diagnosis; release remains blocked."
+  "next": "Read-only sampled-path trace and first-divergence/reference diagnosis; release remains blocked.",
+  "ordinary_reproduction": {
+    "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40205082453",
+    "source": "4fce8a1cdf8ac6083284c7707441204348af0931",
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "avx512f": true,
+    "wer": 0.6666666666666666,
+    "duration_s": 30.4,
+    "pcm_sha256": "1ac415193d618b9ae6f8eb01b67efd95e02ac44430fbbee67414d6c584f289d1",
+    "matches_uninstrumented_source_pcm": true,
+    "sampling_trace_enabled": false,
+    "evidence_sha256": {
+      "CMakeCache.txt": "c6c47069e0691ed7cbd87b0dde807df5f4423ee9aaaf870a3252a620433db088",
+      "compile_commands.json": "8366c959da26a45840742f2563f8842db7b56cef98862133b3fde1cc27d297ee",
+      "compiler.txt": "88b7c4b67564a146863224148116065fee418539f0a408f3636a68f3bde51805",
+      "cpu.txt": "1dc34b38b1d2c1f1ecb0a0c44332ec02d33b4f0902581ca00eac33c9e11d4910",
+      "cpuinfo.txt": "787eef9e40c766ee139e6804311e33ce7b7ae48349294b0430946787cfc250fd",
+      "kernel.txt": "40e1b96798b16f24a59a712a1088b111fc257a3b3f4b48594a8c7995e6a0c523",
+      "load.txt": "8a1e026fa925e0789905089ddc86e6edb99ed8c062065c6b9627c8fd4c20731d",
+      "memory.txt": "0b576603739c43f797c6e80e3ea4ee3d408bd42d6001ae85d59a87d0f64f5cc5",
+      "roundtrip-asr.json": "afcb1722b8c57091e4ddf64a3090dbeca071030d4d57dc2f835396b9be1a3678",
+      "tts-synth.json": "ac4b920a3ad80309f28e6df8673db00efd8d8a363b3ac0ccf391ee44e4b8508f",
+      "tts_csm-1b.wav": "9560314f1be916dc0dffc4a2360415a5eb8aa6cc31e1bdd9341d515cffed0e49"
+    }
+  },
+  "trace_hardware_prerequisites": [
+    {
+      "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40205080441",
+      "cpu": "AMD EPYC 9V74 80-Core Processor",
+      "avx512f": false,
+      "result": "trace prerequisite failed: little-endian host /proc/cpuinfo must expose avx512f",
+      "receipt_sha256": "53d43017dca6e58613fbad7d5d21cf1bd39b8162afd27f17cd83691c4501f064",
+      "model_downloads_or_builds": false
+    },
+    {
+      "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40206350669",
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "avx512f": false,
+      "result": "trace prerequisite failed: little-endian host /proc/cpuinfo must expose avx512f",
+      "receipt_sha256": "50df2aa9ce2f03eacb1970df1ea2a3d4be71f31397b14aa06b3c78150f11a8b2",
+      "model_downloads_or_builds": false
+    },
+    {
+      "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40207535671",
+      "cpu": "AMD EPYC 7763 64-Core Processor",
+      "avx512f": false,
+      "result": "trace prerequisite failed: little-endian host /proc/cpuinfo must expose avx512f",
+      "receipt_sha256": "1e93df61556bd5343abf10a27a0625c5bebdb8c39e35865d2397e279d8a8a84c",
+      "model_downloads_or_builds": false
+    }
+  ]
 }
