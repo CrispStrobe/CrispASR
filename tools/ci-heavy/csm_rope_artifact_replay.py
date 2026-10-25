@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Recompile a bounded CSM rotary probe against retained, hashed CPU GGML.
 
-No model weights, full builds or synthesis. Reuses the actual native/AVX2
-libraries retained by a completed source-pinned profile experiment.
+No model weights, full builds or synthesis. Reuses retained AVX2 libraries by
+default; native-library replay additionally requires an eligible AVX512 host.
 """
 
 import argparse
@@ -26,6 +26,7 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--producer-run", required=True, type=int)
     parser.add_argument("--producer-source", required=True)
+    parser.add_argument("--include-native", action="store_true")
     args = parser.parse_args()
     if os.environ.get("GITHUB_ACTIONS") != "true":
         raise RuntimeError("component replay belongs on hosted Actions")
@@ -54,6 +55,17 @@ def main():
         ab.required(["gh", "run", "download", args.producer_run, "--repo", "CrispStrobe/CrispASR",
                      "--name", f"heavy-{args.producer_run}", "--dir", artifact], ROOT, out, "download", 300)
         producer = json.loads((artifact / "receipt.json").read_text())
+        if not re.fullmatch("[0-9a-f]{40}", producer["source"]):
+            raise RuntimeError("retained native source is not immutable")
+        ab.required(["git", "fetch", "--depth=1", "origin", producer["source"]], ROOT, out, "fetch-source", 300)
+        features = Path("/proc/cpuinfo").read_bytes()
+        if not all(re.search(rb"\b" + flag + rb"\b", features)
+                   for flag in (b"avx2", b"fma", b"f16c", b"bmi2", b"sse4_2")):
+            raise RuntimeError("retained AVX2 library requires AVX2/FMA/F16C/BMI2/SSE4.2")
+        if args.include_native and not re.search(rb"\bavx512f\b", features):
+            raise RuntimeError("native library replay requires AVX512 before compilation/execution")
+        profiles = ("native", "avx2") if args.include_native else ("avx2",)
+        receipt["requested_profiles"] = list(profiles)
         original = artifact / "original-rope-reference"
         if ab.sha256(original / "receipt.json") != profile.ROPE_REFERENCE_RECEIPT:
             raise RuntimeError("original reference artifact pin differs")
@@ -68,7 +80,7 @@ def main():
         if current not in gitlink:
             raise RuntimeError("GGML source differs from retained shared libraries")
         receipt["producer_receipt_sha256"] = ab.sha256(artifact / "receipt.json")
-        for name in ("native", "avx2"):
+        for name in profiles:
             before = json.loads((artifact / name / "rope-component/receipt.json").read_text())
             if before.get("complete") is not True or before.get("pass") is not True:
                 raise RuntimeError(f"{name}: original component did not pass")
