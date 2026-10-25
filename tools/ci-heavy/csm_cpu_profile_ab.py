@@ -38,6 +38,80 @@ TOKEN_MAGIC = b"CSMTXT01"
 MAX_SAMPLES = 2048
 AVX2_BASELINE_PCM = "fff79f9c32a62304fb2348866f4a497436c67b359ea482909eaf56b58b6ded96"
 NATIVE_BASELINE_PCM = "1ac415193d618b9ae6f8eb01b67efd95e02ac44430fbbee67414d6c584f289d1"
+ROPE_REFERENCE_RUN = "40213576399"
+ROPE_REFERENCE_RECEIPT = "ea74ac15c0a1ffa9f7e90e5bd2290ef0cc7f32ed85102d20af174dee5da80273"
+
+
+def original_rope_speech(source, out, executables, paths, csm, asr, receipt, save):
+    """Separate opt-in candidate cells; never relabel the legacy eight cells."""
+    control = {"environment_delta": {"CRISPASR_CSM_ORIGINAL_ROPE": "1"},
+               "scope": "experimental original-frequency correction, not default promotion",
+               "syntheses": {}, "scores": {}, "prefill": {}}
+    receipt["original_rope_control"] = control
+    save()
+    for profile, cli in executables.items():
+        for repeat in range(2):
+            label = f"rope-{profile}-{repeat}"
+            output = out / f"{label}.wav"
+            prefix = out / f"{label}-trace"
+            argv = [cli, "-m", paths["csm"], "--tts", csm["tts_phrase"], "--tts-output", output,
+                    "--seed", str(csm.get("tts_seed", 1234)), "--no-prints"]
+            if csm.get("voice_preset"):
+                argv += ["--voice", csm["voice_preset"]]
+            argv += csm.get("tts_extra_args", [])
+            os.environ["CRISPASR_CSM_ORIGINAL_ROPE"] = "1"
+            if repeat == 1:
+                os.environ["CRISPASR_CSM_TRACE_PREFIX"] = str(prefix)
+            try:
+                rc = ab.command(argv, source, out, f"{label}-synth", 300)
+            finally:
+                os.environ.pop("CRISPASR_CSM_ORIGINAL_ROPE", None)
+                os.environ.pop("CRISPASR_CSM_TRACE_PREFIX", None)
+            info = pcm_info(output)
+            control["syntheses"][label] = {"profile": profile, "repeat": repeat, "rc": rc, "wav": info}
+            save()
+            for judge, asr_cli in executables.items():
+                score_label = f"{label}-judge-{judge}"
+                result = {"tts_profile": profile, "asr_profile": judge, "repeat": repeat, "gate": False}
+                if (rc == 0 and info.get("bytes", 0) >= 1000 and "pcm_sha256" in info
+                        and info.get("channels") == 1 and info.get("rate") == 24000
+                        and info.get("sample_width") == 2):
+                    score_rc = ab.command([asr_cli, "--backend", asr["backend_id"], "-m", paths["asr"],
+                                           "-f", output, "--no-prints"], source, out, score_label, 180)
+                    stdout = (out / f"{score_label}.stdout.log").read_text(errors="replace")
+                    text = ab.regression.strip_ai_disclaimer(next(
+                        (x.strip() for x in reversed(stdout.splitlines()) if x.strip()), ""))
+                    wer = ab.regression.compute_transcript_metrics(csm["tts_phrase"], text)[1]
+                    result.update(rc=score_rc, transcript=text, wer=wer, wer_max=csm["wer_max"],
+                                  gate=bool(score_rc == 0 and wer <= csm["wer_max"]))
+                control["scores"][score_label] = result
+                save()
+        first = control["syntheses"][f"rope-{profile}-0"]["wav"].get("pcm_sha256")
+        second = control["syntheses"][f"rope-{profile}-1"]["wav"].get("pcm_sha256")
+        if not first or first != second:
+            raise RuntimeError(f"original RoPE {profile}: traced/untraced PCM differs or missing")
+        trace = read_profile_trace(out / f"rope-{profile}-1-trace")
+        control["syntheses"][f"rope-{profile}-1"]["trace"] = trace["files"]
+        stage = out / f"prefill-rope-{profile}"
+        os.environ["CRISPASR_CSM_ORIGINAL_ROPE"] = "1"
+        try:
+            rc = ab.command([sys.executable, ROOT / "tools/ci-heavy/csm_prefill_capture.py",
+                             "--library", cli.parent.parent / "src/libcrispasr.so", "--model", paths["csm"],
+                             "--trace-prefix", out / f"rope-{profile}-1-trace", "--out", stage,
+                             "--text", csm["tts_phrase"]], source, out, f"prefill-rope-{profile}", 300)
+        finally:
+            os.environ.pop("CRISPASR_CSM_ORIGINAL_ROPE", None)
+        child_path = stage / "receipt.json"
+        child = json.loads(child_path.read_text()) if child_path.exists() else {}
+        control["prefill"][profile] = {"rc": rc, "complete": bool(rc == 0 and child.get("complete")),
+                                          "receipt_sha256": ab.sha256(child_path) if child_path.exists() else None}
+        save()
+        if not control["prefill"][profile]["complete"]:
+            raise RuntimeError(f"original RoPE {profile}: prefill differs from sampled path")
+    control["speech_acceptance"] = len(control["scores"]) == 8 and all(
+        cell["gate"] for cell in control["scores"].values())
+    control["traced_untraced_pcm_identical"] = True
+    save()
 
 
 def read_trace_bytes(path, magic, limit):
@@ -207,6 +281,8 @@ def main():
                         help="with --trace, repeat native synthesis using the existing eager-F32 attention switch")
     parser.add_argument("--prefill-control", action="store_true",
                         help="with --trace, require existing-API prefill dumps to match actual sampled logits")
+    parser.add_argument("--original-rope-control", action="store_true",
+                        help="with --trace, first gate original RoPE components, then test opt-in speech cells")
     args = parser.parse_args()
     if args.allow_avx2_host and not args.trace:
         parser.error("--allow-avx2-host requires --trace")
@@ -214,6 +290,8 @@ def main():
         parser.error("--prefill-control requires --trace")
     if args.attention_control and not args.trace:
         parser.error("--attention-control requires --trace")
+    if args.original_rope_control and not args.trace:
+        parser.error("--original-rope-control requires --trace")
     if not re.fullmatch(r"[0-9a-f]{40}", args.source):
         parser.error("--source must be an immutable full Git commit")
     if args.trace and not any(arg == "--source" or arg.startswith("--source=") for arg in sys.argv[1:]):
@@ -270,6 +348,18 @@ def main():
             markers = ("CRISPASR_CSM_TRACE_PREFIX", "CSMSMP01", "CSMCOD01", "CSMTXT01")
             if not all(marker in trace_source for marker in markers):
                 raise RuntimeError("--source does not contain the required CSM trace writer")
+        if args.original_rope_control:
+            if "CRISPASR_CSM_ORIGINAL_ROPE" not in trace_source:
+                raise RuntimeError("source does not contain the experimental original RoPE control")
+            reference = out / "original-rope-reference"
+            ab.required(["gh", "run", "download", ROPE_REFERENCE_RUN, "--repo", "CrispStrobe/CrispASR",
+                         "--name", f"heavy-{ROPE_REFERENCE_RUN}", "--dir", reference], ROOT, out,
+                        "original-rope-reference-download", 300)
+            if ab.sha256(reference / "receipt.json") != ROPE_REFERENCE_RECEIPT:
+                raise RuntimeError("original reference receipt hash differs from qualified producer")
+            receipt["original_rope_reference"] = {"run": ROPE_REFERENCE_RUN,
+                                                   "receipt_sha256": ROPE_REFERENCE_RECEIPT}
+            save()
         manifest_path = source / "tests/regression/manifest.json"
         manifest = json.loads(manifest_path.read_text())
         _, csm, asr = ab.selected(manifest)
@@ -318,10 +408,15 @@ def main():
             receipt["profiles"][profile]["cli_sha256"] = ab.sha256(cli)
             receipt["profiles"][profile]["cpu_compiler_commands_verified"] = len(cpu_commands)
             ab.required(["ldd", cli], source, case, "libraries", 60)
+            if args.original_rope_control:
+                import csm_rope_component_run
+                component = csm_rope_component_run.run(source, build, profile, reference, case / "rope-component")
+                receipt["profiles"][profile]["rope_component"] = component
             save()
         # Preserve the actual nightly synth argv, including default marking.
         # Whole WAV hashes can change with provenance metadata; compare PCM too.
         os.environ.pop("CRISPASR_CSM_TRACE_PREFIX", None)
+        os.environ.pop("CRISPASR_CSM_ORIGINAL_ROPE", None)
         if args.attention_control:
             os.environ.pop("CRISPASR_CORE_ATTN_EAGER_F32", None)
         for profile, cli in executables.items():
@@ -470,6 +565,8 @@ def main():
                     save()
                 if not all(control["complete"] for control in controls.values()):
                     raise RuntimeError("prefill dump did not match actual sampled logits; raw evidence retained")
+        if args.original_rope_control:
+            original_rope_speech(source, out, executables, paths, csm, asr, receipt, save)
         receipt["complete"] = True
         receipt["acceptance"] = speech_acceptance
         save()
@@ -486,6 +583,12 @@ def main():
                         "".join(f"| {x['tts_profile']}/{x['repeat']} | {x['asr_profile']} | "
                                 f"{x.get('wer', 'missing')} | {x['gate']} |\n"
                                 for x in receipt["attention_control"]["scores"].values()))
+        if args.original_rope_control:
+            summary += ("\n## Original RoPE candidate (opt-in, default unchanged)\n\n" +
+                        "| Synth/repeat | ASR | WER | Gate |\n|---|---|---|---|\n" +
+                        "".join(f"| {x['tts_profile']}/{x['repeat']} | {x['asr_profile']} | "
+                                f"{x.get('wer', 'missing')} | {x['gate']} |\n"
+                                for x in receipt["original_rope_control"]["scores"].values()))
         (out / "summary.md").write_text(summary)
         return 0 if receipt["acceptance"] else 1
     except Exception as exc:

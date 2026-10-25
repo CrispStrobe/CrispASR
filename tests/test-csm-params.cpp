@@ -4,6 +4,10 @@
 #include <catch2/catch_approx.hpp>
 #include <catch2/catch_test_macros.hpp>
 #include "csm_tts.h"
+#include "csm_rope.h"
+#include "csm_rope_reference.h"
+#include <cmath>
+#include <limits>
 
 TEST_CASE("csm_params: default values are sensible", "[unit][csm]") {
     struct csm_tts_context_params p = csm_tts_context_default_params();
@@ -39,4 +43,33 @@ TEST_CASE("csm_init_from_file: empty path returns nullptr", "[unit][csm]") {
 TEST_CASE("csm_free: NULL context is a no-op", "[unit][csm]") {
     csm_tts_free(nullptr);
     SUCCEED("csm_tts_free tolerated a NULL ctx.");
+}
+
+TEST_CASE("csm_rope: both frequency tables match the pinned original operator", "[unit][csm][rope]") {
+    auto check = [](const std::vector<float>& actual, const auto& expected) {
+        REQUIRE(actual.size() == expected.size());
+        double squared_error = 0, squared_reference = 0;
+        for (size_t i = 0; i < actual.size(); ++i) {
+            REQUIRE(std::isfinite(actual[i]));
+            REQUIRE(std::abs(actual[i] - expected[i]) <= 1e-4f);
+            const double delta = (double)actual[i] - expected[i];
+            squared_error += delta * delta;
+            squared_reference += (double)expected[i] * expected[i];
+        }
+        REQUIRE(std::sqrt(squared_error / squared_reference) <= 2e-6);
+    };
+    check(csm_rope::frequency_factors(64, 500000.0f, 32.0f, 0.125f, 0.5f, 1024), csm_rope_reference::backbone);
+    check(csm_rope::frequency_factors(128, 500000.0f, 32.0f, 0.001953125f, 0.0078125f, 16), csm_rope_reference::depth);
+}
+
+TEST_CASE("csm_rope: unscaled config remains explicit and malformed inputs fail", "[unit][csm][rope]") {
+    auto plain = csm_rope::frequency_factors(64, 500000.0f, 1.0f, 1.0f, 4.0f, 2048);
+    REQUIRE(plain.size() == 32);
+    for (float value : plain)
+        REQUIRE(value == 1.0f);
+    REQUIRE(csm_rope::frequency_factors(65, 500000, 32, 0.125f, 0.5f, 1024).empty());
+    REQUIRE(csm_rope::frequency_factors(64, 500000, 0.5f, 0.125f, 0.5f, 1024).empty());
+    REQUIRE(csm_rope::frequency_factors(64, 500000, 32, 0.125f, 0.125f, 1024).empty());
+    REQUIRE(csm_rope::frequency_factors(64, 500000, 32, 0.125f, 0.5f, 0).empty());
+    REQUIRE(csm_rope::frequency_factors(64, std::numeric_limits<float>::quiet_NaN(), 32, 0.125f, 0.5f, 1024).empty());
 }

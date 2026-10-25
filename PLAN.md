@@ -128,6 +128,17 @@ unmodified pinned HF AST operator bodies and immutable authenticated config;
 it loads no weights and retains original licenses/model card. This is an
 operator reference, not full-model initialization or coefficient-lineage proof.
 
+Original operator reference40213576399 is complete: pinned source/config,
+full F32 inputs/outputs, both licenses and failing unscaled controls retained.
+Its complete BB/DD frequency tables exactly match the bounded C++ helper check
+(relative L2=0, max absolute error=0). Prefill40213578893 validates the dump
+against real sampled logits on a portable host; it cannot clear AVX512 failure.
+Root has prepared an experimental `CRISPASR_CSM_ORIGINAL_ROPE=1` correction,
+OFF by default, covering both stacks and every generation/dump graph. The next
+Actions matrix gates actual GGML rotary outputs before opt-in speech cells,
+retains legacy eight speech cells separately, and checks traced/untraced PCM
+and diagnostic/sampled logits. No full-model, CUDA or default acceptance yet.
+
 ## Release and error follow-up — completed (2026-10-25)
 
 The reviewed agenda was processed through the final license item before any

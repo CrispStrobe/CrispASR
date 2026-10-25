@@ -134,6 +134,8 @@ def main():
                "resources_before_load": resources, "params": {}, "files": {}}
     receipt["attention_environment"] = {
         "CRISPASR_CORE_ATTN_EAGER_F32": os.environ.get("CRISPASR_CORE_ATTN_EAGER_F32")}
+    receipt["rope_environment"] = {
+        "CRISPASR_CSM_ORIGINAL_ROPE": os.environ.get("CRISPASR_CSM_ORIGINAL_ROPE")}
     receipt_path = out / "receipt.json"
 
     def save():

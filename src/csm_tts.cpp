@@ -21,6 +21,7 @@
 // Reference: github.com/SesameAILabs/csm (Apache 2.0)
 
 #include "csm_tts.h"
+#include "csm_rope.h"
 
 #include "core/attention.h"
 #include "core/conv.h"
@@ -107,6 +108,11 @@ struct csm_hparams {
     uint32_t bb_max_pos = 2048;
     float bb_rope_theta = 500000.0f;
     float bb_rms_norm_eps = 1e-5f;
+    std::string bb_rope_scaling = "llama3";
+    float bb_rope_factor = 32.0f;
+    float bb_rope_low = 0.125f;
+    float bb_rope_high = 0.5f;
+    uint32_t bb_rope_original_context = 1024;
 
     // Depth decoder (Llama-3.2 100M)
     uint32_t dd_n_layers = 4;
@@ -116,6 +122,12 @@ struct csm_hparams {
     uint32_t dd_head_dim = 128;
     uint32_t dd_ff_dim = 8192;
     uint32_t dd_backbone_hidden = 2048;
+    float dd_rope_theta = 500000.0f;
+    std::string dd_rope_scaling = "llama3";
+    float dd_rope_factor = 32.0f;
+    float dd_rope_low = 0.001953125f;
+    float dd_rope_high = 0.0078125f;
+    uint32_t dd_rope_original_context = 16;
 
     // Audio / text
     uint32_t text_vocab_size = 128256;
@@ -256,6 +268,10 @@ struct csm_tts_context {
     // Compute scheduler
     ggml_backend_sched_t sched = nullptr;
     std::vector<uint8_t> compute_meta;
+    // Opt-in until the original-operator and full speech controls qualify it.
+    bool original_rope = false;
+    std::vector<float> bb_rope_factors;
+    std::vector<float> dd_rope_factors;
 
     // Backbone KV cache
     ggml_context* bb_kv_ctx = nullptr;
@@ -308,6 +324,37 @@ struct csm_tts_context {
 };
 
 namespace {
+
+static ggml_tensor* rope_input(ggml_context* graph_ctx, const std::vector<float>& values, const char* name) {
+    if (values.empty())
+        return nullptr;
+    auto* tensor = ggml_new_tensor_1d(graph_ctx, GGML_TYPE_F32, (int64_t)values.size());
+    ggml_set_name(tensor, name);
+    ggml_set_input(tensor);
+    return tensor;
+}
+
+static bool allocate_graph(csm_tts_context* ctx, ggml_cgraph* graph) {
+    const auto allocate = ggml_backend_sched_alloc_graph;
+    if (!allocate(ctx->sched, graph))
+        return false;
+    // Every backbone/depth graph, including AR steps and diagnostic dumps,
+    // consumes the same context-owned factors. Missing live inputs fail closed.
+    const char* inputs[] = {"bb_embeds", "dd_embeds"};
+    const char* names[] = {"bb_rope_factors", "dd_rope_factors"};
+    const std::vector<float>* values[] = {&ctx->bb_rope_factors, &ctx->dd_rope_factors};
+    for (int i = 0; i < 2; ++i) {
+        if (values[i]->empty() || !ggml_graph_get_tensor(graph, inputs[i]))
+            continue;
+        auto* tensor = ggml_graph_get_tensor(graph, names[i]);
+        if (!tensor || tensor->type != GGML_TYPE_F32 || ggml_nelements(tensor) != (int64_t)values[i]->size()) {
+            fprintf(stderr, "csm_tts: missing or malformed %s graph input\n", names[i]);
+            return false;
+        }
+        ggml_backend_tensor_set(tensor, values[i]->data(), 0, values[i]->size() * sizeof(float));
+    }
+    return true;
+}
 
 // ===================================================================
 // Helper: read tensor data as F32 (handles F16/quantized tensors)
@@ -547,6 +594,45 @@ static ggml_tensor* conv1d_transpose(ggml_context* ctx, const seanet_conv& conv,
 // Metadata / weight loading
 // ===================================================================
 
+static bool rope_metadata_schema(gguf_context* g, const char* prefix) {
+    const char* suffixes[] = {"rope_scaling_type", "rope_scaling_factor", "rope_low_freq_factor",
+                              "rope_high_freq_factor", "rope_orig_max_pos"};
+    const gguf_type types[] = {GGUF_TYPE_STRING, GGUF_TYPE_FLOAT32, GGUF_TYPE_FLOAT32, GGUF_TYPE_FLOAT32,
+                               GGUF_TYPE_UINT32};
+    int count = 0;
+    for (int i = 0; i < 5; ++i) {
+        const std::string key = std::string(prefix) + "." + suffixes[i];
+        const int64_t index = gguf_find_key(g, key.c_str());
+        if (index < 0)
+            continue;
+        ++count;
+        if (gguf_get_kv_type(g, index) != types[i]) {
+            fprintf(stderr, "csm_tts: invalid RoPE metadata type for %s\n", key.c_str());
+            return false;
+        }
+    }
+    if (count != 0 && count != 5) {
+        fprintf(stderr, "csm_tts: incomplete RoPE metadata for %s\n", prefix);
+        return false;
+    }
+    if (count == 5) {
+        const std::string key = std::string(prefix) + ".rope_scaling_type";
+        const std::string type = core_gguf::kv_str(g, key.c_str(), "");
+        if (type != "llama3" && type != "none") {
+            fprintf(stderr, "csm_tts: unsupported RoPE scaling for %s\n", prefix);
+            return false;
+        }
+    }
+    if (std::strcmp(prefix, "csm.depth") == 0) {
+        const int64_t theta = gguf_find_key(g, "csm.depth.rope_theta");
+        if (theta >= 0 && gguf_get_kv_type(g, theta) != GGUF_TYPE_FLOAT32) {
+            fprintf(stderr, "csm_tts: invalid depth RoPE theta metadata type\n");
+            return false;
+        }
+    }
+    return true;
+}
+
 static void load_metadata(csm_tts_context* c, gguf_context* g) {
     auto& hp = c->model.hp;
 
@@ -560,6 +646,11 @@ static void load_metadata(csm_tts_context* c, gguf_context* g) {
     hp.bb_max_pos = core_gguf::kv_u32(g, "csm.backbone.max_pos", hp.bb_max_pos);
     hp.bb_rope_theta = core_gguf::kv_f32(g, "csm.backbone.rope_theta", hp.bb_rope_theta);
     hp.bb_rms_norm_eps = core_gguf::kv_f32(g, "csm.backbone.rms_norm_eps", hp.bb_rms_norm_eps);
+    hp.bb_rope_scaling = core_gguf::kv_str(g, "csm.backbone.rope_scaling_type", "llama3");
+    hp.bb_rope_factor = core_gguf::kv_f32(g, "csm.backbone.rope_scaling_factor", hp.bb_rope_factor);
+    hp.bb_rope_low = core_gguf::kv_f32(g, "csm.backbone.rope_low_freq_factor", hp.bb_rope_low);
+    hp.bb_rope_high = core_gguf::kv_f32(g, "csm.backbone.rope_high_freq_factor", hp.bb_rope_high);
+    hp.bb_rope_original_context = core_gguf::kv_u32(g, "csm.backbone.rope_orig_max_pos", hp.bb_rope_original_context);
 
     // Depth decoder
     hp.dd_n_layers = core_gguf::kv_u32(g, "csm.depth.n_layers", hp.dd_n_layers);
@@ -569,6 +660,12 @@ static void load_metadata(csm_tts_context* c, gguf_context* g) {
     hp.dd_head_dim = core_gguf::kv_u32(g, "csm.depth.head_dim", hp.dd_head_dim);
     hp.dd_ff_dim = core_gguf::kv_u32(g, "csm.depth.ff_dim", hp.dd_ff_dim);
     hp.dd_backbone_hidden = core_gguf::kv_u32(g, "csm.depth.backbone_hidden", hp.dd_backbone_hidden);
+    hp.dd_rope_theta = core_gguf::kv_f32(g, "csm.depth.rope_theta", hp.bb_rope_theta);
+    hp.dd_rope_scaling = core_gguf::kv_str(g, "csm.depth.rope_scaling_type", "llama3");
+    hp.dd_rope_factor = core_gguf::kv_f32(g, "csm.depth.rope_scaling_factor", hp.dd_rope_factor);
+    hp.dd_rope_low = core_gguf::kv_f32(g, "csm.depth.rope_low_freq_factor", hp.dd_rope_low);
+    hp.dd_rope_high = core_gguf::kv_f32(g, "csm.depth.rope_high_freq_factor", hp.dd_rope_high);
+    hp.dd_rope_original_context = core_gguf::kv_u32(g, "csm.depth.rope_orig_max_pos", hp.dd_rope_original_context);
 
     // Audio / text
     hp.text_vocab_size = core_gguf::kv_u32(g, "csm.text_vocab_size", hp.text_vocab_size);
@@ -1121,6 +1218,7 @@ extern "C" struct csm_tts_context* csm_tts_init_from_file(const char* path_model
     auto* c = new csm_tts_context();
     c->params = params;
     c->n_threads = params.n_threads > 0 ? params.n_threads : 4;
+    c->original_rope = crispasr_env::truthy("CRISPASR_CSM_ORIGINAL_ROPE");
 
     if (params.seed != 0) {
         c->rng_state = params.seed;
@@ -1143,8 +1241,34 @@ extern "C" struct csm_tts_context* csm_tts_init_from_file(const char* path_model
             delete c;
             return nullptr;
         }
+        if (!rope_metadata_schema(gctx, "csm.backbone") || !rope_metadata_schema(gctx, "csm.depth")) {
+            core_gguf::free_metadata(gctx);
+            delete c;
+            return nullptr;
+        }
         load_metadata(c, gctx);
         core_gguf::free_metadata(gctx);
+    }
+
+    if (c->original_rope) {
+        const auto& hp = c->model.hp;
+        auto prepare = [](const std::string& kind, int dim, float theta, float factor, float low, float high,
+                          uint32_t original, std::vector<float>& destination) {
+            if (!csm_rope::valid_parameters(dim, theta, factor, low, high, original))
+                return false;
+            if (kind == "none")
+                return factor == 1.0f;
+            destination = csm_rope::frequency_factors(dim, theta, factor, low, high, original);
+            return destination.size() == (size_t)dim / 2;
+        };
+        if (!prepare(hp.bb_rope_scaling, (int)hp.bb_head_dim, hp.bb_rope_theta, hp.bb_rope_factor, hp.bb_rope_low,
+                     hp.bb_rope_high, hp.bb_rope_original_context, c->bb_rope_factors) ||
+            !prepare(hp.dd_rope_scaling, (int)hp.dd_head_dim, hp.dd_rope_theta, hp.dd_rope_factor, hp.dd_rope_low,
+                     hp.dd_rope_high, hp.dd_rope_original_context, c->dd_rope_factors)) {
+            fprintf(stderr, "csm_tts: invalid original RoPE parameters\n");
+            delete c;
+            return nullptr;
+        }
     }
 
     // Pass 2: weights
@@ -1393,7 +1517,8 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
             ggml_set_input(causal_mask);
         }
 
-        const core_attn::KvSelfAttnParams kvp = {
+        auto* rope_factors = rope_input(ctx0, ctx->bb_rope_factors, "bb_rope_factors");
+        core_attn::KvSelfAttnParams kvp = {
             /*n_heads*/ (int)hp.bb_n_heads,
             /*n_kv_heads*/ (int)hp.bb_n_kv_heads,
             /*head_dim*/ (int)hp.bb_head_dim,
@@ -1406,6 +1531,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
             /*qk_norm_eps*/ 0.0f,
             /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
         };
+        kvp.rope_freq_factors = rope_factors;
 
         ggml_tensor* cur = embeds;
         for (uint32_t il = 0; il < hp.bb_n_layers; il++) {
@@ -1475,19 +1601,21 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
             ggml_set_input(causal_mask);
         }
 
-        const core_attn::KvSelfAttnParams kvp = {
+        auto* rope_factors = rope_input(ctx0, ctx->dd_rope_factors, "dd_rope_factors");
+        core_attn::KvSelfAttnParams kvp = {
             /*n_heads*/ (int)hp.dd_n_heads,
             /*n_kv_heads*/ (int)hp.dd_n_kv_heads,
             /*head_dim*/ (int)hp.dd_head_dim,
             /*n_kv_grp*/ (int)(hp.dd_n_heads / hp.dd_n_kv_heads),
             /*n_ctx_orig*/ (int)(hp.audio_num_codebooks + 1),
-            /*rope_theta*/ hp.bb_rope_theta,
+            /*rope_theta*/ ctx->original_rope ? hp.dd_rope_theta : hp.bb_rope_theta,
             /*rope_beta_fast*/ 0.0f,
             /*rope_beta_slow*/ 0.0f,
             /*attn_scale*/ 1.0f / std::sqrt((float)hp.dd_head_dim),
             /*qk_norm_eps*/ 0.0f,
             /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
         };
+        kvp.rope_freq_factors = rope_factors;
 
         ggml_tensor* cur = embeds;
         for (uint32_t il = 0; il < hp.dd_n_layers; il++) {
@@ -1622,7 +1750,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
 
         ggml_cgraph* gf = build_backbone_graph(0, n_text_frames);
         ggml_backend_sched_reset(ctx->sched);
-        if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+        if (!allocate_graph(ctx, gf)) {
             fprintf(stderr, "csm_tts: failed to alloc backbone prefill graph\n");
             return nullptr;
         }
@@ -1684,7 +1812,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
 
             ggml_cgraph* dd_gf = build_depth_graph(2, 1, 0);
             ggml_backend_sched_reset(ctx->sched);
-            if (!ggml_backend_sched_alloc_graph(ctx->sched, dd_gf)) {
+            if (!allocate_graph(ctx, dd_gf)) {
                 fprintf(stderr, "csm_tts: failed to alloc first depth prefill\n");
                 return nullptr;
             }
@@ -1715,7 +1843,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
 
                 ggml_cgraph* dd_gf = build_depth_graph(1, cb_idx, dd_n_past);
                 ggml_backend_sched_reset(ctx->sched);
-                if (!ggml_backend_sched_alloc_graph(ctx->sched, dd_gf))
+                if (!allocate_graph(ctx, dd_gf))
                     break;
                 ggml_backend_tensor_set(ggml_graph_get_tensor(dd_gf, "dd_embeds"), dd_step_embed.data(), 0,
                                         (size_t)dd_d * sizeof(float));
@@ -1775,7 +1903,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
             // Run backbone single-step
             ggml_cgraph* gf = build_backbone_graph(n_past_bb, 1);
             ggml_backend_sched_reset(ctx->sched);
-            if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+            if (!allocate_graph(ctx, gf)) {
                 fprintf(stderr, "csm_tts: failed to alloc backbone step graph\n");
                 break;
             }
@@ -1853,7 +1981,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
                 // Prefill with codebook_idx=1 (predicting codebook 1 from position 1), n_past=0
                 ggml_cgraph* dd_gf = build_depth_graph(2, 1, 0);
                 ggml_backend_sched_reset(ctx->sched);
-                if (!ggml_backend_sched_alloc_graph(ctx->sched, dd_gf)) {
+                if (!allocate_graph(ctx, dd_gf)) {
                     fprintf(stderr, "csm_tts: failed to alloc depth prefill graph\n");
                     break;
                 }
@@ -1894,7 +2022,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
                 // Pass codebook_idx so the graph uses the correct per-codebook head
                 ggml_cgraph* dd_gf = build_depth_graph(1, cb_idx, dd_n_past);
                 ggml_backend_sched_reset(ctx->sched);
-                if (!ggml_backend_sched_alloc_graph(ctx->sched, dd_gf)) {
+                if (!allocate_graph(ctx, dd_gf)) {
                     fprintf(stderr, "csm_tts: failed to alloc depth step graph (cb=%d)\n", cb_idx);
                     break;
                 }
@@ -2078,7 +2206,7 @@ mimi_decode:
         ggml_build_forward_expand(graph, x);
 
         ggml_backend_sched_reset(ctx->sched);
-        if (!ggml_backend_sched_alloc_graph(ctx->sched, graph)) {
+        if (!allocate_graph(ctx, graph)) {
             fprintf(stderr, "csm_tts: failed to alloc Mimi decoder graph\n");
             ggml_free(gctx);
             return nullptr;
@@ -2183,7 +2311,8 @@ extern "C" int csm_tts_run_backbone_dump(struct csm_tts_context* ctx, const char
         ggml_set_input(causal_mask);
     }
 
-    const core_attn::KvSelfAttnParams kvp = {
+    auto* rope_factors = rope_input(ctx0, ctx->bb_rope_factors, "bb_rope_factors");
+    core_attn::KvSelfAttnParams kvp = {
         /*n_heads*/ (int)hp.bb_n_heads,
         /*n_kv_heads*/ (int)hp.bb_n_kv_heads,
         /*head_dim*/ (int)hp.bb_head_dim,
@@ -2196,6 +2325,7 @@ extern "C" int csm_tts_run_backbone_dump(struct csm_tts_context* ctx, const char
         /*qk_norm_eps*/ 0.0f,
         /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
     };
+    kvp.rope_freq_factors = rope_factors;
 
     ggml_backend_buffer_clear(ctx->bb_kv_buf, 0);
 
@@ -2248,7 +2378,7 @@ extern "C" int csm_tts_run_backbone_dump(struct csm_tts_context* ctx, const char
     ggml_build_forward_expand(gf, logits);
 
     ggml_backend_sched_reset(ctx->sched);
-    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+    if (!allocate_graph(ctx, gf)) {
         fprintf(stderr, "csm_tts: backbone dump alloc failed\n");
         ggml_free(ctx0);
         return -3;
@@ -2354,19 +2484,21 @@ extern "C" int csm_tts_run_depth_dump(struct csm_tts_context* ctx, const float* 
     ggml_set_name(causal_mask, "dd_mask");
     ggml_set_input(causal_mask);
 
-    const core_attn::KvSelfAttnParams kvp = {
+    auto* rope_factors = rope_input(ctx0, ctx->dd_rope_factors, "dd_rope_factors");
+    core_attn::KvSelfAttnParams kvp = {
         /*n_heads*/ (int)hp.dd_n_heads,
         /*n_kv_heads*/ (int)hp.dd_n_kv_heads,
         /*head_dim*/ (int)hp.dd_head_dim,
         /*n_kv_grp*/ (int)(hp.dd_n_heads / hp.dd_n_kv_heads),
         /*n_ctx_orig*/ (int)(hp.audio_num_codebooks + 1),
-        /*rope_theta*/ hp.bb_rope_theta,
+        /*rope_theta*/ ctx->original_rope ? hp.dd_rope_theta : hp.bb_rope_theta,
         /*rope_beta_fast*/ 0.0f,
         /*rope_beta_slow*/ 0.0f,
         /*attn_scale*/ 1.0f / std::sqrt((float)hp.dd_head_dim),
         /*qk_norm_eps*/ 0.0f,
         /*gqa_mode*/ core_attn::GQA_MANUAL_CONT,
     };
+    kvp.rope_freq_factors = rope_factors;
 
     ggml_backend_buffer_clear(ctx->dd_kv_buf, 0);
 
@@ -2409,7 +2541,7 @@ extern "C" int csm_tts_run_depth_dump(struct csm_tts_context* ctx, const float* 
     dd_mask[0 * 2 + 1] = ggml_fp32_to_fp16(-INFINITY); // position 0 cannot see position 1
 
     ggml_backend_sched_reset(ctx->sched);
-    if (!ggml_backend_sched_alloc_graph(ctx->sched, gf)) {
+    if (!allocate_graph(ctx, gf)) {
         ggml_free(ctx0);
         return -3;
     }
