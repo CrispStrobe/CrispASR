@@ -1,0 +1,252 @@
+{
+  "schema": "crispasr-final-release-source-checks-v1",
+  "checked_at": "2026-10-25T21:01:54.100824+00:00",
+  "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+  "version": "0.8.45",
+  "local_annotated_tag": "v0.8.45",
+  "tag_published": false,
+  "qualified_commit_preserved": true,
+  "acceptance": true,
+  "runs": [
+    {
+      "run": 40226564474,
+      "name": "CI",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226564474",
+      "jobs": {
+        "success": 13
+      },
+      "receipt_sha256": "d7cd11ccc32824c8ba39a626f0b48015f4dce300b0275693557f747bfd92de1a"
+    },
+    {
+      "run": 40226564501,
+      "name": "Lint",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226564501",
+      "jobs": {
+        "success": 10
+      },
+      "receipt_sha256": "7a6676199f44b65ad203ea6d8bc0f7ee9af1d5a92b67be2b193155b79cac9b84"
+    },
+    {
+      "run": 40226564590,
+      "name": "Regression (nightly)",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226564590",
+      "jobs": {
+        "success": 12
+      },
+      "receipt_sha256": "7cf865b8138218ef6777f033c3abb1b9f438672ec8662591f6565091c11e867a"
+    },
+    {
+      "run": 40226564449,
+      "name": "Lint Deep",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226564449",
+      "jobs": {
+        "success": 1
+      },
+      "receipt_sha256": "5a548aeb86f585b6367b72d57b7ebb61c56eb7e588447c9314d72943f7d15182"
+    },
+    {
+      "run": 40226564521,
+      "name": "Build WASM",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226564521",
+      "jobs": {
+        "success": 5
+      },
+      "receipt_sha256": "d467d5facb8b9ff16619c32d4b67ab6bf1e4e124fe468a8ccdec353da0bc1a1e"
+    },
+    {
+      "run": 40226564494,
+      "name": "Binding ABI contracts",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226564494",
+      "jobs": {
+        "success": 6
+      },
+      "receipt_sha256": "10c05b9873c6b36c3137012bf455e7f9b3841c8ed50873ad1f17c9d7c8d15438"
+    },
+    {
+      "run": 40226564465,
+      "name": "Secret scan",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226564465",
+      "jobs": {
+        "success": 1
+      },
+      "receipt_sha256": "0dc95ba8bf5d30b87f39ab3756c5a4479b1478c43b60592e0839a65a889bee77"
+    },
+    {
+      "run": 40226564634,
+      "name": "Docker Smoke",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226564634",
+      "jobs": {
+        "success": 2
+      },
+      "receipt_sha256": "16fbe6cbfd5fa89354e7c058efb2df087e3e070ba05e6476abf525e15a47757b"
+    },
+    {
+      "run": 40226564519,
+      "name": "Bindings Tests (Ruby)",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226564519",
+      "jobs": {
+        "success": 1
+      },
+      "receipt_sha256": "6f760bb108e4b897e1ff8d40050cadda2f2c0cf9f852e87c48640c98759b87a2"
+    },
+    {
+      "run": 40226564569,
+      "name": "Bindings Tests (Rust)",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226564569",
+      "jobs": {
+        "success": 1
+      },
+      "receipt_sha256": "842c5feb8985c3891d1066a596ff80367b3900586abc7ce00a34c833164b5906"
+    },
+    {
+      "run": 40226564543,
+      "name": "Bindings Tests (Dart)",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226564543",
+      "jobs": {
+        "success": 1
+      },
+      "receipt_sha256": "2fd9fbf050d997bfb683e657fd034a699787f6777a08cd856f9d687ae4be1630"
+    },
+    {
+      "run": 40226564575,
+      "name": "CTC character alignment",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226564575",
+      "jobs": {
+        "success": 1
+      },
+      "receipt_sha256": "a670447ea8d757775eb0a1655fd78c30dc12589314422698469ba986c7cc0a75"
+    },
+    {
+      "run": 40226564438,
+      "name": "Metal cache test",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226564438",
+      "jobs": {
+        "success": 2
+      },
+      "receipt_sha256": "1f6dab2a995773aff13199a0f91701ca17ba3235e42f245fb50e820cc63beb3d"
+    },
+    {
+      "run": 40226563603,
+      "name": "pages build and deployment",
+      "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+      "status": "completed",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40226563603",
+      "jobs": {
+        "success": 3
+      },
+      "receipt_sha256": "2848295151916af8e6a026b2821ef73d5663effe7ccde8ba0e1b1cc343e5bd35"
+    }
+  ],
+  "release_published": false,
+  "compiled_sources_and_tests_identical_to_qualified_source": true,
+  "qualified_nn_source": "2c118384014e2d11c371533bdc6dc3447cb1ba3f",
+  "ctest": {
+    "selected": 2100,
+    "failed": 0,
+    "dictionary_skips": 4
+  },
+  "final_csm_regression": {
+    "run": 40226564590,
+    "wer": 0.0,
+    "wer_max": 0.15,
+    "transcript": "The quick brown fox jumps over the lazy dog."
+  },
+  "closure_review": {
+    "new_closures": [],
+    "retained_open": [
+      532,
+      483,
+      461,
+      456
+    ],
+    "reason": "The four unresolved dependencies still require external evidence or separate license review."
+  },
+  "fresh_issue_pr_sweep": {
+    "checked_at": "2026-10-25T21:03:00.217732+00:00",
+    "after_last_agenda_item_and_closure_review": true,
+    "all_fourteen_release_source_workflows_pass": true,
+    "open_issue_count": 4,
+    "open_pr_count": 0,
+    "new_issues": [],
+    "new_followups": [],
+    "checks": [
+      {
+        "number": 532,
+        "url": "https://github.com/CrispStrobe/CrispASR/issues/532",
+        "updated_at": "2026-10-12T07:42:16Z",
+        "all_comments": 2,
+        "body_and_all_comments_identical_to_full_review": true,
+        "linked_issue_comments": [],
+        "disposition": "retain_open_external_dependency"
+      },
+      {
+        "number": 483,
+        "url": "https://github.com/CrispStrobe/CrispASR/issues/483",
+        "updated_at": "2026-10-12T15:30:57Z",
+        "all_comments": 3,
+        "body_and_all_comments_identical_to_full_review": true,
+        "linked_issue_comments": [],
+        "disposition": "retain_open_external_dependency"
+      },
+      {
+        "number": 461,
+        "url": "https://github.com/CrispStrobe/CrispASR/issues/461",
+        "updated_at": "2026-10-09T08:53:29Z",
+        "all_comments": 19,
+        "body_and_all_comments_identical_to_full_review": true,
+        "linked_issue_comments": [],
+        "disposition": "retain_open_external_dependency"
+      },
+      {
+        "number": 456,
+        "url": "https://github.com/CrispStrobe/CrispASR/issues/456",
+        "updated_at": "2026-10-20T12:56:22Z",
+        "all_comments": 2,
+        "body_and_all_comments_identical_to_full_review": true,
+        "linked_issue_comments": [],
+        "disposition": "retain_open_external_dependency"
+      }
+    ],
+    "new_closures": []
+  }
+}

@@ -703,8 +703,8 @@
     "cuda_bundle_run": 40220671948,
     "cpu_default_acceptance": true,
     "cuda_acceptance": true,
-    "release_acceptance": false,
-    "status": "Exact-source CPU defaults, original F16 port, published Q4 coefficient lineage and actual Tesla T4 CUDA all pass. Release-source metadata/checks remain separate.",
+    "release_acceptance": true,
+    "status": "Qualified CPU defaults, original F16 backbone prefill and both-stack rotary operators, published Q4 coefficient lineage and actual Tesla T4 speech pass. Version 0.8.45 is prepared with all fourteen final-source workflows passing; tag and release remain unpublished. Historical failing controls above remain unchanged.",
     "cpu_matrix_receipt_sha256": "23fe54fe323dfa3c1dc79417eebf99c4a9c5a341787eacaaf866e3c4b81b1061",
     "cpu_matrix_host_avx512f": false,
     "original_port_acceptance": true,
@@ -792,6 +792,9 @@
         "sha256": "a6fa1e65934bdc5395a083d67c96a735f7b3d140e94b34de890763080858dd18",
         "raw_outputs_retained": true
       }
-    }
+    },
+    "release_published": false,
+    "release_source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+    "release_checks": "csm-release-preparation-2026-10-25.json"
   }
 }

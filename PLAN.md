@@ -1,47 +1,58 @@
 # CrispASR — Pending work
 
-## NOW — CSM qualified; preparing the next release (2026-10-25)
+## NOW — 0.8.45 prepared; external evidence pending (2026-10-25)
 
-Owner: Codex, branch `fix/csm-recurring-nightly-20261025`.
-The authorized agenda reaches release preparation before supported closures and
-then a fresh issue/PR sweep. No issue closures occurred during qualification.
+Owner: Codex. The complete authorized agenda is integrated on main. All fourteen
+final-source workflows passed before the closure review and fresh issue/PR sweep.
+[Release-preparation receipt](docs/csm-release-preparation-2026-10-25.json).
 
-1. **Complete: recurring CSM speech failure.** Both original transformer stacks
-   require Llama-3 rotary scaling that conversion/runtime had dropped. Restore
-   the original factors, separate depth theta and CLI/C ABI corrected defaults;
-   explicit `CRISPASR_CSM_ORIGINAL_ROPE=0` remains a diagnostic legacy control.
-   Sampling, model bytes, seed and0.15 speech limit were not changed.
-2. **Complete: original and actual-device qualification.** Full original HF F32
-   model hooks supply19 stages. Fresh F16 passes magnitude/relative-error gates;
-   actual quantization with the three existing Q8 embedding tables reproduces
-   all442 published payloads. Opt-in AVX512 speech passes WER0 and AVX2 WER1/9;
-   final-source bare/ON CPU defaults match PCM and pass all8 speech cells.
-   Tesla T4 version1 passes original/generated rotary gates and unscaled controls,
-   both bare/ON speech cases atWER0 with exact PCM. Synth GPU peaks1696/1590MiB
-   exceed physical model bytes. Uploaded entry and raw evidence were independently
-   rechecked. See [complete qualification ledger](docs/csm-cpu-profile-2026-10-25.json).
-3. **Complete: four existing dependencies reviewed in full.** Descriptions, all
-   comments, timelines and latest owner/reporter requirements remain unchanged.
-   Keep#532 open for the German crash reproducer, #483 for actual GTX1660/MX150
-   MMQ measurements, #461 for B390 Vulkan quality/performance evidence, and#456
-   for its separate research/output license review. No speculative resolution.
-4. **In progress: integration and0.8.45 preparation.** Exact NN source
-   `2c118384014e2d11c371533bdc6dc3447cb1ba3f` passes all13 CI jobs40220615289,
-   all10 lint jobs40220617460, ordinary CSM40220623142, default matrix40220619349,
-   F16/lineage40220621471 and actual T4 validation. CUDA builder40220671948
-   produces archive SHA256
-   `71ab4f8ef5b9ddd029cd3a461c9c6518812ed4735d013efb98509643759fa630`;
-   all69 file hashes, notices and exact Debian runtime source packets verify.
-   NVIDIA runtime libraries are host-provided. Inputs/raw proof remain private;
-   public records use portable aliases and public Actions IDs. Prepare0.8.45
-   with the repository bump script, then finish metadata/source checks.
-5. **After the last item:** close only supported resolutions, then perform the
-   requested fresh issue/PR sweep. The four dependencies above remain open.
+1. **Complete: recurring CSM speech failure.** Conversion and runtime now preserve
+   original Llama-3 rotary scaling for both transformer stacks and the independent
+   depth theta. CLI and C ABI defaults use the corrected path; explicit
+   `CRISPASR_CSM_ORIGINAL_ROPE=0` retains the diagnostic legacy control. Sampling,
+   published weights, seed and the 0.15 speech limit were preserved.
+2. **Complete: original and actual-device qualification.** Original HF F32
+   backbone-prefill hooks supply 19 stages; fresh F16 passes their magnitude and
+   relative-error gates. Separate original rotary operators qualify both stacks.
+   Actual quantization with the three existing Q8 embedding tables reproduces
+   all 442 published tensor payloads. The controlled AVX512 native case scores
+   WER 0 and AVX2 scores WER 1/9. Final-source bare/explicit-ON CPU controls pass
+   all eight speech cells with exact PCM identity. Actual Tesla T4 version 1
+   passes rotary controls and both speech repeats at WER 0 with exact PCM;
+   synthesis GPU peaks are 1696/1590 MiB. Full depth-decoder and Mimi model-stage
+   parity is not claimed. [Qualification ledger](docs/csm-cpu-profile-2026-10-25.json).
+3. **Complete: external dependencies reviewed in full.** Descriptions, all
+   comments, timelines and latest owner/reporter requirements were reviewed.
+   Keep #532 open for the German crash reproducer, #483 for GTX 1660/MX150 MMQ
+   measurements, #461 for B390 Vulkan quality/performance evidence, and #456 for
+   its separate research/output license review. The paired #483 artifacts remain
+   available through 2026-11-07. No speculative resolution or license grant.
+4. **Complete: integration and 0.8.45 preparation.** The repository version script
+   prepared version metadata and local annotated tag `v0.8.45`, targeting
+   `e58bb48b52cf1fe957c19586297c83a2ed0d9fe4`. The tag and release are unpublished.
+   All fourteen workflows on that source pass: compiler CI, lint, deep analysis,
+   regression, WASM, six binding ABI contracts, secret scan, Docker smoke, Ruby,
+   Rust, Dart, CTC alignment, Metal cache and Pages. CI selects 2,100 CTest cases
+   with zero failures and four dictionary skips. Final ordinary CSM scores WER 0
+   at the unchanged 0.15 limit; Granite's published-profile regression passes.
+   Compiled sources and tests match qualified NN source `2c1183840`, preserved in
+   main history. CUDA builder 40220671948 supplies the independently verified
+   69-file runtime with required notices and exact Debian runtime source packets;
+   NVIDIA runtime libraries are host-provided.
+5. **Complete: closure review, then fresh sweep.** After all final checks passed,
+   the closure review found no additional supported resolution. The prior six
+   resolved issues and two integrated PRs were already closed after the preceding
+   agenda. The 21:03 UTC fresh sweep found exactly the four dependencies above,
+   no new issues or follow-ups, and no open PRs. Each description and every
+   comment is byte-identical to the full dependency review; there are no linked
+   issue comments to follow.
 
-Large CPU work ran on Actions and actual CUDA only on an available Kaggle slot.
+Large CPU work ran on Actions; actual CUDA ran only on an available Kaggle slot.
 No full model was loaded locally. Parent wrote NN/math changes; one Sol agent
-handled metadata, capture/build plumbing and read-only review. Load/memory guards
-protect compiles/inference. All five privacy guards pass before every push.
+handled metadata, capture/build plumbing and read-only review. Load and memory
+checks guard compilation/inference; all five privacy guards run before pushes.
+Public receipts use portable aliases and public Actions IDs; raw proof remains
+private. Further issue work awaits the listed external evidence or a new report.
 
 ## Release and error follow-up — completed (2026-10-25)
 
@@ -82,7 +93,7 @@ External dependencies remain open:
 
 - #532: the reported assertion/device/model/clip reproducer is still missing;
   CPU/T4 allocation controls did not reproduce the crash.
-- #483: actual GTX1660/MX150 MMQ results remain external; paired packages are
+- #483: actual GTX 1660/MX150 MMQ results remain external; paired packages are
   available through 2026-11-07. Matching CUDA 12.6 packages already resolve the
   reporter's runtime-version warning.
 - #461: B390 Vulkan profiling must preserve the reported ten-step quality.
@@ -1221,7 +1232,7 @@ prevent full-runtime/default acceptance. Do not repeat accepted utility proof.
 
 - **Issue532 / Canary:** CPU/T4 reuse/allocation controls did not reproduce the
   crash; await original recording/device details. Do not apply a speculative fix.
-- **Issue483:** matched CUDA/MMQ packages are prepared; actual GTX1660/MX150
+- **Issue483:** matched CUDA/MMQ packages are prepared; actual GTX 1660/MX150
   correctness and timing remain external. No generic-GPU speed conclusion.
 - **Issue461 / VoxCPM2:** profile VAE setup and Vulkan LocDiT on relevant hardware.
   Eight-step RTF1.019 and poorer reported quality do not justify changing the
@@ -1442,8 +1453,8 @@ Keep all seven rejected recipes rejected and production defaults unchanged.
 Component proof does not reproduce a whole original model trajectory or
 validate speech, Q4 quality, GPU portability or speed.
 
-Final-source `2c1183840` CPU qualification completes: all13 CI jobs40220615289,
-all10 lint jobs40220617460, ordinary CSM40220623142 and default-vs-explicit
+Final-source `2c1183840` CPU qualification completes: all 13 CI jobs 40220615289,
+all 10 lint jobs 40220617460, ordinary CSM40220623142 and default-vs-explicit
 matrix40220619349 pass. The latter is a portable host, with all8 corrected
 cells atWER1/9 and bare/ON PCM identity; the earlier AVX512 opt-in comparison
 remains separately scoped. Original port40220621471 passes all19 F16 stages
