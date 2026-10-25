@@ -163,6 +163,18 @@ no GPU inference has run. The feature branch now prepares corrected defaults
 for CLI/C ABI with explicit legacy0 control; exact-source default-vs-ON CPU,
 F16/Q4 lineage and CUDA checks must finish before integration/release.
 
+Exact-recipe40220292768 succeeds: all442 published physical tensor payloads,
+types and shapes match fresh quantization of the original coefficients, with
+three existing Q8 embedding overrides and Q4_K body. Independent inventory
+comparison confirms the result. Final-source `2c1183840` CUDA bundle40220671948
+also builds successfully (no GPU execution): archive SHA256
+`71ab4f8ef5b9ddd029cd3a461c9c6518812ed4735d013efb98509643759fa630`.
+All final-source default-vs-ON speech, F16 port, ordinary regression, CI and
+lint checks remain in flight before integration. A configured-account read-only
+Kaggle audit found20 recent kernels terminal, none running/queued; recheck slots
+immediately before the actual GPU launch. No issues have been closed in this
+agenda, and VERSION remains0.8.44 while release preparation is pending.
+
 ## Release and error follow-up — completed (2026-10-25)
 
 The reviewed agenda was processed through the final license item before any
@@ -1561,3 +1573,18 @@ precision task and all quality gates are in the quantization section above.
 Keep all seven rejected recipes rejected and production defaults unchanged.
 Component proof does not reproduce a whole original model trajectory or
 validate speech, Q4 quality, GPU portability or speed.
+
+Final-source `2c1183840` CPU qualification completes: all13 CI jobs40220615289,
+all10 lint jobs40220617460, ordinary CSM40220623142 and default-vs-explicit
+matrix40220619349 pass. The latter is a portable host, with all8 corrected
+cells atWER1/9 and bare/ON PCM identity; the earlier AVX512 opt-in comparison
+remains separately scoped. Original port40220621471 passes all19 F16 stages
+and all442 published coefficient payloads reproduce at that exact source.
+The licensed CUDA archive passes an independent streaming69-file hash audit.
+
+Prelaunch transport check found the documented GitHub token absent from the
+Kaggle credential dataset, before allocating a GPU. Verified inputs are staged
+privately using existing HF credentials, with immutable revision/hash pins;
+the mounted Kaggle HF credential successfully reads the actual archive.
+The source-pinned kernel is prepared without adding new credentials. Actual
+GPU acceptance, integration and release preparation remain pending.

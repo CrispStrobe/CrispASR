@@ -1,0 +1,16 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-csm-original-rope",
+  "title": "CrispASR CSM Original RoPE",
+  "code_file": "csm_original_rope.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [
+    "${KAGGLE_ACCOUNT}/crispasr-hf-token"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

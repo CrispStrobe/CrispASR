@@ -1,14 +1,20 @@
 # v0.8.45 — draft, not released
 
-**Release blocked.** The recurring CSM-1B nightly regression in [run 40178598589](https://github.com/CrispStrobe/CrispASR/actions/runs/40178598589) produced “The grip brown fox.” for the pinned nine-word phrase (WER 0.6667; required maximum 0.15). A passing same-host comparison on an AMD EPYC 7763 did not reproduce that failure or establish its cause. Recheck the full required gates on the final release source after the CSM cause is resolved.
+**Final qualification pending.** The recurring CSM-1B nightly regression in [run 40178598589](https://github.com/CrispStrobe/CrispASR/actions/runs/40178598589) produced “The grip brown fox.” for the pinned nine-word phrase (WER 0.6667; required maximum 0.15). Restoring the original model's missing rotary scaling passes the controlled AVX512/AVX2 speech checks and the original F32-to-native F16 stage checks. Final default-path, exact published-weight recipe and actual CUDA checks must finish before release preparation is completed.
 
-These notes describe changes committed after `v0.8.44` through `f469d6dd86e42d42d0358fbef6fa75cd0c2aba29`. They are a preparation draft; later fixes and final-source results must be incorporated before publication.
+These notes describe the changes after `v0.8.44` and the CSM correction under qualification on the working branch. Final source and validation receipts must be recorded before publication.
 
 The bounded [CPU-profile experiment](docs/csm-cpu-profile-2026-10-25.json)
 reproduces the failure on an AMD EPYC 9V74 with native flags. Two native
 syntheses fail both ASR judges; two AVX2 syntheses pass both. Repeats have exact
 PCM identity within each profile. This isolates synthesis sensitivity in that
-experiment, but does not yet identify a numerical operation or qualify a fix.
+experiment. The subsequent original-model audit identified dropped Llama-3
+rotary scaling in both CSM transformer stacks.
+
+## CSM speech correction
+
+- The converter preserves the original model's scaling parameters and separate depth-decoder theta. The runtime applies the original frequency factors to backbone and depth graphs, including generation and C ABI diagnostic paths. Existing published CSM weights use canonical original parameters when the older GGUF lacks scaling metadata; malformed or unsupported new metadata is rejected.
+- Pinned original operators, full F32 model hooks and magnitude-sensitive F16 stage checks qualify the corrected computation. The controlled AVX512 native speech path scores WER0 and AVX2 scores WER1/9, across both repeats and both ASR judges at the unchanged0.15 limit. Traced/untraced PCM and actual-synthesis/diagnostic logits agree. Final corrected-default and actual CUDA acceptance remain pending in this draft. See the [CSM evidence](docs/csm-cpu-profile-2026-10-25.json).
 
 ## Granite Speech 5.0
 

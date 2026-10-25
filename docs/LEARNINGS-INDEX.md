@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (336 lessons)
+## Index by topic (337 lessons)
 
 **Security & untrusted input** (2)
 
@@ -96,7 +96,7 @@ cross-reference when you already know which model you are touching.
 - L19241 — Fused ggml_flash_attn_ext accumulates KQ in F16 and set_prec is silently ignored on P100/sm_60 — a repo-wide latent class, but fix by SENSITIVITY not by count
 - L19278 — The session ABI re-implements every backend — a rate the CLI resamples is a constant there, and a runtime probe turns a 2-hour check into 4 seconds
 
-**Parity, the diff harness & ground truth** (45)
+**Parity, the diff harness & ground truth** (46)
 
 - L80 — Dia: teacher forcing, real feedback and complete speech catch different bugs
 - L116 — Nemotron: CPU window parity does not establish CUDA window parity (2026-10-02, #487)
@@ -143,6 +143,7 @@ cross-reference when you already know which model you are touching.
 - L18668 — Chatterbox Multilingual V3: checkpoint names, quant hashes, and a non-silent clone are not parity
 - L19017 — Device-side argmax can cost more than the readback it removes, and an unused graph output still runs
 - L19458 — 314. Index-Echo 9B: preload functional child weights before trusting offloaded cache references
+- L19786 — 2026-10-25 — CSM CPU differences exposed dropped RoPE metadata; compare the original reference before changing sampling
 
 **ggml graphs, allocation & caching** (51)
 
@@ -416,7 +417,7 @@ lookup, not a partition.
 - **moss** (13) — L1147, L1343, L1835, L2037, L2212, L2218, L2509, L2534, L2559, L3681, L14885, L15640, L15658
 - **firered** (9) — L2004, L5192, L5283, L5864, L6031, L6895, L14026, L15771, L15814
 - **funasr / sensevoice / SANM** (2) — L9627, L11891
-- **kyutai / moshi / mimi** (7) — L2224, L2288, L5149, L12061, L12835, L12991, L17374
+- **kyutai / moshi / mimi** (8) — L2224, L2288, L5149, L12061, L12835, L12991, L17374, L19786
 - **dia** (6) — L80, L1966, L12020, L12095, L12315, L17418
 - **parler** (1) — L12389
 - **speecht5** (2) — L12020, L12315

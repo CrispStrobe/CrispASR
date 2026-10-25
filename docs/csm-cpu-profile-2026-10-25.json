@@ -552,5 +552,173 @@
     ],
     "independent_raw_npy_shape_finite_hash_audit": true,
     "scope": "Full pinned original HF F32 backbone prefill only. Native parity, published-Q4 lineage, speech and CUDA require separate checks."
+  },
+  "corrected_opt_in_comparison": {
+    "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40218140553",
+    "source": "4fcce3495e2dd61df4569895ac17bceb3a818cbc",
+    "receipt_sha256": "281c2d39a05b3eebe61310e0ead2fa33cfa02a0be58dfb67f3aa80905f7e8514",
+    "complete": true,
+    "host_avx512f": true,
+    "candidate_speech_acceptance": true,
+    "legacy_speech_acceptance": false,
+    "identical_repeat_pcm": true,
+    "scores": {
+      "rope-native-0-judge-native": {
+        "tts_profile": "native",
+        "asr_profile": "native",
+        "repeat": 0,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "wer_max": 0.15
+      },
+      "rope-native-0-judge-avx2": {
+        "tts_profile": "native",
+        "asr_profile": "avx2",
+        "repeat": 0,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "wer_max": 0.15
+      },
+      "rope-native-1-judge-native": {
+        "tts_profile": "native",
+        "asr_profile": "native",
+        "repeat": 1,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "wer_max": 0.15
+      },
+      "rope-native-1-judge-avx2": {
+        "tts_profile": "native",
+        "asr_profile": "avx2",
+        "repeat": 1,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "wer_max": 0.15
+      },
+      "rope-avx2-0-judge-native": {
+        "tts_profile": "avx2",
+        "asr_profile": "native",
+        "repeat": 0,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the s lazy dog.",
+        "wer": 0.1111111111111111,
+        "wer_max": 0.15
+      },
+      "rope-avx2-0-judge-avx2": {
+        "tts_profile": "avx2",
+        "asr_profile": "avx2",
+        "repeat": 0,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the s lazy dog.",
+        "wer": 0.1111111111111111,
+        "wer_max": 0.15
+      },
+      "rope-avx2-1-judge-native": {
+        "tts_profile": "avx2",
+        "asr_profile": "native",
+        "repeat": 1,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the s lazy dog.",
+        "wer": 0.1111111111111111,
+        "wer_max": 0.15
+      },
+      "rope-avx2-1-judge-avx2": {
+        "tts_profile": "avx2",
+        "asr_profile": "avx2",
+        "repeat": 1,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the s lazy dog.",
+        "wer": 0.1111111111111111,
+        "wer_max": 0.15
+      }
+    },
+    "prefill": {
+      "native": {
+        "rc": 0,
+        "complete": true,
+        "receipt_sha256": "cd06193077ac5c861cc9d324824f40976d88506ad194de48161ba319b582051f"
+      },
+      "avx2": {
+        "rc": 0,
+        "complete": true,
+        "receipt_sha256": "73c2ae0335c3514087c997466b7cac2367e74182ed133a8a53620fd4c5e478b0"
+      }
+    },
+    "operator_pass": {
+      "native": true,
+      "avx2": true
+    },
+    "independent_raw_audio_logs_and_operator_replay": true,
+    "scope": "Opt-in corrected graph; default behavior and actual GPU require separate exact-source checks. Legacy cells deliberately remain failed controls."
+  },
+  "original_port_and_weight_lineage": {
+    "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40220292768",
+    "source": "64241eb1ef91fb40c68b18933e9ab5734570e2e5",
+    "receipt_sha256": "23f489d317b88e66ec1c28c8b71be27a17fc74646ca9fee28ddafae356dc6c28",
+    "complete": true,
+    "f16_original_parity": true,
+    "published_q4_payloads_match_fresh_quantization": true,
+    "physical_tensor_count": 442,
+    "independent_all_tensor_payload_type_shape_comparison": true,
+    "quantize_recipe": {
+      "body": "q4_k",
+      "tensor_type": [
+        "^(backbone\\.(audio|text)_embd|depth\\.token_embd)\\.weight$=q8_0"
+      ],
+      "scope": "Exact reproduction of existing published tensor types; no precision tuning"
+    },
+    "original_f16_default_attention_c0": {
+      "rel_l2": 0.000262932042925035,
+      "norm_ratio": 1.0000778506583163,
+      "cosine": 0.9999999684661884,
+      "max_abs": 0.0021866559982299805,
+      "f16_port_gate": true
+    },
+    "legacy_f16_c0": {
+      "rel_l2": 0.0064586820776250916,
+      "norm_ratio": 0.9992914838213187,
+      "cosine": 0.9999793791002574,
+      "max_abs": 0.05065739154815674,
+      "f16_port_gate": false
+    },
+    "scope": "Actual crispasr-quantize reproduces every published coefficient payload from the original checkpoint. Separate exact-source default and actual-CUDA gates remain pending."
+  },
+  "corrected_default_qualification": {
+    "source": "2c118384014e2d11c371533bdc6dc3447cb1ba3f",
+    "cpu_matrix_run": 40220619349,
+    "original_port_run": 40220621471,
+    "ordinary_regression_run": 40220623142,
+    "cuda_bundle_run": 40220671948,
+    "cpu_default_acceptance": true,
+    "cuda_acceptance": false,
+    "release_acceptance": false,
+    "status": "Final-source CPU default, original port and published lineage pass. CUDA bundle qualified as a build; actual GPU execution pending.",
+    "cpu_matrix_receipt_sha256": "23fe54fe323dfa3c1dc79417eebf99c4a9c5a341787eacaaf866e3c4b81b1061",
+    "cpu_matrix_host_avx512f": false,
+    "original_port_acceptance": true,
+    "original_port_receipt_sha256": "a1cb7f0f2841e753d9c2c0fe3a0d926117aaeb5297f4236765e9a1d970f74f3f",
+    "ordinary_regression_acceptance": true,
+    "ci": {
+      "run": 40220615289,
+      "passed_jobs": 13
+    },
+    "lint": {
+      "run": 40220617460,
+      "passed_jobs": 10
+    },
+    "cuda_bundle_sha256": "71ab4f8ef5b9ddd029cd3a461c9c6518812ed4735d013efb98509643759fa630",
+    "cuda_bundle_file_hashes_verified": 69
   }
 }
