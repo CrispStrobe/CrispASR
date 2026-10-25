@@ -333,5 +333,377 @@
       "receipt_sha256": "1e93df61556bd5343abf10a27a0625c5bebdb8c39e35865d2397e279d8a8a84c",
       "model_downloads_or_builds": false
     }
-  ]
+  ],
+  "sampled_profile_diagnosis": {
+    "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40209553208",
+    "source": "4fce8a1cdf8ac6083284c7707441204348af0931",
+    "worker_source": "6b1b617f6d5cd9d6f9d3392711bd8b31503942c7",
+    "receipt_sha256": "e9038816be65223166e82b4cb2754fb2dc1c7ec098a54f191166fa718a0a0ae5",
+    "host_avx512f": true,
+    "trace_comparison": {
+      "native_records": 2048,
+      "avx2_records": 1920,
+      "equal_input_records": 1,
+      "first_chosen_token_divergence": 0,
+      "first_raw_logit_divergence": 0,
+      "first_raw_logit_divergence_before_choice": null,
+      "first_rng_before_divergence": null,
+      "finite_values_compared": 2051,
+      "nonfinite_mismatch": 0,
+      "max_abs": 0.156965970993042,
+      "native_norm": 109.99660364371528,
+      "avx2_norm": 109.7076265484251,
+      "relative_error_vs_avx2": 0.015618128334429996,
+      "prompt_token_count": 14,
+      "native_code_frames": 380,
+      "avx2_code_frames": 59,
+      "chosen_tokens": {
+        "native": 1842,
+        "avx2": 384,
+        "frame": 0,
+        "codebook": 0
+      }
+    },
+    "identical_repeat_pcm": {
+      "native": true,
+      "avx2": true
+    },
+    "speech_acceptance": false,
+    "prefill_complete": false,
+    "prefill_failure": "Overstrict model basename check rejected the resolved HF cache blob before model load; corrected to require existing physical SHA.",
+    "attention_control": {
+      "speech_acceptance": true,
+      "traced_untraced_pcm_identical": true,
+      "scores": {
+        "attention-native-0-judge-native": {
+          "tts_profile": "native-eager-f32",
+          "asr_profile": "native",
+          "repeat": 0,
+          "gate": true,
+          "rc": 0,
+          "transcript": "The quick brown fox jumps over the lazy dog.",
+          "wer": 0.0,
+          "wer_max": 0.15
+        },
+        "attention-native-0-judge-avx2": {
+          "tts_profile": "native-eager-f32",
+          "asr_profile": "avx2",
+          "repeat": 0,
+          "gate": true,
+          "rc": 0,
+          "transcript": "The quick brown fox jumps over the lazy doll.",
+          "wer": 0.1111111111111111,
+          "wer_max": 0.15
+        },
+        "attention-native-1-judge-native": {
+          "tts_profile": "native-eager-f32",
+          "asr_profile": "native",
+          "repeat": 1,
+          "gate": true,
+          "rc": 0,
+          "transcript": "The quick brown fox jumps over the lazy dog.",
+          "wer": 0.0,
+          "wer_max": 0.15
+        },
+        "attention-native-1-judge-avx2": {
+          "tts_profile": "native-eager-f32",
+          "asr_profile": "avx2",
+          "repeat": 1,
+          "gate": true,
+          "rc": 0,
+          "transcript": "The quick brown fox jumps over the lazy doll.",
+          "wer": 0.1111111111111111,
+          "wer_max": 0.15
+        }
+      }
+    },
+    "interpretation": "First differing choice has identical RNG draw, unchanged token ranking and shifted CDF boundary. This does not identify a sampler defect or qualify an eager-attention default."
+  },
+  "prefill_dump_validation": {
+    "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40213578893",
+    "source": "4fce8a1cdf8ac6083284c7707441204348af0931",
+    "worker_source": "91a63e86b94ddd4e7ec52356badbac023261f7f7",
+    "receipt_sha256": "87c7bda933d6d41da727cf3daead46c10411880c6773695b4539f5df8061e70d",
+    "complete": true,
+    "host_avx512f": false,
+    "controls": {
+      "native": {
+        "rc": 0,
+        "complete": true,
+        "receipt_sha256": "67818fefdefb1c9a0ce01e25f46a41fc191a053cf363d6b7cb4161e188c627e9"
+      },
+      "avx2": {
+        "rc": 0,
+        "complete": true,
+        "receipt_sha256": "06d516a0e58808b7ff36dfcb48cedb78763b7cdf36d4f719de932ecdd96e7141"
+      },
+      "eager-f32": {
+        "rc": 0,
+        "complete": true,
+        "receipt_sha256": "ee561d1f826d012e9ccff410519a4e110b12b46432ee40df2f16d461fa9b8394"
+      }
+    },
+    "scope": "Portable host only; all dump c0 vectors byte-match actual sampled-path vectors. Cannot resolve native AVX512 failure."
+  },
+  "original_rope_reference": {
+    "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40213576399",
+    "receipt_sha256": "ea74ac15c0a1ffa9f7e90e5bd2290ef0cc7f32ed85102d20af174dee5da80273",
+    "complete": true,
+    "source_revision": "798f948e88fd0b93fc515ec6b96e0503b78ad6ba",
+    "config_revision": "c92a71e1c419772e25be7dc14d952c2521a740ab",
+    "config_sha256": "b203c014cb5a2f7b4f98d2e945f091182aceb17fa530ce968e8c3437e01a9b70",
+    "weights_loaded": false,
+    "fidelity_scope": "Original operator bodies and raw config attributes; not full CsmConfig/model initialization",
+    "cases": {
+      "backbone": {
+        "configuration": {
+          "head_dim": 64,
+          "hidden_size": 2048,
+          "num_attention_heads": 32,
+          "num_key_value_heads": 8,
+          "max_position_embeddings": 2048,
+          "rope_theta": 500000,
+          "rope_scaling": {
+            "factor": 32.0,
+            "high_freq_factor": 0.5,
+            "low_freq_factor": 0.125,
+            "original_max_position_embeddings": 1024,
+            "rope_type": "llama3"
+          }
+        },
+        "positions": [
+          0,
+          1,
+          7,
+          13,
+          31,
+          127,
+          255,
+          1023,
+          2047
+        ],
+        "unscaled_max_abs_q_error": 1.9151451587677002,
+        "frequency_table_sha256": "fffa05a18c44dee3e80518c5b583f524ded93d0d9054fa080b21f602112579eb"
+      },
+      "depth": {
+        "configuration": {
+          "head_dim": 128,
+          "hidden_size": 1024,
+          "num_attention_heads": 8,
+          "num_key_value_heads": 2,
+          "max_position_embeddings": 33,
+          "rope_theta": 500000,
+          "rope_scaling": {
+            "factor": 32.0,
+            "high_freq_factor": 0.0078125,
+            "low_freq_factor": 0.001953125,
+            "original_max_position_embeddings": 16,
+            "rope_type": "llama3"
+          }
+        },
+        "positions": [
+          0,
+          1,
+          7,
+          13,
+          15,
+          16,
+          31,
+          32
+        ],
+        "unscaled_max_abs_q_error": 0.031247494742274284,
+        "frequency_table_sha256": "c172c745ffca828d1b3d70e74b6f4309ea715dc3fde5ec53c85e84ecfb04118b"
+      }
+    },
+    "bounded_cpp_frequency_check": {
+      "backbone": {
+        "relative_l2": 0,
+        "max_abs": 0
+      },
+      "depth": {
+        "relative_l2": 0,
+        "max_abs": 0
+      }
+    },
+    "qualification": "Experimental runtime control is OFF by default. Operator graphs, full-model parity, speech and actual CUDA remain separate qualifications."
+  },
+  "original_f32_prefill": {
+    "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40218575515",
+    "source": "f9c4f69f935dad1e95068403d24180d89d3c9dab",
+    "receipt_sha256": "c2e4641fa73181f874c0ccb781629113922588436981030be940396c2a07ea6c",
+    "complete": true,
+    "parameter_count": 1632100161,
+    "stage_count": 19,
+    "prompt_tokens": [
+      128000,
+      58,
+      15,
+      60,
+      791,
+      4062,
+      14198,
+      39935,
+      35308,
+      927,
+      279,
+      16053,
+      5679,
+      128001
+    ],
+    "independent_raw_npy_shape_finite_hash_audit": true,
+    "scope": "Full pinned original HF F32 backbone prefill only. Native parity, published-Q4 lineage, speech and CUDA require separate checks."
+  },
+  "corrected_opt_in_comparison": {
+    "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40218140553",
+    "source": "4fcce3495e2dd61df4569895ac17bceb3a818cbc",
+    "receipt_sha256": "281c2d39a05b3eebe61310e0ead2fa33cfa02a0be58dfb67f3aa80905f7e8514",
+    "complete": true,
+    "host_avx512f": true,
+    "candidate_speech_acceptance": true,
+    "legacy_speech_acceptance": false,
+    "identical_repeat_pcm": true,
+    "scores": {
+      "rope-native-0-judge-native": {
+        "tts_profile": "native",
+        "asr_profile": "native",
+        "repeat": 0,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "wer_max": 0.15
+      },
+      "rope-native-0-judge-avx2": {
+        "tts_profile": "native",
+        "asr_profile": "avx2",
+        "repeat": 0,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "wer_max": 0.15
+      },
+      "rope-native-1-judge-native": {
+        "tts_profile": "native",
+        "asr_profile": "native",
+        "repeat": 1,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "wer_max": 0.15
+      },
+      "rope-native-1-judge-avx2": {
+        "tts_profile": "native",
+        "asr_profile": "avx2",
+        "repeat": 1,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the lazy dog.",
+        "wer": 0.0,
+        "wer_max": 0.15
+      },
+      "rope-avx2-0-judge-native": {
+        "tts_profile": "avx2",
+        "asr_profile": "native",
+        "repeat": 0,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the s lazy dog.",
+        "wer": 0.1111111111111111,
+        "wer_max": 0.15
+      },
+      "rope-avx2-0-judge-avx2": {
+        "tts_profile": "avx2",
+        "asr_profile": "avx2",
+        "repeat": 0,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the s lazy dog.",
+        "wer": 0.1111111111111111,
+        "wer_max": 0.15
+      },
+      "rope-avx2-1-judge-native": {
+        "tts_profile": "avx2",
+        "asr_profile": "native",
+        "repeat": 1,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the s lazy dog.",
+        "wer": 0.1111111111111111,
+        "wer_max": 0.15
+      },
+      "rope-avx2-1-judge-avx2": {
+        "tts_profile": "avx2",
+        "asr_profile": "avx2",
+        "repeat": 1,
+        "gate": true,
+        "rc": 0,
+        "transcript": "The quick brown fox jumps over the s lazy dog.",
+        "wer": 0.1111111111111111,
+        "wer_max": 0.15
+      }
+    },
+    "prefill": {
+      "native": {
+        "rc": 0,
+        "complete": true,
+        "receipt_sha256": "cd06193077ac5c861cc9d324824f40976d88506ad194de48161ba319b582051f"
+      },
+      "avx2": {
+        "rc": 0,
+        "complete": true,
+        "receipt_sha256": "73c2ae0335c3514087c997466b7cac2367e74182ed133a8a53620fd4c5e478b0"
+      }
+    },
+    "operator_pass": {
+      "native": true,
+      "avx2": true
+    },
+    "independent_raw_audio_logs_and_operator_replay": true,
+    "scope": "Opt-in corrected graph; default behavior and actual GPU require separate exact-source checks. Legacy cells deliberately remain failed controls."
+  },
+  "original_port_and_weight_lineage": {
+    "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40220292768",
+    "source": "64241eb1ef91fb40c68b18933e9ab5734570e2e5",
+    "receipt_sha256": "23f489d317b88e66ec1c28c8b71be27a17fc74646ca9fee28ddafae356dc6c28",
+    "complete": true,
+    "f16_original_parity": true,
+    "published_q4_payloads_match_fresh_quantization": true,
+    "physical_tensor_count": 442,
+    "independent_all_tensor_payload_type_shape_comparison": true,
+    "quantize_recipe": {
+      "body": "q4_k",
+      "tensor_type": [
+        "^(backbone\\.(audio|text)_embd|depth\\.token_embd)\\.weight$=q8_0"
+      ],
+      "scope": "Exact reproduction of existing published tensor types; no precision tuning"
+    },
+    "original_f16_default_attention_c0": {
+      "rel_l2": 0.000262932042925035,
+      "norm_ratio": 1.0000778506583163,
+      "cosine": 0.9999999684661884,
+      "max_abs": 0.0021866559982299805,
+      "f16_port_gate": true
+    },
+    "legacy_f16_c0": {
+      "rel_l2": 0.0064586820776250916,
+      "norm_ratio": 0.9992914838213187,
+      "cosine": 0.9999793791002574,
+      "max_abs": 0.05065739154815674,
+      "f16_port_gate": false
+    },
+    "scope": "Actual crispasr-quantize reproduces every published coefficient payload from the original checkpoint. Separate exact-source default and actual-CUDA gates remain pending."
+  },
+  "corrected_default_qualification": {
+    "source": "2c118384014e2d11c371533bdc6dc3447cb1ba3f",
+    "cpu_matrix_run": 40220619349,
+    "original_port_run": 40220621471,
+    "ordinary_regression_run": 40220623142,
+    "cuda_bundle_run": 40220671948,
+    "cpu_default_acceptance": false,
+    "cuda_acceptance": false,
+    "release_acceptance": false,
+    "status": "Final-source checks in flight; prepared CUDA bundle is not GPU execution."
+  }
 }
