@@ -28,6 +28,10 @@ ROOT = Path(__file__).resolve().parents[2]
 # gates, not relaxed Q4 speech gates and not a claim of F32 bit identity.
 F16_GATES = {"rel_l2": 0.005, "norm_ratio_delta": 0.005, "cosine_min": 0.99999, "max_abs": 0.05}
 MODEL_SHA = "1123f9e8ff2d9212700d1fface749b8ec4f9765569bb996667a15a9a9832ee13"
+# Inventory of the existing release: 439/442 tensors already reproduce under
+# bare Q4_K; its three embedding tables are Q8_0. Reproduce that published
+# recipe exactly, without choosing precision from speech outcomes.
+PUBLISHED_EMBEDDING_RULE = r"^(backbone\.(audio|text)_embd|depth\.token_embd)\.weight$=q8_0"
 
 
 def inventory(path):
@@ -113,7 +117,11 @@ def main():
         run([sys.executable, ROOT / "models/convert-csm-to-gguf.py", "--input", model_dir,
              "--output", f16, "--outtype", "f16"], "convert-f16")
         fresh_q4 = scratch / "csm-fresh-q4_k.gguf"
-        run([build / "bin/crispasr-quantize", f16, fresh_q4, "q4_k"], "quantize-q4", 1200)
+        receipt["quantize_recipe"] = {"body": "q4_k", "tensor_type": [PUBLISHED_EMBEDDING_RULE],
+                                       "scope": "Exact reproduction of existing published tensor types; no precision tuning"}
+        save()
+        run([build / "bin/crispasr-quantize", f16, fresh_q4, "q4_k", "--tensor-type", PUBLISHED_EMBEDDING_RULE],
+            "quantize-q4", 1200)
         published = ab.regression.hf_download("cstr/csm-1b-GGUF", "csm-1b-q4_k.gguf",
                                                "5abf936b9d17a839fca69e09baf31e0ea5068f97", scratch)
         if ab.sha256(published) != MODEL_SHA:
