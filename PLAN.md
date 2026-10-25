@@ -67,6 +67,14 @@ an AVX512-capable host before any heavy work, tests traced/untraced PCM identity
 and includes a separate two-repeat existing eager-F32 attention control on the
 same native executable. The original eight speech gates remain unchanged.
 
+Trace source/worker `4fce8a1cdf8ac6083284c7707441204348af0931` is dispatched
+as40205080441 (`--trace --attention-control`). CSM-only ordinary regression
+40205082453 exercises the manual selector and failure retention. Fresh CI
+40205060514, lint40205060534 and push regression40205060538 are pending on
+that same instrumentation source. No numerical fix is claimed. A hosted-only
+existing-API prefill helper is prepared locally for the next boundary check,
+but has not loaded a model or qualified its dump graph against real synthesis.
+
 ## Release and error follow-up — completed (2026-10-25)
 
 The reviewed agenda was processed through the final license item before any
