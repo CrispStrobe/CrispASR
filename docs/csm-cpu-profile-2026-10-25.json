@@ -526,5 +526,31 @@
       }
     },
     "qualification": "Experimental runtime control is OFF by default. Operator graphs, full-model parity, speech and actual CUDA remain separate qualifications."
+  },
+  "original_f32_prefill": {
+    "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40218575515",
+    "source": "f9c4f69f935dad1e95068403d24180d89d3c9dab",
+    "receipt_sha256": "c2e4641fa73181f874c0ccb781629113922588436981030be940396c2a07ea6c",
+    "complete": true,
+    "parameter_count": 1632100161,
+    "stage_count": 19,
+    "prompt_tokens": [
+      128000,
+      58,
+      15,
+      60,
+      791,
+      4062,
+      14198,
+      39935,
+      35308,
+      927,
+      279,
+      16053,
+      5679,
+      128001
+    ],
+    "independent_raw_npy_shape_finite_hash_audit": true,
+    "scope": "Full pinned original HF F32 backbone prefill only. Native parity, published-Q4 lineage, speech and CUDA require separate checks."
   }
 }

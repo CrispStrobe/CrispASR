@@ -139,6 +139,18 @@ Actions matrix gates actual GGML rotary outputs before opt-in speech cells,
 retains legacy eight speech cells separately, and checks traced/untraced PCM
 and diagnostic/sampled logits. No full-model, CUDA or default acceptance yet.
 
+Experimental native source `4fcce3495` passes all13 CI jobs40218162927.
+Sampled component/speech matrix40218140553 remains running at that source.
+Full original HF F32 prefill40218575515 (`f9c4f69f9`) succeeds: exact pinned
+source modules/config,1,632,100,161 CPU F32 parameters, independently recovered
+fourteen-token prompt and all19 stage arrays. Independent raw/npy shape,
+finite-value and hash checks pass. Original receipt SHA256
+`c2e4641fa73181f874c0ccb781629113922588436981030be940396c2a07ea6c`.
+Fresh conversion/actual-Q4 quantization/native parity40218903577 is running;
+its F16 gates were committed before observing outputs. No release acceptance
+is inferred from the original reference or ordinary CI. CUDA build/packaging
+and a strict GPU-only consumer are prepared, with no GPU job/session launched.
+
 ## Release and error follow-up — completed (2026-10-25)
 
 The reviewed agenda was processed through the final license item before any
