@@ -11,10 +11,12 @@ benchmark or proof that a passing host reproduces a previously failing host.
 import argparse
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
 import shutil
+import struct
 import subprocess
 import sys
 import wave
@@ -30,6 +32,159 @@ PROFILES = {
              "-DGGML_AVX512_VNNI=OFF", "-DGGML_AVX512_BF16=OFF",
              "-DGGML_AMX_TILE=OFF", "-DGGML_AMX_INT8=OFF", "-DGGML_AMX_BF16=OFF"],
 }
+SAMPLE_MAGIC = b"CSMSMP01"
+CODE_MAGIC = b"CSMCOD01"
+TOKEN_MAGIC = b"CSMTXT01"
+MAX_SAMPLES = 2048
+AVX2_BASELINE_PCM = "fff79f9c32a62304fb2348866f4a497436c67b359ea482909eaf56b58b6ded96"
+NATIVE_BASELINE_PCM = "1ac415193d618b9ae6f8eb01b67efd95e02ac44430fbbee67414d6c584f289d1"
+
+
+def read_trace_bytes(path, magic, limit):
+    size = path.stat().st_size
+    if size < 8 or size > limit:
+        raise ValueError(f"{path.name}: invalid trace size {size} (limit {limit})")
+    data = path.read_bytes()
+    if data[:8] != magic:
+        raise ValueError(f"{path.name}: incorrect trace magic")
+    return data
+
+
+def read_sampling(path):
+    import numpy as np
+
+    data = read_trace_bytes(path, SAMPLE_MAGIC, 256 * 1024**2)
+    records = []
+    offset = 8
+    while offset < len(data):
+        if len(records) >= MAX_SAMPLES or len(data) - offset < 32:
+            raise ValueError(f"{path.name}: too many or truncated sampling records")
+        vocab, topk, temp, token, before, after = struct.unpack_from("<IIfiQQ", data, offset)
+        offset += 32
+        if not (1 <= vocab <= 65536 and 0 <= topk <= vocab and
+                math.isfinite(temp) and temp >= 0 and 0 <= token < vocab):
+            raise ValueError(f"{path.name}: invalid sampling record {len(records)}")
+        width = vocab * 4
+        if len(data) - offset < width:
+            raise ValueError(f"{path.name}: truncated logits at record {len(records)}")
+        logits = np.frombuffer(data, dtype="<f4", count=vocab, offset=offset).copy()
+        if np.isnan(logits).any():
+            raise ValueError(f"{path.name}: NaN logits at record {len(records)}")
+        records.append({"vocab": vocab, "topk": topk, "temperature": temp,
+                        "token": token, "rng_before": before, "rng_after": after,
+                        "logits": logits})
+        offset += width
+    if not records:
+        raise ValueError(f"{path.name}: no sampling records")
+    return records
+
+
+def read_codes(path):
+    import numpy as np
+
+    data = read_trace_bytes(path, CODE_MAGIC, 32 * 1024**2)
+    if len(data) < 16:
+        raise ValueError(f"{path.name}: missing code dimensions")
+    frames, codebooks = struct.unpack_from("<II", data, 8)
+    if not (1 <= frames <= 100000 and codebooks == 32 and len(data) == 16 + frames * codebooks * 4):
+        raise ValueError(f"{path.name}: invalid or truncated code grid")
+    return np.frombuffer(data, dtype="<i4", count=frames * codebooks, offset=16).reshape(frames, codebooks).copy()
+
+
+def read_tokens(path):
+    import numpy as np
+
+    data = read_trace_bytes(path, TOKEN_MAGIC, 4 * 1024**2)
+    if len(data) < 12:
+        raise ValueError(f"{path.name}: missing token count")
+    count = struct.unpack_from("<I", data, 8)[0]
+    if not (1 <= count <= 100000 and len(data) == 12 + count * 4):
+        raise ValueError(f"{path.name}: invalid or truncated prompt tokens")
+    return np.frombuffer(data, dtype="<i4", count=count, offset=12).copy()
+
+
+def read_profile_trace(prefix):
+    import numpy as np
+
+    samples_path = Path(str(prefix) + ".sampling.bin")
+    codes_path = Path(str(prefix) + ".codes.bin")
+    tokens_path = Path(str(prefix) + ".tokens.bin")
+    samples = read_sampling(samples_path)
+    codes = read_codes(codes_path)
+    tokens = read_tokens(tokens_path)
+    vocab = samples[0]["vocab"]
+    if any(record["vocab"] != vocab for record in samples):
+        raise ValueError(f"{prefix}: sampling vocabulary width changed")
+    if np.any(codes < 0) or np.any(codes >= vocab) or np.any(tokens < 0):
+        raise ValueError(f"{prefix}: code or prompt token IDs are out of range")
+    shared = min(len(samples), codes.size)
+    required = 32 * min(len(codes), 64)
+    if shared < required or not np.array_equal(
+            np.asarray([record["token"] for record in samples[:shared]], dtype=np.int32),
+            codes.reshape(-1)[:shared]):
+        raise ValueError(f"{prefix}: sampled tokens disagree with retained code prefix")
+    return {"samples": samples, "codes": codes, "tokens": tokens,
+            "files": {kind: {"sha256": ab.sha256(path), "bytes": path.stat().st_size}
+                      for kind, path in (("sampling", samples_path), ("codes", codes_path),
+                                         ("tokens", tokens_path))}}
+
+
+def compare_traces(native, avx2, left_label="native", right_label="avx2"):
+    import numpy as np
+
+    if not np.array_equal(native["tokens"], avx2["tokens"]):
+        raise ValueError(f"{left_label} and {right_label} prompt token IDs differ")
+    a, b = native["samples"], avx2["samples"]
+    shared = min(len(a), len(b))
+    chosen = next((i for i in range(shared) if a[i]["token"] != b[i]["token"]), None)
+    if chosen is None and len(a) != len(b):
+        chosen = shared
+    # At the first differing choice, both logits were computed from the same
+    # preceding chosen-token prefix. Later records have different inputs.
+    equal_input_records = shared if chosen is None else min(shared, chosen + 1)
+    first_raw = None
+    first_rng = None
+    max_abs = norm_native_sq = norm_avx2_sq = norm_diff_sq = 0.0
+    finite_count = nonfinite_mismatch = 0
+    for i in range(equal_input_records):
+        left, right = a[i], b[i]
+        if left["vocab"] != right["vocab"] or left["topk"] != right["topk"] or left["temperature"] != right["temperature"]:
+            raise ValueError(f"sampling configuration differs at record {i}")
+        if first_raw is None and left["logits"].tobytes() != right["logits"].tobytes():
+            first_raw = i
+        if first_rng is None and left["rng_before"] != right["rng_before"]:
+            first_rng = i
+        lvals = left["logits"].astype(np.float64)
+        rvals = right["logits"].astype(np.float64)
+        finite = np.isfinite(lvals) & np.isfinite(rvals)
+        nonfinite_mismatch += int(np.count_nonzero(~finite & (lvals != rvals)))
+        lv, rv = lvals[finite], rvals[finite]
+        delta = lv - rv
+        finite_count += int(delta.size)
+        if delta.size:
+            max_abs = max(max_abs, float(np.max(np.abs(delta))))
+            norm_native_sq += float(np.dot(lv, lv))
+            norm_avx2_sq += float(np.dot(rv, rv))
+            norm_diff_sq += float(np.dot(delta, delta))
+    result = {f"{left_label}_records": len(a), f"{right_label}_records": len(b),
+              "equal_input_records": equal_input_records,
+              "first_chosen_token_divergence": chosen,
+              "first_raw_logit_divergence": first_raw,
+              "first_raw_logit_divergence_before_choice":
+                  first_raw if first_raw is not None and (chosen is None or first_raw < chosen) else None,
+              "first_rng_before_divergence": first_rng,
+              "finite_values_compared": finite_count,
+              "nonfinite_mismatch": nonfinite_mismatch,
+              "max_abs": max_abs, f"{left_label}_norm": math.sqrt(norm_native_sq),
+              f"{right_label}_norm": math.sqrt(norm_avx2_sq),
+              f"relative_error_vs_{right_label}": math.sqrt(norm_diff_sq) / max(math.sqrt(norm_avx2_sq), 1e-30),
+              "prompt_token_count": len(native["tokens"]),
+              f"{left_label}_code_frames": len(native["codes"]),
+              f"{right_label}_code_frames": len(avx2["codes"])}
+    if chosen is not None and chosen < shared:
+        result["chosen_tokens"] = {left_label: a[chosen]["token"], right_label: b[chosen]["token"],
+                                   "frame": chosen // 32, "codebook": chosen % 32}
+    return result
 
 
 def pcm_info(path):
@@ -45,9 +200,16 @@ def pcm_info(path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", default="f469d6dd86e42d42d0358fbef6fa75cd0c2aba29")
+    parser.add_argument("--trace", action="store_true", help="capture and compare the sampled CSM path")
+    parser.add_argument("--attention-control", action="store_true",
+                        help="with --trace, repeat native synthesis using the existing eager-F32 attention switch")
     args = parser.parse_args()
+    if args.attention_control and not args.trace:
+        parser.error("--attention-control requires --trace")
     if not re.fullmatch(r"[0-9a-f]{40}", args.source):
         parser.error("--source must be an immutable full Git commit")
+    if args.trace and not any(arg == "--source" or arg.startswith("--source=") for arg in sys.argv[1:]):
+        parser.error("--trace requires an explicit --source commit containing the trace writer")
     out = Path(os.environ["HEAVY_OUT"]).resolve()
     scratch = Path(os.environ["HEAVY_SCRATCH"]).resolve() / "csm-cpu-profile-ab"
     out.mkdir(parents=True, exist_ok=True)
@@ -58,12 +220,26 @@ def main():
                "scope": __doc__, "profiles": {}, "syntheses": {}, "scores": {},
                "initial_resources": ab.snapshot(), "image": os.environ.get("ImageOS"),
                "image_version": os.environ.get("ImageVersion")}
+    if args.trace:
+        receipt["trace"] = {"requested": True, "source": args.source,
+                            "format": "CSMSMP01/CSMCOD01/CSMTXT01 little-endian"}
 
     def save():
         (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
 
     save()
     try:
+        if args.trace:
+            cpuinfo = Path("/proc/cpuinfo").read_bytes()
+            (out / "cpuinfo.txt").write_bytes(cpuinfo)
+            has_avx512f = sys.byteorder == "little" and bool(re.search(rb"\bavx512f\b", cpuinfo))
+            receipt["trace"]["host_avx512f"] = has_avx512f
+            receipt["trace"]["cpuinfo_sha256"] = hashlib.sha256(cpuinfo).hexdigest()
+            save()
+            if not has_avx512f:
+                receipt["error"] = "trace prerequisite failed: little-endian host /proc/cpuinfo must expose avx512f"
+                save()
+                return 2
         ab.require_headroom(receipt["initial_resources"])
         shutil.copy2("/proc/cpuinfo", out / "cpuinfo.txt")
         ab.required(["lscpu", "--json"], ROOT, out, "cpu", 60)
@@ -74,6 +250,11 @@ def main():
         ab.required(["git", "fetch", "--depth=1", "origin", args.source], ROOT, out, "fetch", 300)
         ab.required(["git", "worktree", "add", "--detach", source, args.source], ROOT, out, "worktree", 300)
         ab.required(["git", "submodule", "update", "--init", "--recursive"], source, out, "submodules", 600)
+        if args.trace:
+            trace_source = (source / "src/csm_tts.cpp").read_text()
+            markers = ("CRISPASR_CSM_TRACE_PREFIX", "CSMSMP01", "CSMCOD01", "CSMTXT01")
+            if not all(marker in trace_source for marker in markers):
+                raise RuntimeError("--source does not contain the required CSM trace writer")
         manifest_path = source / "tests/regression/manifest.json"
         manifest = json.loads(manifest_path.read_text())
         _, csm, asr = ab.selected(manifest)
@@ -125,6 +306,9 @@ def main():
             save()
         # Preserve the actual nightly synth argv, including default marking.
         # Whole WAV hashes can change with provenance metadata; compare PCM too.
+        os.environ.pop("CRISPASR_CSM_TRACE_PREFIX", None)
+        if args.attention_control:
+            os.environ.pop("CRISPASR_CORE_ATTN_EAGER_F32", None)
         for profile, cli in executables.items():
             for repeat in range(2):
                 label = f"{profile}-{repeat}"
@@ -134,7 +318,13 @@ def main():
                 if csm.get("voice_preset"):
                     argv += ["--voice", csm["voice_preset"]]
                 argv += csm.get("tts_extra_args", [])
-                rc = ab.command(argv, source, out, f"{label}-synth", 300)
+                trace_prefix = out / f"{label}-trace" if args.trace and repeat == 1 else None
+                if trace_prefix is not None:
+                    os.environ["CRISPASR_CSM_TRACE_PREFIX"] = str(trace_prefix)
+                try:
+                    rc = ab.command(argv, source, out, f"{label}-synth", 300)
+                finally:
+                    os.environ.pop("CRISPASR_CSM_TRACE_PREFIX", None)
                 info = pcm_info(output)
                 receipt["syntheses"][label] = {"profile": profile, "repeat": repeat, "rc": rc, "wav": info}
                 save()
@@ -153,19 +343,106 @@ def main():
                                       gate=bool(score_rc == 0 and wer <= csm["wer_max"]))
                     receipt["scores"][score_label] = result
                     save()
-        receipt["complete"] = True
-        receipt["acceptance"] = len(receipt["scores"]) == 8 and all(x["gate"] for x in receipt["scores"].values())
+        speech_acceptance = len(receipt["scores"]) == 8 and all(x["gate"] for x in receipt["scores"].values())
+        receipt["speech_acceptance"] = speech_acceptance
         receipt["identical_repeat_pcm"] = {
             p: bool(receipt["syntheses"][f"{p}-0"]["wav"].get("pcm_sha256")) and
             receipt["syntheses"][f"{p}-0"]["wav"].get("pcm_sha256") ==
             receipt["syntheses"][f"{p}-1"]["wav"].get("pcm_sha256") for p in PROFILES}
+        if args.trace:
+            avx2_pcm = receipt["syntheses"]["avx2-1"]["wav"].get("pcm_sha256")
+            native_pcm = receipt["syntheses"]["native-1"]["wav"].get("pcm_sha256")
+            receipt["trace"]["pcm_baselines"] = {
+                "avx2_expected": AVX2_BASELINE_PCM, "avx2_actual": avx2_pcm,
+                "avx2_match": avx2_pcm == AVX2_BASELINE_PCM,
+                "native_prior": NATIVE_BASELINE_PCM, "native_actual": native_pcm,
+                "native_match_prior": native_pcm == NATIVE_BASELINE_PCM,
+            }
+            save()
+            for profile in PROFILES:
+                if not receipt["identical_repeat_pcm"][profile]:
+                    raise RuntimeError(f"{profile}: traced repeat changed synthesized PCM")
+            if avx2_pcm != AVX2_BASELINE_PCM:
+                raise RuntimeError("AVX2 traced PCM differs from accepted same-host baseline")
+            parsed = {profile: read_profile_trace(out / f"{profile}-1-trace") for profile in PROFILES}
+            receipt["trace"]["files"] = {profile: data["files"] for profile, data in parsed.items()}
+            receipt["trace"]["comparison"] = compare_traces(parsed["native"], parsed["avx2"])
+            save()
+            if args.attention_control:
+                control = {"environment_delta": {"CRISPASR_CORE_ATTN_EAGER_F32":
+                                                  {"baseline": None, "control": "1"}},
+                           "source_profile": "native", "gating": "diagnostic only; original eight cells decide job result",
+                           "syntheses": {}, "scores": {}}
+                receipt["attention_control"] = control
+                save()
+                native_cli = executables["native"]
+                for repeat in range(2):
+                    label = f"attention-native-{repeat}"
+                    output = out / f"{label}.wav"
+                    argv = [native_cli, "-m", paths["csm"], "--tts", csm["tts_phrase"], "--tts-output", output,
+                            "--seed", str(csm.get("tts_seed", 1234)), "--no-prints"]
+                    if csm.get("voice_preset"):
+                        argv += ["--voice", csm["voice_preset"]]
+                    argv += csm.get("tts_extra_args", [])
+                    os.environ["CRISPASR_CORE_ATTN_EAGER_F32"] = "1"
+                    if repeat == 1:
+                        os.environ["CRISPASR_CSM_TRACE_PREFIX"] = str(out / f"{label}-trace")
+                    try:
+                        rc = ab.command(argv, source, out, f"{label}-synth", 300)
+                    finally:
+                        os.environ.pop("CRISPASR_CSM_TRACE_PREFIX", None)
+                        os.environ.pop("CRISPASR_CORE_ATTN_EAGER_F32", None)
+                    info = pcm_info(output)
+                    control["syntheses"][label] = {"repeat": repeat, "rc": rc, "wav": info}
+                    save()
+                    for judge, asr_cli in executables.items():
+                        score_label = f"{label}-judge-{judge}"
+                        result = {"tts_profile": "native-eager-f32", "asr_profile": judge,
+                                  "repeat": repeat, "gate": False}
+                        if (rc == 0 and info.get("bytes", 0) >= 1000 and "pcm_sha256" in info
+                                and info.get("channels") == 1 and info.get("rate") == 24000
+                                and info.get("sample_width") == 2):
+                            score_rc = ab.command([asr_cli, "--backend", asr["backend_id"], "-m", paths["asr"],
+                                                   "-f", output, "--no-prints"], source, out, score_label, 180)
+                            stdout = (out / f"{score_label}.stdout.log").read_text(errors="replace")
+                            text = ab.regression.strip_ai_disclaimer(
+                                next((x.strip() for x in reversed(stdout.splitlines()) if x.strip()), ""))
+                            wer = ab.regression.compute_transcript_metrics(csm["tts_phrase"], text)[1]
+                            result.update(rc=score_rc, transcript=text, wer=wer, wer_max=csm["wer_max"],
+                                          gate=bool(score_rc == 0 and wer <= csm["wer_max"]))
+                        control["scores"][score_label] = result
+                        save()
+                first_pcm = control["syntheses"]["attention-native-0"]["wav"].get("pcm_sha256")
+                second_pcm = control["syntheses"]["attention-native-1"]["wav"].get("pcm_sha256")
+                control["traced_untraced_pcm_identical"] = bool(first_pcm) and first_pcm == second_pcm
+                control["speech_acceptance"] = len(control["scores"]) == 4 and all(
+                    cell["gate"] for cell in control["scores"].values())
+                save()
+                if not control["traced_untraced_pcm_identical"]:
+                    raise RuntimeError("eager-F32 attention control: tracing changed synthesized PCM")
+                eager = read_profile_trace(out / "attention-native-1-trace")
+                control["trace"] = {"files": eager["files"],
+                                    "native_vs_eager": compare_traces(
+                                        parsed["native"], eager, "native", "eager_f32"),
+                                    "eager_vs_avx2": compare_traces(
+                                        eager, parsed["avx2"], "eager_f32", "avx2")}
+                save()
+        receipt["complete"] = True
+        receipt["acceptance"] = speech_acceptance
         save()
-        (out / "summary.md").write_text(
+        summary = (
             "# CSM CPU profile factorial\n\n" +
             "| Synth/repeat | ASR | WER | Gate |\n|---|---|---|---|\n" +
             "".join(f"| {x['tts_profile']}/{x['repeat']} | {x['asr_profile']} | {x.get('wer', 'missing')} | {x['gate']} |\n"
                     for x in receipt["scores"].values()) +
             "\nExisting seed, model pins and 0.15 WER gate are unchanged. Full logs, audio and compiler/CPU evidence retained.\n")
+        if args.attention_control:
+            summary += ("\n## Eager-F32 attention control (diagnostic only)\n\n" +
+                        "| Synth/repeat | ASR | WER | Gate |\n|---|---|---|---|\n" +
+                        "".join(f"| {x['tts_profile']}/{x['repeat']} | {x['asr_profile']} | "
+                                f"{x.get('wer', 'missing')} | {x['gate']} |\n"
+                                for x in receipt["attention_control"]["scores"].values()))
+        (out / "summary.md").write_text(summary)
         return 0 if receipt["acceptance"] else 1
     except Exception as exc:
         receipt["error"] = f"{type(exc).__name__}: {exc}"

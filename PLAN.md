@@ -40,6 +40,33 @@ regression40202758265 and CI40202758268 in flight. A concrete
 `RELEASE_NOTES_v0.8.45.md` draft records the qualified changes and explicitly
 retains the CSM release blocker. VERSION remains0.8.44; no tag exists for0.8.45.
 
+Worker-source CI40202758268's hosted unit job passes all2095 selected CTests
+(four existing optional-dictionary skips), including the actual new diagnostics
+CTest, and189 Python tests/34 subtests. This does not clear the CSM speech gate.
+The ordinary push regression selects the six-model core, not CSM; a validated
+manual `diagnostic_backend` choice is prepared for CSM/data2vec-only capture.
+Its six actual shell controls and actionlint pass. It will be dispatched after
+the current regression settles, preserving that in-flight core/Granite evidence.
+
+**Reproduced:** factorial40202774412 completed on AMD EPYC9V74 with AVX512.
+Both native syntheses produce identical30.4s PCM and WER2/3 under BOTH ASR
+executables. Both explicit AVX2 syntheses produce identical4.72s PCM and WER0
+under BOTH ASR executables, matching the prior passing PCM hash exactly.
+Raw PCM hashes, eight ASR logs and compiler commands were independently
+checked. See `docs/csm-cpu-profile-2026-10-25.json`. This isolates the observed
+profile difference to synthesis, without yet identifying a faulty operation.
+Root is adding opt-in read-only sampled logits/RNG/code capture; the original
+sampling arithmetic/RNG function body remains byte-identical. Instrumented
+controls must retain untraced/traced PCM identity before traces are interpreted.
+
+Baseline `8eca86f32` now passes all13 CI jobs, all10 lint jobs and the complete
+selected regression40202758265 (six core models plus Granite5 acceptance).
+These checks precede sampled-path instrumentation and do not override the
+reproduced CSM native-profile failure. The next hosted trace experiment requires
+an AVX512-capable host before any heavy work, tests traced/untraced PCM identity,
+and includes a separate two-repeat existing eager-F32 attention control on the
+same native executable. The original eight speech gates remain unchanged.
+
 ## Release and error follow-up — completed (2026-10-25)
 
 The reviewed agenda was processed through the final license item before any

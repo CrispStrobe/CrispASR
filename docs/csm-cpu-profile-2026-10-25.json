@@ -1,0 +1,287 @@
+{
+  "schema": 1,
+  "date": "2026-10-25",
+  "run": "https://github.com/CrispStrobe/CrispASR/actions/runs/40202774412",
+  "artifact_id": 12603395220,
+  "source": "f469d6dd86e42d42d0358fbef6fa75cd0c2aba29",
+  "worker_source": "8eca86f32f1b89e7aa2c96249b34e9c994d94f54",
+  "complete": true,
+  "speech_acceptance": false,
+  "host": {
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "logical_cpus": 4,
+    "avx512f": true
+  },
+  "pins": {
+    "csm": {
+      "name": "csm-1b",
+      "backend_id": "csm",
+      "gguf": {
+        "repo": "cstr/csm-1b-GGUF",
+        "revision": "5abf936b9d17a839fca69e09baf31e0ea5068f97",
+        "file": "csm-1b-q4_k.gguf",
+        "approx_size_mb": 1100
+      },
+      "voice_preset": "default",
+      "tts_phrase": "The quick brown fox jumps over the lazy dog",
+      "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
+      "wer_max": 0.15,
+      "wer_max_note": "CSM-1B Q4_K conversational TTS. 15% WER headroom."
+    },
+    "asr": {
+      "name": "parakeet-tdt-0.6b-en",
+      "backend_id": "parakeet",
+      "skip_diff": false,
+      "source_model": "nvidia/parakeet-tdt-0.6b-v3",
+      "gguf": {
+        "repo": "cstr/parakeet-tdt-0.6b-v3-GGUF",
+        "revision": "815cc1bcb5cfb92f9cd0bbd22c7bc2f6e2d4ec13",
+        "file": "parakeet-tdt-0.6b-v3-q4_k.gguf",
+        "approx_size_mb": 466
+      },
+      "sample": "samples/jfk.wav",
+      "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "expected_transcript_source": "captured 2026-05-15 with HF revision 815cc1b, CPU-only, samples/jfk.wav",
+      "fixture_ref_path": "parakeet-tdt-0.6b-en/ref.gguf",
+      "diff_gguf": {
+        "file": "parakeet-tdt-0.6b-v3.gguf"
+      },
+      "diff_thresholds": {
+        "mel_spectrogram": 0.999,
+        "encoder_output": 0.999
+      },
+      "stage_threshold_default": 0.999,
+      "stage_threshold_note": "Kaggle validate 2026-09-28: all 28 stages >= 0.999914 after the absent-xscaling fix 6814698f (encoder was 0.594)."
+    }
+  },
+  "model_sha256": {
+    "csm": "1123f9e8ff2d9212700d1fface749b8ec4f9765569bb996667a15a9a9832ee13",
+    "asr": "1a60f6e53e5781240dde6e69a47a47a8a71995a3a106517b009225afcc514457"
+  },
+  "profiles": {
+    "native": {
+      "flags": [
+        "-G",
+        "Ninja",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+        "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
+        "-DCRISPASR_BUILD_TESTS=OFF",
+        "-DCRISPASR_BUILD_EXAMPLES=ON",
+        "-DCRISPASR_BUILD_SERVER=OFF",
+        "-DGGML_NATIVE=ON"
+      ],
+      "cpu_compiler_commands_verified": 17
+    },
+    "avx2": {
+      "flags": [
+        "-G",
+        "Ninja",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+        "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
+        "-DCRISPASR_BUILD_TESTS=OFF",
+        "-DCRISPASR_BUILD_EXAMPLES=ON",
+        "-DCRISPASR_BUILD_SERVER=OFF",
+        "-DGGML_NATIVE=OFF",
+        "-DGGML_AVX=ON",
+        "-DGGML_AVX2=ON",
+        "-DGGML_FMA=ON",
+        "-DGGML_F16C=ON",
+        "-DGGML_AVX_VNNI=OFF",
+        "-DGGML_AVX512=OFF",
+        "-DGGML_AVX512_VBMI=OFF",
+        "-DGGML_AVX512_VNNI=OFF",
+        "-DGGML_AVX512_BF16=OFF",
+        "-DGGML_AMX_TILE=OFF",
+        "-DGGML_AMX_INT8=OFF",
+        "-DGGML_AMX_BF16=OFF"
+      ],
+      "cpu_compiler_commands_verified": 17
+    }
+  },
+  "syntheses": {
+    "native-0": {
+      "profile": "native",
+      "repeat": 0,
+      "rc": 0,
+      "wav": {
+        "exists": true,
+        "sha256": "317e4f82030dc1c56073a64b1b1b4918abd30c54af616b7bb3498926a84fc73a",
+        "bytes": 1461084,
+        "channels": 1,
+        "rate": 24000,
+        "frames": 729600,
+        "duration_s": 30.4,
+        "sample_width": 2,
+        "pcm_sha256": "1ac415193d618b9ae6f8eb01b67efd95e02ac44430fbbee67414d6c584f289d1"
+      }
+    },
+    "native-1": {
+      "profile": "native",
+      "repeat": 1,
+      "rc": 0,
+      "wav": {
+        "exists": true,
+        "sha256": "ad85d42fef93ed8e049d51ef6456dde145a01cf2ead718a20788ab245748d176",
+        "bytes": 1461084,
+        "channels": 1,
+        "rate": 24000,
+        "frames": 729600,
+        "duration_s": 30.4,
+        "sample_width": 2,
+        "pcm_sha256": "1ac415193d618b9ae6f8eb01b67efd95e02ac44430fbbee67414d6c584f289d1"
+      }
+    },
+    "avx2-0": {
+      "profile": "avx2",
+      "repeat": 0,
+      "rc": 0,
+      "wav": {
+        "exists": true,
+        "sha256": "761780687cf759f32faedcfd4c7c6d118179747189243ad5d1b1bccb27c21690",
+        "bytes": 228444,
+        "channels": 1,
+        "rate": 24000,
+        "frames": 113280,
+        "duration_s": 4.72,
+        "sample_width": 2,
+        "pcm_sha256": "fff79f9c32a62304fb2348866f4a497436c67b359ea482909eaf56b58b6ded96"
+      }
+    },
+    "avx2-1": {
+      "profile": "avx2",
+      "repeat": 1,
+      "rc": 0,
+      "wav": {
+        "exists": true,
+        "sha256": "7b5543de96866abea05ba4241c234b1b0d54d002f3dbfe5507462f2e2ddd8861",
+        "bytes": 228444,
+        "channels": 1,
+        "rate": 24000,
+        "frames": 113280,
+        "duration_s": 4.72,
+        "sample_width": 2,
+        "pcm_sha256": "fff79f9c32a62304fb2348866f4a497436c67b359ea482909eaf56b58b6ded96"
+      }
+    }
+  },
+  "scores": {
+    "native-0-judge-native": {
+      "tts_profile": "native",
+      "asr_profile": "native",
+      "repeat": 0,
+      "gate": false,
+      "rc": 0,
+      "transcript": "The grip brown fox.",
+      "wer": 0.6666666666666666,
+      "wer_max": 0.15
+    },
+    "native-0-judge-avx2": {
+      "tts_profile": "native",
+      "asr_profile": "avx2",
+      "repeat": 0,
+      "gate": false,
+      "rc": 0,
+      "transcript": "The grip brown fox.",
+      "wer": 0.6666666666666666,
+      "wer_max": 0.15
+    },
+    "native-1-judge-native": {
+      "tts_profile": "native",
+      "asr_profile": "native",
+      "repeat": 1,
+      "gate": false,
+      "rc": 0,
+      "transcript": "The grip brown fox.",
+      "wer": 0.6666666666666666,
+      "wer_max": 0.15
+    },
+    "native-1-judge-avx2": {
+      "tts_profile": "native",
+      "asr_profile": "avx2",
+      "repeat": 1,
+      "gate": false,
+      "rc": 0,
+      "transcript": "The grip brown fox.",
+      "wer": 0.6666666666666666,
+      "wer_max": 0.15
+    },
+    "avx2-0-judge-native": {
+      "tts_profile": "avx2",
+      "asr_profile": "native",
+      "repeat": 0,
+      "gate": true,
+      "rc": 0,
+      "transcript": "The quick brown fox jumps over the lazy dog.",
+      "wer": 0.0,
+      "wer_max": 0.15
+    },
+    "avx2-0-judge-avx2": {
+      "tts_profile": "avx2",
+      "asr_profile": "avx2",
+      "repeat": 0,
+      "gate": true,
+      "rc": 0,
+      "transcript": "The quick brown fox jumps over the lazy dog.",
+      "wer": 0.0,
+      "wer_max": 0.15
+    },
+    "avx2-1-judge-native": {
+      "tts_profile": "avx2",
+      "asr_profile": "native",
+      "repeat": 1,
+      "gate": true,
+      "rc": 0,
+      "transcript": "The quick brown fox jumps over the lazy dog.",
+      "wer": 0.0,
+      "wer_max": 0.15
+    },
+    "avx2-1-judge-avx2": {
+      "tts_profile": "avx2",
+      "asr_profile": "avx2",
+      "repeat": 1,
+      "gate": true,
+      "rc": 0,
+      "transcript": "The quick brown fox jumps over the lazy dog.",
+      "wer": 0.0,
+      "wer_max": 0.15
+    }
+  },
+  "identical_repeat_pcm": {
+    "native": true,
+    "avx2": true
+  },
+  "evidence_sha256": {
+    "receipt.json": "d78f8937d68b6f1a929aa9c21e0311362f85b92f2d8578fdf623c165758ff6d2",
+    "cpuinfo.txt": "480c7786bdd3c291a77a8a45740e2037e010d3985cbf1e913cc675e4e3957a0b",
+    "cpu.stdout.log": "65f12c33e22051311486d4e6c22ab280b9e6584e63bb3ef925f4b0c2ebb15d60",
+    "native/compile_commands.json": "b9cbc812444904e34371008cba2625977dd1d5c64e4bbb969cec8690c239f879",
+    "native/CMakeCache.txt": "3abfecd0a0c19dcf5a213348d3698814d4704433cfd655c9c28d9df4a4bbe826",
+    "native/libraries.stdout.log": "da8c5253ee923a691849912b62f2ae3dfa247bc95093114ff16a316ed626c516",
+    "avx2/compile_commands.json": "972e8118e9dcf9721f434325eff8a44500cb36e57fa257e193a79d6a28df0220",
+    "avx2/CMakeCache.txt": "7c5bc23ba06fd5711da9d9d5097eeb7cc941306c572d043db5d8435017b2b603",
+    "avx2/libraries.stdout.log": "2388a3e828b34027b02a6851203198857e3afd1e3e92271b1cd28315dd432984",
+    "native-0.wav": "317e4f82030dc1c56073a64b1b1b4918abd30c54af616b7bb3498926a84fc73a",
+    "native-1.wav": "ad85d42fef93ed8e049d51ef6456dde145a01cf2ead718a20788ab245748d176",
+    "avx2-0.wav": "761780687cf759f32faedcfd4c7c6d118179747189243ad5d1b1bccb27c21690",
+    "avx2-1.wav": "7b5543de96866abea05ba4241c234b1b0d54d002f3dbfe5507462f2e2ddd8861",
+    "native-0-judge-native.stdout.log": "f76fef133ba09e7dfdd5cf1a95a5ea1b7d0eb09148038659297637ef1c0d13c3",
+    "native-0-judge-avx2.stdout.log": "f76fef133ba09e7dfdd5cf1a95a5ea1b7d0eb09148038659297637ef1c0d13c3",
+    "native-1-judge-native.stdout.log": "f76fef133ba09e7dfdd5cf1a95a5ea1b7d0eb09148038659297637ef1c0d13c3",
+    "native-1-judge-avx2.stdout.log": "f76fef133ba09e7dfdd5cf1a95a5ea1b7d0eb09148038659297637ef1c0d13c3",
+    "avx2-0-judge-native.stdout.log": "b47cc0f104b62d4c7c30bcd68fd8e67613e287dc4ad8c310ef10cbadea9c4380",
+    "avx2-0-judge-avx2.stdout.log": "b47cc0f104b62d4c7c30bcd68fd8e67613e287dc4ad8c310ef10cbadea9c4380",
+    "avx2-1-judge-native.stdout.log": "b47cc0f104b62d4c7c30bcd68fd8e67613e287dc4ad8c310ef10cbadea9c4380",
+    "avx2-1-judge-avx2.stdout.log": "b47cc0f104b62d4c7c30bcd68fd8e67613e287dc4ad8c310ef10cbadea9c4380"
+  },
+  "conclusions": [
+    "The failure reproduces on this one host with native compiler flags; both native repeats fail the unchanged 0.15 WER gate.",
+    "Both AVX2 syntheses pass both ASR executables with WER zero and match the prior passing PCM hash.",
+    "Cross-scoring isolates the observed profile difference to synthesis rather than the ASR judge.",
+    "This does not identify the first numerical divergence, establish a particular faulty kernel, or qualify a production fix. No gate, seed, model pin or production default was changed."
+  ],
+  "next": "Read-only sampled-path trace and first-divergence/reference diagnosis; release remains blocked."
+}

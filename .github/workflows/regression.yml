@@ -42,6 +42,11 @@ on:
         description: 'Run the complete published Granite5 acceptance regression only'
         type: boolean
         default: false
+      diagnostic_backend:
+        description: 'Single-backend diagnostics; none keeps normal selection'
+        type: choice
+        options: [none, csm-1b, data2vec-base]
+        default: none
   # PR / push: smoke + unit + preflight, plus the per-backend regression for
   # only the backends the change can affect (tools/regression_select.py; shared
   # code selects a small core set). Docs-only changes do not trigger it.
@@ -205,7 +210,22 @@ jobs:
           BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
           GH_TOKEN: ${{ github.token }}
           GRANITE5_ONLY: ${{ inputs.granite5_only }}
+          DIAGNOSTIC_BACKEND: ${{ inputs.diagnostic_backend }}
         run: |
+          case "$DIAGNOSTIC_BACKEND" in
+            ''|none) ;;
+            csm-1b|data2vec-base)
+              if [ "$GRANITE5_ONLY" = true ]; then
+                echo '::error::diagnostic_backend and granite5_only cannot both be set'
+                exit 1
+              fi
+              printf 'matrix=["%s"]\n' "$DIAGNOSTIC_BACKEND" >> "$GITHUB_OUTPUT"
+              echo 'granite5=false' >> "$GITHUB_OUTPUT"
+              echo "selected diagnostic backend: $DIAGNOSTIC_BACKEND"
+              exit 0
+              ;;
+            *) echo '::error::diagnostic_backend must be none, csm-1b, or data2vec-base'; exit 1 ;;
+          esac
           if [ "$GRANITE5_ONLY" = true ]; then
             echo 'matrix=[]' >> "$GITHUB_OUTPUT"
             echo 'granite5=true' >> "$GITHUB_OUTPUT"
@@ -217,8 +237,8 @@ jobs:
           # cancelled run's changes were otherwise never selected again: on
           # 2026-09-28 the parakeet + wav2vec2 fixes landed in cancelled runs and
           # the surviving run selected only the diff-tool change.
-          # Only automatic push runs advance this baseline. Manual
-          # Granite-only runs do not qualify the core-model matrix.
+          # Only automatic push runs advance this baseline. Manual Granite-only
+          # and single-backend diagnostic runs never qualify the core-model matrix.
           if [ "$EVENT" = push ]; then
             for sha in $(gh run list -R "$GITHUB_REPOSITORY" --workflow regression.yml --branch main \
                            --event push --status success --limit 30 --json headSha --jq '.[].headSha' 2>/dev/null); do

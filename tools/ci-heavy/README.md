@@ -69,6 +69,19 @@ flags survive failures; models and build trees stay in scratch. Run with
 `-f pip="numpy huggingface_hub"` on Linux x86. A passing host does not establish
 the cause or resolution of a failure on an unidentified host. Ordinary nightly
 CSM/data2vec failures now retain bounded evidence for seven days.
+To capture one ordinary nightly path, dispatch `regression.yml` with
+`-f diagnostic_backend=csm-1b` (or `data2vec-base`). This keeps the existing
+model pins and gates, cannot be combined with `granite5_only`, and never
+advances the successful automatic-push baseline used for core selection.
+After reproducing native-profile drift, `--trace --source <full-commit>`
+captures the actual sampled path in the second repeat, requiring PCM identity
+with the untraced repeat and the retained AVX2 baseline before interpretation.
+It rejects hosts without AVX512 before downloads/builds. Optional
+`--attention-control` adds two syntheses using the existing eager-F32 attention
+switch on the same native executable; those four extra ASR cells remain
+separate from the original eight gates. This diagnoses an operation boundary;
+it changes no production default. Raw logits, RNG states, prompt IDs and codes
+are retained, capped at2048 sampling records per traced synthesis.
 
 `dia_attention_arithmetic.py` uses tiny analytic fixtures and exact recorded
 original/native Q/K/V to split dot products, softmax and weighted-value arithmetic.

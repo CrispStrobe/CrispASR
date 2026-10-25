@@ -360,8 +360,82 @@ static float rand_uniform(uint64_t& state) {
     return (float)(xorshift64star(state) >> 11) / (float)(1ULL << 53);
 }
 
-// Top-k sampling with temperature
-static int sample_topk(const float* logits, int vocab, int topk, float temperature, uint64_t& rng) {
+// Optional, bounded read-only evidence from the actual sampled synthesis path.
+// Host-endian binary records are interpreted only on matching little-endian
+// hosted x86 controls. No re-sampling or greedy diagnostic path is involved.
+struct csm_sampling_trace {
+    std::string prefix;
+    FILE* samples = nullptr;
+    unsigned records = 0;
+
+    csm_sampling_trace() {
+        const char* value = crispasr_env::get("CRISPASR_CSM_TRACE_PREFIX");
+        if (!value || !*value)
+            return;
+        prefix = value;
+        samples = open(".sampling.bin", "CSMSMP01");
+    }
+
+    ~csm_sampling_trace() {
+        if (samples)
+            fclose(samples);
+    }
+
+    FILE* open(const char* suffix, const char* magic) const {
+        FILE* file = fopen((prefix + suffix).c_str(), "wb");
+        if (file)
+            fwrite(magic, 1, 8, file);
+        else
+            fprintf(stderr, "csm_tts: cannot open requested diagnostic trace\n");
+        return file;
+    }
+
+    void sample(const float* logits, int vocab, int topk, float temperature, int token, uint64_t before,
+                uint64_t after) {
+        if (!samples || records >= 2048)
+            return;
+        const uint32_t width = (uint32_t)vocab;
+        const uint32_t k = (uint32_t)topk;
+        const int32_t selected = (int32_t)token;
+        fwrite(&width, sizeof(width), 1, samples);
+        fwrite(&k, sizeof(k), 1, samples);
+        fwrite(&temperature, sizeof(temperature), 1, samples);
+        fwrite(&selected, sizeof(selected), 1, samples);
+        fwrite(&before, sizeof(before), 1, samples);
+        fwrite(&after, sizeof(after), 1, samples);
+        fwrite(logits, sizeof(float), (size_t)vocab, samples);
+        ++records;
+    }
+
+    void text(const std::vector<int32_t>& tokens) const {
+        if (prefix.empty())
+            return;
+        if (FILE* file = open(".tokens.bin", "CSMTXT01")) {
+            const uint32_t count = (uint32_t)tokens.size();
+            fwrite(&count, sizeof(count), 1, file);
+            fwrite(tokens.data(), sizeof(int32_t), tokens.size(), file);
+            fclose(file);
+        }
+    }
+
+    void codes(const std::vector<std::vector<int32_t>>& frames, int n_cb) const {
+        if (prefix.empty())
+            return;
+        if (FILE* file = open(".codes.bin", "CSMCOD01")) {
+            const uint32_t count = (uint32_t)frames.size();
+            const uint32_t width = (uint32_t)n_cb;
+            fwrite(&count, sizeof(count), 1, file);
+            fwrite(&width, sizeof(width), 1, file);
+            for (const auto& frame : frames)
+                fwrite(frame.data(), sizeof(int32_t), frame.size(), file);
+            fclose(file);
+        }
+    }
+};
+
+// Top-k sampling with temperature. Keep arithmetic and RNG draws unchanged;
+// the wrapper below records inputs and the result after the decision.
+static int sample_topk_impl(const float* logits, int vocab, int topk, float temperature, uint64_t& rng) {
     if (temperature <= 0.0f || topk <= 1) {
         // Greedy
         int best = 0;
@@ -403,6 +477,14 @@ static int sample_topk(const float* logits, int vocab, int topk, float temperatu
         }
     }
     return scored[topk - 1].second;
+}
+
+static int sample_topk(const float* logits, int vocab, int topk, float temperature, uint64_t& rng,
+                       csm_sampling_trace& trace) {
+    const uint64_t before = rng;
+    const int token = sample_topk_impl(logits, vocab, topk, temperature, rng);
+    trace.sample(logits, vocab, topk, temperature, token, before, rng);
+    return token;
 }
 
 // ===================================================================
@@ -1187,6 +1269,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
     auto& hp = m.hp;
     float temperature = ctx->params.temperature;
     int topk = ctx->params.topk;
+    csm_sampling_trace trace;
 
     // 1. Tokenize text
     std::vector<int32_t> text_tokens;
@@ -1198,6 +1281,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
         fprintf(stderr, "csm_tts: empty text after tokenization\n");
         return nullptr;
     }
+    trace.text(text_tokens);
 
     if (ctx->params.verbosity >= 1) {
         fprintf(stderr, "csm_tts: %zu text tokens:", text_tokens.size());
@@ -1580,7 +1664,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
         }
 
         // Sample first frame's codebook-0 from the prefill output
-        int32_t first_cb0 = sample_topk(bb_logits.data(), avocab, topk, temperature, ctx->rng_state);
+        int32_t first_cb0 = sample_topk(bb_logits.data(), avocab, topk, temperature, ctx->rng_state, trace);
 
         // Depth decode the first frame
         std::vector<int32_t> first_frame_codes(n_cb);
@@ -1617,7 +1701,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
             ggml_tensor* dd_logits_t = ggml_graph_get_tensor(dd_gf, "dd_logits");
             std::vector<float> dd_logits(avocab);
             ggml_backend_tensor_get(dd_logits_t, dd_logits.data(), 0, dd_logits.size() * sizeof(float));
-            first_frame_codes[1] = sample_topk(dd_logits.data(), avocab, topk, temperature, ctx->rng_state);
+            first_frame_codes[1] = sample_topk(dd_logits.data(), avocab, topk, temperature, ctx->rng_state, trace);
         }
         // Decode codebooks 2..31 for first frame
         {
@@ -1642,7 +1726,8 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
                 ggml_tensor* dd_logits_t = ggml_graph_get_tensor(dd_gf, "dd_logits");
                 std::vector<float> dd_logits(avocab);
                 ggml_backend_tensor_get(dd_logits_t, dd_logits.data(), 0, dd_logits.size() * sizeof(float));
-                first_frame_codes[cb_idx] = sample_topk(dd_logits.data(), avocab, topk, temperature, ctx->rng_state);
+                first_frame_codes[cb_idx] =
+                    sample_topk(dd_logits.data(), avocab, topk, temperature, ctx->rng_state, trace);
                 dd_n_past++;
             }
         }
@@ -1726,7 +1811,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
             }
 
             // Sample codebook-0 token
-            int32_t cb0_token = sample_topk(bb_logits.data(), avocab, topk, temperature, ctx->rng_state);
+            int32_t cb0_token = sample_topk(bb_logits.data(), avocab, topk, temperature, ctx->rng_state, trace);
 
             // NOTE: EOS is checked AFTER generating all codebooks for the frame.
             // Python CSM stops when ALL codebooks are codebook_eos_token_id, not just cb0.
@@ -1789,7 +1874,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
                 ggml_backend_tensor_get(dd_logits_t, dd_logits.data(), 0, dd_logits.size() * sizeof(float));
 
                 // Sample codebook-1 token
-                int32_t cb1_token = sample_topk(dd_logits.data(), avocab, topk, temperature, ctx->rng_state);
+                int32_t cb1_token = sample_topk(dd_logits.data(), avocab, topk, temperature, ctx->rng_state, trace);
                 frame_codes[1] = cb1_token;
             }
 
@@ -1826,7 +1911,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
                 std::vector<float> dd_logits(avocab);
                 ggml_backend_tensor_get(dd_logits_t, dd_logits.data(), 0, dd_logits.size() * sizeof(float));
 
-                int32_t cb_token = sample_topk(dd_logits.data(), avocab, topk, temperature, ctx->rng_state);
+                int32_t cb_token = sample_topk(dd_logits.data(), avocab, topk, temperature, ctx->rng_state, trace);
                 frame_codes[cb_idx] = cb_token;
                 dd_n_past++;
             }
@@ -1857,6 +1942,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
 
 mimi_decode:
     ctx->last_codes = all_codes; // capture before Mimi decode (which may fail)
+    trace.codes(all_codes, n_cb);
     if (all_codes.empty()) {
         fprintf(stderr, "csm_tts: no audio frames generated\n");
         return nullptr;

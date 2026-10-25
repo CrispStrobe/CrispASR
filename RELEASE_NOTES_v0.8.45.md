@@ -4,6 +4,12 @@
 
 These notes describe changes committed after `v0.8.44` through `f469d6dd86e42d42d0358fbef6fa75cd0c2aba29`. They are a preparation draft; later fixes and final-source results must be incorporated before publication.
 
+The bounded [CPU-profile experiment](docs/csm-cpu-profile-2026-10-25.json)
+reproduces the failure on an AMD EPYC 9V74 with native flags. Two native
+syntheses fail both ASR judges; two AVX2 syntheses pass both. Repeats have exact
+PCM identity within each profile. This isolates synthesis sensitivity in that
+experiment, but does not yet identify a numerical operation or qualify a fix.
+
 ## Granite Speech 5.0
 
 - Native YaRN conversion and runtime support add the licensed Granite Speech 5.0 2B model. The approved F16 profile and a separately qualified Q4_K profile are published at the [pinned model revision](https://huggingface.co/cstr/granite-speech-5.0-2b-GGUF/tree/e1df7d2cabb0ddba9863d7fc90cb6e78e8f19a6d). The model registry now selects Q4_K by default and keeps an explicit F16 choice; unsupported precision profiles remain rejected.
