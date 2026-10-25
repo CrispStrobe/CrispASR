@@ -96,6 +96,14 @@ separate from the original eight gates. This diagnoses an operation boundary;
 it changes no production default. Raw logits, RNG states, prompt IDs and codes
 are retained, capped at2048 sampling records per traced synthesis.
 
+`csm_original_rope_reference.py` executes the pinned original HF rotary class,
+frequency helpers and rotation function with the original immutable CSM config.
+It exports full tiny F32 input/output tables and an unscaled negative control
+for both stacks, through native position2047/backbone and32/depth. It loads no
+model weights, preserves the original AST bodies/decorators and license notices,
+and does not claim full CsmConfig/model initialization or weight lineage. Run
+with `-f pip="numpy torch==2.6.0 huggingface_hub"` on the hosted CPU workflow.
+
 `dia_attention_arithmetic.py` uses tiny analytic fixtures and exact recorded
 original/native Q/K/V to split dot products, softmax and weighted-value arithmetic.
 It requires exact native hosted and actual original-module attention controls.

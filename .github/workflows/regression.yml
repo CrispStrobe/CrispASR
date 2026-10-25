@@ -182,6 +182,10 @@ jobs:
           python tests/test_regression_select.py -v
       - name: Run model-free failure diagnostics controls
         run: python -m unittest discover -s tests -p test_regression_diagnostics.py -v
+      - name: Run CSM metadata and capture guards
+        run: |
+          python tests/test_csm_rope_metadata.py -v
+          python tests/test_csm_prefill_capture.py -v
       - name: Run perf-baseline compare unit tests
         run: |
           python tools/perf_baseline_compare.py --selftest

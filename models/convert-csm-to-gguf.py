@@ -70,6 +70,7 @@ import numpy as np
 # fails OPEN (the stamp is simply never found) and nothing errors.
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from _speaker_identity_arg import add_speaker_identity_arg, stamp_speaker_identity
+from csm_rope_config import write_csm_rope_metadata
 
 
 try:
@@ -399,6 +400,7 @@ def main():
     dd_head_dim = int(dd_cfg.get("head_dim", dd_d_model // dd_n_heads))
     dd_ff_dim = int(dd_cfg.get("intermediate_size", 8192))
     dd_bb_hidden = int(dd_cfg.get("backbone_hidden_size", bb_d_model))
+    dd_max_pos = int(dd_cfg.get("max_position_embeddings", 33))
 
     # --- Mimi codec hparams ---
     mc_cfg = cfg.get("codec_config", {})
@@ -487,6 +489,8 @@ def main():
     u32("csm.depth.head_dim", dd_head_dim)
     u32("csm.depth.ff_dim", dd_ff_dim)
     u32("csm.depth.backbone_hidden", dd_bb_hidden)
+    write_csm_rope_metadata(w, cfg, bb_max_pos=bb_max_pos, dd_max_pos=dd_max_pos,
+                            bb_theta=rope_theta)
 
     # Audio / text vocab
     u32("csm.text_vocab_size", text_vocab_size)

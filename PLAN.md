@@ -102,6 +102,32 @@ interpreted. The helper is hosted-only and requires8GiB available before load.
 Its syntax/40-byte ABI layout, local refusal and the driver's three actual
 pre-heavy ISA controls pass without model loading. No numerical fix is claimed.
 
+Trace40209553208 reproduces the same native/AVX2 PCM hashes on an AVX512 EPYC
+9V45. The first choice already differs: native1842 versusAVX2384, same draw;
+c0 logits relative error0.0156181. Existing eager-F32 attention passes all four
+speech cells (WER0/native judge,1/9/AVX2 judge), without qualifying a fix.
+All traced/untraced PCM pairs match. Prefill capture stopped before model load
+because its basename check rejected HF's resolved cache-blob name; use the
+already-required physical SHA instead. No stage arrays were interpreted.
+
+**Claimed next: original CSM RoPE fidelity.** The immutable original config
+declares llama3 factor32 for both stacks (backbone old-context1024, low0.125,
+high0.5; depth old-context16, low0.001953125, high0.0078125). Current conversion
+drops these fields and the CSM graph supplies no frequency factors. Root owns
+original-operator reference and any NN/math intervention; a Sol agent may handle
+only converter parameter transport/tests. This is a separate confirmed transport
+omission, not yet an established cause of the speech failure. Keep defaults and
+sampling unchanged until reference and controlled model checks qualify a fix.
+
+Converter transport is prepared with six model-free checks: original BB/DD
+scaling fields and scalar types, explicit unscaled metadata, independent depth
+theta, and fail-closed malformed configs. Two capture guards prove local
+invocations never load a library and HF cache symlinks reach the physical-SHA
+check. The filename defect is fixed. Original RoPE reference worker executes
+unmodified pinned HF AST operator bodies and immutable authenticated config;
+it loads no weights and retains original licenses/model card. This is an
+operator reference, not full-model initialization or coefficient-lineage proof.
+
 ## Release and error follow-up — completed (2026-10-25)
 
 The reviewed agenda was processed through the final license item before any

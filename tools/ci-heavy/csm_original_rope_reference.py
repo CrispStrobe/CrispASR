@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+"""Execute pinned original CSM rotary operators on tiny F32 inputs, no weights.
+
+Actions dependencies: numpy torch==2.6.0 huggingface_hub.
+Original AST nodes, including their decorators, execute without body edits.
+Only import dependencies and configuration attribute containers are supplied.
+"""
+
+import ast
+from functools import wraps
+import hashlib
+import importlib.metadata
+import json
+import math
+import os
+from pathlib import Path
+import re
+import shutil
+import sys
+from types import SimpleNamespace
+from typing import Optional
+import urllib.request
+
+import nightly_error_ab as ab
+
+
+REVISION = "798f948e88fd0b93fc515ec6b96e0503b78ad6ba"
+CONFIG_REVISION = "c92a71e1c419772e25be7dc14d952c2521a740ab"
+CONFIG_SHA256 = "b203c014cb5a2f7b4f98d2e945f091182aceb17fa530ce968e8c3437e01a9b70"
+CARD_SHA256 = "f45b5ea019e71b0a45e4c036ff24e81ac623b00f5781980c192b607af2adb0af"
+SOURCES = {
+    "modeling_csm.py": ("src/transformers/models/csm/modeling_csm.py",
+                        "a23916b8ec5a5bf8cb0429b82bff0e54b0252ef045b043e1fa17f80fde131b06"),
+    "modeling_rope_utils.py": ("src/transformers/modeling_rope_utils.py",
+                               "3a0bcdd0d4223c7645fc4bdcc53ff43d16689ead85e0751ed604dd173dba4358"),
+}
+ROOT = Path(__file__).resolve().parents[2]
+
+
+def fetch(url, destination, expected=None):
+    with urllib.request.urlopen(url, timeout=60) as response:
+        data = response.read(300001)
+    if len(data) > 300000:
+        raise RuntimeError("original source exceeds bounded download size")
+    digest = hashlib.sha256(data).hexdigest()
+    if expected and digest != expected:
+        raise RuntimeError(f"source hash changed: {destination.name}")
+    destination.write_bytes(data)
+    return digest
+
+
+def execute_nodes(path, names, namespace):
+    source = path.read_text()
+    tree = ast.parse(source, filename=str(path))
+    nodes = [node for node in tree.body if getattr(node, "name", None) in names]
+    if {node.name for node in nodes} != set(names):
+        raise RuntimeError(f"missing original operators in {path.name}")
+    # Do not rewrite a function body, a decorator, a constant or an expression.
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(path), "exec"), namespace)
+    return {node.name: hashlib.sha256(ast.dump(node, include_attributes=False).encode()).hexdigest()
+            for node in nodes}
+
+
+def main():
+    if os.environ.get("GITHUB_ACTIONS") != "true":
+        raise RuntimeError("original reference execution belongs on the hosted CPU runner")
+    out = Path(os.environ["HEAVY_OUT"])
+    scratch = Path(os.environ["HEAVY_SCRATCH"]) / "csm-original-rope"
+    scratch.mkdir(exist_ok=True)
+    initial = ab.snapshot()
+    ab.require_headroom(initial)
+    upstream = out / "upstream"
+    upstream.mkdir(parents=True, exist_ok=True)
+    receipt = {"complete": False, "scope": __doc__, "source_revision": REVISION,
+               "config_revision": CONFIG_REVISION, "initial_resources": initial,
+               "sources": {}, "nodes": {}, "cases": {},
+               "fidelity_scope": "Original operator bodies and raw config attributes; not full CsmConfig/model initialization"}
+
+    def save():
+        (out / "receipt.json").write_text(json.dumps(receipt, indent=2) + "\n")
+
+    save()
+    try:
+        for name in ("test_csm_rope_metadata", "test_csm_prefill_capture"):
+            ab.required([sys.executable, ROOT / f"tests/{name}.py", "-v"], ROOT, out, name, 60)
+        for name, (relative, digest) in SOURCES.items():
+            url = f"https://raw.githubusercontent.com/huggingface/transformers/{REVISION}/{relative}"
+            receipt["sources"][name] = {"url": url, "sha256": fetch(url, upstream / name, digest)}
+        license_url = f"https://raw.githubusercontent.com/huggingface/transformers/{REVISION}/LICENSE"
+        receipt["sources"]["LICENSE"] = {
+            "url": license_url, "sha256": fetch(license_url, upstream / "LICENSE")}
+        csm_license = "https://raw.githubusercontent.com/SesameAILabs/csm/836f886515f0dec02c22ed2316cc78904bdc0f36/LICENSE"
+        receipt["sources"]["CSM_LICENSE"] = {
+            "url": csm_license, "sha256": fetch(
+                csm_license, upstream / "CSM_LICENSE",
+                "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4")}
+        config_path = ab.regression.hf_download("sesame/csm-1b", "config.json", CONFIG_REVISION, scratch)
+        if ab.sha256(config_path) != CONFIG_SHA256:
+            raise RuntimeError("immutable original CSM configuration hash differs")
+        shutil.copy2(config_path, out / "original-config.json")
+        config = json.loads(config_path.read_text())
+        card_path = ab.regression.hf_download("sesame/csm-1b", "README.md", CONFIG_REVISION, scratch)
+        if ab.sha256(card_path) != CARD_SHA256:
+            raise RuntimeError("immutable original CSM model card hash differs")
+        card = card_path.read_text()
+        if not re.search(r"(?m)^license:\s*apache-2\.0\s*$", card):
+            raise RuntimeError("original model card does not declare the expected Apache-2.0 license")
+        shutil.copy2(card_path, upstream / "CSM_MODEL_CARD.md")
+        receipt["model_card_sha256"] = ab.sha256(card_path)
+        receipt["config_sha256"] = CONFIG_SHA256
+        save()
+
+        # No pretrained model, tokenizer, codec or generation is instantiated.
+        import numpy as np
+        import torch
+        torch.set_num_threads(1)
+        namespace = {"torch": torch, "nn": torch.nn, "math": math, "wraps": wraps,
+                     "Optional": Optional, "PretrainedConfig": SimpleNamespace,
+                     "CsmConfig": SimpleNamespace, "__name__": "pinned_original_csm_rope"}
+        receipt["packages"] = {name: importlib.metadata.version(name) for name in ("numpy", "torch")}
+        receipt["nodes"].update(execute_nodes(
+            upstream / "modeling_rope_utils.py",
+            ["dynamic_rope_update", "_compute_default_rope_parameters", "_compute_llama3_parameters"], namespace))
+        namespace["ROPE_INIT_FUNCTIONS"] = {
+            "default": namespace["_compute_default_rope_parameters"],
+            "llama3": namespace["_compute_llama3_parameters"]}
+        receipt["nodes"].update(execute_nodes(
+            upstream / "modeling_csm.py", ["CsmRotaryEmbedding", "rotate_half", "apply_rotary_pos_emb"], namespace))
+        receipt["resources_before_operator"] = ab.snapshot()
+        ab.require_headroom(receipt["resources_before_operator"])
+        layouts = [("backbone", config, [0, 1, 7, 13, 31, 127, 255, 1023, 2047]),
+                   ("depth", config["depth_decoder_config"], [0, 1, 7, 13, 15, 16, 31, 32])]
+        for name, cfg, positions in layouts:
+            case = out / name
+            case.mkdir()
+            attributes = {key: cfg[key] for key in ("head_dim", "hidden_size", "num_attention_heads",
+                                                   "num_key_value_heads", "max_position_embeddings",
+                                                   "rope_theta", "rope_scaling")}
+            rotary = namespace["CsmRotaryEmbedding"](SimpleNamespace(**attributes), device="cpu")
+            legacy = namespace["CsmRotaryEmbedding"](
+                SimpleNamespace(**dict(attributes, rope_scaling=None)), device="cpu")
+            pos = torch.tensor([positions], dtype=torch.long)
+            hd, qh, kh = cfg["head_dim"], cfg["num_attention_heads"], cfg["num_key_value_heads"]
+            q = torch.sin(torch.arange(qh * len(positions) * hd, dtype=torch.float32) * 0.071).reshape(1, qh, -1, hd)
+            k = torch.cos(torch.arange(kh * len(positions) * hd, dtype=torch.float32) * 0.131 + 0.2).reshape(1, kh, -1, hd)
+            cos, sin = rotary(q, pos)
+            rq, rk = namespace["apply_rotary_pos_emb"](q, k, cos, sin)
+            oldcos, oldsin = legacy(q, pos)
+            oldq, oldk = namespace["apply_rotary_pos_emb"](q, k, oldcos, oldsin)
+            arrays = {"positions": pos.squeeze(0).numpy().astype("<i4"),
+                      "inv_freq": rotary.inv_freq.numpy(), "unscaled_inv_freq": legacy.inv_freq.numpy(),
+                      "freq_factors": (legacy.inv_freq / rotary.inv_freq).numpy(),
+                      "cos": cos.squeeze(0).numpy(), "sin": sin.squeeze(0).numpy()}
+            arrays.update({key: value.squeeze(0).permute(1, 0, 2).contiguous().numpy()
+                           for key, value in (("q", q), ("k", k), ("q_rotated", rq), ("k_rotated", rk),
+                                              ("q_unscaled", oldq), ("k_unscaled", oldk))})
+            files = {}
+            for key, array in arrays.items():
+                if not np.isfinite(array).all():
+                    raise RuntimeError(f"nonfinite original fixture: {name}/{key}")
+                np.save(case / f"{key}.npy", array, allow_pickle=False)
+                array.tofile(case / f"{key}.bin")
+                files[key] = {"shape": list(array.shape), "dtype": str(array.dtype),
+                              "npy_sha256": ab.sha256(case / f"{key}.npy"),
+                              "raw_sha256": ab.sha256(case / f"{key}.bin")}
+            gap = float(torch.max(torch.abs(rq - oldq)))
+            if gap < 1e-3:
+                raise RuntimeError("disabled-scaling negative control did not distinguish the original operator")
+            receipt["cases"][name] = {"configuration": attributes, "positions": positions,
+                                      "unscaled_max_abs_q_error": gap, "files": files}
+            save()
+        receipt["complete"] = True
+        receipt["weights_loaded"] = False
+        save()
+        (out / "summary.md").write_text(
+            "# Original CSM RoPE reference\n\nPinned original operators and configuration; no model weights.\n\n" +
+            "\n".join(f"- {name}: unscaled negative-control max Q error {case['unscaled_max_abs_q_error']:.6g}"
+                      for name, case in receipt["cases"].items()) + "\n")
+    except Exception as exc:
+        receipt["error"] = f"{type(exc).__name__}: {exc}"
+        save()
+        raise
+
+
+if __name__ == "__main__":
+    main()

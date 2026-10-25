@@ -22,7 +22,6 @@ import csm_cpu_profile_ab as profile
 import nightly_error_ab as ab
 
 
-MODEL_NAME = "csm-1b-q4_k.gguf"
 MODEL_SHA256 = "1123f9e8ff2d9212700d1fface749b8ec4f9765569bb996667a15a9a9832ee13"
 TEXT = "The quick brown fox jumps over the lazy dog"
 N_LAYERS = 16
@@ -108,8 +107,8 @@ def main():
     library, model, trace_prefix, out = hosted_paths(args)
     if sys.byteorder != "little" or os.uname().machine != "x86_64":
         raise RuntimeError("trace ABI is supported only on hosted little-endian x86_64")
-    if args.text != TEXT or model.name != MODEL_NAME:
-        raise RuntimeError("only the pinned CSM model and regression phrase are supported")
+    if args.text != TEXT:
+        raise RuntimeError("only the pinned regression phrase is supported")
 
     # Complete all validation and the resource guard before CDLL/model loading.
     trace = profile.read_profile_trace(trace_prefix)
