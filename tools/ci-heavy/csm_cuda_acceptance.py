@@ -92,6 +92,7 @@ def main():
                 candidate.get("traced_untraced_pcm_identical") is not True or
                 len(candidate.get("scores", {})) != 8 or
                 not all(cell.get("gate") is True for cell in candidate["scores"].values()) or
+                candidate.get("default_vs_explicit_on") is not True or
                 port.get("complete") is not True or port.get("f16_original_parity") is not True):
             raise RuntimeError("successful opt-in CPU speech and original F16 port receipts are required")
         from csm_native_prefill import EXPECTED
@@ -192,6 +193,10 @@ def main():
         pcm_hashes = []
         for repeat in range(2):
             wav = args.out / f"speech-{repeat}.wav"
+            if repeat == 0:
+                env.pop("CRISPASR_CSM_ORIGINAL_ROPE", None)
+            else:
+                env["CRISPASR_CSM_ORIGINAL_ROPE"] = "1"
             run([cli, "--backend", "csm", "-m", paths["csm"], "--gpu-backend", "cuda", "--tts", phrase,
                  "--voice", "default", "--seed", "1234", "--tts-output", wav, "-t", "4"],
                 f"synth-{repeat}", resident_model=True, env=env)

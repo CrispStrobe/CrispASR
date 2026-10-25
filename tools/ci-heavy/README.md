@@ -75,7 +75,10 @@ next numerical boundary without another ISA draw.
 `--original-rope-control` on the profile worker first checks actual GGML F32
 rotary outputs against original operator artifact40213576399, including
 unscaled negative controls, before running eight separate candidate speech
-cells. `CRISPASR_CSM_ORIGINAL_ROPE=1` is experimental and OFF by default.
+cells. Corrected runtime initialization enables original scaling by default;
+`CRISPASR_CSM_ORIGINAL_ROPE=0` explicitly selects the legacy diagnostic path.
+`--default-rope-control` forces legacy OFF cells separately and requires bare
+corrected defaults to produce the same PCM as explicit ON, for both profiles.
 The original eight legacy cells still decide that diagnostic job's exit code;
 candidate acceptance is a separate receipt field, never inferred from green CI.
 
@@ -91,7 +94,8 @@ Install Torch2.6.0 and transformers from commit
 
 `csm_prefill_parity.py --producer-run <run> --producer-source <full-sha>` requires
 a successful original producer at that exact source. It converts the identical
-HF coefficients to F16, runs actual `crispasr-quantize q4_k`, inventories fresh
+HF coefficients to F16, runs actual `crispasr-quantize q4_k` with the existing
+release's three Q8 embedding tables, inventories fresh
 and published Q4 payloads, and captures original/legacy RoPE through the C ABI.
 Both default and eager-F32 attention are checked for the corrected F16 port.
 Stage gates include magnitude and relative error as well as cosine; Q4 metrics

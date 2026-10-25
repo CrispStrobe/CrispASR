@@ -42,12 +42,13 @@ ROPE_REFERENCE_RUN = "40213576399"
 ROPE_REFERENCE_RECEIPT = "ea74ac15c0a1ffa9f7e90e5bd2290ef0cc7f32ed85102d20af174dee5da80273"
 
 
-def original_rope_speech(source, out, executables, paths, csm, asr, receipt, save):
+def original_rope_speech(source, out, executables, paths, csm, asr, receipt, save, default_control=False):
     """Separate opt-in candidate cells; never relabel the legacy eight cells."""
     control = {"environment_delta": {"CRISPASR_CSM_ORIGINAL_ROPE": "1"},
                "scope": "experimental original-frequency correction, not default promotion",
                "syntheses": {}, "scores": {}, "prefill": {}}
     receipt["original_rope_control"] = control
+    control["default_vs_explicit_on"] = default_control
     save()
     for profile, cli in executables.items():
         for repeat in range(2):
@@ -59,7 +60,10 @@ def original_rope_speech(source, out, executables, paths, csm, asr, receipt, sav
             if csm.get("voice_preset"):
                 argv += ["--voice", csm["voice_preset"]]
             argv += csm.get("tts_extra_args", [])
-            os.environ["CRISPASR_CSM_ORIGINAL_ROPE"] = "1"
+            if default_control and repeat == 0:
+                os.environ.pop("CRISPASR_CSM_ORIGINAL_ROPE", None)
+            else:
+                os.environ["CRISPASR_CSM_ORIGINAL_ROPE"] = "1"
             if repeat == 1:
                 os.environ["CRISPASR_CSM_TRACE_PREFIX"] = str(prefix)
             try:
@@ -283,6 +287,8 @@ def main():
                         help="with --trace, require existing-API prefill dumps to match actual sampled logits")
     parser.add_argument("--original-rope-control", action="store_true",
                         help="with --trace, first gate original RoPE components, then test opt-in speech cells")
+    parser.add_argument("--default-rope-control", action="store_true",
+                        help="with original control, compare bare corrected defaults to explicit ON; legacy cells force OFF")
     args = parser.parse_args()
     if args.allow_avx2_host and not args.trace:
         parser.error("--allow-avx2-host requires --trace")
@@ -292,6 +298,8 @@ def main():
         parser.error("--attention-control requires --trace")
     if args.original_rope_control and not args.trace:
         parser.error("--original-rope-control requires --trace")
+    if args.default_rope_control and not args.original_rope_control:
+        parser.error("--default-rope-control requires --original-rope-control")
     if not re.fullmatch(r"[0-9a-f]{40}", args.source):
         parser.error("--source must be an immutable full Git commit")
     if args.trace and not any(arg == "--source" or arg.startswith("--source=") for arg in sys.argv[1:]):
@@ -351,6 +359,8 @@ def main():
         if args.original_rope_control:
             if "CRISPASR_CSM_ORIGINAL_ROPE" not in trace_source:
                 raise RuntimeError("source does not contain the experimental original RoPE control")
+            if args.default_rope_control and "c->original_rope = !rope_mode" not in trace_source:
+                raise RuntimeError("source does not enable original RoPE by default")
             reference = out / "original-rope-reference"
             ab.required(["gh", "run", "download", ROPE_REFERENCE_RUN, "--repo", "CrispStrobe/CrispASR",
                          "--name", f"heavy-{ROPE_REFERENCE_RUN}", "--dir", reference], ROOT, out,
@@ -417,6 +427,10 @@ def main():
         # Whole WAV hashes can change with provenance metadata; compare PCM too.
         os.environ.pop("CRISPASR_CSM_TRACE_PREFIX", None)
         os.environ.pop("CRISPASR_CSM_ORIGINAL_ROPE", None)
+        if args.default_rope_control:
+            os.environ["CRISPASR_CSM_ORIGINAL_ROPE"] = "0"
+            receipt["legacy_rope_environment"] = "CRISPASR_CSM_ORIGINAL_ROPE=0"
+            save()
         if args.attention_control:
             os.environ.pop("CRISPASR_CORE_ATTN_EAGER_F32", None)
         for profile, cli in executables.items():
@@ -566,7 +580,7 @@ def main():
                 if not all(control["complete"] for control in controls.values()):
                     raise RuntimeError("prefill dump did not match actual sampled logits; raw evidence retained")
         if args.original_rope_control:
-            original_rope_speech(source, out, executables, paths, csm, asr, receipt, save)
+            original_rope_speech(source, out, executables, paths, csm, asr, receipt, save, args.default_rope_control)
         receipt["complete"] = True
         receipt["acceptance"] = speech_acceptance
         save()

@@ -151,6 +151,18 @@ its F16 gates were committed before observing outputs. No release acceptance
 is inferred from the original reference or ordinary CI. CUDA build/packaging
 and a strict GPU-only consumer are prepared, with no GPU job/session launched.
 
+Opt-in matrix40218140553 completes on AVX512: original/generated operator gates
+pass in both profiles, native speech WER0 and AVX2 WER1/9 across both repeats
+and both ASR judges; untraced/traced PCM and sampled/dump logits match. The job
+is intentionally red from retained legacy cells, not candidate acceptance.
+F16 parity40218903577 passes all19 stages under default/eager attention;
+legacy logits fail the same limits. Fresh quantization matches439/442 published
+payloads; the other3 are published Q8 embeddings. Exact-recipe lineage rerun
+40220292768 is in flight. CUDA builder40219829666 runs on source `fe2ee5ca9`;
+no GPU inference has run. The feature branch now prepares corrected defaults
+for CLI/C ABI with explicit legacy0 control; exact-source default-vs-ON CPU,
+F16/Q4 lineage and CUDA checks must finish before integration/release.
+
 ## Release and error follow-up — completed (2026-10-25)
 
 The reviewed agenda was processed through the final license item before any

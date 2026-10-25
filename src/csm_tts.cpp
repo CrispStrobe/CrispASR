@@ -1218,7 +1218,10 @@ extern "C" struct csm_tts_context* csm_tts_init_from_file(const char* path_model
     auto* c = new csm_tts_context();
     c->params = params;
     c->n_threads = params.n_threads > 0 ? params.n_threads : 4;
-    c->original_rope = crispasr_env::truthy("CRISPASR_CSM_ORIGINAL_ROPE");
+    // Original-model scaling is the default for every caller, including the
+    // C ABI. Explicit 0 preserves the legacy path for controlled comparisons.
+    const char* rope_mode = crispasr_env::get("CRISPASR_CSM_ORIGINAL_ROPE");
+    c->original_rope = !rope_mode || crispasr_env::truthy("CRISPASR_CSM_ORIGINAL_ROPE");
 
     if (params.seed != 0) {
         c->rng_state = params.seed;
