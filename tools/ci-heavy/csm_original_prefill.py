@@ -92,14 +92,29 @@ def main():
                        out / "TRANSFORMERS_LICENSE")
         original.fetch("https://raw.githubusercontent.com/SesameAILabs/csm/836f886515f0dec02c22ed2316cc78904bdc0f36/LICENSE",
                        out / "CSM_LICENSE", "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4")
-        index = ab.regression.hf_download("sesame/csm-1b", "model.safetensors.index.json",
+        index = ab.regression.hf_download("sesame/csm-1b", "transformers.safetensors.index.json",
                                           original.CONFIG_REVISION, scratch)
         weights = sorted(set(json.loads(index.read_text())["weight_map"].values()))
         if not weights or any(Path(name).name != name or not name.endswith(".safetensors") for name in weights):
             raise RuntimeError("original checkpoint has unsafe or missing shard names")
         headroom("resources_before_download", 12)
-        model_dir = Path(snapshot_download("sesame/csm-1b", revision=original.CONFIG_REVISION,
+        snapshot = Path(snapshot_download("sesame/csm-1b", revision=original.CONFIG_REVISION,
                                           allow_patterns=[*weights, "*.json", "tokenizer*", "*.model", "README.md"]))
+        # This repository also has an ORIGINAL-format model.safetensors. The
+        # official HF conversion has differently named shards/index. Present
+        # ONLY that index under HF's conventional loader name, preserving every
+        # coefficient and weight-map entry; never let AutoModel choose the
+        # original-format file as though it contained HF-format tensors.
+        model_dir = scratch / "hf-loader-view"
+        model_dir.mkdir()
+        for path in snapshot.iterdir():
+            if path.name in weights or path.suffix in (".json", ".model", ".txt"):
+                if path.name != "model.safetensors.index.json":
+                    (model_dir / path.name).symlink_to(path.resolve())
+        (model_dir / "model.safetensors.index.json").symlink_to(index.resolve())
+        receipt["loader_index_alias"] = {"source": "transformers.safetensors.index.json",
+                                           "alias": "model.safetensors.index.json",
+                                           "sha256": ab.sha256(index), "weights_unchanged": True}
         receipt["weight_files"] = {name: {"bytes": (model_dir / name).stat().st_size,
                                           "sha256": ab.sha256(model_dir / name)} for name in weights}
         receipt["weight_index_sha256"] = ab.sha256(index)
