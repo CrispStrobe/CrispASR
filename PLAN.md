@@ -34,6 +34,12 @@ tests pass. `csm_cpu_profile_ab.py` prepares four sampled WAVs and eight ASR
 cells on Actions, with explicit compiler-flag verification. This is diagnostic
 infrastructure, not a CSM fix or release acceptance.
 
+Hosted factorial40202774412 is dispatched from worker `8eca86f32`, testing
+unchanged model code at `f469d6dd8`. The same worker source has fresh ordinary
+regression40202758265 and CI40202758268 in flight. A concrete
+`RELEASE_NOTES_v0.8.45.md` draft records the qualified changes and explicitly
+retains the CSM release blocker. VERSION remains0.8.44; no tag exists for0.8.45.
+
 ## Release and error follow-up — completed (2026-10-25)
 
 The reviewed agenda was processed through the final license item before any

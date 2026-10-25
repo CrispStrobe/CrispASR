@@ -59,6 +59,17 @@ retained. This component diagnosis does not establish model or speech parity.
 
 ## Script contract
 
+`csm_cpu_profile_ab.py` diagnoses the recurring sampled CSM nightly failure
+without changing production sampling or acceptance. It builds one immutable
+source with native CPU flags and explicit AVX2/FMA/F16C flags, verifies actual
+compiler commands, generates two WAVs per build with the nightly seed and model
+pins, and cross-scores every WAV with both ASR executables. The eight cells keep
+the existing 0.15 WER limit. CPU details, WAV/PCM hashes, command logs and build
+flags survive failures; models and build trees stay in scratch. Run with
+`-f pip="numpy huggingface_hub"` on Linux x86. A passing host does not establish
+the cause or resolution of a failure on an unidentified host. Ordinary nightly
+CSM/data2vec failures now retain bounded evidence for seven days.
+
 `dia_attention_arithmetic.py` uses tiny analytic fixtures and exact recorded
 original/native Q/K/V to split dot products, softmax and weighted-value arithmetic.
 It requires exact native hosted and actual original-module attention controls.
