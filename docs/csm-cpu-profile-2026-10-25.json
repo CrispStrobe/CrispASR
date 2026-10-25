@@ -786,6 +786,11 @@
         "both_raw_pcm_hashes_verified": true,
         "both_raw_transcripts_exact_nine_words": true,
         "synth_gpu_residency_exceeds_physical_model_bytes": true
+      },
+      "private_evidence_checkpoint": {
+        "revision": "b4afa6054c0ab46b720bb199255bad7063cd2557",
+        "sha256": "a6fa1e65934bdc5395a083d67c96a735f7b3d140e94b34de890763080858dd18",
+        "raw_outputs_retained": true
       }
     }
   }

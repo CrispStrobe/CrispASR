@@ -33,8 +33,8 @@ then a fresh issue/PR sweep. No issue closures occurred during qualification.
    `71ab4f8ef5b9ddd029cd3a461c9c6518812ed4735d013efb98509643759fa630`;
    all69 file hashes, notices and exact Debian runtime source packets verify.
    NVIDIA runtime libraries are host-provided. Inputs/raw proof remain private;
-   public records use portable aliases and public Actions IDs. VERSION is0.8.44
-   until the repository bump script prepares the next version.
+   public records use portable aliases and public Actions IDs. Prepare0.8.45
+   with the repository bump script, then finish metadata/source checks.
 5. **After the last item:** close only supported resolutions, then perform the
    requested fresh issue/PR sweep. The four dependencies above remain open.
 
@@ -42,53 +42,6 @@ Large CPU work ran on Actions and actual CUDA only on an available Kaggle slot.
 No full model was loaded locally. Parent wrote NN/math changes; one Sol agent
 handled metadata, capture/build plumbing and read-only review. Load/memory guards
 protect compiles/inference. All five privacy guards pass before every push.
-
-Original operator reference40213576399 is complete: pinned source/config,
-full F32 inputs/outputs, both licenses and failing unscaled controls retained.
-Its complete BB/DD frequency tables exactly match the bounded C++ helper check
-(relative L2=0, max absolute error=0). Prefill40213578893 validates the dump
-against real sampled logits on a portable host; it cannot clear AVX512 failure.
-Root has prepared an experimental `CRISPASR_CSM_ORIGINAL_ROPE=1` correction,
-OFF by default, covering both stacks and every generation/dump graph. The next
-Actions matrix gates actual GGML rotary outputs before opt-in speech cells,
-retains legacy eight speech cells separately, and checks traced/untraced PCM
-and diagnostic/sampled logits. No full-model, CUDA or default acceptance yet.
-
-Experimental native source `4fcce3495` passes all13 CI jobs40218162927.
-Sampled component/speech matrix40218140553 remains running at that source.
-Full original HF F32 prefill40218575515 (`f9c4f69f9`) succeeds: exact pinned
-source modules/config,1,632,100,161 CPU F32 parameters, independently recovered
-fourteen-token prompt and all19 stage arrays. Independent raw/npy shape,
-finite-value and hash checks pass. Original receipt SHA256
-`c2e4641fa73181f874c0ccb781629113922588436981030be940396c2a07ea6c`.
-Fresh conversion/actual-Q4 quantization/native parity40218903577 is running;
-its F16 gates were committed before observing outputs. No release acceptance
-is inferred from the original reference or ordinary CI. CUDA build/packaging
-and a strict GPU-only consumer are prepared, with no GPU job/session launched.
-
-Opt-in matrix40218140553 completes on AVX512: original/generated operator gates
-pass in both profiles, native speech WER0 and AVX2 WER1/9 across both repeats
-and both ASR judges; untraced/traced PCM and sampled/dump logits match. The job
-is intentionally red from retained legacy cells, not candidate acceptance.
-F16 parity40218903577 passes all19 stages under default/eager attention;
-legacy logits fail the same limits. Fresh quantization matches439/442 published
-payloads; the other3 are published Q8 embeddings. Exact-recipe lineage rerun
-40220292768 is in flight. CUDA builder40219829666 runs on source `fe2ee5ca9`;
-no GPU inference has run. The feature branch now prepares corrected defaults
-for CLI/C ABI with explicit legacy0 control; exact-source default-vs-ON CPU,
-F16/Q4 lineage and CUDA checks must finish before integration/release.
-
-Exact-recipe40220292768 succeeds: all442 published physical tensor payloads,
-types and shapes match fresh quantization of the original coefficients, with
-three existing Q8 embedding overrides and Q4_K body. Independent inventory
-comparison confirms the result. Final-source `2c1183840` CUDA bundle40220671948
-also builds successfully (no GPU execution): archive SHA256
-`71ab4f8ef5b9ddd029cd3a461c9c6518812ed4735d013efb98509643759fa630`.
-All final-source default-vs-ON speech, F16 port, ordinary regression, CI and
-lint checks remain in flight before integration. A configured-account read-only
-Kaggle audit found20 recent kernels terminal, none running/queued; recheck slots
-immediately before the actual GPU launch. No issues have been closed in this
-agenda, and VERSION remains0.8.44 while release preparation is pending.
 
 ## Release and error follow-up — completed (2026-10-25)
 
