@@ -48,6 +48,8 @@ Env:
   KEEP_WORK       If set to 1, don't delete WORK_DIR on exit.
   REGRESSION_MANIFEST  Path to manifest.json (default:
                   tests/regression/manifest.json).
+  REGRESSION_DIAGNOSTICS_DIR  Optional directory outside WORK_DIR for bounded
+                  command logs and a failed TTS roundtrip's generated WAV.
 """
 
 from __future__ import annotations
@@ -63,6 +65,74 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+_LOG_LIMIT = 512 * 1024
+_WAV_LIMIT = 32 * 1024 * 1024
+
+
+def _diagnostics_dir() -> Path | None:
+    value = os.environ.get("REGRESSION_DIAGNOSTICS_DIR")
+    if not value:
+        return None
+    path = Path(value).resolve()
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def _bounded_output(value: str | bytes | None) -> dict:
+    data = value.encode("utf-8", errors="replace") if isinstance(value, str) else value or b""
+    text = data[-_LOG_LIMIT:].decode("utf-8", errors="replace")
+    encoded = text.encode("utf-8")
+    if len(encoded) > _LOG_LIMIT:
+        # Replacing malformed bytes can expand the tail by up to 3x. Trim the
+        # encoded suffix and drop only a partial codepoint at its new start.
+        text = encoded[-_LOG_LIMIT:].decode("utf-8", errors="ignore")
+    return {
+        "bytes": len(data),
+        "truncated": len(data) > _LOG_LIMIT or len(encoded) > _LOG_LIMIT,
+        "text": text,
+    }
+
+
+def _run_captured(argv: list[str], *, check: bool, timeout: int, label: str) -> subprocess.CompletedProcess:
+    """Run an unchanged CLI argv; persist bounded output when requested."""
+    try:
+        proc = subprocess.run(argv, capture_output=True, text=True, check=check, timeout=timeout)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        diag = _diagnostics_dir()
+        if diag is not None:
+            (diag / f"{label}.json").write_text(json.dumps({
+                "argv": argv,
+                "returncode": exc.returncode if isinstance(exc, subprocess.CalledProcessError) else None,
+                "timed_out": isinstance(exc, subprocess.TimeoutExpired),
+                "stdout": _bounded_output(exc.stdout),
+                "stderr": _bounded_output(exc.stderr),
+            }, indent=2) + "\n")
+        raise
+    diag = _diagnostics_dir()
+    if diag is not None:
+        (diag / f"{label}.json").write_text(json.dumps({
+            "argv": argv,
+            "returncode": proc.returncode,
+            "timed_out": False,
+            "stdout": _bounded_output(proc.stdout),
+            "stderr": _bounded_output(proc.stderr),
+        }, indent=2) + "\n")
+    return proc
+
+
+def _preserve_failure_wav(name: str, wav: Path) -> None:
+    """Keep only a small generated WAV, never model or downloaded input files."""
+    diag = _diagnostics_dir()
+    if diag is None or not wav.is_file():
+        return
+    size = wav.stat().st_size
+    if size > _WAV_LIMIT:
+        (diag / "wav-skipped.json").write_text(json.dumps({
+            "reason": "generated WAV exceeds diagnostics cap", "bytes": size,
+            "limit": _WAV_LIMIT,
+        }, indent=2) + "\n")
+        return
+    shutil.copyfile(wav, diag / f"tts_{name}.wav")
 
 
 def die(msg: str, code: int = 1) -> "NoReturn":
@@ -203,18 +273,17 @@ def run_transcript(crispasr_bin: Path, gguf: Path, sample: Path, *, srt: bool = 
         import tempfile
         with tempfile.TemporaryDirectory(prefix="regression-srt-", dir=gguf.parent) as temp:
             prefix = Path(temp) / "decoded"
-            subprocess.run([str(crispasr_bin), "-m", str(gguf), "-f", str(sample),
-                            "-osrt", "-of", str(prefix)], capture_output=True,
-                           text=True, check=True, timeout=600)
+            _run_captured([str(crispasr_bin), "-m", str(gguf), "-f", str(sample),
+                           "-osrt", "-of", str(prefix)],
+                          check=True, timeout=600, label="transcript")
             cues = prefix.with_suffix(".srt").read_text()
             return " ".join(line.strip() for line in cues.splitlines()
                             if line.strip() and not line.strip().isdigit() and "-->" not in line)
-    proc = subprocess.run(
+    proc = _run_captured(
         [str(crispasr_bin), "-m", str(gguf), "-f", str(sample)],
-        capture_output=True,
-        text=True,
         check=True,
         timeout=600,
+        label="transcript",
     )
     # The transcript is on stdout; status lines go to stderr. Take stdout's
     # last non-empty line as the transcript (the CLI prints a single text
@@ -306,12 +375,11 @@ def run_diff(diff_bin: Path, backend_id: str, gguf: Path, ref: Path, sample: Pat
     the harness's verdict and only fail if a stage is missing or the
     process crashed outright.
     """
-    proc = subprocess.run(
+    proc = _run_captured(
         [str(diff_bin), backend_id, str(gguf), str(ref), str(sample)],
-        capture_output=True,
-        text=True,
         check=False,
         timeout=600,
+        label="diff",
     )
     if proc.returncode < 0:
         die(f"crispasr-diff died from signal {-proc.returncode}\n"
@@ -654,19 +722,21 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
         syn_cmd += ["--codec-model", str(codec_local)]
     syn_cmd += list(entry.get("tts_extra_args", []))
     try:
-        proc = subprocess.run(syn_cmd, capture_output=True, text=True,
-                              timeout=300)
+        proc = _run_captured(syn_cmd, check=False, timeout=300, label="tts-synth")
     except subprocess.TimeoutExpired:
+        _preserve_failure_wav(name, out_wav)
         if advisory:
             return advisory_skip("TTS synth timed out after 300 s")
         die(f"{name}: TTS synth timed out after 300 s")
     if proc.returncode != 0:
+        _preserve_failure_wav(name, out_wav)
         if advisory:
             return advisory_skip(f"TTS synth crashed (rc={proc.returncode})")
         print(f"\033[31m  FAIL\033[0m  TTS synth crashed (rc={proc.returncode})")
         print(f"    stderr tail: ...{(proc.stderr or '')[-300:]}")
         return 1
     if not out_wav.is_file() or out_wav.stat().st_size < 1000:
+        _preserve_failure_wav(name, out_wav)
         if advisory:
             return advisory_skip(f"TTS produced no usable output: {out_wav}")
         print(f"\033[31m  FAIL\033[0m  TTS produced no usable output: {out_wav}")
@@ -679,13 +749,14 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
                "-f", str(out_wav),
                "--no-prints"]
     try:
-        proc = subprocess.run(asr_cmd, capture_output=True, text=True,
-                              timeout=180)
+        proc = _run_captured(asr_cmd, check=False, timeout=180, label="roundtrip-asr")
     except subprocess.TimeoutExpired:
+        _preserve_failure_wav(name, out_wav)
         if advisory:
             return advisory_skip("ASR roundtrip timed out after 180 s")
         die(f"{name}: ASR roundtrip timed out after 180 s")
     if proc.returncode != 0:
+        _preserve_failure_wav(name, out_wav)
         if advisory:
             return advisory_skip(f"ASR roundtrip crashed (rc={proc.returncode})")
         print(f"\033[31m  FAIL\033[0m  ASR roundtrip crashed (rc={proc.returncode})")
@@ -701,6 +772,8 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
     wer_max = float(entry["wer_max"])
     _, wer = compute_transcript_metrics(tts_phrase, transcript)
     ok = wer <= wer_max
+    if not ok:
+        _preserve_failure_wav(name, out_wav)
     # `advisory: true` entries report their WER but never fail the run — for
     # legitimately weak / high-variance TTS models (e.g. bark-small) whose
     # roundtrip can't clear a tight cross-platform bar. NOT for masking a real
@@ -1014,6 +1087,9 @@ def main() -> int:
     keep_work = os.environ.get("KEEP_WORK") == "1"
 
     try:
+        diagnostics = os.environ.get("REGRESSION_DIAGNOSTICS_DIR")
+        if diagnostics and Path(diagnostics).resolve().is_relative_to(work_root.resolve()):
+            die("REGRESSION_DIAGNOSTICS_DIR must be outside WORK_DIR so cleanup preserves evidence")
         if tts_entry is not None:
             failures = tts_roundtrip_for(
                 backend_name, manifest, work_root, crispasr_bin)

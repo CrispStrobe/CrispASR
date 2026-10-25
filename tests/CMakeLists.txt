@@ -5688,6 +5688,9 @@ if(UNIX AND Python3_EXECUTABLE)
     add_test(NAME pypi-distributions
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_pypi_distributions.py -v)
     set_tests_properties(pypi-distributions PROPERTIES LABELS "unit;python")
+    add_test(NAME regression-failure-diagnostics
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_regression_diagnostics.py -v)
+    set_tests_properties(regression-failure-diagnostics PROPERTIES LABELS "unit;python" TIMEOUT 30)
     set_tests_properties(wheel-platform-floor PROPERTIES LABELS "unit;packaging" TIMEOUT 30)
     # Model-free language ABI probes skip on developer machines without SDKs.
     # binding-contracts.yml uses the strict runner and rejects every skip.

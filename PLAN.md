@@ -1,5 +1,39 @@
 # CrispASR — Pending work
 
+## NOW — recurring CSM failure and next-release preparation (2026-10-25)
+
+Owner: Codex, branch `fix/csm-recurring-nightly-20261025`, base `f469d6dd8`.
+The user authorized the recommended agenda and requires closure only after the
+last item, followed by a fresh issue/PR sweep. No early closures are planned.
+
+1. Diagnose and repair the recurring CSM nightly failure40178598589 (job
+   121126870389): sampled Q4 output scores WER0.6667, unchanged limit0.15.
+   First retain exact WAV/PCM, stdout/stderr, CPU/ISA and compiler commands.
+   The passing AMD EPYC7763 A/B40171767752 does not clear this new failure.
+2. Run one bounded same-host native/portable CPU comparison with unchanged
+   model, seed, text and gates. Cross-score two WAVs per build with both
+   ASR executables to separate synthesis drift from judge drift. Do not apply
+   speculative NN changes or change expected text, seeds or thresholds.
+3. Review the four existing reproducer/hardware/license dependencies, keeping
+   unsupported resolutions open. Preserve Nyra's separate license hold.
+4. After CSM acceptance and required checks, prepare the next release from
+   current main using the repository release method. No release artifact or
+   tag is published while the CSM gate remains failed.
+5. Reach the last item, close only supported resolutions, then perform a fresh
+   issue/PR sweep and continue errors before features.
+
+Resources at start: load0.50 on four CPUs,4792MiB available. Two Sol agents
+handle read-only diagnosis and diagnostic retention; root owns NN changes and
+release integration. Heavy CPU work runs on Actions; real CUDA work requires
+an available Kaggle slot. Check local load/memory before compiles or inference.
+
+Diagnostic retention is implemented: optional bounded command logs and failed
+TTS WAVs survive cleanup; failed CSM/data2vec jobs upload host and compiler
+evidence for seven days. Five new model-free controls and 56 existing driver
+tests pass. `csm_cpu_profile_ab.py` prepares four sampled WAVs and eight ASR
+cells on Actions, with explicit compiler-flag verification. This is diagnostic
+infrastructure, not a CSM fix or release acceptance.
+
 ## Release and error follow-up — completed (2026-10-25)
 
 The reviewed agenda was processed through the final license item before any

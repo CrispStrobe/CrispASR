@@ -62,6 +62,7 @@ on:
       - 'tools/regression_select.py'
       - 'tools/ci-heavy/granite5*'
       - 'tests/test_granite5_regression.py'
+      - 'tests/test_regression_diagnostics.py'
       - 'tools/reference_backends/phonon2/**'
       - 'tools/reference_backends/parakeet_hf.py'
       - 'tools/reference_backends/index_echo.py'
@@ -88,6 +89,7 @@ on:
       - 'tools/regression_select.py'
       - 'tools/ci-heavy/granite5*'
       - 'tests/test_granite5_regression.py'
+      - 'tests/test_regression_diagnostics.py'
       - 'tools/reference_backends/phonon2/**'
       - 'tools/reference_backends/parakeet_hf.py'
       - 'tools/reference_backends/index_echo.py'
@@ -173,6 +175,8 @@ jobs:
         run: |
           python -m pytest tests/test_regression_select.py -v || \
           python tests/test_regression_select.py -v
+      - name: Run model-free failure diagnostics controls
+        run: python -m unittest discover -s tests -p test_regression_diagnostics.py -v
       - name: Run perf-baseline compare unit tests
         run: |
           python tools/perf_baseline_compare.py --selftest
@@ -370,6 +374,7 @@ jobs:
         run: |
           cmake -S . -B build-regression -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
               -DCRISPASR_BUILD_TESTS=OFF \
               -DCRISPASR_BUILD_EXAMPLES=ON \
               -DCRISPASR_BUILD_SERVER=OFF
@@ -391,9 +396,52 @@ jobs:
           HUGGING_FACE_HUB_TOKEN: ${{ secrets.HF_TOKEN }}
           HF_HUB_ENABLE_HF_TRANSFER: "0"
           HF_HUB_DOWNLOAD_TIMEOUT: "120"
+          REGRESSION_DIAGNOSTICS_DIR: ${{ runner.temp }}/regression-diagnostics-${{ matrix.backend }}
         run: |
           mkdir -p "$WORK_DIR"
           tests/regression/run_one.py "${{ matrix.backend }}"
+
+      - name: Retain failed CSM/data2vec host and build evidence
+        if: failure() && (matrix.backend == 'csm-1b' || matrix.backend == 'data2vec-base')
+        env:
+          REGRESSION_DIAGNOSTICS_DIR: ${{ runner.temp }}/regression-diagnostics-${{ matrix.backend }}
+        run: |
+          python - <<'PY'
+          import os
+          import subprocess
+          from pathlib import Path
+
+          out = Path(os.environ['REGRESSION_DIAGNOSTICS_DIR'])
+          out.mkdir(parents=True, exist_ok=True)
+          (out / 'cpuinfo.txt').write_bytes(Path('/proc/cpuinfo').read_bytes()[:1024 * 1024])
+          for name, cmd in {
+              'cpu.txt': ['lscpu'],
+              'memory.txt': ['free', '-m'],
+              'load.txt': ['uptime'],
+              'compiler.txt': ['c++', '--version'],
+              'kernel.txt': ['uname', '-a'],
+          }.items():
+              result = subprocess.run(cmd, capture_output=True, timeout=15)
+              (out / name).write_bytes((result.stdout + result.stderr)[:65536])
+          for name, limit in [('compile_commands.json', 8 * 1024 * 1024),
+                              ('CMakeCache.txt', 2 * 1024 * 1024)]:
+              source = Path('build-regression') / name
+              if source.is_file():
+                  size = source.stat().st_size
+                  if size <= limit:
+                      (out / name).write_bytes(source.read_bytes())
+                  else:
+                      (out / f'{name}.skipped.txt').write_text(
+                          f'{name} was {size} bytes, above {limit}-byte evidence cap\n')
+          PY
+
+      - uses: actions/upload-artifact@v4
+        if: failure() && (matrix.backend == 'csm-1b' || matrix.backend == 'data2vec-base')
+        with:
+          name: regression-failure-${{ matrix.backend }}
+          path: ${{ runner.temp }}/regression-diagnostics-${{ matrix.backend }}/
+          if-no-files-found: error
+          retention-days: 7
 
       # F2: cross-surface (CLI vs session C-ABI) parity — best-effort guard
       # against the #257 dual-dispatch class. Parakeet only for now (the one
