@@ -84,6 +84,12 @@ After reproducing native-profile drift, `--trace --source <full-commit>`
 captures the actual sampled path in the second repeat, requiring PCM identity
 with the untraced repeat and the retained AVX2 baseline before interpretation.
 It rejects hosts without AVX512 before downloads/builds. Optional
+`--allow-avx2-host` instead collects a portable trace baseline on a host with
+the required AVX2/FMA/F16C/BMI2/SSE4.2 features; its receipt explicitly cannot
+clear the known native failure. Optional `--prefill-control` calls
+`csm_prefill_capture.py` in a fresh process per profile, retaining16 layer
+outputs and refusing interpretation unless its c0 logits byte-match the real
+sampled path. It uses only the existing C ABI and requires8GiB available RAM.
 `--attention-control` adds two syntheses using the existing eager-F32 attention
 switch on the same native executable; those four extra ASR cells remain
 separate from the original eight gates. This diagnoses an operation boundary;

@@ -201,9 +201,17 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", default="f469d6dd86e42d42d0358fbef6fa75cd0c2aba29")
     parser.add_argument("--trace", action="store_true", help="capture and compare the sampled CSM path")
+    parser.add_argument("--allow-avx2-host", action="store_true",
+                        help="with --trace, collect a portable baseline if AVX512 is unavailable; not a native fix")
     parser.add_argument("--attention-control", action="store_true",
                         help="with --trace, repeat native synthesis using the existing eager-F32 attention switch")
+    parser.add_argument("--prefill-control", action="store_true",
+                        help="with --trace, require existing-API prefill dumps to match actual sampled logits")
     args = parser.parse_args()
+    if args.allow_avx2_host and not args.trace:
+        parser.error("--allow-avx2-host requires --trace")
+    if args.prefill_control and not args.trace:
+        parser.error("--prefill-control requires --trace")
     if args.attention_control and not args.trace:
         parser.error("--attention-control requires --trace")
     if not re.fullmatch(r"[0-9a-f]{40}", args.source):
@@ -232,12 +240,19 @@ def main():
         if args.trace:
             cpuinfo = Path("/proc/cpuinfo").read_bytes()
             (out / "cpuinfo.txt").write_bytes(cpuinfo)
-            has_avx512f = sys.byteorder == "little" and bool(re.search(rb"\bavx512f\b", cpuinfo))
+            has_avx512f = bool(re.search(rb"\bavx512f\b", cpuinfo))
+            features = (b"avx2", b"fma", b"f16c", b"bmi2", b"sse4_2") if args.allow_avx2_host else (b"avx512f",)
+            eligible = sys.byteorder == "little" and all(
+                re.search(rb"\b" + feature + rb"\b", cpuinfo) for feature in features)
             receipt["trace"]["host_avx512f"] = has_avx512f
+            receipt["trace"]["purpose"] = (
+                "native-profile comparison; known failure remains open until separately qualified"
+                if has_avx512f else "portable trace baseline only; cannot clear the known native-profile failure")
             receipt["trace"]["cpuinfo_sha256"] = hashlib.sha256(cpuinfo).hexdigest()
             save()
-            if not has_avx512f:
-                receipt["error"] = "trace prerequisite failed: little-endian host /proc/cpuinfo must expose avx512f"
+            if not eligible:
+                receipt["error"] = "trace prerequisite failed: little-endian host must expose " + ", ".join(
+                    feature.decode() for feature in features)
                 save()
                 return 2
         ab.require_headroom(receipt["initial_resources"])
@@ -427,11 +442,40 @@ def main():
                                     "eager_vs_avx2": compare_traces(
                                         eager, parsed["avx2"], "eager_f32", "avx2")}
                 save()
+            if args.prefill_control:
+                cases = [(profile, cli, out / f"{profile}-1-trace", None)
+                         for profile, cli in executables.items()]
+                if args.attention_control:
+                    cases.append(("eager-f32", executables["native"],
+                                  out / "attention-native-1-trace", "1"))
+                controls = {}
+                receipt["prefill_controls"] = controls
+                for profile, cli, prefix, attention in cases:
+                    library = cli.parent.parent / "src/libcrispasr.so"
+                    stage_out = out / f"prefill-{profile}"
+                    if attention is not None:
+                        os.environ["CRISPASR_CORE_ATTN_EAGER_F32"] = attention
+                    try:
+                        rc = ab.command([sys.executable, ROOT / "tools/ci-heavy/csm_prefill_capture.py",
+                                         "--library", library, "--model", paths["csm"],
+                                         "--trace-prefix", prefix, "--out", stage_out,
+                                         "--text", csm["tts_phrase"]], source, out,
+                                        f"prefill-{profile}-control", 300)
+                    finally:
+                        os.environ.pop("CRISPASR_CORE_ATTN_EAGER_F32", None)
+                    stage_receipt = stage_out / "receipt.json"
+                    child = json.loads(stage_receipt.read_text()) if stage_receipt.is_file() else {}
+                    controls[profile] = {"rc": rc, "complete": bool(rc == 0 and child.get("complete")),
+                                         "receipt_sha256": ab.sha256(stage_receipt) if stage_receipt.is_file() else None}
+                    save()
+                if not all(control["complete"] for control in controls.values()):
+                    raise RuntimeError("prefill dump did not match actual sampled logits; raw evidence retained")
         receipt["complete"] = True
         receipt["acceptance"] = speech_acceptance
         save()
         summary = (
             "# CSM CPU profile factorial\n\n" +
+            ((receipt["trace"]["purpose"] + ".\n\n") if args.trace else "") +
             "| Synth/repeat | ASR | WER | Gate |\n|---|---|---|---|\n" +
             "".join(f"| {x['tts_profile']}/{x['repeat']} | {x['asr_profile']} | {x.get('wer', 'missing')} | {x['gate']} |\n"
                     for x in receipt["scores"].values()) +

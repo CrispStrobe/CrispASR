@@ -91,6 +91,17 @@ The published Q4 card does not pin its exact original-checkpoint revision;
 verify official Q/K permutation and coefficient lineage before treating the
 recovered original checkpoint as an exact oracle. Release remains blocked.
 
+Sampled native failure40208525637 at `f42006e3f` now retains valid14-token
+prompt IDs,380 code frames and2048 sampled records. Its30.4s PCM hash exactly
+matches the original untraced native failure, establishing noninterference for
+this request. Both RCs are0; ASR remains WER2/3. The next source-pinned Actions
+comparison explicitly permits a portable-host trace baseline (never a native
+resolution) and adds existing-C-ABI prefill capture. Every prefill c0 vector
+must byte-match the actual sampled trace before its intermediate stages are
+interpreted. The helper is hosted-only and requires8GiB available before load.
+Its syntax/40-byte ABI layout, local refusal and the driver's three actual
+pre-heavy ISA controls pass without model loading. No numerical fix is claimed.
+
 ## Release and error follow-up — completed (2026-10-25)
 
 The reviewed agenda was processed through the final license item before any
