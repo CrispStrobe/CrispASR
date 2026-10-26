@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Hosted compile experiment only. No model loads, inference or image publishing.
+# Compile experiment on an authorized MUSA host. No model loads or publishing.
 set -euo pipefail
 mkdir -p /out/licenses
 exec > >(tee /out/probe.log) 2>&1
@@ -56,7 +56,7 @@ from pathlib import Path
 available = next(int(line.split()[1]) for line in Path('/proc/meminfo').read_text().splitlines()
                  if line.startswith('MemAvailable:'))
 print('Before compile: load=', os.getloadavg(), 'available_KiB=', available, flush=True)
-assert os.getloadavg()[0] < 2 * (os.cpu_count() or 1), 'Hosted runner overloaded'
+assert os.getloadavg()[0] < 2 * (os.cpu_count() or 1), 'Runner overloaded'
 assert available >= 4 * 1024**2, 'Less than 4 GiB available'
 PY
 }

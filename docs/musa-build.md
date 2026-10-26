@@ -49,3 +49,23 @@ Before enabling MUSA image publication, complete the applicable license and
 notice review, validate the actual runtime image, and run backend operation and
 speech checks on the target hardware. Generic `main-musa` tags must not imply
 support for untested S80/S4000 architectures.
+
+## October 26 permission and runner recheck
+
+The complete current agreement was reread, including section II.2(6): public
+performance/benchmark disclosure needs the vendor's written permission. A
+hardware runner alone does not resolve that separate condition. No applicable
+written exception has been supplied, and the repository runner API currently
+lists zero self-hosted runners. No new SDK execution, image build or inference
+was dispatched in this review. [Review receipt](musa-permissions-review-2026-10-26.json).
+
+To resume, provide an appropriately configured and authorized S5000 host, plus
+applicable SDK-specific terms or written authorization covering any proposed
+exception. Before distributing the full SDK-based runtime, identify every vendor
+and third-party component, establish permission for that actual payload, and
+include the complete applicable agreements and notices. The earlier fourteen
+package copyright metadata records do not clear the full image. Before publishing
+performance numbers, separately establish permission for their disclosure.
+The manual image validator is a packaging check; operation and speech parity
+still require target-hardware tests. Neither successful compilation nor a PCI
+vendor match proves those checks passed.

@@ -37,9 +37,15 @@ jobs:
         run: |
           set -euo pipefail
           python3 - <<'PY'
+          import os
           from pathlib import Path
           assert any(p.read_text().strip().lower() == '0x1ed5'
                      for p in Path('/sys/bus/pci/devices').glob('*/vendor')), 'Requires a Moore Threads platform'
+          available = next(int(l.split()[1]) for l in Path('/proc/meminfo').read_text().splitlines()
+                           if l.startswith('MemAvailable:'))
+          print('load:', os.getloadavg(), 'available_KiB:', available, flush=True)
+          assert os.getloadavg()[0] < (os.cpu_count() or 1), 'Runner overloaded'
+          assert available >= 6 * 1024**2, 'Need 6 GiB available before SDK pull/use'
           PY
           cat /proc/loadavg
           grep MemAvailable /proc/meminfo

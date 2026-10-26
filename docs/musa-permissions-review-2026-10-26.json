@@ -1,0 +1,37 @@
+{
+  "review_date": "2026-10-26",
+  "status": "awaiting_authorized_S5000_and_applicable_permissions",
+  "agreement": {
+    "url": "https://www.mthreads.com/software_license_agreement",
+    "effective_date": "2025-12-19",
+    "full_text_read": true,
+    "retrieved_html_sha256": "49eb81cb5bb7c79ec5533d0dfae81874c13944b4cd83da597dd0e92755ea0be1",
+    "extracted_text_sha256": "d8536488d405e1cc5b5d35e4f0ef641cef1f437ed2be03bb7b5e4e8c168cde0e",
+    "relevant_sections": {
+      "II.1": "Conditional binary redistribution: unmodified binaries, agreement to each recipient; source derivatives require separate authorization for distribution.",
+      "II.2(6)": "Written vendor permission for performance/benchmark disclosure.",
+      "II.2(7)": "Written vendor authorization for non-vendor hardware platform use.",
+      "IV": "Applicable third-party terms remain separate."
+    }
+  },
+  "registered_self_hosted_runners": 0,
+  "runner_check_url": "https://api.github.com/repos/CrispStrobe/CrispASR/actions/runners",
+  "historical_compile_run": 40330966977,
+  "historical_compile_is_permission_clearance": false,
+  "new_sdk_execution": false,
+  "new_image_build": false,
+  "new_hardware_inference": false,
+  "image_published": false,
+  "prepared_workflows": [
+    ".github/workflows/validate-musa-image.yml",
+    ".github/workflows/probe-musa-sdk52.yml"
+  ],
+  "new_guard": "Probe now enforces load and 6 GiB available memory before SDK pull/use, matching image-validator preparation.",
+  "next_requirements": [
+    "Appropriately configured, authorized S5000 self-hosted runner.",
+    "Applicable exceptions or written authorization before otherwise restricted platform use.",
+    "Full runtime component/redistribution agreement and notice inventory before image publication.",
+    "Actual image packaging/dependency closure and S5000 operation/speech parity.",
+    "Written permission before publishing performance or benchmark results."
+  ]
+}

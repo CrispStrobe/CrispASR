@@ -40,9 +40,12 @@ record external dependencies without speculative fixes or unsupported closure.
    changing inference. Existing context caches and batched prefill are confirmed.
    Preserve ten steps; no speed claim from eight-step logs or another GPU.
    [Evidence and exact B390 capture](docs/voxcpm2-b390-review-2026-10-26.md).
-5. **In progress:** MUSA: review applicable SDK permissions, runner availability and runtime-image
-   validation; no standard-hosted SDK execution or unqualified image publication.
-6. Nyra #456: resolve/review research and generated-output terms before any port
+5. **Review complete; external prerequisites remain:** MUSA agreement fully
+   reread; platform, redistribution and benchmark-disclosure permissions remain
+   separate. Runner API lists zero self-hosted runners. Added pre-SDK-pull RAM/
+   load enforcement; no SDK execution, image build or publication in this review.
+   [Permission/runner receipt](docs/musa-permissions-review-2026-10-26.json).
+6. **In progress:** Nyra #456: resolve/review research and generated-output terms before any port
    or redistribution. Keep deferred unless appropriate rights are established.
 
 ## Published and verified — 0.8.45 (2026-10-26)
