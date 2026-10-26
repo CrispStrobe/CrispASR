@@ -482,6 +482,26 @@ the published architecture and algorithms; the upstream packages are used only
 as measurement oracles by the reference dumper, never vendored or linked.
 
 ────────────────────────────────────────────────────────────────────────────────
+NVIDIA Nemotron-3.5-ASR-Streaming-0.6B — MODEL WEIGHTS
+(https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b)
+OpenMDW License Agreement v1.1
+────────────────────────────────────────────────────────────────────────────────
+
+The managed Nemotron ASR download is a cstr GGUF conversion of NVIDIA's model.
+The pinned original and conversion model cards both identify OpenMDW-1.1 as
+the governing model license. The runtime's MIT license does not replace it.
+The complete agreement and model-origin notice accompany managed downloads
+under nemotron-3.5-asr-streaming-0.6b/ and are retained in the source tree at
+docs/nemotron-model-notices/. Redistribution of model materials must preserve
+the agreement and applicable copyright and origin notices.
+
+  Original: nvidia/nemotron-3.5-asr-streaming-0.6b
+  Original revision: ea30d66debe3740a08b573244286791d423d6b3e
+  Conversion: cstr/nemotron-3.5-asr-streaming-GGUF
+  Conversion revision: bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2
+  License: OpenMDW-1.1 — https://openmdw.ai/license/1-1/
+
+────────────────────────────────────────────────────────────────────────────────
 NVIDIA Nemotron-3-Diarization (streaming Sortformer v3) — MODEL WEIGHTS
 (https://huggingface.co/nvidia/Nemotron-3-Diarization)
 OpenMDW License Agreement v1.1

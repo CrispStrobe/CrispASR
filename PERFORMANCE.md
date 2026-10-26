@@ -3321,6 +3321,10 @@ Ordered by estimated breadth × depth of impact across the project:
 
 ### VPS bench data (2026-06-20, 4-core CPU, Q4_K/F16, JFK 11s)
 
+These historical Nemotron Q4 timings do not establish correctness acceptance.
+The [2026-10-26 CPU/T4 replay](docs/nemotron-default-policy-2026-10-26.md)
+qualifies pinned F16 as the managed default and rejects the former default Q4.
+
 | Backend | Stage | Time (ms) |
 |---------|-------|-----------|
 | paraformer-zh Q4_K (123 MB) | fbank+lfr | 142 |

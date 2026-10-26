@@ -145,8 +145,10 @@ export CRISPASR_MODEL_GIGAAM_F16="${CRISPASR_MODEL_GIGAAM_F16:-$CRISPASR_MODELS_
 export CRISPASR_FIXTURE_GIGAAM="${CRISPASR_FIXTURE_GIGAAM:-$CRISPASR_MODELS_DIR/fixtures/gigaam-example.wav}"
 
 # ── Nemotron (streaming ASR) ──
-export CRISPASR_MODEL_NEMOTRON="${CRISPASR_MODEL_NEMOTRON:-$CRISPASR_MODELS_DIR/nemotron-3.5-asr-streaming-0.6b-q4_k.gguf}"
+export CRISPASR_MODEL_NEMOTRON="${CRISPASR_MODEL_NEMOTRON:-$CRISPASR_MODELS_DIR/nemotron-3.5-asr-streaming-0.6b-f16.gguf}"
 export CRISPASR_MODEL_NEMOTRON_F16="${CRISPASR_MODEL_NEMOTRON_F16:-$CRISPASR_MODELS_DIR/nemotron-3.5-asr-streaming-0.6b-f16.gguf}"
+# Optional historical Q4/JFK diagnostic: set CRISPASR_MODEL_NEMOTRON_Q4 explicitly.
+# It must not inherit the F16 default and compare that model with itself.
 
 # ── LFM2-Audio ──
 export CRISPASR_MODEL_LFM2="${CRISPASR_MODEL_LFM2:-$CRISPASR_MODELS_DIR/lfm2-audio-1.5b-q5_k.gguf}"

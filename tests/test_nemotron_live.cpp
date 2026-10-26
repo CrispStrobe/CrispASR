@@ -4,8 +4,9 @@
 // Run: ctest -R test-nemotron --output-on-failure
 //
 // Env vars:
-//   CRISPASR_MODEL_NEMOTRON    — Q4_K GGUF path
+//   CRISPASR_MODEL_NEMOTRON    — qualified default GGUF path (F16)
 //   CRISPASR_MODEL_NEMOTRON_F16 — F16 GGUF path (optional)
+//   CRISPASR_MODEL_NEMOTRON_Q4  — explicitly selected historical Q4 diagnostic
 
 #include <catch2/catch_test_macros.hpp>
 #include "nemotron.h"
@@ -504,12 +505,15 @@ TEST_CASE("nemotron: GPU production stream captures complete speech", "[nemotron
     nemotron_free(ctx);
 }
 
-TEST_CASE("nemotron: F16 produces same text as Q4_K", "[nemotron][.live]") {
-    std::string model_q4k = get_env("CRISPASR_MODEL_NEMOTRON");
+// This one-clip diagnostic does not qualify Q4: the fixed original-reference
+// matrix rejects it. Keep the quant input explicit when the default is F16.
+TEST_CASE("nemotron: explicit Q4_K diagnostic matches F16 on JFK only", "[nemotron][.live]") {
+    std::string model_q4k = get_env("CRISPASR_MODEL_NEMOTRON_Q4");
     std::string model_f16 = get_env("CRISPASR_MODEL_NEMOTRON_F16");
     if (model_q4k.empty() || model_f16.empty()) {
-        SKIP("CRISPASR_MODEL_NEMOTRON or CRISPASR_MODEL_NEMOTRON_F16 not set");
+        SKIP("Explicit CRISPASR_MODEL_NEMOTRON_Q4 or CRISPASR_MODEL_NEMOTRON_F16 not set");
     }
+    REQUIRE(model_q4k != model_f16);
 
     auto pcm = load_wav_16k_mono("samples/jfk.wav");
     REQUIRE(!pcm.empty());

@@ -1,0 +1,14 @@
+{
+  "bytes": 10401626,
+  "sha256": "ff2f7c5f1280462d2c64a435a76b447d603c0e663851df2d596ee100222f5aff",
+  "files": 79,
+  "redacted_console_files": 2,
+  "original_cpu_archive_sha256": "a20d84f88df04aa88af1331600dc6dcdc96e1ea17d3686d54e0574d1b3a5992b",
+  "repo": "cstr/crispasr-regression-fixtures",
+  "repo_type": "model",
+  "revision": "5fccbdd17f5640385576d7d5a8b06d41c3f5db08",
+  "path": "tts-asr/nemotron-default-replay-20261026/proof.zip",
+  "anonymous_full_readback": true,
+  "expanded_members_verified": 79,
+  "numerical_members_unmodified": true
+}

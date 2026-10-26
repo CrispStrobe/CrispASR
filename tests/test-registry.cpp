@@ -27,6 +27,74 @@ TEST_CASE("registry: lookup unknown backend returns false", "[unit][registry]") 
     REQUIRE_FALSE(found);
 }
 
+TEST_CASE("registry: Nemotron defaults only to the pinned qualified F16", "[unit][registry][nemotron]") {
+    CrispasrRegistryEntry entry;
+    REQUIRE(crispasr_registry_lookup("nemotron", entry));
+    REQUIRE(entry.filename == "nemotron-3.5-asr-streaming-0.6b-f16.gguf");
+    REQUIRE(entry.url == "https://huggingface.co/cstr/nemotron-3.5-asr-streaming-GGUF/resolve/"
+                         "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2/nemotron-3.5-asr-streaming-0.6b-f16.gguf");
+    REQUIRE(entry.approx_size == "~1.3 GB");
+    REQUIRE(entry.license == "OpenMDW-1.1");
+    REQUIRE(crispasr_registry_lookup("nemotron", entry, "f16"));
+    REQUIRE(entry.filename == "nemotron-3.5-asr-streaming-0.6b-f16.gguf");
+    for (const char* quant : {"q4_k", "q8_0", "q6_k", "bf16", "f32"}) {
+        REQUIRE_FALSE(crispasr_registry_lookup("nemotron", entry, quant));
+        REQUIRE_FALSE(crispasr_registry_lookup_by_filename("nemotron-3.5-asr-streaming-0.6b-f16.gguf", entry, quant));
+        REQUIRE_FALSE(crispasr_registry_lookup_by_filename(
+            std::string("nemotron-3.5-asr-streaming-0.6b-") + quant + ".gguf", entry));
+    }
+}
+
+TEST_CASE("registry: Nemotron default retains full OpenMDW terms and origin", "[unit][registry][nemotron]") {
+    CrispasrRegistryBundle bundle;
+    REQUIRE(crispasr_registry_default_bundle("nemotron", bundle));
+    REQUIRE(bundle.license == "OpenMDW-1.1");
+    REQUIRE_FALSE(bundle.requires_license_acceptance);
+    REQUIRE(bundle.artifacts.size() == 3);
+    REQUIRE(bundle.artifacts[0].filename == "nemotron-3.5-asr-streaming-0.6b-f16.gguf");
+    REQUIRE(bundle.artifacts[0].kind == CrispasrRegistryArtifactKind::Primary);
+    const char* names[] = {"LICENSE-OpenMDW-1.1.txt", "NOTICE.txt"};
+    for (size_t i = 1; i < bundle.artifacts.size(); ++i) {
+        REQUIRE(bundle.artifacts[i].kind == CrispasrRegistryArtifactKind::Extra);
+        REQUIRE(bundle.artifacts[i].filename == std::string("nemotron-3.5-asr-streaming-0.6b/") + names[i - 1]);
+        REQUIRE(bundle.artifacts[i].url ==
+                std::string("https://raw.githubusercontent.com/CrispStrobe/CrispASR/"
+                            "102cd6bfc233c3d5d211966718d3de0e4401f836/docs/nemotron-model-notices/") +
+                    names[i - 1]);
+    }
+}
+
+TEST_CASE("resolver: Nemotron Q4 cache and filenames cannot substitute for the F16 default",
+          "[unit][registry][nemotron]") {
+    const std::filesystem::path cache = "test-registry-nemotron-cache";
+    const std::string prefix = "nemotron-3.5-asr-streaming-0.6b-";
+    const std::string f16 = prefix + "f16.gguf", q4 = prefix + "q4_k.gguf";
+    std::filesystem::create_directories(cache);
+    {
+        std::ofstream fixture(cache / q4, std::ios::binary);
+        fixture << "existing explicitly selected diagnostic model fixture";
+    }
+    CrispasrRegistryEntry entry;
+    REQUIRE(crispasr_registry_lookup("nemotron", entry));
+    REQUIRE(entry.filename == f16);
+    CHECK_FALSE(crispasr_find_cached_model(entry, cache.string()));
+    CHECK(crispasr_resolve_model(q4, "nemotron", true, cache.string(), false) == (cache / q4).string());
+    std::filesystem::remove(cache / q4);
+    {
+        std::ofstream fixture(cache / f16, std::ios::binary);
+        fixture << "qualified default identity fixture";
+    }
+    REQUIRE(crispasr_find_cached_model(entry, cache.string()));
+    CHECK(entry.filename == f16);
+    for (const char* quant : {"q4_k", "q8_0", "q6_k"}) {
+        const std::string requested = prefix + quant + ".gguf";
+        CHECK(crispasr_resolve_model(requested, "nemotron", true, cache.string(), false) == requested);
+        CHECK_FALSE(crispasr_find_cached_model(entry, cache.string(), quant));
+    }
+    CHECK(crispasr_resolve_model(f16, "nemotron", true, cache.string(), false) == (cache / f16).string());
+    std::filesystem::remove_all(cache);
+}
+
 TEST_CASE("registry: Phonon-2 selects Q8 and resolves alternate GGUF quants", "[unit][registry]") {
     CrispasrRegistryEntry e;
     REQUIRE(crispasr_registry_lookup("phonon2", e));
@@ -563,6 +631,11 @@ TEST_CASE("registry: fill with preferred quant does not crash on any entry (#152
         crispasr_registry_get_at(i, e);
         CrispasrRegistryEntry eq;
         const bool found = crispasr_registry_lookup(e.backend, eq, "q4_k");
+        if (e.backend == "nemotron") {
+            // Only F16 is qualified; manufacturing a Q4 download is rejected.
+            REQUIRE_FALSE(found);
+            continue;
+        }
         REQUIRE(found);
         REQUIRE(!eq.backend.empty());
         REQUIRE(!eq.filename.empty());

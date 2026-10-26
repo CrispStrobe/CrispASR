@@ -90,9 +90,12 @@ constexpr Entry k_registry[] = {
     {"wespeaker", "wespeaker-resnet34-lm.gguf",
      "https://huggingface.co/cstr/wespeaker-resnet34-lm-GGUF/resolve/main/wespeaker-resnet34-lm.gguf", "~24 MB",
      nullptr, nullptr, nullptr, "CC-BY-4.0 (weights; attribution required; see https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM)"},
-    {"nemotron", "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
-     "https://huggingface.co/cstr/nemotron-3.5-asr-streaming-0.6b-GGUF/resolve/main/nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
-     "~458 MB", nullptr, nullptr},
+    // Current plain Q4 fails the fixed original-transcript and stage controls
+    // on CPU and T4. Only the original-qualified F16 is a managed download;
+    // explicit existing quantized paths remain available for diagnostics.
+    {"nemotron", "nemotron-3.5-asr-streaming-0.6b-f16.gguf",
+     "https://huggingface.co/cstr/nemotron-3.5-asr-streaming-GGUF/resolve/bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2/nemotron-3.5-asr-streaming-0.6b-f16.gguf",
+     "~1.3 GB", nullptr, nullptr, nullptr, "OpenMDW-1.1", ",f16,"},
     {"parakeet", "parakeet-tdt-0.6b-v3-q4_k.gguf",
      "https://huggingface.co/cstr/parakeet-tdt-0.6b-v3-GGUF/resolve/main/parakeet-tdt-0.6b-v3-q4_k.gguf", "~467 MB", nullptr, nullptr, nullptr, "CC-BY-4.0 (see https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3)"},
     // Quds v4 (#387): Persian ASR, FastConformer-RNNT fine-tune of the
@@ -1882,6 +1885,12 @@ constexpr ExtraCompanion k_moonshine_streaming_small_de_onnx_f32_extras[] = {
     {nullptr, nullptr},
 };
 
+constexpr ExtraCompanion k_nemotron_extras[] = {
+    {"nemotron-3.5-asr-streaming-0.6b/LICENSE-OpenMDW-1.1.txt", "https://raw.githubusercontent.com/CrispStrobe/CrispASR/102cd6bfc233c3d5d211966718d3de0e4401f836/docs/nemotron-model-notices/LICENSE-OpenMDW-1.1.txt"},
+    {"nemotron-3.5-asr-streaming-0.6b/NOTICE.txt", "https://raw.githubusercontent.com/CrispStrobe/CrispASR/102cd6bfc233c3d5d211966718d3de0e4401f836/docs/nemotron-model-notices/NOTICE.txt"},
+    {nullptr, nullptr},
+};
+
 constexpr ExtraCompanion k_granite5_extras[] = {
     {"granite-speech-5.0-2b/LICENSE", "https://huggingface.co/cstr/granite-speech-5.0-2b-GGUF/resolve/e1df7d2cabb0ddba9863d7fc90cb6e78e8f19a6d/LICENSE"},
     {"granite-speech-5.0-2b/LICENSE-RECIPE.txt", "https://huggingface.co/cstr/granite-speech-5.0-2b-GGUF/resolve/e1df7d2cabb0ddba9863d7fc90cb6e78e8f19a6d/LICENSE-RECIPE.txt"},
@@ -1892,6 +1901,7 @@ constexpr ExtraCompanion k_granite5_extras[] = {
 };
 
 constexpr ExtraList k_extras[] = {
+    {"nemotron", k_nemotron_extras},
     {"granite", k_granite5_extras},
     {"moonshine-streaming-small-de-onnx-f32", k_moonshine_streaming_small_de_onnx_f32_extras},
     {"moonshine-streaming-tiny-de-onnx-f32", k_moonshine_streaming_tiny_de_onnx_f32_extras},
@@ -2395,9 +2405,11 @@ std::string crispasr_resolve_model(const std::string& model_arg, const std::stri
         // sub-variant keys like "parakeet-v2" / "parakeet-tdt-1.1b" / etc.
         CrispasrRegistryEntry match;
         bool have_match = crispasr_registry_lookup_by_filename(model_arg, match, preferred_quant);
-        // A named Granite5 profile must never fall back to a different model
-        // merely because its rejected/unpublished quant has no registry row.
-        if (!have_match && basename_of(model_arg).rfind("granite-speech-5.0-2b-", 0) == 0)
+        // Preserve an explicit Granite5 or Nemotron filename when its quant
+        // has no qualified registry row, rather than substituting the default.
+        const std::string requested_basename = basename_of(model_arg);
+        if (!have_match && (requested_basename.rfind("granite-speech-5.0-2b-", 0) == 0 ||
+                            requested_basename.rfind("nemotron-3.5-asr-streaming-0.6b-", 0) == 0))
             return model_arg;
         if (!have_match)
             have_match = crispasr_registry_lookup(model_arg, match, preferred_quant);

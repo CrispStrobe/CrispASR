@@ -1,0 +1,32 @@
+{
+  "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
+  "previous_revision": "61e58fbba2c97f6b8058e88dc959df7cd4ce150b",
+  "revision": "f300f4f36b388c5f22f810c4e8503359fb9c1ce7",
+  "changed_files": [
+    "README.md",
+    "LICENSE-OpenMDW-1.1.txt",
+    "NOTICE.txt"
+  ],
+  "weights_unchanged": true,
+  "model_identities": {
+    "nemotron-3.5-asr-streaming-0.6b-f16.gguf": [
+      1286368480,
+      "14cbc98df495d8ab452c6a4ac367136d94ab5da55e73afaa96ba4f749dd95d09"
+    ],
+    "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf": [
+      408557984,
+      "22480dd283a3bf1b39e9d2ab86c048b0c1654b2fc280e46627a4cbfded4b46fd"
+    ]
+  },
+  "files": {
+    "README.md": "ae2761c97379a4d69ec787ac8d1078a7fbd1727b033555bbd9c1597f7d9de457",
+    "LICENSE-OpenMDW-1.1.txt": "be21b29b1c69af5b4a4e60a6bd7bc933eec374e52be29d1ebb9e6a17a6588491",
+    "NOTICE.txt": "728c1751d295f5bf6856c20ffbda1805c5f6a14cb2e36f0a2e5c09c091bd9cc6"
+  },
+  "anonymous_changed_files_verified": [
+    "README.md",
+    "LICENSE-OpenMDW-1.1.txt",
+    "NOTICE.txt"
+  ],
+  "anonymous_model_identities_verified": true
+}

@@ -1,3 +1,22 @@
+## 2026-10-26 — Nemotron managed downloads select qualified F16
+
+The former default Q4 reproduces the same failure on CPU and actual T4:
+11/26 original transcript matches and 8/22 VoxCPM prompt matches, with strict
+pre-encode/encoder and CLI controls failing. Pinned F16 passes all 26/22 controls,
+stages, magnitude checks and fresh/reused sessions on both devices. Independent
+retained-array/transcript/CUDA-activity audits reject three corrupt receipts per
+device. [Policy and permanent 79-file proof](docs/nemotron-default-policy-2026-10-26.md).
+
+The source registry now permits only the measured F16 managed profile, retains
+full OpenMDW terms/origin, and prevents stale Q4 cache or missing-Q4-to-F16
+substitution. Existing explicit Q4 files remain diagnostic inputs. Regression
+and live defaults follow F16; the optional Q4/JFK check has its own explicit
+input so it cannot compare the new F16 default with itself. Registry units pass
+7,042 assertions in 71 cases. The converted-model card corrects unsupported Q4
+claims and adds full license/origin files without changing either weight hash.
+The published v0.8.45 binary can use the qualified F16 file explicitly; the new
+automatic selection belongs to source builds containing this registry fix.
+
 ## 2026-10-26 — MUSA Docker recipe adopts the tested SDK 5.2 profile
 
 The actual Dockerfile now pins SDK 5.2/S5000 and architecture 31, installs the

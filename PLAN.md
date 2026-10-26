@@ -6,36 +6,19 @@ Owner: Codex. User authorized all six items in this order. Finish the last item
 before closure review and a fresh issue/PR sweep. Preserve acceptance gates and
 record external dependencies without speculative fixes or unsupported closure.
 
-1. **In progress:** replay the current Nemotron default and pinned F16 against
-   the complete saved original-model controls, first CPU on Actions, then actual
-   CUDA on an available Kaggle GPU session. The default's reported file SHA is
-   identical to the historically failing plain-Q4 control. Establish current
-   behavior before deciding registry/default policy; no hybrid-as-compact-Q4 claim.
-   CPU replay [40377479500](https://github.com/CrispStrobe/CrispASR/actions/runs/40377479500)
-   uses immutable source `6143b9aa2`. The inference-only Kaggle entry is prepared
-   but deliberately blocked until a complete reviewed CPU receipt is pinned.
-   CUDA requires worker-specific model allocation and SM activity during decode,
-   after initialization. Published OpenMDW-1.1 model terms and origin are retained
-   in `docs/nemotron-model-notices/`; this is not model acceptance or a rights warranty.
-   **CPU diagnosis complete:** F16 matches all 26 original transcripts and all
-   22 VoxCPM prompts, with all three stage/magnitude gates passing. The actual
-   registry Q4 matches only 11/26 and 8/22; pre-encode/encoder gates and its CLI
-   control fail. Fresh/reused outputs are stable for both profiles. The
-   [unmodified CPU receipt](docs/nemotron-default-replay-2026-10-26-cpu.json) and
-   [independent array/transcript audit](docs/nemotron-default-replay-2026-10-26-cpu-audit.json)
-   retain the result; three corrupt-receipt controls are rejected. Actual CUDA
-   and the resulting default policy remain pending. The first artifact's
-   accidental model links are excluded from bounded local collection; remote
-   recovery 40383267861 will verify the full archive before duplicate cleanup.
-   Actual T4 CUDA version 1 completes the full F16 control (26/26, 22/22, all
-   stages passing, 15 own-process SM samples during decode). Its Q4 arm stops
-   before inference because the harness imposed an arbitrary 512 MiB process
-   allocation floor; the compact model allocates 492 MiB. The
-   [unmodified partial receipt](docs/nemotron-default-replay-2026-10-26-cuda-v1.json)
-   is not a completed CUDA Q4 verdict. All 17 output files and terminal logs
-   are archived. Corrected proof requires own-process allocation at least the
-   model file's size, plus the unchanged post-initialization SM, transcript and
-   stage/magnitude gates. A corrected version 2 remains required before policy.
+1. **CPU/T4 qualification complete; source fix under validation:** Nemotron's
+   former default Q4 matches only 11/26 original transcripts and 8/22 VoxCPM
+   prompts on both devices, failing pre-encode/encoder and CLI controls. Pinned
+   F16 passes all 26/22 controls and unchanged stage/magnitude gates; both have
+   stable reused sessions. Independent raw-array/transcript/CUDA activity audits
+   and three corrupt-receipt controls per device pass. The source default now
+   selects only qualified F16 (~1.3 GB), retains OpenMDW-1.1/origin files, and
+   prevents stale Q4 cache or missing-Q4-to-F16 substitution. Explicit existing
+   Q4 files remain diagnostic inputs. Registry units pass 7,042 assertions/71
+   cases; full C ABI checks run on Actions. [Policy and complete evidence](docs/nemotron-default-policy-2026-10-26.md).
+   Full recovery 40383267861 verifies the original ZIP hash and all 22 retained
+   members; its accidental model-weight duplicate is removed after anonymous
+   full readback of the permanent 79-file proof. No issue closure is implied.
 2. Canary #532: review/obtain the exact failing clip, assertion and device/build
    context; retain the unreproduced status if these remain unavailable.
 3. CUDA/MMQ #483: preserve the original matched packages and notices before

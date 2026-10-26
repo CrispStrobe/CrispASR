@@ -7,6 +7,43 @@
 #include <cstdint>
 #include <string>
 
+TEST_CASE("registry C ABI: Nemotron F16 default preserves its license and exact files",
+          "[unit][registry][c-abi][nemotron]") {
+    char backend[64] = {}, license[256] = {};
+    int32_t requires_acceptance = -1;
+    REQUIRE(crispasr_registry_default_bundle_info_abi("nemotron", backend, sizeof(backend), license, sizeof(license),
+                                                      &requires_acceptance) == 3);
+    REQUIRE(std::string(backend) == "nemotron");
+    REQUIRE(std::string(license) == "OpenMDW-1.1");
+    REQUIRE(requires_acceptance == 0);
+    const char* names[] = {"nemotron-3.5-asr-streaming-0.6b-f16.gguf",
+                           "nemotron-3.5-asr-streaming-0.6b/LICENSE-OpenMDW-1.1.txt",
+                           "nemotron-3.5-asr-streaming-0.6b/NOTICE.txt"};
+    for (int i = 0; i < 3; ++i) {
+        int32_t kind = -1;
+        char filename[128] = {}, url[512] = {}, size[64] = {};
+        REQUIRE(crispasr_registry_default_bundle_artifact_abi("nemotron", i, &kind, filename, sizeof(filename), url,
+                                                              sizeof(url), size, sizeof(size)) == 0);
+        REQUIRE(std::string(filename) == names[i]);
+        REQUIRE(kind == (i == 0 ? CRISPASR_REGISTRY_ARTIFACT_PRIMARY : CRISPASR_REGISTRY_ARTIFACT_EXTRA));
+        REQUIRE(std::string(url).find("/main/") == std::string::npos);
+        if (i == 0) {
+            REQUIRE(std::string(url).find("/resolve/bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2/") != std::string::npos);
+            REQUIRE(std::string(size) == "~1.3 GB");
+        } else {
+            REQUIRE(std::string(url).find("/102cd6bfc233c3d5d211966718d3de0e4401f836/docs/nemotron-model-notices/") !=
+                    std::string::npos);
+            REQUIRE(std::string(size).empty());
+        }
+    }
+    char filename[128] = {}, url[512] = {}, size[64] = {};
+    REQUIRE(crispasr_registry_lookup_abi("nemotron", filename, sizeof(filename), url, sizeof(url), size,
+                                         sizeof(size)) == 0);
+    REQUIRE(std::string(filename) == names[0]);
+    REQUIRE(crispasr_registry_lookup_by_filename_abi("nemotron-3.5-asr-streaming-0.6b-q4_k.gguf", filename,
+                                                     sizeof(filename), url, sizeof(url), size, sizeof(size)) == 1);
+}
+
 TEST_CASE("registry C ABI: Granite5 default includes pinned Apache notices", "[unit][registry][c-abi][granite5]") {
     char backend[64] = {};
     char license[256] = {};

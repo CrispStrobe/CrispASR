@@ -45,6 +45,19 @@ def words(text):
     return re.findall('[a-z]+', re.sub(r'<[^>]*>', '', text).lower())
 
 
+def runtime_default(library):
+    """Ask the tested C ABI, rather than assuming the historical Q4 is default."""
+    lib = ct.CDLL(str(library))
+    lib.crispasr_registry_lookup_abi.argtypes = [ct.c_char_p, ct.c_char_p, ct.c_int32,
+                                               ct.c_char_p, ct.c_int32, ct.c_char_p, ct.c_int32]
+    lib.crispasr_registry_lookup_abi.restype = ct.c_int
+    filename, url, size = ct.create_string_buffer(256), ct.create_string_buffer(1024), ct.create_string_buffer(64)
+    assert lib.crispasr_registry_lookup_abi(b'nemotron', filename, len(filename), url, len(url), size, len(size)) == 0
+    row = dict(file=filename.value.decode(), url=url.value.decode(), size=size.value.decode())
+    row['profile'] = next(name for name, model in MODELS.items() if model[2] == row['file'])
+    return row
+
+
 def active_gpu_samples(text, pid):
     """NVIDIA pmon -s u: gpu, pid, type, SM%, memory%, ... ."""
     rows = [line.split() for line in text.splitlines() if not line.lstrip().startswith('#')]
@@ -324,6 +337,7 @@ def main():
         args.cli = str(build / 'bin/crispasr')
     receipt['library_sha256'] = digest(args.library)
     receipt['cli_sha256'] = digest(args.cli)
+    receipt['runtime_registry_default'] = runtime_default(args.library)
     proof = hf_hub_download(FIXTURES, 'tts-asr/nemotron-reference-20261009/proof.zip', revision=PROOF_REV)
     assert digest(proof) == PROOF_SHA
     reference = scratch / 'reference'
@@ -365,7 +379,8 @@ def main():
         if profile == 'f16':
             assert code == 0 and row.get('accepted'), 'Pinned F16/original control must pass before interpreting Q4'
     receipt['complete'] = all(x.get('complete') for x in receipt['profiles'].values())
-    receipt['current_default_accepted'] = receipt['profiles']['registry-q4'].get('accepted', False)
+    receipt['legacy_registry_q4_accepted'] = receipt['profiles']['registry-q4'].get('accepted', False)
+    receipt['current_default_accepted'] = receipt['profiles'][receipt['runtime_registry_default']['profile']].get('accepted', False)
     save()
     assert receipt['complete'], 'Replay incomplete; raw failure retained'
     lines = ['Complete 26-case original-reference replay; see replay.json.',

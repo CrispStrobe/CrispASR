@@ -1,0 +1,56 @@
+{
+  "f16": {
+    "original_word_matches": 26,
+    "voxcpm_exact": 22,
+    "state_changes": [],
+    "accepted": true,
+    "stages": {
+      "mel_spectrogram": {
+        "sha256": "62765e92746555c30dddb755ebb95fbe96b69eeb9defb92f0847f8f746a82a78",
+        "cosine_min": 0.9999999992172605,
+        "relative_l2": 1.0037382467243017e-05,
+        "passed": true
+      },
+      "pre_encode_output": {
+        "sha256": "9d4213d8f50b038e36e8aa91f2edfe3bf6ce34e74c3dfb428014f0cd777f969d",
+        "cosine_min": 0.9999999913268405,
+        "relative_l2": 4.749317146031641e-05,
+        "passed": true
+      },
+      "encoder_output": {
+        "sha256": "a342e1f7b81523cc5d2cb911f25e1fc6bb733a9006968cb915e0247af2921a6b",
+        "cosine_min": 0.9999976279152666,
+        "relative_l2": 0.00028003937974455264,
+        "passed": true
+      }
+    }
+  },
+  "registry-q4": {
+    "original_word_matches": 11,
+    "voxcpm_exact": 8,
+    "state_changes": [],
+    "accepted": false,
+    "stages": {
+      "mel_spectrogram": {
+        "sha256": "62765e92746555c30dddb755ebb95fbe96b69eeb9defb92f0847f8f746a82a78",
+        "cosine_min": 0.9999999992172605,
+        "relative_l2": 1.0037382467243017e-05,
+        "passed": true
+      },
+      "pre_encode_output": {
+        "sha256": "d5677ca0860a3e38c80be7371bd68892394269a50bd5fc512617e78087536960",
+        "cosine_min": 0.9955013302517465,
+        "relative_l2": 0.06083604621455616,
+        "passed": false
+      },
+      "encoder_output": {
+        "sha256": "db939a76f9d90ab1c6f15629c220ed3615484821e9e832cdd6f4d3ad37aa768d",
+        "cosine_min": 0.9663092363749245,
+        "relative_l2": 0.07358669709432629,
+        "passed": false
+      }
+    }
+  },
+  "negative_controls_rejected": 3,
+  "receipt_sha256": "5de6428c9985d4a0df810c760424bb154eefe446d8ff5d65ca904cd7d3942295"
+}

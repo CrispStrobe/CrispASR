@@ -1019,13 +1019,13 @@
       "gguf": {
         "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
         "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
-        "_revision_note": "TODO: replace with actual 40-char SHA from HF repo.",
-        "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
-        "approx_size_mb": 458
+        "_revision_note": "Immutable F16 default; SHA256 14cbc98df495d8ab452c6a4ac367136d94ab5da55e73afaa96ba4f749dd95d09; original-reference CPU/T4 qualification 2026-10-26.",
+        "file": "nemotron-3.5-asr-streaming-0.6b-f16.gguf",
+        "approx_size_mb": 1286
       },
       "sample": "samples/jfk.wav",
       "expected_transcript": "And so my fellow Americans ask not what your country can do for you. Ask what you can do for your country.",
-      "expected_transcript_source": "captured 2026-06-15 with nemotron Q4_K on samples/jfk.wav (F16 produces identical text)",
+      "expected_transcript_source": "Historical JFK transcript captured 2026-06-15 with Q4_K; retained as this clip expectation. Default now uses F16 qualified by the broader 2026-10-26 CPU/T4 original-reference controls; Q4 is rejected there.",
       "transcript_tolerance": {
         "cer_max": 0.05,
         "wer_max": 0.1
