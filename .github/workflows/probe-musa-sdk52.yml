@@ -12,7 +12,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: [self-hosted, linux, x64, musa-s5000]
     timeout-minutes: 180
     env:
       SDK_IMAGE: registry.mthreads.com/mcconline/musa_sdk:5.2.0-devel-ubuntu22.04-s5000@sha256:ffb9f46ba25a14d5978b21fe59a7cb804c534a01e5b4a134112d4962a3e3e657
@@ -33,10 +33,14 @@ jobs:
           persist-credentials: false
           sparse-checkout-cone-mode: false
           sparse-checkout: tools/ci-heavy/musa_sdk52_probe.sh
-      - name: Prepare hosted resources
+      - name: Verify MUSA platform and available resources
         run: |
           set -euo pipefail
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          python3 - <<'PY'
+          from pathlib import Path
+          assert any(p.read_text().strip().lower() == '0x1ed5'
+                     for p in Path('/sys/bus/pci/devices').glob('*/vendor')), 'Requires a Moore Threads platform'
+          PY
           cat /proc/loadavg
           grep MemAvailable /proc/meminfo
           df -h /

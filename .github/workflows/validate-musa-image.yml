@@ -1,0 +1,80 @@
+name: Validate MUSA S5000 image
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: musa-s5000-validation
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    runs-on: [self-hosted, linux, x64, musa-s5000]
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Check platform and resources before SDK use
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/musa-validation"
+          python3 - <<'PY'
+          import os
+          import shutil
+          from pathlib import Path
+          assert any(p.read_text().strip().lower() == '0x1ed5'
+                     for p in Path('/sys/bus/pci/devices').glob('*/vendor')), 'Requires a Moore Threads platform'
+          available = next(int(l.split()[1]) for l in Path('/proc/meminfo').read_text().splitlines()
+                           if l.startswith('MemAvailable:'))
+          print('load:', os.getloadavg(), 'available_KiB:', available, flush=True)
+          assert os.getloadavg()[0] < (os.cpu_count() or 1), 'Runner overloaded'
+          assert available >= 6 * 1024**2, 'Need 6 GiB available'
+          assert shutil.disk_usage(os.environ['RUNNER_TEMP']).free >= 30 * 1024**3, 'Need 30 GiB free'
+          PY
+      - uses: docker/setup-buildx-action@v3
+        with:
+          driver-opts: memory=6g
+      - name: Build the actual Docker recipe without publication
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: .devops/main-musa.Dockerfile
+          load: true
+          push: false
+          tags: crispasr-musa-validation:${{ github.run_id }}
+          build-args: CRISPASR_BUILD_JOBS=2
+      - name: Check runtime packaging without model inference
+        env:
+          IMAGE: crispasr-musa-validation:${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          out="$RUNNER_TEMP/musa-validation"
+          docker image inspect "$IMAGE" > "$out/image.json"
+          docker run --rm --entrypoint crispasr "$IMAGE" --version > "$out/version.txt"
+          docker run --rm --entrypoint bash "$IMAGE" -c '
+            set -euo pipefail
+            bash -n /app/.devops/run-server.sh
+            test -s /app/LICENSE && test -s /app/THIRD_PARTY_NOTICES.txt
+            test -s /app/musa-package-metadata/muAlg-copyright
+            test -s /app/musa-package-metadata/muThrust-copyright
+            find /app/build -type f -name "*.so*" -exec ldd {} \;
+            ldd /app/build/bin/crispasr
+          ' > "$out/dependencies.txt"
+          if grep -q 'not found' "$out/dependencies.txt"; then
+            cat "$out/dependencies.txt"
+            exit 1
+          fi
+          printf '%s\n' 'Packaging/model-free checks only; speech/hardware parity and redistribution review remain open.' > "$out/scope.txt"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: musa-image-validation-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/musa-validation/
+      - name: Remove only this job's local image tag
+        if: always()
+        run: docker image rm "crispasr-musa-validation:${{ github.run_id }}" || true

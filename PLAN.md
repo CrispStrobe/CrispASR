@@ -25,6 +25,20 @@ Owner: Codex. The authorized native/Python/Rust/Dart publication is complete.
 
 ## OPEN — MUSA runtime qualification and older SDK targets (2026-10-26)
 
+Owner: Codex. **Source fix prepared:** the actual Docker recipe uses the tested
+SDK 5.2 digest, official package versions and architecture 31, with matching
+SDK build/runtime bases. MUSA is removed from automatic registry publication.
+A manual self-hosted image validator checks packaging and dependency closure;
+eight policy controls reject unpinned SDKs, widened targets, mismatched runtime
+bases, hosted SDK execution and unreviewed publication. No matching runner is
+registered, so the new runtime image is not yet validated.
+
+The vendor's general software agreement section II.2(7) restricts non-Moore-Threads
+platform use absent written authorization. SDK workflows now require a MUSA
+self-hosted runner with a physical platform check until an applicable exception
+is established. The earlier hosted compile result remains historical technical
+evidence, not license clearance. See [build status and terms](docs/musa-build.md).
+
 Owner: Codex. **Compile experiment complete:** SDK 5.2 with architecture 31
 compiled the unchanged tagged WKV object, linked the full CLI through all 767
 remaining build steps and produced the MUSA shared library. Run 40330966977
@@ -43,10 +57,9 @@ Six Docker flavours published. MUSA is excluded from publication acceptance.
 Adding pinned official muAlg headers and complete MIT/BSD notices cleared the
 missing CUB header, but both MCC 4.2 (40303383587) and MCC 4.3 (40305189068) crash
 in `rwkv_wkv7_f32<128>` with `MTGPUISD::FRAME_LOAD`. Neither recovery published an
-image. The default SDK remains 4.2; the recovery recipe retains the tested 4.3
-image digests and exact dependency revision. SDK 5.2/architecture 31 now provides a working compile candidate. The older
-targets and runtime/image qualification remain open. No kernel changes or MUSA
-hardware inference claims.
+image. The production recipe now selects SDK 5.2/architecture 31; the obsolete
+4.3 recovery workflow is removed. The older targets and runtime/image
+qualification remain open. No kernel changes or MUSA hardware inference claims.
 
 ## NOW — 0.8.45 prepared; external evidence pending (2026-10-25)
 

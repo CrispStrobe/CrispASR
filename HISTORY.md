@@ -1,3 +1,14 @@
+## 2026-10-26 — MUSA Docker recipe adopts the tested SDK 5.2 profile
+
+The actual Dockerfile now pins SDK 5.2/S5000 and architecture 31, installs the
+tested official dependency versions and keeps matching SDK build/runtime bases.
+MUSA is excluded from automatic image publication while runtime validation and
+applicable license terms remain open. SDK workflows are manual and restricted
+to a MUSA self-hosted runner, with platform/resource checks and no destructive
+host cleanup. The vendor's general agreement adds a platform-use constraint;
+the historical hosted compile proof does not establish permission for more such
+runs. [Current scope and validation path](docs/musa-build.md).
+
 ## 2026-10-26 — MUSA SDK 5.2 compiles the unchanged WKV and full backend
 
 Hosted probe 40330966977 compiled the original tagged WKV source for architecture

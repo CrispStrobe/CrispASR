@@ -37,7 +37,8 @@ jobs:
       matrix:
         config:
           - { tag: "main", dockerfile: ".devops/main.Dockerfile", platform: "linux/amd64" }
-          - { tag: "main-musa", dockerfile: ".devops/main-musa.Dockerfile", platform: "linux/amd64" }
+          # MUSA has a separate manual self-hosted validation workflow. Its SDK
+          # platform/redistribution terms and runtime qualification remain open.
           - { tag: "main-intel", dockerfile: ".devops/main-intel.Dockerfile", platform: "linux/amd64" }
           - { tag: "main-cuda", dockerfile: ".devops/main-cuda.Dockerfile", platform: "linux/amd64" }
           # main-cuda-portable = same CUDA GPU build as main-cuda, but the CPU ggml backend
@@ -95,7 +96,7 @@ jobs:
           if [ "${{ github.event_name }}" == "push" ]; then
             TAGS="$TAGS,ghcr.io/${REPO}:${{ matrix.config.tag }}-${{ env.COMMIT_SHA }}"
           fi
-          echo "tags=$TAGS" >> $GITHUB_OUTPUT
+          echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
 
       - name: Build and push Docker image (tagged)
         uses: docker/build-push-action@v6

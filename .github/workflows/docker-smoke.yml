@@ -9,6 +9,10 @@ on:
       - ".env.example"
       - "hf-space/**"
       - ".github/workflows/docker-smoke.yml"
+      - ".github/workflows/docker.yml"
+      - ".github/workflows/probe-musa-sdk52.yml"
+      - ".github/workflows/validate-musa-image.yml"
+      - "tests/test_musa_build_policy.py"
       - "README.md"
       - "CMakeLists.txt"
       - "src/**"
@@ -24,6 +28,10 @@ on:
       - ".env.example"
       - "hf-space/**"
       - ".github/workflows/docker-smoke.yml"
+      - ".github/workflows/docker.yml"
+      - ".github/workflows/probe-musa-sdk52.yml"
+      - ".github/workflows/validate-musa-image.yml"
+      - "tests/test_musa_build_policy.py"
       - "README.md"
       - "CMakeLists.txt"
       - "src/**"
@@ -53,6 +61,9 @@ jobs:
                   yaml.safe_load(f)
           print("compose-yaml-ok")
           PY
+
+      - name: Check MUSA build and SDK execution policy without using the SDK
+        run: python3 tests/test_musa_build_policy.py -v
 
       - name: Cache smoke-test model
         id: model-cache
