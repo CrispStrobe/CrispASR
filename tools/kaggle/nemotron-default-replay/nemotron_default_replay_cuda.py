@@ -10,7 +10,7 @@ import sys
 import tarfile
 import urllib.request
 
-SOURCE = 'PENDING'
+SOURCE = '964739ac309bde166eb077b1e36960edd18d2724'
 CPU_RUN = 40377479500
 CPU_SOURCE = '6143b9aa2ff0457092a2f35b0dcb2a4aa42a5ff8'
 CPU_RECEIPT = 'docs/nemotron-default-replay-2026-10-26-cpu.json'
