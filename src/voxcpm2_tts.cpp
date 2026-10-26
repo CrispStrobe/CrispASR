@@ -4282,7 +4282,7 @@ static bool vae_wn_init_ggml(voxcpm2_context* ctx) {
     }
 
     // Now populate. WN convs: reconstruct from g/v, write into the tensor.
-    double t_fetch = 0, t_wn = 0, t_up = 0; // CRISPASR_VOXCPM2_BENCH split (#461)
+    double t_fetch = 0, t_wn = 0, t_up = 0, t_perm = 0; // CRISPASR_VOXCPM2_BENCH split (#461)
     auto is_convt_key = [](const std::string& k) {
         // "vae.dec.layer.{2..7}.block.1" - the six ConvTranspose1d upsamplers
         static const std::string pre = "vae.dec.layer.", suf = ".block.1";
@@ -4301,6 +4301,7 @@ static bool vae_wn_init_ggml(voxcpm2_context* ctx) {
         std::vector<float> w = wn_reconstruct(g, v, e.out_ch, e.in_ch, e.ksize);
         auto c2 = std::chrono::steady_clock::now();
         ggml_backend_tensor_set(M[e.key], w.data(), 0, w.size() * sizeof(float));
+        auto c3 = std::chrono::steady_clock::now();
         if (is_convt_key(e.key)) {
             // Permute for the decomposed transposed-conv path straight from the
             // host copy: tensor ne = [K, e.in_ch, e.out_ch] = [K, OC, IC] of
@@ -4311,14 +4312,17 @@ static bool vae_wn_init_ggml(voxcpm2_context* ctx) {
             core_convt::permute_convt1d_host([wp](size_t i) { return wp[i]; }, buf.get(), e.ksize, e.in_ch, e.out_ch);
             host_perm[e.key] = std::move(buf);
         }
-        auto c3 = std::chrono::steady_clock::now();
+        auto c4 = std::chrono::steady_clock::now();
         t_fetch += std::chrono::duration<double, std::milli>(c1 - c0).count();
         t_wn += std::chrono::duration<double, std::milli>(c2 - c1).count();
         t_up += std::chrono::duration<double, std::milli>(c3 - c2).count();
+        t_perm += std::chrono::duration<double, std::milli>(c4 - c3).count();
     }
     if (voxcpm2_bench_enabled())
-        fprintf(stderr, "  voxcpm2_bench: vae.wn f32_fetch=%.1f ms rebuild=%.1f ms upload=%.1f ms (%zu convs)\n",
-                t_fetch, t_wn, t_up, wn_entries.size());
+        fprintf(stderr,
+                "  voxcpm2_bench: vae.wn f32_fetch=%.1f ms rebuild=%.1f ms upload=%.1f ms host_permute=%.1f ms (%zu "
+                "convs)\n",
+                t_fetch, t_wn, t_up, t_perm, wn_entries.size());
 
     // Snake1d: populate inv_alpha + copy alpha to the compute backend.
     for (const auto& name : alpha_names) {

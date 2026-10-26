@@ -30,9 +30,17 @@ record external dependencies without speculative fixes or unsupported closure.
    closure. [Assessment](docs/canary-532-reproducer-review-2026-10-26.json).
 3. **In progress:** CUDA/MMQ #483: preserve the original matched packages and notices before
    November 7 expiry; obtain actual GTX1660/MX150 correctness/timing evidence.
-4. VoxCPM2 #461: investigate B390 VAE setup and LocDiT costs while preserving
-   ten-step quality; actual B390 validation remains required.
-5. MUSA: review applicable SDK permissions, runner availability and runtime-image
+   Actions preservation 40399378816 is queued at source `2730866a8`: original
+   ZIPs and additive CUDA/cuBLAS notices go to a verified maintainer draft, with
+   no rebuild or publication. Archive/draft controls and actionlint pass. Actual
+   GTX1660/MX150 access was requested from the user; no hardware claim yet.
+4. **Code/log review complete; awaiting B390:** VoxCPM2 #461: all 19 comments
+   reviewed. VAE initialization explains 76.4% of the historical VAE increase;
+   its old upload timer included host permutation. Split those timings without
+   changing inference. Existing context caches and batched prefill are confirmed.
+   Preserve ten steps; no speed claim from eight-step logs or another GPU.
+   [Evidence and exact B390 capture](docs/voxcpm2-b390-review-2026-10-26.md).
+5. **In progress:** MUSA: review applicable SDK permissions, runner availability and runtime-image
    validation; no standard-hosted SDK execution or unqualified image publication.
 6. Nyra #456: resolve/review research and generated-output terms before any port
    or redistribution. Keep deferred unless appropriate rights are established.
