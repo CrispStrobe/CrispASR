@@ -86,6 +86,10 @@ printf 'passed\n' > /out/wkv-result.txt
 resources
 cmake --build /out/build --parallel 2 --target crispasr-cli 2>&1 | tee /out/full-build.log
 test -x /out/build/bin/crispasr
+# CMake regenerates source-tree package version metadata; compiled sources must
+# still match the qualified tag exactly.
+git -C /src diff --exit-code -- src include examples > /out/source-diff.txt
+git -C /src/ggml diff --exit-code -- src include >> /out/source-diff.txt
 find /out/build -name 'libggml-musa.so*' -type f -exec sha256sum {} + > /out/musa-libraries.txt
 test -s /out/musa-libraries.txt
 sha256sum /out/build/bin/crispasr > /out/cli-sha256.txt

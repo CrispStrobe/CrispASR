@@ -52,7 +52,7 @@ jobs:
         run: |
           set -euo pipefail
           docker run --rm --cpus=2 --memory=6g \
-            -v "$GITHUB_WORKSPACE:/src:ro" \
+            -v "$GITHUB_WORKSPACE:/src" \
             -v "$RUNNER_TEMP/musa52:/out" \
             --entrypoint /bin/bash "$SDK_IMAGE" \
             /src/.musa-qa/tools/ci-heavy/musa_sdk52_probe.sh
