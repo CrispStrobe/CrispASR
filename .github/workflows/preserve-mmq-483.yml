@@ -13,7 +13,7 @@ concurrency:
 
 jobs:
   preserve:
-    runs-on: macos-15
+    runs-on: macos-latest
     timeout-minutes: 60
     env:
       GH_TOKEN: ${{ github.token }}
