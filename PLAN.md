@@ -24,7 +24,10 @@ Owner: Codex. The user authorized publication of the prepared release.
    keeps tag source unchanged, pins muAlg `e189e81f5` and license SHA256
    `2ac06c9d4c058c9159e16ee8a83b41e3a403cf690fde725e664c2595e5f425a8`,
    builds/tests only on Actions, and publishes only after runtime filesystem
-   gates pass. MUSA GPU inference is not qualified by this packaging recovery.
+   gates pass. Recovery 40303383587 cleared missing headers but MCC 4.2 crashed
+   during upstream WKV code generation. Try the official SDK 4.3 images, pinned
+   by digest, without kernel changes or architecture exclusions. MUSA GPU
+   inference is not qualified by this packaging recovery.
 4. **In progress:** preserve native third-party notices in wheels via pinned
    packaging QA (the tag staging script copies only libraries). Missing, empty, stale and byte-preservation fault controls cover both staging
    and finished wheels; pinned QA staging records every original and staged

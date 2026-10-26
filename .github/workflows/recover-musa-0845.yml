@@ -50,7 +50,10 @@ jobs:
           load: true
           push: false
           tags: crispasr-musa-0845-verified
-          build-args: CRISPASR_BUILD_JOBS=2
+          build-args: |
+            CRISPASR_BUILD_JOBS=2
+            BASE_MUSA_DEV_CONTAINER=mthreads/musa:rc4.3.0-devel-ubuntu22.04-amd64@sha256:e16f5d760bc4946f18d66768b7a69de0e84caa5ccf8f15e759f5626cc8fc1e69
+            BASE_MUSA_RUN_CONTAINER=mthreads/musa:rc4.3.0-runtime-ubuntu22.04-amd64@sha256:7d3dfe1bda6409ab5c67040420171333ee9019fc43bcce299ac2c857db139b69
           labels: |
             org.opencontainers.image.revision=e58bb48b52cf1fe957c19586297c83a2ed0d9fe4
             org.opencontainers.image.version=0.8.45
