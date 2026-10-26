@@ -25,6 +25,13 @@ Owner: Codex. The authorized native/Python/Rust/Dart publication is complete.
 
 ## OPEN — MUSA image compiler blocker (2026-10-26)
 
+Owner: Codex. **In progress:** user authorized the SDK 5.2 experiment. Use the
+official S5000 development image pinned by manifest digest. On Actions, compile
+the unchanged tagged WKV source first, then the full backend/CLI for architecture
+31. Record exact package versions, compiler identity and installed copyright
+files. No image publication, kernel changes or hardware qualification. Older
+architectures remain separate, unqualified targets.
+
 Six Docker flavours published. MUSA is excluded from publication acceptance.
 Adding pinned official muAlg headers and complete MIT/BSD notices cleared the
 missing CUB header, but both MCC 4.2 (40303383587) and MCC 4.3 (40305189068) crash

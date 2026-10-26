@@ -1,0 +1,68 @@
+name: Probe MUSA SDK 5.2
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: probe-musa-sdk52
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    env:
+      SDK_IMAGE: registry.mthreads.com/mcconline/musa_sdk:5.2.0-devel-ubuntu22.04-s5000@sha256:ffb9f46ba25a14d5978b21fe59a7cb804c534a01e5b4a134112d4962a3e3e657
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: v0.8.45
+          submodules: recursive
+          persist-credentials: false
+      - name: Verify unchanged release source
+        run: |
+          test "$(git rev-parse HEAD)" = e58bb48b52cf1fe957c19586297c83a2ed0d9fe4
+          test "$(cat VERSION)" = 0.8.45
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.workflow_sha }}
+          path: .musa-qa
+          persist-credentials: false
+          sparse-checkout-cone-mode: false
+          sparse-checkout: tools/ci-heavy/musa_sdk52_probe.sh
+      - name: Prepare hosted resources
+        run: |
+          set -euo pipefail
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/.ghcup /opt/hostedtoolcache/CodeQL
+          cat /proc/loadavg
+          grep MemAvailable /proc/meminfo
+          df -h /
+          python3 - <<'PY'
+          import shutil
+          assert shutil.disk_usage('/').free >= 30 * 1024**3, 'Need 30 GiB for SDK and build scratch'
+          PY
+          mkdir -p "$RUNNER_TEMP/musa52"
+          printf '%s\n' "$SDK_IMAGE" > "$RUNNER_TEMP/musa52/image.txt"
+          docker pull "$SDK_IMAGE"
+          docker image inspect "$SDK_IMAGE" > "$RUNNER_TEMP/musa52/image-inspect.json"
+      - name: Compile WKV first, then the unchanged full backend
+        run: |
+          set -euo pipefail
+          docker run --rm --cpus=2 --memory=6g \
+            -v "$GITHUB_WORKSPACE:/src:ro" \
+            -v "$RUNNER_TEMP/musa52:/out" \
+            --entrypoint /bin/bash "$SDK_IMAGE" \
+            /src/.musa-qa/tools/ci-heavy/musa_sdk52_probe.sh
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: musa-sdk52-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            ${{ runner.temp }}/musa52/*.txt
+            ${{ runner.temp }}/musa52/*.json
+            ${{ runner.temp }}/musa52/*.log
+            ${{ runner.temp }}/musa52/licenses/
+          retention-days: 30
