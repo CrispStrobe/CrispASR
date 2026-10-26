@@ -7,13 +7,21 @@ Owner: Codex. The user authorized publication of the prepared release.
 1. **Complete:** verified the existing annotated tag, VERSION 0.8.45, current
    glint marker and all fourteen qualified source workflows. Preserve the prepared
    tag target `e58bb48b52cf1fe957c19586297c83a2ed0d9fe4`.
-2. Push `v0.8.45` and publish release notes through the normal release pipeline.
+2. **Complete:** pushed `v0.8.45` and published its release notes. Native
+   release build 40284721476 and wrapper publisher 40284721364 are in flight.
    All compilation runs on hosted Actions; actual CUDA qualification is already
    retained from Kaggle. No local compilation or model inference is required.
-3. Monitor each release platform and wheel producer. Resolve actual packaging
-   failures without replacing successful assets or rebuilding unrelated jobs.
-4. Verify release asset completeness, runtime splits/notices and anonymous
-   downloads; verify the four CPU wheels and sdist published on PyPI against
+3. **In progress:** monitor each release platform and wheel producer. The Rust
+   sys crate uploaded, but the wrapper raced Cargo index propagation after a
+   fixed 30-second sleep. Confirm index visibility and retry only the failed
+   publisher; replace the future wait with bounded exact-version resolution.
+   Preserve successful assets and avoid unrelated rebuilds.
+4. **In progress:** preserve native third-party notices in wheels via pinned
+   packaging QA (the tag staging script copies only libraries). Missing, empty, stale and byte-preservation fault controls cover both staging
+   and finished wheels; hosted wheel jobs must verify every staged notice after
+   building. The local pure-package smoke exceeded its 30-second bound under
+   shared load, so actual package building stays on Actions. Verify release asset
+   completeness, runtime splits/notices and anonymous downloads; verify the four CPU wheels and sdist published on PyPI against
    their producer hashes, plus the CUDA/Vulkan wheel index.
 5. Record final publication receipts and clean up release-note files on main
    only after publication; the tag retains its original notes.

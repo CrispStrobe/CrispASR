@@ -153,9 +153,29 @@ jobs:
           CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
         run: cargo publish --no-verify --manifest-path crispasr-sys/Cargo.toml --allow-dirty
 
-      - name: Wait for crispasr-sys to index
-        if: steps.crate_ver.outputs.sys_exists != 'true'
-        run: sleep 30
+      # The upload API can report success before Cargo's index serves the new
+      # version. A fixed 30-second sleep raced this on v0.8.45. Resolve the exact
+      # dependency with Cargo itself; this downloads metadata, never builds it.
+      - name: Wait for Cargo to resolve crispasr-sys
+        if: steps.crate_ver.outputs.wrap_exists != 'true'
+        env:
+          RELEASE_VERSION: ${{ steps.crate_ver.outputs.version }}
+        run: |
+          set -euo pipefail
+          probe_dir="$(mktemp -d "$RUNNER_TEMP/crispasr-index.XXXXXX")"
+          trap 'rm -rf "$probe_dir"' EXIT
+          mkdir -p "$probe_dir/src"
+          printf '[package]\nname = "crispasr-index-probe"\nversion = "0.0.0"\nedition = "2021"\n[dependencies]\ncrispasr-sys = "=%s"\n' "$RELEASE_VERSION" > "$probe_dir/Cargo.toml"
+          touch "$probe_dir/src/lib.rs"
+          for attempt in $(seq 1 30); do
+            if cargo generate-lockfile --manifest-path "$probe_dir/Cargo.toml"; then
+              echo "Cargo resolves crispasr-sys $RELEASE_VERSION"
+              exit 0
+            fi
+            if [ "$attempt" -lt 30 ]; then sleep 10; fi
+          done
+          echo "::error::Cargo cannot resolve crispasr-sys $RELEASE_VERSION after 30 attempts"
+          exit 1
 
       - name: Publish crispasr
         id: pub_wrap
