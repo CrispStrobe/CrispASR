@@ -229,7 +229,13 @@ class PublicationAuditTest(unittest.TestCase):
     def test_old_asset_removed_only_after_new_public_bytes_verify(self):
         self.asset_transaction(fail_readback=False)
 
-    def asset_transaction(self, fail_readback):
+    def test_transient_rollback_rename_errors_are_retried(self):
+        self.asset_transaction(fail_readback=True, rollback_failures=2)
+
+    def test_lost_promotion_response_is_recovered_by_asset_id(self):
+        self.asset_transaction(fail_readback=False, lost_promotion_response=True)
+
+    def asset_transaction(self, fail_readback, rollback_failures=0, lost_promotion_response=False):
         original = self.tar()
         original_bytes = original.read_bytes()
         old_digest = self.audit.sha_file(original)
@@ -240,6 +246,8 @@ class PublicationAuditTest(unittest.TestCase):
         assets = {1: old.copy()}
         data = {1: original_bytes}
         events = []
+        failures_left = rollback_failures
+        lose_response = lost_promotion_response
 
         def upload(command, **kwargs):
             self.assertNotIn("--clobber", command)
@@ -250,9 +258,21 @@ class PublicationAuditTest(unittest.TestCase):
             events.append("upload-staged")
 
         def rename(asset_id, name):
+            nonlocal failures_left, lose_response
+            if asset_id == 1 and name == old["name"] and failures_left:
+                failures_left -= 1
+                raise OSError("transient rollback rename failure")
             assets[asset_id].update(name=name, browser_download_url="https://example.invalid/" + name)
             events.append(("rename", asset_id, name))
+            if asset_id == 2 and name == old["name"] and lose_response:
+                lose_response = False
+                raise OSError("promotion committed but response lost")
             return assets[asset_id].copy()
+
+        def api(path):
+            if path.startswith("releases/assets/"):
+                return assets[int(path.rsplit("/", 1)[1])].copy()
+            return {"assets": list(assets.values())}
 
         def download(url, destination):
             name = url.split("?", 1)[0].rsplit("/", 1)[1]
@@ -269,10 +289,11 @@ class PublicationAuditTest(unittest.TestCase):
 
         args = argparse.Namespace(tag="v0.8.45")
         with patch.object(self.audit.subprocess, "run", side_effect=upload), \
-                patch.object(self.audit, "api", side_effect=lambda path: {"assets": list(assets.values())}), \
+                patch.object(self.audit, "api", side_effect=api), \
                 patch.object(self.audit, "rename_asset", side_effect=rename), \
                 patch.object(self.audit, "delete_asset", side_effect=delete), \
-                patch.object(self.audit, "download", side_effect=download):
+                patch.object(self.audit, "download", side_effect=download), \
+                patch.object(self.audit.time, "sleep"):
             if fail_readback:
                 with self.assertRaisesRegex(OSError, "readback failed"):
                     self.audit.publish_repaired(args, old, repaired, original, proof, self.root / "proof.json")
@@ -280,6 +301,8 @@ class PublicationAuditTest(unittest.TestCase):
                 self.assertEqual(data[1], original_bytes)
                 self.assertFalse(any(e[0] == "delete" for e in events if isinstance(e, tuple)))
                 self.assertTrue(proof["original_restored"])
+                self.assertFalse(proof["published"])
+                self.assertEqual(proof["recovery_asset_state"]["original"]["name"], old["name"])
             else:
                 self.audit.publish_repaired(args, old, repaired, original, proof, self.root / "proof.json")
                 self.assertNotIn(1, assets)

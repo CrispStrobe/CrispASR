@@ -33,7 +33,8 @@ Owner: Codex. The user authorized publication of the prepared release.
    payload/link/authorization fault controls pass. Independent review added strict
    root notice paths, complete three-DLL CUDA checksums and full/split payload
    equality, native-wheel payload matching, and exact vendored-runtime source
-   attribution. Twenty-eight controls pass. Repairs upload and verify a staged
+   attribution. Thirty controls pass, including bounded recovery after transient rename
+   failures and lost promotion responses. Repairs upload and verify a staged
    replacement before retaining/renaming the original, with rollback on failure;
    the original backup is removed only after canonical readback succeeds. Future
    release packaging now copies those notices before archiving.

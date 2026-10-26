@@ -219,6 +219,25 @@ def delete_asset(asset_id):
                     "--method", "DELETE"], check=True)
 
 
+def rename_asset_verified(asset_id, name):
+    last_error = None
+    for attempt in range(4):
+        try:
+            current = api(f"releases/assets/{asset_id}")
+            if current["name"] == name:
+                return current
+            rename_asset(asset_id, name)
+            current = api(f"releases/assets/{asset_id}")
+            if current["name"] != name:
+                raise RuntimeError("Asset rename did not reach its requested state")
+            return current
+        except Exception as error:
+            last_error = error
+            if attempt < 3:
+                time.sleep(2**attempt)
+    raise RuntimeError(f"Could not confirm asset {asset_id} named {name}") from last_error
+
+
 def publish_repaired(args, asset, repaired, destination, proof, proof_path):
     """Verify staged bytes first, retain the old asset through promotion, and roll back."""
     name = asset["name"]
@@ -236,8 +255,8 @@ def publish_repaired(args, asset, repaired, destination, proof, proof_path):
                  original_asset_id=asset["id"], backup_name=backup_name)
     proof_path.write_text(json.dumps(proof, indent=2) + "\n")
     try:
-        rename_asset(asset["id"], backup_name)
-        fresh = rename_asset(staged["id"], name)
+        rename_asset_verified(asset["id"], backup_name)
+        fresh = rename_asset_verified(staged["id"], name)
         readback = download(fresh["browser_download_url"] + f"?verify={time.time_ns()}", verification)
         assert readback == proof["repaired"]
         assert fresh["digest"] == "sha256:" + readback["sha256"]
@@ -249,15 +268,23 @@ def publish_repaired(args, asset, repaired, destination, proof, proof_path):
         # Both renames are idempotent. Attempt them even if a prior API request
         # committed but its response was lost, so flags cannot hide a partial swap.
         try:
-            rename_asset(staged["id"], staged_name)
+            rename_asset_verified(staged["id"], staged_name)
         except Exception as rollback_error:
             rollback_errors.append(str(rollback_error))
         try:
-            rename_asset(asset["id"], name)
+            rename_asset_verified(asset["id"], name)
             proof["original_restored"] = True
         except Exception as rollback_error:
             rollback_errors.append(str(rollback_error))
-        proof.update(error=str(error), rollback_errors=rollback_errors)
+        state = {}
+        for key, asset_id in [("original", asset["id"]), ("replacement", staged["id"])]:
+            try:
+                current = api(f"releases/assets/{asset_id}")
+                state[key] = dict(id=asset_id, name=current["name"])
+            except Exception as state_error:
+                state[key] = dict(id=asset_id, error=str(state_error))
+        proof.update(published=False, error=str(error), rollback_errors=rollback_errors,
+                     recovery_asset_state=state)
         proof_path.write_text(json.dumps(proof, indent=2) + "\n")
         raise
     # Cleanup is separate from promotion: if deletion fails, the verified new
