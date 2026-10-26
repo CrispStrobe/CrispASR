@@ -1,0 +1,175 @@
+{
+  "complete": false,
+  "source": "964739ac309bde166eb077b1e36960edd18d2724",
+  "device": "cuda",
+  "original_reference_revision": "10e579dedf52a16a159cbc5d35e17f8bffa77190",
+  "original_reference_sha256": "7762f2a73d8ae7dad05d667fbf0bca393a0b3b7ad622b1b1f09473fa8f5d0463",
+  "context_preset": 0,
+  "language": "en-US",
+  "profiles": {
+    "f16": {
+      "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
+      "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
+      "file": "nemotron-3.5-asr-streaming-0.6b-f16.gguf",
+      "sha256": "14cbc98df495d8ab452c6a4ac367136d94ab5da55e73afaa96ba4f749dd95d09",
+      "bytes": 1286368480,
+      "returncode": 0,
+      "profile": "f16",
+      "device": "cuda",
+      "model_sha256": "14cbc98df495d8ab452c6a4ac367136d94ab5da55e73afaa96ba4f749dd95d09",
+      "fresh": {
+        "omnivoice:heavy-37891923274:legacy": "The quick brown fect jumps over the lazy dig.",
+        "omnivoice:heavy-37891923274:output-cleanup": "The quick brown fix jumps over the lazy dig.",
+        "omnivoice:heavy-37891923274:punctuation": "The quick brown fect jumps over the lazy dag.",
+        "omnivoice:heavy-37891923274:reference-cleanup": "The quick brown fix jumps over the lazy dig.",
+        "voxcpm2-original:heavy-37892473946:native-f16-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-original:heavy-37892473946:native-f16-short": "Hello, this is a short test sentence.",
+        "voxcpm2-original:heavy-37892473946:native-q8-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-original:heavy-37892473946:native-q8-short": "Hello, this is a short test sentence.",
+        "voxcpm2-original:heavy-37892473946:python-bf16-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-original:heavy-37892473946:python-bf16-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": "Hello, this is a short test sentence."
+      },
+      "reused": {
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:q8-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-split:mixed-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:q8-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-step-batch:mixed-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:q8-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:vulkan-fused:mixed-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:cuda-fused:q8-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-short": "Hello, this is a short test sentence.",
+        "voxcpm2-gpu:voxcpm2-profile:cuda-fused:mixed-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-original:heavy-37892473946:python-bf16-short": "Hello, this is a short test sentence.",
+        "voxcpm2-original:heavy-37892473946:python-bf16-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-original:heavy-37892473946:native-q8-short": "Hello, this is a short test sentence.",
+        "voxcpm2-original:heavy-37892473946:native-q8-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "voxcpm2-original:heavy-37892473946:native-f16-short": "Hello, this is a short test sentence.",
+        "voxcpm2-original:heavy-37892473946:native-f16-long": "The sun is shining today. Hello, this is a short test sentence.",
+        "omnivoice:heavy-37891923274:reference-cleanup": "The quick brown fix jumps over the lazy dig.",
+        "omnivoice:heavy-37891923274:punctuation": "The quick brown fect jumps over the lazy dag.",
+        "omnivoice:heavy-37891923274:output-cleanup": "The quick brown fix jumps over the lazy dig.",
+        "omnivoice:heavy-37891923274:legacy": "The quick brown fect jumps over the lazy dig."
+      },
+      "actual_cuda": {
+        "mapped_backend": [
+          "/kaggle/temp/nemotron-default-replay/crispasr-linux-x86_64-cuda/libggml-cuda.so"
+        ],
+        "process_allocations": "106, 1330\n",
+        "process_id": 106
+      },
+      "decode_gpu_activity": {
+        "process_id": 106,
+        "active_samples": 15,
+        "evidence": "decode-pmon.txt",
+        "verified": true
+      },
+      "cabi_auto": "The quick brown fect jumps over the lazy dig.",
+      "auto_matches_explicit": true,
+      "original_word_matches": 26,
+      "voxcpm_exact": 22,
+      "state_changes": [],
+      "cli_returncode": 0,
+      "cli_cuda_backend_selection_verified": true,
+      "cli_transcript": "Hello, this is a short test sentence.\n",
+      "cli_original_match": true,
+      "stages": {
+        "mel_spectrogram": {
+          "cosine_min": 0.9999999992172595,
+          "native_norm": 3802.327423724659,
+          "reference_norm": 3802.327812570753,
+          "relative_l2": 1.0037382467243017e-05,
+          "passed": true,
+          "shape": [
+            128,
+            1101
+          ]
+        },
+        "pre_encode_output": {
+          "cosine_min": 0.9999999913268398,
+          "native_norm": 35037.271319947264,
+          "reference_norm": 35037.28117428865,
+          "relative_l2": 4.749317146031641e-05,
+          "passed": true,
+          "shape": [
+            139,
+            1024
+          ]
+        },
+        "encoder_output": {
+          "cosine_min": 0.9999976279152656,
+          "native_norm": 16.613050709011194,
+          "reference_norm": 16.61293235759931,
+          "relative_l2": 0.00028003937974455264,
+          "passed": true,
+          "shape": [
+            139,
+            1024
+          ]
+        }
+      },
+      "accepted": true,
+      "complete": true,
+      "cuda_backend_selection_verified": true
+    },
+    "registry-q4": {
+      "repo": "cstr/nemotron-3.5-asr-streaming-0.6b-GGUF",
+      "revision": "f6f18e48c30035807b6ca0cdb965654fa02dbf69",
+      "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf",
+      "sha256": "22480dd283a3bf1b39e9d2ab86c048b0c1654b2fc280e46627a4cbfded4b46fd",
+      "bytes": 408557984,
+      "returncode": 1,
+      "profile": "registry-q4",
+      "device": "cuda",
+      "model_sha256": "22480dd283a3bf1b39e9d2ab86c048b0c1654b2fc280e46627a4cbfded4b46fd",
+      "fresh": {},
+      "reused": {},
+      "actual_cuda": {
+        "mapped_backend": [
+          "/kaggle/temp/nemotron-default-replay/crispasr-linux-x86_64-cuda/libggml-cuda.so"
+        ],
+        "process_allocations": "148, 492\n",
+        "process_id": 148
+      },
+      "cuda_backend_selection_verified": true
+    }
+  },
+  "defaults_changed": false,
+  "stage_gates": {
+    "cosine_min": 0.999,
+    "relative_l2_max": 0.01
+  },
+  "stage_attention": "native diagnostic default",
+  "session_attention": "existing Session default",
+  "original_model_rerun": false,
+  "library_sha256": "84757a3fb3878ec981433fd08deeac5af034254a1f00e5b4789aec1f0e6eed28",
+  "cli_sha256": "f5102b39ea7772464d559fed33ef815237b3fa318080624d0a0b9c793d68276f",
+  "reference_gguf": {
+    "revision": "cb678dfd4806778aa55c39fe7b7a710a54cdc153",
+    "path": "nemotron-3.5-asr-streaming-0.6b/ref.gguf",
+    "sha256": "0185cf75f4d8d22f788362dcfde326d109f5798f5779132d91fc857c45e46ef1"
+  },
+  "current_default_accepted": false
+}

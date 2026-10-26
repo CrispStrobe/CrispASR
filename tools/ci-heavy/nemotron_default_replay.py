@@ -204,13 +204,16 @@ def replay(args):
                     ['nvidia-smi', '--id=0', '--query-compute-apps=pid,used_gpu_memory',
                      '--format=csv,noheader,nounits'], text=True)
                 result['actual_cuda'] = dict(mapped_backend=mapped, process_allocations=allocations,
-                                             process_id=os.getpid())
+                                             process_id=os.getpid(),
+                                             minimum_process_allocation_mib=(model.stat().st_size + 1024**2 - 1) // 1024**2,
+                                             allocation_scope='own-process total CUDA memory; not isolated weight bytes')
                 save()
                 assert mapped, 'Actual CUDA backend is not mapped'
                 sizes = [float(line.split(',')[-1].strip()) for line in allocations.splitlines()
                          if re.fullmatch(r'\s*\d+\s*,\s*[0-9.]+\s*', line)
                          and int(line.split(',')[0].strip()) == os.getpid()]
-                assert sizes and max(sizes) >= 512, 'Model CUDA allocation not established'
+                assert sizes and max(sizes) >= result['actual_cuda']['minimum_process_allocation_mib'], (
+                    'Own-process CUDA allocation is smaller than the pinned model file')
             result['fresh'][label] = ' '.join(x.text for x in s.transcribe(pcm(label), language='en-US'))
         save()
     with session() as s:

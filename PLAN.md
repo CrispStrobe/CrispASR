@@ -27,6 +27,15 @@ record external dependencies without speculative fixes or unsupported closure.
    and the resulting default policy remain pending. The first artifact's
    accidental model links are excluded from bounded local collection; remote
    recovery 40383267861 will verify the full archive before duplicate cleanup.
+   Actual T4 CUDA version 1 completes the full F16 control (26/26, 22/22, all
+   stages passing, 15 own-process SM samples during decode). Its Q4 arm stops
+   before inference because the harness imposed an arbitrary 512 MiB process
+   allocation floor; the compact model allocates 492 MiB. The
+   [unmodified partial receipt](docs/nemotron-default-replay-2026-10-26-cuda-v1.json)
+   is not a completed CUDA Q4 verdict. All 17 output files and terminal logs
+   are archived. Corrected proof requires own-process allocation at least the
+   model file's size, plus the unchanged post-initialization SM, transcript and
+   stage/magnitude gates. A corrected version 2 remains required before policy.
 2. Canary #532: review/obtain the exact failing clip, assertion and device/build
    context; retain the unreproduced status if these remain unavailable.
 3. CUDA/MMQ #483: preserve the original matched packages and notices before
