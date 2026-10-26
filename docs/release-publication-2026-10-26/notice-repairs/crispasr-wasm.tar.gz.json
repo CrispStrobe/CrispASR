@@ -1,0 +1,44 @@
+{
+  "asset": "crispasr-wasm.tar.gz",
+  "original": {
+    "bytes": 4611687,
+    "sha256": "1837dce4ec211164da090200559ab017a21303a1a8c8dfead9b7057426304d4b"
+  },
+  "repaired": {
+    "bytes": 4595296,
+    "sha256": "7fd13323d33d385ce8ae972c4078fafc5757ecd46b8802ce39a4463da3d28a3a"
+  },
+  "added": [
+    "crispasr-wasm/LICENSE",
+    "crispasr-wasm/THIRD_PARTY_NOTICES.txt"
+  ],
+  "all_original_members_byte_identical": true,
+  "original_members": {
+    "crispasr-wasm/libwhisper.js": {
+      "bytes": 148460,
+      "sha256": "ee9ecb298997b140c078eea56ffaf5c49ada22eea859c20e02b83518bd447d1e",
+      "mode": 420
+    },
+    "crispasr-wasm/libwhisper.wasm": {
+      "bytes": 12696819,
+      "sha256": "1de259c751fb53744736e67ccf6b2c09bbb410ca3206398fd90c7dacb4f1c705",
+      "mode": 493
+    },
+    "crispasr-wasm/README.txt": {
+      "bytes": 443,
+      "sha256": "9c3d8382b6ca13a685455fd2829bd3820ece00a6dd9b81db62f0222b85419cf6",
+      "mode": 420
+    }
+  },
+  "published": true,
+  "staged_asset_id": 677762407,
+  "staged_bytes_verified": true,
+  "original_asset_id": 677727909,
+  "backup_name": "crispasr-wasm.tar.gz.notice-backup-1837dce4ec211164",
+  "final_asset_id": 677762407,
+  "anonymous_readback": {
+    "bytes": 4595296,
+    "sha256": "7fd13323d33d385ce8ae972c4078fafc5757ecd46b8802ce39a4463da3d28a3a"
+  },
+  "original_backup_removed_after_verification": true
+}

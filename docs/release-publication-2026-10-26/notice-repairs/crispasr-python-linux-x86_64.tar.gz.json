@@ -1,0 +1,79 @@
+{
+  "asset": "crispasr-python-linux-x86_64.tar.gz",
+  "original": {
+    "bytes": 11125156,
+    "sha256": "fb2b6be602a81033f32fec61af71f926ba4b4f5fcc580bd0f575d5c538f9dae8"
+  },
+  "repaired": {
+    "bytes": 11081383,
+    "sha256": "0f98569a8d0934040d7dd183b53fe31ad3d3b1622bc6070672167a2f867fee10"
+  },
+  "added": [
+    "crispasr-python-linux-x86_64/LICENSE",
+    "crispasr-python-linux-x86_64/THIRD_PARTY_NOTICES.txt"
+  ],
+  "all_original_members_byte_identical": true,
+  "original_members": {
+    "crispasr-python-linux-x86_64/crispasr/libblas.so.3": {
+      "bytes": 682336,
+      "sha256": "3c6c6a97e7aafe31de18cde8bd5066860d08591e71e6f2b6f750ef488df61c6d",
+      "mode": 420
+    },
+    "crispasr-python-linux-x86_64/crispasr/libggml-cpu.so": {
+      "bytes": 1441848,
+      "sha256": "c8c32dac255aa65de94f3395e4b29957032c2c74b791875ba30bf44fb5df93da",
+      "mode": 493
+    },
+    "crispasr-python-linux-x86_64/crispasr/libwhisper.so": {
+      "bytes": 25397104,
+      "sha256": "211b43c9cdcff9eb7474bda0d707eff9a4bfa7eb156dc4310b7d1c545787dd5b",
+      "mode": 493
+    },
+    "crispasr-python-linux-x86_64/crispasr/libcrispasr.so": {
+      "link": "libwhisper.so",
+      "mode": 511,
+      "link_type": "symlink"
+    },
+    "crispasr-python-linux-x86_64/crispasr/__init__.py": {
+      "bytes": 3090,
+      "sha256": "52f77063194870c82a12f7039930cbe95b434c5655f69f854c8fb9a49c551ae8",
+      "mode": 493
+    },
+    "crispasr-python-linux-x86_64/crispasr/libgomp.so.1": {
+      "bytes": 317376,
+      "sha256": "4427bcbbc6faac6eaa4e8906ea4668e1615c9cfdff442549a8f5b49c3639217f",
+      "mode": 420
+    },
+    "crispasr-python-linux-x86_64/crispasr/_binding.py": {
+      "bytes": 245698,
+      "sha256": "6be7b5d1c929ee7f3bdb7956d8fa5ece1650224f83e7c37dead5e35a34e07219",
+      "mode": 493
+    },
+    "crispasr-python-linux-x86_64/crispasr/libggml.so": {
+      "bytes": 59736,
+      "sha256": "c0eca59cfee59af3ecfcda0cbfe80a141dadddd86e18fb316ca5d96a320e1957",
+      "mode": 493
+    },
+    "crispasr-python-linux-x86_64/crispasr/libcrispasr_helpers.so": {
+      "bytes": 15688,
+      "sha256": "0251dd50033ea8304c6816a5a8f1b9beeaeeb4ceaef9c62877779095a89887d9",
+      "mode": 493
+    },
+    "crispasr-python-linux-x86_64/crispasr/libggml-base.so": {
+      "bytes": 983808,
+      "sha256": "478849828231315d9a6504f2f5df09a148d5431a906535e6c34a2f19f8291fe5",
+      "mode": 493
+    }
+  },
+  "published": true,
+  "staged_asset_id": 677756682,
+  "staged_bytes_verified": true,
+  "original_asset_id": 677727940,
+  "backup_name": "crispasr-python-linux-x86_64.tar.gz.notice-backup-fb2b6be602a81033",
+  "final_asset_id": 677756682,
+  "anonymous_readback": {
+    "bytes": 11081383,
+    "sha256": "0f98569a8d0934040d7dd183b53fe31ad3d3b1622bc6070672167a2f867fee10"
+  },
+  "original_backup_removed_after_verification": true
+}

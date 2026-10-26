@@ -1,0 +1,74 @@
+{
+  "asset": "crispasr-python-linux-arm64.tar.gz",
+  "original": {
+    "bytes": 10002213,
+    "sha256": "61e1ee874b5171f8a4550ebb49930363d6bf1eae3bcf049e31ae3bdc94650b91"
+  },
+  "repaired": {
+    "bytes": 9996880,
+    "sha256": "91323542041b19717e1d36e57adb93d4954c592590f985da443b50ee23d57293"
+  },
+  "added": [
+    "crispasr-python-linux-arm64/LICENSE",
+    "crispasr-python-linux-arm64/THIRD_PARTY_NOTICES.txt"
+  ],
+  "all_original_members_byte_identical": true,
+  "original_members": {
+    "crispasr-python-linux-arm64/crispasr/libcrispasr_helpers.so": {
+      "bytes": 8520,
+      "sha256": "e68ca4075ce9d1da1689cbf556cee74bc630648b8389f5c4d7c9c35586ae1ad3",
+      "mode": 493
+    },
+    "crispasr-python-linux-arm64/crispasr/libggml-cpu.so": {
+      "bytes": 1036696,
+      "sha256": "bcb5ead684eb6a4e0c63561de5ef789df106cbf3cfe5c481171dc907349496ff",
+      "mode": 493
+    },
+    "crispasr-python-linux-arm64/crispasr/__init__.py": {
+      "bytes": 3090,
+      "sha256": "52f77063194870c82a12f7039930cbe95b434c5655f69f854c8fb9a49c551ae8",
+      "mode": 493
+    },
+    "crispasr-python-linux-arm64/crispasr/libcrispasr.so": {
+      "link": "libwhisper.so",
+      "mode": 511,
+      "link_type": "symlink"
+    },
+    "crispasr-python-linux-arm64/crispasr/libgomp.so.1": {
+      "bytes": 346008,
+      "sha256": "2f1325e52f648a1b0c78d840ffb2d1435c700f505c8b3a5e42a90dff26684d41",
+      "mode": 420
+    },
+    "crispasr-python-linux-arm64/crispasr/libwhisper.so": {
+      "bytes": 23032104,
+      "sha256": "6fadb126c8e9b697a60cfe26d08d1dd65cd351fb4aec42a4cb0994ec0f394b96",
+      "mode": 493
+    },
+    "crispasr-python-linux-arm64/crispasr/libggml.so": {
+      "bytes": 48856,
+      "sha256": "a8a72c820bdecac6577ed2b77f5d56fd522615daef7ef428fd89a88dfb9117c6",
+      "mode": 493
+    },
+    "crispasr-python-linux-arm64/crispasr/libggml-base.so": {
+      "bytes": 893680,
+      "sha256": "0461830a232c7956af3c83a3f8ce13f77f80cd9eefb37a9203539dad60006a8b",
+      "mode": 493
+    },
+    "crispasr-python-linux-arm64/crispasr/_binding.py": {
+      "bytes": 245698,
+      "sha256": "6be7b5d1c929ee7f3bdb7956d8fa5ece1650224f83e7c37dead5e35a34e07219",
+      "mode": 493
+    }
+  },
+  "published": true,
+  "staged_asset_id": 677756212,
+  "staged_bytes_verified": true,
+  "original_asset_id": 677727922,
+  "backup_name": "crispasr-python-linux-arm64.tar.gz.notice-backup-61e1ee874b5171f8",
+  "final_asset_id": 677756212,
+  "anonymous_readback": {
+    "bytes": 9996880,
+    "sha256": "91323542041b19717e1d36e57adb93d4954c592590f985da443b50ee23d57293"
+  },
+  "original_backup_removed_after_verification": true
+}

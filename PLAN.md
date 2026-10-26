@@ -1,57 +1,38 @@
 # CrispASR — Pending work
 
-## NOW — Publish and verify 0.8.45 (2026-10-26)
+## Published and verified — 0.8.45 (2026-10-26)
 
-Owner: Codex. The user authorized publication of the prepared release.
+Owner: Codex. The authorized native/Python/Rust/Dart publication is complete.
+[Permanent publication receipt](docs/release-publication-2026-10-26.json).
 
-1. **Complete:** verified the existing annotated tag, VERSION 0.8.45, current
-   glint marker and all fourteen qualified source workflows. Preserve the prepared
-   tag target `e58bb48b52cf1fe957c19586297c83a2ed0d9fe4`.
-2. **Complete:** pushed `v0.8.45` and published its release notes. Native
-   release build 40284721476 and wrapper publisher 40284721364 are in flight.
-   All compilation runs on hosted Actions; actual CUDA qualification is already
-   retained from Kaggle. No local compilation or model inference is required.
-3. **In progress:** monitor each release platform and wheel producer. The Rust
-   sys crate uploaded, but the wrapper raced Cargo index propagation after a
-   fixed 30-second sleep. Confirm index visibility and retry only the failed
-   publisher; replace the future wait with bounded exact-version resolution.
-   Preserve successful assets and avoid unrelated rebuilds. Six Docker flavours
-   published; MUSA alone failed because the SDK image lacks CUB headers. Supply
-   Moore Threads' pinned official muAlg headers and their complete MIT/BSD
-   notices, preserve existing kernels, and rebuild only that image on Actions.
-   Its runtime must also retain the shared-library tree, entrypoint and project
-   notices. Recovery
-   keeps tag source unchanged, pins muAlg `e189e81f5` and license SHA256
-   `2ac06c9d4c058c9159e16ee8a83b41e3a403cf690fde725e664c2595e5f425a8`,
-   builds/tests only on Actions, and publishes only after runtime filesystem
-   gates pass. Recovery 40303383587 cleared missing headers but MCC 4.2 crashed
-   during upstream WKV code generation. Try the official SDK 4.3 images, pinned
-   by digest, without kernel changes or architecture exclusions. MUSA GPU
-   inference is not qualified by this packaging recovery.
-4. **In progress:** preserve native third-party notices in wheels via pinned
-   packaging QA (the tag staging script copies only libraries). Missing, empty, stale and byte-preservation fault controls cover both staging
-   and finished wheels; pinned QA staging records every original and staged
-   library identity, including newly vendored DSOs outside ldconfig. Runtime
-   package sources and headers remain at the qualified tag. Hosted wheel jobs
-   must verify every staged notice after
-   building. The local pure-package smoke exceeded its 30-second bound under
-   shared load, so actual package building stays on Actions. Verify release asset
-   completeness, runtime splits/notices and anonymous downloads, plus bounded
-   portable Linux CLI version and C ABI library-load checks on Actions; verify the four CPU wheels and sdist published on PyPI against
-   their producer hashes, plus the CUDA/Vulkan wheel index.
-   Readback tooling also repairs missing project notices in the two legacy
-   Linux Python archives, WASM and xcframework archives after the native producer
-   finishes, preserving every original member, file mode and symlink. Six
-   payload/link/authorization fault controls pass. Independent review added strict
-   root notice paths, complete three-DLL CUDA checksums and full/split payload
-   equality, native-wheel payload matching, and exact vendored-runtime source
-   attribution. Thirty controls pass, including bounded recovery after transient rename
-   failures and lost promotion responses. Repairs upload and verify a staged
-   replacement before retaining/renaming the original, with rollback on failure;
-   the original backup is removed only after canonical readback succeeds. Future
-   release packaging now copies those notices before archiving.
-5. Record final publication receipts and clean up release-note files on main
-   only after publication; the tag retains its original notes.
+- The original annotated tag and source `e58bb48b5` are preserved. Native producer
+  40284721476 and wrapper publisher 40284721364 passed; anonymous registry reads
+  matched the tagged source files.
+- Native audit 40304161701 verified all 50 public assets, CUDA runtime checksums
+  and full/split payloads, notices, portable CLI version and C ABI loading.
+  Four notice-only repairs preserve all 130 original members, modes and links.
+  The full member inventory and repair proofs are retained in the repository.
+- Wheel producer 40303514758 passed all eight distributions and both publishers.
+  Final audit 40313434985 verified the original four CPU wheels and sdist against
+  full PyPI reads, all three GPU wheel downloads and live CUDA/Vulkan indexes,
+  tagged package sources, notice manifests and qualified native library hashes.
+  The first audit correctly rejected the stale index before Pages deployment;
+  no package rebuild or re-upload was needed. Pages 40306957371 passed.
+- Release-body readback matches. The current root release-note copy was removed
+  after publication; the immutable tag retains its original notes. Thirty
+  packaging/repair fault controls passed. No local compilation or inference ran
+  during publication; existing Kaggle evidence qualifies the unchanged NN source.
+
+## OPEN — MUSA image compiler blocker (2026-10-26)
+
+Six Docker flavours published. MUSA is excluded from publication acceptance.
+Adding pinned official muAlg headers and complete MIT/BSD notices cleared the
+missing CUB header, but both MCC 4.2 (40303383587) and MCC 4.3 (40305189068) crash
+in `rwkv_wkv7_f32<128>` with `MTGPUISD::FRAME_LOAD`. Neither recovery published an
+image. The default SDK remains 4.2; the recovery recipe retains the tested 4.3
+image digests and exact dependency revision. A compatible compiler or separately
+qualified upstream fix is needed. No kernel changes, architecture exclusions or
+MUSA hardware inference claims.
 
 ## NOW — 0.8.45 prepared; external evidence pending (2026-10-25)
 
@@ -82,7 +63,7 @@ final-source workflows passed before the closure review and fresh issue/PR sweep
    available through 2026-11-07. No speculative resolution or license grant.
 4. **Complete: integration and 0.8.45 preparation.** The repository version script
    prepared version metadata and local annotated tag `v0.8.45`, targeting
-   `e58bb48b52cf1fe957c19586297c83a2ed0d9fe4`. The tag and release are unpublished.
+   `e58bb48b52cf1fe957c19586297c83a2ed0d9fe4`. Publication is recorded in the section above.
    All fourteen workflows on that source pass: compiler CI, lint, deep analysis,
    regression, WASM, six binding ABI contracts, secret scan, Docker smoke, Ruby,
    Rust, Dart, CTC alignment, Metal cache and Pages. CI selects 2,100 CTest cases

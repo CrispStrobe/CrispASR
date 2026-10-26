@@ -1,8 +1,8 @@
 ARG UBUNTU_VERSION=22.04
 # This needs to generally match the container host's environment.
-# MCC 4.2 crashes in the upstream WKV kernel's code generation. Use the newer
-# official SDK without changing kernels or restricting supported architectures.
-ARG MUSA_VERSION=rc4.3.0
+# Both public SDK 4.2 and 4.3 currently hit an upstream WKV compiler error.
+# The release recovery records that blocker; do not silently alter kernels.
+ARG MUSA_VERSION=rc4.2.0
 # Target the MUSA build image
 ARG BASE_MUSA_DEV_CONTAINER=mthreads/musa:${MUSA_VERSION}-devel-ubuntu${UBUNTU_VERSION}-amd64
 # Target the MUSA runtime image

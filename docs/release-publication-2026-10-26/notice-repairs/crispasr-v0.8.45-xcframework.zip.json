@@ -1,0 +1,569 @@
+{
+  "asset": "crispasr-v0.8.45-xcframework.zip",
+  "original": {
+    "bytes": 633508176,
+    "sha256": "dc00091bc2ab47ceed185905e1a76f69253a3f8b2ac5f910eb7dccee716ac2d8"
+  },
+  "repaired": {
+    "bytes": 633387511,
+    "sha256": "db1b4d60e7a96a796e421847b74e934a3913dea6533d448d71c2ff4a7a0e34dd"
+  },
+  "added": [
+    "crispasr.xcframework/LICENSE",
+    "crispasr.xcframework/THIRD_PARTY_NOTICES.txt"
+  ],
+  "all_original_members_byte_identical": true,
+  "original_members": {
+    "crispasr.xcframework/tvos-arm64/crispasr.framework/crispasr": {
+      "bytes": 24249824,
+      "sha256": "696cbde3a239789ee75d498d92a2d9ce13fc0846fdddf0d7541a0dc2c4f52ebc",
+      "mode": 2179792896
+    },
+    "crispasr.xcframework/tvos-arm64/crispasr.framework/Headers/ggml-blas.h": {
+      "bytes": 586,
+      "sha256": "e76cb8594dc9866d99e7d63191b9fff6ab8b50244b4a28ce3af0f962964a6b5b",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64/crispasr.framework/Headers/ggml-backend.h": {
+      "bytes": 25776,
+      "sha256": "5791edae1fb7622027621d15bc7a160198bd3b75ed8f96d06cb7b85e2b873756",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64/crispasr.framework/Headers/crispasr.h": {
+      "bytes": 61740,
+      "sha256": "b223c04d0124cbb3886fa91586ceeceba3f87ac5c114002efc28b482f834c74c",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64/crispasr.framework/Headers/ggml-alloc.h": {
+      "bytes": 3689,
+      "sha256": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64/crispasr.framework/Headers/ggml-metal.h": {
+      "bytes": 2141,
+      "sha256": "322f36cd30f3e9e7aad7b5b9bc63078012fd0b7706ac4e24f5721b604f3d8980",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64/crispasr.framework/Headers/ggml-cpu.h": {
+      "bytes": 7753,
+      "sha256": "316279e004cdeb8e6ef78599acb602bf79a8abdf897fed9fd1914808c1518c6e",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64/crispasr.framework/Headers/gguf.h": {
+      "bytes": 11355,
+      "sha256": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64/crispasr.framework/Headers/ggml.h": {
+      "bytes": 118603,
+      "sha256": "aaaa78cbe07ca83d5d1f972161a8c4b24ecf0f441e0b2d211f1ee7484a26f478",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64/crispasr.framework/Modules/module.modulemap": {
+      "bytes": 344,
+      "sha256": "c5ab9a27f93abfd8f9374fc5b0af761602ba648275b34f2dd98b40b432122edd",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64/crispasr.framework/Info.plist": {
+      "bytes": 1064,
+      "sha256": "c7718264f5575f1fcf4f891c376a79033a144b78bc3ba4acd7d0cea0d05f96d2",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64/dSYMs/crispasr.dSYM/Contents/Resources/Relocations/aarch64/crispasr.yml": {
+      "bytes": 4201852,
+      "sha256": "0fc9238bc756602501682e3a4dbd9a0e45b9164e804aa12fff50a5458318a2ce",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64/dSYMs/crispasr.dSYM/Contents/Resources/DWARF/crispasr": {
+      "bytes": 166164024,
+      "sha256": "5378e97e213e08db28e1d828062c0e9d27a9e6d4846c88c40310f656b601d9f1",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64/dSYMs/crispasr.dSYM/Contents/Info.plist": {
+      "bytes": 646,
+      "sha256": "ea97bd6b86366849461f9dbd86e04996a17ff29c1c9c5379dcf7dc91be1aee86",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/crispasr.framework/crispasr": {
+      "bytes": 51604576,
+      "sha256": "7a1ca16eb77df8fbbbcb95742029093c6e784bdd7b549dc3c548e64223205c9b",
+      "mode": 2179792896
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-blas.h": {
+      "bytes": 586,
+      "sha256": "e76cb8594dc9866d99e7d63191b9fff6ab8b50244b4a28ce3af0f962964a6b5b",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-backend.h": {
+      "bytes": 25776,
+      "sha256": "5791edae1fb7622027621d15bc7a160198bd3b75ed8f96d06cb7b85e2b873756",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/crispasr.framework/Headers/crispasr.h": {
+      "bytes": 61740,
+      "sha256": "b223c04d0124cbb3886fa91586ceeceba3f87ac5c114002efc28b482f834c74c",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-alloc.h": {
+      "bytes": 3689,
+      "sha256": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-metal.h": {
+      "bytes": 2141,
+      "sha256": "322f36cd30f3e9e7aad7b5b9bc63078012fd0b7706ac4e24f5721b604f3d8980",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-cpu.h": {
+      "bytes": 7753,
+      "sha256": "316279e004cdeb8e6ef78599acb602bf79a8abdf897fed9fd1914808c1518c6e",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/crispasr.framework/Headers/gguf.h": {
+      "bytes": 11355,
+      "sha256": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/crispasr.framework/Headers/ggml.h": {
+      "bytes": 118603,
+      "sha256": "aaaa78cbe07ca83d5d1f972161a8c4b24ecf0f441e0b2d211f1ee7484a26f478",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/crispasr.framework/Modules/module.modulemap": {
+      "bytes": 344,
+      "sha256": "c5ab9a27f93abfd8f9374fc5b0af761602ba648275b34f2dd98b40b432122edd",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/crispasr.framework/Info.plist": {
+      "bytes": 1064,
+      "sha256": "c7718264f5575f1fcf4f891c376a79033a144b78bc3ba4acd7d0cea0d05f96d2",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/dSYMs/crispasr.dSYM/Contents/Resources/Relocations/aarch64/crispasr.yml": {
+      "bytes": 4190644,
+      "sha256": "540f1b42eed7d4e77b5d0fa4fbca7c0baec14d1f724e2f8d2a157b07b66aa47b",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/dSYMs/crispasr.dSYM/Contents/Resources/Relocations/x86_64/crispasr.yml": {
+      "bytes": 3644404,
+      "sha256": "574e98694cb6e1db9ce9e6ba11274f3302290588267b896f8c4852c2b93609a4",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/dSYMs/crispasr.dSYM/Contents/Resources/DWARF/crispasr": {
+      "bytes": 335136804,
+      "sha256": "fcbd34e015d091f3802d6547002d87851905cb12267558dcdb9f619cd7c8d2f5",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/tvos-arm64_x86_64-simulator/dSYMs/crispasr.dSYM/Contents/Info.plist": {
+      "bytes": 646,
+      "sha256": "ea97bd6b86366849461f9dbd86e04996a17ff29c1c9c5379dcf7dc91be1aee86",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Resources": {
+      "bytes": 26,
+      "sha256": "59991b51b8ee15b59f07ec45942957a4ce90494257766964f5df60b7c7998e42",
+      "mode": 2716663808
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Versions/A/Resources/Info.plist": {
+      "bytes": 972,
+      "sha256": "ee3d1831463e4f393728cbdd0fbe816a33d7264c348d49f78fbe499654746455",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Versions/A/crispasr": {
+      "bytes": 51805296,
+      "sha256": "c40277e32173ee0ee7836ad7623615cf8791b7a85c6e2bd7ce83bdb5a75d2764",
+      "mode": 2179792896
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Versions/A/Headers/ggml-blas.h": {
+      "bytes": 586,
+      "sha256": "e76cb8594dc9866d99e7d63191b9fff6ab8b50244b4a28ce3af0f962964a6b5b",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Versions/A/Headers/ggml-backend.h": {
+      "bytes": 25776,
+      "sha256": "5791edae1fb7622027621d15bc7a160198bd3b75ed8f96d06cb7b85e2b873756",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Versions/A/Headers/crispasr.h": {
+      "bytes": 61740,
+      "sha256": "b223c04d0124cbb3886fa91586ceeceba3f87ac5c114002efc28b482f834c74c",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Versions/A/Headers/ggml-alloc.h": {
+      "bytes": 3689,
+      "sha256": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Versions/A/Headers/ggml-metal.h": {
+      "bytes": 2141,
+      "sha256": "322f36cd30f3e9e7aad7b5b9bc63078012fd0b7706ac4e24f5721b604f3d8980",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Versions/A/Headers/ggml-cpu.h": {
+      "bytes": 7753,
+      "sha256": "316279e004cdeb8e6ef78599acb602bf79a8abdf897fed9fd1914808c1518c6e",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Versions/A/Headers/gguf.h": {
+      "bytes": 11355,
+      "sha256": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Versions/A/Headers/ggml.h": {
+      "bytes": 118603,
+      "sha256": "aaaa78cbe07ca83d5d1f972161a8c4b24ecf0f441e0b2d211f1ee7484a26f478",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Versions/A/Modules/module.modulemap": {
+      "bytes": 344,
+      "sha256": "c5ab9a27f93abfd8f9374fc5b0af761602ba648275b34f2dd98b40b432122edd",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Versions/Current": {
+      "bytes": 1,
+      "sha256": "559aead08264d5795d3909718cdd05abd49572e84fe55590eef31a88a08fdffd",
+      "mode": 2716663808
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/crispasr": {
+      "bytes": 25,
+      "sha256": "879f84104a6021fae495424cb79a0c1db0bb059c2a18be9f1b38eed0f4b213c0",
+      "mode": 2716663808
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Headers": {
+      "bytes": 24,
+      "sha256": "2e7459ad2a0fe8f04a961c353c2c65f76a7081836ad76265c47e0cc08ed0a737",
+      "mode": 2716663808
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/crispasr.framework/Modules": {
+      "bytes": 24,
+      "sha256": "5654ed24a88b2873ef353738bc450794670107f7d13295c2e63f6affd4eb2fd8",
+      "mode": 2716663808
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/dSYMs/crispasr.dSYM/Contents/Resources/Relocations/aarch64/crispasr.yml": {
+      "bytes": 4210371,
+      "sha256": "afce5e2e281ec71e56adc99274017bdc5d43231057e2d087fa3cf3ceedf92ee1",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/dSYMs/crispasr.dSYM/Contents/Resources/Relocations/x86_64/crispasr.yml": {
+      "bytes": 3661488,
+      "sha256": "56b203e54ac1b85fbcfd97469f0ed4080e8c4e9a928c615c1527109c438b57c3",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/dSYMs/crispasr.dSYM/Contents/Resources/DWARF/crispasr": {
+      "bytes": 335846315,
+      "sha256": "0d6debd197cd4c3b6700789cdd3d2704a465171cc633ee551480d83a1b210d42",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/macos-arm64_x86_64/dSYMs/crispasr.dSYM/Contents/Info.plist": {
+      "bytes": 646,
+      "sha256": "ea97bd6b86366849461f9dbd86e04996a17ff29c1c9c5379dcf7dc91be1aee86",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/crispasr.framework/crispasr": {
+      "bytes": 51687488,
+      "sha256": "b2ba021d904737d86ac6ba6f19ca1d31fa7053baadba800ec85a6aa35cd75f99",
+      "mode": 2179792896
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-blas.h": {
+      "bytes": 586,
+      "sha256": "e76cb8594dc9866d99e7d63191b9fff6ab8b50244b4a28ce3af0f962964a6b5b",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-backend.h": {
+      "bytes": 25776,
+      "sha256": "5791edae1fb7622027621d15bc7a160198bd3b75ed8f96d06cb7b85e2b873756",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/crispasr.framework/Headers/crispasr.h": {
+      "bytes": 61740,
+      "sha256": "b223c04d0124cbb3886fa91586ceeceba3f87ac5c114002efc28b482f834c74c",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-alloc.h": {
+      "bytes": 3689,
+      "sha256": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-metal.h": {
+      "bytes": 2141,
+      "sha256": "322f36cd30f3e9e7aad7b5b9bc63078012fd0b7706ac4e24f5721b604f3d8980",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-cpu.h": {
+      "bytes": 7753,
+      "sha256": "316279e004cdeb8e6ef78599acb602bf79a8abdf897fed9fd1914808c1518c6e",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/crispasr.framework/Headers/gguf.h": {
+      "bytes": 11355,
+      "sha256": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/crispasr.framework/Headers/ggml.h": {
+      "bytes": 118603,
+      "sha256": "aaaa78cbe07ca83d5d1f972161a8c4b24ecf0f441e0b2d211f1ee7484a26f478",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/crispasr.framework/Modules/module.modulemap": {
+      "bytes": 344,
+      "sha256": "c5ab9a27f93abfd8f9374fc5b0af761602ba648275b34f2dd98b40b432122edd",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/crispasr.framework/Info.plist": {
+      "bytes": 1090,
+      "sha256": "4e8a1830e6505e8bdfc0e404839e2a808b72470614922077925c14052b3c6562",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/dSYMs/crispasr.dSYM/Contents/Resources/Relocations/aarch64/crispasr.yml": {
+      "bytes": 4200738,
+      "sha256": "a6d633aef45dd3dcd128bb107089bd5a96447dfc3a437fecc1012b342744d285",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/dSYMs/crispasr.dSYM/Contents/Resources/Relocations/x86_64/crispasr.yml": {
+      "bytes": 3653912,
+      "sha256": "8ff3275da7ad57cb8823f52f623d001f85c5fd56e4e398fafbe5aa8cf62248fe",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/dSYMs/crispasr.dSYM/Contents/Resources/DWARF/crispasr": {
+      "bytes": 335300398,
+      "sha256": "317c0045821678283ad23e98f5dbc860834c579df97b5fb93c4cf0af6e2f9aa8",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64_x86_64-simulator/dSYMs/crispasr.dSYM/Contents/Info.plist": {
+      "bytes": 646,
+      "sha256": "ea97bd6b86366849461f9dbd86e04996a17ff29c1c9c5379dcf7dc91be1aee86",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64/crispasr.framework/crispasr": {
+      "bytes": 24315520,
+      "sha256": "42e8d6c5b89abc186aec19b10ab37dd40ad571530c6601b795fede147a95d9f0",
+      "mode": 2179792896
+    },
+    "crispasr.xcframework/xros-arm64/crispasr.framework/Headers/ggml-blas.h": {
+      "bytes": 586,
+      "sha256": "e76cb8594dc9866d99e7d63191b9fff6ab8b50244b4a28ce3af0f962964a6b5b",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64/crispasr.framework/Headers/ggml-backend.h": {
+      "bytes": 25776,
+      "sha256": "5791edae1fb7622027621d15bc7a160198bd3b75ed8f96d06cb7b85e2b873756",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64/crispasr.framework/Headers/crispasr.h": {
+      "bytes": 61740,
+      "sha256": "b223c04d0124cbb3886fa91586ceeceba3f87ac5c114002efc28b482f834c74c",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64/crispasr.framework/Headers/ggml-alloc.h": {
+      "bytes": 3689,
+      "sha256": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64/crispasr.framework/Headers/ggml-metal.h": {
+      "bytes": 2141,
+      "sha256": "322f36cd30f3e9e7aad7b5b9bc63078012fd0b7706ac4e24f5721b604f3d8980",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64/crispasr.framework/Headers/ggml-cpu.h": {
+      "bytes": 7753,
+      "sha256": "316279e004cdeb8e6ef78599acb602bf79a8abdf897fed9fd1914808c1518c6e",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64/crispasr.framework/Headers/gguf.h": {
+      "bytes": 11355,
+      "sha256": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64/crispasr.framework/Headers/ggml.h": {
+      "bytes": 118603,
+      "sha256": "aaaa78cbe07ca83d5d1f972161a8c4b24ecf0f441e0b2d211f1ee7484a26f478",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64/crispasr.framework/Modules/module.modulemap": {
+      "bytes": 344,
+      "sha256": "c5ab9a27f93abfd8f9374fc5b0af761602ba648275b34f2dd98b40b432122edd",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64/crispasr.framework/Info.plist": {
+      "bytes": 970,
+      "sha256": "1bfcdc1a64b38b854febe45e37728f74ff37a93b06525644e062fb2172e8ec84",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64/dSYMs/crispasr.dSYM/Contents/Resources/Relocations/aarch64/crispasr.yml": {
+      "bytes": 4201795,
+      "sha256": "e316ebfd81a1a03e21a98a07b177f803c05cfd171cde41b712e7e48de7a105de",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64/dSYMs/crispasr.dSYM/Contents/Resources/DWARF/crispasr": {
+      "bytes": 167447292,
+      "sha256": "c8bda4d1f8155077a9cf458db37bdd480f96cd444ba0a684bbeebef4a1cf4714",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64/dSYMs/crispasr.dSYM/Contents/Info.plist": {
+      "bytes": 646,
+      "sha256": "ea97bd6b86366849461f9dbd86e04996a17ff29c1c9c5379dcf7dc91be1aee86",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/crispasr.framework/crispasr": {
+      "bytes": 51818240,
+      "sha256": "d3573edbfb3592078ce8188aa3f3fae3329f7d19e71e3c8e13057203e29e299b",
+      "mode": 2179792896
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-blas.h": {
+      "bytes": 586,
+      "sha256": "e76cb8594dc9866d99e7d63191b9fff6ab8b50244b4a28ce3af0f962964a6b5b",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-backend.h": {
+      "bytes": 25776,
+      "sha256": "5791edae1fb7622027621d15bc7a160198bd3b75ed8f96d06cb7b85e2b873756",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/crispasr.framework/Headers/crispasr.h": {
+      "bytes": 61740,
+      "sha256": "b223c04d0124cbb3886fa91586ceeceba3f87ac5c114002efc28b482f834c74c",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-alloc.h": {
+      "bytes": 3689,
+      "sha256": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-metal.h": {
+      "bytes": 2141,
+      "sha256": "322f36cd30f3e9e7aad7b5b9bc63078012fd0b7706ac4e24f5721b604f3d8980",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/crispasr.framework/Headers/ggml-cpu.h": {
+      "bytes": 7753,
+      "sha256": "316279e004cdeb8e6ef78599acb602bf79a8abdf897fed9fd1914808c1518c6e",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/crispasr.framework/Headers/gguf.h": {
+      "bytes": 11355,
+      "sha256": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/crispasr.framework/Headers/ggml.h": {
+      "bytes": 118603,
+      "sha256": "aaaa78cbe07ca83d5d1f972161a8c4b24ecf0f441e0b2d211f1ee7484a26f478",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/crispasr.framework/Modules/module.modulemap": {
+      "bytes": 344,
+      "sha256": "c5ab9a27f93abfd8f9374fc5b0af761602ba648275b34f2dd98b40b432122edd",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/crispasr.framework/Info.plist": {
+      "bytes": 970,
+      "sha256": "1bfcdc1a64b38b854febe45e37728f74ff37a93b06525644e062fb2172e8ec84",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/dSYMs/crispasr.dSYM/Contents/Resources/Relocations/aarch64/crispasr.yml": {
+      "bytes": 4190492,
+      "sha256": "f6772b91a3b82f71ebbbf3a4742dd2b9003b9d33ccac539fd3c9256768612be5",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/dSYMs/crispasr.dSYM/Contents/Resources/Relocations/x86_64/crispasr.yml": {
+      "bytes": 3644528,
+      "sha256": "05d2f0d92d159b0726d8d324a4ae333e4dab1db6ff95f3196959816fb04f3119",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/dSYMs/crispasr.dSYM/Contents/Resources/DWARF/crispasr": {
+      "bytes": 337971712,
+      "sha256": "276f6f8e5af87a271eecb7642560c2d8b40fc0855f21775769a2d94d3afeea9c",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/xros-arm64_x86_64-simulator/dSYMs/crispasr.dSYM/Contents/Info.plist": {
+      "bytes": 646,
+      "sha256": "ea97bd6b86366849461f9dbd86e04996a17ff29c1c9c5379dcf7dc91be1aee86",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64/crispasr.framework/crispasr": {
+      "bytes": 24316080,
+      "sha256": "c3343fccd6b4d946350cf1eef02bf6bf792b50b0a3015e0d4813d8744ee75e46",
+      "mode": 2179792896
+    },
+    "crispasr.xcframework/ios-arm64/crispasr.framework/Headers/ggml-blas.h": {
+      "bytes": 586,
+      "sha256": "e76cb8594dc9866d99e7d63191b9fff6ab8b50244b4a28ce3af0f962964a6b5b",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64/crispasr.framework/Headers/ggml-backend.h": {
+      "bytes": 25776,
+      "sha256": "5791edae1fb7622027621d15bc7a160198bd3b75ed8f96d06cb7b85e2b873756",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64/crispasr.framework/Headers/crispasr.h": {
+      "bytes": 61740,
+      "sha256": "b223c04d0124cbb3886fa91586ceeceba3f87ac5c114002efc28b482f834c74c",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64/crispasr.framework/Headers/ggml-alloc.h": {
+      "bytes": 3689,
+      "sha256": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64/crispasr.framework/Headers/ggml-metal.h": {
+      "bytes": 2141,
+      "sha256": "322f36cd30f3e9e7aad7b5b9bc63078012fd0b7706ac4e24f5721b604f3d8980",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64/crispasr.framework/Headers/ggml-cpu.h": {
+      "bytes": 7753,
+      "sha256": "316279e004cdeb8e6ef78599acb602bf79a8abdf897fed9fd1914808c1518c6e",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64/crispasr.framework/Headers/gguf.h": {
+      "bytes": 11355,
+      "sha256": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64/crispasr.framework/Headers/ggml.h": {
+      "bytes": 118603,
+      "sha256": "aaaa78cbe07ca83d5d1f972161a8c4b24ecf0f441e0b2d211f1ee7484a26f478",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64/crispasr.framework/Modules/module.modulemap": {
+      "bytes": 344,
+      "sha256": "c5ab9a27f93abfd8f9374fc5b0af761602ba648275b34f2dd98b40b432122edd",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64/crispasr.framework/Info.plist": {
+      "bytes": 1090,
+      "sha256": "4e8a1830e6505e8bdfc0e404839e2a808b72470614922077925c14052b3c6562",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64/dSYMs/crispasr.dSYM/Contents/Resources/Relocations/aarch64/crispasr.yml": {
+      "bytes": 4211928,
+      "sha256": "b5aef51eb8245442ce1014bd683fc703a0b1431342f319972e48427c6097ddd2",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64/dSYMs/crispasr.dSYM/Contents/Resources/DWARF/crispasr": {
+      "bytes": 166246421,
+      "sha256": "90f251ad0e16bb2939823b78eb5b36f83781faa2481be05780b44c81b83d4f16",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/ios-arm64/dSYMs/crispasr.dSYM/Contents/Info.plist": {
+      "bytes": 646,
+      "sha256": "ea97bd6b86366849461f9dbd86e04996a17ff29c1c9c5379dcf7dc91be1aee86",
+      "mode": 2175008768
+    },
+    "crispasr.xcframework/Info.plist": {
+      "bytes": 3685,
+      "sha256": "941480d4e14b15435cdc2f4ce81ed5534552673c5546b75bec78d36d449b4329",
+      "mode": 2175008768
+    }
+  },
+  "published": true,
+  "staged_asset_id": 677760166,
+  "staged_bytes_verified": true,
+  "original_asset_id": 677727919,
+  "backup_name": "crispasr-v0.8.45-xcframework.zip.notice-backup-dc00091bc2ab47ce",
+  "final_asset_id": 677760166,
+  "anonymous_readback": {
+    "bytes": 633387511,
+    "sha256": "db1b4d60e7a96a796e421847b74e934a3913dea6533d448d71c2ff4a7a0e34dd"
+  },
+  "original_backup_removed_after_verification": true
+}

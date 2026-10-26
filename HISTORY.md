@@ -1,3 +1,22 @@
+## 2026-10-26 — Published v0.8.45; native, Python and registry readbacks verified
+
+Published the prepared annotated tag without changing qualified NN source.
+Native release producer 40284721476 passed; independent audit 40304161701
+anonymously downloaded all 50 assets and verified their hashes, CUDA splits and
+runtime checksums. Four archives gained missing project notices with all original
+members preserved. Downloaded portable Linux CLI version and C ABI load checks
+passed. Both Rust crates and Dart published and matched tagged source files.
+
+Wheel producer 40303514758 passed all eight distribution jobs and both
+publishers. After Pages 40306957371 deployed the index, final audit 40313434985
+verified all eight original distributions against full public downloads, tagged
+package sources, notices, qualified native payloads and live GPU index links.
+The initial audit correctly rejected the stale index before deployment. Full
+inventory and repair proofs are retained in the
+[publication receipt](docs/release-publication-2026-10-26.json).
+Six Docker flavours published; MUSA recovery hit the same upstream WKV compiler
+crash in both official SDKs 4.2 and 4.3 and published no replacement image.
+
 ## 2026-10-25 — Original CSM rotary scaling qualified on CPU and Tesla T4
 
 Restored original Llama-3 frequency scaling for CSM backbone/depth graphs,

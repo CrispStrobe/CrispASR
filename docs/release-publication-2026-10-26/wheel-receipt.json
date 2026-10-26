@@ -1,0 +1,113 @@
+{
+  "tag": "v0.8.45",
+  "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+  "audit_source": "1980620e3c2464c2719a1a128568dbe145559e39",
+  "complete": true,
+  "acceptance": true,
+  "native_inventory_producer": {
+    "run": 40304161701,
+    "source": "a0af5b3334bfe226428f1fc5e19bcce4adcbbaa1",
+    "artifact_id": 12642112126
+  },
+  "wheels": {
+    "complete": true,
+    "producer_run": 40303514758,
+    "producer_source": "a0af5b3334bfe226428f1fc5e19bcce4adcbbaa1",
+    "original_distributions": {
+      "crispasr-0.8.45-py3-none-manylinux_2_35_aarch64.whl": {
+        "artifact_id": 12641444013,
+        "bytes": 46019855,
+        "sha256": "db2ac089474abe8347f863982abeef313a6c0dfaa18b449013e3fa2a8d58b9c3",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 19,
+        "qualified_native_libraries_verified": 16
+      },
+      "crispasr-0.8.45-py3-none-manylinux_2_35_x86_64.whl": {
+        "artifact_id": 12643360239,
+        "bytes": 53821153,
+        "sha256": "9a21c26cde452a78763a7337c5631cd26d9485492d64ca761c74a7fdce354a6a",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 19,
+        "qualified_native_libraries_verified": 17
+      },
+      "crispasr-0.8.45-py3-none-macosx_11_0_arm64.whl": {
+        "artifact_id": 12641504057,
+        "bytes": 34960848,
+        "sha256": "acbc8c7faecea44499c616e4313ec1938b4b1c4f28b116ba55d983366a8dc811",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 2,
+        "qualified_native_libraries_verified": 19
+      },
+      "crispasr-0.8.45-py3-none-win_amd64.whl": {
+        "artifact_id": 12642215616,
+        "bytes": 14786140,
+        "sha256": "d9bf7cea6a8e2706b84c1bd4d2bd1db99395a107eec2c9c2e9ef48db8c0109a6",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 2,
+        "qualified_native_libraries_verified": 5
+      },
+      "crispasr-0.8.45+cuda-py3-none-manylinux_2_35_x86_64.whl": {
+        "artifact_id": 12641914029,
+        "bytes": 598541659,
+        "sha256": "4e9689c09266f6152bfc016781bca23baf072d0da829d4130af564e98152c821",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 19,
+        "qualified_native_libraries_verified": 18
+      },
+      "crispasr-0.8.45+cuda-py3-none-win_amd64.whl": {
+        "artifact_id": 12642122148,
+        "bytes": 777326998,
+        "sha256": "e7712aed608caa5d39aa41e3c53103032a3293dd3c3a0c24e151997d36f730e1",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 2,
+        "qualified_native_libraries_verified": 9
+      },
+      "crispasr-0.8.45+vulkan-py3-none-win_amd64.whl": {
+        "artifact_id": 12643250525,
+        "bytes": 28977365,
+        "sha256": "f5fe9ebb5db5bcda78799f49b180b0daa9c5e6acd46dd4def6425b68580b62d2",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 2,
+        "qualified_native_libraries_verified": 6
+      },
+      "crispasr-0.8.45.tar.gz": {
+        "artifact_id": 12642501080,
+        "bytes": 71340,
+        "sha256": "2c7f466d94621fcc14208d2fb819caab8e7ea91d1264c116fcd660c9becff644"
+      }
+    },
+    "pypi_anonymous_readbacks": [
+      {
+        "filename": "crispasr-0.8.45-py3-none-macosx_11_0_arm64.whl",
+        "url": "https://files.pythonhosted.org/packages/b7/92/651b29ec30afa34041c188328f7192e9cfde2ab07462a677f78c8027fb2b/crispasr-0.8.45-py3-none-macosx_11_0_arm64.whl",
+        "bytes": 34960848,
+        "sha256": "acbc8c7faecea44499c616e4313ec1938b4b1c4f28b116ba55d983366a8dc811"
+      },
+      {
+        "filename": "crispasr-0.8.45-py3-none-manylinux_2_35_aarch64.whl",
+        "url": "https://files.pythonhosted.org/packages/6b/a0/78145b6430804b4f8e1db07f6a5edc8ccab4c7ef7a95e039cbc143397201/crispasr-0.8.45-py3-none-manylinux_2_35_aarch64.whl",
+        "bytes": 46019855,
+        "sha256": "db2ac089474abe8347f863982abeef313a6c0dfaa18b449013e3fa2a8d58b9c3"
+      },
+      {
+        "filename": "crispasr-0.8.45-py3-none-manylinux_2_35_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/90/0f/5a0265ab065fb68a5a83ec6f3cf22363a8fe3ee579bf208c95b4fd5d1ee9/crispasr-0.8.45-py3-none-manylinux_2_35_x86_64.whl",
+        "bytes": 53821153,
+        "sha256": "9a21c26cde452a78763a7337c5631cd26d9485492d64ca761c74a7fdce354a6a"
+      },
+      {
+        "filename": "crispasr-0.8.45-py3-none-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/a7/ca/7940f44a90744d8129df4adce044edf518201198b4a0dd045f17232c307a/crispasr-0.8.45-py3-none-win_amd64.whl",
+        "bytes": 14786140,
+        "sha256": "d9bf7cea6a8e2706b84c1bd4d2bd1db99395a107eec2c9c2e9ef48db8c0109a6"
+      },
+      {
+        "filename": "crispasr-0.8.45.tar.gz",
+        "url": "https://files.pythonhosted.org/packages/49/dd/c34528d60654b70ddb3f2f91a9a346c2c0793a088d2467db95942293a468/crispasr-0.8.45.tar.gz",
+        "bytes": 71340,
+        "sha256": "2c7f466d94621fcc14208d2fb819caab8e7ea91d1264c116fcd660c9becff644"
+      }
+    ],
+    "gpu_index_and_full_readbacks_verified": true
+  }
+}
