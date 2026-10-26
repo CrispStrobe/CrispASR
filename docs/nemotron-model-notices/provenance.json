@@ -1,0 +1,17 @@
+{
+  "checked": "2026-10-26",
+  "license": "OpenMDW-1.1",
+  "license_url": "https://openmdw.ai/license/1-1/",
+  "license_html_sha256": "789da5a6cb8f75b218811c45acd5bff5e5008c8a6915aed4f9405d3ffed1b967",
+  "license_text_sha256": "be21b29b1c69af5b4a4e60a6bd7bc933eec374e52be29d1ebb9e6a17a6588491",
+  "original_card": {
+    "url": "https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b/blob/ea30d66debe3740a08b573244286791d423d6b3e/README.md",
+    "sha256": "a3344caadf796c084c6b90a9fa5978068fd45e3a019790bebe50489bb3c0f7b7"
+  },
+  "gguf_card": {
+    "url": "https://huggingface.co/cstr/nemotron-3.5-asr-streaming-GGUF/blob/bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2/README.md",
+    "sha256": "5fcc93d34191936fe188d3942b5e61304c99863c61c249a23f2a77f94cf996af"
+  },
+  "weights_redistributed": false,
+  "numerical_acceptance": false
+}

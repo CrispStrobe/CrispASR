@@ -11,6 +11,12 @@ record external dependencies without speculative fixes or unsupported closure.
    CUDA on an available Kaggle GPU session. The default's reported file SHA is
    identical to the historically failing plain-Q4 control. Establish current
    behavior before deciding registry/default policy; no hybrid-as-compact-Q4 claim.
+   CPU replay [40377479500](https://github.com/CrispStrobe/CrispASR/actions/runs/40377479500)
+   uses immutable source `6143b9aa2`. The inference-only Kaggle entry is prepared
+   but deliberately blocked until a complete reviewed CPU receipt is pinned.
+   CUDA requires worker-specific model allocation and SM activity during decode,
+   after initialization. Published OpenMDW-1.1 model terms and origin are retained
+   in `docs/nemotron-model-notices/`; this is not model acceptance or a rights warranty.
 2. Canary #532: review/obtain the exact failing clip, assertion and device/build
    context; retain the unreproduced status if these remain unavailable.
 3. CUDA/MMQ #483: preserve the original matched packages and notices before

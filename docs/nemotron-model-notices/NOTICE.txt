@@ -1,0 +1,21 @@
+NVIDIA Nemotron-3.5-ASR-Streaming-0.6B — model materials
+Original model publisher: NVIDIA
+Original model: nvidia/nemotron-3.5-asr-streaming-0.6b
+Original model card: https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b/blob/ea30d66debe3740a08b573244286791d423d6b3e/README.md
+GGUF conversion publisher: cstr
+GGUF model card: https://huggingface.co/cstr/nemotron-3.5-asr-streaming-GGUF/blob/bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2/README.md
+
+Both pinned model cards identify OpenMDW-1.1 as the governing model license.
+The NVIDIA card's `license: other` field is qualified by
+`license_name: openmdw-1.1` and its explicit governing-terms paragraph.
+A full copy of that agreement accompanies this notice.
+Source of license text: https://openmdw.ai/license/1-1/
+Retrieved: 2026-10-26; paragraph text preserved, HTML formatting removed.
+The historical GGUF card's GitHub license link returned HTTP 404 on that date;
+the NVIDIA card's official OpenMDW link supplies the agreement.
+
+Model weights and their derivatives remain subject to OpenMDW-1.1.
+The CrispASR runtime's MIT license does not replace the model license.
+This notice records published terms and origin, without a warranty concerning
+upstream training data, third-party rights or a particular deployment.
+This notice does not establish numerical acceptance of any model profile.
