@@ -51,6 +51,38 @@ class PreservationTest(unittest.TestCase):
             with self.subTest(key=key, value=value), self.assertRaises(RuntimeError):
                 PRESERVE.require_draft(bad)
 
+    def test_startup_load_must_recover_before_transfers(self):
+        samples = iter([dict(load=(6.13, 19, 12), available_kib=3 * 1024**2,
+                             disk_free=100 * 1024**3, cpus=3),
+                        dict(load=(5, 19, 12), available_kib=3 * 1024**2,
+                             disk_free=100 * 1024**3, cpus=3)])
+        receipt, pauses, saves = {}, [], []
+        PRESERVE.wait_for_resources(Path('.'), receipt, lambda: saves.append(True),
+                                    probe=lambda _: next(samples), pause=pauses.append, attempts=2)
+        self.assertEqual(pauses, [10])
+        self.assertEqual(len(saves), 2)
+        self.assertEqual(receipt['resources']['load'][0], 5)
+
+    def test_persistent_load_or_memory_pressure_stops_at_wait_bound(self):
+        for load, memory in [(6.13, 3 * 1024**2), (1, 1024**2)]:
+            with self.subTest(load=load, memory=memory):
+                pauses, receipt = [], {}
+                with self.assertRaises(RuntimeError):
+                    PRESERVE.wait_for_resources(Path('.'), receipt, lambda: None,
+                        probe=lambda _: dict(load=(load, 0, 0), available_kib=memory,
+                                             disk_free=100 * 1024**3, cpus=3),
+                        pause=pauses.append, attempts=3)
+                self.assertEqual(pauses, [10, 10])
+                self.assertEqual(len(receipt['resource_samples']), 3)
+
+    def test_insufficient_disk_stops_without_waiting_or_cleanup(self):
+        pauses = []
+        with self.assertRaises(RuntimeError):
+            PRESERVE.wait_for_resources(Path('.'), {}, lambda: None,
+                probe=lambda _: dict(load=(1, 0, 0), available_kib=3 * 1024**2,
+                                     disk_free=7 * 1024**3, cpus=3), pause=pauses.append)
+        self.assertEqual(pauses, [])
+
 
 if __name__ == '__main__':
     unittest.main()

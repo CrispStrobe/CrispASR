@@ -12,6 +12,7 @@ import os
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
+import time
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -66,6 +67,32 @@ def members(archive, limit):
     assert len(entries) < 1000 and len({safe_name(m.filename).lower() for m in entries}) == len(entries)
     assert sum(m.file_size for m in entries) <= limit
     return [m for m in entries if not m.is_dir()]
+
+
+def resource_snapshot(scratch):
+    import psutil
+
+    return dict(load=os.getloadavg(), available_kib=psutil.virtual_memory().available // 1024,
+                disk_free=shutil.disk_usage(scratch).free, cpus=os.cpu_count() or 1)
+
+
+def wait_for_resources(scratch, receipt, save, *, probe=resource_snapshot, pause=time.sleep, attempts=31):
+    """Allow runner startup load to settle; never lower the transfer gates."""
+    receipt['resource_samples'] = []
+    receipt['resource_wait_interval_s'] = 10
+    for attempt in range(attempts):
+        row = dict(probe(scratch), wait_attempt=attempt)
+        receipt['resources'] = row
+        receipt['resource_samples'].append(row)
+        save()
+        if row['disk_free'] < 8 * 1024**3:
+            raise RuntimeError('Need 8 GiB free for archive scratch')
+        if row['available_kib'] >= 2 * 1024**2 and row['load'][0] < 2 * row['cpus']:
+            return
+        if attempt + 1 < attempts:
+            print('Waiting for archive headroom:', row, flush=True)
+            pause(10)
+    raise RuntimeError('Archive load/memory headroom did not recover within the bounded wait')
 
 
 def preserve(mode, out, scratch, pin):
@@ -149,8 +176,6 @@ def preserve(mode, out, scratch, pin):
 
 
 def main():
-    import psutil
-
     assert os.environ.get('GITHUB_ACTIONS') == 'true' and os.environ.get('GITHUB_REPOSITORY') == REPOSITORY
     out, scratch = Path(os.environ['PRESERVE_OUT']), Path(os.environ['PRESERVE_SCRATCH'])
     out.mkdir(parents=True, exist_ok=True)
@@ -164,11 +189,7 @@ def main():
 
     save()
     try:
-        available = psutil.virtual_memory().available // 1024
-        receipt['resources'] = dict(load=os.getloadavg(), available_kib=available,
-                                    disk_free=shutil.disk_usage(scratch).free)
-        assert available >= 2 * 1024**2 and os.getloadavg()[0] < 2 * (os.cpu_count() or 1)
-        assert shutil.disk_usage(scratch).free >= 8 * 1024**3
+        wait_for_resources(scratch, receipt, save)
         producer = api(f'actions/runs/{PRODUCER}')
         assert producer['conclusion'] == 'success' and producer['head_sha'] == SOURCE
         pin = json.loads((ROOT / 'docs/cuda126-mmq-experiment-2026-10-08.json').read_text())
