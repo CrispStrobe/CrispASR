@@ -16,6 +16,7 @@ import shutil
 import struct
 import subprocess
 import sys
+import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -222,11 +223,14 @@ def replay(args):
                 reused()
         else:
             reused()
-    opaque = out / 'opaque.gguf'
-    opaque.symlink_to(model)
-    with Session(str(opaque), lib_path=args.library, n_threads=4, use_gpu=args.device == 'cuda') as s:
-        assert s.backend == 'nemotron'
-        result['cabi_auto'] = ' '.join(x.text for x in s.transcribe(pcm(labels[0]), language='en-US'))
+    # Keep model links in scratch: a native abort can bypass Python cleanup,
+    # and artifact collectors may follow symlinks in the evidence directory.
+    with tempfile.TemporaryDirectory(prefix='nemotron-auto-', dir=os.environ['HEAVY_SCRATCH']) as auto_dir:
+        opaque = Path(auto_dir) / 'opaque.gguf'
+        opaque.symlink_to(model)
+        with Session(str(opaque), lib_path=args.library, n_threads=4, use_gpu=args.device == 'cuda') as s:
+            assert s.backend == 'nemotron'
+            result['cabi_auto'] = ' '.join(x.text for x in s.transcribe(pcm(labels[0]), language='en-US'))
     result['auto_matches_explicit'] = result['cabi_auto'] == result['fresh'][labels[0]]
     result['original_word_matches'] = sum(words(text) == words(prior['original'][label]['transcript'])
                                           for label, text in result['fresh'].items())
@@ -244,6 +248,12 @@ def replay(args):
     if args.device == 'cpu':
         command.append('-ng')
     result['cli_returncode'] = run(command, 'cli', out, 600)
+    if args.device == 'cuda':
+        cli_log = (out / 'cli.log').read_text()
+        result['cli_cuda_backend_selection_verified'] = ('nemotron: backend = CUDA0' in cli_log and
+                                                         'nemotron: backend = CPU' not in cli_log)
+        save()
+        assert result['cli_cuda_backend_selection_verified'], 'CLI CUDA request fell back to CPU'
     textfile = out / 'cli-control.txt'
     result['cli_transcript'] = textfile.read_text() if textfile.exists() else ''
     result['cli_original_match'] = (result['cli_returncode'] == 0 and
