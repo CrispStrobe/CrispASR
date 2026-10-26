@@ -23,6 +23,11 @@ Owner: Codex. The user authorized publication of the prepared release.
    shared load, so actual package building stays on Actions. Verify release asset
    completeness, runtime splits/notices and anonymous downloads; verify the four CPU wheels and sdist published on PyPI against
    their producer hashes, plus the CUDA/Vulkan wheel index.
+   Readback tooling also repairs missing project notices in the two legacy
+   Linux Python archives, WASM and xcframework archives after the native producer
+   finishes, preserving every original member, file mode and symlink. Six
+   payload/link/authorization fault controls pass. Future
+   release packaging now copies those notices before archiving.
 5. Record final publication receipts and clean up release-note files on main
    only after publication; the tag retains its original notes.
 

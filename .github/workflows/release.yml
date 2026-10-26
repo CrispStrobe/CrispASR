@@ -266,6 +266,7 @@ jobs:
           cp build-wasm/bin/libwhisper.js build-wasm/bin/libwhisper.wasm release/crispasr-wasm/
           [ -f build-wasm/bin/libwhisper.worker.js ] && cp build-wasm/bin/libwhisper.worker.js release/crispasr-wasm/ || true
           printf 'CrispASR WebAssembly: libwhisper.js (global whisper_factory) + libwhisper.wasm.\nMultithreaded -> host page must be cross-origin isolated (COOP/COEP).\nTTS: Module.ttsOpenExplicit(model,backend,threads) -> ttsSetVoice(voice,"") -> ttsSynthesize(text) => Float32Array.\nPlayback/WAV sample rate: Module.sessionOutputSampleRate() after opening the model (backend dependent).\nLoad files via Module.FS_createDataFile("/models",name,bytes,true,true).\n' > release/crispasr-wasm/README.txt
+          cp LICENSE THIRD_PARTY_NOTICES.txt release/crispasr-wasm/
           cd release && tar czf crispasr-wasm.tar.gz crispasr-wasm/
 
       - uses: actions/upload-artifact@v4
@@ -940,6 +941,7 @@ jobs:
           # Then assert it — the gate the other Linux legs have had since #296.
           python3 scripts/check-bundled-deps.py "$PKG"
 
+          cp LICENSE THIRD_PARTY_NOTICES.txt "$PKG/"
           cd release && tar czf crispasr-python-linux-x86_64.tar.gz crispasr-python-linux-x86_64/
 
       - uses: actions/upload-artifact@v4
@@ -1017,6 +1019,7 @@ jobs:
           # Then assert it — the gate the other Linux legs have had since #296.
           python3 scripts/check-bundled-deps.py "$PKG"
 
+          cp LICENSE THIRD_PARTY_NOTICES.txt "$PKG/"
           cd release && tar czf crispasr-python-linux-arm64.tar.gz crispasr-python-linux-arm64/
 
       - uses: actions/upload-artifact@v4
@@ -1198,6 +1201,7 @@ jobs:
           TAG="${TAG//\//-}"
           test -d build-apple/crispasr.xcframework  # fail loudly if the build produced nothing
           mkdir -p release-ios
+          cp LICENSE THIRD_PARTY_NOTICES.txt build-apple/crispasr.xcframework/
           # --symlinks: the .framework Versions/Current symlinks must survive the
           # zip or the consumer's framework is malformed. Zip from inside
           # build-apple so the archive root is crispasr.xcframework, not a path.

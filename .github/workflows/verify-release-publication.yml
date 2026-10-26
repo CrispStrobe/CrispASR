@@ -1,0 +1,68 @@
+name: Verify release publication
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_run:
+        description: 'Completed native Release run (optional)'
+        default: ''
+        type: string
+      wheel_run:
+        description: 'Completed Release Python wheels run (optional)'
+        default: ''
+        type: string
+      repair_notices:
+        description: 'Add missing notices to the four reviewed archive families, preserving every original member'
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  actions: read
+
+concurrency:
+  group: verify-release-publication-0845
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    permissions:
+      contents: write  # only the explicit notice-only repair can modify release assets
+      actions: read
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Check notice-only repair controls
+        run: python tests/test_release_publication_audit.py -v
+      - name: Read back and verify publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_RUN: ${{ inputs.release_run }}
+          WHEEL_RUN: ${{ inputs.wheel_run }}
+          REPAIR_NOTICES: ${{ inputs.repair_notices }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/publication/out" "$RUNNER_TEMP/publication/scratch"
+          export HEAVY_OUT="$RUNNER_TEMP/publication/out"
+          export HEAVY_SCRATCH="$RUNNER_TEMP/publication/scratch"
+          args=(--tag v0.8.45 --source e58bb48b52cf1fe957c19586297c83a2ed0d9fe4)
+          if [ -n "$RELEASE_RUN" ]; then
+            [[ "$RELEASE_RUN" =~ ^[0-9]+$ ]]
+            args+=(--release-run "$RELEASE_RUN")
+          fi
+          if [ -n "$WHEEL_RUN" ]; then
+            [[ "$WHEEL_RUN" =~ ^[0-9]+$ ]]
+            args+=(--wheel-run "$WHEEL_RUN")
+          fi
+          if [ "$REPAIR_NOTICES" = true ]; then args+=(--repair-notices); fi
+          python tools/ci-heavy/release_publication_audit.py "${args[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: release-publication-${{ github.run_id }}
+          path: ${{ runner.temp }}/publication/out
+          retention-days: 30
