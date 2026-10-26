@@ -1,0 +1,211 @@
+{
+  "date": "2026-10-26",
+  "complete": true,
+  "scope": "Compilation and linking of unchanged v0.8.45 WKV and full CLI/backend using SDK 5.2 architecture 31; no model inference or publication.",
+  "compile_acceptance": true,
+  "hardware_inference_qualified": false,
+  "published": false,
+  "run": 40330966977,
+  "run_url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40330966977",
+  "workflow_source": "a26d98828deeac401e7ec558348ed48e35df9c64",
+  "source": "e58bb48b52cf1fe957c19586297c83a2ed0d9fe4",
+  "tag": "v0.8.45",
+  "sdk_image": "registry.mthreads.com/mcconline/musa_sdk:5.2.0-devel-ubuntu22.04-s5000@sha256:ffb9f46ba25a14d5978b21fe59a7cb804c534a01e5b4a134112d4962a3e3e657",
+  "compiler": {
+    "clang_version": "14.0.0",
+    "mcc_version": "5.2.0",
+    "vendor_revision": "8a8cb2971e3084fc442baeacb7447e3d73263dc8"
+  },
+  "upstream_recipe": {
+    "commit": "46847e61582097979f539595d893d83d8e1d1af1",
+    "blob": "db97aeb15b2953cf3e26964ce97df45702055533",
+    "url": "https://github.com/ggml-org/llama.cpp/blob/46847e61582097979f539595d893d83d8e1d1af1/.github/workflows/build-cuda-ubuntu.yml"
+  },
+  "architecture": "31 / MTT S5000",
+  "wkv": {
+    "compiled": true,
+    "object_nonempty": true,
+    "proof": "musa-sdk52-2026-10-26/wkv.log",
+    "command": "musa-sdk52-2026-10-26/wkv-command.json"
+  },
+  "full_build": {
+    "compiled_and_linked": true,
+    "link_evidence": "[767/767] Linking CXX executable bin/crispasr",
+    "proof": "musa-sdk52-2026-10-26/full-build-tail.txt",
+    "cli_sha256": "f585e99aa2b9d6fff525d5dde81aca951945215a60c6cca5d908de69f5881838",
+    "musa_shared_library_sha256": "9456555546655788d140d69f2d24753ed15096b0b408d7101f652a2766f96998"
+  },
+  "source_checks": {
+    "root_src_include_examples_diff_empty": true,
+    "ggml_src_include_diff_empty": true,
+    "kernel_changes": false
+  },
+  "resource_limits": {
+    "hosted_actions": true,
+    "compiler_workers": 2,
+    "container_memory_GiB": 6,
+    "available_memory_before_configure_and_compile_minimum_GiB": 4,
+    "ccache_max_GiB": 2,
+    "local_compilation_or_inference": false
+  },
+  "license_inventory": {
+    "sdk_packages": 15,
+    "copyright_metadata_files_captured": 14,
+    "missing_copyright_metadata": [
+      "musa-repo-jammy"
+    ],
+    "observed_license_fields": {
+      "musa-musart-5-2": "LicenseRef-MooreThreads-Proprietary",
+      "musa-toolkit-5-2-config-common": "MIT",
+      "libmudnn3-musa-5-2": "LicenseRef-MooreThreads-Proprietary",
+      "musa-mapping-5-2": "LicenseRef-MooreThreads-Proprietary",
+      "musa-musart-dev-5-2": "LicenseRef-MooreThreads-Proprietary",
+      "musa-toolkit-cmake-5-2": "LicenseRef-MooreThreads-Proprietary",
+      "libmudnn3-dev-musa-5-2": "LicenseRef-MooreThreads-Proprietary",
+      "libmthreads-mtml": "LicenseRef-MooreThreads-Proprietary",
+      "musa-muthrust-5-2": "muThrust",
+      "musa-mupti-5-2": "LicenseRef-MooreThreads-Proprietary",
+      "libmthreads-mtml-dev": "LicenseRef-MooreThreads-Proprietary",
+      "musa-mupti-dev-5-2": "LicenseRef-MooreThreads-Proprietary",
+      "libmthreads-compute": "LicenseRef-MooreThreads-Proprietary",
+      "musa-mualg-5-2": "muAlg"
+    },
+    "full_redistribution_terms_reviewed": false,
+    "note": "Captured copyright metadata references proprietary licenses and muAlg/muThrust identifiers; it does not establish redistribution permission. No SDK image or compiled binaries were published.",
+    "packages": "musa-sdk52-2026-10-26/sdk-packages.json"
+  },
+  "limits": [
+    "Only architecture 31 was compiled; architectures 21 and 22 remain unqualified.",
+    "The earlier failed 4.2/4.3 builds targeted 21/22/31 together; this is not an isolated SDK-versus-architecture causal comparison.",
+    "No MUSA hardware execution, backend operation parity or speech validation was performed.",
+    "Runtime image packaging, dependency closure and applicable redistribution terms remain open."
+  ],
+  "initial_harness_failure": {
+    "run": 40329398984,
+    "wkv_tested": false,
+    "cause": "Read-only source mount prevented CMake from generating JavaScript/package files. The corrected probe allows generated files and checks compiled source directories for changes."
+  },
+  "artifact": "musa-sdk52-40330966977-1",
+  "artifact_files": {
+    "acceptance.txt": {
+      "bytes": 83,
+      "sha256": "4d32c4599456ece5bf0e44022be1e9ee694605372bed4d84512ae1e39ddd7f64"
+    },
+    "cli-sha256.txt": {
+      "bytes": 90,
+      "sha256": "c83e4e68d5611bf9844d9deba48e22916e3eb88bc9c0dd8860457f45343c9fb0"
+    },
+    "compiler.txt": {
+      "bytes": 206,
+      "sha256": "45663ef95b166a9d2c630fe04630f64935666463d8502ecb9bfaa1194d70a58e"
+    },
+    "configure.log": {
+      "bytes": 2820,
+      "sha256": "ae65386612e0053f470c100b946487eff2ff494f5b63720192686e7ae4d3e722"
+    },
+    "full-build.log": {
+      "bytes": 3020486,
+      "sha256": "7283020307281d66524cf9818fac03616dba5c4e5234131aa5b61c7108b8b083"
+    },
+    "image-inspect.json": {
+      "bytes": 8509,
+      "sha256": "4d00aaa11c220f3d3457d9e80d3f33fe76c93f88addf0dda858c752318013e35"
+    },
+    "image.txt": {
+      "bytes": 143,
+      "sha256": "9d6387bafedf7b4977ae10dea4f313e6504a21fc44acaee64421959808170013"
+    },
+    "licenses/libmthreads-compute-copyright": {
+      "bytes": 236,
+      "sha256": "c144cde1a3b2a0b25ec3c5c698a1313e9213f55dc02c81c9145e0e76854e9852"
+    },
+    "licenses/libmthreads-mtml-copyright": {
+      "bytes": 247,
+      "sha256": "81fd7d07b7cc145e8d973482925432dc60b7872669653cd8c6042b98f602563a"
+    },
+    "licenses/libmthreads-mtml-dev-copyright": {
+      "bytes": 247,
+      "sha256": "81fd7d07b7cc145e8d973482925432dc60b7872669653cd8c6042b98f602563a"
+    },
+    "licenses/libmudnn3-dev-musa-5-2-copyright": {
+      "bytes": 241,
+      "sha256": "efbe8db13631ec59e949aed406405faf0179d9007e3269224ea8308bda55bf7a"
+    },
+    "licenses/libmudnn3-musa-5-2-copyright": {
+      "bytes": 241,
+      "sha256": "efbe8db13631ec59e949aed406405faf0179d9007e3269224ea8308bda55bf7a"
+    },
+    "licenses/musa-mapping-5-2-copyright": {
+      "bytes": 227,
+      "sha256": "582373e81323c4266888a8056a7680f30b66e0fe8d38dcd7d6d2f05c5d95fc81"
+    },
+    "licenses/musa-mualg-5-2-copyright": {
+      "bytes": 200,
+      "sha256": "2280e3a6ae0dbcf9eaad667945849deae5d048434f51e434735fdda0b0b8ab0c"
+    },
+    "licenses/musa-mupti-5-2-copyright": {
+      "bytes": 231,
+      "sha256": "fd4beeecfe80380fb918f4b4c13ee1d588e6b2fa2646d61644d16d29826545c9"
+    },
+    "licenses/musa-mupti-dev-5-2-copyright": {
+      "bytes": 231,
+      "sha256": "fd4beeecfe80380fb918f4b4c13ee1d588e6b2fa2646d61644d16d29826545c9"
+    },
+    "licenses/musa-musart-5-2-copyright": {
+      "bytes": 232,
+      "sha256": "c6622c80e14b5888b202459457220467c7cb55b897005fd87627f687b490d2b5"
+    },
+    "licenses/musa-musart-dev-5-2-copyright": {
+      "bytes": 232,
+      "sha256": "c6622c80e14b5888b202459457220467c7cb55b897005fd87627f687b490d2b5"
+    },
+    "licenses/musa-muthrust-5-2-copyright": {
+      "bytes": 206,
+      "sha256": "9e629bea3668ce650722940c20a9382665920bef0fdce503cd98dc1aea21e035"
+    },
+    "licenses/musa-toolkit-5-2-config-common-copyright": {
+      "bytes": 215,
+      "sha256": "cdf3fe8993004194848938f7ab8c8161ebc86367ab8b78006525f49b02ab4c5a"
+    },
+    "licenses/musa-toolkit-cmake-5-2-copyright": {
+      "bytes": 239,
+      "sha256": "81011b8f13227410aa3f0e06abca49fcf66c3e07404ace9acf12fc64bde25a51"
+    },
+    "musa-libraries.txt": {
+      "bytes": 119,
+      "sha256": "539f1e2ba94695217d212d1d41dd0dff13730d2dc3d36ab87f89f199f91bd92c"
+    },
+    "packages.txt": {
+      "bytes": 16600,
+      "sha256": "5ab0ae40b30b8d9a543be24ef7053b4ad8cb2eaf64f82e2f3e42c84d3681d7cf"
+    },
+    "probe.log": {
+      "bytes": 3156849,
+      "sha256": "6f183f112ec801b80904a4a9d211e2f680779ee48514687e8ecce8848825e1ab"
+    },
+    "sdk-packages.json": {
+      "bytes": 3241,
+      "sha256": "77da068f23ea911201fa0cf30e3c0f65988bd16bcaf622bfb1ad584524afd144"
+    },
+    "source-diff.txt": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "status.txt": {
+      "bytes": 12,
+      "sha256": "bde294368bfed77c2cddf8cec271d398aee9cdbab3b26e1059281bd33adb0120"
+    },
+    "wkv-command.json": {
+      "bytes": 2150,
+      "sha256": "d8b91baf510128d6f82afce2c52be90043844e1b694b4433f5e0da5cd043e5b3"
+    },
+    "wkv-result.txt": {
+      "bytes": 7,
+      "sha256": "2700165975f68815c97d605c56eca8e90d497ade1264b6282401d13fee99ac27"
+    },
+    "wkv.log": {
+      "bytes": 4932,
+      "sha256": "2ee1edde12ab636518e6afd8f582731d8424cf997877914c8f1b388c58c81475"
+    }
+  }
+}

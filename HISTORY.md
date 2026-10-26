@@ -1,3 +1,13 @@
+## 2026-10-26 — MUSA SDK 5.2 compiles the unchanged WKV and full backend
+
+Hosted probe 40330966977 compiled the original tagged WKV source for architecture
+31/S5000, linked the complete CLI and produced `libggml-musa`. Both compiled-source
+checks remained clean. The official SDK image is pinned by digest; compiler,
+package and copyright metadata and build hashes are retained in the
+[compile receipt](docs/musa-sdk52-2026-10-26.json). No kernel changes, image
+publication or MUSA hardware qualification. Redistribution terms and older GPU
+targets remain open.
+
 ## 2026-10-26 — Published v0.8.45; native, Python and registry readbacks verified
 
 Published the prepared annotated tag without changing qualified NN source.

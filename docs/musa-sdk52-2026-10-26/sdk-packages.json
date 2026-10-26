@@ -1,0 +1,106 @@
+[
+  {
+    "package": "libmthreads-compute",
+    "version": "5.2.0",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "c144cde1a3b2a0b25ec3c5c698a1313e9213f55dc02c81c9145e0e76854e9852"
+  },
+  {
+    "package": "libmthreads-mtml",
+    "version": "2.4.2",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "81fd7d07b7cc145e8d973482925432dc60b7872669653cd8c6042b98f602563a"
+  },
+  {
+    "package": "libmthreads-mtml-dev",
+    "version": "2.4.2",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "81fd7d07b7cc145e8d973482925432dc60b7872669653cd8c6042b98f602563a"
+  },
+  {
+    "package": "libmudnn3-dev-musa-5-2",
+    "version": "3.4.0.0",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "efbe8db13631ec59e949aed406405faf0179d9007e3269224ea8308bda55bf7a"
+  },
+  {
+    "package": "libmudnn3-musa-5-2",
+    "version": "3.4.0.0",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "efbe8db13631ec59e949aed406405faf0179d9007e3269224ea8308bda55bf7a"
+  },
+  {
+    "package": "musa-mapping-5-2",
+    "version": "5.2.0",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "582373e81323c4266888a8056a7680f30b66e0fe8d38dcd7d6d2f05c5d95fc81"
+  },
+  {
+    "package": "musa-mualg-5-2",
+    "version": "1.17.2",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "2280e3a6ae0dbcf9eaad667945849deae5d048434f51e434735fdda0b0b8ab0c"
+  },
+  {
+    "package": "musa-mupti-5-2",
+    "version": "1.3.0",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "fd4beeecfe80380fb918f4b4c13ee1d588e6b2fa2646d61644d16d29826545c9"
+  },
+  {
+    "package": "musa-mupti-dev-5-2",
+    "version": "1.3.0",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "fd4beeecfe80380fb918f4b4c13ee1d588e6b2fa2646d61644d16d29826545c9"
+  },
+  {
+    "package": "musa-musart-5-2",
+    "version": "5.2.0",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "c6622c80e14b5888b202459457220467c7cb55b897005fd87627f687b490d2b5"
+  },
+  {
+    "package": "musa-musart-dev-5-2",
+    "version": "5.2.0",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "c6622c80e14b5888b202459457220467c7cb55b897005fd87627f687b490d2b5"
+  },
+  {
+    "package": "musa-muthrust-5-2",
+    "version": "1.17.2",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "9e629bea3668ce650722940c20a9382665920bef0fdce503cd98dc1aea21e035"
+  },
+  {
+    "package": "musa-repo-jammy",
+    "version": "1.0.0.11-1",
+    "architecture": "all",
+    "copyright_present": false
+  },
+  {
+    "package": "musa-toolkit-5-2-config-common",
+    "version": "5.2.0",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "cdf3fe8993004194848938f7ab8c8161ebc86367ab8b78006525f49b02ab4c5a"
+  },
+  {
+    "package": "musa-toolkit-cmake-5-2",
+    "version": "5.2.0",
+    "architecture": "amd64",
+    "copyright_present": true,
+    "copyright_sha256": "81011b8f13227410aa3f0e06abca49fcf66c3e07404ace9acf12fc64bde25a51"
+  }
+]

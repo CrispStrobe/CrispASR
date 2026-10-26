@@ -23,23 +23,30 @@ Owner: Codex. The authorized native/Python/Rust/Dart publication is complete.
   packaging/repair fault controls passed. No local compilation or inference ran
   during publication; existing Kaggle evidence qualifies the unchanged NN source.
 
-## OPEN — MUSA image compiler blocker (2026-10-26)
+## OPEN — MUSA runtime qualification and older SDK targets (2026-10-26)
 
-Owner: Codex. **In progress:** user authorized the SDK 5.2 experiment. Use the
-official S5000 development image pinned by manifest digest. On Actions, compile
-the unchanged tagged WKV source first, then the full backend/CLI for architecture
-31. Record exact package versions, compiler identity and installed copyright
-files. No image publication, kernel changes or hardware qualification. Older
-architectures remain separate, unqualified targets.
+Owner: Codex. **Compile experiment complete:** SDK 5.2 with architecture 31
+compiled the unchanged tagged WKV object, linked the full CLI through all 767
+remaining build steps and produced the MUSA shared library. Run 40330966977
+passed; root and ggml compiled-source diffs are empty. The first attempt failed
+on CMake's generated source-tree files before WKV was tested; the corrected mount
+retains source-diff guards. [Permanent evidence](docs/musa-sdk52-2026-10-26.json).
+
+The image digest, compiler revision, installed package versions and copyright
+metadata are retained. These metadata files mostly reference proprietary terms;
+redistribution permission is not established. No image/binaries were published.
+Actual MUSA operations and speech output, runtime dependency closure and full
+redistribution terms still need validation. Architecture 31/S5000 is the only
+compiled target; this does not qualify 21/22 or isolate SDK from target selection.
 
 Six Docker flavours published. MUSA is excluded from publication acceptance.
 Adding pinned official muAlg headers and complete MIT/BSD notices cleared the
 missing CUB header, but both MCC 4.2 (40303383587) and MCC 4.3 (40305189068) crash
 in `rwkv_wkv7_f32<128>` with `MTGPUISD::FRAME_LOAD`. Neither recovery published an
 image. The default SDK remains 4.2; the recovery recipe retains the tested 4.3
-image digests and exact dependency revision. A compatible compiler or separately
-qualified upstream fix is needed. No kernel changes, architecture exclusions or
-MUSA hardware inference claims.
+image digests and exact dependency revision. SDK 5.2/architecture 31 now provides a working compile candidate. The older
+targets and runtime/image qualification remain open. No kernel changes or MUSA
+hardware inference claims.
 
 ## NOW — 0.8.45 prepared; external evidence pending (2026-10-25)
 
