@@ -25,8 +25,9 @@
   "wkv": {
     "compiled": true,
     "object_nonempty": true,
-    "proof": "musa-sdk52-2026-10-26/wkv.log",
-    "command": "musa-sdk52-2026-10-26/wkv-command.json"
+    "proof": "musa-sdk52-2026-10-26/wkv-compile.txt",
+    "command": "musa-sdk52-2026-10-26/wkv-command.json",
+    "proof_sha256": "2ee1edde12ab636518e6afd8f582731d8424cf997877914c8f1b388c58c81475"
   },
   "full_build": {
     "compiled_and_linked": true,

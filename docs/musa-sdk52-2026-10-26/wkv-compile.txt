@@ -1,0 +1,38 @@
+ninja: Entering directory `/out/build'
+[0/2] /usr/bin/cmake -P /out/build/CMakeFiles/VerifyGlobs.cmake
+[1/1] ccache /usr/local/musa/bin/clang++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_CUDA_FA_BF16_BF16=1 -DGGML_CUDA_FA_BF16_F16=0 -DGGML_CUDA_FA_BF16_Q4_0=0 -DGGML_CUDA_FA_BF16_Q4_1=0 -DGGML_CUDA_FA_BF16_Q5_0=0 -DGGML_CUDA_FA_BF16_Q5_1=0 -DGGML_CUDA_FA_BF16_Q8_0=0 -DGGML_CUDA_FA_F16_BF16=0 -DGGML_CUDA_FA_F16_F16=1 -DGGML_CUDA_FA_F16_Q4_0=0 -DGGML_CUDA_FA_F16_Q4_1=0 -DGGML_CUDA_FA_F16_Q5_0=0 -DGGML_CUDA_FA_F16_Q5_1=0 -DGGML_CUDA_FA_F16_Q8_0=0 -DGGML_CUDA_FA_Q4_0_BF16=0 -DGGML_CUDA_FA_Q4_0_F16=0 -DGGML_CUDA_FA_Q4_0_Q4_0=1 -DGGML_CUDA_FA_Q4_0_Q4_1=0 -DGGML_CUDA_FA_Q4_0_Q5_0=0 -DGGML_CUDA_FA_Q4_0_Q5_1=0 -DGGML_CUDA_FA_Q4_0_Q8_0=0 -DGGML_CUDA_FA_Q4_1_BF16=0 -DGGML_CUDA_FA_Q4_1_F16=0 -DGGML_CUDA_FA_Q4_1_Q4_0=0 -DGGML_CUDA_FA_Q4_1_Q4_1=0 -DGGML_CUDA_FA_Q4_1_Q5_0=0 -DGGML_CUDA_FA_Q4_1_Q5_1=0 -DGGML_CUDA_FA_Q4_1_Q8_0=0 -DGGML_CUDA_FA_Q5_0_BF16=0 -DGGML_CUDA_FA_Q5_0_F16=0 -DGGML_CUDA_FA_Q5_0_Q4_0=0 -DGGML_CUDA_FA_Q5_0_Q4_1=0 -DGGML_CUDA_FA_Q5_0_Q5_0=0 -DGGML_CUDA_FA_Q5_0_Q5_1=0 -DGGML_CUDA_FA_Q5_0_Q8_0=0 -DGGML_CUDA_FA_Q5_1_BF16=0 -DGGML_CUDA_FA_Q5_1_F16=0 -DGGML_CUDA_FA_Q5_1_Q4_0=0 -DGGML_CUDA_FA_Q5_1_Q4_1=0 -DGGML_CUDA_FA_Q5_1_Q5_0=0 -DGGML_CUDA_FA_Q5_1_Q5_1=0 -DGGML_CUDA_FA_Q5_1_Q8_0=0 -DGGML_CUDA_FA_Q8_0_BF16=0 -DGGML_CUDA_FA_Q8_0_F16=0 -DGGML_CUDA_FA_Q8_0_Q4_0=0 -DGGML_CUDA_FA_Q8_0_Q4_1=0 -DGGML_CUDA_FA_Q8_0_Q5_0=0 -DGGML_CUDA_FA_Q8_0_Q5_1=0 -DGGML_CUDA_FA_Q8_0_Q8_0=1 -DGGML_CUDA_FA_QUANTS=\"q4_0-q4_0,q8_0-q8_0,f16-f16,bf16-bf16\" -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_MUSA -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_musa_EXPORTS -I/src/ggml/src/ggml-musa/.. -I/src/ggml/src/../include -isystem /usr/local/musa/include -x c++ -O3 -DNDEBUG -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -std=c++17 -Od3 -fno-strict-aliasing -ffast-math -fsigned-char -x musa -mtgpu -fmusa-flush-denormals-to-zero --cuda-gpu-arch=mp_31 -MD -MT ggml/src/ggml-musa/CMakeFiles/ggml-musa.dir/__/ggml-cuda/wkv.cu.o -MF ggml/src/ggml-musa/CMakeFiles/ggml-musa.dir/__/ggml-cuda/wkv.cu.o.d -o ggml/src/ggml-musa/CMakeFiles/ggml-musa.dir/__/ggml-cuda/wkv.cu.o -c /src/ggml/src/ggml-cuda/wkv.cu
+In file included from /src/ggml/src/ggml-cuda/wkv.cu:1:
+/src/ggml/src/ggml-cuda/common.cuh:427:1: warning: function declared 'noreturn' should not return [-Winvalid-noreturn]
+}
+^
+/src/ggml/src/ggml-cuda/common.cuh:876:73: warning: unused parameter 'x' [-Wunused-parameter]
+static __device__ __forceinline__ uint8_t ggml_cuda_fp32_to_ue4m3(float x) {
+                                                                        ^
+/src/ggml/src/ggml-cuda/common.cuh:1452:84: warning: suggest braces around initialization of subobject [-Wmissing-braces]
+    cublasHandle_t cublas_handles[GGML_CUDA_MAX_DEVICES][GGML_CUDA_MAX_STREAMS] = {nullptr};
+                                                                                   ^~~~~~~
+                                                                                   {      }
+/src/ggml/src/ggml-cuda/common.cuh:1453:79: warning: suggest braces around initialization of subobject [-Wmissing-braces]
+    void * cublas_workspaces[GGML_CUDA_MAX_DEVICES][GGML_CUDA_MAX_STREAMS] = {nullptr};
+                                                                              ^~~~~~~
+                                                                              {      }
+4 warnings generated when compiling for mp_31.
+In file included from /src/ggml/src/ggml-cuda/wkv.cu:1:
+/src/ggml/src/ggml-cuda/common.cuh:427:1: warning: function declared 'noreturn' should not return [-Winvalid-noreturn]
+}
+^
+/src/ggml/src/ggml-cuda/common.cuh:876:73: warning: unused parameter 'x' [-Wunused-parameter]
+static __device__ __forceinline__ uint8_t ggml_cuda_fp32_to_ue4m3(float x) {
+                                                                        ^
+/src/ggml/src/ggml-cuda/common.cuh:886:1: warning: non-void function does not return a value [-Wreturn-type]
+}
+^
+/src/ggml/src/ggml-cuda/common.cuh:1452:84: warning: suggest braces around initialization of subobject [-Wmissing-braces]
+    cublasHandle_t cublas_handles[GGML_CUDA_MAX_DEVICES][GGML_CUDA_MAX_STREAMS] = {nullptr};
+                                                                                   ^~~~~~~
+                                                                                   {      }
+/src/ggml/src/ggml-cuda/common.cuh:1453:79: warning: suggest braces around initialization of subobject [-Wmissing-braces]
+    void * cublas_workspaces[GGML_CUDA_MAX_DEVICES][GGML_CUDA_MAX_STREAMS] = {nullptr};
+                                                                              ^~~~~~~
+                                                                              {      }
+5 warnings generated when compiling for host.
