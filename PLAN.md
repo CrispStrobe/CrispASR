@@ -1,5 +1,27 @@
 # CrispASR — Pending work
 
+## NOW — Ordered correctness and dependency agenda (2026-10-26)
+
+Owner: Codex. User authorized all six items in this order. Finish the last item
+before closure review and a fresh issue/PR sweep. Preserve acceptance gates and
+record external dependencies without speculative fixes or unsupported closure.
+
+1. **In progress:** replay the current Nemotron default and pinned F16 against
+   the complete saved original-model controls, first CPU on Actions, then actual
+   CUDA on an available Kaggle GPU session. The default's reported file SHA is
+   identical to the historically failing plain-Q4 control. Establish current
+   behavior before deciding registry/default policy; no hybrid-as-compact-Q4 claim.
+2. Canary #532: review/obtain the exact failing clip, assertion and device/build
+   context; retain the unreproduced status if these remain unavailable.
+3. CUDA/MMQ #483: preserve the original matched packages and notices before
+   November 7 expiry; obtain actual GTX1660/MX150 correctness/timing evidence.
+4. VoxCPM2 #461: investigate B390 VAE setup and LocDiT costs while preserving
+   ten-step quality; actual B390 validation remains required.
+5. MUSA: review applicable SDK permissions, runner availability and runtime-image
+   validation; no standard-hosted SDK execution or unqualified image publication.
+6. Nyra #456: resolve/review research and generated-output terms before any port
+   or redistribution. Keep deferred unless appropriate rights are established.
+
 ## Published and verified — 0.8.45 (2026-10-26)
 
 Owner: Codex. The authorized native/Python/Rust/Dart publication is complete.
