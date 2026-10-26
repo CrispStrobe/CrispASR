@@ -149,6 +149,8 @@ def preserve(mode, out, scratch, pin):
 
 
 def main():
+    import psutil
+
     assert os.environ.get('GITHUB_ACTIONS') == 'true' and os.environ.get('GITHUB_REPOSITORY') == REPOSITORY
     out, scratch = Path(os.environ['PRESERVE_OUT']), Path(os.environ['PRESERVE_SCRATCH'])
     out.mkdir(parents=True, exist_ok=True)
@@ -162,8 +164,7 @@ def main():
 
     save()
     try:
-        available = next(int(line.split()[1]) for line in Path('/proc/meminfo').read_text().splitlines()
-                         if line.startswith('MemAvailable:'))
+        available = psutil.virtual_memory().available // 1024
         receipt['resources'] = dict(load=os.getloadavg(), available_kib=available,
                                     disk_free=shutil.disk_usage(scratch).free)
         assert available >= 2 * 1024**2 and os.getloadavg()[0] < 2 * (os.cpu_count() or 1)

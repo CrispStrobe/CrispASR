@@ -30,9 +30,11 @@ record external dependencies without speculative fixes or unsupported closure.
    closure. [Assessment](docs/canary-532-reproducer-review-2026-10-26.json).
 3. **In progress:** CUDA/MMQ #483: preserve the original matched packages and notices before
    November 7 expiry; obtain actual GTX1660/MX150 correctness/timing evidence.
-   Actions preservation 40399378816 is queued at source `2730866a8`: original
-   ZIPs and additive CUDA/cuBLAS notices go to a verified maintainer draft, with
-   no rebuild or publication. Archive/draft controls and actionlint pass. Actual
+   Initial Actions preservation 40399378816 remained unstarted in the Ubuntu
+   queue for over 30 minutes and was canceled before any step. Move this archive-
+   only job to macOS with pinned binary-only psutil for equivalent resource checks.
+   Original ZIPs and additive CUDA/cuBLAS notices go to a verified maintainer
+   draft, with no rebuild or publication. Archive/draft controls and actionlint pass. Actual
    GTX1660/MX150 access was requested from the user; no hardware claim yet.
 4. **Code/log review complete; awaiting B390:** VoxCPM2 #461: all 19 comments
    reviewed. VAE initialization explains 76.4% of the historical VAE increase;
