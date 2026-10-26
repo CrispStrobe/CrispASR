@@ -1,0 +1,34 @@
+{
+  "review_date": "2026-10-26",
+  "issue": 456,
+  "issue_updated_at": "2026-10-20T12:56:22Z",
+  "comments_read": 2,
+  "disposition": "integration_deferred_pending_appropriate_rights_and_distribution_review",
+  "model_revision": "9c8e724072261c30641a91ca365ce4f7b4ae7f83",
+  "model_current_revision_matches_pin": true,
+  "model_license_url": "https://huggingface.co/nyralabs/nyra_forced_aligner_en/raw/9c8e724072261c30641a91ca365ce4f7b4ae7f83/LICENSE.md",
+  "model_license_sha256": "b1aed942e58df7d8abbc2b7006b322f0bb909bab8566da35a79843e9600f5c31",
+  "model_license_full_parts_read": [
+    "A",
+    "B",
+    "C"
+  ],
+  "model_license_version": "1.0",
+  "model_license_effective_date": "2026-09-21",
+  "software_revision": "e8235c3a213af2e63449b814969b029dc8b6f78a",
+  "software_license_sha256": "2f9a510502298df545257cb446cb4ca8a0cadd6b436f1978ba9f0dd0bfe986b1",
+  "readme_sha256": "bee74ecbd228970eec3a2220fedac5c7d999b4bfdbeb7692fca6e263efe47852",
+  "dependency_metadata_sha256": "865033564bf9cc4e6bde29baa699d4de5ac098ddc6f712477ad3d70f6c3da073",
+  "written_rights_supplied_or_obtained": false,
+  "conversion_performed": false,
+  "backend_added": false,
+  "registry_entry_added": false,
+  "model_or_output_dataset_published": false,
+  "independent_obligations": [
+    "Model/output restrictions and signed written rights for otherwise prohibited intended uses.",
+    "Derivative-model license/attribution and recipient contractual obligations.",
+    "Output marking, recipient contracts and downstream training restrictions.",
+    "Exact WavLM provenance and upstream notices.",
+    "espeak-ng and phonemizer dependency/linkage obligations."
+  ]
+}

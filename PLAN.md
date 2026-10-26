@@ -45,8 +45,11 @@ record external dependencies without speculative fixes or unsupported closure.
    separate. Runner API lists zero self-hosted runners. Added pre-SDK-pull RAM/
    load enforcement; no SDK execution, image build or publication in this review.
    [Permission/runner receipt](docs/musa-permissions-review-2026-10-26.json).
-6. **In progress:** Nyra #456: resolve/review research and generated-output terms before any port
-   or redistribution. Keep deferred unless appropriate rights are established.
+6. **Full review complete; deferred:** Nyra #456 description/both comments and
+   the complete pinned Parts A–C license reviewed. Production/hosted/API uses,
+   converted model distribution, generated outputs and downstream training need
+   separate rights/obligations; ordinary NC acceptance does not clear a port.
+   No new model/conversion/backend work. [Pinned review](docs/nyra-license-review-2026-10-26.md).
 
 ## Published and verified — 0.8.45 (2026-10-26)
 

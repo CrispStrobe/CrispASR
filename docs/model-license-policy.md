@@ -29,8 +29,10 @@ terms are not evidence of permission.
 
 - Drama-3: the Fish Audio Community License includes revenue and hosted-service
   conditions. Keep issues545/546 outside implementation/release scope.
-- Nyra: model terms restrict research/commercial use and the generated alignment
-  outputs; issue456 requires separate review, rather than an ordinary NC switch.
+- Nyra: the [full pinned review](nyra-license-review-2026-10-26.md) keeps issue456
+  deferred. Terms exclude production/operational and hosted/API use, restrict
+  generated outputs and impose derivative/recipient obligations. A normal NC
+  acceptance switch does not clear integration.
 - OmniVoice: the original-generation model revision
   `c5fdb5ccb189668d56333f77ba2629f4cd7535f4` already distinguishes Apache-2.0 code
   from CC-BY-NC weights. This is not merely a later change to today's card. The
