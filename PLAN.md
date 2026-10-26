@@ -15,7 +15,16 @@ Owner: Codex. The user authorized publication of the prepared release.
    sys crate uploaded, but the wrapper raced Cargo index propagation after a
    fixed 30-second sleep. Confirm index visibility and retry only the failed
    publisher; replace the future wait with bounded exact-version resolution.
-   Preserve successful assets and avoid unrelated rebuilds.
+   Preserve successful assets and avoid unrelated rebuilds. Six Docker flavours
+   published; MUSA alone failed because the SDK image lacks CUB headers. Supply
+   Moore Threads' pinned official muAlg headers and their complete MIT/BSD
+   notices, preserve existing kernels, and rebuild only that image on Actions.
+   Its runtime must also retain the shared-library tree, entrypoint and project
+   notices. Recovery
+   keeps tag source unchanged, pins muAlg `e189e81f5` and license SHA256
+   `2ac06c9d4c058c9159e16ee8a83b41e3a403cf690fde725e664c2595e5f425a8`,
+   builds/tests only on Actions, and publishes only after runtime filesystem
+   gates pass. MUSA GPU inference is not qualified by this packaging recovery.
 4. **In progress:** preserve native third-party notices in wheels via pinned
    packaging QA (the tag staging script copies only libraries). Missing, empty, stale and byte-preservation fault controls cover both staging
    and finished wheels; pinned QA staging records every original and staged
