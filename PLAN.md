@@ -1,5 +1,23 @@
 # CrispASR — Pending work
 
+## NOW — Publish and verify 0.8.45 (2026-10-26)
+
+Owner: Codex. The user authorized publication of the prepared release.
+
+1. **Complete:** verified the existing annotated tag, VERSION 0.8.45, current
+   glint marker and all fourteen qualified source workflows. Preserve the prepared
+   tag target `e58bb48b52cf1fe957c19586297c83a2ed0d9fe4`.
+2. Push `v0.8.45` and publish release notes through the normal release pipeline.
+   All compilation runs on hosted Actions; actual CUDA qualification is already
+   retained from Kaggle. No local compilation or model inference is required.
+3. Monitor each release platform and wheel producer. Resolve actual packaging
+   failures without replacing successful assets or rebuilding unrelated jobs.
+4. Verify release asset completeness, runtime splits/notices and anonymous
+   downloads; verify the four CPU wheels and sdist published on PyPI against
+   their producer hashes, plus the CUDA/Vulkan wheel index.
+5. Record final publication receipts and clean up release-note files on main
+   only after publication; the tag retains its original notes.
+
 ## NOW — 0.8.45 prepared; external evidence pending (2026-10-25)
 
 Owner: Codex. The complete authorized agenda is integrated on main. All fourteen
