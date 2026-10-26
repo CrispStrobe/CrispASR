@@ -5,6 +5,7 @@ Diagnostic only: no model publication or acceptance-gate/default changes.
 CPU builds run on Actions; --library/--cli permits a prebuilt actual-CUDA replay.
 """
 import argparse
+from contextlib import contextmanager
 import ctypes as ct
 import hashlib
 import json
@@ -41,6 +42,41 @@ def digest(path):
 
 def words(text):
     return re.findall('[a-z]+', re.sub(r'<[^>]*>', '', text).lower())
+
+
+def active_gpu_samples(text, pid):
+    """NVIDIA pmon -s u: gpu, pid, type, SM%, memory%, ... ."""
+    rows = [line.split() for line in text.splitlines() if not line.lstrip().startswith('#')]
+    return [row for row in rows if len(row) >= 5 and row[0] == '0'
+            and row[1] == str(pid) and row[3].isdigit() and int(row[3]) > 0]
+
+
+@contextmanager
+def gpu_decode_activity(out, result, save):
+    """Capture process-specific SM activity during the reused decode sequence.
+
+    The model is already open; CUDA context/weight initialization occurs before
+    this interval. No claim is made that every graph operator executes on CUDA.
+    See https://docs.nvidia.com/deploy/nvidia-smi/index.html#process-monitoring
+    """
+    path = out / 'decode-pmon.txt'
+    with path.open('w') as stream:
+        monitor = subprocess.Popen(['nvidia-smi', 'pmon', '-i', '0', '-s', 'u', '-d', '1'],
+                                   stdout=stream, stderr=subprocess.STDOUT)
+        try:
+            yield
+        finally:
+            monitor.terminate()
+            try:
+                monitor.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                monitor.kill()
+                monitor.wait()
+    samples = active_gpu_samples(path.read_text(), os.getpid())
+    result['decode_gpu_activity'] = dict(process_id=os.getpid(), active_samples=len(samples),
+                                        evidence=path.name, verified=bool(samples))
+    save()
+    assert samples, 'No own-process SM activity established during decoding'
 
 
 def resources():
@@ -152,7 +188,7 @@ def replay(args):
 
     def session(backend='nemotron'):
         return Session(str(model), lib_path=args.library, backend=backend, n_threads=4,
-                       use_gpu=args.device == 'cuda')
+                       use_gpu=args.device == 'cuda', verbosity=1 if args.device == 'cuda' else 0)
 
     resources()
     labels = list(prior['cases'])
@@ -160,12 +196,32 @@ def replay(args):
     for label in labels:
         with session() as s:
             assert s.backend == 'nemotron'
+            if args.device == 'cuda' and 'actual_cuda' not in result:
+                mapped = sorted({line.split()[-1] for line in Path('/proc/self/maps').read_text().splitlines()
+                                 if 'libggml-cuda.so' in line})
+                allocations = subprocess.check_output(
+                    ['nvidia-smi', '--id=0', '--query-compute-apps=pid,used_gpu_memory',
+                     '--format=csv,noheader,nounits'], text=True)
+                result['actual_cuda'] = dict(mapped_backend=mapped, process_allocations=allocations,
+                                             process_id=os.getpid())
+                save()
+                assert mapped, 'Actual CUDA backend is not mapped'
+                sizes = [float(line.split(',')[-1].strip()) for line in allocations.splitlines()
+                         if re.fullmatch(r'\s*\d+\s*,\s*[0-9.]+\s*', line)
+                         and int(line.split(',')[0].strip()) == os.getpid()]
+                assert sizes and max(sizes) >= 512, 'Model CUDA allocation not established'
             result['fresh'][label] = ' '.join(x.text for x in s.transcribe(pcm(label), language='en-US'))
         save()
     with session() as s:
-        for label in reversed(labels):
-            result['reused'][label] = ' '.join(x.text for x in s.transcribe(pcm(label), language='en-US'))
-            save()
+        def reused():
+            for label in reversed(labels):
+                result['reused'][label] = ' '.join(x.text for x in s.transcribe(pcm(label), language='en-US'))
+                save()
+        if args.device == 'cuda':
+            with gpu_decode_activity(out, result, save):
+                reused()
+        else:
+            reused()
     opaque = out / 'opaque.gguf'
     opaque.symlink_to(model)
     with Session(str(opaque), lib_path=args.library, n_threads=4, use_gpu=args.device == 'cuda') as s:
@@ -283,6 +339,11 @@ def main():
         row = dict(repo=repo, revision=revision, file=filename, sha256=sha, bytes=size, returncode=code)
         if (dest / 'result.json').exists():
             row.update(json.loads((dest / 'result.json').read_text()))
+        if args.device == 'cuda':
+            log = (out / (profile + '-session.log')).read_text()
+            row['cuda_backend_selection_verified'] = ('nemotron: backend = CUDA0' in log and
+                                                       'nemotron: backend = CPU' not in log)
+            assert row['cuda_backend_selection_verified'], 'CUDA request fell back to CPU'
         receipt['profiles'][profile] = row
         save()
         if profile == 'f16':
