@@ -21,7 +21,8 @@ Owner: Codex. The user authorized publication of the prepared release.
    and finished wheels; hosted wheel jobs must verify every staged notice after
    building. The local pure-package smoke exceeded its 30-second bound under
    shared load, so actual package building stays on Actions. Verify release asset
-   completeness, runtime splits/notices and anonymous downloads; verify the four CPU wheels and sdist published on PyPI against
+   completeness, runtime splits/notices and anonymous downloads, plus bounded
+   portable Linux CLI version and C ABI library-load checks on Actions; verify the four CPU wheels and sdist published on PyPI against
    their producer hashes, plus the CUDA/Vulkan wheel index.
    Readback tooling also repairs missing project notices in the two legacy
    Linux Python archives, WASM and xcframework archives after the native producer

@@ -109,6 +109,44 @@ def tag_file(tag, name):
     return base64.b64decode(item["content"])
 
 
+def runtime_smoke(path):
+    """Exercise the downloaded portable CLI/C ABI without loading any model."""
+    import tempfile
+    if os.getloadavg()[0] > 2 * (os.cpu_count() or 1):
+        raise RuntimeError("Hosted runner too loaded for the bounded runtime smoke")
+    available = next(int(line.split()[1]) for line in Path("/proc/meminfo").read_text().splitlines()
+                     if line.startswith("MemAvailable:"))
+    if available < 512 * 1024:
+        raise RuntimeError("Hosted runner has less than 512 MiB available")
+    env = {"PATH": os.environ["PATH"], "LANG": "C.UTF-8",
+           "OMP_NUM_THREADS": "1", "OPENBLAS_NUM_THREADS": "1"}
+    with tempfile.TemporaryDirectory(dir=SCRATCH) as folder:
+        destination = Path(folder)
+        with tarfile.open(path, "r:gz") as archive:
+            archive.extractall(destination, filter="data")
+        if path.name == "crispasr-linux-x86_64.tar.gz":
+            executable = destination / "crispasr-linux-x86_64/crispasr"
+            command = [str(executable), "--version"]
+        else:
+            lib = destination / "libcrispasr-linux-x86_64/lib"
+            candidates = list(lib.glob("libcrispasr.so*")) or list(lib.glob("libwhisper.so*"))
+            assert candidates, "Downloaded C ABI bundle contains no loadable library"
+            library = sorted(candidates, key=lambda p: len(p.name))[0]
+            command = [sys.executable, "-c",
+                       "import ctypes,sys; lib=ctypes.CDLL(sys.argv[1]); "
+                       "names=['crispasr_session_open','crispasr_session_transcribe',"
+                       "'crispasr_session_synthesize']; "
+                       "assert all(getattr(lib,n) for n in names); "
+                       "print('Packaged C ABI loads and exports all three Session entry points')",
+                       str(library)]
+        process = subprocess.run(command, env=env, capture_output=True, text=True, timeout=30)
+        (OUT / (path.name + ".smoke.log")).write_text(process.stdout + process.stderr)
+        assert process.returncode == 0, (path.name, process.stdout, process.stderr)
+        if path.name == "crispasr-linux-x86_64.tar.gz":
+            assert "0.8.45" in process.stdout
+        return dict(exit_code=process.returncode, stdout=process.stdout.strip(), no_model_loaded=True)
+
+
 def repair_notices(path, members, notices):
     roots = {PurePosixPath(name).parts[0] for name in members}
     if len(roots) != 1:
@@ -206,6 +244,8 @@ def native(args, result):
                 members = after
                 repaired.unlink()
             record["members"] = members
+            if name in {"crispasr-linux-x86_64.tar.gz", "libcrispasr-linux-x86_64.tar.gz"}:
+                record["runtime_smoke"] = runtime_smoke(path)
             if "-non-cuda" in name:
                 assert not any(PurePosixPath(n).name.lower().startswith(("cublas", "cudart"))
                                for n in members), name
