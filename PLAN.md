@@ -15,13 +15,20 @@ record external dependencies without speculative fixes or unsupported closure.
    selects only qualified F16 (~1.3 GB), retains OpenMDW-1.1/origin files, and
    prevents stale Q4 cache or missing-Q4-to-F16 substitution. Explicit existing
    Q4 files remain diagnostic inputs. Registry units pass 7,042 assertions/71
-   cases; full C ABI checks run on Actions. [Policy and complete evidence](docs/nemotron-default-policy-2026-10-26.md).
+   cases; frozen source `2ed915ae0` runs full C ABI CI 40394217371, lint
+   40394221291 and secrets 40394225126. [Policy and complete evidence](docs/nemotron-default-policy-2026-10-26.md).
    Full recovery 40383267861 verifies the original ZIP hash and all 22 retained
    members; its accidental model-weight duplicate is removed after anonymous
    full readback of the permanent 79-file proof. No issue closure is implied.
-2. Canary #532: review/obtain the exact failing clip, assertion and device/build
-   context; retain the unreproduced status if these remain unavailable.
-3. CUDA/MMQ #483: preserve the original matched packages and notices before
+2. **Reviewed; awaiting exact reproducer:** Canary #532 description and both
+   comments reread, with no reporter follow-up or linked issue comments. The
+   allocation/logits export is byte-identical to the earlier CPU probe; later
+   model-format/Viterbi changes do not demonstrate the reported pipeline fixed.
+   Missing assertion, startup device/build, model filenames and shareable German
+   clip were requested from the user. Existing CPU/T4 probes do not reproduce
+   that private translation/VAD/diarization pipeline; no allocator patch or
+   closure. [Assessment](docs/canary-532-reproducer-review-2026-10-26.json).
+3. **In progress:** CUDA/MMQ #483: preserve the original matched packages and notices before
    November 7 expiry; obtain actual GTX1660/MX150 correctness/timing evidence.
 4. VoxCPM2 #461: investigate B390 VAE setup and LocDiT costs while preserving
    ten-step quality; actual B390 validation remains required.

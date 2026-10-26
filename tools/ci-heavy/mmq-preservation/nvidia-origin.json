@@ -1,0 +1,9 @@
+{
+  "url": "https://docs.nvidia.com/cuda/archive/12.6.3/eula/index.html",
+  "retrieved": "2026-10-26",
+  "source_html_sha256": "676a5b14c2d308fb2ee868b12e20c266251a53a933a116a5b68a5413e9016af0",
+  "text_sha256": "36d2ae0fe764f6b786185bd388bc571edbe3e0d53ca5a3bd562ac994bdb0af7e",
+  "scope": "Full official CUDA 12.6.3 SDK agreement, supplement and attachment notices; HTML formatting removed",
+  "full_eula_copy_explicitly_required": false,
+  "applicable_cublas_third_party_notices_required": true
+}

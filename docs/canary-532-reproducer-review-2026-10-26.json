@@ -1,0 +1,20 @@
+{
+  "issue": 532,
+  "read_description": true,
+  "comments_read": 2,
+  "issue_updated_at": "2026-10-12T07:42:16Z",
+  "linked_issue_comments": [],
+  "reporter_followup_after_owner_probes": false,
+  "current_source": "2ed915ae0238fb065943c366e279dd5c11a41a16",
+  "ctc_logit_export_matches_prior_cpu_probe": true,
+  "ctc_logit_export_sha256": "aac1505625d3a83a2c3a4d10620e5135559617452209b8d88d204ae5ebff1fb3",
+  "reported_pipeline_reproduced": false,
+  "runtime_fix_applied": false,
+  "required_inputs": [
+    "shareable failing German audio URL",
+    "assertion immediately before backtrace",
+    "startup device/backend and build commit",
+    "main/alignment model filenames"
+  ],
+  "status": "awaiting exact reproducer; no speculative allocator fix"
+}

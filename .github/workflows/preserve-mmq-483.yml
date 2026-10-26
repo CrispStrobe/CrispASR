@@ -1,0 +1,38 @@
+name: Preserve original issue 483 MMQ pair
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: read
+
+concurrency:
+  group: preserve-original-mmq-483
+  cancel-in-progress: false
+
+jobs:
+  preserve:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Check archive and draft ownership guards
+        run: python3 -B tests/test_mmq_preservation.py -v
+      - name: Preserve originals and verify draft asset readback
+        env:
+          PRESERVE_OUT: ${{ runner.temp }}/mmq-receipt
+          PRESERVE_SCRATCH: ${{ runner.temp }}/mmq-scratch
+        run: python3 -B tools/ci-heavy/preserve_cuda126_mmq.py
+      - name: Retain small audit receipt and notice inventory
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: mmq-preservation-${{ github.run_id }}
+          path: ${{ runner.temp }}/mmq-receipt
+          if-no-files-found: error
+          retention-days: 90
