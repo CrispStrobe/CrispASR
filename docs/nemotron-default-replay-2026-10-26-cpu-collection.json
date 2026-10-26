@@ -1,0 +1,108 @@
+{
+  "artifact_id": 12680065211,
+  "producer_run": 40377479500,
+  "method": "explicit bounded HTTP ranges",
+  "full_archive_digest_recomputed": false,
+  "retained": {
+    "apt-install.log": {
+      "bytes": 2459,
+      "sha256": "09806ffa9b4489e9829ab76a836d5f9940f7a65eb72dbb7bba684f7f8eadec59"
+    },
+    "apt-update.log": {
+      "bytes": 1499,
+      "sha256": "24e02b855549fb7fa5bca16a4e5210aec41979f56e027ac7860c34f793b34b9f"
+    },
+    "build.log": {
+      "bytes": 480758,
+      "sha256": "74512e9c24458413196c1474d229f825ee089150b4628f52d79e63c7b8a30a27"
+    },
+    "configure.log": {
+      "bytes": 2760,
+      "sha256": "f5979ece7145be48504e2b6a959b62a0b6b8908b3ec47e1fa2f91a1f8057a22f"
+    },
+    "f16/cli-control.txt": {
+      "bytes": 38,
+      "sha256": "b9cee5cfa07a755c3725e78b88db99020e8316d76f6536100a1c37a0ed39f487"
+    },
+    "f16/cli-control.wav": {
+      "bytes": 204844,
+      "sha256": "cf5238a514b333cd57a1d5a8a2086c91627b4db7cb19b6225122be2e3cfafce1"
+    },
+    "f16/cli.log": {
+      "bytes": 726,
+      "sha256": "fc2e8205fd3fe2dc5d3bcd9d7ab518236d7992928bdbc2535dbe74ce845bd287"
+    },
+    "f16/encoder_output.npy": {
+      "bytes": 569472,
+      "sha256": "e6e22d1e792f6b690244f3f19246a5677b7706ff4064b7356075f750ffc17a08"
+    },
+    "f16/mel_spectrogram.npy": {
+      "bytes": 563840,
+      "sha256": "4215900c3d1928472aa7d458b7174af61b51c94415950e95e416cd9f4a9f0913"
+    },
+    "f16/pre_encode_output.npy": {
+      "bytes": 569472,
+      "sha256": "02e686d86ef439d5c2f33bc270edbb32a3dcabe6b75c641b4f80e41ce3641805"
+    },
+    "f16/result.json": {
+      "bytes": 7102,
+      "sha256": "2621458e3c1321bc4ff5f588f55accfec23f5a245f58438ad562cf8ccec271de"
+    },
+    "f16-session.log": {
+      "bytes": 14005,
+      "sha256": "54cf6f9ec3892bb7c1a14eb1ab0ccf5c8a45e4577b75ba7c7e75201ea7d80063"
+    },
+    "registry-q4/cli-control.txt": {
+      "bytes": 68,
+      "sha256": "d28bc131ac8ad94cbb8d074bdffc57461fbfb9b3eb0ddd7d5ab8a788505650a2"
+    },
+    "registry-q4/cli-control.wav": {
+      "bytes": 204844,
+      "sha256": "cf5238a514b333cd57a1d5a8a2086c91627b4db7cb19b6225122be2e3cfafce1"
+    },
+    "registry-q4/cli.log": {
+      "bytes": 756,
+      "sha256": "151eeb07b8284ef006a4ad008afcac4a332b21d64e7ed509bb1af9fc9c3ca639"
+    },
+    "registry-q4/encoder_output.npy": {
+      "bytes": 569472,
+      "sha256": "73d19fc75db9fb352f756636d305614503e2aa70748f32e4a19c5d47ae0b48b4"
+    },
+    "registry-q4/mel_spectrogram.npy": {
+      "bytes": 563840,
+      "sha256": "4215900c3d1928472aa7d458b7174af61b51c94415950e95e416cd9f4a9f0913"
+    },
+    "registry-q4/pre_encode_output.npy": {
+      "bytes": 569472,
+      "sha256": "9997e866cccce47f515a8e210b77987fd567e7e59c34d0e51d37249391f54149"
+    },
+    "registry-q4/result.json": {
+      "bytes": 7675,
+      "sha256": "aac8c3895bcd3e5d2dad596cd7a2e1c558752cbda9ffe747586bd6c5886c899c"
+    },
+    "registry-q4-session.log": {
+      "bytes": 14006,
+      "sha256": "c36b07dbe1664c170203e343eecc4fcde5fdeea9dc6679d8d46209ae28a597e2"
+    },
+    "replay.json": {
+      "bytes": 17765,
+      "sha256": "f4e078e83504da76b7a0b2bf85847d21b14c9232ab8bacd112b52b3e81bc62fb"
+    },
+    "summary.md": {
+      "bytes": 130,
+      "sha256": "b26b60a653180b5a890ffb245b0ea9ad8be480f57894bf26495de04f429c4ba1"
+    }
+  },
+  "excluded": {
+    "f16/opaque.gguf": {
+      "bytes": 1286368480,
+      "crc32": 663688554
+    },
+    "registry-q4/opaque.gguf": {
+      "bytes": 408557984,
+      "crc32": 1407067579
+    }
+  },
+  "transferred_bytes": 3528900,
+  "http_requests": 123
+}

@@ -17,6 +17,16 @@ record external dependencies without speculative fixes or unsupported closure.
    CUDA requires worker-specific model allocation and SM activity during decode,
    after initialization. Published OpenMDW-1.1 model terms and origin are retained
    in `docs/nemotron-model-notices/`; this is not model acceptance or a rights warranty.
+   **CPU diagnosis complete:** F16 matches all 26 original transcripts and all
+   22 VoxCPM prompts, with all three stage/magnitude gates passing. The actual
+   registry Q4 matches only 11/26 and 8/22; pre-encode/encoder gates and its CLI
+   control fail. Fresh/reused outputs are stable for both profiles. The
+   [unmodified CPU receipt](docs/nemotron-default-replay-2026-10-26-cpu.json) and
+   [independent array/transcript audit](docs/nemotron-default-replay-2026-10-26-cpu-audit.json)
+   retain the result; three corrupt-receipt controls are rejected. Actual CUDA
+   and the resulting default policy remain pending. The first artifact's
+   accidental model links are excluded from bounded local collection; remote
+   recovery 40383267861 will verify the full archive before duplicate cleanup.
 2. Canary #532: review/obtain the exact failing clip, assertion and device/build
    context; retain the unreproduced status if these remain unavailable.
 3. CUDA/MMQ #483: preserve the original matched packages and notices before

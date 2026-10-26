@@ -356,14 +356,22 @@ def main():
             assert row['cuda_backend_selection_verified'], 'CUDA request fell back to CPU'
         receipt['profiles'][profile] = row
         save()
+        print('NEMOTRON_PROFILE=' + json.dumps({key: row.get(key) for key in
+              ('profile', 'device', 'returncode', 'complete', 'accepted', 'original_word_matches', 'voxcpm_exact')}),
+              flush=True)
         if profile == 'f16':
             assert code == 0 and row.get('accepted'), 'Pinned F16/original control must pass before interpreting Q4'
     receipt['complete'] = all(x.get('complete') for x in receipt['profiles'].values())
     receipt['current_default_accepted'] = receipt['profiles']['registry-q4'].get('accepted', False)
     save()
     assert receipt['complete'], 'Replay incomplete; raw failure retained'
-    (out / 'summary.md').write_text('Complete 26-case original-reference replay; see replay.json.\n'
-                                  'Diagnostic acceptance is per profile; no default or model promotion.\n')
+    lines = ['Complete 26-case original-reference replay; see replay.json.',
+             'Diagnostic completion does not approve Q4 or change defaults.', '',
+             '| Profile | Accepted | Original transcript matches | VoxCPM prompt matches |',
+             '| --- | --- | --- | --- |']
+    for profile, row in receipt['profiles'].items():
+        lines.append(f'| {profile} | {row["accepted"]} | {row["original_word_matches"]}/26 | {row["voxcpm_exact"]}/22 |')
+    (out / 'summary.md').write_text('\n'.join(lines) + '\n')
 
 
 if __name__ == '__main__':
