@@ -9,10 +9,13 @@ import argparse
 import base64
 import copy
 from email.parser import BytesParser
+from functools import lru_cache
 import hashlib
 from html.parser import HTMLParser
 import json
 import os
+import posixpath
+import re
 from pathlib import Path, PurePosixPath
 import shutil
 import subprocess
@@ -72,13 +75,15 @@ def inventory(path):
     members = {}
     total = 0
 
-    def add(name, stream, link=None, mode=None):
+    def add(name, stream, link=None, mode=None, link_type=None):
         nonlocal total
         name = safe_name(name)
         if name in members:
             raise ValueError(f"Duplicate archive member: {name}")
         record = dict(link=link) if link is not None else sha_stream(stream)
         record["mode"] = mode
+        if link is not None:
+            record["link_type"] = link_type
         total += record.get("bytes", 0)
         if total > 32 * 1024**3 or len(members) > 100000:
             raise ValueError("Archive exceeds publication audit bounds")
@@ -98,12 +103,14 @@ def inventory(path):
                     with archive.extractfile(member) as stream:
                         add(member.name, stream, mode=member.mode)
                 elif member.issym() or member.islnk():
-                    add(member.name, None, link=member.linkname, mode=member.mode)
+                    add(member.name, None, link=member.linkname, mode=member.mode,
+                        link_type="symlink" if member.issym() else "hardlink")
                 elif not member.isdir():
                     raise ValueError(f"Unexpected archive member type: {member.name}")
     return members
 
 
+@lru_cache(maxsize=64)
 def tag_file(tag, name):
     item = api(f"contents/{name}?ref={tag}")
     return base64.b64decode(item["content"])
@@ -147,15 +154,29 @@ def runtime_smoke(path):
         return dict(exit_code=process.returncode, stdout=process.stdout.strip(), no_model_loaded=True)
 
 
-def repair_notices(path, members, notices):
+def archive_root(members):
     roots = {PurePosixPath(name).parts[0] for name in members}
     if len(roots) != 1:
-        raise ValueError(f"Expected one archive root for notice repair: {path.name}")
-    root = next(iter(roots))
+        raise ValueError("Expected one project archive root")
+    return next(iter(roots))
+
+
+def notice_digests(content):
+    canonical = content.replace(b"\r\n", b"\n")
+    return {hashlib.sha256(value).hexdigest()
+            for value in (content, canonical, canonical.replace(b"\n", b"\r\n"))}
+
+
+def root_notices_present(members, notices):
+    root = archive_root(members)
+    return all(members.get(f"{root}/{name}", {}).get("sha256") in notice_digests(content)
+               for name, content in notices.items())
+
+
+def repair_notices(path, members, notices):
+    root = archive_root(members)
     missing = {str(PurePosixPath(root) / name): content for name, content in notices.items()
-               if not any(PurePosixPath(n).name == name and
-                          value.get("sha256") == hashlib.sha256(content).hexdigest()
-                          for n, value in members.items())}
+               if members.get(f"{root}/{name}", {}).get("sha256") not in notice_digests(content)}
     if set(missing) & members.keys():
         raise ValueError("Refusing to replace an existing notice with different bytes")
     if not missing:
@@ -187,16 +208,146 @@ def repair_notices(path, members, notices):
     return repaired, after, sorted(missing)
 
 
+def rename_asset(asset_id, name):
+    return json.loads(subprocess.check_output(
+        ["gh", "api", f"repos/{REPO}/releases/assets/{asset_id}",
+         "--method", "PATCH", "-f", "name=" + name], text=True))
+
+
+def delete_asset(asset_id):
+    subprocess.run(["gh", "api", f"repos/{REPO}/releases/assets/{asset_id}",
+                    "--method", "DELETE"], check=True)
+
+
+def publish_repaired(args, asset, repaired, destination, proof, proof_path):
+    """Verify staged bytes first, retain the old asset through promotion, and roll back."""
+    name = asset["name"]
+    suffix = ".tar.gz" if name.endswith(".tar.gz") else ".zip"
+    staged_name = name[:-len(suffix)] + ".notice-staged-" + proof["repaired"]["sha256"][:16] + suffix
+    backup_name = name + ".notice-backup-" + proof["original"]["sha256"][:16]
+    staged_path = repaired.parent / staged_name
+    shutil.copyfile(repaired, staged_path)
+    subprocess.run(["gh", "release", "upload", args.tag, str(staged_path), "--repo", REPO], check=True)
+    staged = {a["name"]: a for a in api(f"releases/tags/{args.tag}")["assets"]}[staged_name]
+    verification = repaired.parent / "public-readback"
+    assert download(staged["browser_download_url"] + f"?verify={time.time_ns()}", verification) == proof["repaired"]
+    assert staged["digest"] == "sha256:" + proof["repaired"]["sha256"]
+    proof.update(staged_asset_id=staged["id"], staged_bytes_verified=True,
+                 original_asset_id=asset["id"], backup_name=backup_name)
+    proof_path.write_text(json.dumps(proof, indent=2) + "\n")
+    try:
+        rename_asset(asset["id"], backup_name)
+        fresh = rename_asset(staged["id"], name)
+        readback = download(fresh["browser_download_url"] + f"?verify={time.time_ns()}", verification)
+        assert readback == proof["repaired"]
+        assert fresh["digest"] == "sha256:" + readback["sha256"]
+        shutil.copyfile(verification, destination)
+        proof.update(published=True, final_asset_id=fresh["id"], anonymous_readback=readback)
+        proof_path.write_text(json.dumps(proof, indent=2) + "\n")
+    except Exception as error:
+        rollback_errors = []
+        # Both renames are idempotent. Attempt them even if a prior API request
+        # committed but its response was lost, so flags cannot hide a partial swap.
+        try:
+            rename_asset(staged["id"], staged_name)
+        except Exception as rollback_error:
+            rollback_errors.append(str(rollback_error))
+        try:
+            rename_asset(asset["id"], name)
+            proof["original_restored"] = True
+        except Exception as rollback_error:
+            rollback_errors.append(str(rollback_error))
+        proof.update(error=str(error), rollback_errors=rollback_errors)
+        proof_path.write_text(json.dumps(proof, indent=2) + "\n")
+        raise
+    # Cleanup is separate from promotion: if deletion fails, the verified new
+    # canonical asset stays available and the old backup remains recoverable.
+    try:
+        delete_asset(asset["id"])
+    except Exception as error:
+        proof["cleanup_error"] = str(error)
+        proof_path.write_text(json.dumps(proof, indent=2) + "\n")
+        raise
+    proof["original_backup_removed_after_verification"] = True
+    proof_path.write_text(json.dumps(proof, indent=2) + "\n")
+    staged_path.unlink()
+    verification.unlink()
+    return fresh, readback
+
+
+def parse_runtime_checksums(text, flavor):
+    if flavor not in {"cuda", "cuda126", "cuda13"}:
+        raise ValueError("Unreviewed CUDA runtime flavor")
+    major = "13" if flavor == "cuda13" else "12"
+    expected = {f"cudart64_{major}.dll", f"cublas64_{major}.dll", f"cublasLt64_{major}.dll"}
+    result = {}
+    for line in text.splitlines():
+        if not line.strip():
+            continue
+        fields = line.split(maxsplit=1)
+        if len(fields) != 2 or not re.fullmatch(r"[0-9a-fA-F]{64}", fields[0]):
+            raise ValueError("Malformed CUDA runtime checksum")
+        name = fields[1].strip().lstrip("*")
+        if name in result:
+            raise ValueError("Duplicate CUDA runtime checksum")
+        result[name] = fields[0].lower()
+    if set(result) != expected:
+        raise ValueError("CUDA runtime checksum set must contain the exact three DLLs")
+    return result
+
+
+
+def validate_cuda_payloads(records):
+    for flavor in ("cuda", "cuda126", "cuda13"):
+        text = records[f"crispasr-windows-x86_64-{flavor}-runtime-sha256.txt"]["runtime_checksums"]
+        checksums = parse_runtime_checksums(text, flavor)
+        full = records[f"crispasr-windows-x86_64-{flavor}.zip"]["members"]
+        runtime_entries = [(PurePosixPath(n).name, value) for n, value in full.items()
+                           if PurePosixPath(n).name.lower().startswith(("cublas", "cudart"))]
+        assert len(runtime_entries) == 3
+        runtime_files = dict(runtime_entries)
+        assert set(runtime_files) == set(checksums)
+        for filename, digest in checksums.items():
+            assert runtime_files[filename]["sha256"] == digest
+        if flavor in {"cuda", "cuda126"}:
+            runtime = records[f"{flavor}-runtime.zip"]["members"]
+            assert len(runtime) == 3
+            assert {PurePosixPath(n).name for n in runtime} == set(checksums)
+            for n, value in runtime.items():
+                expected = runtime_files[PurePosixPath(n).name]
+                assert all(value[k] == expected[k] for k in ("bytes", "sha256"))
+        if flavor in {"cuda", "cuda13"}:
+            for filename, digest in checksums.items():
+                assert records[filename]["sha256"] == digest
+    for name, record in records.items():
+        if "-non-cuda" not in name:
+            continue
+        full = records[name.replace("-non-cuda", "")]["members"]
+        def binaries(members):
+            return {str(PurePosixPath(n).relative_to(PurePosixPath(n).parts[0])): value
+                    for n, value in members.items()
+                    if n.lower().endswith((".dll", ".exe", ".lib", ".a"))
+                    and not PurePosixPath(n).name.lower().startswith(("cublas", "cudart"))}
+        original, split = binaries(full), binaries(record["members"])
+        assert original.keys() == split.keys(), name
+        for relative, value in split.items():
+            assert all(original[relative].get(k) == value.get(k)
+                       for k in ("bytes", "sha256", "link")), (name, relative)
+
+
 def native(args, result):
     run = api(f"actions/runs/{args.release_run}")
     assert run["status"] == "completed" and run["conclusion"] == "success", run
     assert run["head_sha"] == args.source and run["path"] == ".github/workflows/release.yml"
+    assert run["event"] == "push" and run["head_branch"] == args.tag
     release = api(f"releases/tags/{args.tag}")
     baseline = api("releases/tags/v0.8.44")
     expected = {a["name"].replace("0.8.44", args.tag.removeprefix("v")) for a in baseline["assets"]}
     # Wheels are produced by a later workflow and audited separately.
     expected = {name for name in expected if not name.endswith(".whl")}
     assets = {a["name"]: a for a in release["assets"] if not a["name"].endswith(".whl")}
+    if any(".notice-staged-" in n or ".notice-backup-" in n for n in assets):
+        raise ValueError("Unfinished notice repair: recover using the retained repair receipt before rerunning")
     assert expected <= assets.keys(), sorted(expected - assets.keys())
     notices = {name: tag_file(args.tag, name) for name in ("LICENSE", "THIRD_PARTY_NOTICES.txt")}
     records = {}
@@ -209,10 +360,7 @@ def native(args, result):
         if name.endswith((".tar.gz", ".zip")):
             members = inventory(path)
             project = name.startswith(("crispasr-", "libcrispasr-"))
-            notices_present = all(any(PurePosixPath(n).name == wanted and
-                                      value.get("sha256") == hashlib.sha256(content).hexdigest()
-                                      for n, value in members.items())
-                                  for wanted, content in notices.items())
+            notices_present = root_notices_present(members, notices) if project else False
             if project and not notices_present:
                 allowed = name in REPAIRABLE or name == f"crispasr-{args.tag}-xcframework.zip"
                 if not args.repair_notices or not allowed:
@@ -231,15 +379,8 @@ def native(args, result):
                 # as a workflow artifact rather than losing a produced file.
                 checkpoint = repair_dir / name
                 shutil.copyfile(repaired, checkpoint)
-                subprocess.run(["gh", "release", "upload", args.tag, str(repaired),
-                                "--repo", REPO, "--clobber"], check=True)
-                fresh = {a["name"]: a for a in api(f"releases/tags/{args.tag}")["assets"]}[name]
-                new_readback = download(fresh["browser_download_url"] + f"?verify={time.time_ns()}", path)
-                assert new_readback == sha_file(repaired)
-                assert fresh["digest"] == "sha256:" + new_readback["sha256"]
+                fresh, new_readback = publish_repaired(args, asset, repaired, path, proof, proof_path)
                 record.update(new_readback, asset_id=fresh["id"])
-                proof.update(published=True, final_asset_id=fresh["id"], anonymous_readback=new_readback)
-                proof_path.write_text(json.dumps(proof, indent=2) + "\n")
                 checkpoint.unlink()
                 members = after
                 repaired.unlink()
@@ -255,33 +396,7 @@ def native(args, result):
         (OUT / "native-assets.json").write_text(json.dumps(records, indent=2) + "\n")
         path.unlink()
         print("Verified native asset:", name, flush=True)
-    for name, record in records.items():
-        if name.endswith("runtime-sha256.txt"):
-            flavor = name.removeprefix("crispasr-windows-x86_64-").removesuffix("-runtime-sha256.txt")
-            full = records[f"crispasr-windows-x86_64-{flavor}.zip"]["members"]
-            for line in record["runtime_checksums"].splitlines():
-                digest, filename = line.split(maxsplit=1)
-                filename = filename.strip().lstrip("*")
-                found = [v for n, v in full.items() if PurePosixPath(n).name == filename]
-                assert len(found) == 1 and found[0]["sha256"] == digest.lower()
-                if flavor in {"cuda", "cuda126"}:
-                    runtime = records[f"{flavor}-runtime.zip"]["members"]
-                    paired = [v for n, v in runtime.items() if PurePosixPath(n).name == filename]
-                    assert len(paired) == 1
-                    assert all(paired[0][k] == found[0][k] for k in ("bytes", "sha256"))
-                else:
-                    assert records[filename]["sha256"] == digest.lower()
-    for name, record in records.items():
-        if "-non-cuda" in name:
-            full = records[name.replace("-non-cuda", "")]["members"]
-            by_relative_path = {str(PurePosixPath(n).relative_to(PurePosixPath(n).parts[0])): value
-                                for n, value in full.items()}
-            for n, value in record["members"].items():
-                if n.lower().endswith((".dll", ".exe", ".lib", ".a")):
-                    relative = str(PurePosixPath(n).relative_to(PurePosixPath(n).parts[0]))
-                    original = by_relative_path.get(relative)
-                    assert original and all(original.get(k) == value.get(k)
-                                            for k in ("bytes", "sha256", "link")), (name, relative)
+    validate_cuda_payloads(records)
     result["native"] = dict(complete=True, release_run=args.release_run,
                             assets=len(records), all_full_anonymous_readbacks=True,
                             asset_records="native-assets.json")
@@ -297,11 +412,105 @@ class Links(HTMLParser):
             self.hrefs.update(urllib.parse.unquote(v) for k, v in attrs if k == "href")
 
 
+def load_native_inventory(args, result):
+    if args.release_run:
+        return json.loads((OUT / "native-assets.json").read_text())
+    if not args.native_audit_run:
+        raise ValueError("Wheel verification requires a successful native inventory producer")
+    run = api(f"actions/runs/{args.native_audit_run}")
+    assert run["status"] == "completed" and run["conclusion"] == "success"
+    assert run["path"] == ".github/workflows/verify-release-publication.yml"
+    artifacts = api(f"actions/runs/{args.native_audit_run}/artifacts?per_page=100")["artifacts"]
+    selected = [a for a in artifacts if a["name"] == f"release-publication-{args.native_audit_run}"]
+    assert len(selected) == 1 and not selected[0]["expired"]
+    path = SCRATCH / "native-inventory.zip"
+    with path.open("wb") as target:
+        subprocess.run(["gh", "api", f"repos/{REPO}/actions/artifacts/{selected[0]['id']}/zip"],
+                       stdout=target, check=True)
+    with zipfile.ZipFile(path) as archive:
+        for name in ("receipt.json", "native-assets.json"):
+            assert archive.getinfo(name).file_size <= 64 * 1024**2
+        receipt = json.loads(archive.read("receipt.json"))
+        assert receipt["complete"] and receipt["acceptance"] and receipt["native"]["complete"]
+        assert receipt["source"] == args.source and receipt["tag"] == args.tag
+        assert receipt["audit_source"] == run["head_sha"]
+        records = json.loads(archive.read("native-assets.json"))
+    path.unlink()
+    result["native_inventory_producer"] = dict(run=args.native_audit_run, source=run["head_sha"],
+                                               artifact_id=selected[0]["id"])
+    return records
+
+
+def is_library(name):
+    return name.endswith((".dll", ".dylib", ".so")) or ".so." in name
+
+
+OPTIONAL_HELPERS = {"libcrispasr_helpers.so", "libcrispasr_helpers.dylib", "crispasr_helpers.dll"}
+
+
+def bundle_libraries(members):
+    root = archive_root(members)
+
+    def resolve(name):
+        seen = set()
+        while "link" in members[name]:
+            if name in seen or len(seen) >= 32:
+                raise ValueError("Cyclic native library alias")
+            seen.add(name)
+            row = members[name]
+            target = row["link"] if row["link_type"] == "hardlink" else posixpath.join(posixpath.dirname(name), row["link"])
+            name = safe_name(posixpath.normpath(target))
+            if not name.startswith(root + "/") or name not in members:
+                raise ValueError("Native alias leaves its bundle or has no payload")
+        return members[name]
+
+    for sub in ("lib", "bin", "src", ""):
+        folder = PurePosixPath(root) / sub
+        names = [n for n in members if PurePosixPath(n).parent == folder and is_library(PurePosixPath(n).name)]
+        if names:
+            result = {PurePosixPath(n).name: resolve(n) for n in names
+                      if PurePosixPath(n).name not in OPTIONAL_HELPERS}
+            assert result and any("crispasr" in n or "whisper" in n for n in result)
+            return result
+    raise ValueError("Native bundle contains no principal libraries")
+
+
+def verify_native_wheel(archive, expected, manifest):
+    packaged = {PurePosixPath(n).name: n for n in archive.namelist()
+                if PurePosixPath(n).parent == PurePosixPath("crispasr") and is_library(PurePosixPath(n).name)}
+    assert expected.keys() <= packaged.keys(), sorted(expected.keys() - packaged.keys())
+    for name, original in expected.items():
+        with archive.open(packaged[name]) as stream:
+            assert sha_stream(stream) == {k: original[k] for k in ("bytes", "sha256")}, name
+    for name in packaged.keys() - expected.keys() - OPTIONAL_HELPERS:
+        row = manifest["native_libraries"][name]
+        assert row["kind"] == "installed-runtime" and row["copyright_package"]
+        with archive.open(packaged[name]) as stream:
+            assert sha_stream(stream)["sha256"] == row["staged_sha256"]
+        copyright_name = "packages/" + row["copyright_package"].replace(":", "_") + "/copyright"
+        assert copyright_name in manifest["files"]
+    return len(expected)
+
+
 def wheels(args, result):
     run = api(f"actions/runs/{args.wheel_run}")
     assert run["status"] == "completed" and run["conclusion"] == "success", run
     assert run["path"] == ".github/workflows/release-python-wheels.yml"
+    assert run["event"] in {"workflow_run", "workflow_dispatch"}
     version = args.tag.removeprefix("v")
+    native = load_native_inventory(args, result)
+    native_assets = {
+        "cpu-wheel-linux-x86_64": "libcrispasr-linux-x86_64.tar.gz",
+        "cpu-wheel-linux-arm64": "libcrispasr-linux-arm64.tar.gz",
+        "cpu-wheel-macos-arm64": "libcrispasr-macos-arm64.tar.gz",
+        "cpu-wheel-windows-x86_64": "libcrispasr-windows-x86_64.tar.gz",
+        "gpu-wheel-linux-x86_64-cuda": "libcrispasr-linux-x86_64-cuda.tar.gz",
+        "gpu-wheel-windows-x86_64-cuda": "libcrispasr-windows-x86_64-cuda.tar.gz",
+        "gpu-wheel-windows-x86_64-vulkan": "libcrispasr-windows-x86_64-vulkan.tar.gz",
+    }
+    source_files = {item["name"] for item in api(f"contents/python/crispasr?ref={args.tag}")
+                    if item["type"] == "file" and (item["name"].endswith(".py") or item["name"] == "_helpers.c")}
+    assert source_files
     artifacts = api(f"actions/runs/{args.wheel_run}/artifacts?per_page=100")["artifacts"]
     wanted = {"sdist", "cpu-wheel-linux-x86_64", "cpu-wheel-linux-arm64", "cpu-wheel-macos-arm64",
               "cpu-wheel-windows-x86_64", "gpu-wheel-linux-x86_64-cuda",
@@ -335,13 +544,30 @@ def wheels(args, result):
                 fields = BytesParser().parsebytes(archive.read(metadata[0]))
                 expected_version = version + ("+vulkan" if "vulkan" in name else "+cuda" if name.startswith("gpu-") else "")
                 assert fields["Name"] == "crispasr" and fields["Version"] == expected_version
+                packaged_sources = {PurePosixPath(n).name for n in names
+                                    if PurePosixPath(n).parent == PurePosixPath("crispasr")
+                                    and (n.endswith(".py") or PurePosixPath(n).name == "_helpers.c")}
+                assert packaged_sources == source_files
+                for source in source_files:
+                    actual = archive.read("crispasr/" + source)
+                    expected = tag_file(args.tag, "python/crispasr/" + source)
+                    # Git checkout may use CRLF on Windows. No other source
+                    # rewriting is permitted by this packaging-only workflow.
+                    assert actual.replace(b"\r\n", b"\n") == expected.replace(b"\r\n", b"\n")
+                record["tag_package_sources_verified"] = len(source_files)
                 notice = "crispasr/licenses/THIRD_PARTY_NOTICES.txt"
-                assert archive.read(notice) == tag_file(args.tag, "THIRD_PARTY_NOTICES.txt")
+                assert archive.read(notice).replace(b"\r\n", b"\n") == tag_file(args.tag, "THIRD_PARTY_NOTICES.txt").replace(b"\r\n", b"\n")
+                assert archive.read("crispasr/licenses/LICENSE").replace(b"\r\n", b"\n") == tag_file(args.tag, "LICENSE").replace(b"\r\n", b"\n")
                 manifest = json.loads(archive.read("crispasr/licenses/manifest.json"))
+                license_files = {n.removeprefix("crispasr/licenses/") for n in names
+                                 if n.startswith("crispasr/licenses/") and not n.endswith("/")}
+                assert license_files == set(manifest["files"]) | {"manifest.json"}
                 for member_name, digest in manifest["files"].items():
                     with archive.open("crispasr/licenses/" + member_name) as stream:
                         assert sha_stream(stream)["sha256"] == digest
                 record["native_notices_verified"] = len(manifest["files"])
+                expected_native = bundle_libraries(native[native_assets[name]]["members"])
+                record["qualified_native_libraries_verified"] = verify_native_wheel(archive, expected_native, manifest)
         distributions[filename] = record
         archive_path.unlink()
     sys.path.insert(0, str(ROOT / "python/tools"))
@@ -385,6 +611,7 @@ def main():
     parser.add_argument("--source", required=True)
     parser.add_argument("--release-run", type=int)
     parser.add_argument("--wheel-run", type=int)
+    parser.add_argument("--native-audit-run", type=int)
     parser.add_argument("--repair-notices", action="store_true")
     args = parser.parse_args()
     assert args.tag == "v0.8.45"  # the reviewed release; do not silently generalize policy
@@ -393,7 +620,8 @@ def main():
     assert api(f"git/tags/{tag['sha']}")["object"]["sha"] == args.source
     assert tag_file(args.tag, "VERSION").decode().strip() == args.tag[1:]
     assert args.release_run or args.wheel_run
-    receipt = dict(tag=args.tag, source=args.source, complete=False, acceptance=False)
+    receipt = dict(tag=args.tag, source=args.source, audit_source=os.environ.get("GITHUB_SHA"),
+                   complete=False, acceptance=False)
     try:
         if args.release_run:
             native(args, receipt)

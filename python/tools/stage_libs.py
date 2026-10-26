@@ -20,6 +20,8 @@ resolution needs the versioned file to exist as real bytes.
 from __future__ import annotations
 
 import argparse
+import hashlib
+import json
 import os
 import platform
 import shutil
@@ -28,6 +30,15 @@ import sys
 from pathlib import Path
 
 LIB_GLOBS = ("lib*.so", "lib*.so.*", "*.so", "*.dylib", "*.dll")
+OPTIONAL_HELPERS = {"libcrispasr_helpers.so", "libcrispasr_helpers.dylib", "crispasr_helpers.dll"}
+
+
+def sha(path: Path) -> str:
+    h = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            h.update(block)
+    return h.hexdigest()
 
 # Shared objects that must NEVER be vendored into a wheel: the C runtime and its
 # friends. Copying these in is how you get two libcs in one process.
@@ -78,7 +89,7 @@ def _is_lib(p: Path) -> bool:
     )
 
 
-def copy_libs(lib_dir: Path, pkg: Path) -> list[str]:
+def copy_libs(lib_dir: Path, pkg: Path, provenance=None) -> list[str]:
     copied = []
     for entry in sorted(lib_dir.iterdir()):
         if not _is_lib(entry):
@@ -93,12 +104,15 @@ def copy_libs(lib_dir: Path, pkg: Path) -> list[str]:
         shutil.copyfile(src, dst)
         shutil.copymode(src, dst)
         copied.append(entry.name)
+        if provenance is not None:
+            provenance[entry.name] = dict(kind="release-bundle", bundle_name=entry.name,
+                                         source_sha256=sha(src), staged_sha256=sha(dst))
     if not copied:
         raise SystemExit(f"stage_libs: nothing copied from {lib_dir}")
     return copied
 
 
-def vendor_linux_deps(pkg: Path) -> tuple[list[str], list[str], list[str]]:
+def vendor_linux_deps(pkg: Path, provenance=None) -> tuple[list[str], list[str], list[str]]:
     """Copy the staged libraries' EXTERNAL dependencies into the package.
 
     The release bundle is relocatable but NOT self-contained: `libcrispasr.so`
@@ -169,6 +183,9 @@ def vendor_linux_deps(pkg: Path) -> tuple[list[str], list[str], list[str]]:
             if have_patchelf:
                 subprocess.run(["patchelf", "--set-rpath", "$ORIGIN", str(dst)],
                                check=False)
+            if provenance is not None:
+                provenance[soname] = dict(kind="installed-runtime", source_path=os.path.realpath(path),
+                                         source_sha256=sha(Path(path)), staged_sha256=sha(dst))
             staged.add(soname)
             vendored.append(soname)
             queue.append(dst)
@@ -241,6 +258,7 @@ def main() -> int:
                     help="extracted libcrispasr-<platform> bundle directory")
     ap.add_argument("--pkg", type=Path, default=Path(__file__).parent.parent / "crispasr",
                     help="the crispasr package directory to stage into")
+    ap.add_argument("--provenance", type=Path, help="write original/staged library identities for notice QA")
     args = ap.parse_args()
 
     bundle = args.bundle
@@ -251,7 +269,8 @@ def main() -> int:
         raise SystemExit(f"stage_libs: {pkg} is not the crispasr package")
 
     lib_dir = find_lib_dir(bundle)
-    copied = copy_libs(lib_dir, pkg)
+    provenance = {}
+    copied = copy_libs(lib_dir, pkg, provenance)
     print(f"stage_libs: staged {len(copied)} libs from {lib_dir}:", flush=True)
     for n in copied:
         print(f"  {n}", flush=True)
@@ -262,7 +281,7 @@ def main() -> int:
                       if d.is_dir()]
 
     if platform.system() == "Linux":
-        vendored, unresolved, host_provided = vendor_linux_deps(pkg)
+        vendored, unresolved, host_provided = vendor_linux_deps(pkg, provenance)
         if vendored:
             print(f"stage_libs: vendored {len(vendored)} external deps:", flush=True)
             for n in sorted(vendored):
@@ -281,6 +300,17 @@ def main() -> int:
             raise SystemExit(1)
 
     compile_helpers(pkg, include_dir, extra_includes)
+    for path in pkg.iterdir():
+        if not _is_lib(path) or not path.is_file():
+            continue
+        identity = sha(path)
+        if path.name not in provenance or provenance[path.name]["staged_sha256"] != identity:
+            if path.name not in OPTIONAL_HELPERS:
+                raise SystemExit(f"stage_libs: unexpected native payload change: {path.name}")
+            provenance[path.name] = dict(kind="compatibility-helper", staged_sha256=identity,
+                                         source_sha256=sha(pkg / "_helpers.c"))
+    if args.provenance:
+        args.provenance.write_text(json.dumps({"libraries": provenance}, indent=2) + "\n")
     return 0
 
 

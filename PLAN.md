@@ -18,7 +18,10 @@ Owner: Codex. The user authorized publication of the prepared release.
    Preserve successful assets and avoid unrelated rebuilds.
 4. **In progress:** preserve native third-party notices in wheels via pinned
    packaging QA (the tag staging script copies only libraries). Missing, empty, stale and byte-preservation fault controls cover both staging
-   and finished wheels; hosted wheel jobs must verify every staged notice after
+   and finished wheels; pinned QA staging records every original and staged
+   library identity, including newly vendored DSOs outside ldconfig. Runtime
+   package sources and headers remain at the qualified tag. Hosted wheel jobs
+   must verify every staged notice after
    building. The local pure-package smoke exceeded its 30-second bound under
    shared load, so actual package building stays on Actions. Verify release asset
    completeness, runtime splits/notices and anonymous downloads, plus bounded
@@ -27,7 +30,12 @@ Owner: Codex. The user authorized publication of the prepared release.
    Readback tooling also repairs missing project notices in the two legacy
    Linux Python archives, WASM and xcframework archives after the native producer
    finishes, preserving every original member, file mode and symlink. Six
-   payload/link/authorization fault controls pass. Future
+   payload/link/authorization fault controls pass. Independent review added strict
+   root notice paths, complete three-DLL CUDA checksums and full/split payload
+   equality, native-wheel payload matching, and exact vendored-runtime source
+   attribution. Twenty-eight controls pass. Repairs upload and verify a staged
+   replacement before retaining/renaming the original, with rollback on failure;
+   the original backup is removed only after canonical readback succeeds. Future
    release packaging now copies those notices before archiving.
 5. Record final publication receipts and clean up release-note files on main
    only after publication; the tag retains its original notes.

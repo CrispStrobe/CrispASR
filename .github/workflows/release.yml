@@ -942,6 +942,7 @@ jobs:
           python3 scripts/check-bundled-deps.py "$PKG"
 
           cp LICENSE THIRD_PARTY_NOTICES.txt "$PKG/"
+          cp LICENSE THIRD_PARTY_NOTICES.txt "$(dirname "$PKG")/"
           cd release && tar czf crispasr-python-linux-x86_64.tar.gz crispasr-python-linux-x86_64/
 
       - uses: actions/upload-artifact@v4
@@ -1020,6 +1021,7 @@ jobs:
           python3 scripts/check-bundled-deps.py "$PKG"
 
           cp LICENSE THIRD_PARTY_NOTICES.txt "$PKG/"
+          cp LICENSE THIRD_PARTY_NOTICES.txt "$(dirname "$PKG")/"
           cd release && tar czf crispasr-python-linux-arm64.tar.gz crispasr-python-linux-arm64/
 
       - uses: actions/upload-artifact@v4

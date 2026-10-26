@@ -98,6 +98,7 @@ jobs:
           sparse-checkout-cone-mode: false
           sparse-checkout: |
             python/tools/stage_wheel_notices.py
+            python/tools/stage_libs.py
             tests/test_wheel_notices.py
       - name: Verify missing notices fail closed
         run: python tests/test_wheel_notices.py -v
@@ -163,6 +164,7 @@ jobs:
             python/tools/wheel_abi_policies.json
             python/tools/auditwheel-policy.LICENSE
             python/tools/stage_wheel_notices.py
+            python/tools/stage_libs.py
 
       - name: Download + extract the prebuilt lib bundle
         shell: bash
@@ -197,14 +199,14 @@ jobs:
 
       - name: Stage libs into the package
         shell: bash
-        run: python python/tools/stage_libs.py --bundle "$BUNDLE_DIR"
+        run: python .wheel-qa/python/tools/stage_libs.py --bundle "$BUNDLE_DIR" --pkg python/crispasr --provenance native-provenance.json
 
       - name: Carry native bundle notices into the wheel
         shell: bash
         run: |
           python .wheel-qa/python/tools/stage_wheel_notices.py \
             --bundle "$BUNDLE_DIR" --package python/crispasr \
-            --pyproject python/pyproject.toml
+            --pyproject python/pyproject.toml --provenance native-provenance.json
 
       - name: Build + retag platform wheel
         shell: bash
@@ -374,6 +376,7 @@ jobs:
             python/tools/wheel_abi_policies.json
             python/tools/auditwheel-policy.LICENSE
             python/tools/stage_wheel_notices.py
+            python/tools/stage_libs.py
 
       - name: Download + extract the prebuilt lib bundle
         shell: bash
@@ -404,14 +407,14 @@ jobs:
 
       - name: Stage libs into the package
         shell: bash
-        run: python python/tools/stage_libs.py --bundle "$BUNDLE_DIR"
+        run: python .wheel-qa/python/tools/stage_libs.py --bundle "$BUNDLE_DIR" --pkg python/crispasr --provenance native-provenance.json
 
       - name: Carry native bundle notices into the wheel
         shell: bash
         run: |
           python .wheel-qa/python/tools/stage_wheel_notices.py \
             --bundle "$BUNDLE_DIR" --package python/crispasr \
-            --pyproject python/pyproject.toml
+            --pyproject python/pyproject.toml --provenance native-provenance.json
 
       - name: Add local version tag (+${{ matrix.local }})
         shell: bash

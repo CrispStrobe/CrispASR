@@ -22,7 +22,33 @@ def digest(path):
     return h.hexdigest()
 
 
-def stage(bundle, package, pyproject):
+def archive_path(path, root):
+    return path.relative_to(root).as_posix()
+
+
+
+def installed_package(path):
+    candidates = [path, path.resolve()]
+    candidates += [Path(str(p).replace("/usr/lib/", "/lib/", 1))
+                   for p in list(candidates) if str(p).startswith("/usr/lib/")]
+    owner = None
+    for candidate in candidates:
+        result = subprocess.run(["dpkg-query", "-S", str(candidate)], capture_output=True, text=True)
+        if result.returncode == 0:
+            owner = result.stdout.splitlines()[0].rsplit(": ", 1)[0]
+            break
+    if owner is None:
+        raise ValueError(f"Cannot identify installed runtime: {path.name}")
+    copyright_file = Path("/usr/share/doc") / owner.split(":")[0] / "copyright"
+    if not copyright_file.is_file() or not copyright_file.read_bytes().strip():
+        raise ValueError(f"Missing package copyright: {owner}")
+    identity = subprocess.check_output(
+        ["dpkg-query", "-W", "-f", "${binary:Package}\t${Version}\t${source:Package}\t${source:Version}\n",
+         owner], text=True).strip()
+    return owner, identity, copyright_file
+
+
+def stage(bundle, package, pyproject, provenance=None):
     bundle, package, pyproject = map(Path, (bundle, package, pyproject))
     required = [bundle / "LICENSE", bundle / "THIRD_PARTY_NOTICES.txt"]
     for source in required:
@@ -30,6 +56,20 @@ def stage(bundle, package, pyproject):
             raise ValueError(f"Missing or empty native bundle notice: {source}")
     if not (package / "_binding.py").is_file():
         raise ValueError("Not a crispasr package directory")
+    native = {p.name for p in package.iterdir() if p.is_file() and
+              (p.name.endswith((".dll", ".dylib", ".so")) or ".so." in p.name)}
+    records = json.loads(Path(provenance).read_text())["libraries"] if provenance else {}
+    if native != records.keys():
+        raise ValueError("Every staged native library requires original source provenance")
+    for name, record in records.items():
+        if record["kind"] not in {"release-bundle", "installed-runtime", "compatibility-helper"}:
+            raise ValueError(f"Unknown native library origin: {name}")
+        if digest(package / name) != record["staged_sha256"]:
+            raise ValueError(f"Staged native library changed: {name}")
+        if record["kind"] == "installed-runtime" and digest(Path(record["source_path"])) != record["source_sha256"]:
+            raise ValueError(f"Original installed runtime changed: {name}")
+    public_records = {name: {k: v for k, v in row.items() if k != "source_path"}
+                      for name, row in records.items()}
     text = pyproject.read_text()
     section = "[tool.setuptools.package-data]"
     if text.count(section) != 1:
@@ -61,49 +101,29 @@ def stage(bundle, package, pyproject):
         if not common.is_dir():
             raise ValueError("Linux runner has no common license texts")
         shutil.copytree(common, destination / "common", symlinks=False)
-        listing = subprocess.check_output(["ldconfig", "-p"], text=True)
-        paths = {}
-        for line in listing.splitlines():
-            if " => " in line:
-                name = line.split()[0]
-                paths.setdefault(name, []).append(Path(line.split(" => ", 1)[1]))
         seen = set()
-        for library in package.iterdir():
-            if not library.is_file() or library.name not in paths:
+        for name, record in records.items():
+            if record["kind"] != "installed-runtime":
+                # Libraries copied from the qualified native bundle retain its
+                # exact root notices. Only newly vendored DSOs need a new
+                # installed-package attribution; never infer it from ldconfig.
                 continue
-            for installed in paths[library.name]:
-                candidates = [installed, installed.resolve()]
-                candidates += [Path(str(p).replace("/usr/lib/", "/lib/", 1))
-                               for p in list(candidates) if str(p).startswith("/usr/lib/")]
-                owner = None
-                for candidate in candidates:
-                    result = subprocess.run(["dpkg-query", "-S", str(candidate)],
-                                            capture_output=True, text=True)
-                    if result.returncode == 0:
-                        owner = result.stdout.splitlines()[0].rsplit(": ", 1)[0]
-                        break
-                if owner is None:
-                    raise ValueError(f"Cannot identify installed runtime: {library.name}")
-                if owner in seen:
-                    continue
-                seen.add(owner)
-                copyright_file = Path("/usr/share/doc") / owner.split(":")[0] / "copyright"
-                if not copyright_file.is_file() or not copyright_file.read_bytes().strip():
-                    raise ValueError(f"Missing package copyright: {owner}")
-                target = destination / "packages" / owner.replace(":", "_")
-                target.mkdir(parents=True)
-                shutil.copyfile(copyright_file, target / "copyright")
-                identity = subprocess.check_output(
-                    ["dpkg-query", "-W", "-f",
-                     "${binary:Package}\t${Version}\t${source:Package}\t${source:Version}\n",
-                     owner], text=True).strip()
-                packages.append(dict(binary_package=owner, identity=identity))
+            owner, identity, copyright_file = installed_package(Path(record["source_path"]))
+            public_records[name]["copyright_package"] = owner
+            if owner in seen:
+                continue
+            seen.add(owner)
+            target = destination / "packages" / owner.replace(":", "_")
+            target.mkdir(parents=True)
+            shutil.copyfile(copyright_file, target / "copyright")
+            packages.append(dict(binary_package=owner, identity=identity))
 
     manifest = {
         "schema": "crispasr-wheel-notices-v1",
         "native_bundle_notices_preserved": True,
         "runtime_packages": packages,
-        "files": {str(p.relative_to(destination)): digest(p)
+        "native_libraries": public_records,
+        "files": {archive_path(p, destination): digest(p)
                   for p in sorted(destination.rglob("*")) if p.is_file()},
         "scope": "Notice preservation and installed package identity; no new license grant.",
     }
@@ -120,18 +140,19 @@ def main():
     parser.add_argument("--package", required=True, type=Path)
     parser.add_argument("--pyproject", type=Path)
     parser.add_argument("--verify-wheel", type=Path)
+    parser.add_argument("--provenance", type=Path)
     args = parser.parse_args()
     if args.verify_wheel:
         verify_wheel(args.verify_wheel, args.package)
     else:
         if not args.bundle or not args.pyproject:
             parser.error("staging requires --bundle and --pyproject")
-        stage(args.bundle, args.package, args.pyproject)
+        stage(args.bundle, args.package, args.pyproject, args.provenance)
 
 
 def verify_wheel(wheel, package):
     directory = Path(package) / "licenses"
-    expected = {"crispasr/licenses/" + str(p.relative_to(directory)): digest(p)
+    expected = {"crispasr/licenses/" + archive_path(p, directory): digest(p)
                 for p in directory.rglob("*") if p.is_file()}
     if not expected or "crispasr/licenses/THIRD_PARTY_NOTICES.txt" not in expected:
         raise ValueError("No staged native notices to verify")

@@ -11,6 +11,10 @@ on:
         description: 'Completed Release Python wheels run (optional)'
         default: ''
         type: string
+      native_audit_run:
+        description: 'Successful native audit run supplying the qualified library inventory for wheel verification'
+        default: ''
+        type: string
       repair_notices:
         description: 'Add missing notices to the four reviewed archive families, preserving every original member'
         default: false
@@ -43,6 +47,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_RUN: ${{ inputs.release_run }}
           WHEEL_RUN: ${{ inputs.wheel_run }}
+          NATIVE_AUDIT_RUN: ${{ inputs.native_audit_run }}
           REPAIR_NOTICES: ${{ inputs.repair_notices }}
         run: |
           set -euo pipefail
@@ -57,6 +62,10 @@ jobs:
           if [ -n "$WHEEL_RUN" ]; then
             [[ "$WHEEL_RUN" =~ ^[0-9]+$ ]]
             args+=(--wheel-run "$WHEEL_RUN")
+          fi
+          if [ -n "$NATIVE_AUDIT_RUN" ]; then
+            [[ "$NATIVE_AUDIT_RUN" =~ ^[0-9]+$ ]]
+            args+=(--native-audit-run "$NATIVE_AUDIT_RUN")
           fi
           if [ "$REPAIR_NOTICES" = true ]; then args+=(--repair-notices); fi
           python tools/ci-heavy/release_publication_audit.py "${args[@]}"
