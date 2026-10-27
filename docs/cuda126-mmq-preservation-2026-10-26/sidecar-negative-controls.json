@@ -1,0 +1,21 @@
+{
+  "controls": [
+    {
+      "control": "real_failed_startup_receipt",
+      "rejected": true,
+      "native_or_range_requests": 0
+    },
+    {
+      "control": "missing_complete_asset_readback",
+      "rejected": true,
+      "native_or_range_requests": 0
+    },
+    {
+      "control": "wrong_original_archive_sha",
+      "rejected": true,
+      "native_or_range_requests": 0
+    }
+  ],
+  "passed": true,
+  "validator_sha256": "593c8edf7385ef7032623af35f1205fcb280e5ce37659bb1c654ad9e28409014"
+}

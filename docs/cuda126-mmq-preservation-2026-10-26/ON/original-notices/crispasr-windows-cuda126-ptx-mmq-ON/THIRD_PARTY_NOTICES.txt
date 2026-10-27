@@ -1,0 +1,561 @@
+THIRD-PARTY NOTICES
+===================
+
+CrispASR incorporates the following third-party components. Each component's
+license and copyright notice is reproduced below as required by the applicable
+license terms. Full license texts are available at the URLs noted.
+
+
+────────────────────────────────────────────────────────────────────────────────
+ggml (https://github.com/ggml-org/ggml)
+MIT License
+────────────────────────────────────────────────────────────────────────────────
+
+Copyright (c) 2023-2026 The ggml authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+────────────────────────────────────────────────────────────────────────────────
+llamafile / sgemm (https://github.com/Mozilla-Ocho/llamafile)
+MIT License
+────────────────────────────────────────────────────────────────────────────────
+
+Copyright 2024 Mozilla Foundation
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+────────────────────────────────────────────────────────────────────────────────
+KleidiAI (https://gitlab.arm.com/kleidi/kleidiai)
+MIT License
+────────────────────────────────────────────────────────────────────────────────
+
+Copyright 2025-2026 Arm Limited and/or its affiliates <open-source-office@arm.com>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+NOTE: KleidiAI is compiled only on ARM builds.
+
+
+────────────────────────────────────────────────────────────────────────────────
+glint (https://github.com/CrispStrobe/glint)
+MIT License
+────────────────────────────────────────────────────────────────────────────────
+
+Copyright (c) 2026 glint contributors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+────────────────────────────────────────────────────────────────────────────────
+nlohmann/json (https://github.com/nlohmann/json)
+MIT License
+────────────────────────────────────────────────────────────────────────────────
+
+Copyright (c) 2013-2022 Niels Lohmann <https://nlohmann.me>
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+NOTE: nlohmann/json is used only in CLI examples and the server binary.
+
+
+────────────────────────────────────────────────────────────────────────────────
+RNNoise (https://github.com/xiph/rnnoise)
+BSD 3-Clause License
+────────────────────────────────────────────────────────────────────────────────
+
+Copyright (c) 2017, Mozilla
+Copyright (c) 2007-2017, Jean-Marc Valin
+Copyright (c) 2005-2017, Xiph.Org Foundation
+Copyright (c) 2003-2004, Mark Borgerding
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
+
+- Neither the name of the Xiph.Org Foundation nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED.  IN NO EVENT SHALL THE FOUNDATION
+OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+NOTE: RNNoise is compiled into libcrispasr on all non-MSVC platforms.
+
+
+────────────────────────────────────────────────────────────────────────────────
+libogg v1.3.5 (https://github.com/xiph/ogg)
+BSD 3-Clause License
+────────────────────────────────────────────────────────────────────────────────
+
+Copyright (c) 2002, Xiph.org Foundation
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
+
+- Neither the name of the Xiph.org Foundation nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE FOUNDATION
+OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+NOTE: libogg is statically compiled into libcrispasr when built with
+-DCRISPASR_OPUS_FETCH=ON (all official release binaries).
+
+
+────────────────────────────────────────────────────────────────────────────────
+libopus v1.5.2 (https://github.com/xiph/opus)
+BSD 3-Clause License
+────────────────────────────────────────────────────────────────────────────────
+
+Copyright 2001-2011 Xiph.Org, Skype Limited, Octasic,
+                    Jean-Marc Valin, Timothy B. Terriberry,
+                    CSIRO, Gregory Maxwell, Mark Borgerding,
+                    Erik de Castro Lopo
+Copyright 2012-2014 Xiph.Org Foundation and contributors
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
+
+- Neither the name of Internet Society, IETF or IETF Trust, nor the
+  names of specific contributors, may be used to endorse or promote
+  products derived from this software without specific prior written
+  permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+``AS IS'' AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT OWNER
+OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL,
+EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO,
+PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR
+PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF
+LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING
+NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+NOTE: libopus is statically compiled into libcrispasr when built with
+-DCRISPASR_OPUS_FETCH=ON (all official release binaries).
+
+
+────────────────────────────────────────────────────────────────────────────────
+opusfile v0.12 (https://github.com/xiph/opusfile)
+BSD 3-Clause License
+────────────────────────────────────────────────────────────────────────────────
+
+Copyright (c) 1994-2013 Xiph.Org Foundation and contributors
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions
+are met:
+
+- Redistributions of source code must retain the above copyright
+  notice, this list of conditions and the following disclaimer.
+
+- Redistributions in binary form must reproduce the above copyright
+  notice, this list of conditions and the following disclaimer in the
+  documentation and/or other materials provided with the distribution.
+
+- Neither the name of the Xiph.Org Foundation nor the names of its
+  contributors may be used to endorse or promote products derived from
+  this software without specific prior written permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE FOUNDATION
+OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+NOTE: opusfile is statically compiled into libcrispasr when built with
+-DCRISPASR_OPUS_FETCH=ON (all official release binaries).
+
+
+────────────────────────────────────────────────────────────────────────────────
+OpenBLAS (https://github.com/OpenMathLib/OpenBLAS)
+BSD 3-Clause License
+────────────────────────────────────────────────────────────────────────────────
+
+Copyright (c) 2011-2014, The OpenBLAS Project
+All rights reserved.
+
+Redistribution and use in source and binary forms, with or without
+modification, are permitted provided that the following conditions are
+met:
+
+1. Redistributions of source code must retain the above copyright
+   notice, this list of conditions and the following disclaimer.
+
+2. Redistributions in binary form must reproduce the above copyright
+   notice, this list of conditions and the following disclaimer in
+   the documentation and/or other materials provided with the
+   distribution.
+
+3. Neither the name of the OpenBLAS project nor the names of
+   its contributors may be used to endorse or promote products
+   derived from this software without specific prior written
+   permission.
+
+THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+"AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR
+A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT
+OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL,
+SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT
+LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE,
+DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY
+THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
+OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+NOTE: OpenBLAS IS bundled in the Linux release archives, alongside its own
+dependency closure. It used to be dynamically linked and left to the user,
+which is what CrispASR #296 fixed — the loader failed before main() on any
+machine without it. This paragraph said otherwise until 2026-08-10.
+
+
+────────────────────────────────────────────────────────────────────────────────
+GNU OpenMP runtime — libgomp (https://gcc.gnu.org/)
+GPL-3.0-or-later WITH GCC-exception-3.1 (GCC Runtime Library Exception)
+────────────────────────────────────────────────────────────────────────────────
+
+The Linux release archives bundle `libgomp.so.1`, the OpenMP runtime that ships
+with GCC, because GGML is compiled with OpenMP enabled and the library is absent
+from minimal installs.
+
+CrispASR's own source remains under the MIT licence in LICENSE. The GCC Runtime
+Library Exception grants permission to propagate the compiled result of
+combining this runtime with independent modules under any licence, provided all
+target code was produced by Eligible Compilation Processes — which GCC is. The
+exception is what makes an MIT-licensed binary linking libgomp unproblematic;
+it does not change the licence of libgomp itself.
+
+Redistributing the `libgomp.so.1` FILE is separately a conveyance of a
+GPL-3.0-or-later work, and carries the corresponding-source obligation of
+GPLv3 section 6. The bundled copy is the unmodified library from the GCC
+package of the distribution the release was built on (Ubuntu 22.04, `gcc-12`).
+Complete corresponding source for that exact build is available from Ubuntu's
+source archive (`apt-get source gcc-12`) and from https://gcc.gnu.org/, and the
+CrispASR maintainers will provide it on request for three years from the date
+of the release that carried it — open an issue at
+https://github.com/CrispStrobe/CrispASR.
+
+Licence texts: https://www.gnu.org/licenses/gpl-3.0.html and
+https://www.gnu.org/licenses/gcc-exception-3.1.html
+
+
+────────────────────────────────────────────────────────────────────────────────
+LLVM OpenMP runtime — libomp (https://openmp.llvm.org/)
+Apache License 2.0 WITH LLVM-exception
+────────────────────────────────────────────────────────────────────────────────
+
+The Linux HIP/ROCm release archives bundle `libomp.so`, the LLVM OpenMP runtime.
+ROCm's compiler is clang, so `-fopenmp` resolves to LLVM's runtime rather than
+GCC's, and it lives under `/opt/rocm/lib/llvm/lib` — a directory the dynamic
+loader does not search, so it must travel with the binaries (CrispASR #339).
+
+Unmodified. Apache-2.0 with the LLVM exception is a permissive licence; it
+imposes no copyleft on CrispASR's MIT-licensed source and no source-availability
+obligation on this redistribution. Licence text and the exception:
+https://llvm.org/LICENSE.txt
+
+
+────────────────────────────────────────────────────────────────────────────────
+miniaudio (https://github.com/mackron/miniaudio)
+Public Domain / MIT No Attribution
+────────────────────────────────────────────────────────────────────────────────
+
+miniaudio v0.11.x — David Reid <mackron@gmail.com>
+
+Choice of Public Domain or MIT No Attribution (MIT-0). No copyright notice
+or attribution is required by either license. Included here for informational
+purposes.
+
+
+────────────────────────────────────────────────────────────────────────────────
+OmniVoice prompt vocabularies (https://github.com/k2-fsa/OmniVoice)
+Apache License 2.0
+────────────────────────────────────────────────────────────────────────────────
+
+Copyright 2026 Xiaomi Corp. (authors: Han Zhu)
+
+third_party/omnivoice/lang_map.py and third_party/omnivoice/voice_design.py are
+verbatim, unmodified copies of omnivoice/utils/lang_map.py (commit
+c8c0a6257b9b652dc7d239df9d911dbb1f9dabdf) and omnivoice/utils/voice_design.py
+(commit 9c3ab463713d15e94e252f468ac02f55bdba640b). The Apache-2.0 headers and
+copyright notices are retained in the files themselves.
+
+They are vendored as the generator inputs for src/core/omnivoice_lang_table.h
+(the ISO 639-3 language ids) and src/core/omnivoice_instruct_table.h (the
+voice-design instruct vocabulary) — the two literal vocabularies the OmniVoice
+prompt is conditioned on — so that the CI drift gates are hermetic. The
+generated headers are derived data tables, not translations of any OmniVoice
+source code; the CrispASR runtime is an independent implementation. Licensed
+under the Apache License, Version 2.0; full text at
+http://www.apache.org/licenses/LICENSE-2.0
+
+
+────────────────────────────────────────────────────────────────────────────────
+RUNTIME-ONLY COMPONENTS (not bundled in binaries)
+────────────────────────────────────────────────────────────────────────────────
+
+The following components may be loaded at runtime by the user but are NOT
+statically or dynamically linked into the distributed CrispASR binaries.
+Users who install these libraries on their system are solely responsible for
+complying with their respective licenses.
+
+  fdk-aac / libfdk-aac
+    License: Fraunhofer FDK AAC Codec Library License
+    Note: Loaded via dlopen if present. The Fraunhofer FDK AAC license
+    restricts commercial software distribution; users distributing software
+    that uses fdk-aac must obtain a separate commercial license from
+    Fraunhofer IIS. CrispASR itself does not link against fdk-aac.
+
+  espeak-ng
+    License: LGPL-3.0-or-later (source) + GPL-3.0 (voice data)
+    Note: Loaded via dlopen by default (-DCRISPASR_WITH_ESPEAK_NG=AUTO).
+    Building with -DCRISPASR_WITH_ESPEAK_NG=ON links espeak-ng at build
+    time, making the resulting binary a GPL-3.0 derivative that cannot be
+    distributed under MIT-only terms.
+
+────────────────────────────────────────────────────────────────────────────────
+WeSpeaker ResNet34-LM speaker embedding model — MODEL WEIGHTS
+(https://huggingface.co/Wespeaker/wespeaker-voxceleb-resnet34-LM)
+Creative Commons Attribution 4.0 International (CC-BY-4.0)
+────────────────────────────────────────────────────────────────────────────────
+
+CrispASR redistributes GGUF conversions of the WeSpeaker VoxCeleb ResNet34-LM
+speaker-embedding weights, used by the `--diarize-method foxnose` diarizer
+(issue #324).
+
+  Source model : Wespeaker/wespeaker-voxceleb-resnet34-LM
+  Upstream     : https://github.com/wenet-e2e/wespeaker
+  Licence      : CC-BY-4.0 — https://creativecommons.org/licenses/by/4.0/
+
+CC-BY-4.0 permits redistribution and modification, including commercially,
+PROVIDED attribution is given. This notice, and the `license: cc-by-4.0` tag
+plus credit on the converted model card, constitute that attribution.
+
+Note: some downstream projects describe these weights as Apache-2.0. That is
+incorrect — the wenet-e2e/wespeaker CODE is Apache-2.0, but the published
+WEIGHTS are CC-BY-4.0, which carries the attribution requirement above.
+
+No source code from wenet-e2e/wespeaker or from FoxNoseTech/diarize (both
+Apache-2.0) is incorporated into CrispASR. The GGUF converter, the ggml
+runtime and the clustering stack are independent implementations written from
+the published architecture and algorithms; the upstream packages are used only
+as measurement oracles by the reference dumper, never vendored or linked.
+
+────────────────────────────────────────────────────────────────────────────────
+NVIDIA Nemotron-3-Diarization (streaming Sortformer v3) — MODEL WEIGHTS
+(https://huggingface.co/nvidia/Nemotron-3-Diarization)
+OpenMDW License Agreement v1.1
+────────────────────────────────────────────────────────────────────────────────
+
+`--diarize-method sortformer` (issue #466) downloads NVIDIA's own
+Nemotron-3-Diarization.q8_0.gguf from the model repo above;
+models/convert-nemotron3-diar-to-gguf.py converts the same repo's safetensors
+into that GGUF layout. OpenMDW-1.1 permits use, modification and
+redistribution, including commercially; redistributions must carry the
+licence and its notices.
+
+  Source model : nvidia/Nemotron-3-Diarization
+  Licence      : OpenMDW-1.1 — https://openmdw.ai/license/1-1/
+
+The ggml runtime in src/nemotron3_diar.cpp is an independent implementation.
+Its offline chunk loop and Arrival-Order Speaker Cache follow the algorithm of
+transformers' modeling_nemotron3_diarization.py (Apache-2.0, HuggingFace), which
+is also the measurement oracle for tools/reference_backends/nemotron3_diar.py.
+The GGUF tensor/metadata layout is the one NVIDIA's NeMo-Speech.cpp (Apache-2.0)
+reads, so both runtimes load the same files; no NeMo-Speech.cpp code is vendored.
+
+────────────────────────────────────────────────────────────────────────────────
+Managed model-weight policy — additional Hugging Face sources
+────────────────────────────────────────────────────────────────────────────────
+
+The following supported downloads are conversions of the upstream model cards;
+their upstream terms apply to the weights and any redistribution of them:
+
+  NVIDIA Parakeet, Canary, FastConformer and FastPitch
+    CC-BY-4.0. Sources include:
+    https://huggingface.co/nvidia/parakeet-tdt-0.6b-v3
+    Attribution is required; commercial use is permitted by that license.
+
+  Helsinki-NLP Opus-MT (MarianMT) translation models
+    CC-BY-4.0, per the OPUS-MT project
+    (https://github.com/Helsinki-NLP/Opus-MT). Sources:
+    https://huggingface.co/Helsinki-NLP/opus-mt-de-en
+    https://huggingface.co/Helsinki-NLP/opus-mt-en-de
+    Attribution is required; commercial use is permitted by that license.
+    (The opus-mt-de-en model card is tagged apache-2.0 and opus-mt-en-de
+    cc-by-4.0. Both are the same opus-2020-02-26 release, and the project
+    states in both of its repositories — Helsinki-NLP/Opus-MT and
+    Helsinki-NLP/OPUS-MT-train, checked 2026-10-06 — that its pre-trained
+    models are distributed under CC-BY 4.0; that statement is the one
+    followed here; the same holds for every other pair hosted here, all
+    from the same project.) Format conversions are hosted at
+    https://huggingface.co/cstr/opus-mt-<src>-<tgt>-GGUF for 24 directions
+    (de↔en, fr↔de, fr↔en, ar↔de, ar↔en, it↔de, it↔en, es↔de, es↔en, he↔de, en→he, he→en, tr→en, en→tr; he→en and en→tr from Helsinki-NLP/opus-mt-tc-big-*), under CC-BY-4.0 with
+    attribution to the OPUS-MT project (J. Tiedemann, S. Thottingal,
+    "OPUS-MT - Building open translation services for the World", EAMT 2020).
+
+  OuteAI/OuteTTS-0.3-1B
+    CC-BY-NC-SA-4.0 (non-commercial, ShareAlike):
+    https://huggingface.co/OuteAI/OuteTTS-0.3-1B
+
+  Kyutai Pocket TTS
+    CC-BY-4.0 with Hugging Face gated access and upstream acceptable-use
+    conditions, including restrictions on voice impersonation/cloning and
+    deceptive or harmful use:
+    https://huggingface.co/kyutai/pocket-tts
+
+  Facebook fastText language identification (LID-176)
+    CC-BY-NC-4.0 (non-commercial):
+    https://huggingface.co/facebook/fasttext-language-identification
+
+  LiquidAI LFM2.5-Audio
+    LFM Open License v1.0, with additional component notices described by the
+    upstream card:
+    https://huggingface.co/LiquidAI/LFM2.5-Audio-1.5B
+
+  Llama-based TTS weights (TADA, Orpheus and related variants)
+    These conversions contain or derive from Llama 3.2 materials. The Llama
+    3.2 Community License, attribution and acceptable-use terms apply; the
+    downstream GGUF card's Apache label does not remove those upstream terms.
+    Sources include:
+    https://huggingface.co/HumeAI/tada-3b-ml
+    https://huggingface.co/canopylabs/orpheus-3b-0.1-ft
+
+  FunASR / SenseVoice / Paraformer and Google Gemma derivatives
+    These remain subject to their upstream custom terms. CrispASR marks them
+    as restricted and requires an explicit acceptance tag before managed
+    auto-download; see the original model cards and licenses linked by the
+    respective entries in the model registry.

@@ -1,0 +1,179 @@
+{
+  "checked_at": "2026-10-26T23:48:57.568556+00:00",
+  "performed_after_all_six_items_and_final_source_archive_acceptance": true,
+  "open_issue_count": 5,
+  "open_pr_count": 0,
+  "comments_read": 26,
+  "issues": [
+    {
+      "issue": 557,
+      "title": "Request: Linux GPU wheels (+vulkan, +hip for x86_64; +cuda for aarch64)",
+      "url": "https://github.com/CrispStrobe/CrispASR/issues/557",
+      "state": "open",
+      "created_at": "2026-10-26T22:56:32Z",
+      "updated_at": "2026-10-26T22:56:32Z",
+      "comments_read": 0,
+      "description_and_all_comments_unchanged_since_prior_full_review": false,
+      "new_since_previous_sweep": true,
+      "full_thread_read": true,
+      "description_sha256": "580452eda42c5678e8b9e5d30550cf5e5ad69533d3e943366481d0318ac2c67a",
+      "comments_canonical_json_sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "issue": 532,
+      "title": "canary translate crash",
+      "url": "https://github.com/CrispStrobe/CrispASR/issues/532",
+      "state": "open",
+      "created_at": "2026-10-10T17:55:13Z",
+      "updated_at": "2026-10-12T07:42:16Z",
+      "comments_read": 2,
+      "description_and_all_comments_unchanged_since_prior_full_review": true,
+      "new_since_previous_sweep": false,
+      "full_thread_read": true,
+      "description_sha256": "61b0cafb39206501b488f432bfe7b357b7843f9583c3255bae0a41ba0b8e353b",
+      "comments_canonical_json_sha256": "0f9eb2076f650d7672fe8c9360b3be0a70a9bb48cfb2229a99af33375b5d7e21"
+    },
+    {
+      "issue": 483,
+      "title": "[Improvement] CrispASR should be built with CUDA 12.6 instead of 12.8",
+      "url": "https://github.com/CrispStrobe/CrispASR/issues/483",
+      "state": "open",
+      "created_at": "2026-10-01T07:45:39Z",
+      "updated_at": "2026-10-12T15:30:57Z",
+      "comments_read": 3,
+      "description_and_all_comments_unchanged_since_prior_full_review": true,
+      "new_since_previous_sweep": false,
+      "full_thread_read": true,
+      "description_sha256": "9887e3d26bd35a0e21b23c4637c8ff7c79535914c93615cbce9cb9779b2f1988",
+      "comments_canonical_json_sha256": "8dbb0498a4498de30ec6ab8652559a76ce79f22583ce84094933725af13f57fc"
+    },
+    {
+      "issue": 461,
+      "title": "voxcpm2 RTF is much higher over vulkan",
+      "url": "https://github.com/CrispStrobe/CrispASR/issues/461",
+      "state": "open",
+      "created_at": "2026-09-24T01:07:23Z",
+      "updated_at": "2026-10-09T08:53:29Z",
+      "comments_read": 19,
+      "description_and_all_comments_unchanged_since_prior_full_review": true,
+      "new_since_previous_sweep": false,
+      "full_thread_read": true,
+      "description_sha256": "7ac4c5c93d08681b9d81861755d24b64c82f3d1fc0f5ee8c0ed318e65ebf9dac",
+      "comments_canonical_json_sha256": "ced0ff0c9f9b563b8e09b618b26cca1badd1212774081c268272360f32adc004"
+    },
+    {
+      "issue": 456,
+      "title": "New model released : Integrate nyra-forced-aligner for conversational English word timestamps",
+      "url": "https://github.com/CrispStrobe/CrispASR/issues/456",
+      "state": "open",
+      "created_at": "2026-09-23T16:30:59Z",
+      "updated_at": "2026-10-20T12:56:22Z",
+      "comments_read": 2,
+      "description_and_all_comments_unchanged_since_prior_full_review": true,
+      "new_since_previous_sweep": false,
+      "full_thread_read": true,
+      "description_sha256": "7f1bb7efec57519760b6ba386e6718eda02188649d48a68bb099be41f8bff85a",
+      "comments_canonical_json_sha256": "31fd1f84a669989fa90931c923fa1bd047f080946d97e6799b47483a276146e4"
+    }
+  ],
+  "latest_prs": [
+    {
+      "number": 554,
+      "title": "fix(rust): report actual last synth error in Session::synthesize_raw()",
+      "html_url": "https://github.com/CrispStrobe/CrispASR/pull/554",
+      "state": "closed",
+      "updated_at": "2026-10-25T08:26:10Z",
+      "merged_at": null
+    },
+    {
+      "number": 553,
+      "title": "fix(bindings): decode Dart session text leniently when it ends inside a UTF-8 character",
+      "html_url": "https://github.com/CrispStrobe/CrispASR/pull/553",
+      "state": "closed",
+      "updated_at": "2026-10-25T08:26:08Z",
+      "merged_at": null
+    },
+    {
+      "number": 521,
+      "title": "fix(omnivoice): match upstream audio cleanup and reference processing",
+      "html_url": "https://github.com/CrispStrobe/CrispASR/pull/521",
+      "state": "closed",
+      "updated_at": "2026-10-22T09:26:18Z",
+      "merged_at": "2026-10-22T09:23:35Z"
+    },
+    {
+      "number": 544,
+      "title": "ci: add opt-in CANN build coverage",
+      "html_url": "https://github.com/CrispStrobe/CrispASR/pull/544",
+      "state": "closed",
+      "updated_at": "2026-10-20T13:00:42Z",
+      "merged_at": "2026-10-12T17:43:58Z"
+    },
+    {
+      "number": 548,
+      "title": "stream(vad): never throttle the decode that opens an utterance (#547)",
+      "html_url": "https://github.com/CrispStrobe/CrispASR/pull/548",
+      "state": "closed",
+      "updated_at": "2026-10-17T19:03:29Z",
+      "merged_at": "2026-10-17T19:03:29Z"
+    },
+    {
+      "number": 492,
+      "title": "perf: accelerate MiMo-ASR inference and preprocessing",
+      "html_url": "https://github.com/CrispStrobe/CrispASR/pull/492",
+      "state": "closed",
+      "updated_at": "2026-10-15T16:28:59Z",
+      "merged_at": null
+    },
+    {
+      "number": 543,
+      "title": "Integrate validated Breeze instructions and per-request voice references",
+      "html_url": "https://github.com/CrispStrobe/CrispASR/pull/543",
+      "state": "closed",
+      "updated_at": "2026-10-12T17:46:00Z",
+      "merged_at": "2026-10-12T17:38:48Z"
+    },
+    {
+      "number": 536,
+      "title": "fix: server voice clones with breeze-tts-2",
+      "html_url": "https://github.com/CrispStrobe/CrispASR/pull/536",
+      "state": "closed",
+      "updated_at": "2026-10-12T17:42:07Z",
+      "merged_at": "2026-10-12T17:38:50Z"
+    },
+    {
+      "number": 529,
+      "title": "feat: add instruction support to breeze-tts-2",
+      "html_url": "https://github.com/CrispStrobe/CrispASR/pull/529",
+      "state": "closed",
+      "updated_at": "2026-10-12T17:42:05Z",
+      "merged_at": "2026-10-12T17:38:49Z"
+    },
+    {
+      "number": 530,
+      "title": "Various tts library fixes",
+      "html_url": "https://github.com/CrispStrobe/CrispASR/pull/530",
+      "state": "closed",
+      "updated_at": "2026-10-12T16:41:20Z",
+      "merged_at": "2026-10-12T14:45:22Z"
+    }
+  ],
+  "latest_binding_pr_discussion_recheck": [
+    {
+      "pr": 553,
+      "conversation": 0,
+      "reviews": 0,
+      "review_comments": 0
+    },
+    {
+      "pr": 554,
+      "conversation": 0,
+      "reviews": 0,
+      "review_comments": 0
+    }
+  ],
+  "issue_closures": [],
+  "github_comments_or_messages_posted": false,
+  "disposition": "Four existing issues retain confirmed missing reproducer/hardware/rights inputs. New feature557 fully triaged and recommended as the next packaging batch, outside the six accepted tasks.",
+  "new_feature_review": "issue-557-linux-gpu-wheels-review-2026-10-26.md"
+}

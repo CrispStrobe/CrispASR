@@ -1,0 +1,559 @@
+{
+  "complete": true,
+  "published": false,
+  "draft": true,
+  "gpu_executed": false,
+  "rebuilt": false,
+  "producer_run": 37733919241,
+  "original_source": "04ded753e909da019a2cd391f651f51f5299b6f5",
+  "modes": {
+    "OFF": {
+      "mode": "OFF",
+      "producer_artifact_id": 11532751916,
+      "producer_expires_at": "2026-11-07T06:32:14Z",
+      "original_bytes": 520620096,
+      "original_sha256": "ddaf82ddf80992c9d5b8f86263cc23317e5b92f6377dcf9c365926fbb00fe244",
+      "original_members": {
+        "diagnostics.stderr.txt": {
+          "bytes": 4281,
+          "crc32": 3411432952
+        },
+        "diagnostics.stdout.txt": {
+          "bytes": 0,
+          "crc32": 0
+        },
+        "manifest.json": {
+          "bytes": 825,
+          "crc32": 4237058133
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF.zip": {
+          "bytes": 521290107,
+          "crc32": 3590812671
+        },
+        "version.stderr.txt": {
+          "bytes": 0,
+          "crc32": 0
+        },
+        "version.stdout.txt": {
+          "bytes": 535,
+          "crc32": 1606961303
+        }
+      },
+      "package_sha256": "42959c0ae9bf6cecda07081056d57f4b600ee1520b3170f58781ddbe22260440",
+      "package_members": {
+        "crispasr-windows-cuda126-ptx-mmq-OFF/crispasr-quantize.exe": {
+          "bytes": 132608,
+          "sha256": "3897479e20563aa072b1f8c2b6159005742a42aa942a2621e088c30fda8e8862"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/crispasr.dll": {
+          "bytes": 17168896,
+          "sha256": "1ac46c7c5b1b0fd62f4d8916d98b6c0e63c66d742a2a4e783688767d76e53e7f"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/crispasr.exe": {
+          "bytes": 15603712,
+          "sha256": "1fa630172569facbf00716868c977001d9c4d3d74992201e68a4e305900ee800"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/cublas64_12.dll": {
+          "bytes": 104883712,
+          "sha256": "01d8172b25d8e2d2cb6a276e76e719f5908c6124f484c8c8ca310fbe7b6634f3"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/cublasLt64_12.dll": {
+          "bytes": 531812352,
+          "sha256": "0d59d264782cec2782b9ac72483e53c9ba485a9d3a1e19b34071a17b8152102e"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/cudart64_12.dll": {
+          "bytes": 556544,
+          "sha256": "d954ca542b3b6bcf03cc2b798a7d00051501cf734ca751050e986af505cf9dad"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/EXPERIMENT.txt": {
+          "bytes": 354,
+          "sha256": "b2133e6df4bb3f822aedbaad312fe21656fb4b7793b715610a201371d7ee4930"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/ggml-base.dll": {
+          "bytes": 683008,
+          "sha256": "37469dc2299a18c10345159b59eed726b2a9d7f6a32ebdd142a62ca4232bbdc0"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/ggml-cpu.dll": {
+          "bytes": 1107456,
+          "sha256": "3a4239dc7c4e0ff41370a2da76694d6365f5dc090579e0f99d1cb8ac3557584c"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/ggml-cuda.dll": {
+          "bytes": 108687872,
+          "sha256": "b5e4b4940a232d269f0adb97a9bb2130ee5af41f8295b5e3af0972cbc6411ed1"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/ggml.dll": {
+          "bytes": 61952,
+          "sha256": "1e5c4ecfb11a0f837066ee924e066acf76bdf0a1b5361d7c421fc7e76a4876ef"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/LICENSE": {
+          "bytes": 1206,
+          "sha256": "51b246c135c42131ec3bee3ed9a70284b2559f0516d76c9f617dcddb9e682869"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/manifest.json": {
+          "bytes": 825,
+          "sha256": "94d98ce3d5c8b72c5d489e7ad0629c9be505bc5ebf263c29870358c910c0b353"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/THIRD_PARTY_NOTICES.txt": {
+          "bytes": 34411,
+          "sha256": "2ec2587202bcc2bf658962ca1b339f29b3f25986a0a68818ccf1601d40d661ce"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-OFF/whisper.dll": {
+          "bytes": 17168896,
+          "sha256": "1ac46c7c5b1b0fd62f4d8916d98b6c0e63c66d742a2a4e783688767d76e53e7f"
+        }
+      },
+      "manifest": {
+        "commit": "04ded753e909da019a2cd391f651f51f5299b6f5",
+        "ggml_commit": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+        "toolkit": "12.6.3",
+        "runtime_version": 12060,
+        "architectures": "61-virtual;80-virtual",
+        "force_mmq": "OFF",
+        "cpu_floor": {
+          "fma": "ON",
+          "native": "OFF",
+          "avx2": "ON",
+          "f16c": "ON"
+        },
+        "runtime_sha256": {
+          "cudart64_12.dll": "d954ca542b3b6bcf03cc2b798a7d00051501cf734ca751050e986af505cf9dad",
+          "cublas64_12.dll": "01d8172b25d8e2d2cb6a276e76e719f5908c6124f484c8c8ca310fbe7b6634f3",
+          "cublasLt64_12.dll": "0d59d264782cec2782b9ac72483e53c9ba485a9d3a1e19b34071a17b8152102e"
+        },
+        "cuda_compile_commands_verified": 144,
+        "gpu_execution": false,
+        "scope": "Compile, staged DLL/runtime and driverless startup checks; no GPU performance acceptance"
+      },
+      "vendor_origin": {
+        "url": "https://docs.nvidia.com/cuda/archive/12.6.3/eula/index.html",
+        "retrieved": "2026-10-26",
+        "source_html_sha256": "676a5b14c2d308fb2ee868b12e20c266251a53a933a116a5b68a5413e9016af0",
+        "text_sha256": "36d2ae0fe764f6b786185bd388bc571edbe3e0d53ca5a3bd562ac994bdb0af7e",
+        "scope": "Full official CUDA 12.6.3 SDK agreement, supplement and attachment notices; HTML formatting removed",
+        "full_eula_copy_explicitly_required": false,
+        "applicable_cublas_third_party_notices_required": true
+      },
+      "rebuilt": false,
+      "gpu_executed": false,
+      "preservation_file": "cuda126-ptx-mmq-OFF-preserved.zip",
+      "preservation_bytes": 520722110,
+      "preservation_sha256": "c3fd68c6c9d6702208da5f998d58d6e8b823da85208b4852c159b250d76efcfc",
+      "draft_asset_id": 679803172,
+      "full_draft_asset_readback": true
+    },
+    "ON": {
+      "mode": "ON",
+      "producer_artifact_id": 11532004516,
+      "producer_expires_at": "2026-11-07T06:36:24Z",
+      "original_bytes": 520659350,
+      "original_sha256": "84a6b98729aba3412642959f09e60f41b029f66fe545375293b252b39768bfa1",
+      "original_members": {
+        "crispasr-windows-cuda126-ptx-mmq-ON.zip": {
+          "bytes": 521289346,
+          "crc32": 2445100055
+        },
+        "diagnostics.stderr.txt": {
+          "bytes": 4278,
+          "crc32": 4061678730
+        },
+        "diagnostics.stdout.txt": {
+          "bytes": 0,
+          "crc32": 0
+        },
+        "manifest.json": {
+          "bytes": 824,
+          "crc32": 3922367244
+        },
+        "version.stderr.txt": {
+          "bytes": 0,
+          "crc32": 0
+        },
+        "version.stdout.txt": {
+          "bytes": 535,
+          "crc32": 1109077931
+        }
+      },
+      "package_sha256": "7d4a3f4d07700c13d5830225932a2b7b7c632d20e1cab890ff7ca828dd8e0915",
+      "package_members": {
+        "crispasr-windows-cuda126-ptx-mmq-ON/crispasr-quantize.exe": {
+          "bytes": 132608,
+          "sha256": "2b806bd968a70895d0977456b8fb05807ad9a05e4b9dd2e5466febeed52ac5b4"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/crispasr.dll": {
+          "bytes": 17168896,
+          "sha256": "8ebe1afd2aa7223ebba4df716d8561c0f63da64f63c412317d69dd484c90c8da"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/crispasr.exe": {
+          "bytes": 15603712,
+          "sha256": "8c858c92382f5e09109383418e52b16da5ab9aa98ffc0968328c2407ff3d4a10"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/cublas64_12.dll": {
+          "bytes": 104883712,
+          "sha256": "01d8172b25d8e2d2cb6a276e76e719f5908c6124f484c8c8ca310fbe7b6634f3"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/cublasLt64_12.dll": {
+          "bytes": 531812352,
+          "sha256": "0d59d264782cec2782b9ac72483e53c9ba485a9d3a1e19b34071a17b8152102e"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/cudart64_12.dll": {
+          "bytes": 556544,
+          "sha256": "d954ca542b3b6bcf03cc2b798a7d00051501cf734ca751050e986af505cf9dad"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/EXPERIMENT.txt": {
+          "bytes": 353,
+          "sha256": "1668d5bebe4eb388d72328d2a52a3fa10bbc02b64a7ccf509ef49f78189c6aaf"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/ggml-base.dll": {
+          "bytes": 683008,
+          "sha256": "05887b7ebc9da22e6dd0c415417541698492af95fbfaa8527111b90f4cb95ca3"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/ggml-cpu.dll": {
+          "bytes": 1107456,
+          "sha256": "fb78400940004460a20d39b1a89f056ef2c7c0348dc4d9062f6062aa810b8d55"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/ggml-cuda.dll": {
+          "bytes": 108687360,
+          "sha256": "d31dd87a8a18fd2f80c4b92f53ea355a724e68c13180d165c27a4a46a39fe49f"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/ggml.dll": {
+          "bytes": 61952,
+          "sha256": "7ec184068898f1fb857dfe2360fb69b6c1534163aa50532ebc110097339029e2"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/LICENSE": {
+          "bytes": 1206,
+          "sha256": "51b246c135c42131ec3bee3ed9a70284b2559f0516d76c9f617dcddb9e682869"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/manifest.json": {
+          "bytes": 824,
+          "sha256": "3be67a8d21bc16bfdee838a45b44eeb6a3de052224a57c7b754807a9374b145d"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/THIRD_PARTY_NOTICES.txt": {
+          "bytes": 34411,
+          "sha256": "2ec2587202bcc2bf658962ca1b339f29b3f25986a0a68818ccf1601d40d661ce"
+        },
+        "crispasr-windows-cuda126-ptx-mmq-ON/whisper.dll": {
+          "bytes": 17168896,
+          "sha256": "8ebe1afd2aa7223ebba4df716d8561c0f63da64f63c412317d69dd484c90c8da"
+        }
+      },
+      "manifest": {
+        "commit": "04ded753e909da019a2cd391f651f51f5299b6f5",
+        "ggml_commit": "c36dab89b662838f0f5d4826c399198c0b90bbfc",
+        "toolkit": "12.6.3",
+        "runtime_version": 12060,
+        "architectures": "61-virtual;80-virtual",
+        "force_mmq": "ON",
+        "cpu_floor": {
+          "fma": "ON",
+          "avx2": "ON",
+          "native": "OFF",
+          "f16c": "ON"
+        },
+        "runtime_sha256": {
+          "cudart64_12.dll": "d954ca542b3b6bcf03cc2b798a7d00051501cf734ca751050e986af505cf9dad",
+          "cublas64_12.dll": "01d8172b25d8e2d2cb6a276e76e719f5908c6124f484c8c8ca310fbe7b6634f3",
+          "cublasLt64_12.dll": "0d59d264782cec2782b9ac72483e53c9ba485a9d3a1e19b34071a17b8152102e"
+        },
+        "cuda_compile_commands_verified": 144,
+        "gpu_execution": false,
+        "scope": "Compile, staged DLL/runtime and driverless startup checks; no GPU performance acceptance"
+      },
+      "vendor_origin": {
+        "url": "https://docs.nvidia.com/cuda/archive/12.6.3/eula/index.html",
+        "retrieved": "2026-10-26",
+        "source_html_sha256": "676a5b14c2d308fb2ee868b12e20c266251a53a933a116a5b68a5413e9016af0",
+        "text_sha256": "36d2ae0fe764f6b786185bd388bc571edbe3e0d53ca5a3bd562ac994bdb0af7e",
+        "scope": "Full official CUDA 12.6.3 SDK agreement, supplement and attachment notices; HTML formatting removed",
+        "full_eula_copy_explicitly_required": false,
+        "applicable_cublas_third_party_notices_required": true
+      },
+      "rebuilt": false,
+      "gpu_executed": false,
+      "preservation_file": "cuda126-ptx-mmq-ON-preserved.zip",
+      "preservation_bytes": 520761342,
+      "preservation_sha256": "d6f6e957a29d0a525d4b33e24a64ee50e4663e1ffeef03c74ec3542d3daac4d0",
+      "draft_asset_id": 679804521,
+      "full_draft_asset_readback": true
+    }
+  },
+  "resource_samples": [
+    {
+      "load": [
+        93.4248046875,
+        39.1298828125,
+        15.51220703125
+      ],
+      "available_kib": 3204304,
+      "disk_free": 103241195520,
+      "cpus": 3,
+      "wait_attempt": 0
+    },
+    {
+      "load": [
+        79.5830078125,
+        37.95556640625,
+        15.37109375
+      ],
+      "available_kib": 3171392,
+      "disk_free": 103241588736,
+      "cpus": 3,
+      "wait_attempt": 1
+    },
+    {
+      "load": [
+        67.80224609375,
+        36.8037109375,
+        15.22607421875
+      ],
+      "available_kib": 3140192,
+      "disk_free": 103245373440,
+      "cpus": 3,
+      "wait_attempt": 2
+    },
+    {
+      "load": [
+        59.46923828125,
+        36.03662109375,
+        15.20556640625
+      ],
+      "available_kib": 3127968,
+      "disk_free": 103245074432,
+      "cpus": 3,
+      "wait_attempt": 3
+    },
+    {
+      "load": [
+        53.259765625,
+        35.4755859375,
+        15.24951171875
+      ],
+      "available_kib": 3150064,
+      "disk_free": 103244972032,
+      "cpus": 3,
+      "wait_attempt": 4
+    },
+    {
+      "load": [
+        47.546875,
+        34.8212890625,
+        15.2529296875
+      ],
+      "available_kib": 3142016,
+      "disk_free": 103233462272,
+      "cpus": 3,
+      "wait_attempt": 5
+    },
+    {
+      "load": [
+        43.52587890625,
+        34.3818359375,
+        15.3251953125
+      ],
+      "available_kib": 3152320,
+      "disk_free": 103197077504,
+      "cpus": 3,
+      "wait_attempt": 6
+    },
+    {
+      "load": [
+        37.3876953125,
+        33.365234375,
+        15.18701171875
+      ],
+      "available_kib": 3137040,
+      "disk_free": 103191851008,
+      "cpus": 3,
+      "wait_attempt": 7
+    },
+    {
+      "load": [
+        32.09375,
+        32.36474609375,
+        15.0439453125
+      ],
+      "available_kib": 3143888,
+      "disk_free": 103144837120,
+      "cpus": 3,
+      "wait_attempt": 8
+    },
+    {
+      "load": [
+        27.55322265625,
+        31.38134765625,
+        14.89697265625
+      ],
+      "available_kib": 3149920,
+      "disk_free": 103141507072,
+      "cpus": 3,
+      "wait_attempt": 9
+    },
+    {
+      "load": [
+        23.5439453125,
+        30.39697265625,
+        14.740234375
+      ],
+      "available_kib": 3133024,
+      "disk_free": 103133859840,
+      "cpus": 3,
+      "wait_attempt": 10
+    },
+    {
+      "load": [
+        22.7294921875,
+        29.98974609375,
+        14.7783203125
+      ],
+      "available_kib": 3107440,
+      "disk_free": 103093800960,
+      "cpus": 3,
+      "wait_attempt": 11
+    },
+    {
+      "load": [
+        19.234375,
+        29.001953125,
+        14.60498046875
+      ],
+      "available_kib": 3111136,
+      "disk_free": 103085215744,
+      "cpus": 3,
+      "wait_attempt": 12
+    },
+    {
+      "load": [
+        18.65478515625,
+        28.71923828125,
+        14.58935546875
+      ],
+      "available_kib": 3116816,
+      "disk_free": 103082930176,
+      "cpus": 3,
+      "wait_attempt": 13
+    },
+    {
+      "load": [
+        16.8974609375,
+        28.01806640625,
+        14.50537109375
+      ],
+      "available_kib": 3146880,
+      "disk_free": 103081570304,
+      "cpus": 3,
+      "wait_attempt": 14
+    },
+    {
+      "load": [
+        14.458984375,
+        27.12841796875,
+        14.3466796875
+      ],
+      "available_kib": 3101088,
+      "disk_free": 103044734976,
+      "cpus": 3,
+      "wait_attempt": 15
+    },
+    {
+      "load": [
+        13.8369140625,
+        26.56640625,
+        14.29541015625
+      ],
+      "available_kib": 3108160,
+      "disk_free": 103044268032,
+      "cpus": 3,
+      "wait_attempt": 16
+    },
+    {
+      "load": [
+        12.0166015625,
+        25.7568359375,
+        14.1513671875
+      ],
+      "available_kib": 3103088,
+      "disk_free": 102616342528,
+      "cpus": 3,
+      "wait_attempt": 17
+    },
+    {
+      "load": [
+        10.322265625,
+        24.94140625,
+        13.99755859375
+      ],
+      "available_kib": 3098192,
+      "disk_free": 102613934080,
+      "cpus": 3,
+      "wait_attempt": 18
+    },
+    {
+      "load": [
+        8.96240234375,
+        24.16845703125,
+        13.85107421875
+      ],
+      "available_kib": 3080208,
+      "disk_free": 102610534400,
+      "cpus": 3,
+      "wait_attempt": 19
+    },
+    {
+      "load": [
+        8.5546875,
+        23.5849609375,
+        13.76416015625
+      ],
+      "available_kib": 3077632,
+      "disk_free": 102608478208,
+      "cpus": 3,
+      "wait_attempt": 20
+    },
+    {
+      "load": [
+        7.2392578125,
+        22.80810546875,
+        13.6025390625
+      ],
+      "available_kib": 3375056,
+      "disk_free": 103277215744,
+      "cpus": 3,
+      "wait_attempt": 21
+    },
+    {
+      "load": [
+        6.12548828125,
+        22.056640625,
+        13.44287109375
+      ],
+      "available_kib": 3370704,
+      "disk_free": 103273877504,
+      "cpus": 3,
+      "wait_attempt": 22
+    },
+    {
+      "load": [
+        5.18310546875,
+        21.330078125,
+        13.28515625
+      ],
+      "available_kib": 3248496,
+      "disk_free": 103263858688,
+      "cpus": 3,
+      "wait_attempt": 23
+    }
+  ],
+  "resource_wait_interval_s": 10,
+  "resources": {
+    "load": [
+      5.18310546875,
+      21.330078125,
+      13.28515625
+    ],
+    "available_kib": 3248496,
+    "disk_free": 103263858688,
+    "cpus": 3,
+    "wait_attempt": 23
+  },
+  "draft_release_id": 424870665,
+  "draft_release_tag": "archive-issue483-mmq-20261008"
+}

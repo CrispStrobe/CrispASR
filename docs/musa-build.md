@@ -69,3 +69,8 @@ performance numbers, separately establish permission for their disclosure.
 The manual image validator is a packaging check; operation and speech parity
 still require target-hardware tests. Neither successful compilation nor a PCI
 vendor match proves those checks passed.
+
+The hosted policy/CPU Docker smoke run [40402386515](https://github.com/CrispStrobe/CrispASR/actions/runs/40402386515)
+passes, including all eight MUSA policy controls. It does not execute the MUSA
+SDK or build/qualify the MUSA runtime image. The user confirmed that neither
+the target host nor applicable new permissions are available yet.

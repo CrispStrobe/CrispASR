@@ -1,0 +1,44 @@
+{
+  "review_date": "2026-10-26",
+  "complete": true,
+  "original_binaries_source": "04ded753e909da019a2cd391f651f51f5299b6f5",
+  "producer_run": 37733919241,
+  "preservation_worker_source": "45cd1f9494b1906d416ce36a34fecaccaa9aac95",
+  "preservation_run": 40414804633,
+  "preservation_job": 121894325009,
+  "preservation_run_url": "https://github.com/CrispStrobe/CrispASR/actions/runs/40414804633",
+  "guard_tests": 8,
+  "draft": {
+    "id": 424870665,
+    "tag_name": "archive-issue483-mmq-20261008",
+    "target_commitish": "04ded753e909da019a2cd391f651f51f5299b6f5",
+    "draft": true,
+    "prerelease": true,
+    "published_at": null,
+    "html_url": "https://github.com/CrispStrobe/CrispASR/releases/tag/untagged-0b913dbe68ff9728fd48"
+  },
+  "raw_worker_receipt": "cuda126-mmq-preservation-2026-10-26/receipt.json",
+  "independent_sidecars": "cuda126-mmq-preservation-2026-10-26/sidecar-ranges-verified.json",
+  "negative_controls": "cuda126-mmq-preservation-2026-10-26/sidecar-negative-controls.json",
+  "validator": "tools/ci-heavy/mmq-preservation/verify_sidecars.py",
+  "validator_sha256": "593c8edf7385ef7032623af35f1205fcb280e5ce37659bb1c654ad9e28409014",
+  "original_archives_modified": false,
+  "native_payload_downloaded_locally": false,
+  "rebuilt": false,
+  "gpu_executed": false,
+  "published": false,
+  "target_gpu_acceptance": "Blocked: user confirms no GTX1660/MX150 access. No performance or correctness claim.",
+  "workflow_resource_fix": "Bounded wait with unchanged 2GiB/load<2xCPU/8GiB gates; actual job waited23x10sec before passing load5.1831 on3CPUs.",
+  "previous_real_failed_attempt": {
+    "run": 40410511134,
+    "source": "3e6c7fed26d4b2954d7b1afcc9fd68e65bfff0c3",
+    "failure": "Initial resource guard before transfers; no original data or draft assets uploaded.",
+    "load_1min": 6.12646484375,
+    "available_kib": 3195232,
+    "disk_free": 103356841984
+  },
+  "canceled_unstarted_attempts": [
+    40399378816,
+    40403354566
+  ]
+}

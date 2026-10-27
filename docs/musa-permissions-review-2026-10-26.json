@@ -33,5 +33,30 @@
     "Full runtime component/redistribution agreement and notice inventory before image publication.",
     "Actual image packaging/dependency closure and S5000 operation/speech parity.",
     "Written permission before publishing performance or benchmark results."
-  ]
+  ],
+  "hosted_policy_validation": {
+    "run": 40402386515,
+    "source": "de0e4991fe4c33288b3d912cb03c70c1ff4ba1dd",
+    "conclusion": "success",
+    "jobs": [
+      {
+        "job": 121851337305,
+        "name": "smoke",
+        "conclusion": "success",
+        "log_sha256": "44e8d654b9b8975dc42d0daa0f910903e4ded9641851eb3268f89c3fe5c56bcd",
+        "musa_policy_step": true
+      },
+      {
+        "job": 121851337794,
+        "name": "hf-space-build",
+        "conclusion": "success",
+        "log_sha256": "780c05fd210e7c8e2f456a0928019eaebb2103b9ec9f8b815f5fbd0214a9cf52",
+        "musa_policy_step": false
+      }
+    ],
+    "musa_policy_tests": 8,
+    "musa_sdk_used": false,
+    "scope": "Static SDK execution/publication policy controls and separate non-MUSA Docker smoke; no MUSA runtime or speech acceptance."
+  },
+  "user_confirmed_external_inputs": "Neither an authorized S5000 host nor SDK-specific written permissions available yet."
 }

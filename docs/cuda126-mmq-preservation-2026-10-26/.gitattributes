@@ -1,0 +1,2 @@
+# Preserve exact CI receipt/notice bytes, including original Windows line endings.
+**/* -text whitespace=cr-at-eol

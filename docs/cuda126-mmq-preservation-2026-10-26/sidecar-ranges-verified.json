@@ -1,0 +1,77 @@
+{
+  "draft_release_id": 424870665,
+  "modes": {
+    "OFF": {
+      "draft_asset_id": 679803172,
+      "wrapper_sha256": "c3fd68c6c9d6702208da5f998d58d6e8b823da85208b4852c159b250d76efcfc",
+      "original_nested_bytes": 520620096,
+      "original_nested_crc32": 1843254873,
+      "small_sidecars": {
+        "notices/NVIDIA-CUDA-12.6.3-LICENSE.txt": {
+          "bytes": 59271,
+          "sha256": "36d2ae0fe764f6b786185bd388bc571edbe3e0d53ca5a3bd562ac994bdb0af7e"
+        },
+        "notices/nvidia-origin.json": {
+          "bytes": 500,
+          "sha256": "14d25b03cbba4ea6caefa45fe7986aaf32f80070fd6211e3eaabd8beeb06bd7c"
+        },
+        "notices/ADDITIONAL-CUDA-NOTICE.txt": {
+          "bytes": 586,
+          "sha256": "052d4f8ed2a7ba02db20c98779aaca1b3a7bf73fcc97209f23c3b881a6c2da34"
+        },
+        "notices/original/crispasr-windows-cuda126-ptx-mmq-OFF/LICENSE": {
+          "bytes": 1206,
+          "sha256": "51b246c135c42131ec3bee3ed9a70284b2559f0516d76c9f617dcddb9e682869"
+        },
+        "notices/original/crispasr-windows-cuda126-ptx-mmq-OFF/THIRD_PARTY_NOTICES.txt": {
+          "bytes": 34411,
+          "sha256": "2ec2587202bcc2bf658962ca1b339f29b3f25986a0a68818ccf1601d40d661ce"
+        },
+        "inventory.json": {
+          "bytes": 4920,
+          "sha256": "c70e0fa4ac78e063da97213a5144bd357fda88b967a01316912aabb067e43a71"
+        }
+      },
+      "http_range_requests": 21,
+      "transferred_bytes": 101971,
+      "original_native_zip_payload_read_locally": false
+    },
+    "ON": {
+      "draft_asset_id": 679804521,
+      "wrapper_sha256": "d6f6e957a29d0a525d4b33e24a64ee50e4663e1ffeef03c74ec3542d3daac4d0",
+      "original_nested_bytes": 520659350,
+      "original_nested_crc32": 2509374843,
+      "small_sidecars": {
+        "notices/NVIDIA-CUDA-12.6.3-LICENSE.txt": {
+          "bytes": 59271,
+          "sha256": "36d2ae0fe764f6b786185bd388bc571edbe3e0d53ca5a3bd562ac994bdb0af7e"
+        },
+        "notices/nvidia-origin.json": {
+          "bytes": 500,
+          "sha256": "14d25b03cbba4ea6caefa45fe7986aaf32f80070fd6211e3eaabd8beeb06bd7c"
+        },
+        "notices/ADDITIONAL-CUDA-NOTICE.txt": {
+          "bytes": 586,
+          "sha256": "052d4f8ed2a7ba02db20c98779aaca1b3a7bf73fcc97209f23c3b881a6c2da34"
+        },
+        "notices/original/crispasr-windows-cuda126-ptx-mmq-ON/LICENSE": {
+          "bytes": 1206,
+          "sha256": "51b246c135c42131ec3bee3ed9a70284b2559f0516d76c9f617dcddb9e682869"
+        },
+        "notices/original/crispasr-windows-cuda126-ptx-mmq-ON/THIRD_PARTY_NOTICES.txt": {
+          "bytes": 34411,
+          "sha256": "2ec2587202bcc2bf658962ca1b339f29b3f25986a0a68818ccf1601d40d661ce"
+        },
+        "inventory.json": {
+          "bytes": 4902,
+          "sha256": "eddba1842df77fe32285ade0bc9fe1e37717c99aac91e3b830f254b2c0f907d9"
+        }
+      },
+      "http_range_requests": 21,
+      "transferred_bytes": 101949,
+      "original_native_zip_payload_read_locally": false
+    }
+  },
+  "full_payload_downloaded_locally": false,
+  "complete": true
+}

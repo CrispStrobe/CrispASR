@@ -1,3 +1,38 @@
+## 2026-10-26 — Original MMQ pair preserved with complete vendor notices
+
+Run 40414804633 preserves the exact original OFF/ON artifact ZIPs in unpublished
+maintainer draft 424870665, with original project notices, full CUDA 12.6.3
+agreement/attachments including cuBLAS notices, and inventories. Original/member
+hash checks and full uploaded-asset readbacks pass. Independent bounded ranges
+verify all sidecars using 203,920 bytes without local native payload downloads;
+three invalid receipts are rejected. Eight path/draft/resource controls pass.
+The startup wait preserves resource limits. No rebuild, GPU execution, production
+switch or public promotion; actual GTX1660/MX150 remains unavailable.
+[Preservation proof](docs/cuda126-mmq-preservation-2026-10-26.md).
+
+The full six-item review ends with all 13 frozen-source CI jobs and 10 lint jobs
+passing, plus both native/archive privacy checks. The unit tier has 2,104 entries,
+zero failures/four optional fixture skips, including the Nemotron C ABI controls.
+Final issue/PR audit keeps the four genuine external dependencies open and finds
+new #557 (Linux GPU wheel feature, fully triaged) plus no open PRs. [Complete receipt](docs/ordered-agenda-2026-10-26.md).
+
+## 2026-10-26 — B390 timing attribution and restricted-model reviews
+
+Split VoxCPM2 VAE host permutation from the interval previously labeled upload;
+weights, graphs, caches and the ten-step default remain unchanged. The full B390
+issue/log audit distinguishes context initialization from process/cache warmth
+and retains the latest ten-step listening requirement. No new B390 speed claim.
+[Review and capture](docs/voxcpm2-b390-review-2026-10-26.md).
+
+The MUSA probe now checks load and available memory before pulling/using the SDK.
+The complete current agreement review records separate platform, redistribution
+and benchmark-disclosure conditions; no authorized runner or runtime acceptance
+is established. [Permission review](docs/musa-permissions-review-2026-10-26.json).
+Nyra's complete pinned software/model/output terms keep integration deferred;
+ordinary non-commercial acceptance does not clear production, hosted use,
+restricted derivatives or output obligations. No conversion or port was added.
+[Nyra review](docs/nyra-license-review-2026-10-26.md).
+
 ## 2026-10-26 — Nemotron managed downloads select qualified F16
 
 The former default Q4 reproduces the same failure on CPU and actual T4:

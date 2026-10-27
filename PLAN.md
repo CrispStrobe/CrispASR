@@ -1,57 +1,57 @@
 # CrispASR — Pending work
 
-## NOW — Ordered correctness and dependency agenda (2026-10-26)
+## Completed — Ordered correctness and dependency review (2026-10-26)
 
-Owner: Codex. User authorized all six items in this order. Finish the last item
-before closure review and a fresh issue/PR sweep. Preserve acceptance gates and
-record external dependencies without speculative fixes or unsupported closure.
+Owner: Codex. All six items were worked in the authorized order, followed by
+final source acceptance and the closure/issue/PR audit. Available implementation,
+preservation and full license reviews are complete. Four existing issues retain explicit
+external dependencies confirmed by the user. The final sweep also found new
+feature #557; none was closed speculatively.
+[Complete result](docs/ordered-agenda-2026-10-26.md),
+[source/check receipt](docs/ordered-agenda-2026-10-26.json).
 
-1. **CPU/T4 qualification complete; source fix under validation:** Nemotron's
-   former default Q4 matches only 11/26 original transcripts and 8/22 VoxCPM
-   prompts on both devices, failing pre-encode/encoder and CLI controls. Pinned
-   F16 passes all 26/22 controls and unchanged stage/magnitude gates; both have
-   stable reused sessions. Independent raw-array/transcript/CUDA activity audits
-   and three corrupt-receipt controls per device pass. The source default now
-   selects only qualified F16 (~1.3 GB), retains OpenMDW-1.1/origin files, and
-   prevents stale Q4 cache or missing-Q4-to-F16 substitution. Explicit existing
-   Q4 files remain diagnostic inputs. Registry units pass 7,042 assertions/71
-   cases; frozen source `2ed915ae0` runs full C ABI CI 40394217371, lint
-   40394221291 and secrets 40394225126. [Policy and complete evidence](docs/nemotron-default-policy-2026-10-26.md).
-   Full recovery 40383267861 verifies the original ZIP hash and all 22 retained
-   members; its accidental model-weight duplicate is removed after anonymous
-   full readback of the permanent 79-file proof. No issue closure is implied.
-2. **Reviewed; awaiting exact reproducer:** Canary #532 description and both
-   comments reread, with no reporter follow-up or linked issue comments. The
-   allocation/logits export is byte-identical to the earlier CPU probe; later
-   model-format/Viterbi changes do not demonstrate the reported pipeline fixed.
-   Missing assertion, startup device/build, model filenames and shareable German
-   clip were requested from the user. Existing CPU/T4 probes do not reproduce
-   that private translation/VAD/diarization pipeline; no allocator patch or
-   closure. [Assessment](docs/canary-532-reproducer-review-2026-10-26.json).
-3. **In progress:** CUDA/MMQ #483: preserve the original matched packages and notices before
-   November 7 expiry; obtain actual GTX1660/MX150 correctness/timing evidence.
-   Initial Actions preservation 40399378816 remained unstarted in the Ubuntu
-   queue for over 30 minutes and was canceled before any step. Move this archive-
-   only job to macOS with pinned binary-only psutil for equivalent resource checks.
-   Original ZIPs and additive CUDA/cuBLAS notices go to a verified maintainer
-   draft, with no rebuild or publication. Archive/draft controls and actionlint pass. Actual
-   GTX1660/MX150 access was requested from the user; no hardware claim yet.
-4. **Code/log review complete; awaiting B390:** VoxCPM2 #461: all 19 comments
-   reviewed. VAE initialization explains 76.4% of the historical VAE increase;
-   its old upload timer included host permutation. Split those timings without
-   changing inference. Existing context caches and batched prefill are confirmed.
-   Preserve ten steps; no speed claim from eight-step logs or another GPU.
-   [Evidence and exact B390 capture](docs/voxcpm2-b390-review-2026-10-26.md).
-5. **Review complete; external prerequisites remain:** MUSA agreement fully
-   reread; platform, redistribution and benchmark-disclosure permissions remain
-   separate. Runner API lists zero self-hosted runners. Added pre-SDK-pull RAM/
-   load enforcement; no SDK execution, image build or publication in this review.
-   [Permission/runner receipt](docs/musa-permissions-review-2026-10-26.json).
-6. **Full review complete; deferred:** Nyra #456 description/both comments and
-   the complete pinned Parts A–C license reviewed. Production/hosted/API uses,
-   converted model distribution, generated outputs and downstream training need
-   separate rights/obligations; ordinary NC acceptance does not clear a port.
-   No new model/conversion/backend work. [Pinned review](docs/nyra-license-review-2026-10-26.md).
+1. **Nemotron fixed and qualified:** CPU and actual T4 accept pinned F16 at all
+   26 original transcript/22 VoxCPM controls and unchanged stage/magnitude gates;
+   former Q4 fails on both. Managed F16-only selection and full OpenMDW/origin
+   notices ship in source, with cache/filename and opaque C ABI coverage. Existing
+   v0.8.45 binaries need the qualified F16 file explicitly; no new release here.
+2. **Canary #532 held:** all issue/comments/source reviewed; exact clip/assertion/
+   startup evidence remains unavailable. No speculative allocator change.
+3. **MMQ #483 preserved; hardware held:** run 40414804633 preserves both original
+   ZIPs byte-exact in unpublished maintainer draft 424870665, with full vendor/
+   cuBLAS and original notices. Full asset readbacks and independent 203,920-byte
+   sidecar audit pass. Resource startup wait retains the original limits. No
+   GTX1660/MX150 access or target correctness/performance claim.
+   [Preservation proof](docs/cuda126-mmq-preservation-2026-10-26.md).
+4. **B390 #461 held:** source/log audit and upload/host-permutation timer split
+   complete; ten-step quality retained. No target access or new speed claim.
+5. **MUSA held:** complete current terms review and pre-SDK resource enforcement;
+   eight hosted policy controls pass without SDK use. No authorized S5000/new
+   permissions; runtime, redistribution and benchmark-disclosure conditions open.
+6. **Nyra #456 deferred:** complete pinned Parts A–C review; model/outputs,
+   production/hosted, derivative/recipient and training conditions remain. No
+   appropriate rights, conversion or port.
+
+Frozen native source `2506cdd4b` passes CI 40403357613 (13 jobs), lint 40403361382
+(10 jobs) and privacy 40403364971. Unit tier: 2,104 entries, zero failures, four
+optional fixture skips, all four Nemotron default/C ABI controls passed. Archive
+worker `45cd1f949` passes eight guards, actual preservation and privacy
+40414720651; native source is unchanged. Final audit finds five open issues,
+zero open PRs: all 26 existing comments are unchanged, and new #557 has no comments. No issue closure
+or external comment/message was justified. Inputs/hardware/rights, rather than
+speculative feature work, are the remaining next steps.
+
+## NEXT — New Linux GPU wheel request #557 (unclaimed)
+
+The final sweep found [#557](https://github.com/CrispStrobe/CrispASR/issues/557),
+created during this agenda. Whole description/all zero comments reviewed and
+checked against current code and actual release assets. Recommend x86_64 Vulkan
+first (needs a shared-library producer; current CLI is static), HIP next (bundle
+exists, wheel/index/publication-audit support missing), and ARM CUDA afterward
+(separate native toolchain/bundle/device target). Preserve runtime-dependency,
+notice, ABI and actual-device acceptance. No implementation or publication was
+started outside the completed six-item batch.
+[Code/asset audit and next steps](docs/issue-557-linux-gpu-wheels-review-2026-10-26.md).
 
 ## Published and verified — 0.8.45 (2026-10-26)
 
@@ -1346,8 +1346,9 @@ prevent full-runtime/default acceptance. Do not repeat accepted utility proof.
 
 - **Issue532 / Canary:** CPU/T4 reuse/allocation controls did not reproduce the
   crash; await original recording/device details. Do not apply a speculative fix.
-- **Issue483:** matched CUDA/MMQ packages are prepared; actual GTX 1660/MX150
-  correctness and timing remain external. No generic-GPU speed conclusion.
+- **Issue483:** original matched CUDA/MMQ packages and complete vendor notices
+  are [preserved in a verified maintainer draft](docs/cuda126-mmq-preservation-2026-10-26.md).
+  Actual GTX1660/MX150 correctness and timing remain external.
 - **Issue461 / VoxCPM2:** profile VAE setup and Vulkan LocDiT on relevant hardware.
   Eight-step RTF1.019 and poorer reported quality do not justify changing the
   ten-step quality default. Issue478 Windows/Khmer retest, Q4 batching and
@@ -1363,20 +1364,16 @@ prevent full-runtime/default acceptance. Do not repeat accepted utility proof.
 - **Dolphin:** merged original-reference fix does not prove reporter Kylin/GCC9,
   private clips or GPU behavior. Obtain those inputs if further work is needed.
 
-## Release v0.8.44
+## Historical release preparation — superseded by published v0.8.45
 
-Comprehensive notes exist in RELEASE_NOTES_v0.8.44.md and
-[the next-release draft](docs/release-notes-next.md). Remaining work:
-- Freeze accepted source and scope; exclude rejected Dia/Q4/NPU experiments.
-- Run fresh immutable package/wheel dry-run and inspect artifacts, dependency
-  closure and relevant CLI/C-ABI/binding behavior on the frozen source.
-- Require applicable tip CI and acceptance evidence; use scripts/bump-version.sh
-  for propagated version and annotated tag, then publish and inspect assets.
-- Update final release notes to describe shipped behavior and known limitations.
+The old v0.8.44 preparation checklist is no longer pending work. The prepared
+successor v0.8.45 was published and its native/Python/Rust/Dart packages and
+notices verified on October 26; see the
+[publication receipt](docs/release-publication-2026-10-26.json) and the current
+published section above. Historical v0.8.44 notes remain in
+RELEASE_NOTES_v0.8.44.md. Later source fixes, including Nemotron default selection,
+are not retroactively present in the published tag or binaries.
 
-Passing current source CI does not prove new v0.8.44 assets have been built.
-Unrelated future research need not be advertised as accepted to release proven
-improvements. Existing failed gates must stay explicit.
 
 ## Deferred outside active/release scope — Drama3 (issues545/546)
 
