@@ -31,7 +31,20 @@ start a new release, feature build, model campaign or package publication.
 registry default. Use the qualified F16 file explicitly with those binaries;
 the automatic F16 selection requires a build containing the source fix.
 
-## Proposed next execution order — unclaimed
+## NOW — active claim (2026-10-27)
+
+**Claimed: priority 1, v0.8.46 correctness release.** Owner: maintainer agent,
+isolated release worktree. Source: main after `826ac177e` plus release notes and
+the `scripts/bump-version.sh 0.8.46` commit. Missing behavior: published v0.8.45
+binaries still default Nemotron to the rejected plain Q4; v0.8.46 ships the
+qualified F16 default, its OpenMDW notices, VoxCPM2 timing split and wheel
+notice/provenance staging. Acceptance: CI/lint/secret green on the bump commit;
+release run terminal results inspected; native asset, wheel/index, Rust and Dart
+readbacks via the existing publication auditor. Resources: hosted Actions only;
+no local model/GPU job. v0.8.45 tag/assets stay untouched. Next after this: #557
+Vulkan wheel (priority 2).
+
+## Proposed next execution order
 
 | Priority | Bounded task | Entry point and completion gate |
 |---|---|---|
