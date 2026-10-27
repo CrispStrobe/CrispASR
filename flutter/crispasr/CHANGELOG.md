@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.8.46
+
+* **Models:** the managed Nemotron download now selects the original-qualified
+  F16 model with its OpenMDW-1.1 notices; the former plain Q4 default failed
+  fixed original-model controls. Public Dart interfaces are unchanged.
+
 ## 0.8.45
 
 * **Native speech:** restore original CSM rotary scaling for both transformer
