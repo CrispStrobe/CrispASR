@@ -519,6 +519,29 @@ def verify_native_wheel(archive, expected, manifest):
     return len(expected)
 
 
+# #557: Linux x86_64 +vulkan and +hip wheels exist from 0.8.47 on. Older tags
+# keep their original exact distribution set.
+LINUX_GPU_WHEELS_SINCE = (0, 8, 47)
+LINUX_GPU_WHEEL_ASSETS = {
+    "gpu-wheel-linux-x86_64-vulkan": "libcrispasr-linux-x86_64-vulkan.tar.gz",
+    "gpu-wheel-linux-x86_64-hip": "libcrispasr-linux-x86_64-hip.tar.gz",
+}
+GPU_INDEX_FLAVORS = ("cuda", "vulkan", "hip")
+
+
+def linux_gpu_wheels_expected(version):
+    return tuple(int(part) for part in version.split(".")[:3]) >= LINUX_GPU_WHEELS_SINCE
+
+
+def wheel_local_suffix(artifact_name):
+    if not artifact_name.startswith("gpu-"):
+        return ""
+    for flavor in GPU_INDEX_FLAVORS:
+        if artifact_name.endswith("-" + flavor):
+            return "+" + flavor
+    raise ValueError(f"Unknown GPU wheel flavor: {artifact_name}")
+
+
 def wheels(args, result):
     run = api(f"actions/runs/{args.wheel_run}")
     assert run["status"] == "completed" and run["conclusion"] == "success", run
@@ -535,13 +558,13 @@ def wheels(args, result):
         "gpu-wheel-windows-x86_64-cuda": "libcrispasr-windows-x86_64-cuda.tar.gz",
         "gpu-wheel-windows-x86_64-vulkan": "libcrispasr-windows-x86_64-vulkan.tar.gz",
     }
+    if linux_gpu_wheels_expected(version):
+        native_assets.update(LINUX_GPU_WHEEL_ASSETS)
     source_files = {item["name"] for item in api(f"contents/python/crispasr?ref={args.tag}")
                     if item["type"] == "file" and (item["name"].endswith(".py") or item["name"] == "_helpers.c")}
     assert source_files
     artifacts = api(f"actions/runs/{args.wheel_run}/artifacts?per_page=100")["artifacts"]
-    wanted = {"sdist", "cpu-wheel-linux-x86_64", "cpu-wheel-linux-arm64", "cpu-wheel-macos-arm64",
-              "cpu-wheel-windows-x86_64", "gpu-wheel-linux-x86_64-cuda",
-              "gpu-wheel-windows-x86_64-cuda", "gpu-wheel-windows-x86_64-vulkan"}
+    wanted = {"sdist", *native_assets}
     selected = {a["name"]: a for a in artifacts if a["name"] in wanted}
     assert selected.keys() == wanted
     cpu = SCRATCH / "cpu"
@@ -569,7 +592,7 @@ def wheels(args, result):
                 metadata = [n for n in names if n.endswith(".dist-info/METADATA")]
                 assert len(metadata) == 1
                 fields = BytesParser().parsebytes(archive.read(metadata[0]))
-                expected_version = version + ("+vulkan" if "vulkan" in name else "+cuda" if name.startswith("gpu-") else "")
+                expected_version = version + wheel_local_suffix(name)
                 assert fields["Name"] == "crispasr" and fields["Version"] == expected_version
                 packaged_sources = {PurePosixPath(n).name for n in names
                                     if PurePosixPath(n).parent == PurePosixPath("crispasr")
@@ -614,7 +637,7 @@ def wheels(args, result):
         readbacks.append(dict(filename=record["filename"], url=item["url"], **downloaded))
         path.unlink()
     assets = {a["name"]: a for a in api(f"releases/tags/{args.tag}")["assets"]}
-    for flavor in ("cuda", "vulkan"):
+    for flavor in GPU_INDEX_FLAVORS:
         url = f"https://crispstrobe.github.io/CrispASR/whl/{flavor}/crispasr/"
         with OPENER.open(url, timeout=120) as response:
             parser = Links()

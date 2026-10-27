@@ -31,15 +31,22 @@ native library compatible; supply a native build suitable for your system.
 
 ### GPU wheels
 
-CUDA and Vulkan builds are published to a separate index (llama-cpp-python
-style — pass `--extra-index-url`):
+CUDA, Vulkan and ROCm/HIP builds are published to a separate index
+(llama-cpp-python style — pass `--extra-index-url`):
 
 ```bash
-# NVIDIA CUDA (Linux + Windows)
+# NVIDIA CUDA (Linux x86_64 + Windows)
 pip install crispasr --extra-index-url https://crispstrobe.github.io/CrispASR/whl/cuda/
-# Vulkan (Windows)
+# Vulkan (Windows; Linux x86_64 from 0.8.47)
 pip install crispasr --extra-index-url https://crispstrobe.github.io/CrispASR/whl/vulkan/
+# AMD ROCm/HIP (Linux x86_64, from 0.8.47)
+pip install crispasr --extra-index-url https://crispstrobe.github.io/CrispASR/whl/hip/
 ```
+
+GPU wheels do not ship a GPU driver or vendor runtime. Linux `+vulkan` needs
+the host's Vulkan loader (`libvulkan.so.1`) and a Vulkan driver; `+hip` needs a
+ROCm 6.x install (HIP runtime, hipBLAS/rocBLAS and ROCm's `libomp`) on the
+loader path, e.g. `/opt/rocm/lib` and `/opt/rocm/lib/llvm/lib`.
 
 ### Other platforms / bring-your-own library
 

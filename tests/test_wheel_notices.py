@@ -20,6 +20,33 @@ stager = importlib.util.module_from_spec(stager_spec)
 stager_spec.loader.exec_module(stager)
 
 
+class HostProvidedRuntimeTest(unittest.TestCase):
+    """#557: ROCm's libomp is host-provided for +hip only, never globally."""
+
+    LDD = ("\tlibomp.so => not found\n"
+           "\tlibamdhip64.so.6 => not found\n"
+           "\tlibvulkan.so.1 => not found\n")
+
+    def run_vendor(self, extra):
+        with tempfile.TemporaryDirectory() as tmp:
+            pkg = Path(tmp)
+            (pkg / "libcrispasr.so").write_bytes(b"\x7fELF")
+            ldd = SimpleNamespace(stdout=self.LDD)
+            with patch.object(stager.shutil, "which", return_value="/usr/bin/ldd"), \
+                 patch.object(stager.subprocess, "run", return_value=ldd):
+                return stager.vendor_linux_deps(pkg, {}, extra)
+
+    def test_libomp_unresolved_without_variant_opt_in(self):
+        vendored, unresolved, host = self.run_vendor(())
+        self.assertEqual((vendored, unresolved), ([], ["libomp.so"]))
+        self.assertEqual(sorted(host), ["libamdhip64.so.6", "libvulkan.so.1"])
+
+    def test_variant_host_runtime_is_neither_vendored_nor_missing(self):
+        vendored, unresolved, host = self.run_vendor(("libomp.so",))
+        self.assertEqual((vendored, unresolved), ([], []))
+        self.assertEqual(sorted(host), ["libamdhip64.so.6", "libomp.so", "libvulkan.so.1"])
+
+
 class WheelNoticesTest(unittest.TestCase):
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()

@@ -3,15 +3,18 @@ name: Release Python wheels
 # Builds self-contained (native-lib-bundled) Python wheels and publishes them:
 #   • CPU wheels          → PyPI (linux x86_64/arm64, macOS arm64/Metal, win x64)
 #   • GPU wheels          → a PEP 503 "simple" index on GitHub Pages
-#                           (CUDA linux+win, Vulkan win), llama-cpp-python style:
+#                           (CUDA linux+win, Vulkan linux+win, HIP linux),
+#                           llama-cpp-python style:
 #         pip install crispasr --extra-index-url \
 #             https://crispstrobe.github.io/CrispASR/whl/cuda/
 #         pip install crispasr --extra-index-url \
 #             https://crispstrobe.github.io/CrispASR/whl/vulkan/
+#         pip install crispasr --extra-index-url \
+#             https://crispstrobe.github.io/CrispASR/whl/hip/
 #   • a pure-Python sdist → PyPI (fallback for unlisted platforms; finds a
 #                           system-installed libcrispasr at runtime)
 #
-# These wheels REUSE the relocatable `libcrispasr-<platform>[-cuda|-vulkan]`
+# These wheels REUSE the relocatable `libcrispasr-<platform>[-cuda|-vulkan|-hip]`
 # bundles that `release.yml` already builds and attaches to the GitHub Release
 # (their rpaths are rewritten to $ORIGIN / @loader_path by
 # tools/package-lib-bundle.sh). So this workflow does NOT recompile the native
@@ -24,7 +27,7 @@ name: Release Python wheels
 #   • PyPI:   `PYPI_API_TOKEN` repo secret (token scoped to the crispasr project).
 #   • Pages:  none needed — Pages already serves `main`/root (legacy Jekyll).
 #             The GPU index is committed to `main` under `whl/`, so Jekyll serves
-#             it at https://crispstrobe.github.io/CrispASR/whl/{cuda,vulkan}/ and
+#             it at https://crispstrobe.github.io/CrispASR/whl/{cuda,vulkan,hip}/ and
 #             the existing README landing page is left untouched.
 #
 # Linux bundles import GLIBC_2.34 and GLIBCXX_3.4.30; auditwheel's pinned
@@ -338,6 +341,19 @@ jobs:
             asset: libcrispasr-linux-x86_64-cuda
             plat: manylinux_2_35_x86_64
             local: cuda
+          # #557: Linux Vulkan / ROCm. The Vulkan loader + ICD and the ROCm
+          # runtime (incl. ROCm's libomp) are host-provided, like CUDA's.
+          - name: linux-x86_64-vulkan
+            runner: ubuntu-22.04
+            asset: libcrispasr-linux-x86_64-vulkan
+            plat: manylinux_2_35_x86_64
+            local: vulkan
+          - name: linux-x86_64-hip
+            runner: ubuntu-22.04
+            asset: libcrispasr-linux-x86_64-hip
+            plat: manylinux_2_35_x86_64
+            local: hip
+            host_provided: libomp.so
           - name: windows-x86_64-cuda
             runner: windows-latest
             asset: libcrispasr-windows-x86_64-cuda
@@ -407,7 +423,10 @@ jobs:
 
       - name: Stage libs into the package
         shell: bash
-        run: python .wheel-qa/python/tools/stage_libs.py --bundle "$BUNDLE_DIR" --pkg python/crispasr --provenance native-provenance.json
+        run: |
+          python .wheel-qa/python/tools/stage_libs.py --bundle "$BUNDLE_DIR" --pkg python/crispasr \
+            --provenance native-provenance.json \
+            ${{ matrix.host_provided && format('--host-provided {0}', matrix.host_provided) || '' }}
 
       - name: Carry native bundle notices into the wheel
         shell: bash
@@ -460,6 +479,28 @@ jobs:
           name: gpu-wheel-abi-${{ matrix.name }}
           path: wheel-abi.json
 
+      # #557: loader smoke for the Linux Vulkan wheel in a clean venv, against
+      # the Khronos loader + Mesa's software ICD. This proves relocation and
+      # dependency closure only; it is NOT GPU acceleration evidence. The +hip
+      # wheel cannot load without a ROCm runtime, which hosted runners lack.
+      - name: Smoke test (Linux Vulkan wheel loads in a clean venv)
+        if: matrix.name == 'linux-x86_64-vulkan'
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get install -y --no-install-recommends libvulkan1 mesa-vulkan-drivers
+          python -m venv .wt && . .wt/bin/activate
+          pip install python/dist/*.whl
+          python - <<'PY'
+          import ctypes
+          from pathlib import Path
+          import crispasr._binding as b
+          lib = b._find_lib()
+          assert "site-packages" in lib and Path(lib).exists(), lib
+          ctypes.CDLL(lib)
+          print("CDLL load OK:", lib)
+          PY
+
       - uses: actions/upload-artifact@v4
         with:
           name: gpu-wheel-${{ matrix.name }}
@@ -503,7 +544,7 @@ jobs:
           # wheels (absolute URLs), so main only carries tiny index.html files.
           rels = json.loads(subprocess.check_output(
               ["gh", "api", "--paginate", f"repos/{repo}/releases"]))
-          buckets = {"cuda": [], "vulkan": []}
+          buckets = {"cuda": [], "vulkan": [], "hip": []}
           for r in rels:
               for a in r.get("assets", []):
                   n = a["name"]

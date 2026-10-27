@@ -112,7 +112,8 @@ def copy_libs(lib_dir: Path, pkg: Path, provenance=None) -> list[str]:
     return copied
 
 
-def vendor_linux_deps(pkg: Path, provenance=None) -> tuple[list[str], list[str], list[str]]:
+def vendor_linux_deps(pkg: Path, provenance=None,
+                      extra_host: tuple[str, ...] = ()) -> tuple[list[str], list[str], list[str]]:
     """Copy the staged libraries' EXTERNAL dependencies into the package.
 
     The release bundle is relocatable but NOT self-contained: `libcrispasr.so`
@@ -167,7 +168,7 @@ def vendor_linux_deps(pkg: Path, provenance=None) -> tuple[list[str], list[str],
             seen.add(soname)
             if any(soname.startswith(c) for c in LINUX_CORE) or soname in staged:
                 continue
-            if any(soname.startswith(c) for c in LINUX_HOST_PROVIDED):
+            if any(soname.startswith(c) for c in LINUX_HOST_PROVIDED + extra_host):
                 host_provided.append(soname)
                 continue
             if rest.startswith("not found"):
@@ -259,6 +260,9 @@ def main() -> int:
     ap.add_argument("--pkg", type=Path, default=Path(__file__).parent.parent / "crispasr",
                     help="the crispasr package directory to stage into")
     ap.add_argument("--provenance", type=Path, help="write original/staged library identities for notice QA")
+    ap.add_argument("--host-provided", action="append", default=[], metavar="SONAME_PREFIX",
+                    help="extra variant-specific host runtime (e.g. ROCm's libomp.so for +hip); "
+                         "never vendored, never treated as missing")
     args = ap.parse_args()
 
     bundle = args.bundle
@@ -281,7 +285,7 @@ def main() -> int:
                       if d.is_dir()]
 
     if platform.system() == "Linux":
-        vendored, unresolved, host_provided = vendor_linux_deps(pkg, provenance)
+        vendored, unresolved, host_provided = vendor_linux_deps(pkg, provenance, tuple(args.host_provided))
         if vendored:
             print(f"stage_libs: vendored {len(vendored)} external deps:", flush=True)
             for n in sorted(vendored):

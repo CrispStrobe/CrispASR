@@ -216,6 +216,20 @@ class PublicationAuditTest(unittest.TestCase):
                 else:
                     self.assertEqual(self.audit.verify_native_wheel(archive, expected, {}), 2)
 
+    def test_linux_gpu_wheel_set_is_version_gated_and_flavors_exact(self):
+        # #557: v0.8.46 and older keep their original exact wheel set.
+        self.assertFalse(self.audit.linux_gpu_wheels_expected("0.8.46"))
+        self.assertTrue(self.audit.linux_gpu_wheels_expected("0.8.47"))
+        self.assertTrue(self.audit.linux_gpu_wheels_expected("0.9.0"))
+        self.assertEqual(self.audit.wheel_local_suffix("cpu-wheel-linux-x86_64"), "")
+        self.assertEqual(self.audit.wheel_local_suffix("gpu-wheel-linux-x86_64-hip"), "+hip")
+        self.assertEqual(self.audit.wheel_local_suffix("gpu-wheel-linux-x86_64-vulkan"), "+vulkan")
+        self.assertEqual(self.audit.wheel_local_suffix("gpu-wheel-windows-x86_64-cuda"), "+cuda")
+        with self.assertRaises(ValueError):
+            self.audit.wheel_local_suffix("gpu-wheel-linux-aarch64-unknown")
+        self.assertEqual(set(self.audit.LINUX_GPU_WHEEL_ASSETS.values()),
+                         {"libcrispasr-linux-x86_64-vulkan.tar.gz", "libcrispasr-linux-x86_64-hip.tar.gz"})
+
     def test_missing_native_wheel_libraries_fail(self):
         path = self.root / "empty.whl"
         with zipfile.ZipFile(path, "w") as archive:
