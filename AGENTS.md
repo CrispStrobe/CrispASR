@@ -4,6 +4,10 @@
 
 ## Read first, if you have it
 
+Fresh agents should use `docs/maintenance-handoff.md` for the current completed
+work, evidence and bounded next actions, then claim a task in `PLAN.md`.
+`PLAN-ARCHIVE.md` and dated handoffs are historical snapshots, not active queues.
+
 Local operational notes, when present, are in gitignored `CLAUDE.md`. Read them
 for storage/worktree/job recovery; keep actual machine paths and private account
 details there. Public plans and receipts use portable aliases and public run IDs.
