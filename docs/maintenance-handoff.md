@@ -287,6 +287,14 @@ what delayed the live wheel index for v0.8.46.
 
 ### Task F — OpenVoice2 conditioned-cloning proof (independent)
 
+- **Accepted structural result:** frozen replay kernel version2 passes **27/27
+  on both CPU and T4 CUDA**, unchanged model/reference/gates. Raw waveform cosine
+  is0.99999973, norm ratio1.000042. [Verified receipt](openvoice-frozen-replay-accepted-2026-10-28.json).
+  Native CPP is `1b874a104`; worker is `d84007612`. Next run the already prepared
+  `tools/kaggle/openvoice-conditioning` full three-case worker (`.5`) with those
+  exact fixes. Preserve its previous version2 source/logs/outputs (already saved)
+  before pushing version3. It is the quality/conditioning proof, not another
+  frozen structural repeat. No whole-current-ggml or Session/CLI claim yet.
 - **Latest result:** frozen replay v1 passes 26/27 on CPU and actual T4 CUDA.
   The bias/flow repairs are verified on identical original/model bytes. Only
   raw decoder amplitude fails (~1.11145 norm ratio). Original final activation

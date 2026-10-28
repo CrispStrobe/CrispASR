@@ -1,3 +1,12 @@
+## 2026-10-28 — OpenVoice structural replay accepted on CPU/T4
+
+All27 unchanged original-reference stage/magnitude gates pass on both CPU and
+actual T4 CUDA after the three model recipe corrections. Raw waveform cosine
+is0.99999973 and norm ratio1.000042. Model/reference bytes are identical to the
+rejected controls. The ABI-matched old runtime/header profile is explicit;
+full cloning/ASR/speaker and whole-current-runtime/Session checks remain pending.
+The verified replay is not default-model acceptance.
+
 ## 2026-10-28 — v0.8.47 native publication accepted
 
 Auditor 40751444564 passes complete/acceptance with all 52 full anonymous asset

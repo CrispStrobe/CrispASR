@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (337 lessons)
+## Index by topic (338 lessons)
 
 **Security & untrusted input** (2)
 
@@ -335,7 +335,7 @@ cross-reference when you already know which model you are touching.
 - L17279 — CrispEmbed #31 WASM OCR e2e
 - L19386 — 313. Index-Echo: audit effective nested dtypes and Silero waveform history
 
-**Per-model port notes** (48)
+**Per-model port notes** (49)
 
 - L967 — A model's capability list cannot be inferred from its vocabulary — and forcing a fake list does not simulate having the capability
 - L3572 — Multi-stream token architecture (Mini-Omni2)
@@ -385,6 +385,7 @@ cross-reference when you already know which model you are touching.
 - L19624 — 2026-10-06 — A GGUF's `block_count` can include blocks that are not part of the trunk (Qwen3.5 MTP)
 - L19687 — Dolphin noncausal CSGU needs padding after LayerNorm (2026-10-12, #540)
 - L19724 — M1 OmniVoice attention copies and warm shader-cache controls
+- L19821 — OpenVoice2 — zero input is not absent conditioning; ordered flow and final activation defaults
 
 **Uncategorised** (12)
 
@@ -428,7 +429,7 @@ lookup, not a partition.
 - **indextts** (1) — L8563
 - **orpheus / SNAC** (1) — L3460
 - **voxcpm2** (4) — L9233, L9437, L9560, L18409
-- **openvoice2** (1) — L13170
+- **openvoice2** (2) — L13170, L19821
 - **glm-asr** (1) — L14432
 - **qwen3** (18) — L2037, L3911, L4614, L5283, L7962, L8563, L9233, L9627, L11609, L14391, L14489, L14582, L15265, L15601, L16019, L18027, L18530, L19624
 - **madlad / T5** (1) — L7857

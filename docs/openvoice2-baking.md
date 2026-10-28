@@ -113,6 +113,22 @@ This subsecond boundary check used one CPU thread after a resource check, withou
 running the full model locally. Whole-model CPU/CUDA replay of the final slope
 and the full cloning/quality gates remain required. No acceptance bar changed.
 
+## Frozen replay v2 — 27/27 on CPU and T4 CUDA
+
+With model CPP `1b874a104`, the same model/reference bytes now pass **all 27**
+unchanged stage and magnitude gates on CPU and actual T4 CUDA. Raw waveform
+cosine is 0.99999973 and norm ratio is 1.000042 (relative L2 about0.000735).
+All input/source/hash, device-work and resource evidence was independently
+checked. [Accepted structural receipt](openvoice-frozen-replay-accepted-2026-10-28.json).
+`replay_acceptance` is true; `model_acceptance` intentionally remains false.
+
+The next proof is the original three-case conditioning/quality worker with the
+same three corrections: tau0/0.3, shared original noise, exact cache reuse,
+uninstrumented model C API waveform/embedding, unequal clip means and mean-
+conditioned waveform, then independent ASR and speaker improvement. The current
+worker pins the audited old runtime/header ABI; whole-current-ggml and Session/
+CLI acceptance remain separate. No default model is promoted from replay.
+
 ## Recipe and license boundary
 
 OpenVoice V2 separates a base TTS from tone-color conversion. The native
