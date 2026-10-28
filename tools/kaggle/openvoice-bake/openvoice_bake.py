@@ -23,11 +23,11 @@ import urllib.request
 CONDITIONING = os.environ.get('CRISPASR_OV2_CONDITIONING') == '1'
 PUBLISH = os.environ.get('CRISPASR_OV2_PUBLISH') == '1'
 REPLAY = os.environ.get('CRISPASR_OV2_REPLAY') == '1'
-VERSION = ('2026-10-28.openvoice-fixed-replay.1' if REPLAY else
-           '2026-10-28.openvoice-conditioning.4' if CONDITIONING else '2026-10-28.openvoice-bake.6')
+VERSION = ('2026-10-28.openvoice-fixed-replay.2' if REPLAY else
+           '2026-10-28.openvoice-conditioning.5' if CONDITIONING else '2026-10-28.openvoice-bake.7')
 SOURCE = '6be9fda3629d9314da97101b8574fb25db06150f'
-MODEL_DELTA_SOURCE = '581234dfb89f4dc14a67857ddee359a3aac085fd'
-MODEL_DELTA_SHA256 = '74a792cca0f40a5e689717cb3084886b0324114043ec2074114d7ef3a59c4ed4'
+MODEL_DELTA_SOURCE = "1b874a104c70bc77e1a64dc1d5f4e924f0a3cfeb"
+MODEL_DELTA_SHA256 = "f658c40176fe1c67584cd9ab80ca9d954433cfe7973f6ba84b43a448d59b8c13"
 REPLAY_PINS = {'model': '483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255',
                'reference': '259993b526944e8e36ccca436e005cbc3935a46636b42c618cfd5c3d19429c8f'}
 UPSTREAM = '74a1d147b17a8c3092dd5430504bd83ef6c7eb23'
