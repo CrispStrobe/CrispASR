@@ -10,8 +10,7 @@
   "dataset_sources": [],
   "competition_sources": [],
   "kernel_sources": [
-    "${KAGGLE_ACCOUNT}/crispasr-openvoice-conditioning",
-    "${KAGGLE_ACCOUNT}/crispasr-openvoice-full-source"
+    "${KAGGLE_ACCOUNT}/crispasr-openvoice-conditioning"
   ],
   "model_sources": []
 }

@@ -67,6 +67,16 @@ def main():
                     ['git', '-C', ROOT, 'checkout', 'FETCH_HEAD']]:
             subprocess.run(list(map(str, cmd)), check=True)
         checkpoints = list(Path('/kaggle/input').rglob('current-application-checkpoint.tar.gz'))
+        if not checkpoints:
+            # The operator obtains the same per-file expiring URL used by
+            # Kaggle's output client. No account API token enters this worker.
+            url = os.environ.pop('CRISPASR_CHECKPOINT_URL', '')
+            if not url.startswith('https://'):
+                raise ValueError('A scoped expiring checkpoint download URL is required')
+            checkpoint = WORK/'retained-application.tar.gz'
+            helper.guard_resources('retained-checkpoint-input')
+            fetch(url, checkpoint, CHECKPOINT_SHA)
+            checkpoints = [checkpoint]
         if len(checkpoints) != 1 or sha(checkpoints[0]) != CHECKPOINT_SHA:
             raise ValueError('Exactly the retained version-1 application is required')
         with tarfile.open(checkpoints[0]) as archive:

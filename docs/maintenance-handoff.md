@@ -22,7 +22,7 @@ a fresh agent should confirm ownership before dispatching replacements.
 | Item | State | Evidence |
 |---|---|---|
 | v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit 40736324867 PASS; task A complete. | [Receipt](release-publication-2026-10-28.md) |
-| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 is accepted; all 14 jobs in wheel producer 40751349609 pass. Pages 40776528499 and final wheel audit remain pending. | Task B |
+| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 is accepted; all 14 jobs in wheel producer 40751349609 pass. Pages 40776528499 passes and live index links are verified; wheel audit 40789883589 is queued. | Task B |
 | #557 issue | Code merged. Issue still **open**. No public comment posted yet. | Task C |
 | data2vec-base nightly gate | COMPLETE: same-host cause, paired Q4/exact-F16 policy and actual production regression 40750908085 accepted. | Task D |
 | OpenVoice2 | Bounded three-case conditioning/quality and current-runtime structural proofs accepted. Real Python Session validation is accepted on Kaggle; actual CLI and a full rebuilt-current library remain separate. | Task F and follow-up below |
@@ -116,8 +116,10 @@ audit **40751444564** passed on `ubuntu-latest` with `complete: true, acceptance
 the 12 setup/build jobs, PyPI and GPU-index publication (`workflow_run`, workflow
 source `2c733b9c3`; release inputs remain the frozen tag). Index commit
 `08ffbfaf1f9c123740d3807ffa4b07c0af3f29e0` is on main. Pages deployment
-**40776528499** remains queued; the public HIP index was still unavailable at
-the last HTTP check. Preserve existing runs; no duplicate deployment is needed.
+**40776528499** succeeded; anonymous HIP/Vulkan and ARM CUDA v0.8.47
+index links are verified. Final wheel audit **40789883589** was dispatched
+on main with the exact frozen source and accepted producer/native-audit inputs.
+It is queued; preserve it rather than creating another run.
 The [accepted native receipt](release-v0847-native-audit-2026-10-28.json)
 and [full inventory](release-v0847-native-assets-2026-10-28.json) are retained.
 Wheel readback still waits for successful
@@ -165,8 +167,9 @@ what delayed the live wheel index for v0.8.46.
 
 - **Live:** native producer and native audit **40751444564** are accepted.
   Wheel producer **40751349609** is also successful (all 14 jobs). Pages
-  **40776528499** at index commit `08ffbfaf1` is queued. Steps 1–3 below
-  are complete; continue at step 4. Use `native_audit_run=40751444564`
+  **40776528499** at index commit `08ffbfaf1` and live index links pass.
+  Final wheel audit **40789883589** is queued. Steps 1–5 below have been
+  performed; collect that existing verifier instead of dispatching again. Use `native_audit_run=40751444564`
   for the eventual wheel verifier; do not repeat the accepted native audit.
 
 - **Do, in order:**
@@ -439,7 +442,14 @@ publication occurred. Remaining scope:
    hosted diagnostic using that exact checkpoint and accepted real reference
    data. Compare neutral speech alone, actual prefix/content segments and joined
    clips using the unchanged pinned tiny.en plus an independently pinned small.en
-   recognizer. This diagnostic never sets application acceptance true. Establish
+   recognizer. Diagnostic version 1 failed before inference because Kaggle
+   rejected the failed full-source run as an unversioned input attachment.
+   Its source/logs/output are preserved. The prepared transport repair uses
+   the existing output API's expiring URL scoped to that single checkpoint;
+   render the URL placeholder only into a private push copy, never commit it
+   or copy an account API token into the worker. The private-cache alternative
+   hit the account storage limit; no assets were removed or made public.
+   This diagnostic never sets application acceptance true. Establish
    a synthesis defect versus decoding limitation before proposing a repair or
    acceptance-policy change. No NN code change or new tooling dataset is needed.
    Actions CPU **40783760561** remains queued at `7c158b325` (identical application

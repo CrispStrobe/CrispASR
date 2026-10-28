@@ -36,10 +36,10 @@ policy and remaining hosted confirmation are tracked as task D.
 | ARM64 CUDA lib producer dry run (branch) | 40661942703 | pass: same gates (CUDA runtime host) |
 | Release | 40711745769 | PASS: 38/38 jobs including final publish; exact 52-name public asset set checked. Full byte audit 40751444564 accepted — task B |
 | Rust / Dart wrappers | 40711745994 | PASS: all three publisher jobs; three registry archives fully read back, registry SHA-256/version, original manifests, licenses and packaged source files match frozen tag ([receipt](release-wrappers-readback-2026-10-28.json)) |
-| Python wheels | 40751349609 | PASS: all 14 jobs including all builds, PyPI and GPU-index publication. Pages and final wheel readback remain pending |
+| Python wheels | 40751349609 | PASS: all 14 jobs including all builds, PyPI and GPU-index publication. Pages and live index links pass; final wheel audit 40789883589 remains queued |
 | Native byte publication audit | 40751444564 | PASS: complete/acceptance true; all 52 full anonymous readbacks, notices/runtime/qualified-library inventory accepted. [Receipt](release-v0847-native-audit-2026-10-28.json), [inventory](release-v0847-native-assets-2026-10-28.json) |
-| Pages deployment | 40776528499 | queued at index commit `08ffbfaf1`; no live-index acceptance yet |
-| Wheel publication audit | — | waits for Pages/public index links; native inventory already accepted — task B |
+| Pages deployment | 40776528499 | PASS at index commit `08ffbfaf1`; live HIP/Vulkan and ARM CUDA v0.8.47 links verified |
+| Wheel publication audit | 40789883589 | queued; exact frozen tag source, wheel producer and accepted native inventory supplied — task B |
 
 Not covered: execution on a physical AMD, Intel or ARM NVIDIA GPU (task E). The
 `+hip` wheel cannot be load-tested on hosted runners.
@@ -60,9 +60,8 @@ Not covered: execution on a physical AMD, Intel or ARM NVIDIA GPU (task E). The
   Do not dispatch another capability probe.
 - B's native audit is accepted. All wheel builds passed in producer
   **40751349609**, including both publishers and the three new GPU variants.
-  Pages **40776528499** remains queued. Verify the resulting public index links
-  after deployment, then run the wheel audit
-  using accepted native audit **40751444564**. Never retag v0.8.47.
+  Pages **40776528499** and live index links pass. Collect final wheel audit
+  **40789883589**, supplied accepted native audit **40751444564**. Never retag v0.8.47.
 - The user requests keeping #557 open and preparing its reply for review.
   No comment was posted and no issue was closed.
 - Standalone Parakeet word-boundary repairs are separately documented in
