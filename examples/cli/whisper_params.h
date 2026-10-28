@@ -250,9 +250,8 @@ struct whisper_params {
     int att_context_right = INT_MIN;
     std::string hotwords;        // comma-separated hotword list (PLAN #98)
     float hotwords_boost = 2.0f; // per-token log-prob boost for hotword prefix matches
-    // Free-form hotword/context text injected into the vibevoice-asr prompt
-    // (only backend that reads this so far). Matches the `context_info` param
-    // in microsoft/VibeVoice's vibevoice_asr_processor.py.
+    // Free-form context injected verbatim into Qwen3-ASR's system turn or
+    // VibeVoice-ASR's instruction prompt.
     std::string context;
     // #205: granite-speech incremental decoding — seed the assistant turn with a
     // previously-decoded transcript so the model continues from it instead of

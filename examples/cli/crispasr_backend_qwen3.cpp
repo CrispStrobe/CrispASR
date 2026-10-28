@@ -42,7 +42,7 @@ std::string decode_token(const std::string& s) {
 
 class Qwen3Backend : public CrispasrBackend {
 public:
-    Qwen3Backend() = default;
+    explicit Qwen3Backend(bool context_enabled) : context_enabled_(context_enabled) {}
     ~Qwen3Backend() override { Qwen3Backend::shutdown(); }
 
     const char* name() const override { return "qwen3"; }
@@ -185,8 +185,8 @@ public:
             else
                 assistant_prefill = "language " + crispasr_iso_to_english_lang(params.language) + "<asr_text>";
         }
-        // PLAN #98 Phase B: hotword prompt injection
-        std::string text = core_qwen3_prompt::build(N_enc, sys_instruction, "", assistant_prefill, params.hotwords);
+        std::string text = core_qwen3_prompt::build(N_enc, sys_instruction, "", assistant_prefill, params.hotwords,
+                                                    context_enabled_ ? params.context : "");
         if (raon_) {
             warn_raon_ignored_flags(params);
             text = raon_prompt(N_enc, params.ask);
@@ -569,7 +569,8 @@ public:
             else
                 assistant_prefill = "language " + crispasr_iso_to_english_lang(params.language) + "<asr_text>";
         }
-        std::string text = core_qwen3_prompt::build(N_enc, sys_instruction, "", assistant_prefill, params.hotwords);
+        std::string text = core_qwen3_prompt::build(N_enc, sys_instruction, "", assistant_prefill, params.hotwords,
+                                                    context_enabled_ ? params.context : "");
         if (raon_) {
             warn_raon_ignored_flags(params);
             text = raon_prompt(N_enc, params.ask);
@@ -755,6 +756,7 @@ private:
     qwen3_asr_context* ctx_ = nullptr;
     std::string stream_recipe_; // GGUF qwen3asr.streaming_recipe ("r2t2" or "")
     bool raon_ = false;         // #455 Raon-Speech-9B GGUF
+    bool context_enabled_;      // CLI context is supported only for Qwen3-ASR.
 };
 
 // Realtime session: Confucius4-R2T2's prefix-rollback streaming, driven by the
@@ -880,6 +882,6 @@ std::unique_ptr<CrispasrRealtimeSession> Qwen3Backend::create_realtime_session(c
 
 } // namespace
 
-std::unique_ptr<CrispasrBackend> crispasr_make_qwen3_backend() {
-    return std::unique_ptr<CrispasrBackend>(new Qwen3Backend());
+std::unique_ptr<CrispasrBackend> crispasr_make_qwen3_backend(bool context_enabled) {
+    return std::unique_ptr<CrispasrBackend>(new Qwen3Backend(context_enabled));
 }
