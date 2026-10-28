@@ -22,7 +22,7 @@ a fresh agent should confirm ownership before dispatching replacements.
 | Item | State | Evidence |
 |---|---|---|
 | v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit 40736324867 PASS; task A complete. | [Receipt](release-publication-2026-10-28.md) |
-| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 is accepted; wheel producer 40751349609 remains queued. | Task B |
+| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 is accepted; all 14 jobs in wheel producer 40751349609 pass. Pages 40776528499 and final wheel audit remain pending. | Task B |
 | #557 issue | Code merged. Issue still **open**. No public comment posted yet. | Task C |
 | data2vec-base nightly gate | COMPLETE: same-host cause, paired Q4/exact-F16 policy and actual production regression 40750908085 accepted. | Task D |
 | OpenVoice2 | Bounded three-case conditioning/quality and current-runtime structural proofs accepted. Real Python Session validation is accepted on Kaggle; actual CLI and a full rebuilt-current library remain separate. | Task F and follow-up below |
@@ -112,10 +112,12 @@ final publish, and the exact 52 expected public asset names. Native readback
 audit **40751444564** passed on `ubuntu-latest` with `complete: true, acceptance: true`, auditor source
 `bda9d00ce6209a7811dccc5a996077b8bdc2521d`, pinned tag source
 `5f87a56265e4bbd7e2adc7052254e576d5774abb`, release_run `40711745769`,
-`repair_notices=false`. Automatic Python wheel producer **40751349609** is
-now has all 12 setup/build jobs passing, including HIP and ARM CUDA; PyPI publication also passes; only
-`publish-gpu-index` remains queued (`workflow_run`, workflow
-source `2c733b9c3`; release inputs remain the frozen tag). Preserve both runs.
+`repair_notices=false`. Automatic Python wheel producer **40751349609** passes all 14 jobs, including
+the 12 setup/build jobs, PyPI and GPU-index publication (`workflow_run`, workflow
+source `2c733b9c3`; release inputs remain the frozen tag). Index commit
+`08ffbfaf1f9c123740d3807ffa4b07c0af3f29e0` is on main. Pages deployment
+**40776528499** remains queued; the public HIP index was still unavailable at
+the last HTTP check. Preserve existing runs; no duplicate deployment is needed.
 The [accepted native receipt](release-v0847-native-audit-2026-10-28.json)
 and [full inventory](release-v0847-native-assets-2026-10-28.json) are retained.
 Wheel readback still waits for successful
@@ -162,9 +164,10 @@ what delayed the live wheel index for v0.8.46.
 ### Task B — verify the v0.8.47 publication
 
 - **Live:** native producer and native audit **40751444564** are accepted.
-  Collect existing wheel producer **40751349609**; use `native_audit_run=40751444564`
-  for the eventual wheel verifier. Steps 1–2 below are
-  complete for native job results, asset names and full byte acceptance.
+  Wheel producer **40751349609** is also successful (all 14 jobs). Pages
+  **40776528499** at index commit `08ffbfaf1` is queued. Steps 1–3 below
+  are complete; continue at step 4. Use `native_audit_run=40751444564`
+  for the eventual wheel verifier; do not repeat the accepted native audit.
 
 - **Do, in order:**
   1. Wait for release run **40711745769** (tag `v0.8.47`). Every build job must
@@ -188,8 +191,9 @@ what delayed the live wheel index for v0.8.46.
      wheel and that `whl/cuda/` lists the `manylinux_2_35_aarch64` `+cuda` wheel.
   5. Dispatch the verifier with `tag=v0.8.47`,
      `source=5f87a56265e4bbd7e2adc7052254e576d5774abb`, `runner=ubuntu-latest`
-     and `release_run=<id>`.
-     Then dispatch it again with `wheel_run=<id>` and `native_audit_run=<that run>`.
+     and `wheel_run=40751349609`, `native_audit_run=40751444564`.
+     Dispatch `verify-release-publication.yml` on main; the native audit is
+     already accepted and must not be dispatched again.
      `v0.8.47` is already in `REVIEWED_TAGS`. For versions ≥ 0.8.47 the auditor
      requires the three new GPU wheels and the `hip` index.
 - **If a new GPU wheel leg fails:** inspect the failing step first. For a
@@ -402,19 +406,39 @@ Preset identity is explicitly `unknown`: model-generated audio does not prove
 whose identity a preset represents. Raw artifacts remain private and labelled;
 these tests grant no identity, consent or voice-pack publication rights.
 Both Session versions' terminal source, logs and outputs are retained privately.
-No active OpenVoice kernel remains and no replacement is required.
+These accepted Session runs need no replacement. A separate full-source
+application campaign is running below; it does not replace their evidence.
 This qualifies the shipped SDK plus verified model overlay, not a complete
 rebuilt-current library or the actual CLI. No model/default promotion or Hub
 publication occurred. Remaining scope:
 
-1. **Full rebuilt-current library and CLI:** repeat G's retained integration
-   controls against a newly built full current-source shared library, with the
-   same renamed Melo model, pinned BERT/converter/reference inputs, rate checks,
-   raw/marked output and unchanged quality gates. The tested SDK composition
-   supplies a retained comparator; do not rebuild models or change the oracle.
-   Qualify the actual CLI
-   separately: its filename detection and adapter cannot substitute for C ABI
-   coverage. Use suitable hosted workers, not a loaded local machine.
+1. **Full rebuilt-current library and CLI — claimed, validation running:**
+   candidate branch `validate/openvoice-interfaces-20261028`; bootstrap commit
+   `ae1f243a7`, worker/application source
+   `91e1e97b399d105924915c0e8d5ea0176359b147`. These changes are not yet on main.
+   The actual CLI adapter needed GPU forwarding, native-rate declaration before
+   synthesis, neutral disclosure bypass/resampling, fail-closed converter inputs,
+   F32-sensitive model discovery and unset-speaker normalization. Native Melo
+   now rejects out-of-range IDs. Actual production-body routing and setter
+   controls reproduce the failures before the repair and pass afterward.
+   Actions CPU run **40783760561** is queued at `7c158b325` (identical application
+   C++). Kaggle **`crispasr-openvoice-full-source` version 1** is running with
+   `tools/kaggle/openvoice-fullsource/entry.py`: all current application C++ is
+   rebuilt against only audited v0.8.47 ggml DSOs and exact `e2ae679a` headers.
+   There is no old application DSO or model overlay and no CUDA kernel rebuild.
+   `tools/ci-heavy/openvoice_interfaces.py` checks both original 27-stage cases,
+   real renamed-model Session/C ABI, invalid speaker IDs, raw/marked repeats,
+   actual CLI baseline/content-only clone/default neutral disclosure, native
+   rates, unchanged WER <=0.2 and clone speaker improvement >0.01. CUDA proof
+   must occur inside each converter flow-to-vocoder window, not earlier Melo
+   work. Before every compile/inference it checks load, memory and storage.
+   **Next:** retain terminal source, logs, checkpoint, receipts and encrypted
+   evidence before any replacement; inspect any actual failure. Accept only
+   complete/acceptance true, all four quality cases and actual converter CUDA.
+   Public artifacts contain metrics and hashes; speech/transcripts/private logs
+   are encrypted to an operator key recovered from ignored local notes. Preset
+   identity remains unknown. CPU acceptance and exact-source CI remain separate.
+   Merge only after those gates; prepare the next patch release afterward.
 2. **Publication:** no Hub write was attempted by the accepted read-only run.
    Earlier repository creation returned 403. Use an authorized destination,
    retain original MIT notices, converter precision recipe, immutable model/

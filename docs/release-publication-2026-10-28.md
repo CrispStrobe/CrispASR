@@ -36,9 +36,10 @@ policy and remaining hosted confirmation are tracked as task D.
 | ARM64 CUDA lib producer dry run (branch) | 40661942703 | pass: same gates (CUDA runtime host) |
 | Release | 40711745769 | PASS: 38/38 jobs including final publish; exact 52-name public asset set checked. Full byte audit 40751444564 accepted — task B |
 | Rust / Dart wrappers | 40711745994 | PASS: all three publisher jobs; three registry archives fully read back, registry SHA-256/version, original manifests, licenses and packaged source files match frozen tag ([receipt](release-wrappers-readback-2026-10-28.json)) |
-| Python wheels | 40751349609 | all 12 setup/build jobs pass, including HIP and ARM CUDA; PyPI publication passes; GPU-index publication remains queued. No wheel publication acceptance yet |
+| Python wheels | 40751349609 | PASS: all 14 jobs including all builds, PyPI and GPU-index publication. Pages and final wheel readback remain pending |
 | Native byte publication audit | 40751444564 | PASS: complete/acceptance true; all 52 full anonymous readbacks, notices/runtime/qualified-library inventory accepted. [Receipt](release-v0847-native-audit-2026-10-28.json), [inventory](release-v0847-native-assets-2026-10-28.json) |
-| Wheel publication audit | — | waits for wheels/index/Pages and accepted native inventory — task B |
+| Pages deployment | 40776528499 | queued at index commit `08ffbfaf1`; no live-index acceptance yet |
+| Wheel publication audit | — | waits for Pages/public index links; native inventory already accepted — task B |
 
 Not covered: execution on a physical AMD, Intel or ARM NVIDIA GPU (task E). The
 `+hip` wheel cannot be load-tested on hosted runners.
@@ -58,8 +59,9 @@ Not covered: execution on a physical AMD, Intel or ARM NVIDIA GPU (task E). The
   0.999138 (threshold 0.999). [Receipt](data2vec-production-regression-2026-10-28.json).
   Do not dispatch another capability probe.
 - B's native audit is accepted. All wheel builds passed in producer
-  **40751349609**, including the three new GPU variants. PyPI publication also passes. Wait for GPU-index publication,
-  verify the resulting index/Pages deployment, then run the wheel audit
+  **40751349609**, including both publishers and the three new GPU variants.
+  Pages **40776528499** remains queued. Verify the resulting public index links
+  after deployment, then run the wheel audit
   using accepted native audit **40751444564**. Never retag v0.8.47.
 - The user requests keeping #557 open and preparing its reply for review.
   No comment was posted and no issue was closed.
