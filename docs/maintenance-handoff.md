@@ -279,6 +279,13 @@ what delayed the live wheel index for v0.8.46.
 
 ### Task F — OpenVoice2 conditioned-cloning proof (independent)
 
+- **Current:** version 2 reached actual T4 CUDA work and failed 11/27 stages.
+  The original reference/model bytes are retained and verified. The two
+  original-recipe corrections (preserve zero-input conditioning bias; couple
+  before forward flip) pass tiny production-body negative controls. Exact owned
+  input CPU/CUDA replay is the next gate; full speech acceptance is not claimed.
+  [All stages](openvoice-original-parity-failure-2026-10-28.json) and
+  [repair method](openvoice2-baking.md#first-pretrained-numerical-failure-and-bounded-repair).
 - Old bake v2 is a terminal CPU-backend registration abort. The prepared
   dynamic-backend/module-discovery repair was never qualified by that run.
 - Conditioning kernel version 1, worker `.2` (2026-10-28), compiled both

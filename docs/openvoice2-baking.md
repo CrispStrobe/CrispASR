@@ -51,6 +51,42 @@ query hit rate limiting. Use a bounded current roster after backoff, respect
 the two-session cap, and preserve the previous terminal artifacts before a
 software retry. Never infer a running kernel's failure from missing logs.
 
+## First pretrained numerical failure and bounded repair
+
+Conditioning kernel version **2**, worker `.3`, passed the loader and read-only
+checkpoint path, generated a capture-neutral original reference, and executed
+the native CUDA vocoder on T4. It failed **11/27 required stages**. Both PCM
+inputs and frontend/reference encoder match closely; the first material
+posterior WaveNet difference is cosine 0.994142 and norm ratio 0.980296.
+Posterior statistics fail the unchanged magnitude gate; forward-flow cosine
+then drops to 0.133117, and waveform cosine is -0.030380.
+[Full stage receipt](openvoice-original-parity-failure-2026-10-28.json).
+The producer's `gpu_executed` flag is set only after every case; its false flag
+in this failed first case does not negate the scheduler's actual CUDA splits
+and completed vocoder output. Numerical/model acceptance remains false.
+
+Reading the pinned original inference path identifies two recipe defects:
+
+- `zero_g` passes a **zero tensor** through the posterior conditioning affine
+  layer. The native path skipped that layer entirely, dropping its learned
+  bias. The actual F32 checkpoint has 6,144 nonzero bias values (norm 11.9577).
+- Forward residual flow is **coupling then channel flip**; inverse flow visits
+  the flip first. Native forward flow incorrectly flipped before coupling too.
+
+Tiny tests compile the actual production CPU bodies against biased affine
+fixtures. Both fail before repair (bias output 0.0572535 versus 0.2013839;
+flow first value 4 versus 3.5), then pass after the two corrections, including
+one/two-block forward expectations and inverse reconstruction. Existing owned
+conditioning/noise/clip-average controls still pass. No large local model runs.
+These tests justify the bounded fixes; they do not qualify pretrained speech.
+
+Next replay the **identical retained model and original reference bytes** on
+Kaggle CPU/CUDA, retaining every original gate. Keep real model/reference data
+separate from tooling caches and carry the full MIT notice and synthetic-audio
+attribution. Full three-case cloning, shared-noise, independent ASR/speaker and
+higher-level Session/CLI acceptance remain separate after structural replay.
+Do not replace this failed reference with native output or loosen tolerances.
+
 ## Recipe and license boundary
 
 OpenVoice V2 separates a base TTS from tone-color conversion. The native

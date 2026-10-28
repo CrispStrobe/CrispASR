@@ -1,3 +1,13 @@
+## 2026-10-28 — OpenVoice pretrained failure isolated
+
+The read-only conditioning worker reached actual T4 CUDA execution and rejected
+11/27 stages. Frontend/reference encoder parity is close; posterior WaveNet
+bias handling and forward coupling/flip ordering diverge from the pinned
+original. Two production-body fixtures fail before those recipe fixes and pass
+afterward. The failed model/reference bytes and all stage evidence are retained;
+pretrained replay and speech qualification are still pending, with unchanged
+gates. [Failure receipt](docs/openvoice-original-parity-failure-2026-10-28.json).
+
 ## 2026-10-28 — Java/Ruby speaker errors and read-only OpenVoice proof
 
 Java and Ruby now reject out-of-range integer speaker IDs instead of swallowing

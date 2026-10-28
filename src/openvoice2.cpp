@@ -946,12 +946,10 @@ static void enc_q_forward(openvoice2_context* ctx, const std::vector<float>& spe
 
     // Compute speaker conditioning for WaveNet
     std::vector<float> g_cond;
-    if (hp.zero_g) {
-        // zero_g mode: enc_q ignores speaker conditioning
-        g_cond.clear();
-    } else {
-        compute_g_cond(eq.wn, g_vec, hp.gin_channels, hp.n_wn_layers_enc_q, hidden, g_cond);
-    }
+    // The original passes zeros_like(g), not g=None. The learned affine
+    // conditioning bias still contributes when the speaker input is zero.
+    std::vector<float> zero_g(hp.gin_channels, 0.0f);
+    compute_g_cond(eq.wn, hp.zero_g ? zero_g : g_vec, hp.gin_channels, hp.n_wn_layers_enc_q, hidden, g_cond);
 
     // WaveNet
     std::vector<float> wn_out;
@@ -1012,10 +1010,11 @@ static void flow_wavenet(openvoice2_context* ctx, std::vector<float>& z, int T, 
     for (int fi = start; fi != end; fi += step) {
         const auto& fb = ctx->w.flow_blocks[fi];
 
-        // Flip channels
-        for (int t = 0; t < T; t++)
-            for (int c = 0; c < C / 2; c++)
-                std::swap(z[t * C + c], z[t * C + C - 1 - c]);
+        // Forward applies coupling then Flip. Its inverse visits Flip first.
+        if (reverse)
+            for (int t = 0; t < T; t++)
+                for (int c = 0; c < C / 2; c++)
+                    std::swap(z[t * C + c], z[t * C + C - 1 - c]);
 
         // Split into z0, z1
         std::vector<float> z0(half * T), z1(half * T);
@@ -1084,6 +1083,10 @@ static void flow_wavenet(openvoice2_context* ctx, std::vector<float>& z, int T, 
                 z[t * C + half + c] = z1[t * half + c];
             }
         }
+        if (!reverse)
+            for (int t = 0; t < T; t++)
+                for (int c = 0; c < C / 2; c++)
+                    std::swap(z[t * C + c], z[t * C + C - 1 - c]);
     }
 }
 

@@ -1,0 +1,333 @@
+{
+  "kernel_version": 2,
+  "worker_version": "2026-10-28.openvoice-conditioning.3",
+  "worker_source": "aa0ae40669456a2ce748348a8f258cb14870ac42",
+  "worker_sha256": "3cb365e8cab7061ddad03918b56c2b6d92cc6b522dc034dbf27333433a977fa6",
+  "native_source": "6be9fda3629d9314da97101b8574fb25db06150f",
+  "hardware": "Tesla T4, 7.5, 15360 MiB, 580.178.04\nTesla T4, 7.5, 15360 MiB, 580.178.04",
+  "cuda_work_observed": true,
+  "producer_gpu_executed_flag": false,
+  "flag_note": "Producer sets gpu_executed only after all cases. Scheduler CUDA splits plus a completed vocoder output establish actual work in this failed first case.",
+  "model_acceptance": false,
+  "complete": false,
+  "publication_requested": false,
+  "converted_model": {
+    "bytes": 102123872,
+    "sha256": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255",
+    "name": "openvoice2-tcc-f32sens.gguf"
+  },
+  "reference": {
+    "case": 0,
+    "local_file": "reference-0.gguf",
+    "bytes": 48770848,
+    "sha256": "259993b526944e8e36ccca436e005cbc3935a46636b42c618cfd5c3d19429c8f"
+  },
+  "full_model_and_reference_readbacks_verified": true,
+  "resource_checks_verified": 11,
+  "stages": [
+    {
+      "stage": "src_pcm",
+      "pass": true,
+      "n": 85505.0,
+      "cos": 1.0,
+      "|mine|": 20.0432366,
+      "|ref|": 20.0432366,
+      "ratio": 1.0,
+      "rel_l2": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "stage": "ref_pcm",
+      "pass": true,
+      "n": 71680.0,
+      "cos": 1.0,
+      "|mine|": 21.4376587,
+      "|ref|": 21.4376587,
+      "ratio": 1.0,
+      "rel_l2": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "stage": "src_spec",
+      "pass": true,
+      "n": 171342.0,
+      "cos": 1.0,
+      "|mine|": 555.45518,
+      "|ref|": 555.45537,
+      "ratio": 0.999999658,
+      "rel_l2": 1.11952002e-06,
+      "max_abs": 7.08252192e-05
+    },
+    {
+      "stage": "ref_spec",
+      "pass": true,
+      "n": 143640.0,
+      "cos": 1.0,
+      "|mine|": 594.12155,
+      "|ref|": 594.121769,
+      "ratio": 0.999999631,
+      "rel_l2": 1.98569085e-06,
+      "max_abs": 0.000276431441
+    },
+    {
+      "stage": "ref_enc_layernorm",
+      "pass": true,
+      "n": 143640.0,
+      "cos": 1.0,
+      "|mine|": 204.768723,
+      "|ref|": 204.768717,
+      "ratio": 1.00000003,
+      "rel_l2": 1.57120485e-06,
+      "max_abs": 2.23740935e-05
+    },
+    {
+      "stage": "ref_enc_conv0",
+      "pass": true,
+      "n": 1151360.0,
+      "cos": 1.0,
+      "|mine|": 275.311542,
+      "|ref|": 275.311545,
+      "ratio": 0.999999987,
+      "rel_l2": 2.82067308e-06,
+      "max_abs": 9.22847539e-05
+    },
+    {
+      "stage": "ref_enc_conv1",
+      "pass": true,
+      "n": 288960.0,
+      "cos": 1.0,
+      "|mine|": 89.8781581,
+      "|ref|": 89.8781569,
+      "ratio": 1.00000001,
+      "rel_l2": 7.47936453e-06,
+      "max_abs": 0.00021988526
+    },
+    {
+      "stage": "ref_enc_conv2",
+      "pass": true,
+      "n": 145600.0,
+      "cos": 1.0,
+      "|mine|": 57.7518576,
+      "|ref|": 57.7518618,
+      "ratio": 0.999999928,
+      "rel_l2": 2.09179638e-05,
+      "max_abs": 0.000248990953
+    },
+    {
+      "stage": "ref_enc_conv3",
+      "pass": true,
+      "n": 38016.0,
+      "cos": 0.999999999,
+      "|mine|": 36.0819118,
+      "|ref|": 36.0819145,
+      "ratio": 0.999999925,
+      "rel_l2": 3.98713774e-05,
+      "max_abs": 0.000446729362
+    },
+    {
+      "stage": "ref_enc_conv4",
+      "pass": true,
+      "n": 19584.0,
+      "cos": 0.999999999,
+      "|mine|": 20.6945725,
+      "|ref|": 20.6945841,
+      "ratio": 0.999999441,
+      "rel_l2": 5.38669546e-05,
+      "max_abs": 0.000302240252
+    },
+    {
+      "stage": "ref_enc_conv5",
+      "pass": true,
+      "n": 5760.0,
+      "cos": 0.999999998,
+      "|mine|": 9.3858411,
+      "|ref|": 9.38585727,
+      "ratio": 0.999998277,
+      "rel_l2": 5.52210538e-05,
+      "max_abs": 0.000135660172
+    },
+    {
+      "stage": "ref_enc_gru_out",
+      "pass": true,
+      "n": 128.0,
+      "cos": 1.0,
+      "|mine|": 5.02094554,
+      "|ref|": 5.02094745,
+      "ratio": 0.99999962,
+      "rel_l2": 3.12626391e-05,
+      "max_abs": 6.04987144e-05
+    },
+    {
+      "stage": "target_se",
+      "pass": true,
+      "n": 256.0,
+      "cos": 0.999999999,
+      "|mine|": 11.3325328,
+      "|ref|": 11.3325415,
+      "ratio": 0.999999232,
+      "rel_l2": 3.7413542e-05,
+      "max_abs": 6.74724579e-05
+    },
+    {
+      "stage": "src_se",
+      "pass": true,
+      "n": 256.0,
+      "cos": 1.0,
+      "|mine|": 10.4166389,
+      "|ref|": 10.4166389,
+      "ratio": 1.0,
+      "rel_l2": 0.0,
+      "max_abs": 0.0
+    },
+    {
+      "stage": "enc_q_pre",
+      "pass": true,
+      "n": 64128.0,
+      "cos": 1.0,
+      "|mine|": 819.97098,
+      "|ref|": 819.971275,
+      "ratio": 0.99999964,
+      "rel_l2": 1.68898543e-06,
+      "max_abs": 0.000167369843
+    },
+    {
+      "stage": "enc_q_wn_out",
+      "pass": true,
+      "n": 64128.0,
+      "cos": 0.994142214,
+      "|mine|": 84.5505103,
+      "|ref|": 86.2499691,
+      "ratio": 0.980296123,
+      "rel_l2": 0.108963166,
+      "max_abs": 2.11251307
+    },
+    {
+      "stage": "enc_q_stats",
+      "pass": false,
+      "n": 128256.0,
+      "cos": 0.995169552,
+      "|mine|": 241.433877,
+      "|ref|": 248.267851,
+      "ratio": 0.972473382,
+      "rel_l2": 0.100760502,
+      "max_abs": 2.03984094
+    },
+    {
+      "stage": "enc_q_z",
+      "pass": false,
+      "n": 64128.0,
+      "cos": 0.994663204,
+      "|mine|": 228.320168,
+      "|ref|": 235.502469,
+      "ratio": 0.969502224,
+      "rel_l2": 0.106198807,
+      "max_abs": 2.03984094
+    },
+    {
+      "stage": "z_after_flow_fwd",
+      "pass": false,
+      "n": 64128.0,
+      "cos": 0.133117171,
+      "|mine|": 259.224767,
+      "|ref|": 50.1391085,
+      "ratio": 5.17011121,
+      "rel_l2": 5.13357466,
+      "max_abs": 5.53896427
+    },
+    {
+      "stage": "z_after_flow_rev",
+      "pass": false,
+      "n": 64128.0,
+      "cos": 0.704958698,
+      "|mine|": 470.293782,
+      "|ref|": 264.756,
+      "ratio": 1.77632908,
+      "rel_l2": 1.28486098,
+      "max_abs": 7.34583378
+    },
+    {
+      "stage": "dec_conv_pre",
+      "pass": false,
+      "n": 171008.0,
+      "cos": 0.722098344,
+      "|mine|": 9671.44637,
+      "|ref|": 5858.08457,
+      "ratio": 1.65095711,
+      "rel_l2": 1.15816777,
+      "max_abs": 154.785799
+    },
+    {
+      "stage": "dec_stage0",
+      "pass": false,
+      "n": 684032.0,
+      "cos": 0.683175867,
+      "|mine|": 6318.54974,
+      "|ref|": 2878.4084,
+      "ratio": 2.19515401,
+      "rel_l2": 1.67909161,
+      "max_abs": 41.0872259
+    },
+    {
+      "stage": "dec_stage1",
+      "pass": false,
+      "n": 2736128.0,
+      "cos": 0.587441564,
+      "|mine|": 4180.48579,
+      "|ref|": 1633.02763,
+      "ratio": 2.55996023,
+      "rel_l2": 2.13207465,
+      "max_abs": 12.4633286
+    },
+    {
+      "stage": "dec_stage2",
+      "pass": false,
+      "n": 2736128.0,
+      "cos": 0.778204987,
+      "|mine|": 1619.52993,
+      "|ref|": 971.305877,
+      "ratio": 1.66737376,
+      "rel_l2": 1.08858537,
+      "max_abs": 5.80989343
+    },
+    {
+      "stage": "dec_stage3",
+      "pass": false,
+      "n": 2736128.0,
+      "cos": 0.836596711,
+      "|mine|": 474.99047,
+      "|ref|": 341.767736,
+      "ratio": 1.38980489,
+      "rel_l2": 0.778553295,
+      "max_abs": 3.69972759
+    },
+    {
+      "stage": "dec_output",
+      "pass": false,
+      "n": 85504.0,
+      "cos": -0.030380284,
+      "|mine|": 22.0252607,
+      "|ref|": 17.1447433,
+      "ratio": 1.28466552,
+      "rel_l2": 1.65179373,
+      "max_abs": 0.774618074
+    },
+    {
+      "stage": "output_pcm",
+      "pass": false,
+      "n": 85504.0,
+      "cos": -0.030380284,
+      "|mine|": 32.8930148,
+      "|ref|": 43.5998791,
+      "ratio": 0.754429037,
+      "rel_l2": 1.27082757,
+      "max_abs": 1.37044734
+    }
+  ],
+  "posterior_zero_g": true,
+  "posterior_conditioning_bias": {
+    "elements": 6144,
+    "nonzero": 6144,
+    "l2_norm": 11.957716941833496,
+    "storage": "F32"
+  }
+}
