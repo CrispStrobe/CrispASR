@@ -519,12 +519,13 @@ def verify_native_wheel(archive, expected, manifest):
     return len(expected)
 
 
-# #557: Linux x86_64 +vulkan and +hip wheels exist from 0.8.47 on. Older tags
+# #557: Linux x86_64 +vulkan/+hip and aarch64 +cuda wheels exist from 0.8.47 on. Older tags
 # keep their original exact distribution set.
 LINUX_GPU_WHEELS_SINCE = (0, 8, 47)
 LINUX_GPU_WHEEL_ASSETS = {
     "gpu-wheel-linux-x86_64-vulkan": "libcrispasr-linux-x86_64-vulkan.tar.gz",
     "gpu-wheel-linux-x86_64-hip": "libcrispasr-linux-x86_64-hip.tar.gz",
+    "gpu-wheel-linux-arm64-cuda": "libcrispasr-linux-arm64-cuda.tar.gz",
 }
 GPU_INDEX_FLAVORS = ("cuda", "vulkan", "hip")
 

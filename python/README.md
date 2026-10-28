@@ -35,7 +35,7 @@ CUDA, Vulkan and ROCm/HIP builds are published to a separate index
 (llama-cpp-python style — pass `--extra-index-url`):
 
 ```bash
-# NVIDIA CUDA (Linux x86_64 + Windows)
+# NVIDIA CUDA (Linux x86_64 + Windows; Linux aarch64/SBSA from 0.8.47, not Jetson)
 pip install crispasr --extra-index-url https://crispstrobe.github.io/CrispASR/whl/cuda/
 # Vulkan (Windows; Linux x86_64 from 0.8.47)
 pip install crispasr --extra-index-url https://crispstrobe.github.io/CrispASR/whl/vulkan/

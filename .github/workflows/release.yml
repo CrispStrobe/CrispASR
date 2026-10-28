@@ -1584,6 +1584,83 @@ jobs:
           files: release/libcrispasr-linux-arm64.tar.gz
           fail_on_unmatched_files: true
 
+  # ── Linux ARM64 shared libs + headers (CUDA, SBSA) — #557 ──────────────────
+  # Server-class ARM (NVIDIA SBSA: Grace/GH200, Ampere Altra + discrete GPU).
+  # Jetson/Tegra uses a different (L4T) CUDA stack and is NOT covered. Like the
+  # x86_64 CUDA bundle, cudart/cublas and the driver are host-provided.
+  build-libs-linux-arm64-cuda:
+    if: ${{ !inputs.only || inputs.only == 'build-libs-linux-arm64-cuda' }}
+    runs-on: ubuntu-22.04-arm
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          ref: ${{ inputs.tag || github.sha }}
+
+      - name: Install deps + CUDA 12.8 (SBSA)
+        run: |
+          set -euo pipefail
+          sudo apt-get update && sudo apt-get install -y cmake g++ patchelf
+          wget -q https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2204/sbsa/cuda-keyring_1.1-1_all.deb
+          sudo dpkg -i cuda-keyring_1.1-1_all.deb
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cuda-nvcc-12-8 cuda-cudart-dev-12-8 cuda-nvrtc-dev-12-8 libcublas-dev-12-8
+          echo "/usr/local/cuda-12.8/bin" >> "$GITHUB_PATH"
+
+      - name: Build (shared libs, CUDA)
+        run: |
+          cmake -S . -B build-libs \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_CUDA=ON \
+            -DCMAKE_CUDA_COMPILER=/usr/local/cuda-12.8/bin/nvcc \
+            -DCMAKE_CUDA_ARCHITECTURES="80-real;86-real;89-real;90-real;90-virtual;120-real;120-virtual" \
+            -DCRISPASR_BUILD_TESTS=OFF \
+            -DCRISPASR_BUILD_EXAMPLES=OFF \
+            -DCRISPASR_BUILD_SERVER=OFF \
+            -DCRISPASR_OPUS_FETCH=ON
+          cmake --build build-libs --config Release -j $(nproc) --target crispasr-lib
+
+      - name: Package
+        run: |
+          set -euo pipefail
+          OUT=release/libcrispasr-linux-arm64-cuda
+          mkdir -p "$OUT/src" "$OUT/ggml/src" "$OUT/include" "$OUT/ggml/include"
+          cp -P build-libs/src/libcrispasr*.so* "$OUT/src/"
+          [ -e build-libs/src/libwhisper.so ] && cp -P build-libs/src/libwhisper.so* "$OUT/src/"
+          find build-libs/src -maxdepth 1 -name 'lib*.so*' \( -type f -o -type l \) \
+            ! -name 'libcrispasr*' ! -name 'libwhisper*' \
+            -exec cp -P {} "$OUT/src/" \;
+          find build-libs/ggml/src -name 'libggml*.so*' \( -type f -o -type l \) \
+            -exec cp -P {} "$OUT/ggml/src/" \;
+          test -n "$(find "$OUT/ggml/src" -name 'libggml-cuda.so*' -print -quit)" || {
+            echo "::error::libggml-cuda.so missing from the ARM64 CUDA lib bundle (#557)"; exit 1; }
+          CRISPASR_BUNDLE_HOST_DIRS=/usr/local/cuda-12.8 \
+          CRISPASR_BUNDLE_EXTRA_RPATH=/usr/local/cuda/lib64 \
+            bash tools/package-lib-bundle.sh "$OUT"
+          python3 scripts/check-bundled-deps.py "$OUT/lib" \
+            --allow 'libcuda.so.*' --allow 'libcudart.so.*' --allow 'libcublas*.so.*' --allow 'libnv*.so.*'
+          cp include/crispasr.h include/crispasr_session.h "$OUT/include/"
+          cp ggml/include/*.h   "$OUT/ggml/include/" 2>/dev/null || true
+          cp LICENSE "$OUT/"
+          cp THIRD_PARTY_NOTICES.txt "$OUT/"
+          cd release && tar czf libcrispasr-linux-arm64-cuda.tar.gz libcrispasr-linux-arm64-cuda/
+          ls -lh libcrispasr-linux-arm64-cuda.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: libcrispasr-linux-arm64-cuda
+          path: release/libcrispasr-linux-arm64-cuda.tar.gz
+
+      - name: Attach libcrispasr-linux-arm64-cuda.tar.gz to release
+        if: inputs.tag != '' || startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: release/libcrispasr-linux-arm64-cuda.tar.gz
+          fail_on_unmatched_files: true
+
   # ── Windows x86_64 shared libs + headers (CPU baseline) ──────────────────────
   # Windows tarball includes BOTH the runtime DLLs (under bin/) and the MSVC
   # import .lib files (under src/Release/ — this matches what
@@ -2723,7 +2800,7 @@ jobs:
   # to transient permission issues). softprops won't clobber files that
   # already exist on the release.
   publish:
-    needs: [validate-version, build-linux, build-linux-cpu-legacy, build-linux-x86_64-avx512, build-linux-x86_64-cuda, build-linux-x86_64-cuda13, build-linux-x86_64-hip, build-linux-arm64, build-python-linux, build-python-linux-arm64, build-macos, build-macos-x86_64, build-libs-macos-arm64, build-libs-linux-x86_64, build-libs-linux-x86_64-avx512, build-libs-linux-x86_64-hip, build-libs-linux-arm64, build-libs-linux-x86_64-cuda, build-libs-linux-x86_64-vulkan, build-libs-windows-x86_64, build-libs-windows-x86_64-vulkan, build-libs-windows-x86_64-cuda, build-libs-windows-x86_64-cpu-legacy, build-windows-cpu, build-windows-cpu-legacy, build-windows-cuda, build-windows-cuda13, build-windows-vulkan, build-android-arm64]
+    needs: [validate-version, build-linux, build-linux-cpu-legacy, build-linux-x86_64-avx512, build-linux-x86_64-cuda, build-linux-x86_64-cuda13, build-linux-x86_64-hip, build-linux-arm64, build-python-linux, build-python-linux-arm64, build-macos, build-macos-x86_64, build-libs-macos-arm64, build-libs-linux-x86_64, build-libs-linux-x86_64-avx512, build-libs-linux-x86_64-hip, build-libs-linux-arm64, build-libs-linux-arm64-cuda, build-libs-linux-x86_64-cuda, build-libs-linux-x86_64-vulkan, build-libs-windows-x86_64, build-libs-windows-x86_64-vulkan, build-libs-windows-x86_64-cuda, build-libs-windows-x86_64-cpu-legacy, build-windows-cpu, build-windows-cpu-legacy, build-windows-cuda, build-windows-cuda13, build-windows-vulkan, build-android-arm64]
     if: always() && !cancelled()
     runs-on: ubuntu-latest
     steps:

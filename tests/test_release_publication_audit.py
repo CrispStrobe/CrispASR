@@ -228,7 +228,9 @@ class PublicationAuditTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.audit.wheel_local_suffix("gpu-wheel-linux-aarch64-unknown")
         self.assertEqual(set(self.audit.LINUX_GPU_WHEEL_ASSETS.values()),
-                         {"libcrispasr-linux-x86_64-vulkan.tar.gz", "libcrispasr-linux-x86_64-hip.tar.gz"})
+                         {"libcrispasr-linux-x86_64-vulkan.tar.gz", "libcrispasr-linux-x86_64-hip.tar.gz",
+                          "libcrispasr-linux-arm64-cuda.tar.gz"})
+        self.assertEqual(self.audit.wheel_local_suffix("gpu-wheel-linux-arm64-cuda"), "+cuda")
 
     def test_missing_native_wheel_libraries_fail(self):
         path = self.root / "empty.whl"

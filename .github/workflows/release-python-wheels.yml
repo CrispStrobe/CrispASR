@@ -354,6 +354,12 @@ jobs:
             plat: manylinux_2_35_x86_64
             local: hip
             host_provided: libomp.so
+          # SBSA server ARM only (not Jetson/L4T).
+          - name: linux-arm64-cuda
+            runner: ubuntu-22.04-arm
+            asset: libcrispasr-linux-arm64-cuda
+            plat: manylinux_2_35_aarch64
+            local: cuda
           - name: windows-x86_64-cuda
             runner: windows-latest
             asset: libcrispasr-windows-x86_64-cuda
