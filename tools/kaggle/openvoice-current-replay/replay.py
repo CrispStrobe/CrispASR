@@ -21,7 +21,7 @@ SDK_NAME = 'libcrispasr-linux-x86_64-cuda'
 SDK_SHA256 = '8fbd68e1822cd16e58055753fc67120c20784451e286d94177f7f7fb78b76cbd'
 SDK_BYTES = 196467235
 SESSION = os.environ.get('CRISPASR_OV2_SESSION') == '1'
-VERSION = ('2026-10-28.openvoice-session.1' if SESSION else
+VERSION = ('2026-10-28.openvoice-session.2' if SESSION else
            '2026-10-28.openvoice-current-replay.2')
 WORK = Path('/kaggle/temp/openvoice-current-replay')
 OUT = Path('/kaggle/working')
@@ -252,7 +252,7 @@ from crispasr import Session
 spec=importlib.util.spec_from_file_location('resources',work/'shared-worker.py')
 resources=importlib.util.module_from_spec(spec);spec.loader.exec_module(resources)
 resources.WORK=work;resources.OUT=out
-record=dict(cases=[],native_complete=False,raw_artifacts='Private synthetic-voice validation; normal marked output tested separately')
+record=dict(cases=[],native_complete=False,speaker_identity='unknown',raw_artifacts='Private model-generated reference validation; normal marked output tested separately')
 resources.RECEIPT=record
 resources.save=lambda:(out/'session.json').write_text(json.dumps(record,indent=2))
 texts=['The quick brown fox jumps over the lazy dog.',
@@ -261,7 +261,8 @@ for i,text in enumerate(texts):
  resources.guard_resources('session-open')
  with Session(str(model),lib_path=str(bundle/'libcrispasr.so'),n_threads=2,use_gpu=True,verbosity=1) as s:
   if s.backend!='melotts':raise RuntimeError('C ABI architecture detection failed')
-  s.set_speaker_id(0);s.set_speaker_identity('synthetic')
+  # Generated reference PCM does not establish the identity of a preset donor.
+  s.set_speaker_id(0);s.set_speaker_identity('unknown')
   s.accept_marking_responsibility('Private synthetic validation: raw clips stay private and labelled; normal marked synthesis is also checked')
   resources.guard_resources('session-baseline')
   s.set_tts_seed(42);baseline=s.synthesize_raw(text);rate=s.output_sample_rate()
