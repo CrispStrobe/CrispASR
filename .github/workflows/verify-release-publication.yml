@@ -15,7 +15,7 @@ on:
         description: 'Readback worker; does not rebuild or change release payloads'
         type: choice
         default: ubuntu-22.04
-        options: [ubuntu-22.04, ubuntu-24.04]
+        options: [ubuntu-22.04, ubuntu-24.04, ubuntu-latest]
       release_run:
         description: 'Completed native Release run (optional)'
         default: ''
