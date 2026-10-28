@@ -141,10 +141,16 @@ set_property(TARGET ggml-cuda PROPERTY INTERFACE_LINK_LIBRARIES "ggml-base;CUDA:
     for tree in [BUILD,GGML_LIB]:
         for file in tree.rglob('*.so*'):
             if not file.is_file():continue
-            dest=candidate/file.name
+            actual=file.resolve()
+            dest=candidate/actual.name
             if dest.exists():
-                if helper.sha(dest)!=helper.sha(file):raise RuntimeError('Candidate DSO basename collision')
-            else:shutil.copy2(file,dest,follow_symlinks=False)
+                if helper.sha(dest)!=helper.sha(actual):raise RuntimeError('Candidate DSO basename collision')
+            else:shutil.copy2(actual,dest)
+            if file.name!=actual.name:
+                alias=candidate/file.name
+                if alias.exists() or alias.is_symlink():
+                    if helper.sha(alias)!=helper.sha(actual):raise RuntimeError('Candidate alias collision')
+                else:alias.symlink_to(actual.name)
     for name in ['LICENSE','THIRD_PARTY_NOTICES.txt']:
         shutil.copy2(ROOT/name,candidate/name)
         shutil.copy2(WORK/SDK_NAME/name,candidate/('ggml-provider-'+name))
