@@ -94,6 +94,7 @@ class ManifestSchemaTests(unittest.TestCase):
         gguf_required = {"repo", "revision", "file"}
         names_seen: set[str] = set()
         for entry in self.manifest["backends"]:
+            run_one.validate_exact_diff_transcript(entry)
             missing = always_required - set(entry)
             self.assertEqual(missing, set(),
                 f"backend missing keys: {missing} in {entry.get('name', '?')}")
@@ -183,6 +184,88 @@ class ManifestSchemaTests(unittest.TestCase):
 
 
 class MandatoryDiffGateTests(unittest.TestCase):
+    def test_nightly_rejects_missing_declared_stages(self):
+        entry = dict(name="probe", backend_id="probe", sample="samples/jfk.wav",
+                     expected_transcript="correct words", fixture_ref_path="probe/ref.gguf",
+                     gguf=dict(repo="unused/model", file="model.gguf", revision="1" * 40),
+                     diff_thresholds={"encoder_output": 0.999, "ctc_logits": 0.999})
+        manifest = dict(backends=[entry], fixtures=dict(repo="unused/fixtures", revision="2" * 40))
+        for stages, expected_failures in [({"encoder_output": 1.0}, 1),
+                                          ({"unrelated_stage": 1.0}, 2),
+                                          ({"encoder_output": 1.0, "ctc_logits": 1.0}, 0)]:
+            with self.subTest(stages=stages), \
+                    mock.patch.object(run_one, "hf_download", return_value=Path("unused.gguf")), \
+                    mock.patch.object(run_one, "run_transcript", return_value="correct words"), \
+                    mock.patch.object(run_one, "run_diff", return_value=stages):
+                self.assertEqual(run_one.regression_for("probe", manifest, HERE,
+                                                       Path("unused-cli"), Path("unused-diff")), expected_failures)
+
+    def test_quantized_allowance_requires_exact_full_precision_control(self):
+        entry = next(b for b in json.loads((HERE / "manifest.json").read_text())["backends"]
+                     if b["name"] == "data2vec-base")
+        target = entry["expected_transcript"]
+        one_error = target.replace("SO A MY", "SO MY")
+        two_errors = target.replace("SO A MY", "SO")
+        manifest = dict(backends=[entry], fixtures=dict(repo="unused/fixtures", revision="2" * 40))
+        for quant, control, stages, failures in [
+                (one_error, target, {"ctc_logits": 0.999138}, 0),
+                (one_error, one_error, {"ctc_logits": 0.999138}, 1),
+                (two_errors, target, {"ctc_logits": 0.999138}, 1),
+                (one_error, target, {"ctc_logits": 0.998}, 1),
+                (one_error, target, {}, 1)]:
+            with self.subTest(quant=quant, control=control, stages=stages), \
+                    mock.patch.object(run_one, "hf_download", return_value=Path("unused.gguf")), \
+                    mock.patch.object(run_one, "verify_transcript_reference"), \
+                    mock.patch.object(run_one, "run_transcript", side_effect=[quant, control]) as transcript, \
+                    mock.patch.object(run_one, "run_diff", return_value=stages):
+                self.assertEqual(run_one.regression_for(entry["name"], manifest, HERE,
+                                                       Path("unused-cli"), Path("unused-diff")), failures)
+                self.assertEqual(transcript.call_args.kwargs["label"], "transcript-f16")
+
+    def test_retained_profile_outputs_pass_both_production_drivers(self):
+        # Execute only the real Kaggle function AST: importing the notebook
+        # would start installs/builds. No model execution or downloads here.
+        import ast
+        import time
+        import types
+        import tempfile
+        root = HERE.parents[1]
+        tree = ast.parse((root / "tools/kaggle/crispasr-regression.py").read_text())
+        function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "run_validate")
+        entry = next(b for b in json.loads((HERE / "manifest.json").read_text())["backends"]
+                     if b["name"] == "data2vec-base")
+        receipt = json.loads((root / "docs/data2vec-avx512-controls-2026-10-28.json").read_text())
+        for profile, row in receipt["profiles"].items():
+            for surface in ["raw_transcript", "fixed_language_pipeline", "nightly_invocation"]:
+                q4 = row["models"]["q4"][surface].splitlines()[-1]
+                f16 = row["models"]["f16"][surface].splitlines()[-1]
+                for control, expected in [(f16, True), (q4, profile == "avx2")]:
+                    with self.subTest(profile=profile, surface=surface, control=control), \
+                            tempfile.TemporaryDirectory() as temp, \
+                            mock.patch.dict(sys.modules, {"run_one": run_one,
+                                "huggingface_hub": types.SimpleNamespace(hf_hub_download=lambda **kw: str(Path(temp) / kw["filename"]))}), \
+                            mock.patch.object(run_one, "verify_transcript_reference"), \
+                            mock.patch.object(run_one, "run_transcript", side_effect=[q4, control]), \
+                            mock.patch.object(run_one, "run_diff", return_value=row["f16_stage"]["values"]):
+                        env = dict(Path=Path, time=time, sys=SimpleNamespace(path=SimpleNamespace(insert=lambda *args: None)), BACKENDS=[entry], MANIFEST={"fixtures": {
+                            "repo": "unused", "revision": "pin"}}, REPO=root, BUILD=Path(temp), HF_CACHE=Path(temp))
+                        exec(compile(ast.Module(body=[function], type_ignores=[]), "kaggle-validation", "exec"), env)
+                        result = env["run_validate"]()[0]
+                        self.assertEqual(result.get("ok"), expected, result)
+                        self.assertEqual(run_one.transcript_gate(entry, q4)[0]
+                                         and run_one.exact_diff_transcript_gate(entry, control)[0], expected)
+
+    def test_incomplete_exact_control_rejected_before_download(self):
+        entry = next(b for b in json.loads((HERE / "manifest.json").read_text())["backends"]
+                     if b["name"] == "data2vec-base")
+        for changes in [{"skip_diff": True}, {"diff_gguf": None},
+                        {"transcript_reference": None}, {"require_exact_diff_transcript": "true"}]:
+            with self.subTest(changes=changes), mock.patch.object(run_one, "hf_download") as download:
+                with self.assertRaises(ValueError):
+                    run_one.regression_for(entry["name"], dict(backends=[dict(entry, **changes)]),
+                                           HERE, Path("unused-cli"), Path("unused-diff"))
+                download.assert_not_called()
+
     def test_index_echo_rejects_scale_failure_despite_perfect_cosine(self):
         # Cosine divides magnitude out: a uniformly wrong scale can emit only
         # PASS rows while the separate relative-L2 check makes the process fail.

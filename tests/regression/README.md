@@ -18,9 +18,16 @@ of the frozen CTC logits, sample and pinned upstream vocabulary, then decodes
 CTC with repeat collapse followed by blank removal. The expected transcript
 must match that independent decode before native inference is checked.
 `data2vec-base` uses this guard: its original Python model also inserts `A`
-after `AND SO`. The zero-WER gate therefore measures upstream parity; the
-separate human reference remains in the manifest and reports 4.55% WER as an
-accuracy advisory. The model weights, decoder and stage thresholds are unchanged.
+after `AND SO`. Its Q4 fixture allows at most one word error over the original
+23-word reference (WER <= 1/23). Controlled same-host CPU-profile tests show Q4
+retains this `A` on AVX2 and drops it on AVX-512; F16 retains it under both.
+`require_exact_diff_transcript: true` requires the existing F16 `diff_gguf` to
+pass a separate zero-WER transcript check against that same independent target,
+in addition to the unchanged stage thresholds. Both normal and Kaggle drivers
+apply these controls; F16 diagnostics have their own `transcript-f16` label.
+Missing model/reference controls fail before downloads. The separate human
+reference still reports 4.55% WER as an accuracy advisory. Weights and decoder
+are unchanged. [Retained controls](../../docs/data2vec-avx512-controls-2026-10-28.json).
 The previous target was a native Q4 capture from July, not the Python reference.
 
 ## Why pin everything
@@ -142,7 +149,9 @@ check immediately; once the Kaggle rebake produces a `ref.gguf`, remove
 
 ## Gating every captured stage (`stage_threshold_default`)
 
-`diff_thresholds` gates the stages it names. crispasr-diff also captures
+`diff_thresholds` gates the stages it names; a declared stage missing from the
+harness output fails the regression. Unlisted optional stages do not become
+mandatory. crispasr-diff also captures
 per-layer and conv-snapshot stages (`encoder_layer_*`, `pre_enc_c*`, …);
 without a default these only print `INFO` and can drift arbitrarily.
 Set `"stage_threshold_default": 0.998` to gate every captured stage that

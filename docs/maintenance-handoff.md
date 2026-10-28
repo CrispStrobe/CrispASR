@@ -24,7 +24,7 @@ a fresh agent should confirm ownership before dispatching replacements.
 | v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit receipt **not yet green** (audit-script bug, now fixed; see task A). | [Receipt](release-publication-2026-10-28.md) |
 | v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** is building. Partial public assets do not establish complete publication or acceptance. | Task B |
 | #557 issue | Code merged. Issue still **open**. No public comment posted yet. | Task C |
-| data2vec-base nightly gate | Q4 transcript failure recorded; CPU causation unproven. | Task D |
+| data2vec-base nightly gate | Same-host Q4 CPU-profile divergence verified; mandatory exact F16 control added. Hosted production confirmation remains. | Task D |
 
 First actions for a fresh agent:
 
@@ -97,24 +97,29 @@ locations and exact recovery commands are in ignored notes, not in this ledger.
 
 ## Open tasks — fully scoped
 
-Hosted A/B/D work is already dispatched. No local background collector remains;
-claim result collection in PLAN.md before continuing. Do not duplicate queued jobs.
-Task A auditor rerun **40736324867** is dispatched on `ubuntu-latest`; pinned
-Ubuntu 24.04 attempt **40723794473** was canceled while still unassigned. Task B release
-**40711745769** has started building. Task D uses the bounded hosted worker
-`tools/ci-heavy/data2vec_cpu_profiles.py`, run **40723799365** at `bf724a8e5`, has completed on Ubuntu 24.04/EPYC 7763.
-It passes the native/AVX2 controls, but this host has no AVX-512; task D is still open.
-Earlier Ubuntu 22.04 attempts A **40720956336** and D **40721782580** were
-canceled while queued; neither supplies an acceptance result. The audit runner
-is selectable without changing release build workers or tagged payloads.
-No task needs a local model or GPU job.
+A is complete: **40736324867** passed; its accepted full-distribution readback
+receipt is [retained here](release-v0846-wheel-audit-2026-10-28.json).
+B native producer **40711745769** has all 37 build jobs successful and the exact
+52 expected public asset names. Its final safety-net `publish` job is still
+queued; Python wheel production and both v0.8.47 publication audits remain pending.
+D **40735433388** completed on EPYC 9V74 with all three actual CPU profiles.
+Its independently decoded retained arrays establish the quantized profile
+sensitivity. No further capability attempts are needed. See task D for the fix
+and remaining hosted confirmation. No local background collector remains.
+Earlier canceled capability/worker attempts supply no acceptance result.
 Before every push run the five privacy guards (see the ignored local notes for
 the account binding). Avoid bursts of pushes to main: each push cancels the
 pending Pages deploy and in-progress CI/Lint on the earlier commit. That is
 what delayed the live wheel index for v0.8.46.
 
-### Task A — finish the v0.8.46 wheel audit receipt
+### Task A — complete: v0.8.46 wheel audit accepted
 
+- **Complete:** auditor **40736324867**, artifact **12840629916**, has
+  `complete: true, acceptance: true`; all eight distributions and five PyPI
+  anonymous readbacks pass, along with GPU index/file readbacks. Auditor source
+  `eafae0f48819eaf2a0c75d5d250383335ae70b23`. Do not rerun an accepted task.
+  [Portable receipt](release-v0846-wheel-audit-2026-10-28.json).
+- The following dispatch details explain the completed rerun, not another job.
 - **Why:** wheel audit run **40703639437** failed with HTTP 404 on
   `https://crispstrobe.github.io/CrispASR/whl/hip/crispasr/`. The cause was the
   auditor, not the release: it required a `hip` index for every version, and
@@ -202,64 +207,48 @@ what delayed the live wheel index for v0.8.46.
 - **Then:** retain the verified final wording for review. Issue #557 stays open
   under the user's explicit instruction; no external message is authorized.
 
-### Task D — investigate the data2vec-base nightly exact-match failure
+### Task D — CPU-profile cause established; confirm the paired regression policy
 
-- **Observed:** run **40481871937**, source `34a8e4361`, failed Q4_K transcript
-  parity against the pinned independent reference: native omitted the inserted
-  `A` after `AND SO`; WER 0.0435 against the unchanged zero-WER gate. Its F16
-  stage check passed at cosine minimum 0.999138 (threshold 0.999).
-- **Correction to the earlier handoff:** preceding green run **40459786231**
-  skipped the regression job entirely. It is not a passing data2vec control.
-  Failed-job artifact **12743112477** (29,774 compressed bytes) does record the
-  CPU: AMD EPYC 9V74, four vCPUs, AVX2/AVX-512. Actual compiler commands use
-  `-march=native`, CPU repacking and LLAMAFILE; BLAS is off. Cached AVX options
-  alone do not describe the resulting native ISA.
-- **Genuine older passing control:** [retained-byte comparison](data2vec-cpu-profile-evidence-2026-10-28.json)
-  rechecks run **40171767752**, artifact **12591396023**: EPYC 7763 with AVX2
-  and no AVX-512, GNU 13.3.0, Q4 transcript pass and F16 cosine 0.999141.
-  Eight relevant runtime/source/build objects match the later failing source.
-  Its Q4 frame-47 `A`/delimiter margin is 0.0651703, versus 0.6076422 in the
-  independently pinned original logits. This supports a controlled CPU-profile
-  experiment; it does not prove causation or supply missing F16 transcript controls.
-- **Unproven:** CPU-sensitive quantization near ties. The failing normal CLI
-  also used automatic punctuation and Whisper language identification; the F16
-  stage comparison proves neither an exact F16 transcript nor pipeline identity.
-- **Current AVX2 result:** run **40723799365**, artifact **12836031087**,
-  succeeds on EPYC 7763/GNU 13.3.0. Independent raw-byte review verifies all
-  12 Q4/F16 repeated CTC transcripts, eight pipeline controls, two F16 stage
-  checks and 26 resource gates. Both profiles give cosine minimum 0.999141;
-  repeated logits are identical. [Verified controls](data2vec-avx2-controls-2026-10-28.json).
-  This supplies the missing AVX2 F16 transcript control, not the AVX-512 control.
-- **Current follow-up:** **40735433388**, source `a21687e29`, `ubuntu-latest`,
-  queued with `args=--require-avx512`: capability attempt **1 of 3**. Collect its
-  terminal receipt before considering another attempt.
-- **Next bounded allocation if necessary:** add `args=--require-avx512` to the dispatch below.
-  Keep at most three serial capability attempts; stop on the first suitable host
-  or preserve a hardware hold after three unsuitable attempts. An unsuitable
-  host returns `complete: false`, `skipped: avx512-unavailable` before worker APT,
-  model downloads or native builds. Normal workflow/Python setup still runs.
-  A green capability-skip job is not numerical acceptance. Require
-  `complete: true`, all three profiles including `avx512`, and actual outputs.
-- **Do:** run `tools/ci-heavy/data2vec_cpu_profiles.py` through `heavy-cpu.yml`
-  with `pip="numpy gguf==0.17.1 huggingface_hub"`, runner `ubuntu-latest` (Ubuntu 24.04 for the current attempt).
-  One source and immutable model/reference/vocabulary/audio pins are reused for
-  sequential native, explicit AVX2 and (when supported) explicit AVX-512 builds.
-  Actual compiler flags, CPU and resource evidence are retained. Each profile
-  repeats raw Q4 and F16 logits three times, independently decodes CTC, records
-  every divergent frame's native/reference top-two scores, magnitude/error
-  metrics, explicit-English pipeline output, the exact nightly CLI invocation
-  and the unchanged F16 stage gate.
-- **Accept:** explain the observed divergence from actual controlled evidence.
-  `complete: true` on the diagnostic means collection completed, not that Q4
-  parity passed or a new profile/model was accepted. If CPU/profile correlation
-  is absent, investigate the remaining pipeline/build confound instead of
-  declaring the hypothesis confirmed. Preserve original failed evidence.
-- Successful manual `diagnostic_backend=data2vec-base` regressions now retain
-  host/build artifacts too; the earlier workflow uploaded successful diagnostics
-  only for CSM. Both retention/upload conditions use the selected backend.
-- **Do not:** loosen any gate, replace the reference or use a passing overall
-  workflow whose data2vec job was skipped. Any eventual tolerance/profile gate
-  needs original-reference and decoded-output evidence first.
+- Original failed nightly **40481871937** used EPYC 9V74 and native CPU flags.
+  Its Q4 transcript omitted `A` from the frozen original 23-word target;
+  F16 stage cosine passed at 0.999138. The preceding green workflow skipped
+  data2vec and is not a passing control.
+- First controlled run **40723799365** on EPYC 7763 passes native/AVX2 but has
+  no AVX-512. [First controls](data2vec-avx2-controls-2026-10-28.json).
+- Decisive run **40735433388**, source
+  `a21687e2918cbb1de9850e94b3350aac7f473afb`, artifact **12841953440**,
+  completed on EPYC 9V74. Native, explicit AVX2 and explicit AVX512 use identical
+  frozen model/reference/audio inputs and sequential source-matched builds.
+  All 18 retained 549x32 raw arrays were independently decoded and checked for
+  exact within-profile repeat equality. Native/AVX512 Q4 omit `A`; AVX2 Q4
+  retains it. At frame 47, Q4 A-minus-delimiter is -0.1045904 versus +0.0651703.
+  F16 stays positive (~0.616), retains the independent target in every profile,
+  and passes unchanged stage minima 0.999138/0.999141/0.999138. Explicit-English
+  pipeline and exact nightly invocations agree. This rules out punctuation/LID
+  as the cause in the controlled reproduction.
+  [Portable retained-byte summary](data2vec-avx512-controls-2026-10-28.json).
+- Implemented in `tests/regression/run_one.py` and
+  `tools/kaggle/crispasr-regression.py`: data2vec Q4 allows **one word error over
+  23 original reference words**, with `require_exact_diff_transcript: true`
+  requiring the existing pinned F16 `diff_gguf` to pass a separate **zero-WER**
+  transcript control. Original expected text, independent CTC reference hashes,
+  model pins and F16 stage threshold 0.999 are unchanged. Both drivers verify
+  original-reference provenance; missing control configuration fails before
+  downloads. Separate `transcript-f16` diagnostics preserve both outputs.
+- Also repaired: the normal driver counted missing required stages as skips.
+  Missing explicitly named stages now fail, matching Kaggle. A model-free
+  production caller control failed before the repair and passes afterward.
+- Model-free controls cover one/two Q4 word errors, strict F16 failures, stage
+  degradation/absence, incomplete configuration, separate diagnostic retention,
+  and replay of all three profiles through the actual Kaggle validation function.
+  These checks do not claim a new hosted inference run.
+- **Next:** after committing/pushing, dispatch `regression.yml --ref main`
+  with `diagnostic_backend=data2vec-base`, `granite5_only=false`. Record the
+  exact source SHA/run ID. Require actual data2vec execution, Q4 and exact F16
+  transcript passes, stage pass, and retained host/build/transcript evidence.
+  A pending/skipped overall green workflow is not acceptance. Do not repeat
+  capability probes, rebake targets, change kernels or use human words as the
+  upstream parity oracle. If it fails, investigate retained outputs first.
 
 ### Task E — real-hardware qualification of the new GPU wheels
 
@@ -337,7 +326,10 @@ outputs; define a new hypothesis/input and acceptance boundary.
 ## Resource, license and completion rules
 
 - Check load and available memory before compilation/inference. Large CPU/model
-  work belongs on suitable Actions workers; actual supported CUDA tests belong
+  work prefers suitable Actions workers while their queue moves. The maintainer's
+  current usage-guide override allows Kaggle CPU workers when Actions stalls
+  (CPU inputs need datasets because those kernels lack internet); do not spend
+  GPU quota on CPU build farms. Actual supported CUDA tests belong
   on Kaggle under the maintainer's usage guide, the single configured account
   and the two-session cap. Do not use GPU slots as SDK/build farms, reinstall
   Torch/CUDA arbitrarily, probe other accounts or guess session IDs. Save terminal

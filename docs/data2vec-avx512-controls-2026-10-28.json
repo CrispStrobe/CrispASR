@@ -1,0 +1,187 @@
+{
+  "run": 40735433388,
+  "artifact_id": 12841953440,
+  "source": "a21687e2918cbb1de9850e94b3350aac7f473afb",
+  "complete": true,
+  "cpu": "AMD EPYC 9V74",
+  "reference_sha256": "ab4151f868b958d9461719ba8142c2f5c8f104fac2c2987539aa6f041bc7ac1a",
+  "profiles": {
+    "native": {
+      "models": {
+        "q4": {
+          "raw_transcript": "AND SO MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
+          "shape": [
+            549,
+            32
+          ],
+          "repeats": 3,
+          "repeats_identical": true,
+          "frame47_A_minus_delimiter": -0.10459041595458984,
+          "relative_l2": 0.0765494997743269,
+          "norm_ratio": 0.9856476187705994,
+          "max_abs": 14.700443267822266,
+          "fixed_language_pipeline": "AND SO MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+          "nightly_invocation": "AND SO MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY."
+        },
+        "f16": {
+          "raw_transcript": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
+          "shape": [
+            549,
+            32
+          ],
+          "repeats": 3,
+          "repeats_identical": true,
+          "frame47_A_minus_delimiter": 0.6161994934082031,
+          "relative_l2": 0.007605280384522429,
+          "norm_ratio": 1.0022178888320923,
+          "max_abs": 2.742267608642578,
+          "fixed_language_pipeline": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+          "nightly_invocation": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY."
+        }
+      },
+      "f16_stage": {
+        "values": {
+          "ctc_logits": 0.999138
+        },
+        "passed": [
+          [
+            "ctc_logits",
+            0.999138,
+            0.999
+          ]
+        ],
+        "failed": [],
+        "missing": [],
+        "extras": [],
+        "gate": true
+      },
+      "cpu_arch_options": [
+        "-march=native"
+      ]
+    },
+    "avx2": {
+      "models": {
+        "q4": {
+          "raw_transcript": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
+          "shape": [
+            549,
+            32
+          ],
+          "repeats": 3,
+          "repeats_identical": true,
+          "frame47_A_minus_delimiter": 0.0651702880859375,
+          "relative_l2": 0.0760820492252878,
+          "norm_ratio": 0.9878290295600891,
+          "max_abs": 14.569343566894531,
+          "fixed_language_pipeline": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+          "nightly_invocation": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY."
+        },
+        "f16": {
+          "raw_transcript": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
+          "shape": [
+            549,
+            32
+          ],
+          "repeats": 3,
+          "repeats_identical": true,
+          "frame47_A_minus_delimiter": 0.6154394149780273,
+          "relative_l2": 0.007594611329325996,
+          "norm_ratio": 1.0022228956222534,
+          "max_abs": 2.7399673461914062,
+          "fixed_language_pipeline": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+          "nightly_invocation": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY."
+        }
+      },
+      "f16_stage": {
+        "values": {
+          "ctc_logits": 0.999141
+        },
+        "passed": [
+          [
+            "ctc_logits",
+            0.999141,
+            0.999
+          ]
+        ],
+        "failed": [],
+        "missing": [],
+        "extras": [],
+        "gate": true
+      },
+      "cpu_arch_options": [
+        "-mavx",
+        "-mavx2",
+        "-mbmi2",
+        "-mf16c",
+        "-mfma",
+        "-msse4.2"
+      ]
+    },
+    "avx512": {
+      "models": {
+        "q4": {
+          "raw_transcript": "AND SO MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
+          "shape": [
+            549,
+            32
+          ],
+          "repeats": 3,
+          "repeats_identical": true,
+          "frame47_A_minus_delimiter": -0.10459041595458984,
+          "relative_l2": 0.0765494997743269,
+          "norm_ratio": 0.9856476187705994,
+          "max_abs": 14.700443267822266,
+          "fixed_language_pipeline": "AND SO MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+          "nightly_invocation": "AND SO MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY."
+        },
+        "f16": {
+          "raw_transcript": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
+          "shape": [
+            549,
+            32
+          ],
+          "repeats": 3,
+          "repeats_identical": true,
+          "frame47_A_minus_delimiter": 0.6161994934082031,
+          "relative_l2": 0.007605280384522429,
+          "norm_ratio": 1.0022178888320923,
+          "max_abs": 2.742267608642578,
+          "fixed_language_pipeline": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+          "nightly_invocation": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY."
+        }
+      },
+      "f16_stage": {
+        "values": {
+          "ctc_logits": 0.999138
+        },
+        "passed": [
+          [
+            "ctc_logits",
+            0.999138,
+            0.999
+          ]
+        ],
+        "failed": [],
+        "missing": [],
+        "extras": [],
+        "gate": true
+      },
+      "cpu_arch_options": [
+        "-mavx",
+        "-mavx2",
+        "-mavx512bw",
+        "-mavx512cd",
+        "-mavx512dq",
+        "-mavx512f",
+        "-mavx512vl",
+        "-mbmi2",
+        "-mf16c",
+        "-mfma",
+        "-msse4.2"
+      ]
+    }
+  },
+  "conclusion": "On one CPU and frozen inputs, native/AVX512 Q4 drops A while AVX2 Q4 retains it. F16 retains the independent-reference transcript under every profile; all unchanged F16 stage gates pass. This is CPU-profile-sensitive quantized decoding, not punctuation or language detection.",
+  "verified_resource_guards": 39,
+  "vocabulary_sha256": "19727f8944fe6459fc3f240ae2c198395b740f6a029bd23e06656266b83bcf64"
+}

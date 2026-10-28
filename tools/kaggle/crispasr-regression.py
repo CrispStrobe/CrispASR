@@ -740,6 +740,7 @@ def run_validate() -> list[dict]:
         gguf_local = None  # reset per iteration: the finally-block eviction below
                            # must never see a stale path from the previous backend
         try:
+            run_one.validate_exact_diff_transcript(entry)
             from huggingface_hub import hf_hub_download
             gguf_local = Path(hf_hub_download(
                 repo_id=entry["gguf"]["repo"],
@@ -779,6 +780,11 @@ def run_validate() -> list[dict]:
             else:
                 sample = REPO / entry["sample"]
 
+            if "transcript_reference" in entry:
+                if ref_local is None:
+                    raise ValueError("Transcript provenance requires an independent reference dump")
+                run_one.verify_transcript_reference(entry, ref_local, sample, HF_CACHE)
+
             crispasr_bin = BUILD / "bin" / "crispasr"
             diff_bin = BUILD / "bin" / "crispasr-diff"
 
@@ -792,6 +798,8 @@ def run_validate() -> list[dict]:
             transcript_ok, _tlines = run_one.transcript_gate(entry, actual)
             for _l in _tlines:
                 print(_l)
+            control_ok = True
+            control = None
             if skip_diff:
                 stages, passes, fails, missing, extras = {}, [], [], [], {}
                 ok = transcript_ok
@@ -805,6 +813,13 @@ def run_validate() -> list[dict]:
                     diff_gguf = Path(hf_hub_download(
                         repo_id=dg.get("repo", entry["gguf"]["repo"]), filename=dg["file"],
                         revision=dg.get("revision", entry["gguf"]["revision"])))
+                if entry.get("require_exact_diff_transcript", False):
+                    control = run_one.run_transcript(
+                        crispasr_bin, diff_gguf, sample,
+                        srt=entry.get("transcript_format") == "srt", label="transcript-f16")
+                    control_ok, control_lines = run_one.exact_diff_transcript_gate(entry, control)
+                    for line in control_lines:
+                        print(f"[transcript-f16] {line}")
                 stages = run_one.run_diff(
                     diff_bin, entry["backend_id"], diff_gguf, ref_local, sample)
                 passes, fails, missing, extras = run_one.evaluate_stage_thresholds(
@@ -818,13 +833,15 @@ def run_validate() -> list[dict]:
                     print(f"    INFO {_st:32s} cos_min={_v:.6f}")
                 for _st in missing:
                     print(f"    MISSING {_st}")
-                ok = transcript_ok and not fails and not missing
+                ok = transcript_ok and control_ok and not fails and not missing
             results.append({
                 "backend": name,
                 "mode": "validate",
                 "ok": ok,
                 "elapsed_s": round(time.time() - t0, 2),
                 "transcript_match": transcript_ok,
+                "exact_diff_transcript_match": control_ok if control is not None else None,
+                "exact_diff_transcript_actual": control,
                 "transcript_actual": actual if not transcript_ok else None,
                 "stages": {s: stages.get(s) for s in entry.get("diff_thresholds", {})},
                 "extras": dict(extras),

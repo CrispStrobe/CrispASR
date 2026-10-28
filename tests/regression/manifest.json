@@ -559,6 +559,8 @@
     },
     {
       "name": "data2vec-base",
+      "require_exact_diff_transcript": true,
+      "transcript_tolerance": {"cer_max": 0.0, "wer_max": 0.043478260869565216},
       "backend_id": "data2vec",
       "skip_diff": false,
       "gguf": {
@@ -569,7 +571,7 @@
       },
       "sample": "samples/jfk.wav",
       "expected_transcript": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
-      "expected_transcript_source": "Greedy CTC decode of the existing frozen independent transformers reference, SHA256 ab4151f868b958d9461719ba8142c2f5c8f104fac2c2987539aa6f041bc7ac1a, not a native-output rebake. The original model inserts A (human WER 4.55%); this gate checks zero-WER upstream parity, not zero human WER.",
+      "expected_transcript_source": "Greedy CTC decode of the existing frozen independent transformers reference, SHA256 ab4151f868b958d9461719ba8142c2f5c8f104fac2c2987539aa6f041bc7ac1a, not a native-output rebake. The original model inserts A (human WER 4.55%); the mandatory F16 control checks zero-WER upstream parity. Q4 allows at most one word error over this 23-word reference after controlled CPU-profile testing (40735433388); the independent target is unchanged.",
       "source_model": "facebook/data2vec-audio-base-960h",
       "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
       "fixture_ref_path": "data2vec-base/ref.gguf",

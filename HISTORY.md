@@ -1,3 +1,20 @@
+## 2026-10-28 — v0.8.46 wheel audit accepted; data2vec CPU cause reproduced
+
+Wheel auditor 40736324867 passes all eight published distributions and anonymous
+readbacks; task A is complete. v0.8.47 has all 37 native build jobs passed and
+52 expected public asset names, but final publication, Python wheels and byte
+audits remain pending. #557 stays open; no public reply was posted.
+
+Controlled run 40735433388 reproduces Q4 divergence on one EPYC 9V74: AVX2
+retains the original reference's `A`, native/AVX512 omit it. All repeated F16
+raw/pipeline transcripts match the original target and unchanged stage gates
+pass. Both regression drivers now pair a one-word Q4 fixture allowance with a
+mandatory zero-WER F16 transcript control. Model/reference pins and stage bars
+are unchanged. Missing declared stages now fail in the normal driver too.
+Model-free negative controls and retained-output replay cover the policy;
+new hosted production-run confirmation is still required. See the
+[current handoff](docs/maintenance-handoff.md#task-d--cpu-profile-cause-established-confirm-the-paired-regression-policy).
+
 ## 2026-10-28 — Hosted result-collection checkpoint
 
 Current v0.8.46 wheel auditor 40736324867 uses `ubuntu-latest`; the still-unassigned

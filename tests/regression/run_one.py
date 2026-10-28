@@ -262,7 +262,8 @@ def strip_ai_disclaimer(transcript: str) -> str:
     return transcript
 
 
-def run_transcript(crispasr_bin: Path, gguf: Path, sample: Path, *, srt: bool = False) -> str:
+def run_transcript(crispasr_bin: Path, gguf: Path, sample: Path, *, srt: bool = False,
+                   label: str = "transcript") -> str:
     """Run `crispasr -m gguf -f sample`, return the transcript line.
 
     The CLI prints the transcript on its own line near the end, after
@@ -277,7 +278,7 @@ def run_transcript(crispasr_bin: Path, gguf: Path, sample: Path, *, srt: bool = 
             prefix = Path(temp) / "decoded"
             _run_captured([str(crispasr_bin), "-m", str(gguf), "-f", str(sample),
                            "-osrt", "-of", str(prefix)],
-                          check=True, timeout=600, label="transcript")
+                          check=True, timeout=600, label=label)
             cues = prefix.with_suffix(".srt").read_text()
             return " ".join(line.strip() for line in cues.splitlines()
                             if line.strip() and not line.strip().isdigit() and "-->" not in line)
@@ -285,7 +286,7 @@ def run_transcript(crispasr_bin: Path, gguf: Path, sample: Path, *, srt: bool = 
         [str(crispasr_bin), "-m", str(gguf), "-f", str(sample)],
         check=True,
         timeout=600,
-        label="transcript",
+        label=label,
     )
     # The transcript is on stdout; status lines go to stderr. Take stdout's
     # last non-empty line as the transcript (the CLI prints a single text
@@ -438,6 +439,21 @@ def transcript_gate(entry: dict, actual: str) -> tuple[bool, list[str]]:
     return ok, [f"{verdict}  {gate}{suffix}", f"    expected: {expected!r}", f"    actual:   {actual!r}"]
 
 
+def validate_exact_diff_transcript(entry: dict) -> None:
+    """Reject incomplete full-precision controls before downloading models."""
+    required = entry.get("require_exact_diff_transcript", False)
+    if not isinstance(required, bool):
+        raise ValueError("require_exact_diff_transcript must be boolean")
+    if required and (not entry.get("diff_gguf") or entry.get("skip_diff", False)
+                     or not entry.get("transcript_reference")):
+        raise ValueError("Exact diff transcript requires diff_gguf, stage diff and independent transcript_reference")
+
+
+def exact_diff_transcript_gate(entry: dict, actual: str) -> tuple[bool, list[str]]:
+    """The F16 control always requires zero error against the original target."""
+    return transcript_gate({**entry, "transcript_tolerance": {"cer_max": 0.0, "wer_max": 0.0}}, actual)
+
+
 def verify_transcript_reference(entry: dict, reference: Path, sample: Path,
                                 work_dir: Path) -> str:
     """Verify a transcript target against pinned, independent CTC logits.
@@ -487,6 +503,8 @@ def regression_for(name: str, manifest: dict, work_dir: Path,
     entry = next((b for b in manifest["backends"] if b["name"] == name), None)
     if entry is None:
         die(f"backend '{name}' not in manifest")
+
+    validate_exact_diff_transcript(entry)
 
     gguf_local = hf_download(
         entry["gguf"]["repo"],
@@ -571,17 +589,25 @@ def regression_for(name: str, manifest: dict, work_dir: Path,
         dg = entry["diff_gguf"]
         diff_gguf = hf_download(dg.get("repo", entry["gguf"]["repo"]), dg["file"],
                                 dg.get("revision", entry["gguf"]["revision"]), work_dir)
+    if entry.get("require_exact_diff_transcript", False):
+        print(f"\n[transcript-f16] {name}")
+        control = run_transcript(crispasr_bin, diff_gguf, sample,
+                                 srt=entry.get("transcript_format") == "srt", label="transcript-f16")
+        control_ok, control_lines = exact_diff_transcript_gate(entry, control)
+        for line in control_lines:
+            print(line)
+        failures += int(not control_ok)
     print(f"\n[diff-harness] {name}  ({diff_gguf.name})")
     stages = run_diff(diff_bin, entry["backend_id"], diff_gguf, ref_local, sample)
     thresholds = entry["diff_thresholds"]
     passes, fails, missing, extras = evaluate_stage_thresholds(stages, thresholds, **stage_gate_kwargs(entry))
     for stage in missing:
-        print(f"\033[33m  SKIP\033[0m {stage}  (not captured by diff harness)")
+        print(f"\033[31m  FAIL\033[0m {stage}  (required stage not captured by diff harness)")
     for stage, cos_min, threshold in passes:
         print(f"\033[32m  PASS\033[0m {stage:24s} cos_min={cos_min:.6f}  threshold={threshold}")
     for stage, cos_min, threshold in fails:
         print(f"\033[31m  FAIL\033[0m {stage:24s} cos_min={cos_min:.6f}  threshold={threshold}")
-    failures += len(fails)
+    failures += len(fails) + len(missing)
     # Captured but ungated: no stage_threshold_default, or listed in
     # advisory_stages. Add a threshold (or a default) if the stage is meant to hold.
     for stage, cos_min in extras:
@@ -877,6 +903,7 @@ def dry_run(manifest: dict, backend_filter: str | None = None) -> int:
     print(f"dry-run: checking {len(backends)} ASR + {len(tts_backends)} TTS backend(s)")
 
     for entry in backends:
+        validate_exact_diff_transcript(entry)
         name = entry["name"]
         # skip_preflight: true — GGUF repo temporarily inaccessible (e.g. HF
         # private-repo storage limit). Dry-run skips the artifact check so CI

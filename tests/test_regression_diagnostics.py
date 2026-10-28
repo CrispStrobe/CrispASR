@@ -103,6 +103,19 @@ else:
             self.assertEqual(sorted(p.name for p in diag.iterdir()), expected)
 
     @unittest.skipUnless(os.name == "posix", "fake CLI uses a POSIX shebang and chmod")
+    def test_quantized_and_f16_transcripts_keep_separate_evidence(self):
+        with tempfile.TemporaryDirectory() as temp, \
+                patch.dict(os.environ, {"REGRESSION_DIAGNOSTICS_DIR": temp}), \
+                patch.object(run_one.subprocess, "run", side_effect=[
+                    subprocess.CompletedProcess([], 0, stdout="quantized words\n", stderr="q4"),
+                    subprocess.CompletedProcess([], 0, stdout="reference words\n", stderr="f16")]):
+            run_one.run_transcript(Path("cli"), Path("q4.gguf"), Path("audio.wav"))
+            run_one.run_transcript(Path("cli"), Path("f16.gguf"), Path("audio.wav"), label="transcript-f16")
+            q4 = json.loads((Path(temp) / "transcript.json").read_text())
+            f16 = json.loads((Path(temp) / "transcript-f16.json").read_text())
+            self.assertIn("quantized words", q4["stdout"]["text"])
+            self.assertIn("reference words", f16["stdout"]["text"])
+
     def test_command_log_is_bounded_and_retains_failure_status(self):
         with tempfile.TemporaryDirectory(prefix="regression-diagnostics-test-") as temp:
             root = Path(temp)

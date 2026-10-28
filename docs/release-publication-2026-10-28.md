@@ -12,7 +12,8 @@ Public run IDs only. Each line says what it verifies and what it does not.
 | Native publication audit | 40682766228 | PASS: full anonymous readback of all 50 assets, root notices, CLI runtime-version smoke, CUDA split/runtime payload sets |
 | Python wheels (PyPI CPU + sdist, GPU index) | 40679618075 | all 8 distributions built and published |
 | Rust / Dart wrappers | 40649389411 | pass |
-| Wheel publication audit | 40703639437 | FAILED in the auditor (required a `whl/hip` index that only exists from 0.8.47). Fixed on main; rerun is task A in the handoff |
+| Wheel publication audit | 40703639437 | FAILED in the auditor (required a `whl/hip` index that only exists from 0.8.47). Fixed on main; superseded by successful audit 40736324867 |
+| Corrected wheel publication audit | 40736324867 | PASS: all eight distributions, five full PyPI and all GPU readbacks; [accepted receipt](release-v0846-wheel-audit-2026-10-28.json) |
 
 Not covered: new speech or device evidence. The v0.8.46 native inference changes
 reuse the Nemotron CPU/T4 qualification described in
@@ -21,8 +22,9 @@ reuse the Nemotron CPU/T4 qualification described in
 A nightly regression run (40481871937) failed data2vec-base Q4_K on exact match
 (WER 0.0435, human-accuracy WER 0). The preceding green workflow skipped data2vec, so it supplies no passing
 control. The failed job retained AMD EPYC 9V74/native-build evidence and a
-passing F16 stage check; CPU near-tie variance remains an unverified hypothesis.
-The controlled follow-up is tracked as task D.
+passing F16 stage check; the same-host follow-up 40735433388 establishes Q4 native/AVX512 versus AVX2
+near-tie sensitivity while every F16 control passes. The paired regression
+policy and remaining hosted confirmation are tracked as task D.
 
 ## v0.8.47 — Linux GPU Python wheels (#557)
 
@@ -32,7 +34,7 @@ The controlled follow-up is tracked as task D.
 | CI / Lint / Secret scan on tag source | 40689967257 / 40689967286 / 40689967265 | pass |
 | Vulkan lib producer dry run (branch) | 40460158618 | pass: build, relocated dlopen verify, dependency gate (`libvulkan.so.*` host) |
 | ARM64 CUDA lib producer dry run (branch) | 40661942703 | pass: same gates (CUDA runtime host) |
-| Release | 40711745769 | building, partial public assets; complete publication unverified — task B |
+| Release | 40711745769 | all 37 build jobs pass; exact 52-name public asset set checked. Final publish queued; full byte audit pending — task B |
 | Rust / Dart wrappers | 40711745994 | PASS: all three publisher jobs; three registry archives fully read back, registry SHA-256/version, original manifests, licenses and packaged source files match frozen tag ([receipt](release-wrappers-readback-2026-10-28.json)) |
 | Python wheels / native and wheel audits | — | await terminal native producer and wheel publication — task B |
 

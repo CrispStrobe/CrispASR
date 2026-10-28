@@ -5,24 +5,25 @@ It contains the completed work, exact evidence, bounded next actions and blocker
 needed by a fresh agent; no earlier chat is required. Follow `AGENTS.md` and its
 mandatory maintainer-guide instructions before implementation.
 
-**Hosted tasks A/B/D are already dispatched; result collection is the next task.** Claim work by adding owner,
+**A is complete; D has decisive retained CPU-profile evidence and a scoped regression fix. B publication remains in flight.** Claim work by adding owner,
 source SHA, missing behavior, acceptance gates and next action under "NOW"
 before starting. The full scope of each task (exact runs, inputs, commands and
 acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-tasks--fully-scoped).
 
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
-- No local background collector or implementation job remains. A fresh agent should claim result collection and preserve the already dispatched runs.
-- A: corrected v0.8.46 wheel auditor 40736324867 is queued on `ubuntu-latest`; accept only successful terminal receipt.
+- Owner: current maintainer agent, starting source `42d787586`; collect A/B/D terminal receipts, repair actual failures, and preserve existing runs. Large work stays on suitable hosted workers; local load 0.26 and available memory about 4.4 GiB at resumption.
+- A complete: corrected auditor 40736324867 passed; all eight distributions and anonymous readbacks accepted. [Receipt](docs/release-v0846-wheel-audit-2026-10-28.json).
 - B: monitor existing v0.8.47 producers, then native/wheel audits and public readbacks; do not retag.
-- D: 40723799365 passes the native/AVX2 Q4/F16 controls on EPYC 7763; AVX-512 is absent, so causation/gate changes remain unqualified. Follow-up 40735433388 at a21687e29 is capability attempt 1/3, queued with `--require-avx512`. Do not dispatch another until it is terminal; stop on a suitable host or after three unsuitable attempts.
+- D: 40735433388 completed on EPYC 9V74 with all three actual CPU profiles. Repeated raw arrays independently confirm native/AVX512 Q4 drops `A`, AVX2 Q4 retains it, and every F16 control matches the unchanged original reference. Added a one-word Q4 allowance with mandatory zero-WER F16 transcript and unchanged stage gates in both drivers. Hosted production-run confirmation is next; no further capability probes.
+- Additional error repaired: normal nightly now fails missing explicitly required stages, matching Kaggle; negative caller controls cover partial/absent captures.
 - Resources: light local inspection only; large builds/readbacks/inference on suitable Actions workers.
 - C: user requests keeping #557 open and preparing a reply for review; do not post or close. E remains hardware-dependent.
 - Newly opened #558: reproduced and repaired standalone-marker grouping, with model-free regression controls. Reporter audio/NeMo/CUDA acceptance remains pending; see [repair scope](docs/parakeet-word-boundary-558-2026-10-28.md).
 
-- v0.8.46 is **published**. Native audit passes; the wheel audit receipt is pending (task A).
+- v0.8.46 is **published**. Native audit passes; native and wheel audits pass (task A complete).
 - v0.8.47 (#557 Linux GPU wheels) has a **partial public release**, tagged at `5f87a5626`. Release run
-  40711745769 is still building; its complete publication is unverified (task B).
+  40711745769 has all 37 build jobs passed and exactly 52 public asset names; final publish job remains queued. Full native byte audit and Python wheels are unverified (task B).
 - [Publication receipt](docs/release-publication-2026-10-28.md).
 
 ## Completed baseline
@@ -39,10 +40,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 | # | Task | Depends on | Done when |
 |---|---|---|---|
-| A | Rerun the v0.8.46 wheel audit after the auditor `hip`-index fix. | — | Verifier run `success` and `receipt.json` acceptance true; run ID in the receipt. |
-| B | Verify the v0.8.47 publication: release jobs, 52 native assets, three new GPU wheel legs, `whl/hip` + aarch64 `whl/cuda` index entries, native and wheel audits. | v0.8.47 release run finished | Both verifier runs pass; IDs recorded. If a new wheel leg fails, fix and re-dispatch the wheel workflow for `v0.8.47`. Never re-tag. |
+| A | COMPLETE: v0.8.46 wheel auditor 40736324867 passed. | — | Accepted receipt committed; do not repeat. |
+| B | Verify the v0.8.47 publication: release jobs, 52 native assets, three new GPU wheel legs, `whl/hip` + aarch64 `whl/cuda` index entries, native and wheel audits. | v0.8.47 release run finished | Both verifier runs pass; IDs recorded. For transient failures rerun failed jobs in the original producer. Whole redispatch risks different CPU bytes colliding with immutable PyPI; see handoff. Never re-tag. |
 | C | Prepare the #557 final reply for maintainer review; keep the issue open. | B | Both audits support the draft claims; reviewed wording is ready. No posting or closure authorized. |
-| D | Investigate the data2vec-base Q4_K nightly exact-match failure (run 40481871937). | — | Controlled profile/raw-CTC/pipeline comparison explains the failure; any gate change requires original-reference evidence. |
+| D | Investigate the data2vec-base Q4_K nightly exact-match failure (run 40481871937). | — | Cause explained by retained same-host arrays; paired Q4/F16 policy and missing-stage fix covered by model-free controls. Confirm a hosted production regression on the committed source. |
 | E | Real-hardware qualification of `+vulkan` (AMD/Intel), `+hip` (ROCm) and aarch64 `+cuda`. | Hardware access | Clean-venv install, Session JFK transcript matches, GPU backend selected and used, CPU/GPU compared. Recorded per class. |
 
 ## External holds — do not schedule speculative repairs
