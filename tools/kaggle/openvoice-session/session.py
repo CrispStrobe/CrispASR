@@ -6,8 +6,8 @@ from pathlib import Path
 import runpy
 import urllib.request
 
-SOURCE = 'c1cff9857c551612a230dd0ea41161195a289707'
-SHA256 = '079f082f9f012972a026bb148e32d04bfd8cf19a3611881276862478cc584758'
+SOURCE = '264ff48a5a4887509888ed0078ddb8012d9d6131'
+SHA256 = 'c55c0f5c0c555d0798107f6f3b6b83ea747bd827276aeefdec408e3870305fea'
 print('OpenVoice Session bootstrap', 'worker_source=' + SOURCE, 'worker_sha256=' + SHA256,
       'entry_sha256=' + hashlib.sha256(Path(__file__).read_bytes()).hexdigest(), flush=True)
 path = Path('/kaggle/temp/openvoice-session-worker.py')
