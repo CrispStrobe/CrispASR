@@ -16,7 +16,7 @@ in ignored local notes.
 ## Current state and first actions
 
 State at this wrap-up (2026-10-28): **v0.8.46 is published; v0.8.47 has partial public assets and
-its native release run has passed all 38 jobs including final publication. Native byte audit passed; all wheel builds pass, while both wheel publishers remain queued.** Active follow-up work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
+its native release run has passed all 38 jobs including final publication. Native byte audit passed; all wheel builds and PyPI publication pass, while GPU-index publication remains queued.** Active follow-up work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
 a fresh agent should confirm ownership before dispatching replacements.
 
 | Item | State | Evidence |
@@ -24,7 +24,8 @@ a fresh agent should confirm ownership before dispatching replacements.
 | v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit 40736324867 PASS; task A complete. | [Receipt](release-publication-2026-10-28.md) |
 | v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 is accepted; wheel producer 40751349609 remains queued. | Task B |
 | #557 issue | Code merged. Issue still **open**. No public comment posted yet. | Task C |
-| data2vec-base nightly gate | Same-host Q4 CPU-profile divergence verified; mandatory exact F16 control added. Hosted production confirmation remains. | Task D |
+| data2vec-base nightly gate | COMPLETE: same-host cause, paired Q4/exact-F16 policy and actual production regression 40750908085 accepted. | Task D |
+| OpenVoice2 | Bounded three-case conditioning/quality and current-runtime structural proofs accepted. Real Python Session validation is accepted on Kaggle; actual CLI and a full rebuilt-current library remain separate. | Task F and follow-up below |
 
 First actions for a fresh agent:
 
@@ -36,7 +37,7 @@ First actions for a fresh agent:
    2026-10-28 check: open #456/#461/#483/#532/#557/#558, new PR #559,
    zero comments on #557. The [PR #559 review checkpoint](qwen3-context-pr559-review-2026-10-28.md)
    scopes its remaining gates; no review or merge was submitted.
-3. A is accepted; continue B → C in order. D is independently dispatched; E needs hardware.
+3. A, D and bounded F are accepted; continue B → C in order. G is also accepted; do not duplicate it. E needs hardware.
 4. For any task, record owner, source SHA, exact missing behavior, acceptance gates,
    resources and next action in PLAN.md before starting. Do not recreate a passing campaign.
 
@@ -49,7 +50,7 @@ source/CI/validation checks; do not retag v0.8.47 to include them.
 
 | Area | Implemented and accepted | Limits / evidence |
 |---|---|---|
-| v0.8.46 release | Promotes the qualified Nemotron F16 default with OpenMDW notices, the VoxCPM2 host-permute timing split, and wheel notice/provenance staging. Published 2026-10-28; native and wheel publication pass. The verifier now takes `tag`/`source` inputs, and `REVIEWED_TAGS` lists v0.8.45–v0.8.47. | Wheel audit receipt pending (task A). v0.8.45 tag/assets untouched. [Receipt](release-publication-2026-10-28.md). |
+| v0.8.46 release | Promotes the qualified Nemotron F16 default with OpenMDW notices, the VoxCPM2 host-permute timing split, and wheel notice/provenance staging. Published 2026-10-28; native and wheel publication pass. The verifier now takes `tag`/`source` inputs, and `REVIEWED_TAGS` lists v0.8.45–v0.8.47. | Wheel audit 40736324867 accepted (task A complete). v0.8.45 tag/assets untouched. [Receipt](release-publication-2026-10-28.md). |
 | #557 Linux GPU wheels (code) | Producers `build-libs-linux-x86_64-vulkan` and `build-libs-linux-arm64-cuda`. Wheel legs `linux-x86_64-vulkan`, `linux-x86_64-hip` (`--host-provided libomp.so`) and `linux-arm64-cuda`. A `whl/hip` index. A Linux Vulkan clean-venv loader smoke. Version-gated (≥ 0.8.47) exact auditor expectations. Tagged for v0.8.47; publication verification is pending. | Packaging only; no physical-GPU run (task E). Jetson excluded. Publication unverified at hand-off (task B). |
 | v0.8.45 release | Native, Python, Rust and Dart publication completed. Native assets, CUDA splits, package notices, registry distributions and live GPU indexes were read back and verified. | Immutable tag source `e58bb48b5`. Native audit 40304161701; wheel audit 40313434985. This earlier receipt predates the separately scoped v0.8.46/v0.8.47 work. [Publication receipt](release-publication-2026-10-26.json). |
 | Nemotron default | Managed downloads now select the pinned qualified F16 profile only, retain OpenMDW/origin notices, and reject stale-Q4/missing-Q4 substitution. CPU and actual T4 pass 26/26 original transcript matches, 22/22 VoxCPM prompts, unchanged stage/magnitude gates, CLI, opaque-filename C ABI and fresh/reused-session controls. | Former plain Q4 fails both devices (11/26 and 8/22), so it is not an accepted default. Explicit existing Q4 files remain diagnostic. Existing v0.8.45 binaries still require explicit F16 selection. [Policy and full proof](nemotron-default-policy-2026-10-26.md). |
@@ -81,7 +82,7 @@ voice pack or requantize Granite merely to reproduce these completed results.
   - Native audit **40682766228** PASS: 50 assets fully read back, with notices
     and the CLI version smoke.
   - Wheels **40679618075** and wrappers **40649389411** pass.
-  - Wheel audit pending: task A.
+  - Wheel audit **40736324867** PASS; task A complete.
 - **v0.8.47**, tag source `5f87a56265e4bbd7e2adc7052254e576d5774abb`:
   - CI **40689967257**, Lint **40689967286** and Secret scan **40689967265** pass.
   - Release **40711745769** remains in progress: task B.
@@ -112,14 +113,16 @@ audit **40751444564** passed on `ubuntu-latest` with `complete: true, acceptance
 `bda9d00ce6209a7811dccc5a996077b8bdc2521d`, pinned tag source
 `5f87a56265e4bbd7e2adc7052254e576d5774abb`, release_run `40711745769`,
 `repair_notices=false`. Automatic Python wheel producer **40751349609** is
-now has all 12 setup/build jobs passing, including HIP and ARM CUDA; only
-`publish-pypi` and `publish-gpu-index` remain queued (`workflow_run`, workflow
+now has all 12 setup/build jobs passing, including HIP and ARM CUDA; PyPI publication also passes; only
+`publish-gpu-index` remains queued (`workflow_run`, workflow
 source `2c733b9c3`; release inputs remain the frozen tag). Preserve both runs.
 The [accepted native receipt](release-v0847-native-audit-2026-10-28.json)
 and [full inventory](release-v0847-native-assets-2026-10-28.json) are retained.
 Wheel readback still waits for successful
 wheel/index/Pages publication and the accepted native inventory.
-D **40735433388** completed on EPYC 9V74 with all three actual CPU profiles.
+D production confirmation **40750908085** passed; its
+[accepted receipt](data2vec-production-regression-2026-10-28.json) closes this
+bounded nightly-gate repair. Diagnostic **40735433388** completed on EPYC 9V74 with all three actual CPU profiles.
 Its independently decoded retained arrays establish the quantized profile
 sensitivity. No further capability attempts are needed. See task D for the fix
 and remaining hosted confirmation. No local background collector remains.
@@ -386,14 +389,30 @@ what delayed the live wheel index for v0.8.46.
 
 #### OpenVoice follow-up scope after task F
 
-1. **High-level integration:** run the real Python Session/C ABI with a renamed
-   Melo model (architecture detection), its pinned BERT companion, the accepted
-   F32-sensitive converter and the synthetic reference. Confirm codec/voice
-   setters, source-speaker routing, 44.1 kHz baseline versus 22.05 kHz clone
-   output, actual CUDA, deterministic reseeding and repeated conversion. Test
-   both raw validation output with an explicit marking attestation and normal
-   marked synthesis; retain notices and label any raw validation artifacts.
-   Apply the unchanged WER/speaker gates to output. Qualify the actual CLI
+**G COMPLETE — real Session integration:** `tools/kaggle/openvoice-session`,
+kernel version 2 (`crispasr-openvoice-session`), controller source
+`264ff48a5`, bootstrap `1f5b35a85`. The renamed model auto-detects as Melo;
+codec/voice setters, baseline 44.1 kHz and clone 22.05 kHz rates, exact reseeded
+repeats, raw and normal marked synthesis all pass. Actual CUDA is observed.
+Marked-clone WER is 0.1111 and 0; independent speaker improvements are 0.1823
+and 0.2731. Raw speech passes too. Exact controller bytes, source/header/model
+pins, all resource checks and WER arithmetic were independently verified.
+[Accepted Session receipt](openvoice-session-accepted-2026-10-28.json).
+Preset identity is explicitly `unknown`: model-generated audio does not prove
+whose identity a preset represents. Raw artifacts remain private and labelled;
+these tests grant no identity, consent or voice-pack publication rights.
+Both Session versions' terminal source, logs and outputs are retained privately.
+No active OpenVoice kernel remains and no replacement is required.
+This qualifies the shipped SDK plus verified model overlay, not a complete
+rebuilt-current library or the actual CLI. No model/default promotion or Hub
+publication occurred. Remaining scope:
+
+1. **Full rebuilt-current library and CLI:** repeat G's retained integration
+   controls against a newly built full current-source shared library, with the
+   same renamed Melo model, pinned BERT/converter/reference inputs, rate checks,
+   raw/marked output and unchanged quality gates. The tested SDK composition
+   supplies a retained comparator; do not rebuild models or change the oracle.
+   Qualify the actual CLI
    separately: its filename detection and adapter cannot substitute for C ABI
    coverage. Use suitable hosted workers, not a loaded local machine.
 2. **Publication:** no Hub write was attempted by the accepted read-only run.

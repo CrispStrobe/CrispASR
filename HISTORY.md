@@ -1,3 +1,19 @@
+## 2026-10-28 — Production data2vec and real OpenVoice Session accepted
+
+Production nightly run 40750908085 passes on EPYC 9V74: Q4 WER 1/23,
+mandatory exact F16 WER zero, CTC-logit cosine minimum 0.999138 against the
+unchanged 0.999 threshold. Original model/reference pins remain unchanged.
+
+OpenVoice Session kernel version 2 also passes actual C ABI architecture
+selection on a renamed model, codec/voice setters, 44.1/22.05 kHz rates,
+exact reseeded repeats, raw and normal marked speech, actual CUDA and both
+quality gates. Marked-clone WER is 0.1111 and zero; speaker improvements are
+0.1823 and 0.2731. Preset identity remains unknown; generated reference audio
+is no identity/consent/publication clearance. Raw artifacts stay private.
+This qualifies the shipped SDK plus model overlay. Actual CLI and a complete
+rebuilt-current library remain separate, with no model publication or default
+promotion. Portable receipts and remaining scope are in the handoff.
+
 ## 2026-10-28 — OpenVoice conditioning and current-runtime proof accepted
 
 The repaired quality decoder completes all three original-reference T4 cases:

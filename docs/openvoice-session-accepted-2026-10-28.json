@@ -1,0 +1,630 @@
+{
+  "schema": 1,
+  "version": "2026-10-28.openvoice-session.2",
+  "source": "5f87a56265e4bbd7e2adc7052254e576d5774abb",
+  "ggml": "e2ae679a563014f46c546ce6c6448e8601e4dea6",
+  "native_model_delta_source": "1b874a104c70bc77e1a64dc1d5f4e924f0a3cfeb",
+  "native_model_delta_sha256": "f658c40176fe1c67584cd9ab80ca9d954433cfe7973f6ba84b43a448d59b8c13",
+  "worker_source": "d84007612167105cf24c7af80014d1f0ea1bd8a3",
+  "worker_sha256": "b1fed1e4518ceeb517c749be67ce3eeee9d3243153b5f50043f6edf9c4584f20",
+  "entry_sha256": "c55c0f5c0c555d0798107f6f3b6b83ea747bd827276aeefdec408e3870305fea",
+  "complete": true,
+  "model_acceptance": false,
+  "gpu_executed": true,
+  "publication_requested": false,
+  "publication_complete": false,
+  "sdk": {
+    "tag": "v0.8.47",
+    "asset": "libcrispasr-linux-x86_64-cuda.tar.gz",
+    "sha256": "8fbd68e1822cd16e58055753fc67120c20784451e286d94177f7f7fb78b76cbd",
+    "bytes": 196467235
+  },
+  "limitations": [
+    "Frozen tau=0 structural replay only; speech quality is a separate gate",
+    "Only OpenVoice/Melo model objects rebuilt; shipped SDK supplies core and ggml",
+    "High-level Session and CLI are not qualified by this replay"
+  ],
+  "hardware": "Tesla T4, 7.5, 15360 MiB, 580.178.04\nTesla T4, 7.5, 15360 MiB, 580.178.04",
+  "resource_checks": [
+    {
+      "phase": "bootstrap-current-sdk",
+      "available_bytes": 32573599744,
+      "load": [
+        0.013671875,
+        0.12744140625,
+        0.0849609375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1126151790592,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "dependencies-libcrispasr.so",
+      "available_bytes": 32425529344,
+      "load": [
+        0.2880859375,
+        0.1826171875,
+        0.10498046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125533515776,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "dependencies-libggml-cuda.so",
+      "available_bytes": 32403898368,
+      "load": [
+        0.2880859375,
+        0.1826171875,
+        0.10498046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125533515776,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "compile-current-model-delta",
+      "available_bytes": 32388616192,
+      "load": [
+        0.2880859375,
+        0.1826171875,
+        0.10498046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125533515776,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "compile-current-diff-driver",
+      "available_bytes": 32437534720,
+      "load": [
+        0.39794921875,
+        0.2099609375,
+        0.11474609375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125533204480,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "replay-cuda",
+      "available_bytes": 32327249920,
+      "load": [
+        0.49072265625,
+        0.236328125,
+        0.12451171875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125533143040,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "replay-cpu",
+      "available_bytes": 32359206912,
+      "load": [
+        0.5693359375,
+        0.26171875,
+        0.13427734375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125533130752,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "session-quality-dependencies",
+      "available_bytes": 32305909760,
+      "load": [
+        1.1533203125,
+        0.40966796875,
+        0.18603515625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125381525504,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "session-native",
+      "available_bytes": 32320380928,
+      "load": [
+        1.1083984375,
+        0.44921875,
+        0.20361328125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124881620992,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "session-independent-quality",
+      "available_bytes": 32366370816,
+      "load": [
+        1.02685546875,
+        0.58203125,
+        0.27392578125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124880912384,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    }
+  ],
+  "host_provider_directories": [
+    "cublas/lib",
+    "cuda_cccl/lib",
+    "cuda_cupti/lib",
+    "cuda_nvcc/lib",
+    "cuda_nvrtc/lib",
+    "cuda_runtime/lib",
+    "cudnn/lib",
+    "cufft/lib",
+    "cufile/lib",
+    "curand/lib",
+    "cusolver/lib",
+    "cusparse/lib",
+    "cusparselt/lib",
+    "nccl/lib",
+    "nvjitlink/lib",
+    "nvshmem/lib",
+    "nvtx/lib",
+    "cuda/lib64",
+    "nvidia/lib64"
+  ],
+  "symbol_owners": {
+    "openvoice2_context_default_params": "libopenvoice-probe.so",
+    "openvoice2_init_from_file": "libopenvoice-probe.so",
+    "openvoice2_convert": "libopenvoice-probe.so",
+    "openvoice2_set_stage_callback": "libopenvoice-probe.so"
+  },
+  "native_delta": {
+    "libopenvoice-probe.so": "85b429cd17914cb0712429baf04d52840edfaef79b362dcfb734dcddb4eee744",
+    "openvoice-bake": "73a278d97a27c5ebddd4e0b2a85f42abfce158d40783e3e99094aa2d8214325c"
+  },
+  "replay_input_sha256": {
+    "model": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255",
+    "reference": "259993b526944e8e36ccca436e005cbc3935a46636b42c618cfd5c3d19429c8f"
+  },
+  "replay_results": [
+    {
+      "mode": "cuda",
+      "returncode": 0,
+      "passes": 27,
+      "failures": 0,
+      "cuda_work_observed": true,
+      "accepted": true
+    },
+    {
+      "mode": "cpu",
+      "returncode": 0,
+      "passes": 27,
+      "failures": 0,
+      "cuda_work_observed": false,
+      "accepted": true
+    }
+  ],
+  "replay_acceptance": true,
+  "replay_scope": "Frozen tau=0 CPU/CUDA replay with v0.8.47 SDK, matching e2 ggml headers and verified model overlay; no speech quality or Session/CLI acceptance",
+  "session_acceptance": true,
+  "cases": [
+    {
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "backend": "melotts",
+      "baseline_rate": 44100,
+      "clone_rate": 22050,
+      "repeat_exact": true,
+      "marked_differs": true,
+      "samples": 85504,
+      "quality": {
+        "baseline": {
+          "transcript": "The quick brown fox jumps over the lazy dock.",
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.5050774216651917
+        },
+        "original": {
+          "transcript": "The quick brown fox jumps over the lazy dock.",
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.688458263874054
+        },
+        "raw": {
+          "transcript": "The quick brown fox jumps over the lazy dock.",
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6888701915740967
+        },
+        "clone": {
+          "transcript": "The quick brown fox jumps over the lazy dock.",
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6873792409896851
+        }
+      },
+      "quality_pass": true
+    },
+    {
+      "text": "We enjoy reading books and listening to music in the evening.",
+      "backend": "melotts",
+      "baseline_rate": 44100,
+      "clone_rate": 22050,
+      "repeat_exact": true,
+      "marked_differs": true,
+      "samples": 94464,
+      "quality": {
+        "baseline": {
+          "transcript": "We enjoy reading books and listening to music in the evening.",
+          "wer": 0.0,
+          "speaker_cosine": 0.451520174741745
+        },
+        "original": {
+          "transcript": "We enjoy reading books and listening to music in the evening.",
+          "wer": 0.0,
+          "speaker_cosine": 0.6888084411621094
+        },
+        "raw": {
+          "transcript": "We enjoy reading books and listening to music in the evening.",
+          "wer": 0.0,
+          "speaker_cosine": 0.7248735427856445
+        },
+        "clone": {
+          "transcript": "We enjoy reading books and listening to music in the evening.",
+          "wer": 0.0,
+          "speaker_cosine": 0.7245923280715942
+        }
+      },
+      "quality_pass": true
+    }
+  ],
+  "torch_reference_device": "cuda",
+  "session_native": {
+    "cases": [
+      {
+        "text": "The quick brown fox jumps over the lazy dog.",
+        "backend": "melotts",
+        "baseline_rate": 44100,
+        "clone_rate": 22050,
+        "repeat_exact": true,
+        "marked_differs": true,
+        "samples": 85504
+      },
+      {
+        "text": "We enjoy reading books and listening to music in the evening.",
+        "backend": "melotts",
+        "baseline_rate": 44100,
+        "clone_rate": 22050,
+        "repeat_exact": true,
+        "marked_differs": true,
+        "samples": 94464
+      }
+    ],
+    "native_complete": true,
+    "speaker_identity": "unknown",
+    "raw_artifacts": "Private model-generated reference validation; normal marked output tested separately",
+    "resource_checks": [
+      {
+        "phase": "session-open",
+        "available_bytes": 32202805248,
+        "load": [
+          1.1083984375,
+          0.44921875,
+          0.20361328125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124880973824,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "session-baseline",
+        "available_bytes": 31832559616,
+        "load": [
+          1.1083984375,
+          0.44921875,
+          0.20361328125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124880973824,
+        "gpu_free_mib": [
+          14709,
+          14909
+        ]
+      },
+      {
+        "phase": "session-codec-and-voice",
+        "available_bytes": 31763599360,
+        "load": [
+          1.1083984375,
+          0.44921875,
+          0.20361328125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124880973824,
+        "gpu_free_mib": [
+          14535,
+          14909
+        ]
+      },
+      {
+        "phase": "session-raw-clone",
+        "available_bytes": 31729086464,
+        "load": [
+          1.1083984375,
+          0.44921875,
+          0.20361328125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124880973824,
+        "gpu_free_mib": [
+          14425,
+          14909
+        ]
+      },
+      {
+        "phase": "session-repeat",
+        "available_bytes": 31727075328,
+        "load": [
+          1.083984375,
+          0.47705078125,
+          0.216796875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124880957440,
+        "gpu_free_mib": [
+          14255,
+          14909
+        ]
+      },
+      {
+        "phase": "session-marked-clone",
+        "available_bytes": 31769206784,
+        "load": [
+          1.07080078125,
+          0.49462890625,
+          0.2255859375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124880957440,
+        "gpu_free_mib": [
+          14255,
+          14909
+        ]
+      },
+      {
+        "phase": "session-open",
+        "available_bytes": 31772635136,
+        "load": [
+          1.0595703125,
+          0.51171875,
+          0.234375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124880957440,
+        "gpu_free_mib": [
+          14805,
+          14909
+        ]
+      },
+      {
+        "phase": "session-baseline",
+        "available_bytes": 31707254784,
+        "load": [
+          1.0546875,
+          0.52001953125,
+          0.23876953125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124880957440,
+        "gpu_free_mib": [
+          14707,
+          14909
+        ]
+      },
+      {
+        "phase": "session-codec-and-voice",
+        "available_bytes": 31690108928,
+        "load": [
+          1.0546875,
+          0.52001953125,
+          0.23876953125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124880957440,
+        "gpu_free_mib": [
+          14519,
+          14909
+        ]
+      },
+      {
+        "phase": "session-raw-clone",
+        "available_bytes": 31680311296,
+        "load": [
+          1.0546875,
+          0.52001953125,
+          0.23876953125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124880957440,
+        "gpu_free_mib": [
+          14409,
+          14909
+        ]
+      },
+      {
+        "phase": "session-repeat",
+        "available_bytes": 31691542528,
+        "load": [
+          1.0458984375,
+          0.53662109375,
+          0.24755859375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124880957440,
+        "gpu_free_mib": [
+          14223,
+          14909
+        ]
+      },
+      {
+        "phase": "session-marked-clone",
+        "available_bytes": 31701082112,
+        "load": [
+          1.03515625,
+          0.56005859375,
+          0.2607421875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124880957440,
+        "gpu_free_mib": [
+          14223,
+          14909
+        ]
+      }
+    ]
+  },
+  "session_cuda_observed": true,
+  "asr": {
+    "repo": "Systran/faster-whisper-tiny.en",
+    "revision": "0d3d19a32d3338f10357c0889762bd8d64bbdeba"
+  },
+  "session_scope": "Python Session/C ABI on shipped v0.8.47 SDK with verified model overlay; not a rebuilt-current-library or CLI qualification",
+  "kernel_version": 2,
+  "controller_source": "264ff48a5a4887509888ed0078ddb8012d9d6131",
+  "bootstrap_source": "1f5b35a8541e5628b388b33ab9581b80654cbb7f",
+  "artifact_readback": {
+    "SDK-LICENSE": {
+      "bytes": 1184,
+      "sha256": "aa918fb53ff1948e12cdae8136e045210fb6db222a1f6f0c14bad48e6de2100e"
+    },
+    "replay-cuda.log": {
+      "bytes": 5524,
+      "sha256": "ac9bbc4f148276dd38016c76db3ff4c9cd4e16a23adde2d3ac3a8f753a427395"
+    },
+    "session-quality-dependencies.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "baseline-1.wav": {
+      "bytes": 755792,
+      "sha256": "8f3b94a754953e0eb552739c907bb20e72757f5d4041d42552fb7b0f5f391267"
+    },
+    "reference-ATTRIBUTION.txt": {
+      "bytes": 382,
+      "sha256": "377a32e6f98e9c96c4bb16c221f1aca1a8793b209b7a6991c827a8a46f42763c"
+    },
+    "validation.json": {
+      "bytes": 13147,
+      "sha256": "5e363dbca60be9a5fc5d58e7d6c02644de9402fdcf1daaa1257b8d428c8d524c"
+    },
+    "reference.wav": {
+      "bytes": 573520,
+      "sha256": "237f5c2ebcd75f734f44f63ba4915321aea7d8d53969a6d5f3aad966cdb760e6"
+    },
+    "dependencies-libcrispasr.so.log": {
+      "bytes": 1787,
+      "sha256": "f361c1840cc45935c29d33620d243e1812747104ed969b5d59ab2d88edbea839"
+    },
+    "baseline-0.wav": {
+      "bytes": 684112,
+      "sha256": "ef4928ef345ed241e9bd2f3bf1722a2fa5bfecd8db472ccda4ca8a78a8847b45"
+    },
+    "session-independent-quality.log": {
+      "bytes": 487,
+      "sha256": "2d2a23d2c543300d1777facdbf3fa8f1322d5b4721fa99ec8af952817f250b4e"
+    },
+    "raw-1.wav": {
+      "bytes": 377936,
+      "sha256": "5f8f56eb78b3c7fa9c20872152788f2f32e76195a927066c9fb474f13e879691"
+    },
+    "session-native.log": {
+      "bytes": 26983,
+      "sha256": "89efab4da77438a9bf9b210cc38ab2bde18da523377e2a16914dde4022aaea9c"
+    },
+    "compile-current-model-delta.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "original-0.wav": {
+      "bytes": 342096,
+      "sha256": "b77bfae1ec314cd5e2808419a70bbfcd2e48a69c4dddbadaeed63b0d063c5ee0"
+    },
+    "reference-OpenVoice-LICENSE.txt": {
+      "bytes": 1057,
+      "sha256": "bb3541f421e6273d3a3e3dd5bdba2bd3b79a3c2eadca65cde9c62c2467903ac0"
+    },
+    "replay-cpu.log": {
+      "bytes": 5135,
+      "sha256": "0dc85e63b0e311129244fb63d6808acac1165762c3dc0d776ddfc8fbffdcdafa"
+    },
+    "clone-1.wav": {
+      "bytes": 377936,
+      "sha256": "70b4dd6765473c9aa59c2559b8aa2f8a56d61294db308fce9f270c769e50b13a"
+    },
+    "dependencies-libggml-cuda.so.log": {
+      "bytes": 1277,
+      "sha256": "37754d4abe808669aa38176052e2165e480ea0f8b1202c235cdf611fee146671"
+    },
+    "SDK-THIRD_PARTY_NOTICES.txt": {
+      "bytes": 39469,
+      "sha256": "eb5f24053cd50bcbc9c5050992b1dfb1bef671e9684dfcbff46929c97615af3b"
+    },
+    "crispasr-openvoice-session.log": {
+      "bytes": 5312,
+      "sha256": "78ad9398f20b969b533ea1b5d46b7615f2c6391cb06562a1afaa06746ba2d688"
+    },
+    "raw-0.wav": {
+      "bytes": 342096,
+      "sha256": "ba1b954da296acfb75a2c493c2b3d5a836e0fbefe90c3b945f58206d1bef6ef9"
+    },
+    "replay-inputs.json": {
+      "bytes": 1174,
+      "sha256": "9f0c9af03de834120043c116c9b28b17ff5396fef511da660e3a21111a64b6b1"
+    },
+    "compile-current-diff-driver.log": {
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "quality.json": {
+      "bytes": 13002,
+      "sha256": "ba5d3ea47f144a99b96257ab022af7910c4d9849a15517729b9c67f40e2e000d"
+    },
+    "clone-0.wav": {
+      "bytes": 342096,
+      "sha256": "0fd22ee4059cebb1cbabf65096e9aeb3375eb67576ff0a7967207a01e92fa37a"
+    },
+    "session.json": {
+      "bytes": 4277,
+      "sha256": "3bfca62c47f9fe3d7cab11c02706e8aee93c479cd1fc93b61db90de91c487b03"
+    },
+    "original-1.wav": {
+      "bytes": 377936,
+      "sha256": "d52c2c518733b30b665adcde66659b0d7496f3177003c078d4db8167885dbb6e"
+    }
+  },
+  "rights_scope": "Model-generated reference audio and retained source notices; preset identity is explicitly unknown. This test does not establish identity, consent or voice-pack publication rights. Raw artifacts remain private validation data. No rights clearance or production default promotion is inferred."
+}

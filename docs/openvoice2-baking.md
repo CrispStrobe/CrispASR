@@ -5,9 +5,13 @@ on T4 CUDA: 27/27, 27/27 and 28/28 original-reference stages, raw C API,
 exact-repeat/cache and clip-mean controls, WER <=0.2 and independent speaker
 improvement >0.01. [Accepted quality receipt](openvoice-conditioning-accepted-2026-10-28.json).
 The separate current-runtime replay also passes all 27 stages on CPU and CUDA
-against the v0.8.47 SDK and matching ggml headers. High-level Session/CLI,
-model publication, broader voices/languages and default promotion remain
-separate tasks. The older attempts below are historical failed controls,
+against the v0.8.47 SDK and matching ggml headers. The real Python Session/C ABI
+composition also passes both sentences through
+raw and normal marked output, with architecture detection, exact repeats,
+native rates, actual CUDA and unchanged quality gates.
+[Session receipt](openvoice-session-accepted-2026-10-28.json). Actual CLI, a full
+rebuilt-current library, model publication, broader voices/languages and default
+promotion remain separate tasks. The older attempts below are historical failed controls,
 not instructions to repeat a passing campaign. See [the handoff](maintenance-handoff.md).
 
 ## Recovered execution state — 2026-10-28
@@ -299,7 +303,7 @@ and retained notices, followed by full anonymous byte readback.
 Conditioning kernel version 3 passed all three original-reference CUDA cases
 (27/27, 27/27, 28/28), exact repeats, uninstrumented raw C API conversion and
 clip-mean conditioning. Its independent quality process failed in PyAV decoding
-before ASR results, so speech acceptance remains pending. The repair reads the
+before ASR results; this historical failure is superseded by accepted version 4. The repair reads the
 generated WAVs with SoundFile, averages channels and resamples to mono float32
 at 16 kHz before passing arrays to the unchanged Whisper decoder. It preserves
 the WER <=0.2 and independent speaker-improvement >0.01 gates.
