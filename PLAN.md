@@ -15,7 +15,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 - Owner: current maintainer agent; starting source `b967685fd`.
 - A: corrected v0.8.46 wheel auditor 40723794473 is queued on Ubuntu 24.04; accept only successful terminal receipt.
 - B: monitor existing v0.8.47 producers, then native/wheel audits and public readbacks; do not retag.
-- D: controlled CPU/F16 comparison 40723799365 at bf724a8e5 is queued on Ubuntu 24.04; no gate relaxation without proof. The alleged previous data2vec pass was actually skipped.
+- D: 40723799365 passes the native/AVX2 Q4/F16 controls on EPYC 7763; AVX-512 is absent, so causation/gate changes remain unqualified. Next: at most three serial `--require-avx512` capability attempts, stopping before model/build work on unsuitable hosts.
 - Resources: light local inspection only; large builds/readbacks/inference on suitable Actions workers.
 - C: user requests keeping #557 open and preparing a reply for review; do not post or close. E remains hardware-dependent.
 - Newly opened #558: reproduced and repaired standalone-marker grouping, with model-free regression controls. Reporter audio/NeMo/CUDA acceptance remains pending; see [repair scope](docs/parakeet-word-boundary-558-2026-10-28.md).

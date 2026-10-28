@@ -5,8 +5,11 @@ Hosted heavy-cpu.yml only; pip: numpy gguf==0.17.1 huggingface_hub.
 One source, immutable inputs, sequential native/AVX2/AVX512 builds. Raw CTC,
 explicit-English CLI and the exact nightly invocation are separate controls.
 Successful execution means evidence collected, not a newly qualified model.
+Use --require-avx512 for a follow-up: unsuitable workers retain preflight
+evidence and stop before worker APT/model downloads or compilation.
 """
 
+import argparse
 import hashlib
 from itertools import groupby
 import json
@@ -25,6 +28,7 @@ MODEL_HASHES = {
     "q4": "93b6ab01f1f83525157d797a385a3e9e014c6761d3e974351363adc452a86f7e",
     "f16": "4df9cc50b7f5340488fa64f5ead34f93660c6ff8785e7e71a859a8860a13254e",
 }
+AVX512_FLAGS = {"avx512f", "avx512cd", "avx512bw", "avx512dq", "avx512vl"}
 
 
 def sha256(path):
@@ -85,9 +89,9 @@ def compare_logits(native, reference, inverse, blank):
 
 
 def main():
-    import gguf
-    import numpy as np
-
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--require-avx512", action="store_true")
+    args = parser.parse_args()
     out = Path(os.environ["HEAVY_OUT"])
     scratch = Path(os.environ["HEAVY_SCRATCH"]) / "data2vec-cpu-profiles"
     out.mkdir(parents=True, exist_ok=True)
@@ -96,6 +100,7 @@ def main():
     manifest = json.loads((ROOT / "tests/regression/manifest.json").read_text())
     entry = next(e for e in manifest["backends"] if e["name"] == "data2vec-base")
     receipt = {"complete": False, "scope": __doc__, "profiles": {},
+               "require_avx512": args.require_avx512,
                "source": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip(),
                "pins": {"model": entry["gguf"], "fixtures": manifest["fixtures"],
                         "transcript_reference": entry["transcript_reference"]}}
@@ -114,9 +119,19 @@ def main():
         flags = set(next(line.split(":", 1)[1].split() for line in cpuinfo.splitlines() if line.startswith("flags")))
         if not {"avx2", "fma", "f16c"} <= flags:
             raise RuntimeError("worker must support AVX2/FMA/F16C")
+        receipt["avx512_unavailable"] = not AVX512_FLAGS <= flags
+        if args.require_avx512 and receipt["avx512_unavailable"]:
+            receipt["skipped"] = "avx512-unavailable"
+            save()
+            (out / "summary.md").write_text(
+                "AVX512 unavailable: preflight only; no worker APT/model work, builds or numerical acceptance.\n")
+            return
         run(["bash", ROOT / "tools/ci-apt.sh", "update"], out, "apt-update", scratch)
         run(["bash", ROOT / "tools/ci-apt.sh", "install", "-y", "ccache", "libopenblas-dev",
              "libespeak-ng-dev", "espeak-ng", "pkg-config"], out, "apt-install", scratch)
+        import gguf
+        import numpy as np
+
         get = lambda spec: regression.hf_download(spec["repo"], spec["file"], spec["revision"], scratch)
         models = {"q4": get(entry["gguf"]), "f16": get({**entry["gguf"], **entry["diff_gguf"]})}
         for name, path in models.items():
@@ -134,10 +149,8 @@ def main():
         receipt["input_sha256"] = {name: sha256(path) for name, path in
                                    {**models, "reference": ref, "sample": sample}.items()}
         profiles = ["native", "avx2"]
-        if {"avx512f", "avx512cd", "avx512bw", "avx512dq", "avx512vl"} <= flags:
+        if AVX512_FLAGS <= flags:
             profiles.append("avx512")
-        else:
-            receipt["avx512_unavailable"] = True
         for profile in profiles:
             case = out / profile
             case.mkdir(exist_ok=True)

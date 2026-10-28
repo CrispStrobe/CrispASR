@@ -1,0 +1,63 @@
+{
+  "complete": true,
+  "scope": "Independently verified AVX2-only worker controls; no AVX512 causation or gate change.",
+  "run": 40723799365,
+  "artifact": 12836031087,
+  "source": "bf724a8e57a2279ba37ea8b33215301ca45d8f73",
+  "cpu": "AMD EPYC 7763",
+  "compiler": "GNU 13.3.0",
+  "avx512_available": false,
+  "profiles": {
+    "native": {
+      "models": {
+        "q4": {
+          "raw_transcript": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
+          "repeats": 3,
+          "identical_repeated_logits": true,
+          "logits_sha256": "266f9b9d9483f88dcfd144e14d8268028b9303653c08692dc036835fab5b8bec",
+          "both_pipeline_controls_exact_normalized": true
+        },
+        "f16": {
+          "raw_transcript": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
+          "repeats": 3,
+          "identical_repeated_logits": true,
+          "logits_sha256": "90007bd32470badf4a63295777de83958c67ab8808bbcdb97f56a9671dca9f1a",
+          "both_pipeline_controls_exact_normalized": true
+        }
+      },
+      "f16_cosine_min": 0.999141
+    },
+    "avx2": {
+      "models": {
+        "q4": {
+          "raw_transcript": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
+          "repeats": 3,
+          "identical_repeated_logits": true,
+          "logits_sha256": "266f9b9d9483f88dcfd144e14d8268028b9303653c08692dc036835fab5b8bec",
+          "both_pipeline_controls_exact_normalized": true
+        },
+        "f16": {
+          "raw_transcript": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU ASK WHAT YOU CAN DO FOR YOUR COUNTRY",
+          "repeats": 3,
+          "identical_repeated_logits": true,
+          "logits_sha256": "90007bd32470badf4a63295777de83958c67ab8808bbcdb97f56a9671dca9f1a",
+          "both_pipeline_controls_exact_normalized": true
+        }
+      },
+      "f16_cosine_min": 0.999141
+    }
+  },
+  "resources": {
+    "checks": 26,
+    "minimum_available_bytes": 15443767296,
+    "maximum_load": 4.0224609375,
+    "cpus": 4
+  },
+  "input_sha256": {
+    "q4": "93b6ab01f1f83525157d797a385a3e9e014c6761d3e974351363adc452a86f7e",
+    "f16": "4df9cc50b7f5340488fa64f5ead34f93660c6ff8785e7e71a859a8860a13254e",
+    "reference": "ab4151f868b958d9461719ba8142c2f5c8f104fac2c2987539aa6f041bc7ac1a",
+    "sample": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e"
+  },
+  "pending": "Actual AVX512 host, repeated Q4/F16/raw/pipeline controls on that host."
+}

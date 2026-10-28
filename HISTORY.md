@@ -1,3 +1,17 @@
+## 2026-10-28 — Data2vec AVX2 F16 transcript controls verified
+
+Hosted worker 40723799365 passes on EPYC 7763/GNU 13.3.0. Independent retained-byte
+checks verify 12 repeated raw Q4/F16 transcripts, eight pipeline controls, two F16
+stage checks and 26 resource guards; both native/AVX2 stage minima are 0.999141.
+The host has no AVX-512, so this does not explain the failing 9V74 profile and no
+gate changes. [Verified controls](docs/data2vec-avx2-controls-2026-10-28.json).
+
+The worker now supports `--require-avx512`, retaining a capability-only receipt
+on unsuitable hosts before worker APT/model downloads or native builds. Workflow
+Python setup still occurs. Two unit controls verify refusal/progression; a green
+capability skip is explicitly not numerical acceptance. Follow-up is bounded to
+three serial capability attempts, not another blind AVX2 campaign.
+
 ## 2026-10-28 — v0.8.47 wrapper readbacks and retained positive CPU evidence
 
 All three v0.8.47 Rust/Dart publisher jobs (40711745994) pass. Independent full

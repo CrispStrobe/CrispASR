@@ -100,7 +100,8 @@ locations and exact recovery commands are in ignored notes, not in this ledger.
 Tasks A/B/D are claimed by the current maintainer agent from source `b967685fd`.
 Task A auditor rerun **40723794473** is dispatched; task B release
 **40711745769** has started building. Task D uses the bounded hosted worker
-`tools/ci-heavy/data2vec_cpu_profiles.py`, run **40723799365** at `bf724a8e5`, using Ubuntu 24.04.
+`tools/ci-heavy/data2vec_cpu_profiles.py`, run **40723799365** at `bf724a8e5`, has completed on Ubuntu 24.04/EPYC 7763.
+It passes the native/AVX2 controls, but this host has no AVX-512; task D is still open.
 Earlier Ubuntu 22.04 attempts A **40720956336** and D **40721782580** were
 canceled while queued; neither supplies an acceptance result. The audit runner
 is selectable without changing release build workers or tagged payloads.
@@ -212,6 +213,19 @@ what delayed the live wheel index for v0.8.46.
 - **Unproven:** CPU-sensitive quantization near ties. The failing normal CLI
   also used automatic punctuation and Whisper language identification; the F16
   stage comparison proves neither an exact F16 transcript nor pipeline identity.
+- **Current AVX2 result:** run **40723799365**, artifact **12836031087**,
+  succeeds on EPYC 7763/GNU 13.3.0. Independent raw-byte review verifies all
+  12 Q4/F16 repeated CTC transcripts, eight pipeline controls, two F16 stage
+  checks and 26 resource gates. Both profiles give cosine minimum 0.999141;
+  repeated logits are identical. [Verified controls](data2vec-avx2-controls-2026-10-28.json).
+  This supplies the missing AVX2 F16 transcript control, not the AVX-512 control.
+- **Next bounded allocation:** add `args=--require-avx512` to the dispatch below.
+  Keep at most three serial capability attempts; stop on the first suitable host
+  or preserve a hardware hold after three unsuitable attempts. An unsuitable
+  host returns `complete: false`, `skipped: avx512-unavailable` before worker APT,
+  model downloads or native builds. Normal workflow/Python setup still runs.
+  A green capability-skip job is not numerical acceptance. Require
+  `complete: true`, all three profiles including `avx512`, and actual outputs.
 - **Do:** run `tools/ci-heavy/data2vec_cpu_profiles.py` through `heavy-cpu.yml`
   with `pip="numpy gguf==0.17.1 huggingface_hub"`, runner `ubuntu-latest` (Ubuntu 24.04 for the current attempt).
   One source and immutable model/reference/vocabulary/audio pins are reused for

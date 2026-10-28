@@ -43,7 +43,10 @@ Not covered: execution on a physical AMD, Intel or ARM NVIDIA GPU (task E). The
 
 - v0.8.46 corrected wheel auditor: **40723794473**, Ubuntu 24.04, queued.
   Original Ubuntu 22.04 attempt 40720956336 was canceled while queued.
-- CPU-profile diagnostic: **40723799365** at `bf724a8e5`, Ubuntu 24.04, queued.
+- CPU-profile diagnostic: **40723799365** at `bf724a8e5`, Ubuntu 24.04/EPYC 7763,
+  succeeds for native/AVX2 only. Twelve raw controls, eight pipeline controls,
+  two F16 stage checks and 26 resource gates independently pass
+  ([receipt](data2vec-avx2-controls-2026-10-28.json)). AVX-512 remains unavailable.
   Original attempt 40721782580 was canceled while queued. No acceptance gate changed.
 - Native auditor now requires the exact reviewed asset set: 50 legacy names,
   plus the two new native bundles from v0.8.47. Nineteen auditor unit controls

@@ -68,6 +68,8 @@ on:
       - 'tools/ci-heavy/granite5*'
       - 'tests/test_granite5_regression.py'
       - 'tests/test_regression_diagnostics.py'
+      - 'tests/test_data2vec_cpu_profiles.py'
+      - 'tools/ci-heavy/data2vec_cpu_profiles.py'
       - 'tools/reference_backends/phonon2/**'
       - 'tools/reference_backends/parakeet_hf.py'
       - 'tools/reference_backends/index_echo.py'
@@ -95,6 +97,8 @@ on:
       - 'tools/ci-heavy/granite5*'
       - 'tests/test_granite5_regression.py'
       - 'tests/test_regression_diagnostics.py'
+      - 'tests/test_data2vec_cpu_profiles.py'
+      - 'tools/ci-heavy/data2vec_cpu_profiles.py'
       - 'tools/reference_backends/phonon2/**'
       - 'tools/reference_backends/parakeet_hf.py'
       - 'tools/reference_backends/index_echo.py'
@@ -182,6 +186,8 @@ jobs:
           python tests/test_regression_select.py -v
       - name: Run model-free failure diagnostics controls
         run: python -m unittest discover -s tests -p test_regression_diagnostics.py -v
+      - name: Run data2vec worker hardware preflight controls
+        run: python tests/test_data2vec_cpu_profiles.py -v
       - name: Run CSM metadata and capture guards
         run: |
           python tests/test_csm_rope_metadata.py -v
