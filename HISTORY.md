@@ -12,7 +12,8 @@ pass. Both regression drivers now pair a one-word Q4 fixture allowance with a
 mandatory zero-WER F16 transcript control. Model/reference pins and stage bars
 are unchanged. Missing declared stages now fail in the normal driver too.
 Model-free negative controls and retained-output replay cover the policy;
-new hosted production-run confirmation is still required. See the
+60 driver tests, seven diagnostics tests and 19 publication-audit tests pass.
+Targeted hosted production confirmation 40750908085 at `2c733b9c3` is queued. See the
 [current handoff](docs/maintenance-handoff.md#task-d--cpu-profile-cause-established-confirm-the-paired-regression-policy).
 
 ## 2026-10-28 — Hosted result-collection checkpoint

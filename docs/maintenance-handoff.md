@@ -16,13 +16,13 @@ in ignored local notes.
 ## Current state and first actions
 
 State at this wrap-up (2026-10-28): **v0.8.46 is published; v0.8.47 has partial public assets and
-its release run is still building.** Active follow-up work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
+its final release publish job is running; all 37 build jobs passed.** Active follow-up work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
 a fresh agent should confirm ownership before dispatching replacements.
 
 | Item | State | Evidence |
 |---|---|---|
-| v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit receipt **not yet green** (audit-script bug, now fixed; see task A). | [Receipt](release-publication-2026-10-28.md) |
-| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** is building. Partial public assets do not establish complete publication or acceptance. | Task B |
+| v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit 40736324867 PASS; task A complete. | [Receipt](release-publication-2026-10-28.md) |
+| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** has all 37 build jobs passed and 52 expected public asset names. Final publish is running; full byte and wheel audits remain pending. | Task B |
 | #557 issue | Code merged. Issue still **open**. No public comment posted yet. | Task C |
 | data2vec-base nightly gate | Same-host Q4 CPU-profile divergence verified; mandatory exact F16 control added. Hosted production confirmation remains. | Task D |
 
@@ -33,8 +33,8 @@ First actions for a fresh agent:
    (identified in the ignored local notes).
 2. Refresh open issues and PRs. Read each relevant whole thread (body, all
    comments, linked comments, latest follow-ups) before changing behavior. The
-   2026-10-28 check: open #456/#461/#483/#532/#557, zero open PRs, zero comments on #557.
-3. Do tasks A → B → C in order (each depends on the previous). D and E are independent.
+   2026-10-28 check: open #456/#461/#483/#532/#557/#558, zero open PRs, zero comments on #557.
+3. A is accepted; continue B → C in order. D is independently dispatched; E needs hardware.
 4. For any task, record owner, source SHA, exact missing behavior, acceptance gates,
    resources and next action in PLAN.md before starting. Do not recreate a passing campaign.
 
@@ -100,8 +100,8 @@ locations and exact recovery commands are in ignored notes, not in this ledger.
 A is complete: **40736324867** passed; its accepted full-distribution readback
 receipt is [retained here](release-v0846-wheel-audit-2026-10-28.json).
 B native producer **40711745769** has all 37 build jobs successful and the exact
-52 expected public asset names. Its final safety-net `publish` job is still
-queued; Python wheel production and both v0.8.47 publication audits remain pending.
+52 expected public asset names. Its final safety-net `publish` job is
+running; Python wheel production and both v0.8.47 publication audits remain pending.
 D **40735433388** completed on EPYC 9V74 with all three actual CPU profiles.
 Its independently decoded retained arrays establish the quantized profile
 sensitivity. No further capability attempts are needed. See task D for the fix
@@ -242,9 +242,13 @@ what delayed the live wheel index for v0.8.46.
   degradation/absence, incomplete configuration, separate diagnostic retention,
   and replay of all three profiles through the actual Kaggle validation function.
   These checks do not claim a new hosted inference run.
-- **Next:** after committing/pushing, dispatch `regression.yml --ref main`
-  with `diagnostic_backend=data2vec-base`, `granite5_only=false`. Record the
-  exact source SHA/run ID. Require actual data2vec execution, Q4 and exact F16
+- **Dispatched:** targeted production regression **40750908085** at committed
+  source `2c733b9c3335b2a909d527041fb90ec360d070ff`, `regression.yml --ref main`,
+  `diagnostic_backend=data2vec-base`, `granite5_only=false`. It is queued; do
+  not duplicate it. Local validation passed 60 driver, seven diagnostics and
+  19 publication-audit tests, plus all five privacy guards. The ad hoc Ruff
+  check reports the same seven pre-existing findings as the parent; no new
+  findings. **Next:** collect the hosted run. Require actual execution, Q4 and exact F16
   transcript passes, stage pass, and retained host/build/transcript evidence.
   A pending/skipped overall green workflow is not acceptance. Do not repeat
   capability probes, rebake targets, change kernels or use human words as the
