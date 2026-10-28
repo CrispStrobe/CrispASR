@@ -1,3 +1,11 @@
+## 2026-10-28 — v0.8.47 native publication accepted
+
+Auditor 40751444564 passes complete/acceptance with all 52 full anonymous asset
+readbacks, required notices/runtime checks and qualified library inventory.
+The receipt and full relative-path inventory are retained publicly. Python
+wheel producer 40751349609 and the later wheel/index audit remain pending.
+No tag or release asset was rewritten. #557 stays open for review.
+
 ## 2026-10-28 — OpenVoice pretrained failure isolated
 
 The read-only conditioning worker reached actual T4 CUDA execution and rejected

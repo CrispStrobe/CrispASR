@@ -16,13 +16,13 @@ in ignored local notes.
 ## Current state and first actions
 
 State at this wrap-up (2026-10-28): **v0.8.46 is published; v0.8.47 has partial public assets and
-its native release run has passed all 38 jobs including final publication. Native byte audit and Python wheels are queued.** Active follow-up work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
+its native release run has passed all 38 jobs including final publication. Native byte audit passed; Python wheels remain queued.** Active follow-up work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
 a fresh agent should confirm ownership before dispatching replacements.
 
 | Item | State | Evidence |
 |---|---|---|
 | v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit 40736324867 PASS; task A complete. | [Receipt](release-publication-2026-10-28.md) |
-| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 and wheel producer 40751349609 are queued. | Task B |
+| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 is accepted; wheel producer 40751349609 remains queued. | Task B |
 | #557 issue | Code merged. Issue still **open**. No public comment posted yet. | Task C |
 | data2vec-base nightly gate | Same-host Q4 CPU-profile divergence verified; mandatory exact F16 control added. Hosted production confirmation remains. | Task D |
 
@@ -101,12 +101,14 @@ A is complete: **40736324867** passed; its accepted full-distribution readback
 receipt is [retained here](release-v0846-wheel-audit-2026-10-28.json).
 B native producer **40711745769** has all **38 jobs successful**, including
 final publish, and the exact 52 expected public asset names. Native readback
-audit **40751444564** is queued on `ubuntu-latest`, auditor source
+audit **40751444564** passed on `ubuntu-latest` with `complete: true, acceptance: true`, auditor source
 `bda9d00ce6209a7811dccc5a996077b8bdc2521d`, pinned tag source
 `5f87a56265e4bbd7e2adc7052254e576d5774abb`, release_run `40711745769`,
 `repair_notices=false`. Automatic Python wheel producer **40751349609** is
 also queued (`workflow_run`, workflow source `2c733b9c3`; release inputs remain
-the frozen tag). Preserve both runs. Wheel readback still waits for successful
+the frozen tag). Preserve both runs. The [accepted native receipt](release-v0847-native-audit-2026-10-28.json)
+and [full inventory](release-v0847-native-assets-2026-10-28.json) are retained.
+Wheel readback still waits for successful
 wheel/index/Pages publication and the accepted native inventory.
 D **40735433388** completed on EPYC 9V74 with all three actual CPU profiles.
 Its independently decoded retained arrays establish the quantized profile
@@ -147,9 +149,10 @@ what delayed the live wheel index for v0.8.46.
 
 ### Task B — verify the v0.8.47 publication
 
-- **Live:** native producer completed; collect existing native audit
-  **40751444564** and wheel producer **40751349609**. Steps 1–2 below are
-  complete for job results and asset names; full byte acceptance is pending.
+- **Live:** native producer and native audit **40751444564** are accepted.
+  Collect existing wheel producer **40751349609**; use `native_audit_run=40751444564`
+  for the eventual wheel verifier. Steps 1–2 below are
+  complete for native job results, asset names and full byte acceptance.
 
 - **Do, in order:**
   1. Wait for release run **40711745769** (tag `v0.8.47`). Every build job must
@@ -286,6 +289,16 @@ what delayed the live wheel index for v0.8.46.
   input CPU/CUDA replay is the next gate; full speech acceptance is not claimed.
   [All stages](openvoice-original-parity-failure-2026-10-28.json) and
   [repair method](openvoice2-baking.md#first-pretrained-numerical-failure-and-bounded-repair).
+- The frozen replay data attachment is ready: real model/reference data only,
+  with MIT notices and synthetic-audio provenance. Model SHA-256
+  `483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255`;
+  original reference SHA-256
+  `259993b526944e8e36ccca436e005cbc3935a46636b42c618cfd5c3d19429c8f`.
+  Use `tools/kaggle/openvoice-fixed-replay` once its current source is pushed.
+  The worker retains clone/header base `6be9fda36` and audited ggml `0a8620765`,
+  overlaying only model CPP `581234dfb` (SHA-256 verified). Current main's
+  ggml is newer; passing this frozen-runtime repair is not whole-current-ggml
+  qualification. No full SDK rebuild is needed.
 - Old bake v2 is a terminal CPU-backend registration abort. The prepared
   dynamic-backend/module-discovery repair was never qualified by that run.
 - Conditioning kernel version 1, worker `.2` (2026-10-28), compiled both

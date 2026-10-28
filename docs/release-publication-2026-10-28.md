@@ -34,10 +34,10 @@ policy and remaining hosted confirmation are tracked as task D.
 | CI / Lint / Secret scan on tag source | 40689967257 / 40689967286 / 40689967265 | pass |
 | Vulkan lib producer dry run (branch) | 40460158618 | pass: build, relocated dlopen verify, dependency gate (`libvulkan.so.*` host) |
 | ARM64 CUDA lib producer dry run (branch) | 40661942703 | pass: same gates (CUDA runtime host) |
-| Release | 40711745769 | PASS: 38/38 jobs including final publish; exact 52-name public asset set checked. Full byte audit 40751444564 queued — task B |
+| Release | 40711745769 | PASS: 38/38 jobs including final publish; exact 52-name public asset set checked. Full byte audit 40751444564 accepted — task B |
 | Rust / Dart wrappers | 40711745994 | PASS: all three publisher jobs; three registry archives fully read back, registry SHA-256/version, original manifests, licenses and packaged source files match frozen tag ([receipt](release-wrappers-readback-2026-10-28.json)) |
 | Python wheels | 40751349609 | automatic workflow_run producer queued; no wheel acceptance yet |
-| Native byte publication audit | 40751444564 | queued; full 52-asset readback not yet accepted |
+| Native byte publication audit | 40751444564 | PASS: complete/acceptance true; all 52 full anonymous readbacks, notices/runtime/qualified-library inventory accepted. [Receipt](release-v0847-native-audit-2026-10-28.json), [inventory](release-v0847-native-assets-2026-10-28.json) |
 | Wheel publication audit | — | waits for wheels/index/Pages and accepted native inventory — task B |
 
 Not covered: execution on a physical AMD, Intel or ARM NVIDIA GPU (task E). The

@@ -1,0 +1,17 @@
+{
+  "tag": "v0.8.47",
+  "source": "5f87a56265e4bbd7e2adc7052254e576d5774abb",
+  "audit_source": "bda9d00ce6209a7811dccc5a996077b8bdc2521d",
+  "complete": true,
+  "acceptance": true,
+  "native": {
+    "complete": true,
+    "release_run": 40711745769,
+    "assets": 52,
+    "all_full_anonymous_readbacks": true,
+    "asset_records_artifact_member": "native-assets.json",
+    "asset_records": "release-v0847-native-assets-2026-10-28.json"
+  },
+  "audit_run": 40751444564,
+  "artifact_id": 12848063768
+}

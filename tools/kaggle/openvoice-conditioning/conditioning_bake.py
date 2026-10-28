@@ -6,8 +6,8 @@ from pathlib import Path
 import runpy
 import urllib.request
 
-WORKER_SOURCE = "aa0ae40669456a2ce748348a8f258cb14870ac42"
-WORKER_SHA256 = "3cb365e8cab7061ddad03918b56c2b6d92cc6b522dc034dbf27333433a977fa6"
+WORKER_SOURCE = "18cd593de480d1e9ef268570b1eb556edfd926da"
+WORKER_SHA256 = "3162084ed25d9788f6ca28e418eb2b4d8aa1d50eea0f55a0fa3a36feab7cbe21"
 print('OpenVoice conditioning bootstrap v2',
       'bootstrap_sha256=' + hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
       'worker_source=' + WORKER_SOURCE, 'worker_sha256=' + WORKER_SHA256, flush=True)
