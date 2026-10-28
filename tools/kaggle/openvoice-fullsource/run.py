@@ -132,6 +132,27 @@ set_property(TARGET ggml-cuda PROPERTY INTERFACE_LINK_LIBRARIES "ggml-base;CUDA:
         helper.save()
     helper.run(['git','-C',ROOT,'diff','--exit-code','--','src','include','examples/cli'],
                'unmodified-application-sources')
+    # Preserve this exact application before crash-prone inference. This is a
+    # private validation checkpoint, not an audited release package.
+    helper.guard_resources('checkpoint-current-application')
+    candidate=WORK/'candidate';candidate.mkdir(exist_ok=True)
+    for file in [BUILD/'bin/crispasr',BUILD/'bin/crispasr-diff']:
+        shutil.copy2(file,candidate/file.name)
+    for tree in [BUILD,GGML_LIB]:
+        for file in tree.rglob('*.so*'):
+            if not file.is_file():continue
+            dest=candidate/file.name
+            if dest.exists():
+                if helper.sha(dest)!=helper.sha(file):raise RuntimeError('Candidate DSO basename collision')
+            else:shutil.copy2(file,dest,follow_symlinks=False)
+    for name in ['LICENSE','THIRD_PARTY_NOTICES.txt']:
+        shutil.copy2(ROOT/name,candidate/name)
+        shutil.copy2(WORK/SDK_NAME/name,candidate/('ggml-provider-'+name))
+    (candidate/'provenance.json').write_text(json.dumps(receipt,indent=2))
+    with tarfile.open(OUT/'current-application-checkpoint.tar.gz','w:gz',compresslevel=1) as archive:
+        archive.add(candidate,arcname='candidate')
+    receipt['application_checkpoint_sha256']=helper.sha(OUT/'current-application-checkpoint.tar.gz')
+    helper.save()
     mounted=sorted(p for p in Path('/kaggle/input').rglob('validation.json')
                    if 'crispasr-openvoice-conditioning' in p.parts)
     if not mounted:raise RuntimeError('Accepted real conditioning data missing')
