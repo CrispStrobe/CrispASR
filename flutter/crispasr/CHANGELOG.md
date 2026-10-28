@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+## 0.8.47
+
+* **Packaging:** Linux GPU Python wheels and native bundles (#557). Dart
+  interfaces and native inference are unchanged.
+
 ## 0.8.46
 
 * **Models:** the managed Nemotron download now selects the original-qualified
