@@ -44,11 +44,22 @@ def wer(expected, actual):
     return row[-1] / max(1, len(a))
 
 
+def cuda_vocoder_segments(log):
+    # Exclude earlier Melo/BERT CUDA work from the converter's proof.
+    windows = re.findall(r'openvoice2: flow reverse[^\n]*\n(.*?)openvoice2: HiFi-GAN output [1-9]\d* samples',
+                         log, re.S)
+    return sum(bool(re.search(r'^## SPLIT #\d+: CUDA', window, re.M)) for window in windows)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--audio-public-key', required=True)
+    parser.add_argument('--device', choices=['cpu','cuda'], default='cpu')
+    parser.add_argument('--inputs', type=Path)
+    parser.add_argument('--build-dir', type=Path)
     args = parser.parse_args()
-    if os.environ.get('GITHUB_ACTIONS') != 'true':
+    kaggle = Path('/kaggle/working').is_dir() and Path('/kaggle/input').is_dir()
+    if os.environ.get('GITHUB_ACTIONS') != 'true' and not (kaggle and args.device == 'cuda'):
         raise RuntimeError('Hosted-only validation; do not build or infer locally')
     if len(bytes.fromhex(args.audio_public_key)) != 32:
         raise ValueError('Expected X25519 public key')
@@ -56,15 +67,15 @@ def main():
     out = Path(os.environ['HEAVY_OUT']); out.mkdir(parents=True, exist_ok=True)
     scratch = Path(os.environ['HEAVY_SCRATCH']) / 'openvoice-interfaces'
     scratch.mkdir(parents=True, exist_ok=True)
-    data = scratch / 'inputs'; data.mkdir(exist_ok=True)
+    data = args.inputs or scratch / 'inputs'; data.mkdir(exist_ok=True)
     private = scratch / 'private'; private.mkdir(exist_ok=True)
-    build = scratch / 'build'
+    build = args.build_dir or scratch / 'build'
     account = os.environ.get('KAGGLE_ACCOUNT', '')
-    receipt = dict(schema=1, complete=False, acceptance=False, scope='Full current-source CPU library and actual CLI',
+    receipt = dict(schema=1, complete=False, acceptance=False, scope='Current-source library and actual CLI; device='+args.device,
         source=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         ggml=subprocess.check_output(['git', '-C', ROOT/'ggml', 'rev-parse', 'HEAD'], text=True).strip(),
         resource_checks=[], phases={}, cases=[], limitations=[
-            'CPU acceptance; actual CUDA CLI still requires a CUDA build and physical GPU',
+            'Full-source CPU build on Actions; CUDA profile may reuse pinned matching ggml DSOs',
             'Model-generated references; preset identity unknown; no voice rights clearance',
             'No model publication or registry default promotion',
             'Speaker gain gates content-only marked clones; disclosed clips also require full-text and rate gates'])
@@ -77,6 +88,11 @@ def main():
         state = dict(phase=label, available_bytes=int(memory['MemAvailable'].split()[0])*1024,
                      load=list(os.getloadavg()), cpus=os.cpu_count() or 1,
                      scratch_free_bytes=shutil.disk_usage(scratch).free)
+        if args.device == 'cuda':
+            free = subprocess.check_output(['nvidia-smi','--query-gpu=memory.free','--format=csv,noheader,nounits'],text=True)
+            state['gpu_free_mib'] = [int(x) for x in free.splitlines() if x.strip()]
+            if not state['gpu_free_mib'] or min(state['gpu_free_mib']) < 1024:
+                raise RuntimeError('Insufficient actual GPU headroom')
         receipt['resource_checks'].append(state); save()
         if state['available_bytes'] < 3*1024**3 or state['load'][0] > 2*state['cpus'] or state['scratch_free_bytes'] < 2*1024**3:
             raise RuntimeError('Insufficient hosted resources before ' + label)
@@ -95,17 +111,18 @@ def main():
     try:
         # The token is used solely to read this account's existing real-data
         # kernel outputs. No model, archive, or cache dataset is created.
-        if not account or not os.environ.get('KAGGLE_API_TOKEN'):
-            raise RuntimeError('Missing configured Kaggle read credentials')
-        from kaggle import KaggleApi
-        api = KaggleApi(); api.authenticate()
-        pattern = r'(validation\.json|openvoice2-tcc-f32sens\.gguf|reference-[01]\.gguf|reference\.wav|original-[01]\.wav|reference-(ATTRIBUTION|OpenVoice-LICENSE)\.txt)$'
-        token = None
-        while True:
-            _, token = api.kernels_output(account + '/crispasr-openvoice-conditioning', path=str(data),
-                                          file_pattern=pattern, quiet=True, page_token=token, page_size=100)
-            if not token:
-                break
+        if args.inputs is None:
+            if not account or not os.environ.get('KAGGLE_API_TOKEN'):
+                raise RuntimeError('Missing configured Kaggle read credentials')
+            from kaggle import KaggleApi
+            api = KaggleApi(); api.authenticate()
+            pattern = r'(validation\.json|openvoice2-tcc-f32sens\.gguf|reference-[01]\.gguf|reference\.wav|original-[01]\.wav|reference-(ATTRIBUTION|OpenVoice-LICENSE)\.txt)$'
+            token = None
+            while True:
+                _, token = api.kernels_output(account + '/crispasr-openvoice-conditioning', path=str(data),
+                                              file_pattern=pattern, quiet=True, page_token=token, page_size=100)
+                if not token:
+                    break
         if sha(data/'validation.json') != CONDITIONING_SHA256:
             raise ValueError('Accepted conditioning receipt changed')
         original = json.loads((data/'validation.json').read_text())
@@ -129,11 +146,18 @@ def main():
                 shutil.copyfileobj(response, dest)
             if sha(path) != digest:
                 raise ValueError('Melo/BERT checksum mismatch')
-        run(['cmake', '-S', ROOT, '-B', build, '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_SHARED_LIBS=ON',
-             '-DGGML_NATIVE=OFF', '-DGGML_CUDA=OFF', '-DGGML_METAL=OFF', '-DGGML_VULKAN=OFF',
-             '-DGGML_BLAS=OFF', '-DCRISPASR_BUILD_SERVER=OFF', '-DCRISPASR_BUILD_TESTS=OFF'], 'configure')
-        run(['cmake', '--build', build, '--target', 'crispasr-cli', 'crispasr-lib', 'crispasr-diff', '-j2'],
-            'build-current-source', timeout=7200)
+        if args.build_dir is None:
+            run(['cmake', '-S', ROOT, '-B', build, '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_SHARED_LIBS=ON',
+                 '-DGGML_NATIVE=OFF', '-DGGML_CUDA=OFF', '-DGGML_METAL=OFF', '-DGGML_VULKAN=OFF',
+                 '-DGGML_BLAS=OFF', '-DCRISPASR_BUILD_SERVER=OFF', '-DCRISPASR_BUILD_TESTS=OFF'], 'configure')
+            run(['cmake', '--build', build, '--target', 'crispasr-cli', 'crispasr-lib', 'crispasr-diff', '-j2'],
+                'build-current-source', timeout=7200)
+        elif not (build/'CMakeCache.txt').exists():
+            raise RuntimeError('Requested rebuilt application is absent')
+        cache = (build/'CMakeCache.txt').read_text()
+        homes = [line.split('=',1)[1] for line in cache.splitlines() if line.startswith('CMAKE_HOME_DIRECTORY:INTERNAL=')]
+        if len(homes) != 1 or Path(homes[0]).resolve() != ROOT.resolve():
+            raise RuntimeError('Build does not belong to the current source tree')
         libraries = list(build.rglob('libcrispasr.so'))
         if len(libraries) != 1:
             raise RuntimeError('Expected one rebuilt shared library')
@@ -142,27 +166,33 @@ def main():
         receipt['model_source_sha256'] = {name: sha(ROOT/name) for name in [
             'src/openvoice2.cpp', 'src/melotts.cpp', 'src/crispasr_c_api.cpp',
             'examples/cli/crispasr_backend_melotts.cpp']}
-        env = dict(os.environ, CRISPASR_OV2_GPU='0', CRISPASR_MELOTTS_BERT=str(bert),
+        env = dict(os.environ, CRISPASR_OV2_GPU='1' if args.device == 'cuda' else '0', CRISPASR_MELOTTS_BERT=str(bert),
                    OMP_NUM_THREADS='2', OPENBLAS_NUM_THREADS='1')
         env.pop('CRISPASR_DIFF_USE_GPU', None); env.pop('LD_PRELOAD', None)
+        if args.device == 'cuda':
+            env['CRISPASR_DIFF_USE_GPU'] = '1'
+            env['GGML_SCHED_DEBUG'] = '1'
         for i in range(2):
             label = 'original-reference-' + str(i)
             run([build/'bin/crispasr-diff', 'openvoice2', data/'openvoice2-tcc-f32sens.gguf',
                  data/f'reference-{i}.gguf', ROOT/'samples/jfk.wav'], label, env=env, private_log=True)
             log = (private/(label+'.log')).read_text()
-            if log.count('[PASS]') != 27 or '[FAIL]' in log:
+            if log.count('[PASS]') != 27 or '[FAIL]' in log or (args.device == 'cuda' and cuda_vocoder_segments(log) != 1):
                 raise RuntimeError('Full-source original-reference gate failed')
         # Isolate native aborts so the parent can preserve encrypted evidence.
         run([sys.executable, __file__, '--session-child', library, melo,
-             data/'openvoice2-tcc-f32sens.gguf', data/'reference.wav', private],
+             data/'openvoice2-tcc-f32sens.gguf', data/'reference.wav', private, args.device],
             'rebuilt-session', env=env, private_log=True)
         session_result = json.loads((private/'session.json').read_text())
         if not session_result['complete'] or len(session_result['cases']) != 2 or session_result['invalid_native_ids'] != [-1,2147483647]:
             raise RuntimeError('Rebuilt Session matrix incomplete')
         receipt['session_controls'] = session_result
+        if args.device == 'cuda' and cuda_vocoder_segments((private/'rebuilt-session.log').read_text()) != 6:
+            raise RuntimeError('Rebuilt Session converter CUDA work incomplete')
         # Test the real command, with BERT specified independently from TCC.
         common = [cli, '--backend', 'melotts', '-m', melo, '--codec-model', bert,
-                  '-t', '2', '--no-gpu', '--seed', '42', '--speaker-identity', 'unknown']
+                  '-t', '2', '--seed', '42', '--speaker-identity', 'unknown']
+        common += ['--gpu-backend','cuda'] if args.device == 'cuda' else ['--no-gpu']
         for i, text in enumerate(TEXTS):
             run(common + ['--tts', text, '--tts-output', private/f'cli-baseline-{i}.wav'],
                 f'cli-baseline-{i}', env=env, private_log=True)
@@ -172,6 +202,15 @@ def main():
             run(clone + ['--no-spoken-disclaimer', '--accept-marking-responsibility',
                          '--tts-output', private/f'cli-clone-{i}.wav'], f'cli-clone-{i}', env=env, private_log=True)
             run(clone + ['--tts-output', private/f'cli-disclosed-{i}.wav'], f'cli-disclosed-{i}', env=env, private_log=True)
+            disclosed_log = (private/f'cli-disclosed-{i}.log').read_text()
+            if len(re.findall(r'openvoice2: HiFi-GAN output [1-9]\d* samples',disclosed_log)) != 1:
+                raise RuntimeError('Neutral disclosure was converted or requested clone did not execute')
+        if args.device == 'cuda':
+            for i in range(2):
+                log = (private/f'cli-clone-{i}.log').read_text()
+                if 'openvoice2: vocoder backend CUDA' not in log or cuda_vocoder_segments(log) != 1:
+                    raise RuntimeError('Actual CLI CUDA work was not observed')
+            receipt['cli_cuda_observed'] = True
         guard('independent-quality')
         import numpy as np
         import soundfile as sf
@@ -230,8 +269,8 @@ def main():
         save()
 
 
-def session_child(library, melo, converter, reference, private):
-    if os.environ.get('GITHUB_ACTIONS') != 'true':
+def session_child(library, melo, converter, reference, private, device='cpu'):
+    if os.environ.get('GITHUB_ACTIONS') != 'true' and not (device == 'cuda' and Path('/kaggle/working').is_dir()):
         raise RuntimeError('Hosted-only native Session child')
     import ctypes as ct
     import numpy as np
@@ -246,6 +285,11 @@ def session_child(library, melo, converter, reference, private):
         row = dict(phase=label, available_bytes=int(memory['MemAvailable'].split()[0])*1024,
                    load=list(os.getloadavg()), cpus=os.cpu_count() or 1,
                    scratch_free_bytes=shutil.disk_usage(private).free)
+        if device == 'cuda':
+            free = subprocess.check_output(['nvidia-smi','--query-gpu=memory.free','--format=csv,noheader,nounits'],text=True)
+            row['gpu_free_mib'] = [int(x) for x in free.splitlines() if x.strip()]
+            if not row['gpu_free_mib'] or min(row['gpu_free_mib']) < 1024:
+                raise RuntimeError('Insufficient GPU headroom before '+label)
         state['resource_checks'].append(row);save()
         if row['available_bytes'] < 3*1024**3 or row['load'][0] > 2*row['cpus'] or row['scratch_free_bytes'] < 2*1024**3:
             raise RuntimeError('Insufficient hosted resources before '+label)
@@ -271,7 +315,7 @@ def session_child(library, melo, converter, reference, private):
         state['invalid_native_ids'].append(invalid);save()
     for i,text in enumerate(TEXTS):
         guard('session-open')
-        with Session(str(melo),lib_path=str(library),n_threads=2,use_gpu=False,verbosity=1) as session:
+        with Session(str(melo),lib_path=str(library),n_threads=2,use_gpu=(device=='cuda'),verbosity=1) as session:
             if session.backend!='melotts':raise RuntimeError('Architecture detection failed')
             session.set_tts_seed(42);session.set_speaker_id(0);session.set_speaker_identity('unknown')
             guard('session-baseline');baseline=session.synthesize(text)
