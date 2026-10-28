@@ -986,8 +986,21 @@ Per-word boost suffix: `"Berenz^5.0,NVIDIA^3.0,plain"`.
 |---|---|
 | **CTC-WS trie (Phase A)** — token-level logit boost during CTC/TDT decode | parakeet (CTC + TDT) |
 | **LLM prompt injection (Phase B)** — hotwords appended to the system/instruction prompt | qwen3-asr, voxtral |
-| **Free-form prompt injection** — separate `--context` flag, not `--hotwords` (see below) | vibevoice |
+| **Free-form prompt injection** — separate `--context` flag (see below) | qwen3, vibevoice |
 | Not applicable | voxtral4b (fixed streaming prompt), granite-nle (NAR, no text prompt), funasr (hardcoded prompt), whisper (use `--prompt` instead) |
+
+### Qwen3-ASR: `--context` (free-form system text)
+
+`--context "TEXT"` inserts the text verbatim into Qwen3-ASR's system message, matching upstream `qwen_asr`'s `context=` argument. Use it for prose such as recent dictations, names or topic context. Whitespace and punctuation are preserved; an empty string leaves the prompt byte-identical to omitting the flag. The forced-language assistant prefill (`language English<asr_text>` for `-l en`) stays intact.
+
+```bash
+crispasr --backend qwen3 -m auto -f dictation.wav -l en \
+    --context "Previous dictations: I met Zoë at Acme. We discussed the ggml integration."
+```
+
+If a system instruction is already present (`--ask`, translation or the legacy language-prompt flag), context follows it with a separating space. When `--hotwords` is also supplied, its existing "The following words may appear in the audio: …" hint follows the context.
+
+For Session/C API callers, set `CRISPASR_QWEN3_HOTWORDS_AS_CONTEXT=1` and pass the free-form text to `crispasr_session_set_hotwords()`. This reuses the existing hotwords setter, as VibeVoice does: the session text enters the system turn verbatim instead of being wrapped in the hotword sentence. Unset or `0` keeps the existing hotword behavior; clearing hotwords restores the original prompt. The flag applies only to Qwen3 sessions; CLI callers use `--context` directly. The realtime prefix-rollback path (`--stream-session`) and other Qwen-derived backends are unchanged.
 
 ### VibeVoice-ASR: `--context` (free-form prompt injection)
 
@@ -1328,7 +1341,7 @@ otherwise they are pyannote-local track IDs.
 | `--frequency-penalty F` | Penalize repeated generated token IDs on supported autoregressive backends. Useful with `-n` as a retry knob after cap-triggered degeneration. |
 | `--ask "TEXT"` | Replace the transcription instruction with a free-form question about the audio (audio-QA). Honoured by ark-asr, glm-asr, granite, higgs-stt, mimo-asr, qwen3, raon-speech (replaces "Transcribe the audio into text"), voxtral |
 | `--prefix-text "TEXT"` | Seed the assistant turn with an already-decoded transcript so the model continues from it instead of re-decoding; the output is the continuation only (granite-speech, #205) |
-| `--context "TEXT"` | Free-form prompt/context injection — vibevoice-asr only; see [Hotwords](#hotwords--contextual-biasing) |
+| `--context "TEXT"` | Free-form prompt/context injection — qwen3 system message or vibevoice-asr instruction prompt; see [Hotwords](#hotwords--contextual-biasing) |
 
 ## Multi-language / translation
 

@@ -30,7 +30,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_voxtral_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_voxtral4b_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_voxtral_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_higgs_stt_backend();
-std::unique_ptr<CrispasrBackend> crispasr_make_qwen3_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_qwen3_backend(bool context_enabled);
 std::unique_ptr<CrispasrBackend> crispasr_make_fastconformer_ctc_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_wav2vec2_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_vibevoice_backend();
@@ -175,7 +175,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
     if (name == "qwen3" || name == "qwen3-1.7b" || name == "qwen3_1.7b" || name == "qwen3_17b" || name == "mega-asr" ||
         name == "mega_asr" || name == "megaasr" || name == "raon-speech" || name == "raon-speech-9b" ||
         name == "raon_speech")
-        return crispasr_make_qwen3_backend(); // #455 Raon-Speech rides the qwen3-asr runtime
+        return crispasr_make_qwen3_backend(name == "qwen3" || name == "qwen3-1.7b" || name == "qwen3_1.7b" ||
+                                           name == "qwen3_17b");
     if (name == "fastconformer-ctc" || name == "fastconformer_ctc" || name == "canary-ctc" || name == "canary_ctc")
         return crispasr_make_fastconformer_ctc_backend();
     if (name == "wav2vec2" || name == "hubert" || name == "data2vec")

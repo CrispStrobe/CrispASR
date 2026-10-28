@@ -1321,6 +1321,7 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 ### Qwen3-ASR
 
 - `CRISPASR_QWEN3ASR_QUANT_AUDIO`
+- `CRISPASR_QWEN3_HOTWORDS_AS_CONTEXT` — opt in with `1` (any nonzero integer) to treat Qwen3 Session/C API hotwords as free-form system context, matching upstream `qwen_asr`'s `context=` argument. Pass the text with `crispasr_session_set_hotwords()`; its bytes are preserved without the "The following words may appear in the audio: …" wrapper. Existing language prefills and explicit questions remain independent. Unset or `0` preserves the default prompt byte-for-byte, as do empty hotwords in either mode. Read on each transcription. Applies only to Qwen3 sessions; the CLI uses `--context` directly. Realtime prefix-rollback streaming and other Qwen-derived backends are unchanged.
 
 ### Qwen3-ASR / Qwen3-TTS
 
