@@ -116,7 +116,7 @@ def tag_file(tag, name):
     return base64.b64decode(item["content"])
 
 
-def runtime_smoke(path):
+def runtime_smoke(path, version):
     """Exercise the downloaded portable CLI/C ABI without loading any model."""
     import tempfile
     if os.getloadavg()[0] > 2 * (os.cpu_count() or 1):
@@ -150,7 +150,7 @@ def runtime_smoke(path):
         (OUT / (path.name + ".smoke.log")).write_text(process.stdout + process.stderr)
         assert process.returncode == 0, (path.name, process.stdout, process.stderr)
         if path.name == "crispasr-linux-x86_64.tar.gz":
-            assert "0.8.45" in process.stdout
+            assert version in process.stdout
         return dict(exit_code=process.returncode, stdout=process.stdout.strip(), no_model_loaded=True)
 
 
@@ -413,7 +413,7 @@ def native(args, result):
                 repaired.unlink()
             record["members"] = members
             if name in {"crispasr-linux-x86_64.tar.gz", "libcrispasr-linux-x86_64.tar.gz"}:
-                record["runtime_smoke"] = runtime_smoke(path)
+                record["runtime_smoke"] = runtime_smoke(path, args.tag.removeprefix("v"))
             if "-non-cuda" in name:
                 assert not any(PurePosixPath(n).name.lower().startswith(("cublas", "cudart"))
                                for n in members), name
