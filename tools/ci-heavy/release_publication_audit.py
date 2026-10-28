@@ -362,6 +362,17 @@ def validate_cuda_payloads(records):
                        for k in ("bytes", "sha256", "link")), (name, relative)
 
 
+def require_native_asset_set(baseline_names, actual_names, version):
+    expected = {name.replace("0.8.44", version) for name in baseline_names if not name.endswith(".whl")}
+    if linux_gpu_wheels_expected(version):
+        expected.update({"libcrispasr-linux-x86_64-vulkan.tar.gz",
+                         "libcrispasr-linux-arm64-cuda.tar.gz"})
+    actual = {name for name in actual_names if not name.endswith(".whl")}
+    if actual != expected:
+        raise ValueError(f"Native asset set mismatch: missing={sorted(expected - actual)}, "
+                         f"unexpected={sorted(actual - expected)}")
+
+
 def native(args, result):
     run = api(f"actions/runs/{args.release_run}")
     assert run["status"] == "completed" and run["conclusion"] == "success", run
@@ -369,13 +380,11 @@ def native(args, result):
     assert run["event"] == "push" and run["head_branch"] == args.tag
     release = api(f"releases/tags/{args.tag}")
     baseline = api("releases/tags/v0.8.44")
-    expected = {a["name"].replace("0.8.44", args.tag.removeprefix("v")) for a in baseline["assets"]}
     # Wheels are produced by a later workflow and audited separately.
-    expected = {name for name in expected if not name.endswith(".whl")}
     assets = {a["name"]: a for a in release["assets"] if not a["name"].endswith(".whl")}
     if any(".notice-staged-" in n or ".notice-backup-" in n for n in assets):
         raise ValueError("Unfinished notice repair: recover using the retained repair receipt before rerunning")
-    assert expected <= assets.keys(), sorted(expected - assets.keys())
+    require_native_asset_set([a["name"] for a in baseline["assets"]], assets, args.tag.removeprefix("v"))
     notices = {name: tag_file(args.tag, name) for name in ("LICENSE", "THIRD_PARTY_NOTICES.txt")}
     records = {}
     for name, asset in sorted(assets.items()):

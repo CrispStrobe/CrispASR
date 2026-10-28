@@ -32,8 +32,23 @@ The controlled follow-up is tracked as task D.
 | CI / Lint / Secret scan on tag source | 40689967257 / 40689967286 / 40689967265 | pass |
 | Vulkan lib producer dry run (branch) | 40460158618 | pass: build, relocated dlopen verify, dependency gate (`libvulkan.so.*` host) |
 | ARM64 CUDA lib producer dry run (branch) | 40661942703 | pass: same gates (CUDA runtime host) |
-| Release | 40711745769 | in flight at hand-off — task B |
+| Release | 40711745769 | building, partial public assets; complete publication unverified — task B |
 | Wheels / wrappers / audits | — | not yet run — task B |
 
 Not covered: execution on a physical AMD, Intel or ARM NVIDIA GPU (task E). The
 `+hip` wheel cannot be load-tested on hosted runners.
+
+## Current follow-up attempts
+
+- v0.8.46 corrected wheel auditor: **40723794473**, Ubuntu 24.04, queued.
+  Original Ubuntu 22.04 attempt 40720956336 was canceled while queued.
+- CPU-profile diagnostic: **40723799365** at `bf724a8e5`, Ubuntu 24.04, queued.
+  Original attempt 40721782580 was canceled while queued. No acceptance gate changed.
+- Native auditor now requires the exact reviewed asset set: 50 legacy names,
+  plus the two new native bundles from v0.8.47. Nineteen auditor unit controls
+  pass; current public v0.8.45/v0.8.46 names pass, incomplete v0.8.47 is rejected.
+- The user explicitly requested keeping #557 open and preparing its final reply
+  for review. No comment was posted and no issue was closed.
+- Later source repair for standalone Parakeet word boundaries is separately
+  documented in [#558 scope](parakeet-word-boundary-558-2026-10-28.md). It is
+  outside frozen v0.8.47 and is not new speech/device acceptance.

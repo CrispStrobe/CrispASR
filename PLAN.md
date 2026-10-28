@@ -13,16 +13,16 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
 - Owner: current maintainer agent; starting source `b967685fd`.
-- A: corrected v0.8.46 wheel auditor 40720956336 is queued; accept only successful terminal receipt.
+- A: corrected v0.8.46 wheel auditor 40723794473 is queued on Ubuntu 24.04; accept only successful terminal receipt.
 - B: monitor existing v0.8.47 producers, then native/wheel audits and public readbacks; do not retag.
-- D: controlled CPU/F16 comparison 40721782580 at d89c7617d is queued; no gate relaxation without proof. The alleged previous data2vec pass was actually skipped.
+- D: controlled CPU/F16 comparison 40723799365 at bf724a8e5 is queued on Ubuntu 24.04; no gate relaxation without proof. The alleged previous data2vec pass was actually skipped.
 - Resources: light local inspection only; large builds/readbacks/inference on suitable Actions workers.
 - C: user requests keeping #557 open and preparing a reply for review; do not post or close. E remains hardware-dependent.
 - Newly opened #558: reproduced and repaired standalone-marker grouping, with model-free regression controls. Reporter audio/NeMo/CUDA acceptance remains pending; see [repair scope](docs/parakeet-word-boundary-558-2026-10-28.md).
 
 - v0.8.46 is **published**. Native audit passes; the wheel audit receipt is pending (task A).
-- v0.8.47 (#557 Linux GPU wheels) is **tagged** at `5f87a5626`. Release run
-  40711745769 was in flight; nothing about its outputs is verified (task B).
+- v0.8.47 (#557 Linux GPU wheels) has a **partial public release**, tagged at `5f87a5626`. Release run
+  40711745769 is still building; its complete publication is unverified (task B).
 - [Publication receipt](docs/release-publication-2026-10-28.md).
 
 ## Completed baseline
@@ -56,9 +56,9 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 | #456 Nyra | Appropriate model/output rights and distribution review. | Resolved production/hosted, derivative/recipient, output/training, WavLM-provenance and dependency obligations. No port/conversion behind a plain NC switch. |
 
 The user explicitly confirmed these inputs/devices/new permissions are unavailable.
-Refresh complete issue threads before resuming if new evidence arrives. Five
-issues were open at the 2026-10-28 check: #456, #461, #483, #532 and #557
-(implemented, awaiting tasks B/C); no PR was open. None was closed merely to finish this batch.
+Refresh complete issue threads before resuming if new evidence arrives. Six
+issues were open at the 2026-10-28 check: #456, #461, #483, #532, #557
+(implemented, awaiting publication acceptance) and new #558; no PR was open. None was closed merely to finish this batch.
 
 ## Parked work and historical detail
 

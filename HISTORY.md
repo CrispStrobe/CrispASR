@@ -1,3 +1,16 @@
+## 2026-10-28 — Strict native publication inventory and alternate readback worker
+
+The publication auditor now requires the exact reviewed native asset names,
+including both new v0.8.47 bundles; missing or unexpected names fail. Nineteen
+unit controls pass. Current public v0.8.45/v0.8.46 name sets pass, while the
+incomplete v0.8.47 set is correctly rejected. This name check is separate from
+full byte, notice, relocation and runtime readback acceptance.
+
+Readback audits can select Ubuntu 24.04 while retaining Ubuntu 22.04 as default;
+release builders and tags are unchanged. Replacement attempts A 40723794473 and
+D 40723799365 are queued after the prior Ubuntu 22.04 attempts were canceled
+while queued. [Current publication receipt](docs/release-publication-2026-10-28.md).
+
 ## 2026-10-28 — Parakeet standalone boundary repair and controlled nightly follow-up
 
 Repaired a demonstrated grouping defect: an interior standalone SentencePiece

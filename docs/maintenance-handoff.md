@@ -15,16 +15,17 @@ in ignored local notes.
 
 ## Current state and first actions
 
-State at this wrap-up (2026-10-28): **v0.8.46 is published; v0.8.47 is tagged and
-its release run was in flight.** No implementation claim is transferred: every
-open item below is unclaimed and must be claimed in [PLAN.md](../PLAN.md).
+State at this wrap-up (2026-10-28): **v0.8.46 is published; v0.8.47 has partial public assets and
+its release run is still building.** No implementation claim is transferred: every
+active work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
+a fresh agent should confirm ownership before dispatching replacements.
 
 | Item | State | Evidence |
 |---|---|---|
 | v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit receipt **not yet green** (audit-script bug, now fixed; see task A). | [Receipt](release-publication-2026-10-28.md) |
-| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** was queued at hand-off. Nothing about its outputs is verified. | Task B |
+| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** is building. Partial public assets do not establish complete publication or acceptance. | Task B |
 | #557 issue | Code merged. Issue still **open**. No public comment posted yet. | Task C |
-| data2vec-base nightly gate | One CPU-variance failure recorded, not fixed. | Task D |
+| data2vec-base nightly gate | Q4 transcript failure recorded; CPU causation unproven. | Task D |
 
 First actions for a fresh agent:
 
@@ -43,8 +44,8 @@ First actions for a fresh agent:
 | Area | Implemented and accepted | Limits / evidence |
 |---|---|---|
 | v0.8.46 release | Promotes the qualified Nemotron F16 default with OpenMDW notices, the VoxCPM2 host-permute timing split, and wheel notice/provenance staging. Published 2026-10-28; native and wheel publication pass. The verifier now takes `tag`/`source` inputs, and `REVIEWED_TAGS` lists v0.8.45–v0.8.47. | Wheel audit receipt pending (task A). v0.8.45 tag/assets untouched. [Receipt](release-publication-2026-10-28.md). |
-| #557 Linux GPU wheels (code) | Producers `build-libs-linux-x86_64-vulkan` and `build-libs-linux-arm64-cuda`. Wheel legs `linux-x86_64-vulkan`, `linux-x86_64-hip` (`--host-provided libomp.so`) and `linux-arm64-cuda`. A `whl/hip` index. A Linux Vulkan clean-venv loader smoke. Version-gated (≥ 0.8.47) exact auditor expectations. Shipped as v0.8.47. | Packaging only; no physical-GPU run (task E). Jetson excluded. Publication unverified at hand-off (task B). |
-| v0.8.45 release | Native, Python, Rust and Dart publication completed. Native assets, CUDA splits, package notices, registry distributions and live GPU indexes were read back and verified. | Immutable tag source `e58bb48b5`. Native audit 40304161701; wheel audit 40313434985. No release after v0.8.45 was published by this batch. [Publication receipt](release-publication-2026-10-26.json). |
+| #557 Linux GPU wheels (code) | Producers `build-libs-linux-x86_64-vulkan` and `build-libs-linux-arm64-cuda`. Wheel legs `linux-x86_64-vulkan`, `linux-x86_64-hip` (`--host-provided libomp.so`) and `linux-arm64-cuda`. A `whl/hip` index. A Linux Vulkan clean-venv loader smoke. Version-gated (≥ 0.8.47) exact auditor expectations. Tagged for v0.8.47; publication verification is pending. | Packaging only; no physical-GPU run (task E). Jetson excluded. Publication unverified at hand-off (task B). |
+| v0.8.45 release | Native, Python, Rust and Dart publication completed. Native assets, CUDA splits, package notices, registry distributions and live GPU indexes were read back and verified. | Immutable tag source `e58bb48b5`. Native audit 40304161701; wheel audit 40313434985. This earlier receipt predates the separately scoped v0.8.46/v0.8.47 work. [Publication receipt](release-publication-2026-10-26.json). |
 | Nemotron default | Managed downloads now select the pinned qualified F16 profile only, retain OpenMDW/origin notices, and reject stale-Q4/missing-Q4 substitution. CPU and actual T4 pass 26/26 original transcript matches, 22/22 VoxCPM prompts, unchanged stage/magnitude gates, CLI, opaque-filename C ABI and fresh/reused-session controls. | Former plain Q4 fails both devices (11/26 and 8/22), so it is not an accepted default. Explicit existing Q4 files remain diagnostic. Existing v0.8.45 binaries still require explicit F16 selection. [Policy and full proof](nemotron-default-policy-2026-10-26.md). |
 | Qwen3-TTS #555 | Incompatible Base packs are rejected before prefill; failed replacement preserves the previous pack. Designed clear defaults use the matching original 1024/2048-dimensional encoders for 0.6B/1.7B. CPU/T4 speech/reference controls pass. | Model-specific embeddings/codes are not interchangeable voice packs. Apache/MIT notices, recipes and original declarations are retained; speaker identity/likeness rights and human listening are not inferred from ASR. [Runtime proof](issue555-voice-pack-2026-10-23.json), [designed voices](qwen3-designed-voices.md). |
 | Granite5 #552 | Qualified mixed Q4_K is the approximately 4.07 GB default. Bare `crispasr-quantize input-f16.gguf output.gguf q4_k` reproduces the accepted model byte-for-byte. CPU/T4 original-reference and C ABI/default checks pass; full model/recipe notices are retained. | Native context remains 4096; no full-16k or speed claim. Q8/Q6 and earlier failed Q4 recipes remain rejected despite matching words. [Q4_K proof](granite5-q4k-2026-10-24.json). |
@@ -95,10 +96,12 @@ locations and exact recovery commands are in ignored notes, not in this ledger.
 ## Open tasks — fully scoped
 
 Tasks A/B/D are claimed by the current maintainer agent from source `b967685fd`.
-Task A auditor rerun **40720956336** is dispatched; task B release
+Task A auditor rerun **40723794473** is dispatched; task B release
 **40711745769** has started building. Task D uses the bounded hosted worker
-`tools/ci-heavy/data2vec_cpu_profiles.py`, run **40721782580** at `d89c7617d`.
-It retains that frozen source even if later Parakeet text-grouping changes land.
+`tools/ci-heavy/data2vec_cpu_profiles.py`, run **40723799365** at `bf724a8e5`, using Ubuntu 24.04.
+Earlier Ubuntu 22.04 attempts A **40720956336** and D **40721782580** were
+canceled while queued; neither supplies an acceptance result. The audit runner
+is selectable without changing release build workers or tagged payloads.
 No task needs a local model or GPU job.
 Before every push run the five privacy guards (see the ignored local notes for
 the account binding). Avoid bursts of pushes to main: each push cancels the
@@ -116,7 +119,8 @@ what delayed the live wheel index for v0.8.46.
   unit test (`test_linux_gpu_wheel_set_is_version_gated_and_flavors_exact`).
 - **Do:** dispatch `.github/workflows/verify-release-publication.yml` on main with
   `tag=v0.8.46`, `source=34a8e436192de19d3e5a872437edfe3fd26ce8c4`,
-  `wheel_run=40679618075`, `native_audit_run=40682766228`.
+  `wheel_run=40679618075`, `native_audit_run=40682766228`,
+  `runner=ubuntu-24.04` (the workflow default remains Ubuntu 22.04).
 - **Accept:** the run concludes `success`, and its `release-publication-<run>`
   artifact `receipt.json` has `complete: true, acceptance: true`. Add the run ID
   to [the receipt](release-publication-2026-10-28.md).
@@ -133,7 +137,10 @@ what delayed the live wheel index for v0.8.46.
      had passed only branch dry runs (40460158618, 40661942703).
   2. Confirm the release has every v0.8.46 asset name (with 0.8.47) plus
      `libcrispasr-linux-x86_64-vulkan.tar.gz` and `libcrispasr-linux-arm64-cuda.tar.gz`.
-     The native set is normally 52.
+     The native set is exactly the reviewed 50-name baseline plus these two
+     bundles (52); the auditor now rejects missing and unexpected names. Its
+     19 unit controls pass, including missing-bundle and extra-asset cases.
+     The current public v0.8.45/v0.8.46 name sets pass this stricter check.
   3. Wait for the `Release Python wheels` run it triggers (event `workflow_run`)
      and for `Release wrappers` (Rust/Dart). The wheel run must include and pass
      the GPU legs `linux-x86_64-vulkan`, `linux-x86_64-hip` and
@@ -197,7 +204,7 @@ what delayed the live wheel index for v0.8.46.
   also used automatic punctuation and Whisper language identification; the F16
   stage comparison proves neither an exact F16 transcript nor pipeline identity.
 - **Do:** run `tools/ci-heavy/data2vec_cpu_profiles.py` through `heavy-cpu.yml`
-  with `pip="numpy gguf==0.17.1 huggingface_hub"`, runner `ubuntu-22.04`.
+  with `pip="numpy gguf==0.17.1 huggingface_hub"`, runner `ubuntu-latest` (Ubuntu 24.04 for the current attempt).
   One source and immutable model/reference/vocabulary/audio pins are reused for
   sequential native, explicit AVX2 and (when supported) explicit AVX-512 builds.
   Actual compiler flags, CPU and resource evidence are retained. Each profile

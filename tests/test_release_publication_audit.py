@@ -216,6 +216,19 @@ class PublicationAuditTest(unittest.TestCase):
                 else:
                     self.assertEqual(self.audit.verify_native_wheel(archive, expected, {}), 2)
 
+    def test_native_asset_set_requires_both_new_bundles_and_rejects_extras(self):
+        baseline = {"crispasr-v0.8.44-xcframework.zip", "libcrispasr-linux-x86_64.tar.gz", "old.whl"}
+        old = {"crispasr-v0.8.46-xcframework.zip", "libcrispasr-linux-x86_64.tar.gz", "new.whl"}
+        self.audit.require_native_asset_set(baseline, old, "0.8.46")
+        current = {"crispasr-v0.8.47-xcframework.zip", "libcrispasr-linux-x86_64.tar.gz",
+                   "libcrispasr-linux-x86_64-vulkan.tar.gz", "libcrispasr-linux-arm64-cuda.tar.gz"}
+        self.audit.require_native_asset_set(baseline, current, "0.8.47")
+        for bundle in ["libcrispasr-linux-x86_64-vulkan.tar.gz", "libcrispasr-linux-arm64-cuda.tar.gz"]:
+            with self.subTest(missing=bundle), self.assertRaisesRegex(ValueError, "missing=.*" + bundle):
+                self.audit.require_native_asset_set(baseline, current - {bundle}, "0.8.47")
+        with self.assertRaisesRegex(ValueError, "unexpected=.*unreviewed"):
+            self.audit.require_native_asset_set(baseline, current | {"unreviewed.tar.gz"}, "0.8.47")
+
     def test_linux_gpu_wheel_set_is_version_gated_and_flavors_exact(self):
         # #557: v0.8.46 and older keep their original exact wheel set.
         self.assertFalse(self.audit.linux_gpu_wheels_expected("0.8.46"))
