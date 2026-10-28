@@ -6,9 +6,9 @@ from pathlib import Path
 import runpy
 import urllib.request
 
-WORKER_SOURCE = "d84007612167105cf24c7af80014d1f0ea1bd8a3"
-WORKER_SHA256 = "b1fed1e4518ceeb517c749be67ce3eeee9d3243153b5f50043f6edf9c4584f20"
-print('OpenVoice conditioning bootstrap v3',
+WORKER_SOURCE = "c5287611ef8416704a216d1a91c1a0fea5127a66"
+WORKER_SHA256 = "61435c8198ae6de1443c73c36905e4e8b9293a1f54bb17761ead4472011c9179"
+print('OpenVoice conditioning bootstrap v4',
       'bootstrap_sha256=' + hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
       'worker_source=' + WORKER_SOURCE, 'worker_sha256=' + WORKER_SHA256, flush=True)
 path = Path('/kaggle/temp/openvoice-conditioning-worker.py')
