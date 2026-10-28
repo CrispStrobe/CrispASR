@@ -724,7 +724,7 @@ public final class CrispasrSession extends CrispasrSessionTasks implements AutoC
     /** Select a multi-speaker backend's speaker by index. */
     public void setSpeakerId(int id) {
         int rc = Lib.INSTANCE.crispasr_session_set_speaker_id(nativeHandle(), id);
-        if (rc != 0 && rc != -2) throw new IllegalStateException("set_speaker_id failed (rc=" + rc + ")");
+        if (rc != 0) throw new IllegalStateException("set_speaker_id failed (rc=" + rc + ")");
     }
 
     /**

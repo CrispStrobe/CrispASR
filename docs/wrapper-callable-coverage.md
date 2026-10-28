@@ -466,3 +466,11 @@ repair (`setter swallowed rc=-2`); afterward its current/older-library runs
 pass 101/35 assertions. This proves wrapper error transport, not model quality.
 Native punctuation replacement unloads the old model before attempting the new
 load; the exception exposes that failure so callers can recover.
+
+Java `CrispasrSession.setSpeakerId` and Ruby `Session.set_speaker_id` had the
+same out-of-range `-2` omission. Both now reject it. Their real public adapters
+run against a shared two-speaker C fixture, accepting 0/1 and rejecting negative,
+upper-bound and maximum-integer IDs. Both new probes fail before the repair;
+afterward Java passes 95 current/9 older-ABI assertions and Ruby passes 343
+assertions, with all 155 Ruby context guards still checked. Python, Go, Rust
+and Dart already reject this error; WASM exposes the return code to its caller.

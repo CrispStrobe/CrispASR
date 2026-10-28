@@ -20,8 +20,15 @@ mixed-rate resampler equivalence remain separate scope.
 See [OpenVoice baking](../../../docs/openvoice2-baking.md) for gates, limitations
 and source identities. A successful submission/build is not model acceptance.
 
-The resource-guarded worker version is `2026-10-28.openvoice-conditioning.2`.
+The resource-guarded worker version is `2026-10-28.openvoice-conditioning.3`.
 It records available memory/load, scratch and GPU headroom before compilation
 and inference, and stops on insufficient resources. The bootstrap pins the
 exact worker source/hash; its model-free contract rejects stale delivery pins.
 The native model source and 27/28 stage, waveform and quality gates are unchanged.
+
+Kernel version 1 used worker `.2`: delta builds/conversion passed on two T4s,
+then Hub repository creation returned 403 before inference. It is not model
+acceptance. Worker `.3` retains model/reference/notice checkpoints locally by
+default. Publication requires `CRISPASR_OV2_PUBLISH=1` plus suitable Hub rights,
+and its completion is recorded separately from numerical acceptance. Preserve
+the previous terminal log/output before submitting the software repair.

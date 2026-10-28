@@ -26,12 +26,30 @@ or native inference phase; insufficient resources stop before work. The two
 host C++ delta compilations remain sequential and use the shared harness
 heartbeat. No ggml/CUDA SDK rebuild or Torch reinstall is needed.
 
-The follow-up remains unsubmitted until current session capacity is confirmed.
-An account-roster query hit API rate limiting; that is not evidence of a free
-GPU slot. Do not poll the entire historical kernel list in a burst. Collect a
-bounded current roster after backoff, respect the two-session cap, and never
-infer a running kernel's failure from missing mid-flight logs. The original
-27/28 stage, waveform, content and speaker gates remain unchanged.
+Conditioning kernel version **1**, worker
+`2026-10-28.openvoice-conditioning.2`, was admitted after a bounded capacity
+check. It received two T4s, passed both C++ delta compilations and conversion,
+and retained five successful resource checks. It then failed with HTTP 403
+while trying to create a Hugging Face staging model repository, **before model
+loading or inference**. GPU allocation is not GPU execution. The receipt has
+`complete: false`, `model_acceptance: false`, `gpu_executed: false`.
+[Portable failed-attempt receipt](openvoice-conditioning-attempt-2026-10-28.json).
+The uploaded source, terminal log and output are preserved before replacement.
+
+Worker `2026-10-28.openvoice-conditioning.3` separates validation from publication.
+By default it saves the converted model, original references, full MIT notice,
+attribution and hash/size checkpoints in kernel output without requiring Hub
+write permissions. `CRISPASR_OV2_PUBLISH=1` explicitly enables publication and
+requires write access; a requested publication failure remains a failure.
+`publication_requested` and `publication_complete` are separate from numerical
+`model_acceptance`. No reference, stage, waveform, content or speaker gate is
+relaxed. Bounded model-free tests prove that read-only validation makes no Hub
+write calls and that denied requested writes preserve evidence and fail.
+
+Do not poll the entire historical kernel list in a burst: an initial roster
+query hit rate limiting. Use a bounded current roster after backoff, respect
+the two-session cap, and preserve the previous terminal artifacts before a
+software retry. Never infer a running kernel's failure from missing logs.
 
 ## Recipe and license boundary
 

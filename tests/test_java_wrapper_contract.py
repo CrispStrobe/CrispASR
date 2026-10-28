@@ -28,6 +28,11 @@ public class WrapperAbiProbe {
     public static void main(String[] args) {
         float[] pcm={1,3,5};boolean old=args.length>0;
         try(CrispasrSession s=CrispasrSession.open("probe",4)) {
+            s.setSpeakerId(0);s.setSpeakerId(1);
+            for(int id:new int[]{-1,2,Integer.MAX_VALUE}) {
+                try {s.setSpeakerId(id);throw new AssertionError("invalid speaker ID accepted: "+id);}
+                catch(IllegalStateException error) {eq(error.getMessage().contains("rc=-2"),true);}
+            }
             CrispasrSession.Segment a=s.transcribe(pcm)[0];
             eq(a.t0,123L);eq(a.words[0].t0,-1L);eq(a.words[0].hasTimestamps(),false);
             eq(a.words[0].alts[0].text,"alternative");eq(a.speaker,"speaker");

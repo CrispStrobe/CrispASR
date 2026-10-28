@@ -817,7 +817,7 @@ static VALUE rb_session_set_speaker_name(VALUE self, VALUE handle, VALUE name) {
 static VALUE rb_session_set_speaker_id(VALUE self, VALUE handle, VALUE id) {
     struct CrispasrSession* s = rb_extra_handle(handle);
     int rc = crispasr_session_set_speaker_id(s, NUM2INT(id));
-    if (rc != 0 && rc != -2)
+    if (rc != 0)
         rb_raise(rb_eRuntimeError, "set_speaker_id failed (rc=%d)", rc);
     return Qnil;
 }

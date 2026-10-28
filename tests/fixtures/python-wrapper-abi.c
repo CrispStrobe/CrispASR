@@ -3,6 +3,13 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Integer-speaker contract: this fixture exposes exactly two speakers.
+int crispasr_session_set_speaker_id(crispasr_session* s, int id) {
+    if (!s)
+        return -1;
+    return id >= 0 && id < 2 ? 0 : -2;
+}
+
 static int mode, live, calls, invalid_frees;
 static void* allocations[16];
 static float buffer[32];

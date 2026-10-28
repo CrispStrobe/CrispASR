@@ -3,9 +3,10 @@
 import ast
 import importlib.util
 import os
+import tempfile
 from pathlib import Path
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 ROOT=Path(__file__).resolve().parents[1]
 WORKER=ROOT/'tools/kaggle/openvoice-bake/openvoice_bake.py'
@@ -46,6 +47,41 @@ class WorkerContracts(unittest.TestCase):
                    and isinstance(node.value,ast.Constant)}
         self.assertRegex(constants['WORKER_SOURCE'],r'^[0-9a-f]{40}$')
         self.assertEqual(constants['WORKER_SHA256'],hashlib.sha256(WORKER.read_bytes()).hexdigest())
+
+    def test_read_only_validation_retains_checkpoints_without_hub_writes(self):
+        spec=importlib.util.spec_from_file_location('openvoice_worker',WORKER)
+        worker=importlib.util.module_from_spec(spec);spec.loader.exec_module(worker)
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);model=root/'model.gguf';ref=root/'reference.gguf';license_file=root/'LICENSE'
+            model.write_bytes(b'GGUF model probe');ref.write_bytes(b'GGUF original probe');license_file.write_text('MIT notice')
+            hub=Mock()
+            with patch.object(worker,'OUT',root),patch.object(worker,'PUBLISH',False):
+                worker.checkpoint_model(hub,model,'original-model-revision',license_file)
+                record=worker.checkpoint_reference(hub,ref,0,'unused/namespace','source attribution',license_file)
+                self.assertEqual(hub.mock_calls,[])
+                self.assertEqual(worker.RECEIPT['model_checkpoint']['sha256'],worker.sha(model))
+                self.assertEqual(record['sha256'],worker.sha(ref))
+                self.assertNotIn('published_revision',record)
+                self.assertEqual((root/'reference-OpenVoice-LICENSE.txt').read_text(),'MIT notice')
+                self.assertEqual((root/'reference-ATTRIBUTION.txt').read_text(),'source attribution')
+                self.assertFalse(worker.RECEIPT['model_acceptance'])
+
+    def test_requested_publication_denial_preserves_local_evidence_and_fails(self):
+        spec=importlib.util.spec_from_file_location('openvoice_worker',WORKER)
+        worker=importlib.util.module_from_spec(spec);spec.loader.exec_module(worker)
+        with tempfile.TemporaryDirectory() as temp:
+            root=Path(temp);model=root/'model.gguf';license_file=root/'LICENSE'
+            model.write_bytes(b'GGUF probe');license_file.write_text('MIT notice')
+            hub=Mock();hub.create_repo.side_effect=PermissionError('write denied')
+            hub.upload_file.side_effect=PermissionError('write denied')
+            with patch.object(worker,'OUT',root),patch.object(worker,'PUBLISH',True):
+                with self.assertRaises(PermissionError):
+                    worker.checkpoint_model(hub,model,'original-model-revision',license_file)
+                with self.assertRaisesRegex(RuntimeError,'publication failed'):
+                    worker.checkpoint_reference(hub,model,0,'unused/namespace','attribution',license_file)
+                self.assertEqual(worker.RECEIPT['model_checkpoint']['sha256'],worker.sha(model))
+                self.assertEqual(worker.RECEIPT['reference_checkpoints'][0]['publication_error'],'PermissionError')
+                self.assertFalse(worker.RECEIPT['model_acceptance'])
 
     def test_embedded_python_phases_compile(self):
         tree=ast.parse(WORKER.read_text())

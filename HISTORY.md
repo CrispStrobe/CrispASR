@@ -1,3 +1,19 @@
+## 2026-10-28 — Java/Ruby speaker errors and read-only OpenVoice proof
+
+Java and Ruby now reject out-of-range integer speaker IDs instead of swallowing
+native `-2`. New public-method fixtures fail before repair, then pass 95/9 Java
+current/older assertions and 343 Ruby assertions; existing ownership/context
+checks remain covered. These are bounded model-free adapter tests.
+
+OpenVoice conditioning version 1 compiled both deltas and converted weights on
+a T4 allocation, then failed Hub repository creation with 403 before inference.
+No GPU/model acceptance is claimed. The source, terminal logs and outputs are
+preserved. The repaired worker retains model/reference/notice checkpoints in
+kernel output and requires explicit opt-in for publishing, with separate status
+fields; its original numerical and speech gates remain unchanged. See
+[the receipt](docs/openvoice-conditioning-attempt-2026-10-28.json) and
+[the method](docs/openvoice2-baking.md).
+
 ## 2026-10-28 — C# explicit setter errors exposed
 
 `Session.SetPuncModel`, `SetVoice` and `SetSpeakerId` now reject native `-2`

@@ -18,6 +18,15 @@ def reject(type)
 end
 # Original 29 assertions (preserve exact semantics)
 h=s.open('probe',1)
+s.set_speaker_id(h,0);s.set_speaker_id(h,1)
+[-1,2,2147483647].each do |id|
+  begin
+    s.set_speaker_id(h,id)
+    raise "invalid speaker ID accepted: #{id}"
+  rescue RuntimeError => error
+    eq(error.message.include?('rc=-2'),true)
+  end
+end
 a=s.transcribe(h,[1,3,5]).first
 eq(a[:speaker],'speaker');eq(a[:words].first[:alts].first[:text],'alternative')
 eq(a[:tokens].size,2);eq(a[:tokens].map{|x|x[:raw_text]}.join.force_encoding('UTF-8'),'日')

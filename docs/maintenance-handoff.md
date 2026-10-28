@@ -277,6 +277,33 @@ what delayed the live wheel index for v0.8.46.
   - CPU and GPU transcripts compared.
 - **Record:** in HISTORY.md and the receipt.
 
+### Task F — OpenVoice2 conditioned-cloning proof (independent)
+
+- Old bake v2 is a terminal CPU-backend registration abort. The prepared
+  dynamic-backend/module-discovery repair was never qualified by that run.
+- Conditioning kernel version 1, worker `.2` (2026-10-28), compiled both
+  native C++ deltas and converted F32-sensitive weights on a two-T4 allocation,
+  then failed Hub repository creation with 403 **before inference**. All five
+  retained compute resource checks passed. `gpu_executed` and acceptance remain
+  false. [Portable receipt](openvoice-conditioning-attempt-2026-10-28.json).
+  Previous source/logs/output are retained privately; do not erase them.
+- Worker `.3` defaults to read-only validation: model/reference/notice/hash
+  checkpoints remain in kernel output. Only `CRISPASR_OV2_PUBLISH=1` requests
+  Hub writes, with separate `publication_requested/publication_complete` fields.
+  A denied requested write fails; it never becomes numerical acceptance.
+- Reuse frozen native source `6be9fda3629d9314da97101b8574fb25db06150f` and the
+  audited original runtime/ggml pins in the worker. The model math is unchanged
+  on main. The bootstrap has a full source/hash pin and a test for stale delivery.
+  Check current Kaggle capacity, submit the repaired worker once, record its
+  actual entry hash/source/hardware, then collect terminal evidence. Never fish
+  for a GPU or treat allocation/building as CUDA execution.
+- **Accept:** original 27/28 stage, magnitude and waveform gates; exact repeated
+  uninstrumented C API output; clip-mean conditioning and shared-noise controls;
+  actual CUDA vocoder work; independent baseline/original/clone ASR WER <=0.2
+  and speaker-similarity improvement >0.01. Preserve rejected controls and
+  upstream/model/input hashes and notices. No registry default promotion from
+  structural parity alone. See [the full method](openvoice2-baking.md).
+
 ### Scope notes kept from #557 review
 
 - GPU wheels never vendor a driver or vendor runtime (`LINUX_HOST_PROVIDED` in
@@ -329,7 +356,7 @@ outputs; define a new hypothesis/input and acceptance boundary.
 | Callable wrappers/lifecycle | Audit one genuinely missing exported/wrapped operation or new model/platform lifecycle case using [the coverage ledger](wrapper-callable-coverage.md). | Existing primitive repairs, high-level Go CPU lifecycle and accepted binding/metadata fixes are done. Raw low-level handles remain caller-serialized; API presence does not imply universal concurrent/model acceptance. |
 | Alignment #217 | Scope labeled natural-speech boundaries, additional long-form/model/device coverage using [the clean-room audit](alignment-cleanroom-2026-10-18.md). | Character/subword synthetic and bounded Japanese CPU evidence exists; #550 actual T4 memory/reuse is complete. Preserve default-off optimization gates and exact timestamps; do not repeat the accepted 45-minute CUDA matrix or claim Subtimer rankings. |
 | CANN | Obtain physical Ascend evidence under [the CANN TODO](cann-todo.md) and [layout procedure](cann-layout-followup-2026-10-20.md). | Host/SDK controls are accepted. Physical full-model placement, fallback, ACL replay and cache-on/off require target hardware; no Kaggle replacement. Keep optional caches off until qualified. |
-| OpenVoice2 | Recover current terminal status/artifact identity privately, then adopt one actual pretrained embedding/conditioning/quality case under [the baking method](openvoice2-baking.md). | Old queued/session-cap notes are stale. Synthetic encoder proof is not pretrained quality. Preserve original hooks, 27/28 stage gates, noise/clip-mean controls, WER <=0.2 and speaker improvement >0.01; do not relaunch an old worker blindly. |
+| OpenVoice2 | Active task F above uses the repaired read-only worker under [the baking method](openvoice2-baking.md). | Old queued/session-cap notes are stale. Synthetic encoder proof is not pretrained quality. Preserve original hooks, 27/28 stage gates, noise/clip-mean controls, WER <=0.2 and speaker improvement >0.01; do not relaunch an old worker blindly. |
 | Echo9B quantization | One identical-owned-input projection intervention, beginning with down-projection layer 25; [accepted attribution](index-echo-owned-ffn-audit-2026-10-19.json). | Seven recipes remain rejected. Component improvement is not complete EN/ZH trajectory, speech, cache, GPU or default acceptance. No duplicate attribution campaign. |
 | MiMo attention | Capture the actual failing 71-row Q/K/V, mask, scores/probabilities and pre-output projection with OFF/ON/OFF identity; [operator audit](mimo-attention-operator-2026-10-17.md). | Tiny F16-accumulator findings do not repair the F32 71-row path. Old cache-read/BLAS hypotheses were rejected. Preserve existing error gates and PR492's closed/unmerged status. |
 | Dia | Require a new operator hypothesis on identical original/native inputs; otherwise leave experimental. [Factorial results](dia-cuda-factorial-results-2026-10-16.json). | Original, precision/recipe, draw-placement and BOS/source sweeps did not recover all speech cases. Keep failed controls, seeds and thresholds; no token overrides or repeated full sweeps. |

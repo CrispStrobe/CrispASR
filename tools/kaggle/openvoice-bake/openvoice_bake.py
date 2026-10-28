@@ -21,7 +21,8 @@ import traceback
 import urllib.request
 
 CONDITIONING = os.environ.get('CRISPASR_OV2_CONDITIONING') == '1'
-VERSION = '2026-10-28.openvoice-conditioning.2' if CONDITIONING else '2026-10-28.openvoice-bake.4'
+PUBLISH = os.environ.get('CRISPASR_OV2_PUBLISH') == '1'
+VERSION = '2026-10-28.openvoice-conditioning.3' if CONDITIONING else '2026-10-28.openvoice-bake.5'
 SOURCE = '6be9fda3629d9314da97101b8574fb25db06150f' if CONDITIONING else '71e329ccfbb33dc99fa53743565292b1dba13b1e'
 UPSTREAM = '74a1d147b17a8c3092dd5430504bd83ef6c7eb23'
 BASE_SOURCE = '191815511b85a526aace111b1bda2e28ecb7faad'
@@ -33,6 +34,7 @@ ROOT = WORK / 'sdk'
 BUNDLE = WORK / 'bundle'
 RECEIPT = {'schema': 1, 'version': VERSION, 'source': SOURCE, 'upstream': UPSTREAM,
            'complete': False, 'model_acceptance': False, 'gpu_executed': False,
+           'publication_requested': PUBLISH, 'publication_complete': False,
            'cases': [], 'limitations': ['native reference encoder and flows are CPU; vocoder uses CUDA',
                                       'native-rate replay isolates resampling; raw reference without VAD',
                                       'tau0.3 uses original shared noise; free-running RNG parity is separate' if CONDITIONING else 'deterministic tau=0; upstream tau=0.3 quality separate',
@@ -77,6 +79,64 @@ def guard_resources(label):
             or state['load'][0] > 2 * state['cpus'] or not state['gpu_free_mib']
             or min(state['gpu_free_mib']) < 1024):
         raise RuntimeError('Insufficient worker headroom before ' + label)
+
+
+def checkpoint_model(hub, converted, model_rev, license_file):
+    """Retain producer bytes even when validation has no publishing rights."""
+    record = {'local_file': converted.name, 'bytes': converted.stat().st_size,
+              'sha256': sha(converted)}
+    if not record['bytes']:
+        raise ValueError('Empty converted model checkpoint')
+    RECEIPT['model_checkpoint'] = record
+    save()
+    if not PUBLISH:
+        return
+    repo = 'cstr/openvoice2-tcc-GGUF'
+    hub.create_repo(repo, repo_type='model', private=False, exist_ok=True)
+    if not hub.file_exists(repo, 'README.md'):
+        pending = ('---\nlicense: mit\npipeline_tag: audio-to-audio\n---\n\n'
+                   '# OpenVoice V2 GGUF experimental artifacts\n\n'
+                   'Files under staging/ are producer checkpoints, not accepted releases. '
+                   'Actual parity, GPU and speech-quality validation is pending.\n\n'
+                   'Original MIT model: https://huggingface.co/myshell-ai/OpenVoiceV2/tree/' + model_rev + '\n')
+        hub.upload_file(path_or_fileobj=pending.encode(), repo_id=repo, path_in_repo='README.md',
+                        commit_message='Mark producer staging artifacts unvalidated')
+    path = 'staging/' + VERSION + '/' + converted.name
+    staged = hub.upload_file(path_or_fileobj=str(converted), repo_id=repo, path_in_repo=path,
+                             commit_message='Checkpoint unvalidated conversion before hardware validation')
+    hub.upload_file(path_or_fileobj=str(license_file), repo_id=repo, path_in_repo='LICENSE',
+                    commit_message='Retain original MIT notice')
+    record.update(repo=repo, revision=staged.oid, path=path)
+    save()
+
+
+def checkpoint_reference(hub, ref, case, prefix, notice, license_file):
+    record = {'case': case, 'local_file': ref.name, 'bytes': ref.stat().st_size, 'sha256': sha(ref)}
+    if not record['bytes']:
+        raise ValueError('Empty original reference checkpoint')
+    (OUT / 'reference-ATTRIBUTION.txt').write_text(notice)
+    shutil.copy2(license_file, OUT / 'reference-OpenVoice-LICENSE.txt')
+    RECEIPT.setdefault('reference_checkpoints', []).append(record)
+    save()
+    if not PUBLISH:
+        return record
+    try:
+        published = hub.upload_file(path_or_fileobj=str(ref), repo_id='cstr/crispasr-regression-fixtures',
+            repo_type='dataset', path_in_repo=f'{prefix}/reference-{case}.gguf',
+            commit_message=f'OpenVoice original-module reference case {case}; quality gate separate')
+        record['published_revision'] = published.oid
+        hub.upload_file(path_or_fileobj=notice.encode(), repo_id='cstr/crispasr-regression-fixtures',
+            repo_type='dataset', path_in_repo=prefix+'/ATTRIBUTION.txt',
+            commit_message='Document OpenVoice reference provenance')
+        hub.upload_file(path_or_fileobj=str(license_file), repo_id='cstr/crispasr-regression-fixtures',
+            repo_type='dataset', path_in_repo=prefix+'/OpenVoice-LICENSE.txt',
+            commit_message='Retain OpenVoice MIT notice')
+    except Exception as exc:
+        record['publication_error'] = type(exc).__name__
+        save()
+        raise RuntimeError('Requested reference checkpoint publication failed') from exc
+    save()
+    return record
 
 
 def run(command, name, **kwargs):
@@ -197,20 +257,7 @@ def main():
         save()
         # Producer checkpoints precede crash-prone native execution. Staging
         # artifacts are explicitly unvalidated and are not registry defaults.
-        model_repo='cstr/openvoice2-tcc-GGUF'
-        hub.create_repo(model_repo,repo_type='model',private=False,exist_ok=True)
-        if not hub.file_exists(model_repo,'README.md'):
-            pending=('---\nlicense: mit\npipeline_tag: audio-to-audio\n---\n\n'
-                     '# OpenVoice V2 GGUF experimental artifacts\n\n'
-                     'Files under staging/ are producer checkpoints, not accepted releases. '
-                     'Actual parity, GPU and speech-quality validation is pending.\n\n'
-                     'Original MIT model: https://huggingface.co/myshell-ai/OpenVoiceV2/tree/'+model_rev+'\n')
-            hub.upload_file(path_or_fileobj=pending.encode(),repo_id=model_repo,path_in_repo='README.md',commit_message='Mark producer staging artifacts unvalidated')
-        staged=hub.upload_file(path_or_fileobj=str(converted),repo_id=model_repo,
-            path_in_repo='staging/'+VERSION+'/'+converted.name,commit_message='Checkpoint unvalidated conversion before hardware validation')
-        hub.upload_file(path_or_fileobj=str(upstream/'LICENSE'),repo_id=model_repo,path_in_repo='LICENSE',commit_message='Retain original MIT notice')
-        RECEIPT['model_checkpoint']={'repo':model_repo,'revision':staged.oid,'path':'staging/'+VERSION+'/'+converted.name}
-        save()
+        checkpoint_model(hub, converted, model_rev, upstream/'LICENSE')
         melo_rev=hub.model_info('cstr/melotts-en-v2-GGUF').sha
         melo=hf_hub_download('cstr/melotts-en-v2-GGUF','melotts-en-v2-f16.gguf',revision=melo_rev)
         bert=hf_hub_download('cstr/melotts-en-v2-GGUF','bert-base-uncased-q4k.gguf',revision=melo_rev)
@@ -332,26 +379,11 @@ np.savez(sys.argv[5],**captures)
             sf.write(OUT/f'original-{i}.wav',captures['output_pcm'].flatten(),22050,subtype='FLOAT')
             # Checkpoint immediately after production, before native execution.
             fixture_prefix='openvoice2/bake-20261028/'+VERSION
-            reference_checkpoint={'case':i,'sha256':sha(ref)}
-            try:
-                published=hub.upload_file(path_or_fileobj=str(ref),repo_id='cstr/crispasr-regression-fixtures',
-                    repo_type='dataset',path_in_repo=f'{fixture_prefix}/reference-{i}.gguf',
-                    commit_message=f'OpenVoice original-module reference case {i}; quality gate separate')
-                reference_checkpoint['published_revision']=published.oid
-                notice=("OpenVoice2 reference from original MIT modules at "+UPSTREAM+".\n"
-                        "Inputs are synthetic MeloTTS audio from cstr/melotts-en-v2-GGUF revision "+melo_rev+".\n"
-                        "No external speaker recording. Model/source hashes and recipe are inside the archive.\n"
-                        "Structural parity and speech quality are separate gates; consult the validation receipt.\n")
-                hub.upload_file(path_or_fileobj=notice.encode(),repo_id='cstr/crispasr-regression-fixtures',repo_type='dataset',
-                    path_in_repo=fixture_prefix+'/ATTRIBUTION.txt',commit_message='Document OpenVoice reference provenance')
-                hub.upload_file(path_or_fileobj=str(upstream/'LICENSE'),repo_id='cstr/crispasr-regression-fixtures',repo_type='dataset',
-                    path_in_repo=fixture_prefix+'/OpenVoice-LICENSE.txt',commit_message='Retain OpenVoice MIT notice')
-            except Exception as exc:
-                reference_checkpoint['publication_error']=type(exc).__name__
-            RECEIPT.setdefault('reference_checkpoints',[]).append(reference_checkpoint)
-            save()
-            if 'publication_error' in reference_checkpoint:
-                raise RuntimeError('Reference checkpoint publication failed before native execution')
+            notice=("OpenVoice2 reference from original MIT modules at "+UPSTREAM+".\n"
+                    "Inputs are synthetic MeloTTS audio from cstr/melotts-en-v2-GGUF revision "+melo_rev+".\n"
+                    "No external speaker recording. Model/source hashes and recipe are inside the archive.\n"
+                    "Structural parity and speech quality are separate gates; consult the validation receipt.\n")
+            reference_checkpoint=checkpoint_reference(hub,ref,i,fixture_prefix,notice,upstream/'LICENSE')
             kh.step('native-gpu-parity',case=i)
             env=dict(os.environ,CRISPASR_DIFF_USE_GPU='1')
             run([WORK/'openvoice-bake',WORK/'openvoice-f32sens.gguf',ref],f'diff-gpu-{i}',env=env)
@@ -423,7 +455,7 @@ np.savez(sys.argv[5],**captures)
                 if not lib.openvoice2_set_target_embedding(ov,None):raise RuntimeError('Clearing conditioning failed')
                 RECEIPT.setdefault('clip_means',[]).append({'case':i,'embedding_cosine':average_cos,'waveform_cosine':mean_cos,'waveform_norm_ratio':mean_ratio})
             sf.write(OUT/f'clone-{i}.wav',native[0],22050,subtype='FLOAT')
-            RECEIPT['cases'].append({'text':text,'speaker':key,'tau':tau,'ref_sha256':sha(ref),'gpu_parity':True,'published_revision':reference_checkpoint['published_revision'],
+            RECEIPT['cases'].append({'text':text,'speaker':key,'tau':tau,'ref_sha256':sha(ref),'gpu_parity':True,'published_revision':reference_checkpoint.get('published_revision'),
                                      'uninstrumented_waveform_cosine':cosine,'embedding_cosine':emb_cos,'embedding_norm_ratio':emb_ratio,'repeat_exact':True})
             save()
         lib.melotts_free(ctx)
@@ -467,10 +499,10 @@ receipt['asr']={'repo':'Systran/faster-whisper-tiny.en','revision':revision}
         run([sys.executable,quality_script,OUT],'independent-quality')
         quality=json.loads((OUT/'quality.json').read_text())
         RECEIPT['cases']=quality['cases'];RECEIPT['asr']=quality['asr']
-        RECEIPT['references_published']=all('published_revision' in case for case in RECEIPT['cases'])
+        RECEIPT['references_published']=bool(RECEIPT['cases']) and all(case.get('published_revision') for case in RECEIPT['cases'])
         RECEIPT['model_acceptance']=all(case['quality_pass'] for case in RECEIPT['cases'])
         RECEIPT['complete']=True
-        if RECEIPT['model_acceptance']:
+        if RECEIPT['model_acceptance'] and PUBLISH:
             try:
                 repo='cstr/openvoice2-tcc-GGUF'
                 hub.create_repo(repo,repo_type='model',private=False,exist_ok=True)
@@ -488,11 +520,16 @@ receipt['asr']={'repo':'Systran/faster-whisper-tiny.en','revision':revision}
                 hub.upload_file(path_or_fileobj=str(upstream/'LICENSE'),repo_id=repo,path_in_repo='LICENSE',commit_message='Retain original MIT notice')
             except Exception as exc:
                 RECEIPT['model_publication_error']=type(exc).__name__
+        RECEIPT['publication_complete']=bool(PUBLISH and RECEIPT.get('published_model')
+            and all(r.get('published_revision') for r in RECEIPT.get('reference_checkpoints',[]))
+            and not RECEIPT.get('model_publication_error'))
         RECEIPT['artifacts']={p.name:{'bytes':p.stat().st_size,'sha256':sha(p)} for p in OUT.iterdir() if p.is_file() and p.name!='validation.json'}
         save()
         kh.step('parity-complete',cases=len(RECEIPT['cases']),quality=RECEIPT['model_acceptance'])
         if not RECEIPT['model_acceptance']:
             raise RuntimeError('Content or independent speaker-similarity gate failed; preserve original/native controls')
+        if PUBLISH and not RECEIPT['publication_complete']:
+            raise RuntimeError('Requested publication incomplete; see retained publication errors')
     finally:
         os.dup2(original_stderr,2);os.close(original_stderr);native_log.close()
 

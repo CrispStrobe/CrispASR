@@ -1,0 +1,103 @@
+{
+  "version": "2026-10-28.openvoice-conditioning.2",
+  "source": "6be9fda3629d9314da97101b8574fb25db06150f",
+  "entry_sha256": "1ddf20148a8ece4e6e2037da50bdd5de36c050a8fceccee8e9805d506ad059a7",
+  "base_runtime_source": "191815511b85a526aace111b1bda2e28ecb7faad",
+  "base_runtime_sha256": "63474b5f034ebac850b7b87ef76eecec12d009092d4c72370aeeb6be341365c5",
+  "ggml": "0a862076567afd8468822ccc512c97ac6a69b340",
+  "hardware": "Tesla T4, 7.5, 15360 MiB, 580.178.04\nTesla T4, 7.5, 15360 MiB, 580.178.04",
+  "complete": false,
+  "model_acceptance": false,
+  "gpu_executed": false,
+  "native_delta": {
+    "libopenvoice-probe.so": "7a07f23b62e761c124da3c557395fdd2b88e652724b66dd5b7e56e47c6b54b5f",
+    "openvoice-bake": "a6fdbe9965f3a66c745d205c339d68b949596bfd5f1334ee16d2c7a0292cee88"
+  },
+  "converted_model": {
+    "bytes": 102123872,
+    "sha256": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255",
+    "name": "openvoice2-tcc-f32sens.gguf"
+  },
+  "resource_checks": [
+    {
+      "phase": "small-dependencies",
+      "available_bytes": 32416882688,
+      "load": [
+        0.36279296875,
+        0.35693359375,
+        0.1865234375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124582055936,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "asr-dependencies",
+      "available_bytes": 32425541632,
+      "load": [
+        0.4140625,
+        0.36767578125,
+        0.19091796875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124546449408,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "compile-model-delta",
+      "available_bytes": 32365293568,
+      "load": [
+        0.5048828125,
+        0.38916015625,
+        0.19970703125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124083838976,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "compile-diff-driver",
+      "available_bytes": 32394276864,
+      "load": [
+        0.58154296875,
+        0.40966796875,
+        0.20849609375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124083523584,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "convert-f32-sensitive",
+      "available_bytes": 32248774656,
+      "load": [
+        0.615234375,
+        0.419921875,
+        0.212890625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123944685568,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    }
+  ],
+  "kernel_version": 1,
+  "terminal_state": "ERROR",
+  "failure": "Hugging Face create_repo returned 403 before model loading/inference. Allocation and compilation are not GPU execution or numerical acceptance.",
+  "preservation": "Uploaded source, terminal logs, bounded outputs and producer hashes retained before any replacement.",
+  "converted_model_full_readback_verified": true
+}
