@@ -23,8 +23,8 @@ import urllib.request
 CONDITIONING = os.environ.get('CRISPASR_OV2_CONDITIONING') == '1'
 PUBLISH = os.environ.get('CRISPASR_OV2_PUBLISH') == '1'
 REPLAY = os.environ.get('CRISPASR_OV2_REPLAY') == '1'
-VERSION = ('2026-10-28.openvoice-fixed-replay.2' if REPLAY else
-           '2026-10-28.openvoice-conditioning.5' if CONDITIONING else '2026-10-28.openvoice-bake.7')
+VERSION = ('2026-10-28.openvoice-fixed-replay.3' if REPLAY else
+           '2026-10-28.openvoice-conditioning.6' if CONDITIONING else '2026-10-28.openvoice-bake.8')
 SOURCE = '6be9fda3629d9314da97101b8574fb25db06150f'
 MODEL_DELTA_SOURCE = "1b874a104c70bc77e1a64dc1d5f4e924f0a3cfeb"
 MODEL_DELTA_SHA256 = "f658c40176fe1c67584cd9ab80ca9d954433cfe7973f6ba84b43a448d59b8c13"
@@ -550,12 +550,23 @@ from huggingface_hub import HfApi,snapshot_download
 from faster_whisper import WhisperModel
 from resemblyzer import VoiceEncoder,preprocess_wav
 import numpy as np
+import soundfile as sf
+from scipy.signal import resample_poly
+from math import gcd
 out=Path(sys.argv[1]);receipt=json.loads((out/'validation.json').read_text())
 hub=HfApi();revision=hub.model_info('Systran/faster-whisper-tiny.en').sha
 model=snapshot_download('Systran/faster-whisper-tiny.en',revision=revision)
 asr=WhisperModel(model,device='cpu',compute_type='int8',cpu_threads=2)
 encoder=VoiceEncoder(device=receipt['torch_reference_device'])
 reference=encoder.embed_utterance(preprocess_wav(out/'reference.wav'))
+def asr_audio(path):
+ # Decode our PCM WAVs directly: PyAV versions differ on metadata_errors.
+ # Whisper's array input must already be mono float32 at 16 kHz.
+ pcm,rate=sf.read(path,dtype='float32',always_2d=True)
+ pcm=pcm.mean(axis=1)
+ if rate!=16000:
+  divisor=gcd(rate,16000);pcm=resample_poly(pcm,16000//divisor,rate//divisor)
+ return np.ascontiguousarray(pcm,dtype=np.float32)
 def wer(expected,actual):
  a=re.findall(r'[a-z]+',expected.lower());b=re.findall(r'[a-z]+',actual.lower());row=list(range(len(b)+1))
  for i,x in enumerate(a,1):
@@ -566,7 +577,7 @@ def wer(expected,actual):
 for i,case in enumerate(receipt['cases']):
  quality={}
  for name in ['baseline','original','clone']:
-  path=out/f'{name}-{i}.wav';segments,_=asr.transcribe(str(path),language='en',beam_size=5)
+  path=out/f'{name}-{i}.wav';segments,_=asr.transcribe(asr_audio(path),language='en',beam_size=5)
   text=' '.join(segment.text.strip() for segment in segments)
   vector=encoder.embed_utterance(preprocess_wav(path))
   quality[name]={'transcript':text,'wer':wer(case['text'],text),'speaker_cosine':float(np.dot(vector,reference))}

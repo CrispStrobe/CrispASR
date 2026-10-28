@@ -1,3 +1,14 @@
+## 2026-10-28 — OpenVoice conditioning proof and quality decoder repair
+
+The three original-recipe repairs pass the full conditioning worker's 27/27,
+27/27 and 28/28 original-reference stages on T4 CUDA, with exact repeats, raw
+C API and clip-mean controls. Independent quality failed before ASR results:
+installed PyAV rejects faster-whisper's `metadata_errors` argument. The worker
+now supplies mono 16 kHz float32 arrays decoded from its PCM WAVs, retaining
+the original WER and speaker thresholds. Speech acceptance remains pending.
+A separate current-ggml SDK replay worker adds dependency and symbol-owner
+gates; its execution remains pending. These are post-v0.8.47 changes.
+
 ## 2026-10-28 — OpenVoice structural replay accepted on CPU/T4
 
 All27 unchanged original-reference stage/magnitude gates pass on both CPU and

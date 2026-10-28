@@ -283,6 +283,23 @@ it does not replace the pending actual-model/GPU/quality matrix.
 
 ## Producer checkpoint and publication policy
 
+Conditioning kernel version 3 passed all three original-reference CUDA cases
+(27/27, 27/27, 28/28), exact repeats, uninstrumented raw C API conversion and
+clip-mean conditioning. Its independent quality process failed in PyAV decoding
+before ASR results, so speech acceptance remains pending. The repair reads the
+generated WAVs with SoundFile, averages channels and resamples to mono float32
+at 16 kHz before passing arrays to the unchanged Whisper decoder. It preserves
+the WER <=0.2 and independent speaker-improvement >0.01 gates.
+[Structural receipt](openvoice-conditioning-structural-2026-10-28.json).
+
+The separate `tools/kaggle/openvoice-current-replay` worker qualifies the same
+frozen inputs against the shipped v0.8.47 CUDA SDK and matching `e2ae679a` ggml
+headers. It verifies archive bytes, dependency resolution and the owning shared
+library for model symbols before running all 27 stages on CPU and CUDA. Only
+the corrected OpenVoice/Melo translation units and driver compile. No SDK or
+Torch rebuild is involved. This structural profile keeps `model_acceptance`
+false and does not replace full speech, Session or CLI qualification.
+
 The shared worker checkpoints the converted GGUF under an explicitly unvalidated
 staging path and each original-module reference before native execution. Each
 receipt records hashes and immutable publication revisions; attribution and MIT

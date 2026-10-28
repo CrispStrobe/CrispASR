@@ -13,6 +13,29 @@ WORKER=ROOT/'tools/kaggle/openvoice-bake/openvoice_bake.py'
 
 
 class WorkerContracts(unittest.TestCase):
+    def test_quality_asr_receives_mono_16khz_array_without_pyav_decode(self):
+        import numpy as np
+        import soundfile as sf
+        from scipy.signal import resample_poly
+        from math import gcd
+        phases=[node.value for node in ast.walk(ast.parse(WORKER.read_text()))
+                if isinstance(node,ast.Constant) and isinstance(node.value,str)
+                and node.value.startswith('import sys,json,re')]
+        tree=ast.parse(phases[0])
+        helper=next(node for node in tree.body if isinstance(node,ast.FunctionDef) and node.name=='asr_audio')
+        namespace=dict(np=np,sf=sf,resample_poly=resample_poly,gcd=gcd)
+        exec(compile(ast.Module(body=[helper],type_ignores=[]),'asr-audio','exec'),namespace)
+        with tempfile.TemporaryDirectory() as temp:
+            for rate in [16000,22050,44100]:
+                for channels in [1,2]:
+                    pcm=np.full((rate//10,channels),.25,dtype=np.float32)
+                    path=Path(temp)/'test.wav';sf.write(path,pcm,rate,subtype='FLOAT')
+                    audio=namespace['asr_audio'](path)
+                    self.assertEqual(audio.dtype,np.float32)
+                    self.assertEqual(audio.shape,(1600,))
+                    self.assertTrue(audio.flags.c_contiguous)
+                    np.testing.assert_allclose(audio[20:-20],.25,atol=.001)
+
     def test_host_loader_path_survives_native_bundle_prefix(self):
         spec=importlib.util.spec_from_file_location('openvoice_worker',WORKER)
         worker=importlib.util.module_from_spec(spec);spec.loader.exec_module(worker)

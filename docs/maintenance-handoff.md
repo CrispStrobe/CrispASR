@@ -290,23 +290,32 @@ what delayed the live wheel index for v0.8.46.
 - **Accepted structural result:** frozen replay kernel version2 passes **27/27
   on both CPU and T4 CUDA**, unchanged model/reference/gates. Raw waveform cosine
   is0.99999973, norm ratio1.000042. [Verified receipt](openvoice-frozen-replay-accepted-2026-10-28.json).
-  Native CPP is `1b874a104`; worker is `d84007612`. Next run the already prepared
-  `tools/kaggle/openvoice-conditioning` full three-case worker (`.5`) with those
-  exact fixes. Preserve its previous version2 source/logs/outputs (already saved)
-  before pushing version3. It is the quality/conditioning proof, not another
-  frozen structural repeat. No whole-current-ggml or Session/CLI claim yet.
-- **Latest result:** frozen replay v1 passes 26/27 on CPU and actual T4 CUDA.
+  Native CPP is `1b874a104`; worker is `d84007612`. Full conditioning kernel
+  version 3 finished all three native cases: 27/27, 27/27 and 28/28 T4 CUDA
+  stages, exact repeats, raw C API and clip-mean controls. Its independent
+  quality process failed because installed PyAV rejects `metadata_errors`;
+  no ASR/speaker acceptance is claimed. [Retained proof](openvoice-conditioning-structural-2026-10-28.json).
+  Repair decodes the generated PCM WAVs directly into mono float32 at 16 kHz,
+  preserving the same ASR model and WER/speaker thresholds. Re-run the full
+  worker after its new immutable bootstrap pins are published. Version 3
+  source, terminal logs and all outputs are retained privately.
+  Separately qualify `tools/kaggle/openvoice-current-replay`: shipped v0.8.47
+  SDK with matching `e2ae679a` ggml headers and only the verified model overlay.
+  It requires resolved host dependencies, actual overlay symbol ownership and
+  all 27 CPU/CUDA stages. Keep model acceptance false; Session/CLI and speech
+  quality are separate. No full SDK rebuild or local model run is needed.
+- **Historical failed control:** frozen replay v1 passes 26/27 on CPU and actual T4 CUDA.
   The bias/flow repairs are verified on identical original/model bytes. Only
   raw decoder amplitude fails (~1.11145 norm ratio). Original final activation
   uses slope 0.01; native used 0.1. The final slope is corrected with a failing-
   before/passing-after graph-call test and an isolated owned-input check
   (norm 1.111307 → 0.999915). Repeat the exact frozen replay with the new CPP
-  delta before the full cloning run. [Both profiles](openvoice-frozen-replay-2026-10-28.json).
-- **Current:** version 2 reached actual T4 CUDA work and failed 11/27 stages.
+  delta subsequently passed in version 2 above. [Both profiles](openvoice-frozen-replay-2026-10-28.json).
+- **Historical failed control:** conditioning version 2 reached actual T4 CUDA work and failed 11/27 stages.
   The original reference/model bytes are retained and verified. The two
   original-recipe corrections (preserve zero-input conditioning bias; couple
   before forward flip) pass tiny production-body negative controls. Exact owned
-  input CPU/CUDA replay is the next gate; full speech acceptance is not claimed.
+  input CPU/CUDA replay subsequently passed; full speech acceptance is not claimed.
   [All stages](openvoice-original-parity-failure-2026-10-28.json) and
   [repair method](openvoice2-baking.md#first-pretrained-numerical-failure-and-bounded-repair).
 - The frozen replay data attachment is ready: real model/reference data only,
@@ -314,7 +323,8 @@ what delayed the live wheel index for v0.8.46.
   `483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255`;
   original reference SHA-256
   `259993b526944e8e36ccca436e005cbc3935a46636b42c618cfd5c3d19429c8f`.
-  Use `tools/kaggle/openvoice-fixed-replay` once its current source is pushed.
+  The accepted `tools/kaggle/openvoice-fixed-replay` version 2 used these bytes;
+  do not duplicate it merely to recover the same structural proof.
   The worker retains clone/header base `6be9fda36` and audited ggml `0a8620765`,
   overlaying only model CPP `1b874a104` (SHA-256 verified). Current main's
   ggml is newer; passing this frozen-runtime repair is not whole-current-ggml
