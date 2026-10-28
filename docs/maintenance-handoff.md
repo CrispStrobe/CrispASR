@@ -97,7 +97,8 @@ locations and exact recovery commands are in ignored notes, not in this ledger.
 Tasks A/B/D are claimed by the current maintainer agent from source `b967685fd`.
 Task A auditor rerun **40720956336** is dispatched; task B release
 **40711745769** has started building. Task D uses the bounded hosted worker
-`tools/ci-heavy/data2vec_cpu_profiles.py`; its run ID will be recorded after dispatch.
+`tools/ci-heavy/data2vec_cpu_profiles.py`, run **40721782580** at `d89c7617d`.
+It retains that frozen source even if later Parakeet text-grouping changes land.
 No task needs a local model or GPU job.
 Before every push run the five privacy guards (see the ignored local notes for
 the account binding). Avoid bursts of pushes to main: each push cancels the
@@ -158,10 +159,12 @@ what delayed the live wheel index for v0.8.46.
 - **Accept:** both verifier runs succeed. Record run IDs, asset count and wheel
   filenames in [the receipt](release-publication-2026-10-28.md).
 
-### Task C — answer and close #557 (public; maintainer approves wording)
+### Task C — prepare #557 reply for review; keep the issue open
 
-- **Precondition:** task B accepted.
-- **Draft (post only after the maintainer approves the text):**
+- **User decision (2026-10-28):** keep #557 open; prepare the final reply for review.
+  Do not post the comment or close the issue.
+- **Precondition for the draft claims below:** task B accepted.
+- **Draft for review only (unverified claims must remain conditional until B passes):**
 
   > Linux GPU wheels are published from v0.8.47:
   > `+vulkan` (x86_64) at `https://crispstrobe.github.io/CrispASR/whl/vulkan/`,
@@ -175,8 +178,8 @@ what delayed the live wheel index for v0.8.46.
   > so reports from your hardware (e.g. `crispasr.Session` with Parakeet ja)
   > would be very welcome here.
 
-- **Then:** close #557 as completed. Reopen, or open a narrower follow-up, if the
-  reporter finds a runtime fault.
+- **Then:** retain the verified final wording for review. Issue #557 stays open
+  under the user's explicit instruction; no external message is authorized.
 
 ### Task D — investigate the data2vec-base nightly exact-match failure
 
@@ -231,6 +234,15 @@ what delayed the live wheel index for v0.8.46.
   for ROCm's `libomp.so` on `+hip`. Do not add it globally.
 - The aarch64 CUDA bundle targets SBSA, CUDA 12.8, architectures 80/86/89/90/120.
   Jetson/L4T needs a separate toolchain and is out of scope.
+
+## New #558 — source repair with bounded remaining acceptance
+
+The full report and linked #15 thread were read. A standalone SentencePiece
+space is preserved in full token text but was lost as a word-grouping boundary.
+The shared range helper is repaired and model-free before/after controls cover
+the demonstrated defect. See [repair and remaining evidence](parakeet-word-boundary-558-2026-10-28.md).
+This later source fix is outside frozen v0.8.47. Personal natural-speech input,
+matched NeMo token traces and device acceptance are still missing; keep #558 open.
 
 ## External holds — exact unblock conditions
 

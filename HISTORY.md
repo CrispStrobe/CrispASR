@@ -1,3 +1,18 @@
+## 2026-10-28 — Parakeet standalone boundary repair and controlled nightly follow-up
+
+Repaired a demonstrated grouping defect: an interior standalone SentencePiece
+space was retained in full decoded text but discarded when forming words,
+joining `the` + `3090` and `could` + `utilize`. Model-free production-function
+fixtures fail before and pass after; no decoder/model/math change. Reporter
+#558 audio/NeMo/CUDA acceptance remains open. [Scope and controls](docs/parakeet-word-boundary-558-2026-10-28.md).
+
+The data2vec nightly's supposed previous passing control actually skipped that
+backend. Failed-job CPU/build evidence is retained; CPU near-tie variance is
+unproven. A hosted immutable-input native/AVX2/AVX512 diagnostic is dispatched as
+40721782580. The corrected v0.8.46 wheel auditor is 40720956336; v0.8.47 producer
+40711745769 is still running. No terminal publication/diagnostic success is
+claimed. The user requested keeping #557 open and preparing its reply for review.
+
 ## 2026-10-28 — v0.8.46 correctness release and v0.8.47 Linux GPU wheels (#557)
 
 v0.8.46 (tag source `34a8e4361`) publishes the qualified Nemotron F16 default

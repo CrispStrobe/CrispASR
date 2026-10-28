@@ -13,11 +13,12 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
 - Owner: current maintainer agent; starting source `b967685fd`.
-- A: dispatch the corrected v0.8.46 wheel auditor; accept only successful terminal receipt.
+- A: corrected v0.8.46 wheel auditor 40720956336 is queued; accept only successful terminal receipt.
 - B: monitor existing v0.8.47 producers, then native/wheel audits and public readbacks; do not retag.
-- D: inspect failing/passing nightly evidence and design a controlled CPU/F16 comparison; no gate relaxation without proof.
+- D: controlled CPU/F16 comparison 40721782580 at d89c7617d is queued; no gate relaxation without proof. The alleged previous data2vec pass was actually skipped.
 - Resources: light local inspection only; large builds/readbacks/inference on suitable Actions workers.
-- C awaits verified publication and maintainer-approved wording; E remains hardware-dependent.
+- C: user requests keeping #557 open and preparing a reply for review; do not post or close. E remains hardware-dependent.
+- Newly opened #558: reproduced and repaired standalone-marker grouping, with model-free regression controls. Reporter audio/NeMo/CUDA acceptance remains pending; see [repair scope](docs/parakeet-word-boundary-558-2026-10-28.md).
 
 - v0.8.46 is **published**. Native audit passes; the wheel audit receipt is pending (task A).
 - v0.8.47 (#557 Linux GPU wheels) is **tagged** at `5f87a5626`. Release run
@@ -40,7 +41,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 |---|---|---|---|
 | A | Rerun the v0.8.46 wheel audit after the auditor `hip`-index fix. | — | Verifier run `success` and `receipt.json` acceptance true; run ID in the receipt. |
 | B | Verify the v0.8.47 publication: release jobs, 52 native assets, three new GPU wheel legs, `whl/hip` + aarch64 `whl/cuda` index entries, native and wheel audits. | v0.8.47 release run finished | Both verifier runs pass; IDs recorded. If a new wheel leg fails, fix and re-dispatch the wheel workflow for `v0.8.47`. Never re-tag. |
-| C | Post the approved #557 reply (draft in the handoff) and close #557. | B | Maintainer approved the text; comment posted; issue closed. |
+| C | Prepare the #557 final reply for maintainer review; keep the issue open. | B | Both audits support the draft claims; reviewed wording is ready. No posting or closure authorized. |
 | D | Investigate the data2vec-base Q4_K nightly exact-match failure (run 40481871937). | — | Controlled profile/raw-CTC/pipeline comparison explains the failure; any gate change requires original-reference evidence. |
 | E | Real-hardware qualification of `+vulkan` (AMD/Intel), `+hip` (ROCm) and aarch64 `+cuda`. | Hardware access | Clean-venv install, Session JFK transcript matches, GPU backend selected and used, CPU/GPU compared. Recorded per class. |
 

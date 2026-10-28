@@ -33,6 +33,7 @@ inline bool is_punct_only(const char* s) {
 // tokens before the first word belong to it; skipped tokens between words and
 // after the last word belong to the preceding word. Grouping still ignores
 // them for word text/times/probability, while selected windows retain raw data.
+// A standalone SentencePiece space still starts the next non-punctuation word.
 template <class TextAt> std::vector<std::pair<int, int>> token_ranges(int count, TextAt text_at) {
     int starts = 0;
     for (int i = 0; i < count; ++i) {
@@ -44,14 +45,22 @@ template <class TextAt> std::vector<std::pair<int, int>> token_ranges(int count,
     std::vector<std::pair<int, int>> out;
     int begin = 0;
     bool have_word = false;
+    bool pending_space = false;
     for (int i = 0; i < count; ++i) {
         const char* t = text_at(i);
-        if (!t[0] || (t[0] == ' ' && !t[1]))
+        if (!t[0])
             continue;
-        if (have_word && !is_punct_only(t) && (t[0] == ' ' || !space_prefix_style)) {
+        if (t[0] == ' ' && !t[1]) {
+            pending_space = have_word;
+            continue;
+        }
+        const bool is_punct = is_punct_only(t);
+        if (have_word && !is_punct && (pending_space || t[0] == ' ' || !space_prefix_style)) {
             out.push_back({begin, i});
             begin = i;
         }
+        if (!is_punct)
+            pending_space = false;
         have_word = true;
     }
     if (have_word)

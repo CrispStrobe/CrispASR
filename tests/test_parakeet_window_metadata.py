@@ -113,6 +113,27 @@ std::vector<crispasr_audio_slice> crispasr_energy_chunk_slices(const float*,int 
         code += definition(shared, 'std::string norm_word(') + '\n'
         code += definition(shared, 'int gap_fill_segments(') + '\n'
         code += '''
+extern "C" const char* standalone_boundary_words(int kind) {
+    const std::vector<std::vector<const char*>> fixtures = {
+        {" on", " the", " ", "3090", ",", " because"},
+        {" but", " we", " could", " ", "util", "ize", ".", " that"},
+        {" ", " on", " the", " ", "", " ", "3090", ",", " because", " "},
+        {" a", " b", " ", ".", "c", " d"},
+        {" ", ".", "a", " b", " c"},
+    };
+    parakeet_result r{};
+    r.tokens=(parakeet_token_data*)calloc(32,sizeof(parakeet_token_data));
+    for(auto text:fixtures.at(kind)) add(&r,text,r.n_tokens*8,r.n_tokens*8+8,.5f);
+    parakeet_group_words(&r,8);
+    auto seg=result_to_seg(&r,0);
+    static std::string text;
+    text.clear();
+    for(const auto& word:seg.words) { if(!text.empty()) text += "|"; text+=word.text; }
+    free(r.words); free(r.tokens);
+    return text.c_str();
+}
+'''
+        code += '''
 extern "C" crispasr_session_result* inject(int kind) {
     scenario=kind; decodes=0;
     std::vector<float> audio(8*16000);
@@ -140,6 +161,11 @@ extern "C" int compare_grouping() {
         parakeet_result a{},b{}; std::vector<parakeet_token_data> tokens(rng()%40);
         for(auto& t:tokens) { strcpy(t.text,texts[rng()%11]); t.t0=(rng()%6)*8; t.t1=t.t0+8;
             t.p=(rng()%100)/100.f; }
+        // Historical grouping discarded interior standalone boundaries (#558).
+        // Keep its immutable oracle for the unchanged domain; the explicit
+        // standalone-boundary fixtures below assert the corrected behavior.
+        for(size_t i=1;i+1<tokens.size();++i)
+            if(strcmp(tokens[i].text," ")==0) tokens[i].text[0]='\\0';
         a.tokens=b.tokens=tokens.data(); a.n_tokens=b.n_tokens=(int)tokens.size();
         parakeet_group_words(&a,8); parakeet_group_words_reference(&b,8);
         bool equal=a.n_words==b.n_words;
@@ -163,6 +189,8 @@ extern "C" int compare_grouping() {
         cls.lib = ctypes.CDLL(str(path / 'probe.so'))
         cls.lib.inject.argtypes, cls.lib.inject.restype = [ctypes.c_int], ctypes.c_void_p
         cls.lib.compare_grouping.restype = ctypes.c_int
+        cls.lib.standalone_boundary_words.argtypes = [ctypes.c_int]
+        cls.lib.standalone_boundary_words.restype = ctypes.c_char_p
         cls.result_lib = ctypes.CDLL(os.environ['CRISPASR_LIB']) if os.environ.get('CRISPASR_LIB') else cls.lib
         cls.lib.crispasr_session_result_free.argtypes = [ctypes.c_void_p]
         cls.session = binding.Session.__new__(binding.Session)
@@ -214,8 +242,15 @@ extern "C" int compare_grouping() {
         finally:
             self.lib.crispasr_session_result_free(handle)
 
-    def test_grouping_math_and_words_match_frozen_native(self):
+    def test_grouping_matches_frozen_native_without_interior_standalone_spaces(self):
         self.assertEqual(self.lib.compare_grouping(), 0)
+
+    def test_standalone_word_boundary_survives_grouping(self):
+        for kind, expected in enumerate([
+                'on|the|3090,|because', 'but|we|could|utilize.|that',
+                'on|the|3090,|because', 'a|b.|c|d', '.a|b|c']):
+            with self.subTest(kind=kind):
+                self.assertEqual(self.lib.standalone_boundary_words(kind).decode(), expected)
 
     def test_overlap_splice_and_dedup_keep_owner_bytes_and_probabilities(self):
         seg = self.read(0)
