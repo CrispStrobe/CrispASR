@@ -22,8 +22,14 @@ import urllib.request
 
 CONDITIONING = os.environ.get('CRISPASR_OV2_CONDITIONING') == '1'
 PUBLISH = os.environ.get('CRISPASR_OV2_PUBLISH') == '1'
-VERSION = '2026-10-28.openvoice-conditioning.3' if CONDITIONING else '2026-10-28.openvoice-bake.5'
-SOURCE = '6be9fda3629d9314da97101b8574fb25db06150f' if CONDITIONING else '71e329ccfbb33dc99fa53743565292b1dba13b1e'
+REPLAY = os.environ.get('CRISPASR_OV2_REPLAY') == '1'
+VERSION = ('2026-10-28.openvoice-fixed-replay.1' if REPLAY else
+           '2026-10-28.openvoice-conditioning.4' if CONDITIONING else '2026-10-28.openvoice-bake.6')
+SOURCE = '6be9fda3629d9314da97101b8574fb25db06150f'
+MODEL_DELTA_SOURCE = '581234dfb89f4dc14a67857ddee359a3aac085fd'
+MODEL_DELTA_SHA256 = '74a792cca0f40a5e689717cb3084886b0324114043ec2074114d7ef3a59c4ed4'
+REPLAY_PINS = {'model': '483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255',
+               'reference': '259993b526944e8e36ccca436e005cbc3935a46636b42c618cfd5c3d19429c8f'}
 UPSTREAM = '74a1d147b17a8c3092dd5430504bd83ef6c7eb23'
 BASE_SOURCE = '191815511b85a526aace111b1bda2e28ecb7faad'
 BASE_REV = '425c555beb63de4665cba604c47ea38232f5d080'
@@ -35,6 +41,8 @@ BUNDLE = WORK / 'bundle'
 RECEIPT = {'schema': 1, 'version': VERSION, 'source': SOURCE, 'upstream': UPSTREAM,
            'complete': False, 'model_acceptance': False, 'gpu_executed': False,
            'publication_requested': PUBLISH, 'publication_complete': False,
+           'native_base_source': SOURCE, 'native_model_delta_source': MODEL_DELTA_SOURCE,
+           'native_model_delta_sha256': MODEL_DELTA_SHA256,
            'cases': [], 'limitations': ['native reference encoder and flows are CPU; vocoder uses CUDA',
                                       'native-rate replay isolates resampling; raw reference without VAD',
                                       'tau0.3 uses original shared noise; free-running RNG parity is separate' if CONDITIONING else 'deterministic tau=0; upstream tau=0.3 quality separate',
@@ -139,6 +147,63 @@ def checkpoint_reference(hub, ref, case, prefix, notice, license_file):
     return record
 
 
+def load_replay_inputs():
+    candidates = sorted(p for p in Path('/kaggle/input').rglob('inputs.json')
+                        if 'crispasr-openvoice-replay-20261028' in p.parts)
+    if not candidates:
+        raise RuntimeError('Frozen model/reference dataset is not mounted')
+    manifest = candidates[0]
+    metadata = json.loads(manifest.read_text())
+    inputs = {}
+    for role, filename in [('model', metadata['model']['name']),
+                           ('reference', metadata['reference']['local_file'])]:
+        if Path(filename).name != filename:
+            raise ValueError('Replay input filename must be a basename')
+        path = manifest.parent / filename
+        if sha(path) != REPLAY_PINS[role]:
+            raise ValueError('Frozen replay checksum mismatch: ' + role)
+        inputs[role] = path
+    shutil.copy2(manifest, OUT / 'replay-inputs.json')
+    for name in ['reference-ATTRIBUTION.txt', 'reference-OpenVoice-LICENSE.txt']:
+        shutil.copy2(manifest.parent / name, OUT / name)
+    RECEIPT['replay_input_sha256'] = dict(REPLAY_PINS)
+    save()
+    return inputs
+
+
+def replay(inputs):
+    """Same rejected original/model bytes, CPU and genuine CUDA; no new teacher."""
+    import re
+    results = []
+    for mode in ['cuda', 'cpu']:
+        env = dict(os.environ)
+        env.pop('CRISPASR_DIFF_USE_GPU', None)
+        if mode == 'cuda':
+            env['CRISPASR_DIFF_USE_GPU'] = '1'
+        label = 'replay-' + mode
+        returncode = 0
+        try:
+            run([WORK / 'openvoice-bake', inputs['model'], inputs['reference']], label, env=env)
+        except subprocess.CalledProcessError as exc:
+            returncode = exc.returncode
+        log = (OUT / (label + '.log')).read_text()
+        cuda_work = bool(re.search(r'^## SPLIT #\d+: CUDA', log, re.M)
+                         and re.search(r'HiFi-GAN output [1-9]\d* samples', log))
+        device_ok = cuda_work if mode == 'cuda' else 'vocoder backend CPU' in log
+        row = {'mode': mode, 'returncode': returncode, 'passes': log.count('[PASS]'),
+               'failures': log.count('[FAIL]'), 'cuda_work_observed': cuda_work}
+        row['accepted'] = bool(returncode == 0 and row['passes'] == 27 and row['failures'] == 0 and device_ok)
+        results.append(row)
+        RECEIPT.update(replay_results=results, gpu_executed=any(r['cuda_work_observed'] for r in results))
+        save()
+    RECEIPT.update(complete=True, replay_acceptance=all(r['accepted'] for r in results),
+                   model_acceptance=False,
+                   replay_scope='Frozen tau=0 structural model replay on the original audited runtime; not speech, conditioning, Session/CLI or whole-current-ggml acceptance')
+    save()
+    if not RECEIPT['replay_acceptance']:
+        raise RuntimeError('Frozen CPU/CUDA replay failed unchanged original-reference gates')
+
+
 def run(command, name, **kwargs):
     guard_resources(name)
     if str(command[0])==sys.executable:
@@ -194,6 +259,8 @@ def bootstrap():
     ggml=subprocess.check_output(['git','-C',ROOT/'ggml','rev-parse','HEAD'],text=True).strip()
     assert ggml=='0a862076567afd8468822ccc512c97ac6a69b340'
     RECEIPT.update(base_runtime_source=BASE_SOURCE,base_runtime_sha256=BASE_SHA,ggml=ggml)
+    download('https://raw.githubusercontent.com/CrispStrobe/CrispASR/' + MODEL_DELTA_SOURCE +
+             '/src/openvoice2.cpp', ROOT/'src/openvoice2.cpp', MODEL_DELTA_SHA256)
     if os.environ.get('CRISPASR_OV2_BUNDLE_READY')!='1':
         host_path=os.environ.get('LD_LIBRARY_PATH','')
         env=dict(os.environ,CRISPASR_OV2_BUNDLE_READY='1',CRISPASR_OV2_HOST_LD_LIBRARY_PATH=host_path,
@@ -203,6 +270,8 @@ def bootstrap():
 
 
 def main():
+    if REPLAY and PUBLISH:
+        raise ValueError('Frozen replay cannot request publication')
     # Re-exec only after immutable inputs are verified, without repeat cloning.
     if os.environ.get('CRISPASR_OV2_BUNDLE_READY')=='1':
         sys.path.insert(0,str(ROOT/'tools/kaggle'))
@@ -214,11 +283,19 @@ def main():
                        hardware=subprocess.check_output(['nvidia-smi','--query-gpu=name,compute_cap,memory.total,driver_version','--format=csv,noheader'],text=True).strip())
     else:
         kh=bootstrap()
+    if sha(ROOT/'src/openvoice2.cpp') != MODEL_DELTA_SHA256:
+        raise ValueError('Native model overlay checksum mismatch')
+    kh.step('native-model-overlay', source=MODEL_DELTA_SOURCE, sha256=MODEL_DELTA_SHA256)
     original_stderr=os.dup(2)
     native_log=(OUT/'native.log').open('w');os.dup2(native_log.fileno(),2)
     try:
-        run([sys.executable,'-m','pip','install','-q','gguf','librosa>=0.10','soundfile','huggingface_hub','resemblyzer','webrtcvad-wheels','--no-deps'],'small-dependencies')
-        run([sys.executable,'-m','pip','install','-q','faster-whisper'],'asr-dependencies')
+        replay_inputs = None
+        if REPLAY:
+            guard_resources('frozen-replay-inputs')
+            replay_inputs = load_replay_inputs()
+        else:
+            run([sys.executable,'-m','pip','install','-q','gguf','librosa>=0.10','soundfile','huggingface_hub','resemblyzer','webrtcvad-wheels','--no-deps'],'small-dependencies')
+            run([sys.executable,'-m','pip','install','-q','faster-whisper'],'asr-dependencies')
         # Use the prebuilt CUDA ggml. These are ordinary model C++ files only;
         # link our own definitions locally to avoid old SDK symbol interposition.
         # The audited base uses dynamic backend modules. Match that ABI and
@@ -232,6 +309,9 @@ def main():
                     '-L'+str(WORK),'-Wl,-rpath,'+str(WORK),'-lopenvoice-probe','-lcrispasr',
                     '-lggml','-lggml-base','-ldl','-pthread','-o',WORK/'openvoice-bake'],'compile-diff-driver')
         RECEIPT['native_delta']={name:sha(WORK/name) for name in ['libopenvoice-probe.so','openvoice-bake']}
+        if REPLAY:
+            replay(replay_inputs)
+            return
         import numpy as np
         import soundfile as sf
         cap=float(RECEIPT['hardware'].splitlines()[0].split(',')[1])

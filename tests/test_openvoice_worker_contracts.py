@@ -83,6 +83,34 @@ class WorkerContracts(unittest.TestCase):
                 self.assertEqual(worker.RECEIPT['reference_checkpoints'][0]['publication_error'],'PermissionError')
                 self.assertFalse(worker.RECEIPT['model_acceptance'])
 
+    def test_frozen_replay_requires_all_stages_and_actual_devices(self):
+        import subprocess
+        spec=importlib.util.spec_from_file_location('openvoice_worker',WORKER)
+        worker=importlib.util.module_from_spec(spec);spec.loader.exec_module(worker)
+        for fault in [None,'missing-stage','no-cuda','nonzero-exit']:
+            with self.subTest(fault=fault),tempfile.TemporaryDirectory() as temp:
+                root=Path(temp)
+                def run(command,label,**kwargs):
+                    cuda=label.endswith('cuda')
+                    self.assertEqual('CRISPASR_DIFF_USE_GPU' in kwargs['env'],cuda)
+                    count=26 if fault=='missing-stage' else 27
+                    log='[PASS] boundary\n'*count
+                    if cuda and fault!='no-cuda':
+                        log+='## SPLIT #1: CUDA0 # 1 inputs\nopenvoice2: HiFi-GAN output 4 samples\n'
+                    if not cuda:log+='openvoice2: vocoder backend CPU\n'
+                    (root/(label+'.log')).write_text(log)
+                    if fault=='nonzero-exit':raise subprocess.CalledProcessError(1,command)
+                worker.RECEIPT=dict(model_acceptance=False)
+                with patch.object(worker,'OUT',root),patch.object(worker,'run',side_effect=run),patch.object(worker,'save'):
+                    if fault:
+                        with self.assertRaisesRegex(RuntimeError,'replay failed'):
+                            worker.replay(dict(model=Path('model'),reference=Path('reference')))
+                    else:
+                        worker.replay(dict(model=Path('model'),reference=Path('reference')))
+                    self.assertEqual(worker.RECEIPT['replay_acceptance'],fault is None)
+                    self.assertFalse(worker.RECEIPT['model_acceptance'])
+                    self.assertEqual(len(worker.RECEIPT['replay_results']),2)
+
     def test_embedded_python_phases_compile(self):
         tree=ast.parse(WORKER.read_text())
         phases=[]
