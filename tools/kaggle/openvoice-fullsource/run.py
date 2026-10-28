@@ -44,6 +44,10 @@ def main():
                  scope='Full current CrispASR library/CLI C++; prebuilt matching ggml CUDA; no CUDA kernel rebuild')
     helper.RECEIPT=receipt
     helper.save=lambda:(OUT/'build-provenance.json').write_text(json.dumps(receipt,indent=2))
+    receipt['entry_sha256']=helper.sha(Path(__file__))
+    receipt['hardware']=subprocess.check_output(['nvidia-smi',
+        '--query-gpu=name,compute_cap,memory.total,driver_version','--format=csv,noheader'],
+        text=True,env=helper.host_environment()).strip()
     os.environ.update(OMP_NUM_THREADS='2',OPENBLAS_NUM_THREADS='1',GGML_SCHED_DEBUG='1')
     helper.guard_resources('full-source-bootstrap')
     if os.environ.get('CRISPASR_FULL_READY')!='1':
@@ -114,6 +118,14 @@ set_property(TARGET ggml-cuda PROPERTY INTERFACE_LINK_LIBRARIES "ggml-base;CUDA:
         log=(OUT/(label+'.log')).read_text()
         if 'not found' in log or 'undefined symbol:' in log:raise RuntimeError('Unresolved current runtime dependency')
         if str(WORK/SDK_NAME) in log:raise RuntimeError('Old SDK application DSO entered current application')
+        loaded={}
+        for name,target in re.findall(r'^\s*(libggml(?:-base|-cpu|-cuda)?\.so\S*) => (\S+)',log,re.M):
+            actual=Path(target).resolve()
+            if actual.parent!=GGML_LIB.resolve():raise RuntimeError('System ggml displaced the audited provider')
+            loaded[name]=dict(file=actual.name,sha256=helper.sha(actual))
+        if len(loaded)!=4:raise RuntimeError('Expected all four audited ggml providers')
+        receipt.setdefault('loaded_ggml',{})[file.name]=loaded
+        helper.save()
     helper.run(['git','-C',ROOT,'diff','--exit-code','--','src','include','examples/cli'],
                'unmodified-application-sources')
     mounted=sorted(p for p in Path('/kaggle/input').rglob('validation.json')
