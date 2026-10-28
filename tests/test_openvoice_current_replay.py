@@ -15,6 +15,9 @@ SPEC.loader.exec_module(REPLAY)
 
 
 class CurrentReplayContracts(unittest.TestCase):
+    def test_embedded_session_phase_compiles(self):
+        compile(REPLAY.SESSION_SCRIPT, 'session-child', 'exec')
+
     def test_unresolved_dependencies_fail_even_when_ldd_returns_zero(self):
         for output in ['libc.so.6 => /lib/libc.so.6',
                        'libcublas.so.12 => not found', 'undefined symbol: ggml_backend_cuda_init']:

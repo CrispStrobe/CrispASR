@@ -20,7 +20,9 @@ GGML = 'e2ae679a563014f46c546ce6c6448e8601e4dea6'
 SDK_NAME = 'libcrispasr-linux-x86_64-cuda'
 SDK_SHA256 = '8fbd68e1822cd16e58055753fc67120c20784451e286d94177f7f7fb78b76cbd'
 SDK_BYTES = 196467235
-VERSION = '2026-10-28.openvoice-current-replay.1'
+SESSION = os.environ.get('CRISPASR_OV2_SESSION') == '1'
+VERSION = ('2026-10-28.openvoice-session.1' if SESSION else
+           '2026-10-28.openvoice-current-replay.2')
 WORK = Path('/kaggle/temp/openvoice-current-replay')
 OUT = Path('/kaggle/working')
 
@@ -163,8 +165,123 @@ def main(worker):
     worker.RECEIPT['replay_scope'] = ('Frozen tau=0 CPU/CUDA replay with v0.8.47 SDK, matching e2 '
         'ggml headers and verified model overlay; no speech quality or Session/CLI acceptance')
     worker.save()
+    if SESSION:
+        session_validation(worker)
 
 
+def session_validation(worker):
+    """Actual Session callers over the qualified SDK/model overlay composition."""
+    import ast
+    worker.RECEIPT.update(complete=False, session_acceptance=False)
+    worker.save()
+    candidates = sorted(p for p in Path('/kaggle/input').rglob('validation.json')
+                        if 'crispasr-openvoice-conditioning' in p.parts)
+    if not candidates:
+        raise RuntimeError('Accepted conditioning output is not mounted')
+    if worker.sha(candidates[0]) != '46badec89720409414dad5c61f3e5cc1c34928a3e0b8391a1cf4f92e4d90dec8':
+        raise ValueError('Accepted conditioning receipt checksum mismatch')
+    evidence = json.loads(candidates[0].read_text())
+    if not (evidence['version'] == '2026-10-28.openvoice-conditioning.6'
+            and evidence['complete'] and evidence['model_acceptance'] and len(evidence['cases']) == 3):
+        raise ValueError('Conditioning input is not the accepted version 4')
+    for name in ['reference.wav', 'original-0.wav', 'original-1.wav',
+                 'reference-ATTRIBUTION.txt', 'reference-OpenVoice-LICENSE.txt']:
+        path = candidates[0].parent / name
+        if worker.sha(path) != evidence['artifacts'][name]['sha256']:
+            raise ValueError('Conditioning artifact checksum mismatch: ' + name)
+        shutil.copy2(path, OUT / name)
+    revision = evidence['melo']['revision']
+    model, bert = WORK / 'opaque-engine.gguf', WORK / 'bert.gguf'
+    for path, filename, digest in [(model, 'melotts-en-v2-f16.gguf', evidence['melo']['model_sha256']),
+                                   (bert, 'bert-base-uncased-q4k.gguf', evidence['melo']['bert_sha256'])]:
+        worker.download('https://huggingface.co/cstr/melotts-en-v2-GGUF/resolve/' + revision + '/' + filename,
+                        path, digest)
+    inputs = worker.load_replay_inputs()
+    worker.run([sys.executable, '-m', 'pip', 'install', '-q', 'soundfile', 'scipy',
+                'faster-whisper', 'resemblyzer', 'webrtcvad-wheels'], 'session-quality-dependencies')
+    script = WORK / 'session-check.py'
+    script.write_text(SESSION_SCRIPT)
+    env = dict(os.environ, LD_PRELOAD=str(WORK / 'libopenvoice-probe.so'),
+               CRISPASR_MELOTTS_BERT=str(bert), CRISPASR_OV2_GPU='1')
+    worker.run([sys.executable, script, worker.ROOT, worker.BUNDLE, model, inputs['model'], OUT, WORK],
+               'session-native', env=env)
+    session = json.loads((OUT / 'session.json').read_text())
+    log = (OUT / 'session-native.log').read_text()
+    cuda = ('openvoice2: vocoder backend CUDA' in log and
+            'HiFi-GAN output' in log and '## SPLIT #' in log and ': CUDA' in log)
+    if not (session['native_complete'] and cuda and len(session['cases']) == 2):
+        raise RuntimeError('Session did not prove native conversion and actual CUDA')
+    worker.RECEIPT.update(cases=session['cases'], torch_reference_device='cuda',
+                          session_native=session, session_cuda_observed=cuda)
+    worker.save()
+    # Use the accepted quality decoder and unchanged gates, adding raw output
+    # to the required content controls alongside normal marked synthesis.
+    source = WORK / 'quality-worker.py'
+    worker.download('https://raw.githubusercontent.com/CrispStrobe/CrispASR/' + QUALITY_SOURCE +
+                    '/tools/kaggle/openvoice-bake/openvoice_bake.py', source, QUALITY_SHA256)
+    phases = [node.value for node in ast.walk(ast.parse(source.read_text()))
+              if isinstance(node, ast.Constant) and isinstance(node.value, str)
+              and node.value.startswith('import sys,json,re')]
+    if len(phases) != 1:
+        raise ValueError('Ambiguous pinned quality phase')
+    quality = WORK / 'session-quality.py'
+    quality.write_text(phases[0].replace("['baseline','original','clone']", "['baseline','original','raw','clone']"))
+    worker.run([sys.executable, quality, OUT], 'session-independent-quality')
+    result = json.loads((OUT / 'quality.json').read_text())
+    accepted = len(result['cases']) == 2 and all(case['quality_pass'] for case in result['cases'])
+    worker.RECEIPT.update(cases=result['cases'], asr=result['asr'], complete=True,
+                          session_acceptance=accepted, model_acceptance=False,
+                          session_scope='Python Session/C ABI on shipped v0.8.47 SDK with verified model overlay; not a rebuilt-current-library or CLI qualification')
+    worker.save()
+    if not accepted:
+        raise RuntimeError('Session content or speaker quality gate failed')
+
+
+QUALITY_SOURCE = 'c5287611ef8416704a216d1a91c1a0fea5127a66'
+QUALITY_SHA256 = '61435c8198ae6de1443c73c36905e4e8b9293a1f54bb17761ead4472011c9179'
+SESSION_SCRIPT = '''import importlib.util,json,os,sys
+from pathlib import Path
+import numpy as np
+import soundfile as sf
+root,bundle,model,converter,out,work=map(Path,sys.argv[1:])
+sys.path.insert(0,str(root/'python'))
+from crispasr import Session
+spec=importlib.util.spec_from_file_location('resources',work/'shared-worker.py')
+resources=importlib.util.module_from_spec(spec);spec.loader.exec_module(resources)
+resources.WORK=work;resources.OUT=out
+record=dict(cases=[],native_complete=False,raw_artifacts='Private synthetic-voice validation; normal marked output tested separately')
+resources.RECEIPT=record
+resources.save=lambda:(out/'session.json').write_text(json.dumps(record,indent=2))
+texts=['The quick brown fox jumps over the lazy dog.',
+       'We enjoy reading books and listening to music in the evening.']
+for i,text in enumerate(texts):
+ resources.guard_resources('session-open')
+ with Session(str(model),lib_path=str(bundle/'libcrispasr.so'),n_threads=2,use_gpu=True,verbosity=1) as s:
+  if s.backend!='melotts':raise RuntimeError('C ABI architecture detection failed')
+  s.set_speaker_id(0);s.set_speaker_identity('synthetic')
+  s.accept_marking_responsibility('Private synthetic validation: raw clips stay private and labelled; normal marked synthesis is also checked')
+  resources.guard_resources('session-baseline')
+  s.set_tts_seed(42);baseline=s.synthesize_raw(text);rate=s.output_sample_rate()
+  if rate!=44100 or not np.isfinite(baseline).all():raise RuntimeError('Baseline PCM/rate failed')
+  sf.write(out/f'baseline-{i}.wav',baseline,rate,subtype='FLOAT')
+  resources.guard_resources('session-codec-and-voice')
+  s.set_codec_path(str(converter));s.set_voice(str(out/'reference.wav'))
+  resources.guard_resources('session-raw-clone')
+  s.set_tts_seed(42);raw=s.synthesize_raw(text)
+  if s.output_sample_rate()!=22050 or not len(raw) or not np.isfinite(raw).all():raise RuntimeError('Clone PCM/rate failed')
+  resources.guard_resources('session-repeat')
+  s.set_tts_seed(42);repeat=s.synthesize_raw(text)
+  if not np.array_equal(raw,repeat):raise RuntimeError('Reseeded Session clone differs')
+  resources.guard_resources('session-marked-clone')
+  s.set_tts_seed(42);marked=s.synthesize(text)
+  if marked.shape!=raw.shape or not np.isfinite(marked).all() or np.array_equal(raw,marked):raise RuntimeError('Marked synthesis control failed')
+  sf.write(out/f'raw-{i}.wav',raw,22050,subtype='FLOAT')
+  sf.write(out/f'clone-{i}.wav',marked,22050,subtype='FLOAT')
+  record['cases'].append(dict(text=text,backend=s.backend,baseline_rate=rate,clone_rate=22050,
+                            repeat_exact=True,marked_differs=True,samples=len(raw)))
+  resources.save()
+record['native_complete']=True;resources.save()
+'''
 if __name__ == '__main__':
     shared = load_worker()
     try:
