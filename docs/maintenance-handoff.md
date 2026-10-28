@@ -97,8 +97,10 @@ locations and exact recovery commands are in ignored notes, not in this ledger.
 
 ## Open tasks — fully scoped
 
-Tasks A/B/D are claimed by the current maintainer agent from source `b967685fd`.
-Task A auditor rerun **40723794473** is dispatched; task B release
+Hosted A/B/D work is already dispatched. No local background collector remains;
+claim result collection in PLAN.md before continuing. Do not duplicate queued jobs.
+Task A auditor rerun **40736324867** is dispatched on `ubuntu-latest`; pinned
+Ubuntu 24.04 attempt **40723794473** was canceled while still unassigned. Task B release
 **40711745769** has started building. Task D uses the bounded hosted worker
 `tools/ci-heavy/data2vec_cpu_profiles.py`, run **40723799365** at `bf724a8e5`, has completed on Ubuntu 24.04/EPYC 7763.
 It passes the native/AVX2 controls, but this host has no AVX-512; task D is still open.
@@ -123,7 +125,8 @@ what delayed the live wheel index for v0.8.46.
 - **Do:** dispatch `.github/workflows/verify-release-publication.yml` on main with
   `tag=v0.8.46`, `source=34a8e436192de19d3e5a872437edfe3fd26ce8c4`,
   `wheel_run=40679618075`, `native_audit_run=40682766228`,
-  `runner=ubuntu-24.04` (the workflow default remains Ubuntu 22.04).
+  `runner=ubuntu-latest` (the workflow default remains Ubuntu 22.04;
+  pinned Ubuntu 24.04 is also supported).
 - **Accept:** the run concludes `success`, and its `release-publication-<run>`
   artifact `receipt.json` has `complete: true, acceptance: true`. Add the run ID
   to [the receipt](release-publication-2026-10-28.md).
@@ -154,13 +157,21 @@ what delayed the live wheel index for v0.8.46.
      `https://crispstrobe.github.io/CrispASR/whl/hip/crispasr/` lists the `+hip`
      wheel and that `whl/cuda/` lists the `manylinux_2_35_aarch64` `+cuda` wheel.
   5. Dispatch the verifier with `tag=v0.8.47`,
-     `source=5f87a56265e4bbd7e2adc7052254e576d5774abb` and `release_run=<id>`.
+     `source=5f87a56265e4bbd7e2adc7052254e576d5774abb`, `runner=ubuntu-latest`
+     and `release_run=<id>`.
      Then dispatch it again with `wheel_run=<id>` and `native_audit_run=<that run>`.
      `v0.8.47` is already in `REVIEWED_TAGS`. For versions ≥ 0.8.47 the auditor
      requires the three new GPU wheels and the `hip` index.
-- **If a new GPU wheel leg fails:** fix the workflow on main and re-run only the
-  wheel workflow with `workflow_dispatch` and `tag=v0.8.47`. The workflow checks
-  out the tag's package source. Do not move or re-push the tag.
+- **If a new GPU wheel leg fails:** inspect the failing step first. For a
+  transient failure, rerun only failed jobs of the same producer run, retaining
+  the original successful CPU/sdist artifacts. Do not move/re-push the tag.
+  If workflow code needs repair after CPU distributions reached PyPI, do not
+  blindly dispatch the full wheel matrix for the same version: fresh archives
+  can have different hashes, while `twine --skip-existing` retains the old public
+  bytes. The strict auditor then correctly rejects that mismatch. Prepare explicit
+  byte-preserving reuse of the original qualified CPU artifacts, or a new patch
+  release if published contents are defective. Such cross-run reuse is not yet
+  implemented; never weaken byte comparison or overwrite an immutable version.
   Known risks to check first:
   - **HIP:** `stage_libs.py --host-provided libomp.so` must leave nothing
     unresolved (the leg runs on a runner without ROCm).
@@ -219,7 +230,10 @@ what delayed the live wheel index for v0.8.46.
   checks and 26 resource gates. Both profiles give cosine minimum 0.999141;
   repeated logits are identical. [Verified controls](data2vec-avx2-controls-2026-10-28.json).
   This supplies the missing AVX2 F16 transcript control, not the AVX-512 control.
-- **Next bounded allocation:** add `args=--require-avx512` to the dispatch below.
+- **Current follow-up:** **40735433388**, source `a21687e29`, `ubuntu-latest`,
+  queued with `args=--require-avx512`: capability attempt **1 of 3**. Collect its
+  terminal receipt before considering another attempt.
+- **Next bounded allocation if necessary:** add `args=--require-avx512` to the dispatch below.
   Keep at most three serial capability attempts; stop on the first suitable host
   or preserve a hardware hold after three unsuitable attempts. An unsuitable
   host returns `complete: false`, `skipped: avx512-unavailable` before worker APT,

@@ -5,17 +5,17 @@ It contains the completed work, exact evidence, bounded next actions and blocker
 needed by a fresh agent; no earlier chat is required. Follow `AGENTS.md` and its
 mandatory maintainer-guide instructions before implementation.
 
-**Tasks A/B/D claimed by the current maintainer agent.** Claim other work by adding owner,
+**Hosted tasks A/B/D are already dispatched; result collection is the next task.** Claim work by adding owner,
 source SHA, missing behavior, acceptance gates and next action under "NOW"
 before starting. The full scope of each task (exact runs, inputs, commands and
 acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-tasks--fully-scoped).
 
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
-- Owner: current maintainer agent; starting source `b967685fd`.
-- A: corrected v0.8.46 wheel auditor 40723794473 is queued on Ubuntu 24.04; accept only successful terminal receipt.
+- No local background collector or implementation job remains. A fresh agent should claim result collection and preserve the already dispatched runs.
+- A: corrected v0.8.46 wheel auditor 40736324867 is queued on `ubuntu-latest`; accept only successful terminal receipt.
 - B: monitor existing v0.8.47 producers, then native/wheel audits and public readbacks; do not retag.
-- D: 40723799365 passes the native/AVX2 Q4/F16 controls on EPYC 7763; AVX-512 is absent, so causation/gate changes remain unqualified. Next: at most three serial `--require-avx512` capability attempts, stopping before model/build work on unsuitable hosts.
+- D: 40723799365 passes the native/AVX2 Q4/F16 controls on EPYC 7763; AVX-512 is absent, so causation/gate changes remain unqualified. Follow-up 40735433388 at a21687e29 is capability attempt 1/3, queued with `--require-avx512`. Do not dispatch another until it is terminal; stop on a suitable host or after three unsuitable attempts.
 - Resources: light local inspection only; large builds/readbacks/inference on suitable Actions workers.
 - C: user requests keeping #557 open and preparing a reply for review; do not post or close. E remains hardware-dependent.
 - Newly opened #558: reproduced and repaired standalone-marker grouping, with model-free regression controls. Reporter audio/NeMo/CUDA acceptance remains pending; see [repair scope](docs/parakeet-word-boundary-558-2026-10-28.md).

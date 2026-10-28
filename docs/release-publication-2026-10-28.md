@@ -41,7 +41,8 @@ Not covered: execution on a physical AMD, Intel or ARM NVIDIA GPU (task E). The
 
 ## Current follow-up attempts
 
-- v0.8.46 corrected wheel auditor: **40723794473**, Ubuntu 24.04, queued.
+- v0.8.46 corrected wheel auditor: **40736324867**, `ubuntu-latest`, queued.
+  Pinned Ubuntu 24.04 attempt 40723794473 was canceled after remaining unassigned.
   Original Ubuntu 22.04 attempt 40720956336 was canceled while queued.
 - CPU-profile diagnostic: **40723799365** at `bf724a8e5`, Ubuntu 24.04/EPYC 7763,
   succeeds for native/AVX2 only. Twelve raw controls, eight pipeline controls,
@@ -64,3 +65,17 @@ with the same compiler version. This supports testing CPU sensitivity; causal
 acceptance and F16 transcript controls remain pending. Manual diagnostic backend
 runs now retain successful data2vec host/build evidence as well as CSM evidence.
 No transcript or numerical gate was relaxed.
+
+AVX-512 follow-up **40735433388** at `a21687e29` is queued, capability attempt
+1/3, using `--require-avx512`. Collect it before dispatching a replacement; a
+capability-only skip does not close the numerical investigation. The auditor's
+`ubuntu-latest` option changes only its worker label, not release platforms or
+tagged bytes. The final worker-label/docs checkpoints skip redundant native CI;
+normal code checks on `a21687e29` are separate and are not claimed as passing.
+
+Recovery limit: a full wheel-workflow rerun can rebuild different archive bytes
+while `twine --skip-existing` preserves the original PyPI files. Prefer failed-job
+reruns within the same producer run for transient failures. A workflow-code fix
+after CPU publication requires qualified original CPU artifact reuse or a new
+patch version; byte-preserving cross-run reuse is not implemented. Strict public
+byte comparisons remain mandatory.

@@ -1,3 +1,18 @@
+## 2026-10-28 — Hosted result-collection checkpoint
+
+Current v0.8.46 wheel auditor 40736324867 uses `ubuntu-latest`; the still-unassigned
+pinned Ubuntu 24.04 attempt 40723794473 was canceled. Native v0.8.47 producer
+40711745769 remains in flight; Rust/Dart readbacks pass, Python wheels and both
+v0.8.47 publication audits remain pending. AVX-512 capability attempt 1/3 is
+40735433388 at source a21687e29; do not duplicate it while queued/running. No
+transcript gate, release tag or published native payload was changed. The user
+requires #557 to stay open, with a reply prepared for review only.
+
+The readback-worker-label and final documentation checkpoints skip redundant
+native CI; actionlint, Markdown anchors and all five configured-account privacy
+guards pass locally. Code-check runs are separate; no pending/canceled run is
+counted as a pass. [Current handoff](docs/maintenance-handoff.md).
+
 ## 2026-10-28 — Data2vec AVX2 F16 transcript controls verified
 
 Hosted worker 40723799365 passes on EPYC 7763/GNU 13.3.0. Independent retained-byte
