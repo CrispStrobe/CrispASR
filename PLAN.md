@@ -14,7 +14,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 - Owner: current maintainer agent, starting source `42d787586`; collect A/B/D terminal receipts, repair actual failures, and preserve existing runs. Large work stays on suitable hosted workers; local load 0.26 and available memory about 4.4 GiB at resumption.
 - A complete: corrected auditor 40736324867 passed; all eight distributions and anonymous readbacks accepted. [Receipt](docs/release-v0846-wheel-audit-2026-10-28.json).
-- B: monitor existing v0.8.47 producers, then native/wheel audits and public readbacks; do not retag.
+- B: native producer 40711745769 completed successfully (38/38 jobs including publish). Native audit 40751444564 and automatic Python wheel producer 40751349609 are queued; collect both, then Pages and wheel audit. Do not retag.
 - D: 40735433388 completed on EPYC 9V74 with all three actual CPU profiles. Repeated raw arrays independently confirm native/AVX512 Q4 drops `A`, AVX2 Q4 retains it, and every F16 control matches the unchanged original reference. Added a one-word Q4 allowance with mandatory zero-WER F16 transcript and unchanged stage gates in both drivers. Targeted hosted production run 40750908085 at `2c733b9c3` is queued; collect it, do not duplicate. No further capability probes.
 - Additional error repaired: normal nightly now fails missing explicitly required stages, matching Kaggle; negative caller controls cover partial/absent captures.
 - Resources: light local inspection only; large builds/readbacks/inference on suitable Actions workers.
@@ -23,7 +23,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 - v0.8.46 is **published**. Native and wheel audits pass (task A complete).
 - v0.8.47 (#557 Linux GPU wheels) has a **partial public release**, tagged at `5f87a5626`. Release run
-  40711745769 has all 37 build jobs passed and exactly 52 public asset names; final publish job is running. Full native byte audit and Python wheels are unverified (task B).
+  40711745769 completed successfully with exactly 52 public asset names. Native byte audit 40751444564 and Python wheel producer 40751349609 remain unverified (task B).
 - [Publication receipt](docs/release-publication-2026-10-28.md).
 
 ## Completed baseline

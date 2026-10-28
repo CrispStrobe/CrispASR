@@ -16,13 +16,13 @@ in ignored local notes.
 ## Current state and first actions
 
 State at this wrap-up (2026-10-28): **v0.8.46 is published; v0.8.47 has partial public assets and
-its final release publish job is running; all 37 build jobs passed.** Active follow-up work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
+its native release run has passed all 38 jobs including final publication. Native byte audit and Python wheels are queued.** Active follow-up work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
 a fresh agent should confirm ownership before dispatching replacements.
 
 | Item | State | Evidence |
 |---|---|---|
 | v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit 40736324867 PASS; task A complete. | [Receipt](release-publication-2026-10-28.md) |
-| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** has all 37 build jobs passed and 52 expected public asset names. Final publish is running; full byte and wheel audits remain pending. | Task B |
+| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 and wheel producer 40751349609 are queued. | Task B |
 | #557 issue | Code merged. Issue still **open**. No public comment posted yet. | Task C |
 | data2vec-base nightly gate | Same-host Q4 CPU-profile divergence verified; mandatory exact F16 control added. Hosted production confirmation remains. | Task D |
 
@@ -99,9 +99,15 @@ locations and exact recovery commands are in ignored notes, not in this ledger.
 
 A is complete: **40736324867** passed; its accepted full-distribution readback
 receipt is [retained here](release-v0846-wheel-audit-2026-10-28.json).
-B native producer **40711745769** has all 37 build jobs successful and the exact
-52 expected public asset names. Its final safety-net `publish` job is
-running; Python wheel production and both v0.8.47 publication audits remain pending.
+B native producer **40711745769** has all **38 jobs successful**, including
+final publish, and the exact 52 expected public asset names. Native readback
+audit **40751444564** is queued on `ubuntu-latest`, auditor source
+`bda9d00ce6209a7811dccc5a996077b8bdc2521d`, pinned tag source
+`5f87a56265e4bbd7e2adc7052254e576d5774abb`, release_run `40711745769`,
+`repair_notices=false`. Automatic Python wheel producer **40751349609** is
+also queued (`workflow_run`, workflow source `2c733b9c3`; release inputs remain
+the frozen tag). Preserve both runs. Wheel readback still waits for successful
+wheel/index/Pages publication and the accepted native inventory.
 D **40735433388** completed on EPYC 9V74 with all three actual CPU profiles.
 Its independently decoded retained arrays establish the quantized profile
 sensitivity. No further capability attempts are needed. See task D for the fix
@@ -140,6 +146,10 @@ what delayed the live wheel index for v0.8.46.
   re-upload under the same version.
 
 ### Task B — verify the v0.8.47 publication
+
+- **Live:** native producer completed; collect existing native audit
+  **40751444564** and wheel producer **40751349609**. Steps 1–2 below are
+  complete for job results and asset names; full byte acceptance is pending.
 
 - **Do, in order:**
   1. Wait for release run **40711745769** (tag `v0.8.47`). Every build job must

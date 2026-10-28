@@ -1,9 +1,9 @@
 ## 2026-10-28 — v0.8.46 wheel audit accepted; data2vec CPU cause reproduced
 
 Wheel auditor 40736324867 passes all eight published distributions and anonymous
-readbacks; task A is complete. v0.8.47 has all 37 native build jobs passed and
-52 expected public asset names, but final publication, Python wheels and byte
-audits remain pending. #557 stays open; no public reply was posted.
+readbacks; task A is complete. v0.8.47 native producer 40711745769 passes all 38 jobs including final publish,
+with 52 expected public asset names. Native readback 40751444564 and automatic
+Python wheel producer 40751349609 are queued; byte/wheel acceptance remains pending. #557 stays open; no public reply was posted.
 
 Controlled run 40735433388 reproduces Q4 divergence on one EPYC 9V74: AVX2
 retains the original reference's `A`, native/AVX512 omit it. All repeated F16
