@@ -1,0 +1,14 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-openvoice-session",
+  "title": "CrispASR OpenVoice Session",
+  "code_file": "session.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": ["${KAGGLE_ACCOUNT}/crispasr-openvoice-replay-20261028"],
+  "competition_sources": [],
+  "kernel_sources": ["${KAGGLE_ACCOUNT}/crispasr-openvoice-conditioning"],
+  "model_sources": []
+}
