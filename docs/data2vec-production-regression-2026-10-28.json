@@ -1,0 +1,62 @@
+{
+  "schema": 1,
+  "run": 40750908085,
+  "source": "2c733b9c3335b2a909d527041fb90ec360d070ff",
+  "artifact": 12854280702,
+  "complete": true,
+  "acceptance": true,
+  "cpu": "AMD EPYC 9V74 80-Core Processor",
+  "compiler": "GCC 13.3.0",
+  "cpu_profile": "native, AVX512-capable host",
+  "quant_transcript": "AND SO MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+  "f16_transcript": "AND SO A MY FELLOW AMERICANS ASK NOT WHAT YOUR COUNTRY CAN DO FOR YOU, ASK WHAT YOU CAN DO FOR YOUR COUNTRY.",
+  "original_word_count": 23,
+  "quant_wer": 0.043478260869565216,
+  "quant_wer_limit": 0.043478260869565216,
+  "f16_wer": 0,
+  "f16_wer_limit": 0,
+  "stage": {
+    "name": "ctc_logits",
+    "cos_min": 0.999138,
+    "cos_mean": 0.999968,
+    "threshold": 0.999,
+    "passes": 1,
+    "failures": 0,
+    "skips": 0
+  },
+  "jobs": [
+    {
+      "name": "select",
+      "conclusion": "success"
+    },
+    {
+      "name": "smoke",
+      "conclusion": "success"
+    },
+    {
+      "name": "unit-tests",
+      "conclusion": "success"
+    },
+    {
+      "name": "regression (data2vec-base)",
+      "conclusion": "success"
+    },
+    {
+      "name": "preflight",
+      "conclusion": "success"
+    },
+    {
+      "name": "granite5",
+      "conclusion": "skipped"
+    }
+  ],
+  "evidence_sha256": {
+    "transcript.json": "aa635d62be4ff04572f2b6978e71ad4fcd8c55c57441166d37da109d066c5c14",
+    "transcript-f16.json": "52dca6b4d6149d1f082072969ebcf252d646347f5c0b2255bf9afc370631f903",
+    "diff.json": "c6dae458dfd9134333a1fc25140f7a689d2ac8da4e3c513f24893a3ac28c75c7",
+    "compile_commands.json": "e3660cd55a0b3c8a4e8697553721c2308c116af7aad03bb75ceb71404e2bce78",
+    "cpu.txt": "d53395eb22c253f3a0299c1dbdbdd80d7487a420a47f2f957b93828db88909cc",
+    "compiler.txt": "88b7c4b67564a146863224148116065fee418539f0a408f3636a68f3bde51805"
+  },
+  "scope": "Confirms committed paired Q4/F16 policy in the actual production nightly driver; original model/reference and stage gate unchanged"
+}

@@ -264,13 +264,17 @@ what delayed the live wheel index for v0.8.46.
   degradation/absence, incomplete configuration, separate diagnostic retention,
   and replay of all three profiles through the actual Kaggle validation function.
   These checks do not claim a new hosted inference run.
-- **Dispatched:** targeted production regression **40750908085** at committed
+- **COMPLETE:** targeted production regression **40750908085** at committed
   source `2c733b9c3335b2a909d527041fb90ec360d070ff`, `regression.yml --ref main`,
-  `diagnostic_backend=data2vec-base`, `granite5_only=false`. It is queued; do
-  not duplicate it. Local validation passed 60 driver, seven diagnostics and
+  `diagnostic_backend=data2vec-base`, `granite5_only=false`, passed on EPYC 9V74.
+  Q4 WER is 1/23, exact F16 WER is zero, and CTC-logit cosine minimum is
+  0.999138 against the unchanged 0.999 threshold (one pass, no fail/skip).
+  Artifact 12854280702 and complete raw logs are retained privately;
+  [portable accepted receipt](data2vec-production-regression-2026-10-28.json).
+  Do not duplicate it. Local validation passed 60 driver, seven diagnostics and
   19 publication-audit tests, plus all five privacy guards. The ad hoc Ruff
   check reports the same seven pre-existing findings as the parent; no new
-  findings. **Next:** collect the hosted run. Require actual execution, Q4 and exact F16
+  findings. Acceptance required actual execution, Q4 and exact F16
   transcript passes, stage pass, and retained host/build/transcript evidence.
   A pending/skipped overall green workflow is not acceptance. Do not repeat
   capability probes, rebake targets, change kernels or use human words as the

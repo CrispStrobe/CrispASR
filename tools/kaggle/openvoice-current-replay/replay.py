@@ -243,6 +243,9 @@ SESSION_SCRIPT = '''import importlib.util,json,os,sys
 from pathlib import Path
 import numpy as np
 import soundfile as sf
+# The loader has already installed the overlay. Do not inject it into resource
+# probes, whose clean vendor environment intentionally excludes SDK paths.
+os.environ.pop('LD_PRELOAD',None)
 root,bundle,model,converter,out,work=map(Path,sys.argv[1:])
 sys.path.insert(0,str(root/'python'))
 from crispasr import Session

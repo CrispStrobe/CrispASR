@@ -54,7 +54,9 @@ Not covered: execution on a physical AMD, Intel or ARM NVIDIA GPU (task E). The
   **40723799365** lacked AVX512 and is a retained historical control.
   The source now pairs the one-word Q4 allowance with a mandatory exact F16
   transcript and unchanged stage gates. Production regression **40750908085**
-  remains queued; collect it rather than dispatching another capability probe.
+  PASSED: Q4 WER 1/23, exact F16 WER zero and CTC-logit cosine minimum
+  0.999138 (threshold 0.999). [Receipt](data2vec-production-regression-2026-10-28.json).
+  Do not dispatch another capability probe.
 - B's native audit is accepted. All wheel builds passed in producer
   **40751349609**, including the three new GPU variants. Wait for both publisher
   jobs, verify the resulting index/Pages deployment, then run the wheel audit
