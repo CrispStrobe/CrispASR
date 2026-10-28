@@ -216,7 +216,12 @@ def main():
         if not receipt['acceptance']:
             raise RuntimeError('Original content/speaker gates failed; inspect encrypted speech and phase logs')
     except Exception:
-        receipt['error'] = traceback.format_exc().replace(account, '<configured-account>') if account else traceback.format_exc()
+        error = traceback.format_exc()
+        for name in ['KAGGLE_ACCOUNT','KAGGLE_API_TOKEN','HF_TOKEN','GH_TOKEN']:
+            value = os.environ.get(name, '')
+            if value:
+                error = error.replace(value, '<redacted>')
+        receipt['error'] = error
         raise
     finally:
         sys.path.insert(0, str(ROOT/'tools/validation'))
