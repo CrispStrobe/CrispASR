@@ -4,9 +4,14 @@
 
 namespace core_qwen3_prompt {
 
-// Hotwords are context, independent of an explicit question and language bias.
+// Raw context and wrapped hotwords are independent of questions and language bias.
 inline std::string build(int audio_tokens, std::string system, const std::string& question, const std::string& prefill,
-                         const std::string& hotwords) {
+                         const std::string& hotwords, const std::string& context = "") {
+    if (!context.empty()) {
+        if (!system.empty() && system.back() != ' ')
+            system += ' ';
+        system += context;
+    }
     if (!hotwords.empty()) {
         if (!system.empty() && system.back() != ' ')
             system += ' ';

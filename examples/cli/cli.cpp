@@ -1112,7 +1112,7 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             params.hotwords.empty() ? "" : params.hotwords.c_str());
     fprintf(out,
             "             --context TEXT        [%-7s] hotword/context text injected into the prompt "
-            "(vibevoice-asr only)\n",
+            "(qwen3, vibevoice-asr)\n",
             params.context.empty() ? "" : "set");
     fprintf(out,
             "             --prefix-text TEXT    [%-7s] granite incremental decoding: seed the transcript so "
