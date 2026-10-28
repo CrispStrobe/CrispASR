@@ -412,33 +412,45 @@ This qualifies the shipped SDK plus verified model overlay, not a complete
 rebuilt-current library or the actual CLI. No model/default promotion or Hub
 publication occurred. Remaining scope:
 
-1. **Full rebuilt-current library and CLI — claimed, validation running:**
-   candidate branch `validate/openvoice-interfaces-20261028`; bootstrap commit
-   `ae1f243a7`, worker/application source
-   `91e1e97b399d105924915c0e8d5ea0176359b147`. These changes are not yet on main.
-   The actual CLI adapter needed GPU forwarding, native-rate declaration before
-   synthesis, neutral disclosure bypass/resampling, fail-closed converter inputs,
-   F32-sensitive model discovery and unset-speaker normalization. Native Melo
-   now rejects out-of-range IDs. Actual production-body routing and setter
-   controls reproduce the failures before the repair and pass afterward.
-   Actions CPU run **40783760561** is queued at `7c158b325` (identical application
-   C++). Kaggle **`crispasr-openvoice-full-source` version 1** is running with
-   `tools/kaggle/openvoice-fullsource/entry.py`: all current application C++ is
-   rebuilt against only audited v0.8.47 ggml DSOs and exact `e2ae679a` headers.
-   There is no old application DSO or model overlay and no CUDA kernel rebuild.
-   `tools/ci-heavy/openvoice_interfaces.py` checks both original 27-stage cases,
-   real renamed-model Session/C ABI, invalid speaker IDs, raw/marked repeats,
-   actual CLI baseline/content-only clone/default neutral disclosure, native
-   rates, unchanged WER <=0.2 and clone speaker improvement >0.01. CUDA proof
-   must occur inside each converter flow-to-vocoder window, not earlier Melo
-   work. Before every compile/inference it checks load, memory and storage.
-   **Next:** retain terminal source, logs, checkpoint, receipts and encrypted
-   evidence before any replacement; inspect any actual failure. Accept only
-   complete/acceptance true, all four quality cases and actual converter CUDA.
-   Public artifacts contain metrics and hashes; speech/transcripts/private logs
-   are encrypted to an operator key recovered from ignored local notes. Preset
-   identity remains unknown. CPU acceptance and exact-source CI remain separate.
-   Merge only after those gates; prepare the next patch release afterward.
+1. **Full rebuilt-current library and CLI — structural pass, quality failure:**
+   candidate branch `validate/openvoice-interfaces-20261028`; application source
+   `91e1e97b399d105924915c0e8d5ea0176359b147`, bootstrap `ae1f243a7`.
+   These changes are not yet on main. The actual CLI adapter needed GPU
+   forwarding, native-rate declaration before synthesis, neutral disclosure
+   bypass/resampling, fail-closed converter inputs, F32-sensitive discovery and
+   unset-speaker normalization. Native Melo rejects out-of-range IDs. Actual
+   production-body routing/setter controls failed before and pass after repair.
+   Kaggle `crispasr-openvoice-full-source` version 1 is terminal **ERROR**.
+   All current application C++ compiled against audited v0.8.47 ggml DSOs and
+   exact `e2ae679a` headers; dependencies resolve with no old application DSO or
+   model overlay. Both original-reference cases pass 27/27 with converter CUDA.
+   Real Session detection/native speaker rejection, raw/marked repeats and rates
+   pass; the six expected converter CUDA windows are observed. All actual CLI
+   commands, rate checks, neutral bypass and converter GPU controls pass.
+   **Overall acceptance remains false:** default-disclosed CLI case 0 has
+   tiny.en WER **0.25**, above the unchanged **0.20** gate. Its content-only
+   clone passes at 0.111 with speaker gain above 0.01; both Session cases and
+   CLI case 1 pass. [Failed quality receipt](openvoice-fullsource-attempt-2026-10-28.json).
+   All source/logs, the exact compiled application checkpoint and encrypted
+   private speech were retained and the checkpoint hash read back. Do not
+   rebuild it merely to repeat this proof; do not change seeds, thresholds or
+   the recognition oracle to make the failed gate green.
+   **Claimed next action:** `tools/kaggle/openvoice-disclosure` prepares a
+   hosted diagnostic using that exact checkpoint and accepted real reference
+   data. Compare neutral speech alone, actual prefix/content segments and joined
+   clips using the unchanged pinned tiny.en plus an independently pinned small.en
+   recognizer. This diagnostic never sets application acceptance true. Establish
+   a synthesis defect versus decoding limitation before proposing a repair or
+   acceptance-policy change. No NN code change or new tooling dataset is needed.
+   Actions CPU **40783760561** remains queued at `7c158b325` (identical application
+   C++); candidate CI **40787625795**, Lint **40787628325** and Secret scan
+   **40787631487** at `b1561def7` were also requested. Read their live status;
+   allocation/building is not acceptance. Preserve terminal evidence before any
+   replacement. Before every compile/inference check load, memory and storage.
+   Public receipts contain metrics/hashes; speech, transcripts and phase logs
+   stay encrypted to the operator key recovered from ignored local notes.
+   Preset identity remains unknown. CPU acceptance and exact-source CI remain
+   separate. Merge only after those gates; prepare the next patch afterward.
 2. **Publication:** no Hub write was attempted by the accepted read-only run.
    Earlier repository creation returned 403. Use an authorized destination,
    retain original MIT notices, converter precision recipe, immutable model/
