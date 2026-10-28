@@ -632,6 +632,10 @@ def wheels(args, result):
                             gpu_index_and_full_readbacks_verified=True)
 
 
+REVIEWED_TAGS = {"v0.8.45", "v0.8.46"}
+NOTICE_REPAIR_TAGS = {"v0.8.45"}
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--tag", required=True)
@@ -641,7 +645,10 @@ def main():
     parser.add_argument("--native-audit-run", type=int)
     parser.add_argument("--repair-notices", action="store_true")
     args = parser.parse_args()
-    assert args.tag == "v0.8.45"  # the reviewed release; do not silently generalize policy
+    # Reviewed releases only; add a tag here deliberately, never by pattern.
+    assert args.tag in REVIEWED_TAGS, args.tag
+    # Notice repair was reviewed for the v0.8.45 archive families only.
+    assert not args.repair_notices or args.tag in NOTICE_REPAIR_TAGS, args.tag
     tag = api(f"git/ref/tags/{args.tag}")["object"]
     assert tag["type"] == "tag"
     assert api(f"git/tags/{tag['sha']}")["object"]["sha"] == args.source

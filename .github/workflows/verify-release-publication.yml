@@ -3,6 +3,14 @@ name: Verify release publication
 on:
   workflow_dispatch:
     inputs:
+      tag:
+        description: 'Published release tag to audit (e.g. v0.8.46)'
+        required: true
+        type: string
+      source:
+        description: 'Full 40-hex commit SHA the tag must point at'
+        required: true
+        type: string
       release_run:
         description: 'Completed native Release run (optional)'
         default: ''
@@ -25,7 +33,7 @@ permissions:
   actions: read
 
 concurrency:
-  group: verify-release-publication-0845
+  group: verify-release-publication-${{ inputs.tag }}
   cancel-in-progress: false
 
 jobs:
@@ -49,12 +57,16 @@ jobs:
           WHEEL_RUN: ${{ inputs.wheel_run }}
           NATIVE_AUDIT_RUN: ${{ inputs.native_audit_run }}
           REPAIR_NOTICES: ${{ inputs.repair_notices }}
+          TAG: ${{ inputs.tag }}
+          SOURCE: ${{ inputs.source }}
         run: |
           set -euo pipefail
           mkdir -p "$RUNNER_TEMP/publication/out" "$RUNNER_TEMP/publication/scratch"
           export HEAVY_OUT="$RUNNER_TEMP/publication/out"
           export HEAVY_SCRATCH="$RUNNER_TEMP/publication/scratch"
-          args=(--tag v0.8.45 --source e58bb48b52cf1fe957c19586297c83a2ed0d9fe4)
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          [[ "$SOURCE" =~ ^[0-9a-f]{40}$ ]]
+          args=(--tag "$TAG" --source "$SOURCE")
           if [ -n "$RELEASE_RUN" ]; then
             [[ "$RELEASE_RUN" =~ ^[0-9]+$ ]]
             args+=(--release-run "$RELEASE_RUN")
