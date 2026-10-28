@@ -19,9 +19,10 @@ reuse the Nemotron CPU/T4 qualification described in
 [nemotron-default-policy-2026-10-26.md](nemotron-default-policy-2026-10-26.md).
 
 A nightly regression run (40481871937) failed data2vec-base Q4_K on exact match
-(WER 0.0435, human-accuracy WER 0). The same native code passed on the previous
-nightly, so it is treated as CPU near-tie variance and was not a release blocker.
-It is tracked as task D.
+(WER 0.0435, human-accuracy WER 0). The preceding green workflow skipped data2vec, so it supplies no passing
+control. The failed job retained AMD EPYC 9V74/native-build evidence and a
+passing F16 stage check; CPU near-tie variance remains an unverified hypothesis.
+The controlled follow-up is tracked as task D.
 
 ## v0.8.47 — Linux GPU Python wheels (#557)
 

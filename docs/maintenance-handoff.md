@@ -94,7 +94,11 @@ locations and exact recovery commands are in ignored notes, not in this ledger.
 
 ## Open tasks — fully scoped
 
-All are unclaimed. Hosted Actions only; none needs a local model or GPU job.
+Tasks A/B/D are claimed by the current maintainer agent from source `b967685fd`.
+Task A auditor rerun **40720956336** is dispatched; task B release
+**40711745769** has started building. Task D uses the bounded hosted worker
+`tools/ci-heavy/data2vec_cpu_profiles.py`; its run ID will be recorded after dispatch.
+No task needs a local model or GPU job.
 Before every push run the five privacy guards (see the ignored local notes for
 the account binding). Avoid bursts of pushes to main: each push cancels the
 pending Pages deploy and in-progress CI/Lint on the earlier commit. That is
@@ -174,25 +178,38 @@ what delayed the live wheel index for v0.8.46.
 - **Then:** close #557 as completed. Reopen, or open a narrower follow-up, if the
   reporter finds a runtime fault.
 
-### Task D — data2vec-base nightly exact-match gate is CPU-sensitive
+### Task D — investigate the data2vec-base nightly exact-match failure
 
-- **Observed:** `Regression (nightly)` run **40481871937** (commit `34a8e4361`)
-  failed `regression (data2vec-base)` on the Q4_K model `cstr/data2vec-audio-960h-GGUF@97d79857`.
-  The runtime decoded `AND SO MY FELLOW AMERICANS …`; the pinned reference decode
-  is `AND SO A MY FELLOW AMERICANS …`. That is WER 0.0435 against a max of 0.0,
-  with human-accuracy WER 0. The same native code passed on the previous nightly
-  (`1e7d3b735`, the same day). Only a Flutter changelog line changed between them.
-- **Hypothesis:** a Q4_K logit near-tie that flips with the runner's CPU SIMD
-  path (AVX2 vs AVX-512). Unverified: the runner CPU was not recorded.
-- **Do:**
-  1. Re-run that backend several times with the job printing `lscpu`, and record
-     the CPU flags for passing and failing runs.
-  2. If failures track a CPU profile, run the F16 model on both profiles. If F16
-     matches the reference on both, it is quantization near-tie variance.
-  3. Then either pin the expected text per CPU profile, or gate data2vec Q4_K on
-     the F16 reference with a documented tolerance. Keep the F16 gate exact.
-- **Do not:** loosen the gate without the CPU evidence, or edit the reference
-  text to match one runner.
+- **Observed:** run **40481871937**, source `34a8e4361`, failed Q4_K transcript
+  parity against the pinned independent reference: native omitted the inserted
+  `A` after `AND SO`; WER 0.0435 against the unchanged zero-WER gate. Its F16
+  stage check passed at cosine minimum 0.999138 (threshold 0.999).
+- **Correction to the earlier handoff:** preceding green run **40459786231**
+  skipped the regression job entirely. It is not a passing data2vec control.
+  Failed-job artifact **12743112477** (29,774 compressed bytes) does record the
+  CPU: AMD EPYC 9V74, four vCPUs, AVX2/AVX-512. Actual compiler commands use
+  `-march=native`, CPU repacking and LLAMAFILE; BLAS is off. Cached AVX options
+  alone do not describe the resulting native ISA.
+- **Unproven:** CPU-sensitive quantization near ties. The failing normal CLI
+  also used automatic punctuation and Whisper language identification; the F16
+  stage comparison proves neither an exact F16 transcript nor pipeline identity.
+- **Do:** run `tools/ci-heavy/data2vec_cpu_profiles.py` through `heavy-cpu.yml`
+  with `pip="numpy gguf==0.17.1 huggingface_hub"`, runner `ubuntu-22.04`.
+  One source and immutable model/reference/vocabulary/audio pins are reused for
+  sequential native, explicit AVX2 and (when supported) explicit AVX-512 builds.
+  Actual compiler flags, CPU and resource evidence are retained. Each profile
+  repeats raw Q4 and F16 logits three times, independently decodes CTC, records
+  every divergent frame's native/reference top-two scores, magnitude/error
+  metrics, explicit-English pipeline output, the exact nightly CLI invocation
+  and the unchanged F16 stage gate.
+- **Accept:** explain the observed divergence from actual controlled evidence.
+  `complete: true` on the diagnostic means collection completed, not that Q4
+  parity passed or a new profile/model was accepted. If CPU/profile correlation
+  is absent, investigate the remaining pipeline/build confound instead of
+  declaring the hypothesis confirmed. Preserve original failed evidence.
+- **Do not:** loosen any gate, replace the reference or use a passing overall
+  workflow whose data2vec job was skipped. Any eventual tolerance/profile gate
+  needs original-reference and decoded-output evidence first.
 
 ### Task E — real-hardware qualification of the new GPU wheels
 
