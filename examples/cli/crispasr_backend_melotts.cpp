@@ -12,6 +12,7 @@
 #include <string>
 #include <vector>
 #include "core/crispasr_env.h"
+#include "core/audio_resample.h"
 
 // Read a mono WAV file into float PCM + sample rate.
 // Handles WAVs with extra chunks before the data chunk.
@@ -94,7 +95,7 @@ public:
         mp.n_threads = p.n_threads;
         mp.verbosity = p.no_prints ? 0 : 1;
         mp.use_gpu = crispasr_backend_should_use_gpu(p);
-        mp.speaker_id = p.tts_speaker_id;
+        mp.speaker_id = p.tts_speaker_id < 0 ? 0 : p.tts_speaker_id;
         if (p.seed > 0)
             mp.seed = (uint32_t)p.seed;
 
@@ -162,7 +163,8 @@ public:
                 model_dir = "./";
 
             // Try common names
-            for (const char* name : {"openvoice2-tcc-f16.gguf", "openvoice2-tcc-q4_k.gguf", "openvoice2-tcc.gguf"}) {
+            for (const char* name : {"openvoice2-tcc-f16.gguf", "openvoice2-tcc-q4_k.gguf", "openvoice2-tcc.gguf",
+                                     "openvoice2-tcc-f32sens.gguf"}) {
                 std::string tcc_path = model_dir + name;
                 FILE* test = fopen(tcc_path.c_str(), "rb");
                 if (test) {
@@ -170,6 +172,7 @@ public:
                     auto cp = openvoice2_context_default_params();
                     cp.n_threads = p.n_threads;
                     cp.verbosity = p.no_prints ? 0 : 1;
+                    cp.use_gpu = mp.use_gpu;
                     ov2_ctx_ = openvoice2_init_from_file(tcc_path.c_str(), cp);
                     if (ov2_ctx_) {
                         const char* dd = crispasr_env::get("CRISPASR_OV2_DUMP_DIR");
@@ -183,8 +186,8 @@ public:
             }
 
             if (!ov2_ctx_) {
-                fprintf(stderr, "melotts: warning: --voice specified but no OpenVoice2 TCC "
-                                "model found. Place openvoice2-tcc-f16.gguf next to the melotts model.\n");
+                fprintf(stderr, "melotts: --voice requires a loadable OpenVoice2 TCC companion next to the model\n");
+                return false;
             }
 
             // Load reference audio
@@ -196,9 +199,15 @@ public:
                             (int)ref_pcm_.size(), ref_sr_);
             } else {
                 fprintf(stderr, "melotts: failed to read voice reference '%s'\n", p.tts_voice.c_str());
+                return false;
             }
         }
 
+        // The CLI asks the rate before its first synthesis, including streams.
+        // Keep a configured cloning session at the converter rate even when
+        // generating the neutral disclosure without applying voice conversion.
+        if (ov2_ctx_ && !ref_pcm_.empty())
+            ov2_output_sr_ = openvoice2_sample_rate(ov2_ctx_);
         return true;
     }
 
@@ -206,6 +215,8 @@ public:
         if (!ctx_)
             return {};
 
+        // A neutral disclosure clears the per-call voice and speaker selection.
+        melotts_set_speaker_id(ctx_, params.tts_speaker_id < 0 ? 0 : params.tts_speaker_id);
         // Apply runtime params
         if (params.tts_speed > 0) {
             melotts_set_length_scale(ctx_, 1.0f / params.tts_speed);
@@ -220,7 +231,7 @@ public:
         melotts_pcm_free(pcm);
 
         // Voice cloning via OpenVoice2 if reference audio provided
-        if (ov2_ctx_ && !ref_pcm_.empty()) {
+        if (!params.tts_voice.empty() && ov2_ctx_ && !ref_pcm_.empty()) {
             int src_sr = ctx_ ? melotts_sample_rate(ctx_) : 44100;
             float* cloned_pcm = nullptr;
             int n_cloned = 0;
@@ -234,9 +245,13 @@ public:
                 // Output sample rate follows the companion model metadata.
                 ov2_output_sr_ = openvoice2_sample_rate(ov2_ctx_);
             } else {
-                fprintf(stderr, "melotts: OpenVoice2 voice conversion failed, "
-                                "returning original audio\n");
+                fprintf(stderr, "melotts: requested OpenVoice2 voice conversion failed\n");
+                free(cloned_pcm);
+                return {};
             }
+        } else if (ov2_output_sr_ > 0 && melotts_sample_rate(ctx_) != ov2_output_sr_) {
+            out =
+                core_audio::resample_polyphase(out.data(), (int)out.size(), melotts_sample_rate(ctx_), ov2_output_sr_);
         }
 
         return out;

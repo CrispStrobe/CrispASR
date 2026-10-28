@@ -13,6 +13,21 @@ dumps, parity diffs, ASR roundtrips, and download → convert → quantize → u
 
 Runners are free for public repos and a job can run up to 6 h.
 
+`openvoice_interfaces.py` builds the complete current CPU library, actual CLI
+and diff driver against the accepted frozen model/reference inputs. It uses
+the configured Kaggle read credentials only to retrieve existing real-data
+outputs, then verifies exact hashes. Both original-reference cases, Session
+and CLI rates/content/speaker quality, normal marked speech, and the CLI's
+neutral disclosure are required. It is not an actual CUDA CLI qualification.
+Use `pip="torch numpy scipy soundfile kaggle==2.2.2 faster-whisper resemblyzer
+webrtcvad-wheels cryptography huggingface_hub"` and
+`args="--audio-public-key <32-byte-X25519-public-key-as-hex>"`. CPU Torch is
+installed through the workflow's CPU index. Only the operator public key goes
+to CI; the private key stays in ignored operational storage. Audio, transcripts
+and private phase logs are uploaded as an authenticated encrypted envelope;
+the public receipt contains metrics/hashes/notices. Preserve the matching
+private key to inspect the retained evidence. No model or voice is published.
+
 **Keep on Kaggle** (`tools/kaggle/`) only what needs a real GPU: CUDA or Vulkan
 speed and parity on hardware, and PyTorch on CUDA. Kaggle allows one account per
 person, with GPU sessions used for GPU work.

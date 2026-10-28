@@ -12,6 +12,8 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
+- Current-source/CLI acceptance owner: current agent, source `08ffbfaf1`. Pages `40776528499` is queued; preserve main while it deploys. Prepare hosted full-source library/CLI validation using the exact accepted model/reference data. Found a real CLI routing defect: OpenVoice companion parameters retain `use_gpu=false`, unlike Melo and Session. Add an actual-init weight-free negative control, forward the existing CLI GPU selection, then require hosted CUDA work before claiming CLI GPU support. Heavy work stays hosted; local load about 8 on four CPUs.
+
 - Owner: current maintainer agent, starting source `42d787586`; collect A/B/D terminal receipts, repair actual failures, and preserve existing runs. Large work stays on suitable hosted workers; local load 0.26 and available memory about 4.4 GiB at resumption.
 - A complete: corrected auditor 40736324867 passed; all eight distributions and anonymous readbacks accepted. [Receipt](docs/release-v0846-wheel-audit-2026-10-28.json).
 - B: native producer 40711745769 completed successfully (38/38 jobs including publish). Native audit 40751444564 PASSED with accepted full readbacks for all 52 assets. All wheel builds and PyPI publication passed in 40751349609; GPU-index publication remains queued. Collect it, then Pages and wheel audit. Do not retag.

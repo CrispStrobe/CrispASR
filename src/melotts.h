@@ -34,7 +34,8 @@ struct melotts_params {
 
 struct melotts_params melotts_default_params(void);
 
-// Load a MeloTTS GGUF. Returns nullptr on failure.
+// Load a MeloTTS GGUF. Returns nullptr on failure, including a speaker ID
+// outside the model's zero-based speaker range.
 struct melotts_context* melotts_init_from_file(const char* path_model, struct melotts_params params);
 
 void melotts_free(struct melotts_context* ctx);

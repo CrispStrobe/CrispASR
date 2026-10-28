@@ -931,6 +931,10 @@ struct melotts_context {
     bool weight_cache_enabled = true;
 };
 
+static bool melotts_speaker_id_valid(const melotts_context* ctx, int id) {
+    return ctx && id >= 0 && static_cast<uint32_t>(id) < ctx->hp.n_speakers;
+}
+
 // ── Diff harness ──────────────────────────────────────────────────
 
 static void dump_stage(const melotts_context* ctx, const char* label, const float* data, size_t n) {
@@ -2714,6 +2718,10 @@ struct melotts_params melotts_default_params(void) {
 }
 
 struct melotts_context* melotts_init_from_file(const char* path_model, struct melotts_params params) {
+    if (params.speaker_id < 0) {
+        fprintf(stderr, "melotts: speaker ID must be nonnegative\n");
+        return nullptr;
+    }
     auto* ctx = new melotts_context();
     ctx->verbosity = params.verbosity;
     ctx->n_threads = params.n_threads;
@@ -2731,6 +2739,13 @@ struct melotts_context* melotts_init_from_file(const char* path_model, struct me
         ctx->backend = ctx->backend_cpu;
 
     if (!load_weights(ctx, path_model)) {
+        melotts_free(ctx);
+        return nullptr;
+    }
+
+    if (!melotts_speaker_id_valid(ctx, params.speaker_id)) {
+        fprintf(stderr, "melotts: speaker ID %d is outside the model's %u speakers\n", params.speaker_id,
+                ctx->hp.n_speakers);
         melotts_free(ctx);
         return nullptr;
     }
@@ -3058,7 +3073,7 @@ void melotts_set_sdp_ratio(struct melotts_context* ctx, float v) {
         ctx->sdp_ratio = v;
 }
 void melotts_set_speaker_id(struct melotts_context* ctx, int id) {
-    if (ctx)
+    if (melotts_speaker_id_valid(ctx, id))
         ctx->speaker_id = id;
 }
 void melotts_set_seed(struct melotts_context* ctx, uint32_t seed) {

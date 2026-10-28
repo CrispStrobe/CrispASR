@@ -2222,7 +2222,8 @@ class Session(SessionExtras):
         """Load a separate codec GGUF.
 
         Required for qwen3-tts (12 Hz tokenizer), moss-tts (1.6B transformer
-        RVQ codec) and orpheus (SNAC codec); no-op for other backends.
+        RVQ codec) and orpheus (SNAC codec). For MeloTTS, load the OpenVoice2
+        tone-color converter here before setting a reference voice.
         """
         if not hasattr(self._lib, "crispasr_session_set_codec_path"):
             raise RuntimeError("TTS API not present in this libcrispasr build")

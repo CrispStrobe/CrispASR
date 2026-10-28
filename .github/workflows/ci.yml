@@ -218,12 +218,15 @@ jobs:
 
       - name: TTS session failure, ownership and conversion contracts
         run: |
-          python3 -m pip install scipy soundfile
+          python3 -m pip install scipy soundfile cryptography
           python3 tests/test_tts_session_contracts.py -v
           python3 tests/test_openvoice_bake_contracts.py -v
           python3 tests/test_openvoice_worker_contracts.py -v
           python3 tests/test_openvoice_conditioning_contracts.py -v
           python3 tests/test_openvoice_current_replay.py -v
+          python3 tests/test_openvoice_cli_routing.py -v
+          python3 tests/test_melotts_speaker_range.py -v
+          python3 tests/test_private_evidence.py -v
 
       - name: Supertonic speaker API null and bounds contracts
         run: python3 tests/test_supertonic_speaker_contracts.py -v
