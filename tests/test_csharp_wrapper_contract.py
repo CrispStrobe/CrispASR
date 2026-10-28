@@ -11,6 +11,14 @@ ROOT = Path(__file__).resolve().parents[1]
 PROBE = r'''
 #include "crispasr_session.h"
 static int calls, mode;
+static int setter_rc, setter_calls;
+void probe_setter_rc(int rc) { setter_rc=rc; }
+int probe_setter_calls(void) { return setter_calls; }
+int crispasr_session_set_punc_model(crispasr_session* s,const char* model) { ++setter_calls;return setter_rc; }
+int crispasr_session_set_voice(crispasr_session* s,const char* path,const char* text) { ++setter_calls;return setter_rc; }
+int crispasr_session_set_speaker_id(crispasr_session* s,int id) { ++setter_calls;return setter_rc; }
+int crispasr_session_set_top_k(crispasr_session* s,int k) { ++setter_calls;return setter_rc; }
+
 static float audio[] = {1,2,3,4};
 crispasr_session* crispasr_session_open(const char* p, int threads) { return (crispasr_session*)1; }
 void crispasr_session_close(crispasr_session* s) {}
@@ -102,6 +110,8 @@ class Program {
     [DllImport("crispasr",CallingConvention=CallingConvention.Cdecl)] static extern int probe_owned();
     [DllImport("crispasr",CallingConvention=CallingConvention.Cdecl)]static extern void probe_vad_expect(int n);
     [DllImport("crispasr",CallingConvention=CallingConvention.Cdecl)]static extern int probe_vad_calls();
+    [DllImport("crispasr",CallingConvention=CallingConvention.Cdecl)]static extern void probe_setter_rc(int rc);
+    [DllImport("crispasr",CallingConvention=CallingConvention.Cdecl)]static extern int probe_setter_calls();
     static int assertions;
     static void Equal<T>(T a,T b) { if(!Equals(a,b))throw new Exception($"{a} != {b}");assertions++; }
     static void Reject<T>(Action action) where T:Exception {
@@ -112,6 +122,22 @@ class Program {
     [DllImport("crispasr",CallingConvention=CallingConvention.Cdecl)]static extern int probe_stream_closes();
     static void Main(string[] args) {
         using var s=Session.Open("probe");
+        foreach(int rc in new[]{0,-1,-2,-3,1}) {
+            probe_setter_rc(rc);
+            foreach(Action setter in new Action[]{()=>s.SetPuncModel("missing.gguf"),
+                                                   ()=>s.SetVoice("reference.wav"),()=>s.SetSpeakerId(-1)}) {
+                int before=probe_setter_calls();
+                if(rc==0) setter();
+                else {
+                    try { setter();throw new Exception($"setter swallowed rc={rc}"); }
+                    catch(InvalidOperationException error) { Equal(error.Message.Contains($"rc={rc}"),true); }
+                }
+                Equal(probe_setter_calls(),before+1);
+            }
+        }
+        probe_setter_rc(-2);s.SetTopK(10); // unsupported tuning remains a compatible no-op
+        probe_setter_rc(-1);Reject<InvalidOperationException>(()=>s.SetTopK(10));
+        probe_setter_rc(0);
         var content=new float[6];var f0=new float[3];
         if(args.Length>0 && args[0]=="old") {
             Equal(s.Convert(content,f0).Length,4);
@@ -189,7 +215,7 @@ class CSharpWrapperContract(unittest.TestCase):
 </PropertyGroup><ItemGroup><Compile Include="Program.cs"/>
 <Compile Include="{ROOT / 'bindings/csharp/CrispASR'}/*.cs"/></ItemGroup></Project>''')
             env=dict(os.environ, DOTNET_CLI_TELEMETRY_OPTOUT='1', DOTNET_NOLOGO='1')
-            subprocess.run(['dotnet','build',str(path/'Probe.csproj'),'-c','Release','--nologo','-v','quiet'],
+            subprocess.run(['dotnet','build',str(path/'Probe.csproj'),'-c','Release','--nologo','-v','quiet','-m:1','-p:UseSharedCompilation=false','--disable-build-servers'],
                            env=env,check=True,capture_output=True,text=True)
             for old in (False,True):
                 library=path/('old.so' if old else 'probe.so')

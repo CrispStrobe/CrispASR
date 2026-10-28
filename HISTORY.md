@@ -1,3 +1,16 @@
+## 2026-10-28 — C# explicit setter errors exposed
+
+`Session.SetPuncModel`, `SetVoice` and `SetSpeakerId` now reject native `-2`
+failures instead of silently accepting them as unsupported tuning controls.
+Actual C# public-method probes fail before the fix and pass afterward on the
+current/older-library fixtures (101/35 assertions). Other native error codes
+and optional tuning compatibility are covered. No model/runtime behavior changed.
+
+Recovered OpenVoice2 bake v2 is a terminal CPU backend-registration abort,
+not pretrained acceptance. Its source/logs are preserved; the prepared loader
+repair and conditioning proof have resource guards before compute. GPU
+submission still needs an authoritative capacity check after API rate limiting.
+
 ## 2026-10-28 — v0.8.46 wheel audit accepted; data2vec CPU cause reproduced
 
 Wheel auditor 40736324867 passes all eight published distributions and anonymous

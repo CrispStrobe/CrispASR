@@ -6,6 +6,7 @@ translation units against its exact ggml headers. No ggml/CUDA/full SDK build,
 no CPU-only Kaggle job, no hardware fishing or cross-account retry.
 """
 import ctypes as ct
+from contextlib import nullcontext
 import hashlib
 import json
 import os
@@ -20,7 +21,7 @@ import traceback
 import urllib.request
 
 CONDITIONING = os.environ.get('CRISPASR_OV2_CONDITIONING') == '1'
-VERSION = '2026-10-19.openvoice-conditioning.1' if CONDITIONING else '2026-10-19.openvoice-bake.3'
+VERSION = '2026-10-28.openvoice-conditioning.2' if CONDITIONING else '2026-10-28.openvoice-bake.4'
 SOURCE = '6be9fda3629d9314da97101b8574fb25db06150f' if CONDITIONING else '71e329ccfbb33dc99fa53743565292b1dba13b1e'
 UPSTREAM = '74a1d147b17a8c3092dd5430504bd83ef6c7eb23'
 BASE_SOURCE = '191815511b85a526aace111b1bda2e28ecb7faad'
@@ -56,7 +57,30 @@ def host_environment():
     return env
 
 
+def resource_snapshot():
+    memory = dict(line.split(":", 1) for line in Path('/proc/meminfo').read_text().splitlines())
+    gpu_free = subprocess.check_output(
+        ['nvidia-smi', '--query-gpu=memory.free', '--format=csv,noheader,nounits'],
+        text=True, timeout=30, env=host_environment())
+    return {'available_bytes': int(memory['MemAvailable'].split()[0]) * 1024,
+            'load': list(os.getloadavg()), 'cpus': os.cpu_count() or 1,
+            'scratch_free_bytes': shutil.disk_usage(WORK).free,
+            'gpu_free_mib': [int(line.strip()) for line in gpu_free.splitlines() if line.strip()]}
+
+
+def guard_resources(label):
+    """Retain host headroom before every compile, reference or native phase."""
+    state = resource_snapshot()
+    RECEIPT.setdefault('resource_checks', []).append({'phase': label, **state})
+    save()
+    if (state['available_bytes'] < 3 * 1024**3 or state['scratch_free_bytes'] < 2 * 1024**3
+            or state['load'][0] > 2 * state['cpus'] or not state['gpu_free_mib']
+            or min(state['gpu_free_mib']) < 1024):
+        raise RuntimeError('Insufficient worker headroom before ' + label)
+
+
 def run(command, name, **kwargs):
+    guard_resources(name)
     if str(command[0])==sys.executable:
         kwargs.setdefault('env',host_environment())
         kwargs.setdefault('cwd',WORK)
@@ -64,7 +88,8 @@ def run(command, name, **kwargs):
     harness=sys.modules.get('kaggle_harness')
     if harness:
         harness.step(name)
-    with (OUT / (name + '.log')).open('w') as log:
+    heartbeat = harness.build_heartbeat(name) if harness and name.startswith('compile-') else nullcontext()
+    with heartbeat, (OUT / (name + '.log')).open('w') as log:
         subprocess.run(list(map(str, command)), stdout=log, stderr=subprocess.STDOUT,
                        check=True, timeout=kwargs.pop('timeout', 1200), **kwargs)
 
@@ -87,6 +112,7 @@ def bootstrap():
     caps = [float(row.split(',')[1]) for row in RECEIPT['hardware'].splitlines()]
     if not caps or any(cap not in (6.0,7.5) for cap in caps):
         raise RuntimeError('Frozen CUDA runtime supports sm60/sm75 only')
+    guard_resources('bootstrap')
     for command in (['git','init',ROOT],['git','-C',ROOT,'remote','add','origin','https://github.com/CrispStrobe/CrispASR.git'],
                     ['git','-C',ROOT,'fetch','--depth=1','origin',SOURCE],['git','-C',ROOT,'checkout','FETCH_HEAD'],
                     ['git','-C',ROOT,'submodule','update','--init','--depth=1','ggml']):
@@ -204,9 +230,11 @@ def main():
         lib.melotts_pcm_free.argtypes=[ct.POINTER(ct.c_float)]
         lib.melotts_free.argtypes=[ct.c_void_p]
         params=lib.melotts_default_params();params.n_threads=2;params.use_gpu=False;params.seed=42
+        guard_resources('load-melo-model')
         ctx=lib.melotts_init_from_file(os.fsencode(melo),params)
         if not ctx or not lib.melotts_load_bert(ctx,os.fsencode(bert)):raise RuntimeError('Melo/BERT load failed')
         def synth(text,speaker):
+            guard_resources('melo-synthesis')
             lib.melotts_set_speaker_id(ctx,speaker)
             speaker_key=lib.melotts_source_speaker(ctx).decode()
             ptr=ct.POINTER(ct.c_float)();rate=ct.c_int()
@@ -235,6 +263,7 @@ def main():
         lib.openvoice2_free.argtypes=[ct.c_void_p]
         libc=ct.CDLL(None);libc.free.argtypes=[ct.c_void_p]
         op=lib.openvoice2_context_default_params();op.n_threads=2;op.use_gpu=True;op.tau=0
+        guard_resources('load-openvoice-model')
         ov=lib.openvoice2_init_from_file(os.fsencode(WORK/'openvoice-f32sens.gguf'),op)
         if not ov:raise RuntimeError('Native conversion context load failed')
         cases=[(text,0.0) for text in texts]+([(texts[0],.3)] if CONDITIONING else [])
@@ -247,6 +276,7 @@ def main():
             os.environ['CRISPASR_OV2_TAU']=str(tau)
             if tau:
                 lib.openvoice2_free(ov);op.tau=tau
+                guard_resources('load-noisy-openvoice-model')
                 ov=lib.openvoice2_init_from_file(os.fsencode(WORK/'openvoice-f32sens.gguf'),op)
                 if not ov:raise RuntimeError('Noisy context load failed')
             # Original Torch runs in a separate process with the host CUDA
@@ -301,7 +331,7 @@ np.savez(sys.argv[5],**captures)
                 captures={name:archive[name].copy() for name in archive.files}
             sf.write(OUT/f'original-{i}.wav',captures['output_pcm'].flatten(),22050,subtype='FLOAT')
             # Checkpoint immediately after production, before native execution.
-            fixture_prefix='openvoice2/bake-20261019/'+('conditioning-v1' if CONDITIONING else 'v1')
+            fixture_prefix='openvoice2/bake-20261028/'+VERSION
             reference_checkpoint={'case':i,'sha256':sha(ref)}
             try:
                 published=hub.upload_file(path_or_fileobj=str(ref),repo_id='cstr/crispasr-regression-fixtures',
@@ -343,6 +373,7 @@ np.savez(sys.argv[5],**captures)
                     raise RuntimeError('Original posterior noise was rejected')
             native=[]
             for repeat in range(2):
+                guard_resources('native-conversion')
                 output=floatp();count=ct.c_int()
                 ok=lib.openvoice2_convert(ov,source_pcm.ctypes.data_as(floatp),len(source_pcm),22050,
                     target_pcm.ctypes.data_as(floatp),len(target_pcm),22050,ct.byref(output),ct.byref(count))
@@ -354,6 +385,7 @@ np.savez(sys.argv[5],**captures)
             cosine=float(np.dot(native[0].astype(np.float64),truth)/(np.linalg.norm(native[0].astype(np.float64))*np.linalg.norm(truth)))
             if cosine<.99:raise RuntimeError('Uninstrumented waveform parity failed')
             embedding=np.empty(256,dtype=np.float32)
+            guard_resources('native-speaker-embedding')
             if not lib.openvoice2_extract_speaker_embedding(ov,target_pcm.ctypes.data_as(floatp),len(target_pcm),22050,
                                                          embedding.ctypes.data_as(floatp)):raise RuntimeError('Embedding C ABI failed')
             original_embedding=captures['target_se'].flatten()
@@ -367,6 +399,7 @@ np.savez(sys.argv[5],**captures)
                 spans=captures['segment_spans'].astype(np.int32)
                 starts=np.ascontiguousarray(spans[[0,2]]);ends=np.ascontiguousarray(spans[[1,3]])
                 average=np.empty(256,dtype=np.float32)
+                guard_resources('native-clip-mean')
                 ok=lib.openvoice2_extract_speaker_embedding_segments(ov,target_pcm.ctypes.data_as(floatp),len(target_pcm),22050,
                     starts.ctypes.data_as(ct.POINTER(ct.c_int)),ends.ctypes.data_as(ct.POINTER(ct.c_int)),2,average.ctypes.data_as(floatp))
                 if not ok:raise RuntimeError('Native segment averaging failed')
@@ -377,6 +410,7 @@ np.savez(sys.argv[5],**captures)
                 lib.openvoice2_set_target_embedding.argtypes=[ct.c_void_p,floatp];lib.openvoice2_set_target_embedding.restype=ct.c_bool
                 if not lib.openvoice2_set_target_embedding(ov,average.ctypes.data_as(floatp)):raise RuntimeError('Mean conditioning rejected')
                 ptr=floatp();size=ct.c_int()
+                guard_resources('native-mean-conditioned-conversion')
                 if not lib.openvoice2_convert(ov,source_pcm.ctypes.data_as(floatp),len(source_pcm),22050,
                     target_pcm.ctypes.data_as(floatp),len(target_pcm),22050,ct.byref(ptr),ct.byref(size)):
                     raise RuntimeError('Mean-conditioned conversion failed')

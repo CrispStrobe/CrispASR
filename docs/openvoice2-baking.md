@@ -1,12 +1,37 @@
 # OpenVoice2 reference and cloning validation
 
-Status (2026-10-19): strict reference/runtime wiring is implemented. Fresh
+Status (2026-10-28): strict reference/runtime wiring is implemented. Fresh
 model, CUDA and speech-quality acceptance is pending execution and independent
 audit; the June cosine measurements in HISTORY.md are historical evidence.
 CUDA package run39266520251/source0b4213c39 passed compilation, linking and
 dependency checks. Package delivery audit is still pending; it did not execute
 a GPU/model test. See [the handoff](maintenance-handoff.md) and [PLAN.md](../PLAN.md)
 for current queue blockers, exact source pins and acceptance tasks.
+
+## Recovered execution state — 2026-10-28
+
+The previous bake is terminal **ERROR**. Its uploaded worker identifies itself
+as `2026-10-19.openvoice-bake.2`, native source `71e329c`. The recovered native
+log reports **no CPU ggml backend registered**, then aborts at the backend
+buffer assertion while loading MeloTTS. It supplies no pretrained numerical,
+GPU, conditioning or speech-quality acceptance. The old source and terminal
+logs are preserved privately before any replacement submission.
+
+The already prepared worker adds `GGML_BACKEND_DL` and module discovery from
+the audited bundle directory. Its conditioning mode uses source `6be9fda36`,
+with the same ggml revision as the frozen runtime. No model implementation
+changed since that source. New worker versions add retained load, available
+memory, scratch and GPU-memory checks before compilation and every reference
+or native inference phase; insufficient resources stop before work. The two
+host C++ delta compilations remain sequential and use the shared harness
+heartbeat. No ggml/CUDA SDK rebuild or Torch reinstall is needed.
+
+The follow-up remains unsubmitted until current session capacity is confirmed.
+An account-roster query hit API rate limiting; that is not evidence of a free
+GPU slot. Do not poll the entire historical kernel list in a burst. Collect a
+bounded current roster after backoff, respect the two-session cap, and never
+infer a running kernel's failure from missing mid-flight logs. The original
+27/28 stage, waveform, content and speaker gates remain unchanged.
 
 ## Recipe and license boundary
 

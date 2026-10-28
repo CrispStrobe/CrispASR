@@ -128,9 +128,12 @@ namespace CrispASR
         // Session-state setters
         // ----------------------------------------------------------------
 
-        private static void Check(int rc, string name)
+        // Optional tuning controls use -2 for an unsupported backend. Explicit
+        // resource/identity operations also use -2 for invalid input or load
+        // failure, so those callers require zero-success.
+        private static void Check(int rc, string name, bool allowUnsupported = true)
         {
-            if (rc != 0 && rc != -2)
+            if (rc != 0 && !(allowUnsupported && rc == -2))
                 throw new InvalidOperationException($"{name} failed (rc={rc})");
         }
 
@@ -140,7 +143,7 @@ namespace CrispASR
 
         /// <summary>Load a voice prompt GGUF or WAV reference. refText is for qwen3-tts WAV refs.</summary>
         public void SetVoice(string path, string? refText = null)
-            => Check(NativeMethods.crispasr_session_set_voice(Handle, path, refText), "set_voice");
+            => Check(NativeMethods.crispasr_session_set_voice(Handle, path, refText), "set_voice", allowUnsupported: false);
 
         /// <summary>Select a preset speaker by name (orpheus).</summary>
         public void SetSpeakerName(string name)
@@ -153,7 +156,7 @@ namespace CrispASR
 
         /// <summary>Select a multi-speaker backend's speaker by index.</summary>
         public void SetSpeakerId(int id)
-            => Check(NativeMethods.crispasr_session_set_speaker_id(Handle, id), "set_speaker_id");
+            => Check(NativeMethods.crispasr_session_set_speaker_id(Handle, id), "set_speaker_id", allowUnsupported: false);
 
         /// <summary>Return the list of preset speaker names for the active backend.</summary>
         public string[] Speakers()
@@ -195,7 +198,7 @@ namespace CrispASR
 
         /// <summary>Select + load a punctuation-restoration model.</summary>
         public void SetPuncModel(string puncModel)
-            => Check(NativeMethods.crispasr_session_set_punc_model(Handle, puncModel), "set_punc_model");
+            => Check(NativeMethods.crispasr_session_set_punc_model(Handle, puncModel), "set_punc_model", allowUnsupported: false);
 
         /// <summary>Comma-separated hotwords for contextual biasing.</summary>
         public void SetHotwords(string hotwords, float boost)
