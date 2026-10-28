@@ -1,4 +1,4 @@
-# Fresh-agent maintainer handoff — 2026-10-27
+# Fresh-agent maintainer handoff — 2026-10-28
 
 This is the current handoff. No previous chat is needed to understand the work,
 what is complete, or what to do next. Read `AGENTS.md` and the full maintainer
@@ -7,7 +7,7 @@ mandatory method. Read gitignored local `CLAUDE.md` for private worktree/storage
 account, credential and recovery bindings. Then claim one bounded task in
 [PLAN.md](../PLAN.md) before implementation.
 
-The prior [October 19 handoff](maintenance-handoff-2026-10-19.md) and
+The 2026-10-27 version of this file is in Git history. The prior [October 19 handoff](maintenance-handoff-2026-10-19.md) and
 [historical plan](../PLAN-ARCHIVE.md) are archived snapshots. Their old release,
 PR, job-queue and ownership claims are not current instructions. Do not resume
 them automatically. Public path aliases describe roles; actual bindings stay
@@ -15,30 +15,35 @@ in ignored local notes.
 
 ## Current state and first actions
 
-Checkpoint before this documentation wrap-up: main `630a1fc1f`. Worktree recovery
-and the protected original checkout are identified privately. Do not reset,
-clean or build in the maintainer's unrelated dirty checkout. No job or collector
-from the completed six-item batch requires resumption.
-Older unadopted-job references may exist in local notes. Inspect actual service
-state before allocating a new job; do not assume the account is idle.
-No implementation claim is transferred to a fresh agent.
+State at this wrap-up (2026-10-28): **v0.8.46 is published; v0.8.47 is tagged and
+its release run was in flight.** No implementation claim is transferred: every
+open item below is unclaimed and must be claimed in [PLAN.md](../PLAN.md).
 
-1. Read this handoff and the short current plan. Check working-tree status and
-   remote main; preserve unrelated work.
-2. Refresh open issues, PRs and applicable checks. Read each relevant whole issue,
-   all comments, linked comments and latest follow-ups before changing behavior.
-   The October 27 check found five open issues (#456/#461/#483/#532/#557), zero
-   open PRs, no changes to the 26 existing comments, and zero comments on #557.
-3. Choose the proposed correctness-release scope first, or a separately assigned
-   #557 packaging task. Do not start either during a documentation-only wrap-up.
-4. For implementation, record owner, source, exact missing behavior, acceptance
-   gates, resource/hardware needs and next action in PLAN.md. Keep completed
-   evidence and rejected controls; do not recreate an already passing campaign.
+| Item | State | Evidence |
+|---|---|---|
+| v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit receipt **not yet green** (audit-script bug, now fixed; see task A). | [Receipt](release-publication-2026-10-28.md) |
+| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** was queued at hand-off. Nothing about its outputs is verified. | Task B |
+| #557 issue | Code merged. Issue still **open**. No public comment posted yet. | Task C |
+| data2vec-base nightly gate | One CPU-variance failure recorded, not fixed. | Task D |
+
+First actions for a fresh agent:
+
+1. Read this handoff and [PLAN.md](../PLAN.md). `git pull` main; preserve unrelated work.
+   Do not reset, clean or build in the maintainer's protected original checkout
+   (identified in the ignored local notes).
+2. Refresh open issues and PRs. Read each relevant whole thread (body, all
+   comments, linked comments, latest follow-ups) before changing behavior. The
+   2026-10-28 check: open #456/#461/#483/#532/#557, zero open PRs, zero comments on #557.
+3. Do tasks A → B → C in order (each depends on the previous). D and E are independent.
+4. For any task, record owner, source SHA, exact missing behavior, acceptance gates,
+   resources and next action in PLAN.md before starting. Do not recreate a passing campaign.
 
 ## Completed work — preserve these decisions
 
 | Area | Implemented and accepted | Limits / evidence |
 |---|---|---|
+| v0.8.46 release | Promotes the qualified Nemotron F16 default with OpenMDW notices, the VoxCPM2 host-permute timing split, and wheel notice/provenance staging. Published 2026-10-28; native and wheel publication pass. The verifier now takes `tag`/`source` inputs, and `REVIEWED_TAGS` lists v0.8.45–v0.8.47. | Wheel audit receipt pending (task A). v0.8.45 tag/assets untouched. [Receipt](release-publication-2026-10-28.md). |
+| #557 Linux GPU wheels (code) | Producers `build-libs-linux-x86_64-vulkan` and `build-libs-linux-arm64-cuda`. Wheel legs `linux-x86_64-vulkan`, `linux-x86_64-hip` (`--host-provided libomp.so`) and `linux-arm64-cuda`. A `whl/hip` index. A Linux Vulkan clean-venv loader smoke. Version-gated (≥ 0.8.47) exact auditor expectations. Shipped as v0.8.47. | Packaging only; no physical-GPU run (task E). Jetson excluded. Publication unverified at hand-off (task B). |
 | v0.8.45 release | Native, Python, Rust and Dart publication completed. Native assets, CUDA splits, package notices, registry distributions and live GPU indexes were read back and verified. | Immutable tag source `e58bb48b5`. Native audit 40304161701; wheel audit 40313434985. No release after v0.8.45 was published by this batch. [Publication receipt](release-publication-2026-10-26.json). |
 | Nemotron default | Managed downloads now select the pinned qualified F16 profile only, retain OpenMDW/origin notices, and reject stale-Q4/missing-Q4 substitution. CPU and actual T4 pass 26/26 original transcript matches, 22/22 VoxCPM prompts, unchanged stage/magnitude gates, CLI, opaque-filename C ABI and fresh/reused-session controls. | Former plain Q4 fails both devices (11/26 and 8/22), so it is not an accepted default. Explicit existing Q4 files remain diagnostic. Existing v0.8.45 binaries still require explicit F16 selection. [Policy and full proof](nemotron-default-policy-2026-10-26.md). |
 | Qwen3-TTS #555 | Incompatible Base packs are rejected before prefill; failed replacement preserves the previous pack. Designed clear defaults use the matching original 1024/2048-dimensional encoders for 0.6B/1.7B. CPU/T4 speech/reference controls pass. | Model-specific embeddings/codes are not interchangeable voice packs. Apache/MIT notices, recipes and original declarations are retained; speaker identity/likeness rights and human listening are not inferred from ASR. [Runtime proof](issue555-voice-pack-2026-10-23.json), [designed voices](qwen3-designed-voices.md). |
@@ -61,85 +66,154 @@ voice pack or requantize Granite merely to reproduce these completed results.
 
 ## Acceptance and job ledger
 
-- Native source `2506cdd4b4f93994e280040d8f766d6bbbc48b53`: CI **40403357613**
-  passes all 13 jobs; lint **40403361382** passes all 10; privacy **40403364971**
-  passes. Unit job **121854716196** selects 2,104 CTest entries with zero failures
-  and four optional dictionary/G2P fixture skips. All four Nemotron default/C ABI
-  controls pass. These are not claims that every selected test executed.
-- Deep lint **40401945512** passes at `5c98e2196`, whose native bytes match the
-  qualified source above. Documentation checkpoint `630a1fc1f` also retains
-  those native bytes; privacy **40423913023** and Pages **40423912257** pass.
-  Its redundant native CI/lint/Ruby runs were deliberately canceled, not failed
-  or counted as passing. Do not repeat a full compiled matrix for unchanged
-  Markdown or file modes.
-- Archive worker `45cd1f9494b1906d416ce36a34fecaccaa9aac95`: preservation
-  **40414804633** and privacy **40414720651** pass. Eight guard tests pass;
-  original/member/runtime hashes and both complete draft-asset readbacks pass.
-  Startup load is allowed to settle for at most five minutes without changing
-  the original resource limits. The first actual resource failure is retained.
-- Hosted Docker smoke **40402386515** passes both jobs and all eight MUSA policy
-  controls. It does not use the MUSA SDK or qualify the MUSA runtime image.
-- CPU/T4 original-model proof, licenses, inputs and verifier recipes are already
-  retained with immutable pins. The [aggregate receipt](ordered-agenda-2026-10-26.json)
-  and linked model receipts identify them. Do not redownload large model-bearing
-  Actions artifacts to recover small audit files.
-- The two temporary validation refs were removed only after proof was pushed.
-  Preserve `archive/issue483-mmq-source-20261008` and the matching maintainer
-  draft. No required collector or acceptance job remains awaiting completion.
+- **v0.8.46**, tag source `34a8e436192de19d3e5a872437edfe3fd26ce8c4`:
+  - CI **40470378993**, Lint **40477169406** and Secret scan **40470378983** pass.
+    The earlier bump commit `1e7d3b735` failed only Lint: the Flutter changelog
+    entry was missing. It was fixed before tagging.
+  - Release **40649389464** passes all 36 jobs.
+  - Native audit **40682766228** PASS: 50 assets fully read back, with notices
+    and the CLI version smoke.
+  - Wheels **40679618075** and wrappers **40649389411** pass.
+  - Wheel audit pending: task A.
+- **v0.8.47**, tag source `5f87a56265e4bbd7e2adc7052254e576d5774abb`:
+  - CI **40689967257**, Lint **40689967286** and Secret scan **40689967265** pass.
+  - Release **40711745769** was in flight at hand-off: task B.
+- **#557 dry runs** of the new library producers pass:
+  - Vulkan **40460158618**: build, relocated-load verify, dependency gate.
+  - ARM64 CUDA **40661942703**: same gates.
+  - A wheel staged from the Vulkan artifact passed notice (20 files),
+    provenance and manylinux_2_35 floor checks, and loaded with `CDLL` locally.
+- Earlier evidence for v0.8.45 and the Nemotron, Qwen3, Granite, CSM, MMQ and
+  MUSA work (CI 40403357613, lint 40403361382, preservation 40414804633 and
+  related runs) is unchanged. See the Git history of this file and
+  [ordered-agenda-2026-10-26.json](ordered-agenda-2026-10-26.json).
 
 Public aliases such as `${CRISPASR_STORAGE}`, `${CRISPASR_WORKTREES}` and
 `${CRISPASR_SCRATCH}` denote storage roles, not literal machine layouts. Private
 locations and exact recovery commands are in ignored notes, not in this ledger.
 
-## Next task 1 — correctness-release preparation
+## Open tasks — fully scoped
 
-This is proposed next work, not a release launched by the documentation task.
-The source-only Nemotron fix has not reached the published v0.8.45 registry.
-Prepare a new candidate containing accepted fixes; do not retag or overwrite
-v0.8.45 to make it appear fixed. Use `scripts/bump-version.sh` for version/tag
-propagation, preserve source/model/license pins and freeze the selected source.
+All are unclaimed. Hosted Actions only; none needs a local model or GPU job.
+Before every push run the five privacy guards (see the ignored local notes for
+the account binding). Avoid bursts of pushes to main: each push cancels the
+pending Pages deploy and in-progress CI/Lint on the earlier commit. That is
+what delayed the live wheel index for v0.8.46.
 
-Inspect `.github/workflows/release.yml`, `release-python-wheels.yml` and
-`release-wrappers.yml`, the notice/provenance helpers, and the existing publication
-auditor. Validate the actual resulting CLI/C ABI, relocated native bundles,
-wheel ABI/metadata/notices, full/split CUDA payloads and runtime dependencies.
-Inspect terminal producer results before publication claims, and verify public
-asset/PyPI/index/Rust/Dart readbacks after any authorized publication. Existing
-speech evidence can be reused only where native/inference identity is established;
-new native behavior requires its own original-reference and actual-device proof.
-Keep MUSA and Nyra unqualified scope out of publication acceptance.
+### Task A — finish the v0.8.46 wheel audit receipt
 
-## Next tasks 2–4 — #557 Linux GPU wheels
+- **Why:** wheel audit run **40703639437** failed with HTTP 404 on
+  `https://crispstrobe.github.io/CrispASR/whl/hip/crispasr/`. The cause was the
+  auditor, not the release: it required a `hip` index for every version, and
+  `whl/hip` first exists with 0.8.47. PyPI readbacks and the `cuda`/`vulkan`
+  index checks run before that loop. `gpu_index_flavors(version)` in
+  `tools/ci-heavy/release_publication_audit.py` now version-gates it, with a
+  unit test (`test_linux_gpu_wheel_set_is_version_gated_and_flavors_exact`).
+- **Do:** dispatch `.github/workflows/verify-release-publication.yml` on main with
+  `tag=v0.8.46`, `source=34a8e436192de19d3e5a872437edfe3fd26ce8c4`,
+  `wheel_run=40679618075`, `native_audit_run=40682766228`.
+- **Accept:** the run concludes `success`, and its `release-publication-<run>`
+  artifact `receipt.json` has `complete: true, acceptance: true`. Add the run ID
+  to [the receipt](release-publication-2026-10-28.md).
+- **If it fails:** read the traceback. Do not weaken an assertion to pass it.
+  A real defect in a published distribution needs a new patch release, never a
+  re-upload under the same version.
 
-The full thread was read: zero comments/follow-ups at the latest check. See
-[the code and actual-asset audit](issue-557-linux-gpu-wheels-review-2026-10-26.md).
-No implementation or new wheel publication has started.
+### Task B — verify the v0.8.47 publication
 
-1. **Linux x86_64 Vulkan first.** Add a relocatable shared-library native producer
-   in `.github/workflows/release.yml`, with source/tag provenance, all notices,
-   headers/plugins and loader/dependency closure. The current Vulkan CLI producer
-   explicitly uses `BUILD_SHARED_LIBS=OFF`; its archive cannot supply a missing
-   shared library. Add the corresponding manylinux wheel matrix leg in
-   `.github/workflows/release-python-wheels.yml` using the accepted bundle.
-2. **Linux x86_64 HIP next.** A HIP lib bundle already exists. Add the wheel leg,
-   explicit `+hip` metadata and `whl/hip` PEP 503 index. Extend
-   `tools/ci-heavy/release_publication_audit.py`: native-payload mappings, exact
-   output sets, local-version logic and live index checks currently cover only
-   three GPU variants and CUDA/Vulkan indexes. Preserve strict sets; do not hide
-   the new output from verification.
-3. **ARM CUDA afterward.** CPU aarch64 wheels exist, but there is no matching ARM
-   CUDA native producer/bundle or GPU wheel. Define the ARM toolchain, CUDA
-   architecture/runtime target and actual-device acceptance separately. An x86
-   CUDA wheel or T4 execution does not qualify aarch64.
+- **Do, in order:**
+  1. Wait for release run **40711745769** (tag `v0.8.47`). Every build job must
+     conclude `success`. In particular check the new
+     `build-libs-linux-x86_64-vulkan` and `build-libs-linux-arm64-cuda`, which
+     had passed only branch dry runs (40460158618, 40661942703).
+  2. Confirm the release has every v0.8.46 asset name (with 0.8.47) plus
+     `libcrispasr-linux-x86_64-vulkan.tar.gz` and `libcrispasr-linux-arm64-cuda.tar.gz`.
+     The native set is normally 52.
+  3. Wait for the `Release Python wheels` run it triggers (event `workflow_run`)
+     and for `Release wrappers` (Rust/Dart). The wheel run must include and pass
+     the GPU legs `linux-x86_64-vulkan`, `linux-x86_64-hip` and
+     `linux-arm64-cuda`, plus the Linux Vulkan clean-venv smoke step.
+     `publish-gpu-index` needs every GPU leg to pass.
+  4. Once the index commit `ci: publish GPU wheel index for v0.8.47 [skip ci]`
+     is on main, wait for Pages to deploy it. Check that
+     `https://crispstrobe.github.io/CrispASR/whl/hip/crispasr/` lists the `+hip`
+     wheel and that `whl/cuda/` lists the `manylinux_2_35_aarch64` `+cuda` wheel.
+  5. Dispatch the verifier with `tag=v0.8.47`,
+     `source=5f87a56265e4bbd7e2adc7052254e576d5774abb` and `release_run=<id>`.
+     Then dispatch it again with `wheel_run=<id>` and `native_audit_run=<that run>`.
+     `v0.8.47` is already in `REVIEWED_TAGS`. For versions ≥ 0.8.47 the auditor
+     requires the three new GPU wheels and the `hip` index.
+- **If a new GPU wheel leg fails:** fix the workflow on main and re-run only the
+  wheel workflow with `workflow_dispatch` and `tag=v0.8.47`. The workflow checks
+  out the tag's package source. Do not move or re-push the tag.
+  Known risks to check first:
+  - **HIP:** `stage_libs.py --host-provided libomp.so` must leave nothing
+    unresolved (the leg runs on a runner without ROCm).
+  - **ARM CUDA:** the `ubuntu-22.04-arm` runner must build the wheel against
+    `manylinux_2_35_aarch64`.
+- **Accept:** both verifier runs succeed. Record run IDs, asset count and wheel
+  filenames in [the receipt](release-publication-2026-10-28.md).
 
-For each wheel, preserve native bytes/provenance, exact dependency notices and
-manylinux symbol-floor checks. `python/tools/stage_libs.py` treats absent GPU
-runtime/driver families as host-provided. State that contract accurately and
-review any additional vendored payload. Test a clean installed environment
-through C ABI/Python session, backend/device selection and adjacent plugin
-loading. Actual GPU smoke/parity is needed before claiming acceleration; an
-import, static CLI build or CPU/software-Vulkan fallback is insufficient.
-Do not launch model/SDK builds locally or rebuild unrelated accepted models.
+### Task C — answer and close #557 (public; maintainer approves wording)
+
+- **Precondition:** task B accepted.
+- **Draft (post only after the maintainer approves the text):**
+
+  > Linux GPU wheels are published from v0.8.47:
+  > `+vulkan` (x86_64) at `https://crispstrobe.github.io/CrispASR/whl/vulkan/`,
+  > `+hip` (x86_64, ROCm 6.x) at `https://crispstrobe.github.io/CrispASR/whl/hip/`, and
+  > `+cuda` for aarch64 SBSA servers (Grace/GH200; not Jetson) at the existing
+  > `whl/cuda/` index. The host provides the GPU driver and vendor runtime
+  > (Vulkan loader; ROCm HIP/hipBLAS/rocBLAS and ROCm's libomp; CUDA 12 runtime
+  > and cuBLAS). The wheels pass relocation, dependency, notice and
+  > manylinux_2_35 checks, and the Vulkan wheel loads in a clean environment.
+  > We have not yet run any of them on a physical AMD, Intel or ARM NVIDIA GPU,
+  > so reports from your hardware (e.g. `crispasr.Session` with Parakeet ja)
+  > would be very welcome here.
+
+- **Then:** close #557 as completed. Reopen, or open a narrower follow-up, if the
+  reporter finds a runtime fault.
+
+### Task D — data2vec-base nightly exact-match gate is CPU-sensitive
+
+- **Observed:** `Regression (nightly)` run **40481871937** (commit `34a8e4361`)
+  failed `regression (data2vec-base)` on the Q4_K model `cstr/data2vec-audio-960h-GGUF@97d79857`.
+  The runtime decoded `AND SO MY FELLOW AMERICANS …`; the pinned reference decode
+  is `AND SO A MY FELLOW AMERICANS …`. That is WER 0.0435 against a max of 0.0,
+  with human-accuracy WER 0. The same native code passed on the previous nightly
+  (`1e7d3b735`, the same day). Only a Flutter changelog line changed between them.
+- **Hypothesis:** a Q4_K logit near-tie that flips with the runner's CPU SIMD
+  path (AVX2 vs AVX-512). Unverified: the runner CPU was not recorded.
+- **Do:**
+  1. Re-run that backend several times with the job printing `lscpu`, and record
+     the CPU flags for passing and failing runs.
+  2. If failures track a CPU profile, run the F16 model on both profiles. If F16
+     matches the reference on both, it is quantization near-tie variance.
+  3. Then either pin the expected text per CPU profile, or gate data2vec Q4_K on
+     the F16 reference with a documented tolerance. Keep the F16 gate exact.
+- **Do not:** loosen the gate without the CPU evidence, or edit the reference
+  text to match one runner.
+
+### Task E — real-hardware qualification of the new GPU wheels
+
+- **Status:** packaging only. No new wheel has run on a physical AMD (Vulkan or
+  ROCm), Intel Arc (Vulkan) or ARM NVIDIA GPU. A Kaggle T4 run qualifies none of them.
+- **Resume only with:** a reporter or maintainer machine of that class.
+- **Accept, per class:**
+  - Clean venv: `pip install` from the index.
+  - `crispasr.Session` transcription of the regression JFK sample with the
+    reference-matched transcript.
+  - Log evidence that the GPU backend was selected and the device was used.
+  - CPU and GPU transcripts compared.
+- **Record:** in HISTORY.md and the receipt.
+
+### Scope notes kept from #557 review
+
+- GPU wheels never vendor a driver or vendor runtime (`LINUX_HOST_PROVIDED` in
+  `python/tools/stage_libs.py`). `--host-provided` is a per-leg opt-in, used only
+  for ROCm's `libomp.so` on `+hip`. Do not add it globally.
+- The aarch64 CUDA bundle targets SBSA, CUDA 12.8, architectures 80/86/89/90/120.
+  Jetson/L4T needs a separate toolchain and is out of scope.
 
 ## External holds — exact unblock conditions
 

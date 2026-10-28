@@ -534,6 +534,11 @@ def linux_gpu_wheels_expected(version):
     return tuple(int(part) for part in version.split(".")[:3]) >= LINUX_GPU_WHEELS_SINCE
 
 
+def gpu_index_flavors(version):
+    # whl/hip first exists with the 0.8.47 Linux +hip wheel.
+    return GPU_INDEX_FLAVORS if linux_gpu_wheels_expected(version) else ("cuda", "vulkan")
+
+
 def wheel_local_suffix(artifact_name):
     if not artifact_name.startswith("gpu-"):
         return ""
@@ -638,7 +643,7 @@ def wheels(args, result):
         readbacks.append(dict(filename=record["filename"], url=item["url"], **downloaded))
         path.unlink()
     assets = {a["name"]: a for a in api(f"releases/tags/{args.tag}")["assets"]}
-    for flavor in GPU_INDEX_FLAVORS:
+    for flavor in gpu_index_flavors(version):
         url = f"https://crispstrobe.github.io/CrispASR/whl/{flavor}/crispasr/"
         with OPENER.open(url, timeout=120) as response:
             parser = Links()

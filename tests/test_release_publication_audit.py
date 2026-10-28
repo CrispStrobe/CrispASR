@@ -231,6 +231,9 @@ class PublicationAuditTest(unittest.TestCase):
                          {"libcrispasr-linux-x86_64-vulkan.tar.gz", "libcrispasr-linux-x86_64-hip.tar.gz",
                           "libcrispasr-linux-arm64-cuda.tar.gz"})
         self.assertEqual(self.audit.wheel_local_suffix("gpu-wheel-linux-arm64-cuda"), "+cuda")
+        # v0.8.46 has no whl/hip index; requiring it 404'd the real audit.
+        self.assertEqual(self.audit.gpu_index_flavors("0.8.46"), ("cuda", "vulkan"))
+        self.assertEqual(self.audit.gpu_index_flavors("0.8.47"), ("cuda", "vulkan", "hip"))
 
     def test_missing_native_wheel_libraries_fail(self):
         path = self.root / "empty.whl"

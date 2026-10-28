@@ -1,5 +1,10 @@
 # New #557 — Linux GPU wheel packaging review
 
+> **Status 2026-10-28:** implemented and shipped in v0.8.47 (all three requested
+> wheels). Publication verification, the issue reply and real-GPU qualification
+> are open tasks B, C and E in [the handoff](maintenance-handoff.md). The audit
+> below is the original pre-implementation review.
+
 [Issue #557](https://github.com/CrispStrobe/CrispASR/issues/557) arrived during the
 final six-item audit. The complete description and all comments were read:
 there are currently zero comments, no linked issue comments, and no later

@@ -1,3 +1,20 @@
+## 2026-10-28 — v0.8.46 correctness release and v0.8.47 Linux GPU wheels (#557)
+
+v0.8.46 (tag source `34a8e4361`) publishes the qualified Nemotron F16 default
+and its OpenMDW notices, the VoxCPM2 timing split and wheel notice/provenance
+staging. Release 40649389464 passes 36/36 jobs, and native audit 40682766228
+reads back all 50 assets. Wheels 40679618075 and wrappers 40649389411 pass.
+The publication verifier, previously hardcoded to v0.8.45, now takes the tag
+and source as inputs, with an explicit reviewed-tag set.
+
+#557 adds a Linux x86_64 Vulkan shared-library bundle, a Linux aarch64 (SBSA)
+CUDA bundle, and the Linux `+vulkan`, `+hip` and aarch64 `+cuda` wheels plus a
+`whl/hip` index. Both producers passed dry runs (40460158618, 40661942703). This
+shipped as v0.8.47 (tag source `5f87a5626`). Its publication verification, the
+issue reply and physical-GPU qualification remain open. A data2vec Q4_K nightly
+exact-match failure (40481871937) is recorded as CPU variance to investigate.
+[Receipt](docs/release-publication-2026-10-28.md).
+
 ## 2026-10-27 — Consolidated fresh-agent handoff
 
 The current plan and maintainer handoff now separate completed work, proposed

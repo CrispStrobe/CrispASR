@@ -1,61 +1,41 @@
 # CrispASR — Current work plan
 
-Updated 2026-10-27. Start with [the maintainer handoff](docs/maintenance-handoff.md).
+Updated 2026-10-28. Start with [the maintainer handoff](docs/maintenance-handoff.md).
 It contains the completed work, exact evidence, bounded next actions and blockers
 needed by a fresh agent; no earlier chat is required. Follow `AGENTS.md` and its
 mandatory maintainer-guide instructions before implementation.
 
-**No implementation task or model/GPU job is assigned by this handoff.** Claim
-one bounded task here before starting. This documentation request does not
-start a new release, feature build, model campaign or package publication.
+**No task is claimed.** Every row below is open. Claim one by adding owner,
+source SHA, missing behavior, acceptance gates and next action under "NOW"
+before starting. The full scope of each task (exact runs, inputs, commands and
+acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-tasks--fully-scoped).
+
+## NOW — nothing claimed (2026-10-28 wrap-up)
+
+- v0.8.46 is **published**. Native audit passes; the wheel audit receipt is pending (task A).
+- v0.8.47 (#557 Linux GPU wheels) is **tagged** at `5f87a5626`. Release run
+  40711745769 was in flight; nothing about its outputs is verified (task B).
+- [Publication receipt](docs/release-publication-2026-10-28.md).
 
 ## Completed baseline
 
-- v0.8.45 is published and verified; tag source remains `e58bb48b5`.
-- The later Nemotron F16 default, notices/cache guards and B390 timing correction
-  are on main. Native source `2506cdd4b` passes 13 CI and 10 lint jobs; its
-  2,104-test tier has zero failures and four optional fixture skips. Later native
-  bytes through checkpoint `630a1fc1f` are identical. Deep lint at `5c98e2196`
-  also passes with those same native bytes.
-- Qwen3-TTS #555 model-sized voice packs, Granite5 mixed Q4_K, CSM original RoPE,
-  accepted OmniVoice processing and the binding/publication fixes are complete
-  within their recorded scopes. Do not redo their accepted campaigns.
-- Original #483 MMQ packages are preserved with full vendor notices and verified
-  readbacks in an unpublished maintainer draft. Original artifacts need not be
-  recovered again before their November 7 expiry.
-- [Completed six-item review](docs/ordered-agenda-2026-10-26.md),
-  [release receipt](docs/release-publication-2026-10-26.json),
-  [historical completion log](HISTORY.md).
+- v0.8.45 and v0.8.46 are published. v0.8.46 carries the qualified Nemotron F16
+  default; its tag/assets and v0.8.45's must not be rewritten.
+- #557 code is merged: Linux x86_64 `+vulkan`/`+hip` and aarch64 SBSA `+cuda`
+  wheels and producers, and a `whl/hip` index.
+- Earlier completed work is unchanged: Qwen3-TTS #555 voice packs, Granite5
+  Q4_K, CSM RoPE, OmniVoice processing, the MMQ archive and the binding fixes.
+  See [HISTORY.md](HISTORY.md).
 
-**Published/source distinction:** v0.8.45 binaries retain the old Nemotron
-registry default. Use the qualified F16 file explicitly with those binaries;
-the automatic F16 selection requires a build containing the source fix.
+## Open tasks — in order
 
-## NOW — active claim (2026-10-27)
-
-**Claimed: priority 1, v0.8.46 correctness release.** Owner: maintainer agent,
-isolated release worktree. Source: main after `826ac177e` plus release notes and
-the `scripts/bump-version.sh 0.8.46` commit. Missing behavior: published v0.8.45
-binaries still default Nemotron to the rejected plain Q4; v0.8.46 ships the
-qualified F16 default, its OpenMDW notices, VoxCPM2 timing split and wheel
-notice/provenance staging. Acceptance: CI/lint/secret green on the bump commit;
-release run terminal results inspected; native asset, wheel/index, Rust and Dart
-readbacks via the existing publication auditor. Resources: hosted Actions only;
-no local model/GPU job. v0.8.45 tag/assets stay untouched. Next after this: #557
-Vulkan wheel (priority 2).
-
-## Proposed next execution order
-
-| Priority | Bounded task | Entry point and completion gate |
-|---|---|---|
-| 1 | Prepare promotion of the qualified correctness fixes in a new release. | Follow the handoff's release scope. Freeze the selected source, use the version script, validate package/wheel payloads, notices, relocation, C ABI and public readbacks. Preserve v0.8.45/tag/assets; do not silently retag or republish them. Publication belongs to a separately scoped implementation/release task. |
-| 2 | #557 Linux x86_64 Vulkan wheel. | Add the missing relocatable shared-library producer, then the wheel leg. The existing Vulkan CLI is static and is not a shared-lib bundle. Require clean-environment loader/ABI/notice/provenance checks and honest actual-device scope. |
-| 3 | #557 Linux x86_64 HIP wheel. | Reuse the existing pinned HIP lib bundle; add wheel/local-version/index support and expand publication-audit expectations. Preserve the explicit host-runtime contract and carry exact dependency notices. |
-| 4 | #557 ARM CUDA, lower priority. | Separate ARM-native producer/toolchain/runtime/architecture and device qualification. An x86_64 T4 run does not qualify an aarch64 wheel. |
-
-Full implementation map and acceptance details:
-[#557 code/asset audit](docs/issue-557-linux-gpu-wheels-review-2026-10-26.md).
-No #557 implementation or wheel publication has been performed.
+| # | Task | Depends on | Done when |
+|---|---|---|---|
+| A | Rerun the v0.8.46 wheel audit after the auditor `hip`-index fix. | — | Verifier run `success` and `receipt.json` acceptance true; run ID in the receipt. |
+| B | Verify the v0.8.47 publication: release jobs, 52 native assets, three new GPU wheel legs, `whl/hip` + aarch64 `whl/cuda` index entries, native and wheel audits. | v0.8.47 release run finished | Both verifier runs pass; IDs recorded. If a new wheel leg fails, fix and re-dispatch the wheel workflow for `v0.8.47`. Never re-tag. |
+| C | Post the approved #557 reply (draft in the handoff) and close #557. | B | Maintainer approved the text; comment posted; issue closed. |
+| D | Explain the CPU-sensitive data2vec-base Q4_K nightly exact-match failure (run 40481871937). | — | CPU flags recorded for passing and failing runs, F16 checked on both, and the gate adjusted with evidence. |
+| E | Real-hardware qualification of `+vulkan` (AMD/Intel), `+hip` (ROCm) and aarch64 `+cuda`. | Hardware access | Clean-venv install, Session JFK transcript matches, GPU backend selected and used, CPU/GPU compared. Recorded per class. |
 
 ## External holds — do not schedule speculative repairs
 
@@ -69,8 +49,8 @@ No #557 implementation or wheel publication has been performed.
 
 The user explicitly confirmed these inputs/devices/new permissions are unavailable.
 Refresh complete issue threads before resuming if new evidence arrives. Five
-issues were open at the latest check: #456, #461, #483, #532 and new feature #557;
-no PR was open. None was closed merely to finish this batch.
+issues were open at the 2026-10-28 check: #456, #461, #483, #532 and #557
+(implemented, awaiting tasks B/C); no PR was open. None was closed merely to finish this batch.
 
 ## Parked work and historical detail
 
