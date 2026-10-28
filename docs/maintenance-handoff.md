@@ -308,9 +308,13 @@ what delayed the live wheel index for v0.8.46.
   `259993b526944e8e36ccca436e005cbc3935a46636b42c618cfd5c3d19429c8f`.
   Use `tools/kaggle/openvoice-fixed-replay` once its current source is pushed.
   The worker retains clone/header base `6be9fda36` and audited ggml `0a8620765`,
-  overlaying only model CPP `581234dfb` (SHA-256 verified). Current main's
+  overlaying only model CPP `1b874a104` (SHA-256 verified). Current main's
   ggml is newer; passing this frozen-runtime repair is not whole-current-ggml
   qualification. No full SDK rebuild is needed.
+  The next bootstrap pins worker `d84007612167105cf24c7af80014d1f0ea1bd8a3`
+  (SHA-256 `b1fed1e4518ceeb517c749be67ce3eeee9d3243153b5f50043f6edf9c4584f20`),
+  using CPP delta `1b874a104c70bc77e1a64dc1d5f4e924f0a3cfeb`
+  (SHA-256 `f658c40176fe1c67584cd9ab80ca9d954433cfe7973f6ba84b43a448d59b8c13`).
 - Old bake v2 is a terminal CPU-backend registration abort. The prepared
   dynamic-backend/module-discovery repair was never qualified by that run.
 - Conditioning kernel version 1, worker `.2` (2026-10-28), compiled both

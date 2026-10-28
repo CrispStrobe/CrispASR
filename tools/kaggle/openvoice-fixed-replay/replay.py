@@ -6,9 +6,9 @@ from pathlib import Path
 import runpy
 import urllib.request
 
-WORKER_SOURCE = "18cd593de480d1e9ef268570b1eb556edfd926da"
-WORKER_SHA256 = "3162084ed25d9788f6ca28e418eb2b4d8aa1d50eea0f55a0fa3a36feab7cbe21"
-print('OpenVoice fixed replay bootstrap v1',
+WORKER_SOURCE = "d84007612167105cf24c7af80014d1f0ea1bd8a3"
+WORKER_SHA256 = "b1fed1e4518ceeb517c749be67ce3eeee9d3243153b5f50043f6edf9c4584f20"
+print('OpenVoice fixed replay bootstrap v2',
       'bootstrap_sha256=' + hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
       'worker_source=' + WORKER_SOURCE, 'worker_sha256=' + WORKER_SHA256, flush=True)
 path = Path('/kaggle/temp/openvoice-fixed-replay-worker.py')
