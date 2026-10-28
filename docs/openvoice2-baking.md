@@ -1,12 +1,14 @@
 # OpenVoice2 reference and cloning validation
 
-Status (2026-10-28): strict reference/runtime wiring is implemented. Fresh
-model, CUDA and speech-quality acceptance is pending execution and independent
-audit; the June cosine measurements in HISTORY.md are historical evidence.
-CUDA package run39266520251/source0b4213c39 passed compilation, linking and
-dependency checks. Package delivery audit is still pending; it did not execute
-a GPU/model test. See [the handoff](maintenance-handoff.md) and [PLAN.md](../PLAN.md)
-for current queue blockers, exact source pins and acceptance tasks.
+Status (2026-10-28): the bounded three-case conditioned-cloning test is accepted
+on T4 CUDA: 27/27, 27/27 and 28/28 original-reference stages, raw C API,
+exact-repeat/cache and clip-mean controls, WER <=0.2 and independent speaker
+improvement >0.01. [Accepted quality receipt](openvoice-conditioning-accepted-2026-10-28.json).
+The separate current-runtime replay also passes all 27 stages on CPU and CUDA
+against the v0.8.47 SDK and matching ggml headers. High-level Session/CLI,
+model publication, broader voices/languages and default promotion remain
+separate tasks. The older attempts below are historical failed controls,
+not instructions to repeat a passing campaign. See [the handoff](maintenance-handoff.md).
 
 ## Recovered execution state — 2026-10-28
 
@@ -283,6 +285,17 @@ it does not replace the pending actual-model/GPU/quality matrix.
 
 ## Producer checkpoint and publication policy
 
+The repaired conditioning worker (`.6`, kernel version 4) passes all three
+cases. Clone WER is 0.1111, 0 and 0.1111; independent speaker cosine improves
+by 0.1833, 0.2373 and 0.1494 over the baseline. Original and native clips pass
+the unchanged content gate. All artifact hashes and reported WER values were
+independently checked after download. This closes the bounded raw C API
+conditioning/quality proof on the frozen runtime, without promoting a default.
+The current-runtime 27-stage CPU/CUDA proof is retained separately.
+No model was published: validation was explicitly read-only. Earlier Hub
+repository creation returned 403; publishing needs an authorized destination
+and retained notices, followed by full anonymous byte readback.
+
 Conditioning kernel version 3 passed all three original-reference CUDA cases
 (27/27, 27/27, 28/28), exact repeats, uninstrumented raw C API conversion and
 clip-mean conditioning. Its independent quality process failed in PyAV decoding
@@ -298,7 +311,10 @@ headers. It verifies archive bytes, dependency resolution and the owning shared
 library for model symbols before running all 27 stages on CPU and CUDA. Only
 the corrected OpenVoice/Melo translation units and driver compile. No SDK or
 Torch rebuild is involved. This structural profile keeps `model_acceptance`
-false and does not replace full speech, Session or CLI qualification.
+false and does not replace full speech, Session or CLI qualification. Kernel
+version 1 has now passed all 27 stages on CPU and T4 CUDA, with resolved
+dependencies and verified overlay symbol owners. Raw waveform norm ratio is
+1.000042. [Current-runtime receipt](openvoice-current-runtime-replay-2026-10-28.json).
 
 The shared worker checkpoints the converted GGUF under an explicitly unvalidated
 staging path and each original-module reference before native execution. Each

@@ -16,7 +16,7 @@ in ignored local notes.
 ## Current state and first actions
 
 State at this wrap-up (2026-10-28): **v0.8.46 is published; v0.8.47 has partial public assets and
-its native release run has passed all 38 jobs including final publication. Native byte audit passed; Python wheels remain queued.** Active follow-up work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
+its native release run has passed all 38 jobs including final publication. Native byte audit passed; all wheel builds pass, while both wheel publishers remain queued.** Active follow-up work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
 a fresh agent should confirm ownership before dispatching replacements.
 
 | Item | State | Evidence |
@@ -33,7 +33,9 @@ First actions for a fresh agent:
    (identified in the ignored local notes).
 2. Refresh open issues and PRs. Read each relevant whole thread (body, all
    comments, linked comments, latest follow-ups) before changing behavior. The
-   2026-10-28 check: open #456/#461/#483/#532/#557/#558, zero open PRs, zero comments on #557.
+   2026-10-28 check: open #456/#461/#483/#532/#557/#558, new PR #559,
+   zero comments on #557. The [PR #559 review checkpoint](qwen3-context-pr559-review-2026-10-28.md)
+   scopes its remaining gates; no review or merge was submitted.
 3. A is accepted; continue B → C in order. D is independently dispatched; E needs hardware.
 4. For any task, record owner, source SHA, exact missing behavior, acceptance gates,
    resources and next action in PLAN.md before starting. Do not recreate a passing campaign.
@@ -110,8 +112,10 @@ audit **40751444564** passed on `ubuntu-latest` with `complete: true, acceptance
 `bda9d00ce6209a7811dccc5a996077b8bdc2521d`, pinned tag source
 `5f87a56265e4bbd7e2adc7052254e576d5774abb`, release_run `40711745769`,
 `repair_notices=false`. Automatic Python wheel producer **40751349609** is
-also queued (`workflow_run`, workflow source `2c733b9c3`; release inputs remain
-the frozen tag). Preserve both runs. The [accepted native receipt](release-v0847-native-audit-2026-10-28.json)
+now has all 12 setup/build jobs passing, including HIP and ARM CUDA; only
+`publish-pypi` and `publish-gpu-index` remain queued (`workflow_run`, workflow
+source `2c733b9c3`; release inputs remain the frozen tag). Preserve both runs.
+The [accepted native receipt](release-v0847-native-audit-2026-10-28.json)
 and [full inventory](release-v0847-native-assets-2026-10-28.json) are retained.
 Wheel readback still waits for successful
 wheel/index/Pages publication and the accepted native inventory.
@@ -287,6 +291,21 @@ what delayed the live wheel index for v0.8.46.
 
 ### Task F — OpenVoice2 conditioned-cloning proof (independent)
 
+- **COMPLETE for the bounded three-case raw C API scope:** conditioning kernel
+  version 4, worker `2026-10-28.openvoice-conditioning.6`, source
+  `c5287611ef8416704a216d1a91c1a0fea5127a66`, passes 27/27, 27/27 and 28/28
+  original-reference stages on T4 CUDA. Exact repeats, shared posterior noise,
+  uninstrumented conversion and both clip-mean controls pass. Clone WER is
+  0.1111, 0 and 0.1111; speaker improvement is 0.1833, 0.2373 and 0.1494.
+  All retained artifact bytes and WER arithmetic were independently checked.
+  [Accepted receipt](openvoice-conditioning-accepted-2026-10-28.json).
+  Validation was read-only; publication remains false. Do not repeat this
+  passing matrix merely to recover the same evidence.
+  The full quality matrix used the frozen `0a8620765` runtime; the current
+  `e2ae679a` runtime separately passes the exact 27-stage CPU/CUDA replay.
+  These scopes must remain distinct. Neither qualifies high-level Session/CLI,
+  additional languages/natural references, sensitive-tensor quantization,
+  broader devices or a production default. Follow-up scope is below.
 - **Accepted structural result:** frozen replay kernel version2 passes **27/27
   on both CPU and T4 CUDA**, unchanged model/reference/gates. Raw waveform cosine
   is0.99999973, norm ratio1.000042. [Verified receipt](openvoice-frozen-replay-accepted-2026-10-28.json).
@@ -296,14 +315,18 @@ what delayed the live wheel index for v0.8.46.
   quality process failed because installed PyAV rejects `metadata_errors`;
   no ASR/speaker acceptance is claimed. [Retained proof](openvoice-conditioning-structural-2026-10-28.json).
   Repair decodes the generated PCM WAVs directly into mono float32 at 16 kHz,
-  preserving the same ASR model and WER/speaker thresholds. Re-run the full
-  worker after its new immutable bootstrap pins are published. Version 3
-  source, terminal logs and all outputs are retained privately.
-  Separately qualify `tools/kaggle/openvoice-current-replay`: shipped v0.8.47
-  SDK with matching `e2ae679a` ggml headers and only the verified model overlay.
-  It requires resolved host dependencies, actual overlay symbol ownership and
-  all 27 CPU/CUDA stages. Keep model acceptance false; Session/CLI and speech
-  quality are separate. No full SDK rebuild or local model run is needed.
+  preserving the same ASR model and WER/speaker thresholds. The repaired full
+  worker passed as version 4 above. Version 3 source, terminal logs and all
+  outputs are retained privately as a failed decoder control.
+  **Current-runtime structural replay is also accepted:**
+  `tools/kaggle/openvoice-current-replay`, kernel version 1 (slug
+  `crispasr-openvoice-current-runtime-replay`), uses the shipped v0.8.47 SDK
+  with matching `e2ae679a` ggml headers and only the verified model overlay.
+  Dependencies resolve, all four model symbols belong to the overlay, and
+  all 27 stages pass on both CPU and T4 CUDA. Raw waveform norm ratio is
+  1.000042. [Receipt](openvoice-current-runtime-replay-2026-10-28.json).
+  Keep model acceptance false; Session/CLI and speech quality are separate.
+  No full SDK rebuild or local model run was needed. Do not repeat this proof.
 - **Historical failed control:** frozen replay v1 passes 26/27 on CPU and actual T4 CUDA.
   The bias/flow repairs are verified on identical original/model bytes. Only
   raw decoder amplitude fails (~1.11145 norm ratio). Original final activation
@@ -329,7 +352,7 @@ what delayed the live wheel index for v0.8.46.
   overlaying only model CPP `1b874a104` (SHA-256 verified). Current main's
   ggml is newer; passing this frozen-runtime repair is not whole-current-ggml
   qualification. No full SDK rebuild is needed.
-  The next bootstrap pins worker `d84007612167105cf24c7af80014d1f0ea1bd8a3`
+  The accepted frozen replay bootstrap pins worker `d84007612167105cf24c7af80014d1f0ea1bd8a3`
   (SHA-256 `b1fed1e4518ceeb517c749be67ce3eeee9d3243153b5f50043f6edf9c4584f20`),
   using CPP delta `1b874a104c70bc77e1a64dc1d5f4e924f0a3cfeb`
   (SHA-256 `f658c40176fe1c67584cd9ab80ca9d954433cfe7973f6ba84b43a448d59b8c13`).
@@ -345,18 +368,41 @@ what delayed the live wheel index for v0.8.46.
   checkpoints remain in kernel output. Only `CRISPASR_OV2_PUBLISH=1` requests
   Hub writes, with separate `publication_requested/publication_complete` fields.
   A denied requested write fails; it never becomes numerical acceptance.
-- Reuse frozen native source `6be9fda3629d9314da97101b8574fb25db06150f` and the
-  audited original runtime/ggml pins in the worker. The model math is unchanged
-  on main. The bootstrap has a full source/hash pin and a test for stale delivery.
-  Check current Kaggle capacity, submit the repaired worker once, record its
-  actual entry hash/source/hardware, then collect terminal evidence. Never fish
-  for a GPU or treat allocation/building as CUDA execution.
+- The accepted quality run retains header base `6be9fda36` and the audited
+  original runtime/ggml pins, overlaying only the corrected model CPP `1b874a104`.
+  The full worker and bootstrap are source/hash pinned. Its terminal source,
+  logs and output are preserved; no replay or replacement is currently needed.
+  Never treat allocation/building as CUDA execution.
 - **Accept:** original 27/28 stage, magnitude and waveform gates; exact repeated
   uninstrumented C API output; clip-mean conditioning and shared-noise controls;
   actual CUDA vocoder work; independent baseline/original/clone ASR WER <=0.2
   and speaker-similarity improvement >0.01. Preserve rejected controls and
   upstream/model/input hashes and notices. No registry default promotion from
   structural parity alone. See [the full method](openvoice2-baking.md).
+
+#### OpenVoice follow-up scope after task F
+
+1. **High-level integration:** run the real Python Session/C ABI with a renamed
+   Melo model (architecture detection), its pinned BERT companion, the accepted
+   F32-sensitive converter and the synthetic reference. Confirm codec/voice
+   setters, source-speaker routing, 44.1 kHz baseline versus 22.05 kHz clone
+   output, actual CUDA, deterministic reseeding and repeated conversion. Test
+   both raw validation output with an explicit marking attestation and normal
+   marked synthesis; retain notices and label any raw validation artifacts.
+   Apply the unchanged WER/speaker gates to output. Qualify the actual CLI
+   separately: its filename detection and adapter cannot substitute for C ABI
+   coverage. Use suitable hosted workers, not a loaded local machine.
+2. **Publication:** no Hub write was attempted by the accepted read-only run.
+   Earlier repository creation returned 403. Use an authorized destination,
+   retain original MIT notices, converter precision recipe, immutable model/
+   reference/source hashes and synthetic audio attribution. Fully read back
+   public bytes before declaring publication. Do not turn validation green by
+   granting broader credentials or assuming write access was fixed.
+3. **Broader acceptance:** sensitive-tensor quantization, natural references,
+   other languages/voices and additional device families need their own
+   original-reference and decoded-output checks. None is implied by these
+   bounded synthetic English cases. A default change needs an explicit scoped
+   acceptance decision and cannot be inferred from stage parity alone.
 
 ### Scope notes kept from #557 review
 

@@ -1,3 +1,18 @@
+## 2026-10-28 — OpenVoice conditioning and current-runtime proof accepted
+
+The repaired quality decoder completes all three original-reference T4 cases:
+27/27, 27/27 and 28/28 stages, raw C API, exact repeats and clip-mean controls.
+Clone WER is 0.1111, 0 and 0.1111; independent speaker improvement is 0.1833,
+0.2373 and 0.1494, passing unchanged thresholds. Artifact readback verifies
+all immutable files; the producer's progress snapshot matches exactly before
+its final completion event. Read-only validation published no model.
+Separately, the v0.8.47 SDK with matching current ggml headers and the corrected
+model overlay passes 27/27 CPU and CUDA stages, resolved dependency checks and
+four model-symbol ownership checks. High-level Session/CLI and broader
+quality/default qualification remain separate. Portable receipts and follow-up
+scope are in the maintainer handoff. PR #559 received a local source review;
+no public review or merge was submitted. All changes are post-v0.8.47.
+
 ## 2026-10-28 — OpenVoice conditioning proof and quality decoder repair
 
 The three original-recipe repairs pass the full conditioning worker's 27/27,

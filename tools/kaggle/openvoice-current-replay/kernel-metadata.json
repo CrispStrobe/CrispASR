@@ -1,5 +1,5 @@
 {
-  "id": "${KAGGLE_ACCOUNT}/crispasr-openvoice-current-replay",
+  "id": "${KAGGLE_ACCOUNT}/crispasr-openvoice-current-runtime-replay",
   "title": "CrispASR OpenVoice Current Runtime Replay",
   "code_file": "replay.py",
   "language": "python",

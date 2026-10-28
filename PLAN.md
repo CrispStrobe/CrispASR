@@ -20,8 +20,8 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 - Resources: light local inspection only; large builds/readbacks/inference on suitable Actions workers.
 - Same-family repair owner: current agent; Java/Ruby integer speaker setters also swallow native out-of-range `-2`. Shared native range/public-method fixtures failed before the strict zero-success fixes and pass after: Java 95/9 current/older assertions, Ruby 343 assertions. No model changes.
 - Error repair owner: current agent, source `140c02f53`; C# `SetPuncModel`, `SetVoice` and `SetSpeakerId` swallow native `-2` failures. Repaired with public-method negative controls: failed before, 101/35 assertions pass after, using a single compiler process with available memory about 4.9 GiB and load 2.54. Strict zero-success for these explicit operations preserves optional tuning-knob compatibility.
-- OpenVoice numerical repair owner: current agent. The three original-recipe fixes now pass **27/27 on CPU and T4 CUDA** on identical frozen model/reference bytes; raw waveform cosine0.99999973, norm ratio1.000042. [Accepted replay](docs/openvoice-frozen-replay-accepted-2026-10-28.json). SourceCPP `1b874a104`, worker `d84007612`, old audited runtime/headers kept exact. Next execute full three-case conditioning/shared-noise/cache and ASR/speaker gates; then separately qualify current ggml and high-level Session/CLI. No default promotion.
-- Current-runtime validation owner: current agent, starting source `24178da9d`. Full conditioning kernel version 3 is running. Prepare a separate frozen-input replay against the v0.8.47 SDK and matching `e2ae679a` ggml headers, overlaying only the three verified model fixes. Require dependency resolution, symbol ownership and all 27 CPU/CUDA stages; preserve the old-runtime proof separately. No local model inference or SDK rebuild.
+- OpenVoice numerical repair owner: current agent. The three original-recipe fixes pass **27/27 on CPU and T4 CUDA** on identical frozen model/reference bytes; raw waveform cosine 0.99999973, norm ratio 1.000042. The full three-case conditioning/shared-noise/cache and ASR/speaker gates also pass in version 4: [accepted receipt](docs/openvoice-conditioning-accepted-2026-10-28.json). Next separately qualify high-level Session/CLI and authorized model publication. No default promotion.
+- Current-runtime validation owner: current agent, starting source `24178da9d`. Separate frozen replay is accepted against the v0.8.47 SDK and matching `e2ae679a` ggml headers: resolved dependencies, four overlay symbol owners, 27/27 CPU and 27/27 T4 CUDA stages, raw waveform norm ratio 1.000042. [Receipt](docs/openvoice-current-runtime-replay-2026-10-28.json). Full conditioning version 3 passed native checks but hit a PyAV decoder error; repaired version 4 passes quality. No local model inference or SDK rebuild. Both Kaggle jobs are terminal; no replacement is required.
 - C: user requests keeping #557 open and preparing a reply for review; do not post or close. E remains hardware-dependent.
 - Newly opened #558: reproduced and repaired standalone-marker grouping, with model-free regression controls. Reporter audio/NeMo/CUDA acceptance remains pending; see [repair scope](docs/parakeet-word-boundary-558-2026-10-28.md).
 
@@ -48,7 +48,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 | B | Verify the v0.8.47 publication: release jobs, 52 native assets, three new GPU wheel legs, `whl/hip` + aarch64 `whl/cuda` index entries, native and wheel audits. | v0.8.47 release run finished | Both verifier runs pass; IDs recorded. For transient failures rerun failed jobs in the original producer. Whole redispatch risks different CPU bytes colliding with immutable PyPI; see handoff. Never re-tag. |
 | C | Prepare the #557 final reply for maintainer review; keep the issue open. | B | Both audits support the draft claims; reviewed wording is ready. No posting or closure authorized. |
 | D | Investigate the data2vec-base Q4_K nightly exact-match failure (run 40481871937). | — | Cause explained by retained same-host arrays; paired Q4/F16 policy and missing-stage fix covered by model-free controls. Confirm a hosted production regression on the committed source. |
-| F | OpenVoice2 conditioned-cloning CUDA proof using the repaired read-only worker. | Free supported Kaggle session | 27/28 stages, waveform/cache/clip-mean, WER <=0.2 and independent speaker improvement >0.01 pass, with retained licensed inputs and receipts. Publication remains separate. |
+| F | COMPLETE: bounded OpenVoice2 conditioned-cloning CUDA proof; separate current-runtime structural replay accepted. | — | All three 27/28-stage cases, waveform/cache/clip-mean, WER <=0.2 and speaker improvement >0.01 pass. Publication and high-level integration remain separate. See handoff follow-up scope. |
 | E | Real-hardware qualification of `+vulkan` (AMD/Intel), `+hip` (ROCm) and aarch64 `+cuda`. | Hardware access | Clean-venv install, Session JFK transcript matches, GPU backend selected and used, CPU/GPU compared. Recorded per class. |
 
 ## External holds — do not schedule speculative repairs
@@ -64,7 +64,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 The user explicitly confirmed these inputs/devices/new permissions are unavailable.
 Refresh complete issue threads before resuming if new evidence arrives. Six
 issues were open at the 2026-10-28 check: #456, #461, #483, #532, #557
-(implemented, awaiting publication acceptance) and new #558; no PR was open. None was closed merely to finish this batch.
+(implemented, awaiting publication acceptance) and #558. New PR #559 is reviewed
+in [a scoped checkpoint](docs/qwen3-context-pr559-review-2026-10-28.md); CI and
+independent caller/runtime checks remain. Keep this feature after active error
+repairs. None was closed merely to finish this batch.
 
 ## Parked work and historical detail
 

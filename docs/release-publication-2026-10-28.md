@@ -36,46 +36,34 @@ policy and remaining hosted confirmation are tracked as task D.
 | ARM64 CUDA lib producer dry run (branch) | 40661942703 | pass: same gates (CUDA runtime host) |
 | Release | 40711745769 | PASS: 38/38 jobs including final publish; exact 52-name public asset set checked. Full byte audit 40751444564 accepted — task B |
 | Rust / Dart wrappers | 40711745994 | PASS: all three publisher jobs; three registry archives fully read back, registry SHA-256/version, original manifests, licenses and packaged source files match frozen tag ([receipt](release-wrappers-readback-2026-10-28.json)) |
-| Python wheels | 40751349609 | automatic workflow_run producer queued; no wheel acceptance yet |
+| Python wheels | 40751349609 | all 12 setup/build jobs pass, including HIP and ARM CUDA; PyPI and GPU-index publication jobs remain queued. No wheel publication acceptance yet |
 | Native byte publication audit | 40751444564 | PASS: complete/acceptance true; all 52 full anonymous readbacks, notices/runtime/qualified-library inventory accepted. [Receipt](release-v0847-native-audit-2026-10-28.json), [inventory](release-v0847-native-assets-2026-10-28.json) |
 | Wheel publication audit | — | waits for wheels/index/Pages and accepted native inventory — task B |
 
 Not covered: execution on a physical AMD, Intel or ARM NVIDIA GPU (task E). The
 `+hip` wheel cannot be load-tested on hosted runners.
 
-## Current follow-up attempts
+## Current follow-up state
 
-- v0.8.46 corrected wheel auditor: **40736324867**, `ubuntu-latest`, queued.
-  Pinned Ubuntu 24.04 attempt 40723794473 was canceled after remaining unassigned.
-  Original Ubuntu 22.04 attempt 40720956336 was canceled while queued.
-- CPU-profile diagnostic: **40723799365** at `bf724a8e5`, Ubuntu 24.04/EPYC 7763,
-  succeeds for native/AVX2 only. Twelve raw controls, eight pipeline controls,
-  two F16 stage checks and 26 resource gates independently pass
-  ([receipt](data2vec-avx2-controls-2026-10-28.json)). AVX-512 remains unavailable.
-  Original attempt 40721782580 was canceled while queued. No acceptance gate changed.
-- Native auditor now requires the exact reviewed asset set: 50 legacy names,
-  plus the two new native bundles from v0.8.47. Nineteen auditor unit controls
-  pass; current public v0.8.45/v0.8.46 names pass, incomplete v0.8.47 is rejected.
-- The user explicitly requested keeping #557 open and preparing its final reply
-  for review. No comment was posted and no issue was closed.
-- Later source repair for standalone Parakeet word boundaries is separately
-  documented in [#558 scope](parakeet-word-boundary-558-2026-10-28.md). It is
-  outside frozen v0.8.47 and is not new speech/device acceptance.
-
-The genuine older data2vec control is now independently rechecked in
-[data2vec-cpu-profile-evidence-2026-10-28.json](data2vec-cpu-profile-evidence-2026-10-28.json):
-EPYC 7763/AVX2 (without AVX-512) passes on unchanged relevant runtime objects,
-with the same compiler version. This supports testing CPU sensitivity; causal
-acceptance and F16 transcript controls remain pending. Manual diagnostic backend
-runs now retain successful data2vec host/build evidence as well as CSM evidence.
-No transcript or numerical gate was relaxed.
-
-AVX-512 follow-up **40735433388** at `a21687e29` is queued, capability attempt
-1/3, using `--require-avx512`. Collect it before dispatching a replacement; a
-capability-only skip does not close the numerical investigation. The auditor's
-`ubuntu-latest` option changes only its worker label, not release platforms or
-tagged bytes. The final worker-label/docs checkpoints skip redundant native CI;
-normal code checks on `a21687e29` are separate and are not claimed as passing.
+- A is complete: v0.8.46 wheel auditor **40736324867** passed. Previous
+  unassigned attempts 40723794473 and 40720956336 were canceled; do not resume
+  or duplicate them.
+- D has decisive same-host CPU-profile evidence from **40735433388** on
+  EPYC 9V74: native/AVX512 Q4 drops `A`, AVX2 Q4 retains it, and all F16
+  controls exactly match the original transcript. The earlier EPYC 7763 run
+  **40723799365** lacked AVX512 and is a retained historical control.
+  The source now pairs the one-word Q4 allowance with a mandatory exact F16
+  transcript and unchanged stage gates. Production regression **40750908085**
+  remains queued; collect it rather than dispatching another capability probe.
+- B's native audit is accepted. All wheel builds passed in producer
+  **40751349609**, including the three new GPU variants. Wait for both publisher
+  jobs, verify the resulting index/Pages deployment, then run the wheel audit
+  using accepted native audit **40751444564**. Never retag v0.8.47.
+- The user requests keeping #557 open and preparing its reply for review.
+  No comment was posted and no issue was closed.
+- Standalone Parakeet word-boundary repairs are separately documented in
+  [#558 scope](parakeet-word-boundary-558-2026-10-28.md). They are outside
+  frozen v0.8.47 and do not establish reporter speech/device acceptance.
 
 Recovery limit: a full wheel-workflow rerun can rebuild different archive bytes
 while `twine --skip-existing` preserves the original PyPI files. Prefer failed-job

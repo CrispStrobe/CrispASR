@@ -1,0 +1,791 @@
+{
+  "schema": 1,
+  "version": "2026-10-28.openvoice-current-replay.1",
+  "source": "5f87a56265e4bbd7e2adc7052254e576d5774abb",
+  "ggml": "e2ae679a563014f46c546ce6c6448e8601e4dea6",
+  "native_model_delta_source": "1b874a104c70bc77e1a64dc1d5f4e924f0a3cfeb",
+  "native_model_delta_sha256": "f658c40176fe1c67584cd9ab80ca9d954433cfe7973f6ba84b43a448d59b8c13",
+  "worker_source": "d84007612167105cf24c7af80014d1f0ea1bd8a3",
+  "worker_sha256": "b1fed1e4518ceeb517c749be67ce3eeee9d3243153b5f50043f6edf9c4584f20",
+  "entry_sha256": "815bb7b12d4a78a9b79d16399465305de4de468e2fda06bec8ae5963b396e147",
+  "complete": true,
+  "model_acceptance": false,
+  "gpu_executed": true,
+  "publication_requested": false,
+  "publication_complete": false,
+  "sdk": {
+    "tag": "v0.8.47",
+    "asset": "libcrispasr-linux-x86_64-cuda.tar.gz",
+    "sha256": "8fbd68e1822cd16e58055753fc67120c20784451e286d94177f7f7fb78b76cbd",
+    "bytes": 196467235
+  },
+  "limitations": [
+    "Frozen tau=0 structural replay only; speech quality is a separate gate",
+    "Only OpenVoice/Melo model objects rebuilt; shipped SDK supplies core and ggml",
+    "High-level Session and CLI are not qualified by this replay"
+  ],
+  "hardware": "Tesla T4, 7.5, 15360 MiB, 580.178.04\nTesla T4, 7.5, 15360 MiB, 580.178.04",
+  "resource_checks": [
+    {
+      "phase": "bootstrap-current-sdk",
+      "available_bytes": 32525139968,
+      "load": [
+        0.009765625,
+        0.1484375,
+        0.10205078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1126151811072,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "dependencies-libcrispasr.so",
+      "available_bytes": 32516489216,
+      "load": [
+        0.32958984375,
+        0.20654296875,
+        0.12255859375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125533609984,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "dependencies-libggml-cuda.so",
+      "available_bytes": 32513794048,
+      "load": [
+        0.32958984375,
+        0.20654296875,
+        0.12255859375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125533609984,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "compile-current-model-delta",
+      "available_bytes": 32513576960,
+      "load": [
+        0.32958984375,
+        0.20654296875,
+        0.12255859375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125533605888,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "compile-current-diff-driver",
+      "available_bytes": 32315662336,
+      "load": [
+        0.61376953125,
+        0.27783203125,
+        0.14794921875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125533294592,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "replay-cuda",
+      "available_bytes": 32388874240,
+      "load": [
+        0.64501953125,
+        0.2900390625,
+        0.15283203125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125533233152,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "replay-cpu",
+      "available_bytes": 32412155904,
+      "load": [
+        0.724609375,
+        0.32568359375,
+        0.16748046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125533052928,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    }
+  ],
+  "host_provider_directories": [
+    "cublas/lib",
+    "cuda_cccl/lib",
+    "cuda_cupti/lib",
+    "cuda_nvcc/lib",
+    "cuda_nvrtc/lib",
+    "cuda_runtime/lib",
+    "cudnn/lib",
+    "cufft/lib",
+    "cufile/lib",
+    "curand/lib",
+    "cusolver/lib",
+    "cusparse/lib",
+    "cusparselt/lib",
+    "nccl/lib",
+    "nvjitlink/lib",
+    "nvshmem/lib",
+    "nvtx/lib",
+    "cuda/lib64",
+    "nvidia/lib64"
+  ],
+  "symbol_owners": {
+    "openvoice2_context_default_params": "libopenvoice-probe.so",
+    "openvoice2_init_from_file": "libopenvoice-probe.so",
+    "openvoice2_convert": "libopenvoice-probe.so",
+    "openvoice2_set_stage_callback": "libopenvoice-probe.so"
+  },
+  "native_delta": {
+    "libopenvoice-probe.so": "85b429cd17914cb0712429baf04d52840edfaef79b362dcfb734dcddb4eee744",
+    "openvoice-bake": "73a278d97a27c5ebddd4e0b2a85f42abfce158d40783e3e99094aa2d8214325c"
+  },
+  "replay_input_sha256": {
+    "model": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255",
+    "reference": "259993b526944e8e36ccca436e005cbc3935a46636b42c618cfd5c3d19429c8f"
+  },
+  "replay_results": [
+    {
+      "mode": "cuda",
+      "returncode": 0,
+      "passes": 27,
+      "failures": 0,
+      "cuda_work_observed": true,
+      "accepted": true
+    },
+    {
+      "mode": "cpu",
+      "returncode": 0,
+      "passes": 27,
+      "failures": 0,
+      "cuda_work_observed": false,
+      "accepted": true
+    }
+  ],
+  "replay_acceptance": true,
+  "replay_scope": "Frozen tau=0 CPU/CUDA replay with v0.8.47 SDK, matching e2 ggml headers and verified model overlay; no speech quality or Session/CLI acceptance",
+  "kernel_version": 1,
+  "stages": {
+    "cpu": [
+      {
+        "stage": "src_pcm",
+        "passed": true,
+        "n": 85505.0,
+        "cos": 1.0,
+        "|mine|": 20.0432366,
+        "|ref|": 20.0432366,
+        "ratio": 1.0,
+        "rel_l2": 0.0,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "ref_pcm",
+        "passed": true,
+        "n": 71680.0,
+        "cos": 1.0,
+        "|mine|": 21.4376587,
+        "|ref|": 21.4376587,
+        "ratio": 1.0,
+        "rel_l2": 0.0,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "src_spec",
+        "passed": true,
+        "n": 171342.0,
+        "cos": 1.0,
+        "|mine|": 555.45518,
+        "|ref|": 555.45537,
+        "ratio": 0.999999658,
+        "rel_l2": 1.11952002e-06,
+        "max_abs": 7.08252192e-05
+      },
+      {
+        "stage": "ref_spec",
+        "passed": true,
+        "n": 143640.0,
+        "cos": 1.0,
+        "|mine|": 594.12155,
+        "|ref|": 594.121769,
+        "ratio": 0.999999631,
+        "rel_l2": 1.98569085e-06,
+        "max_abs": 0.000276431441
+      },
+      {
+        "stage": "ref_enc_layernorm",
+        "passed": true,
+        "n": 143640.0,
+        "cos": 1.0,
+        "|mine|": 204.768723,
+        "|ref|": 204.768717,
+        "ratio": 1.00000003,
+        "rel_l2": 1.57120485e-06,
+        "max_abs": 2.23740935e-05
+      },
+      {
+        "stage": "ref_enc_conv0",
+        "passed": true,
+        "n": 1151360.0,
+        "cos": 1.0,
+        "|mine|": 275.311542,
+        "|ref|": 275.311545,
+        "ratio": 0.999999987,
+        "rel_l2": 2.82067308e-06,
+        "max_abs": 9.22847539e-05
+      },
+      {
+        "stage": "ref_enc_conv1",
+        "passed": true,
+        "n": 288960.0,
+        "cos": 1.0,
+        "|mine|": 89.8781581,
+        "|ref|": 89.8781569,
+        "ratio": 1.00000001,
+        "rel_l2": 7.47936453e-06,
+        "max_abs": 0.00021988526
+      },
+      {
+        "stage": "ref_enc_conv2",
+        "passed": true,
+        "n": 145600.0,
+        "cos": 1.0,
+        "|mine|": 57.7518576,
+        "|ref|": 57.7518618,
+        "ratio": 0.999999928,
+        "rel_l2": 2.09179638e-05,
+        "max_abs": 0.000248990953
+      },
+      {
+        "stage": "ref_enc_conv3",
+        "passed": true,
+        "n": 38016.0,
+        "cos": 0.999999999,
+        "|mine|": 36.0819118,
+        "|ref|": 36.0819145,
+        "ratio": 0.999999925,
+        "rel_l2": 3.98713774e-05,
+        "max_abs": 0.000446729362
+      },
+      {
+        "stage": "ref_enc_conv4",
+        "passed": true,
+        "n": 19584.0,
+        "cos": 0.999999999,
+        "|mine|": 20.6945725,
+        "|ref|": 20.6945841,
+        "ratio": 0.999999441,
+        "rel_l2": 5.38669546e-05,
+        "max_abs": 0.000302240252
+      },
+      {
+        "stage": "ref_enc_conv5",
+        "passed": true,
+        "n": 5760.0,
+        "cos": 0.999999998,
+        "|mine|": 9.3858411,
+        "|ref|": 9.38585727,
+        "ratio": 0.999998277,
+        "rel_l2": 5.52210538e-05,
+        "max_abs": 0.000135660172
+      },
+      {
+        "stage": "ref_enc_gru_out",
+        "passed": true,
+        "n": 128.0,
+        "cos": 1.0,
+        "|mine|": 5.02094554,
+        "|ref|": 5.02094745,
+        "ratio": 0.99999962,
+        "rel_l2": 3.12626391e-05,
+        "max_abs": 6.04987144e-05
+      },
+      {
+        "stage": "target_se",
+        "passed": true,
+        "n": 256.0,
+        "cos": 0.999999999,
+        "|mine|": 11.3325328,
+        "|ref|": 11.3325415,
+        "ratio": 0.999999232,
+        "rel_l2": 3.7413542e-05,
+        "max_abs": 6.74724579e-05
+      },
+      {
+        "stage": "src_se",
+        "passed": true,
+        "n": 256.0,
+        "cos": 1.0,
+        "|mine|": 10.4166389,
+        "|ref|": 10.4166389,
+        "ratio": 1.0,
+        "rel_l2": 0.0,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "enc_q_pre",
+        "passed": true,
+        "n": 64128.0,
+        "cos": 1.0,
+        "|mine|": 819.97098,
+        "|ref|": 819.971275,
+        "ratio": 0.99999964,
+        "rel_l2": 1.68898543e-06,
+        "max_abs": 0.000167369843
+      },
+      {
+        "stage": "enc_q_wn_out",
+        "passed": true,
+        "n": 64128.0,
+        "cos": 1.0,
+        "|mine|": 86.2501782,
+        "|ref|": 86.2499691,
+        "ratio": 1.00000242,
+        "rel_l2": 9.26540915e-06,
+        "max_abs": 8.60691071e-05
+      },
+      {
+        "stage": "enc_q_stats",
+        "passed": true,
+        "n": 128256.0,
+        "cos": 1.0,
+        "|mine|": 248.26872,
+        "|ref|": 248.267851,
+        "ratio": 1.0000035,
+        "rel_l2": 9.01939762e-06,
+        "max_abs": 0.000136971474
+      },
+      {
+        "stage": "enc_q_z",
+        "passed": true,
+        "n": 64128.0,
+        "cos": 1.0,
+        "|mine|": 235.503387,
+        "|ref|": 235.502469,
+        "ratio": 1.00000389,
+        "rel_l2": 9.50624617e-06,
+        "max_abs": 0.000136971474
+      },
+      {
+        "stage": "z_after_flow_fwd",
+        "passed": true,
+        "n": 64128.0,
+        "cos": 1.0,
+        "|mine|": 50.1391807,
+        "|ref|": 50.1391085,
+        "ratio": 1.00000144,
+        "rel_l2": 2.2871456e-05,
+        "max_abs": 0.000185251236
+      },
+      {
+        "stage": "z_after_flow_rev",
+        "passed": true,
+        "n": 64128.0,
+        "cos": 1.0,
+        "|mine|": 264.756347,
+        "|ref|": 264.756,
+        "ratio": 1.00000131,
+        "rel_l2": 1.66970359e-05,
+        "max_abs": 0.000133991241
+      },
+      {
+        "stage": "dec_conv_pre",
+        "passed": true,
+        "n": 171008.0,
+        "cos": 0.999999998,
+        "|mine|": 5858.09458,
+        "|ref|": 5858.08457,
+        "ratio": 1.00000171,
+        "rel_l2": 6.01808728e-05,
+        "max_abs": 0.00507354736
+      },
+      {
+        "stage": "dec_stage0",
+        "passed": true,
+        "n": 684032.0,
+        "cos": 0.999999994,
+        "|mine|": 2878.41452,
+        "|ref|": 2878.4084,
+        "ratio": 1.00000213,
+        "rel_l2": 0.000112086911,
+        "max_abs": 0.00495529175
+      },
+      {
+        "stage": "dec_stage1",
+        "passed": true,
+        "n": 2736128.0,
+        "cos": 0.999999968,
+        "|mine|": 1633.12244,
+        "|ref|": 1633.02763,
+        "ratio": 1.00005806,
+        "rel_l2": 0.000260130828,
+        "max_abs": 0.00328922272
+      },
+      {
+        "stage": "dec_stage2",
+        "passed": true,
+        "n": 2736128.0,
+        "cos": 0.999999965,
+        "|mine|": 971.307272,
+        "|ref|": 971.305877,
+        "ratio": 1.00000144,
+        "rel_l2": 0.000264736255,
+        "max_abs": 0.00461016595
+      },
+      {
+        "stage": "dec_stage3",
+        "passed": true,
+        "n": 2736128.0,
+        "cos": 0.999999952,
+        "|mine|": 341.791867,
+        "|ref|": 341.767736,
+        "ratio": 1.00007061,
+        "rel_l2": 0.000317489997,
+        "max_abs": 0.0014026165
+      },
+      {
+        "stage": "dec_output",
+        "passed": true,
+        "n": 85504.0,
+        "cos": 0.99999973,
+        "|mine|": 17.1454643,
+        "|ref|": 17.1447433,
+        "ratio": 1.00004205,
+        "rel_l2": 0.000735568599,
+        "max_abs": 0.000696750358
+      },
+      {
+        "stage": "output_pcm",
+        "passed": true,
+        "n": 85504.0,
+        "cos": 0.99999973,
+        "|mine|": 43.6001019,
+        "|ref|": 43.5998791,
+        "ratio": 1.00000511,
+        "rel_l2": 0.000734369962,
+        "max_abs": 0.00176925212
+      }
+    ],
+    "cuda": [
+      {
+        "stage": "src_pcm",
+        "passed": true,
+        "n": 85505.0,
+        "cos": 1.0,
+        "|mine|": 20.0432366,
+        "|ref|": 20.0432366,
+        "ratio": 1.0,
+        "rel_l2": 0.0,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "ref_pcm",
+        "passed": true,
+        "n": 71680.0,
+        "cos": 1.0,
+        "|mine|": 21.4376587,
+        "|ref|": 21.4376587,
+        "ratio": 1.0,
+        "rel_l2": 0.0,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "src_spec",
+        "passed": true,
+        "n": 171342.0,
+        "cos": 1.0,
+        "|mine|": 555.45518,
+        "|ref|": 555.45537,
+        "ratio": 0.999999658,
+        "rel_l2": 1.11952002e-06,
+        "max_abs": 7.08252192e-05
+      },
+      {
+        "stage": "ref_spec",
+        "passed": true,
+        "n": 143640.0,
+        "cos": 1.0,
+        "|mine|": 594.12155,
+        "|ref|": 594.121769,
+        "ratio": 0.999999631,
+        "rel_l2": 1.98569085e-06,
+        "max_abs": 0.000276431441
+      },
+      {
+        "stage": "ref_enc_layernorm",
+        "passed": true,
+        "n": 143640.0,
+        "cos": 1.0,
+        "|mine|": 204.768723,
+        "|ref|": 204.768717,
+        "ratio": 1.00000003,
+        "rel_l2": 1.57120485e-06,
+        "max_abs": 2.23740935e-05
+      },
+      {
+        "stage": "ref_enc_conv0",
+        "passed": true,
+        "n": 1151360.0,
+        "cos": 1.0,
+        "|mine|": 275.311542,
+        "|ref|": 275.311545,
+        "ratio": 0.999999987,
+        "rel_l2": 2.82067308e-06,
+        "max_abs": 9.22847539e-05
+      },
+      {
+        "stage": "ref_enc_conv1",
+        "passed": true,
+        "n": 288960.0,
+        "cos": 1.0,
+        "|mine|": 89.8781581,
+        "|ref|": 89.8781569,
+        "ratio": 1.00000001,
+        "rel_l2": 7.47936453e-06,
+        "max_abs": 0.00021988526
+      },
+      {
+        "stage": "ref_enc_conv2",
+        "passed": true,
+        "n": 145600.0,
+        "cos": 1.0,
+        "|mine|": 57.7518576,
+        "|ref|": 57.7518618,
+        "ratio": 0.999999928,
+        "rel_l2": 2.09179638e-05,
+        "max_abs": 0.000248990953
+      },
+      {
+        "stage": "ref_enc_conv3",
+        "passed": true,
+        "n": 38016.0,
+        "cos": 0.999999999,
+        "|mine|": 36.0819118,
+        "|ref|": 36.0819145,
+        "ratio": 0.999999925,
+        "rel_l2": 3.98713774e-05,
+        "max_abs": 0.000446729362
+      },
+      {
+        "stage": "ref_enc_conv4",
+        "passed": true,
+        "n": 19584.0,
+        "cos": 0.999999999,
+        "|mine|": 20.6945725,
+        "|ref|": 20.6945841,
+        "ratio": 0.999999441,
+        "rel_l2": 5.38669546e-05,
+        "max_abs": 0.000302240252
+      },
+      {
+        "stage": "ref_enc_conv5",
+        "passed": true,
+        "n": 5760.0,
+        "cos": 0.999999998,
+        "|mine|": 9.3858411,
+        "|ref|": 9.38585727,
+        "ratio": 0.999998277,
+        "rel_l2": 5.52210538e-05,
+        "max_abs": 0.000135660172
+      },
+      {
+        "stage": "ref_enc_gru_out",
+        "passed": true,
+        "n": 128.0,
+        "cos": 1.0,
+        "|mine|": 5.02094554,
+        "|ref|": 5.02094745,
+        "ratio": 0.99999962,
+        "rel_l2": 3.12626391e-05,
+        "max_abs": 6.04987144e-05
+      },
+      {
+        "stage": "target_se",
+        "passed": true,
+        "n": 256.0,
+        "cos": 0.999999999,
+        "|mine|": 11.3325328,
+        "|ref|": 11.3325415,
+        "ratio": 0.999999232,
+        "rel_l2": 3.7413542e-05,
+        "max_abs": 6.74724579e-05
+      },
+      {
+        "stage": "src_se",
+        "passed": true,
+        "n": 256.0,
+        "cos": 1.0,
+        "|mine|": 10.4166389,
+        "|ref|": 10.4166389,
+        "ratio": 1.0,
+        "rel_l2": 0.0,
+        "max_abs": 0.0
+      },
+      {
+        "stage": "enc_q_pre",
+        "passed": true,
+        "n": 64128.0,
+        "cos": 1.0,
+        "|mine|": 819.97098,
+        "|ref|": 819.971275,
+        "ratio": 0.99999964,
+        "rel_l2": 1.68898543e-06,
+        "max_abs": 0.000167369843
+      },
+      {
+        "stage": "enc_q_wn_out",
+        "passed": true,
+        "n": 64128.0,
+        "cos": 1.0,
+        "|mine|": 86.2501782,
+        "|ref|": 86.2499691,
+        "ratio": 1.00000242,
+        "rel_l2": 9.26540915e-06,
+        "max_abs": 8.60691071e-05
+      },
+      {
+        "stage": "enc_q_stats",
+        "passed": true,
+        "n": 128256.0,
+        "cos": 1.0,
+        "|mine|": 248.26872,
+        "|ref|": 248.267851,
+        "ratio": 1.0000035,
+        "rel_l2": 9.01939762e-06,
+        "max_abs": 0.000136971474
+      },
+      {
+        "stage": "enc_q_z",
+        "passed": true,
+        "n": 64128.0,
+        "cos": 1.0,
+        "|mine|": 235.503387,
+        "|ref|": 235.502469,
+        "ratio": 1.00000389,
+        "rel_l2": 9.50624617e-06,
+        "max_abs": 0.000136971474
+      },
+      {
+        "stage": "z_after_flow_fwd",
+        "passed": true,
+        "n": 64128.0,
+        "cos": 1.0,
+        "|mine|": 50.1391807,
+        "|ref|": 50.1391085,
+        "ratio": 1.00000144,
+        "rel_l2": 2.2871456e-05,
+        "max_abs": 0.000185251236
+      },
+      {
+        "stage": "z_after_flow_rev",
+        "passed": true,
+        "n": 64128.0,
+        "cos": 1.0,
+        "|mine|": 264.756347,
+        "|ref|": 264.756,
+        "ratio": 1.00000131,
+        "rel_l2": 1.66970359e-05,
+        "max_abs": 0.000133991241
+      },
+      {
+        "stage": "dec_conv_pre",
+        "passed": true,
+        "n": 171008.0,
+        "cos": 0.999999998,
+        "|mine|": 5858.09458,
+        "|ref|": 5858.08457,
+        "ratio": 1.00000171,
+        "rel_l2": 6.01809304e-05,
+        "max_abs": 0.00507354736
+      },
+      {
+        "stage": "dec_stage0",
+        "passed": true,
+        "n": 684032.0,
+        "cos": 0.999999994,
+        "|mine|": 2878.41453,
+        "|ref|": 2878.4084,
+        "ratio": 1.00000213,
+        "rel_l2": 0.000112075087,
+        "max_abs": 0.00494670868
+      },
+      {
+        "stage": "dec_stage1",
+        "passed": true,
+        "n": 2736128.0,
+        "cos": 0.999999968,
+        "|mine|": 1633.12241,
+        "|ref|": 1633.02763,
+        "ratio": 1.00005804,
+        "rel_l2": 0.000260027584,
+        "max_abs": 0.00327086449
+      },
+      {
+        "stage": "dec_stage2",
+        "passed": true,
+        "n": 2736128.0,
+        "cos": 0.999999965,
+        "|mine|": 971.307262,
+        "|ref|": 971.305877,
+        "ratio": 1.00000143,
+        "rel_l2": 0.000264460381,
+        "max_abs": 0.00458171219
+      },
+      {
+        "stage": "dec_stage3",
+        "passed": true,
+        "n": 2736128.0,
+        "cos": 0.999999952,
+        "|mine|": 341.79186,
+        "|ref|": 341.767736,
+        "ratio": 1.00007059,
+        "rel_l2": 0.000317260396,
+        "max_abs": 0.00139927864
+      },
+      {
+        "stage": "dec_output",
+        "passed": true,
+        "n": 85504.0,
+        "cos": 0.999999731,
+        "|mine|": 17.1454666,
+        "|ref|": 17.1447433,
+        "ratio": 1.00004218,
+        "rel_l2": 0.000734420075,
+        "max_abs": 0.000692371279
+      },
+      {
+        "stage": "output_pcm",
+        "passed": true,
+        "n": 85504.0,
+        "cos": 0.999999731,
+        "|mine|": 43.5999401,
+        "|ref|": 43.5998791,
+        "ratio": 1.0000014,
+        "rel_l2": 0.000733194126,
+        "max_abs": 0.00175783783
+      }
+    ]
+  }
+}
