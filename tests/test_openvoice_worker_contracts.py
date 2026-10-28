@@ -38,6 +38,15 @@ class WorkerContracts(unittest.TestCase):
         with patch.object(worker,'resource_snapshot',return_value=healthy),patch.object(worker,'save'):
             worker.guard_resources('healthy')
 
+    def test_conditioning_bootstrap_matches_prepared_worker(self):
+        import hashlib
+        bootstrap=ROOT/'tools/kaggle/openvoice-conditioning/conditioning_bake.py'
+        constants={node.targets[0].id:node.value.value for node in ast.parse(bootstrap.read_text()).body
+                   if isinstance(node,ast.Assign) and isinstance(node.targets[0],ast.Name)
+                   and isinstance(node.value,ast.Constant)}
+        self.assertRegex(constants['WORKER_SOURCE'],r'^[0-9a-f]{40}$')
+        self.assertEqual(constants['WORKER_SHA256'],hashlib.sha256(WORKER.read_bytes()).hexdigest())
+
     def test_embedded_python_phases_compile(self):
         tree=ast.parse(WORKER.read_text())
         phases=[]

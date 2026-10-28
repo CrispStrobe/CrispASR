@@ -1,7 +1,10 @@
 # OpenVoice clip conditioning and shared-noise proof
 
-Prepared follow-up to `openvoice-bake`; submission was rejected because both
-batch-GPU slots are occupied by queued jobs. No conditioning run was created. Save the previous
+Prepared follow-up to `openvoice-bake`; the original submission was rejected
+because both batch-GPU slots were occupied. Those October 19 queue notes are
+historical; check current capacity before submitting. No accepted conditioning
+run is recorded. The recovered bake v2 failed CPU backend registration; it
+provides no model acceptance. Save the previous
 kernel's terminal log/output before replacing or superseding a live job, and
 respect the two-GPU-session cap. The bootstrap pins the shared worker by commit
 and SHA256; it enables conditioning mode before loading it. Only the bootstrap
@@ -16,3 +19,9 @@ mixed-rate resampler equivalence remain separate scope.
 
 See [OpenVoice baking](../../../docs/openvoice2-baking.md) for gates, limitations
 and source identities. A successful submission/build is not model acceptance.
+
+The resource-guarded worker version is `2026-10-28.openvoice-conditioning.2`.
+It records available memory/load, scratch and GPU headroom before compilation
+and inference, and stops on insufficient resources. The bootstrap pins the
+exact worker source/hash; its model-free contract rejects stale delivery pins.
+The native model source and 27/28 stage, waveform and quality gates are unchanged.
