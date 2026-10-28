@@ -1,0 +1,42 @@
+{
+  "complete": true,
+  "wrappers_run": 40711745994,
+  "tag": "v0.8.47",
+  "tag_source": "5f87a56265e4bbd7e2adc7052254e576d5774abb",
+  "public_anonymous_readbacks": {
+    "crispasr-sys": {
+      "version": "0.8.47",
+      "url": "https://static.crates.io/crates/crispasr-sys/crispasr-sys-0.8.47.crate",
+      "sha256": "de79cb1984b51dbab6f4482763b190e9b54b105aa36500f50673a7858f00b26c",
+      "bytes": 24414,
+      "tag_sources_verified": 2,
+      "tag_source": "5f87a56265e4bbd7e2adc7052254e576d5774abb",
+      "license_sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+      "tag_manifest_and_license_verified": true,
+      "tag_rust_files_verified": 2
+    },
+    "crispasr": {
+      "version": "0.8.47",
+      "url": "https://static.crates.io/crates/crispasr/crispasr-0.8.47.crate",
+      "sha256": "1417e5c5d92d2e359dd21768bdbc0bb7b0677802462fb5aa1ed93b7d0d0cc23b",
+      "bytes": 92512,
+      "tag_sources_verified": 5,
+      "tag_source": "5f87a56265e4bbd7e2adc7052254e576d5774abb",
+      "license_sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+      "tag_manifest_and_license_verified": true,
+      "tag_rust_files_verified": 8
+    },
+    "dart": {
+      "version": "0.8.47",
+      "url": "https://pub.dev/api/archives/crispasr-0.8.47.tar.gz",
+      "sha256": "7063bcad705ca4d1fe9717a8169790d362e8582dc7e82ff5cc60dd5ccae9b00f",
+      "bytes": 124754,
+      "tag_sources_verified": 3,
+      "tag_source": "5f87a56265e4bbd7e2adc7052254e576d5774abb",
+      "license_sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d",
+      "tag_manifest_and_license_verified": true,
+      "tag_rust_files_verified": 0
+    }
+  },
+  "scope": "Published small wrapper archives and tag source identity; no new native/GPU speech acceptance."
+}

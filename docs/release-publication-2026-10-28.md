@@ -33,7 +33,8 @@ The controlled follow-up is tracked as task D.
 | Vulkan lib producer dry run (branch) | 40460158618 | pass: build, relocated dlopen verify, dependency gate (`libvulkan.so.*` host) |
 | ARM64 CUDA lib producer dry run (branch) | 40661942703 | pass: same gates (CUDA runtime host) |
 | Release | 40711745769 | building, partial public assets; complete publication unverified — task B |
-| Wheels / wrappers / audits | — | not yet run — task B |
+| Rust / Dart wrappers | 40711745994 | PASS: all three publisher jobs; three registry archives fully read back, registry SHA-256/version, original manifests, licenses and packaged source files match frozen tag ([receipt](release-wrappers-readback-2026-10-28.json)) |
+| Python wheels / native and wheel audits | — | await terminal native producer and wheel publication — task B |
 
 Not covered: execution on a physical AMD, Intel or ARM NVIDIA GPU (task E). The
 `+hip` wheel cannot be load-tested on hosted runners.
@@ -52,3 +53,11 @@ Not covered: execution on a physical AMD, Intel or ARM NVIDIA GPU (task E). The
 - Later source repair for standalone Parakeet word boundaries is separately
   documented in [#558 scope](parakeet-word-boundary-558-2026-10-28.md). It is
   outside frozen v0.8.47 and is not new speech/device acceptance.
+
+The genuine older data2vec control is now independently rechecked in
+[data2vec-cpu-profile-evidence-2026-10-28.json](data2vec-cpu-profile-evidence-2026-10-28.json):
+EPYC 7763/AVX2 (without AVX-512) passes on unchanged relevant runtime objects,
+with the same compiler version. This supports testing CPU sensitivity; causal
+acceptance and F16 transcript controls remain pending. Manual diagnostic backend
+runs now retain successful data2vec host/build evidence as well as CSM evidence.
+No transcript or numerical gate was relaxed.

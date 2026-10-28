@@ -1,0 +1,117 @@
+{
+  "complete": true,
+  "causal_acceptance": false,
+  "older_control": {
+    "run": 40171767752,
+    "artifact": 12591396023,
+    "cpu": "AMD EPYC 7763",
+    "avx2": true,
+    "avx512f": false,
+    "compiler": "GNU 13.3.0",
+    "q4_transcript_gate": true,
+    "f16_stage_cosine": 0.999141,
+    "source": "96aeb4269a68a7d1e2208cf04d692419198f554f"
+  },
+  "failing_control": {
+    "run": 40481871937,
+    "artifact": 12743112477,
+    "cpu": "AMD EPYC 9V74",
+    "avx2": true,
+    "avx512f": true,
+    "compiler": "GNU 13.3.0",
+    "q4_transcript_gate": false,
+    "f16_stage_cosine": 0.999138,
+    "raw_q4_logits_retained": false,
+    "source": "34a8e436192de19d3e5a872437edfe3fd26ce8c4",
+    "model_sha256_directly_retained": false
+  },
+  "selected_runtime_git_objects_identical": {
+    "src/wav2vec2-ggml.cpp": "b34894ad26be0f924cfc51fe79e4e577e54be94c",
+    "src/wav2vec2-ggml.h": "6104faea68ae4cb66e9e484c14b387f844c81ffc",
+    "src/wav2vec2-ggml-debug.cpp": "bdebbdf409c2c4c16fd59f170918e537d13abdd1",
+    "src/core": "f852f54a512c2bf6553e398322d4f9b3658a5726",
+    "examples/cli/crispasr_backend_wav2vec2.cpp": "bd5d92201d2f842fc294327894475585730bb728",
+    "src/CMakeLists.txt": "933e4f0655a9ac631ace06b9c39557f69433b932",
+    "CMakeLists.txt": "2954501f700fab03e11fbbdef285030c7299a8bc",
+    "ggml": "e2ae679a563014f46c546ce6c6448e8601e4dea6"
+  },
+  "older_logits": {
+    "prior": {
+      "frame47": {
+        "native_q4": {
+          "top2": [
+            [
+              "A",
+              9.661120414733887
+            ],
+            [
+              "|",
+              9.59595012664795
+            ]
+          ],
+          "gap": 0.0651702880859375
+        },
+        "original": {
+          "top2": [
+            [
+              "A",
+              9.628900527954102
+            ],
+            [
+              "|",
+              9.021258354187012
+            ]
+          ],
+          "gap": 0.6076421737670898
+        }
+      },
+      "logits_sha256": "266f9b9d9483f88dcfd144e14d8268028b9303653c08692dc036835fab5b8bec"
+    },
+    "nightly": {
+      "frame47": {
+        "native_q4": {
+          "top2": [
+            [
+              "A",
+              9.661120414733887
+            ],
+            [
+              "|",
+              9.59595012664795
+            ]
+          ],
+          "gap": 0.0651702880859375
+        },
+        "original": {
+          "top2": [
+            [
+              "A",
+              9.628900527954102
+            ],
+            [
+              "|",
+              9.021258354187012
+            ]
+          ],
+          "gap": 0.6076421737670898
+        }
+      },
+      "logits_sha256": "266f9b9d9483f88dcfd144e14d8268028b9303653c08692dc036835fab5b8bec"
+    }
+  },
+  "pending_experiment": 40723799365,
+  "limits": [
+    "Both controls use native architecture; explicit ISA causation is not established.",
+    "No exact F16 transcript control on both profiles yet.",
+    "No regression gate changed.",
+    "Matching compiler version is not proof of identical compiler binaries or entire host environments.",
+    "The failed job identifies the pinned model revision/file but retains no model checksum or raw Q4 logits."
+  ],
+  "older_input_sha256": {
+    "q4": "93b6ab01f1f83525157d797a385a3e9e014c6761d3e974351363adc452a86f7e",
+    "f16": "4df9cc50b7f5340488fa64f5ead34f93660c6ff8785e7e71a859a8860a13254e",
+    "ref": "ab4151f868b958d9461719ba8142c2f5c8f104fac2c2987539aa6f041bc7ac1a",
+    "vocab": "19727f8944fe6459fc3f240ae2c198395b740f6a029bd23e06656266b83bcf64",
+    "sample": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e"
+  }
+}

@@ -435,7 +435,7 @@ jobs:
           tests/regression/run_one.py "$REGRESSION_BACKEND"
 
       - name: Retain CSM/data2vec diagnostics and host/build evidence
-        if: (failure() || inputs.diagnostic_backend == 'csm-1b') && (matrix.backend == 'csm-1b' || matrix.backend == 'data2vec-base')
+        if: (failure() || inputs.diagnostic_backend == matrix.backend) && (matrix.backend == 'csm-1b' || matrix.backend == 'data2vec-base')
         env:
           REGRESSION_DIAGNOSTICS_DIR: ${{ runner.temp }}/regression-diagnostics-${{ matrix.backend }}
         run: |
@@ -469,7 +469,7 @@ jobs:
           PY
 
       - uses: actions/upload-artifact@v4
-        if: (failure() || inputs.diagnostic_backend == 'csm-1b') && (matrix.backend == 'csm-1b' || matrix.backend == 'data2vec-base')
+        if: (failure() || inputs.diagnostic_backend == matrix.backend) && (matrix.backend == 'csm-1b' || matrix.backend == 'data2vec-base')
         with:
           name: regression-diagnostics-${{ matrix.backend }}
           path: ${{ runner.temp }}/regression-diagnostics-${{ matrix.backend }}/

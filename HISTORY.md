@@ -1,3 +1,19 @@
+## 2026-10-28 — v0.8.47 wrapper readbacks and retained positive CPU evidence
+
+All three v0.8.47 Rust/Dart publisher jobs (40711745994) pass. Independent full
+readbacks of the three small registry archives verify registry checksums,
+versions, original manifests, exact package licenses and all packaged Rust/Dart
+source against tag `5f87a5626`. [Portable wrapper receipt](docs/release-wrappers-readback-2026-10-28.json).
+Native and Python-wheel publication acceptance is still pending.
+
+The genuine older data2vec control 40171767752 passes on EPYC 7763/AVX2 without
+AVX-512. Eight runtime/source/build objects match the failing source, and both
+hosts report GNU 13.3.0. Its Q4 frame-47 A/delimiter gap is 0.0651703; this is evidence
+for a controlled profile experiment, not proof of CPU causation or an exact F16
+transcript check on both profiles. [Retained-byte comparison](docs/data2vec-cpu-profile-evidence-2026-10-28.json).
+Manual data2vec diagnostics now retain passing host/build evidence as well as
+failures; no acceptance gate changed.
+
 ## 2026-10-28 — Strict native publication inventory and alternate readback worker
 
 The publication auditor now requires the exact reviewed native asset names,

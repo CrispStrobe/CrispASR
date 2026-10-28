@@ -16,8 +16,7 @@ in ignored local notes.
 ## Current state and first actions
 
 State at this wrap-up (2026-10-28): **v0.8.46 is published; v0.8.47 has partial public assets and
-its release run is still building.** No implementation claim is transferred: every
-active work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
+its release run is still building.** Active follow-up work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
 a fresh agent should confirm ownership before dispatching replacements.
 
 | Item | State | Evidence |
@@ -78,7 +77,10 @@ voice pack or requantize Granite merely to reproduce these completed results.
   - Wheel audit pending: task A.
 - **v0.8.47**, tag source `5f87a56265e4bbd7e2adc7052254e576d5774abb`:
   - CI **40689967257**, Lint **40689967286** and Secret scan **40689967265** pass.
-  - Release **40711745769** was in flight at hand-off: task B.
+  - Release **40711745769** remains in progress: task B.
+  - Wrappers **40711745994** pass all three jobs. Full small registry archive
+    readbacks match checksums, version, original manifests, package licenses and
+    tagged Rust/Dart sources: [receipt](release-wrappers-readback-2026-10-28.json).
 - **#557 dry runs** of the new library producers pass:
   - Vulkan **40460158618**: build, relocated-load verify, dependency gate.
   - ARM64 CUDA **40661942703**: same gates.
@@ -175,7 +177,7 @@ what delayed the live wheel index for v0.8.46.
 
   > Linux GPU wheels are published from v0.8.47:
   > `+vulkan` (x86_64) at `https://crispstrobe.github.io/CrispASR/whl/vulkan/`,
-  > `+hip` (x86_64, ROCm 6.x) at `https://crispstrobe.github.io/CrispASR/whl/hip/`, and
+  > `+hip` (x86_64, ROCm 6.3+) at `https://crispstrobe.github.io/CrispASR/whl/hip/`, and
   > `+cuda` for aarch64 SBSA servers (Grace/GH200; not Jetson) at the existing
   > `whl/cuda/` index. The host provides the GPU driver and vendor runtime
   > (Vulkan loader; ROCm HIP/hipBLAS/rocBLAS and ROCm's libomp; CUDA 12 runtime
@@ -200,6 +202,13 @@ what delayed the live wheel index for v0.8.46.
   CPU: AMD EPYC 9V74, four vCPUs, AVX2/AVX-512. Actual compiler commands use
   `-march=native`, CPU repacking and LLAMAFILE; BLAS is off. Cached AVX options
   alone do not describe the resulting native ISA.
+- **Genuine older passing control:** [retained-byte comparison](data2vec-cpu-profile-evidence-2026-10-28.json)
+  rechecks run **40171767752**, artifact **12591396023**: EPYC 7763 with AVX2
+  and no AVX-512, GNU 13.3.0, Q4 transcript pass and F16 cosine 0.999141.
+  Eight relevant runtime/source/build objects match the later failing source.
+  Its Q4 frame-47 `A`/delimiter margin is 0.0651703, versus 0.6076422 in the
+  independently pinned original logits. This supports a controlled CPU-profile
+  experiment; it does not prove causation or supply missing F16 transcript controls.
 - **Unproven:** CPU-sensitive quantization near ties. The failing normal CLI
   also used automatic punctuation and Whisper language identification; the F16
   stage comparison proves neither an exact F16 transcript nor pipeline identity.
@@ -217,6 +226,9 @@ what delayed the live wheel index for v0.8.46.
   parity passed or a new profile/model was accepted. If CPU/profile correlation
   is absent, investigate the remaining pipeline/build confound instead of
   declaring the hypothesis confirmed. Preserve original failed evidence.
+- Successful manual `diagnostic_backend=data2vec-base` regressions now retain
+  host/build artifacts too; the earlier workflow uploaded successful diagnostics
+  only for CSM. Both retention/upload conditions use the selected backend.
 - **Do not:** loosen any gate, replace the reference or use a passing overall
   workflow whose data2vec job was skipped. Any eventual tolerance/profile gate
   needs original-reference and decoded-output evidence first.
