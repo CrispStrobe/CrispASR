@@ -1,0 +1,24 @@
+{
+  "scope": "Single final activation/Conv1d/tanh only; frozen original dec_stage3 and unchanged F16 model weights; no full-model inference",
+  "shape": [
+    85504,
+    32
+  ],
+  "results": [
+    {
+      "slope": 0.1,
+      "cosine": 0.9994194406971658,
+      "norm_ratio": 1.111307229343941,
+      "relative_l2": 0.1169600735500318
+    },
+    {
+      "slope": 0.01,
+      "cosine": 0.9999999957927064,
+      "norm_ratio": 0.9999145283740839,
+      "relative_l2": 0.00012537649697785176
+    }
+  ],
+  "reference_sha256": "259993b526944e8e36ccca436e005cbc3935a46636b42c618cfd5c3d19429c8f",
+  "model_sha256": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255",
+  "upstream_source": "74a1d147b17a8c3092dd5430504bd83ef6c7eb23"
+}

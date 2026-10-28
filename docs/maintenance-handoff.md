@@ -38,6 +38,11 @@ First actions for a fresh agent:
 4. For any task, record owner, source SHA, exact missing behavior, acceptance gates,
    resources and next action in PLAN.md before starting. Do not recreate a passing campaign.
 
+Post-tag main also contains the C# explicit-setter, Java/Ruby speaker-ID,
+Parakeet standalone-boundary and OpenVoice recipe repairs. These changes are
+**not in the immutable v0.8.47 tag**. A later patch release requires its own
+source/CI/validation checks; do not retag v0.8.47 to include them.
+
 ## Completed work — preserve these decisions
 
 | Area | Implemented and accepted | Limits / evidence |
@@ -282,6 +287,13 @@ what delayed the live wheel index for v0.8.46.
 
 ### Task F — OpenVoice2 conditioned-cloning proof (independent)
 
+- **Latest result:** frozen replay v1 passes 26/27 on CPU and actual T4 CUDA.
+  The bias/flow repairs are verified on identical original/model bytes. Only
+  raw decoder amplitude fails (~1.11145 norm ratio). Original final activation
+  uses slope 0.01; native used 0.1. The final slope is corrected with a failing-
+  before/passing-after graph-call test and an isolated owned-input check
+  (norm 1.111307 → 0.999915). Repeat the exact frozen replay with the new CPP
+  delta before the full cloning run. [Both profiles](openvoice-frozen-replay-2026-10-28.json).
 - **Current:** version 2 reached actual T4 CUDA work and failed 11/27 stages.
   The original reference/model bytes are retained and verified. The two
   original-recipe corrections (preserve zero-input conditioning bias; couple

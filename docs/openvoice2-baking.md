@@ -87,6 +87,32 @@ attribution. Full three-case cloning, shared-noise, independent ASR/speaker and
 higher-level Session/CLI acceptance remain separate after structural replay.
 Do not replace this failed reference with native output or loosen tolerances.
 
+## Frozen replay v1 — two repairs verified, final activation isolated
+
+The exact same model/reference hashes were replayed on CPU and T4 CUDA with
+model CPP `581234dfb` and the original audited runtime/header ABI. Both now pass
+**26/27** unchanged gates. Posterior WaveNet and forward/reverse flows reach
+cosine 1.0 and near-unit magnitudes. This verifies the zero-input bias and flow
+ordering corrections on the actual pretrained case.
+[Both full stage tables](openvoice-frozen-replay-2026-10-28.json).
+
+Only raw `dec_output` still fails: norm ratio 1.11145, despite cosine 0.999420.
+The normalized waveform passes, illustrating why raw magnitude is mandatory.
+The original Generator uses explicit slope 0.1 inside upsample blocks, then
+`F.leaky_relu(x)` with its **default 0.01** before `conv_post`; native code used
+0.1 for both. Only that last slope is corrected.
+
+A small test executes both real graph-builder activation calls on signed inputs;
+it fails before correction (-0.1 versus -0.01), then passes while preserving the
+upsample slope. Separately, an owned-input replay of just the last activation,
+224-weight convolution and tanh uses frozen original `dec_stage3` plus unchanged
+F16 model weights. Correcting the slope changes norm ratio 1.111307 to 0.999915
+and relative L2 0.116960 to 0.000125; cosine becomes 0.999999996.
+[Owned-input evidence](openvoice-final-activation-owned-input-2026-10-28.json).
+This subsecond boundary check used one CPU thread after a resource check, without
+running the full model locally. Whole-model CPU/CUDA replay of the final slope
+and the full cloning/quality gates remain required. No acceptance bar changed.
+
 ## Recipe and license boundary
 
 OpenVoice V2 separates a base TTS from tone-color conversion. The native

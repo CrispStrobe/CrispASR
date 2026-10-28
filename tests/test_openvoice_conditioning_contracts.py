@@ -2,6 +2,7 @@
 """Compile actual conditioning/averaging bodies with tiny embedding inputs."""
 from pathlib import Path
 import subprocess
+import re
 import tempfile
 import unittest
 
@@ -167,6 +168,44 @@ int main(int argc,char** argv){
     def test_forward_couples_before_flip_and_reverse_is_its_inverse(self):
         result=subprocess.run([str(self.binary),'flow'],capture_output=True,text=True)
         self.assertEqual(result.returncode,0,result.stderr)
+
+
+
+class DecoderActivationContract(unittest.TestCase):
+    def test_final_default_slope_differs_from_upsample_slope(self):
+        source=(ROOT/'src/openvoice2.cpp').read_text()
+        decoder=body(source,'static bool hifigan_decode_cpu(')
+        calls=re.findall(r'x = ggml_leaky_relu\(gc, x, [^;]+;',decoder)
+        self.assertEqual(len(calls),2)
+        # Execute both real graph-builder calls on tiny signed inputs. The
+        # original explicitly uses .1 in the upsample loop and F.leaky_relu's
+        # default .01 immediately before conv_post. Positive values are fixed.
+        program=r"""
+#include <array>
+#include <cmath>
+#include <cstdio>
+struct ggml_tensor {std::array<float,5> data;};
+ggml_tensor* ggml_leaky_relu(void*,ggml_tensor* x,float slope,bool){
+ for(float& v:x->data)if(v<0)v*=slope;return x;
+}
+int main(){
+ void* gc=nullptr;
+ for(int stage=0;stage<2;stage++){
+  ggml_tensor tensor{{-10,-1,0,1,10}};ggml_tensor* x=&tensor;
+  if(stage==0){ UPSAMPLE_CALL }else{ FINAL_CALL }
+  const float expected=stage==0?-.1f:-.01f;
+  if(std::abs(x->data[1]-expected)>1e-6f){
+   std::fprintf(stderr,"decoder activation stage %d: %g != %g\n",stage,x->data[1],expected);return 1;
+  }
+  if(x->data[2]!=0 || x->data[3]!=1 || x->data[4]!=10)return 2;
+ }
+}
+""".replace('UPSAMPLE_CALL',calls[0]).replace('FINAL_CALL',calls[1])
+        with tempfile.TemporaryDirectory(prefix='openvoice-final-activation-') as temp:
+            path=Path(temp);(path/'test.cpp').write_text(program)
+            subprocess.run(['c++','-std=c++17',str(path/'test.cpp'),'-o',str(path/'test')],check=True)
+            result=subprocess.run([str(path/'test')],capture_output=True,text=True)
+            self.assertEqual(result.returncode,0,result.stderr)
 
 
 if __name__=='__main__':unittest.main()

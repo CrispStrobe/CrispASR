@@ -1206,8 +1206,8 @@ static bool hifigan_decode_cpu(openvoice2_context* ctx, const std::vector<float>
         rb_idx += n_rk;
     }
 
-    // Final: LeakyReLU → conv_post → tanh
-    x = ggml_leaky_relu(gc, x, 0.1f, false);
+    // Final F.leaky_relu uses its default 0.01 slope; upsample blocks use 0.1.
+    x = ggml_leaky_relu(gc, x, 0.01f, false);
     x = conv1d_cf(gc, x, dec.conv_post_w, dec.conv_post_b, 1, 3, 1);
     x = ggml_tanh(gc, x);
 
