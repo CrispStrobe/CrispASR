@@ -44,8 +44,9 @@ and check actual GPU session availability before every Kaggle submission.
   execution; precision and operation boundaries differ, and no per-step count
   was captured. A native step-count diagnostic is prepared. Granite Q4_K
   version 1 failed on a truncated hash; version 2 ran native warmups but its
-  original lacked the chat template. Version 3 repairs that input and is
-  running on Kaggle. Private CSM original-without-watermark version 1 passed native warmup but
+  original lacked the chat template. Version 3 completed with GPU and zero-WER
+  controls; see the [T4 receipt](granite5-original-t4-benchmark-2026-10-29.json)
+  for the native 26-step decoder and non-equivalent original timing boundaries. Private CSM original-without-watermark version 1 passed native warmup but
   failed in the original warmup because `bitsandbytes` was absent; its evidence
   is retained and a dependency fix is in preparation. Gated access and no
   redistribution are required. Melo/OpenVoice paired
