@@ -1,0 +1,501 @@
+{
+  "schema": 1,
+  "complete": false,
+  "application_acceptance": false,
+  "source": "59751b4e2388bede93705428b81928d7e778efbc",
+  "application_source": "9001ff91338e8a7417137ef4582f6805fcdd8e58",
+  "application_checkpoint_sha256": "5573e9c05f11e0b339660cc82eedf1d4a0ec11475ca0b700d51671b13b13b502",
+  "scope": "Diagnostic only: original BERT math and fixed Q4/F16 precision controls; no application acceptance",
+  "worker_sha256": "2f21de41c9c5232095ab225483c58c2c35066c0d228b27a1e10983b189557c46",
+  "resource_checks": [
+    {
+      "phase": "decoder-bootstrap",
+      "available_bytes": 32427220992,
+      "load": [
+        0.603515625,
+        0.361328125,
+        0.166015625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125559599104,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "dependencies",
+      "available_bytes": 32423407616,
+      "load": [
+        0.603515625,
+        0.361328125,
+        0.166015625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125559599104,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "retained-dependencies",
+      "available_bytes": 32418897920,
+      "load": [
+        0.619140625,
+        0.38134765625,
+        0.1787109375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124940496896,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "download-melo.gguf",
+      "available_bytes": 32418967552,
+      "load": [
+        0.619140625,
+        0.38134765625,
+        0.1787109375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124940492800,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "download-bert.gguf",
+      "available_bytes": 32387633152,
+      "load": [
+        0.5693359375,
+        0.375,
+        0.177734375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124843061248,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "native-captures",
+      "available_bytes": 32412758016,
+      "load": [
+        0.5693359375,
+        0.375,
+        0.177734375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124788887552,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "download-f16-control",
+      "available_bytes": 32372240384,
+      "load": [
+        0.82861328125,
+        0.45263671875,
+        0.21044921875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124709076992,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "original-bert",
+      "available_bytes": 32414232576,
+      "load": [
+        0.76220703125,
+        0.44482421875,
+        0.208984375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124471205888,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "precision-q4_k-neutral",
+      "available_bytes": 32258904064,
+      "load": [
+        0.8681640625,
+        0.5078125,
+        0.23974609375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123987140608,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "precision-q4_k-0",
+      "available_bytes": 32169066496,
+      "load": [
+        0.8681640625,
+        0.5078125,
+        0.23974609375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123986759680,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    }
+  ],
+  "phases": {
+    "native-captures": {
+      "returncode": 0
+    },
+    "original-bert": {
+      "returncode": 0
+    }
+  },
+  "library_sha256": "fffd43cd2536fd8d3876fdc7d9d3e4d8e0c730bd0b6f532e37a2123c2a560d57",
+  "native_activation_backends": [
+    "CUDA0",
+    "CUDA0",
+    "CUDA0"
+  ],
+  "bert_controls": {
+    "complete": true,
+    "application_acceptance": false,
+    "full_neural_parity": false,
+    "scope": "BERT boundary only: shared dequantized GGUF weights and separate original full-precision checkpoint",
+    "transformers": "4.57.1",
+    "modeling_bert_sha256": "89e5e5098b98a206c8835c6c00b52b40d6d078a5994c40f300f98173969137c2",
+    "original_revision": "86b5e0934494bd15c9632b12f734a8a67f723594",
+    "original_model_sha256": "68d45e234eb4a928074dfd868cead0219ab85354cc53d20e772753c6bb9169d3",
+    "native_backend": "CPU",
+    "reference_backend": "CUDA",
+    "comparisons": [
+      {
+        "profile": "q4_k",
+        "case": 0,
+        "model_sha256": "420f467192804606a067c886274eb4a689f0d776f81afdee3939e51d9eda8478",
+        "native_vs_shared_weights": {
+          "accepted": false,
+          "elements": 65280,
+          "cosine": 0.9982829853938309,
+          "norm_ratio": 0.9990566803496139,
+          "relative_l2": 0.05858054008856495,
+          "max_absolute_error": 1.761488676071167
+        },
+        "native_vs_original_f32": {
+          "accepted": false,
+          "elements": 65280,
+          "cosine": 0.9876533252153001,
+          "norm_ratio": 1.005797115437894,
+          "relative_l2": 0.15770258816772387,
+          "max_absolute_error": 2.865381956100464
+        },
+        "native_capture_repeat_exact": true
+      },
+      {
+        "profile": "q4_k",
+        "case": 1,
+        "model_sha256": "420f467192804606a067c886274eb4a689f0d776f81afdee3939e51d9eda8478",
+        "native_vs_shared_weights": {
+          "accepted": false,
+          "elements": 52992,
+          "cosine": 0.9988163095981052,
+          "norm_ratio": 0.999048490725668,
+          "relative_l2": 0.04864189129648512,
+          "max_absolute_error": 0.547156810760498
+        },
+        "native_vs_original_f32": {
+          "accepted": false,
+          "elements": 52992,
+          "cosine": 0.9863789419156609,
+          "norm_ratio": 0.9934087131306053,
+          "relative_l2": 0.1646390009343929,
+          "max_absolute_error": 1.3328282833099365
+        },
+        "native_capture_repeat_exact": true
+      },
+      {
+        "profile": "q4_k",
+        "case": 2,
+        "model_sha256": "420f467192804606a067c886274eb4a689f0d776f81afdee3939e51d9eda8478",
+        "native_vs_shared_weights": {
+          "accepted": false,
+          "elements": 69888,
+          "cosine": 0.9992560497169928,
+          "norm_ratio": 1.000199409027405,
+          "relative_l2": 0.03857767528996072,
+          "max_absolute_error": 0.3437967300415039
+        },
+        "native_vs_original_f32": {
+          "accepted": false,
+          "elements": 69888,
+          "cosine": 0.9907287311311758,
+          "norm_ratio": 1.00297521815876,
+          "relative_l2": 0.13640585675009662,
+          "max_absolute_error": 0.8902578353881836
+        },
+        "native_capture_repeat_exact": true
+      },
+      {
+        "profile": "f16-control",
+        "case": 0,
+        "model_sha256": "f7437929246c43d7300cbf6ff39b4715669a6053661117df99a456bdc5e8ecba",
+        "native_vs_shared_weights": {
+          "accepted": true,
+          "elements": 65280,
+          "cosine": 0.9999999999998599,
+          "norm_ratio": 0.9999999506601259,
+          "relative_l2": 5.302684865446454e-07,
+          "max_absolute_error": 2.384185791015625e-06
+        },
+        "native_vs_original_f32": {
+          "accepted": true,
+          "elements": 65280,
+          "cosine": 0.9999999564233597,
+          "norm_ratio": 0.9999874811878906,
+          "relative_l2": 0.00029548080679268706,
+          "max_absolute_error": 0.0011339187622070312
+        }
+      },
+      {
+        "profile": "f16-control",
+        "case": 1,
+        "model_sha256": "f7437929246c43d7300cbf6ff39b4715669a6053661117df99a456bdc5e8ecba",
+        "native_vs_shared_weights": {
+          "accepted": true,
+          "elements": 52992,
+          "cosine": 0.9999999999995236,
+          "norm_ratio": 1.0000001752309404,
+          "relative_l2": 9.909695885653482e-07,
+          "max_absolute_error": 3.5762786865234375e-05
+        },
+        "native_vs_original_f32": {
+          "accepted": true,
+          "elements": 52992,
+          "cosine": 0.999999941433594,
+          "norm_ratio": 1.00000647981785,
+          "relative_l2": 0.0003423091542900633,
+          "max_absolute_error": 0.007190704345703125
+        }
+      },
+      {
+        "profile": "f16-control",
+        "case": 2,
+        "model_sha256": "f7437929246c43d7300cbf6ff39b4715669a6053661117df99a456bdc5e8ecba",
+        "native_vs_shared_weights": {
+          "accepted": true,
+          "elements": 69888,
+          "cosine": 0.999999999999824,
+          "norm_ratio": 1.000000017750521,
+          "relative_l2": 5.921098639876138e-07,
+          "max_absolute_error": 5.7220458984375e-06
+        },
+        "native_vs_original_f32": {
+          "accepted": true,
+          "elements": 69888,
+          "cosine": 0.9999999573875151,
+          "norm_ratio": 0.9999880963567969,
+          "relative_l2": 0.0002921740059158861,
+          "max_absolute_error": 0.001277923583984375
+        }
+      }
+    ],
+    "resource_checks": [
+      {
+        "phase": "download-original-checkpoint",
+        "available_bytes": 31847514112,
+        "load": [
+          0.81494140625,
+          0.47265625,
+          0.22216796875
+        ],
+        "gpu_free_mib": [
+          14909,
+          14909
+        ]
+      },
+      {
+        "phase": "load-original-bert",
+        "available_bytes": 31760789504,
+        "load": [
+          0.830078125,
+          0.4814453125,
+          0.2265625
+        ],
+        "gpu_free_mib": [
+          14909,
+          14909
+        ]
+      },
+      {
+        "phase": "original-phone-features-0",
+        "available_bytes": 31694594048,
+        "load": [
+          0.830078125,
+          0.4814453125,
+          0.2265625
+        ],
+        "gpu_free_mib": [
+          14335,
+          14909
+        ]
+      },
+      {
+        "phase": "original-phone-features-1",
+        "available_bytes": 31470645248,
+        "load": [
+          0.830078125,
+          0.4814453125,
+          0.2265625
+        ],
+        "gpu_free_mib": [
+          14307,
+          14909
+        ]
+      },
+      {
+        "phase": "original-phone-features-2",
+        "available_bytes": 31480233984,
+        "load": [
+          0.830078125,
+          0.4814453125,
+          0.2265625
+        ],
+        "gpu_free_mib": [
+          14307,
+          14909
+        ]
+      },
+      {
+        "phase": "load-shared-weights-q4_k",
+        "available_bytes": 31475945472,
+        "load": [
+          0.830078125,
+          0.4814453125,
+          0.2265625
+        ],
+        "gpu_free_mib": [
+          14759,
+          14909
+        ]
+      },
+      {
+        "phase": "q4_k-boundary-0",
+        "available_bytes": 30672175104,
+        "load": [
+          0.84375,
+          0.490234375,
+          0.23095703125
+        ],
+        "gpu_free_mib": [
+          14369,
+          14909
+        ]
+      },
+      {
+        "phase": "q4_k-boundary-1",
+        "available_bytes": 30677135360,
+        "load": [
+          0.84375,
+          0.490234375,
+          0.23095703125
+        ],
+        "gpu_free_mib": [
+          14369,
+          14909
+        ]
+      },
+      {
+        "phase": "q4_k-boundary-2",
+        "available_bytes": 30685417472,
+        "load": [
+          0.84375,
+          0.490234375,
+          0.23095703125
+        ],
+        "gpu_free_mib": [
+          14369,
+          14909
+        ]
+      },
+      {
+        "phase": "load-shared-weights-f16-control",
+        "available_bytes": 30683160576,
+        "load": [
+          0.84375,
+          0.490234375,
+          0.23095703125
+        ],
+        "gpu_free_mib": [
+          14759,
+          14909
+        ]
+      },
+      {
+        "phase": "f16-control-boundary-0",
+        "available_bytes": 30571393024,
+        "load": [
+          0.84375,
+          0.490234375,
+          0.23095703125
+        ],
+        "gpu_free_mib": [
+          14369,
+          14909
+        ]
+      },
+      {
+        "phase": "f16-control-boundary-1",
+        "available_bytes": 30597640192,
+        "load": [
+          0.8564453125,
+          0.4990234375,
+          0.2353515625
+        ],
+        "gpu_free_mib": [
+          14369,
+          14909
+        ]
+      },
+      {
+        "phase": "f16-control-boundary-2",
+        "available_bytes": 30597771264,
+        "load": [
+          0.8564453125,
+          0.4990234375,
+          0.2353515625
+        ],
+        "gpu_free_mib": [
+          14369,
+          14909
+        ]
+      }
+    ]
+  },
+  "private_evidence": {
+    "bytes": 70957603,
+    "sha256": "941869b8c3cb5cc225671cb25b70da3081c2b06f7a28faaca181f60823d5f2b8",
+    "recipient_sha256": "8faff36ac3521f054e844e58e8d5305560935c4545c0dc4472bcfce23b058e36",
+    "files": 107
+  },
+  "kernel_slug": "crispasr-melotts-decoder",
+  "kernel_version": 3,
+  "bootstrap_source": "c0afba306",
+  "readback_verified": true,
+  "interpretation": "BERT boundary comparison complete; precision speech probe failed because diagnostic omitted adjacent converter file. Original application acceptance still false."
+}

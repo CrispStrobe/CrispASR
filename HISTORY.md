@@ -1,3 +1,30 @@
+## 2026-10-29 — Standalone CLI LID qualified; BERT precision loss isolated
+
+Hosted current CLI run 40807940665 accepts #560's detect-and-exit repair with
+pinned Whisper/Silero models, invalid ASR/HF bypass, multiple inputs, failure
+statuses and ordinary automatic-language transcription. CI 40807943181 passes
+all 13 jobs and Lint 40807945520 passes at source `bd1e299e1`. Full-recording
+LID remains separate and #560 is open.
+
+Pinned original BERT comparisons isolate Q4 relative feature error 0.136–0.165
+versus about 0.0003 for the F16 control. A fixed precision speech diagnostic on
+the same retained application changes no text, seed, recognizer or threshold:
+F16 disclosed WER 0.125 / 0.055556 passes, Q4 0.25 / 0.333333 fails. Complete
+readbacks/private archives are retained. Full F16 CPU/CUDA speaker/application
+qualification is still pending; no registry/default or release promotion yet.
+
+## 2026-10-29 — Original duration parity verified; application quality still held
+
+The repaired deterministic and stochastic duration predictors match the original
+code on all three actual native input/noise cases on both CPU and CUDA reference
+runs. SDP relative error is about 1.3e-6. Full-source CUDA version 4 and CPU
+40806522459 retain passing stage and functional checks but fail the unchanged
+disclosed-speech gate. The shipped `sdp_ratio` is zero, so the genuine optional
+SDP repair does not explain the default clip failure. Complete checkpoints and
+authenticated private archives are retained; no full application/default or
+release acceptance is claimed. The next bounded check isolates BERT math and
+one original-precision companion control using the same retained application.
+
 ## 2026-10-29 — Original Melo neural boundaries verified; duration defect isolated
 
 Two retained CUDA diagnostics compare pinned original classes with native

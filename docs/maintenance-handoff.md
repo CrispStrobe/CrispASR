@@ -19,20 +19,27 @@ Snapshot 2026-10-29: **v0.8.46 publication is accepted. v0.8.47 native
 publication, both wheel publishers, Pages and live GPU index links pass; final
 wheel audit 40789883589 is accepted for all 11 distributions and readbacks.** Keep #557 open and prepare its reply
 for review only. The current CLI, BERT, final activation and duration repairs are on
-[candidate branch `validate/openvoice-interfaces-20261028`](https://github.com/CrispStrobe/CrispASR/tree/bd1e299e1),
-not main or the immutable v0.8.47 release. Full-source CUDA **version 4** is
-admitted once from application/controller `9001ff913`, bootstrap `8b9511e79`.
-NN CPU **40806522459** targets `8b9511e79`. Final candidate CI
-**40807943181**, Lint **40807945520** and standalone-LID hosted smoke
-**40807940665** target `bd1e299e1`. Superseded CI/Lint **40806525063/40806526797**
-are canceled; do not repeat them. Preserve these runs; read live status before replacement.
-Earlier CPU **40801516214** and CUDA version 3 passed functional/input/activation
-checks but failed unchanged disclosed speech gates. Their complete checkpoints,
-logs and authenticated private archives are retained. Separate original decoder
-and encoder/inverse-flow diagnostics pass on all three captured cases. These
-bounded proofs do not grant complete speech acceptance. The documented
-`--detect-language` routing error in new #560 is being repaired separately
-before the next patch; full-recording LID remains a later feature.
+[candidate branch `validate/openvoice-interfaces-20261028`](https://github.com/CrispStrobe/CrispASR/tree/395daf6ae),
+not main or the immutable v0.8.47 release. The declared F16 BERT profile is
+under full qualification: CUDA `crispasr-openvoice-full-source` **version 5**,
+application/controller `97053abff`, bootstrap `395daf6ae`; CPU **40825101583**
+at that candidate. Require original component checks, actual automatic F16
+companion discovery through Session/C ABI and CLI, and all four original
+speech/speaker cases. No registry/default switch has happened yet.
+
+The completed BERT comparison isolates Q4 error (relative L2 0.136–0.165 versus
+original features) against F16 (about 0.0003). A fixed speech comparison on the
+same application passes the unchanged disclosed WER gate with F16 (0.125 /
+0.055556); Q4 still fails (0.25 / 0.333333). These are diagnostic receipts,
+not complete application acceptance. All terminal source/log/output/checkpoint
+and authenticated private archives are retained; do not repeat accepted
+component campaigns.
+
+#560's bounded CLI error is qualified: hosted **40807940665** passes on source
+`bd1e299e1`, plus CI **40807943181** (all 13 jobs) and Lint **40807945520**.
+Later candidate changes are validation tooling/receipts; C++ is unchanged.
+The issue remains open for its separate full-recording LID request, after I/J.
+#557 also remains open with its prepared reply held for review.
 
 | Item | State | Evidence |
 |---|---|---|
@@ -52,7 +59,7 @@ First actions for a fresh agent:
    2026-10-29 check: open #456/#461/#483/#532/#557/#558/#560, PR #559,
    zero comments on #557. The [PR #559 review checkpoint](qwen3-context-pr559-review-2026-10-28.md)
    scopes its remaining gates; no review or merge was submitted.
-3. A, B, D and bounded F/G are accepted; C is prepared for review with #557 open. Continue H plus K (error repairs), then I → J in order; do not duplicate accepted campaigns. E needs hardware.
+3. A, B, D, bounded F/G and K are accepted; C is prepared for review with #557 open. Continue H (full F16 qualification/default policy), then I → J in order; do not duplicate accepted campaigns. E needs hardware.
 4. For any task, record owner, source SHA, exact missing behavior, acceptance gates,
    resources and next action in PLAN.md before starting. Do not recreate a passing campaign.
 
@@ -523,19 +530,67 @@ publication occurred. Remaining scope:
    all original operators and shared model bytes. No seeds, recognizer,
    speech threshold or model default changed.
 
-   Full-source CUDA **version 4** is admitted once from application/controller
-   `9001ff913`, bootstrap `8b9511e79`. Require the three original duration
-   comparisons plus all input, actual-backend, instrumentation, TCC, Session,
-   CLI, rate and unchanged speech-quality gates. NN CPU **40806522459** targets
-   that post-duration source at `8b9511e79`. Final candidate CI **40807943181**
-   and Lint **40807945520** target `bd1e299e1`, which additionally carries the
-   independent #560 CLI routing repair; no further NN change was made. Old
-   CI/Lint **40806525063/40806526797** are canceled/superseded.
-   Previous CPU **40801516214** finished: full source build, original input and
-   activation, TCC and functional checks pass, disclosed CLI case 0 WER 0.25
-   fails the unchanged 0.20 gate. [Retained CPU control](openvoice-cpu-pre-sdp-attempt-2026-10-29.json).
-   Its complete artifact/checkpoint and authenticated 108-file envelope are
-   retained. Do not rerun it as acceptance of the new duration source.
+   Full-source CUDA **version 4** is terminal from application/controller
+   `9001ff913`, bootstrap `8b9511e79`. All three original deterministic and
+   stochastic duration cases pass, SDP relative error about 1.3e-6. Input,
+   activation/backend, instrumentation, TCC, Session/CLI and rates pass too;
+   disclosed CLI WER 0.25 / 0.333333 still fails 0.20. [Retained CUDA attempt](openvoice-duration-attempt-2026-10-29.json).
+   NN CPU **40806522459** finished at `8b9511e79`, likewise passing original
+   duration and functional checks while disclosed case 0 WER 0.25 fails.
+   [Retained CPU attempt](openvoice-cpu-duration-attempt-2026-10-29.json).
+   Both complete artifacts/checkpoints and authenticated 120-file envelopes
+   are retained. Do not rerun these unchanged failed default-profile campaigns.
+
+   **Important causal limit:** the shipped `sdp_ratio` is zero. The SDP defect
+   is genuine in the optional conditioning path, but repairing it cannot
+   change these default clips. Do not claim it caused or fixed their quality.
+   **BERT diagnosis is complete:** `crispasr-melotts-decoder` version 3,
+   controller `59751b4e2`, bootstrap `c0afba306`, compares pinned original
+   Transformers 4.57.1 and Melo phone expansion against actual native features.
+   Q4 relative L2 versus original FP32 is 0.1577 / 0.1646 / 0.1364; even the
+   shared-dequantized-weight comparison has relative L2 0.0586 / 0.0486 / 0.0386.
+   F16 matches shared weights within about 1e-6 and original FP32 within about
+   0.0003. Native BERT is CPU; original reference is CUDA. All token IDs/repeats
+   match. [BERT boundary receipt](melotts-bert-boundary-2026-10-29.json).
+   The version-3 speech phase failed because its diagnostic omitted the
+   adjacent converter copy. Complete source/log/output and authenticated
+   107-file envelope are retained; this was a harness staging error.
+
+   **Fixed speech diagnostic version 4 is complete:** controller `837e02957`,
+   bootstrap `07a12d7b7`, reuses the exact version-4 application checkpoint
+   (SHA-256 `5573e9c05f11e0b339660cc82eedf1d4a0ec11475ca0b700d51671b13b13b502`).
+   It stages the validated converter and runs only the missing speech phase,
+   without repeating the completed BERT component campaign or rebuilding.
+   Same seed 42, text, Melo/reference/TCC and tiny.en recognizer: Q4 neutral
+   WER 3/7, disclosed 0.25 / 0.333333; F16 neutral 1/7, disclosed 0.125 /
+   0.055556. [Precision speech receipt](melotts-bert-precision-speech-2026-10-29.json).
+   Complete source/log/output and authenticated 13-file envelope are retained.
+   This is diagnostic only; complete speaker/application acceptance is separate.
+
+   **Current bounded task:** full-source CUDA **version 5** is admitted once,
+   application/controller `97053abff`, bootstrap `395daf6ae`; CPU **40825101583**
+   targets that candidate. The driver explicitly selects `--bert-profile f16`,
+   retaining the old Q4 profile/failure receipts. F16 comes from the same model
+   revision `35522347b1bed9a913d6894803c5cab929ae42a5`, file
+   `bert-base-uncased.gguf`, SHA-256
+   `f7437929246c43d7300cbf6ff39b4715669a6053661117df99a456bdc5e8ecba`.
+   It is placed beside the renamed Melo model. No BERT environment override or
+   CLI codec argument is used; actual load logs must prove automatic F16
+   discovery through both C ABI/Session and every real CLI call. Require all
+   original inputs, final activation/backend/instrumentation, DP/SDP duration,
+   TCC stages, Session repeats/rates and four unchanged speech/speaker cases.
+   Preserve complete terminal source/log/output/checkpoints and authenticate
+   the envelope before replacement. Do not promote the profile or rewrite a
+   failed Q4 receipt unless both full CPU/CUDA runs pass.
+
+   After both pass, update the Melo V2 managed companion to the qualified F16
+   canonical filename and immutable model revision; preserve explicit Q4 use,
+   with no implicit Q4 fallback. CLI/C ABI already discover that F16 filename.
+   Retain BERT's own Apache-2.0 license/attribution independently of Melo/OpenVoice
+   MIT notices. Confirm the actual managed selection, finish current-source
+   integration and exact final-tree CI/Lint/secret checks before task I. C++
+   at `bd1e299e1` already passes CI **40807943181** (all 13 jobs) and Lint
+   **40807945520**; later changes are validation tooling, not runtime math.
    Earlier CPU **40783760561** passed its complete four-case matrix at
    `7c158b325`, including default-disclosed WER 0.1875 and zero; its full
    artifact and authenticated encrypted readback are retained.
@@ -568,14 +623,16 @@ The whole [issue #560](https://github.com/CrispStrobe/CrispASR/issues/560) has
 been read: no comments, linked issues or follow-ups at this checkpoint.
 Help/docs promise `--detect-language` exits after detection, but both old and
 unified CLI routes initialize ASR first and continue transcription. The bounded
-repair is committed at `bd1e299e1`; all three production caller/resolver fixture
-controls pass after baseline failures. Hosted current CLI build/smoke
-**40807940665** is queued on that exact source and remains required before
-merging. [Scope and review](issue-560-lid-cli-review-2026-10-29.md). Preserve
-ordinary transcription, explicit external LID backend/model selection, multiple
-input handling and failure exit status. Standalone self/probe modes require a
-clear unsupported-mode result rather than hidden ASR loading. No C ABI or model
-math change is needed. Do not post or close the issue from fixture results.
+repair is committed at `bd1e299e1`; all three production caller/resolver controls
+pass after baseline failures. Hosted current CLI **40807940665** is accepted:
+full CPU build, default/auto/explicit Whisper, dedicated Silero, multiple input,
+invalid ASR/HF bypass, unsupported-mode and bad-input failures, and ordinary
+`-l auto` transcription all pass. CI **40807943181** (13 jobs) and Lint
+**40807945520** pass at that exact source. Checkpoint readback is verified.
+[Accepted receipt](issue-560-lid-cli-accepted-2026-10-29.json),
+[scope and review](issue-560-lid-cli-review-2026-10-29.md).
+K is complete; keep #560 open for its separate full-recording request. No
+public reply or closure has been sent.
 
 The requested full-recording mode is a separate later feature, after current
 error/release/PR #559 gates. Shared prefix detection caps input at 15 seconds;

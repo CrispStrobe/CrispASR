@@ -1,0 +1,377 @@
+{
+  "schema": 1,
+  "complete": true,
+  "application_acceptance": false,
+  "source": "837e02957585e2b29f29ddfbcbab9a6f54a15f36",
+  "application_source": "9001ff91338e8a7417137ef4582f6805fcdd8e58",
+  "application_checkpoint_sha256": "5573e9c05f11e0b339660cc82eedf1d4a0ec11475ca0b700d51671b13b13b502",
+  "scope": "Diagnostic only: fixed Q4/F16 speech comparison; BERT boundary evidence retained separately in version 3",
+  "worker_sha256": "fb48ce6d1fc371c29d8be62e542fa92f93d2667411d991d12b52e07452d4596d",
+  "resource_checks": [
+    {
+      "phase": "decoder-bootstrap",
+      "available_bytes": 32493973504,
+      "load": [
+        0.79833984375,
+        0.4443359375,
+        0.20068359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125559549952,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "dependencies",
+      "available_bytes": 32497799168,
+      "load": [
+        0.79833984375,
+        0.4443359375,
+        0.20068359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125559549952,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "retained-dependencies",
+      "available_bytes": 32460869632,
+      "load": [
+        0.755859375,
+        0.4462890625,
+        0.20361328125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125096468480,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "download-melo.gguf",
+      "available_bytes": 32443441152,
+      "load": [
+        0.755859375,
+        0.4462890625,
+        0.20361328125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125096464384,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "download-bert.gguf",
+      "available_bytes": 32468856832,
+      "load": [
+        0.63916015625,
+        0.43115234375,
+        0.20068359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124999032832,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "download-f16-control",
+      "available_bytes": 32474988544,
+      "load": [
+        0.587890625,
+        0.423828125,
+        0.19921875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124944859136,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "stage-validated-converter",
+      "available_bytes": 32402907136,
+      "load": [
+        0.53759765625,
+        0.41943359375,
+        0.20068359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124702060544,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "precision-q4_k-neutral",
+      "available_bytes": 32387244032,
+      "load": [
+        0.53759765625,
+        0.41943359375,
+        0.20068359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124599934976,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "precision-q4_k-0",
+      "available_bytes": 32344653824,
+      "load": [
+        0.60888671875,
+        0.43896484375,
+        0.20947265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124599545856,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "precision-q4_k-1",
+      "available_bytes": 32297299968,
+      "load": [
+        0.6962890625,
+        0.46728515625,
+        0.22265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124599103488,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "precision-f16-control-neutral",
+      "available_bytes": 32285937664,
+      "load": [
+        0.76416015625,
+        0.494140625,
+        0.23583984375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124598521856,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "precision-f16-control-0",
+      "available_bytes": 32075763712,
+      "load": [
+        0.76416015625,
+        0.494140625,
+        0.23583984375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124598136832,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "precision-f16-control-1",
+      "available_bytes": 32355983360,
+      "load": [
+        0.884765625,
+        0.5361328125,
+        0.25439453125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124597747712,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "load-unchanged-tiny-oracle",
+      "available_bytes": 32396328960,
+      "load": [
+        0.91064453125,
+        0.5595703125,
+        0.267578125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124597350400,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-q4_k-neutral",
+      "available_bytes": 32167170048,
+      "load": [
+        0.91796875,
+        0.56689453125,
+        0.27197265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124519116800,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-q4_k-0",
+      "available_bytes": 32107446272,
+      "load": [
+        0.91796875,
+        0.56689453125,
+        0.27197265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124519112704,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-q4_k-1",
+      "available_bytes": 32098844672,
+      "load": [
+        0.91796875,
+        0.56689453125,
+        0.27197265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124519112704,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-f16-control-neutral",
+      "available_bytes": 32127512576,
+      "load": [
+        0.91796875,
+        0.56689453125,
+        0.27197265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124519112704,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-f16-control-0",
+      "available_bytes": 32122204160,
+      "load": [
+        0.91796875,
+        0.56689453125,
+        0.27197265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124519112704,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-f16-control-1",
+      "available_bytes": 32151941120,
+      "load": [
+        0.91796875,
+        0.56689453125,
+        0.27197265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124519112704,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    }
+  ],
+  "phases": {},
+  "library_sha256": "fffd43cd2536fd8d3876fdc7d9d3e4d8e0c730bd0b6f532e37a2123c2a560d57",
+  "converter_sha256": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255",
+  "precision_quality": [
+    {
+      "profile": "q4_k",
+      "case": "neutral",
+      "wer": 0.42857142857142855,
+      "rate": 44100,
+      "samples": 185856,
+      "sha256": "79bbbad288a2f3357d0d01b01df133426cb2fde7d36fb109573709e363699ce1"
+    },
+    {
+      "profile": "q4_k",
+      "case": "0",
+      "wer": 0.25,
+      "rate": 22050,
+      "samples": 186327,
+      "sha256": "16cf6ca5b25660dc2ae99ef50a6ba296df9eb09347e64c6e536b78665b3fa647"
+    },
+    {
+      "profile": "q4_k",
+      "case": "1",
+      "wer": 0.3333333333333333,
+      "rate": 22050,
+      "samples": 192983,
+      "sha256": "9fb96632f3aa304ed15ad624d0fbe07a0056d212f51904dc6e214584aff4f21d"
+    },
+    {
+      "profile": "f16-control",
+      "case": "neutral",
+      "wer": 0.14285714285714285,
+      "rate": 44100,
+      "samples": 188416,
+      "sha256": "ea9468bf8ef2ca69cbd9b29f7ca16a8501bfe527aabdb93445f768cb19621447"
+    },
+    {
+      "profile": "f16-control",
+      "case": "0",
+      "wer": 0.125,
+      "rate": 22050,
+      "samples": 187607,
+      "sha256": "13455d105eac000ab0968e925841884beadde34ce266b6bb30e38e8b2a25198a"
+    },
+    {
+      "profile": "f16-control",
+      "case": "1",
+      "wer": 0.05555555555555555,
+      "rate": 22050,
+      "samples": 193239,
+      "sha256": "c94b21cb73265c3954600d3e38c3137f0f773258913d9ebeca0cb6c808c4a09f"
+    }
+  ],
+  "precision_scope": "Diagnostic only; no speaker-quality/full-application/default acceptance",
+  "private_evidence": {
+    "bytes": 1762212,
+    "sha256": "013e525279196231b9348f2b1777454f55b4d3312b6a2a2520255abf51b1d8f5",
+    "recipient_sha256": "8faff36ac3521f054e844e58e8d5305560935c4545c0dc4472bcfce23b058e36",
+    "files": 13
+  },
+  "kernel_slug": "crispasr-melotts-decoder",
+  "kernel_version": 4,
+  "bootstrap_source": "07a12d7b7",
+  "readback_verified": true,
+  "interpretation": "Fixed F16 diagnostic passes neutral/disclosed WER while Q4 fails; separate full CPU/CUDA speaker/application qualification required before default promotion"
+}
