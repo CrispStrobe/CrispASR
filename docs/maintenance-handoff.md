@@ -38,8 +38,9 @@ and check actual GPU session availability before every Kaggle submission.
   exclusions. Six PR blobs match; the CLI has an unrelated #560 overlay.
   A fresh-main integration tree `17edd73db` on
   `validate/issue559-integration-20261029` matches all relevant `5eef35019`
-  runtime and test blobs. Recheck the full current PR discussion, complete
-  exact-tree checks and the release publication gate before merge.
+  runtime and test blobs. Exact-tree CI **40867676971** and lint **40867680937**
+  are queued. Recheck the full current PR discussion, complete exact-tree
+  checks and the release publication gate before merge.
 - **#560:** the standalone detect-and-exit repair is already on main. Opt-in
   full-recording detection candidate `f81fba67a` is on a validation branch;
   Hosted long-clip run **40850814403** failed: after Silero rejected a low-evidence Korean
