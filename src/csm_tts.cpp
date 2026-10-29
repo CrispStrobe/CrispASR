@@ -97,6 +97,51 @@ struct csm_bench_stage {
     }
 };
 
+// Graph-only timing; explicit synchronization adds profiling overhead.
+struct csm_step_profile {
+    enum phase { backbone_prefill, backbone_step, depth_prefill, depth_step, phase_count };
+    struct measurement {
+        int calls = 0;
+        int64_t total_us = 0;
+    };
+    measurement phases[phase_count];
+    bool enabled;
+    int frame_attempts = 0;
+    int eos_attempts = 0;
+
+    csm_step_profile() {
+        const char* e = crispasr_env::get("CRISPASR_CSM_STEP_PROFILE");
+        enabled = e && *e && *e != '0';
+    }
+
+    enum ggml_status compute(ggml_backend_sched_t sched, ggml_cgraph* graph, phase which) {
+        if (!enabled)
+            return ggml_backend_sched_graph_compute(sched, graph);
+        ggml_backend_sched_synchronize(sched);
+        const auto start = std::chrono::steady_clock::now();
+        const auto status = ggml_backend_sched_graph_compute(sched, graph);
+        ggml_backend_sched_synchronize(sched);
+        if (status == GGML_STATUS_SUCCESS) {
+            auto& item = phases[which];
+            ++item.calls;
+            item.total_us +=
+                std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - start).count();
+        }
+        return status;
+    }
+
+    void report(size_t accepted_frames) const {
+        if (!enabled)
+            return;
+        static const char* names[] = {"backbone_prefill", "backbone_step", "depth_prefill", "depth_step"};
+        std::fprintf(stderr, "csm_step_profile: attempts=%d accepted=%zu eos=%d\n", frame_attempts, accepted_frames,
+                     eos_attempts);
+        for (int i = 0; i < phase_count; ++i)
+            std::fprintf(stderr, "csm_step_profile: %s calls=%d total_us=%lld\n", names[i], phases[i].calls,
+                         static_cast<long long>(phases[i].total_us));
+    }
+};
+
 struct csm_hparams {
     // Backbone (Llama-3.2 1B)
     uint32_t bb_n_layers = 16;
@@ -1397,6 +1442,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
     float temperature = ctx->params.temperature;
     int topk = ctx->params.topk;
     csm_sampling_trace trace;
+    csm_step_profile step_profile;
 
     // 1. Tokenize text
     std::vector<int32_t> text_tokens;
@@ -1726,6 +1772,8 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
 
     // --- Prefill: process text frames through backbone ---
     {
+        if (step_profile.enabled)
+            ++step_profile.frame_attempts;
         // Build embeddings for all text frames (text-only: audio is masked out)
         std::vector<float> prefill_embeds((size_t)bb_d * n_text_frames);
         for (int i = 0; i < n_text_frames; i++) {
@@ -1765,7 +1813,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
             ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "bb_mask"), mask_data.data(), 0,
                                     mask_data.size() * sizeof(ggml_fp16_t));
         }
-        if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+        if (step_profile.compute(ctx->sched, gf, csm_step_profile::backbone_prefill) != GGML_STATUS_SUCCESS) {
             fprintf(stderr, "csm_tts: backbone prefill compute failed\n");
             return nullptr;
         }
@@ -1825,7 +1873,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
                                     dd_positions.size() * sizeof(int32_t));
             ggml_backend_tensor_set(ggml_graph_get_tensor(dd_gf, "dd_mask"), dd_mask.data(), 0,
                                     dd_mask.size() * sizeof(ggml_fp16_t));
-            if (ggml_backend_sched_graph_compute(ctx->sched, dd_gf) != GGML_STATUS_SUCCESS) {
+            if (step_profile.compute(ctx->sched, dd_gf, csm_step_profile::depth_prefill) != GGML_STATUS_SUCCESS) {
                 fprintf(stderr, "csm_tts: first depth prefill compute failed\n");
                 return nullptr;
             }
@@ -1851,7 +1899,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
                 ggml_backend_tensor_set(ggml_graph_get_tensor(dd_gf, "dd_embeds"), dd_step_embed.data(), 0,
                                         (size_t)dd_d * sizeof(float));
                 ggml_backend_tensor_set(ggml_graph_get_tensor(dd_gf, "dd_positions"), &dd_pos, 0, sizeof(int32_t));
-                if (ggml_backend_sched_graph_compute(ctx->sched, dd_gf) != GGML_STATUS_SUCCESS)
+                if (step_profile.compute(ctx->sched, dd_gf, csm_step_profile::depth_step) != GGML_STATUS_SUCCESS)
                     break;
 
                 ggml_tensor* dd_logits_t = ggml_graph_get_tensor(dd_gf, "dd_logits");
@@ -1873,6 +1921,8 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
         }
         if (!first_eos) {
             all_codes.push_back(first_frame_codes);
+        } else if (step_profile.enabled) {
+            ++step_profile.eos_attempts;
         }
 
         if (ctx->params.verbosity >= 2) {
@@ -1896,6 +1946,8 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
             if (ctx->gen_frame_cap > 0 && (int)all_codes.size() >= ctx->gen_frame_cap) {
                 break; // diagnostic frame cap (KV cache untouched)
             }
+            if (step_profile.enabled)
+                ++step_profile.frame_attempts;
             // Build audio-frame embedding: sum of audio embeddings, text is masked out
             std::vector<float> step_embed(bb_d);
             build_audio_frame_embedding(prev_audio_codes.data(), step_embed.data());
@@ -1913,7 +1965,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
             ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "bb_embeds"), step_embed.data(), 0,
                                     (size_t)bb_d * sizeof(float));
             ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "bb_positions"), &pos, 0, sizeof(int32_t));
-            if (ggml_backend_sched_graph_compute(ctx->sched, gf) != GGML_STATUS_SUCCESS) {
+            if (step_profile.compute(ctx->sched, gf, csm_step_profile::backbone_step) != GGML_STATUS_SUCCESS) {
                 fprintf(stderr, "csm_tts: backbone step %d compute failed\n", frame_idx);
                 break;
             }
@@ -1994,7 +2046,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
                                         dd_positions.size() * sizeof(int32_t));
                 ggml_backend_tensor_set(ggml_graph_get_tensor(dd_gf, "dd_mask"), dd_mask.data(), 0,
                                         dd_mask.size() * sizeof(ggml_fp16_t));
-                if (ggml_backend_sched_graph_compute(ctx->sched, dd_gf) != GGML_STATUS_SUCCESS) {
+                if (step_profile.compute(ctx->sched, dd_gf, csm_step_profile::depth_prefill) != GGML_STATUS_SUCCESS) {
                     fprintf(stderr, "csm_tts: depth prefill compute failed\n");
                     break;
                 }
@@ -2032,7 +2084,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
                 ggml_backend_tensor_set(ggml_graph_get_tensor(dd_gf, "dd_embeds"), dd_step_embed.data(), 0,
                                         (size_t)dd_d * sizeof(float));
                 ggml_backend_tensor_set(ggml_graph_get_tensor(dd_gf, "dd_positions"), &dd_pos, 0, sizeof(int32_t));
-                if (ggml_backend_sched_graph_compute(ctx->sched, dd_gf) != GGML_STATUS_SUCCESS) {
+                if (step_profile.compute(ctx->sched, dd_gf, csm_step_profile::depth_step) != GGML_STATUS_SUCCESS) {
                     fprintf(stderr, "csm_tts: depth step compute failed (cb=%d)\n", cb_idx);
                     break;
                 }
@@ -2056,6 +2108,8 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
                 }
             }
             if (all_eos) {
+                if (step_profile.enabled)
+                    ++step_profile.eos_attempts;
                 if (ctx->params.verbosity >= 1) {
                     fprintf(stderr, "csm_tts: all-codebook EOS at frame %d\n", frame_idx);
                 }
@@ -2072,6 +2126,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
     } // end AR decode block
 
 mimi_decode:
+    step_profile.report(all_codes.size());
     ctx->last_codes = all_codes; // capture before Mimi decode (which may fail)
     trace.codes(all_codes, n_cb);
     if (all_codes.empty()) {
