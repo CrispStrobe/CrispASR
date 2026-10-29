@@ -15,6 +15,54 @@ in ignored local notes.
 
 ## Current state and first actions
 
+### Active continuation — 2026-10-29
+
+The work is not complete until #559 and the full-recording part of #560 are
+accepted, all four recent-model comparisons have usable Kaggle results, and
+Whisper performance matches the comparison implementation on Kaggle. Do not
+close #557; its reply is for review only. Large builds and inference belong on
+hosted workers. Check load and available memory before each build or inference,
+and check actual GPU session availability before every Kaggle submission.
+
+- **Release:** all 37 native build jobs in run **40833098926** passed, but the
+  final publisher remains queued. Rust/Dart publisher **40833098923** passed.
+  Finish publication and both audits using task I below; do not retag v0.8.48.
+- **#559:** exact PR head `6b132720090cbb532f79f544c130381ddf1cf6c9` was
+  applied to a validation tree, candidate `5eef35019`. CI **40848995923** and
+  lint **40848999141** are queued. Hosted short-clip and actual C API prompt
+  routing run **40851686132** is queued on test tree `c83acbb19`. Neither a
+  queued run nor the contributor's own probes establish independent acceptance.
+  Review the current discussion and complete CLI, C API and chunking controls
+  before deciding whether to merge.
+- **#560:** the standalone detect-and-exit repair is already on main. Opt-in
+  full-recording detection candidate `f81fba67a` is on a validation branch;
+  CI **40850807041**, lint **40850810717** and hosted long-clip tests
+  **40850814403** are queued. Model-free caller controls pass, but real model
+  acceptance and main integration remain outstanding.
+- **Recent models:** [the Nemotron paired receipt](nemotron-original-t4-benchmark-2026-10-29.json)
+  records T4 results for native F16 and original F32, with zero WER and GPU
+  execution; precision and operation boundaries differ, and no per-step count
+  was captured. A native step-count diagnostic is prepared. Granite Q4_K
+  version 1 failed on a truncated hash; version 2 ran native warmups but its
+  original lacked the chat template. Version 3 repairs that input and awaits a
+  free GPU slot. A private CSM original-without-watermark comparison is running;
+  gated access and no redistribution are required. Melo/OpenVoice paired
+  timing is being prepared and full original Melo synthesis remains unproven.
+- **Whisper:** the short-audio safety fix `4023a6080` has queued CI
+  **40847257799**, lint **40847261708** and secret scan **40847251740**.
+  A Kaggle timing diagnostic of `c5513ccfb` is running with profiling off/on
+  and output equality controls. A same-toolchain fork comparison is prepared.
+  Neither diagnostic has established the reason for the earlier process-time
+  gap or demonstrated matched performance. Keep all changes on validation
+  branches until their own acceptance checks pass.
+
+The validation branch `validate/ordered-model-benchmarks-20261029` contains the
+prepared adapters and bounded Nemotron receipt. Later local changes and private
+evidence locations are recorded in ignored `CLAUDE.md`; do not assume every
+local commit has been pushed. Check actual job status and preserve terminal
+evidence before any retry. Never publish private audio, credentials, or local
+machine paths.
+
 Snapshot 2026-10-29: **v0.8.46 publication is accepted. v0.8.47 native
 publication, both wheel publishers, Pages and live GPU index links pass; final
 wheel audit 40789883589 is accepted for all 11 distributions and readbacks.** Keep #557 open and prepare its reply
