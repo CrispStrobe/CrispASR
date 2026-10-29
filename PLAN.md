@@ -18,7 +18,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 - Whisper timing diagnosis owner: root agent, starting source `4023a6080`. Missing evidence: paired process timing includes load and differs by build/CUDA libraries, so the stage responsible for the gap is unknown. Add opt-in stage instrumentation and hosted paired profiling with matched workload and explicit device/quality gates. Keep heavy builds and inference hosted; preserve current benchmark receipts.
 
-- Whisper T4 timing diagnostic COMPLETE: [receipt](docs/whisper-timing-t4-diagnostic-2026-10-29.json). Same-output GPU controls passed; median single-token decode is 2.52 ms for source-built CrispASR versus 2.41 ms for the packaged fork, while model loading is 531 ms versus 293 ms. Builds differ; the cause and target performance remain unproven. A same-toolchain comparison including upstream is prepared.
+- Whisper T4 timing diagnostic COMPLETE: [receipt](docs/whisper-timing-t4-diagnostic-2026-10-29.json). Same-output GPU controls passed; median single-token decode is 2.52 ms for source-built CrispASR versus 2.41 ms for the packaged fork, while model loading is 531 ms versus 293 ms. Builds differ; the cause and target performance remain unproven. A same-toolchain comparison including upstream is running on Kaggle.
 
 - Whisper safety repair owner: current agent, source `802cc6a04`. Port upstream MIT change `8631825d41a2712268813981a9550b04a3f225e5` for very short reflective padding; require before/after bounds control and unchanged normal-length reflection. Full build remains hosted.
 

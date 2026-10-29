@@ -55,7 +55,9 @@ and check actual GPU session availability before every Kaggle submission.
   The [T4 timing diagnostic](whisper-timing-t4-diagnostic-2026-10-29.json) of
   `c5513ccfb` passed output and GPU controls. Median decode was 2.52 ms/call
   versus 2.41 ms for the packaged fork, and model load 531 ms versus 293 ms;
-  builds differ. A same-toolchain upstream and fork comparison is prepared.
+  builds differ. A same-toolchain upstream and fork comparison is running on
+  Kaggle; the uploaded script digest is
+  `b9691a735a49515ef6d9be2cb9b288cafd4667fda6b0f0a639e08e7dfe1d98e3`.
   These results do not establish the reason for the gap or matched performance. Keep all changes on validation
   branches until their own acceptance checks pass.
 
