@@ -1110,8 +1110,22 @@ extern "C" struct t5_translate_context* t5_translate_init_from_file(const char* 
     {
         core_gguf::WeightLoad wl;
         if (!core_gguf::load_weights(path_model, c->backend, "t5", wl)) {
-            delete c;
-            return nullptr;
+            if (c->backend != c->backend_cpu) {
+                if (params.verbosity >= 1) {
+                    fprintf(stderr, "t5: GPU weight load failed (%s), falling back to CPU\n",
+                            ggml_backend_name(c->backend));
+                }
+                ggml_backend_free(c->backend);
+                c->backend = c->backend_cpu;
+                wl = core_gguf::WeightLoad{};
+                if (!core_gguf::load_weights(path_model, c->backend, "t5", wl)) {
+                    delete c;
+                    return nullptr;
+                }
+            } else {
+                delete c;
+                return nullptr;
+            }
         }
         c->ctx_w = wl.ctx;
         c->buf_w = wl.buf;
@@ -1346,7 +1360,7 @@ extern "C" int t5_translate_diff(const char* model_gguf, const char* ref_gguf, i
         return 2;
     }
     core_gguf::WeightLoad rw;
-    if (!core_gguf::load_weights(ref_gguf, c->backend, "ref", rw)) {
+    if (!core_gguf::load_weights(ref_gguf, c->backend_cpu, "ref", rw)) {
         std::fprintf(stderr, "t5_diff: failed to load reference %s\n", ref_gguf);
         t5_translate_free(c);
         return 2;
@@ -1401,6 +1415,9 @@ extern "C" int t5_translate_diff(const char* model_gguf, const char* ref_gguf, i
     if (tok_f.empty()) {
         std::fprintf(stderr, "t5_diff: reference has no enc_tokens — cannot align inputs, refusing to "
                              "report per-layer numbers that would be meaningless\n");
+        core_gguf::release_weight_buffer(rw.buf);
+        if (rw.ctx)
+            ggml_free(rw.ctx);
         t5_translate_free(c);
         return 2;
     }
@@ -1521,6 +1538,9 @@ extern "C" int t5_translate_diff(const char* model_gguf, const char* ref_gguf, i
     }
 
     std::printf("t5 diff: %d pass, %d fail, %d skipped\n", n_pass, n_fail, n_skip);
+    core_gguf::release_weight_buffer(rw.buf);
+    if (rw.ctx)
+        ggml_free(rw.ctx);
     t5_translate_free(c);
     return n_fail == 0 ? 0 : 1;
 }

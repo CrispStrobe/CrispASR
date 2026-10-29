@@ -122,8 +122,16 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     EOS = cfg.get("eos_token_id", 1)
 
     st_path = model_dir / "model.safetensors"
-    handle = safe_open(str(st_path), framework="pt")
-    keys = set(handle.keys())
+    idx_path = model_dir / "model.safetensors.index.json"
+    is_sharded = idx_path.is_file()
+    if is_sharded:
+        idx = json.loads(idx_path.read_text(encoding="utf-8"))
+        weight_map = idx.get("weight_map", {})
+        keys = set(weight_map.keys())
+        handle = None
+    else:
+        handle = safe_open(str(st_path), framework="pt")
+        keys = set(handle.keys())
 
     def _W(name: str) -> "torch.Tensor":
         """One tensor, fp32, then let it go. Never cache — that is the whole
@@ -135,7 +143,11 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         if name not in keys:
             stem = name.split(".")[-2] if "." in name else name
             near = sorted(k for k in keys if stem in k)[:8]
-            raise KeyError(f"{name} not in {st_path.name}. Similar keys: {near}")
+            raise KeyError(f"{name} not in {model_dir.name}. Similar keys: {near}")
+        if is_sharded:
+            shard_path = model_dir / weight_map[name]
+            with safe_open(str(shard_path), framework="pt") as h:
+                return h.get_tensor(name).float()
         return handle.get_tensor(name).float()
 
     def _W_any(*names: str) -> "torch.Tensor":
@@ -145,8 +157,8 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
         its list rather than assuming one of them."""
         for n in names:
             if n in keys:
-                return handle.get_tensor(n).float()
-        raise KeyError(f"none of {names} in {st_path.name}")
+                return _W(n)
+        raise KeyError(f"none of {names} in {model_dir.name}")
 
     EMBED = ("shared.weight", "encoder.embed_tokens.weight", "decoder.embed_tokens.weight")
 

@@ -34,8 +34,8 @@ def main(argv):
     if len(argv) < 2:
         sys.exit(__doc__)
     src = Path(argv[1]).resolve()
-    account = os.environ.get("KAGGLE_ACCOUNT", "").strip()
-    token = os.environ.get("KAGGLE_TOKEN", "").strip()
+    account = (os.environ.get("KAGGLE_ACCOUNT") or os.environ.get("KAGGLE_USERNAME") or "").strip()
+    token = (os.environ.get("KAGGLE_TOKEN") or os.environ.get("KAGGLE_KEY") or os.environ.get("KAGGLE_API_TOKEN") or "").strip()
     if not account or not token:
         sys.exit("kpush: set KAGGLE_ACCOUNT and KAGGLE_TOKEN (GitHub secrets / private env file)")
     meta_path = src / "kernel-metadata.json"
@@ -52,7 +52,7 @@ def main(argv):
         leftover = [p.name for p in (dst / "kernel-metadata.json", dst / (code or "")) if p.is_file() and PLACEHOLDER in p.read_text()]
         if leftover:
             sys.exit(f"kpush: unrendered placeholder in {leftover}")
-        env = dict(os.environ, KAGGLE_API_TOKEN=token)
+        env = dict(os.environ, KAGGLE_API_TOKEN=token, KAGGLE_USERNAME=account, KAGGLE_KEY=token)
         return subprocess.call([sys.executable, "-c", "from kaggle.cli import main; main()", "kernels", "push", "-p", str(dst)] + argv[2:], env=env)
 
 

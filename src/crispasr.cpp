@@ -3479,10 +3479,7 @@ static bool whisper_decode_internal(whisper_context& wctx, whisper_state& wstate
 
         {
             struct ggml_tensor* position = ggml_graph_get_tensor(gf, "position");
-            for (int i = 0; i < n_tokens; ++i) {
-                const int32_t val = batch.pos[i];
-                ggml_backend_tensor_set(position, &val, i * sizeof(int32_t), sizeof(int32_t));
-            }
+            ggml_backend_tensor_set(position, batch.pos, 0, n_tokens * sizeof(whisper_pos));
         }
 
         {

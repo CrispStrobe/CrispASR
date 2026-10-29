@@ -104,10 +104,9 @@ def _bf16_bytes_to_f32(raw: bytes) -> np.ndarray:
     return u32.view(np.float32)
 
 
-class SafetensorsReader:
+class SingleSafetensorsReader:
     """
-    Memory-mapped safetensors reader.  Reads the JSON header once; individual
-    tensors are decoded on demand from the mmap without loading the whole file.
+    Memory-mapped reader for a single safetensors file.
     """
 
     def __init__(self, path: Path) -> None:
@@ -156,6 +155,66 @@ class SafetensorsReader:
     def close(self) -> None:
         self._mm.close()
         self._f.close()
+
+
+class SafetensorsReader:
+    """
+    Reader supporting both single safetensors and sharded checkpoints (model.safetensors.index.json).
+    Shards are opened on demand and closed when moving across shards to keep RAM bounded.
+    """
+
+    def __init__(self, path_or_dir: Path) -> None:
+        p = Path(path_or_dir)
+        self._sharded = False
+        self._weight_map: dict[str, str] = {}
+        self._base_dir: Path = p if p.is_dir() else p.parent
+        self._active_shard: str | None = None
+        self._active_reader: SingleSafetensorsReader | None = None
+        self._single: SingleSafetensorsReader | None = None
+
+        if p.is_dir():
+            idx_path = p / "model.safetensors.index.json"
+            single_path = p / "model.safetensors"
+            if idx_path.is_file():
+                self._sharded = True
+                with open(idx_path, encoding="utf-8") as f:
+                    idx = json.load(f)
+                self._weight_map = idx.get("weight_map", {})
+                print(f"  safetensors (sharded): {len(self._weight_map)} tensors across "
+                      f"{len(set(self._weight_map.values()))} shards")
+            elif single_path.is_file():
+                self._single = SingleSafetensorsReader(single_path)
+            else:
+                raise FileNotFoundError(f"Neither model.safetensors nor index found in {p}")
+        else:
+            self._single = SingleSafetensorsReader(p)
+
+    def keys(self) -> list[str]:
+        if self._sharded:
+            return sorted(self._weight_map.keys())
+        return self._single.keys()
+
+    def get(self, name: str) -> np.ndarray:
+        if not self._sharded:
+            return self._single.get(name)
+
+        shard_name = self._weight_map[name]
+        if self._active_shard != shard_name:
+            if self._active_reader is not None:
+                self._active_reader.close()
+            shard_path = self._base_dir / shard_name
+            self._active_reader = SingleSafetensorsReader(shard_path)
+            self._active_shard = shard_name
+
+        return self._active_reader.get(name)
+
+    def close(self) -> None:
+        if self._sharded:
+            if self._active_reader is not None:
+                self._active_reader.close()
+                self._active_reader = None
+        elif self._single is not None:
+            self._single.close()
 
 
 # ---------------------------------------------------------------------------
@@ -380,10 +439,15 @@ def convert(input_dir: Path, out_path: Path) -> None:
 
     # ---- safetensors weights ----
     st_path = input_dir / "model.safetensors"
-    if not st_path.exists():
-        sys.exit(f"Missing model.safetensors at {st_path}")
-    print(f"  weights: {st_path}  ({st_path.stat().st_size / 1e9:.2f} GB)")
-    reader = SafetensorsReader(st_path)
+    idx_path = input_dir / "model.safetensors.index.json"
+    if idx_path.exists():
+        print(f"  weights: sharded checkpoint via {idx_path}")
+        reader = SafetensorsReader(input_dir)
+    elif st_path.exists():
+        print(f"  weights: {st_path}  ({st_path.stat().st_size / 1e9:.2f} GB)")
+        reader = SafetensorsReader(st_path)
+    else:
+        sys.exit(f"Missing model.safetensors or model.safetensors.index.json at {input_dir}")
 
     # ---- vocabulary ----
     tokens, scores = build_vocab(input_dir)
@@ -421,8 +485,14 @@ def convert(input_dir: Path, out_path: Path) -> None:
     n_f16 = 0
     n_f32 = 0
 
+    # Intermediate disk scratch to keep RAM usage minimal on large models (e.g. 7B/10B)
+    scratch_path = out_path.with_suffix(".scratch")
+    scratch_f = open(scratch_path, "wb")
+    scratch_off = 0
+    granularity = getattr(mmap, "ALLOCATIONGRANULARITY", 4096)
+
     def write_tensor(gguf_name: str, arr: np.ndarray) -> None:
-        nonlocal n_written, n_f16, n_f32
+        nonlocal n_written, n_f16, n_f32, scratch_off
         if arr.dtype == np.float64:
             arr = arr.astype(np.float32)
         if is_f32_tensor(gguf_name, arr.shape):
@@ -431,7 +501,18 @@ def convert(input_dir: Path, out_path: Path) -> None:
         else:
             arr = arr.astype(np.float16)
             n_f16 += 1
-        writer.add_tensor(gguf_name, arr)
+
+        pad = (granularity - (scratch_off % granularity)) % granularity
+        if pad > 0:
+            scratch_f.write(b"\0" * pad)
+            scratch_off += pad
+
+        raw = arr.tobytes()
+        scratch_f.write(raw)
+        mmap_arr = np.memmap(scratch_path, dtype=arr.dtype, mode="r", offset=scratch_off, shape=arr.shape)
+        scratch_off += len(raw)
+
+        writer.add_tensor(gguf_name, mmap_arr)
         n_written += 1
         if n_written <= 30 or n_written % 50 == 0:
             print(f"  {gguf_name:60s}  {str(arr.shape):25s}  {arr.dtype}")
@@ -458,11 +539,15 @@ def convert(input_dir: Path, out_path: Path) -> None:
     else:
         print(f"  [warn] tensor count: got {n_written}, expected {expected}")
 
+    scratch_f.flush()
+    scratch_f.close()
+
     writer.write_header_to_file()
     writer.write_kv_data_to_file()
     writer.write_tensors_to_file()
     writer.close()
     reader.close()
+    scratch_path.unlink(missing_ok=True)
     print(f"\nDone: {out_path}  ({out_path.stat().st_size / 1e6:.1f} MB)")
 
 
