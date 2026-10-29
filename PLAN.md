@@ -12,6 +12,8 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
+- Whisper fork comparison owner: current agent. Prepare a real CUDA paired benchmark using the identical pinned base.en model and JFK input, v0.8.47 audited CrispASR binary and a checksum-pinned whisper.cpp fork binary. Require actual per-process GPU evidence, transcript quality, resource guards and retained logs; process timings include initialization.
+
 - Paired benchmark collector owner: current agent, source `df4786900`. Add hosted-only alternating process timing with resource checks, input hashing, warmups and retained failure logs; validate with mocked commands. Step-level adapters and real matched GPU/original comparisons remain separate.
 
 - Benchmark comparison owner: current agent, source `5bcb0bbb8`. Add a model-free comparison of retained paired timing records that rejects mismatched inputs, model identities and settings; report per-step timing only when counts exist. Actual GPU measurements remain hosted and require separately qualified workloads.
