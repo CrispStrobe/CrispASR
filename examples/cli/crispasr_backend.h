@@ -488,3 +488,5 @@ void crispasr_print_backend_matrix_json();
 // Invoked from cli.cpp main() when params.backend is set to a non-whisper
 // backend. The whisper path in cli.cpp is left completely untouched.
 int crispasr_run_backend(const whisper_params& params);
+// Standalone --detect-language: audio LID without resolving or loading an ASR backend.
+int crispasr_run_lid_only(const whisper_params& params);

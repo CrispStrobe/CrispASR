@@ -1,0 +1,21 @@
+# Issue #560: standalone language detection CLI
+
+[Issue #560](https://github.com/CrispStrobe/CrispASR/issues/560) asks for two changes. The first is for `--detect-language` to identify the audio language and exit without requiring an ASR model. The second is an opt-in mode that considers the entire recording rather than its first 15 seconds. The issue has no comments or linked follow-ups as of 2026-10-29.
+
+## Confirmed CLI error and scoped change
+
+The CLI help and `docs/cli.md` say `--detect-language` exits after detection. In the existing implementation it sets automatic language selection inside the transcription flow. The unified path resolves and initializes an ASR backend before running LID; the legacy Whisper path also loads a Whisper ASR model before processing audio. These observations confirm the reported help and behavior mismatch.
+
+The scoped repair routes the flag after CLI parsing and before Hugging Face ASR model resolution and both ASR dispatch paths. It reads each audio input, invokes the existing CLI LID provider, prints the language, confidence, and source, then exits. Missing or unreadable audio, an unavailable LID result, and `--lid-backend off|none|probe|self` return nonzero. Probe/self need an ASR backend, so standalone mode reports their incompatibility instead of silently substituting another provider. Normal transcription through `-l auto` continues through its existing path. A named external provider and `--lid-model PATH` remain available. No ASR model is needed; the selected LID provider may still use its own model. The default provider is Whisper tiny, while `--lid-backend silero` selects a dedicated audio LID model.
+
+The LID resolver's existing default-cache mechanism may download a missing LID model. The CLI has no `--offline` flag; callers wanting a managed local model can provide `--lid-model PATH`. The `--lid-model auto` spelling now resolves the default Whisper LID model, consistent with the other providers.
+
+## Verification and remaining acceptance
+
+A model-free fixture compiles the actual standalone caller with stubbed audio and detector functions. At baseline `8b9511e79`, the route and caller controls fail because the path is absent; the separate actual Whisper resolver control also fails because `auto` is treated as a literal filename. On the candidate, it checks single and multiple inputs, default and explicit provider selection, success output, a partial-file failure, missing input, unreadable audio, detector failure, a missing named LID model, and unsupported standalone provider choices. All three controls now pass without downloading or loading models, including an explicit-path resolver control that performs no cache resolution.
+
+Before accepting the CLI change, build the current CLI and smoke-test a valid audio file with an unavailable `-m` ASR path: `--detect-language --lid-model <local-LID-model> -f <audio>` must print one result, exit zero, and never attempt ASR resolution, initialization, or transcription. Exercise the default cached LID provider and one explicit provider, plus an unreadable input and `--lid-backend self` for nonzero exits. Check that ordinary `-l auto` transcription still runs. The hosted worker [issue560_lid_only.py](../tools/ci-heavy/issue560_lid_only.py) builds the current CLI and runs pinned Whisper/Silero model checks, invalid ASR/HF bypass controls, multiple input and failure cases, and normal automatic-language transcription. Its model bytes are checksum pinned and it checks resources before every build/inference phase. No hosted CLI smoke test has yet passed for this candidate.
+
+## Separate full-recording request
+
+The shared LID function caps input at 15 seconds. Individual providers also impose their own limits: Whisper's encoder uses a 30-second window, Silero has a 30-second default because attention memory grows quadratically, FireRed caps at 5 seconds, and ECAPA caps at 15 seconds. A future full-recording mode needs bounded window sampling and a defined aggregation and confidence policy, plus late-speech and mixed-language controls. It is outside this CLI error repair and follows current error qualification, the patch release and the already scoped PR #559 checks.

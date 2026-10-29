@@ -69,7 +69,7 @@ std::string scratch_dir() {
 constexpr const char* kEcapaLidDefaultFile = "ecapa-lid-107.gguf";
 
 std::string resolve_whisper_lid_model(const whisper_params& p) {
-    if (!p.lid_model.empty())
+    if (!p.lid_model.empty() && p.lid_model != "auto")
         return expand_home(p.lid_model);
     return crispasr_cache::ensure_cached_file(kWhisperLidDefaultFile, kWhisperLidDefaultUrl, p.no_prints,
                                               "crispasr[lid]", p.cache_dir);

@@ -2663,6 +2663,12 @@ int main(int argc, char** argv) {
         }
     }
 
+    // #560: --detect-language is an exit action, including when -m names an
+    // invalid or absent ASR model. Route before --hf-repo and model dispatch so
+    // only the selected LID provider may resolve/load a model.
+    if (params.detect_language && !params.server && !params.dry_run_resolve)
+        return crispasr_run_lid_only(params);
+
     // Issue #128 — resolve --hf-repo / --hf-file early, before any
     // model-path interpretation downstream. Synthesise the HF resolve
     // URL, fetch via the existing cache, then rewrite params.model
