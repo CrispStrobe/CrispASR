@@ -1,0 +1,300 @@
+{
+  "schema": 1,
+  "version": "csm-original-steps-v1",
+  "complete": true,
+  "acceptance": true,
+  "scope": "private original-only F32 CSM forward-step timing, SilentCipher watermark disabled",
+  "hardware": "Tesla T4, compute capability 7.5",
+  "script_sha256": "c382fdbfa5b3376d3f118e5359c5b849039ed9a5f9e4551389e5ce42b852c2ed",
+  "pins": {
+    "runtime": [
+      "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.47/crispasr-linux-x86_64-cuda.tar.gz",
+      "90e23cffb44f4a80d929bf88cf3abb2d526ec4c0b95d88a82d1a8bf33135722d"
+    ],
+    "asr": [
+      "cstr/parakeet-tdt-0.6b-v3-GGUF",
+      "815cc1bcb5cfb92f9cd0bbd22c7bc2f6e2d4ec13",
+      "parakeet-tdt-0.6b-v3-q4_k.gguf",
+      "1a60f6e53e5781240dde6e69a47a47a8a71995a3a106517b009225afcc514457"
+    ],
+    "sesame_source": "836f886515f0dec02c22ed2316cc78904bdc0f36",
+    "silentcipher_source": "d46d7d0893a583d8968ab3a6626e2289faec9152",
+    "csm_original": "c92a71e1c419772e25be7dc14d952c2521a740ab",
+    "llama_tokenizer": "4e20de362430cd3b72f300e6b0f18e50e7166e08",
+    "mimi": "2bfc9ae6e89079a5cc7ed2a68436010d91a3d289",
+    "silentcipher_weights_used": false
+  },
+  "settings": {
+    "text": "The quick brown fox jumps over the lazy dog",
+    "speaker": 0,
+    "context": [],
+    "seed": 1234,
+    "temperature": 0.9,
+    "topk": 50,
+    "original_max_audio_ms": 10000
+  },
+  "timing_boundary": "generate_ms excludes model load and WAV save; frame and module timers synchronize CUDA at boundaries; nested timers include synchronization overhead and are not additive; Mimi decode is separate from frame generation",
+  "software": {
+    "torch": "2.11.0+cu128",
+    "torchaudio": "2.11.0+cu128"
+  },
+  "model_card_sha256": {
+    "csm": "f45b5ea019e71b0a45e4c036ff24e81ac623b00f5781980c192b607af2adb0af",
+    "llama_tokenizer": "7dc455178a8c7c21f9cfe0aef0808a92e78ade6e58e04c18354c668934b929ea",
+    "mimi": "037c5775c15b67a991bae87aba75f287d331d017d7b502f744cdf3cdb4495f06"
+  },
+  "mimi_sha256": "09b782f0629851a271227fb9d36db65c041790365f11bbe5d3d59369cf863f50",
+  "original": {
+    "load_seconds": 25.21560639100005,
+    "device": "cuda:0",
+    "dtype": "torch.float32",
+    "torch": "2.11.0+cu128",
+    "torchaudio": "2.11.0+cu128",
+    "gpu_pid": 172,
+    "gpu_pid_samples": 284,
+    "peak_gpu_mib": 7104,
+    "gpu_allocated_bytes": 7222062080,
+    "output_identity": true
+  },
+  "measured_medians": {
+    "timing_off_generate_ms": 7842.805103,
+    "timing_on_generate_ms": 8213.442325,
+    "prefill_frame_full_ms": 217.352039,
+    "prefill_backbone_forward_ms": 35.785566,
+    "later_frame_full_ms": 207.9520235,
+    "later_backbone_forward_ms": 27.0414195,
+    "later_depth_31_forward_total_ms": 164.2695215,
+    "mimi_decode_ms": 18.546741
+  },
+  "runs_summary": [
+    {
+      "label": "warmup-0-off",
+      "phase": "warmup",
+      "pair": 0,
+      "arm": "timing_off",
+      "generate_ms": 11089.113694,
+      "attempted_frame_calls": 39,
+      "accepted_audio_frames": 38,
+      "eos_frame_attempts": 1,
+      "codebook_count": 32,
+      "all_attempted_codes_sha256": "d24f709a8c462e7848b7efcbb1b40591be925856336f3a0828e01d09d7fa8605",
+      "gpu_pid_samples_during_generate": 46,
+      "wav": {
+        "channels": 1,
+        "sample_width": 2,
+        "rate": 24000,
+        "frames": 72960,
+        "duration_seconds": 3.04,
+        "sha256": "31c3212d3733fb005fc336e4cb7d5fc5f0302a9d79c96624cddd2a0731741669"
+      },
+      "asr_wer": 0.0,
+      "asr_log_sha256": "259b6167d8725c12ab4ba5060117c49118919cc9e8c874536995038102d091cd"
+    },
+    {
+      "label": "warmup-0-on",
+      "phase": "warmup",
+      "pair": 0,
+      "arm": "timing_on",
+      "generate_ms": 8239.834749,
+      "attempted_frame_calls": 39,
+      "accepted_audio_frames": 38,
+      "eos_frame_attempts": 1,
+      "codebook_count": 32,
+      "all_attempted_codes_sha256": "d24f709a8c462e7848b7efcbb1b40591be925856336f3a0828e01d09d7fa8605",
+      "gpu_pid_samples_during_generate": 35,
+      "wav": {
+        "channels": 1,
+        "sample_width": 2,
+        "rate": 24000,
+        "frames": 72960,
+        "duration_seconds": 3.04,
+        "sha256": "31c3212d3733fb005fc336e4cb7d5fc5f0302a9d79c96624cddd2a0731741669"
+      },
+      "mimi_decode_ms": 22.984235,
+      "frame_summary": {
+        "prefill_frame_full_ms": 249.665932,
+        "prefill_backbone_forward_ms": 64.178722,
+        "prefill_depth_31_forward_total_ms": 168.046683,
+        "later_frame_full_median_ms": 206.36753,
+        "later_backbone_forward_median_ms": 26.9717235,
+        "later_depth_31_forward_total_median_ms": 163.082565,
+        "depth_forward_median_ms": 5.234686
+      },
+      "asr_wer": 0.0,
+      "asr_log_sha256": "259b6167d8725c12ab4ba5060117c49118919cc9e8c874536995038102d091cd"
+    },
+    {
+      "label": "measured-0-off",
+      "phase": "measured",
+      "pair": 0,
+      "arm": "timing_off",
+      "generate_ms": 7796.823114,
+      "attempted_frame_calls": 39,
+      "accepted_audio_frames": 38,
+      "eos_frame_attempts": 1,
+      "codebook_count": 32,
+      "all_attempted_codes_sha256": "d24f709a8c462e7848b7efcbb1b40591be925856336f3a0828e01d09d7fa8605",
+      "gpu_pid_samples_during_generate": 33,
+      "wav": {
+        "channels": 1,
+        "sample_width": 2,
+        "rate": 24000,
+        "frames": 72960,
+        "duration_seconds": 3.04,
+        "sha256": "31c3212d3733fb005fc336e4cb7d5fc5f0302a9d79c96624cddd2a0731741669"
+      },
+      "asr_wer": 0.0,
+      "asr_log_sha256": "259b6167d8725c12ab4ba5060117c49118919cc9e8c874536995038102d091cd"
+    },
+    {
+      "label": "measured-0-on",
+      "phase": "measured",
+      "pair": 0,
+      "arm": "timing_on",
+      "generate_ms": 8282.286527,
+      "attempted_frame_calls": 39,
+      "accepted_audio_frames": 38,
+      "eos_frame_attempts": 1,
+      "codebook_count": 32,
+      "all_attempted_codes_sha256": "d24f709a8c462e7848b7efcbb1b40591be925856336f3a0828e01d09d7fa8605",
+      "gpu_pid_samples_during_generate": 34,
+      "wav": {
+        "channels": 1,
+        "sample_width": 2,
+        "rate": 24000,
+        "frames": 72960,
+        "duration_seconds": 3.04,
+        "sha256": "31c3212d3733fb005fc336e4cb7d5fc5f0302a9d79c96624cddd2a0731741669"
+      },
+      "mimi_decode_ms": 20.494934,
+      "frame_summary": {
+        "prefill_frame_full_ms": 217.352039,
+        "prefill_backbone_forward_ms": 35.451836,
+        "prefill_depth_31_forward_total_ms": 164.814695,
+        "later_frame_full_median_ms": 209.9758515,
+        "later_backbone_forward_median_ms": 27.1144485,
+        "later_depth_31_forward_total_median_ms": 165.48638549999998,
+        "depth_forward_median_ms": 5.325533
+      },
+      "asr_wer": 0.0,
+      "asr_log_sha256": "259b6167d8725c12ab4ba5060117c49118919cc9e8c874536995038102d091cd"
+    },
+    {
+      "label": "measured-1-on",
+      "phase": "measured",
+      "pair": 1,
+      "arm": "timing_on",
+      "generate_ms": 8213.442325,
+      "attempted_frame_calls": 39,
+      "accepted_audio_frames": 38,
+      "eos_frame_attempts": 1,
+      "codebook_count": 32,
+      "all_attempted_codes_sha256": "d24f709a8c462e7848b7efcbb1b40591be925856336f3a0828e01d09d7fa8605",
+      "gpu_pid_samples_during_generate": 34,
+      "wav": {
+        "channels": 1,
+        "sample_width": 2,
+        "rate": 24000,
+        "frames": 72960,
+        "duration_seconds": 3.04,
+        "sha256": "31c3212d3733fb005fc336e4cb7d5fc5f0302a9d79c96624cddd2a0731741669"
+      },
+      "mimi_decode_ms": 18.546741,
+      "frame_summary": {
+        "prefill_frame_full_ms": 239.152576,
+        "prefill_backbone_forward_ms": 41.271471,
+        "prefill_depth_31_forward_total_ms": 178.78866,
+        "later_frame_full_median_ms": 207.9520235,
+        "later_backbone_forward_median_ms": 27.0414195,
+        "later_depth_31_forward_total_median_ms": 164.2695215,
+        "depth_forward_median_ms": 5.282943
+      },
+      "asr_wer": 0.0,
+      "asr_log_sha256": "259b6167d8725c12ab4ba5060117c49118919cc9e8c874536995038102d091cd"
+    },
+    {
+      "label": "measured-1-off",
+      "phase": "measured",
+      "pair": 1,
+      "arm": "timing_off",
+      "generate_ms": 7842.805103,
+      "attempted_frame_calls": 39,
+      "accepted_audio_frames": 38,
+      "eos_frame_attempts": 1,
+      "codebook_count": 32,
+      "all_attempted_codes_sha256": "d24f709a8c462e7848b7efcbb1b40591be925856336f3a0828e01d09d7fa8605",
+      "gpu_pid_samples_during_generate": 33,
+      "wav": {
+        "channels": 1,
+        "sample_width": 2,
+        "rate": 24000,
+        "frames": 72960,
+        "duration_seconds": 3.04,
+        "sha256": "31c3212d3733fb005fc336e4cb7d5fc5f0302a9d79c96624cddd2a0731741669"
+      },
+      "asr_wer": 0.0,
+      "asr_log_sha256": "259b6167d8725c12ab4ba5060117c49118919cc9e8c874536995038102d091cd"
+    },
+    {
+      "label": "measured-2-off",
+      "phase": "measured",
+      "pair": 2,
+      "arm": "timing_off",
+      "generate_ms": 7852.332373,
+      "attempted_frame_calls": 39,
+      "accepted_audio_frames": 38,
+      "eos_frame_attempts": 1,
+      "codebook_count": 32,
+      "all_attempted_codes_sha256": "d24f709a8c462e7848b7efcbb1b40591be925856336f3a0828e01d09d7fa8605",
+      "gpu_pid_samples_during_generate": 33,
+      "wav": {
+        "channels": 1,
+        "sample_width": 2,
+        "rate": 24000,
+        "frames": 72960,
+        "duration_seconds": 3.04,
+        "sha256": "31c3212d3733fb005fc336e4cb7d5fc5f0302a9d79c96624cddd2a0731741669"
+      },
+      "asr_wer": 0.0,
+      "asr_log_sha256": "259b6167d8725c12ab4ba5060117c49118919cc9e8c874536995038102d091cd"
+    },
+    {
+      "label": "measured-2-on",
+      "phase": "measured",
+      "pair": 2,
+      "arm": "timing_on",
+      "generate_ms": 8202.764737,
+      "attempted_frame_calls": 39,
+      "accepted_audio_frames": 38,
+      "eos_frame_attempts": 1,
+      "codebook_count": 32,
+      "all_attempted_codes_sha256": "d24f709a8c462e7848b7efcbb1b40591be925856336f3a0828e01d09d7fa8605",
+      "gpu_pid_samples_during_generate": 34,
+      "wav": {
+        "channels": 1,
+        "sample_width": 2,
+        "rate": 24000,
+        "frames": 72960,
+        "duration_seconds": 3.04,
+        "sha256": "31c3212d3733fb005fc336e4cb7d5fc5f0302a9d79c96624cddd2a0731741669"
+      },
+      "mimi_decode_ms": 17.43079,
+      "frame_summary": {
+        "prefill_frame_full_ms": 217.296522,
+        "prefill_backbone_forward_ms": 35.785566,
+        "prefill_depth_31_forward_total_ms": 164.604958,
+        "later_frame_full_median_ms": 207.5192025,
+        "later_backbone_forward_median_ms": 26.99794,
+        "later_depth_31_forward_total_median_ms": 163.83405299999998,
+        "depth_forward_median_ms": 5.257375
+      },
+      "asr_wer": 0.0,
+      "asr_log_sha256": "259b6167d8725c12ab4ba5060117c49118919cc9e8c874536995038102d091cd"
+    }
+  ],
+  "limitations": [
+    "Original runs in F32 on CUDA with SilentCipher watermarking disabled; native benchmarked separately in Q4_K.",
+    "Frame and module timers synchronize CUDA at boundaries; nested timers include synchronization overhead and are not additive.",
+    "Gated CSM and Llama access applies; generated voice and reference material are not published."
+  ]
+}

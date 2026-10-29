@@ -1,0 +1,180 @@
+{
+  "schema": 1,
+  "version": "csm-native-steps-v1",
+  "complete": false,
+  "acceptance": false,
+  "pcm_output_identity_verified": true,
+  "raw_file_hash_gate_tripped_by_c2pa_trailer": true,
+  "scope": "Native Q4_K only; synchronized graph compute times omit frame setup and sampling. Profiling on/off alternates independent processes; output identity and GPU execution required.",
+  "hardware": "Tesla T4, compute capability 7.5",
+  "source": "3997582388c61febe5cfd4b0d741414c0da5233f",
+  "script_sha256": "b45f0b3835998659dc3688f21749d12c43d54ec8d5b13920916905811da77f1d",
+  "cli_sha256": "2d766b8efba70d599def5ba84e65814c8733df91ff827070cb29ae80bec69366",
+  "all_six_runs_pcm_sha256": "47e232cf3e53bb57be1875a1b64899823d8533a8f3f755466c9147652199afd9",
+  "all_six_runs_audio_riff_data_sha256": "da5f956fdf447fe9ccfdd6a288ecb9555b0cb4991ef4cb0f431aa644af42796c",
+  "all_six_runs_asr_wer": 0.0,
+  "median_process_seconds": {
+    "profile_off": 9.207717485000103,
+    "profile_on": 9.270373786000164
+  },
+  "measured_profile_medians": {
+    "attempts": 36,
+    "accepted": 35,
+    "eos": 1,
+    "codebooks": 32,
+    "backbone_prefill_us": 44199.0,
+    "backbone_step_total_us": 247278.0,
+    "backbone_step_us_per_call": 7065.085714285715,
+    "depth_prefill_total_us": 78522.5,
+    "depth_prefill_us_per_call": 2181.1805555555557,
+    "depth_step_total_us": 1494966.0,
+    "depth_step_us_per_call": 1384.2277777777776
+  },
+  "runs": [
+    {
+      "label": "warmup-0-off",
+      "profile_enabled": false,
+      "process_seconds": 14.432741354999962,
+      "peak_gpu_mib": 1696,
+      "peak_gpu_sm_percent": 31,
+      "wav_sha256": "8bc209bb5297a34cfb1429f5b15086df1e30596a1caed3bcd4ae2cc0a1a24c93",
+      "log_sha256": "0e2f3c24e3cc60c8e9d0dd63822e0a66121d34c73a81854650ff166f42d5e968",
+      "asr_wer": 0.0,
+      "audio_riff_data_sha256": "da5f956fdf447fe9ccfdd6a288ecb9555b0cb4991ef4cb0f431aa644af42796c",
+      "pcm_sha256": "47e232cf3e53bb57be1875a1b64899823d8533a8f3f755466c9147652199afd9"
+    },
+    {
+      "label": "warmup-0-on",
+      "profile_enabled": true,
+      "process_seconds": 9.29874251299998,
+      "peak_gpu_mib": 1684,
+      "peak_gpu_sm_percent": 31,
+      "wav_sha256": "d1bf5902a3cd9dcb82095f0dd21b80ed0a16a157f537c39161f166b0eee894d9",
+      "log_sha256": "865f7b108c33c73026574ed5e9231a4f4d319cd6794f374aeb510e3b85543515",
+      "profile": {
+        "attempts": 36,
+        "accepted": 35,
+        "eos": 1,
+        "codebooks": 32,
+        "stages": {
+          "backbone_prefill": {
+            "calls": 1,
+            "total_us": 45824
+          },
+          "backbone_step": {
+            "calls": 35,
+            "total_us": 245623
+          },
+          "depth_prefill": {
+            "calls": 36,
+            "total_us": 75929
+          },
+          "depth_step": {
+            "calls": 1080,
+            "total_us": 1486795
+          }
+        }
+      },
+      "asr_wer": 0.0,
+      "audio_riff_data_sha256": "da5f956fdf447fe9ccfdd6a288ecb9555b0cb4991ef4cb0f431aa644af42796c",
+      "pcm_sha256": "47e232cf3e53bb57be1875a1b64899823d8533a8f3f755466c9147652199afd9"
+    },
+    {
+      "label": "measured-0-off",
+      "profile_enabled": false,
+      "process_seconds": 9.131259606000185,
+      "peak_gpu_mib": 1696,
+      "peak_gpu_sm_percent": 31,
+      "wav_sha256": "136e6272716d53e37226e03dc65aa1762678975ec857333a512f765df1d6814a",
+      "log_sha256": "866524e3ccdc230df271b1217e2fbe4470a794d217b21f4102ef3bf8994bb5c1",
+      "asr_wer": 0.0,
+      "audio_riff_data_sha256": "da5f956fdf447fe9ccfdd6a288ecb9555b0cb4991ef4cb0f431aa644af42796c",
+      "pcm_sha256": "47e232cf3e53bb57be1875a1b64899823d8533a8f3f755466c9147652199afd9"
+    },
+    {
+      "label": "measured-0-on",
+      "profile_enabled": true,
+      "process_seconds": 9.242588803000217,
+      "peak_gpu_mib": 1696,
+      "peak_gpu_sm_percent": 30,
+      "wav_sha256": "040825a06ace6d4b12a78008397ccad997ee0b859208b3600898fef17efe1a85",
+      "log_sha256": "a20bba8363d18c35d0cd74283538f5e0aa70602265ae4519ec5102109b477652",
+      "profile": {
+        "attempts": 36,
+        "accepted": 35,
+        "eos": 1,
+        "codebooks": 32,
+        "stages": {
+          "backbone_prefill": {
+            "calls": 1,
+            "total_us": 44184
+          },
+          "backbone_step": {
+            "calls": 35,
+            "total_us": 246885
+          },
+          "depth_prefill": {
+            "calls": 36,
+            "total_us": 81470
+          },
+          "depth_step": {
+            "calls": 1080,
+            "total_us": 1496659
+          }
+        }
+      },
+      "asr_wer": 0.0,
+      "audio_riff_data_sha256": "da5f956fdf447fe9ccfdd6a288ecb9555b0cb4991ef4cb0f431aa644af42796c",
+      "pcm_sha256": "47e232cf3e53bb57be1875a1b64899823d8533a8f3f755466c9147652199afd9"
+    },
+    {
+      "label": "measured-1-on",
+      "profile_enabled": true,
+      "process_seconds": 9.29815876900011,
+      "peak_gpu_mib": 1588,
+      "peak_gpu_sm_percent": 31,
+      "wav_sha256": "d0a8e9406521729f15e33a6eacc89f31f1b38637f15cdceb4dac30dde8793999",
+      "log_sha256": "f52c49da9ff3ce89ed6da9a92bb84aca12dcdabcd82c1d56fc379a71c5b4fe16",
+      "profile": {
+        "attempts": 36,
+        "accepted": 35,
+        "eos": 1,
+        "codebooks": 32,
+        "stages": {
+          "backbone_prefill": {
+            "calls": 1,
+            "total_us": 44214
+          },
+          "backbone_step": {
+            "calls": 35,
+            "total_us": 247671
+          },
+          "depth_prefill": {
+            "calls": 36,
+            "total_us": 75575
+          },
+          "depth_step": {
+            "calls": 1080,
+            "total_us": 1493273
+          }
+        }
+      },
+      "asr_wer": 0.0,
+      "audio_riff_data_sha256": "da5f956fdf447fe9ccfdd6a288ecb9555b0cb4991ef4cb0f431aa644af42796c",
+      "pcm_sha256": "47e232cf3e53bb57be1875a1b64899823d8533a8f3f755466c9147652199afd9"
+    },
+    {
+      "label": "measured-1-off",
+      "profile_enabled": false,
+      "process_seconds": 9.28417536400002,
+      "peak_gpu_mib": 1684,
+      "peak_gpu_sm_percent": 31,
+      "wav_sha256": "2d13287e23080d8d96d80bf06a0d5e712709890d2340243badc49698bf420d12",
+      "log_sha256": "a6fd55ccd8709167870b8623647833fb998fe588a5e7a2641cb953d0d7f85c75",
+      "asr_wer": 0.0,
+      "audio_riff_data_sha256": "da5f956fdf447fe9ccfdd6a288ecb9555b0cb4991ef4cb0f431aa644af42796c",
+      "pcm_sha256": "47e232cf3e53bb57be1875a1b64899823d8533a8f3f755466c9147652199afd9"
+    }
+  ],
+  "diagnostic_note": "All 6 runs (warmup + 2 measured pairs) produced bit-identical 134,444-byte RIFF+PCM audio payloads (67,200 samples @ 24 kHz) and asr_wer=0.0. The post-loop raw file sha256 check failed because crispAsr appends a 1,840-byte RIFF LIST/C2PA JUMBF provenance trailer whose 149-byte ECDSA signature and claim UUID vary per invocation unless --no-c2pa is passed or the PCM data chunk is hashed."
+}

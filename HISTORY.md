@@ -1,3 +1,28 @@
+## 2026-10-29 — v0.8.48 wheel audit, #559/#560 main integration, and T4 step/toolchain receipts
+
+v0.8.48 Python wheel producer **40856452802**, Pages index deployment at
+`a17d1957e`, and final wheel publication audit **40895402248** passed all 11
+distributions, 5 anonymous PyPI readbacks and GPU index checks, completing
+v0.8.48 release verification ([wheel receipt](docs/release-v0848-wheel-audit-2026-10-29.json)).
+PR #559 integrated onto `main` at `777e8ff23` after exact-tree CI **40899681646**
+(13/13) and Lint **40899687134** (10/10) passed. Issue #560 opt-in full-recording
+LID integrated onto `main` at `641e9bfab` after exact-tree CI **40900035576**
+(13/13), Lint **40900041428** (10/10) and Heavy CPU **40900046409** passed
+([receipt](docs/issue-560-exact-tree-integration-2026-10-29.json)). Whisper
+loader-local device-type caching and short-DTW safety (`d28102214`) passed
+fake-backend equivalence **40899209565** ([receipt](docs/whisper-buft-equivalence-2026-10-29.json)),
+exact-tree CI **40903036393**, Lint **40903042314**, full DTW inference
+**40903516297** ([receipt](docs/whisper-dtw-short-2026-10-29.json)), and T4
+loader A/B (`load_ms` `576.68 -> 318.37 ms`, [receipt](docs/whisper-loader-device-ab-t4-diagnostic-2026-10-29.json));
+same-toolchain T4 v4 beat upstream `whisper.cpp` (`1.142 s` vs `1.292 s`) while
+remaining `+12.3%` above the whisper-only fork (`1.017 s`), so `d28102214` stays
+on `validate/whisper-integration-20261029` ([receipt](docs/whisper-toolchain-paired-t4-diagnostic-2026-10-29.json)).
+T4 step and paired diagnostics for Granite 5.0 ([receipt](docs/granite5-original-steps-t4-2026-10-29.json)),
+CSM 1B original ([receipt](docs/csm-original-steps-t4-2026-10-29.json)) and
+native ([receipt](docs/csm-native-steps-t4-2026-10-29.json)), and MeloTTS V2
+([receipt](docs/melo-original-paired-t4-diagnostic-2026-10-29.json)) are
+archived.
+
 ## 2026-10-29 — Hosted issue and performance evidence
 
 The #560 full-recording CPU run **40858523187** passed the previously failing

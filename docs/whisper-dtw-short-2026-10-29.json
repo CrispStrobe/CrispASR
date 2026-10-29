@@ -1,0 +1,21 @@
+{
+  "complete": true,
+  "acceptance": true,
+  "base": "bfcaa759754764bdcd22b43b9ba5cfb5de3cfb0e",
+  "source": "d281022149ccf1f6a646a2775789d8eedbca3489",
+  "scope": "Actual extracted median_filter with tensor access stubs; hosted CPU control, not full DTW inference",
+  "results": {
+    "before-1-7": -6,
+    "before-2-7": -6,
+    "before-3-7": -6,
+    "before-4-7": -6,
+    "before-5-3": 0,
+    "after-1-7": 0,
+    "after-2-7": 0,
+    "after-3-7": 0,
+    "after-4-7": 0,
+    "after-5-3": 0
+  },
+  "run": 40903516297,
+  "candidate_run": 40864945021
+}

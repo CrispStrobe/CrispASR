@@ -1,0 +1,566 @@
+{
+  "schema": 1,
+  "complete": true,
+  "acceptance": true,
+  "source": "641e9bfab6d712bd2cad9083792379e3d0370865",
+  "models": [
+    {
+      "repo": "ggerganov/whisper.cpp",
+      "revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+      "file": "ggml-tiny.bin",
+      "sha256": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21"
+    },
+    {
+      "repo": "cstr/silero-lid-lang95-GGUF",
+      "revision": "78fb93154156272b2448183dfbf62b648ece4e52",
+      "file": "silero-lid-lang95-f32.gguf",
+      "sha256": "ed161165bb6fabae895f8837761b57bde50ede273ec83f6ad37ba982ce3e54da"
+    }
+  ],
+  "resource_checks": [
+    {
+      "phase": "configure",
+      "available_bytes": 15759003648,
+      "load": [
+        1.2578125,
+        0.49658203125,
+        0.1865234375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 115065241600
+    },
+    {
+      "phase": "build-current-cli",
+      "available_bytes": 15763075072,
+      "load": [
+        1.23681640625,
+        0.50537109375,
+        0.19091796875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 115053645824
+    },
+    {
+      "phase": "checkpoint",
+      "available_bytes": 15558283264,
+      "load": [
+        2.09765625,
+        1.873046875,
+        1.08203125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114907021312
+    },
+    {
+      "phase": "download-ggml-tiny.bin",
+      "available_bytes": 15573823488,
+      "load": [
+        2.09765625,
+        1.873046875,
+        1.08203125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114892873728
+    },
+    {
+      "phase": "download-silero-lid-lang95-f32.gguf",
+      "available_bytes": 15574880256,
+      "load": [
+        2.09765625,
+        1.873046875,
+        1.08203125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114815180800
+    },
+    {
+      "phase": "default-cached-bypasses-asr",
+      "available_bytes": 15598145536,
+      "load": [
+        2.09765625,
+        1.873046875,
+        1.08203125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114798276608
+    },
+    {
+      "phase": "auto-model-bypasses-asr",
+      "available_bytes": 15543279616,
+      "load": [
+        2.08935546875,
+        1.87548828125,
+        1.08740234375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114798264320
+    },
+    {
+      "phase": "explicit-whisper-bypasses-asr",
+      "available_bytes": 15560110080,
+      "load": [
+        2.08935546875,
+        1.87548828125,
+        1.08740234375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114798260224
+    },
+    {
+      "phase": "explicit-silero-bypasses-asr",
+      "available_bytes": 15562723328,
+      "load": [
+        2.08935546875,
+        1.87548828125,
+        1.08740234375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114798256128
+    },
+    {
+      "phase": "whisper-late-after-silence",
+      "available_bytes": 15592144896,
+      "load": [
+        2.08935546875,
+        1.87548828125,
+        1.08740234375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794483712
+    },
+    {
+      "phase": "whisper-first-window-control",
+      "available_bytes": 15684636672,
+      "load": [
+        2.08203125,
+        1.8779296875,
+        1.0927734375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794479616
+    },
+    {
+      "phase": "whisper-late-majority",
+      "available_bytes": 15562448896,
+      "load": [
+        2.08203125,
+        1.8779296875,
+        1.0927734375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794475520
+    },
+    {
+      "phase": "whisper-short-final-speech",
+      "available_bytes": 15702159360,
+      "load": [
+        2.0751953125,
+        1.88037109375,
+        1.09765625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794471424
+    },
+    {
+      "phase": "whisper-silence",
+      "available_bytes": 15587188736,
+      "load": [
+        2.06884765625,
+        1.8828125,
+        1.1025390625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794467328
+    },
+    {
+      "phase": "whisper-empty",
+      "available_bytes": 15587188736,
+      "load": [
+        2.06884765625,
+        1.8828125,
+        1.1025390625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794463232
+    },
+    {
+      "phase": "silero-late-after-silence",
+      "available_bytes": 15587188736,
+      "load": [
+        2.06884765625,
+        1.8828125,
+        1.1025390625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794459136
+    },
+    {
+      "phase": "silero-first-window-control",
+      "available_bytes": 15588823040,
+      "load": [
+        2.06884765625,
+        1.8828125,
+        1.1025390625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794450944
+    },
+    {
+      "phase": "silero-late-majority",
+      "available_bytes": 15569301504,
+      "load": [
+        2.06884765625,
+        1.8828125,
+        1.1025390625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794442752
+    },
+    {
+      "phase": "silero-short-final-speech",
+      "available_bytes": 15693713408,
+      "load": [
+        2.06298828125,
+        1.884765625,
+        1.107421875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794438656
+    },
+    {
+      "phase": "silero-silence",
+      "available_bytes": 15691395072,
+      "load": [
+        2.06298828125,
+        1.884765625,
+        1.107421875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794434560
+    },
+    {
+      "phase": "silero-empty",
+      "available_bytes": 15691395072,
+      "load": [
+        2.06298828125,
+        1.884765625,
+        1.107421875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794430464
+    },
+    {
+      "phase": "unsupported-self",
+      "available_bytes": 15691395072,
+      "load": [
+        2.06298828125,
+        1.884765625,
+        1.107421875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794426368
+    },
+    {
+      "phase": "unsupported-probe",
+      "available_bytes": 15691395072,
+      "load": [
+        2.06298828125,
+        1.884765625,
+        1.107421875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794422272
+    },
+    {
+      "phase": "unsupported-off",
+      "available_bytes": 15691395072,
+      "load": [
+        2.06298828125,
+        1.884765625,
+        1.107421875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794418176
+    },
+    {
+      "phase": "unsupported-none",
+      "available_bytes": 15691407360,
+      "load": [
+        2.06298828125,
+        1.884765625,
+        1.107421875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794414080
+    },
+    {
+      "phase": "missing-audio",
+      "available_bytes": 15691407360,
+      "load": [
+        2.06298828125,
+        1.884765625,
+        1.107421875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794409984
+    },
+    {
+      "phase": "unreadable-audio",
+      "available_bytes": 15691407360,
+      "load": [
+        2.06298828125,
+        1.884765625,
+        1.107421875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794401792
+    },
+    {
+      "phase": "ordinary-auto-transcription",
+      "available_bytes": 15691407360,
+      "load": [
+        2.06298828125,
+        1.884765625,
+        1.107421875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114794397696
+    }
+  ],
+  "phases": {
+    "configure": {
+      "returncode": 0
+    },
+    "build-current-cli": {
+      "returncode": 0
+    },
+    "default-cached-bypasses-asr": {
+      "returncode": 0
+    },
+    "auto-model-bypasses-asr": {
+      "returncode": 0
+    },
+    "explicit-whisper-bypasses-asr": {
+      "returncode": 0
+    },
+    "explicit-silero-bypasses-asr": {
+      "returncode": 0
+    },
+    "whisper-late-after-silence": {
+      "returncode": 0
+    },
+    "whisper-first-window-control": {
+      "returncode": 0
+    },
+    "whisper-late-majority": {
+      "returncode": 0
+    },
+    "whisper-short-final-speech": {
+      "returncode": 0
+    },
+    "whisper-silence": {
+      "returncode": 21
+    },
+    "whisper-empty": {
+      "returncode": 20
+    },
+    "silero-late-after-silence": {
+      "returncode": 0
+    },
+    "silero-first-window-control": {
+      "returncode": 0
+    },
+    "silero-late-majority": {
+      "returncode": 0
+    },
+    "silero-short-final-speech": {
+      "returncode": 0
+    },
+    "silero-silence": {
+      "returncode": 21
+    },
+    "silero-empty": {
+      "returncode": 20
+    },
+    "unsupported-self": {
+      "returncode": 2
+    },
+    "unsupported-probe": {
+      "returncode": 2
+    },
+    "unsupported-off": {
+      "returncode": 2
+    },
+    "unsupported-none": {
+      "returncode": 2
+    },
+    "missing-audio": {
+      "returncode": 2
+    },
+    "unreadable-audio": {
+      "returncode": 20
+    },
+    "ordinary-auto-transcription": {
+      "returncode": 0
+    }
+  },
+  "cli_sha256": "8da63f90ffe32f937dd6b52b130979640edfb3be9e3bbccddb3aa3e22d529689",
+  "sample_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "ko_sample_sha256": "9e6438f0a18a1d723653a93fe04f588e702866e8a573ce2bbf43033012ee90da",
+  "checkpoint_sha256": "ce74e5370363e260e46bf10da14bb90b8df1749fbb38d969d06a1e5a7301085d",
+  "results": {
+    "default-cached-bypasses-asr": [
+      {
+        "language": "en",
+        "confidence": 0.976644,
+        "source": "whisper"
+      }
+    ],
+    "auto-model-bypasses-asr": [
+      {
+        "language": "en",
+        "confidence": 0.976644,
+        "source": "whisper"
+      }
+    ],
+    "explicit-whisper-bypasses-asr": [
+      {
+        "language": "en",
+        "confidence": 0.976644,
+        "source": "whisper"
+      }
+    ],
+    "explicit-silero-bypasses-asr": [
+      {
+        "language": "en",
+        "confidence": 0.998506,
+        "source": "silero"
+      },
+      {
+        "language": "en",
+        "confidence": 0.998506,
+        "source": "silero"
+      }
+    ],
+    "whisper-late-after-silence": [
+      {
+        "language": "en",
+        "confidence": 0.97546,
+        "source": "whisper"
+      }
+    ],
+    "whisper-first-window-control": [
+      {
+        "language": "ko",
+        "confidence": 0.998092,
+        "source": "whisper"
+      }
+    ],
+    "whisper-late-majority": [
+      {
+        "language": "en",
+        "confidence": 0.570204,
+        "source": "whisper"
+      }
+    ],
+    "whisper-short-final-speech": [
+      {
+        "language": "en",
+        "confidence": 0.944872,
+        "source": "whisper"
+      }
+    ],
+    "silero-late-after-silence": [
+      {
+        "language": "en",
+        "confidence": 0.997675,
+        "source": "silero"
+      }
+    ],
+    "silero-first-window-control": [
+      {
+        "language": "ko",
+        "confidence": 0.998092,
+        "source": "whisper"
+      }
+    ],
+    "silero-late-majority": [
+      {
+        "language": "en",
+        "confidence": 0.550502,
+        "source": "mixed"
+      }
+    ],
+    "silero-short-final-speech": [
+      {
+        "language": "en",
+        "confidence": 0.439988,
+        "source": "silero"
+      }
+    ]
+  },
+  "long_clip_fixtures": {
+    "late-after-silence.wav": {
+      "sha256": "cf1ff99fca06ea0c90a4283f2bb50f0f3ee565ee41a54486d3a1dc6bad915217",
+      "duration_samples": 432000
+    },
+    "korean-then-english.wav": {
+      "sha256": "6302a2f3f36592c38f3b2de74d2884fc75f0dda70f5bb2507422e28e93b59f1a",
+      "duration_samples": 612400
+    },
+    "short-final-speech.wav": {
+      "sha256": "8f3502741caa38a106b006c88d48c297afa2c17799390821f0147755d87527a6",
+      "duration_samples": 544000
+    },
+    "silence.wav": {
+      "sha256": "c436a66af13c71de3af151f8e98500a59b31e78573380b833c952edb6cfd6fec",
+      "duration_samples": 288000
+    },
+    "empty.wav": {
+      "sha256": "ba584a378b11d9e9c98736fd8c256fe1453a84ee4139416d24b07acff424f0fb",
+      "duration_samples": 0
+    }
+  },
+  "long_clip_routes": {
+    "whisper-late-after-silence": {
+      "requested": "whisper",
+      "result_source": "whisper",
+      "fallback_observed": false
+    },
+    "whisper-first-window-control": {
+      "requested": "whisper",
+      "result_source": "whisper",
+      "fallback_observed": false
+    },
+    "whisper-late-majority": {
+      "requested": "whisper",
+      "result_source": "whisper",
+      "fallback_observed": false
+    },
+    "whisper-short-final-speech": {
+      "requested": "whisper",
+      "result_source": "whisper",
+      "fallback_observed": false
+    },
+    "silero-late-after-silence": {
+      "requested": "silero",
+      "result_source": "silero",
+      "fallback_observed": false
+    },
+    "silero-first-window-control": {
+      "requested": "silero",
+      "result_source": "whisper",
+      "fallback_observed": true
+    },
+    "silero-late-majority": {
+      "requested": "silero",
+      "result_source": "mixed",
+      "fallback_observed": true
+    },
+    "silero-short-final-speech": {
+      "requested": "silero",
+      "result_source": "silero",
+      "fallback_observed": false
+    }
+  }
+}

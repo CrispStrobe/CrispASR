@@ -1,0 +1,597 @@
+{
+  "schema": 1,
+  "version": "whisper-toolchain-paired-v1-to-v4",
+  "complete": true,
+  "acceptance": false,
+  "performance_match_established": false,
+  "scope": "T4 same-toolchain comparison: same model/audio, compiler, CUDA toolkit and target SM; all three builds disable CUDA VMM; source trees, ggml revisions and other feature defaults may differ. Profiling off/on use the same binary. Process time includes startup and GPU monitoring.",
+  "hardware": "Tesla T4, compute capability 7.5",
+  "cuda_vmm": "disabled for all three builds; compile commands verified",
+  "pins": {
+    "model.bin": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+    "input.wav": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e"
+  },
+  "source": "0a3a97c1e1c43ba3a1a56f1923ef6a74fb362f89",
+  "fork_source": "35026a0bd1983b875c0176f47a5d0145fce340f4",
+  "upstream_source": "284029c07012d2000941a08d38a31ffb71f4734e",
+  "binaries": {
+    "crisp": "3fb50b468563a7b071fda4744888a41a52b7aaaceb1541b676fc9c19cc3dcaa9",
+    "fork": "dd26471a3255bef82d3fbb4caae202bbc14df93fe5816a5196259719edc335b9",
+    "upstream": "bd5b2ed8ec85cf367b4e6733c73324e37038eb864cee9f7831b78582b7582264"
+  },
+  "versions": [
+    {
+      "version": "v1",
+      "outcome": "failed_fork_cmake_cuda_driver",
+      "reason": "Fork CMake configuration could not find CUDA::cuda_driver when GGML_CUDA_NO_VMM was not set."
+    },
+    {
+      "version": "v2",
+      "script_sha256": "ea0d3c6b3ed61b00927c44c4994be463af79943d7d3629e32cb6af27eb2f883e",
+      "outcome": "failed_build_timeout_2400s",
+      "reason": "First CUDA source build reached 96% at the 2400-second timeout."
+    },
+    {
+      "version": "v3",
+      "script_sha256": "ea8666fc9ee9ebd64eeeaf0fb49b1cf76aeaef648bc737a60608b9bf1dbe8208",
+      "outcome": "failed_missing_whisper_timing_profile_env",
+      "reason": "crisp-profile arm invoked the binary without WHISPER_TIMING_PROFILE=1 in its environment."
+    },
+    {
+      "version": "v4",
+      "script_sha256": "f4506a298a883f22b4fd83bf9b69e4f5841d2e820f24b71a831a759ae99c2ff8",
+      "outcome": "completed_all_20_runs_acceptance_false_vs_fork_5pct_gate",
+      "reason": "All 20 GPU, WER=0.0, transcript identity, and 27-call decode gates passed. Loader device-property caching reduced crisp load_ms to 329.66 ms (vs upstream 557.14 ms and fork 293.88 ms), beating upstream process time (1.1420 s vs 1.2923 s), while remaining 12.3% above the whisper-only fork binary (1.1420 s vs 1.0167 s). Profiled decode_threadpool_us is 21-30 us total across 27 decode calls."
+    }
+  ],
+  "median_seconds": {
+    "crisp": 1.1419686985004773,
+    "crisp-profile": 1.141779490999852,
+    "fork": 1.016704694499822,
+    "upstream": 1.2922577455001374
+  },
+  "median_load_ms": {
+    "crisp": 329.66499999999996,
+    "crisp-profile": 327.605,
+    "fork": 293.88,
+    "upstream": 557.135
+  },
+  "median_decode_ms_per_call": {
+    "crisp": 3.225740740740741,
+    "crisp-profile": 3.267962962962963,
+    "fork": 2.5244444444444447,
+    "upstream": 2.4470370370370373
+  },
+  "v4_runs": [
+    {
+      "phase": "warmup",
+      "round": 0,
+      "engine": "crisp",
+      "seconds": 5.326398879000408,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32415444992,
+        "load": [
+          1.54443359375,
+          1.8955078125,
+          1.9560546875
+        ],
+        "cpus": 4,
+        "disk": 1124875792384
+      },
+      "wer": 0.0,
+      "load_ms": 389.96,
+      "decode_ms": 103.45,
+      "decode_calls": 27,
+      "decode_ms_per_call": 3.8314814814814815,
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "warmup",
+      "round": 0,
+      "engine": "crisp-profile",
+      "seconds": 1.2170397829995636,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32244752384,
+        "load": [
+          1.50048828125,
+          1.88037109375,
+          1.95068359375
+        ],
+        "cpus": 4,
+        "disk": 1124875788288
+      },
+      "wer": 0.0,
+      "load_ms": 339.65,
+      "decode_ms": 104.8,
+      "decode_calls": 27,
+      "decode_ms_per_call": 3.8814814814814813,
+      "profile": [
+        "whisper timing profile: load total_us=339646 alloc_us=177285 read_us=22134 upload_us=37744",
+        "whisper timing profile: prealloc_us=56316 vocab_us=41152 buft_list_us=9412 select_us=11",
+        "whisper timing profile: decode count=27 graph_us=4974 input_us=50 compute_us=97741 read_us=1997",
+        "whisper timing profile: decode threadpool_us=28"
+      ],
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "warmup",
+      "round": 0,
+      "engine": "fork",
+      "seconds": 1.167083471999831,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32128462848,
+        "load": [
+          1.50048828125,
+          1.88037109375,
+          1.95068359375
+        ],
+        "cpus": 4,
+        "disk": 1124875784192
+      },
+      "wer": 0.0,
+      "load_ms": 324.8,
+      "decode_ms": 94.7,
+      "decode_calls": 27,
+      "decode_ms_per_call": 3.5074074074074075,
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "warmup",
+      "round": 0,
+      "engine": "upstream",
+      "seconds": 1.4181018799999947,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32153272320,
+        "load": [
+          1.4599609375,
+          1.86572265625,
+          1.9453125
+        ],
+        "cpus": 4,
+        "disk": 1124875780096
+      },
+      "wer": 0.0,
+      "load_ms": 658.41,
+      "decode_ms": 64.91,
+      "decode_calls": 27,
+      "decode_ms_per_call": 2.404074074074074,
+      "transcript_sha256": "044267656cd78db47edd50fead3ae70f8f7240f3c1f3523cc53b94594de5ecfa",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 0,
+      "engine": "crisp",
+      "seconds": 1.0166552860000593,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32236244992,
+        "load": [
+          1.4599609375,
+          1.86572265625,
+          1.9453125
+        ],
+        "cpus": 4,
+        "disk": 1124875776000
+      },
+      "wer": 0.0,
+      "load_ms": 296.23,
+      "decode_ms": 66.34,
+      "decode_calls": 27,
+      "decode_ms_per_call": 2.457037037037037,
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 0,
+      "engine": "crisp-profile",
+      "seconds": 1.1168264489997455,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32250646528,
+        "load": [
+          1.4599609375,
+          1.86572265625,
+          1.9453125
+        ],
+        "cpus": 4,
+        "disk": 1124875771904
+      },
+      "wer": 0.0,
+      "load_ms": 316.74,
+      "decode_ms": 84.63,
+      "decode_calls": 27,
+      "decode_ms_per_call": 3.134444444444444,
+      "profile": [
+        "whisper timing profile: load total_us=316744 alloc_us=158787 read_us=22607 upload_us=37473",
+        "whisper timing profile: prealloc_us=52854 vocab_us=41784 buft_list_us=6610 select_us=8",
+        "whisper timing profile: decode count=27 graph_us=4910 input_us=50 compute_us=77703 read_us=1930",
+        "whisper timing profile: decode threadpool_us=30"
+      ],
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 0,
+      "engine": "fork",
+      "seconds": 1.1168936350004515,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32104968192,
+        "load": [
+          1.4599609375,
+          1.86572265625,
+          1.9453125
+        ],
+        "cpus": 4,
+        "disk": 1124875767808
+      },
+      "wer": 0.0,
+      "load_ms": 317.9,
+      "decode_ms": 90.06,
+      "decode_calls": 27,
+      "decode_ms_per_call": 3.3355555555555556,
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 0,
+      "engine": "upstream",
+      "seconds": 1.4174802930001533,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32197976064,
+        "load": [
+          1.4228515625,
+          1.85107421875,
+          1.93994140625
+        ],
+        "cpus": 4,
+        "disk": 1124875763712
+      },
+      "wer": 0.0,
+      "load_ms": 645.9,
+      "decode_ms": 68.59,
+      "decode_calls": 27,
+      "decode_ms_per_call": 2.5403703703703706,
+      "transcript_sha256": "044267656cd78db47edd50fead3ae70f8f7240f3c1f3523cc53b94594de5ecfa",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "engine": "upstream",
+      "seconds": 1.2671630479999294,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32141025280,
+        "load": [
+          1.4228515625,
+          1.85107421875,
+          1.93994140625
+        ],
+        "cpus": 4,
+        "disk": 1124875759616
+      },
+      "wer": 0.0,
+      "load_ms": 526.39,
+      "decode_ms": 64.31,
+      "decode_calls": 27,
+      "decode_ms_per_call": 2.381851851851852,
+      "transcript_sha256": "044267656cd78db47edd50fead3ae70f8f7240f3c1f3523cc53b94594de5ecfa",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "engine": "fork",
+      "seconds": 0.9664207830001033,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32255541248,
+        "load": [
+          1.4228515625,
+          1.85107421875,
+          1.93994140625
+        ],
+        "cpus": 4,
+        "disk": 1124875755520
+      },
+      "wer": 0.0,
+      "load_ms": 282.52,
+      "decode_ms": 60.85,
+      "decode_calls": 27,
+      "decode_ms_per_call": 2.2537037037037035,
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "engine": "crisp-profile",
+      "seconds": 1.1667325329999585,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32261816320,
+        "load": [
+          1.4228515625,
+          1.85107421875,
+          1.93994140625
+        ],
+        "cpus": 4,
+        "disk": 1124875751424
+      },
+      "wer": 0.0,
+      "load_ms": 339.7,
+      "decode_ms": 94.47,
+      "decode_calls": 27,
+      "decode_ms_per_call": 3.4988888888888887,
+      "profile": [
+        "whisper timing profile: load total_us=339699 alloc_us=180748 read_us=22068 upload_us=37881",
+        "whisper timing profile: prealloc_us=52117 vocab_us=39932 buft_list_us=7423 select_us=6",
+        "whisper timing profile: decode count=27 graph_us=4971 input_us=51 compute_us=87307 read_us=2104",
+        "whisper timing profile: decode threadpool_us=24"
+      ],
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "engine": "crisp",
+      "seconds": 1.1168841470007465,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32319516672,
+        "load": [
+          1.388671875,
+          1.8369140625,
+          1.9345703125
+        ],
+        "cpus": 4,
+        "disk": 1124875747328
+      },
+      "wer": 0.0,
+      "load_ms": 321.49,
+      "decode_ms": 81.38,
+      "decode_calls": 27,
+      "decode_ms_per_call": 3.014074074074074,
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "engine": "crisp",
+      "seconds": 1.168108604999361,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32347877376,
+        "load": [
+          1.388671875,
+          1.8369140625,
+          1.9345703125
+        ],
+        "cpus": 4,
+        "disk": 1124875743232
+      },
+      "wer": 0.0,
+      "load_ms": 344.27,
+      "decode_ms": 92.81,
+      "decode_calls": 27,
+      "decode_ms_per_call": 3.4374074074074077,
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "engine": "crisp-profile",
+      "seconds": 1.1673409999993964,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32176488448,
+        "load": [
+          1.388671875,
+          1.8369140625,
+          1.9345703125
+        ],
+        "cpus": 4,
+        "disk": 1124875739136
+      },
+      "wer": 0.0,
+      "load_ms": 335.01,
+      "decode_ms": 91.84,
+      "decode_calls": 27,
+      "decode_ms_per_call": 3.4014814814814818,
+      "profile": [
+        "whisper timing profile: load total_us=335006 alloc_us=176644 read_us=22453 upload_us=38312",
+        "whisper timing profile: prealloc_us=52626 vocab_us=40286 buft_list_us=7566 select_us=10",
+        "whisper timing profile: decode count=27 graph_us=5188 input_us=55 compute_us=84530 read_us=2035",
+        "whisper timing profile: decode threadpool_us=25"
+      ],
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "engine": "fork",
+      "seconds": 1.0668899779993808,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 31857278976,
+        "load": [
+          1.388671875,
+          1.8369140625,
+          1.9345703125
+        ],
+        "cpus": 4,
+        "disk": 1124875735040
+      },
+      "wer": 0.0,
+      "load_ms": 305.24,
+      "decode_ms": 74.08,
+      "decode_calls": 27,
+      "decode_ms_per_call": 2.7437037037037038,
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "engine": "upstream",
+      "seconds": 1.3173524430003454,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 31673974784,
+        "load": [
+          1.388671875,
+          1.8369140625,
+          1.9345703125
+        ],
+        "cpus": 4,
+        "disk": 1124875730944
+      },
+      "wer": 0.0,
+      "load_ms": 587.88,
+      "decode_ms": 67.52,
+      "decode_calls": 27,
+      "decode_ms_per_call": 2.5007407407407407,
+      "transcript_sha256": "044267656cd78db47edd50fead3ae70f8f7240f3c1f3523cc53b94594de5ecfa",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 3,
+      "engine": "upstream",
+      "seconds": 1.2171641719996842,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 31650918400,
+        "load": [
+          1.357421875,
+          1.82275390625,
+          1.92919921875
+        ],
+        "cpus": 4,
+        "disk": 1124875726848
+      },
+      "wer": 0.0,
+      "load_ms": 512.58,
+      "decode_ms": 64.62,
+      "decode_calls": 27,
+      "decode_ms_per_call": 2.3933333333333335,
+      "transcript_sha256": "044267656cd78db47edd50fead3ae70f8f7240f3c1f3523cc53b94594de5ecfa",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 3,
+      "engine": "fork",
+      "seconds": 0.9665194110002631,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32040026112,
+        "load": [
+          1.357421875,
+          1.82275390625,
+          1.92919921875
+        ],
+        "cpus": 4,
+        "disk": 1124875722752
+      },
+      "wer": 0.0,
+      "load_ms": 278.85,
+      "decode_ms": 62.24,
+      "decode_calls": 27,
+      "decode_ms_per_call": 2.3051851851851852,
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 3,
+      "engine": "crisp-profile",
+      "seconds": 1.1167864310000368,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32073363456,
+        "load": [
+          1.357421875,
+          1.82275390625,
+          1.92919921875
+        ],
+        "cpus": 4,
+        "disk": 1124875718656
+      },
+      "wer": 0.0,
+      "load_ms": 320.2,
+      "decode_ms": 84.15,
+      "decode_calls": 27,
+      "decode_ms_per_call": 3.1166666666666667,
+      "profile": [
+        "whisper timing profile: load total_us=320196 alloc_us=163700 read_us=22342 upload_us=38722",
+        "whisper timing profile: prealloc_us=49650 vocab_us=38687 buft_list_us=6526 select_us=7",
+        "whisper timing profile: decode count=27 graph_us=4937 input_us=51 compute_us=77138 read_us=1987",
+        "whisper timing profile: decode threadpool_us=21"
+      ],
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    },
+    {
+      "phase": "measured",
+      "round": 3,
+      "engine": "crisp",
+      "seconds": 1.1670532500002082,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 31901859840,
+        "load": [
+          1.357421875,
+          1.82275390625,
+          1.92919921875
+        ],
+        "cpus": 4,
+        "disk": 1124875714560
+      },
+      "wer": 0.0,
+      "load_ms": 337.84,
+      "decode_ms": 93.58,
+      "decode_calls": 27,
+      "decode_ms_per_call": 3.465925925925926,
+      "transcript_sha256": "73e34c41002e2c22eecd5c79e45870ce0afd564517a8009aa0605962e408c9ac",
+      "transcript_text_stripped": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
+    }
+  ]
+}

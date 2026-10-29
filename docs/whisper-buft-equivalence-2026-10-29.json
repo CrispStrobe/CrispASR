@@ -1,0 +1,69 @@
+{
+  "complete": true,
+  "acceptance": true,
+  "baseline": "9df3071a933b2c85ceb3e278596c219c5d00c32e",
+  "candidate": "0a3a97c1e1c43ba3a1a56f1923ef6a74fb362f89",
+  "ggml": "e2ae679a563014f46c546ce6c6448e8601e4dea6",
+  "scope": "Hosted, model-free controls for the actual Whisper weight-placement change.\n\nRequires GitHub Actions, HEAVY_SCRATCH, HEAVY_OUT, CMake, Ninja, a C++17\ncompiler, and the initialized pinned ggml submodule. Run from a checkout whose\nsrc/crispasr.cpp exactly matches CANDIDATE below. Only ggml-base and extracted\nplacement functions are compiled; no model, inference, CUDA SDK or GPU is used.\nThis establishes placement/control-flow equivalence, not CUDA speed or parity.\n",
+  "results": {
+    "baseline": {
+      "returncode": 0,
+      "matches_oracle": true,
+      "rows": 656,
+      "expected_rows": 656,
+      "binary_sha256": "8ea2af905753443b012a2a7137ec2da9b99ca55d340f7b763a141b1008e4fa6c"
+    },
+    "candidate": {
+      "returncode": 0,
+      "matches_oracle": true,
+      "rows": 656,
+      "expected_rows": 656,
+      "binary_sha256": "a4e9472b1ad4be1c1edd0784b6e9416e1868aa54b0aad5da85a07cc5e36666ad"
+    },
+    "negative-all-gpu": {
+      "returncode": 0,
+      "matches_oracle": false,
+      "rows": 352,
+      "expected_rows": 656,
+      "binary_sha256": "c5c0db834850f8bddee24c8054ffb60c3dc51993fe67be9726cb67eeef974249",
+      "first_mismatch": {
+        "row": 96,
+        "actual": "choice|cpu-extras|0|0|6",
+        "expected": "support|cpu-extras|0|0|2|6|0"
+      }
+    },
+    "negative-skip-support": {
+      "returncode": 0,
+      "matches_oracle": false,
+      "rows": 352,
+      "expected_rows": 656,
+      "binary_sha256": "6ea35514244c8e2cee26a4d38d817602e82e4c06966c18657961e4a1251249bc",
+      "first_mismatch": {
+        "row": 96,
+        "actual": "choice|cpu-extras|0|0|6",
+        "expected": "support|cpu-extras|0|0|2|6|0"
+      }
+    }
+  },
+  "driver_source": "952812c1fe5d3c585f87e7fff53c7237dd78954a",
+  "script_sha256": "5794b99140e7083c7b086771bc5910c4c15e1b99d5dcf2103376a24ec7678d4f",
+  "source_sha256": {
+    "baseline": "57a89a19c6b32797789412eece521eda5eff76489fd6acabc9a73a80f3c4218a",
+    "candidate": "51ad8440a6512d1aa570aad539c3443be61a0d5172d59bdbce7f4ef41c025e37"
+  },
+  "extracted_sha256": {
+    "baseline": {
+      "functions": "81403470ef81455ee8400e73fe5b2fb516f9222eab28c9db939e46485f2ade0e",
+      "cache": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "candidate": {
+      "functions": "51945dc932eb1e21f11b0ffff1120df52591ad2eec8b9d359c6b633274c08c61",
+      "cache": "4fb26b09dd59ed70f31c657976567072c993e03254b1b765c09b7ed91837e691"
+    }
+  },
+  "scenarios": 11,
+  "tensors_per_load": 9,
+  "loads_per_scenario": 2,
+  "choices_per_arm": 198,
+  "run": 40899209565
+}

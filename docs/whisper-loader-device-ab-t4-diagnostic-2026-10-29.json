@@ -1,0 +1,125 @@
+{
+  "schema": 1,
+  "version": "whisper-loader-device-ab-v1",
+  "complete": true,
+  "acceptance": true,
+  "scope": "One base.en/JFK T4 loader-cache A/B; same compiler/CUDA/SM75/VMM-off. Acceptance is bounded to this workload and tested CPU/CUDA placement controls.",
+  "hardware": "Tesla T4, compute capability 7.5",
+  "script_sha256": "71be7e494f39c08c443bc6688f3bd2bff337afe444201915a1f9b5cd3d648de2",
+  "pins": {
+    "model.bin": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+    "input.wav": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e"
+  },
+  "sources": {
+    "base": {
+      "commit": "9df3071a933b2c85ceb3e278596c219c5d00c32e",
+      "tree": "6b8c0078ba0d6c1124af204b4fdbc58afa16006b",
+      "loader_sha256": "57a89a19c6b32797789412eece521eda5eff76489fd6acabc9a73a80f3c4218a",
+      "submodules": " e2ae679a563014f46c546ce6c6448e8601e4dea6 ggml (v0.10.2-1134-ge2ae679a)\n e40329b83f16f67bb5ddc7bb13ae18de0a9376fc third_party/c2pa-audio (c2pa_audio-v0.2.1~5)\n"
+    },
+    "candidate": {
+      "commit": "0a3a97c1e1c43ba3a1a56f1923ef6a74fb362f89",
+      "tree": "18f8cd5f4d39fc0519164e0011aeb12ec07bd934",
+      "loader_sha256": "51ad8440a6512d1aa570aad539c3443be61a0d5172d59bdbce7f4ef41c025e37",
+      "submodules": " e2ae679a563014f46c546ce6c6448e8601e4dea6 ggml (v0.10.2-1134-ge2ae679a)\n e40329b83f16f67bb5ddc7bb13ae18de0a9376fc third_party/c2pa-audio (c2pa_audio-v0.2.1~5)\n"
+    }
+  },
+  "build_flags": [
+    "-DGGML_CUDA=ON",
+    "-DGGML_CUDA_NO_VMM=ON",
+    "-DCMAKE_CUDA_ARCHITECTURES=75",
+    "-DCMAKE_CUDA_COMPILER=/usr/local/cuda/bin/nvcc",
+    "-DCRISPASR_NO_C2PA_NATIVE=ON",
+    "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+    "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
+    "-DCMAKE_CUDA_COMPILER_LAUNCHER=ccache",
+    "-DCMAKE_EXE_LINKER_FLAGS=-fuse-ld=mold",
+    "-DCMAKE_SHARED_LINKER_FLAGS=-fuse-ld=mold",
+    "-DCMAKE_MODULE_LINKER_FLAGS=-fuse-ld=mold",
+    "-DCMAKE_C_COMPILER=/usr/bin/gcc",
+    "-DCMAKE_CXX_COMPILER=/usr/bin/g++"
+  ],
+  "builds": {
+    "base": {
+      "binary_sha256": "586cda42eecb0c6d1dad9e7ebffe9219333b4b1fd84a215fc2e1814218c42c2a",
+      "cuda_library_sha256": "888166492fe0ec0ebf5ac7ed5eebb44e04d7235c5d9359d5a8baf466c5202072",
+      "compile_commands_sha256": "d4baf9f0120a71711ba74565c82370452c8b7f6d778ed16151c6f8f6f492d377",
+      "normalized_compile_commands_sha256": "4494407f34f074144bad3e024cecc81b6e20536d2a7f45f99bd9926df217fd92",
+      "effective_sm": 75,
+      "effective_no_vmm": true
+    },
+    "candidate": {
+      "binary_sha256": "de94d10a21786732fedd4858a2674d6e62579ac75cc59d6a6b889b6202f8bcda",
+      "cuda_library_sha256": "8a757211e03a264a880d901952b1dadc0fbf050c194548426ef53d94d79a0136",
+      "compile_commands_sha256": "6ab504e2610fdcaf4cc7c4809a996eeca6b79ef27d1872c717b6fe0b439a3799",
+      "normalized_compile_commands_sha256": "4494407f34f074144bad3e024cecc81b6e20536d2a7f45f99bd9926df217fd92",
+      "effective_sm": 75,
+      "effective_no_vmm": true
+    }
+  },
+  "placement_equivalent_for_tested_model_and_configs": true,
+  "medians": {
+    "base-plain": {
+      "samples": 4,
+      "process_seconds": 1.1932268430000477,
+      "load_ms": 576.6800000000001,
+      "decode_ms_per_call": 2.5818518518518516,
+      "phase_medians_us": {}
+    },
+    "base-profile": {
+      "samples": 4,
+      "process_seconds": 1.2173154294996493,
+      "load_ms": 606.2149999999999,
+      "decode_ms_per_call": 2.5999999999999996,
+      "phase_medians_us": {
+        "load_total_us": 606216.5,
+        "load_alloc_us": 141404.0,
+        "load_read_us": 23989.0,
+        "load_upload_us": 40683.0,
+        "load_prealloc_us": 350866.5,
+        "load_vocab_us": 47508.5,
+        "load_buft_list_us": 2624.0,
+        "load_select_us": 286352.0,
+        "decode_count": 27.0,
+        "decode_graph_us": 5542.0,
+        "decode_input_us": 49.0,
+        "decode_compute_us": 62822.0,
+        "decode_read_us": 1805.5,
+        "decode_threadpool_us": 23.5
+      }
+    },
+    "candidate-plain": {
+      "samples": 4,
+      "process_seconds": 0.9668136014997799,
+      "load_ms": 318.37,
+      "decode_ms_per_call": 2.965370370370371,
+      "phase_medians_us": {}
+    },
+    "candidate-profile": {
+      "samples": 4,
+      "process_seconds": 0.9918859664999218,
+      "load_ms": 322.78999999999996,
+      "decode_ms_per_call": 2.95537037037037,
+      "phase_medians_us": {
+        "load_total_us": 322790.0,
+        "load_alloc_us": 154748.0,
+        "load_read_us": 23501.0,
+        "load_upload_us": 39297.0,
+        "load_prealloc_us": 50901.5,
+        "load_vocab_us": 45207.0,
+        "load_buft_list_us": 3495.0,
+        "load_select_us": 8.0,
+        "decode_count": 27.0,
+        "decode_graph_us": 5228.0,
+        "decode_input_us": 47.5,
+        "decode_compute_us": 72722.0,
+        "decode_read_us": 1812.5,
+        "decode_threadpool_us": 20.5
+      }
+    }
+  },
+  "limits": [
+    "Loader-local device-property caching eliminates repeated ggml_backend_dev_get_props queries during weight buffer selection (286.35 ms -> 0.008 ms), reducing total model load from 576.68 ms to 318.37 ms.",
+    "Single-model and single-GPU T4 measurements do not establish general speed across all hardware or models."
+  ]
+}

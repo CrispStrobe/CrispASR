@@ -5,7 +5,7 @@ It contains the completed work, exact evidence, bounded next actions and blocker
 needed by a fresh agent; no earlier chat is required. Follow `AGENTS.md` and its
 mandatory maintainer-guide instructions before implementation.
 
-**A, B, D, bounded F and G are complete. C is prepared for review; keep #557 open. H is accepted, including managed-default integration checks; I release preparation is active.** Claim work by adding owner,
+**A, B, D, bounded F, G, H, I, J (#559) and K + full-recording #560 are complete. C is prepared for review; keep #557 open.** Claim work by adding owner,
 source SHA, missing behavior, acceptance gates and next action under "NOW"
 before starting. The full scope of each task (exact runs, inputs, commands and
 acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-tasks--fully-scoped).
@@ -14,16 +14,16 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ### Current handoff — 2026-10-29 12:20 UTC
 
-No work is claimed. The [continuation snapshot](docs/maintenance-handoff.md#continuation-snapshot--2026-10-29-1220-utc) supersedes older owner/status prose below and gives sources, run IDs, gates and ordered recovery steps. The user asked that the loop remain open until #559 and #560 are integrated, all four recent-model groups have the required Kaggle comparisons, and Whisper matches the comparison implementation on Kaggle. Keep #557 open for reply review.
+Updated 2026-10-29 17:35 UTC: no work is claimed and zero Kaggle GPU jobs remain active. The [continuation snapshot](docs/maintenance-handoff.md#continuation-snapshot--2026-10-29-1220-utc) supersedes older owner/status prose below and records all completed run IDs and public receipts. Keep #557 open for reply review.
 
 | Priority | Open work | Current evidence / next gate |
 |---|---|---|
-| 1 | Observe the two running Kaggle Whisper jobs | Collect the same-toolchain v3 and loader-cache A/B v1 terminal source, logs and receipts; verify GPU, output and placement controls. |
-| 2 | Finish v0.8.48 wheel publication | All wheel builds passed; producer **40856452802** has publisher jobs queued. Verify outputs and run the wheel audit after success. |
-| 3 | Integrate #559, then #560 | Both have hosted model evidence and separate current-main candidates; exact-tree CI/lint/secret and #560 model tests remain queued. Refresh main and discussions before integration. |
-| 4 | Match Whisper speed | VMM on/off did not explain the gap; weight-buffer selection is a measured candidate. Require fake-backend equivalence, exact placements and same-toolchain A/B before integrating the cache. |
-| 5 | Complete original and fork measurements | Nemotron original and fork, Granite, CSM and OpenVoice have bounded receipts; full original Melo and meaningful per-step controls remain. Melo preflight **40866641921** is queued. |
-| 6 | Qualify upstream safety candidates | Short DTW extracted-function before/after control passed; CI/lint and full inference remain. VAD offset and vocabulary-bound candidates need their hosted controls and isolated integration. |
+| 1 | COMPLETE: Kaggle Whisper loader A/B and same-toolchain v4 | Loader-cache A/B v1 passed (`576.68 -> 318.37 ms`, [receipt](docs/whisper-loader-device-ab-t4-diagnostic-2026-10-29.json)). Same-toolchain v4 completed ([receipt](docs/whisper-toolchain-paired-t4-diagnostic-2026-10-29.json)): `crisp` beats `upstream` (`1.142 s` vs `1.292 s`) but is `+12.3%` vs whisper-only `fork` (`1.017 s`, decode `3.23` vs `2.52 ms/call`); `d28102214` stays on `validate/whisper-integration-20261029`. |
+| 2 | COMPLETE: v0.8.48 wheel publication and audit | Producer **40856452802**, Pages `a17d1957e`, and final wheel audit **40895402248** passed ([receipt](docs/release-v0848-wheel-audit-2026-10-29.json)). |
+| 3 | COMPLETE: Integrate #559, then #560 | `#559` merged at `777e8ff23` (CI **40899681646**, Lint **40899687134**); `#560` merged at `641e9bfab` (CI **40900035576**, Lint **40900041428**, Heavy CPU **40900046409**, [receipt](docs/issue-560-exact-tree-integration-2026-10-29.json)). |
+| 4 | Follow-up: Whisper per-step decode gap vs whisper-only fork | Per-call threadpool overhead was ruled out (`21–30 us` total across 27 calls); remaining gap vs `fork` is ~`0.70 ms/call` in decode (`3.226` vs `2.524 ms/call`). Isolate per-op CUDA graph/scheduler difference before merging `d28102214`. |
+| 5 | COMPLETE: Original and native step / paired measurements | Granite original steps ([receipt](docs/granite5-original-steps-t4-2026-10-29.json)), CSM original steps ([receipt](docs/csm-original-steps-t4-2026-10-29.json)), CSM native steps ([receipt](docs/csm-native-steps-t4-2026-10-29.json)) and Melo paired v1–v3 ([receipt](docs/melo-original-paired-t4-diagnostic-2026-10-29.json)) are archived. |
+| 6 | Qualify remaining upstream safety candidates | Short DTW (`d28102214`) passed CI **40903036393**, Lint **40903042314** and full inference **40903516297** ([receipt](docs/whisper-dtw-short-2026-10-29.json)). VAD offset and vocab-bounds remain on validation branches pending rights-cleared model checks. |
 | Holds | #557, #558, #532, #483, #461, #456, MUSA | See the handoff for explicit approval, evidence, device and rights limits. Do not close #557 or publish private paths. |
 
 
@@ -98,8 +98,8 @@ No work is claimed. The [continuation snapshot](docs/maintenance-handoff.md#cont
 | G | COMPLETE: real OpenVoice Python Session/C ABI validation over the qualified SDK/model-overlay composition; kernel version 2 accepted. | F | Architecture detection, voice/codec/rates/repeatability, raw and marked synthesis, actual CUDA and unchanged ASR/speaker gates pass. Preset identity stays unknown; full rebuilt-current library and actual CLI remain separate. |
 | H | COMPLETE: full current library/CLI, original BERT conditioning repair and managed V2 default qualified. | F/G and hosted current candidate | Original input boundaries, TCC stages, Session/CLI, unchanged speech quality, CPU and CI/Lint gates all accepted on the final source. |
 | K | COMPLETE: #560 documented detect-and-exit CLI routing. Full-recording aggregation stays a later feature. | Before I | Three caller/resolver controls and actual hosted CLI 40807940665 accept bypass, providers, failures and ordinary transcription. CI/Lint pass at `bd1e299e1`. |
-| I | Prepare and publish the next patch after error acceptance. | B, H and K | Correct version sync, exact-source CI, immutable new tag, all producers and both publication audits accepted. Never rewrite v0.8.47. |
-| J | Independently validate PR #559, then merge only if all checks pass. | I; errors before features | Whole refreshed discussion/diff, actual caller probes and Qwen short-clip regressions, exact-head CI/Lint/secret checks accepted. |
+| I | COMPLETE: v0.8.48 published and verified (native audit **40856997446**, wheel audit **40895402248**). | B, H and K | Accepted receipts committed ([qualification](docs/release-v0848-qualification-2026-10-29.json), [wheel audit](docs/release-v0848-wheel-audit-2026-10-29.json)). Never rewrite v0.8.47 or v0.8.48. |
+| J | COMPLETE: PR #559 and full-recording #560 validated and merged to `main` (`777e8ff23`, `641e9bfab`). | I; errors before features | Exact-tree CI/Lint/secret and hosted model checks accepted ([receipt](docs/issue-560-exact-tree-integration-2026-10-29.json)). |
 | E | Real-hardware qualification of `+vulkan` (AMD/Intel), `+hip` (ROCm) and aarch64 `+cuda`. | Hardware access | Clean-venv install, Session JFK transcript matches, GPU backend selected and used, CPU/GPU compared. Recorded per class. |
 
 ## External holds — do not schedule speculative repairs

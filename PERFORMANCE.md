@@ -133,10 +133,26 @@ its source and logs are retained. [Receipt](docs/whisper-fork-t4-benchmark-2026-
 
 On the same T4/JFK workload, a source-built CrispASR diagnostic and the packaged
 fork each produced identical text and 27 decode calls. Their median decode times
-were 2.52 and 2.41 ms per call; median model loads were 531 and 293 ms. Their
-builds differ, including CUDA VMM configuration, so the cause and a performance
-match are not established. A same-toolchain upstream/fork comparison and a VMM
-on/off diagnostic are in progress. [Receipt](docs/whisper-timing-t4-diagnostic-2026-10-29.json).
+were 2.52 and 2.41 ms per call; median model loads were 531 and 293 ms.
+[Timing receipt](docs/whisper-timing-t4-diagnostic-2026-10-29.json).
+The VMM on/off A/B (`crispasr-whisper-vmm-ab` v1) ruled out CUDA VMM as the load
+gap cause (559.6 ms on versus 554.3 ms off; decode 2.51 versus 2.52 ms/call) and
+showed weight-buffer selection taking ~232 ms ([VMM receipt](docs/whisper-vmm-t4-diagnostic-2026-10-29.json)).
+Caching `ggml_backend_dev_type` per loader invocation (`0a3a97c1e`) passed
+fake-backend equivalence **40899209565** ([equivalence receipt](docs/whisper-buft-equivalence-2026-10-29.json))
+and T4 A/B (`crispasr-whisper-loader-device-ab` v1): `load_select_us` dropped
+from 286,352 us to 8 us and total `load_ms` from 576.68 ms to 318.37 ms with
+identical per-tensor CPU/CUDA placements ([loader A/B receipt](docs/whisper-loader-device-ab-t4-diagnostic-2026-10-29.json)).
+In the same-toolchain T4 4-arm comparison (`crispasr-whisper-toolchain-paired` v4,
+GCC 11.4 / CUDA 12.8 / SM75 / VMM off, 4 measured calls per arm), candidate
+`d28102214` beat upstream `whisper.cpp` on both load (329.66 ms vs 557.14 ms)
+and end-to-end process wall time (1.1420 s vs 1.2923 s), while remaining +12.3%
+above the whisper-only `fork` binary (1.0167 s process, 293.88 ms load,
+2.524 ms/call decode vs 3.226 ms/call `crisp`; encoder is 90.29 ms `crisp` vs
+103.41 ms `fork`). Profiled `decode_threadpool_us` is 21–30 us total across all
+27 decode calls, ruling out per-call threadpool setup; `d28102214` remains on
+its validation branch because the <= +5% fork process-time gate was not met
+([same-toolchain receipt](docs/whisper-toolchain-paired-t4-diagnostic-2026-10-29.json)).
 
 The following original-implementation comparisons use one T4 and small bounded
 inputs. Each receipt records the different precision, devices and timing
@@ -146,17 +162,23 @@ operations or as general model rankings.
 | Workload | Native measurement | Original measurement | Evidence |
 |---|---:|---:|---|
 | Nemotron ASR, F16 vs F32 | 2.40 s process including load | 17.21 s process including load; 0.912 s generate | [Receipt](docs/nemotron-original-t4-benchmark-2026-10-29.json) |
-| Granite Speech5, Q4_K vs F16 | 296.7 ms for 26 decoder calls after prefill | 1.420 s full second `generate()` call | [Receipt](docs/granite5-original-t4-benchmark-2026-10-29.json) |
-| CSM, Q4_K vs F32 | 8.69 s process including load | 41.12 s process including load, watermark disabled | [Receipt](docs/csm-original-t4-benchmark-2026-10-29.json) |
+| Granite Speech5, Q4_K vs F16 | 296.7 ms for 26 decoder calls after prefill (11.41 ms/step) | 1.420 s full `generate()`; 97.18 ms prefill + 26 × 51.34 ms/step | [Aggregate](docs/granite5-original-t4-benchmark-2026-10-29.json), [Original steps](docs/granite5-original-steps-t4-2026-10-29.json) |
+| CSM, Q4_K vs F32 | 8.69 s process; 35 frames: 44.20 ms prefill, 7.07 ms/frame backbone, 1.38 ms/step depth (1,080 calls) | 41.12 s process; 7.84 s generate (38 frames: 217.35 ms prefill, 207.95 ms/frame later, 18.55 ms Mimi) | [Aggregate](docs/csm-original-t4-benchmark-2026-10-29.json), [Original steps](docs/csm-original-steps-t4-2026-10-29.json), [Native steps](docs/csm-native-steps-t4-2026-10-29.json) |
 | OpenVoice, two warm conversions | 9.33 / 10.28 s, CPU flows and CUDA vocoder | 0.130 / 0.139 s, CUDA converter | [Receipt](docs/openvoice-original-t4-benchmark-2026-10-29.json) |
+| MeloTTS V2, F16 native vs FP32 original | Case 0: 1.513 s (WER 0.0); Case 1 warmup: 1.718 s (WER 0.0909) | Case 0: 0.151 s (WER 0.1111); Case 1 warmup: 0.251 s (WER 0.2727 > 0.20 gate) | [Diagnostic receipt](docs/melo-original-paired-t4-diagnostic-2026-10-29.json) |
 
-The OpenVoice outputs passed the fixed waveform comparison, but full original
-Melo synthesis has not yet been timed. A native stage profile is prepared to
-investigate the conversion gap. A separate [Nemotron fork comparison](docs/nemotron-fork-t4-benchmark-2026-10-29.json)
+A separate [Nemotron fork comparison](docs/nemotron-fork-t4-benchmark-2026-10-29.json)
 passed its T4 quality and GPU controls. At matched R13 context its four measured
 JFK process medians were 3.93 s for CrispASR and 6.50 s for transcribe.cpp; the
-F16 files, upstream artifact revisions and stage boundaries differ. Matched
-per-step comparisons remain outstanding.
+F16 files, upstream artifact revisions and stage boundaries differ. In the CSM
+native step run (`crispasr-csm-native-steps` v1), all 6 profile-off/on calls
+produced bit-identical 134,444-byte RIFF+PCM payloads (`da5f956fdf447fe9ccfdd6a288ecb9555b0cb4991ef4cb0f431aa644af42796c`)
+and zero WER, while the harness whole-file hash check tripped on the 1,840-byte
+per-invocation C2PA signature trailer ([native steps receipt](docs/csm-native-steps-t4-2026-10-29.json)).
+In the Melo paired T4 run (`crispasr-melo-original-paired` v3), 853-tensor
+lineage (758 exact, 128 fused with max rel L2 3.08e-5) and Case 0 passed, while
+unchanged upstream `melo.api.TTS` (`seed=42`) tripped the `tiny.en <= 0.20` WER
+gate on Case 1 warmup (`0.2727`) while native passed (`0.0909`).
 
 # CrispASR — Performance benchmarks
 

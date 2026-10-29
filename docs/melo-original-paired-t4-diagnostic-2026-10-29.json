@@ -1,0 +1,237 @@
+{
+  "schema": 1,
+  "version": "melo-original-paired-v1-to-v3",
+  "complete": false,
+  "acceptance": false,
+  "scope": "Full original Melo API versus native F16 Melo C ABI; warm whole calls",
+  "hardware": "Tesla T4, compute capability 7.5",
+  "import_preflight_run": 40866641921,
+  "import_preflight_source": "a06e8e6508304dc0f7be209db57021bc55723232",
+  "source": "97053abff8201870827027692dc25dc0c412e2a3",
+  "melo_source": "209145371cff8fc3bd60d7be902ea69cbdb7965a",
+  "torch_version": "2.11.0+cu128",
+  "settings": {
+    "speaker": "EN-US",
+    "speaker_id": 0,
+    "threads": 2,
+    "seed": 42,
+    "sdp_ratio": 0.0,
+    "noise_scale": 0.667,
+    "noise_scale_w": 0.8,
+    "speed": 1.0
+  },
+  "original": {
+    "repo": "myshell-ai/MeloTTS-English-v2",
+    "revision": "a53e3509c4ee4ff16d79272feb2474ff864e18f3",
+    "checkpoint_sha256": "794226eb7c1745f3ca281b290613d5f39aa5b0d3b16a117009966f4aaf184757",
+    "bert_revision": "86b5e0934494bd15c9632b12f734a8a67f723594",
+    "bert_safetensors_sha256": "68d45e234eb4a928074dfd868cead0219ab85354cc53d20e772753c6bb9169d3",
+    "runtime": {
+      "load_seconds": 4.940108857000041,
+      "device": "cuda",
+      "eager_unused_tokenizer_ids": [
+        "bert-base-multilingual-uncased",
+        "dbmdz/bert-base-french-europeana-cased",
+        "dccuchile/bert-base-spanish-wwm-uncased",
+        "kykim/bert-kor-base"
+      ],
+      "torch_version": "2.11.0+cu128",
+      "speaker_id": 0
+    }
+  },
+  "native": {
+    "repo": "cstr/melotts-en-v2-GGUF",
+    "revision": "35522347b1bed9a913d6894803c5cab929ae42a5",
+    "model_sha256": "68c82ea2a18fd8e9d01c37a286a17fcfa630dfe7dbbd0bd08e7454e313e78fd8",
+    "bert_sha256": "f7437929246c43d7300cbf6ff39b4715669a6053661117df99a456bdc5e8ecba",
+    "application_sha256": "ae93882f0a7854cfb59f519ebbf406d3c0854828d9f451c0ef308e7bc5269e71",
+    "runtime": {
+      "load_seconds": 0.6925171999999975,
+      "device": "CUDA backend with CPU components",
+      "final_activation_backend": "CUDA"
+    }
+  },
+  "checkpoint_lineage": {
+    "tensor_count": 853,
+    "direct_exact": 758,
+    "fused_count": 128,
+    "fused_max_relative_l2": 3.082746351303521e-05,
+    "original_checkpoint_sha256": "794226eb7c1745f3ca281b290613d5f39aa5b0d3b16a117009966f4aaf184757",
+    "native_model_sha256": "68c82ea2a18fd8e9d01c37a286a17fcfa630dfe7dbbd0bd08e7454e313e78fd8"
+  },
+  "limitations": [
+    "Original wrapper appends 50 ms silence and calls torch.cuda.empty_cache",
+    "Original F32 model/BERT versus native F16 model/BERT with selected F32 tensors",
+    "Torch and ggml sampling RNGs differ despite seed 42",
+    "Original model.infer and native built-in stage counters are separate diagnostics"
+  ],
+  "versions": [
+    {
+      "version": "v1",
+      "script_sha256": "df3a641b0efda69546704e4f7015a78529699f83412361ef6062f0047a7445fa",
+      "outcome": "failed_native_cuda_marker_gate",
+      "reason": "src/melotts.cpp only logs final activation backend CUDA when dump_dir is non-empty; v2 added an untimed 1-phrase dump_dir probe in make_native before clearing dump_dir for timed runs."
+    },
+    {
+      "version": "v2",
+      "script_sha256": "7bc22b5dfbd62abff1f2dc58ebdeac5ba9f2c7ebcc3f231802f9468941cb3220",
+      "outcome": "failed_transformers_tf_import",
+      "reason": "gruut==2.2.3 pins numpy<2.0 (1.26.4), causing transformers AutoModelForMaskedLM to import preinstalled tensorflow/jax requiring numpy>=2.0 when USE_TF is not disabled; v3 sets USE_TF=0 and USE_FLAX=0."
+    },
+    {
+      "version": "v3",
+      "script_sha256": "8fd3cb27dbef36a0bc3a5e632f8769b6f0131e41c73164ba877e12e7c3e9ca62",
+      "outcome": "failed_original_case1_tiny_en_wer_gate",
+      "reason": "Case 0 completed warmup and all 3 measured pairs for both native (median 1.5134 s, asr_wer 0.0) and original (median 0.1514 s, asr_wer 0.1111). On Case 1 warmup 0, native passed (1.7180 s, asr_wer 0.0909 <= 0.20), whereas unchanged upstream original melo.api.TTS with CUDA RNG seed=42 (noise_scale=0.667) synthesized audio that faster-whisper-tiny.en transcribed with asr_wer=0.2727 (3/11 words > 0.20)."
+    }
+  ],
+  "v3_cases": [
+    {
+      "case": 0,
+      "text": "The quick brown fox jumps over the lazy dog.",
+      "runs": [
+        {
+          "phase": "warmup",
+          "repeat": 0,
+          "arm": "native",
+          "seconds": 1.6036709050000582,
+          "samples": 173568,
+          "rate": 44100,
+          "asr_wer": 0.0,
+          "native_stages_ms": {
+            "text_encoder": 68.36,
+            "duration_predict": 49.74,
+            "flow_inverse": 1110.76,
+            "hifigan_decode": 281.08,
+            "synthesize": 1603.41
+          }
+        },
+        {
+          "phase": "warmup",
+          "repeat": 0,
+          "arm": "original",
+          "seconds": 0.16770786500001122,
+          "samples": 175773,
+          "rate": 44100,
+          "asr_wer": 0.1111111111111111,
+          "model_infer_seconds": 0.13894427100001394
+        },
+        {
+          "phase": "measured",
+          "repeat": 0,
+          "arm": "native",
+          "seconds": 1.513404664999939,
+          "samples": 173568,
+          "rate": 44100,
+          "asr_wer": 0.0,
+          "native_stages_ms": {
+            "text_encoder": 67.52,
+            "duration_predict": 46.46,
+            "flow_inverse": 1030.39,
+            "hifigan_decode": 283.51,
+            "synthesize": 1513.23
+          }
+        },
+        {
+          "phase": "measured",
+          "repeat": 0,
+          "arm": "original",
+          "seconds": 0.15144967600008385,
+          "samples": 175773,
+          "rate": 44100,
+          "asr_wer": 0.1111111111111111,
+          "model_infer_seconds": 0.12198878800006696
+        },
+        {
+          "phase": "measured",
+          "repeat": 1,
+          "arm": "original",
+          "seconds": 0.15102042099999835,
+          "samples": 175773,
+          "rate": 44100,
+          "asr_wer": 0.1111111111111111,
+          "model_infer_seconds": 0.12344922299996597
+        },
+        {
+          "phase": "measured",
+          "repeat": 1,
+          "arm": "native",
+          "seconds": 1.4197607820000258,
+          "samples": 173568,
+          "rate": 44100,
+          "asr_wer": 0.0,
+          "native_stages_ms": {
+            "text_encoder": 66.98,
+            "duration_predict": 45.84,
+            "flow_inverse": 1040.17,
+            "hifigan_decode": 178.65,
+            "synthesize": 1419.6
+          }
+        },
+        {
+          "phase": "measured",
+          "repeat": 2,
+          "arm": "native",
+          "seconds": 1.5136101169999847,
+          "samples": 173568,
+          "rate": 44100,
+          "asr_wer": 0.0,
+          "native_stages_ms": {
+            "text_encoder": 67.78,
+            "duration_predict": 46.32,
+            "flow_inverse": 1058.04,
+            "hifigan_decode": 248.73,
+            "synthesize": 1513.45
+          }
+        },
+        {
+          "phase": "measured",
+          "repeat": 2,
+          "arm": "original",
+          "seconds": 0.15404028500006461,
+          "samples": 175773,
+          "rate": 44100,
+          "asr_wer": 0.1111111111111111,
+          "model_infer_seconds": 0.12512246100004631
+        }
+      ],
+      "median_whole_seconds": {
+        "original": 0.15144967600008385,
+        "native": 1.513404664999939
+      },
+      "whole_call_original_over_native": 0.10007216146653675
+    },
+    {
+      "case": 1,
+      "text": "We enjoy reading books and listening to music in the evening.",
+      "runs": [
+        {
+          "phase": "warmup",
+          "repeat": 0,
+          "arm": "native",
+          "seconds": 1.7180005320000191,
+          "samples": 184832,
+          "rate": 44100,
+          "asr_wer": 0.09090909090909091,
+          "native_stages_ms": {
+            "text_encoder": 93.82,
+            "duration_predict": 64.5,
+            "flow_inverse": 1164.73,
+            "hifigan_decode": 291.7,
+            "synthesize": 1717.74
+          }
+        },
+        {
+          "phase": "warmup",
+          "repeat": 0,
+          "arm": "original",
+          "seconds": 0.1760646559999941,
+          "samples": 187037,
+          "rate": 44100,
+          "asr_wer": 0.2727272727272727,
+          "model_infer_seconds": 0.1449739160000263
+        }
+      ]
+    }
+  ]
+}

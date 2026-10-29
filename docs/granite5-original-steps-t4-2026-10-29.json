@@ -1,0 +1,102 @@
+{
+  "schema": 1,
+  "version": "granite5-original-steps-v1",
+  "complete": true,
+  "acceptance": true,
+  "scope": "Original F16 CUDA only; synchronized real forward hooks and alternating hooks-off/on calls on one loaded model",
+  "hardware": "Tesla T4, compute capability 7.5",
+  "script_sha256": "740b0ca25035999fcb36668cb8808f61aa555487cf1c2fdbf1058a078a48cd92",
+  "pins": {
+    "input_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "original_repo": "ibm-granite/granite-speech-5.0-2b",
+    "original_revision": "c075cf19e041a2e4d16c5ee24763e5b037d8f479",
+    "transformers": "4.57.3"
+  },
+  "settings": {
+    "instruction": "transcribe the speech with proper punctuation and capitalization.",
+    "max_new_tokens": 96,
+    "do_sample": false,
+    "num_beams": 1,
+    "threads": 4
+  },
+  "timing_boundary": "generate_ms excludes model loading and processor work; hooked root/encoder/projector/language-model forwards synchronize CUDA before and after each call; nested root duration includes hook synchronization overhead",
+  "device": "cuda:0",
+  "dtype": "torch.float16",
+  "torch": "2.11.0+cu128",
+  "gpu_pid_sample_count": 108,
+  "gpu_pid_peak_memory_mib": 4622,
+  "input_shapes": {
+    "input_ids": [
+      1,
+      129
+    ],
+    "attention_mask": [
+      1,
+      129
+    ],
+    "input_features": [
+      1,
+      550,
+      160
+    ],
+    "input_features_mask": [
+      1,
+      111
+    ]
+  },
+  "license": {
+    "model_card": "Apache-2.0",
+    "model_card_sha256": "7de30987be095cfc7e417b82710a607d7e838cc64fdeaeaa11b06ee939fdf8aa",
+    "source": "ibm-granite/granite-speech-5.0-2b/blob/c075cf19e041a2e4d16c5ee24763e5b037d8f479/README.md",
+    "weights_or_outputs_redistributed": false
+  },
+  "original_files": {
+    "merges.txt": "b6fe424e334903f7fb84d3a106d9730455f4744b9fe3c21ee136d97a00e72502",
+    "out_llm.safetensors": "a6b638a913b2dcf835dfbc621d9780d2557ac635a5c4718d1ffe64d39beb8ada",
+    "generation_config.json": "4a5e80bbcf4116a96b385e0af3ff94b03a7393d424a1201cb1f974e9ffc2e1da",
+    "special_tokens_map.json": "c08676c49fd7969a3130f72be6d4bf34da66aa484a6e21dffe359893a1bd5f2e",
+    "config.json": "14e35a6daa1b4bdd38b3fc0b62eaf519e8993a2fbbbc2b527432c684376d62a3",
+    "tokenizer.json": "43ca88fd0519c64ef93fa0a90cbc4e560fe485b5ba60348a86bc3c624f37918e",
+    "preprocessor_config.json": "382a6f26300937721969b01909c96c2e519620b6781f7b45cb8b2e348a932d87",
+    "added_tokens.json": "b4956ad3505e979f2f25cc2e2be2163d8e23730f854b6c5a14ed106f3dd90549",
+    "tokenizer_config.json": "de233c19cd9efa63738f7481f318fc2048060f751ac9fd7957b131c43226b403",
+    "chat_template.jinja": "e3219da52634178f68696475ea4518ade9d1b5c9a71b825f28312b73afc432c0",
+    "README.md": "7de30987be095cfc7e417b82710a607d7e838cc64fdeaeaa11b06ee939fdf8aa",
+    "processor_config.json": "13edc723022827cc3620ba2e2b4bcf52287b365d77e60a31227f0a4b7dea5f9c",
+    "model.safetensors": "4151269881d2dd825d45ca75d6552b2a20e6e39d0934ed84c4db826af8bf6d88",
+    "vocab.json": "8af71076de8b0b626eed0f4c984faf0a7c062479164b2a31308a948524d4f69c"
+  },
+  "all_runs_generated_token_count": 27,
+  "all_runs_generated_token_ids_sha256": "16915e0ea852206d76013387c131c57f167e57db249d6f68c70c81cd26cb4b9c",
+  "all_runs_wer": 0.0,
+  "measured_medians": {
+    "hooks_off_generate_ms": 1457.268216,
+    "hooks_on_generate_ms": 1484.680699,
+    "prefill_root_ms": 97.184363,
+    "encoder_ms": 34.823195,
+    "projector_ms": 3.676253,
+    "single_token_decode_root_ms_per_call": 51.338010499999996,
+    "single_token_decode_language_model_ms_per_call": 51.030083
+  },
+  "measured_pairs": [
+    {
+      "pair": 0,
+      "hooks_off_generate_ms": 1449.514517,
+      "hooks_on_generate_ms": 1512.246179
+    },
+    {
+      "pair": 1,
+      "hooks_off_generate_ms": 1457.268216,
+      "hooks_on_generate_ms": 1470.67614
+    },
+    {
+      "pair": 2,
+      "hooks_off_generate_ms": 1466.538589,
+      "hooks_on_generate_ms": 1484.680699
+    }
+  ],
+  "limitations": [
+    "Original runs in F16 on CUDA; native benchmarked separately in Q4_K.",
+    "Hooked root/encoder/projector/language-model forwards synchronize CUDA before and after each call; nested root duration includes hook synchronization overhead."
+  ]
+}

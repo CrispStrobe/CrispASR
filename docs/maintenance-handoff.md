@@ -15,17 +15,53 @@ in ignored local notes.
 
 ## Continuation snapshot — 2026-10-29 12:20 UTC
 
-This snapshot supersedes older status and owner prose below. No task is claimed.
-The requested loop is **open**: #559 and #560 are not integrated, the four
-recent-model comparisons still need the full Melo and per-step work described
-below, and matching Whisper performance on Kaggle has not been established.
-Do not close #557: the user explicitly chose to keep it open and review a draft
-reply. Do not post issue comments without an explicit instruction. Read the full
-current issue/PR description, every comment and linked follow-up before acting.
-Use hosted workers for builds and inference; check load and available memory
-before each such operation. Check actual Kaggle GPU usage before every
-submission and retain terminal outputs and source readback before any retry.
-Kaggle has two GPU slots; do not submit a third job or bypass its limits.
+Updated 2026-10-29 17:35 UTC: this snapshot and the update below supersede older
+status and owner prose. No task is claimed and **zero Kaggle GPU jobs are active**.
+- **v0.8.48 wheel publication and final wheel audit (`Task I`) are COMPLETE**:
+  wheel producer **40856452802** passed all 14 jobs (`publish-pypi`, `publish-gpu-index`),
+  Pages deployed index commit `a17d1957e`, and final wheel audit **40895402248**
+  passed (`complete: true, acceptance: true`, 11 distributions, 5 PyPI anonymous
+  readbacks, 52 native assets via **40856997446**). See
+  [wheel audit receipt](release-v0848-wheel-audit-2026-10-29.json) and updated
+  [qualification receipt](release-v0848-qualification-2026-10-29.json).
+- **PR #559 (`Task J`) and Issue #560 full-recording LID are INTEGRATED on `main`**:
+  `#559` exact-tree CI **40899681646** (13/13) and Lint **40899687134** (10/10)
+  passed on `777e8ff23` and fast-forwarded `main`. `#560` rebased onto `777e8ff23`
+  at `641e9bfab` and passed exact-tree CI **40900035576** (13/13), Lint
+  **40900041428** (10/10) and Heavy CPU **40900046409** (`issue560_lid_only.py`,
+  `complete: true, acceptance: true`), then fast-forwarded `main`
+  ([receipt](issue-560-exact-tree-integration-2026-10-29.json)). Keep `#557`
+  open for reply review; do not post issue comments without explicit instruction.
+- **Whisper loader-cache A/B, DTW safety, fake-backend equivalence and same-toolchain v4 are COMPLETE**:
+  fake-backend equivalence **40899209565** ([receipt](whisper-buft-equivalence-2026-10-29.json)),
+  integrated candidate `d28102214` CI **40903036393** (13/13), Lint **40903042314** (10/10),
+  DTW short-window **40903516297** ([receipt](whisper-dtw-short-2026-10-29.json)),
+  and Kaggle T4 `crispasr-whisper-loader-device-ab` v1 ([receipt](whisper-loader-device-ab-t4-diagnostic-2026-10-29.json),
+  `load_select_us` `286352 us -> 8 us`, `load_ms` `576.68 ms -> 318.37 ms`) all
+  passed. Same-toolchain T4 `crispasr-whisper-toolchain-paired` v4 completed all
+  20 runs ([receipt](whisper-toolchain-paired-t4-diagnostic-2026-10-29.json)):
+  `crisp` (`d28102214`) beat `upstream` on load (`329.66 ms` vs `557.14 ms`) and
+  process wall time (`1.1420 s` vs `1.2923 s`), while remaining `+12.3%` above
+  the whisper-only `fork` binary (`1.0167 s`, decode `2.524 ms/call` vs `3.226 ms/call`).
+  Profiled `decode_threadpool_us` is only `21–30 us` total across 27 decode calls.
+  Because `acceptance` against the `<= +5%` fork process-time gate is `false`,
+  `d28102214` remains on `validate/whisper-integration-20261029`.
+- **Recent-model T4 step and paired diagnostics are COMPLETE and archived**:
+  Granite 5.0 original steps (`crispasr-granite5-original-steps` v1,
+  [receipt](granite5-original-steps-t4-2026-10-29.json)) and CSM 1B original
+  steps (`crispasr-csm-original-steps` v1, [receipt](csm-original-steps-t4-2026-10-29.json))
+  passed with `acceptance: true`. CSM 1B native steps (`crispasr-csm-native-steps` v1,
+  [receipt](csm-native-steps-t4-2026-10-29.json)) completed all 6 runs with zero
+  WER and bit-identical 134,444-byte RIFF+PCM audio payloads (`da5f956fdf447fe9ccfdd6a288ecb9555b0cb4991ef4cb0f431aa644af42796c`),
+  tripping only on the post-loop whole-file hash check due to the 1,840-byte
+  per-run C2PA signature trailer. MeloTTS paired T4 (`crispasr-melo-original-paired`
+  v1–v3, [receipt](melo-original-paired-t4-diagnostic-2026-10-29.json)) passed
+  hosted import preflight **40866641921**, 853-tensor lineage, and Case 0
+  (`native` 1.513 s / WER 0.0; `original` 0.151 s / WER 0.1111), while unchanged
+  upstream `melo.api.TTS` (`seed=42`) produced `tiny.en` WER `0.2727 > 0.20` on
+  Case 1 warmup (`native` passed at `0.0909`).
+
+The historical 12:20 UTC notes below are retained for provenance.
 
 1. **Observe the two active Kaggle GPU jobs first.** `crispasr-whisper-toolchain-paired`
    version 3 is running, with uploaded script SHA-256
