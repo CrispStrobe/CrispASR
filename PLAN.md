@@ -12,7 +12,9 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
-- Current-source/CLI acceptance owner: current agent. Runtime fixes are on candidate branch `validate/openvoice-interfaces-20261028` (snapshot `315339f65`), not main or frozen v0.8.47. Full-source CUDA **version 3** is running from application/controller `01a288763`, bootstrap `315339f65`; it adds the original final-activation repair and real-tensor/backend/instrumentation gates to exact original inputs, TCC stages, Session, CLI and unchanged quality gates. CPU **40801516214**, CI **40801518226**, Lint **40801520188** at `315339f65` are queued. Earlier CPU **40783760561** is accepted at `7c158b325`, before the conditioning repairs ([receipt](docs/openvoice-cpu-pre-conditioning-2026-10-29.json)). CUDA versions 1–2 remain failed at default-disclosed tiny.en WER 0.25; version 2 verifies all three original input cases ([retained failure](docs/openvoice-conditioning-inputs-attempt-2026-10-29.json)). Never replace that gate with the stronger diagnostic recognizer. B publication and C reply preparation are complete; #557 stays open.
+- H continuation owner: current agent, source `315339f65`. CUDA version 3 is terminal: original inputs, actual CUDA final activation, instrumentation controls, TCC, Session and CLI behavior pass, but disclosed CLI WER is 0.25 / 0.333333, above the unchanged 0.20 gate. All terminal outputs and authenticated private evidence are retained. Next compare the pinned original Melo Generator against the actual native decoder inputs and converted weights on a hosted GPU, reusing the retained application checkpoint; no rebuild, seed sweep or recognizer substitution. This isolates the decoder boundary and does not claim whole-model parity. Runtime merge and patch release remain gated.
+
+- Current-source/CLI acceptance owner: current agent. Runtime fixes remain on candidate branch `validate/openvoice-interfaces-20261028` (snapshot `0181e36ea`), not main or frozen v0.8.47. Full-source CUDA **version 3** finished from application `01a288763`, bootstrap `315339f65`: exact original inputs, actual CUDA final activation, instrumentation, TCC, Session and CLI functional checks pass; default-disclosed CLI WER **0.25 / 0.333333** fails the unchanged **0.20** gate ([retained receipt](docs/openvoice-final-activation-attempt-2026-10-29.json)). A decoder-only diagnostic `crispasr-melotts-decoder` **version 1** was admitted from controller `504f97186`, bootstrap `0181e36ea`, reusing that exact application checkpoint. Collect its terminal evidence before replacement; it cannot grant whole-application acceptance. CPU **40801516214**, CI **40801518226**, Lint **40801520188** remain queued at `315339f65`. Earlier CPU **40783760561** is accepted only at `7c158b325` ([receipt](docs/openvoice-cpu-pre-conditioning-2026-10-29.json)). B publication and C reply preparation are complete; #557 stays open.
 
 - Owner: current maintainer agent, starting source `42d787586`; collect A/B/D terminal receipts, repair actual failures, and preserve existing runs. Large work stays on suitable hosted workers; local load 0.26 and available memory about 4.4 GiB at resumption.
 - A complete: corrected auditor 40736324867 passed; all eight distributions and anonymous readbacks accepted. [Receipt](docs/release-v0846-wheel-audit-2026-10-28.json).
@@ -29,7 +31,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 - Newly opened #558: reproduced and repaired standalone-marker grouping, with model-free regression controls. Reporter audio/NeMo/CUDA acceptance remains pending; see [repair scope](docs/parakeet-word-boundary-558-2026-10-28.md).
 
 - v0.8.46 is **published**. Native and wheel audits pass (task A complete).
-- v0.8.47 (#557 Linux GPU wheels) has a **partial public release**, tagged at `5f87a5626`. Release run
+- v0.8.47 (#557 Linux GPU wheels) has an **audited public release**, tagged at `5f87a5626`. Release run
   40711745769 completed successfully with exactly 52 public asset names. Native byte audit 40751444564 is accepted; Python wheel producer 40751349609 passed all 14 jobs. Pages 40776528499 and live index links pass; final wheel audit 40789883589 is accepted (task B complete).
 - [Publication receipt](docs/release-publication-2026-10-28.md).
 
@@ -71,7 +73,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 The user explicitly confirmed these inputs/devices/new permissions are unavailable.
 Refresh complete issue threads before resuming if new evidence arrives. Six
 issues were open at the 2026-10-28 check: #456, #461, #483, #532, #557
-(implemented, awaiting publication acceptance) and #558. New PR #559 is reviewed
+(implemented and publication accepted; reply held for review) and #558. New PR #559 is reviewed
 in [a scoped checkpoint](docs/qwen3-context-pr559-review-2026-10-28.md); CI and
 independent caller/runtime checks remain. Keep this feature after active error
 repairs. None was closed merely to finish this batch.

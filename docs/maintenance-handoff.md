@@ -19,9 +19,16 @@ Snapshot 2026-10-29: **v0.8.46 publication is accepted. v0.8.47 native
 publication, both wheel publishers, Pages and live GPU index links pass; final
 wheel audit 40789883589 is accepted for all 11 distributions and readbacks.** Keep #557 open and prepare its reply
 for review only. The current CLI, BERT and Melo activation repairs are on
-[candidate branch `validate/openvoice-interfaces-20261028`](https://github.com/CrispStrobe/CrispASR/tree/315339f65),
-not main or the immutable v0.8.47 release. Full-source CUDA version 3 is running
-from application/controller source `01a288763`, bootstrap `315339f65`; current
+[candidate branch `validate/openvoice-interfaces-20261028`](https://github.com/CrispStrobe/CrispASR/tree/0181e36ea),
+not main or the immutable v0.8.47 release. Full-source CUDA version 3 is terminal:
+original input, final activation and functional checks pass; default-disclosed
+CLI WER 0.25 / 0.333333 fails the unchanged 0.20 gate. See the
+[retained receipt](openvoice-final-activation-attempt-2026-10-29.json).
+Decoder-only diagnostic `crispasr-melotts-decoder` version 1 is admitted from
+controller `504f97186`, bootstrap `0181e36ea`, reusing the exact version-3
+application checkpoint. Collect its terminal source/logs/outputs and authenticated
+private evidence before replacement. It cannot grant whole-application acceptance.
+Current
 CPU 40801516214, CI 40801518226 and Lint 40801520188 are queued at `315339f65`.
 Preserve these existing jobs. Read live status before dispatching a replacement.
 The earlier CPU run 40783760561 passed, but predates the latest BERT frontend
@@ -45,7 +52,7 @@ First actions for a fresh agent:
    2026-10-28 check: open #456/#461/#483/#532/#557/#558, new PR #559,
    zero comments on #557. The [PR #559 review checkpoint](qwen3-context-pr559-review-2026-10-28.md)
    scopes its remaining gates; no review or merge was submitted.
-3. A, D and bounded F are accepted; continue B → C in order. G is also accepted; do not duplicate it. E needs hardware.
+3. A, B, D and bounded F/G are accepted; C is prepared for review with #557 open. Continue H → I → J in order; do not duplicate accepted campaigns. E needs hardware.
 4. For any task, record owner, source SHA, exact missing behavior, acceptance gates,
    resources and next action in PLAN.md before starting. Do not recreate a passing campaign.
 
@@ -59,7 +66,7 @@ source/CI/validation checks; do not retag v0.8.47 to include them.
 | Area | Implemented and accepted | Limits / evidence |
 |---|---|---|
 | v0.8.46 release | Promotes the qualified Nemotron F16 default with OpenMDW notices, the VoxCPM2 host-permute timing split, and wheel notice/provenance staging. Published 2026-10-28; native and wheel publication pass. The verifier now takes `tag`/`source` inputs, and `REVIEWED_TAGS` lists v0.8.45–v0.8.47. | Wheel audit 40736324867 accepted (task A complete). v0.8.45 tag/assets untouched. [Receipt](release-publication-2026-10-28.md). |
-| #557 Linux GPU wheels (code) | Producers `build-libs-linux-x86_64-vulkan` and `build-libs-linux-arm64-cuda`. Wheel legs `linux-x86_64-vulkan`, `linux-x86_64-hip` (`--host-provided libomp.so`) and `linux-arm64-cuda`. A `whl/hip` index. A Linux Vulkan clean-venv loader smoke. Version-gated (≥ 0.8.47) exact auditor expectations. Tagged for v0.8.47; publication verification is pending. | Packaging only; no physical-GPU run (task E). Jetson excluded. Publication unverified at hand-off (task B). |
+| #557 Linux GPU wheels (code) | Producers `build-libs-linux-x86_64-vulkan` and `build-libs-linux-arm64-cuda`. Wheel legs `linux-x86_64-vulkan`, `linux-x86_64-hip` (`--host-provided libomp.so`) and `linux-arm64-cuda`. A `whl/hip` index. A Linux Vulkan clean-venv loader smoke. Version-gated (≥ 0.8.47) exact auditor expectations. Tagged for v0.8.47; native and wheel/index readback audits are accepted. | Packaging only; no physical-GPU run (task E). Jetson excluded. Reply remains review-only (task C). |
 | v0.8.45 release | Native, Python, Rust and Dart publication completed. Native assets, CUDA splits, package notices, registry distributions and live GPU indexes were read back and verified. | Immutable tag source `e58bb48b5`. Native audit 40304161701; wheel audit 40313434985. This earlier receipt predates the separately scoped v0.8.46/v0.8.47 work. [Publication receipt](release-publication-2026-10-26.json). |
 | Nemotron default | Managed downloads now select the pinned qualified F16 profile only, retain OpenMDW/origin notices, and reject stale-Q4/missing-Q4 substitution. CPU and actual T4 pass 26/26 original transcript matches, 22/22 VoxCPM prompts, unchanged stage/magnitude gates, CLI, opaque-filename C ABI and fresh/reused-session controls. | Former plain Q4 fails both devices (11/26 and 8/22), so it is not an accepted default. Explicit existing Q4 files remain diagnostic. Existing v0.8.45 binaries still require explicit F16 selection. [Policy and full proof](nemotron-default-policy-2026-10-26.md). |
 | Qwen3-TTS #555 | Incompatible Base packs are rejected before prefill; failed replacement preserves the previous pack. Designed clear defaults use the matching original 1024/2048-dimensional encoders for 0.6B/1.7B. CPU/T4 speech/reference controls pass. | Model-specific embeddings/codes are not interchangeable voice packs. Apache/MIT notices, recipes and original declarations are retained; speaker identity/likeness rights and human listening are not inferred from ASR. [Runtime proof](issue555-voice-pack-2026-10-23.json), [designed voices](qwen3-designed-voices.md). |
@@ -481,11 +488,26 @@ publication occurred. Remaining scope:
    final slope. Upsample/residual slopes stay 0.1. Require actual captured
    pre/post tensors against the pinned original operator and an uninstrumented
    waveform comparison before interpreting decoded quality. Full-source
-   **version 3** is running from application/controller `01a288763`, bootstrap
-   `315339f65`. It requires all three exact-input cases, the real original
-   final-activation operator on both signs, actual CUDA/CPU tensor placement,
-   instrumentation waveform relative L2 and peak error <=1e-5, both TCC 27-stage
-   cases, Session/CLI and the unchanged original speech-quality gates.
+   **version 3** is terminal from application/controller `01a288763`, bootstrap
+   `315339f65`. All three exact-input cases pass; actual final activation matches
+   the original operator exactly on CUDA0, with norm ratio 1.0 and zero maximum
+   error. Instrumented/plain waveform errors are zero. Both TCC 27-stage cases,
+   Session/CLI and rates pass, but disclosed CLI WER 0.25 / 0.333333 fails the
+   unchanged original 0.20 gate. [Retained failed receipt](openvoice-final-activation-attempt-2026-10-29.json).
+   The complete checkpoint and 108-file encrypted envelope were read back,
+   hashed and authenticated. Do not claim application acceptance.
+   Next: `crispasr-melotts-decoder` version 1, controller `504f97186`, bootstrap
+   `0181e36ea`, is admitted once. It reuses the exact version-3 application
+   checkpoint (SHA-256 `9db22c7d50d70bee047746b3c33647d7df28cf066dee9c08164f0c0031dbba9b`)
+   without rebuilding. Native CUDA inputs feed the pinned original Generator
+   and residual blocks with identical converted decoder weights, strict full
+   parameter loading, and cosine/scale/relative-error comparisons at the final
+   preactivation, activation and waveform boundaries. The scopes exclude
+   conversion and upstream encoder/flow parity. Preserve terminal source,
+   logs, every output and authenticated private evidence before replacement.
+   If decoder parity passes, move earlier to original conditioning/encoder/flow
+   boundaries; if it fails, locate the first decoder divergence. Do not change
+   ASR, seeds, thresholds or defaults to obtain acceptance.
    Current CPU **40801516214**, CI **40801518226**, Lint **40801520188** were
    requested once at `315339f65`; these qualify the post-activation source.
    Earlier CPU **40783760561** passed its complete four-case matrix at
