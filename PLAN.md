@@ -12,6 +12,8 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
+- Paired benchmark collector owner: current agent, source `df4786900`. Add hosted-only alternating process timing with resource checks, input hashing, warmups and retained failure logs; validate with mocked commands. Step-level adapters and real matched GPU/original comparisons remain separate.
+
 - Benchmark comparison owner: current agent, source `5bcb0bbb8`. Add a model-free comparison of retained paired timing records that rejects mismatched inputs, model identities and settings; report per-step timing only when counts exist. Actual GPU measurements remain hosted and require separately qualified workloads.
 
 - H model publication COMPLETE: the qualified converter, original MIT notice, model card and provenance were published at immutable revision `61741391da62c278148a2c75b6c0c5611d447149`. All four files pass anonymous full-byte SHA-256 readback; no validation audio, target embedding or reference capture was published. [Receipt](docs/openvoice2-tcc-publication-2026-10-29.json).
