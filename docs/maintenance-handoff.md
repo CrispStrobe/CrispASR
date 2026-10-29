@@ -628,12 +628,11 @@ publication occurred. Remaining scope:
    to the operator key recovered from ignored local notes. Preset identity
    stays unknown. Merge only after current original-quality, CPU and CI gates;
    prepare the next patch afterward.
-2. **Publication:** no Hub write was attempted by the accepted read-only run.
-   Earlier repository creation returned 403. Use an authorized destination,
-   retain original MIT notices, converter precision recipe, immutable model/
-   reference/source hashes and synthetic audio attribution. Fully read back
-   public bytes before declaring publication. Do not turn validation green by
-   granting broader credentials or assuming write access was fixed.
+2. **Publication complete:** the accepted validation run made no Hub write.
+   A separate model-only publication retained the MIT notice and provenance,
+   and verified all four anonymous full-byte readbacks. The earlier 403 remains
+   a historical failed attempt. No reference captures or audio were published.
+   See the current publication section below.
 3. **Broader acceptance:** sensitive-tensor quantization, natural references,
    other languages/voices and additional device families need their own
    original-reference and decoded-output checks. None is implied by these
@@ -663,6 +662,16 @@ individual detectors have different 5/15/30-second bounds and memory costs.
 Use bounded windows with a declared aggregation/confidence policy and test
 late speech, mixed languages and invalid inputs; removing the cap is not
 sufficient. Default detection behavior stays unchanged until separately scoped.
+
+### OpenVoice converter model publication — complete
+
+The qualified F32-sensitive generic converter is published at immutable
+[revision `61741391da62c278148a2c75b6c0c5611d447149`](https://huggingface.co/cstr/openvoice2-tcc-GGUF/tree/61741391da62c278148a2c75b6c0c5611d447149). The GGUF, original MIT notice, model
+card and pinned provenance all pass anonymous full-byte SHA-256 readback.
+No validation audio, target embedding or reference capture was uploaded.
+Preset identity and rights in a reference voice remain separate; qualification
+is bounded to the documented synthetic English CPU/T4 cases.
+[Publication receipt](openvoice2-tcc-publication-2026-10-29.json).
 
 ### Task I — next patch after current error gates
 

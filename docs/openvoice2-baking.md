@@ -9,10 +9,19 @@ against the v0.8.47 SDK and matching ggml headers. The real Python Session/C ABI
 composition also passes both sentences through
 raw and normal marked output, with architecture detection, exact repeats,
 native rates, actual CUDA and unchanged quality gates.
-[Session receipt](openvoice-session-accepted-2026-10-28.json). Actual CLI, a full
-rebuilt-current library, model publication, broader voices/languages and default
-promotion remain separate tasks. The older attempts below are historical failed controls,
+[Session receipt](openvoice-session-accepted-2026-10-28.json). Actual CLI and full rebuilt-current-library acceptance, and model publication,
+are recorded in the current update below. Broader voices/languages remain separate. The older attempts below are historical failed controls,
 not instructions to repeat a passing campaign. See [the handoff](maintenance-handoff.md).
+
+**Current update (2026-10-29):** The full current CLI and Session/C ABI
+passed the declared F16 profile on CPU and T4 CUDA. The qualified generic
+converter is published at [revision `61741391da62c278148a2c75b6c0c5611d447149`](https://huggingface.co/cstr/openvoice2-tcc-GGUF/tree/61741391da62c278148a2c75b6c0c5611d447149), with
+the original MIT notice and pinned provenance. All four uploaded files pass
+anonymous full-byte readback; validation recordings, target embeddings and
+reference captures remain private. Broader languages, natural references,
+other devices and voice identity rights remain separate. See the
+[publication receipt](openvoice2-tcc-publication-2026-10-29.json) and
+[maintainer handoff](maintenance-handoff.md).
 
 ## Recovered execution state — 2026-10-28
 

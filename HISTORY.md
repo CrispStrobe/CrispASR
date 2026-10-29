@@ -1,3 +1,11 @@
+## 2026-10-29 — OpenVoice converter published with notices
+
+The accepted generic F32-sensitive converter was published at immutable model
+revision `61741391da62c278148a2c75b6c0c5611d447149` with the original MIT notice, provenance and bounded model
+card. All four files pass anonymous full-byte readback. Validation recordings,
+target embeddings and reference captures were not published; no voice identity
+rights or broader device/language acceptance are inferred.
+
 ## 2026-10-29 — v0.8.48 source qualified, main and tag pushed
 
 Exact target `cc114d2b4` passes all 13 CI and 10 lint jobs, secret scanning and

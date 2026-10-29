@@ -1,0 +1,73 @@
+{
+  "schema": 1,
+  "repo": "cstr/openvoice2-tcc-GGUF",
+  "complete": true,
+  "acceptance": true,
+  "scope": "Generic model and notices only; no validation audio/target embeddings/reference captures",
+  "resource_checks": [
+    {
+      "available_bytes": 4106838016,
+      "load": [
+        3.05224609375,
+        2.35107421875,
+        2.4326171875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1387544969216
+    },
+    {
+      "available_bytes": 4034658304,
+      "load": [
+        2.8876953125,
+        2.32861328125,
+        2.4248046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1387544969216
+    }
+  ],
+  "files": {
+    "README.md": {
+      "bytes": 2902,
+      "sha256": "154e0e59f51d11aa5bcb0de605b7e0f432f4254cf02799bb3bc69d1e93181b25"
+    },
+    "LICENSE": {
+      "bytes": 1057,
+      "sha256": "bb3541f421e6273d3a3e3dd5bdba2bd3b79a3c2eadca65cde9c62c2467903ac0"
+    },
+    "PROVENANCE.json": {
+      "bytes": 3579,
+      "sha256": "a16bcdb8ab6792f569ad1c196ac0de0e8d9406a41f48111ce1ebef53173d5ca1"
+    },
+    "openvoice2-tcc-f32sens.gguf": {
+      "bytes": 102123872,
+      "sha256": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255"
+    }
+  },
+  "reference_artifacts_uploaded": false,
+  "phase": "accepted-public-readback",
+  "created_repo": true,
+  "revision": "61741391da62c278148a2c75b6c0c5611d447149",
+  "anonymous_readbacks": {
+    "README.md": {
+      "url": "https://huggingface.co/cstr/openvoice2-tcc-GGUF/resolve/61741391da62c278148a2c75b6c0c5611d447149/README.md",
+      "bytes": 2902,
+      "sha256": "154e0e59f51d11aa5bcb0de605b7e0f432f4254cf02799bb3bc69d1e93181b25"
+    },
+    "LICENSE": {
+      "url": "https://huggingface.co/cstr/openvoice2-tcc-GGUF/resolve/61741391da62c278148a2c75b6c0c5611d447149/LICENSE",
+      "bytes": 1057,
+      "sha256": "bb3541f421e6273d3a3e3dd5bdba2bd3b79a3c2eadca65cde9c62c2467903ac0"
+    },
+    "PROVENANCE.json": {
+      "url": "https://huggingface.co/cstr/openvoice2-tcc-GGUF/resolve/61741391da62c278148a2c75b6c0c5611d447149/PROVENANCE.json",
+      "bytes": 3579,
+      "sha256": "a16bcdb8ab6792f569ad1c196ac0de0e8d9406a41f48111ce1ebef53173d5ca1"
+    },
+    "openvoice2-tcc-f32sens.gguf": {
+      "url": "https://huggingface.co/cstr/openvoice2-tcc-GGUF/resolve/61741391da62c278148a2c75b6c0c5611d447149/openvoice2-tcc-f32sens.gguf",
+      "bytes": 102123872,
+      "sha256": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255"
+    }
+  }
+}

@@ -1,0 +1,65 @@
+{
+  "schema": 1,
+  "artifact": {
+    "bytes": 102123872,
+    "sha256": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255",
+    "name": "openvoice2-tcc-f32sens.gguf"
+  },
+  "upstream_model": {
+    "repo": "myshell-ai/OpenVoiceV2",
+    "revision": "f36e7edfe1684461a8343844af60babc2efbb727",
+    "files": {
+      "README.md": "9f7d4211260d6105d0106705ae250c947bf3fb28e8e40a196de36a0e70d49394",
+      "converter/config.json": "9dfff60350b8c63f2c664efd92a61b2516efb22671466960f0e5dfebd881fa47",
+      "converter/checkpoint.pth": "9652c27e92b6b2a91632590ac9962ef7ae2b712e5c5b7f4c34ec55ee2b37ab9e",
+      "base_speakers/ses/en-us.pth": "0d092d4af0815a4bfbc6105b65621ab68dc4c61b2f55044d8a66968a34947c32",
+      "base_speakers/ses/en-au.pth": "5e9782233deef51fc5289d05ad4dd4ce12b196e282eccf6b6db6256bbd02daaa",
+      "base_speakers/ses/kr.pth": "f501479d6072741a396725bec79144653e9f4a5381b85901e29683aa169795df",
+      "base_speakers/ses/jp.pth": "7b645ff428de4a57a22122318968f1e6127ac81fda2e2aa66062deccd3864416",
+      "base_speakers/ses/en-newest.pth": "6a3798229b1114f0e9cc137b33211809def7dda5a8a9398d5a112c0b42699177",
+      "base_speakers/ses/es.pth": "b8cece8853fb75b9f5217a1f5cda9807bac92a3e4c4547fc651e404d05deff63",
+      "base_speakers/ses/en-br.pth": "2bf5a88025cfd10473b25d65d5c0e608338ce4533059c5f9a3383e69c812d389",
+      "base_speakers/ses/zh.pth": "2b353de562700c13faacf096ecfc0adcafd26e6704a9feef572be1279714e031",
+      "base_speakers/ses/en-default.pth": "e4139de3bc2ea162f45a5a5f9559b710686c9689749b5ab8945ee5e2a082d154",
+      "base_speakers/ses/en-india.pth": "ad03d946757e95fe9e13239aa4b11071d98f22316f604f34b1a0b4bdf41cda48",
+      "base_speakers/ses/fr.pth": "8a01f6d30a73efa368c288a542a522a2bcdd4e2ec5589d8646b307cf8e2ad9ae"
+    }
+  },
+  "upstream_code": {
+    "repository": "https://github.com/myshell-ai/OpenVoice",
+    "revision": "74a1d147b17a8c3092dd5430504bd83ef6c7eb23",
+    "license_file": "LICENSE",
+    "license_sha256": "bb3541f421e6273d3a3e3dd5bdba2bd3b79a3c2eadca65cde9c62c2467903ac0"
+  },
+  "conversion": {
+    "repository": "https://github.com/CrispStrobe/CrispASR",
+    "revision": "6be9fda3629d9314da97101b8574fb25db06150f",
+    "script": "models/convert-openvoice2-to-gguf.py",
+    "script_sha256": "12bf9fef580e3ccf88edd5dfb3c2ac45ba9863fcef7b542357ef0cfb3e2940e9",
+    "recipe": "Fuse weight norm; reference/posterior/flow and rank <=1 tensors F32; other decoder tensors F16; include only official upstream base speaker tensors"
+  },
+  "runtime": {
+    "minimum_version": "0.8.48",
+    "qualified_source": "cc114d2b4a5a9413738f390093e9131576743cb6",
+    "cpu_run": 40825101583,
+    "cuda_kernel": "crispasr-openvoice-full-source",
+    "cuda_kernel_version": 5,
+    "bert_profile": "f16",
+    "receipts": [
+      "https://github.com/CrispStrobe/CrispASR/blob/3a19c0a3177d92e7533aec56513b39fdfd5310d6/docs/openvoice-full-f16-cpu-accepted-2026-10-29.json",
+      "https://github.com/CrispStrobe/CrispASR/blob/3a19c0a3177d92e7533aec56513b39fdfd5310d6/docs/openvoice-full-f16-cuda-accepted-2026-10-29.json"
+    ]
+  },
+  "publication_scope": {
+    "model_only": true,
+    "reference_audio_included": false,
+    "target_embeddings_included": false,
+    "reference_captures_included": false,
+    "voice_identity_rights_established": false
+  },
+  "limitations": [
+    "Bounded synthetic English tests; broader languages/natural references/devices unqualified",
+    "No automatic VAD parity or unrestricted voice identity permission is inferred",
+    "Melo and BERT are separate inputs; BERT retains its own Apache-2.0 license"
+  ]
+}
