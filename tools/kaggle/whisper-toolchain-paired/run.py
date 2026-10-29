@@ -148,6 +148,14 @@ def main():
                 contents = log.read_text(errors='replace')
                 if 'CUDA0 total size' not in contents or 'using CUDA0 backend' not in contents:
                     raise RuntimeError('CUDA model placement or execution backend missing: '+prefix.name)
+                timing = re.search(r'decode time\s*=\s*([0-9.]+) ms\s*/\s*([0-9]+) runs', contents)
+                loading = re.search(r'load time\s*=\s*([0-9.]+) ms', contents)
+                if not timing or not loading or int(timing.group(2)) <= 0:
+                    raise RuntimeError('Missing load or per-decode timing: '+prefix.name)
+                row['load_ms'] = float(loading.group(1))
+                row['decode_ms'] = float(timing.group(1))
+                row['decode_calls'] = int(timing.group(2))
+                row['decode_ms_per_call'] = row['decode_ms'] / row['decode_calls']
                 if name == 'crisp-profile':
                     loads = re.findall(r'whisper timing profile: load total_us=([0-9]+)', contents)
                     decodes = re.findall(r'whisper timing profile: decode count=([0-9]+)', contents)
