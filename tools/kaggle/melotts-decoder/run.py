@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare the original decoder on actual CUDA without rebuilding the application."""
+"""Compare original encoder and flow on actual CUDA without rebuilding the application."""
 
 import hashlib
 import importlib.util
@@ -67,7 +67,7 @@ def main():
         source=source,
         application_source=APPLICATION_SOURCE,
         application_checkpoint_sha256=CHECKPOINT_SHA,
-        scope="Diagnostic only: original decoder, identical converted weights and captured native inputs",
+        scope="Diagnostic only: original encoder and inverse flow, shared converted weights and native inputs",
         worker_sha256=sha(__file__),
         resource_checks=[],
         phases={},
@@ -133,7 +133,17 @@ def main():
         )
         os.execve(sys.executable, [sys.executable, str(Path(__file__).resolve())], env)
     helper.run(
-        [sys.executable, "-m", "pip", "install", "-q", "gguf==0.17.1", "cryptography", "huggingface_hub", "tokenizers"],
+        [
+            sys.executable,
+            "-m",
+            "pip",
+            "install",
+            "-q",
+            "gguf==0.17.1",
+            "cryptography",
+            "huggingface_hub",
+            "tokenizers",
+        ],
         "dependencies",
     )
     sys.path.insert(0, str(ROOT / "tools/validation"))
@@ -224,24 +234,24 @@ def main():
         run(
             [
                 sys.executable,
-                ROOT / "tools/validation/melotts_decoder.py",
+                ROOT / "tools/validation/melotts_upstream.py",
                 "--model",
                 melo,
                 "--captures",
                 captures,
                 "--output",
-                PRIVATE / "original-decoder",
+                PRIVATE / "original-upstream",
             ],
-            "original-generator",
+            "original-upstream",
         )
-        receipt["decoder_controls"] = json.loads(
-            (PRIVATE / "original-decoder/decoder-controls.json").read_text()
+        receipt["upstream_controls"] = json.loads(
+            (PRIVATE / "original-upstream/upstream-controls.json").read_text()
         )
         receipt["complete"] = True
     finally:
-        controls = PRIVATE / "original-decoder/decoder-controls.json"
+        controls = PRIVATE / "original-upstream/upstream-controls.json"
         if controls.exists():
-            receipt["decoder_controls"] = json.loads(controls.read_text())
+            receipt["upstream_controls"] = json.loads(controls.read_text())
         receipt["private_evidence"] = seal_directory(
             PRIVATE, OUT / "private-evidence.bin", RECIPIENT
         )

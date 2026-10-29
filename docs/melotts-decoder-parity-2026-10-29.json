@@ -1,0 +1,294 @@
+{
+  "schema": 1,
+  "complete": true,
+  "application_acceptance": false,
+  "source": "504f97186e7ef39dd35df168ffa86a231a02173e",
+  "application_source": "01a2887632d343154f2ba447a9a2968c7accb567",
+  "application_checkpoint_sha256": "9db22c7d50d70bee047746b3c33647d7df28cf066dee9c08164f0c0031dbba9b",
+  "scope": "Diagnostic only: original decoder, identical converted weights and captured native inputs",
+  "worker_sha256": "d320ba1d70bf81840fc5677785e1c775cd28d61a095670fc4a72df769524c75e",
+  "resource_checks": [
+    {
+      "phase": "decoder-bootstrap",
+      "available_bytes": 32452587520,
+      "load": [
+        0.48095703125,
+        0.28955078125,
+        0.134765625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125559840768,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "dependencies",
+      "available_bytes": 32448692224,
+      "load": [
+        0.48095703125,
+        0.28955078125,
+        0.134765625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125559840768,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "retained-dependencies",
+      "available_bytes": 32418828288,
+      "load": [
+        0.52294921875,
+        0.3017578125,
+        0.1396484375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125557997568,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "download-melo.gguf",
+      "available_bytes": 32415617024,
+      "load": [
+        0.52294921875,
+        0.3017578125,
+        0.1396484375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125557993472,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "download-bert.gguf",
+      "available_bytes": 32413282304,
+      "load": [
+        0.52294921875,
+        0.3017578125,
+        0.1396484375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125460561920,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "native-captures",
+      "available_bytes": 32421277696,
+      "load": [
+        0.48095703125,
+        0.29638671875,
+        0.138671875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125406388224,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "original-generator",
+      "available_bytes": 32386387968,
+      "load": [
+        0.7431640625,
+        0.3701171875,
+        0.16796875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125325508608,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    }
+  ],
+  "phases": {
+    "native-captures": {
+      "returncode": 0
+    },
+    "original-generator": {
+      "returncode": 0
+    }
+  },
+  "library_sha256": "c1f74c293d65b3433cc41f10a497fad5120843b2f2ea84cf1c6c499522998fa5",
+  "native_activation_backends": [
+    "CUDA0",
+    "CUDA0",
+    "CUDA0"
+  ],
+  "decoder_controls": {
+    "complete": true,
+    "acceptance": true,
+    "application_acceptance": false,
+    "scope": "Decoder only; original Generator/ResBlock classes, shared converted weights and native latent inputs",
+    "full_neural_parity": false,
+    "upstream": "209145371cff8fc3bd60d7be902ea69cbdb7965a",
+    "source_sha256": {
+      "LICENSE": "88a50e5a02bbc2a5c2f084dc19da751aa97b1690f5fda76cd8005c8634d1ca70",
+      "melo/text/english.py": "28527f574511bfc13fe1f2f6bbb5bfe4072c06e1c7e9b69598138aef81b9905b",
+      "melo/text/english_bert.py": "0987c4ce65ff9aff4c1b23b25f5903a580e4c907b3d1814e2e97db6dcb020805",
+      "melo/text/japanese.py": "23fa0ac9e10772012978ab747970d143a6b002ef75d0014c61eada7a16a25758",
+      "melo/text/symbols.py": "4c1f3839f7e209b5da45daeb269f955b302d0d4c0df6dbf9be88d534b25ceea2",
+      "melo/text/__init__.py": "eca8c17764c4dcd57d3a71185775d1c6e4d53689d6a9a54708ec63577a2ac8ba",
+      "melo/models.py": "f96eef52845224b5797e54008013a5b6a5fafad2035713dc5181a5db8bf8bef4",
+      "melo/modules.py": "de80baee7dc8d89d621c541b899a84193df4bb3ef95f5e6d076cc37b6bb10bf6",
+      "melo/commons.py": "046943d265635c3d9c99195562e703564a26300981a7db5b87d4cd3fd180ae0d"
+    },
+    "model_sha256": "68c82ea2a18fd8e9d01c37a286a17fcfa630dfe7dbbd0bd08e7454e313e78fd8",
+    "device": "cuda",
+    "torch_version": "2.11.0+cu128",
+    "weight_tensors": 195,
+    "cases": [
+      {
+        "case": 0,
+        "stages": {
+          "dec_before_post": {
+            "accepted": true,
+            "elements": 2973696,
+            "cosine": 0.9999999999975653,
+            "norm_ratio": 1.0000003837387812,
+            "relative_l2": 2.216587027686746e-06,
+            "max_absolute_error": 1.553446054458618e-05
+          },
+          "dec_post_activation": {
+            "accepted": true,
+            "elements": 2973696,
+            "cosine": 0.9999999999968491,
+            "norm_ratio": 1.0000004119903418,
+            "relative_l2": 2.532471950271714e-06,
+            "max_absolute_error": 1.553446054458618e-05
+          },
+          "audio": {
+            "accepted": true,
+            "elements": 185856,
+            "cosine": 0.999999999991731,
+            "norm_ratio": 1.000000654716989,
+            "relative_l2": 4.117700864614286e-06,
+            "max_absolute_error": 1.0266900062561035e-05
+          }
+        },
+        "accepted": true
+      },
+      {
+        "case": 1,
+        "stages": {
+          "dec_before_post": {
+            "accepted": true,
+            "elements": 2777088,
+            "cosine": 0.9999999999960536,
+            "norm_ratio": 1.0000004447365094,
+            "relative_l2": 2.8321000266050838e-06,
+            "max_absolute_error": 9.104609489440918e-06
+          },
+          "dec_post_activation": {
+            "accepted": true,
+            "elements": 2777088,
+            "cosine": 0.9999999999950022,
+            "norm_ratio": 1.000000477722728,
+            "relative_l2": 3.190971226141615e-06,
+            "max_absolute_error": 9.104609489440918e-06
+          },
+          "audio": {
+            "accepted": true,
+            "elements": 173568,
+            "cosine": 0.9999999999911654,
+            "norm_ratio": 1.0000006388857419,
+            "relative_l2": 4.251118465858518e-06,
+            "max_absolute_error": 4.913657903671265e-06
+          }
+        },
+        "accepted": true
+      },
+      {
+        "case": 2,
+        "stages": {
+          "dec_before_post": {
+            "accepted": true,
+            "elements": 2990080,
+            "cosine": 0.9999999999989932,
+            "norm_ratio": 1.000000382713062,
+            "relative_l2": 1.4415996853269176e-06,
+            "max_absolute_error": 2.039968967437744e-05
+          },
+          "dec_post_activation": {
+            "accepted": true,
+            "elements": 2990080,
+            "cosine": 0.9999999999986517,
+            "norm_ratio": 1.0000004033752485,
+            "relative_l2": 1.6769206767448499e-06,
+            "max_absolute_error": 2.039968967437744e-05
+          },
+          "audio": {
+            "accepted": true,
+            "elements": 186880,
+            "cosine": 0.9999999999932289,
+            "norm_ratio": 1.0000007265384365,
+            "relative_l2": 3.7500374799727295e-06,
+            "max_absolute_error": 9.765848517417908e-06
+          }
+        },
+        "accepted": true
+      }
+    ],
+    "resource_checks": [
+      {
+        "available_bytes": 31870791680,
+        "load": [
+          0.7431640625,
+          0.3701171875,
+          0.16796875
+        ],
+        "gpu_free_mib": [
+          14751,
+          14909
+        ]
+      },
+      {
+        "available_bytes": 31637295104,
+        "load": [
+          0.76416015625,
+          0.380859375,
+          0.1728515625
+        ],
+        "gpu_free_mib": [
+          14629,
+          14909
+        ]
+      },
+      {
+        "available_bytes": 31614046208,
+        "load": [
+          0.76416015625,
+          0.380859375,
+          0.1728515625
+        ],
+        "gpu_free_mib": [
+          14527,
+          14909
+        ]
+      }
+    ]
+  },
+  "private_evidence": {
+    "bytes": 135686552,
+    "sha256": "2e7c37a2c0c3984b09386ba65f3ddcd23008ba1a92d1cd4a3ac479d7de48fc14",
+    "recipient_sha256": "8faff36ac3521f054e844e58e8d5305560935c4545c0dc4472bcfce23b058e36",
+    "files": 94
+  },
+  "kernel_slug": "crispasr-melotts-decoder",
+  "kernel_version": 1,
+  "bootstrap_source": "0181e36ea",
+  "readback_verified": true
+}
