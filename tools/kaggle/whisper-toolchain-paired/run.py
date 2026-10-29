@@ -53,7 +53,7 @@ def wer(reference, hypothesis):
 
 def main():
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0)); WORK.mkdir(parents=True, exist_ok=True); OUT.mkdir(parents=True, exist_ok=True)
-    receipt = {'complete': False, 'acceptance': False, 'scope': 'T4 same-toolchain comparison: same model/audio, compiler, CUDA toolkit and target SM; source trees, ggml revisions and feature defaults may differ. Profiling off/on use the same binary. Process time includes startup and GPU monitoring.', 'runs': [], 'pins': {k: v[1] for k, v in PINS.items()}}
+    receipt = {'complete': False, 'acceptance': False, 'scope': 'T4 same-toolchain comparison: same model/audio, compiler, CUDA toolkit and target SM; all three builds disable CUDA VMM; source trees, ggml revisions and other feature defaults may differ. Profiling off/on use the same binary. Process time includes startup and GPU monitoring.', 'runs': [], 'pins': {k: v[1] for k, v in PINS.items()}}
     def save(): (OUT/'receipt.json').write_text(json.dumps(receipt, indent=2)+'\n')
     save(); guard()
     hardware = subprocess.check_output(['nvidia-smi','--query-gpu=name,compute_cap','--format=csv,noheader'], text=True).strip()
@@ -73,7 +73,7 @@ def main():
     guard()
     build = WORK/'build'
     subprocess.run(['cmake', '-S', str(crisp), '-B', str(build), '-DCMAKE_BUILD_TYPE=Release',
-                    '-DGGML_CUDA=ON', '-DGGML_NATIVE=OFF', '-DCMAKE_CUDA_ARCHITECTURES=75',
+                    '-DGGML_CUDA=ON', '-DGGML_CUDA_NO_VMM=ON', '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON', '-DGGML_NATIVE=OFF', '-DCMAKE_CUDA_ARCHITECTURES=75',
                     '-DCRISPASR_BUILD_TESTS=OFF', '-DCRISPASR_BUILD_SERVER=OFF'], check=True, timeout=300)
     subprocess.run(['cmake', '--build', str(build), '--target', 'crispasr-cli', '-j', '2'], check=True, timeout=2400)
     # Build the pinned fork with the same compiler, CUDA toolkit and GPU
@@ -89,7 +89,7 @@ def main():
     guard()
     fork_build = WORK/'fork-build'
     subprocess.run(['cmake', '-S', str(fork), '-B', str(fork_build), '-DCMAKE_BUILD_TYPE=Release',
-                    '-DGGML_CUDA=ON', '-DGGML_NATIVE=OFF', '-DCMAKE_CUDA_ARCHITECTURES=75',
+                    '-DGGML_CUDA=ON', '-DGGML_CUDA_NO_VMM=ON', '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON', '-DGGML_NATIVE=OFF', '-DCMAKE_CUDA_ARCHITECTURES=75',
                     '-DWHISPER_BUILD_TESTS=OFF', '-DWHISPER_BUILD_SERVER=OFF'], check=True, timeout=300)
     guard()
     subprocess.run(['cmake', '--build', str(fork_build), '--target', 'whisper-cli', '-j', '2'], check=True, timeout=2400)
@@ -106,10 +106,17 @@ def main():
     subprocess.run(['git', 'submodule', 'update', '--init', '--recursive'], cwd=upstream, check=True, timeout=300)
     guard()
     subprocess.run(['cmake', '-S', str(upstream), '-B', str(upstream_build), '-DCMAKE_BUILD_TYPE=Release',
-                    '-DGGML_CUDA=ON', '-DGGML_NATIVE=OFF', '-DCMAKE_CUDA_ARCHITECTURES=75',
+                    '-DGGML_CUDA=ON', '-DGGML_CUDA_NO_VMM=ON', '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON', '-DGGML_NATIVE=OFF', '-DCMAKE_CUDA_ARCHITECTURES=75',
                     '-DWHISPER_BUILD_TESTS=OFF', '-DWHISPER_BUILD_SERVER=OFF'], check=True, timeout=300)
     guard()
     subprocess.run(['cmake', '--build', str(upstream_build), '--target', 'whisper-cli', '-j', '2'], check=True, timeout=2400)
+    for tree in (build, fork_build, upstream_build):
+        commands = json.loads((tree/'compile_commands.json').read_text())
+        cuda = [row['command'] for row in commands if row['file'].endswith('ggml-cuda.cu')]
+        if len(cuda) != 1 or 'GGML_CUDA_NO_VMM' not in cuda[0]:
+            raise RuntimeError('CUDA VMM-off compile proof missing: ' + tree.name)
+    receipt['cuda_vmm'] = 'disabled for all three builds; compile commands verified'
+    save()
     c = [p for p in build.rglob('crispasr') if p.is_file()]
     f = [p for p in fork_build.rglob('whisper-cli') if p.is_file()]
     u = [p for p in upstream_build.rglob('whisper-cli') if p.is_file()]
