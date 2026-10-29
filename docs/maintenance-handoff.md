@@ -445,7 +445,7 @@ publication occurred. Remaining scope:
    recognizer. Diagnostic version 1 failed before inference because Kaggle
    rejected the failed full-source run as an unversioned input attachment.
    Its source/logs/output are preserved. The prepared transport repair uses
-   the existing output API's expiring URL scoped to that single checkpoint;
+   the existing output API's fresh download URL for that checkpoint;
    render the URL placeholder only into a private push copy, never commit it
    or copy an account API token into the worker. The private-cache alternative
    hit the account storage limit; no assets were removed or made public.
