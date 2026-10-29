@@ -1,0 +1,52 @@
+{
+  "schema": 1,
+  "complete": true,
+  "scope": "One public JFK clip on T4. One warmup and three measured independent processes per engine; each process performs two calls after loading. Native Q4_K and original F16 have different precision. Process times include loading and GPU monitoring; second-call operation boundaries differ.",
+  "pins": {
+    "input": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "runtime": "90e23cffb44f4a80d929bf88cf3abb2d526ec4c0b95d88a82d1a8bf33135722d",
+    "native": [
+      "cstr/granite-speech-5.0-2b-GGUF",
+      "e1df7d2cabb0ddba9863d7fc90cb6e78e8f19a6d",
+      "granite-speech-5.0-2b-q4_k.gguf",
+      "63324167e3a85a67539a44712aef1a4624882561a939597cc20e1a31e864674d"
+    ],
+    "original": [
+      "ibm-granite/granite-speech-5.0-2b",
+      "c075cf19e041a2e4d16c5ee24763e5b037d8f479"
+    ],
+    "transformers": "4.57.3"
+  },
+  "hardware": "Tesla T4, compute capability 7.5",
+  "settings": {
+    "instruction": "transcribe the speech with proper punctuation and capitalization.",
+    "max_new_tokens": 96,
+    "threads": 4,
+    "original": "greedy, one beam, F16",
+    "native": "accepted mixed Q4_K"
+  },
+  "quality": {
+    "all_eight_processes_gpu_pid_observed": true,
+    "all_sixteen_calls_word_error_rate": 0.0
+  },
+  "median_process_seconds": {
+    "native": 5.081918227000017,
+    "original": 20.77947057900002
+  },
+  "second_call": {
+    "native_decode_steps": 26,
+    "native_decode_median_ms": 296.7,
+    "native_decode_median_ms_per_step": 11.411538461538461,
+    "native_compute_median_us_per_step": 10966.0,
+    "native_alloc_median_us_per_step": 397.0,
+    "original_generate_median_seconds": 1.4202196350000236,
+    "original_generated_token_count": 27
+  },
+  "limitations": [
+    "Native decode timing excludes graph construction, prefill and the first token; original generate includes prefill and additional stages. Do not infer a cross-engine decode-only speedup.",
+    "The F16 and Q4_K models have different numerical precision.",
+    "Native reports 26 greedy decoder calls after the prefill token; the original output has 27 generated tokens. These counts have different boundaries.",
+    "One clip and one GPU do not establish general recognition or performance acceptance."
+  ],
+  "benchmark_script_sha256": "1991103765ecc186cc8b021c9d91fda432e6f6f87e32836d0a91af1557ec6a53"
+}
