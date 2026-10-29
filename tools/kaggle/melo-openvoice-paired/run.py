@@ -162,7 +162,6 @@ def native_engine(candidate, model):
                 okay = lib.openvoice2_convert(ctx, src.ctypes.data_as(fp), len(src), 22050,
                                                ref.ctypes.data_as(fp), len(ref), 22050,
                                                ct.byref(output), ct.byref(count))
-                seconds = time.perf_counter() - started
             finally:
                 os.dup2(old_stderr, 2)
                 os.close(old_stderr)
@@ -172,6 +171,7 @@ def native_engine(candidate, model):
             pcm = np.ctypeslib.as_array(output, shape=(count.value,)).copy()
         finally:
             libc.free(output)
+        seconds = time.perf_counter() - started
         return seconds, pcm
     return convert, lambda: lib.openvoice2_free(ctx)
 
@@ -218,11 +218,11 @@ def original_engine(upstream, model_dir):
             lengths = torch.tensor([src_spec.shape[-1]], dtype=torch.long, device="cuda")
             wave = model.voice_conversion(src_spec, lengths, source_se, target, tau=0)[0][0, 0]
             pcm = wave.detach().float().cpu().numpy().copy()
+            peak = float(np.max(np.abs(pcm)))
+            if peak > .01:
+                pcm *= np.float32(.95) / peak
         torch.cuda.synchronize()
         seconds = time.perf_counter() - started
-        peak = float(np.max(np.abs(pcm)))
-        if peak > .01:
-            pcm *= np.float32(.95) / peak
         return seconds, pcm
     return convert, torch.__version__
 

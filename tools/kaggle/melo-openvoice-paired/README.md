@@ -17,8 +17,12 @@ encoder and flows on **CPU**, with **CUDA HiFi-GAN**; that is the accepted nativ
 architecture, not a full CUDA converter. One warmup and three measured calls
 per arm are made after each model is loaded. Both arms cache the reference
 embedding by its PCM after the first warmup, matching the native C API's
-reference cache. The measured region includes source STFT, encoder, flows and
-vocoder, with the cached reference encoder excluded. This is a warm, in-process
+reference cache. The measured region includes source STFT, encoder, flows,
+vocoder, and peak normalization, with the cached reference encoder excluded.
+Both timers stop after making an owned CPU NumPy copy of the output; the native
+copy and buffer release occur after its C API call, while the original copy
+includes a CUDA-to-CPU transfer.
+This is a warm, in-process
 conversion comparison; load, Melo synthesis, resampling and CLI marking are
 outside the timed region. The original checkpoint is F32 and the native
 OpenVoice GGUF has F32-sensitive tensors. The F16 qualification applies to
