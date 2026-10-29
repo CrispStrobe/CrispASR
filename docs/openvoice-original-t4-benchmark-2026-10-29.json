@@ -56,5 +56,9 @@
     "F16 qualification applies to the Melo/BERT input synthesis; the OpenVoice comparison uses original F32 and native F32-sensitive tensors.",
     "Warm reference caches exclude reference-embedding setup; model load and Melo synthesis are outside timed regions.",
     "These two cases do not establish general voice quality or performance."
+  ],
+  "license_sources": [
+    "https://github.com/myshell-ai/OpenVoice/blob/74a1d147b17a8c3092dd5430504bd83ef6c7eb23/LICENSE",
+    "https://huggingface.co/cstr/openvoice2-tcc-GGUF"
   ]
 }
