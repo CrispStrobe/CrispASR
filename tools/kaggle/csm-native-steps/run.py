@@ -369,6 +369,9 @@ def main():
                     env=env,
                     timeout=300,
                 )
+                (WORK / (label + "-asr.log")).write_text(
+                    judge.stdout + "\n" + judge.stderr
+                )
                 lines = [
                     line.strip()
                     for line in (judge.stdout + "\n" + judge.stderr).splitlines()
