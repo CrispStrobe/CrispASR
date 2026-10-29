@@ -1,0 +1,206 @@
+{
+  "schema": 1,
+  "complete": true,
+  "acceptance": true,
+  "source": "de2e532dded4fe1b3fc7ffc2360d220f2622b2dc",
+  "workflow_run": 40858523187,
+  "artifact_id": 12892399815,
+  "scope": "Hosted CPU CLI controls for opt-in full-recording language detection; not a multilingual accuracy benchmark. The previous run failed on a Silero-to-Whisper model-selection error.",
+  "models": [
+    {
+      "repo": "ggerganov/whisper.cpp",
+      "revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+      "file": "ggml-tiny.bin",
+      "sha256": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21"
+    },
+    {
+      "repo": "cstr/silero-lid-lang95-GGUF",
+      "revision": "78fb93154156272b2448183dfbf62b648ece4e52",
+      "file": "silero-lid-lang95-f32.gguf",
+      "sha256": "ed161165bb6fabae895f8837761b57bde50ede273ec83f6ad37ba982ce3e54da"
+    }
+  ],
+  "long_clip_fixtures": {
+    "late-after-silence.wav": {
+      "sha256": "cf1ff99fca06ea0c90a4283f2bb50f0f3ee565ee41a54486d3a1dc6bad915217",
+      "duration_samples": 432000
+    },
+    "korean-then-english.wav": {
+      "sha256": "6302a2f3f36592c38f3b2de74d2884fc75f0dda70f5bb2507422e28e93b59f1a",
+      "duration_samples": 612400
+    },
+    "short-final-speech.wav": {
+      "sha256": "8f3502741caa38a106b006c88d48c297afa2c17799390821f0147755d87527a6",
+      "duration_samples": 544000
+    },
+    "silence.wav": {
+      "sha256": "c436a66af13c71de3af151f8e98500a59b31e78573380b833c952edb6cfd6fec",
+      "duration_samples": 288000
+    },
+    "empty.wav": {
+      "sha256": "ba584a378b11d9e9c98736fd8c256fe1453a84ee4139416d24b07acff424f0fb",
+      "duration_samples": 0
+    }
+  },
+  "long_clip_routes": {
+    "whisper-late-after-silence": {
+      "requested": "whisper",
+      "result_source": "whisper",
+      "fallback_observed": false
+    },
+    "whisper-first-window-control": {
+      "requested": "whisper",
+      "result_source": "whisper",
+      "fallback_observed": false
+    },
+    "whisper-late-majority": {
+      "requested": "whisper",
+      "result_source": "whisper",
+      "fallback_observed": false
+    },
+    "whisper-short-final-speech": {
+      "requested": "whisper",
+      "result_source": "whisper",
+      "fallback_observed": false
+    },
+    "silero-late-after-silence": {
+      "requested": "silero",
+      "result_source": "silero",
+      "fallback_observed": false
+    },
+    "silero-first-window-control": {
+      "requested": "silero",
+      "result_source": "whisper",
+      "fallback_observed": true
+    },
+    "silero-late-majority": {
+      "requested": "silero",
+      "result_source": "mixed",
+      "fallback_observed": true
+    },
+    "silero-short-final-speech": {
+      "requested": "silero",
+      "result_source": "silero",
+      "fallback_observed": false
+    }
+  },
+  "results": {
+    "default-cached-bypasses-asr": [
+      {
+        "language": "en",
+        "confidence": 0.976644,
+        "source": "whisper"
+      }
+    ],
+    "auto-model-bypasses-asr": [
+      {
+        "language": "en",
+        "confidence": 0.976644,
+        "source": "whisper"
+      }
+    ],
+    "explicit-whisper-bypasses-asr": [
+      {
+        "language": "en",
+        "confidence": 0.976644,
+        "source": "whisper"
+      }
+    ],
+    "explicit-silero-bypasses-asr": [
+      {
+        "language": "en",
+        "confidence": 0.998506,
+        "source": "silero"
+      },
+      {
+        "language": "en",
+        "confidence": 0.998506,
+        "source": "silero"
+      }
+    ],
+    "whisper-late-after-silence": [
+      {
+        "language": "en",
+        "confidence": 0.97546,
+        "source": "whisper"
+      }
+    ],
+    "whisper-first-window-control": [
+      {
+        "language": "ko",
+        "confidence": 0.998092,
+        "source": "whisper"
+      }
+    ],
+    "whisper-late-majority": [
+      {
+        "language": "en",
+        "confidence": 0.570204,
+        "source": "whisper"
+      }
+    ],
+    "whisper-short-final-speech": [
+      {
+        "language": "en",
+        "confidence": 0.944872,
+        "source": "whisper"
+      }
+    ],
+    "silero-late-after-silence": [
+      {
+        "language": "en",
+        "confidence": 0.997675,
+        "source": "silero"
+      }
+    ],
+    "silero-first-window-control": [
+      {
+        "language": "ko",
+        "confidence": 0.998092,
+        "source": "whisper"
+      }
+    ],
+    "silero-late-majority": [
+      {
+        "language": "en",
+        "confidence": 0.550502,
+        "source": "mixed"
+      }
+    ],
+    "silero-short-final-speech": [
+      {
+        "language": "en",
+        "confidence": 0.439988,
+        "source": "silero"
+      }
+    ]
+  },
+  "phase_returncodes": {
+    "configure": 0,
+    "build-current-cli": 0,
+    "default-cached-bypasses-asr": 0,
+    "auto-model-bypasses-asr": 0,
+    "explicit-whisper-bypasses-asr": 0,
+    "explicit-silero-bypasses-asr": 0,
+    "whisper-late-after-silence": 0,
+    "whisper-first-window-control": 0,
+    "whisper-late-majority": 0,
+    "whisper-short-final-speech": 0,
+    "whisper-silence": 21,
+    "whisper-empty": 20,
+    "silero-late-after-silence": 0,
+    "silero-first-window-control": 0,
+    "silero-late-majority": 0,
+    "silero-short-final-speech": 0,
+    "silero-silence": 21,
+    "silero-empty": 20,
+    "unsupported-self": 2,
+    "unsupported-probe": 2,
+    "unsupported-off": 2,
+    "unsupported-none": 2,
+    "missing-audio": 2,
+    "unreadable-audio": 20,
+    "ordinary-auto-transcription": 0
+  },
+  "cli_sha256": "8f7cd3ae2a87bdee3e96fd4affad1fcde4584dcd631b3cc30bca5fdee3b42c7f"
+}
