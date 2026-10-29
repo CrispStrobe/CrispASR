@@ -42,7 +42,16 @@
     "Original generation timing excludes preprocessing; native stages are not identical operation boundaries.",
     "Original F32 and native F16 do not have matching numerical precision.",
     "No decoder step count or directly comparable per-step speed was captured.",
-    "No broader model, language, or device ranking is established."
+    "No broader model, language, or device ranking is established.",
+    "Original and native software stacks and generation boundaries differ; process time includes a GPU monitoring thread."
   ],
-  "benchmark_script_sha256": "d3b03b7cfdd0b871c410e946b9fb3725b22e3dab3796718dfb43c410b3a76e84"
+  "benchmark_script_sha256": "d3b03b7cfdd0b871c410e946b9fb3725b22e3dab3796718dfb43c410b3a76e84",
+  "settings": {
+    "audio": "public JFK sample, 16 kHz mono",
+    "language": "en-US requested",
+    "threads": 4,
+    "max_new_tokens": 512,
+    "original_lookahead_tokens": 3,
+    "native_context_preset": "shipped default [56, 3]"
+  }
 }
