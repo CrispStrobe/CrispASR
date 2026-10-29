@@ -1,0 +1,14 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/nemotron-f16-fork-paired-private",
+  "title": "Nemotron F16 CrispASR and transcribe.cpp paired T4",
+  "code_file": "nemotron_fork_paired.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}
