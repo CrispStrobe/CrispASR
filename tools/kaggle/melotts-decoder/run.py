@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Isolate original BERT conditioning and a fixed precision control on CUDA without rebuilding the application."""
+"""Complete the fixed Q4/F16 speech comparison using the retained CUDA application."""
 
 import hashlib
 import importlib.util
@@ -67,7 +67,7 @@ def main():
         source=source,
         application_source=APPLICATION_SOURCE,
         application_checkpoint_sha256=CHECKPOINT_SHA,
-        scope="Diagnostic only: original BERT math and fixed Q4/F16 precision controls; no application acceptance",
+        scope="Diagnostic only: fixed Q4/F16 speech comparison; BERT boundary evidence retained separately in version 3",
         worker_sha256=sha(__file__),
         resource_checks=[],
         phases={},
@@ -139,11 +139,7 @@ def main():
             "pip",
             "install",
             "-q",
-            "gguf==0.17.1",
             "cryptography",
-            "huggingface_hub",
-            "tokenizers",
-            "transformers==4.57.1",
             "faster-whisper",
             "soundfile",
             "scipy",
@@ -194,46 +190,6 @@ def main():
                 digest,
             )
 
-        def run(command, label):
-            helper.guard_resources(label)
-            with (PRIVATE / (label + ".log")).open("w") as output:
-                result = subprocess.run(
-                    list(map(str, command)),
-                    stdout=output,
-                    stderr=subprocess.STDOUT,
-                    timeout=1800,
-                )
-            receipt["phases"][label] = dict(returncode=result.returncode)
-            save()
-            if result.returncode:
-                raise RuntimeError(label + " failed; inspect encrypted evidence")
-
-        captures = PRIVATE / "native-inputs"
-        run(
-            [
-                sys.executable,
-                ROOT / "tools/validation/melotts_inputs.py",
-                "--library",
-                library,
-                "--model",
-                melo,
-                "--bert",
-                bert,
-                "--output",
-                captures,
-                "--device",
-                "cuda",
-            ],
-            "native-captures",
-        )
-        backends = re.findall(
-            r"^melotts: final activation backend (\S+)",
-            (PRIVATE / "native-captures.log").read_text(),
-            re.M,
-        )
-        if len(backends) != 3 or not all(name.startswith("CUDA") for name in backends):
-            raise RuntimeError("Native captures did not use CUDA")
-        receipt["native_activation_backends"] = backends
         bert_f16 = data / "bert-f16.gguf"
         helper.guard_resources("download-f16-control")
         fetch(
@@ -243,33 +199,10 @@ def main():
             bert_f16,
             "f7437929246c43d7300cbf6ff39b4715669a6053661117df99a456bdc5e8ecba",
         )
-        run(
-            [
-                sys.executable,
-                ROOT / "tools/validation/melotts_bert.py",
-                "--library",
-                library,
-                "--bert-q4",
-                bert,
-                "--bert-f16",
-                bert_f16,
-                "--captures",
-                captures,
-                "--output",
-                PRIVATE / "original-bert",
-            ],
-            "original-bert",
-        )
-        receipt["bert_controls"] = json.loads(
-            (PRIVATE / "original-bert/bert-controls.json").read_text()
-        )
         precision_clips(helper, metadata[0], melo, bert, bert_f16, receipt, save)
 
         receipt["complete"] = True
     finally:
-        controls = PRIVATE / "original-bert/bert-controls.json"
-        if controls.exists():
-            receipt["bert_controls"] = json.loads(controls.read_text())
         receipt["private_evidence"] = seal_directory(
             PRIVATE, OUT / "private-evidence.bin", RECIPIENT
         )
@@ -297,6 +230,14 @@ def precision_clips(helper, metadata_path, melo, q4, f16, receipt, save):
     ]:
         if sha(path) != metadata["artifacts"][name]["sha256"]:
             raise ValueError("Fixed precision input changed")
+    # The actual CLI resolves its converter alongside the Melo model. The
+    # version-3 diagnostic validated the mounted file but omitted this staging.
+    helper.guard_resources("stage-validated-converter")
+    adjacent = melo.parent / converter.name
+    shutil.copy2(converter, adjacent)
+    if sha(adjacent) != metadata["artifacts"]["openvoice2-tcc-f32sens.gguf"]["sha256"]:
+        raise ValueError("Adjacent converter copy differs from the accepted input")
+    receipt["converter_sha256"] = sha(adjacent)
     probes = []
     for label, bert in [("q4_k", q4), ("f16-control", f16)]:
         env = dict(
