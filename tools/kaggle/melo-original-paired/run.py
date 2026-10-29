@@ -14,6 +14,7 @@ import subprocess
 import sys
 import tarfile
 import time
+from types import ModuleType
 
 VERSION = "melo-original-paired-v1"
 OUT = Path("/kaggle/working")
@@ -35,8 +36,8 @@ ASR_REPO = "Systran/faster-whisper-tiny.en"
 ASR_REV = "0d3d19a32d3338f10357c0889762bd8d64bbdeba"
 TEXTS = ("The quick brown fox jumps over the lazy dog.",
          "We enjoy reading books and listening to music in the evening.")
-# The original API imports every language cleaner even for EN_V2. Keep the
-# import dependencies in one list shared with the hosted CPU preflight.
+# The original API imports foreign cleaners even for EN_V2. Keep the import
+# dependencies in one list shared with the hosted CPU preflight.
 ORIGINAL_IMPORT_DEPS = (
     "transformers==4.49.0", "huggingface_hub==0.28.1", "cached-path==1.7.3",
     "g2p-en==2.1.0", "eng-to-ipa==0.0.2", "unidecode==1.4.0",
@@ -52,6 +53,33 @@ UNUSED_TOKENIZER_IDS = frozenset({
     "dccuchile/bert-base-spanish-wwm-uncased",
     "bert-base-multilingual-uncased",
 })
+JAPANESE_TOKENIZER_ID = "tohoku-nlp/bert-base-japanese-v3"
+EXPECTED_EAGER_TOKENIZER_IDS = UNUSED_TOKENIZER_IDS - {JAPANESE_TOKENIZER_ID}
+
+
+def block_unused_japanese_cleaner(source):
+    """Block the unused Japanese cleaner before it imports MeCab or models.
+
+    Melo's cleaner imports every language module. Japanese initializes MeCab
+    during import, even for English synthesis. This wrapper only replaces the
+    Japanese module and fails if a caller tries to use its public entry points.
+    """
+    module_name = "melo.text.japanese"
+    if module_name in sys.modules:
+        raise RuntimeError("Melo Japanese cleaner was imported before its guard")
+    if not (Path(source) / "melo/text/japanese.py").is_file():
+        raise RuntimeError("Pinned Melo Japanese cleaner is missing")
+
+    def unavailable(*_args, **_kwargs):
+        raise RuntimeError("Japanese Melo cleaner is unavailable in this EN_V2 run")
+
+    blocked = ModuleType(module_name)
+    blocked.__package__ = "melo.text"
+    blocked.text_normalize = unavailable
+    blocked.g2p = unavailable
+    blocked.get_bert_feature = unavailable
+    sys.modules[module_name] = blocked
+    return blocked
 
 
 class UnusedLanguageTokenizer:
@@ -233,8 +261,12 @@ def make_original(source, config, checkpoint, bert_snapshot):
     torch.backends.cudnn.benchmark = False
     unused_requests = pin_original_english_bert(bert_snapshot)
     sys.path.insert(0, str(source))
+    blocked_japanese = block_unused_japanese_cleaner(source)
     from melo.api import TTS
-    if set(unused_requests) != UNUSED_TOKENIZER_IDS:
+    from melo.text import japanese
+    if japanese is not blocked_japanese:
+        raise RuntimeError("Japanese cleaner guard was bypassed")
+    if set(unused_requests) != EXPECTED_EAGER_TOKENIZER_IDS:
         raise RuntimeError("Pinned Melo source eager tokenizer inventory changed")
     started = time.perf_counter()
     tts = TTS(language="EN_V2", device="cuda", use_hf=False,

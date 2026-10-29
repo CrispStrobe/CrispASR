@@ -25,15 +25,19 @@ the repository's weight-norm fusion and F16/F32 cast. A mismatch stops the
 run; the model card alone is insufficient lineage proof.
 
 The pinned original API eagerly imports cleaners for Japanese, Korean,
-French, Spanish and mixed Chinese even when `language="EN_V2"`. Those modules
-each construct a tokenizer during import. The adapter substitutes a
-fail-on-use sentinel for their five known tokenizer IDs, so no foreign model
-assets are fetched. Any attempt to use one of those languages raises. The
+French, Spanish and mixed Chinese even when `language="EN_V2"`. Japanese also
+imports MeCab and initializes its tagger during import, before its tokenizer
+is constructed. The adapter installs a fail-on-use Japanese cleaner module
+before importing the original API; the other four cleaners construct foreign
+tokenizers, which the adapter replaces with fail-on-use sentinels. The five
+foreign tokenizer IDs remain blocked if requested, so no foreign model assets
+are fetched. Any attempt to use one of those languages raises. The
 English tokenizer and masked-language model are redirected to the pinned
 English BERT snapshot; unexpected model IDs raise. This is a wrapper-only
 import substitution. The original English TTS implementation and sampling
 settings are otherwise used directly. A hosted CPU preflight imports the same
-pinned source and exercises the English tokenizer and sentinel failures,
+pinned source and exercises the English tokenizer, Japanese cleaner guard,
+and tokenizer sentinel failures,
 without loading model weights or synthesizing speech.
 
 License notices: pinned [MeloTTS source MIT license](https://github.com/myshell-ai/MeloTTS/blob/209145371cff8fc3bd60d7be902ea69cbdb7965a/LICENSE),

@@ -107,11 +107,29 @@ def main():
                           adapter.MELO_SOURCE, source)
         unused_requests = adapter.pin_original_english_bert(tokenizer_dir)
         sys.path.insert(0, str(source))
+        blocked_japanese = adapter.block_unused_japanese_cleaner(source)
         guard("before-original-api-import")
         from melo.api import TTS
-        from melo.text import english
-        if set(unused_requests) != adapter.UNUSED_TOKENIZER_IDS:
+        from melo.text import english, japanese
+        from melo.text.cleaner import clean_text
+        if set(unused_requests) != adapter.EXPECTED_EAGER_TOKENIZER_IDS:
             raise RuntimeError("Pinned source eager tokenizer inventory changed")
+        if japanese is not blocked_japanese:
+            raise RuntimeError("Japanese cleaner guard was bypassed")
+        for blocked_call in (japanese.text_normalize, japanese.g2p,
+                             japanese.get_bert_feature):
+            try:
+                blocked_call("must fail")
+            except RuntimeError:
+                pass
+            else:
+                raise RuntimeError("Japanese cleaner guard failed open")
+        try:
+            clean_text("must fail", "JP")
+        except RuntimeError:
+            pass
+        else:
+            raise RuntimeError("Japanese clean_text route failed open")
         if isinstance(english.tokenizer, adapter.UnusedLanguageTokenizer):
             raise RuntimeError("English tokenizer was replaced by a sentinel")
         if not english.tokenizer.tokenize("A short English import control."):
@@ -130,6 +148,7 @@ def main():
         if not {"sdp_ratio", "noise_scale", "noise_scale_w", "speed", "quiet"} <= set(parameters):
             raise RuntimeError("Original TTS synthesis signature changed")
         receipt["unused_tokenizer_ids"] = sorted(set(unused_requests))
+        receipt["blocked_japanese_cleaner"] = True
         receipt["api_import"] = "melo.api.TTS"
         receipt["complete"] = receipt["acceptance"] = True
         save()
