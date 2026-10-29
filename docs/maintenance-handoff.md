@@ -125,8 +125,12 @@ and check actual GPU session availability before every Kaggle submission.
   WER, transcript and 27-call controls pass. Median load is 554.3 ms VMM off
   and 559.6 ms on; decode is 2.52 and 2.51 ms/call. Profiled weight-buffer
   selection takes about 232–233 ms in either arm. A loader-local device-type
-  cache is being tested against exact per-tensor placement and same-toolchain
-  A/B; no performance match or cause is claimed yet. These results do not yet
+  cache candidate `0a3a97c1e` on `validate/whisper-loader-device-cache-20261029`
+  retains per-tensor support checks; baseline `9df3071a9` and candidate emit
+  the same opt-in ordered placement trace. CI **40870464042** and lint
+  **40870467717** are queued. Complete fake-backend equivalence, CPU/CUDA
+  placement traces and same-toolchain A/B before any integration; no performance
+  match or cause is claimed yet. These results do not yet
   establish the reason for the gap or matched performance. Keep changes on
   validation branches until their own acceptance checks pass. A static upstream
   comparison identified per-call persistent CPU-threadpool setup as a possible
