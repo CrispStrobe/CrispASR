@@ -32,7 +32,7 @@ and check actual GPU session availability before every Kaggle submission.
 - **#559:** exact PR head `6b132720090cbb532f79f544c130381ddf1cf6c9` was
   applied to a validation tree, candidate `5eef35019`. CI **40848995923** and
   lint **40848999141** are queued. Hosted short-clip and actual C API prompt
-  routing run **40855248796** is queued on test tree `aa9579756`, including CLI and chunked routing. Neither a
+  routing run **40859214637** is queued on test tree `70ef1c0f0`, including exact C ABI, CLI and chunked routing. Earlier run **40855248796** was already in progress with a less strict harness; retain it as diagnostic only. Neither a
   queued run nor the contributor's own probes establish independent acceptance.
   Review the current discussion and complete CLI, C API and chunking controls
   before deciding whether to merge.
