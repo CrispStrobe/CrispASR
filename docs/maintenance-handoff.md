@@ -106,6 +106,15 @@ and check actual GPU session availability before every Kaggle submission.
   `validate/whisper-threadpool-adapter-20261029` at `b35e0f32f`. Only run it if
   current comparisons leave that hypothesis relevant; keep CPU ownership and
   synchronization behavior unchanged until correctness and speed are proved.
+  Separately, upstream MIT short-DTW-window safety fix `16375e71f` is on
+  `validate/whisper-dtw-short-20261029`: hosted before/after control
+  **40864945021**, CI **40864948252** and lint **40864951364** are queued.
+  The parallel VAD out-of-range-offset fix `291b69004` is on
+  `validate/whisper-vad-offset-20261029`, with CI **40865260917** and lint
+  **40865264366** queued. These validation trees include other experimental
+  commits; isolate and retest any fix on the eventual integration tree. The
+  upstream vocabulary bounds check needs adaptation for serialized Whisper-ja
+  and Tiron speaker IDs before it can be ported safely.
 
 The validation branch `validate/ordered-model-benchmarks-20261029` contains the
 prepared adapters and bounded Nemotron receipt. Later local changes and private
