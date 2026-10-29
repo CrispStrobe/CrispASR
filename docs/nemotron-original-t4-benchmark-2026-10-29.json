@@ -1,0 +1,57 @@
+{
+  "schema": 1,
+  "complete": true,
+  "scope": "Single public JFK clip on T4. Alternating, one warmup and three measured independent processes per engine; process time includes startup and loading. Native F16 GGUF and original F32 are different precision profiles. Timings are not a same-precision or broad speed ranking.",
+  "model": {
+    "native": [
+      "cstr/nemotron-3.5-asr-streaming-GGUF",
+      "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
+      "nemotron-3.5-asr-streaming-0.6b-f16.gguf",
+      "14cbc98df495d8ab452c6a4ac367136d94ab5da55e73afaa96ba4f749dd95d09"
+    ],
+    "original": [
+      "nvidia/nemotron-3.5-asr-streaming-0.6b",
+      "ea30d66debe3740a08b573244286791d423d6b3e",
+      "9eebdd6590289cb3030f310858f3df93256600a800a3e8200c5993d5f967e174"
+    ],
+    "transformers": "5.19.0"
+  },
+  "inputs": {
+    "audio_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+    "native_release_archive_sha256": "90e23cffb44f4a80d929bf88cf3abb2d526ec4c0b95d88a82d1a8bf33135722d"
+  },
+  "hardware": "Tesla T4, CUDA compute capability 7.5",
+  "runs_per_engine": {
+    "warmup": 1,
+    "measured": 3
+  },
+  "gpu_pid_observed_all_calls": true,
+  "word_error_rate_all_calls": 0.0,
+  "median_process_seconds": {
+    "native": 2.4005123829999775,
+    "original": 17.214790050000033
+  },
+  "original_generate_only_median_seconds": 0.9117860460000315,
+  "native_stage_median_ms": {
+    "mel": 12.19,
+    "encoder": 194.1,
+    "prompt": 847.13,
+    "rnnt_decode": 389.49
+  },
+  "limitations": [
+    "Original generation timing excludes preprocessing; native stages are not identical operation boundaries.",
+    "Original F32 and native F16 do not have matching numerical precision.",
+    "No decoder step count or directly comparable per-step speed was captured.",
+    "No broader model, language, or device ranking is established.",
+    "Original and native software stacks and generation boundaries differ; process time includes a GPU monitoring thread."
+  ],
+  "benchmark_script_sha256": "d3b03b7cfdd0b871c410e946b9fb3725b22e3dab3796718dfb43c410b3a76e84",
+  "settings": {
+    "audio": "public JFK sample, 16 kHz mono",
+    "language": "en-US requested",
+    "threads": 4,
+    "max_new_tokens": 512,
+    "original_lookahead_tokens": 3,
+    "native_context_preset": "default configured [56, 3]; whether used in this offline path is unverified"
+  }
+}
