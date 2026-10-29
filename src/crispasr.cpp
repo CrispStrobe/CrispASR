@@ -3772,7 +3772,11 @@ static bool log_mel_spectrogram(whisper_state& wstate, const float* samples, con
               samples_padded.begin() + n_samples + stage_1_pad + 2 * stage_2_pad, 0);
 
     // reflective pad 200 samples at the beginning of audio
-    std::reverse_copy(samples + 1, samples + 1 + stage_2_pad, samples_padded.begin());
+    // Upstream whisper.cpp 8631825: short inputs have fewer reflectable samples.
+    const int64_t n_reflect = std::min<int64_t>(stage_2_pad, std::max<int64_t>(0, int64_t(n_samples) - 1));
+    if (n_reflect > 0) {
+        std::reverse_copy(samples + 1, samples + 1 + n_reflect, samples_padded.begin() + (stage_2_pad - n_reflect));
+    }
 
     mel.n_mel = n_mel;
     // https://github.com/pytorch/pytorch/blob/main/aten/src/ATen/native/SpectralOps.cpp#L936
