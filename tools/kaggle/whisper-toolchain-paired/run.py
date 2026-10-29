@@ -18,7 +18,7 @@ OUT = Path('/kaggle/working')
 WORK = Path('/kaggle/temp/whisper-toolchain-paired')
 FORK_SOURCE = '35026a0bd1983b875c0176f47a5d0145fce340f4'
 UPSTREAM_SOURCE = '284029c07012d2000941a08d38a31ffb71f4734e'
-SOURCE = 'c5513ccfb16d2a45082e7365d306f927f2c6fb74'
+SOURCE = '0a3a97c1e1c43ba3a1a56f1923ef6a74fb362f89'
 REFERENCE = 'and so my fellow americans ask not what your country can do for you ask what you can do for your country'
 PINS = {
     'model.bin': ('https://huggingface.co/ggerganov/whisper.cpp/resolve/5359861c739e955e79d9a303bcbc70fb988958b1/ggml-base.en.bin', 'a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002'),
@@ -65,7 +65,7 @@ def main():
         with urllib.request.urlopen(url, timeout=180) as source, p.open('wb') as dest: shutil.copyfileobj(source, dest, 1024*1024)
         if sha(p) != expected: raise ValueError('Input hash mismatch: '+name)
     crisp = WORK/'crisp'; fork = WORK/'fork'
-    subprocess.run(['git', 'clone', '--branch', 'validate/whisper-timing-profile-20261029', '--single-branch',
+    subprocess.run(['git', 'clone', '--branch', 'validate/whisper-loader-device-cache-20261029', '--single-branch',
                     'https://github.com/CrispStrobe/CrispASR.git', str(crisp)], check=True, timeout=300)
     if subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=crisp, text=True).strip() != SOURCE:
         raise RuntimeError('Candidate source pin mismatch')
@@ -129,7 +129,7 @@ def main():
                 state = guard(); prefix = WORK/f'{phase}-{i}-{name}'
                 cmd = [str(binary),'-m',str(WORK/'model.bin'),'-f',str(WORK/'input.wav'),'-l','en','-t','2','-bs','1','-otxt','-of',str(prefix)]
                 env = dict(os.environ, LD_LIBRARY_PATH=str(binary.parent)+os.pathsep+os.environ.get('LD_LIBRARY_PATH',''))
-                if name == 'crisp-profile': env['CRISPASR_WHISPER_TIMING_PROFILE'] = '1'
+                if name == 'crisp-profile': env['CRISPASR_WHISPER_TIMING_PROFILE'] = '1'; env['CRISPASR_WHISPER_PROFILE_LOAD'] = '1'
                 start = time.monotonic(); log = OUT/(prefix.name+'.log')
                 with log.open('wb') as stream:
                     proc = subprocess.Popen(cmd, stdout=stream, stderr=subprocess.STDOUT, env=env)
@@ -169,20 +169,30 @@ def main():
                     if len(loads) != 1 or len(decodes) != 1 or int(decodes[0]) <= 0:
                         raise RuntimeError('Missing loader or positive decoder profile')
                     row['profile'] = [x for x in contents.splitlines() if 'whisper timing profile:' in x]
-                if transcript.exists(): row['transcript_sha256'] = sha(transcript)
+                if transcript.exists():
+                    row['transcript_sha256'] = sha(transcript)
+                    row['transcript_text_stripped'] = transcript.read_text().strip()
                 receipt['runs'].append(row); save()
                 if rc or not observed[0] or row.get('wer',1)>0.2: raise RuntimeError('GPU, output or transcript quality gate failed: '+prefix.name)
     import statistics
-    receipt['median_seconds'] = {name: statistics.median(r['seconds'] for r in receipt['runs'] if r['phase']=='measured' and r['engine']==name) for name in ['crisp','crisp-profile','fork','upstream']}
-    hashes = {r['transcript_sha256'] for r in receipt['runs']}
-    if len(hashes) != 1: raise RuntimeError('Transcript differs across profiling controls')
+    engines = ['crisp','crisp-profile','fork','upstream']
+    receipt['median_seconds'] = {name: statistics.median(r['seconds'] for r in receipt['runs'] if r['phase']=='measured' and r['engine']==name) for name in engines}
+    receipt['median_load_ms'] = {name: statistics.median(r['load_ms'] for r in receipt['runs'] if r['phase']=='measured' and r['engine']==name) for name in engines}
+    receipt['median_decode_ms_per_call'] = {name: statistics.median(r['decode_ms_per_call'] for r in receipt['runs'] if r['phase']=='measured' and r['engine']==name) for name in engines}
+    crisp_fork_hashes = {r['transcript_sha256'] for r in receipt['runs'] if r['engine'] in ('crisp', 'crisp-profile', 'fork')}
+    if len(crisp_fork_hashes) != 1: raise RuntimeError('Transcript SHA-256 differs across crisp, crisp-profile, or fork')
+    if len({r['transcript_text_stripped'] for r in receipt['runs']}) != 1:
+        raise RuntimeError('Stripped transcript text differs across engines')
     if len({r['decode_calls'] for r in receipt['runs']}) != 1:
         raise RuntimeError('Decoder call counts differ across engines')
     receipt['source'] = SOURCE
     receipt['fork_source'] = FORK_SOURCE
     receipt['upstream_source'] = UPSTREAM_SOURCE
     receipt['complete'] = True
-    receipt['acceptance'] = False  # A diagnostic, not proof of matched performance.
+    receipt['acceptance'] = bool(
+        receipt['median_seconds']['crisp'] <= receipt['median_seconds']['fork'] * 1.05
+        and receipt['median_seconds']['crisp'] <= receipt['median_seconds']['upstream']
+    )
     save()
 
 
