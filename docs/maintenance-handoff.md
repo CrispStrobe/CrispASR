@@ -55,8 +55,11 @@ and check actual GPU session availability before every Kaggle submission.
   for the native 26-step decoder and non-equivalent original timing boundaries. Private CSM original-without-watermark version 1 failed on missing
   `bitsandbytes`; version 2 passed GPU and zero-WER controls. The [aggregate
   receipt](csm-original-t4-benchmark-2026-10-29.json) discloses precision,
-  watermark and timing boundaries. Gated access and no redistribution apply. Melo/OpenVoice paired
-  timing is being prepared and full original Melo synthesis remains unproven.
+  watermark and timing boundaries. Gated access and no redistribution apply.
+  [OpenVoice paired T4 timing](openvoice-original-t4-benchmark-2026-10-29.json)
+  completed on two cases with output parity; native CPU flows/CUDA vocoder
+  were substantially slower than the original CUDA converter. Full original
+  Melo synthesis remains unproven.
 - **Whisper:** the short-audio safety fix `4023a6080` has queued CI
   **40847257799**, lint **40847261708** and secret scan **40847251740**.
   The [T4 timing diagnostic](whisper-timing-t4-diagnostic-2026-10-29.json) of
