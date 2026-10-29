@@ -441,6 +441,18 @@ def main() -> int:
                        if args.repo_cache else None)
     repo_cache = load_repo_cache(repo_cache_path)
     repos = collect_repos(api, args.user)
+    # HF pagination can silently return a short list (transient 429/5xx), which
+    # would drop whole repos — and their threads — from this run. Anything the
+    # cache knows to have discussions is re-added so the inbox never loses one.
+    known = {f"{t}:{r}" for r, t in repos}
+    missing = [(key.split(":", 1)[1], key.split(":", 1)[0])
+               for key, entry in repo_cache.items()
+               if entry.get("thread_count") and key not in known]
+    if missing:
+        print(f"# warn: repo listing returned {len(repos)} but the cache knows "
+              f"{len(missing)} more with discussions; re-adding them",
+              file=sys.stderr)
+        repos.extend(missing)
     print(f"# {len(repos)} repos found", file=sys.stderr)
 
     now = datetime.now(timezone.utc)
