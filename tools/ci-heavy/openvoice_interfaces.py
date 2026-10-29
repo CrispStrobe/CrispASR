@@ -249,6 +249,10 @@ def main():
         if not session_result['complete'] or len(session_result['cases']) != 2 or session_result['invalid_native_ids'] != [-1,2147483647]:
             raise RuntimeError('Rebuilt Session matrix incomplete')
         receipt['session_controls'] = session_result
+        if args.bert_profile == 'f16':
+            marker = 'melotts: BERT conditioning enabled (' + str(bert) + ')'
+            if (private/'rebuilt-session.log').read_text().count(marker) < 2:
+                raise RuntimeError('C ABI did not discover the declared F16 companion')
         if args.device == 'cuda' and cuda_vocoder_segments((private/'rebuilt-session.log').read_text()) != 6:
             raise RuntimeError('Rebuilt Session converter CUDA work incomplete')
         # The declared F16 profile also exercises the real adjacent-companion
@@ -277,6 +281,14 @@ def main():
                 if 'openvoice2: vocoder backend CUDA' not in log or cuda_vocoder_segments(log) != 1:
                     raise RuntimeError('Actual CLI CUDA work was not observed')
             receipt['cli_cuda_observed'] = True
+        if args.bert_profile == 'f16':
+            marker = 'melotts: BERT conditioning enabled (' + str(bert) + ')'
+            for i in range(2):
+                for mode in ['baseline', 'clone', 'disclosed']:
+                    if marker not in (private/f'cli-{mode}-{i}.log').read_text():
+                        raise RuntimeError('Actual CLI did not discover the declared F16 companion')
+            receipt['c_abi_and_cli_f16_discovery_observed'] = True
+            save()
         guard('independent-quality')
         import numpy as np
         import soundfile as sf
