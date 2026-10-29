@@ -24,9 +24,11 @@ close #557; its reply is for review only. Large builds and inference belong on
 hosted workers. Check load and available memory before each build or inference,
 and check actual GPU session availability before every Kaggle submission.
 
-- **Release:** all 37 native build jobs in run **40833098926** passed, but the
-  final publisher remains queued. Rust/Dart publisher **40833098923** passed.
-  Finish publication and both audits using task I below; do not retag v0.8.48.
+- **Release:** native producer **40833098926** passed all 38 jobs and the
+  release lists 52 assets; Rust/Dart publisher **40833098923** also passed.
+  Native audit **40856997446** and automatic Python wheel producer **40856452802**
+  are queued. Finish both audits and all wheel/index readbacks as task I
+  specifies; do not retag v0.8.48.
 - **#559:** exact PR head `6b132720090cbb532f79f544c130381ddf1cf6c9` was
   applied to a validation tree, candidate `5eef35019`. CI **40848995923** and
   lint **40848999141** are queued. Hosted short-clip and actual C API prompt
