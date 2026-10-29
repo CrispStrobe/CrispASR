@@ -17,6 +17,7 @@ import zipfile
 OUT = Path('/kaggle/working')
 WORK = Path('/kaggle/temp/whisper-toolchain-paired')
 FORK_SOURCE = '35026a0bd1983b875c0176f47a5d0145fce340f4'
+UPSTREAM_SOURCE = '284029c07012d2000941a08d38a31ffb71f4734e'
 SOURCE = 'c5513ccfb16d2a45082e7365d306f927f2c6fb74'
 REFERENCE = 'and so my fellow americans ask not what your country can do for you ask what you can do for your country'
 PINS = {
@@ -35,7 +36,7 @@ def sha(path):
 def guard():
     mem = dict(line.split(':', 1) for line in Path('/proc/meminfo').read_text().splitlines())
     state = {'available': int(mem['MemAvailable'].split()[0]) * 1024, 'load': list(os.getloadavg()), 'cpus': os.cpu_count() or 1, 'disk': shutil.disk_usage(WORK).free}
-    if state['available'] < 3 * 1024**3 or state['load'][0] > 2 * state['cpus'] or state['disk'] < 2 * 1024**3:
+    if state['available'] < 3 * 1024**3 or state['load'][0] > 2 * state['cpus'] or state['disk'] < 6 * 1024**3:
         raise RuntimeError('Insufficient headroom')
     return state
 
@@ -92,14 +93,32 @@ def main():
                     '-DWHISPER_BUILD_TESTS=OFF', '-DWHISPER_BUILD_SERVER=OFF'], check=True, timeout=300)
     guard()
     subprocess.run(['cmake', '--build', str(fork_build), '--target', 'whisper-cli', '-j', '2'], check=True, timeout=2400)
+    # Also build upstream whisper.cpp at the audited current master pin; the
+    # earlier packaged comparison used an independent fork, not upstream.
+    upstream, upstream_build = WORK/'upstream', WORK/'upstream-build'
+    subprocess.run(['git', 'init', str(upstream)], check=True, timeout=60)
+    subprocess.run(['git', '-C', str(upstream), 'remote', 'add', 'origin',
+                    'https://github.com/ggml-org/whisper.cpp.git'], check=True, timeout=60)
+    subprocess.run(['git', '-C', str(upstream), 'fetch', '--depth=1', 'origin', UPSTREAM_SOURCE], check=True, timeout=300)
+    subprocess.run(['git', '-C', str(upstream), 'checkout', 'FETCH_HEAD'], check=True, timeout=60)
+    if subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=upstream, text=True).strip() != UPSTREAM_SOURCE:
+        raise RuntimeError('Upstream source pin mismatch')
+    subprocess.run(['git', 'submodule', 'update', '--init', '--recursive'], cwd=upstream, check=True, timeout=300)
+    guard()
+    subprocess.run(['cmake', '-S', str(upstream), '-B', str(upstream_build), '-DCMAKE_BUILD_TYPE=Release',
+                    '-DGGML_CUDA=ON', '-DGGML_NATIVE=OFF', '-DCMAKE_CUDA_ARCHITECTURES=75',
+                    '-DWHISPER_BUILD_TESTS=OFF', '-DWHISPER_BUILD_SERVER=OFF'], check=True, timeout=300)
+    guard()
+    subprocess.run(['cmake', '--build', str(upstream_build), '--target', 'whisper-cli', '-j', '2'], check=True, timeout=2400)
     c = [p for p in build.rglob('crispasr') if p.is_file()]
     f = [p for p in fork_build.rglob('whisper-cli') if p.is_file()]
-    if len(c)!=1 or len(f)!=1: raise RuntimeError('Expected one executable per archive')
-    for binary in [c[0], f[0]]: binary.chmod(binary.stat().st_mode | 0o111)
-    receipt['binaries'] = {'crisp': sha(c[0]), 'fork': sha(f[0])}; save()
+    u = [p for p in upstream_build.rglob('whisper-cli') if p.is_file()]
+    if len(c)!=1 or len(f)!=1 or len(u)!=1: raise RuntimeError('Expected one executable per source tree')
+    for binary in [c[0], f[0], u[0]]: binary.chmod(binary.stat().st_mode | 0o111)
+    receipt['binaries'] = {'crisp': sha(c[0]), 'fork': sha(f[0]), 'upstream': sha(u[0])}; save()
     for phase, rounds in [('warmup',1),('measured',4)]:
         for i in range(rounds):
-            for name, binary in ([('crisp',c[0]),('crisp-profile',c[0]),('fork',f[0])] if i%2==0 else [('fork',f[0]),('crisp-profile',c[0]),('crisp',c[0])]):
+            for name, binary in ([('crisp',c[0]),('crisp-profile',c[0]),('fork',f[0]),('upstream',u[0])] if i%2==0 else [('upstream',u[0]),('fork',f[0]),('crisp-profile',c[0]),('crisp',c[0])]):
                 state = guard(); prefix = WORK/f'{phase}-{i}-{name}'
                 cmd = [str(binary),'-m',str(WORK/'model.bin'),'-f',str(WORK/'input.wav'),'-l','en','-t','2','-bs','1','-otxt','-of',str(prefix)]
                 env = dict(os.environ, LD_LIBRARY_PATH=str(binary.parent)+os.pathsep+os.environ.get('LD_LIBRARY_PATH',''))
@@ -139,11 +158,12 @@ def main():
                 receipt['runs'].append(row); save()
                 if rc or not observed[0] or row.get('wer',1)>0.2: raise RuntimeError('GPU, output or transcript quality gate failed: '+prefix.name)
     import statistics
-    receipt['median_seconds'] = {name: statistics.median(r['seconds'] for r in receipt['runs'] if r['phase']=='measured' and r['engine']==name) for name in ['crisp','crisp-profile','fork']}
+    receipt['median_seconds'] = {name: statistics.median(r['seconds'] for r in receipt['runs'] if r['phase']=='measured' and r['engine']==name) for name in ['crisp','crisp-profile','fork','upstream']}
     hashes = {r['transcript_sha256'] for r in receipt['runs']}
     if len(hashes) != 1: raise RuntimeError('Transcript differs across profiling controls')
     receipt['source'] = SOURCE
     receipt['fork_source'] = FORK_SOURCE
+    receipt['upstream_source'] = UPSTREAM_SOURCE
     receipt['complete'] = True
     receipt['acceptance'] = False  # A diagnostic, not proof of matched performance.
     save()
