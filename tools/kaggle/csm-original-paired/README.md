@@ -30,11 +30,18 @@ gated CSM and Llama terms; the worker fails if access is absent. All permitted
 weights stay in private scratch and are never redistributed. A separate terms
 review is required before publishing anything beyond aggregate results.
 
+Primary notices: [pinned Sesame source license](https://github.com/SesameAILabs/csm/blob/836f886515f0dec02c22ed2316cc78904bdc0f36/LICENSE),
+[CSM model card and gated access conditions](https://huggingface.co/sesame/csm-1b),
+[Llama tokenizer model card and access terms](https://huggingface.co/meta-llama/Llama-3.2-1B),
+and [Mimi checkpoint model card](https://huggingface.co/kyutai/moshiko-pytorch-bf16).
+The account running the comparison must have accepted the gated terms; the
+public model card alone does not establish access.
+
 Each output is judged with the same pinned Parakeet GGUF and a WER ≤ 0.15
 against the public phrase. Generated WAVs and ASR logs are copied into the
 **private** Kaggle output for evidence recovery. Only `receipt.json` may be
 published after review; never publish `private-evidence/` or the complete
-Kaggle output. No run has been submitted from this directory yet.
+Kaggle output. Version 1 failed as described below; version 2 is running.
 
 Before submission, refresh Kaggle GPU slots and resource admission. If the
 original source dependency set cannot import on the available Kaggle image,
