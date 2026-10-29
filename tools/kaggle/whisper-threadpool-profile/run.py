@@ -90,6 +90,7 @@ def main():
                 state = guard(); prefix = WORK/f'{phase}-{i}-{name}'
                 cmd = [str(binary),'-m',str(WORK/'model.bin'),'-f',str(WORK/'input.wav'),'-l','en','-t','2','-bs','1','-otxt','-of',str(prefix)]
                 env = dict(os.environ, LD_LIBRARY_PATH=str(binary.parent)+os.pathsep+os.environ.get('LD_LIBRARY_PATH',''))
+                env.pop('CRISPASR_WHISPER_TIMING_PROFILE', None)
                 if name == 'crisp-profile': env['CRISPASR_WHISPER_TIMING_PROFILE'] = '1'
                 start = time.monotonic(); log = OUT/(prefix.name+'.log')
                 with log.open('wb') as stream:
@@ -127,7 +128,15 @@ def main():
                     pools = [m for m in pools if m]
                     if len(pools) != 1: raise RuntimeError('Missing unique threadpool timing')
                     row['threadpool_us'] = int(pools[0].group(1))
+                    phases = [re.fullmatch(r'whisper timing profile: decode count=([0-9]+) graph_us=([0-9]+) input_us=([0-9]+) compute_us=([0-9]+) read_us=([0-9]+)', x.strip()) for x in lines]
+                    phases = [m for m in phases if m]
+                    if len(phases) != 1 or int(phases[0].group(1)) != 27:
+                        raise RuntimeError('Missing unique 27-call decoder phase profile')
+                    if row['threadpool_us'] > int(phases[0].group(4)):
+                        raise RuntimeError('Threadpool time exceeds containing compute time')
                     row['profile'] = lines
+                elif 'whisper timing profile:' in contents:
+                    raise RuntimeError('Profile emitted while disabled: ' + prefix.name)
                 if transcript.exists(): row['transcript_sha256'] = sha(transcript)
                 receipt['runs'].append(row); save()
                 if rc or not observed[0] or row.get('wer',1)>0.2: raise RuntimeError('GPU, output or transcript quality gate failed: '+prefix.name)
