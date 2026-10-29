@@ -2039,7 +2039,7 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
     wctx.t_start_us = t_start_us;
     const bool profile_load = getenv("CRISPASR_WHISPER_TIMING_PROFILE") != nullptr;
     int64_t profile_alloc_us = 0, profile_read_us = 0, profile_upload_us = 0;
-    int64_t profile_vocab_us = 0, profile_select_us = 0;
+    int64_t profile_vocab_us = 0, profile_select_us = 0, profile_buft_list_us = 0;
 
     auto& model = wctx.model;
     auto& vocab = wctx.vocab;
@@ -2349,7 +2349,10 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
     };
 
     // Create a list of available bufts, in priority order
+    const int64_t profile_buft_list_start = profile_load ? ggml_time_us() : 0;
     buft_list_t buft_list = make_buft_list(wctx.params);
+    if (profile_load)
+        profile_buft_list_us = ggml_time_us() - profile_buft_list_start;
     if (!ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU)) {
         CRISPASR_LOG_ERROR("%s: no CPU ggml backend is registered — cannot place model weights. "
                            "If this is a packaged (dynamic-backend) build, the shipped libggml-cpu modules "
@@ -2684,9 +2687,9 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
         CRISPASR_LOG_INFO("whisper timing profile: load total_us=%lld alloc_us=%lld read_us=%lld upload_us=%lld\n",
                           (long long)wctx.t_load_us, (long long)profile_alloc_us, (long long)profile_read_us,
                           (long long)profile_upload_us);
-        CRISPASR_LOG_INFO("whisper timing profile: prealloc_us=%lld vocab_us=%lld select_us=%lld\n",
+        CRISPASR_LOG_INFO("whisper timing profile: prealloc_us=%lld vocab_us=%lld buft_list_us=%lld select_us=%lld\n",
                           (long long)(profile_alloc_start - t_start_us), (long long)profile_vocab_us,
-                          (long long)profile_select_us);
+                          (long long)profile_buft_list_us, (long long)profile_select_us);
     }
 
     return true;
