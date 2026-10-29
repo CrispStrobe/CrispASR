@@ -35,7 +35,9 @@ Primary notices: [pinned Sesame source license](https://github.com/SesameAILabs/
 [Llama tokenizer model card and access terms](https://huggingface.co/meta-llama/Llama-3.2-1B),
 and [Mimi checkpoint model card](https://huggingface.co/kyutai/moshiko-pytorch-bf16).
 The account running the comparison must have accepted the gated terms; the
-public model card alone does not establish access.
+public model card alone does not establish access. The Moshi model card also
+describes research-only intended use for the full model; assess any separate
+use or distribution of its Mimi component against the applicable terms.
 
 Each output is judged with the same pinned Parakeet GGUF and a WER ≤ 0.15
 against the public phrase. Generated WAVs and ASR logs are copied into the
