@@ -1,3 +1,19 @@
+## 2026-10-29 — Original Melo neural boundaries verified; duration defect isolated
+
+Two retained CUDA diagnostics compare pinned original classes with native
+boundary inputs and identical converted weights. All nine decoder comparisons
+and fifteen encoder/inverse-flow comparisons pass across three cases, including
+magnitude checks. These are bounded component proofs; complete current speech
+acceptance still fails in the retained pre-duration CPU/CUDA controls.
+
+The remaining SDP defect was isolated to incorrect zero model metadata from
+the converter's `dp`/`sdp` namespace mismatch. Different sentences have identical
+stochastic-duration output prefixes. Candidate repairs also restore the original
+initial reverse Flip and spline constants, with failed-before/passing-after
+production-function and original scalar controls. Hosted full-model duration
+parity and unchanged speech gates remain pending. Runtime changes are on the
+candidate branch, with no model/default promotion or release claim.
+
 ## 2026-10-29 — GPU index publication and earlier full CPU integration verified
 
 The v0.8.47 wheel producer passes all 14 jobs, including both publishers.

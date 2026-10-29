@@ -1,0 +1,1085 @@
+{
+  "schema": 1,
+  "complete": true,
+  "acceptance": false,
+  "scope": "Current-source library and actual CLI; device=cpu",
+  "source": "315339f65fc38330eebf1e6a76f035c9c5671ef4",
+  "ggml": "e2ae679a563014f46c546ce6c6448e8601e4dea6",
+  "resource_checks": [
+    {
+      "phase": "configure",
+      "available_bytes": 15644061696,
+      "load": [
+        0.9833984375,
+        0.71484375,
+        0.33544921875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112267223040
+    },
+    {
+      "phase": "build-current-source",
+      "available_bytes": 15676723200,
+      "load": [
+        0.98486328125,
+        0.7197265625,
+        0.33935546875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112255549440
+    },
+    {
+      "phase": "checkpoint-current-cpu-application",
+      "available_bytes": 15627173888,
+      "load": [
+        1.71044921875,
+        1.81689453125,
+        1.13525390625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112095551488
+    },
+    {
+      "phase": "melo-original-inputs",
+      "available_bytes": 15636307968,
+      "load": [
+        1.71044921875,
+        1.81689453125,
+        1.13525390625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112045428736
+    },
+    {
+      "phase": "original-reference-0",
+      "available_bytes": 15687188480,
+      "load": [
+        1.79150390625,
+        1.82373046875,
+        1.16357421875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111967105024
+    },
+    {
+      "phase": "original-reference-1",
+      "available_bytes": 15604232192,
+      "load": [
+        2.0703125,
+        1.87939453125,
+        1.18896484375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111967096832
+    },
+    {
+      "phase": "rebuilt-session",
+      "available_bytes": 15616311296,
+      "load": [
+        2.22607421875,
+        1.9169921875,
+        1.2080078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111967088640
+    },
+    {
+      "phase": "cli-baseline-0",
+      "available_bytes": 15705300992,
+      "load": [
+        1.84375,
+        1.88330078125,
+        1.271484375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111963787264
+    },
+    {
+      "phase": "cli-clone-0",
+      "available_bytes": 15540195328,
+      "load": [
+        1.8564453125,
+        1.88525390625,
+        1.27587890625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111963426816
+    },
+    {
+      "phase": "cli-disclosed-0",
+      "available_bytes": 15593361408,
+      "load": [
+        1.81494140625,
+        1.87451171875,
+        1.28173828125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111963242496
+    },
+    {
+      "phase": "cli-baseline-1",
+      "available_bytes": 15617372160,
+      "load": [
+        1.7998046875,
+        1.8671875,
+        1.29150390625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111962861568
+    },
+    {
+      "phase": "cli-clone-1",
+      "available_bytes": 15502958592,
+      "load": [
+        1.81591796875,
+        1.86962890625,
+        1.29541015625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111962480640
+    },
+    {
+      "phase": "cli-disclosed-1",
+      "available_bytes": 15596204032,
+      "load": [
+        1.92529296875,
+        1.892578125,
+        1.3125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111962284032
+    },
+    {
+      "phase": "independent-quality",
+      "available_bytes": 15642124288,
+      "load": [
+        1.80517578125,
+        1.8671875,
+        1.31640625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111961890816
+    },
+    {
+      "phase": "quality-session-baseline",
+      "available_bytes": 15222145024,
+      "load": [
+        1.740234375,
+        1.8525390625,
+        1.314453125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883669504
+    },
+    {
+      "phase": "quality-session-original",
+      "available_bytes": 15107883008,
+      "load": [
+        1.740234375,
+        1.8525390625,
+        1.314453125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883665408
+    },
+    {
+      "phase": "quality-session-clone",
+      "available_bytes": 15166484480,
+      "load": [
+        1.740234375,
+        1.8525390625,
+        1.314453125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883665408
+    },
+    {
+      "phase": "quality-session-raw",
+      "available_bytes": 15165636608,
+      "load": [
+        1.76123046875,
+        1.85546875,
+        1.318359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883665408
+    },
+    {
+      "phase": "quality-cli-baseline",
+      "available_bytes": 15177207808,
+      "load": [
+        1.76123046875,
+        1.85546875,
+        1.318359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883661312
+    },
+    {
+      "phase": "quality-cli-original",
+      "available_bytes": 15175634944,
+      "load": [
+        1.76123046875,
+        1.85546875,
+        1.318359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883661312
+    },
+    {
+      "phase": "quality-cli-clone",
+      "available_bytes": 15182360576,
+      "load": [
+        1.76123046875,
+        1.85546875,
+        1.318359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883661312
+    },
+    {
+      "phase": "quality-cli-disclosed",
+      "available_bytes": 15128350720,
+      "load": [
+        1.76123046875,
+        1.85546875,
+        1.318359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883661312
+    },
+    {
+      "phase": "quality-session-baseline",
+      "available_bytes": 15000358912,
+      "load": [
+        1.76123046875,
+        1.85546875,
+        1.318359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883661312
+    },
+    {
+      "phase": "quality-session-original",
+      "available_bytes": 15008501760,
+      "load": [
+        1.76123046875,
+        1.85546875,
+        1.318359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883657216
+    },
+    {
+      "phase": "quality-session-clone",
+      "available_bytes": 15032578048,
+      "load": [
+        1.76123046875,
+        1.85546875,
+        1.318359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883657216
+    },
+    {
+      "phase": "quality-session-raw",
+      "available_bytes": 15084634112,
+      "load": [
+        1.76123046875,
+        1.85546875,
+        1.318359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883657216
+    },
+    {
+      "phase": "quality-cli-baseline",
+      "available_bytes": 15102066688,
+      "load": [
+        1.76123046875,
+        1.85546875,
+        1.318359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883653120
+    },
+    {
+      "phase": "quality-cli-original",
+      "available_bytes": 15258005504,
+      "load": [
+        1.78076171875,
+        1.85791015625,
+        1.322265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883653120
+    },
+    {
+      "phase": "quality-cli-clone",
+      "available_bytes": 15270866944,
+      "load": [
+        1.78076171875,
+        1.85791015625,
+        1.322265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883653120
+    },
+    {
+      "phase": "quality-cli-disclosed",
+      "available_bytes": 15154487296,
+      "load": [
+        1.78076171875,
+        1.85791015625,
+        1.322265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 111883653120
+    }
+  ],
+  "phases": {
+    "configure": {
+      "returncode": 0
+    },
+    "build-current-source": {
+      "returncode": 0
+    },
+    "melo-original-inputs": {
+      "returncode": 0
+    },
+    "original-reference-0": {
+      "returncode": 0
+    },
+    "original-reference-1": {
+      "returncode": 0
+    },
+    "rebuilt-session": {
+      "returncode": 0
+    },
+    "cli-baseline-0": {
+      "returncode": 0
+    },
+    "cli-clone-0": {
+      "returncode": 0
+    },
+    "cli-disclosed-0": {
+      "returncode": 0
+    },
+    "cli-baseline-1": {
+      "returncode": 0
+    },
+    "cli-clone-1": {
+      "returncode": 0
+    },
+    "cli-disclosed-1": {
+      "returncode": 0
+    }
+  },
+  "cases": [
+    {
+      "interface": "session",
+      "case": 0,
+      "quality": {
+        "baseline": {
+          "wer": 0.0,
+          "speaker_cosine": 0.5268271565437317,
+          "rate": 44100,
+          "samples": 173568,
+          "sha256": "47fe1f2b123fdc4924b5cbbb7ddedb1e618cfa2d27b9c02b15e4b5fa326ec170"
+        },
+        "original": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6884583234786987,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "b77bfae1ec314cd5e2808419a70bbfcd2e48a69c4dddbadaeed63b0d063c5ee0"
+        },
+        "clone": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.7062923312187195,
+          "rate": 22050,
+          "samples": 86784,
+          "sha256": "27f067f03d45defd2d8f51d93399f68c6164b3ae57fcdd5aa2e2c2e280f31ef3"
+        },
+        "raw": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.708527684211731,
+          "rate": 22050,
+          "samples": 86784,
+          "sha256": "f5277c56e68738f507bb32c3770eb0235593d32bb5429cb75be5f2d418651605"
+        }
+      },
+      "accepted": true
+    },
+    {
+      "interface": "cli",
+      "case": 0,
+      "quality": {
+        "baseline": {
+          "wer": 0.0,
+          "speaker_cosine": 0.5268326997756958,
+          "rate": 44100,
+          "samples": 173568,
+          "sha256": "3e1fcc1ad83dd8020381bb97cc222e9628e31e53a54f99039bbd73011223b081"
+        },
+        "original": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6884583234786987,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "b77bfae1ec314cd5e2808419a70bbfcd2e48a69c4dddbadaeed63b0d063c5ee0"
+        },
+        "clone": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.7001884579658508,
+          "rate": 22050,
+          "samples": 86784,
+          "sha256": "2e53498f4fcf07a73144e2caa7deb99304ba51ec003b15abfc287b217ba9ecf9"
+        },
+        "disclosed": {
+          "wer": 0.25,
+          "speaker_cosine": 0.7187540531158447,
+          "rate": 22050,
+          "samples": 186327,
+          "sha256": "35772a4686e0852262b96cc9bd3ca8530df0c30767978f4e883f3319569ab303"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "interface": "session",
+      "case": 1,
+      "quality": {
+        "baseline": {
+          "wer": 0.09090909090909091,
+          "speaker_cosine": 0.4650373160839081,
+          "rate": 44100,
+          "samples": 186880,
+          "sha256": "0db6c3cd380e884ab22e715fb953587afc1ca10ed206ec0297ba6914a892d232"
+        },
+        "original": {
+          "wer": 0.0,
+          "speaker_cosine": 0.6888083219528198,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "d52c2c518733b30b665adcde66659b0d7496f3177003c078d4db8167885dbb6e"
+        },
+        "clone": {
+          "wer": 0.09090909090909091,
+          "speaker_cosine": 0.733716607093811,
+          "rate": 22050,
+          "samples": 93440,
+          "sha256": "db1082462f6ab5b28514a9e6dfe0bd36a9038e364698194c89403cc0c28344e8"
+        },
+        "raw": {
+          "wer": 0.09090909090909091,
+          "speaker_cosine": 0.7335327863693237,
+          "rate": 22050,
+          "samples": 93440,
+          "sha256": "74d4b93e07e7af68b8d970d50f6e95157007b1bc870877e095babb5dd2241104"
+        }
+      },
+      "accepted": true
+    },
+    {
+      "interface": "cli",
+      "case": 1,
+      "quality": {
+        "baseline": {
+          "wer": 0.09090909090909091,
+          "speaker_cosine": 0.46504029631614685,
+          "rate": 44100,
+          "samples": 186880,
+          "sha256": "5048b6e7353f075442d0ec53335da8e2a2501199fe1f72aafb2ff8d864f706b7"
+        },
+        "original": {
+          "wer": 0.0,
+          "speaker_cosine": 0.6888083219528198,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "d52c2c518733b30b665adcde66659b0d7496f3177003c078d4db8167885dbb6e"
+        },
+        "clone": {
+          "wer": 0.09090909090909091,
+          "speaker_cosine": 0.7341920733451843,
+          "rate": 22050,
+          "samples": 93440,
+          "sha256": "5b04d661e5c0374816c1933db9041a23c34bff5c7b250d8b9d3416034b80a35d"
+        },
+        "disclosed": {
+          "wer": 0.05555555555555555,
+          "speaker_cosine": 0.7302745580673218,
+          "rate": 22050,
+          "samples": 192983,
+          "sha256": "9d6efed3924a79f81ab6cadaf4b1bfacc28f9d86b93bb3e30724a387a8bfcd26"
+        }
+      },
+      "accepted": true
+    }
+  ],
+  "limitations": [
+    "Full-source CPU build on Actions; CUDA profile may reuse pinned matching ggml DSOs",
+    "Model-generated references; preset identity unknown; no voice rights clearance",
+    "No model publication or registry default promotion",
+    "Speaker gain gates content-only marked clones; disclosed clips also require full-text and rate gates"
+  ],
+  "accepted_inputs": {
+    "openvoice2-tcc-f32sens.gguf": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255",
+    "reference-0.gguf": "259993b526944e8e36ccca436e005cbc3935a46636b42c618cfd5c3d19429c8f",
+    "reference-1.gguf": "5e2a043ce975d27e2d2926d9acacacae0c97e9ab1e85265b7f97bae3d9c059f7",
+    "reference.wav": "237f5c2ebcd75f734f44f63ba4915321aea7d8d53969a6d5f3aad966cdb760e6",
+    "original-0.wav": "b77bfae1ec314cd5e2808419a70bbfcd2e48a69c4dddbadaeed63b0d063c5ee0",
+    "original-1.wav": "d52c2c518733b30b665adcde66659b0d7496f3177003c078d4db8167885dbb6e",
+    "reference-ATTRIBUTION.txt": "377a32e6f98e9c96c4bb16c221f1aca1a8793b209b7a6991c827a8a46f42763c",
+    "reference-OpenVoice-LICENSE.txt": "bb3541f421e6273d3a3e3dd5bdba2bd3b79a3c2eadca65cde9c62c2467903ac0"
+  },
+  "built_sha256": {
+    "library": "4df3f83f97c7ff1d7e6b0fc88d11120a949813fadf7580f605e56b2072d8ef9e",
+    "cli": "94617cd6b5020c1eab741961f3f9e402958af34590a316d9943a9edadc1875a6",
+    "diff": "fb3a6bcb6c607b29bae87d2764929d3f6fca3578afe510b5b0c8e316b88d3711"
+  },
+  "model_source_sha256": {
+    "src/openvoice2.cpp": "f658c40176fe1c67584cd9ab80ca9d954433cfe7973f6ba84b43a448d59b8c13",
+    "src/melotts.cpp": "a6d271b51519f9c43c1b11bcfdd6c2e642f10bf7946b7fd4a270bf04bc3d735c",
+    "src/crispasr_c_api.cpp": "1c7509daf4a6e8a50ff6743596880fc549d429281d73b61b96e77c0dd0b48df5",
+    "src/bert_encoder.cpp": "b5fca7fe0999a30e1555cbb19f9ed0b6ecb05edcf092210a737fcda73a5dbdfc",
+    "src/core/bert_words.h": "d972a21c3182e95d0cba44ae1b63f228806631f189c29dcad8aca09b9d7e653e",
+    "src/core/melotts_bert_alignment.h": "5c75fa83522a9c4eb8a4205fae178fcdc2ef4d1e0d7caeee9548b20384cca656",
+    "examples/cli/crispasr_backend_melotts.cpp": "97ee1ecfaa812f6c86d366cd7c5f8a78c06b94df7002df89b284ca5b47b5eca2"
+  },
+  "cpu_checkpoint_sha256": "86f60ab32bc46cb15bb1f4f9205702b4f34b4f2d26a166f4fab9bef886c6268d",
+  "melo_input_controls": {
+    "complete": true,
+    "input_protocol_only": false,
+    "full_neural_parity": false,
+    "scope": "Original input protocol and final activation; not complete Melo neural parity",
+    "upstream": "209145371cff8fc3bd60d7be902ea69cbdb7965a",
+    "tokenizer_revision": "86b5e0934494bd15c9632b12f734a8a67f723594",
+    "source_sha256": {
+      "LICENSE": "88a50e5a02bbc2a5c2f084dc19da751aa97b1690f5fda76cd8005c8634d1ca70",
+      "melo/text/english.py": "28527f574511bfc13fe1f2f6bbb5bfe4072c06e1c7e9b69598138aef81b9905b",
+      "melo/text/english_bert.py": "0987c4ce65ff9aff4c1b23b25f5903a580e4c907b3d1814e2e97db6dcb020805",
+      "melo/text/japanese.py": "23fa0ac9e10772012978ab747970d143a6b002ef75d0014c61eada7a16a25758",
+      "melo/text/symbols.py": "4c1f3839f7e209b5da45daeb269f955b302d0d4c0df6dbf9be88d534b25ceea2",
+      "melo/text/__init__.py": "eca8c17764c4dcd57d3a71185775d1c6e4d53689d6a9a54708ec63577a2ac8ba",
+      "melo/models.py": "f96eef52845224b5797e54008013a5b6a5fafad2035713dc5181a5db8bf8bef4",
+      "melo/modules.py": "de80baee7dc8d89d621c541b899a84193df4bb3ef95f5e6d076cc37b6bb10bf6"
+    },
+    "cases": [
+      {
+        "case": 0,
+        "accepted": true,
+        "inputs": {
+          "phoneme_ids": {
+            "exact": true,
+            "elements": 85,
+            "sha256": "69f9d9105f5c7b5fdf08d882c2d50942427e91ebd1f6320fe7655666c76e674f"
+          },
+          "tone_ids": {
+            "exact": true,
+            "elements": 85,
+            "sha256": "e6e8ab73103ec2307c5043ea149c39add24e636d043616e8e809ccde1eb07b0c"
+          },
+          "lang_ids": {
+            "exact": true,
+            "elements": 85,
+            "sha256": "1ba503068fb906dcd28a9635eedf29a836a71eb02a6ab266d21b0034b799ef25"
+          },
+          "bert_word2ph": {
+            "exact": true,
+            "elements": 10,
+            "sha256": "f7c46b4db5a502b735cdddf320491c6882073d5b90e95249ef132e110d1fc26e"
+          },
+          "bert_token_ids": {
+            "exact": true,
+            "elements": 10,
+            "sha256": "3b5a82c1a6422b166015dc4789cea9ef7b03fef592b30ac8131b7641ec008bf8"
+          }
+        },
+        "final_activation": {
+          "accepted": true,
+          "elements": 2973696,
+          "negative": 2183363,
+          "positive": 790333,
+          "max_absolute_error": 0.0,
+          "norm_ratio": 1.0
+        },
+        "instrumentation": {
+          "relative_l2": 0.0,
+          "peak_absolute_error": 0.0
+        }
+      },
+      {
+        "case": 1,
+        "accepted": true,
+        "inputs": {
+          "phoneme_ids": {
+            "exact": true,
+            "elements": 69,
+            "sha256": "db836978c7ee799855f996ad1741911e00dd7440d59f4901e81db1999cd3ab2e"
+          },
+          "tone_ids": {
+            "exact": true,
+            "elements": 69,
+            "sha256": "049cf2d40a0b8785126eb1b317d30aa241a150cafaa0b25a20df22ec439be8ea"
+          },
+          "lang_ids": {
+            "exact": true,
+            "elements": 69,
+            "sha256": "2d65a7cebaf1e7a11d982276cc2d43d85971089416704cce3bcad95e6fd2ab48"
+          },
+          "bert_word2ph": {
+            "exact": true,
+            "elements": 12,
+            "sha256": "3583419e8822c99078eaa824239d314049c83845a365528162af6566fd22838c"
+          },
+          "bert_token_ids": {
+            "exact": true,
+            "elements": 12,
+            "sha256": "1c3c76104f908094884d0721b877e16a68d98bc1d3218fd280ad46a6064abf9c"
+          }
+        },
+        "final_activation": {
+          "accepted": true,
+          "elements": 2777088,
+          "negative": 2063218,
+          "positive": 713870,
+          "max_absolute_error": 0.0,
+          "norm_ratio": 1.0
+        },
+        "instrumentation": {
+          "relative_l2": 0.0,
+          "peak_absolute_error": 0.0
+        }
+      },
+      {
+        "case": 2,
+        "accepted": true,
+        "inputs": {
+          "phoneme_ids": {
+            "exact": true,
+            "elements": 91,
+            "sha256": "c36a1f740dd1c2f02f09a35351eff02bc82722720ee79b3388f7b81764370dd6"
+          },
+          "tone_ids": {
+            "exact": true,
+            "elements": 91,
+            "sha256": "6f7f19c919fcc22363bdc0ca5d8bbe32f467c20daf3b32ce6ab38e167d97130f"
+          },
+          "lang_ids": {
+            "exact": true,
+            "elements": 91,
+            "sha256": "4b216cd610bf83c0053e5404c9b0d47c71aae9d0ea1b3f9e76cc7b8976852184"
+          },
+          "bert_word2ph": {
+            "exact": true,
+            "elements": 14,
+            "sha256": "9e409c7b658a6d3c43ce300de146823f15c7d12e0f80a17cf802cb4b97e6b631"
+          },
+          "bert_token_ids": {
+            "exact": true,
+            "elements": 14,
+            "sha256": "f2ed90a72c1f2cc07061c6457e75ab126a1eb819b3bfaa12c564205f3df8da4a"
+          }
+        },
+        "final_activation": {
+          "accepted": true,
+          "elements": 2990080,
+          "negative": 2176665,
+          "positive": 813415,
+          "max_absolute_error": 0.0,
+          "norm_ratio": 1.0
+        },
+        "instrumentation": {
+          "relative_l2": 0.0,
+          "peak_absolute_error": 0.0
+        }
+      }
+    ],
+    "resource_checks": [
+      {
+        "phase": "load-owned-input-data",
+        "available_bytes": 15628660736,
+        "load": [
+          1.71044921875,
+          1.81689453125,
+          1.13525390625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112045314048
+      },
+      {
+        "phase": "load-original-activation-runtime",
+        "available_bytes": 15545094144,
+        "load": [
+          1.71044921875,
+          1.81689453125,
+          1.13525390625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112044797952
+      },
+      {
+        "phase": "load-native-model",
+        "available_bytes": 15415218176,
+        "load": [
+          1.6533203125,
+          1.80322265625,
+          1.13427734375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112044797952
+      },
+      {
+        "phase": "load-native-bert",
+        "available_bytes": 15160324096,
+        "load": [
+          1.6533203125,
+          1.80322265625,
+          1.13427734375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112044793856
+      },
+      {
+        "phase": "native-input-capture-0",
+        "available_bytes": 15160324096,
+        "load": [
+          1.6533203125,
+          1.80322265625,
+          1.13427734375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112044789760
+      },
+      {
+        "phase": "native-uninstrumented-repeat-0",
+        "available_bytes": 14983696384,
+        "load": [
+          1.68115234375,
+          1.806640625,
+          1.13916015625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112019132416
+      },
+      {
+        "phase": "original-final-activation-0",
+        "available_bytes": 14983761920,
+        "load": [
+          1.70703125,
+          1.81005859375,
+          1.14404296875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112018386944
+      },
+      {
+        "phase": "native-input-capture-1",
+        "available_bytes": 14937440256,
+        "load": [
+          1.70703125,
+          1.81005859375,
+          1.14404296875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112018358272
+      },
+      {
+        "phase": "native-uninstrumented-repeat-1",
+        "available_bytes": 14924320768,
+        "load": [
+          1.73095703125,
+          1.8134765625,
+          1.14892578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111994462208
+      },
+      {
+        "phase": "original-final-activation-1",
+        "available_bytes": 14949236736,
+        "load": [
+          1.7529296875,
+          1.81689453125,
+          1.15380859375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111993765888
+      },
+      {
+        "phase": "native-input-capture-2",
+        "available_bytes": 14940717056,
+        "load": [
+          1.7529296875,
+          1.81689453125,
+          1.15380859375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111993741312
+      },
+      {
+        "phase": "native-uninstrumented-repeat-2",
+        "available_bytes": 14980448256,
+        "load": [
+          1.77294921875,
+          1.8203125,
+          1.15869140625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111967895552
+      },
+      {
+        "phase": "original-final-activation-2",
+        "available_bytes": 14980497408,
+        "load": [
+          1.79150390625,
+          1.82373046875,
+          1.16357421875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111967145984
+      }
+    ],
+    "tokenizer_sha256": "ce64fce797c24f68df90b40a3f74f579b336a493db14bd583fd520ea0d8c9a98",
+    "torch_version": "2.15.0+cpu",
+    "instrumentation_checks": [
+      {
+        "case": 0,
+        "relative_l2": 0.0,
+        "peak_absolute_error": 0.0
+      },
+      {
+        "case": 1,
+        "relative_l2": 0.0,
+        "peak_absolute_error": 0.0
+      },
+      {
+        "case": 2,
+        "relative_l2": 0.0,
+        "peak_absolute_error": 0.0
+      }
+    ],
+    "activation_checks": [
+      {
+        "case": 0,
+        "accepted": true,
+        "elements": 2973696,
+        "negative": 2183363,
+        "positive": 790333,
+        "max_absolute_error": 0.0,
+        "norm_ratio": 1.0
+      },
+      {
+        "case": 1,
+        "accepted": true,
+        "elements": 2777088,
+        "negative": 2063218,
+        "positive": 713870,
+        "max_absolute_error": 0.0,
+        "norm_ratio": 1.0
+      },
+      {
+        "case": 2,
+        "accepted": true,
+        "elements": 2990080,
+        "negative": 2176665,
+        "positive": 813415,
+        "max_absolute_error": 0.0,
+        "norm_ratio": 1.0
+      }
+    ],
+    "activation_backends": [
+      "CPU",
+      "CPU",
+      "CPU"
+    ]
+  },
+  "session_controls": {
+    "complete": true,
+    "resource_checks": [
+      {
+        "phase": "native-invalid-speaker",
+        "available_bytes": 15588085760,
+        "load": [
+          2.22607421875,
+          1.9169921875,
+          1.2080078125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111966707712
+      },
+      {
+        "phase": "native-invalid-speaker",
+        "available_bytes": 15588085760,
+        "load": [
+          2.22607421875,
+          1.9169921875,
+          1.2080078125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111966699520
+      },
+      {
+        "phase": "session-open",
+        "available_bytes": 15522656256,
+        "load": [
+          2.22607421875,
+          1.9169921875,
+          1.2080078125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111966699520
+      },
+      {
+        "phase": "session-baseline",
+        "available_bytes": 15332954112,
+        "load": [
+          2.22607421875,
+          1.9169921875,
+          1.2080078125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111966699520
+      },
+      {
+        "phase": "session-codec-voice",
+        "available_bytes": 15206244352,
+        "load": [
+          2.20751953125,
+          1.91845703125,
+          1.21240234375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111966003200
+      },
+      {
+        "phase": "session-raw",
+        "available_bytes": 15173730304,
+        "load": [
+          2.20751953125,
+          1.91845703125,
+          1.21240234375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111966003200
+      },
+      {
+        "phase": "session-repeat",
+        "available_bytes": 15067254784,
+        "load": [
+          2.0869140625,
+          1.90625,
+          1.2197265625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111965995008
+      },
+      {
+        "phase": "session-marked",
+        "available_bytes": 15066767360,
+        "load": [
+          2.07373046875,
+          1.91162109375,
+          1.232421875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111965995008
+      },
+      {
+        "phase": "session-open",
+        "available_bytes": 15440388096,
+        "load": [
+          2.1357421875,
+          1.931640625,
+          1.24658203125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111965298688
+      },
+      {
+        "phase": "session-baseline",
+        "available_bytes": 15408074752,
+        "load": [
+          2.1357421875,
+          1.931640625,
+          1.24658203125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111965294592
+      },
+      {
+        "phase": "session-codec-voice",
+        "available_bytes": 15222824960,
+        "load": [
+          2.04052734375,
+          1.91748046875,
+          1.24951171875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111964545024
+      },
+      {
+        "phase": "session-raw",
+        "available_bytes": 15197536256,
+        "load": [
+          2.04052734375,
+          1.91748046875,
+          1.24951171875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111964545024
+      },
+      {
+        "phase": "session-repeat",
+        "available_bytes": 15017680896,
+        "load": [
+          1.95751953125,
+          1.9052734375,
+          1.2568359375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111964545024
+      },
+      {
+        "phase": "session-marked",
+        "available_bytes": 15014858752,
+        "load": [
+          1.8935546875,
+          1.89404296875,
+          1.26416015625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 111964545024
+      }
+    ],
+    "cases": [
+      {
+        "case": 0,
+        "repeat_exact": true,
+        "marked_differs": true,
+        "samples": 86784
+      },
+      {
+        "case": 1,
+        "repeat_exact": true,
+        "marked_differs": true,
+        "samples": 93440
+      }
+    ],
+    "invalid_native_ids": [
+      -1,
+      2147483647
+    ]
+  },
+  "private_evidence": {
+    "bytes": 75363907,
+    "sha256": "2bdf1c42676bbfd9847d3bab1d42b9ceed88a53009c140d66165c35413c1d12d",
+    "recipient_sha256": "8faff36ac3521f054e844e58e8d5305560935c4545c0dc4472bcfce23b058e36",
+    "files": 108
+  },
+  "workflow_run": 40801516214,
+  "artifact_id": 12868342439,
+  "readback_verified": true,
+  "interpretation": "Post-activation CPU control before SDP repair; functional and boundary controls pass, disclosed case0 WER0.25 fails original gate"
+}

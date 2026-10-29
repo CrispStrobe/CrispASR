@@ -1,0 +1,382 @@
+{
+  "schema": 1,
+  "complete": true,
+  "application_acceptance": false,
+  "source": "48e25bddf2319f142fca13bea5fdc07664100868",
+  "application_source": "01a2887632d343154f2ba447a9a2968c7accb567",
+  "application_checkpoint_sha256": "9db22c7d50d70bee047746b3c33647d7df28cf066dee9c08164f0c0031dbba9b",
+  "scope": "Diagnostic only: original encoder and inverse flow, shared converted weights and native inputs",
+  "worker_sha256": "7e37616493e0ebf992edc7c3013584ba5ae3c55681467a91f2098ac4285965b6",
+  "resource_checks": [
+    {
+      "phase": "decoder-bootstrap",
+      "available_bytes": 32473554944,
+      "load": [
+        0.5927734375,
+        0.4912109375,
+        0.2197265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125559812096,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "dependencies",
+      "available_bytes": 32474337280,
+      "load": [
+        0.5927734375,
+        0.4912109375,
+        0.2197265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125559812096,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "retained-dependencies",
+      "available_bytes": 32480665600,
+      "load": [
+        0.62548828125,
+        0.5,
+        0.22412109375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125557968896,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "download-melo.gguf",
+      "available_bytes": 32472485888,
+      "load": [
+        0.62548828125,
+        0.5,
+        0.22412109375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125557964800,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "download-bert.gguf",
+      "available_bytes": 32426938368,
+      "load": [
+        0.62548828125,
+        0.5,
+        0.22412109375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125460533248,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "native-captures",
+      "available_bytes": 32415113216,
+      "load": [
+        0.62548828125,
+        0.5,
+        0.22412109375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125406359552,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "original-upstream",
+      "available_bytes": 32302493696,
+      "load": [
+        0.80615234375,
+        0.54931640625,
+        0.2470703125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125325479936,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    }
+  ],
+  "phases": {
+    "native-captures": {
+      "returncode": 0
+    },
+    "original-upstream": {
+      "returncode": 0
+    }
+  },
+  "library_sha256": "c1f74c293d65b3433cc41f10a497fad5120843b2f2ea84cf1c6c499522998fa5",
+  "native_activation_backends": [
+    "CUDA0",
+    "CUDA0",
+    "CUDA0"
+  ],
+  "upstream_controls": {
+    "complete": true,
+    "acceptance": true,
+    "application_acceptance": false,
+    "full_neural_parity": false,
+    "scope": "Original encoder and inverse flow with shared converted weights and actual native BERT/latent inputs",
+    "upstream": "209145371cff8fc3bd60d7be902ea69cbdb7965a",
+    "source_sha256": {
+      "LICENSE": "88a50e5a02bbc2a5c2f084dc19da751aa97b1690f5fda76cd8005c8634d1ca70",
+      "melo/text/english.py": "28527f574511bfc13fe1f2f6bbb5bfe4072c06e1c7e9b69598138aef81b9905b",
+      "melo/text/english_bert.py": "0987c4ce65ff9aff4c1b23b25f5903a580e4c907b3d1814e2e97db6dcb020805",
+      "melo/text/japanese.py": "23fa0ac9e10772012978ab747970d143a6b002ef75d0014c61eada7a16a25758",
+      "melo/text/symbols.py": "4c1f3839f7e209b5da45daeb269f955b302d0d4c0df6dbf9be88d534b25ceea2",
+      "melo/text/__init__.py": "eca8c17764c4dcd57d3a71185775d1c6e4d53689d6a9a54708ec63577a2ac8ba",
+      "melo/models.py": "f96eef52845224b5797e54008013a5b6a5fafad2035713dc5181a5db8bf8bef4",
+      "melo/modules.py": "de80baee7dc8d89d621c541b899a84193df4bb3ef95f5e6d076cc37b6bb10bf6",
+      "melo/commons.py": "046943d265635c3d9c99195562e703564a26300981a7db5b87d4cd3fd180ae0d",
+      "melo/attentions.py": "5261b73e4945651e9f7133375f4f83c1532a30f8227f6249c7006d696a737353"
+    },
+    "model_sha256": "68c82ea2a18fd8e9d01c37a286a17fcfa630dfe7dbbd0bd08e7454e313e78fd8",
+    "device": "cuda",
+    "torch_version": "2.11.0+cu128",
+    "weight_tensors": {
+      "enc_p.": 119,
+      "flow.": 240
+    },
+    "cases": [
+      {
+        "case": 0,
+        "stages": {
+          "emb_output": {
+            "accepted": true,
+            "elements": 16320,
+            "cosine": 0.9999999999998799,
+            "norm_ratio": 1.0000000854664788,
+            "relative_l2": 4.98215428366295e-07,
+            "max_absolute_error": 0.000244140625
+          },
+          "enc_output": {
+            "accepted": true,
+            "elements": 16320,
+            "cosine": 0.999999999999913,
+            "norm_ratio": 0.9999999484955989,
+            "relative_l2": 4.228206230445743e-07,
+            "max_absolute_error": 4.76837158203125e-07
+          },
+          "enc_mean": {
+            "accepted": true,
+            "elements": 16320,
+            "cosine": 0.9999999999998986,
+            "norm_ratio": 0.9999999502988062,
+            "relative_l2": 4.543836349790165e-07,
+            "max_absolute_error": 2.384185791015625e-06
+          },
+          "enc_logvar": {
+            "accepted": true,
+            "elements": 16320,
+            "cosine": 1.0,
+            "norm_ratio": 0.9999999974569431,
+            "relative_l2": 4.646994290036625e-08,
+            "max_absolute_error": 4.246830940246582e-07
+          },
+          "z_dec": {
+            "accepted": true,
+            "elements": 69696,
+            "cosine": 0.9999999999999568,
+            "norm_ratio": 1.0000000076993765,
+            "relative_l2": 2.8889420054726516e-07,
+            "max_absolute_error": 5.7220458984375e-06
+          }
+        },
+        "accepted": true
+      },
+      {
+        "case": 1,
+        "stages": {
+          "emb_output": {
+            "accepted": true,
+            "elements": 13248,
+            "cosine": 0.9999999999998834,
+            "norm_ratio": 0.9999999665822695,
+            "relative_l2": 4.859752436213769e-07,
+            "max_absolute_error": 0.000152587890625
+          },
+          "enc_output": {
+            "accepted": true,
+            "elements": 13248,
+            "cosine": 0.9999999999999215,
+            "norm_ratio": 0.999999995105662,
+            "relative_l2": 3.949721929013072e-07,
+            "max_absolute_error": 5.960464477539062e-07
+          },
+          "enc_mean": {
+            "accepted": true,
+            "elements": 13248,
+            "cosine": 0.9999999999999039,
+            "norm_ratio": 0.9999999908407476,
+            "relative_l2": 4.3811540147513493e-07,
+            "max_absolute_error": 2.175569534301758e-06
+          },
+          "enc_logvar": {
+            "accepted": true,
+            "elements": 13248,
+            "cosine": 0.9999999999999997,
+            "norm_ratio": 1.0000000014954764,
+            "relative_l2": 4.659608638112277e-08,
+            "max_absolute_error": 3.5762786865234375e-07
+          },
+          "z_dec": {
+            "accepted": true,
+            "elements": 65088,
+            "cosine": 0.9999999999999536,
+            "norm_ratio": 1.0000000376183589,
+            "relative_l2": 3.035937479212815e-07,
+            "max_absolute_error": 5.245208740234375e-06
+          }
+        },
+        "accepted": true
+      },
+      {
+        "case": 2,
+        "stages": {
+          "emb_output": {
+            "accepted": true,
+            "elements": 17472,
+            "cosine": 0.9999999999999021,
+            "norm_ratio": 1.0000000194826326,
+            "relative_l2": 4.453184144485659e-07,
+            "max_absolute_error": 0.0002593994140625
+          },
+          "enc_output": {
+            "accepted": true,
+            "elements": 17472,
+            "cosine": 0.9999999999999333,
+            "norm_ratio": 1.000000003509342,
+            "relative_l2": 3.6524455488351186e-07,
+            "max_absolute_error": 8.046627044677734e-07
+          },
+          "enc_mean": {
+            "accepted": true,
+            "elements": 17472,
+            "cosine": 0.9999999999999206,
+            "norm_ratio": 1.0000000004005758,
+            "relative_l2": 3.978525625886282e-07,
+            "max_absolute_error": 2.205371856689453e-06
+          },
+          "enc_logvar": {
+            "accepted": true,
+            "elements": 17472,
+            "cosine": 0.9999999999999997,
+            "norm_ratio": 0.9999999984896037,
+            "relative_l2": 4.251615445544404e-08,
+            "max_absolute_error": 3.501772880554199e-07
+          },
+          "z_dec": {
+            "accepted": true,
+            "elements": 70080,
+            "cosine": 0.9999999999999556,
+            "norm_ratio": 0.9999999961591192,
+            "relative_l2": 2.9268322968606287e-07,
+            "max_absolute_error": 5.245208740234375e-06
+          }
+        },
+        "accepted": true
+      }
+    ],
+    "resource_checks": [
+      {
+        "available_bytes": 31811072000,
+        "load": [
+          0.7412109375,
+          0.5400390625,
+          0.24560546875
+        ],
+        "gpu_free_mib": [
+          14693,
+          14909
+        ]
+      },
+      {
+        "available_bytes": 31669977088,
+        "load": [
+          0.7412109375,
+          0.5400390625,
+          0.24560546875
+        ],
+        "gpu_free_mib": [
+          14661,
+          14909
+        ]
+      },
+      {
+        "available_bytes": 31513444352,
+        "load": [
+          0.7412109375,
+          0.5400390625,
+          0.24560546875
+        ],
+        "gpu_free_mib": [
+          14617,
+          14909
+        ]
+      },
+      {
+        "available_bytes": 31512793088,
+        "load": [
+          0.7412109375,
+          0.5400390625,
+          0.24560546875
+        ],
+        "gpu_free_mib": [
+          14617,
+          14909
+        ]
+      },
+      {
+        "available_bytes": 31512743936,
+        "load": [
+          0.7412109375,
+          0.5400390625,
+          0.24560546875
+        ],
+        "gpu_free_mib": [
+          14605,
+          14909
+        ]
+      },
+      {
+        "available_bytes": 31519059968,
+        "load": [
+          0.7412109375,
+          0.5400390625,
+          0.24560546875
+        ],
+        "gpu_free_mib": [
+          14605,
+          14909
+        ]
+      }
+    ]
+  },
+  "private_evidence": {
+    "bytes": 71418832,
+    "sha256": "49c9454ff2c57ab4d2a6fd7e7ac6acb2ac2f988d7c53699a2b722a011909eb3d",
+    "recipient_sha256": "8faff36ac3521f054e844e58e8d5305560935c4545c0dc4472bcfce23b058e36",
+    "files": 101
+  },
+  "kernel_slug": "crispasr-melotts-decoder",
+  "kernel_version": 2,
+  "bootstrap_source": "4e2a821f1",
+  "readback_verified": true
+}

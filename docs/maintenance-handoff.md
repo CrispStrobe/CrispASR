@@ -18,21 +18,21 @@ in ignored local notes.
 Snapshot 2026-10-29: **v0.8.46 publication is accepted. v0.8.47 native
 publication, both wheel publishers, Pages and live GPU index links pass; final
 wheel audit 40789883589 is accepted for all 11 distributions and readbacks.** Keep #557 open and prepare its reply
-for review only. The current CLI, BERT and Melo activation repairs are on
-[candidate branch `validate/openvoice-interfaces-20261028`](https://github.com/CrispStrobe/CrispASR/tree/0181e36ea),
-not main or the immutable v0.8.47 release. Full-source CUDA version 3 is terminal:
-original input, final activation and functional checks pass; default-disclosed
-CLI WER 0.25 / 0.333333 fails the unchanged 0.20 gate. See the
-[retained receipt](openvoice-final-activation-attempt-2026-10-29.json).
-Decoder-only diagnostic `crispasr-melotts-decoder` version 1 is admitted from
-controller `504f97186`, bootstrap `0181e36ea`, reusing the exact version-3
-application checkpoint. Collect its terminal source/logs/outputs and authenticated
-private evidence before replacement. It cannot grant whole-application acceptance.
-Current
-CPU 40801516214, CI 40801518226 and Lint 40801520188 are queued at `315339f65`.
-Preserve these existing jobs. Read live status before dispatching a replacement.
-The earlier CPU run 40783760561 passed, but predates the latest BERT frontend
-repair and supplies only that older source's acceptance.
+for review only. The current CLI, BERT, final activation and duration repairs are on
+[candidate branch `validate/openvoice-interfaces-20261028`](https://github.com/CrispStrobe/CrispASR/tree/bd1e299e1),
+not main or the immutable v0.8.47 release. Full-source CUDA **version 4** is
+admitted once from application/controller `9001ff913`, bootstrap `8b9511e79`.
+NN CPU **40806522459** targets `8b9511e79`. Final candidate CI
+**40807943181**, Lint **40807945520** and standalone-LID hosted smoke
+**40807940665** target `bd1e299e1`. Superseded CI/Lint **40806525063/40806526797**
+are canceled; do not repeat them. Preserve these runs; read live status before replacement.
+Earlier CPU **40801516214** and CUDA version 3 passed functional/input/activation
+checks but failed unchanged disclosed speech gates. Their complete checkpoints,
+logs and authenticated private archives are retained. Separate original decoder
+and encoder/inverse-flow diagnostics pass on all three captured cases. These
+bounded proofs do not grant complete speech acceptance. The documented
+`--detect-language` routing error in new #560 is being repaired separately
+before the next patch; full-recording LID remains a later feature.
 
 | Item | State | Evidence |
 |---|---|---|
@@ -49,10 +49,10 @@ First actions for a fresh agent:
    (identified in the ignored local notes).
 2. Refresh open issues and PRs. Read each relevant whole thread (body, all
    comments, linked comments, latest follow-ups) before changing behavior. The
-   2026-10-28 check: open #456/#461/#483/#532/#557/#558, new PR #559,
+   2026-10-29 check: open #456/#461/#483/#532/#557/#558/#560, PR #559,
    zero comments on #557. The [PR #559 review checkpoint](qwen3-context-pr559-review-2026-10-28.md)
    scopes its remaining gates; no review or merge was submitted.
-3. A, B, D and bounded F/G are accepted; C is prepared for review with #557 open. Continue H → I → J in order; do not duplicate accepted campaigns. E needs hardware.
+3. A, B, D and bounded F/G are accepted; C is prepared for review with #557 open. Continue H plus K (error repairs), then I → J in order; do not duplicate accepted campaigns. E needs hardware.
 4. For any task, record owner, source SHA, exact missing behavior, acceptance gates,
    resources and next action in PLAN.md before starting. Do not recreate a passing campaign.
 
@@ -496,20 +496,46 @@ publication occurred. Remaining scope:
    unchanged original 0.20 gate. [Retained failed receipt](openvoice-final-activation-attempt-2026-10-29.json).
    The complete checkpoint and 108-file encrypted envelope were read back,
    hashed and authenticated. Do not claim application acceptance.
-   Next: `crispasr-melotts-decoder` version 1, controller `504f97186`, bootstrap
-   `0181e36ea`, is admitted once. It reuses the exact version-3 application
-   checkpoint (SHA-256 `9db22c7d50d70bee047746b3c33647d7df28cf066dee9c08164f0c0031dbba9b`)
-   without rebuilding. Native CUDA inputs feed the pinned original Generator
-   and residual blocks with identical converted decoder weights, strict full
-   parameter loading, and cosine/scale/relative-error comparisons at the final
-   preactivation, activation and waveform boundaries. The scopes exclude
-   conversion and upstream encoder/flow parity. Preserve terminal source,
-   logs, every output and authenticated private evidence before replacement.
-   If decoder parity passes, move earlier to original conditioning/encoder/flow
-   boundaries; if it fails, locate the first decoder divergence. Do not change
-   ASR, seeds, thresholds or defaults to obtain acceptance.
-   Current CPU **40801516214**, CI **40801518226**, Lint **40801520188** were
-   requested once at `315339f65`; these qualify the post-activation source.
+   **Decoder diagnostic version 1 is accepted:** all nine boundary comparisons
+   across three cases match the original Generator/residual blocks with shared
+   converted weights and native latent input. Waveform relative L2 is about
+   4e-6 and scale is within 1e-6 of unity. [Receipt](melotts-decoder-parity-2026-10-29.json).
+   **Encoder/inverse-flow diagnostic version 2 is accepted:** all fifteen
+   comparisons across three cases pass with relative errors below 5e-7,
+   using actual native BERT features and sampled latent as shared inputs.
+   [Receipt](melotts-upstream-parity-2026-10-29.json). Both terminal runs have
+   complete source/log/output readbacks and authenticated private envelopes.
+   Do not repeat these accepted diagnostics or infer full-model parity.
+
+   **Concrete duration defect and current repair:** the shipped model declares
+   zero SDP flows and zero DDS layers because the converter counts deterministic
+   `dp` names instead of `sdp`. Captured SDP outputs for different sentences
+   have byte-identical common prefixes: learned conditioning was ignored.
+   The candidate corrects converter counts and recovers legacy zero metadata
+   from the actual contiguous tensor inventory, rejecting incompatible nonzero
+   counts. It restores the original initial reverse Flip and the original
+   1e-3 spline minima/normalization. Four production-body tests pass after
+   failed before controls; ten of sixteen original scalar spline rows failed
+   before and all pass after. [Diagnosis](melotts-sdp-defect-2026-10-29.json).
+   New `tools/validation/melotts_duration.py` runs both pinned original
+   predictors with actual captured native encoder output and scaled noise;
+   RNG equivalence is not assumed. It preserves strict full parameter loading,
+   all original operators and shared model bytes. No seeds, recognizer,
+   speech threshold or model default changed.
+
+   Full-source CUDA **version 4** is admitted once from application/controller
+   `9001ff913`, bootstrap `8b9511e79`. Require the three original duration
+   comparisons plus all input, actual-backend, instrumentation, TCC, Session,
+   CLI, rate and unchanged speech-quality gates. NN CPU **40806522459** targets
+   that post-duration source at `8b9511e79`. Final candidate CI **40807943181**
+   and Lint **40807945520** target `bd1e299e1`, which additionally carries the
+   independent #560 CLI routing repair; no further NN change was made. Old
+   CI/Lint **40806525063/40806526797** are canceled/superseded.
+   Previous CPU **40801516214** finished: full source build, original input and
+   activation, TCC and functional checks pass, disclosed CLI case 0 WER 0.25
+   fails the unchanged 0.20 gate. [Retained CPU control](openvoice-cpu-pre-sdp-attempt-2026-10-29.json).
+   Its complete artifact/checkpoint and authenticated 108-file envelope are
+   retained. Do not rerun it as acceptance of the new duration source.
    Earlier CPU **40783760561** passed its complete four-case matrix at
    `7c158b325`, including default-disclosed WER 0.1875 and zero; its full
    artifact and authenticated encrypted readback are retained.
@@ -536,9 +562,31 @@ publication occurred. Remaining scope:
    bounded synthetic English cases. A default change needs an explicit scoped
    acceptance decision and cannot be inferred from stage parity alone.
 
+### Task K — standalone LID routing error #560
+
+The whole [issue #560](https://github.com/CrispStrobe/CrispASR/issues/560) has
+been read: no comments, linked issues or follow-ups at this checkpoint.
+Help/docs promise `--detect-language` exits after detection, but both old and
+unified CLI routes initialize ASR first and continue transcription. The bounded
+repair is committed at `bd1e299e1`; all three production caller/resolver fixture
+controls pass after baseline failures. Hosted current CLI build/smoke
+**40807940665** is queued on that exact source and remains required before
+merging. [Scope and review](issue-560-lid-cli-review-2026-10-29.md). Preserve
+ordinary transcription, explicit external LID backend/model selection, multiple
+input handling and failure exit status. Standalone self/probe modes require a
+clear unsupported-mode result rather than hidden ASR loading. No C ABI or model
+math change is needed. Do not post or close the issue from fixture results.
+
+The requested full-recording mode is a separate later feature, after current
+error/release/PR #559 gates. Shared prefix detection caps input at 15 seconds;
+individual detectors have different 5/15/30-second bounds and memory costs.
+Use bounded windows with a declared aggregation/confidence policy and test
+late speech, mixed languages and invalid inputs; removing the cap is not
+sufficient. Default detection behavior stays unchanged until separately scoped.
+
 ### Task I — next patch after current error gates
 
-1. Complete B and H first. Refresh main and the candidate; preserve unrelated
+1. Complete B, H and K first. Refresh main and the candidate; preserve unrelated
    work. Merge the qualified runtime changes only when current-source CPU,
    CUDA, CI, lint and secret checks support them. Documentation-only main
    updates do not mean the candidate runtime changes are merged.
