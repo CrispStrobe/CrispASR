@@ -105,6 +105,7 @@ def main():
         source = scratch / "melo-source"
         adapter.clone_pin("https://github.com/myshell-ai/MeloTTS.git",
                           adapter.MELO_SOURCE, source)
+        adapter.ensure_english_nltk_resources(scratch / "nltk-data")
         unused_requests = adapter.pin_original_english_bert(tokenizer_dir)
         sys.path.insert(0, str(source))
         blocked_japanese = adapter.block_unused_japanese_cleaner(source)
@@ -134,6 +135,14 @@ def main():
             raise RuntimeError("English tokenizer was replaced by a sentinel")
         if not english.tokenizer.tokenize("A short English import control."):
             raise RuntimeError("Pinned English tokenizer did not tokenize")
+        if (english.distribute_phone is not japanese.distribute_phone
+                or japanese.distribute_phone(5, 2) != [3, 2]):
+            raise RuntimeError("Melo distribute_phone helper changed")
+        for phrase in adapter.TEXTS:
+            norm_text, phones, tones, word2ph = clean_text(phrase, "EN")
+            if (not norm_text or not phones or len(phones) != len(tones)
+                    or sum(word2ph) != len(phones)):
+                raise RuntimeError("Pinned English cleaner preflight failed")
         for model_id in adapter.UNUSED_TOKENIZER_IDS:
             try:
                 adapter.UnusedLanguageTokenizer(model_id).tokenize("must fail")

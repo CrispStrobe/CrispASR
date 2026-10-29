@@ -185,9 +185,11 @@ def main():
     save()
     rc, log = run(command(bad, 'invalid'), 'invalid-load', timeout=120,
                   env=env, expect_success=False)
-    if rc != 3 or not re.search(
+    if (rc != 13 or not re.search(
         r'invalid model \(special token outside vocabulary of 50363\)', log
-    ) or 'error: failed to initialize whisper context' not in log or (scratch / 'invalid.txt').exists():
+    ) or 'whisper_init_with_params_no_state: failed to load model' not in log
+      or "crispasr: error: failed to initialise backend 'whisper'" not in log
+      or (scratch / 'invalid.txt').exists()):
         raise RuntimeError('Malformed model was not cleanly rejected at the special-token bound')
     receipt['invalid_model_returncode'] = rc
     receipt['complete'] = receipt['acceptance'] = True

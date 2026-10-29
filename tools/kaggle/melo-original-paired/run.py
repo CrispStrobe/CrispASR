@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Private hosted full-original Melo versus native F16 CUDA timing pilot."""
 
+import ast
 import ctypes as ct
 import hashlib
 import json
@@ -57,6 +58,19 @@ JAPANESE_TOKENIZER_ID = "tohoku-nlp/bert-base-japanese-v3"
 EXPECTED_EAGER_TOKENIZER_IDS = UNUSED_TOKENIZER_IDS - {JAPANESE_TOKENIZER_ID}
 
 
+def ensure_english_nltk_resources(nltk_dir):
+    import nltk
+
+    nltk_dir = Path(nltk_dir)
+    nltk_dir.mkdir(parents=True, exist_ok=True)
+    os.environ["NLTK_DATA"] = str(nltk_dir)
+    if str(nltk_dir) not in nltk.data.path:
+        nltk.data.path.insert(0, str(nltk_dir))
+    for resource_name in ("averaged_perceptron_tagger_eng", "cmudict"):
+        if not nltk.download(resource_name, download_dir=str(nltk_dir), quiet=True):
+            raise RuntimeError("Failed to fetch NLTK resource: " + resource_name)
+
+
 def block_unused_japanese_cleaner(source):
     """Block the unused Japanese cleaner before it imports MeCab or models.
 
@@ -67,14 +81,22 @@ def block_unused_japanese_cleaner(source):
     module_name = "melo.text.japanese"
     if module_name in sys.modules:
         raise RuntimeError("Melo Japanese cleaner was imported before its guard")
-    if not (Path(source) / "melo/text/japanese.py").is_file():
+    japanese_path = Path(source) / "melo/text/japanese.py"
+    if not japanese_path.is_file():
         raise RuntimeError("Pinned Melo Japanese cleaner is missing")
+    selected = [node for node in ast.parse(japanese_path.read_text()).body
+                if isinstance(node, ast.FunctionDef) and node.name == "distribute_phone"]
+    if len(selected) != 1:
+        raise RuntimeError("Pinned Melo distribute_phone helper changed")
+    namespace = {}
+    exec(compile(ast.Module(body=selected, type_ignores=[]), str(japanese_path), "exec"), namespace)
 
     def unavailable(*_args, **_kwargs):
         raise RuntimeError("Japanese Melo cleaner is unavailable in this EN_V2 run")
 
     blocked = ModuleType(module_name)
     blocked.__package__ = "melo.text"
+    blocked.distribute_phone = namespace["distribute_phone"]
     blocked.text_normalize = unavailable
     blocked.g2p = unavailable
     blocked.get_bert_feature = unavailable
@@ -259,6 +281,7 @@ def make_original(source, config, checkpoint, bert_snapshot):
     torch.backends.cuda.matmul.allow_tf32 = False
     torch.backends.cudnn.allow_tf32 = False
     torch.backends.cudnn.benchmark = False
+    ensure_english_nltk_resources(WORK / "nltk-data")
     unused_requests = pin_original_english_bert(bert_snapshot)
     sys.path.insert(0, str(source))
     blocked_japanese = block_unused_japanese_cleaner(source)

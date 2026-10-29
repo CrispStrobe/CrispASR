@@ -111,7 +111,7 @@ static ggml_backend_buffer_type buffers[11];
 static ggml_backend_device devices[7];
 static int queries[7] = {};
 static const int buffer_device[] = {0,1,2,2,2,3,2,4,5,6,3};
-static const ggml_backend_dev_type device_types[] = {
+static const enum ggml_backend_dev_type device_types[] = {
     GGML_BACKEND_DEVICE_TYPE_GPU, GGML_BACKEND_DEVICE_TYPE_IGPU,
     GGML_BACKEND_DEVICE_TYPE_CPU, GGML_BACKEND_DEVICE_TYPE_CPU,
     GGML_BACKEND_DEVICE_TYPE_ACCEL, GGML_BACKEND_DEVICE_TYPE_META,
@@ -128,7 +128,7 @@ static void require(bool condition, const char* message) {
 // Deliberately identical names: identities must remain distinct pointers.
 static const char* device_name(ggml_backend_dev_t) { return "same-device-name"; }
 static const char* buffer_name(ggml_backend_buffer_type_t) { return "same-buffer-name"; }
-static ggml_backend_dev_type get_type(ggml_backend_dev_t dev) {
+static enum ggml_backend_dev_type get_type(ggml_backend_dev_t dev) {
     const auto id = dev - devices;
     require(id >= 0 && id < 7, "invalid device");
     ++queries[id]; return device_types[id];
