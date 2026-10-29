@@ -7,6 +7,8 @@ interleaved by the producer under comparable load; this tool cannot prove that.
 """
 import argparse
 import json
+import math
+import re
 import statistics
 from pathlib import Path
 
@@ -17,13 +19,20 @@ def compare(left, right):
     for key in IDENTITY:
         if key not in left or key not in right or left[key] != right[key]:
             raise ValueError(f'Unmatched or missing benchmark identity: {key}')
+    if not re.fullmatch(r'[0-9a-f]{64}', left['input_sha256']):
+        raise ValueError('input_sha256 must be a lowercase SHA-256 digest')
+    for key in ('model_revision', 'precision', 'device'):
+        if not isinstance(left[key], str) or not left[key].strip():
+            raise ValueError(f'{key} must be a nonempty string')
+    if not isinstance(left['settings'], dict):
+        raise ValueError('settings must be an object')
     result = {}
     for name, record in [('left', left), ('right', right)]:
         samples = record.get('samples', [])
         if len(samples) < 3:
             raise ValueError('At least three measured samples per implementation are required')
         times = [float(row['seconds']) for row in samples]
-        if any(not 0 < value < float('inf') for value in times):
+        if any(not math.isfinite(value) or value <= 0 for value in times):
             raise ValueError('Timings must be finite and positive')
         per_step = []
         for row in samples:
@@ -37,6 +46,8 @@ def compare(left, right):
         result[name] = {'samples': len(times), 'median_seconds': statistics.median(times),
                         'min_seconds': min(times), 'max_seconds': max(times),
                         'median_ms_per_step': statistics.median(per_step) if per_step else None}
+    if (result['left']['median_ms_per_step'] is None) != (result['right']['median_ms_per_step'] is None):
+        raise ValueError('Step counts must be available for both implementations or neither')
     result['left_over_right_speed_ratio'] = result['right']['median_seconds'] / result['left']['median_seconds']
     result['limitations'] = 'Identity equality does not establish output quality, identical weights, or controlled hardware load.'
     return result
