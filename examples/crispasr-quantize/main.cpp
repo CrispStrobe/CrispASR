@@ -576,6 +576,18 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         return e && *e && *e != '0';
     }();
 
+    // Hikari (sbintuitions/hikari-medium): 24-layer causal encoder + 24-layer decoder.
+    // Sub-8-bit enc.* compounds per-block drift across the 24 causal self-attention
+    // layers (encoder cos drops to 0.36; breaks delicate WAIT token logit margins
+    // and causes German translation repetition/hallucinations). Floor enc.* at
+    // Q8_0 (~lossless) when targeting sub-8-bit quants (e.g. Q4_K).
+    // CRISPASR_HIKARI_QUANT_ENCODER=1 quantizes enc.* at the target type anyway (A/B gate).
+    const bool is_hikari = (arch == "hikari");
+    const bool hikari_quant_encoder = []() {
+        const char* e = std::getenv("CRISPASR_HIKARI_QUANT_ENCODER");
+        return e && *e && *e != '0';
+    }();
+
     // Bark TTS: 3 GPT-2 sub-models + EnCodec decoder.
     // Embeddings (token_embd, pos_embd), output heads, and the entire
     // EnCodec decoder are read via CPU tensor_get_row_f32 / tensor_get_all_f32
@@ -1152,6 +1164,13 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         // Applies only when the chosen type is a sub-8-bit quant; Q8_0 and
         // unquantized targets pass through. Rows not 32-aligned keep source.
         if (is_qwen3_asr && !qwen3asr_quant_audio && sname.find("audio.") == 0 && should_quantize &&
+            ggml_is_quantized(target_types[i]) && target_types[i] != GGML_TYPE_Q8_0) {
+            target_types[i] = (ncols % ggml_blck_size(GGML_TYPE_Q8_0) == 0) ? GGML_TYPE_Q8_0 : t->type;
+        }
+
+        // Hikari causal encoder Q8_0 floor (see is_hikari note above).
+        // Preserves encoder cosine parity and prevents WAIT-margin collapse in Q4_K.
+        if (is_hikari && !hikari_quant_encoder && sname.find("enc.") == 0 && should_quantize &&
             ggml_is_quantized(target_types[i]) && target_types[i] != GGML_TYPE_Q8_0) {
             target_types[i] = (ncols % ggml_blck_size(GGML_TYPE_Q8_0) == 0) ? GGML_TYPE_Q8_0 : t->type;
         }
