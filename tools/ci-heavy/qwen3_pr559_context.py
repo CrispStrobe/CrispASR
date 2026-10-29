@@ -70,6 +70,8 @@ def run(command, tag, timeout=2400):
     assert result.returncode == 0, tag
 
 
+run([sys.executable, ROOT / 'tools/ci-heavy/qwen3_pr559_factory_probe.py'], 'backend-factory-routing')
+
 build = SCRATCH / 'build'
 run(['cmake', '-S', ROOT, '-B', build, '-G', 'Ninja', '-DCMAKE_BUILD_TYPE=Release',
      '-DBUILD_SHARED_LIBS=ON', '-DGGML_NATIVE=OFF', '-DGGML_BLAS=OFF',
