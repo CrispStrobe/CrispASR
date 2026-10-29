@@ -129,6 +129,9 @@ void whisper_vad_free_segments(whisper_vad_segments* segments) { delete segments
     def test_empty_parallel_input_clears_previous_mapping(self):
         self.check_case('empty')
 
+    def test_parallel_offset_past_end_clears_previous_mapping(self):
+        self.check_case('offset-past-end')
+
 
 if __name__ == '__main__':
     unittest.main()

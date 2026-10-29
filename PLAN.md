@@ -12,6 +12,8 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
+- Whisper parallel VAD reuse safety owner: current agent, starting source `d7e9b9c77`. A no-VAD parallel call whose offset exceeds the audio clears results but leaves the prior VAD mapping. Clear that mapping on the early return and add a literal-caller hosted regression. CI and hosted test must pass before integration; no local builds.
+
 - Whisper DTW short-window safety owner: current agent, starting source `bfcaa7597`. Upstream MIT commit `a46fadb36a9b` avoids an abort when the alignment median filter is wider than a short audio window. Port the bounded filter-width rule; require hosted before/after short-window output and unchanged normal-window controls, plus CI/lint, before integration. No local compilation or inference.
 
 - CSM step instrumentation owner: current agent, starting source `ca0fb1e05`. Existing benchmark times whole generation but does not count synchronized backbone and depth graph calls. Add opt-in counters and graph-compute wall timings without changing model math or default outputs; distinguish accepted frames from attempts. Acceptance requires hosted build, profile-on/off identical outputs, actual GPU use and checked call counts. All builds and inference remain hosted.
