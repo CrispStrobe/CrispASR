@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 import runpy
 import urllib.request
-SOURCE = '9259b9f3e1cbf813d2c93f940eef74a385fb0b6f'
+SOURCE = '01a2887632d343154f2ba447a9a2968c7accb567'
 SHA256 = '7a7ba5b930b617c0884e48df7378a38e4996b4bdf7e379e48b5e4b886e48f4d1'
 RECIPIENT = 'af2f46629cfa40da8c9fffdb9923877d1c4eb312d4ce3b4e36a42aa673f8ba47'
 print('OpenVoice full-source bootstrap', 'source='+SOURCE, 'worker_sha256='+SHA256,
