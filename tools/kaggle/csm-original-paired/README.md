@@ -40,3 +40,11 @@ Before submission, refresh Kaggle GPU slots and resource admission. If the
 original source dependency set cannot import on the available Kaggle image,
 record the failure and revise the pinned environment; do not replace the
 original generator with an unlabelled Transformers pipeline.
+
+Version 1 reached original Mimi decoding and failed because the pinned Moshi
+package imports `bitsandbytes`, which was absent from the Kaggle image. Its
+native warmup passed the GPU and ASR gates; it produced no paired timings.
+Version 2 pins a binary wheel for `bitsandbytes==0.48.2` and fails if no
+compatible wheel exists, without replacing Kaggle Torch or building on GPU.
+The version 1 source, logs, output and private audio are retained in the private
+operator ledger. Version 2 is prepared but has not been submitted.

@@ -21,7 +21,7 @@ import time
 import urllib.request
 import wave
 
-VERSION = "csm-original-paired-v1"
+VERSION = "csm-original-paired-v2"
 OUT = Path("/kaggle/working")
 WORK = Path("/kaggle/temp/csm-original-paired")
 HARNESS_SOURCE = "cc114d2b4a5a9413738f390093e9131576743cb6"
@@ -227,6 +227,8 @@ def main():
     check("before-dependencies")
     # Keep Kaggle's CUDA Torch/Torchaudio. All other original requirements are
     # pinned; --no-deps prevents a hidden multi-GB Torch replacement.
+    subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps", "--only-binary=:all:",
+                    "-q", "bitsandbytes==0.48.2"], check=True)
     subprocess.run([sys.executable, "-m", "pip", "install", "--no-deps", "-q",
                     "tokenizers==0.21.0", "transformers==4.49.0", "huggingface_hub==0.28.1",
                     "moshi==0.2.2", "torchtune==0.4.0", "torchao==0.9.0",
