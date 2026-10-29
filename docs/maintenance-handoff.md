@@ -45,8 +45,10 @@ and check actual GPU session availability before every Kaggle submission.
   was captured. A native step-count diagnostic is prepared. Granite Q4_K
   version 1 failed on a truncated hash; version 2 ran native warmups but its
   original lacked the chat template. Version 3 repairs that input and awaits a
-  free GPU slot. A private CSM original-without-watermark comparison is running;
-  gated access and no redistribution are required. Melo/OpenVoice paired
+  free GPU slot. Private CSM original-without-watermark version 1 passed native warmup but
+  failed in the original warmup because `bitsandbytes` was absent; its evidence
+  is retained and a dependency fix is in preparation. Gated access and no
+  redistribution are required. Melo/OpenVoice paired
   timing is being prepared and full original Melo synthesis remains unproven.
 - **Whisper:** the short-audio safety fix `4023a6080` has queued CI
   **40847257799**, lint **40847261708** and secret scan **40847251740**.
