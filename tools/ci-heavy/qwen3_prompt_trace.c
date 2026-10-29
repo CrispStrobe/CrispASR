@@ -9,7 +9,9 @@
 typedef int32_t *(*tokenize_fn)(void *, const char *, int *);
 
 int32_t *qwen3_asr_tokenize(void *ctx, const char *text, int *count) {
-    tokenize_fn next = (tokenize_fn)dlsym(RTLD_NEXT, "qwen3_asr_tokenize");
+    const char *lib = getenv("CRISPASR_TEST_QWEN_LIB");
+    void *handle = lib ? dlopen(lib, RTLD_NOW | RTLD_NOLOAD) : NULL;
+    tokenize_fn next = (tokenize_fn)dlsym(handle ? handle : RTLD_NEXT, "qwen3_asr_tokenize");
     if (!next) {
         fputs("test interposer: tokenizer lookup failed\n", stderr);
         abort();

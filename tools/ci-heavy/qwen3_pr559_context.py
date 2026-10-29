@@ -93,7 +93,7 @@ qwen = download('qwen')
 trace_lib = SCRATCH / 'qwen3-prompt-trace.so'
 run(['cc', '-shared', '-fPIC', '-O2', ROOT / 'tools/ci-heavy/qwen3_prompt_trace.c',
      '-ldl', '-o', trace_lib], 'build-prompt-trace')
-run(['env', 'LD_PRELOAD=' + str(trace_lib), sys.executable,
+run(['env', 'LD_PRELOAD=' + str(trace_lib), 'CRISPASR_TEST_QWEN_LIB=' + str(lib), sys.executable,
      ROOT / 'tools/ci-heavy/qwen3_pr559_trace.py', lib, qwen, OUT / 'hello.wav', OUT],
     'c-abi-prompt-routing')
 with Session(str(qwen), lib_path=str(lib), backend='qwen3', n_threads=4) as session:
