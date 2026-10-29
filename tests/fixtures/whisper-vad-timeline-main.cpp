@@ -133,6 +133,14 @@ int main(int argc, char** argv) {
         check_mapping_cleared(state);
         return 0;
     }
+    if (test == "offset-past-end") {
+        params.offset_ms = 8000;
+        require(whisper_full_parallel(&ctx, params, pcm.data(), int(pcm.size()), 3) == 0,
+                "out-of-range offset rejected");
+        check_mapping_cleared(state);
+        require(state.result_all.empty(), "out-of-range offset retained old results");
+        return 0;
+    }
     if (test == "stitch") {
         params.vad = true;
         for (int processors : {1, 2, 3}) {

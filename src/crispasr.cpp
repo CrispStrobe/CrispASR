@@ -9214,6 +9214,7 @@ int whisper_full_parallel(struct whisper_context* ctx, struct whisper_full_param
     // overflows the old sample_rate * offset_ms int intermediate.
     const int64_t offset_samples_wide = int64_t(CRISPASR_SAMPLE_RATE) * params.offset_ms / 1000;
     if (offset_samples_wide >= n_samples) {
+        whisper_reset_vad_mapping(ctx->state);
         ctx->state->result_all.clear();
         return 0;
     }
