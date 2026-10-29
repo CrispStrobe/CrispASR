@@ -82,7 +82,11 @@ and check actual GPU session availability before every Kaggle submission.
   [OpenVoice paired T4 timing](openvoice-original-t4-benchmark-2026-10-29.json)
   completed on two cases with output parity; native CPU flows/CUDA vocoder
   were substantially slower than the original CUDA converter. Full original
-  Melo synthesis remains unproven.
+  Melo synthesis remains unproven. Original Melo import preflight
+  **40859441388** failed before inference because the unused Japanese cleaner
+  eagerly imports MeCab. Its receipt and logs are retained; correct the
+  English-only wrapper/dependencies, rerun the hosted preflight, then submit the
+  full paired GPU adapter only after a slot is verified free.
 - **Whisper:** the short-audio safety fix `4023a6080` has queued CI
   **40847257799**, lint **40847261708** and secret scan **40847251740**.
   The [T4 timing diagnostic](whisper-timing-t4-diagnostic-2026-10-29.json) of
