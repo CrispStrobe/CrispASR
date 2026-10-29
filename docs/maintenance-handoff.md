@@ -73,8 +73,9 @@ and check actual GPU session availability before every Kaggle submission.
   version 1 ran as `nemotron-f16-crispasr-and-transcribe-cpp-paired-t4` and
   failed before inference because the pinned release archive did not contain
   the expected `transcribe-cli` executable. Terminal output and source are
-  retained; correct the release invocation before a successor run. Its uploaded
-  script SHA-256 was
+  retained. Version 2 uses the pinned release Python API with its CUDA library
+  and is prepared at `67af321a7` on `validate/nemotron-fork-python-20261029`;
+  static API checks passed but it has not run. Its version 1 script SHA-256 was
   `d4bfc898de2d9cb73d1c0cc3f8f1c6032205089866dcbdae461aad348ee68e5c`.
   Granite step diagnostic is not submitted. Their READMEs specify GPU, model
   provenance, context and quality gates. Coordinate slots before submission.
