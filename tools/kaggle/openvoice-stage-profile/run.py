@@ -107,7 +107,7 @@ def cosine(actual, expected):
     return float(np.dot(a, b) / denom)
 
 
-def native_engine(candidate, model):
+def native_engine(candidate, model, use_gpu):
     import numpy as np
     lib = ct.CDLL(str(candidate / "libcrispasr.so"))
     class Params(ct.Structure):
@@ -128,11 +128,11 @@ def native_engine(candidate, model):
     params = lib.openvoice2_context_default_params()
     params.n_threads = 2
     params.verbosity = 1
-    params.use_gpu = True
+    params.use_gpu = use_gpu
     params.tau = 0
     # C stderr contains only model stage logs and remains private scratch.
     old_stderr = os.dup(2)
-    native_log = WORK / "native-private.log"
+    native_log = WORK / ("native-gpu-private.log" if use_gpu else "native-cpu-private.log")
     with native_log.open("wb") as log:
         os.dup2(log.fileno(), 2)
         try:
@@ -140,10 +140,11 @@ def native_engine(candidate, model):
         finally:
             os.dup2(old_stderr, 2)
             os.close(old_stderr)
-    if not ctx or "openvoice2: vocoder backend CUDA" not in native_log.read_text(errors="replace"):
+    backend = "CUDA" if use_gpu else "CPU"
+    if not ctx or "openvoice2: vocoder backend " + backend not in native_log.read_text(errors="replace"):
         if ctx:
             lib.openvoice2_free(ctx)
-        raise RuntimeError("Native OpenVoice CUDA vocoder was not selected")
+        raise RuntimeError("Native OpenVoice requested backend was not selected")
 
     def convert(source, reference, speaker):
         src = np.ascontiguousarray(source, dtype=np.float32).ravel()
@@ -247,6 +248,7 @@ def main():
     receipt = {"version": VERSION, "complete": False, "acceptance": False,
                "scope": "Opt-in native stage profiling on accepted OpenVoice inputs; timer logging may perturb results; no full Melo original timing",
                "native_device": "CPU reference encoder and flows; CUDA HiFi-GAN",
+               "native_cpu_device": "CPU reference encoder, flows and vocoder",
                "original_device": "PyTorch CUDA reference encoder, flows and HiFi-GAN",
                "source": SOURCE, "upstream": UPSTREAM, "tau": 0, "threads": 2,
                "precision": "Original F32 checkpoint versus native F32-sensitive GGUF; input Melo and BERT F16",
@@ -315,7 +317,8 @@ def main():
                                           local_dir=WORK / "original"))
     if sha(original_dir / "converter/checkpoint.pth") != checkpoint_hash:
         raise RuntimeError("Original checkpoint does not match accepted reference")
-    native, native_free = native_engine(candidate, data / required[0])
+    native, native_free = native_engine(candidate, data / required[0], True)
+    native_cpu, native_cpu_free = native_engine(candidate, data / required[0], False)
     original, torch_version = original_engine(upstream, original_dir)
     receipt["torch_version"] = torch_version
     save()
@@ -336,12 +339,15 @@ def main():
             receipt["cases"].append(case); save()
             for phase, count in (("warmup", 1), ("measured", 3)):
                 for repeat in range(count):
-                    order = ("native", "original") if repeat % 2 == 0 else ("original", "native")
+                    order = (("native", "native-cpu", "original") if repeat % 2 == 0
+                             else ("original", "native-cpu", "native"))
                     for arm in order:
                         receipt["resource_checks"].append(headroom(f"case-{index}-{phase}-{repeat}-{arm}")); save()
                         stages = None
                         if arm == "native":
                             seconds, pcm, stages = native(source, reference, speaker)
+                        elif arm == "native-cpu":
+                            seconds, pcm, stages = native_cpu(source, reference, speaker)
                         else:
                             seconds, pcm = original(source, reference, embedding)
                         score = cosine(pcm, truth)
@@ -357,11 +363,12 @@ def main():
             case["median_seconds"] = {
                 arm: statistics.median(run["seconds"] for run in case["runs"]
                                        if run["phase"] == "measured" and run["arm"] == arm)
-                for arm in ("native", "original")}
+                for arm in ("native", "native-cpu", "original")}
             case["original_over_native_ratio"] = (case["median_seconds"]["original"] /
                                                    case["median_seconds"]["native"])
             save()
     finally:
+        native_cpu_free()
         native_free()
     receipt["complete"] = receipt["acceptance"] = True
     save()
