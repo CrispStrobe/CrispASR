@@ -15,6 +15,7 @@ import resource
 import shutil
 import subprocess
 import sys
+import tarfile
 import traceback
 import urllib.request
 
@@ -167,6 +168,36 @@ def main():
             'src/openvoice2.cpp', 'src/melotts.cpp', 'src/crispasr_c_api.cpp',
             'src/bert_encoder.cpp', 'src/core/bert_words.h', 'src/core/melotts_bert_alignment.h',
             'examples/cli/crispasr_backend_melotts.cpp']}
+        if args.build_dir is None:
+            # Preserve the CPU application before any native model call, just
+            # as the CUDA controller does. This is not a release package.
+            guard('checkpoint-current-cpu-application')
+            candidate = scratch/'candidate'; candidate.mkdir(exist_ok=True)
+            for file in [cli, build/'bin/crispasr-diff']:
+                shutil.copy2(file, candidate/file.name)
+            for file in build.rglob('*.so*'):
+                if not file.is_file():
+                    continue
+                actual = file.resolve(); dest = candidate/actual.name
+                if dest.exists():
+                    if sha(dest) != sha(actual):
+                        raise RuntimeError('CPU candidate DSO basename collision')
+                else:
+                    shutil.copy2(actual, dest)
+                if file.name != actual.name:
+                    alias = candidate/file.name
+                    if alias.exists() or alias.is_symlink():
+                        if sha(alias) != sha(actual):
+                            raise RuntimeError('CPU candidate alias collision')
+                    else:
+                        alias.symlink_to(actual.name)
+            for name in ['LICENSE', 'THIRD_PARTY_NOTICES.txt']:
+                shutil.copy2(ROOT/name, candidate/name)
+            (candidate/'provenance.json').write_text(json.dumps(receipt, indent=2))
+            with tarfile.open(out/'cpu-application-checkpoint.tar.gz', 'w:gz', compresslevel=1) as archive:
+                archive.add(candidate, arcname='candidate')
+            receipt['cpu_checkpoint_sha256'] = sha(out/'cpu-application-checkpoint.tar.gz')
+            save()
         env = dict(os.environ, CRISPASR_OV2_GPU='1' if args.device == 'cuda' else '0', CRISPASR_MELOTTS_BERT=str(bert),
                    OMP_NUM_THREADS='2', OPENBLAS_NUM_THREADS='1')
         env.pop('CRISPASR_DIFF_USE_GPU', None); env.pop('LD_PRELOAD', None)
