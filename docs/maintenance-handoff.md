@@ -53,7 +53,16 @@ and check actual GPU session availability before every Kaggle submission.
   version 1 failed on a truncated hash; version 2 ran native warmups but its
   original lacked the chat template. Version 3 completed with GPU and zero-WER
   controls; see the [T4 receipt](granite5-original-t4-benchmark-2026-10-29.json)
-  for the native 26-step decoder and non-equivalent original timing boundaries. Private CSM original-without-watermark version 1 failed on missing
+  for the native 26-step decoder and non-equivalent original timing boundaries.
+  The Granite original forward-step diagnostic and Nemotron F16 comparison
+  against MIT-licensed transcribe.cpp are prepared on validation branch
+  `validate/whisper-granite-diagnostics-20261029` at `ca0fb1e05`; neither has
+  been submitted. Their READMEs specify GPU, model provenance, context and
+  quality gates. Coordinate available Kaggle slots before submission.
+  Native CSM opt-in graph-step profiling is on validation branch
+  `validate/csm-step-profile-20261029` at `dfdc0edd1`, with CI **40862476012**
+  and lint **40862479235** queued. This is unvalidated instrumentation, not a
+  performance result; require hosted build and profile-on/off output identity. Private CSM original-without-watermark version 1 failed on missing
   `bitsandbytes`; version 2 passed GPU and zero-WER controls. The [aggregate
   receipt](csm-original-t4-benchmark-2026-10-29.json) discloses precision,
   watermark and timing boundaries. Gated access and no redistribution apply.
