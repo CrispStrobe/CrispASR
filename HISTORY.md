@@ -1,3 +1,12 @@
+## 2026-10-29 — v0.8.48 source qualified, main and tag pushed
+
+Exact target `cc114d2b4` passes all 13 CI and 10 lint jobs, secret scanning and
+Rust/Dart binding tests. Every synchronized version and the Dart changelog
+agree. Main and the new annotated v0.8.48 tag were pushed atomically and their
+remote commit readbacks match. Native producer 40833098926 and language-wrapper
+producer 40833098923 are in flight. This records source delivery; published
+assets, wheels and both readback audits are not accepted yet.
+
 ## 2026-10-29 — Managed F16 integration qualification complete
 
 Candidate `500aaaf03` passes all 13 CI jobs, 2,105 unit tests, all 10 lint jobs

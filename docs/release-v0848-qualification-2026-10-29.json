@@ -1,0 +1,44 @@
+{
+  "schema": 1,
+  "scope": "Exact v0.8.48 source qualification and remote main/tag readback; publication still pending",
+  "source": "cc114d2b4a5a9413738f390093e9131576743cb6",
+  "tag": "v0.8.48",
+  "annotated_tag_object": "f9eb753bbdfd66977e6d6c57f2e6f7b712166cb7",
+  "qualification_acceptance": true,
+  "publication_acceptance": false,
+  "remote_main_and_peeled_tag_verified": true,
+  "checks": [
+    {
+      "name": "CI",
+      "run": 40830218588,
+      "jobs": 13,
+      "conclusion": "success"
+    },
+    {
+      "name": "Lint",
+      "run": 40830221020,
+      "jobs": 10,
+      "conclusion": "success"
+    },
+    {
+      "name": "Secret scan",
+      "run": 40830201135,
+      "conclusion": "success"
+    },
+    {
+      "name": "Rust bindings",
+      "run": 40830201115,
+      "conclusion": "success"
+    },
+    {
+      "name": "Dart bindings",
+      "run": 40830201120,
+      "conclusion": "success"
+    }
+  ],
+  "native_release_run": 40833098926,
+  "wrapper_release_run": 40833098923,
+  "native_assets_verified": false,
+  "wheel_publication_verified": false,
+  "publication_audits_dispatched": false
+}

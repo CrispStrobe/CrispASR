@@ -18,9 +18,9 @@ in ignored local notes.
 Snapshot 2026-10-29: **v0.8.46 publication is accepted. v0.8.47 native
 publication, both wheel publishers, Pages and live GPU index links pass; final
 wheel audit 40789883589 is accepted for all 11 distributions and readbacks.** Keep #557 open and prepare its reply
-for review only. The current CLI, BERT, final activation and duration repairs are on
-candidate branch `validate/openvoice-interfaces-20261028`, not main or the
-immutable v0.8.47 release. The full declared F16 profile is **accepted**:
+for review only. The current CLI, BERT, final activation and duration repairs are integrated
+on main and tagged **v0.8.48** at `cc114d2b4`. The immutable v0.8.47 release
+is unchanged. v0.8.48 publication builds/readbacks remain in flight. The full declared F16 profile is **accepted**:
 CPU **40825101583** at `395daf6ae`, artifact **12876647336**; real T4 CUDA
 `crispasr-openvoice-full-source` **version 5**, application/controller
 `97053abff`, bootstrap `395daf6ae`. Both complete source/log/output/checkpoint
@@ -31,8 +31,13 @@ Melo V2 downloads to the qualified F16 companion and immutable revision;
 production resolver → CLI initialization fails before and passes after that
 routing repair. Candidate `500aaaf03` passes CI **40827487259** (13 jobs; 2,105 unit tests),
 Lint **40827489979** (10 jobs) and Secret scan **40827480637**. H is accepted.
-Task I is preparing v0.8.48; exact release-target checks and main/tag publication
-remain. No new release or tag has been published.
+The exact release target `cc114d2b4` also passes CI **40830218588** (13 jobs),
+Lint **40830221020** (10 jobs), Secret **40830201135**, Rust **40830201115**
+and Dart **40830201120**. Main and the new annotated v0.8.48 tag were pushed
+atomically and both remote commit readbacks match. Native Release
+**40833098926** and language wrappers **40833098923** have started; no
+publication acceptance is inferred from the tag. Continue task I, then J.
+[Release qualification receipt](release-v0848-qualification-2026-10-29.json).
 [CPU acceptance](openvoice-full-f16-cpu-accepted-2026-10-29.json),
 [CUDA acceptance](openvoice-full-f16-cuda-accepted-2026-10-29.json).
 
@@ -440,7 +445,7 @@ publication occurred. Remaining scope:
 1. **Full rebuilt-current library and CLI — retained attempts and accepted F16 profile:**
    candidate branch `validate/openvoice-interfaces-20261028`; application source
    `91e1e97b399d105924915c0e8d5ea0176359b147`, bootstrap `ae1f243a7`.
-   These changes are not yet on main. The actual CLI adapter needed GPU
+   These changes were still unmerged at that attempt; current status is above. The actual CLI adapter needed GPU
    forwarding, native-rate declaration before synthesis, neutral disclosure
    bypass/resampling, fail-closed converter inputs, F32-sensitive discovery and
    unset-speaker normalization. Native Melo rejects out-of-range IDs. Actual
@@ -603,8 +608,10 @@ publication occurred. Remaining scope:
    behavior; immutable default URLs are not a new content-verification claim.
    Candidate `500aaaf03` passes CI **40827487259** (all 13 jobs; 2,105
    unit tests), Lint **40827489979** (all 10 jobs) and Secret scan
-   **40827480637**. H is accepted. Task I prepares v0.8.48 with exact
-   synchronized-version tag-target checks before main and tag publication. The earlier accepted CI **40807943181** (13 jobs) and Lint
+   **40827480637**. H is accepted. The integrated v0.8.48 target `cc114d2b4`
+   also passes exact CI **40830218588**, Lint **40830221020**, Secret
+   **40830201135**, Rust **40830201115** and Dart **40830201120**. Main/tag
+   readbacks match; task I now awaits all producers and publication audits. The earlier accepted CI **40807943181** (13 jobs) and Lint
    **40807945520** are at `bd1e299e1`, before this registry change; they do not
    replace final-source qualification.
    Earlier CPU **40783760561** passed its complete four-case matrix at
@@ -658,6 +665,22 @@ late speech, mixed languages and invalid inputs; removing the cap is not
 sufficient. Default detection behavior stays unchanged until separately scoped.
 
 ### Task I — next patch after current error gates
+
+**Current state: steps 1–3 are complete. Do not re-bump, recreate or move the
+published v0.8.48 tag.** Source is
+`cc114d2b4a5a9413738f390093e9131576743cb6`; annotated tag object is
+`f9eb753bbdfd66977e6d6c57f2e6f7b712166cb7`. Exact-source checks all pass and
+remote main/peeled-tag readbacks match. Native Release **40833098926** and
+language-wrapper Release **40833098923** are in flight. Continue steps 4–5.
+The automatic Python-wheel workflow has not yet been verified or manually
+redispatched. Both publication audits remain to dispatch after their inputs
+finish. Use `tag=v0.8.48`, the full source above, `runner=ubuntu-latest`,
+`repair_notices=false`; native audit takes `release_run=40833098926`, then
+wheel audit takes the actual wheel producer ID and accepted native audit ID.
+Require all 52 native names, all 11 distributions, all five anonymous PyPI
+readbacks, complete GPU index/full-byte readbacks and Pages deployment, plus
+Rust/Dart publication. Preserve original producer artifacts; rerun only failed
+jobs for transient failures. J starts only after this acceptance.
 
 1. Complete B, H and K first. Refresh main and the candidate; preserve unrelated
    work. Merge the qualified runtime changes only when current-source CPU,
