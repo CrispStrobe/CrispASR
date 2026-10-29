@@ -20,7 +20,7 @@ import threading
 import time
 import urllib.request
 
-VERSION = "granite5-original-paired-v2"
+VERSION = "granite5-original-paired-v3"
 ROOT = Path("/kaggle/working")
 WORK = Path("/kaggle/temp/granite5-original-paired")
 INPUT = ("https://raw.githubusercontent.com/CrispStrobe/CrispASR/"
@@ -213,11 +213,11 @@ def main():
     if sha(native) != NATIVE[3]:
         raise ValueError("Native model changed")
     original = Path(snapshot_download(ORIGINAL[0], revision=ORIGINAL[1],
-        allow_patterns=["*.json", "*.safetensors", "*.txt", "*.model", "*.tiktoken"],
+        allow_patterns=["*.json", "*.safetensors", "*.txt", "*.model", "*.tiktoken", "*.jinja"],
         local_dir=WORK / "original"))
     weights = list(original.glob("*.safetensors"))
-    if not weights:
-        raise ValueError("Pinned original checkpoint missing")
+    if not weights or not (original / "chat_template.jinja").is_file():
+        raise ValueError("Pinned original checkpoint or chat template missing")
     receipt["original_files"] = {str(p.relative_to(original)): sha(p) for p in original.rglob("*")
                                  if p.is_file() and ".cache" not in p.parts}
     save()
