@@ -259,6 +259,7 @@ struct whisper_params {
     std::string prefix_text;
     std::string lid_backend;
     std::string lid_model;
+    bool lid_full_recording = false; // score successive 15 s LID windows across the recording
     // Post-ASR text LID: when set, after transcription completes, run
     // a fastText-supervised classifier (GlotLID / LID-176) on the
     // assembled transcript and emit `lang=<code>\tconf=<score>` to

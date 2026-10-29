@@ -23,7 +23,8 @@ struct crispasr_lid_result {
 // Run LID from CLI flags. Dispatches to either the shared library
 // (whisper / silero-native) or the CLI-local sherpa-onnx subprocess
 // fallback. Resolves `params.lid_model` (auto-download on empty / "auto")
-// and picks a sensible default model when omitted.
+// and picks a sensible default model when omitted. With
+// `params.lid_full_recording`, scores 15-second windows across the input.
 bool crispasr_detect_language_cli(const float* samples, int n_samples, const whisper_params& params,
                                   crispasr_lid_result& out);
 

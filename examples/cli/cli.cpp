@@ -363,6 +363,8 @@ static bool whisper_params_parse_arg_backend_vad(int argc, char** argv, int& i, 
         params.language = whisper_param_turn_lowercase(ARGV_NEXT);
     } else if (arg == "-dl" || arg == "--detect-language") {
         params.detect_language = true;
+    } else if (arg == "--lid-full-recording") {
+        params.lid_full_recording = true;
     } else if (arg == "--prompt") {
         params.prompt = ARGV_NEXT;
     } else if (arg == "--ask") {
@@ -1266,6 +1268,10 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
         params.lid_backend.c_str());
     fprintf(out, "  --lid-model FNAME                 [%-7s] optional LID model path (default ggml-tiny.bin)\n",
             params.lid_model.c_str());
+    fprintf(out,
+            "  --lid-full-recording              [%-7s] opt in to language detection across all 15 s windows; "
+            "duration-weighted vote (default: first 15 s)\n",
+            params.lid_full_recording ? "true" : "false");
     fprintf(out,
             "  --lid-on-transcript FNAME         [%-7s] post-ASR text LID. Path or "
             "'auto[:cld3|glotlid|lid-fasttext176]' (default cld3, auto-downloaded). "
