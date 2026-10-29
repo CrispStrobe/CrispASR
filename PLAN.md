@@ -12,6 +12,8 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
+- Whisper weight-placement performance owner: current agent, starting source `8d4f42dfe`. Same-source T4 VMM A/B measured roughly 232 ms of model-load time in weight-buffer selection. CUDA device classification calls `cudaGetDeviceProperties`; investigate a loader-local cache of device classification while preserving every per-tensor compatibility check. Require exact placement equivalence across CPU/GPU buffer types, hosted parity and GPU A/B timing before integration; no local builds or inference.
+
 - Whisper vocabulary bounds safety owner: current agent, starting source `8b402725d`. Upstream rejects models whose special-token indices exceed the logits vocabulary. Adapt the guard to serialized Whisper-ja and Tiron speaker ranges rather than assuming the timestamp token is always largest; require hosted valid-layout and malformed-bound tests plus real-model acceptance before integration. No local compilation or inference.
 
 - Whisper parallel VAD reuse safety owner: current agent, starting source `d7e9b9c77`. A no-VAD parallel call whose offset exceeds the audio clears results but leaves the prior VAD mapping. Clear that mapping on the early return and add a literal-caller hosted regression. CI and hosted test must pass before integration; no local builds.

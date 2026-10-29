@@ -2011,12 +2011,19 @@ static bool weight_buft_supported(const whisper_hparams& hparams, ggml_tensor* w
 }
 
 static ggml_backend_buffer_type_t select_weight_buft(const whisper_hparams& hparams, ggml_tensor* w, ggml_op op,
-                                                     buft_list_t buft_list) {
+                                                     buft_list_t buft_list, const char* trace_name) {
     GGML_ASSERT(!buft_list.empty());
     for (const auto& p : buft_list) {
         ggml_backend_dev_t dev = p.first;
         ggml_backend_buffer_type_t buft = p.second;
         if (weight_buft_supported(hparams, w, op, buft, dev)) {
+            if (trace_name) {
+                CRISPASR_LOG_INFO("whisper placement trace: tensor=%s op=%s type=%s shape=%lld,%lld,%lld,%lld "
+                                  "device=%s buffer=%s\n",
+                                  trace_name, ggml_op_name(op), ggml_type_name(w->type), (long long)w->ne[0],
+                                  (long long)w->ne[1], (long long)w->ne[2], (long long)w->ne[3],
+                                  ggml_backend_dev_name(dev), ggml_backend_buft_name(buft));
+            }
             return buft;
         }
     }
@@ -2376,10 +2383,13 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
         return false;
     }
 
+    const bool trace_placement = getenv("CRISPASR_WHISPER_PLACEMENT_TRACE") != nullptr;
     auto create_tensor = [&](asr_tensor type, asr_system system, ggml_tensor* meta, int layer = 0) -> ggml_tensor* {
         ggml_op op = ASR_TENSOR_INFO.at(type);
+        const std::string tensor_name = format(ASR_TENSOR_NAMES.at(system).at(type), layer);
         const int64_t profile_select_start = profile_load ? ggml_time_us() : 0;
-        ggml_backend_buffer_type_t buft = select_weight_buft(hparams, meta, op, buft_list);
+        ggml_backend_buffer_type_t buft =
+            select_weight_buft(hparams, meta, op, buft_list, trace_placement ? tensor_name.c_str() : nullptr);
         if (profile_load)
             profile_select_us += ggml_time_us() - profile_select_start;
         if (!buft) {
@@ -2390,7 +2400,7 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
         ggml_context* ctx = get_ctx(buft);
         ggml_tensor* tensor = ggml_dup_tensor(ctx, meta);
 
-        model.tensors[format(ASR_TENSOR_NAMES.at(system).at(type), layer)] = tensor;
+        model.tensors[tensor_name] = tensor;
 
         return tensor;
     };
