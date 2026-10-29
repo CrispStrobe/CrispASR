@@ -84,9 +84,11 @@ and check actual GPU session availability before every Kaggle submission.
   were substantially slower than the original CUDA converter. Full original
   Melo synthesis remains unproven. Original Melo import preflight
   **40859441388** failed before inference because the unused Japanese cleaner
-  eagerly imports MeCab. Its receipt and logs are retained; correct the
-  English-only wrapper/dependencies, rerun the hosted preflight, then submit the
-  full paired GPU adapter only after a slot is verified free.
+  eagerly imports MeCab. Its receipt and logs are retained. The revised
+  English-only adapter blocks the unused Japanese cleaner and checks fail-on-use
+  guards; hosted rerun **40866641921** is queued from source `a06e8e650` on
+  `validate/melo-original-imports-20261029`. Only submit the paired GPU adapter
+  after this preflight passes and a slot is verified free.
 - **Whisper:** the short-audio safety fix `4023a6080` has queued CI
   **40847257799**, lint **40847261708** and secret scan **40847251740**.
   The [T4 timing diagnostic](whisper-timing-t4-diagnostic-2026-10-29.json) of
