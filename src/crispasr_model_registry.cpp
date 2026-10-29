@@ -1553,14 +1553,15 @@ constexpr Entry k_registry[] = {
     // MIT license. Single GGUF with embedded CMU dictionary + neural G2P.
     // V2: 4 English speakers (US/BR/India/AU), 112 symbols, 11 tones.
     // V3: 1 speaker (EN-Newest), 219 symbols, 16 tones (newest checkpoint).
-    // Companion: bert-base-uncased Q4_K (52 MB) for BERT conditioning.
-    // Also available: F16 (227 MB), Q8_0 (97 MB) on the same HF repo.
+    // V2 companion: original-qualified F16 BERT (Apache-2.0), pinned with
+    // the Melo checkpoint. The canonical filename is discovered by CLI/C ABI.
+    // Explicit quantized BERT paths remain supported; Q4 is not the default.
     {"melotts", "melotts-en-v2-f16.gguf",
-     "https://huggingface.co/cstr/melotts-en-v2-GGUF/resolve/main/melotts-en-v2-f16.gguf",
-     "~102+52 MB",
-     "bert-base-uncased-q4k.gguf",
-     "https://huggingface.co/cstr/melotts-en-v2-GGUF/resolve/main/bert-base-uncased-q4k.gguf",
-     "~52 MB"},
+     "https://huggingface.co/cstr/melotts-en-v2-GGUF/resolve/35522347b1bed9a913d6894803c5cab929ae42a5/melotts-en-v2-f16.gguf",
+     "~102+238 MB",
+     "bert-base-uncased.gguf",
+     "https://huggingface.co/cstr/melotts-en-v2-GGUF/resolve/35522347b1bed9a913d6894803c5cab929ae42a5/bert-base-uncased.gguf",
+     "~238 MB", "MIT (MeloTTS); Apache-2.0 (BERT; see THIRD_PARTY_NOTICES.txt)"},
     {"melotts-v3", "melotts-en-v3-f16.gguf",
      "https://huggingface.co/cstr/melotts-en-v3-GGUF/resolve/main/melotts-en-v3-f16.gguf",
      "~93+52 MB",

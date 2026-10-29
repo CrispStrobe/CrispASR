@@ -246,6 +246,19 @@ TEST_CASE("registry: default bundle rejects unknown backends", "[unit][registry]
     REQUIRE_FALSE(crispasr_registry_default_bundle("nonexistent-backend-xyz", bundle));
 }
 
+TEST_CASE("registry: Melo V2 bundle uses the qualified discoverable BERT companion", "[unit][registry]") {
+    CrispasrRegistryBundle bundle;
+    REQUIRE(crispasr_registry_default_bundle("melotts", bundle));
+    REQUIRE_FALSE(bundle.requires_license_acceptance);
+    REQUIRE(bundle.license.find("Apache-2.0") != std::string::npos);
+    REQUIRE(bundle.artifacts.size() == 2);
+    REQUIRE(bundle.artifacts[0].filename == "melotts-en-v2-f16.gguf");
+    REQUIRE(bundle.artifacts[1].filename == "bert-base-uncased.gguf");
+    for (const auto& artifact : bundle.artifacts) {
+        REQUIRE(artifact.url.find("/resolve/35522347b1bed9a913d6894803c5cab929ae42a5/") != std::string::npos);
+    }
+}
+
 TEST_CASE("registry: every default bundle starts with its lookup result", "[unit][registry]") {
     for (int i = 0; i < crispasr_registry_count(); ++i) {
         CrispasrRegistryEntry entry;

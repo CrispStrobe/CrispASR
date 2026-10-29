@@ -19,13 +19,20 @@ Snapshot 2026-10-29: **v0.8.46 publication is accepted. v0.8.47 native
 publication, both wheel publishers, Pages and live GPU index links pass; final
 wheel audit 40789883589 is accepted for all 11 distributions and readbacks.** Keep #557 open and prepare its reply
 for review only. The current CLI, BERT, final activation and duration repairs are on
-[candidate branch `validate/openvoice-interfaces-20261028`](https://github.com/CrispStrobe/CrispASR/tree/395daf6ae),
-not main or the immutable v0.8.47 release. The declared F16 BERT profile is
-under full qualification: CUDA `crispasr-openvoice-full-source` **version 5**,
-application/controller `97053abff`, bootstrap `395daf6ae`; CPU **40825101583**
-at that candidate. Require original component checks, actual automatic F16
-companion discovery through Session/C ABI and CLI, and all four original
-speech/speaker cases. No registry/default switch has happened yet.
+candidate branch `validate/openvoice-interfaces-20261028`, not main or the
+immutable v0.8.47 release. The full declared F16 profile is **accepted**:
+CPU **40825101583** at `395daf6ae`, artifact **12876647336**; real T4 CUDA
+`crispasr-openvoice-full-source` **version 5**, application/controller
+`97053abff`, bootstrap `395daf6ae`. Both complete source/log/output/checkpoint
+readbacks and 120-file encrypted archives are verified. All four unchanged
+speech/speaker cases pass on both devices, with actual adjacent F16 discovery
+through Session/C ABI and all six CLI calls. The candidate now changes managed
+Melo V2 downloads to the qualified F16 companion and immutable revision;
+production resolver → CLI initialization fails before and passes after that
+routing repair. Exact candidate CI/Lint/secret checks and main integration
+remain before release task I. No new release or tag has been published.
+[CPU acceptance](openvoice-full-f16-cpu-accepted-2026-10-29.json),
+[CUDA acceptance](openvoice-full-f16-cuda-accepted-2026-10-29.json).
 
 The completed BERT comparison isolates Q4 error (relative L2 0.136–0.165 versus
 original features) against F16 (about 0.0003). A fixed speech comparison on the
@@ -59,7 +66,7 @@ First actions for a fresh agent:
    2026-10-29 check: open #456/#461/#483/#532/#557/#558/#560, PR #559,
    zero comments on #557. The [PR #559 review checkpoint](qwen3-context-pr559-review-2026-10-28.md)
    scopes its remaining gates; no review or merge was submitted.
-3. A, B, D, bounded F/G and K are accepted; C is prepared for review with #557 open. Continue H (full F16 qualification/default policy), then I → J in order; do not duplicate accepted campaigns. E needs hardware.
+3. A, B, D, bounded F/G and K are accepted; C is prepared for review with #557 open. Finish H (accepted F16 profile; final managed-default integration), then I → J in order; do not duplicate accepted campaigns. E needs hardware.
 4. For any task, record owner, source SHA, exact missing behavior, acceptance gates,
    resources and next action in PLAN.md before starting. Do not recreate a passing campaign.
 
@@ -567,30 +574,35 @@ publication occurred. Remaining scope:
    Complete source/log/output and authenticated 13-file envelope are retained.
    This is diagnostic only; complete speaker/application acceptance is separate.
 
-   **Current bounded task:** full-source CUDA **version 5** is admitted once,
-   application/controller `97053abff`, bootstrap `395daf6ae`; CPU **40825101583**
-   targets that candidate. The driver explicitly selects `--bert-profile f16`,
-   retaining the old Q4 profile/failure receipts. F16 comes from the same model
-   revision `35522347b1bed9a913d6894803c5cab929ae42a5`, file
+   **Full F16 profile accepted:** CPU **40825101583** at `395daf6ae`,
+   artifact **12876647336**, and CUDA kernel **version 5**, source `97053abff`,
+   bootstrap `395daf6ae`, both pass. F16 is from revision
+   `35522347b1bed9a913d6894803c5cab929ae42a5`, canonical file
    `bert-base-uncased.gguf`, SHA-256
    `f7437929246c43d7300cbf6ff39b4715669a6053661117df99a456bdc5e8ecba`.
-   It is placed beside the renamed Melo model. No BERT environment override or
-   CLI codec argument is used; actual load logs must prove automatic F16
-   discovery through both C ABI/Session and every real CLI call. Require all
-   original inputs, final activation/backend/instrumentation, DP/SDP duration,
-   TCC stages, Session repeats/rates and four unchanged speech/speaker cases.
-   Preserve complete terminal source/log/output/checkpoints and authenticate
-   the envelope before replacement. Do not promote the profile or rewrite a
-   failed Q4 receipt unless both full CPU/CUDA runs pass.
+   Actual no-override discovery is observed in both C ABI opens and all six
+   CLI calls on each device. Original input/final-activation/duration checks,
+   both 27-stage TCC references, rates/repeats and all four unchanged
+   speech/speaker cases pass. CPU disclosed WER is 0.0625 / 0.055556; CUDA is
+   0.125 / 0.055556. Complete source/log/output/checkpoints and both 120-file
+   private archives are authenticated and retained; never repeat accepted
+   component campaigns. [CPU receipt](openvoice-full-f16-cpu-accepted-2026-10-29.json),
+   [CUDA receipt](openvoice-full-f16-cuda-accepted-2026-10-29.json).
 
-   After both pass, update the Melo V2 managed companion to the qualified F16
-   canonical filename and immutable model revision; preserve explicit Q4 use,
-   with no implicit Q4 fallback. CLI/C ABI already discover that F16 filename.
-   Retain BERT's own Apache-2.0 license/attribution independently of Melo/OpenVoice
-   MIT notices. Confirm the actual managed selection, finish current-source
-   integration and exact final-tree CI/Lint/secret checks before task I. C++
-   at `bd1e299e1` already passes CI **40807943181** (all 13 jobs) and Lint
-   **40807945520**; later changes are validation tooling, not runtime math.
+   **Current integration task:** candidate starting `2d388274b` changes only
+   managed Melo V2 to that canonical F16 companion and pins both URLs to the
+   qualified revision. Real production registry resolution feeds actual CLI
+   initialization in a model-free fixture: failure before, pass after, with
+   explicit codec precedence preserved. A bundle unit guard covers pinned
+   URLs, canonical filename and separate Apache-2.0 BERT attribution. Full
+   upstream license remains in THIRD_PARTY_NOTICES.txt. Melo V3 and existing
+   explicit Q4 paths are unchanged; no implicit old-Q4 fallback is introduced.
+   Existing hand-managed cache files remain subject to existing cache trust
+   behavior; immutable default URLs are not a new content-verification claim.
+   Finish exact candidate CI/Lint/secret checks, integrate main safely, then
+   task I. The earlier accepted CI **40807943181** (13 jobs) and Lint
+   **40807945520** are at `bd1e299e1`, before this registry change; they do not
+   replace final-source qualification.
    Earlier CPU **40783760561** passed its complete four-case matrix at
    `7c158b325`, including default-disclosed WER 0.1875 and zero; its full
    artifact and authenticated encrypted readback are retained.

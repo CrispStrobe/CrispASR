@@ -1,3 +1,15 @@
+## 2026-10-29 — Full F16 conditioning accepted on CPU and T4
+
+CPU run 40825101583 and full-current-source CUDA kernel version 5 pass the
+unchanged four-case speech/speaker matrix, original component checks, TCC
+stages, Session/CLI routes and actual no-override F16 BERT discovery. Both
+120-file encrypted archives and executable checkpoints are independently
+verified. Failed Q4 controls remain failed. The candidate fixes managed Melo
+V2's previously undiscoverable companion filename and pins the qualified F16
+model/BERT URLs. Production resolver-to-CLI initialization fails before and
+passes after; explicit user selection remains supported. Final-source CI and
+main integration remain pending; nothing is newly released.
+
 ## 2026-10-29 — Standalone CLI LID qualified; BERT precision loss isolated
 
 Hosted current CLI run 40807940665 accepts #560's detect-and-exit repair with

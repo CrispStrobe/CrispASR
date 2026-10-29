@@ -1,0 +1,1664 @@
+{
+  "schema": 1,
+  "complete": true,
+  "acceptance": true,
+  "scope": "Current-source library and actual CLI; device=cuda",
+  "source": "97053abff8201870827027692dc25dc0c412e2a3",
+  "ggml": "e2ae679a563014f46c546ce6c6448e8601e4dea6",
+  "bert_profile": "f16",
+  "resource_checks": [
+    {
+      "phase": "melo-original-inputs",
+      "available_bytes": 32482205696,
+      "load": [
+        1.21728515625,
+        1.70947265625,
+        1.1787109375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123870511104,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "melo-original-duration",
+      "available_bytes": 32453648384,
+      "load": [
+        1.302734375,
+        1.68505859375,
+        1.18505859375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123789553664,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "original-reference-0",
+      "available_bytes": 32376053760,
+      "load": [
+        1.2783203125,
+        1.67333984375,
+        1.18359375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123789443072,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "original-reference-1",
+      "available_bytes": 32170106880,
+      "load": [
+        1.2353515625,
+        1.65087890625,
+        1.1806640625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123789434880,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "rebuilt-session",
+      "available_bytes": 32370323456,
+      "load": [
+        1.19873046875,
+        1.62890625,
+        1.1787109375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123789426688,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "cli-baseline-0",
+      "available_bytes": 32478732288,
+      "load": [
+        1.17138671875,
+        1.52880859375,
+        1.1787109375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123786002432,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "cli-clone-0",
+      "available_bytes": 32344301568,
+      "load": [
+        1.1572265625,
+        1.52001953125,
+        1.177734375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123785641984,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "cli-disclosed-0",
+      "available_bytes": 32441192448,
+      "load": [
+        1.1328125,
+        1.50244140625,
+        1.17578125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123785453568,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "cli-baseline-1",
+      "available_bytes": 32494612480,
+      "load": [
+        1.41162109375,
+        1.54345703125,
+        1.1953125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123785064448,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "cli-clone-1",
+      "available_bytes": 32371638272,
+      "load": [
+        1.37841796875,
+        1.5341796875,
+        1.19384765625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123784687616,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "cli-disclosed-1",
+      "available_bytes": 32481878016,
+      "load": [
+        1.46728515625,
+        1.54931640625,
+        1.2021484375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123784491008,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "independent-quality",
+      "available_bytes": 32477818880,
+      "load": [
+        1.67236328125,
+        1.5888671875,
+        1.22021484375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123784093696,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-baseline",
+      "available_bytes": 31930490880,
+      "load": [
+        1.94970703125,
+        1.64990234375,
+        1.24755859375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691077632,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-original",
+      "available_bytes": 31833894912,
+      "load": [
+        1.9541015625,
+        1.65576171875,
+        1.251953125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691077632,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-clone",
+      "available_bytes": 31852462080,
+      "load": [
+        1.9541015625,
+        1.65576171875,
+        1.251953125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691077632,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-raw",
+      "available_bytes": 31846727680,
+      "load": [
+        1.9541015625,
+        1.65576171875,
+        1.251953125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691077632,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-baseline",
+      "available_bytes": 31854444544,
+      "load": [
+        1.9541015625,
+        1.65576171875,
+        1.251953125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691073536,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-original",
+      "available_bytes": 31832010752,
+      "load": [
+        1.9541015625,
+        1.65576171875,
+        1.251953125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691073536,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-clone",
+      "available_bytes": 31845724160,
+      "load": [
+        1.9541015625,
+        1.65576171875,
+        1.251953125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691073536,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-disclosed",
+      "available_bytes": 31804526592,
+      "load": [
+        1.9541015625,
+        1.65576171875,
+        1.251953125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691073536,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-baseline",
+      "available_bytes": 31810473984,
+      "load": [
+        1.9541015625,
+        1.65576171875,
+        1.251953125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691073536,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-original",
+      "available_bytes": 31808401408,
+      "load": [
+        1.9541015625,
+        1.65576171875,
+        1.251953125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691073536,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-clone",
+      "available_bytes": 31818481664,
+      "load": [
+        1.9541015625,
+        1.65576171875,
+        1.251953125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691073536,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-raw",
+      "available_bytes": 31675191296,
+      "load": [
+        2.0380859375,
+        1.67822265625,
+        1.26171875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691073536,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-baseline",
+      "available_bytes": 31517372416,
+      "load": [
+        2.0380859375,
+        1.67822265625,
+        1.26171875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691069440,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-original",
+      "available_bytes": 31343071232,
+      "load": [
+        2.0380859375,
+        1.67822265625,
+        1.26171875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691069440,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-clone",
+      "available_bytes": 31307390976,
+      "load": [
+        2.0380859375,
+        1.67822265625,
+        1.26171875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691069440,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-disclosed",
+      "available_bytes": 31287382016,
+      "load": [
+        2.0380859375,
+        1.67822265625,
+        1.26171875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123691069440,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    }
+  ],
+  "phases": {
+    "melo-original-inputs": {
+      "returncode": 0
+    },
+    "melo-original-duration": {
+      "returncode": 0
+    },
+    "original-reference-0": {
+      "returncode": 0
+    },
+    "original-reference-1": {
+      "returncode": 0
+    },
+    "rebuilt-session": {
+      "returncode": 0
+    },
+    "cli-baseline-0": {
+      "returncode": 0
+    },
+    "cli-clone-0": {
+      "returncode": 0
+    },
+    "cli-disclosed-0": {
+      "returncode": 0
+    },
+    "cli-baseline-1": {
+      "returncode": 0
+    },
+    "cli-clone-1": {
+      "returncode": 0
+    },
+    "cli-disclosed-1": {
+      "returncode": 0
+    }
+  },
+  "cases": [
+    {
+      "interface": "session",
+      "case": 0,
+      "quality": {
+        "baseline": {
+          "wer": 0.0,
+          "speaker_cosine": 0.5025454759597778,
+          "rate": 44100,
+          "samples": 173568,
+          "sha256": "7fa3868f86a64f2520f65cb84dc126c6618c8c8eef5cfd919ce159bb2a05b0e7"
+        },
+        "original": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6884582042694092,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "b77bfae1ec314cd5e2808419a70bbfcd2e48a69c4dddbadaeed63b0d063c5ee0"
+        },
+        "clone": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.7248045206069946,
+          "rate": 22050,
+          "samples": 86784,
+          "sha256": "7b5e37b3919d8accf28dc76d811d61f35367314eda8f6ff6073b53554f5ce204"
+        },
+        "raw": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.7262430191040039,
+          "rate": 22050,
+          "samples": 86784,
+          "sha256": "9e4aa05aedb70e89000fb1d0ecb76301b62ffaa01772f26284b558b483b1f3fa"
+        }
+      },
+      "accepted": true
+    },
+    {
+      "interface": "cli",
+      "case": 0,
+      "quality": {
+        "baseline": {
+          "wer": 0.0,
+          "speaker_cosine": 0.5025466680526733,
+          "rate": 44100,
+          "samples": 173568,
+          "sha256": "98e49058e2d45234bdacff9470fe3d11a2ad59733d485c254448ad539a101693"
+        },
+        "original": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6884582042694092,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "b77bfae1ec314cd5e2808419a70bbfcd2e48a69c4dddbadaeed63b0d063c5ee0"
+        },
+        "clone": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.7138328552246094,
+          "rate": 22050,
+          "samples": 86784,
+          "sha256": "f53a2c83d4597e64a9a190b679ff3b8e70382f4895447200bbcbac98ed6b2b67"
+        },
+        "disclosed": {
+          "wer": 0.125,
+          "speaker_cosine": 0.6974738836288452,
+          "rate": 22050,
+          "samples": 187607,
+          "sha256": "52d8705d1e2ce410c17983ce3523292644d3853880f7c3bc6736bf6a5c4c07ad"
+        }
+      },
+      "accepted": true
+    },
+    {
+      "interface": "session",
+      "case": 1,
+      "quality": {
+        "baseline": {
+          "wer": 0.09090909090909091,
+          "speaker_cosine": 0.5057363510131836,
+          "rate": 44100,
+          "samples": 184832,
+          "sha256": "593b7e0aa86a996545dd312323d789212ba487bde4aa5dfa6a536850fd182f70"
+        },
+        "original": {
+          "wer": 0.0,
+          "speaker_cosine": 0.6888083219528198,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "d52c2c518733b30b665adcde66659b0d7496f3177003c078d4db8167885dbb6e"
+        },
+        "clone": {
+          "wer": 0.09090909090909091,
+          "speaker_cosine": 0.7503056526184082,
+          "rate": 22050,
+          "samples": 92416,
+          "sha256": "825eba0e58c208f92db07a8a95353898dbde3dd9b0156ade3da8dec40387dbd5"
+        },
+        "raw": {
+          "wer": 0.09090909090909091,
+          "speaker_cosine": 0.7512862682342529,
+          "rate": 22050,
+          "samples": 92416,
+          "sha256": "56df0ac9605332e04e3ac029d55f25420b6c6b30a7c5d443b87a33cd73f31621"
+        }
+      },
+      "accepted": true
+    },
+    {
+      "interface": "cli",
+      "case": 1,
+      "quality": {
+        "baseline": {
+          "wer": 0.09090909090909091,
+          "speaker_cosine": 0.5057332515716553,
+          "rate": 44100,
+          "samples": 184832,
+          "sha256": "edf7355268173f018e60b8afe74623e300fe052f0a8026ce226d8d59e0ffa702"
+        },
+        "original": {
+          "wer": 0.0,
+          "speaker_cosine": 0.6888083219528198,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "d52c2c518733b30b665adcde66659b0d7496f3177003c078d4db8167885dbb6e"
+        },
+        "clone": {
+          "wer": 0.09090909090909091,
+          "speaker_cosine": 0.7489485740661621,
+          "rate": 22050,
+          "samples": 92416,
+          "sha256": "e1313e1b6eead57b09c5af05bb01b685f9afba5089a157585b3988c7c65c62e1"
+        },
+        "disclosed": {
+          "wer": 0.05555555555555555,
+          "speaker_cosine": 0.7282662391662598,
+          "rate": 22050,
+          "samples": 193239,
+          "sha256": "a77e367f485916d6bf48dde69e9d59c1030b7555b24eea041e941b204de39b9b"
+        }
+      },
+      "accepted": true
+    }
+  ],
+  "limitations": [
+    "Full-source CPU build on Actions; CUDA profile may reuse pinned matching ggml DSOs",
+    "Model-generated references; preset identity unknown; no voice rights clearance",
+    "No model publication or registry default promotion",
+    "Speaker gain gates content-only marked clones; disclosed clips also require full-text and rate gates"
+  ],
+  "accepted_inputs": {
+    "openvoice2-tcc-f32sens.gguf": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255",
+    "reference-0.gguf": "259993b526944e8e36ccca436e005cbc3935a46636b42c618cfd5c3d19429c8f",
+    "reference-1.gguf": "5e2a043ce975d27e2d2926d9acacacae0c97e9ab1e85265b7f97bae3d9c059f7",
+    "reference.wav": "237f5c2ebcd75f734f44f63ba4915321aea7d8d53969a6d5f3aad966cdb760e6",
+    "original-0.wav": "b77bfae1ec314cd5e2808419a70bbfcd2e48a69c4dddbadaeed63b0d063c5ee0",
+    "original-1.wav": "d52c2c518733b30b665adcde66659b0d7496f3177003c078d4db8167885dbb6e",
+    "reference-ATTRIBUTION.txt": "377a32e6f98e9c96c4bb16c221f1aca1a8793b209b7a6991c827a8a46f42763c",
+    "reference-OpenVoice-LICENSE.txt": "bb3541f421e6273d3a3e3dd5bdba2bd3b79a3c2eadca65cde9c62c2467903ac0"
+  },
+  "bert_input": {
+    "file": "bert-base-uncased.gguf",
+    "sha256": "f7437929246c43d7300cbf6ff39b4715669a6053661117df99a456bdc5e8ecba",
+    "revision": "35522347b1bed9a913d6894803c5cab929ae42a5"
+  },
+  "built_sha256": {
+    "library": "fffd43cd2536fd8d3876fdc7d9d3e4d8e0c730bd0b6f532e37a2123c2a560d57",
+    "cli": "944194bce46293007ed2336d08f6918e51b9252447bf2c71f8b210e456b2d84f",
+    "diff": "55c3ac4cf98adc53596663870cbdcb990e33053f0a8d916d0bfce9035a34235b"
+  },
+  "model_source_sha256": {
+    "src/openvoice2.cpp": "f658c40176fe1c67584cd9ab80ca9d954433cfe7973f6ba84b43a448d59b8c13",
+    "src/melotts.cpp": "1de3266dd646055072c8e702b34919dec076748453d09fa0e62286898b3d7e3f",
+    "src/crispasr_c_api.cpp": "1c7509daf4a6e8a50ff6743596880fc549d429281d73b61b96e77c0dd0b48df5",
+    "src/bert_encoder.cpp": "b5fca7fe0999a30e1555cbb19f9ed0b6ecb05edcf092210a737fcda73a5dbdfc",
+    "src/core/bert_words.h": "d972a21c3182e95d0cba44ae1b63f228806631f189c29dcad8aca09b9d7e653e",
+    "src/core/melotts_bert_alignment.h": "5c75fa83522a9c4eb8a4205fae178fcdc2ef4d1e0d7caeee9548b20384cca656",
+    "src/core/melotts_sdp.h": "11cf5feaf93df283b9f61bbb0678b8cd5298b18ae92b4830557d37800b8962cf",
+    "examples/cli/crispasr_backend_melotts.cpp": "97ee1ecfaa812f6c86d366cd7c5f8a78c06b94df7002df89b284ca5b47b5eca2"
+  },
+  "melo_input_controls": {
+    "complete": true,
+    "input_protocol_only": false,
+    "full_neural_parity": false,
+    "scope": "Original input protocol and final activation; not complete Melo neural parity",
+    "upstream": "209145371cff8fc3bd60d7be902ea69cbdb7965a",
+    "tokenizer_revision": "86b5e0934494bd15c9632b12f734a8a67f723594",
+    "source_sha256": {
+      "LICENSE": "88a50e5a02bbc2a5c2f084dc19da751aa97b1690f5fda76cd8005c8634d1ca70",
+      "melo/text/english.py": "28527f574511bfc13fe1f2f6bbb5bfe4072c06e1c7e9b69598138aef81b9905b",
+      "melo/text/english_bert.py": "0987c4ce65ff9aff4c1b23b25f5903a580e4c907b3d1814e2e97db6dcb020805",
+      "melo/text/japanese.py": "23fa0ac9e10772012978ab747970d143a6b002ef75d0014c61eada7a16a25758",
+      "melo/text/symbols.py": "4c1f3839f7e209b5da45daeb269f955b302d0d4c0df6dbf9be88d534b25ceea2",
+      "melo/text/__init__.py": "eca8c17764c4dcd57d3a71185775d1c6e4d53689d6a9a54708ec63577a2ac8ba",
+      "melo/models.py": "f96eef52845224b5797e54008013a5b6a5fafad2035713dc5181a5db8bf8bef4",
+      "melo/modules.py": "de80baee7dc8d89d621c541b899a84193df4bb3ef95f5e6d076cc37b6bb10bf6"
+    },
+    "cases": [
+      {
+        "case": 0,
+        "accepted": true,
+        "inputs": {
+          "phoneme_ids": {
+            "exact": true,
+            "elements": 85,
+            "sha256": "69f9d9105f5c7b5fdf08d882c2d50942427e91ebd1f6320fe7655666c76e674f"
+          },
+          "tone_ids": {
+            "exact": true,
+            "elements": 85,
+            "sha256": "e6e8ab73103ec2307c5043ea149c39add24e636d043616e8e809ccde1eb07b0c"
+          },
+          "lang_ids": {
+            "exact": true,
+            "elements": 85,
+            "sha256": "1ba503068fb906dcd28a9635eedf29a836a71eb02a6ab266d21b0034b799ef25"
+          },
+          "bert_word2ph": {
+            "exact": true,
+            "elements": 10,
+            "sha256": "f7c46b4db5a502b735cdddf320491c6882073d5b90e95249ef132e110d1fc26e"
+          },
+          "bert_token_ids": {
+            "exact": true,
+            "elements": 10,
+            "sha256": "3b5a82c1a6422b166015dc4789cea9ef7b03fef592b30ac8131b7641ec008bf8"
+          }
+        },
+        "final_activation": {
+          "accepted": true,
+          "elements": 3014656,
+          "negative": 2217027,
+          "positive": 797628,
+          "max_absolute_error": 0.0,
+          "norm_ratio": 1.0
+        },
+        "instrumentation": {
+          "relative_l2": 0.0,
+          "peak_absolute_error": 0.0
+        }
+      },
+      {
+        "case": 1,
+        "accepted": true,
+        "inputs": {
+          "phoneme_ids": {
+            "exact": true,
+            "elements": 69,
+            "sha256": "db836978c7ee799855f996ad1741911e00dd7440d59f4901e81db1999cd3ab2e"
+          },
+          "tone_ids": {
+            "exact": true,
+            "elements": 69,
+            "sha256": "049cf2d40a0b8785126eb1b317d30aa241a150cafaa0b25a20df22ec439be8ea"
+          },
+          "lang_ids": {
+            "exact": true,
+            "elements": 69,
+            "sha256": "2d65a7cebaf1e7a11d982276cc2d43d85971089416704cce3bcad95e6fd2ab48"
+          },
+          "bert_word2ph": {
+            "exact": true,
+            "elements": 12,
+            "sha256": "3583419e8822c99078eaa824239d314049c83845a365528162af6566fd22838c"
+          },
+          "bert_token_ids": {
+            "exact": true,
+            "elements": 12,
+            "sha256": "1c3c76104f908094884d0721b877e16a68d98bc1d3218fd280ad46a6064abf9c"
+          }
+        },
+        "final_activation": {
+          "accepted": true,
+          "elements": 2777088,
+          "negative": 2064237,
+          "positive": 712851,
+          "max_absolute_error": 0.0,
+          "norm_ratio": 1.0
+        },
+        "instrumentation": {
+          "relative_l2": 0.0,
+          "peak_absolute_error": 0.0
+        }
+      },
+      {
+        "case": 2,
+        "accepted": true,
+        "inputs": {
+          "phoneme_ids": {
+            "exact": true,
+            "elements": 91,
+            "sha256": "c36a1f740dd1c2f02f09a35351eff02bc82722720ee79b3388f7b81764370dd6"
+          },
+          "tone_ids": {
+            "exact": true,
+            "elements": 91,
+            "sha256": "6f7f19c919fcc22363bdc0ca5d8bbe32f467c20daf3b32ce6ab38e167d97130f"
+          },
+          "lang_ids": {
+            "exact": true,
+            "elements": 91,
+            "sha256": "4b216cd610bf83c0053e5404c9b0d47c71aae9d0ea1b3f9e76cc7b8976852184"
+          },
+          "bert_word2ph": {
+            "exact": true,
+            "elements": 14,
+            "sha256": "9e409c7b658a6d3c43ce300de146823f15c7d12e0f80a17cf802cb4b97e6b631"
+          },
+          "bert_token_ids": {
+            "exact": true,
+            "elements": 14,
+            "sha256": "f2ed90a72c1f2cc07061c6457e75ab126a1eb819b3bfaa12c564205f3df8da4a"
+          }
+        },
+        "final_activation": {
+          "accepted": true,
+          "elements": 2957312,
+          "negative": 2155876,
+          "positive": 801436,
+          "max_absolute_error": 0.0,
+          "norm_ratio": 1.0
+        },
+        "instrumentation": {
+          "relative_l2": 0.0,
+          "peak_absolute_error": 0.0
+        }
+      }
+    ],
+    "resource_checks": [
+      {
+        "phase": "load-owned-input-data",
+        "available_bytes": 32456003584,
+        "load": [
+          1.21728515625,
+          1.70947265625,
+          1.1787109375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123869122560,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "load-original-activation-runtime",
+        "available_bytes": 32352567296,
+        "load": [
+          1.21728515625,
+          1.70947265625,
+          1.1787109375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123867484160,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "load-native-model",
+        "available_bytes": 32109998080,
+        "load": [
+          1.18359375,
+          1.685546875,
+          1.1767578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123867316224,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "load-native-bert",
+        "available_bytes": 31707594752,
+        "load": [
+          1.18359375,
+          1.685546875,
+          1.1767578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123867308032,
+        "gpu_free_mib": [
+          14709,
+          14909
+        ]
+      },
+      {
+        "phase": "native-input-capture-0",
+        "available_bytes": 31699566592,
+        "load": [
+          1.18359375,
+          1.685546875,
+          1.1767578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123867303936,
+        "gpu_free_mib": [
+          14709,
+          14909
+        ]
+      },
+      {
+        "phase": "native-uninstrumented-repeat-0",
+        "available_bytes": 31591972864,
+        "load": [
+          1.18359375,
+          1.685546875,
+          1.1767578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123841306624,
+        "gpu_free_mib": [
+          14519,
+          14909
+        ]
+      },
+      {
+        "phase": "original-final-activation-0",
+        "available_bytes": 31595184128,
+        "load": [
+          1.16845703125,
+          1.673828125,
+          1.17578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123840548864,
+        "gpu_free_mib": [
+          14519,
+          14909
+        ]
+      },
+      {
+        "phase": "native-input-capture-1",
+        "available_bytes": 31553323008,
+        "load": [
+          1.16845703125,
+          1.673828125,
+          1.17578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123840520192,
+        "gpu_free_mib": [
+          14519,
+          14909
+        ]
+      },
+      {
+        "phase": "native-uninstrumented-repeat-1",
+        "available_bytes": 31523287040,
+        "load": [
+          1.16845703125,
+          1.673828125,
+          1.17578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123816620032,
+        "gpu_free_mib": [
+          14519,
+          14909
+        ]
+      },
+      {
+        "phase": "original-final-activation-1",
+        "available_bytes": 31519506432,
+        "load": [
+          1.16845703125,
+          1.673828125,
+          1.17578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123815919616,
+        "gpu_free_mib": [
+          14519,
+          14909
+        ]
+      },
+      {
+        "phase": "native-input-capture-2",
+        "available_bytes": 31498866688,
+        "load": [
+          1.16845703125,
+          1.673828125,
+          1.17578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123815895040,
+        "gpu_free_mib": [
+          14519,
+          14909
+        ]
+      },
+      {
+        "phase": "native-uninstrumented-repeat-2",
+        "available_bytes": 31519449088,
+        "load": [
+          1.15478515625,
+          1.66259765625,
+          1.1748046875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123790319616,
+        "gpu_free_mib": [
+          14519,
+          14909
+        ]
+      },
+      {
+        "phase": "original-final-activation-2",
+        "available_bytes": 31539920896,
+        "load": [
+          1.15478515625,
+          1.66259765625,
+          1.1748046875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123789578240,
+        "gpu_free_mib": [
+          14519,
+          14909
+        ]
+      }
+    ],
+    "tokenizer_sha256": "ce64fce797c24f68df90b40a3f74f579b336a493db14bd583fd520ea0d8c9a98",
+    "torch_version": "2.11.0+cu128",
+    "instrumentation_checks": [
+      {
+        "case": 0,
+        "relative_l2": 0.0,
+        "peak_absolute_error": 0.0
+      },
+      {
+        "case": 1,
+        "relative_l2": 0.0,
+        "peak_absolute_error": 0.0
+      },
+      {
+        "case": 2,
+        "relative_l2": 0.0,
+        "peak_absolute_error": 0.0
+      }
+    ],
+    "activation_checks": [
+      {
+        "case": 0,
+        "accepted": true,
+        "elements": 3014656,
+        "negative": 2217027,
+        "positive": 797628,
+        "max_absolute_error": 0.0,
+        "norm_ratio": 1.0
+      },
+      {
+        "case": 1,
+        "accepted": true,
+        "elements": 2777088,
+        "negative": 2064237,
+        "positive": 712851,
+        "max_absolute_error": 0.0,
+        "norm_ratio": 1.0
+      },
+      {
+        "case": 2,
+        "accepted": true,
+        "elements": 2957312,
+        "negative": 2155876,
+        "positive": 801436,
+        "max_absolute_error": 0.0,
+        "norm_ratio": 1.0
+      }
+    ],
+    "activation_backends": [
+      "CUDA0",
+      "CUDA0",
+      "CUDA0"
+    ]
+  },
+  "melo_duration_controls": {
+    "complete": true,
+    "acceptance": true,
+    "application_acceptance": false,
+    "full_neural_parity": false,
+    "scope": "Original deterministic/stochastic duration predictors; shared converted weights, native encoder output and noise",
+    "upstream": "209145371cff8fc3bd60d7be902ea69cbdb7965a",
+    "source_sha256": {
+      "LICENSE": "88a50e5a02bbc2a5c2f084dc19da751aa97b1690f5fda76cd8005c8634d1ca70",
+      "melo/text/english.py": "28527f574511bfc13fe1f2f6bbb5bfe4072c06e1c7e9b69598138aef81b9905b",
+      "melo/text/english_bert.py": "0987c4ce65ff9aff4c1b23b25f5903a580e4c907b3d1814e2e97db6dcb020805",
+      "melo/text/japanese.py": "23fa0ac9e10772012978ab747970d143a6b002ef75d0014c61eada7a16a25758",
+      "melo/text/symbols.py": "4c1f3839f7e209b5da45daeb269f955b302d0d4c0df6dbf9be88d534b25ceea2",
+      "melo/text/__init__.py": "eca8c17764c4dcd57d3a71185775d1c6e4d53689d6a9a54708ec63577a2ac8ba",
+      "melo/models.py": "f96eef52845224b5797e54008013a5b6a5fafad2035713dc5181a5db8bf8bef4",
+      "melo/modules.py": "de80baee7dc8d89d621c541b899a84193df4bb3ef95f5e6d076cc37b6bb10bf6",
+      "melo/transforms.py": "e6798989a0d75cbec45e7e24e3697e1c4886b3664c6a80a452645ef1d2a93f9c"
+    },
+    "device": "cuda",
+    "cases": [
+      {
+        "case": 0,
+        "stages": {
+          "dp_logw": {
+            "accepted": true,
+            "elements": 85,
+            "cosine": 0.9999999999999017,
+            "norm_ratio": 1.000000040747485,
+            "relative_l2": 4.4478704304338277e-07,
+            "max_absolute_error": 1.6689300537109375e-06
+          },
+          "sdp_logw": {
+            "accepted": true,
+            "elements": 85,
+            "cosine": 0.9999999999992193,
+            "norm_ratio": 1.0000000402825673,
+            "relative_l2": 1.250321387397974e-06,
+            "max_absolute_error": 5.751848220825195e-06
+          }
+        },
+        "accepted": true
+      },
+      {
+        "case": 1,
+        "stages": {
+          "dp_logw": {
+            "accepted": true,
+            "elements": 69,
+            "cosine": 0.999999999999921,
+            "norm_ratio": 0.9999999163965719,
+            "relative_l2": 4.067167701448795e-07,
+            "max_absolute_error": 2.2649765014648438e-06
+          },
+          "sdp_logw": {
+            "accepted": true,
+            "elements": 69,
+            "cosine": 0.9999999999993754,
+            "norm_ratio": 0.9999999937116993,
+            "relative_l2": 1.1180147914593296e-06,
+            "max_absolute_error": 6.020069122314453e-06
+          }
+        },
+        "accepted": true
+      },
+      {
+        "case": 2,
+        "stages": {
+          "dp_logw": {
+            "accepted": true,
+            "elements": 91,
+            "cosine": 0.9999999999999362,
+            "norm_ratio": 0.9999999631432074,
+            "relative_l2": 3.6002596218718257e-07,
+            "max_absolute_error": 1.3113021850585938e-06
+          },
+          "sdp_logw": {
+            "accepted": true,
+            "elements": 91,
+            "cosine": 0.9999999999988168,
+            "norm_ratio": 1.0000000268476164,
+            "relative_l2": 1.5389107313605098e-06,
+            "max_absolute_error": 1.5620142221450806e-05
+          }
+        },
+        "accepted": true
+      }
+    ],
+    "resource_checks": [
+      {
+        "phase": "load-original-duration",
+        "available_bytes": 32435892224,
+        "load": [
+          1.302734375,
+          1.68505859375,
+          1.18505859375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123789484032,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "original-duration-0",
+        "available_bytes": 32002195456,
+        "load": [
+          1.302734375,
+          1.68505859375,
+          1.18505859375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123789471744,
+        "gpu_free_mib": [
+          14799,
+          14909
+        ]
+      },
+      {
+        "phase": "original-duration-1",
+        "available_bytes": 31455543296,
+        "load": [
+          1.2783203125,
+          1.67333984375,
+          1.18359375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123789463552,
+        "gpu_free_mib": [
+          14779,
+          14909
+        ]
+      },
+      {
+        "phase": "original-duration-2",
+        "available_bytes": 31438856192,
+        "load": [
+          1.2783203125,
+          1.67333984375,
+          1.18359375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123789455360,
+        "gpu_free_mib": [
+          14779,
+          14909
+        ]
+      }
+    ],
+    "model_sha256": "68c82ea2a18fd8e9d01c37a286a17fcfa630dfe7dbbd0bd08e7454e313e78fd8",
+    "trained_stochastic_flows": 4,
+    "active_stochastic_flows": 3,
+    "noise_scale": 0.800000011920929,
+    "torch_version": "2.11.0+cu128"
+  },
+  "session_controls": {
+    "complete": true,
+    "resource_checks": [
+      {
+        "phase": "native-invalid-speaker",
+        "available_bytes": 32243023872,
+        "load": [
+          1.19873046875,
+          1.62890625,
+          1.1787109375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123788947456,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "native-invalid-speaker",
+        "available_bytes": 32243048448,
+        "load": [
+          1.19873046875,
+          1.62890625,
+          1.1787109375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123788939264,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "session-open",
+        "available_bytes": 32147996672,
+        "load": [
+          1.1826171875,
+          1.6181640625,
+          1.177734375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123788939264,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "session-baseline",
+        "available_bytes": 31825969152,
+        "load": [
+          1.1826171875,
+          1.6181640625,
+          1.177734375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123788939264,
+        "gpu_free_mib": [
+          14709,
+          14909
+        ]
+      },
+      {
+        "phase": "session-codec-voice",
+        "available_bytes": 31769313280,
+        "load": [
+          1.1826171875,
+          1.6181640625,
+          1.177734375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123788242944,
+        "gpu_free_mib": [
+          14533,
+          14909
+        ]
+      },
+      {
+        "phase": "session-raw",
+        "available_bytes": 31772733440,
+        "load": [
+          1.1826171875,
+          1.6181640625,
+          1.177734375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123788242944,
+        "gpu_free_mib": [
+          14423,
+          14909
+        ]
+      },
+      {
+        "phase": "session-repeat",
+        "available_bytes": 31840059392,
+        "load": [
+          1.31494140625,
+          1.630859375,
+          1.18701171875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123788210176,
+        "gpu_free_mib": [
+          14251,
+          14909
+        ]
+      },
+      {
+        "phase": "session-marked",
+        "available_bytes": 31877582848,
+        "load": [
+          1.24462890625,
+          1.59912109375,
+          1.1826171875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123788206080,
+        "gpu_free_mib": [
+          14251,
+          14909
+        ]
+      },
+      {
+        "phase": "session-open",
+        "available_bytes": 31870824448,
+        "load": [
+          1.20654296875,
+          1.57861328125,
+          1.18017578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123787505664,
+        "gpu_free_mib": [
+          14799,
+          14909
+        ]
+      },
+      {
+        "phase": "session-baseline",
+        "available_bytes": 31815663616,
+        "load": [
+          1.20654296875,
+          1.57861328125,
+          1.18017578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123787505664,
+        "gpu_free_mib": [
+          14701,
+          14909
+        ]
+      },
+      {
+        "phase": "session-codec-voice",
+        "available_bytes": 31795904512,
+        "load": [
+          1.20654296875,
+          1.57861328125,
+          1.18017578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123786760192,
+        "gpu_free_mib": [
+          14517,
+          14909
+        ]
+      },
+      {
+        "phase": "session-raw",
+        "available_bytes": 31791726592,
+        "load": [
+          1.20654296875,
+          1.57861328125,
+          1.18017578125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123786760192,
+        "gpu_free_mib": [
+          14407,
+          14909
+        ]
+      },
+      {
+        "phase": "session-repeat",
+        "available_bytes": 31790534656,
+        "load": [
+          1.17431640625,
+          1.55908203125,
+          1.17822265625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123786756096,
+        "gpu_free_mib": [
+          14225,
+          14909
+        ]
+      },
+      {
+        "phase": "session-marked",
+        "available_bytes": 31800619008,
+        "load": [
+          1.203125,
+          1.54736328125,
+          1.1806640625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1123786752000,
+        "gpu_free_mib": [
+          14225,
+          14909
+        ]
+      }
+    ],
+    "cases": [
+      {
+        "case": 0,
+        "repeat_exact": true,
+        "marked_differs": true,
+        "samples": 86784
+      },
+      {
+        "case": 1,
+        "repeat_exact": true,
+        "marked_differs": true,
+        "samples": 92416
+      }
+    ],
+    "invalid_native_ids": [
+      -1,
+      2147483647
+    ]
+  },
+  "cli_bert_autodiscovery": true,
+  "cli_cuda_observed": true,
+  "c_abi_and_cli_f16_discovery_observed": true,
+  "private_evidence": {
+    "bytes": 75444656,
+    "sha256": "2c007a7135754af178940157792437af2c99615e92c051bb5aeb1074e433ae6b",
+    "recipient_sha256": "8faff36ac3521f054e844e58e8d5305560935c4545c0dc4472bcfce23b058e36",
+    "files": 120
+  },
+  "kernel": "crispasr-openvoice-full-source",
+  "kernel_version": 5,
+  "build_provenance": {
+    "schema": 1,
+    "source": "97053abff8201870827027692dc25dc0c412e2a3",
+    "ggml": "e2ae679a563014f46c546ce6c6448e8601e4dea6",
+    "sdk_sha256": "8fbd68e1822cd16e58055753fc67120c20784451e286d94177f7f7fb78b76cbd",
+    "complete": true,
+    "scope": "Full current CrispASR library/CLI C++; prebuilt matching ggml CUDA; no CUDA kernel rebuild",
+    "entry_sha256": "07d034f69b086ee677ca20044f951829ebbef5d4e87d2a0df0bb83a34033ef4b",
+    "hardware": "Tesla T4, 7.5, 15360 MiB, 580.178.04\nTesla T4, 7.5, 15360 MiB, 580.178.04",
+    "resource_checks": [
+      {
+        "phase": "full-source-bootstrap",
+        "available_bytes": 32460722176,
+        "load": [
+          1.2509765625,
+          0.5107421875,
+          0.22802734375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1125318848512,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "quality-dependencies",
+        "available_bytes": 32404930560,
+        "load": [
+          1.23046875,
+          0.51904296875,
+          0.232421875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1125318848512,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "speaker-dependencies",
+        "available_bytes": 32422326272,
+        "load": [
+          1.2119140625,
+          0.52734375,
+          0.23681640625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124854800384,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "configure-current-cuda",
+        "available_bytes": 32439656448,
+        "load": [
+          1.19482421875,
+          0.53564453125,
+          0.2412109375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124820996096,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "compile-current-application",
+        "available_bytes": 32414130176,
+        "load": [
+          1.19482421875,
+          0.53564453125,
+          0.2412109375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124809592832,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "dependencies-libcrispasr.so",
+        "available_bytes": 32477810688,
+        "load": [
+          1.51953125,
+          1.79541015625,
+          1.1953125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124656787456,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "dependencies-crispasr",
+        "available_bytes": 32485609472,
+        "load": [
+          1.51953125,
+          1.79541015625,
+          1.1953125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124656787456,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "unmodified-application-sources",
+        "available_bytes": 32502902784,
+        "load": [
+          1.51953125,
+          1.79541015625,
+          1.1953125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124656787456,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "checkpoint-current-application",
+        "available_bytes": 32500178944,
+        "load": [
+          1.51953125,
+          1.79541015625,
+          1.1953125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124656787456,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "full-source-cuda-interfaces",
+        "available_bytes": 32516681728,
+        "load": [
+          1.32373046875,
+          1.73876953125,
+          1.185546875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124207112192,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      }
+    ],
+    "ggml_provider_files": {
+      "libggml-cuda.so.0": "aa44d3764de03e176e63b586bdfe572716fd2a88501ecd03dd392f4375d3a5bd",
+      "libggml.so": "510cef6003680386cb59f64577f8c565432f05e9dde3a2c63bea50cec52f5b5e",
+      "libggml-cuda.so": "aa44d3764de03e176e63b586bdfe572716fd2a88501ecd03dd392f4375d3a5bd",
+      "libggml-cuda.so.0.26.0": "aa44d3764de03e176e63b586bdfe572716fd2a88501ecd03dd392f4375d3a5bd",
+      "libggml-cpu.so.0": "911574c33ce33227071792fddcba68fc01ae2258d255fde342d87675b7e3fef8",
+      "libggml.so.0.26.0": "510cef6003680386cb59f64577f8c565432f05e9dde3a2c63bea50cec52f5b5e",
+      "libggml-base.so": "87d2f61ad5f46a10760aab44d7b02b63cadcbd90a98718c5725ebce66ed47dd4",
+      "libggml-base.so.0": "87d2f61ad5f46a10760aab44d7b02b63cadcbd90a98718c5725ebce66ed47dd4",
+      "libggml-cpu.so.0.26.0": "911574c33ce33227071792fddcba68fc01ae2258d255fde342d87675b7e3fef8",
+      "libggml-cpu.so": "911574c33ce33227071792fddcba68fc01ae2258d255fde342d87675b7e3fef8",
+      "libggml-base.so.0.26.0": "87d2f61ad5f46a10760aab44d7b02b63cadcbd90a98718c5725ebce66ed47dd4",
+      "libggml.so.0": "510cef6003680386cb59f64577f8c565432f05e9dde3a2c63bea50cec52f5b5e"
+    },
+    "loaded_ggml": {
+      "libcrispasr.so": {
+        "libggml.so.0": {
+          "file": "libggml.so.0.26.0",
+          "sha256": "510cef6003680386cb59f64577f8c565432f05e9dde3a2c63bea50cec52f5b5e"
+        },
+        "libggml-cpu.so.0": {
+          "file": "libggml-cpu.so.0.26.0",
+          "sha256": "911574c33ce33227071792fddcba68fc01ae2258d255fde342d87675b7e3fef8"
+        },
+        "libggml-base.so.0": {
+          "file": "libggml-base.so.0.26.0",
+          "sha256": "87d2f61ad5f46a10760aab44d7b02b63cadcbd90a98718c5725ebce66ed47dd4"
+        },
+        "libggml-cuda.so.0": {
+          "file": "libggml-cuda.so.0.26.0",
+          "sha256": "aa44d3764de03e176e63b586bdfe572716fd2a88501ecd03dd392f4375d3a5bd"
+        }
+      },
+      "crispasr": {
+        "libggml.so.0": {
+          "file": "libggml.so.0.26.0",
+          "sha256": "510cef6003680386cb59f64577f8c565432f05e9dde3a2c63bea50cec52f5b5e"
+        },
+        "libggml-cpu.so.0": {
+          "file": "libggml-cpu.so.0.26.0",
+          "sha256": "911574c33ce33227071792fddcba68fc01ae2258d255fde342d87675b7e3fef8"
+        },
+        "libggml-base.so.0": {
+          "file": "libggml-base.so.0.26.0",
+          "sha256": "87d2f61ad5f46a10760aab44d7b02b63cadcbd90a98718c5725ebce66ed47dd4"
+        },
+        "libggml-cuda.so.0": {
+          "file": "libggml-cuda.so.0.26.0",
+          "sha256": "aa44d3764de03e176e63b586bdfe572716fd2a88501ecd03dd392f4375d3a5bd"
+        }
+      }
+    },
+    "application_checkpoint_sha256": "ae93882f0a7854cfb59f519ebbf406d3c0854828d9f451c0ef308e7bc5269e71",
+    "acceptance": true,
+    "built_sha256": {
+      "library": "fffd43cd2536fd8d3876fdc7d9d3e4d8e0c730bd0b6f532e37a2123c2a560d57",
+      "cli": "944194bce46293007ed2336d08f6918e51b9252447bf2c71f8b210e456b2d84f",
+      "diff": "55c3ac4cf98adc53596663870cbdcb990e33053f0a8d916d0bfce9035a34235b"
+    }
+  },
+  "readback_verified": true
+}

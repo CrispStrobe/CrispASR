@@ -34,6 +34,8 @@ class CLIRouting(unittest.TestCase):
 #include <string>
 #include <vector>
 #include <cassert>
+#include "crispasr_model_registry.h"
+#include "crispasr_cache.h"
 struct whisper_params {
  float tts_speed=1;int n_threads=3,tts_speaker_id=2,seed=42;bool no_prints=true,use_gpu=true;
  std::string gpu_backend="cuda",model,tts_voice,tts_codec_model,cache_dir;
@@ -42,6 +44,16 @@ struct melotts_context{};struct openvoice2_context{};
 struct melotts_params {int n_threads=4,verbosity=1,speaker_id=0;bool use_gpu=false;uint32_t seed=0;};
 struct openvoice2_context_params {int n_threads=4,verbosity=1;bool use_gpu=false;};
 static melotts_params melo_seen;static openvoice2_context_params ov_seen;
+static std::string bert_seen;
+static std::vector<std::string> fetched_urls;
+namespace crispasr_cache {
+std::string dir(const std::string& value){return value;}
+bool file_present(const std::string& path){FILE* f=fopen(path.c_str(),"rb");if(!f)return false;fclose(f);return true;}
+std::string probe_cached_file(const std::string& name,const std::string& base){
+ auto path=base+"/"+name;return file_present(path)?path:"";}
+std::string ensure_cached_file(const std::string& name,const std::string& url,bool,const char*,const std::string& base){
+ fetched_urls.push_back(url);auto path=base+"/"+name;FILE* f=fopen(path.c_str(),"wb");assert(f);fputs("fixture",f);fclose(f);return path;}
+}
 static melotts_context melo;static openvoice2_context ov;
 static int conversions=0,speaker=-1;static bool converter_fails=false,reference_ok=true;
 void melotts_set_speaker_id(melotts_context*,int id){speaker=id;}
@@ -64,7 +76,7 @@ melotts_params melotts_default_params(){return {};}
 openvoice2_context_params openvoice2_context_default_params(){return {};}
 melotts_context* melotts_init_from_file(const char*,melotts_params p){melo_seen=p;return &melo;}
 openvoice2_context* openvoice2_init_from_file(const char*,openvoice2_context_params p){ov_seen=p;return &ov;}
-bool melotts_load_bert(melotts_context*,const char*){return true;}
+bool melotts_load_bert(melotts_context*,const char* path){bert_seen=path;return true;}
 void openvoice2_set_dump_dir(openvoice2_context*,const char*){}
 namespace crispasr_env {const char* get(const char*){return nullptr;}}
 bool read_wav_mono(const char*,std::vector<float>& pcm,int& sr){pcm={1,2};sr=22050;return reference_ok;}
@@ -74,6 +86,18 @@ std::vector<float> ref_pcm_;int ref_sr_=0,ov2_output_sr_=0;'''
         main = r'''
 int main(int argc,char** argv){
  assert(argc==3);std::string mode=argv[2];whisper_params p;p.model=std::string(argv[1])+"/opaque.gguf";p.tts_voice="generated.wav";
+ if(mode=="managed-bert"){
+  p.tts_voice.clear();p.cache_dir=argv[1];
+  p.model=crispasr_resolve_model("auto","melotts",true,p.cache_dir,true);
+  Probe b;if(p.model.empty() || !b.init(p))return 2;
+  if(bert_seen!=p.cache_dir+"/bert-base-uncased.gguf")return 1;
+  if(fetched_urls.size()!=2)return 3;
+  for(const auto& url:fetched_urls)
+   if(url.find("/resolve/35522347b1bed9a913d6894803c5cab929ae42a5/")==std::string::npos)return 4;
+  p.tts_codec_model=p.cache_dir+"/explicit-q4.gguf";Probe explicit_choice;
+  if(!explicit_choice.init(p) || bert_seen!=p.tts_codec_model)return 5;
+  return 0;
+ }
  if(mode=="missing-model"){remove((std::string(argv[1])+"/openvoice2-tcc-f16.gguf").c_str());Probe b;return b.init(p)?1:0;}
  if(mode=="invalid-reference"){reference_ok=false;Probe b;return b.init(p)?1:0;}
  if(mode=="f32-companion"){
@@ -107,9 +131,10 @@ int main(int argc,char** argv){
             root = Path(temp)
             (root / 'openvoice2-tcc-f16.gguf').write_bytes(b'fixture: no model is loaded')
             (root / 'probe.cpp').write_text(mock + helper + '\nstruct Probe{\n' + init + synth + rate + fields + '\n};\n' + main)
-            subprocess.run(['c++', '-std=c++17', str(root / 'probe.cpp'), '-o', str(root / 'probe')], check=True)
+            subprocess.run(['c++', '-std=c++17', '-I', str(ROOT/'src'), str(root / 'probe.cpp'),
+                            str(ROOT/'src/crispasr_model_registry.cpp'), '-o', str(root / 'probe')], check=True)
             for mode in ['routing','initial-rate','neutral','conversion-failure',
-                         'missing-model','invalid-reference','baseline','clone','f32-companion','unset-speaker']:
+                         'missing-model','invalid-reference','baseline','clone','f32-companion','unset-speaker','managed-bert']:
                 with self.subTest(mode=mode):
                     (root / 'openvoice2-tcc-f16.gguf').write_bytes(b'fixture')
                     subprocess.run([str(root / 'probe'), str(root),mode],check=True)
