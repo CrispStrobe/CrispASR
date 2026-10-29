@@ -18,6 +18,7 @@
 #include "melotts.h"
 #include "core/bert_words.h"
 #include "core/melotts_bert_alignment.h"
+#include "core/melotts_sdp.h"
 #include "bert_encoder.h"
 
 #include "ggml.h"
@@ -1579,6 +1580,10 @@ static void dds_conv_forward(const melotts_dds_conv& dds, const std::vector<floa
 
 static float rqs_inverse(float y_in, const float* w_bins, const float* h_bins, const float* d_knots, int num_bins,
                          float range_min, float range_max) {
+    // Original Melo transforms.py uses 1e-3 minima on probabilities BEFORE
+    // mapping to the tail interval, and 1e-3 + softplus on derivatives.
+    constexpr float min_bin = 1e-3f;
+    constexpr float min_derivative = 1e-3f;
     std::vector<float> widths(num_bins), heights(num_bins), derivatives(num_bins + 1);
 
     float max_w = *std::max_element(w_bins, w_bins + num_bins);
@@ -1588,7 +1593,7 @@ static float rqs_inverse(float y_in, const float* w_bins, const float* h_bins, c
         sum_w += widths[i];
     }
     for (int i = 0; i < num_bins; i++)
-        widths[i] = widths[i] / sum_w * (range_max - range_min) + 1e-5f;
+        widths[i] = (min_bin + (1.0f - min_bin * num_bins) * widths[i] / sum_w) * (range_max - range_min);
 
     float max_h = *std::max_element(h_bins, h_bins + num_bins);
     float sum_h = 0;
@@ -1597,12 +1602,12 @@ static float rqs_inverse(float y_in, const float* w_bins, const float* h_bins, c
         sum_h += heights[i];
     }
     for (int i = 0; i < num_bins; i++)
-        heights[i] = heights[i] / sum_h * (range_max - range_min) + 1e-5f;
+        heights[i] = (min_bin + (1.0f - min_bin * num_bins) * heights[i] / sum_h) * (range_max - range_min);
 
     derivatives[0] = 1.0f;
     derivatives[num_bins] = 1.0f;
     for (int i = 0; i < num_bins - 1; i++)
-        derivatives[i + 1] = logf(1.0f + expf(d_knots[i])) + 1e-5f;
+        derivatives[i + 1] = std::max(d_knots[i], 0.0f) + log1pf(expf(-fabsf(d_knots[i]))) + min_derivative;
 
     std::vector<float> cum_w(num_bins + 1), cum_h(num_bins + 1);
     cum_w[0] = range_min;
@@ -1610,6 +1615,12 @@ static float rqs_inverse(float y_in, const float* w_bins, const float* h_bins, c
     for (int i = 0; i < num_bins; i++) {
         cum_w[i + 1] = cum_w[i] + widths[i];
         cum_h[i + 1] = cum_h[i] + heights[i];
+    }
+    cum_w[num_bins] = range_max;
+    cum_h[num_bins] = range_max;
+    for (int i = 0; i < num_bins; i++) {
+        widths[i] = cum_w[i + 1] - cum_w[i];
+        heights[i] = cum_h[i + 1] - cum_h[i];
     }
 
     int bin_idx = num_bins - 1;
@@ -1622,7 +1633,7 @@ static float rqs_inverse(float y_in, const float* w_bins, const float* h_bins, c
 
     float w_k = widths[bin_idx], h_k = heights[bin_idx];
     float d_k = derivatives[bin_idx], d_k1 = derivatives[bin_idx + 1];
-    float s_k = h_k / (w_k + 1e-10f);
+    float s_k = h_k / w_k;
     float y_yk = y_in - cum_h[bin_idx];
     float t2 = d_k1 + d_k - 2.0f * s_k;
 
@@ -1632,7 +1643,7 @@ static float rqs_inverse(float y_in, const float* w_bins, const float* h_bins, c
     float disc = b * b - 4.0f * a * c;
     if (disc < 0)
         disc = 0;
-    float xi = (2.0f * c) / (-b - sqrtf(disc + 1e-10f));
+    float xi = (2.0f * c) / (-b - sqrtf(disc));
     xi = std::clamp(xi, 0.0f, 1.0f);
 
     return xi * w_k + cum_w[bin_idx];
@@ -1766,6 +1777,13 @@ static void sdp_forward(melotts_context* ctx,
         for (int i = 0; i < 2 * T; i++)
             z[i] = dist(gen);
     }
+
+    dump_stage(ctx, "sdp_noise", z.data(), z.size());
+
+    // Original reversed ModuleList starts with its terminal Flip. Dropping
+    // the useless ConvFlow slot 1 retains the final Flip before affine slot 0.
+    for (int t = 0; t < T; t++)
+        std::swap(z[t * 2 + 0], z[t * 2 + 1]);
 
     // Run SDP flows in reverse
     for (int fi = (int)w.sdp_flows.size() - 1; fi >= 0; fi--) {
@@ -2610,6 +2628,19 @@ static bool load_weights(melotts_context* ctx, const char* path) {
     w.sdp_flow0_m = require_tensor(tensors, "sdp.flows.0.m");
     w.sdp_flow0_logs = try_tensor(tensors, "sdp.flows.0.logs");
 
+    uint32_t active_flows = 0, dds_layers = 0;
+    if (!core_melotts::sdp_inference_counts([&](const std::string& name) { return tensors.count(name) != 0; },
+                                            active_flows, dds_layers)) {
+        fprintf(stderr, "melotts: incomplete or unsupported SDP tensor inventory\n");
+        return false;
+    }
+    if ((hp.n_sdp_flows != 0 && hp.n_sdp_flows != active_flows) ||
+        (hp.n_sdp_dds_layers != 0 && hp.n_sdp_dds_layers != dds_layers)) {
+        fprintf(stderr, "melotts: SDP metadata disagrees with tensor inventory\n");
+        return false;
+    }
+    hp.n_sdp_flows = active_flows;
+    hp.n_sdp_dds_layers = dds_layers;
     load_dds_conv(tensors, "sdp.convs", hp.n_sdp_dds_layers, w.sdp_convs);
 
     w.sdp_flows.resize(hp.n_sdp_flows);

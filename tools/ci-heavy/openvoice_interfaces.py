@@ -166,7 +166,7 @@ def main():
         receipt['built_sha256'] = dict(library=sha(library), cli=sha(cli), diff=sha(build/'bin/crispasr-diff'))
         receipt['model_source_sha256'] = {name: sha(ROOT/name) for name in [
             'src/openvoice2.cpp', 'src/melotts.cpp', 'src/crispasr_c_api.cpp',
-            'src/bert_encoder.cpp', 'src/core/bert_words.h', 'src/core/melotts_bert_alignment.h',
+            'src/bert_encoder.cpp', 'src/core/bert_words.h', 'src/core/melotts_bert_alignment.h', 'src/core/melotts_sdp.h',
             'examples/cli/crispasr_backend_melotts.cpp']}
         if args.build_dir is None:
             # Preserve the CPU application before any native model call, just
@@ -217,6 +217,14 @@ def main():
             raise RuntimeError('Original final-activation comparisons used an unexpected backend')
         inputs['activation_backends'] = backends
         receipt['melo_input_controls'] = inputs
+        save()
+        run([sys.executable, ROOT/'tools/validation/melotts_duration.py', '--model', melo,
+             '--captures', private/'melo-inputs', '--output', private/'melo-duration', '--device', args.device],
+            'melo-original-duration', env=env, private_log=True)
+        duration = json.loads((private/'melo-duration/duration-controls.json').read_text())
+        if not duration['complete'] or not duration['acceptance'] or len(duration['cases']) != 3:
+            raise RuntimeError('Original Melo duration controls incomplete')
+        receipt['melo_duration_controls'] = duration
         save()
         for i in range(2):
             label = 'original-reference-' + str(i)

@@ -135,11 +135,11 @@ def main():
 
     n_sdp_flows = 0
     for idx in [3, 5, 7, 9, 11]:
-        if f"dp.flows.{idx}.pre.weight" in tensors:
+        if f"sdp.flows.{idx}.pre.weight" in tensors:
             n_sdp_flows += 1
 
     n_sdp_dds_layers = 0
-    while f"dp.convs.convs_sep.{n_sdp_dds_layers}.weight" in tensors:
+    while f"sdp.convs.convs_sep.{n_sdp_dds_layers}.weight" in tensors:
         n_sdp_dds_layers += 1
 
     n_resblocks = 0

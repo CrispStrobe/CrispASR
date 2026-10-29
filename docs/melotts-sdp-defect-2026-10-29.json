@@ -1,0 +1,36 @@
+{
+  "schema": 1,
+  "application_acceptance": false,
+  "source_before": "4e2a821f1",
+  "original_melo": "209145371cff8fc3bd60d7be902ea69cbdb7965a",
+  "original_transforms_sha256": "e6798989a0d75cbec45e7e24e3697e1c4886b3664c6a80a452645ef1d2a93f9c",
+  "model_revision": "35522347b1bed9a913d6894803c5cab929ae42a5",
+  "model_sha256": "68c82ea2a18fd8e9d01c37a286a17fcfa630dfe7dbbd0bd08e7454e313e78fd8",
+  "observed_metadata": {
+    "n_sdp_flows": 0,
+    "n_sdp_dds_layers": 0
+  },
+  "native_evidence": {
+    "kernel_slug": "crispasr-melotts-decoder",
+    "kernel_version": 1,
+    "conditioning_ignored": true,
+    "shared_prefix_sdp_outputs_exact": true,
+    "cases": 3
+  },
+  "repairs": [
+    "Count sdp rather than deterministic dp tensors in converter",
+    "Recover legacy zero counts from actual contiguous tensor inventory; reject incompatible metadata",
+    "Preserve initial Flip in original reverse ModuleList",
+    "Match original spline minima, normalized widths/heights and derivative formula"
+  ],
+  "regression": {
+    "converter_before": "FAIL: 0 != 3",
+    "native_legacy_before": "FAIL: zero layers remained",
+    "reverse_before": "FAIL: -1.21679 != -0.243046",
+    "spline_before_failed_rows": 10,
+    "spline_total_rows": 16,
+    "spline_tolerance": 2e-05,
+    "after": "Four production-body/scalar-oracle tests pass; hosted full-model parity and quality pending"
+  },
+  "scope": "Diagnosis and primitive verification only; not full-model application acceptance"
+}
