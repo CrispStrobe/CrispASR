@@ -12,7 +12,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
-- Whisper fork comparison owner: current agent. Prepare a real CUDA paired benchmark using the identical pinned base.en model and JFK input, v0.8.47 audited CrispASR binary and a checksum-pinned whisper.cpp fork binary. Require actual per-process GPU evidence, transcript quality, resource guards and retained logs; process timings include initialization.
+- Whisper fork comparison owner: current agent, source `e579461fb`. Kaggle `crispasr-whisper-fork-paired` version 1 is running after a fresh slot check found zero active GPU sessions. It uses identical pinned base.en model and JFK input, the audited v0.8.47 CrispASR CUDA binary and a checksum-pinned whisper.cpp fork release. It requires observed GPU process use and WER <=0.2 for each call. Timings include process initialization and concurrent GPU monitoring; they are not per-step. Collect all terminal source/log/output before replacing this kernel. No result is accepted yet.
 
 - Paired benchmark collector owner: current agent, source `df4786900`. Add hosted-only alternating process timing with resource checks, input hashing, warmups and retained failure logs; validate with mocked commands. Step-level adapters and real matched GPU/original comparisons remain separate.
 
