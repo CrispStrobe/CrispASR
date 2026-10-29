@@ -32,18 +32,19 @@ and check actual GPU session availability before every Kaggle submission.
 - **#559:** exact PR head `6b132720090cbb532f79f544c130381ddf1cf6c9` was
   applied to a validation tree, candidate `5eef35019`. CI **40848995923** and
   lint **40848999141** are queued. Hosted short-clip and actual C API prompt
-  routing run **40855248796** is queued on test tree `aa9579756`, including CLI and chunked routing. Neither a
+  routing run **40859214637** is queued on test tree `70ef1c0f0`, including exact C ABI, CLI and chunked routing. Earlier run **40855248796** was already in progress with a less strict harness; retain it as diagnostic only. Neither a
   queued run nor the contributor's own probes establish independent acceptance.
   Review the current discussion and complete CLI, C API and chunking controls
   before deciding whether to merge.
 - **#560:** the standalone detect-and-exit repair is already on main. Opt-in
   full-recording detection candidate `f81fba67a` is on a validation branch;
-  CI **40850807041** and lint **40850810717** are queued. Hosted long-clip
-  run **40850814403** failed: after Silero rejected a low-evidence Korean
+  Hosted long-clip run **40850814403** failed: after Silero rejected a low-evidence Korean
   window, fallback tried to load the explicit Silero GGUF as a Whisper model.
   Whisper long-clip controls and Silero late-speech detection passed. Fix the
-  fallback and rerun the retained controls without lowering the Silero gate;
-  model acceptance and main integration remain outstanding.
+  fallback without lowering the Silero gate. Repair `de2e532dd` passes
+  model-free actual-caller controls; CI **40858515815**, lint **40858519622**
+  and hosted long-clip rerun **40858523187** are queued. Model acceptance and
+  main integration remain outstanding.
 - **Recent models:** [the Nemotron paired receipt](nemotron-original-t4-benchmark-2026-10-29.json)
   records T4 results for native F16 and original F32, with zero WER and GPU
   execution; precision and operation boundaries differ, and no per-step count
@@ -54,8 +55,11 @@ and check actual GPU session availability before every Kaggle submission.
   for the native 26-step decoder and non-equivalent original timing boundaries. Private CSM original-without-watermark version 1 failed on missing
   `bitsandbytes`; version 2 passed GPU and zero-WER controls. The [aggregate
   receipt](csm-original-t4-benchmark-2026-10-29.json) discloses precision,
-  watermark and timing boundaries. Gated access and no redistribution apply. Melo/OpenVoice paired
-  timing is being prepared and full original Melo synthesis remains unproven.
+  watermark and timing boundaries. Gated access and no redistribution apply.
+  [OpenVoice paired T4 timing](openvoice-original-t4-benchmark-2026-10-29.json)
+  completed on two cases with output parity; native CPU flows/CUDA vocoder
+  were substantially slower than the original CUDA converter. Full original
+  Melo synthesis remains unproven.
 - **Whisper:** the short-audio safety fix `4023a6080` has queued CI
   **40847257799**, lint **40847261708** and secret scan **40847251740**.
   The [T4 timing diagnostic](whisper-timing-t4-diagnostic-2026-10-29.json) of

@@ -1,0 +1,64 @@
+{
+  "schema": 1,
+  "complete": true,
+  "scope": "Two private, accepted F16 Melo/BERT-derived source/reference pairs, deterministic tau=0. One warmup and three alternating measured warm conversion calls per arm and case. This is OpenVoice conversion only; no full original Melo synthesis timing. No audio, speaker embeddings, input hashes, or private reference data are published.",
+  "hardware": "Tesla T4, compute capability 7.5",
+  "source": "97053abff8201870827027692dc25dc0c412e2a3",
+  "original_source": "74a1d147b17a8c3092dd5430504bd83ef6c7eb23",
+  "original_model_revision": "f36e7edfe1684461a8343844af60babc2efbb727",
+  "original_checkpoint_sha256": "9652c27e92b6b2a91632590ac9962ef7ae2b712e5c5b7f4c34ec55ee2b37ab9e",
+  "native_model_sha256": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255",
+  "application_checkpoint_sha256": "ae93882f0a7854cfb59f519ebbf406d3c0854828d9f451c0ef308e7bc5269e71",
+  "script_sha256": "96bae1ec7bc3363396e93537804c2889537abf033a00a2f6f7a69ca3c7be0c53",
+  "settings": {
+    "tau": 0,
+    "threads": 2,
+    "reference_embedding_cache": "warm on both arms",
+    "native_device": "CPU reference encoder and flows; CUDA HiFi-GAN",
+    "original_device": "PyTorch CUDA reference encoder, flows and HiFi-GAN",
+    "precision": "Original F32 checkpoint versus native F32-sensitive GGUF; input Melo and BERT F16"
+  },
+  "quality": {
+    "all_sixteen_conversion_outputs_match_accepted_length": true,
+    "minimum_cosine_threshold": 0.99
+  },
+  "cases": [
+    {
+      "case": 0,
+      "output_audio_seconds": 3.877732426303855,
+      "median_conversion_seconds": {
+        "native": 9.331440072999953,
+        "original": 0.1304342700000234
+      },
+      "conversion_seconds_per_audio_second": {
+        "native": 2.406416701085902,
+        "original": 0.0336367380882826
+      },
+      "minimum_cosine_to_accepted_original": 0.9999997312145426
+    },
+    {
+      "case": 1,
+      "output_audio_seconds": 4.284081632653061,
+      "median_conversion_seconds": {
+        "native": 10.276020620999986,
+        "original": 0.13905185400000164
+      },
+      "conversion_seconds_per_audio_second": {
+        "native": 2.3986519170588765,
+        "original": 0.03245779747522904
+      },
+      "minimum_cosine_to_accepted_original": 0.999999612817229
+    }
+  ],
+  "limitations": [
+    "Native reference encoder and flows run on CPU while its vocoder runs on CUDA; the original runs the converter on CUDA.",
+    "Both measured boundaries include peak normalization and output copy, but implementation and device transfer costs differ.",
+    "F16 qualification applies to the Melo/BERT input synthesis; the OpenVoice comparison uses original F32 and native F32-sensitive tensors.",
+    "Warm reference caches exclude reference-embedding setup; model load and Melo synthesis are outside timed regions.",
+    "These two cases do not establish general voice quality or performance."
+  ],
+  "license_sources": [
+    "https://github.com/myshell-ai/OpenVoice/blob/74a1d147b17a8c3092dd5430504bd83ef6c7eb23/LICENSE",
+    "https://huggingface.co/cstr/openvoice2-tcc-GGUF"
+  ]
+}
