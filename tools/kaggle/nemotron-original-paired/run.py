@@ -20,7 +20,7 @@ import threading
 import time
 import urllib.request
 
-VERSION = "nemotron-original-paired-v1"
+VERSION = "nemotron-original-paired-v2"
 ROOT = Path("/kaggle/working")
 WORK = Path("/kaggle/temp/nemotron-original-paired")
 INPUT = ("https://raw.githubusercontent.com/CrispStrobe/CrispASR/"
@@ -67,7 +67,8 @@ def headroom():
     state = {"available_bytes": int(memory["MemAvailable"].split()[0]) * 1024,
              "load": list(os.getloadavg()), "cpus": os.cpu_count() or 1,
              "scratch_free_bytes": shutil.disk_usage(WORK).free}
-    if state["available_bytes"] < 3 * 1024**3 or state["scratch_free_bytes"] < 6 * 1024**3:
+    if (state["available_bytes"] < 3 * 1024**3 or state["scratch_free_bytes"] < 6 * 1024**3
+            or state["load"][0] > 2 * state["cpus"]):
         raise RuntimeError("Insufficient worker resources")
     return state
 
@@ -103,8 +104,9 @@ def original_child():
     with torch.inference_mode():
         output = model.generate(**inputs, return_dict_in_generate=True, max_new_tokens=512)
     torch.cuda.synchronize()
+    generate_seconds = time.monotonic() - start
     transcript = processor.batch_decode(output.sequences, skip_special_tokens=True)[0]
-    payload = {"transcript": transcript, "generate_seconds": time.monotonic() - start,
+    payload = {"transcript": transcript, "generate_seconds": generate_seconds,
                "sequences_shape": list(output.sequences.shape), "device": str(model.device),
                "dtype": str(model.dtype), "torch": torch.__version__}
     Path(os.environ["NEMOTRON_CHILD_OUTPUT"]).write_text(json.dumps(payload, indent=2) + "\n")
@@ -185,6 +187,13 @@ def main():
     binary = next(runtime.rglob("crispasr"))
     if not binary.is_file() or sha(binary) != "4c07dbc07453e80684786203990ab6e89c1266bc13e6c61ca0e7ea5045444819":
         raise ValueError("Unexpected native executable")
+    # Install before the first Hub import. Replacing huggingface_hub inside an
+    # already-importing interpreter made v1 fail on a stale utils.httpx export.
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "transformers==5.19.0",
+                    "huggingface_hub>=0.36,<2", "soundfile", "accelerate"], check=True)
+    from importlib.metadata import version
+    if version("transformers") != "5.19.0":
+        raise RuntimeError("Unexpected original software version")
     from huggingface_hub import hf_hub_download, snapshot_download
     native = Path(hf_hub_download(NATIVE[0], NATIVE[2], revision=NATIVE[1], local_dir=WORK / "native"))
     if sha(native) != NATIVE[3]:
@@ -195,11 +204,6 @@ def main():
         raise ValueError("Original model changed")
     receipt["original_files"] = {str(p.relative_to(original)): sha(p) for p in original.rglob("*") if p.is_file()}
     save()
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "transformers==5.19.0",
-                    "huggingface_hub>=0.36,<2", "soundfile", "accelerate"], check=True)
-    import transformers
-    if transformers.__version__ != "5.19.0":
-        raise RuntimeError("Unexpected original software version")
     base_env = dict(os.environ)
     base_env["LD_LIBRARY_PATH"] = str(binary.parent) + os.pathsep + base_env.get("LD_LIBRARY_PATH", "")
     base_env.update(NEMOTRON_ORIGINAL_DIR=str(original), NEMOTRON_AUDIO=str(WORK / "input.wav"))
