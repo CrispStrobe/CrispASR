@@ -294,6 +294,10 @@ def make_original(source, config, checkpoint, bert_snapshot):
     started = time.perf_counter()
     tts = TTS(language="EN_V2", device="cuda", use_hf=False,
               config_path=str(config), ckpt_path=str(checkpoint))
+    from melo.text import english_bert
+    from transformers import AutoModelForMaskedLM
+    if english_bert.model is None:
+        english_bert.model = AutoModelForMaskedLM.from_pretrained("bert-base-uncased").to("cuda")
     torch.cuda.synchronize()
     load_seconds = time.perf_counter() - started
     if torch.cuda.memory_allocated(0) < 128 * 1024**2:
@@ -302,6 +306,12 @@ def make_original(source, config, checkpoint, bert_snapshot):
     speaker = speaker_map["EN-US"] if "EN-US" in speaker_map else speaker_map["en-us"]
     if speaker != 0 or tts.hps.data.sampling_rate != 44100:
         raise RuntimeError("Original Melo speaker/sample rate differs from qualification")
+    probe_pcm = tts.tts_to_file("Warmup.", speaker, output_path=None,
+                                sdp_ratio=0.0, noise_scale=0.667,
+                                noise_scale_w=0.8, speed=1.0, quiet=True)
+    torch.cuda.synchronize()
+    if len(probe_pcm) <= 0:
+        raise RuntimeError("Original Melo probe synthesis failed")
     model_infer = tts.model.infer
     model_times = []
 
@@ -443,7 +453,8 @@ def main():
     WORK.mkdir(parents=True, exist_ok=True)
     os.environ.update(TMPDIR=str(WORK), HF_HOME=str(WORK / "hf"),
                       CUDA_VISIBLE_DEVICES="0", OMP_NUM_THREADS="2", OPENBLAS_NUM_THREADS="1",
-                      CRISPASR_MELOTTS_BENCH="1", HF_HUB_DISABLE_TELEMETRY="1")
+                      CRISPASR_MELOTTS_BENCH="1", HF_HUB_DISABLE_TELEMETRY="1",
+                      USE_TORCH="1", USE_TF="0", USE_FLAX="0")
     receipt = {"version": VERSION, "complete": False, "acceptance": False,
                "scope": "Full original Melo API versus native F16 Melo C ABI; warm whole calls",
                "source": SOURCE, "melo_source": MELO_SOURCE,
