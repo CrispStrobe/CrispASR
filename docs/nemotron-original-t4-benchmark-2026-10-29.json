@@ -52,6 +52,6 @@
     "threads": 4,
     "max_new_tokens": 512,
     "original_lookahead_tokens": 3,
-    "native_context_preset": "shipped default [56, 3]"
+    "native_context_preset": "default configured [56, 3]; whether used in this offline path is unverified"
   }
 }
