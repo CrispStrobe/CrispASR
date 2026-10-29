@@ -169,6 +169,8 @@ def main():
     receipt['median_seconds'] = {name: statistics.median(r['seconds'] for r in receipt['runs'] if r['phase']=='measured' and r['engine']==name) for name in ['crisp','crisp-profile','fork','upstream']}
     hashes = {r['transcript_sha256'] for r in receipt['runs']}
     if len(hashes) != 1: raise RuntimeError('Transcript differs across profiling controls')
+    if len({r['decode_calls'] for r in receipt['runs']}) != 1:
+        raise RuntimeError('Decoder call counts differ across engines')
     receipt['source'] = SOURCE
     receipt['fork_source'] = FORK_SOURCE
     receipt['upstream_source'] = UPSTREAM_SOURCE
