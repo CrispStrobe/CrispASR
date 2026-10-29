@@ -120,9 +120,17 @@ and check actual GPU session availability before every Kaggle submission.
   `ea8666fc9ee9ebd64eeeaf0fb49b1cf76aeaef648bc737a60608b9bf1dbe8208`.
   Its v2 uploaded script SHA-256 was
   `ea0d3c6b3ed61b00927c44c4994be463af79943d7d3629e32cb6af27eb2f883e`.
-  The independent `crispasr-whisper-vmm-ab` version 1 tests VMM on and off on
-  the same CrispASR source and is still running. Collect and check its terminal
-  output before drawing conclusions. These results do not yet
+  The independent `crispasr-whisper-vmm-ab` version 1 completed on the same
+  source: [receipt](whisper-vmm-t4-diagnostic-2026-10-29.json). All 20 GPU,
+  WER, transcript and 27-call controls pass. Median load is 554.3 ms VMM off
+  and 559.6 ms on; decode is 2.52 and 2.51 ms/call. Profiled weight-buffer
+  selection takes about 232–233 ms in either arm. A loader-local device-type
+  cache candidate `0a3a97c1e` on `validate/whisper-loader-device-cache-20261029`
+  retains per-tensor support checks; baseline `9df3071a9` and candidate emit
+  the same opt-in ordered placement trace. CI **40870464042** and lint
+  **40870467717** are queued. Complete fake-backend equivalence, CPU/CUDA
+  placement traces and same-toolchain A/B before any integration; no performance
+  match or cause is claimed yet. These results do not yet
   establish the reason for the gap or matched performance. Keep changes on
   validation branches until their own acceptance checks pass. A static upstream
   comparison identified per-call persistent CPU-threadpool setup as a possible
