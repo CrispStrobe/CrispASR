@@ -7,8 +7,8 @@ from pathlib import Path
 import runpy
 import urllib.request
 
-SOURCE = "59751b4e2388bede93705428b81928d7e778efbc"
-SHA256 = "2f21de41c9c5232095ab225483c58c2c35066c0d228b27a1e10983b189557c46"
+SOURCE = "837e02957585e2b29f29ddfbcbab9a6f54a15f36"
+SHA256 = "fb48ce6d1fc371c29d8be62e542fa92f93d2667411d991d12b52e07452d4596d"
 print(
     "Melo decoder diagnostic source=" + SOURCE,
     "worker_sha256=" + SHA256,
