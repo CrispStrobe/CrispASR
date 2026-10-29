@@ -70,8 +70,11 @@ and check actual GPU session availability before every Kaggle submission.
   The Granite original forward-step diagnostic and Nemotron F16 comparison
   against MIT-licensed transcribe.cpp are prepared on validation branch
   `validate/whisper-granite-diagnostics-20261029` at `ca0fb1e05`. Nemotron fork
-  version 1 is running as `nemotron-f16-crispasr-and-transcribe-cpp-paired-t4`;
-  its uploaded script SHA-256 is
+  version 1 ran as `nemotron-f16-crispasr-and-transcribe-cpp-paired-t4` and
+  failed before inference because the pinned release archive did not contain
+  the expected `transcribe-cli` executable. Terminal output and source are
+  retained; correct the release invocation before a successor run. Its uploaded
+  script SHA-256 was
   `d4bfc898de2d9cb73d1c0cc3f8f1c6032205089866dcbdae461aad348ee68e5c`.
   Granite step diagnostic is not submitted. Their READMEs specify GPU, model
   provenance, context and quality gates. Coordinate slots before submission.
@@ -111,7 +114,9 @@ and check actual GPU session availability before every Kaggle submission.
   completing the first source build (96% at 2,400 seconds); its terminal source
   and output are retained. No v2 inference result exists. The revised adapter
   allows 5,400 seconds per build, on `validate/hosted-build-timeouts-20261029`
-  at `eaa50d2cd`; submit a new version only when a slot is free.
+  at `eaa50d2cd`. Version 3 was submitted after a fresh slot check; uploaded
+  script SHA-256 is
+  `ea8666fc9ee9ebd64eeeaf0fb49b1cf76aeaef648bc737a60608b9bf1dbe8208`.
   Its v2 uploaded script SHA-256 was
   `ea0d3c6b3ed61b00927c44c4994be463af79943d7d3629e32cb6af27eb2f883e`.
   The independent `crispasr-whisper-vmm-ab` version 1 tests VMM on and off on
