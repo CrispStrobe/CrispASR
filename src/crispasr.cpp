@@ -10328,7 +10328,15 @@ static void median_filter(struct ggml_tensor* dst, const struct ggml_tensor* a, 
         return;
     }
     int filter_width = ((median_filter_user_data*)userdata)->filter_width;
-    CRISPASR_ASSERT(filter_width < a->ne[2]);
+    // Upstream whisper.cpp a46fadb36a9b (MIT): narrow the filter for a
+    // short alignment window instead of aborting; width 1 is a no-op.
+    if (filter_width >= a->ne[2]) {
+        filter_width = (a->ne[2] % 2) ? (int)a->ne[2] - 2 : (int)a->ne[2] - 1;
+        if (filter_width < 1) {
+            filter_width = 1;
+        }
+    }
+    CRISPASR_ASSERT(filter_width < a->ne[2] || filter_width == 1);
     CRISPASR_ASSERT(filter_width % 2);
     CRISPASR_ASSERT(ggml_n_dims(a) == 3);
     CRISPASR_ASSERT(a->type == GGML_TYPE_F32);
