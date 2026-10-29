@@ -1946,13 +1946,19 @@ static buft_list_t make_buft_list(whisper_context_params& params) {
     return buft_list;
 }
 
+struct whisper_weight_buft {
+    ggml_backend_dev_t dev;
+    ggml_backend_buffer_type_t buft;
+    enum ggml_backend_dev_type type;
+};
+
 static bool weight_buft_supported(const whisper_hparams& hparams, ggml_tensor* w, ggml_op op,
-                                  ggml_backend_buffer_type_t buft, ggml_backend_dev_t dev) {
+                                  ggml_backend_buffer_type_t buft, ggml_backend_dev_t dev,
+                                  enum ggml_backend_dev_type type) {
     bool op_supported = true;
 
-    if (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_GPU ||
-        ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_IGPU ||
-        (ggml_backend_dev_type(dev) == GGML_BACKEND_DEVICE_TYPE_CPU && buft == core_cpu_backend::buffer_type())) {
+    if (type == GGML_BACKEND_DEVICE_TYPE_GPU || type == GGML_BACKEND_DEVICE_TYPE_IGPU ||
+        (type == GGML_BACKEND_DEVICE_TYPE_CPU && buft == core_cpu_backend::buffer_type())) {
         // GPU and default CPU backend support all operators
         op_supported = true;
     } else {
@@ -2003,12 +2009,20 @@ static bool weight_buft_supported(const whisper_hparams& hparams, ggml_tensor* w
 }
 
 static ggml_backend_buffer_type_t select_weight_buft(const whisper_hparams& hparams, ggml_tensor* w, ggml_op op,
-                                                     buft_list_t buft_list) {
+                                                     const std::vector<whisper_weight_buft>& buft_list,
+                                                     const char* trace_name) {
     GGML_ASSERT(!buft_list.empty());
     for (const auto& p : buft_list) {
-        ggml_backend_dev_t dev = p.first;
-        ggml_backend_buffer_type_t buft = p.second;
-        if (weight_buft_supported(hparams, w, op, buft, dev)) {
+        ggml_backend_dev_t dev = p.dev;
+        ggml_backend_buffer_type_t buft = p.buft;
+        if (weight_buft_supported(hparams, w, op, buft, dev, p.type)) {
+            if (trace_name) {
+                CRISPASR_LOG_INFO("whisper placement trace: tensor=%s op=%s type=%s shape=%lld,%lld,%lld,%lld "
+                                  "device=%s buffer=%s\n",
+                                  trace_name, ggml_op_name(op), ggml_type_name(w->type), (long long)w->ne[0],
+                                  (long long)w->ne[1], (long long)w->ne[2], (long long)w->ne[3],
+                                  ggml_backend_dev_name(dev), ggml_backend_buft_name(buft));
+            }
             return buft;
         }
     }
@@ -2348,9 +2362,24 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
         return false;
     }
 
+    // Classify each candidate device once during this load. Retain each
+    // per-weight buffer support check and the original priority order.
+    std::unordered_map<ggml_backend_dev_t, enum ggml_backend_dev_type> device_types;
+    std::vector<whisper_weight_buft> weight_bufts;
+    weight_bufts.reserve(buft_list.size());
+    for (const auto& entry : buft_list) {
+        auto it = device_types.find(entry.first);
+        if (it == device_types.end())
+            it = device_types.emplace(entry.first, ggml_backend_dev_type(entry.first)).first;
+        weight_bufts.push_back({entry.first, entry.second, it->second});
+    }
+
+    const bool trace_placement = getenv("CRISPASR_WHISPER_PLACEMENT_TRACE") != nullptr;
     auto create_tensor = [&](asr_tensor type, asr_system system, ggml_tensor* meta, int layer = 0) -> ggml_tensor* {
         ggml_op op = ASR_TENSOR_INFO.at(type);
-        ggml_backend_buffer_type_t buft = select_weight_buft(hparams, meta, op, buft_list);
+        const std::string tensor_name = format(ASR_TENSOR_NAMES.at(system).at(type), layer);
+        ggml_backend_buffer_type_t buft =
+            select_weight_buft(hparams, meta, op, weight_bufts, trace_placement ? tensor_name.c_str() : nullptr);
         if (!buft) {
             throw std::runtime_error(
                 format("failed to find a compatible buffer type for tensor %s", ASR_TENSOR_NAMES.at(system).at(type)));
@@ -2359,7 +2388,7 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
         ggml_context* ctx = get_ctx(buft);
         ggml_tensor* tensor = ggml_dup_tensor(ctx, meta);
 
-        model.tensors[format(ASR_TENSOR_NAMES.at(system).at(type), layer)] = tensor;
+        model.tensors[tensor_name] = tensor;
 
         return tensor;
     };
