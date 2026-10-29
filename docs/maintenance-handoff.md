@@ -75,7 +75,10 @@ and check actual GPU session availability before every Kaggle submission.
   the expected `transcribe-cli` executable. Terminal output and source are
   retained. Version 2 uses the pinned release Python API with its CUDA library
   and is prepared at `67af321a7` on `validate/nemotron-fork-python-20261029`;
-  static API checks passed but it has not run. Its version 1 script SHA-256 was
+  static API checks passed. Version 2 processed all 27 native cases on GPU,
+  then failed because the harness expected per-input text files while the CLI
+  emitted transcripts on stdout. Retain its logs and fix unambiguous output
+  parsing before version 3; it is not a fork comparison result. Its version 1 script SHA-256 was
   `d4bfc898de2d9cb73d1c0cc3f8f1c6032205089866dcbdae461aad348ee68e5c`.
   Granite step diagnostic is not submitted. Their READMEs specify GPU, model
   provenance, context and quality gates. Coordinate slots before submission.
