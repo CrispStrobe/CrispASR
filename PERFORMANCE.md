@@ -129,6 +129,32 @@ does not isolate the time spent in GPU kernels. The failed version 1 never ran
 inference because the harness searched for the wrong packaged executable name;
 its source and logs are retained. [Receipt](docs/whisper-fork-t4-benchmark-2026-10-29.json).
 
+### Follow-up and recent models — 2026-10-29
+
+On the same T4/JFK workload, a source-built CrispASR diagnostic and the packaged
+fork each produced identical text and 27 decode calls. Their median decode times
+were 2.52 and 2.41 ms per call; median model loads were 531 and 293 ms. Their
+builds differ, including CUDA VMM configuration, so the cause and a performance
+match are not established. A same-toolchain upstream/fork comparison and a VMM
+on/off diagnostic are in progress. [Receipt](docs/whisper-timing-t4-diagnostic-2026-10-29.json).
+
+The following original-implementation comparisons use one T4 and small bounded
+inputs. Each receipt records the different precision, devices and timing
+boundaries; do not compare the table's native and original values as identical
+operations or as general model rankings.
+
+| Workload | Native measurement | Original measurement | Evidence |
+|---|---:|---:|---|
+| Nemotron ASR, F16 vs F32 | 2.40 s process including load | 17.21 s process including load; 0.912 s generate | [Receipt](docs/nemotron-original-t4-benchmark-2026-10-29.json) |
+| Granite Speech5, Q4_K vs F16 | 296.7 ms for 26 decoder calls after prefill | 1.420 s full second `generate()` call | [Receipt](docs/granite5-original-t4-benchmark-2026-10-29.json) |
+| CSM, Q4_K vs F32 | 8.69 s process including load | 41.12 s process including load, watermark disabled | [Receipt](docs/csm-original-t4-benchmark-2026-10-29.json) |
+| OpenVoice, two warm conversions | 9.33 / 10.28 s, CPU flows and CUDA vocoder | 0.130 / 0.139 s, CUDA converter | [Receipt](docs/openvoice-original-t4-benchmark-2026-10-29.json) |
+
+The OpenVoice outputs passed the fixed waveform comparison, but full original
+Melo synthesis has not yet been timed. A native stage profile is prepared to
+investigate the conversion gap. Nemotron ggml-fork and matched per-step
+comparisons remain outstanding.
+
 # CrispASR — Performance benchmarks
 
 Character CTC workspace experiment (2026-10-18): opt-in
