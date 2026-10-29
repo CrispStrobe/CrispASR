@@ -66,11 +66,17 @@ and check actual GPU session availability before every Kaggle submission.
   The [T4 timing diagnostic](whisper-timing-t4-diagnostic-2026-10-29.json) of
   `c5513ccfb` passed output and GPU controls. Median decode was 2.52 ms/call
   versus 2.41 ms for the packaged fork, and model load 531 ms versus 293 ms;
-  builds differ. A same-toolchain upstream and fork comparison is running on
-  Kaggle; the uploaded script digest is
-  `b9691a735a49515ef6d9be2cb9b288cafd4667fda6b0f0a639e08e7dfe1d98e3`.
-  These results do not establish the reason for the gap or matched performance. Keep all changes on validation
-  branches until their own acceptance checks pass.
+  builds differ. Same-toolchain comparison `crispasr-whisper-toolchain-paired`
+  version 1 failed before fork compilation: its CMake configuration could not
+  find `CUDA::cuda_driver`. Retained output and source document the failure.
+  Version 2 is submitted with CUDA VMM disabled for all three builds and checks
+  each compile command; its uploaded script SHA-256 is
+  `ea0d3c6b3ed61b00927c44c4994be463af79943d7d3629e32cb6af27eb2f883e`.
+  The independent `crispasr-whisper-vmm-ab` version 1 tests VMM on and off on
+  the same CrispASR source. Collect and check both terminal outputs before
+  drawing conclusions or scheduling another run. These results do not yet
+  establish the reason for the gap or matched performance. Keep changes on
+  validation branches until their own acceptance checks pass.
 
 The validation branch `validate/ordered-model-benchmarks-20261029` contains the
 prepared adapters and bounded Nemotron receipt. Later local changes and private
@@ -757,13 +763,13 @@ implemented and validated on hosted hardware.
 published v0.8.48 tag.** Source is
 `cc114d2b4a5a9413738f390093e9131576743cb6`; annotated tag object is
 `f9eb753bbdfd66977e6d6c57f2e6f7b712166cb7`. Exact-source checks all pass and
-remote main/peeled-tag readbacks match. Native Release **40833098926** and
-language-wrapper Release **40833098923** are in flight. Continue steps 4–5.
-The automatic Python-wheel workflow has not yet been verified or manually
-redispatched. Both publication audits remain to dispatch after their inputs
-finish. Use `tag=v0.8.48`, the full source above, `runner=ubuntu-latest`,
-`repair_notices=false`; native audit takes `release_run=40833098926`, then
-wheel audit takes the actual wheel producer ID and accepted native audit ID.
+remote main/peeled-tag readbacks match. Native Release **40833098926**,
+language-wrapper Release **40833098923**, and native audit **40856997446**
+passed. Automatic wheel producer **40856452802** is queued; do not duplicate
+it. After it passes, dispatch the wheel audit using `tag=v0.8.48`, the full
+source above, `runner=ubuntu-latest`, `repair_notices=false`,
+`release_run=40833098926`, `wheel_run=40856452802`, and
+`native_audit_run=40856997446`.
 Require all 52 native names, all 11 distributions, all five anonymous PyPI
 readbacks, complete GPU index/full-byte readbacks and Pages deployment, plus
 Rust/Dart publication. Preserve original producer artifacts; rerun only failed
