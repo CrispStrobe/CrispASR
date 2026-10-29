@@ -234,6 +234,11 @@ class FrameProfile:
             raise RuntimeError("Incomplete CSM forward trace")
 
 
+def validate_eos_order(flags):
+    if not flags or not flags[-1] or any(flags[:-1]):
+        raise RuntimeError("EOS must be the last attempted frame")
+
+
 def validate_frames(rows, accepted, eos_count, codebooks, timed):
     if not rows or codebooks != EXPECTED_CODEBOOKS:
         raise RuntimeError("Missing frames or unexpected codebook count")
@@ -365,12 +370,13 @@ def original_child():
                                                        temperature=TEMPERATURE, topk=TOPK)
                             torch.cuda.synchronize()
                             generate_ms = (time.perf_counter_ns() - start) / 1e6
+                            after_samples = len(watch.samples)
+                            after_sm = len(watch.sm_samples)
                     finally:
                         generator._audio_tokenizer.decode = mimi_original
                     samples = torch.stack(profile.samples).detach().cpu().contiguous()
                     eos = (samples == 0).all(dim=-1).reshape(-1)
-                    if not bool(eos[-1].item()) or bool(eos[:-1].any().item()):
-                        raise RuntimeError("EOS must be the last attempted frame")
+                    validate_eos_order(eos.tolist())
                     eos_count = int(eos.sum().item())
                     accepted = int((~eos).sum().item())
                     validate_frames(profile.rows, accepted, eos_count, model.config.audio_num_codebooks, timed)
@@ -387,8 +393,8 @@ def original_child():
                         "eos_frame_attempts": eos_count,
                         "codebook_count": model.config.audio_num_codebooks,
                         "all_attempted_codes_sha256": hashlib.sha256(samples.numpy().tobytes()).hexdigest(),
-                        "gpu_pid_samples_during_generate": len(watch.samples) - before_samples,
-                        "gpu_sm_samples_during_generate": watch.sm_samples[before_sm:],
+                        "gpu_pid_samples_during_generate": after_samples - before_samples,
+                        "gpu_sm_samples_during_generate": watch.sm_samples[before_sm:after_sm],
                         "wav": wav_info(wav),
                     }
                     if timed:

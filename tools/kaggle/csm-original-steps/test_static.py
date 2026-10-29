@@ -124,4 +124,12 @@ for bad in (calls[:-1], [*calls[:-1], {**calls[-1], "all_attempted_codes_sha256"
         raise AssertionError("Invalid timing-on/off identity or pair was accepted")
 
 assert module.wer(module.PHRASE) == 0
+module.validate_eos_order([False, False, True])
+for bad in ([], [False], [True, False], [True, True]):
+    try:
+        module.validate_eos_order(bad)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("Invalid EOS order accepted")
 print("CSM original step model-free controls: PASS")
