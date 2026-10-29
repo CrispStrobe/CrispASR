@@ -1,0 +1,17 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-openvoice-stage-profile",
+  "title": "crispasr-openvoice-stage-profile",
+  "code_file": "run.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [
+    "${KAGGLE_ACCOUNT}/crispasr-openvoice-conditioning",
+    "${KAGGLE_ACCOUNT}/crispasr-openvoice-full-source"
+  ],
+  "model_sources": []
+}
