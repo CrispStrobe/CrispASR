@@ -113,8 +113,11 @@ and check actual GPU session availability before every Kaggle submission.
   `validate/whisper-vad-offset-20261029`, with CI **40865260917** and lint
   **40865264366** queued. These validation trees include other experimental
   commits; isolate and retest any fix on the eventual integration tree. The
-  upstream vocabulary bounds check needs adaptation for serialized Whisper-ja
-  and Tiron speaker IDs before it can be ported safely.
+  upstream vocabulary bounds check is adapted for serialized Whisper-ja and
+  Tiron speaker IDs at `c2e86fbce` on `validate/whisper-vocab-bounds-20261029`.
+  CI **40865446248**, lint **40865449693** and a Whisper-tiny hosted model run
+  **40865458610** are queued. Accept real Whisper-ja and Tiron models as well
+  before integrating the guard; unit fixtures do not prove model compatibility.
 
 The validation branch `validate/ordered-model-benchmarks-20261029` contains the
 prepared adapters and bounded Nemotron receipt. Later local changes and private
