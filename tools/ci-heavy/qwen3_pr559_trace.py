@@ -60,7 +60,10 @@ with Session(str(model), lib_path=str(lib), backend="qwen3", n_threads=4) as ses
 long_audio = out / "qwen-cli-chunks.wav"
 with wave.open(str(audio), "rb") as source, wave.open(str(long_audio), "wb") as target:
     target.setparams(source.getparams())
-    target.writeframes(source.readframes(source.getnframes()) * 40)
+    frames = source.getnframes()
+    if frames <= 0:
+        raise RuntimeError("Synthetic input is empty")
+    target.writeframes(source.readframes(frames) * (25 * 16000 // frames + 1))
 for label, input_audio, context, extra, minimum in (
     ("raw", audio, "Acme context", [], 1),
     ("empty", audio, "", [], 1),
