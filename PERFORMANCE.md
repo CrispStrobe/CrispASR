@@ -114,6 +114,14 @@ engine followed one warmup each. Every call observed the process on the GPU
 and returned zero WER on this single input. Process-wall medians were **1.468 s
 for CrispASR** and **1.017 s for the fork** (fork about 1.44× faster).
 
+The engines also report internal phase counters. Median load time was 635.53 ms
+for CrispASR versus 292.59 ms for the fork; median decode was 102.03 versus
+64.74 ms across 27 reported decode runs (3.78 versus 2.40 ms per run).
+CrispASR's median encoder was 80.00 versus 99.84 ms. These separate medians
+do not sum to the median end-to-end result. The data localizes the gap to load
+and decode in this experiment, but does not identify which build, kernel,
+backend configuration or implementation caused it.
+
 These are whole-process times, including model initialization and concurrent
 GPU monitoring; the binaries use different builds and CUDA libraries. They
 are not per-step timings or a general model-family ranking. GPU PID evidence

@@ -215,5 +215,264 @@
   "fork_source": "35026a0bd1983b875c0176f47a5d0145fce340f4",
   "fork_release": "v1.0.0",
   "crispasr_release": "v0.8.47",
-  "readback_verified": true
+  "readback_verified": true,
+  "reported_engine_phase_timings": {
+    "crisp": {
+      "load": {
+        "values": [
+          {
+            "ms": 657.2,
+            "runs": null
+          },
+          {
+            "ms": 625.96,
+            "runs": null
+          },
+          {
+            "ms": 519.81,
+            "runs": null
+          },
+          {
+            "ms": 645.09,
+            "runs": null
+          }
+        ],
+        "median_ms": 635.5250000000001
+      },
+      "mel": {
+        "values": [
+          {
+            "ms": 24.32,
+            "runs": null
+          },
+          {
+            "ms": 21.94,
+            "runs": null
+          },
+          {
+            "ms": 35.07,
+            "runs": null
+          },
+          {
+            "ms": 21.9,
+            "runs": null
+          }
+        ],
+        "median_ms": 23.130000000000003
+      },
+      "sample": {
+        "values": [
+          {
+            "ms": 21.2,
+            "runs": 1
+          },
+          {
+            "ms": 18.71,
+            "runs": 1
+          },
+          {
+            "ms": 18.5,
+            "runs": 1
+          },
+          {
+            "ms": 23.4,
+            "runs": 1
+          }
+        ],
+        "median_ms": 19.955
+      },
+      "encode": {
+        "values": [
+          {
+            "ms": 82.08,
+            "runs": 1
+          },
+          {
+            "ms": 80.93,
+            "runs": 1
+          },
+          {
+            "ms": 78.73,
+            "runs": 1
+          },
+          {
+            "ms": 79.07,
+            "runs": 1
+          }
+        ],
+        "median_ms": 80.0
+      },
+      "decode": {
+        "values": [
+          {
+            "ms": 107.68,
+            "runs": 27
+          },
+          {
+            "ms": 100.12,
+            "runs": 27
+          },
+          {
+            "ms": 97.15,
+            "runs": 27
+          },
+          {
+            "ms": 103.93,
+            "runs": 27
+          }
+        ],
+        "median_ms": 102.025
+      },
+      "total": {
+        "values": [
+          {
+            "ms": 912.9,
+            "runs": null
+          },
+          {
+            "ms": 868.42,
+            "runs": null
+          },
+          {
+            "ms": 770.85,
+            "runs": null
+          },
+          {
+            "ms": 894.46,
+            "runs": null
+          }
+        ],
+        "median_ms": 881.44
+      }
+    },
+    "fork": {
+      "load": {
+        "values": [
+          {
+            "ms": 279.7,
+            "runs": null
+          },
+          {
+            "ms": 308.51,
+            "runs": null
+          },
+          {
+            "ms": 274.69,
+            "runs": null
+          },
+          {
+            "ms": 305.47,
+            "runs": null
+          }
+        ],
+        "median_ms": 292.58500000000004
+      },
+      "mel": {
+        "values": [
+          {
+            "ms": 23.91,
+            "runs": null
+          },
+          {
+            "ms": 22.53,
+            "runs": null
+          },
+          {
+            "ms": 22.01,
+            "runs": null
+          },
+          {
+            "ms": 22.15,
+            "runs": null
+          }
+        ],
+        "median_ms": 22.34
+      },
+      "sample": {
+        "values": [
+          {
+            "ms": 19.06,
+            "runs": 1
+          },
+          {
+            "ms": 18.67,
+            "runs": 1
+          },
+          {
+            "ms": 19.09,
+            "runs": 1
+          },
+          {
+            "ms": 21.22,
+            "runs": 1
+          }
+        ],
+        "median_ms": 19.075
+      },
+      "encode": {
+        "values": [
+          {
+            "ms": 95.53,
+            "runs": 1
+          },
+          {
+            "ms": 105.98,
+            "runs": 1
+          },
+          {
+            "ms": 92.87,
+            "runs": 1
+          },
+          {
+            "ms": 104.14,
+            "runs": 1
+          }
+        ],
+        "median_ms": 99.83500000000001
+      },
+      "decode": {
+        "values": [
+          {
+            "ms": 55.55,
+            "runs": 27
+          },
+          {
+            "ms": 76.86,
+            "runs": 27
+          },
+          {
+            "ms": 54.38,
+            "runs": 27
+          },
+          {
+            "ms": 73.93,
+            "runs": 27
+          }
+        ],
+        "median_ms": 64.74000000000001
+      },
+      "total": {
+        "values": [
+          {
+            "ms": 484.69,
+            "runs": null
+          },
+          {
+            "ms": 543.71,
+            "runs": null
+          },
+          {
+            "ms": 473.86,
+            "runs": null
+          },
+          {
+            "ms": 537.66,
+            "runs": null
+          }
+        ],
+        "median_ms": 511.17499999999995
+      }
+    }
+  },
+  "phase_timing_limitations": "Engine-reported counters; builds and CUDA libraries differ, monitoring was active; separate medians do not add to the median total."
 }
