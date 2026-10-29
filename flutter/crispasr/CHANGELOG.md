@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+## 0.8.48
+
+* **Native speech:** restore original Melo/OpenVoice conditioning, duration and
+  decoder behavior; preserve output rates and reject invalid speaker choices.
+* **Models:** managed Melo V2 downloads select the qualified F16 BERT companion
+  with immutable source pins and separate Apache-2.0 attribution.
+* **Recognition and CLI:** preserve standalone Parakeet word boundaries and
+  make standalone language detection exit before loading an ASR model.
+* Public Dart interfaces are unchanged. CPU/T4 speech acceptance is bounded to
+  the documented English profile; additional GPU families remain unverified.
+
 ## 0.8.47
 
 * **Packaging:** Linux GPU Python wheels and native bundles (#557). Dart
