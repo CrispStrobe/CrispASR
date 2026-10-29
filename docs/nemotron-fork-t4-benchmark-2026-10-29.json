@@ -1,0 +1,82 @@
+{
+  "schema": 1,
+  "complete": true,
+  "acceptance": true,
+  "scope": "One T4; 26 original-reference quality clips and one public JFK clip per arm, plus four fresh-process JFK measurements per arm after warmup. Crisp and transcribe.cpp use different F16 GGUF schemas and artifacts; process times include startup and GPU monitoring.",
+  "hardware": "Tesla T4, compute capability 7.5",
+  "script_sha256": "95fea2e27971633c0034cadf0a4a3827f44cad072da9a2e610552bdab7b3e98e",
+  "runtime_pins": {
+    "crisp_source": "5f87a56265e4bbd7e2adc7052254e576d5774abb",
+    "crisp_model_sha256": "14cbc98df495d8ab452c6a4ac367136d94ab5da55e73afaa96ba4f749dd95d09",
+    "transcribe_source": "4d7c1ccefd39e5a9ea36cca5f8fefc6dcc14b99b",
+    "transcribe_model_sha256": "f21a0cea64d232981def7f8f2b7ab322459703a2e89359962c042c57159755b1",
+    "transcribe_python_wheel_sha256": "f373b6e20a4d897ed0dcaa2fe7fae183379777432b3a76641c42506c77b442ad"
+  },
+  "model_terms": "NVIDIA OpenMDW-1.1 applies to the weights; transcribe.cpp runtime is MIT. Model files are not identical and upstream artifact identity is unproven.",
+  "quality": {
+    "all_arms_gpu_pid_memory_and_sm_observed": true,
+    "clips_per_arm": 27,
+    "matched_r13_original_reference_wer_gap": 0.0
+  },
+  "arms": {
+    "crisp_r3": {
+      "context": {
+        "left": 56,
+        "right": 3,
+        "offline": true,
+        "source": "native runtime mask log"
+      },
+      "original_reference_26_wer": 0.0,
+      "jfk_wer": 0.0,
+      "median_process_seconds": 3.8712840350000306,
+      "median_native_stage_ms": {
+        "mel_ms": 14.695,
+        "encoder_ms": 203.76999999999998,
+        "prompt_ms": 822.155,
+        "rnnt_decode_ms": 221.01999999999998
+      }
+    },
+    "crisp_r13": {
+      "context": {
+        "left": 56,
+        "right": 13,
+        "offline": true,
+        "source": "native runtime mask log"
+      },
+      "original_reference_26_wer": 0.00816326530612245,
+      "jfk_wer": 0.0,
+      "median_process_seconds": 3.9333413994999944,
+      "median_native_stage_ms": {
+        "mel_ms": 12.04,
+        "encoder_ms": 212.24,
+        "prompt_ms": 821.995,
+        "rnnt_decode_ms": 206.48
+      }
+    },
+    "transcribe_r13": {
+      "context": {
+        "left": 56,
+        "right": 13,
+        "offline": true,
+        "source": "pinned v0.4.1 model default; single-utterance Python API offline path"
+      },
+      "original_reference_26_wer": 0.00816326530612245,
+      "jfk_wer": 0.0,
+      "median_process_seconds": 6.5025642830000265,
+      "median_native_stage_ms": {
+        "mel_ms": 11.48550033569336,
+        "encode_ms": 1042.1129760742188,
+        "decode_ms": 1303.113525390625
+      }
+    }
+  },
+  "limitations": [
+    "The R13 pair matches the reported offline context, not model bytes or upstream artifact revisions.",
+    "Reported native stage boundaries differ across runtimes and must not be equated by name alone.",
+    "This is one clip for timing and does not establish general recognition quality or performance."
+  ],
+  "license_sources": [
+    "https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b",
+    "https://github.com/handy-computer/transcribe.cpp/blob/4d7c1ccefd39e5a9ea36cca5f8fefc6dcc14b99b/LICENSE"
+  ]
+}

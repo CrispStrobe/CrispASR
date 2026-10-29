@@ -77,10 +77,13 @@ and check actual GPU session availability before every Kaggle submission.
   and is prepared at `67af321a7` on `validate/nemotron-fork-python-20261029`;
   static API checks passed. Version 2 processed all 27 native cases on GPU,
   then failed because the harness expected the wrong output paths. Version 3
-  verifies the actual `.txt` paths against stdout and is running on Kaggle;
-  its source is in `validate/whisper-loader-ab-20261029` at `5c6c767aa` and
-  its uploaded script SHA-256 is
-  `95fea2e27971633c0034cadf0a4a3827f44cad072da9a2e610552bdab7b3e98e`.
+  verifies the actual `.txt` paths against stdout and completed with GPU and
+  quality gates; see the [fork receipt](nemotron-fork-t4-benchmark-2026-10-29.json).
+  For matched R13 context, both engines have 0.0082 WER against 26 original
+  transcripts and zero JFK WER. Four measured JFK process medians are 3.93 s
+  native and 6.50 s transcribe.cpp; GGUF bytes, artifacts and stage boundaries
+  differ. Its source is in `validate/whisper-loader-ab-20261029` at `5c6c767aa`,
+  script SHA-256 `95fea2e27971633c0034cadf0a4a3827f44cad072da9a2e610552bdab7b3e98e`.
   Versions 1 and 2 are not fork comparison results. Version 1 script SHA-256 was
   `d4bfc898de2d9cb73d1c0cc3f8f1c6032205089866dcbdae461aad348ee68e5c`.
   Granite step diagnostic is not submitted. Their READMEs specify GPU, model
@@ -136,8 +139,9 @@ and check actual GPU session availability before every Kaggle submission.
   the same opt-in ordered placement trace. CI **40870464042** and lint
   **40870467717** are queued. Fake-backend equivalence run **40871174976**
   is queued on `validate/whisper-buft-equivalence-20261029`. The GPU A/B
-  adapter is prepared at `5c6c767aa` on `validate/whisper-loader-ab-20261029`;
-  submit when a slot is free after the current jobs. Complete the equivalence,
+  adapter at `5c6c767aa` on `validate/whisper-loader-ab-20261029` is running
+  on Kaggle as `crispasr-whisper-loader-device-ab` v1; uploaded script SHA-256
+  `71be7e494f39c08c443bc6688f3bd2bff337afe444201915a1f9b5cd3d648de2`. Complete the equivalence,
   CPU/CUDA placement traces and same-toolchain A/B before any integration; no
   performance match or cause is claimed yet. These results do not yet
   establish the reason for the gap or matched performance. Keep changes on
