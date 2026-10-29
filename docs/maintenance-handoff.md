@@ -76,9 +76,12 @@ and check actual GPU session availability before every Kaggle submission.
   retained. Version 2 uses the pinned release Python API with its CUDA library
   and is prepared at `67af321a7` on `validate/nemotron-fork-python-20261029`;
   static API checks passed. Version 2 processed all 27 native cases on GPU,
-  then failed because the harness expected per-input text files while the CLI
-  emitted transcripts on stdout. Retain its logs and fix unambiguous output
-  parsing before version 3; it is not a fork comparison result. Its version 1 script SHA-256 was
+  then failed because the harness expected the wrong output paths. Version 3
+  verifies the actual `.txt` paths against stdout and is running on Kaggle;
+  its source is in `validate/whisper-loader-ab-20261029` at `5c6c767aa` and
+  its uploaded script SHA-256 is
+  `95fea2e27971633c0034cadf0a4a3827f44cad072da9a2e610552bdab7b3e98e`.
+  Versions 1 and 2 are not fork comparison results. Version 1 script SHA-256 was
   `d4bfc898de2d9cb73d1c0cc3f8f1c6032205089866dcbdae461aad348ee68e5c`.
   Granite step diagnostic is not submitted. Their READMEs specify GPU, model
   provenance, context and quality gates. Coordinate slots before submission.
@@ -131,9 +134,12 @@ and check actual GPU session availability before every Kaggle submission.
   cache candidate `0a3a97c1e` on `validate/whisper-loader-device-cache-20261029`
   retains per-tensor support checks; baseline `9df3071a9` and candidate emit
   the same opt-in ordered placement trace. CI **40870464042** and lint
-  **40870467717** are queued. Complete fake-backend equivalence, CPU/CUDA
-  placement traces and same-toolchain A/B before any integration; no performance
-  match or cause is claimed yet. These results do not yet
+  **40870467717** are queued. Fake-backend equivalence run **40871174976**
+  is queued on `validate/whisper-buft-equivalence-20261029`. The GPU A/B
+  adapter is prepared at `5c6c767aa` on `validate/whisper-loader-ab-20261029`;
+  submit when a slot is free after the current jobs. Complete the equivalence,
+  CPU/CUDA placement traces and same-toolchain A/B before any integration; no
+  performance match or cause is claimed yet. These results do not yet
   establish the reason for the gap or matched performance. Keep changes on
   validation branches until their own acceptance checks pass. A static upstream
   comparison identified per-call persistent CPU-threadpool setup as a possible
