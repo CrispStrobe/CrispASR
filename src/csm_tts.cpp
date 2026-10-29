@@ -130,12 +130,20 @@ struct csm_step_profile {
         return status;
     }
 
-    void report(size_t accepted_frames) const {
+    void report(size_t accepted_frames, int codebooks) const {
         if (!enabled)
             return;
         static const char* names[] = {"backbone_prefill", "backbone_step", "depth_prefill", "depth_step"};
-        std::fprintf(stderr, "csm_step_profile: attempts=%d accepted=%zu eos=%d\n", frame_attempts, accepted_frames,
-                     eos_attempts);
+        // Inner-loop failures can still yield a partially filled frame. Never
+        // present its counters as a complete measurement.
+        const bool complete =
+            frame_attempts > 0 && codebooks >= 2 && eos_attempts <= 1 &&
+            static_cast<size_t>(frame_attempts) == accepted_frames + eos_attempts &&
+            phases[backbone_prefill].calls == 1 && phases[backbone_step].calls == frame_attempts - 1 &&
+            phases[depth_prefill].calls == frame_attempts &&
+            static_cast<int64_t>(phases[depth_step].calls) == static_cast<int64_t>(codebooks - 2) * frame_attempts;
+        std::fprintf(stderr, "csm_step_profile: complete=%d attempts=%d accepted=%zu eos=%d codebooks=%d\n",
+                     complete ? 1 : 0, frame_attempts, accepted_frames, eos_attempts, codebooks);
         for (int i = 0; i < phase_count; ++i)
             std::fprintf(stderr, "csm_step_profile: %s calls=%d total_us=%lld\n", names[i], phases[i].calls,
                          static_cast<long long>(phases[i].total_us));
@@ -2126,7 +2134,7 @@ extern "C" float* csm_tts_synthesize_with_reference(struct csm_tts_context* ctx,
     } // end AR decode block
 
 mimi_decode:
-    step_profile.report(all_codes.size());
+    step_profile.report(all_codes.size(), n_cb);
     ctx->last_codes = all_codes; // capture before Mimi decode (which may fail)
     trace.codes(all_codes, n_cb);
     if (all_codes.empty()) {
