@@ -43,7 +43,7 @@ Each output is judged with the same pinned Parakeet GGUF and a WER ≤ 0.15
 against the public phrase. Generated WAVs and ASR logs are copied into the
 **private** Kaggle output for evidence recovery. Only `receipt.json` may be
 published after review; never publish `private-evidence/` or the complete
-Kaggle output. Version 1 failed as described below; version 2 is running.
+Kaggle output. Version 1 failed as described below; version 2 passed the paired pilot. See the [aggregate receipt](../../../docs/csm-original-t4-benchmark-2026-10-29.json).
 
 Before submission, refresh Kaggle GPU slots and resource admission. If the
 original source dependency set cannot import on the available Kaggle image,
