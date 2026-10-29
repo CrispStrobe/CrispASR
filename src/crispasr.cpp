@@ -1346,6 +1346,10 @@ struct whisper_state {
     int64_t t_prompt_us = 0;
     int64_t t_mel_us = 0;
 
+    // Optional single-token decode breakdown in host wall-clock microseconds.
+    int64_t profile_graph_us = 0, profile_input_us = 0, profile_compute_us = 0, profile_read_us = 0;
+    int32_t profile_decode_count = 0;
+
     int32_t n_sample = 0; // number of tokens sampled
     int32_t n_encode = 0; // number of encoder calls
     int32_t n_decode = 0; // number of decoder calls with n_tokens == 1  (text-generation)
@@ -2033,6 +2037,8 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
     const int64_t t_start_us = ggml_time_us();
 
     wctx.t_start_us = t_start_us;
+    const bool profile_load = getenv("CRISPASR_WHISPER_TIMING_PROFILE") != nullptr;
+    int64_t profile_alloc_us = 0, profile_read_us = 0, profile_upload_us = 0;
 
     auto& model = wctx.model;
     auto& vocab = wctx.vocab;
@@ -2534,6 +2540,7 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
     }
 
     // allocate tensors in the backend buffers
+    const int64_t profile_alloc_start = profile_load ? ggml_time_us() : 0;
     for (auto& p : ctx_map) {
         ggml_backend_buffer_type_t buft = p.first;
         ggml_context* ctx = p.second;
@@ -2546,6 +2553,9 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
                               size_main / 1e6);
         }
     }
+
+    if (profile_load)
+        profile_alloc_us = ggml_time_us() - profile_alloc_start;
 
     // load weights
     {
@@ -2621,15 +2631,24 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
 
             if (ggml_backend_buffer_is_host(tensor->buffer)) {
                 // for the CPU and Metal backend, we can read directly into the tensor
+                const int64_t read_start = profile_load ? ggml_time_us() : 0;
                 loader->read(loader->context, tensor->data, ggml_nbytes(tensor));
                 BYTESWAP_TENSOR(tensor);
+                if (profile_load)
+                    profile_read_us += ggml_time_us() - read_start;
             } else {
                 // read into a temporary buffer first, then copy to device memory
                 read_buf.resize(ggml_nbytes(tensor));
 
+                const int64_t read_start = profile_load ? ggml_time_us() : 0;
                 loader->read(loader->context, read_buf.data(), read_buf.size());
+                if (profile_load)
+                    profile_read_us += ggml_time_us() - read_start;
 
+                const int64_t upload_start = profile_load ? ggml_time_us() : 0;
                 ggml_backend_tensor_set(tensor, read_buf.data(), 0, ggml_nbytes(tensor));
+                if (profile_load)
+                    profile_upload_us += ggml_time_us() - upload_start;
             }
 
             total_size += ggml_nbytes(tensor);
@@ -2653,6 +2672,11 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
     }
 
     wctx.t_load_us = ggml_time_us() - t_start_us;
+    if (profile_load) {
+        CRISPASR_LOG_INFO("whisper timing profile: load total_us=%lld alloc_us=%lld read_us=%lld upload_us=%lld\n",
+                          (long long)wctx.t_load_us, (long long)profile_alloc_us, (long long)profile_read_us,
+                          (long long)profile_upload_us);
+    }
 
     return true;
 }
@@ -3440,6 +3464,8 @@ static bool whisper_decode_internal(whisper_context& wctx, whisper_state& wstate
 
     const int n_vocab = hparams.n_vocab;
     const int n_tokens = batch.n_tokens;
+    const bool profile_decode = n_tokens == 1 && getenv("CRISPASR_WHISPER_TIMING_PROFILE") != nullptr;
+    int64_t profile_start = profile_decode ? ggml_time_us() : 0;
 
     auto& logits_out = wstate.logits;
 
@@ -3469,6 +3495,11 @@ static bool whisper_decode_internal(whisper_context& wctx, whisper_state& wstate
         if (!ggml_backend_sched_alloc_graph(sched, gf)) {
             // should never happen as we pre-allocate the memory
             return false;
+        }
+
+        if (profile_decode) {
+            wstate.profile_graph_us += ggml_time_us() - profile_start;
+            profile_start = ggml_time_us();
         }
 
         // set the inputs
@@ -3521,8 +3552,17 @@ static bool whisper_decode_internal(whisper_context& wctx, whisper_state& wstate
 
         logits = ggml_graph_node(gf, -1);
 
+        if (profile_decode) {
+            wstate.profile_input_us += ggml_time_us() - profile_start;
+            profile_start = ggml_time_us();
+        }
+
         if (!ggml_graph_compute_helper(sched, gf, n_threads)) {
             return false;
+        }
+        if (profile_decode) {
+            wstate.profile_compute_us += ggml_time_us() - profile_start;
+            profile_start = ggml_time_us();
         }
     }
 
@@ -3533,6 +3573,11 @@ static bool whisper_decode_internal(whisper_context& wctx, whisper_state& wstate
         }
         ggml_backend_tensor_get(logits, logits_out.data() + (n_vocab * i), sizeof(float) * (n_vocab * i),
                                 sizeof(float) * n_vocab);
+    }
+
+    if (profile_decode) {
+        wstate.profile_read_us += ggml_time_us() - profile_start;
+        wstate.profile_decode_count++;
     }
 
     if (batch.n_tokens > 1) {
@@ -4827,6 +4872,13 @@ void whisper_print_timings(struct whisper_context* ctx) {
     CRISPASR_LOG_INFO("\n");
     CRISPASR_LOG_INFO("%s:     load time = %8.2f ms\n", __func__, ctx->t_load_us / 1000.0f);
     if (ctx->state != nullptr) {
+        if (ctx->state->profile_decode_count) {
+            CRISPASR_LOG_INFO(
+                "whisper timing profile: decode count=%d graph_us=%lld input_us=%lld compute_us=%lld read_us=%lld\n",
+                ctx->state->profile_decode_count, (long long)ctx->state->profile_graph_us,
+                (long long)ctx->state->profile_input_us, (long long)ctx->state->profile_compute_us,
+                (long long)ctx->state->profile_read_us);
+        }
         const int32_t n_sample = std::max(1, ctx->state->n_sample);
         const int32_t n_encode = std::max(1, ctx->state->n_encode);
         const int32_t n_decode = std::max(1, ctx->state->n_decode);
@@ -4852,6 +4904,9 @@ void whisper_print_timings(struct whisper_context* ctx) {
 void whisper_reset_timings(struct whisper_context* ctx) {
     ctx->t_start_us = ggml_time_us();
     if (ctx->state != nullptr) {
+        ctx->state->profile_graph_us = ctx->state->profile_input_us = 0;
+        ctx->state->profile_compute_us = ctx->state->profile_read_us = 0;
+        ctx->state->profile_decode_count = 0;
         ctx->state->t_mel_us = 0;
         ctx->state->t_sample_us = 0;
         ctx->state->t_encode_us = 0;
