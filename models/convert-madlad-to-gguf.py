@@ -487,7 +487,7 @@ def convert(input_dir: Path, out_path: Path) -> None:
 
     # Intermediate disk scratch to keep RAM usage minimal on large models (e.g. 7B/10B)
     scratch_path = out_path.with_suffix(".scratch")
-    scratch_f = open(scratch_path, "wb")
+    scratch_f = open(scratch_path, "w+b")
     scratch_off = 0
     granularity = getattr(mmap, "ALLOCATIONGRANULARITY", 4096)
 
@@ -509,7 +509,8 @@ def convert(input_dir: Path, out_path: Path) -> None:
 
         raw = arr.tobytes()
         scratch_f.write(raw)
-        mmap_arr = np.memmap(scratch_path, dtype=arr.dtype, mode="r", offset=scratch_off, shape=arr.shape)
+        scratch_f.flush()
+        mmap_arr = np.memmap(scratch_f, dtype=arr.dtype, mode="r", offset=scratch_off, shape=arr.shape)
         scratch_off += len(raw)
 
         writer.add_tensor(gguf_name, mmap_arr)

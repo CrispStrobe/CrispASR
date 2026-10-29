@@ -183,7 +183,7 @@ def process_variant(variant_name: str, src_repo: str, dst_repo: str):
             p = subprocess.run([sys.executable, str(CONVERTER), "--input", str(SRC), "--output", str(F16)],
                                capture_output=True, text=True, timeout=7200)
         if p.returncode != 0 or not F16.is_file():
-            step(f"fatal.{variant_name}.convert-failed", exit=p.returncode, tail=p.stdout[-600:])
+            step(f"fatal.{variant_name}.convert-failed", exit=p.returncode, tail=p.stdout[-600:], err=p.stderr[-600:])
             raise SystemExit(f"{variant_name} F16 conversion failed")
         step(f"{variant_name}.convert.done", f16_gb=gb(F16), free_gb=free_gb())
 
