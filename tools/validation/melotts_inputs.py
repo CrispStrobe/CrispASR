@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Compare real native input captures with original Melo Python functions.
+"""Compare native inputs and the final activation with original Melo functions.
 
-Input protocol only: no alternative neural implementation or ASR oracle. The
+Boundary checks only: no alternative neural implementation or ASR oracle. The
 model's own dictionary/symbol table are the shared data. OOV neural G2P is
 deliberately outside these fixed, dictionary-covered English controls.
 """
@@ -28,6 +28,8 @@ SOURCES = {
     'melo/text/japanese.py': '23fa0ac9e10772012978ab747970d143a6b002ef75d0014c61eada7a16a25758',
     'melo/text/symbols.py': '4c1f3839f7e209b5da45daeb269f955b302d0d4c0df6dbf9be88d534b25ceea2',
     'melo/text/__init__.py': 'eca8c17764c4dcd57d3a71185775d1c6e4d53689d6a9a54708ec63577a2ac8ba',
+    'melo/models.py': 'f96eef52845224b5797e54008013a5b6a5fafad2035713dc5181a5db8bf8bef4',
+    'melo/modules.py': 'de80baee7dc8d89d621c541b899a84193df4bb3ef95f5e6d076cc37b6bb10bf6',
 }
 
 
@@ -59,7 +61,8 @@ def main():
         raise RuntimeError('Hosted-only model validation')
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     out = args.output; out.mkdir(parents=True, exist_ok=True)
-    receipt = dict(complete=False, input_protocol_only=True, upstream=UPSTREAM,
+    receipt = dict(complete=False, input_protocol_only=False, full_neural_parity=False,
+                   scope='Original input protocol and final activation; not complete Melo neural parity', upstream=UPSTREAM,
                    tokenizer_revision=TOKENIZER_REVISION, source_sha256=SOURCES,
                    cases=[], resource_checks=[])
     def save():
@@ -110,6 +113,19 @@ def main():
     select_functions(source/'melo/text/japanese.py', {'distribute_phone'}, namespace)
     select_functions(source/'melo/text/english.py', {'post_replace_ph', 'refine_ph', 'refine_syllables', 'g2p'}, namespace, arpa=True)
     select_functions(source/'melo/text/__init__.py', {'cleaned_text_to_sequence'}, namespace)
+    guard('load-original-activation-runtime')
+    import torch
+    generator = next(node for node in ast.parse((source/'melo/models.py').read_text()).body
+                     if isinstance(node, ast.ClassDef) and node.name == 'Generator')
+    forward = next(node for node in generator.body if isinstance(node, ast.FunctionDef) and node.name == 'forward')
+    final_calls = [node.value for node in forward.body if isinstance(node, ast.Assign)
+                   and isinstance(node.value, ast.Call) and isinstance(node.value.func, ast.Attribute)
+                   and isinstance(node.value.func.value, ast.Name) and node.value.func.value.id == 'F'
+                   and node.value.func.attr == 'leaky_relu']
+    if len(final_calls) != 1 or len(final_calls[0].args) != 1 or final_calls[0].keywords:
+        raise ValueError('Original final default activation changed')
+    final_operator = compile(ast.Expression(body=final_calls[0]), 'original-melo-final-activation', 'eval')
+    receipt['torch_version'] = torch.__version__
     class Params(ct.Structure):
         _fields_ = [('n_threads',ct.c_int),('verbosity',ct.c_int),('use_gpu',ct.c_bool),
                     ('noise_scale',ct.c_float),('length_scale',ct.c_float),('noise_w',ct.c_float),
@@ -144,8 +160,45 @@ def main():
             try:
                 if count <= 0 or not pcm or rate.value != 44100:
                     raise RuntimeError('Native owned-input synthesis failed')
+                instrumented = np.ctypeslib.as_array(pcm, shape=(count,)).copy()
             finally:
                 lib.melotts_pcm_free(pcm)
+            lib.melotts_set_dump_dir(ctx, b'')
+            guard('native-uninstrumented-repeat-'+str(index))
+            pcm = ct.POINTER(ct.c_float)(); rate=ct.c_int()
+            repeated_count = lib.melotts_synthesize(ctx, text.encode(), ct.byref(pcm), ct.byref(rate))
+            try:
+                if repeated_count > 0 and pcm:
+                    plain = np.ctypeslib.as_array(pcm, shape=(repeated_count,)).copy()
+                    plain.tofile(case/'audio-uninstrumented.bin')
+                if repeated_count != count or not pcm or rate.value != 44100:
+                    raise RuntimeError('Instrumentation changed native waveform dimensions')
+            finally:
+                lib.melotts_pcm_free(pcm)
+            relative = float(np.linalg.norm(plain-instrumented)/max(float(np.linalg.norm(plain)), 1e-30))
+            peak = float(np.max(np.abs(plain-instrumented)))
+            receipt.setdefault('instrumentation_checks', []).append(dict(case=index, relative_l2=relative,
+                                                                         peak_absolute_error=peak))
+            save()
+            if not np.isfinite(plain).all() or relative > 1e-5 or peak > 1e-5:
+                raise RuntimeError('Instrumentation changed the native waveform')
+            guard('original-final-activation-'+str(index))
+            before = np.fromfile(case/'dec_before_post.bin', dtype='<f4')
+            after = np.fromfile(case/'dec_post_activation.bin', dtype='<f4')
+            negative = int(np.sum(before < 0)); positive = int(np.sum(before > 0))
+            if len(before) != len(after):
+                receipt.setdefault('activation_checks', []).append(dict(case=index, accepted=False,
+                    before_elements=len(before), after_elements=len(after)))
+                save()
+                raise RuntimeError('Native final-activation tensor dimensions changed')
+            reference_activation = eval(final_operator, {'F':torch.nn.functional, 'x':torch.from_numpy(before)}).numpy()
+            matches = len(after) == len(reference_activation) and np.allclose(after, reference_activation, rtol=1e-6, atol=1e-7)
+            activation = dict(accepted=bool(matches and negative and positive), elements=len(after), negative=negative, positive=positive,
+                max_absolute_error=float(np.max(np.abs(after-reference_activation))),
+                norm_ratio=float(np.linalg.norm(after)/np.linalg.norm(reference_activation)))
+            receipt.setdefault('activation_checks', []).append(dict(case=index, **activation)); save()
+            if not activation['accepted']:
+                raise RuntimeError('Actual native final activation differs from the original operator')
             # The fixed controls contain no numbers, times or abbreviations;
             # lowercasing is their entire original text_normalize operation.
             phones, tones, word2ph = namespace['g2p'](text.lower())
@@ -163,7 +216,9 @@ def main():
                 actual = np.fromfile(case/(name+'.bin'),dtype='<i4')
                 match = np.array_equal(reference, actual)
                 results[name] = dict(exact=bool(match), elements=len(actual), sha256=sha(case/(name+'.bin')))
-            row = dict(case=index, accepted=all(v['exact'] for v in results.values()), inputs=results)
+            row = dict(case=index, accepted=all(v['exact'] for v in results.values()), inputs=results,
+                       final_activation=activation,
+                       instrumentation=dict(relative_l2=relative, peak_absolute_error=peak))
             receipt['cases'].append(row); save()
             if not row['accepted']:
                 raise RuntimeError('Original Melo input boundary differs from the actual native capture')

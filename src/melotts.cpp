@@ -2164,7 +2164,13 @@ static bool hifigan_decode(melotts_context* ctx, const std::vector<float>& z, co
     }
 
     // Final: LeakyReLU → conv_post → tanh
-    x = ggml_leaky_relu(gc, x, 0.1f, false);
+    ggml_tensor* before_post = x;
+    x = ggml_leaky_relu(gc, x, 0.01f, false);
+    ggml_tensor* post_activation = x;
+    if (!ctx->dump_dir.empty()) {
+        ggml_set_output(before_post);
+        ggml_set_output(post_activation);
+    }
     x = conv1d_cf(gc, x, w.dec_conv_post_w, nullptr, 1, 3, 1);
     x = ggml_tanh(gc, x);
 
@@ -2183,6 +2189,16 @@ static bool hifigan_decode(melotts_context* ctx, const std::vector<float>& z, co
         ggml_backend_tensor_set(g_input, g_vec.data(), 0, gin * sizeof(float));
 
     ggml_backend_sched_graph_compute(mg.sched, gf);
+
+    if (!ctx->dump_dir.empty()) {
+        const auto backend = ggml_backend_sched_get_tensor_backend(mg.sched, post_activation);
+        fprintf(stderr, "melotts: final activation backend %s\n", backend ? ggml_backend_name(backend) : "unassigned");
+        std::vector<float> before(ggml_nelements(before_post)), after(ggml_nelements(post_activation));
+        ggml_backend_tensor_get(before_post, before.data(), 0, before.size() * sizeof(float));
+        ggml_backend_tensor_get(post_activation, after.data(), 0, after.size() * sizeof(float));
+        dump_stage(ctx, "dec_before_post", before.data(), before.size());
+        dump_stage(ctx, "dec_post_activation", after.data(), after.size());
+    }
 
     int T_audio = (int)ggml_nelements(x);
     pcm_out.resize(T_audio);

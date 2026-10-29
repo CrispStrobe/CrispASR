@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Compile actual conditioning/averaging bodies with tiny embedding inputs."""
 from pathlib import Path
+import os
 import subprocess
 import re
 import tempfile
@@ -173,8 +174,15 @@ int main(int argc,char** argv){
 
 class DecoderActivationContract(unittest.TestCase):
     def test_final_default_slope_differs_from_upsample_slope(self):
-        source=(ROOT/'src/openvoice2.cpp').read_text()
-        decoder=body(source,'static bool hifigan_decode_cpu(')
+        self.check_decoder('openvoice2')
+
+    def test_melo_final_default_slope_differs_from_upsample_slope(self):
+        self.check_decoder('melotts')
+
+    def check_decoder(self, backend):
+        source=(ROOT/('src/'+backend+'.cpp')).read_text()
+        signature='static bool hifigan_decode_cpu(' if backend=='openvoice2' else 'static bool hifigan_decode('
+        decoder=body(source,signature)
         calls=re.findall(r'x = ggml_leaky_relu\(gc, x, [^;]+;',decoder)
         self.assertEqual(len(calls),2)
         # Execute both real graph-builder calls on tiny signed inputs. The
@@ -202,6 +210,10 @@ int main(){
 }
 """.replace('UPSAMPLE_CALL',calls[0]).replace('FINAL_CALL',calls[1])
         with tempfile.TemporaryDirectory(prefix='openvoice-final-activation-') as temp:
+            if Path('/proc/meminfo').exists():
+                memory=dict(line.split(':',1) for line in Path('/proc/meminfo').read_text().splitlines())
+                if int(memory['MemAvailable'].split()[0])*1024 < 3*1024**3 or os.getloadavg()[0] > 2*(os.cpu_count() or 1):
+                    raise RuntimeError('Insufficient resources before activation fixture compile')
             path=Path(temp);(path/'test.cpp').write_text(program)
             subprocess.run(['c++','-std=c++17',str(path/'test.cpp'),'-o',str(path/'test')],check=True)
             result=subprocess.run([str(path/'test')],capture_output=True,text=True)

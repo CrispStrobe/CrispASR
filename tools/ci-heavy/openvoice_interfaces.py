@@ -210,6 +210,12 @@ def main():
         inputs = json.loads((private/'melo-inputs/controls.json').read_text())
         if not inputs['complete'] or len(inputs['cases']) != 3 or not all(row['accepted'] for row in inputs['cases']):
             raise RuntimeError('Original Melo input protocol controls incomplete')
+        backends = re.findall(r'^melotts: final activation backend (\S+)',
+                              (private/'melo-original-inputs.log').read_text(), re.M)
+        expected_backend = 'CUDA' if args.device == 'cuda' else 'CPU'
+        if len(backends) != 3 or not all(name.startswith(expected_backend) for name in backends):
+            raise RuntimeError('Original final-activation comparisons used an unexpected backend')
+        inputs['activation_backends'] = backends
         receipt['melo_input_controls'] = inputs
         save()
         for i in range(2):

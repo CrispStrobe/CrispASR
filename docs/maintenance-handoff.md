@@ -1,4 +1,4 @@
-# Fresh-agent maintainer handoff — 2026-10-28
+# Fresh-agent maintainer handoff — 2026-10-29
 
 This is the current handoff. No previous chat is needed to understand the work,
 what is complete, or what to do next. Read `AGENTS.md` and the full maintainer
@@ -15,9 +15,17 @@ in ignored local notes.
 
 ## Current state and first actions
 
-State at this wrap-up (2026-10-28): **v0.8.46 is published; v0.8.47 has partial public assets and
-its native release run has passed all 38 jobs including final publication. Native byte audit passed; all wheel builds and PyPI publication pass, while GPU-index publication remains queued.** Active follow-up work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
-a fresh agent should confirm ownership before dispatching replacements.
+Snapshot 2026-10-29: **v0.8.46 publication is accepted. v0.8.47 native
+publication, both wheel publishers, Pages and live GPU index links pass; final
+wheel audit 40789883589 remains queued.** Keep #557 open and prepare its reply
+for review only. Runtime repairs below are on
+[candidate branch `validate/openvoice-interfaces-20261028`](https://github.com/CrispStrobe/CrispASR/tree/379146cb0d1dd590ae805686284bdb7b52d9ece8),
+not main or the immutable v0.8.47 release. Full-source CUDA version 2 is terminal with failed overall quality
+from application source `9259b9f3e`, bootstrap `379146cb0`; current CPU
+40795945687, CI 40795948208 and Lint 40795950893 are queued at `379146cb0`.
+Preserve these existing jobs. Read live status before dispatching a replacement.
+The earlier CPU run 40783760561 passed, but predates the latest BERT frontend
+repair and supplies only that older source's acceptance.
 
 | Item | State | Evidence |
 |---|---|---|
@@ -25,11 +33,11 @@ a fresh agent should confirm ownership before dispatching replacements.
 | v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 is accepted; all 14 jobs in wheel producer 40751349609 pass. Pages 40776528499 passes and live index links are verified; wheel audit 40789883589 is queued. | Task B |
 | #557 issue | Code merged. Issue still **open**. No public comment posted yet. | Task C |
 | data2vec-base nightly gate | COMPLETE: same-host cause, paired Q4/exact-F16 policy and actual production regression 40750908085 accepted. | Task D |
-| OpenVoice2 | Bounded three-case conditioning/quality and current-runtime structural proofs accepted. Real Python Session validation is accepted on Kaggle; actual CLI and a full rebuilt-current library remain separate. | Task F and follow-up below |
+| OpenVoice2 | Bounded conditioning/SDK Session proofs accepted. Full rebuilt CPU library/CLI at `7c158b325` is accepted. Latest BERT conditioning candidate needs its own current CPU/CUDA and CI gates; no model/default promotion. | Task F and follow-up below |
 
 First actions for a fresh agent:
 
-1. Read this handoff and [PLAN.md](../PLAN.md). `git pull` main; preserve unrelated work.
+1. Read this handoff and [PLAN.md](../PLAN.md), inspect status and local recovery notes, then fetch remote refs. Update a clean main checkout without rewriting candidate or unrelated work.
    Do not reset, clean or build in the maintainer's protected original checkout
    (identified in the ignored local notes).
 2. Refresh open issues and PRs. Read each relevant whole thread (body, all
@@ -471,14 +479,31 @@ publication occurred. Remaining scope:
    protocol proof plus decoded acceptance, not complete original Melo neural
    stage parity or broad-language acceptance. Before every compile/inference
    check load, memory and storage. Retain terminal source/logs/checkpoints and
-   encrypted evidence before any replacement. Current CPU **40783760561** and
-   CI **40787625795** / Lint **40787628325** predate this conditioning repair;
-   they cannot qualify it. Replace the obsolete queued CPU run once the new
-   candidate is pushed; request CI/Lint on the final candidate. Public receipts
-   contain metrics/hashes; speech/transcripts stay encrypted to the operator
-   key recovered from ignored local notes. Preset identity stays unknown.
-   Merge only after original quality, CPU and CI gates; prepare the next patch
-   afterward.
+   encrypted evidence before any replacement. Full-source CUDA **version 2**
+   is terminal from source `9259b9f3e`, bootstrap `379146cb0`. All three
+   original-input controls, TCC stages and functional surfaces pass, but
+   default-disclosed CLI case 0 still has tiny.en WER 0.25 >0.20.
+   [Retained failed attempt](openvoice-conditioning-inputs-attempt-2026-10-29.json).
+   The next concrete repair follows original `Generator.forward`: its final
+   `F.leaky_relu(x)` uses default 0.01; native Melo used 0.1 there. The actual
+   graph-call regression fails before and passes after correcting only that
+   final slope. Upsample/residual slopes stay 0.1. Require actual captured
+   pre/post tensors against the pinned original operator and an uninstrumented
+   waveform comparison before interpreting decoded quality. Current CPU
+   **40795945687**, CI **40795948208** and Lint **40795950893** were requested
+   once at `379146cb0`; the application source matches the CUDA campaign.
+   Earlier CPU **40783760561** passed its complete four-case matrix at
+   `7c158b325`, including default-disclosed WER 0.1875 and zero; its full
+   artifact and authenticated encrypted readback are retained.
+   [Earlier CPU receipt](openvoice-cpu-pre-conditioning-2026-10-29.json).
+   That run predates the frontend repair and cannot qualify it. Earlier
+   CI/Lint **40787625795** / **40787628325** were superseded and canceled.
+   The current CPU worker checkpoints its compiled application before model
+   calls; artifacts are validation checkpoints, not audited release packages.
+   Public receipts contain metrics/hashes; speech/transcripts stay encrypted
+   to the operator key recovered from ignored local notes. Preset identity
+   stays unknown. Merge only after current original-quality, CPU and CI gates;
+   prepare the next patch afterward.
 2. **Publication:** no Hub write was attempted by the accepted read-only run.
    Earlier repository creation returned 403. Use an authorized destination,
    retain original MIT notices, converter precision recipe, immutable model/
@@ -490,6 +515,46 @@ publication occurred. Remaining scope:
    original-reference and decoded-output checks. None is implied by these
    bounded synthetic English cases. A default change needs an explicit scoped
    acceptance decision and cannot be inferred from stage parity alone.
+
+### Task I — next patch after current error gates
+
+1. Complete B and H first. Refresh main and the candidate; preserve unrelated
+   work. Merge the qualified runtime changes only when current-source CPU,
+   CUDA, CI, lint and secret checks support them. Documentation-only main
+   updates do not mean the candidate runtime changes are merged.
+2. Prepare `RELEASE_NOTES_v0.8.48.md` from the actual post-v0.8.47 changes,
+   retaining source/validation limits and hardware holds. Use
+   `scripts/bump-version.sh 0.8.48`; it synchronizes versions and creates the
+   release commit and local annotated tag. Never hand-edit version files or
+   rewrite a published tag/PyPI distribution. Check the release auditor's
+   reviewed-tag allow-list before the bump, with its existing unit controls.
+3. Push the exact release commit to a qualification branch first. Request CI,
+   lint and secret checks there; require their `headSha` to equal the local
+   annotated tag's peeled commit. Keep the release tag local until those
+   checks pass. Then fast-forward main safely and push that new tag once.
+4. Collect native, wheel and Rust/Dart publishers. Verify the full expected
+   inventory, notices, immutable distribution bytes, indexes and Pages, using
+   the existing publication verifiers. For transient producer failures rerun
+   only failed jobs in the original run. Retain artifacts before replacement.
+5. Record accepted receipts and release source/run IDs. Do not call this task
+   complete from allocation, building or a subset of successful publishers.
+   Keep physical AMD/Intel/ARM execution claims excluded without hardware.
+
+### Task J — PR #559 after error and release acceptance
+
+Follow [the scoped review](qwen3-context-pr559-review-2026-10-28.md). Refresh
+its entire description, comments, reviews, inline comments, linked #218/#488
+follow-ups and current head before acting. The earlier reviewed head was
+`6b132720090cbb532f79f544c130381ddf1cf6c9`; source review was not independent
+runtime acceptance. Review any fork workflow changes before authorizing CI.
+Retain actual C ABI/CLI probes for context unset/zero/enabled/changed/cleared,
+empty/nonempty context, forced/automatic language, explicit questions, backend
+exclusions and chunk propagation. Run the existing short-clip Qwen regression
+on a suitable hosted worker with context enabled/cleared, preserving #488's
+recognition and language-prefill gates. Require exact-candidate CI/lint/secret
+checks. Merge only with independent caller/runtime evidence; a dedicated context
+setter across every binding/server/WASM surface is outside this narrow PR.
+No public review/comment or merge has been sent for this PR.
 
 ### Scope notes kept from #557 review
 
