@@ -26,13 +26,14 @@ and check actual GPU session availability before every Kaggle submission.
 
 - **Release:** native producer **40833098926** passed all 38 jobs and the
   release lists 52 assets; Rust/Dart publisher **40833098923** also passed.
-  Native audit **40856997446** and automatic Python wheel producer **40856452802**
-  are queued. Finish both audits and all wheel/index readbacks as task I
-  specifies; do not retag v0.8.48.
+  Native audit **40856997446** passed all 52 full anonymous readbacks and
+  notice/producer checks. Automatic Python wheel producer **40856452802** is
+  queued. Finish wheel publication, its audit and all wheel/index readbacks as
+  task I specifies; do not retag v0.8.48.
 - **#559:** exact PR head `6b132720090cbb532f79f544c130381ddf1cf6c9` was
   applied to a validation tree, candidate `5eef35019`. CI **40848995923** and
   lint **40848999141** are queued. Hosted short-clip and actual C API prompt
-  routing run **40859214637** is queued on test tree `70ef1c0f0`, including exact C ABI, CLI and chunked routing. Earlier run **40855248796** was already in progress with a less strict harness; retain it as diagnostic only. Neither a
+  routing run **40860832787** is queued on test tree `8a12a0ad7`, including exact C ABI, CLI, chunked routing and actual CLI factory exclusions. Earlier run **40855248796** passed; its retained C ABI and CLI traces were rechecked with the stricter parser, including four chunk prompts. Its receipt overstates unrelated coverage, so use only the bounded [Qwen evidence](qwen3-pr559-cpu-diagnostic-2026-10-29.json). Neither a
   queued run nor the contributor's own probes establish independent acceptance.
   Review the current discussion and complete CLI, C API and chunking controls
   before deciding whether to merge.
