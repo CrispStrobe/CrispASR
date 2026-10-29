@@ -1408,10 +1408,17 @@ constexpr Entry k_registry[] = {
      "~1.9 GB", nullptr, nullptr},
     // hikari (sbintuitions/hikari-medium, MIT): simultaneous speech translation
     // EN -> DE/JA/RU + English ASR. f16 is the default: it equals the reference
-    // and gives the same text on CPU and Metal; q8_0 (-m auto:q8_0) changed one
-    // German sentence of a 27 s clip on Metal. Silero rides along (k_extras).
+    // and gives the same text on CPU and Metal. q4_k uses mixed quantization (causal
+    // encoder floored at Q8_0, decoder at Q4_K) for exact transcription parity at 636 MB.
+    // Silero rides along (k_extras).
     {"hikari", "hikari-medium-f16.gguf",
      "https://huggingface.co/cstr/hikari-medium-GGUF/resolve/main/hikari-medium-f16.gguf", "~1.5 GB", nullptr,
+     nullptr, nullptr, "MIT (https://huggingface.co/sbintuitions/hikari-medium)"},
+    {"hikari", "hikari-medium-q4_k.gguf",
+     "https://huggingface.co/cstr/hikari-medium-GGUF/resolve/main/hikari-medium-q4_k.gguf", "~636 MB", nullptr,
+     nullptr, nullptr, "MIT (https://huggingface.co/sbintuitions/hikari-medium)"},
+    {"hikari", "hikari-medium-q8_0.gguf",
+     "https://huggingface.co/cstr/hikari-medium-GGUF/resolve/main/hikari-medium-q8_0.gguf", "~873 MB", nullptr,
      nullptr, nullptr, "MIT (https://huggingface.co/sbintuitions/hikari-medium)"},
     // Opus-MT / MarianMT (Helsinki-NLP, CC-BY-4.0): one ~75M model per language
     // pair, the fastest translator for live translation. `marian` is the
