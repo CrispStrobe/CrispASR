@@ -1839,11 +1839,21 @@ vocoder (5 upsample stages) @ 44.1 kHz. Built-in English G2P via embedded
 CMU dictionary (129k entries) + rule-based LTS fallback for OOV words.
 4 English speakers (US, BR, India, AU).
 
-Optional BERT conditioning: loads a companion bert-base-uncased GGUF (238 MB)
-via `melotts_load_bert()`. Runs 10-layer BERT forward pass → hidden_states[-3]
-→ word2ph expansion → `ja_bert_proj` (768→192) → added to text encoder
-embeddings. Improves contextual phoneme disambiguation (4/6 → 4/6 ASR
-roundtrip but fixes previously-broken sentences like "I enjoy reading").
+BERT conditioning loads a companion bert-base-uncased GGUF via
+`melotts_load_bert()`. It runs the first 10 layers, matching the original full
+BERT's `hidden_states[-3]`, then expands features using the original word/phone
+alignment and projects 768→192 features into the text encoder. Managed Melo V2
+downloads select the qualified F16 companion (238 MB) under the canonical
+`bert-base-uncased.gguf` filename, pinned to the same immutable revision as the
+Melo checkpoint. BERT is Apache-2.0 independently of Melo's MIT license; see
+THIRD_PARTY_NOTICES.txt. Explicit companion paths remain supported.
+
+The full current application passes the unchanged four-case speech/speaker
+matrix on CPU and T4 CUDA with actual Session/C ABI and CLI companion discovery.
+[CPU evidence](openvoice-full-f16-cpu-accepted-2026-10-29.json) and
+[CUDA evidence](openvoice-full-f16-cuda-accepted-2026-10-29.json) retain exact model
+hashes and scope. The older Q4 BERT profile fails the fixed content controls and
+is not the managed default. This qualification does not cover Melo V3.
 
 ### piper
 

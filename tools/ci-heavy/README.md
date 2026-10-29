@@ -19,8 +19,11 @@ the configured Kaggle read credentials only to retrieve existing real-data
 outputs, then verifies exact hashes. Both original-reference cases, Session
 and CLI rates/content/speaker quality, normal marked speech, and the CLI's
 neutral disclosure are required. It is not an actual CUDA CLI qualification.
-Use `pip="torch numpy scipy soundfile kaggle==2.2.2 faster-whisper resemblyzer
-webrtcvad-wheels cryptography huggingface_hub"` and
+The default `--bert-profile f16` follows the qualified managed Melo V2 bundle;
+`--bert-profile q4_k` retains the failing historical control explicitly. F16
+must be observed through actual adjacent-file discovery in Session and CLI.
+Use `pip="torch numpy scipy soundfile gguf==0.17.1 tokenizers kaggle==2.2.2
+faster-whisper resemblyzer webrtcvad-wheels cryptography huggingface-hub"` and
 `args="--audio-public-key <32-byte-X25519-public-key-as-hex>"`. CPU Torch is
 installed through the workflow's CPU index. Only the operator public key goes
 to CI; the private key stays in ignored operational storage. Audio, transcripts

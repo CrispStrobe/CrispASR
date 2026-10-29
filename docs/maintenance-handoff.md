@@ -29,8 +29,10 @@ speech/speaker cases pass on both devices, with actual adjacent F16 discovery
 through Session/C ABI and all six CLI calls. The candidate now changes managed
 Melo V2 downloads to the qualified F16 companion and immutable revision;
 production resolver → CLI initialization fails before and passes after that
-routing repair. Exact candidate CI/Lint/secret checks and main integration
-remain before release task I. No new release or tag has been published.
+routing repair. Candidate `500aaaf03` passes CI **40827487259** (13 jobs; 2,105 unit tests),
+Lint **40827489979** (10 jobs) and Secret scan **40827480637**. H is accepted.
+Task I is preparing v0.8.48; exact release-target checks and main/tag publication
+remain. No new release or tag has been published.
 [CPU acceptance](openvoice-full-f16-cpu-accepted-2026-10-29.json),
 [CUDA acceptance](openvoice-full-f16-cuda-accepted-2026-10-29.json).
 
@@ -66,7 +68,7 @@ First actions for a fresh agent:
    2026-10-29 check: open #456/#461/#483/#532/#557/#558/#560, PR #559,
    zero comments on #557. The [PR #559 review checkpoint](qwen3-context-pr559-review-2026-10-28.md)
    scopes its remaining gates; no review or merge was submitted.
-3. A, B, D, bounded F/G and K are accepted; C is prepared for review with #557 open. Finish H (accepted F16 profile; final managed-default integration), then I → J in order; do not duplicate accepted campaigns. E needs hardware.
+3. A, B, D, bounded F/G and K are accepted; C is prepared for review with #557 open. H is accepted; continue I → J in order; do not duplicate accepted campaigns. E needs hardware.
 4. For any task, record owner, source SHA, exact missing behavior, acceptance gates,
    resources and next action in PLAN.md before starting. Do not recreate a passing campaign.
 
@@ -429,13 +431,13 @@ Preset identity is explicitly `unknown`: model-generated audio does not prove
 whose identity a preset represents. Raw artifacts remain private and labelled;
 these tests grant no identity, consent or voice-pack publication rights.
 Both Session versions' terminal source, logs and outputs are retained privately.
-These accepted Session runs need no replacement. A separate full-source
-application campaign is running below; it does not replace their evidence.
+These accepted Session runs need no replacement. The separate full-source
+application qualification below does not replace their bounded evidence.
 This qualifies the shipped SDK plus verified model overlay, not a complete
 rebuilt-current library or the actual CLI. No model/default promotion or Hub
 publication occurred. Remaining scope:
 
-1. **Full rebuilt-current library and CLI — structural pass, quality failure:**
+1. **Full rebuilt-current library and CLI — retained attempts and accepted F16 profile:**
    candidate branch `validate/openvoice-interfaces-20261028`; application source
    `91e1e97b399d105924915c0e8d5ea0176359b147`, bootstrap `ae1f243a7`.
    These changes are not yet on main. The actual CLI adapter needed GPU
@@ -599,8 +601,10 @@ publication occurred. Remaining scope:
    explicit Q4 paths are unchanged; no implicit old-Q4 fallback is introduced.
    Existing hand-managed cache files remain subject to existing cache trust
    behavior; immutable default URLs are not a new content-verification claim.
-   Finish exact candidate CI/Lint/secret checks, integrate main safely, then
-   task I. The earlier accepted CI **40807943181** (13 jobs) and Lint
+   Candidate `500aaaf03` passes CI **40827487259** (all 13 jobs; 2,105
+   unit tests), Lint **40827489979** (all 10 jobs) and Secret scan
+   **40827480637**. H is accepted. Task I prepares v0.8.48 with exact
+   synchronized-version tag-target checks before main and tag publication. The earlier accepted CI **40807943181** (13 jobs) and Lint
    **40807945520** are at `bd1e299e1`, before this registry change; they do not
    replace final-source qualification.
    Earlier CPU **40783760561** passed its complete four-case matrix at

@@ -58,7 +58,7 @@ def main():
     parser.add_argument('--device', choices=['cpu','cuda'], default='cpu')
     parser.add_argument('--inputs', type=Path)
     parser.add_argument('--build-dir', type=Path)
-    parser.add_argument('--bert-profile', choices=['q4_k', 'f16'], default='q4_k')
+    parser.add_argument('--bert-profile', choices=['q4_k', 'f16'], default='f16')
     args = parser.parse_args()
     kaggle = Path('/kaggle/working').is_dir() and Path('/kaggle/input').is_dir()
     if os.environ.get('GITHUB_ACTIONS') != 'true' and not (kaggle and args.device == 'cuda'):

@@ -1,3 +1,10 @@
+## 2026-10-29 — Managed F16 integration qualification complete
+
+Candidate `500aaaf03` passes all 13 CI jobs, 2,105 unit tests, all 10 lint jobs
+and secret scanning. The accepted CPU/T4 full speech proofs and actual managed
+resolver-to-CLI regression support the Melo V2 F16 bundle change. v0.8.48
+release preparation follows; publication and its readback audits are separate.
+
 ## 2026-10-29 — Full F16 conditioning accepted on CPU and T4
 
 CPU run 40825101583 and full-current-source CUDA kernel version 5 pass the
