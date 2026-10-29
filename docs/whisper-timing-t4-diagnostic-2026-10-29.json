@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "complete": true,
+  "performance_match_established": false,
+  "scope": "T4, one public JFK clip, one warmup and four alternating measured processes per engine. Crisp profiling off/on are the same source-built binary; fork is a separately packaged binary with different build and CUDA libraries. Process time includes startup and GPU monitoring. Do not attribute the difference to an individual cause without same-toolchain controls.",
+  "source": "c5513ccfb16d2a45082e7365d306f927f2c6fb74",
+  "hardware": "Tesla T4, compute capability 7.5",
+  "audio_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "model_sha256": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+  "all_15_calls": {
+    "gpu_process_observed": true,
+    "cuda_model_and_backend_observed": true,
+    "wer": 0.0,
+    "same_transcript": true,
+    "decode_calls": 27
+  },
+  "medians": {
+    "crisp": {
+      "median_process_seconds": 1.268079560500155,
+      "median_load_ms": 530.76,
+      "median_decode_ms_per_call": 2.515740740740741
+    },
+    "crisp-profile": {
+      "median_process_seconds": 1.318525539500115,
+      "median_load_ms": 580.715,
+      "median_decode_ms_per_call": 2.509074074074074
+    },
+    "fork": {
+      "median_process_seconds": 1.0168029989999923,
+      "median_load_ms": 293.255,
+      "median_decode_ms_per_call": 2.406111111111111
+    }
+  },
+  "profiled_crisp_phase_medians_us": {
+    "load_total_us": 580715.5,
+    "load_alloc_us": 138749.0,
+    "load_read_us": 22069.5,
+    "load_upload_us": 37335.5,
+    "decode_graph_us": 4679.5,
+    "decode_input_us": 47.0,
+    "decode_compute_us": 61235.5,
+    "decode_read_us": 1742.0
+  },
+  "limits": [
+    "Profiled loader phases are partial and do not account for all load time.",
+    "Decode compute includes scheduler synchronization and is host wall time.",
+    "Matching one clip is not general speed or recognition acceptance."
+  ]
+}
