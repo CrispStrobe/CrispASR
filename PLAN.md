@@ -12,6 +12,8 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
+- Whisper DTW short-window safety owner: current agent, starting source `bfcaa7597`. Upstream MIT commit `a46fadb36a9b` avoids an abort when the alignment median filter is wider than a short audio window. Port the bounded filter-width rule; require hosted before/after short-window output and unchanged normal-window controls, plus CI/lint, before integration. No local compilation or inference.
+
 - CSM step instrumentation owner: current agent, starting source `ca0fb1e05`. Existing benchmark times whole generation but does not count synchronized backbone and depth graph calls. Add opt-in counters and graph-compute wall timings without changing model math or default outputs; distinguish accepted frames from attempts. Acceptance requires hosted build, profile-on/off identical outputs, actual GPU use and checked call counts. All builds and inference remain hosted.
 
 - OpenVoice stage diagnosis owner: current agent, starting from the accepted paired adapter `8a5bb390b`. The warm converter comparison shows a large CPU-flow versus CUDA-original gap but has no native phase breakdown. Prepare a hosted-only run on the same qualified inputs and application, retaining unchanged waveform gates and reporting stage timers without private audio or embeddings. Do not infer a cause or change neural math until measured.
