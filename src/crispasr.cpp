@@ -3479,7 +3479,20 @@ static bool whisper_decode_internal(whisper_context& wctx, whisper_state& wstate
 
         {
             struct ggml_tensor* position = ggml_graph_get_tensor(gf, "position");
-            ggml_backend_tensor_set(position, batch.pos, 0, n_tokens * sizeof(whisper_pos));
+            static const int contiguous_pos_gate = []() {
+                const char* e = getenv("CRISPASR_WHISPER_CONTIGUOUS_POS");
+                return e ? atoi(e) : 1;
+            }();
+            if (contiguous_pos_gate == 0) {
+                // Working path (pre-571cfa031): individual per-token driver calls
+                for (int i = 0; i < n_tokens; ++i) {
+                    const int32_t val = batch.pos[i];
+                    ggml_backend_tensor_set(position, &val, i * sizeof(int32_t), sizeof(int32_t));
+                }
+            } else {
+                // New path (571cfa031): single contiguous block copy
+                ggml_backend_tensor_set(position, batch.pos, 0, n_tokens * sizeof(whisper_pos));
+            }
         }
 
         {
