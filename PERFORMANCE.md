@@ -152,8 +152,11 @@ operations or as general model rankings.
 
 The OpenVoice outputs passed the fixed waveform comparison, but full original
 Melo synthesis has not yet been timed. A native stage profile is prepared to
-investigate the conversion gap. Nemotron ggml-fork and matched per-step
-comparisons remain outstanding.
+investigate the conversion gap. A separate [Nemotron fork comparison](docs/nemotron-fork-t4-benchmark-2026-10-29.json)
+passed its T4 quality and GPU controls. At matched R13 context its four measured
+JFK process medians were 3.93 s for CrispASR and 6.50 s for transcribe.cpp; the
+F16 files, upstream artifact revisions and stage boundaries differ. Matched
+per-step comparisons remain outstanding.
 
 # CrispASR — Performance benchmarks
 
