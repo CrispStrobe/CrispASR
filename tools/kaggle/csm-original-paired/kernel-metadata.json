@@ -7,7 +7,7 @@
   "is_private": "true",
   "enable_gpu": "true",
   "enable_internet": "true",
-  "dataset_sources": [],
+  "dataset_sources": ["${KAGGLE_ACCOUNT}/crispasr-hf-token"],
   "competition_sources": [],
   "kernel_sources": [],
   "model_sources": []
