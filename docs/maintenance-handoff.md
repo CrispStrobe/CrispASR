@@ -673,6 +673,20 @@ Preset identity and rights in a reference voice remain separate; qualification
 is bounded to the documented synthetic English CPU/T4 cases.
 [Publication receipt](openvoice2-tcc-publication-2026-10-29.json).
 
+### Matched Whisper CUDA fork benchmark
+
+Kaggle `crispasr-whisper-fork-paired` version 2 completed on T4. The same
+pinned base.en and JFK bytes produced zero WER and observed GPU process use
+on all ten calls. Four alternating measured calls per engine give medians
+1.468 s (CrispASR v0.8.47) and 1.017 s (OpenWhispr fork v1.0.0).
+This measures process startup and model loading with concurrent GPU monitoring,
+not per-step execution; builds and CUDA libraries differ. It is one input and
+not a general model ranking. [Receipt](whisper-fork-t4-benchmark-2026-10-29.json).
+All terminal source/log/output retained; version 1's missing-executable failure
+preceded inference and is retained separately. Do not repeat accepted runs
+without a new question. Per-step and upstream-original comparison remain to be
+implemented and validated on hosted hardware.
+
 ### Task I — next patch after current error gates
 
 **Current state: steps 1–3 are complete. Do not re-bump, recreate or move the

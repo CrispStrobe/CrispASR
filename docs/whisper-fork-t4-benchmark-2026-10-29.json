@@ -1,0 +1,219 @@
+{
+  "complete": true,
+  "acceptance": true,
+  "scope": "same input/model bytes and requested settings; process time includes loading and concurrent GPU monitoring; not per-step; differing builds and CUDA libraries",
+  "runs": [
+    {
+      "phase": "warmup",
+      "round": 0,
+      "engine": "crisp",
+      "seconds": 5.9784312630000045,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32492310528,
+        "load": [
+          0.23486328125,
+          0.17236328125,
+          0.09814453125
+        ],
+        "cpus": 4,
+        "disk": 1124500606976
+      },
+      "wer": 0.0
+    },
+    {
+      "phase": "warmup",
+      "round": 0,
+      "engine": "fork",
+      "seconds": 1.8882610640000053,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32420155392,
+        "load": [
+          0.29638671875,
+          0.1865234375,
+          0.10302734375
+        ],
+        "cpus": 4,
+        "disk": 1124500586496
+      },
+      "wer": 0.0
+    },
+    {
+      "phase": "measured",
+      "round": 0,
+      "engine": "crisp",
+      "seconds": 1.5175798980000081,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32329498624,
+        "load": [
+          0.29638671875,
+          0.1865234375,
+          0.10302734375
+        ],
+        "cpus": 4,
+        "disk": 1124500582400
+      },
+      "wer": 0.0
+    },
+    {
+      "phase": "measured",
+      "round": 0,
+      "engine": "fork",
+      "seconds": 0.9673081729999922,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32348876800,
+        "load": [
+          0.43310546875,
+          0.216796875,
+          0.11328125
+        ],
+        "cpus": 4,
+        "disk": 1124500578304
+      },
+      "wer": 0.0
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "engine": "fork",
+      "seconds": 1.0668914359999917,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32252080128,
+        "load": [
+          0.43310546875,
+          0.216796875,
+          0.11328125
+        ],
+        "cpus": 4,
+        "disk": 1124500574208
+      },
+      "wer": 0.0
+    },
+    {
+      "phase": "measured",
+      "round": 1,
+      "engine": "crisp",
+      "seconds": 1.4677443709999807,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32016310272,
+        "load": [
+          0.43310546875,
+          0.216796875,
+          0.11328125
+        ],
+        "cpus": 4,
+        "disk": 1124500570112
+      },
+      "wer": 0.0
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "engine": "crisp",
+      "seconds": 1.3673659609999618,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32227704832,
+        "load": [
+          0.43310546875,
+          0.216796875,
+          0.11328125
+        ],
+        "cpus": 4,
+        "disk": 1124500566016
+      },
+      "wer": 0.0
+    },
+    {
+      "phase": "measured",
+      "round": 2,
+      "engine": "fork",
+      "seconds": 0.9166234580000037,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32339673088,
+        "load": [
+          0.43310546875,
+          0.216796875,
+          0.11328125
+        ],
+        "cpus": 4,
+        "disk": 1124500561920
+      },
+      "wer": 0.0
+    },
+    {
+      "phase": "measured",
+      "round": 3,
+      "engine": "fork",
+      "seconds": 1.069008064000002,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 32105570304,
+        "load": [
+          0.638671875,
+          0.26318359375,
+          0.12890625
+        ],
+        "cpus": 4,
+        "disk": 1124500557824
+      },
+      "wer": 0.0
+    },
+    {
+      "phase": "measured",
+      "round": 3,
+      "engine": "crisp",
+      "seconds": 1.4678742629999988,
+      "rc": 0,
+      "cuda_process_observed": true,
+      "resources": {
+        "available": 31984381952,
+        "load": [
+          0.638671875,
+          0.26318359375,
+          0.12890625
+        ],
+        "cpus": 4,
+        "disk": 1124500553728
+      },
+      "wer": 0.0
+    }
+  ],
+  "pins": {
+    "crisp.tar.gz": "90e23cffb44f4a80d929bf88cf3abb2d526ec4c0b95d88a82d1a8bf33135722d",
+    "fork.zip": "286ad85d70ef9dd753b313f5d82c2ee3ce9015a1286e523f029fe215fdd7da61",
+    "model.bin": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+    "input.wav": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e"
+  },
+  "hardware": "Tesla T4, 7.5\nTesla T4, 7.5",
+  "binaries": {
+    "crisp": "4c07dbc07453e80684786203990ab6e89c1266bc13e6c61ca0e7ea5045444819",
+    "fork": "8e1b2ebd341605c8054c26b81a4dcb079954425f131dc3f498063bfd0d0bf417"
+  },
+  "median_seconds": {
+    "crisp": 1.4678093169999897,
+    "fork": 1.017099804499992
+  },
+  "kernel": "crispasr-whisper-fork-paired",
+  "kernel_version": 2,
+  "worker_source": "af1f9f8c8ecaf4853c6a85d9e56d33682da9dcaa",
+  "fork_source": "35026a0bd1983b875c0176f47a5d0145fce340f4",
+  "fork_release": "v1.0.0",
+  "crispasr_release": "v0.8.47",
+  "readback_verified": true
+}

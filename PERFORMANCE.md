@@ -104,6 +104,23 @@ Five new tests pass under GCC and Clang; full-library/hosted/model acceptance
 is pending. See [method and limitations](docs/alignment-cleanroom-2026-10-18.md#independent-subword-workspace-experiment)
 and [raw local receipt](docs/alignment-subword-local-2026-10-18.json).
 
+## Whisper fork CUDA comparison — 2026-10-29
+
+Kaggle `crispasr-whisper-fork-paired` version 2 compared the published v0.8.47
+CrispASR CUDA CLI against the OpenWhispr `whisper.cpp` fork v1.0.0 on T4.
+Both used the exact same pinned base.en model and JFK audio bytes, requested
+English, two threads and beam size one. Four alternating measured calls per
+engine followed one warmup each. Every call observed the process on the GPU
+and returned zero WER on this single input. Process-wall medians were **1.468 s
+for CrispASR** and **1.017 s for the fork** (fork about 1.44× faster).
+
+These are whole-process times, including model initialization and concurrent
+GPU monitoring; the binaries use different builds and CUDA libraries. They
+are not per-step timings or a general model-family ranking. GPU PID evidence
+does not isolate the time spent in GPU kernels. The failed version 1 never ran
+inference because the harness searched for the wrong packaged executable name;
+its source and logs are retained. [Receipt](docs/whisper-fork-t4-benchmark-2026-10-29.json).
+
 # CrispASR — Performance benchmarks
 
 Character CTC workspace experiment (2026-10-18): opt-in
