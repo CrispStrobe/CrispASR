@@ -8,6 +8,7 @@
 #include "crispasr_backend.h"
 #include "crispasr_cache.h"
 #include "crispasr_lid.h" // shared library header (src/)
+#include "core/lid_recording.h"
 #include "crispasr_subprocess.h"
 #include "whisper_params.h"
 
@@ -245,11 +246,28 @@ bool crispasr_backend_probe_language(CrispasrBackend& backend, const float* samp
     if (!be.empty() && be != "probe" && be != "self")
         return false;
 
+    if (params.lid_full_recording) {
+        core_lid::WindowResult result;
+        const bool ok = core_lid::detect_recording(
+            samples, n_samples,
+            [&](const float* window, int count, core_lid::WindowResult& vote) {
+                if (!backend.detect_language(window, count, params, vote.lang_code, vote.confidence))
+                    return false;
+                vote.source = std::string(backend.name()) + "-probe";
+                return true;
+            },
+            result);
+        if (!ok)
+            return false;
+        out.lang_code = result.lang_code;
+        out.confidence = result.confidence;
+        out.source = result.source;
+        return true;
+    }
     std::string lang;
     float confidence = 0.0f;
     if (!backend.detect_language(samples, n_samples, params, lang, confidence) || lang.empty())
         return false;
-
     out.lang_code = lang;
     out.confidence = confidence;
     out.source = std::string(backend.name()) + "-probe";
@@ -275,8 +293,8 @@ static bool detect_whisper_cli(const float* samples, int n_samples, const whispe
     return true;
 }
 
-bool crispasr_detect_language_cli(const float* samples, int n_samples, const whisper_params& params,
-                                  crispasr_lid_result& out) {
+static bool crispasr_detect_language_cli_window(const float* samples, int n_samples, const whisper_params& params,
+                                                crispasr_lid_result& out) {
     out = {};
     if (!samples || n_samples <= 0)
         return false;
@@ -371,4 +389,30 @@ bool crispasr_detect_language_cli(const float* samples, int n_samples, const whi
     fprintf(stderr, "crispasr[lid]: unknown --lid-backend '%s' (expected 'whisper', 'silero', 'firered', or 'ecapa')\n",
             be.c_str());
     return false;
+}
+
+bool crispasr_detect_language_cli(const float* samples, int n_samples, const whisper_params& params,
+                                  crispasr_lid_result& out) {
+    if (!params.lid_full_recording)
+        return crispasr_detect_language_cli_window(samples, n_samples, params, out);
+
+    core_lid::WindowResult result;
+    const bool ok = core_lid::detect_recording(
+        samples, n_samples,
+        [&](const float* window, int count, core_lid::WindowResult& vote) {
+            crispasr_lid_result one;
+            if (!crispasr_detect_language_cli_window(window, count, params, one))
+                return false;
+            vote.lang_code = one.lang_code;
+            vote.confidence = one.confidence;
+            vote.source = one.source;
+            return true;
+        },
+        result);
+    if (!ok)
+        return false;
+    out.lang_code = result.lang_code;
+    out.confidence = result.confidence;
+    out.source = result.source;
+    return true;
 }

@@ -649,6 +649,25 @@ These VAD providers are available:
 
 Pass `--lid-backend off` to skip LID entirely.
 
+By default, the external detector checks the first 15 seconds. Pass
+`--lid-full-recording` with `--detect-language` to classify each 15-second
+window and return one language for the recording. The same opt-in applies to
+external or self-probe LID during `-l auto` transcription. The final language
+is chosen by the duration of non-silent windows; ties keep the first language
+seen. Near-silent windows are skipped. A final fragment under five seconds is
+classified with preceding context but counted by its own duration. The reported
+confidence is a support estimate, not a calibrated recording-wide posterior.
+It takes longer on long recordings and reports one dominant language,
+not language changes over time. For standalone detection, no ASR model is needed:
+
+Native providers reuse a loaded detector across windows. The sherpa-ONNX
+subprocess fallback launches and loads its model once per window, so this mode
+can be substantially slower with that provider.
+
+```bash
+crispasr --detect-language --lid-full-recording -f recording.wav
+```
+
 ### Text language identification (post-ASR / standalone)
 
 Audio LID (above) tags **what was spoken**; text LID tags **what was

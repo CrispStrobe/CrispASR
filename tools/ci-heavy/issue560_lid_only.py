@@ -11,6 +11,7 @@ import shutil
 import subprocess
 import tarfile
 import urllib.request
+import wave
 
 ROOT = Path(__file__).resolve().parents[2]
 MODELS = [
@@ -125,6 +126,7 @@ def main():
         cli = build / "bin/crispasr"
         receipt["cli_sha256"] = sha(cli)
         receipt["sample_sha256"] = sha(ROOT / "samples/jfk.wav")
+        receipt["ko_sample_sha256"] = sha(ROOT / "samples/ko-369.wav")
         guard("checkpoint")
         with tarfile.open(
             out / "cli-validation-checkpoint.tar.gz", "w:gz", compresslevel=1
@@ -162,7 +164,7 @@ def main():
         common = [cli, "--no-gpu", "-np", "-t", "2", "--cache-dir", cache]
         audio = ROOT / "samples/jfk.wav"
 
-        def detect(flags, label, files=None):
+        def detect(flags, label, files=None, expected_language="en"):
             log = run(
                 common
                 + ["--detect-language"]
@@ -177,7 +179,7 @@ def main():
                 re.M,
             )
             if len(rows) != len(files or [audio]) or any(
-                lang != "en" for lang, _, _ in rows
+                lang != expected_language for lang, _, _ in rows
             ):
                 raise RuntimeError("Standalone LID result missing or unexpected")
             receipt.setdefault("results", {})[label] = [
@@ -219,6 +221,66 @@ def main():
         )
         if any(source != "silero" for _, _, source in rows):
             raise RuntimeError("Dedicated provider silently fell back")
+
+        # Real long-clip controls for the recording-wide opt-in. All fixtures
+        # use the two public repository clips; no model or ASR weights are
+        # embedded. A Korean prefix followed by more English speech forces the
+        # first-window and full-recording decisions to differ, proving that
+        # the flag reaches late windows rather than merely changing output.
+        def read_pcm(path):
+            with wave.open(str(path), "rb") as wav:
+                if (
+                    wav.getnchannels() != 1
+                    or wav.getsampwidth() != 2
+                    or wav.getframerate() != 16000
+                ):
+                    raise RuntimeError("Unexpected public clip format")
+                return wav.readframes(wav.getnframes())
+
+        def write_pcm(name, data):
+            path = scratch / name
+            with wave.open(str(path), "wb") as wav:
+                wav.setnchannels(1)
+                wav.setsampwidth(2)
+                wav.setframerate(16000)
+                wav.writeframes(data)
+            receipt.setdefault("long_clip_fixtures", {})[name] = dict(
+                sha256=sha(path), duration_samples=len(data) // 2
+            )
+            save()
+            return path
+
+        english = read_pcm(audio)
+        korean = read_pcm(ROOT / "samples/ko-369.wav")
+        silence_16s = bytes(16 * 16000 * 2)
+        late = write_pcm("late-after-silence.wav", silence_16s + english)
+        mixed = write_pcm("korean-then-english.wav", korean * 5 + english * 2)
+        # 30 s of silence plus 4 s of real speech reaches the short-tail
+        # context path; the classifier sees context but the vote weighs 4 s.
+        tail = write_pcm("short-final-speech.wav", bytes(30 * 16000 * 2) + english[:4 * 16000 * 2])
+        silent = write_pcm("silence.wav", bytes(18 * 16000 * 2))
+        empty = write_pcm("empty.wav", b"")
+        for provider, filename in [
+            ("whisper", "ggml-tiny.bin"),
+            ("silero", "silero-lid-lang95-f32.gguf"),
+        ]:
+            selected = bypass + ["--lid-backend", provider, "--lid-model", cache / filename]
+            full = selected + ["--lid-full-recording"]
+            _, rows = detect(full, provider + "-late-after-silence", files=[late])
+            if any(source != provider for _, _, source in rows):
+                raise RuntimeError("Full-recording provider silently fell back")
+            detect(selected, provider + "-first-window-control", files=[mixed], expected_language="ko")
+            detect(full, provider + "-late-majority", files=[mixed])
+            detect(full, provider + "-short-final-speech", files=[tail])
+            for name, path in [("silence", silent), ("empty", empty)]:
+                log = run(
+                    common + ["--detect-language"] + full + ["-f", path],
+                    provider + "-" + name,
+                    success=False,
+                    timeout=60,
+                )
+                if re.search(r"^lang=", log, re.M):
+                    raise RuntimeError("No-speech input emitted a LID result")
         for backend in ["self", "probe", "off", "none"]:
             log = run(
                 common + ["--detect-language", "--lid-backend", backend, "-f", audio],
