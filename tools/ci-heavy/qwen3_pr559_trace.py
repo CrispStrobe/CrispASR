@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 import sys
+import subprocess
 import wave
 
 import numpy as np
@@ -12,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT / "python"))
 from crispasr import Session
 
-lib, model, audio, out = map(Path, sys.argv[1:])
+lib, model, audio, out, cli = map(Path, sys.argv[1:])
 with wave.open(str(audio), "rb") as wav:
     assert (wav.getframerate(), wav.getnchannels(), wav.getsampwidth()) == (16000, 1, 2)
     pcm = np.frombuffer(wav.readframes(wav.getnframes()), dtype="<i2").astype(np.float32) / 32768
@@ -54,4 +55,32 @@ with Session(str(model), lib_path=str(lib), backend="qwen3", n_threads=4) as ses
             raise AssertionError("Automatic language unexpectedly forced")
         if mode == "question" and "What was said?" not in trace:
             raise AssertionError("Question was lost")
-(out / "prompt-routing-result.json").write_text(json.dumps({"passed": True, "modes": [m[0] for m in modes]}) + "\n")
+# Capture the CLI's actual tokenizer calls on a synthetic short clip and on
+# explicit multi-chunk input. LD_PRELOAD was set before this process started.
+long_audio = out / "qwen-cli-chunks.wav"
+with wave.open(str(audio), "rb") as source, wave.open(str(long_audio), "wb") as target:
+    target.setparams(source.getparams())
+    target.writeframes(source.readframes(source.getnframes()) * 40)
+for label, input_audio, context, extra, minimum in (
+    ("raw", audio, "Acme context", [], 1),
+    ("empty", audio, "", [], 1),
+    ("chunks", long_audio, "Acme context", ["--chunk-seconds", "10"], 2),
+):
+    path = out / ("cli-prompt-trace-" + label + ".txt")
+    env = dict(os.environ, CRISPASR_TEST_PROMPT_TRACE=str(path))
+    command = [str(cli), "--backend", "qwen3", "-m", str(model), "-ng", "-t", "4", "-l", "en",
+               "--context", context, "-f", str(input_audio), "-otxt", "-of", str(out / ("cli-" + label))] + extra
+    with (out / ("cli-prompt-run-" + label + ".log")).open("w") as log:
+        subprocess.run(command, env=env, stdout=log, stderr=subprocess.STDOUT, timeout=1800, check=True)
+    if not path.is_file():
+        raise RuntimeError("CLI tokenizer interposer did not capture " + label)
+    prompts = [p.split("\n--- END ---\n", 1)[0] for p in path.read_text().split("\n--- PROMPT ---\n")[1:]]
+    if len(prompts) < minimum:
+        raise AssertionError("CLI did not produce enough chunk prompts: " + label)
+    for prompt in prompts:
+        if "<|im_start|>system\n" + context + "<|im_end|>" not in prompt:
+            raise AssertionError("CLI context missing in " + label)
+        if "language English<asr_text>" not in prompt:
+            raise AssertionError("CLI forced language missing in " + label)
+(out / "prompt-routing-result.json").write_text(json.dumps(
+    {"passed": True, "modes": [m[0] for m in modes], "cli": ["raw", "empty", "chunks"]}) + "\n")
