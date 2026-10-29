@@ -65,7 +65,7 @@ and check actual GPU session availability before every Kaggle submission.
   the revised profiler marks their counters incomplete. This is unvalidated instrumentation, not a
   performance result; require hosted build and profile-on/off output identity.
   Native and original CSM step adapters are prepared, not submitted, at
-  `validate/csm-native-steps-20261029` commit `f973abfb4`. Each README sets
+  `validate/csm-native-steps-20261029` commit `51fae70cb`. Each README sets
   separate boundaries, GPU/identity/ASR gates and license limits. The native
   adapter builds the pinned profiler and rejects incomplete frame traces; the
   original adapter checks actual frame and decoder forwards. The native parser
