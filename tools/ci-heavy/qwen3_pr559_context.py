@@ -19,10 +19,47 @@ os.environ['TMPDIR'] = str(SCRATCH)
 os.environ['OMP_NUM_THREADS'] = '4'
 PINS = {
     'qwen': ('cstr/qwen3-asr-1.7b-GGUF', '674df5d44b50a63e7102a18895ed20e3f91de301', 'qwen3-asr-1.7b-q8_0.gguf'),
-    'mimo': ('cstr/mimo-asr-GGUF', 'e2d7dfebf0afd8076771903e92958039c5074eab', 'mimo-asr-q4_k.gguf'),
-    'codec': ('cstr/mimo-tokenizer-GGUF', 'fa380f4c49a8e8c62c02c00d0da5e263fc5b0dcf', 'mimo-tokenizer-q4_k.gguf'),
     'piper': ('cstr/piper-en_US-lessac-medium-GGUF', '6b3d385695cd2e91c1af9d37ca5684ee649e2e3d', 'piper-en_US-lessac-medium-f16.gguf'),
 }
+PR_HEAD = '6b132720090cbb532f79f544c130381ddf1cf6c9'
+# Git blob IDs from the exact PR head. The hosted validation branch is a
+# cherry-pick onto current main, so its commit ID alone does not prove that
+# the PR's implementation was tested. cli.cpp also has the unrelated #560
+# language-detection early-exit insertion; its PR help hunk is checked below.
+PR_BLOBS = {
+    'examples/cli/crispasr_backend.cpp': 'e995ba32581cc63543f8ccbba330901010e9f317',
+    'examples/cli/crispasr_backend_qwen3.cpp': 'c4ae1c02e6604014626bda30d875100c7f6e7c3a',
+    'examples/cli/whisper_params.h': 'fd1734889a893e11648481894dbe209849b8df9a',
+    'src/core/qwen3_prompt.h': '6db29486030a7228e7613082f6a9caad95dc3bf1',
+    'src/crispasr_c_api.cpp': '45d3472ce4d77dd16fce8380fae42594b2061846',
+    'tests/test-asr-prompt-contract.cpp': 'd4efe975c315f73d24ce8bc48e771f9fc4bf488f',
+}
+PR_CLI_BLOB = '8fcbc8c8a41b5be041df4da867cc37714c54cb40'
+VALIDATION_CLI_BLOB = 'b55ba8d05910638eac8990d79c374820a032be3b'
+
+
+def verify_pr_blobs():
+    observed = {}
+    for source, expected in PR_BLOBS.items():
+        actual = subprocess.check_output(['git', 'hash-object', str(ROOT / source)], text=True).strip()
+        if actual != expected:
+            raise RuntimeError(f'PR head blob mismatch: {source}: {actual} != {expected}')
+        observed[source] = actual
+    cli_source = ROOT / 'examples/cli/cli.cpp'
+    cli_blob = subprocess.check_output(['git', 'hash-object', str(cli_source)], text=True).strip()
+    if cli_blob != VALIDATION_CLI_BLOB:
+        raise RuntimeError(f'Unexpected validation CLI blob: {cli_blob}')
+    cli_text = cli_source.read_text()
+    if cli_text.count('(qwen3, vibevoice-asr)') != 1:
+        raise RuntimeError('PR CLI context help hunk is missing or duplicated')
+    observed['examples/cli/cli.cpp'] = {
+        'pr_head_blob': PR_CLI_BLOB, 'validation_blob': cli_blob,
+        'pr_context_help_hunk': True, 'overlay': 'unrelated issue #560 language-detection early exit',
+    }
+    return observed
+
+
+verified_pr_blobs = verify_pr_blobs()
 
 
 def run(command, tag, timeout=2400):
@@ -73,7 +110,8 @@ def normalized(text):
 
 
 results = dict(passed=False, source_commit=subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
-               model_pins=PINS, qwen={}, mimo={}, scope='CPU; synthetic short clips, JFK and SenseVoice Chinese sample; no Vulkan claim')
+               pr_head=PR_HEAD, verified_pr_blobs=verified_pr_blobs, model_pins=PINS, qwen={},
+               scope='CPU; Piper-generated synthetic English short clips and prompt routing; no Vulkan claim')
 
 
 def save():
