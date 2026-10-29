@@ -1,0 +1,860 @@
+{
+  "schema": 1,
+  "complete": true,
+  "acceptance": false,
+  "scope": "Current-source library and actual CLI; device=cuda",
+  "source": "91e1e97b399d105924915c0e8d5ea0176359b147",
+  "ggml": "e2ae679a563014f46c546ce6c6448e8601e4dea6",
+  "resource_checks": [
+    {
+      "phase": "original-reference-0",
+      "available_bytes": 32489807872,
+      "load": [
+        1.37109375,
+        1.64306640625,
+        1.05810546875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124056662016,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "original-reference-1",
+      "available_bytes": 32461303808,
+      "load": [
+        1.28857421875,
+        1.61083984375,
+        1.056640625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124056645632,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "rebuilt-session",
+      "available_bytes": 32397967360,
+      "load": [
+        1.404296875,
+        1.6240234375,
+        1.06689453125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124056612864,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "cli-baseline-0",
+      "available_bytes": 32474222592,
+      "load": [
+        1.103515625,
+        1.47412109375,
+        1.05908203125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124053024768,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "cli-clone-0",
+      "available_bytes": 32478167040,
+      "load": [
+        1.103515625,
+        1.47412109375,
+        1.05908203125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124052676608,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "cli-disclosed-0",
+      "available_bytes": 32389447680,
+      "load": [
+        1.080078125,
+        1.4501953125,
+        1.0576171875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124052488192,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "cli-baseline-1",
+      "available_bytes": 32467681280,
+      "load": [
+        1.06689453125,
+        1.4345703125,
+        1.056640625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124052103168,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "cli-clone-1",
+      "available_bytes": 32344748032,
+      "load": [
+        1.0615234375,
+        1.42724609375,
+        1.05615234375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124051718144,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "cli-disclosed-1",
+      "available_bytes": 32419422208,
+      "load": [
+        1.046875,
+        1.4052734375,
+        1.0546875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124051517440,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "independent-quality",
+      "available_bytes": 32456040448,
+      "load": [
+        1.03564453125,
+        1.384765625,
+        1.05322265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124051116032,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-baseline",
+      "available_bytes": 31896383488,
+      "load": [
+        0.96142578125,
+        1.3369140625,
+        1.04541015625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955744768,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-original",
+      "available_bytes": 31843229696,
+      "load": [
+        0.96142578125,
+        1.3369140625,
+        1.04541015625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955744768,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-clone",
+      "available_bytes": 31827648512,
+      "load": [
+        0.96142578125,
+        1.3369140625,
+        1.04541015625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955744768,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-raw",
+      "available_bytes": 31814901760,
+      "load": [
+        0.96142578125,
+        1.3369140625,
+        1.04541015625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955744768,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-baseline",
+      "available_bytes": 31822462976,
+      "load": [
+        0.96142578125,
+        1.3369140625,
+        1.04541015625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955740672,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-original",
+      "available_bytes": 31799894016,
+      "load": [
+        1.044921875,
+        1.34814453125,
+        1.05078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955740672,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-clone",
+      "available_bytes": 31801344000,
+      "load": [
+        1.044921875,
+        1.34814453125,
+        1.05078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955740672,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-disclosed",
+      "available_bytes": 31768084480,
+      "load": [
+        1.044921875,
+        1.34814453125,
+        1.05078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955740672,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-baseline",
+      "available_bytes": 31764099072,
+      "load": [
+        1.044921875,
+        1.34814453125,
+        1.05078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955740672,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-original",
+      "available_bytes": 31748145152,
+      "load": [
+        1.044921875,
+        1.34814453125,
+        1.05078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955740672,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-clone",
+      "available_bytes": 31748153344,
+      "load": [
+        1.044921875,
+        1.34814453125,
+        1.05078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955740672,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-session-raw",
+      "available_bytes": 31709310976,
+      "load": [
+        1.044921875,
+        1.34814453125,
+        1.05078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955740672,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-baseline",
+      "available_bytes": 31705636864,
+      "load": [
+        1.044921875,
+        1.34814453125,
+        1.05078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955736576,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-original",
+      "available_bytes": 31707443200,
+      "load": [
+        1.044921875,
+        1.34814453125,
+        1.05078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955736576,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-clone",
+      "available_bytes": 31717343232,
+      "load": [
+        1.044921875,
+        1.34814453125,
+        1.05078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955736576,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "quality-cli-disclosed",
+      "available_bytes": 31583207424,
+      "load": [
+        1.12158203125,
+        1.359375,
+        1.05615234375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1123955736576,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    }
+  ],
+  "phases": {
+    "original-reference-0": {
+      "returncode": 0
+    },
+    "original-reference-1": {
+      "returncode": 0
+    },
+    "rebuilt-session": {
+      "returncode": 0
+    },
+    "cli-baseline-0": {
+      "returncode": 0
+    },
+    "cli-clone-0": {
+      "returncode": 0
+    },
+    "cli-disclosed-0": {
+      "returncode": 0
+    },
+    "cli-baseline-1": {
+      "returncode": 0
+    },
+    "cli-clone-1": {
+      "returncode": 0
+    },
+    "cli-disclosed-1": {
+      "returncode": 0
+    }
+  },
+  "cases": [
+    {
+      "interface": "session",
+      "case": 0,
+      "quality": {
+        "baseline": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.5016840696334839,
+          "rate": 44100,
+          "samples": 171008,
+          "sha256": "ee105ecd84e3372f34cc0e6d520bd802575cdfd0929ef9c9b177844f1b65c70a"
+        },
+        "original": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6884582042694092,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "b77bfae1ec314cd5e2808419a70bbfcd2e48a69c4dddbadaeed63b0d063c5ee0"
+        },
+        "clone": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6873791217803955,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "a95b4e4f915e824681c913c433f94e21d87e3516a41fe879bed6990d2f253c96"
+        },
+        "raw": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6888700723648071,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "101a27242db1cbc3ac799e79c94195516a8350671da548abd7e4913f6a9d0f6d"
+        }
+      },
+      "accepted": true
+    },
+    {
+      "interface": "cli",
+      "case": 0,
+      "quality": {
+        "baseline": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.5016865730285645,
+          "rate": 44100,
+          "samples": 171008,
+          "sha256": "8bfac6d74de7b000683a7453bb260207d45ac3d742d0658ecb88db850646fa3e"
+        },
+        "original": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6884582042694092,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "b77bfae1ec314cd5e2808419a70bbfcd2e48a69c4dddbadaeed63b0d063c5ee0"
+        },
+        "clone": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6708998680114746,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "2389db3a0687afa4a74e3b0888b666380e4d59630bf89c7c205f1e77bba5f9e5"
+        },
+        "disclosed": {
+          "wer": 0.25,
+          "speaker_cosine": 0.701741099357605,
+          "rate": 22050,
+          "samples": 185815,
+          "sha256": "7bd90d7d2f0eef7b1be5360620bad265effb57f96ac7bc0942957ddfeff2667d"
+        }
+      },
+      "accepted": false
+    },
+    {
+      "interface": "session",
+      "case": 1,
+      "quality": {
+        "baseline": {
+          "wer": 0.0,
+          "speaker_cosine": 0.4496225416660309,
+          "rate": 44100,
+          "samples": 188928,
+          "sha256": "f3f153e2b51abaa52ff4a17dd73f8655789025e3a2e95ec99b42d08f8bad244a"
+        },
+        "original": {
+          "wer": 0.0,
+          "speaker_cosine": 0.6888083219528198,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "d52c2c518733b30b665adcde66659b0d7496f3177003c078d4db8167885dbb6e"
+        },
+        "clone": {
+          "wer": 0.0,
+          "speaker_cosine": 0.7245923280715942,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "7bb3a0942410e6f067516cf69d52f07fe1f1cb7be5819de0a523434c818d6f4e"
+        },
+        "raw": {
+          "wer": 0.0,
+          "speaker_cosine": 0.7248736023902893,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "fe5b01fc6323d543d5c687b89780a044cd9652884b147576815877bc6ca05697"
+        }
+      },
+      "accepted": true
+    },
+    {
+      "interface": "cli",
+      "case": 1,
+      "quality": {
+        "baseline": {
+          "wer": 0.0,
+          "speaker_cosine": 0.44961655139923096,
+          "rate": 44100,
+          "samples": 188928,
+          "sha256": "bf35cdcb306f719575366bc69260206fcebefecb439013a7b662cdd8e1c5b150"
+        },
+        "original": {
+          "wer": 0.0,
+          "speaker_cosine": 0.6888083219528198,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "d52c2c518733b30b665adcde66659b0d7496f3177003c078d4db8167885dbb6e"
+        },
+        "clone": {
+          "wer": 0.0,
+          "speaker_cosine": 0.7331283688545227,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "5e9e65506d4809a9a3b82756befb8c7a6039bf8b5fbc21280f08c7b18817c5ef"
+        },
+        "disclosed": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.7451372742652893,
+          "rate": 22050,
+          "samples": 194775,
+          "sha256": "0cf19369eab07b4eb0d119db51adfc26d93c9d57cfab31af7be6f721cb7ad7d0"
+        }
+      },
+      "accepted": true
+    }
+  ],
+  "limitations": [
+    "Full-source CPU build on Actions; CUDA profile may reuse pinned matching ggml DSOs",
+    "Model-generated references; preset identity unknown; no voice rights clearance",
+    "No model publication or registry default promotion",
+    "Speaker gain gates content-only marked clones; disclosed clips also require full-text and rate gates"
+  ],
+  "accepted_inputs": {
+    "openvoice2-tcc-f32sens.gguf": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255",
+    "reference-0.gguf": "259993b526944e8e36ccca436e005cbc3935a46636b42c618cfd5c3d19429c8f",
+    "reference-1.gguf": "5e2a043ce975d27e2d2926d9acacacae0c97e9ab1e85265b7f97bae3d9c059f7",
+    "reference.wav": "237f5c2ebcd75f734f44f63ba4915321aea7d8d53969a6d5f3aad966cdb760e6",
+    "original-0.wav": "b77bfae1ec314cd5e2808419a70bbfcd2e48a69c4dddbadaeed63b0d063c5ee0",
+    "original-1.wav": "d52c2c518733b30b665adcde66659b0d7496f3177003c078d4db8167885dbb6e",
+    "reference-ATTRIBUTION.txt": "377a32e6f98e9c96c4bb16c221f1aca1a8793b209b7a6991c827a8a46f42763c",
+    "reference-OpenVoice-LICENSE.txt": "bb3541f421e6273d3a3e3dd5bdba2bd3b79a3c2eadca65cde9c62c2467903ac0"
+  },
+  "built_sha256": {
+    "library": "b6d5aa152d8f7759db167d33ada148a10b9696b6ec72399b32628fdb96535a21",
+    "cli": "293ce0a7b8789d08543eb4e616791d63f00965ddb7dec209ffc08000123cb14e",
+    "diff": "55c3ac4cf98adc53596663870cbdcb990e33053f0a8d916d0bfce9035a34235b"
+  },
+  "model_source_sha256": {
+    "src/openvoice2.cpp": "f658c40176fe1c67584cd9ab80ca9d954433cfe7973f6ba84b43a448d59b8c13",
+    "src/melotts.cpp": "7b847160799f5ba0a5374062526eb38a67980a53b23fde959fbcd3b874723db4",
+    "src/crispasr_c_api.cpp": "1c7509daf4a6e8a50ff6743596880fc549d429281d73b61b96e77c0dd0b48df5",
+    "examples/cli/crispasr_backend_melotts.cpp": "97ee1ecfaa812f6c86d366cd7c5f8a78c06b94df7002df89b284ca5b47b5eca2"
+  },
+  "session_controls": {
+    "complete": true,
+    "resource_checks": [
+      {
+        "phase": "native-invalid-speaker",
+        "available_bytes": 32279756800,
+        "load": [
+          1.37158203125,
+          1.61328125,
+          1.06640625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124055965696,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "native-invalid-speaker",
+        "available_bytes": 32264314880,
+        "load": [
+          1.37158203125,
+          1.61328125,
+          1.06640625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124055957504,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "session-open",
+        "available_bytes": 32157597696,
+        "load": [
+          1.37158203125,
+          1.61328125,
+          1.06640625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124055957504,
+        "gpu_free_mib": [
+          14912,
+          14912
+        ]
+      },
+      {
+        "phase": "session-baseline",
+        "available_bytes": 31840882688,
+        "load": [
+          1.37158203125,
+          1.61328125,
+          1.06640625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124055957504,
+        "gpu_free_mib": [
+          14709,
+          14909
+        ]
+      },
+      {
+        "phase": "session-codec-voice",
+        "available_bytes": 31843229696,
+        "load": [
+          1.37158203125,
+          1.61328125,
+          1.06640625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124055269376,
+        "gpu_free_mib": [
+          14535,
+          14909
+        ]
+      },
+      {
+        "phase": "session-raw",
+        "available_bytes": 31827132416,
+        "load": [
+          1.37158203125,
+          1.61328125,
+          1.06640625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124055269376,
+        "gpu_free_mib": [
+          14425,
+          14909
+        ]
+      },
+      {
+        "phase": "session-repeat",
+        "available_bytes": 31863918592,
+        "load": [
+          1.31396484375,
+          1.5927734375,
+          1.0654296875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124055257088,
+        "gpu_free_mib": [
+          14255,
+          14909
+        ]
+      },
+      {
+        "phase": "session-marked",
+        "available_bytes": 31871172608,
+        "load": [
+          1.24365234375,
+          1.56298828125,
+          1.06396484375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124055252992,
+        "gpu_free_mib": [
+          14249,
+          14909
+        ]
+      },
+      {
+        "phase": "session-open",
+        "available_bytes": 31871508480,
+        "load": [
+          1.2060546875,
+          1.5439453125,
+          1.06298828125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124054560768,
+        "gpu_free_mib": [
+          14799,
+          14909
+        ]
+      },
+      {
+        "phase": "session-baseline",
+        "available_bytes": 31810785280,
+        "load": [
+          1.2060546875,
+          1.5439453125,
+          1.06298828125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124054560768,
+        "gpu_free_mib": [
+          14701,
+          14909
+        ]
+      },
+      {
+        "phase": "session-codec-voice",
+        "available_bytes": 31794503680,
+        "load": [
+          1.2060546875,
+          1.5439453125,
+          1.06298828125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124053798912,
+        "gpu_free_mib": [
+          14513,
+          14909
+        ]
+      },
+      {
+        "phase": "session-raw",
+        "available_bytes": 31777214464,
+        "load": [
+          1.2060546875,
+          1.5439453125,
+          1.06298828125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124053798912,
+        "gpu_free_mib": [
+          14403,
+          14909
+        ]
+      },
+      {
+        "phase": "session-repeat",
+        "available_bytes": 31791284224,
+        "load": [
+          1.15966796875,
+          1.5166015625,
+          1.0615234375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124053794816,
+        "gpu_free_mib": [
+          14217,
+          14909
+        ]
+      },
+      {
+        "phase": "session-marked",
+        "available_bytes": 31792156672,
+        "load": [
+          1.13427734375,
+          1.4990234375,
+          1.060546875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 1124053794816,
+        "gpu_free_mib": [
+          14217,
+          14909
+        ]
+      }
+    ],
+    "cases": [
+      {
+        "case": 0,
+        "repeat_exact": true,
+        "marked_differs": true,
+        "samples": 85504
+      },
+      {
+        "case": 1,
+        "repeat_exact": true,
+        "marked_differs": true,
+        "samples": 94464
+      }
+    ],
+    "invalid_native_ids": [
+      -1,
+      2147483647
+    ]
+  },
+  "cli_cuda_observed": true,
+  "error": "CLI case 0 default-disclosed WER 0.25 exceeds unchanged 0.20 gate; three other quality cases accepted.",
+  "private_evidence": {
+    "bytes": 5366199,
+    "sha256": "2c8b8f6d9ec543ffd5817151fd74a6179f4c6b6e3838d281f5c6798b5c6ff89d",
+    "recipient_sha256": "8faff36ac3521f054e844e58e8d5305560935c4545c0dc4472bcfce23b058e36",
+    "files": 26
+  },
+  "kernel_version": 1,
+  "bootstrap_source": "ae1f243a796778a647927d84f115e0c7a596cdef",
+  "producer_terminal_status": "ERROR",
+  "hardware": "2 \u00d7 NVIDIA Tesla T4",
+  "checkpoint_sha256": "16c7b7f10141cdb8f023bbf0dcd4c274a8f9f2215a501767545666df06906d05",
+  "raw_speech_public": false,
+  "original_stage_controls": [
+    {
+      "case": 0,
+      "passed": 27,
+      "failed": 0,
+      "cuda_vocoder_windows": 1
+    },
+    {
+      "case": 1,
+      "passed": 27,
+      "failed": 0,
+      "cuda_vocoder_windows": 1
+    }
+  ],
+  "session_cuda_vocoder_windows": 6
+}

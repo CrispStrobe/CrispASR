@@ -1,0 +1,496 @@
+{
+  "schema": 1,
+  "complete": true,
+  "application_acceptance": false,
+  "scope": "Diagnostic only: unchanged failed full-disclosure WER gate retained",
+  "application_source": "91e1e97b399d105924915c0e8d5ea0176359b147",
+  "checkpoint_sha256": "16c7b7f10141cdb8f023bbf0dcd4c274a8f9f2215a501767545666df06906d05",
+  "entry_sha256": "67a7564ee9e71f4ab0c9bda8907f92a7ad133d142b5efd5ad8af277653d5c74e",
+  "observations": [
+    {
+      "model": "Systran/faster-whisper-tiny.en",
+      "revision": "0d3d19a32d3338f10357c0889762bd8d64bbdeba",
+      "device": "cpu",
+      "precision": "int8",
+      "probe": "neutral",
+      "wer": 0.2857142857142857,
+      "audio_sha256": "a90c495b587413a5899b592f6486946f18dad5c76c3c1aac8fbcd16c21b040c9"
+    },
+    {
+      "model": "Systran/faster-whisper-tiny.en",
+      "revision": "0d3d19a32d3338f10357c0889762bd8d64bbdeba",
+      "device": "cpu",
+      "precision": "int8",
+      "probe": "prefix-0",
+      "wer": 0.2857142857142857,
+      "audio_sha256": "075eafc8df02e7d2e5e15710043fd8f9cd08061c6b83bb9cf433f3d093e63116"
+    },
+    {
+      "model": "Systran/faster-whisper-tiny.en",
+      "revision": "0d3d19a32d3338f10357c0889762bd8d64bbdeba",
+      "device": "cpu",
+      "precision": "int8",
+      "probe": "content-0",
+      "wer": 0.1111111111111111,
+      "audio_sha256": "b486d1fbce190ea1b557e03ad0b809995072b7f2f1d30580030a3cff97f92fce"
+    },
+    {
+      "model": "Systran/faster-whisper-tiny.en",
+      "revision": "0d3d19a32d3338f10357c0889762bd8d64bbdeba",
+      "device": "cpu",
+      "precision": "int8",
+      "probe": "disclosed-0",
+      "wer": 0.25,
+      "audio_sha256": "57e992abb907f585f7accbf8e259b43a0a7d5179e555a2f742302674b5b82935"
+    },
+    {
+      "model": "Systran/faster-whisper-tiny.en",
+      "revision": "0d3d19a32d3338f10357c0889762bd8d64bbdeba",
+      "device": "cpu",
+      "precision": "int8",
+      "probe": "prefix-1",
+      "wer": 0.2857142857142857,
+      "audio_sha256": "611074e73811a15dc1efe3f2447e093a3da525ba14d54effbbe08c944a8894a5"
+    },
+    {
+      "model": "Systran/faster-whisper-tiny.en",
+      "revision": "0d3d19a32d3338f10357c0889762bd8d64bbdeba",
+      "device": "cpu",
+      "precision": "int8",
+      "probe": "content-1",
+      "wer": 0.0,
+      "audio_sha256": "2124f50fc2749868daefde51f5c67a326098dc9da1916d039f6de3de8b1b33f8"
+    },
+    {
+      "model": "Systran/faster-whisper-tiny.en",
+      "revision": "0d3d19a32d3338f10357c0889762bd8d64bbdeba",
+      "device": "cpu",
+      "precision": "int8",
+      "probe": "disclosed-1",
+      "wer": 0.1111111111111111,
+      "audio_sha256": "6898708af43df850bb53cd75027e56a96376cf8fc533366f267abe7b2dc327ea"
+    },
+    {
+      "model": "Systran/faster-whisper-small.en",
+      "revision": "d1d751a5f8271d482d14ca55d9e2deeebbae577f",
+      "device": "cuda",
+      "precision": "float16",
+      "probe": "neutral",
+      "wer": 0.14285714285714285,
+      "audio_sha256": "a90c495b587413a5899b592f6486946f18dad5c76c3c1aac8fbcd16c21b040c9"
+    },
+    {
+      "model": "Systran/faster-whisper-small.en",
+      "revision": "d1d751a5f8271d482d14ca55d9e2deeebbae577f",
+      "device": "cuda",
+      "precision": "float16",
+      "probe": "prefix-0",
+      "wer": 0.14285714285714285,
+      "audio_sha256": "075eafc8df02e7d2e5e15710043fd8f9cd08061c6b83bb9cf433f3d093e63116"
+    },
+    {
+      "model": "Systran/faster-whisper-small.en",
+      "revision": "d1d751a5f8271d482d14ca55d9e2deeebbae577f",
+      "device": "cuda",
+      "precision": "float16",
+      "probe": "content-0",
+      "wer": 0.1111111111111111,
+      "audio_sha256": "b486d1fbce190ea1b557e03ad0b809995072b7f2f1d30580030a3cff97f92fce"
+    },
+    {
+      "model": "Systran/faster-whisper-small.en",
+      "revision": "d1d751a5f8271d482d14ca55d9e2deeebbae577f",
+      "device": "cuda",
+      "precision": "float16",
+      "probe": "disclosed-0",
+      "wer": 0.125,
+      "audio_sha256": "57e992abb907f585f7accbf8e259b43a0a7d5179e555a2f742302674b5b82935"
+    },
+    {
+      "model": "Systran/faster-whisper-small.en",
+      "revision": "d1d751a5f8271d482d14ca55d9e2deeebbae577f",
+      "device": "cuda",
+      "precision": "float16",
+      "probe": "prefix-1",
+      "wer": 0.14285714285714285,
+      "audio_sha256": "611074e73811a15dc1efe3f2447e093a3da525ba14d54effbbe08c944a8894a5"
+    },
+    {
+      "model": "Systran/faster-whisper-small.en",
+      "revision": "d1d751a5f8271d482d14ca55d9e2deeebbae577f",
+      "device": "cuda",
+      "precision": "float16",
+      "probe": "content-1",
+      "wer": 0.0,
+      "audio_sha256": "2124f50fc2749868daefde51f5c67a326098dc9da1916d039f6de3de8b1b33f8"
+    },
+    {
+      "model": "Systran/faster-whisper-small.en",
+      "revision": "d1d751a5f8271d482d14ca55d9e2deeebbae577f",
+      "device": "cuda",
+      "precision": "float16",
+      "probe": "disclosed-1",
+      "wer": 0.05555555555555555,
+      "audio_sha256": "6898708af43df850bb53cd75027e56a96376cf8fc533366f267abe7b2dc327ea"
+    }
+  ],
+  "resource_checks": [
+    {
+      "phase": "disclosure-bootstrap",
+      "available_bytes": 32479887360,
+      "load": [
+        0.859375,
+        0.462890625,
+        0.189453125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125560217600,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "dependencies",
+      "available_bytes": 32499572736,
+      "load": [
+        0.859375,
+        0.462890625,
+        0.189453125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125560180736,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "runtime-dependencies",
+      "available_bytes": 32488239104,
+      "load": [
+        0.8076171875,
+        0.46435546875,
+        0.1923828125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1125097099264,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "neutral",
+      "available_bytes": 32536207360,
+      "load": [
+        0.74267578125,
+        0.45654296875,
+        0.19091796875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124842778624,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "disclosed-0",
+      "available_bytes": 32417234944,
+      "load": [
+        0.923828125,
+        0.4990234375,
+        0.2060546875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124840898560,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "disclosed-1",
+      "available_bytes": 32334639104,
+      "load": [
+        1.26171875,
+        0.5908203125,
+        0.24072265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124839616512,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "load-faster-whisper-tiny.en",
+      "available_bytes": 32398864384,
+      "load": [
+        1.203125,
+        0.611328125,
+        0.25390625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124834988032,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-neutral",
+      "available_bytes": 32211480576,
+      "load": [
+        1.203125,
+        0.611328125,
+        0.25390625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124756754432,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-prefix-0",
+      "available_bytes": 32082968576,
+      "load": [
+        1.26708984375,
+        0.634765625,
+        0.263671875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124756750336,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-content-0",
+      "available_bytes": 32095301632,
+      "load": [
+        1.26708984375,
+        0.634765625,
+        0.263671875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124756750336,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-disclosed-0",
+      "available_bytes": 32109416448,
+      "load": [
+        1.26708984375,
+        0.634765625,
+        0.263671875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124756750336,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-prefix-1",
+      "available_bytes": 32107614208,
+      "load": [
+        1.26708984375,
+        0.634765625,
+        0.263671875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124756750336,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-content-1",
+      "available_bytes": 32120475648,
+      "load": [
+        1.26708984375,
+        0.634765625,
+        0.263671875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124756750336,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-disclosed-1",
+      "available_bytes": 32113389568,
+      "load": [
+        1.26708984375,
+        0.634765625,
+        0.263671875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124756750336,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "load-faster-whisper-small.en",
+      "available_bytes": 32163291136,
+      "load": [
+        1.26708984375,
+        0.634765625,
+        0.263671875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124756750336,
+      "gpu_free_mib": [
+        14912,
+        14912
+      ]
+    },
+    {
+      "phase": "decode-neutral",
+      "available_bytes": 31593574400,
+      "load": [
+        1.40625,
+        0.67431640625,
+        0.27880859375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124270575616,
+      "gpu_free_mib": [
+        14231,
+        14909
+      ]
+    },
+    {
+      "phase": "decode-prefix-0",
+      "available_bytes": 31336660992,
+      "load": [
+        1.40625,
+        0.67431640625,
+        0.27880859375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124270575616,
+      "gpu_free_mib": [
+        14217,
+        14909
+      ]
+    },
+    {
+      "phase": "decode-content-0",
+      "available_bytes": 31356702720,
+      "load": [
+        1.40625,
+        0.67431640625,
+        0.27880859375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124270571520,
+      "gpu_free_mib": [
+        14217,
+        14909
+      ]
+    },
+    {
+      "phase": "decode-disclosed-0",
+      "available_bytes": 31356747776,
+      "load": [
+        1.40625,
+        0.67431640625,
+        0.27880859375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124270571520,
+      "gpu_free_mib": [
+        14217,
+        14909
+      ]
+    },
+    {
+      "phase": "decode-prefix-1",
+      "available_bytes": 31356784640,
+      "load": [
+        1.40625,
+        0.67431640625,
+        0.27880859375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124270571520,
+      "gpu_free_mib": [
+        14217,
+        14909
+      ]
+    },
+    {
+      "phase": "decode-content-1",
+      "available_bytes": 31344939008,
+      "load": [
+        1.40625,
+        0.67431640625,
+        0.27880859375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124270571520,
+      "gpu_free_mib": [
+        14217,
+        14909
+      ]
+    },
+    {
+      "phase": "decode-disclosed-1",
+      "available_bytes": 31328710656,
+      "load": [
+        1.40625,
+        0.67431640625,
+        0.27880859375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 1124270571520,
+      "gpu_free_mib": [
+        14217,
+        14909
+      ]
+    }
+  ],
+  "binary_sha256": "293ce0a7b8789d08543eb4e616791d63f00965ddb7dec209ffc08000123cb14e",
+  "prefix_comparisons": [
+    {
+      "case": 0,
+      "cosine": 0.9999366402626038,
+      "norm_ratio": 0.9996370673179626,
+      "samples": 93696
+    },
+    {
+      "case": 1,
+      "cosine": 0.9999366402626038,
+      "norm_ratio": 0.9996370673179626,
+      "samples": 93696
+    }
+  ],
+  "private_evidence": {
+    "bytes": 1634750,
+    "sha256": "382c9c48908979ad60c89cc04d87101091c479b3fdd3b663fef335d83b0caeca",
+    "recipient_sha256": "8faff36ac3521f054e844e58e8d5305560935c4545c0dc4472bcfce23b058e36",
+    "files": 11
+  },
+  "kernel_version": 2,
+  "worker_source": "f2729e4295844fdc121756de2214b864dee596f9",
+  "bootstrap_source": "a455b144f",
+  "producer_terminal_status": "COMPLETE",
+  "raw_speech_public": false,
+  "interpretation": "Neutral Melo speech also fails original tiny.en WER; small.en diagnostic does not replace that gate. Original Melo reference investigation required."
+}

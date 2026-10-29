@@ -1,4 +1,4 @@
-# Fresh-agent maintainer handoff — 2026-10-28
+# Fresh-agent maintainer handoff — 2026-10-29
 
 This is the current handoff. No previous chat is needed to understand the work,
 what is complete, or what to do next. Read `AGENTS.md` and the full maintainer
@@ -15,21 +15,29 @@ in ignored local notes.
 
 ## Current state and first actions
 
-State at this wrap-up (2026-10-28): **v0.8.46 is published; v0.8.47 has partial public assets and
-its native release run has passed all 38 jobs including final publication. Native byte audit passed; all wheel builds and PyPI publication pass, while GPU-index publication remains queued.** Active follow-up work is owned in [PLAN.md](../PLAN.md). Preserve the listed run IDs;
-a fresh agent should confirm ownership before dispatching replacements.
+Snapshot 2026-10-29: **v0.8.46 publication is accepted. v0.8.47 native
+publication, both wheel publishers, Pages and live GPU index links pass; final
+wheel audit 40789883589 is accepted for all 11 distributions and readbacks.** Keep #557 open and prepare its reply
+for review only. The current CLI, BERT and Melo activation repairs are on
+[candidate branch `validate/openvoice-interfaces-20261028`](https://github.com/CrispStrobe/CrispASR/tree/315339f65),
+not main or the immutable v0.8.47 release. Full-source CUDA version 3 is running
+from application/controller source `01a288763`, bootstrap `315339f65`; current
+CPU 40801516214, CI 40801518226 and Lint 40801520188 are queued at `315339f65`.
+Preserve these existing jobs. Read live status before dispatching a replacement.
+The earlier CPU run 40783760561 passed, but predates the latest BERT frontend
+repair and supplies only that older source's acceptance.
 
 | Item | State | Evidence |
 |---|---|---|
 | v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit 40736324867 PASS; task A complete. | [Receipt](release-publication-2026-10-28.md) |
-| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 is accepted; wheel producer 40751349609 remains queued. | Task B |
+| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 is accepted; all 14 jobs in wheel producer 40751349609 pass. Pages 40776528499 passes and live index links are verified; wheel audit 40789883589 is accepted; B complete. | Task B |
 | #557 issue | Code merged. Issue still **open**. No public comment posted yet. | Task C |
 | data2vec-base nightly gate | COMPLETE: same-host cause, paired Q4/exact-F16 policy and actual production regression 40750908085 accepted. | Task D |
-| OpenVoice2 | Bounded three-case conditioning/quality and current-runtime structural proofs accepted. Real Python Session validation is accepted on Kaggle; actual CLI and a full rebuilt-current library remain separate. | Task F and follow-up below |
+| OpenVoice2 | Bounded conditioning/SDK Session proofs accepted. Full rebuilt CPU library/CLI at `7c158b325` is accepted. Latest BERT conditioning candidate needs its own current CPU/CUDA and CI gates; no model/default promotion. | Task F and follow-up below |
 
 First actions for a fresh agent:
 
-1. Read this handoff and [PLAN.md](../PLAN.md). `git pull` main; preserve unrelated work.
+1. Read this handoff and [PLAN.md](../PLAN.md), inspect status and local recovery notes, then fetch remote refs. Update a clean main checkout without rewriting candidate or unrelated work.
    Do not reset, clean or build in the maintainer's protected original checkout
    (identified in the ignored local notes).
 2. Refresh open issues and PRs. Read each relevant whole thread (body, all
@@ -112,10 +120,15 @@ final publish, and the exact 52 expected public asset names. Native readback
 audit **40751444564** passed on `ubuntu-latest` with `complete: true, acceptance: true`, auditor source
 `bda9d00ce6209a7811dccc5a996077b8bdc2521d`, pinned tag source
 `5f87a56265e4bbd7e2adc7052254e576d5774abb`, release_run `40711745769`,
-`repair_notices=false`. Automatic Python wheel producer **40751349609** is
-now has all 12 setup/build jobs passing, including HIP and ARM CUDA; PyPI publication also passes; only
-`publish-gpu-index` remains queued (`workflow_run`, workflow
-source `2c733b9c3`; release inputs remain the frozen tag). Preserve both runs.
+`repair_notices=false`. Automatic Python wheel producer **40751349609** passes all 14 jobs, including
+the 12 setup/build jobs, PyPI and GPU-index publication (`workflow_run`, workflow
+source `2c733b9c3`; release inputs remain the frozen tag). Index commit
+`08ffbfaf1f9c123740d3807ffa4b07c0af3f29e0` is on main. Pages deployment
+**40776528499** succeeded; anonymous HIP/Vulkan and ARM CUDA v0.8.47
+index links are verified. Final wheel audit **40789883589** was dispatched
+on main with the exact frozen source and accepted producer/native-audit inputs.
+It passed with complete/acceptance true, all 11 distributions and five PyPI
+readbacks, plus every GPU index/full-file readback. [Accepted wheel receipt](release-v0847-wheel-audit-2026-10-29.json). B is complete; do not repeat either accepted auditor.
 The [accepted native receipt](release-v0847-native-audit-2026-10-28.json)
 and [full inventory](release-v0847-native-assets-2026-10-28.json) are retained.
 Wheel readback still waits for successful
@@ -159,12 +172,14 @@ what delayed the live wheel index for v0.8.46.
   A real defect in a published distribution needs a new patch release, never a
   re-upload under the same version.
 
-### Task B — verify the v0.8.47 publication
+### Task B — complete: v0.8.47 publication verified
 
 - **Live:** native producer and native audit **40751444564** are accepted.
-  Collect existing wheel producer **40751349609**; use `native_audit_run=40751444564`
-  for the eventual wheel verifier. Steps 1–2 below are
-  complete for native job results, asset names and full byte acceptance.
+  Wheel producer **40751349609** is also successful (all 14 jobs). Pages
+  **40776528499** at index commit `08ffbfaf1` and live index links pass.
+  Final wheel audit **40789883589** passed. Steps 1–5 below are historical
+  completed instructions; do not repeat the producer, Pages or accepted audits. Use `native_audit_run=40751444564`
+  for the eventual wheel verifier; do not repeat the accepted native audit.
 
 - **Do, in order:**
   1. Wait for release run **40711745769** (tag `v0.8.47`). Every build job must
@@ -188,8 +203,9 @@ what delayed the live wheel index for v0.8.46.
      wheel and that `whl/cuda/` lists the `manylinux_2_35_aarch64` `+cuda` wheel.
   5. Dispatch the verifier with `tag=v0.8.47`,
      `source=5f87a56265e4bbd7e2adc7052254e576d5774abb`, `runner=ubuntu-latest`
-     and `release_run=<id>`.
-     Then dispatch it again with `wheel_run=<id>` and `native_audit_run=<that run>`.
+     and `wheel_run=40751349609`, `native_audit_run=40751444564`.
+     Dispatch `verify-release-publication.yml` on main; the native audit is
+     already accepted and must not be dispatched again.
      `v0.8.47` is already in `REVIEWED_TAGS`. For versions ≥ 0.8.47 the auditor
      requires the three new GPU wheels and the `hip` index.
 - **If a new GPU wheel leg fails:** inspect the failing step first. For a
@@ -210,27 +226,17 @@ what delayed the live wheel index for v0.8.46.
 - **Accept:** both verifier runs succeed. Record run IDs, asset count and wheel
   filenames in [the receipt](release-publication-2026-10-28.md).
 
-### Task C — prepare #557 reply for review; keep the issue open
+### Task C — complete: #557 reply prepared for review; keep the issue open
 
-- **User decision (2026-10-28):** keep #557 open; prepare the final reply for review.
-  Do not post the comment or close the issue.
-- **Precondition for the draft claims below:** task B accepted.
-- **Draft for review only (unverified claims must remain conditional until B passes):**
+The [final reply for review](issue-557-reply-review-2026-10-29.md) is supported
+by accepted native audit **40751444564**, wheel audit **40789883589** and live
+Pages/index checks. The whole issue was refreshed: open, no comments, no new
+reporter requirements. It still explicitly states that physical AMD/Intel/ARM
+GPU execution is unverified.
 
-  > Linux GPU wheels are published from v0.8.47:
-  > `+vulkan` (x86_64) at `https://crispstrobe.github.io/CrispASR/whl/vulkan/`,
-  > `+hip` (x86_64, ROCm 6.3+) at `https://crispstrobe.github.io/CrispASR/whl/hip/`, and
-  > `+cuda` for aarch64 SBSA servers (Grace/GH200; not Jetson) at the existing
-  > `whl/cuda/` index. The host provides the GPU driver and vendor runtime
-  > (Vulkan loader; ROCm HIP/hipBLAS/rocBLAS and ROCm's libomp; CUDA 12 runtime
-  > and cuBLAS). The wheels pass relocation, dependency, notice and
-  > manylinux_2_35 checks, and the Vulkan wheel loads in a clean environment.
-  > We have not yet run any of them on a physical AMD, Intel or ARM NVIDIA GPU,
-  > so reports from your hardware (e.g. `crispasr.Session` with Parakeet ja)
-  > would be very welcome here.
-
-- **Then:** retain the verified final wording for review. Issue #557 stays open
-  under the user's explicit instruction; no external message is authorized.
+**User decision:** keep #557 open. No comment, closure or public review has
+been sent. Preparing the draft does not authorize posting it. Preserve it for
+the maintainer's review without asking again or sending it automatically.
 
 ### Task D — CPU-profile cause established; confirm the paired regression policy
 
@@ -402,19 +408,100 @@ Preset identity is explicitly `unknown`: model-generated audio does not prove
 whose identity a preset represents. Raw artifacts remain private and labelled;
 these tests grant no identity, consent or voice-pack publication rights.
 Both Session versions' terminal source, logs and outputs are retained privately.
-No active OpenVoice kernel remains and no replacement is required.
+These accepted Session runs need no replacement. A separate full-source
+application campaign is running below; it does not replace their evidence.
 This qualifies the shipped SDK plus verified model overlay, not a complete
 rebuilt-current library or the actual CLI. No model/default promotion or Hub
 publication occurred. Remaining scope:
 
-1. **Full rebuilt-current library and CLI:** repeat G's retained integration
-   controls against a newly built full current-source shared library, with the
-   same renamed Melo model, pinned BERT/converter/reference inputs, rate checks,
-   raw/marked output and unchanged quality gates. The tested SDK composition
-   supplies a retained comparator; do not rebuild models or change the oracle.
-   Qualify the actual CLI
-   separately: its filename detection and adapter cannot substitute for C ABI
-   coverage. Use suitable hosted workers, not a loaded local machine.
+1. **Full rebuilt-current library and CLI — structural pass, quality failure:**
+   candidate branch `validate/openvoice-interfaces-20261028`; application source
+   `91e1e97b399d105924915c0e8d5ea0176359b147`, bootstrap `ae1f243a7`.
+   These changes are not yet on main. The actual CLI adapter needed GPU
+   forwarding, native-rate declaration before synthesis, neutral disclosure
+   bypass/resampling, fail-closed converter inputs, F32-sensitive discovery and
+   unset-speaker normalization. Native Melo rejects out-of-range IDs. Actual
+   production-body routing/setter controls failed before and pass after repair.
+   Kaggle `crispasr-openvoice-full-source` version 1 is terminal **ERROR**.
+   All current application C++ compiled against audited v0.8.47 ggml DSOs and
+   exact `e2ae679a` headers; dependencies resolve with no old application DSO or
+   model overlay. Both original-reference cases pass 27/27 with converter CUDA.
+   Real Session detection/native speaker rejection, raw/marked repeats and rates
+   pass; the six expected converter CUDA windows are observed. All actual CLI
+   commands, rate checks, neutral bypass and converter GPU controls pass.
+   **Overall acceptance remains false:** default-disclosed CLI case 0 has
+   tiny.en WER **0.25**, above the unchanged **0.20** gate. Its content-only
+   clone passes at 0.111 with speaker gain above 0.01; both Session cases and
+   CLI case 1 pass. [Failed quality receipt](openvoice-fullsource-attempt-2026-10-28.json).
+   All source/logs, the exact compiled application checkpoint and encrypted
+   private speech were retained and the checkpoint hash read back. Do not
+   rebuild it merely to repeat this proof; do not change seeds, thresholds or
+   the recognition oracle to make the failed gate green.
+   **Disclosure diagnostic version 2 is complete:** controller `f2729e429`,
+   bootstrap `a455b144f`, exact retained application/checkpoint, no rebuild.
+   Neutral speech and extracted prefixes score tiny.en WER 2/7; small.en scores
+   them 1/7. Content passes both. The prefix agrees with the neutral baseline
+   after resampling (cosine 0.999937, norm ratio 0.999637); conversion/rate
+   routing is not the cause. [Diagnostic receipt](openvoice-disclosure-diagnostic-2026-10-29.json).
+   Original tiny.en acceptance remains failed; the additional recognizer does
+   not replace it. All terminal source/logs/output and encrypted speech are
+   retained, including the version-1 transport failure before inference.
+   Kaggle rejected the failed full-source run as an input attachment. The
+   corrected transport obtains the existing output API's download URL for the
+   exact checkpoint and renders its placeholder only into a private push copy;
+   never commit that capability URL or copy an account API token into a worker.
+   The private-cache alternative reached the account storage limit; no assets
+   were deleted or made public.
+   **Claimed conditioning repair, runtime acceptance pending:** original Melo
+   `209145371cff8fc3bd60d7be902ea69cbdb7965a` exposes two concrete frontend
+   mismatches. Native BERT retained punctuation inside whitespace words and
+   distributed already-doubled phone counts over WordPieces. The original
+   isolates punctuation and distributes raw phones before inserting blanks.
+   Actual-function model-free controls fail before and pass after the repair.
+   Shared existing Unicode normalization/pretokenization now feeds both callers;
+   counts come from the same WordPiece pass, unknown words are atomic, and
+   mismatched token/phone shapes fail closed. No neural operators, weights,
+   seeds, ASR oracle or quality threshold were changed.
+   Next rebuild the full candidate on a hosted CUDA worker. Require exact
+   captured native token/phoneme/tone/language/phone-count arrays against pinned
+   original Python functions in `tools/validation/melotts_inputs.py`, then both
+   original TCC 27-stage cases, Session/C ABI, actual CLI and all four original
+   quality cases, including tiny.en default-disclosed WER <=0.20. This is input
+   protocol proof plus decoded acceptance, not complete original Melo neural
+   stage parity or broad-language acceptance. Before every compile/inference
+   check load, memory and storage. Retain terminal source/logs/checkpoints and
+   encrypted evidence before any replacement. Full-source CUDA **version 2**
+   is terminal from source `9259b9f3e`, bootstrap `379146cb0`. All three
+   original-input controls, TCC stages and functional surfaces pass, but
+   default-disclosed CLI case 0 still has tiny.en WER 0.25 >0.20.
+   [Retained failed attempt](openvoice-conditioning-inputs-attempt-2026-10-29.json).
+   The next concrete repair follows original `Generator.forward`: its final
+   `F.leaky_relu(x)` uses default 0.01; native Melo used 0.1 there. The actual
+   graph-call regression fails before and passes after correcting only that
+   final slope. Upsample/residual slopes stay 0.1. Require actual captured
+   pre/post tensors against the pinned original operator and an uninstrumented
+   waveform comparison before interpreting decoded quality. Full-source
+   **version 3** is running from application/controller `01a288763`, bootstrap
+   `315339f65`. It requires all three exact-input cases, the real original
+   final-activation operator on both signs, actual CUDA/CPU tensor placement,
+   instrumentation waveform relative L2 and peak error <=1e-5, both TCC 27-stage
+   cases, Session/CLI and the unchanged original speech-quality gates.
+   Current CPU **40801516214**, CI **40801518226**, Lint **40801520188** were
+   requested once at `315339f65`; these qualify the post-activation source.
+   Earlier CPU **40783760561** passed its complete four-case matrix at
+   `7c158b325`, including default-disclosed WER 0.1875 and zero; its full
+   artifact and authenticated encrypted readback are retained.
+   [Earlier CPU receipt](openvoice-cpu-pre-conditioning-2026-10-29.json).
+   It predates both conditioning repairs and cannot qualify them. The queued
+   pre-activation CPU **40795945687** was canceled; old CI/Lint runs were
+   superseded by the current candidate. Preserve failed/older controls without
+   redispatching them as proof of the new source.
+   The current CPU worker checkpoints its compiled application before model
+   calls; artifacts are validation checkpoints, not audited release packages.
+   Public receipts contain metrics/hashes; speech/transcripts stay encrypted
+   to the operator key recovered from ignored local notes. Preset identity
+   stays unknown. Merge only after current original-quality, CPU and CI gates;
+   prepare the next patch afterward.
 2. **Publication:** no Hub write was attempted by the accepted read-only run.
    Earlier repository creation returned 403. Use an authorized destination,
    retain original MIT notices, converter precision recipe, immutable model/
@@ -426,6 +513,46 @@ publication occurred. Remaining scope:
    original-reference and decoded-output checks. None is implied by these
    bounded synthetic English cases. A default change needs an explicit scoped
    acceptance decision and cannot be inferred from stage parity alone.
+
+### Task I — next patch after current error gates
+
+1. Complete B and H first. Refresh main and the candidate; preserve unrelated
+   work. Merge the qualified runtime changes only when current-source CPU,
+   CUDA, CI, lint and secret checks support them. Documentation-only main
+   updates do not mean the candidate runtime changes are merged.
+2. Prepare `RELEASE_NOTES_v0.8.48.md` from the actual post-v0.8.47 changes,
+   retaining source/validation limits and hardware holds. Use
+   `scripts/bump-version.sh 0.8.48`; it synchronizes versions and creates the
+   release commit and local annotated tag. Never hand-edit version files or
+   rewrite a published tag/PyPI distribution. Check the release auditor's
+   reviewed-tag allow-list before the bump, with its existing unit controls.
+3. Push the exact release commit to a qualification branch first. Request CI,
+   lint and secret checks there; require their `headSha` to equal the local
+   annotated tag's peeled commit. Keep the release tag local until those
+   checks pass. Then fast-forward main safely and push that new tag once.
+4. Collect native, wheel and Rust/Dart publishers. Verify the full expected
+   inventory, notices, immutable distribution bytes, indexes and Pages, using
+   the existing publication verifiers. For transient producer failures rerun
+   only failed jobs in the original run. Retain artifacts before replacement.
+5. Record accepted receipts and release source/run IDs. Do not call this task
+   complete from allocation, building or a subset of successful publishers.
+   Keep physical AMD/Intel/ARM execution claims excluded without hardware.
+
+### Task J — PR #559 after error and release acceptance
+
+Follow [the scoped review](qwen3-context-pr559-review-2026-10-28.md). Refresh
+its entire description, comments, reviews, inline comments, linked #218/#488
+follow-ups and current head before acting. The earlier reviewed head was
+`6b132720090cbb532f79f544c130381ddf1cf6c9`; source review was not independent
+runtime acceptance. Review any fork workflow changes before authorizing CI.
+Retain actual C ABI/CLI probes for context unset/zero/enabled/changed/cleared,
+empty/nonempty context, forced/automatic language, explicit questions, backend
+exclusions and chunk propagation. Run the existing short-clip Qwen regression
+on a suitable hosted worker with context enabled/cleared, preserving #488's
+recognition and language-prefill gates. Require exact-candidate CI/lint/secret
+checks. Merge only with independent caller/runtime evidence; a dedicated context
+setter across every binding/server/WASM surface is outside this narrow PR.
+No public review/comment or merge has been sent for this PR.
 
 ### Scope notes kept from #557 review
 

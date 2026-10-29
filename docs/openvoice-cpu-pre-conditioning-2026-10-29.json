@@ -1,0 +1,707 @@
+{
+  "schema": 1,
+  "complete": true,
+  "acceptance": true,
+  "scope": "Accepted full current-source CPU Session/CLI at the pre-BERT-conditioning source; not qualification of the newer conditioning repair",
+  "source": "7c158b325c78a2c7de7671542888613cff44b2fe",
+  "ggml": "e2ae679a563014f46c546ce6c6448e8601e4dea6",
+  "resource_checks": [
+    {
+      "phase": "configure",
+      "available_bytes": 15661895680,
+      "load": [
+        0.99609375,
+        0.52001953125,
+        0.205078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112268705792
+    },
+    {
+      "phase": "build-current-source",
+      "available_bytes": 15662514176,
+      "load": [
+        0.99658203125,
+        0.5283203125,
+        0.20947265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112257028096
+    },
+    {
+      "phase": "original-reference-0",
+      "available_bytes": 15621509120,
+      "load": [
+        1.66748046875,
+        1.73486328125,
+        1.0
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112097480704
+    },
+    {
+      "phase": "original-reference-1",
+      "available_bytes": 15627214848,
+      "load": [
+        2.04541015625,
+        1.810546875,
+        1.0322265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112097472512
+    },
+    {
+      "phase": "rebuilt-session",
+      "available_bytes": 15600218112,
+      "load": [
+        1.88427734375,
+        1.783203125,
+        1.03125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112097464320
+    },
+    {
+      "phase": "cli-baseline-0",
+      "available_bytes": 15707738112,
+      "load": [
+        1.67333984375,
+        1.73291015625,
+        1.10986328125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112094162944
+    },
+    {
+      "phase": "cli-clone-0",
+      "available_bytes": 15525285888,
+      "load": [
+        1.72412109375,
+        1.7421875,
+        1.11962890625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112093810688
+    },
+    {
+      "phase": "cli-disclosed-0",
+      "available_bytes": 15634259968,
+      "load": [
+        1.63134765625,
+        1.7216796875,
+        1.12255859375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112093626368
+    },
+    {
+      "phase": "cli-baseline-1",
+      "available_bytes": 15643582464,
+      "load": [
+        1.63232421875,
+        1.71240234375,
+        1.13525390625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112093233152
+    },
+    {
+      "phase": "cli-clone-1",
+      "available_bytes": 15520776192,
+      "load": [
+        1.615234375,
+        1.70556640625,
+        1.13916015625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112092848128
+    },
+    {
+      "phase": "cli-disclosed-1",
+      "available_bytes": 15673090048,
+      "load": [
+        1.5830078125,
+        1.6923828125,
+        1.14697265625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112092651520
+    },
+    {
+      "phase": "independent-quality",
+      "available_bytes": 15685341184,
+      "load": [
+        1.595703125,
+        1.685546875,
+        1.15966796875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112092254208
+    },
+    {
+      "phase": "quality-session-baseline",
+      "available_bytes": 15276040192,
+      "load": [
+        1.62841796875,
+        1.69091796875,
+        1.16455078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112014008320
+    },
+    {
+      "phase": "quality-session-original",
+      "available_bytes": 15196270592,
+      "load": [
+        1.62841796875,
+        1.69091796875,
+        1.16455078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112014008320
+    },
+    {
+      "phase": "quality-session-clone",
+      "available_bytes": 15189438464,
+      "load": [
+        1.62841796875,
+        1.69091796875,
+        1.16455078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112014008320
+    },
+    {
+      "phase": "quality-session-raw",
+      "available_bytes": 15243337728,
+      "load": [
+        1.62841796875,
+        1.69091796875,
+        1.16455078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112014008320
+    },
+    {
+      "phase": "quality-cli-baseline",
+      "available_bytes": 15212408832,
+      "load": [
+        1.62841796875,
+        1.69091796875,
+        1.16455078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112014004224
+    },
+    {
+      "phase": "quality-cli-original",
+      "available_bytes": 15231696896,
+      "load": [
+        1.62841796875,
+        1.69091796875,
+        1.16455078125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112014004224
+    },
+    {
+      "phase": "quality-cli-clone",
+      "available_bytes": 15242608640,
+      "load": [
+        1.73828125,
+        1.712890625,
+        1.1748046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112014004224
+    },
+    {
+      "phase": "quality-cli-disclosed",
+      "available_bytes": 15096127488,
+      "load": [
+        1.73828125,
+        1.712890625,
+        1.1748046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112014000128
+    },
+    {
+      "phase": "quality-session-baseline",
+      "available_bytes": 15245185024,
+      "load": [
+        1.73828125,
+        1.712890625,
+        1.1748046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112014000128
+    },
+    {
+      "phase": "quality-session-original",
+      "available_bytes": 15161397248,
+      "load": [
+        1.73828125,
+        1.712890625,
+        1.1748046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112014000128
+    },
+    {
+      "phase": "quality-session-clone",
+      "available_bytes": 15120654336,
+      "load": [
+        1.73828125,
+        1.712890625,
+        1.1748046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112014000128
+    },
+    {
+      "phase": "quality-session-raw",
+      "available_bytes": 14968893440,
+      "load": [
+        1.73828125,
+        1.712890625,
+        1.1748046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112014000128
+    },
+    {
+      "phase": "quality-cli-baseline",
+      "available_bytes": 14791868416,
+      "load": [
+        1.73828125,
+        1.712890625,
+        1.1748046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112013996032
+    },
+    {
+      "phase": "quality-cli-original",
+      "available_bytes": 14698577920,
+      "load": [
+        1.73828125,
+        1.712890625,
+        1.1748046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112013996032
+    },
+    {
+      "phase": "quality-cli-clone",
+      "available_bytes": 14729256960,
+      "load": [
+        1.73828125,
+        1.712890625,
+        1.1748046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112013996032
+    },
+    {
+      "phase": "quality-cli-disclosed",
+      "available_bytes": 14743638016,
+      "load": [
+        1.73828125,
+        1.712890625,
+        1.1748046875
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 112013991936
+    }
+  ],
+  "phases": {
+    "configure": {
+      "returncode": 0
+    },
+    "build-current-source": {
+      "returncode": 0
+    },
+    "original-reference-0": {
+      "returncode": 0
+    },
+    "original-reference-1": {
+      "returncode": 0
+    },
+    "rebuilt-session": {
+      "returncode": 0
+    },
+    "cli-baseline-0": {
+      "returncode": 0
+    },
+    "cli-clone-0": {
+      "returncode": 0
+    },
+    "cli-disclosed-0": {
+      "returncode": 0
+    },
+    "cli-baseline-1": {
+      "returncode": 0
+    },
+    "cli-clone-1": {
+      "returncode": 0
+    },
+    "cli-disclosed-1": {
+      "returncode": 0
+    }
+  },
+  "cases": [
+    {
+      "interface": "session",
+      "case": 0,
+      "quality": {
+        "baseline": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.5016840100288391,
+          "rate": 44100,
+          "samples": 171008,
+          "sha256": "4e3fc203804c994743d1b0753d444d2350688d78bd5890a5c4510a07df613f47"
+        },
+        "original": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6884582042694092,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "b77bfae1ec314cd5e2808419a70bbfcd2e48a69c4dddbadaeed63b0d063c5ee0"
+        },
+        "clone": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6873757839202881,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "850aeb2b7bc97e5f8a3b39dd7e42ab3593224dab70c693e4eac711b1d258743c"
+        },
+        "raw": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6888664960861206,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "e930e837dbae95c64c0c5c82a43e228bc9bc896157f18e071ecb29802b2a3953"
+        }
+      },
+      "accepted": true
+    },
+    {
+      "interface": "cli",
+      "case": 0,
+      "quality": {
+        "baseline": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.5016907453536987,
+          "rate": 44100,
+          "samples": 171008,
+          "sha256": "455bd99caf50168c70b3d9d6d58d1d80b1888019ddd9676bfe7937d315321f2d"
+        },
+        "original": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6884582042694092,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "b77bfae1ec314cd5e2808419a70bbfcd2e48a69c4dddbadaeed63b0d063c5ee0"
+        },
+        "clone": {
+          "wer": 0.1111111111111111,
+          "speaker_cosine": 0.6709164381027222,
+          "rate": 22050,
+          "samples": 85504,
+          "sha256": "bfa73b85e969aa430a925b64d3ab217c13b71b2f06ade1068979b683b145db56"
+        },
+        "disclosed": {
+          "wer": 0.1875,
+          "speaker_cosine": 0.7017434239387512,
+          "rate": 22050,
+          "samples": 185815,
+          "sha256": "36dca127947a1b1b87d9f6fdbc0c2624ceca912ba129a585cfa0af93b7a8c5b2"
+        }
+      },
+      "accepted": true
+    },
+    {
+      "interface": "session",
+      "case": 1,
+      "quality": {
+        "baseline": {
+          "wer": 0.0,
+          "speaker_cosine": 0.4496220052242279,
+          "rate": 44100,
+          "samples": 188928,
+          "sha256": "1b81dc125db214cb35ce220d31f031aa4a2ee04e9e33e80f0666ff55a09d8deb"
+        },
+        "original": {
+          "wer": 0.0,
+          "speaker_cosine": 0.6888083219528198,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "d52c2c518733b30b665adcde66659b0d7496f3177003c078d4db8167885dbb6e"
+        },
+        "clone": {
+          "wer": 0.0,
+          "speaker_cosine": 0.7245917916297913,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "aa55e209e8fef8767362b34bb6924f91a013b916c0cb6e827f5db4f420d33927"
+        },
+        "raw": {
+          "wer": 0.0,
+          "speaker_cosine": 0.7248730659484863,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "11c655e8ebe0ea6624806de572ffe46e6e0b04ae03efa377b26c1a2dbbaed055"
+        }
+      },
+      "accepted": true
+    },
+    {
+      "interface": "cli",
+      "case": 1,
+      "quality": {
+        "baseline": {
+          "wer": 0.0,
+          "speaker_cosine": 0.4496150314807892,
+          "rate": 44100,
+          "samples": 188928,
+          "sha256": "50eaa75c22167d5af555f2323b4d9d5ecea2331c6d2f6247bc1bb9c72aee97c0"
+        },
+        "original": {
+          "wer": 0.0,
+          "speaker_cosine": 0.6888083219528198,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "d52c2c518733b30b665adcde66659b0d7496f3177003c078d4db8167885dbb6e"
+        },
+        "clone": {
+          "wer": 0.0,
+          "speaker_cosine": 0.7331316471099854,
+          "rate": 22050,
+          "samples": 94464,
+          "sha256": "a936cd3f8f97c8615f2135779597bebb5d9c96842fbd775ef45d67018ca985ab"
+        },
+        "disclosed": {
+          "wer": 0.0,
+          "speaker_cosine": 0.7451386451721191,
+          "rate": 22050,
+          "samples": 194775,
+          "sha256": "6ca8b77c8381125cc06d656955f907d9408ac8eebffefb553772009c7a9018ee"
+        }
+      },
+      "accepted": true
+    }
+  ],
+  "limitations": [
+    "CPU acceptance; actual CUDA CLI still requires a CUDA build and physical GPU",
+    "Model-generated references; preset identity unknown; no voice rights clearance",
+    "No model publication or registry default promotion",
+    "Speaker gain gates content-only marked clones; disclosed clips also require full-text and rate gates"
+  ],
+  "accepted_inputs": {
+    "openvoice2-tcc-f32sens.gguf": "483fd233035bb2c7cde69519d4d460742b6a70c96c5293e878fe25e72d944255",
+    "reference-0.gguf": "259993b526944e8e36ccca436e005cbc3935a46636b42c618cfd5c3d19429c8f",
+    "reference-1.gguf": "5e2a043ce975d27e2d2926d9acacacae0c97e9ab1e85265b7f97bae3d9c059f7",
+    "reference.wav": "237f5c2ebcd75f734f44f63ba4915321aea7d8d53969a6d5f3aad966cdb760e6",
+    "original-0.wav": "b77bfae1ec314cd5e2808419a70bbfcd2e48a69c4dddbadaeed63b0d063c5ee0",
+    "original-1.wav": "d52c2c518733b30b665adcde66659b0d7496f3177003c078d4db8167885dbb6e",
+    "reference-ATTRIBUTION.txt": "377a32e6f98e9c96c4bb16c221f1aca1a8793b209b7a6991c827a8a46f42763c",
+    "reference-OpenVoice-LICENSE.txt": "bb3541f421e6273d3a3e3dd5bdba2bd3b79a3c2eadca65cde9c62c2467903ac0"
+  },
+  "built_sha256": {
+    "library": "b069436701ab373ef6c0b23c1ff3cf46cb77795957f31e09ddb77e9ac710df81",
+    "cli": "6d364a0262906e66baa53d44d0a6acc0223b1eb9810d3dfe352324928df3a93c",
+    "diff": "fb3a6bcb6c607b29bae87d2764929d3f6fca3578afe510b5b0c8e316b88d3711"
+  },
+  "model_source_sha256": {
+    "src/openvoice2.cpp": "f658c40176fe1c67584cd9ab80ca9d954433cfe7973f6ba84b43a448d59b8c13",
+    "src/melotts.cpp": "7b847160799f5ba0a5374062526eb38a67980a53b23fde959fbcd3b874723db4",
+    "src/crispasr_c_api.cpp": "1c7509daf4a6e8a50ff6743596880fc549d429281d73b61b96e77c0dd0b48df5",
+    "examples/cli/crispasr_backend_melotts.cpp": "97ee1ecfaa812f6c86d366cd7c5f8a78c06b94df7002df89b284ca5b47b5eca2"
+  },
+  "session_controls": {
+    "complete": true,
+    "resource_checks": [
+      {
+        "phase": "native-invalid-speaker",
+        "available_bytes": 15595061248,
+        "load": [
+          1.88427734375,
+          1.783203125,
+          1.03125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112097083392
+      },
+      {
+        "phase": "native-invalid-speaker",
+        "available_bytes": 15595061248,
+        "load": [
+          1.88427734375,
+          1.783203125,
+          1.03125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112097075200
+      },
+      {
+        "phase": "session-open",
+        "available_bytes": 15529631744,
+        "load": [
+          1.88427734375,
+          1.783203125,
+          1.03125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112097075200
+      },
+      {
+        "phase": "session-baseline",
+        "available_bytes": 15348199424,
+        "load": [
+          1.8935546875,
+          1.787109375,
+          1.03662109375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112097075200
+      },
+      {
+        "phase": "session-codec-voice",
+        "available_bytes": 15245729792,
+        "load": [
+          1.982421875,
+          1.8076171875,
+          1.04736328125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112096387072
+      },
+      {
+        "phase": "session-raw",
+        "available_bytes": 15245729792,
+        "load": [
+          1.982421875,
+          1.8076171875,
+          1.04736328125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112096387072
+      },
+      {
+        "phase": "session-repeat",
+        "available_bytes": 15080075264,
+        "load": [
+          1.98046875,
+          1.81689453125,
+          1.06298828125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112096378880
+      },
+      {
+        "phase": "session-marked",
+        "available_bytes": 15079047168,
+        "load": [
+          1.78173828125,
+          1.7802734375,
+          1.06689453125
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112096378880
+      },
+      {
+        "phase": "session-open",
+        "available_bytes": 15449706496,
+        "load": [
+          1.67578125,
+          1.7578125,
+          1.0712890625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112095686656
+      },
+      {
+        "phase": "session-baseline",
+        "available_bytes": 15417393152,
+        "load": [
+          1.67578125,
+          1.7578125,
+          1.0712890625
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112095682560
+      },
+      {
+        "phase": "session-codec-voice",
+        "available_bytes": 15226384384,
+        "load": [
+          1.65234375,
+          1.74951171875,
+          1.076171875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112094924800
+      },
+      {
+        "phase": "session-raw",
+        "available_bytes": 15193870336,
+        "load": [
+          1.65234375,
+          1.74951171875,
+          1.076171875
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112094924800
+      },
+      {
+        "phase": "session-repeat",
+        "available_bytes": 15018504192,
+        "load": [
+          1.60986328125,
+          1.7333984375,
+          1.0859375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112094924800
+      },
+      {
+        "phase": "session-marked",
+        "available_bytes": 15018504192,
+        "load": [
+          1.5419921875,
+          1.71337890625,
+          1.08984375
+        ],
+        "cpus": 4,
+        "scratch_free_bytes": 112094924800
+      }
+    ],
+    "cases": [
+      {
+        "case": 0,
+        "repeat_exact": true,
+        "marked_differs": true,
+        "samples": 85504
+      },
+      {
+        "case": 1,
+        "repeat_exact": true,
+        "marked_differs": true,
+        "samples": 94464
+      }
+    ],
+    "invalid_native_ids": [
+      -1,
+      2147483647
+    ]
+  },
+  "private_evidence": {
+    "bytes": 5363943,
+    "sha256": "660f3956b104547473e2be5c4879a989487e51f4a054d40a7f0b72ad78408621",
+    "recipient_sha256": "8faff36ac3521f054e844e58e8d5305560935c4545c0dc4472bcfce23b058e36",
+    "files": 26
+  },
+  "run": 40783760561,
+  "raw_speech_public": false
+}

@@ -1,3 +1,19 @@
+## 2026-10-29 — GPU index publication and earlier full CPU integration verified
+
+The v0.8.47 wheel producer passes all 14 jobs, including both publishers.
+Pages 40776528499 deployed the index, and anonymous HIP, Vulkan and ARM CUDA
+v0.8.47 links were verified. Full native byte audit remains accepted separately.
+Final wheel auditor 40789883589 accepts all 11 distributions, five PyPI anonymous
+readbacks and all GPU index/full-file readbacks; v0.8.47 publication verification
+is complete. The #557 reply is prepared for review and the issue remains open.
+
+Full CPU build/Session/CLI run 40783760561 passes all four speech-quality cases
+at source `7c158b325`, with raw/marked repeats and native rates. This receipt
+predates the later BERT conditioning repair and does not qualify that newer
+candidate. [Bounded CPU receipt](docs/openvoice-cpu-pre-conditioning-2026-10-29.json).
+Preset identity remains unknown; no voice rights or model/default promotion
+is inferred from this internal validation.
+
 ## 2026-10-28 — Production data2vec and real OpenVoice Session accepted
 
 Production nightly run 40750908085 passes on EPYC 9V74: Q4 WER 1/23,

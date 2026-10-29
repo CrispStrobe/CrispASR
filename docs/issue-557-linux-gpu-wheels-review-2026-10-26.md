@@ -1,3 +1,8 @@
+> Publication update (2026-10-29): v0.8.47 native audit 40751444564 and wheel
+> audit 40789883589 are accepted; all GPU index links are live. The issue stays
+> open by maintainer request. [Final reply for review](issue-557-reply-review-2026-10-29.md).
+> Physical AMD/Intel/ARM GPU execution remains unverified.
+
 # New #557 — Linux GPU wheel packaging review
 
 > **Status 2026-10-28:** implemented and shipped in v0.8.47 (all three requested
