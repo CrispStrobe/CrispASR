@@ -43,9 +43,9 @@
     "original_generated_token_count": 27
   },
   "limitations": [
-    "Original generate includes stages outside native decode; do not divide these totals into a cross-engine decode-only speedup.",
+    "Native decode timing excludes graph construction, prefill and the first token; original generate includes prefill and additional stages. Do not infer a cross-engine decode-only speedup.",
     "The F16 and Q4_K models have different numerical precision.",
-    "Native step and original generated-token counts have different semantics.",
+    "Native reports 26 greedy decoder calls after the prefill token; the original output has 27 generated tokens. These counts have different boundaries.",
     "One clip and one GPU do not establish general recognition or performance acceptance."
   ],
   "benchmark_script_sha256": "1991103765ecc186cc8b021c9d91fda432e6f6f87e32836d0a91af1557ec6a53"
