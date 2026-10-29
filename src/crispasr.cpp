@@ -257,9 +257,12 @@ static void whisper_release_cpu_threadpool(ggml_backend_t backend) {
 }
 
 static bool ggml_graph_compute_helper(ggml_backend_sched_t sched, struct ggml_cgraph* graph, int n_threads,
-                                      bool sched_reset = true) {
+                                      bool sched_reset = true, int64_t* profile_pool_us = nullptr) {
     // Lazy-init persistent threadpool on the CPU backend (#132).
+    const int64_t pool_start = profile_pool_us ? ggml_time_us() : 0;
     whisper_ensure_cpu_threadpool(sched, n_threads);
+    if (profile_pool_us)
+        *profile_pool_us += ggml_time_us() - pool_start;
 
     for (int i = 0; i < ggml_backend_sched_get_n_backends(sched); ++i) {
         ggml_backend_t backend = ggml_backend_sched_get_backend(sched, i);
@@ -1348,6 +1351,7 @@ struct whisper_state {
 
     // Optional single-token decode breakdown in host wall-clock microseconds.
     int64_t profile_graph_us = 0, profile_input_us = 0, profile_compute_us = 0, profile_read_us = 0;
+    int64_t profile_pool_us = 0;
     int32_t profile_decode_count = 0;
 
     int32_t n_sample = 0; // number of tokens sampled
@@ -3571,7 +3575,8 @@ static bool whisper_decode_internal(whisper_context& wctx, whisper_state& wstate
             profile_start = ggml_time_us();
         }
 
-        if (!ggml_graph_compute_helper(sched, gf, n_threads)) {
+        if (!ggml_graph_compute_helper(sched, gf, n_threads, true,
+                                       profile_decode ? &wstate.profile_pool_us : nullptr)) {
             return false;
         }
         if (profile_decode) {
@@ -4892,6 +4897,8 @@ void whisper_print_timings(struct whisper_context* ctx) {
                 ctx->state->profile_decode_count, (long long)ctx->state->profile_graph_us,
                 (long long)ctx->state->profile_input_us, (long long)ctx->state->profile_compute_us,
                 (long long)ctx->state->profile_read_us);
+            CRISPASR_LOG_INFO("whisper timing profile: decode threadpool_us=%lld\n",
+                              (long long)ctx->state->profile_pool_us);
         }
         const int32_t n_sample = std::max(1, ctx->state->n_sample);
         const int32_t n_encode = std::max(1, ctx->state->n_encode);
@@ -4920,6 +4927,7 @@ void whisper_reset_timings(struct whisper_context* ctx) {
     if (ctx->state != nullptr) {
         ctx->state->profile_graph_us = ctx->state->profile_input_us = 0;
         ctx->state->profile_compute_us = ctx->state->profile_read_us = 0;
+        ctx->state->profile_pool_us = 0;
         ctx->state->profile_decode_count = 0;
         ctx->state->t_mel_us = 0;
         ctx->state->t_sample_us = 0;
