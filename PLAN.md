@@ -5,18 +5,22 @@ It contains the completed work, exact evidence, bounded next actions and blocker
 needed by a fresh agent; no earlier chat is required. Follow `AGENTS.md` and its
 mandatory maintainer-guide instructions before implementation.
 
-**A, D, bounded F and G are complete. B publication remains in flight.** Claim work by adding owner,
+**A, B, D, bounded F and G are complete. C is prepared for review; keep #557 open. H runtime qualification is in flight.** Claim work by adding owner,
 source SHA, missing behavior, acceptance gates and next action under "NOW"
 before starting. The full scope of each task (exact runs, inputs, commands and
 acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-tasks--fully-scoped).
 
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
-- Current-source/CLI acceptance owner: current agent. Runtime fixes are on candidate branch `validate/openvoice-interfaces-20261028` (snapshot `379146cb0`), not main or the frozen v0.8.47 tag. Full-source CUDA version 2 is terminal with original-input/functional passes but default-disclosed WER 0.25 still failing: application source `9259b9f3e`, bootstrap `379146cb0`. It must pass three exact original-Melo input controls, both original TCC 27-stage cases, Session/C ABI, actual CLI and all unchanged quality gates. The frontend repairs pass actual-function controls that failed before and all three actual original-input comparisons. A second original-recipe mismatch is being repaired: Melo final activation used 0.1 instead of the original default 0.01; its actual-call regression failed before and passes after. Require captured real-tensor original-operator and waveform-instrumentation checks, then full unchanged quality gates on fresh hosted source. CPU **40795945687**, CI **40795948208** and Lint **40795950893** at `379146cb0` are queued. Earlier full CPU build **40783760561** is accepted at `7c158b325`, before the BERT repair ([bounded receipt](docs/openvoice-cpu-pre-conditioning-2026-10-29.json)); it cannot qualify the latest candidate. Failed CUDA version 1 and the disclosure diagnostic remain preserved ([failure](docs/openvoice-fullsource-attempt-2026-10-28.json), [diagnostic](docs/openvoice-disclosure-diagnostic-2026-10-29.json)); the stronger recognizer did not replace the original gate. Pages/live indexes pass; collect final wheel audit **40789883589**. Keep #557 open.
+- #560 bounded routing error COMPLETE, owner current agent after Sol implementation/review. Full current CLI run **40807940665** accepts default/auto Whisper and dedicated Silero language detection without ASR model/HF resolution, multiple inputs, failure exits and ordinary automatic-language transcription. Three actual-caller/resolver controls pass after baseline failures; [accepted receipt](docs/issue-560-lid-cli-accepted-2026-10-29.json). Code `bd1e299e1` has CI **40807943181** (all 13 jobs) and Lint **40807945520** accepted. The issue stays open for the separate full-recording feature after I/J; no public reply or closure.
+
+- H continuation owner: current agent. BERT diagnostic version 3 completed its boundary comparisons: Q4 relative error versus original features is 0.136–0.165, F16 is about 0.0003. Its speech phase hit a missing adjacent converter in the diagnostic, preserved and fixed. Version 4 then completed the missing speech-only comparison on the same application: Q4 disclosed WER 0.25 / 0.333333 fails; fixed F16 control 0.125 / 0.055556 passes, with unchanged texts, seed and tiny.en recognizer ([receipt](docs/melotts-bert-precision-speech-2026-10-29.json)). All terminal source/log/output/envelope readbacks are retained. Root is qualifying an explicitly declared F16 profile through the full current-source CPU/CUDA speaker and speech matrix before any registry/default change. Existing Q4 failure receipts remain failed. #560 bounded routing acceptance passed hosted run 40807940665; CI 40807943181 and Lint 40807945520 at `bd1e299e1` pass.
+
+- Current-source/CLI acceptance owner: current agent. Runtime repairs remain on candidate branch `validate/openvoice-interfaces-20261028` (`395daf6ae`), not main or frozen v0.8.47. Full-source CUDA **version 5**, application/controller `97053abff`, bootstrap `395daf6ae`, is admitted once for the declared **F16 BERT profile**. CPU **40825101583** is running at the same candidate. Both require original input/activation/duration/TCC checks, real Session/C ABI and CLI F16 auto-discovery without overrides, all four unchanged speech/speaker cases and native rates/repeats/backend proof. Registry/default remains Q4 until both pass. Completed Q4 attempts, original BERT comparisons and the fixed F16 speech diagnostic are retained; do not rerun accepted component campaigns. C++ code is unchanged since accepted CI/Lint source `bd1e299e1`; later commits add validation profiles/receipts. B publication/C reply preparation and K routing qualification are complete; #557 stays open.
 
 - Owner: current maintainer agent, starting source `42d787586`; collect A/B/D terminal receipts, repair actual failures, and preserve existing runs. Large work stays on suitable hosted workers; local load 0.26 and available memory about 4.4 GiB at resumption.
 - A complete: corrected auditor 40736324867 passed; all eight distributions and anonymous readbacks accepted. [Receipt](docs/release-v0846-wheel-audit-2026-10-28.json).
-- B: native producer 40711745769 completed successfully (38/38 jobs including publish). Native audit 40751444564 PASSED with accepted full readbacks for all 52 assets. All 14 jobs in wheel producer 40751349609 passed, including PyPI and GPU-index publication. Pages 40776528499 deployed index commit `08ffbfaf1`; public HIP/Vulkan and ARM CUDA v0.8.47 links are verified. Final wheel audit **40789883589** is queued; collect its accepted receipt before completing B. Do not retag.
+- B: native producer 40711745769 completed successfully (38/38 jobs including publish). Native audit 40751444564 PASSED with accepted full readbacks for all 52 assets. All 14 jobs in wheel producer 40751349609 passed, including PyPI and GPU-index publication. Pages 40776528499 deployed index commit `08ffbfaf1`; public HIP/Vulkan and ARM CUDA v0.8.47 links are verified. Final wheel audit **40789883589** is accepted: all 11 distributions and all anonymous readbacks pass ([receipt](docs/release-v0847-wheel-audit-2026-10-29.json)). B is complete. Do not retag.
 - D: 40735433388 completed on EPYC 9V74 with all three actual CPU profiles. Repeated raw arrays independently confirm native/AVX512 Q4 drops `A`, AVX2 Q4 retains it, and every F16 control matches the unchanged original reference. Added a one-word Q4 allowance with mandatory zero-WER F16 transcript and unchanged stage gates in both drivers. Targeted production run 40750908085 at `2c733b9c3` PASSED on EPYC 9V74: Q4 WER 1/23, F16 WER zero, CTC-logit cosine 0.999138. [Accepted receipt](docs/data2vec-production-regression-2026-10-28.json). Do not duplicate. No further capability probes.
 - Additional error repaired: normal nightly now fails missing explicitly required stages, matching Kaggle; negative caller controls cover partial/absent captures.
 - Resources: light local inspection only; large builds/readbacks/inference on suitable Actions workers.
@@ -29,8 +33,8 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 - Newly opened #558: reproduced and repaired standalone-marker grouping, with model-free regression controls. Reporter audio/NeMo/CUDA acceptance remains pending; see [repair scope](docs/parakeet-word-boundary-558-2026-10-28.md).
 
 - v0.8.46 is **published**. Native and wheel audits pass (task A complete).
-- v0.8.47 (#557 Linux GPU wheels) has a **partial public release**, tagged at `5f87a5626`. Release run
-  40711745769 completed successfully with exactly 52 public asset names. Native byte audit 40751444564 is accepted; Python wheel producer 40751349609 passed all 14 jobs. Pages 40776528499 and live index links pass; final wheel audit 40789883589 remains queued (task B).
+- v0.8.47 (#557 Linux GPU wheels) has an **audited public release**, tagged at `5f87a5626`. Release run
+  40711745769 completed successfully with exactly 52 public asset names. Native byte audit 40751444564 is accepted; Python wheel producer 40751349609 passed all 14 jobs. Pages 40776528499 and live index links pass; final wheel audit 40789883589 is accepted (task B complete).
 - [Publication receipt](docs/release-publication-2026-10-28.md).
 
 ## Completed baseline
@@ -48,13 +52,14 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 | # | Task | Depends on | Done when |
 |---|---|---|---|
 | A | COMPLETE: v0.8.46 wheel auditor 40736324867 passed. | — | Accepted receipt committed; do not repeat. |
-| B | Verify the v0.8.47 publication: release jobs, 52 native assets, three new GPU wheel legs, `whl/hip` + aarch64 `whl/cuda` index entries, native and wheel audits. | v0.8.47 release run finished | Both verifier runs pass; IDs recorded. For transient failures rerun failed jobs in the original producer. Whole redispatch risks different CPU bytes colliding with immutable PyPI; see handoff. Never re-tag. |
-| C | Prepare the #557 final reply for maintainer review; keep the issue open. | B | Both audits support the draft claims; reviewed wording is ready. No posting or closure authorized. |
+| B | COMPLETE: v0.8.47 publication verified: release jobs, 52 native assets, three new GPU wheel legs, `whl/hip` + aarch64 `whl/cuda` index entries, native and wheel audits. | v0.8.47 release run finished | Both verifier runs pass; IDs recorded. For transient failures rerun failed jobs in the original producer. Whole redispatch risks different CPU bytes colliding with immutable PyPI; see handoff. Never re-tag. |
+| C | COMPLETE: [final #557 reply prepared for review](docs/issue-557-reply-review-2026-10-29.md); keep the issue open. | B | Both audits support the draft claims; reviewed wording is ready. No posting or closure authorized. |
 | D | COMPLETE: data2vec-base Q4_K nightly diagnosis and paired Q4/F16 production gate. | — | Cause retained in same-host arrays; model-free guards and actual production regression 40750908085 pass. |
 | F | COMPLETE: bounded OpenVoice2 conditioned-cloning CUDA proof; separate current-runtime structural replay accepted. | — | All three 27/28-stage cases, waveform/cache/clip-mean, WER <=0.2 and speaker improvement >0.01 pass. Publication and high-level integration remain separate. See handoff follow-up scope. |
 | G | COMPLETE: real OpenVoice Python Session/C ABI validation over the qualified SDK/model-overlay composition; kernel version 2 accepted. | F | Architecture detection, voice/codec/rates/repeatability, raw and marked synthesis, actual CUDA and unchanged ASR/speaker gates pass. Preset identity stays unknown; full rebuilt-current library and actual CLI remain separate. |
 | H | Qualify the full current library/CLI and original BERT conditioning repair. | F/G and hosted current candidate | Original input boundaries, TCC stages, Session/CLI, unchanged speech quality, CPU and CI/Lint gates all accepted on the final source. |
-| I | Prepare and publish the next patch after error acceptance. | B and H | Correct version sync, exact-source CI, immutable new tag, all producers and both publication audits accepted. Never rewrite v0.8.47. |
+| K | COMPLETE: #560 documented detect-and-exit CLI routing. Full-recording aggregation stays a later feature. | Before I | Three caller/resolver controls and actual hosted CLI 40807940665 accept bypass, providers, failures and ordinary transcription. CI/Lint pass at `bd1e299e1`. |
+| I | Prepare and publish the next patch after error acceptance. | B, H and K | Correct version sync, exact-source CI, immutable new tag, all producers and both publication audits accepted. Never rewrite v0.8.47. |
 | J | Independently validate PR #559, then merge only if all checks pass. | I; errors before features | Whole refreshed discussion/diff, actual caller probes and Qwen short-clip regressions, exact-head CI/Lint/secret checks accepted. |
 | E | Real-hardware qualification of `+vulkan` (AMD/Intel), `+hip` (ROCm) and aarch64 `+cuda`. | Hardware access | Clean-venv install, Session JFK transcript matches, GPU backend selected and used, CPU/GPU compared. Recorded per class. |
 
@@ -69,9 +74,9 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 | #456 Nyra | Appropriate model/output rights and distribution review. | Resolved production/hosted, derivative/recipient, output/training, WavLM-provenance and dependency obligations. No port/conversion behind a plain NC switch. |
 
 The user explicitly confirmed these inputs/devices/new permissions are unavailable.
-Refresh complete issue threads before resuming if new evidence arrives. Six
-issues were open at the 2026-10-28 check: #456, #461, #483, #532, #557
-(implemented, awaiting publication acceptance) and #558. New PR #559 is reviewed
+Refresh complete issue threads before resuming if new evidence arrives. Seven
+issues are open at the 2026-10-29 check: #456, #461, #483, #532, #557
+(implemented and publication accepted; reply held for review) and #558/#560. New PR #559 is reviewed
 in [a scoped checkpoint](docs/qwen3-context-pr559-review-2026-10-28.md); CI and
 independent caller/runtime checks remain. Keep this feature after active error
 repairs. None was closed merely to finish this batch.

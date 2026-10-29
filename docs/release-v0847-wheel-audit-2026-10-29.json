@@ -1,0 +1,137 @@
+{
+  "tag": "v0.8.47",
+  "source": "5f87a56265e4bbd7e2adc7052254e576d5774abb",
+  "audit_source": "08ffbfaf1f9c123740d3807ffa4b07c0af3f29e0",
+  "complete": true,
+  "acceptance": true,
+  "native_inventory_producer": {
+    "run": 40751444564,
+    "source": "bda9d00ce6209a7811dccc5a996077b8bdc2521d",
+    "artifact_id": 12848063768
+  },
+  "wheels": {
+    "complete": true,
+    "producer_run": 40751349609,
+    "producer_source": "2c733b9c3335b2a909d527041fb90ec360d070ff",
+    "original_distributions": {
+      "crispasr-0.8.47-py3-none-manylinux_2_35_aarch64.whl": {
+        "artifact_id": 12849688876,
+        "bytes": 46024436,
+        "sha256": "3e9156935d00ca6265b6f5318aa94027258d10275c87c33951b51c5d0b372582",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 19,
+        "qualified_native_libraries_verified": 16
+      },
+      "crispasr-0.8.47-py3-none-manylinux_2_35_x86_64.whl": {
+        "artifact_id": 12849874861,
+        "bytes": 53821750,
+        "sha256": "c5495bd98e31b3f08cdcf027c75cbcd4252bad98f512196d8f6711ee5137b601",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 19,
+        "qualified_native_libraries_verified": 17
+      },
+      "crispasr-0.8.47-py3-none-macosx_11_0_arm64.whl": {
+        "artifact_id": 12850375403,
+        "bytes": 34965804,
+        "sha256": "1f7b63492ea2e2dca41186432cbc57e2d5d11e83a7dc7232290c9d4c86ba1197",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 2,
+        "qualified_native_libraries_verified": 19
+      },
+      "crispasr-0.8.47-py3-none-win_amd64.whl": {
+        "artifact_id": 12850273106,
+        "bytes": 14787221,
+        "sha256": "d04946cea184ca5a6e75cd1e8fd93c78e3dd4badb7f26eb8351c7c03d2d4a307",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 2,
+        "qualified_native_libraries_verified": 5
+      },
+      "crispasr-0.8.47+cuda-py3-none-manylinux_2_35_aarch64.whl": {
+        "artifact_id": 12849394745,
+        "bytes": 430294694,
+        "sha256": "8e0e351de84a14e9f59c8c8cc1204c7b3d2e5035aa59915ac4846f2b5bf21194",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 19,
+        "qualified_native_libraries_verified": 17
+      },
+      "crispasr-0.8.47+cuda-py3-none-manylinux_2_35_x86_64.whl": {
+        "artifact_id": 12850368122,
+        "bytes": 598530230,
+        "sha256": "fd16f25ca2cadd20afa0b102e010596ce198e9aacdf0f4872e22579608aa6551",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 19,
+        "qualified_native_libraries_verified": 18
+      },
+      "crispasr-0.8.47+hip-py3-none-manylinux_2_35_x86_64.whl": {
+        "artifact_id": 12851315564,
+        "bytes": 329166912,
+        "sha256": "8c005c216df8a73eabf15e10d1f19ba490503ee30abad5a13dc33e312dcb8935",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 19,
+        "qualified_native_libraries_verified": 22
+      },
+      "crispasr-0.8.47+vulkan-py3-none-manylinux_2_35_x86_64.whl": {
+        "artifact_id": 12849609563,
+        "bytes": 84124867,
+        "sha256": "e3518462bb34de089cfa7d9250acdea4eea07cd2543a6fba848deae8a83b28c7",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 19,
+        "qualified_native_libraries_verified": 18
+      },
+      "crispasr-0.8.47+cuda-py3-none-win_amd64.whl": {
+        "artifact_id": 12850438403,
+        "bytes": 777297257,
+        "sha256": "2438c92739da8fb5ed661b70d81498092b629b4c098192690159c7a7e35416ad",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 2,
+        "qualified_native_libraries_verified": 9
+      },
+      "crispasr-0.8.47+vulkan-py3-none-win_amd64.whl": {
+        "artifact_id": 12851855212,
+        "bytes": 28977548,
+        "sha256": "54863757bbbe5a87dbd33b17afa23d17d5bbe3ec46b7a5a2bd4d5c8e987efd8b",
+        "tag_package_sources_verified": 5,
+        "native_notices_verified": 2,
+        "qualified_native_libraries_verified": 6
+      },
+      "crispasr-0.8.47.tar.gz": {
+        "artifact_id": 12851310427,
+        "bytes": 71819,
+        "sha256": "6c64dcf3829525e9eb92e08051307efbfc4d173c8900806996ccf0619d34232a"
+      }
+    },
+    "pypi_anonymous_readbacks": [
+      {
+        "filename": "crispasr-0.8.47-py3-none-macosx_11_0_arm64.whl",
+        "url": "https://files.pythonhosted.org/packages/2f/f7/6c05c8ac0a93975a6f6b58251f2f226d2d059806a264d4509ea0b6719ddb/crispasr-0.8.47-py3-none-macosx_11_0_arm64.whl",
+        "bytes": 34965804,
+        "sha256": "1f7b63492ea2e2dca41186432cbc57e2d5d11e83a7dc7232290c9d4c86ba1197"
+      },
+      {
+        "filename": "crispasr-0.8.47-py3-none-manylinux_2_35_aarch64.whl",
+        "url": "https://files.pythonhosted.org/packages/47/80/eda1376b1d9a42f49fadc67fbc95d89584bca76d11de345a846511c9e90b/crispasr-0.8.47-py3-none-manylinux_2_35_aarch64.whl",
+        "bytes": 46024436,
+        "sha256": "3e9156935d00ca6265b6f5318aa94027258d10275c87c33951b51c5d0b372582"
+      },
+      {
+        "filename": "crispasr-0.8.47-py3-none-manylinux_2_35_x86_64.whl",
+        "url": "https://files.pythonhosted.org/packages/2f/e8/0259ccd99e65895ff74f9d00bceb98c8395a90368672df7fdc498d5401a5/crispasr-0.8.47-py3-none-manylinux_2_35_x86_64.whl",
+        "bytes": 53821750,
+        "sha256": "c5495bd98e31b3f08cdcf027c75cbcd4252bad98f512196d8f6711ee5137b601"
+      },
+      {
+        "filename": "crispasr-0.8.47-py3-none-win_amd64.whl",
+        "url": "https://files.pythonhosted.org/packages/fc/55/b3568b3cab6b891ac091210945b4b886123b849cbb5e34bd18f198373396/crispasr-0.8.47-py3-none-win_amd64.whl",
+        "bytes": 14787221,
+        "sha256": "d04946cea184ca5a6e75cd1e8fd93c78e3dd4badb7f26eb8351c7c03d2d4a307"
+      },
+      {
+        "filename": "crispasr-0.8.47.tar.gz",
+        "url": "https://files.pythonhosted.org/packages/09/06/eb28a91776e08ffefa0219c06233693a3d199e930992bf7bc77b3e1675f8/crispasr-0.8.47.tar.gz",
+        "bytes": 71819,
+        "sha256": "6c64dcf3829525e9eb92e08051307efbfc4d173c8900806996ccf0619d34232a"
+      }
+    ],
+    "gpu_index_and_full_readbacks_verified": true
+  }
+}

@@ -17,20 +17,34 @@ in ignored local notes.
 
 Snapshot 2026-10-29: **v0.8.46 publication is accepted. v0.8.47 native
 publication, both wheel publishers, Pages and live GPU index links pass; final
-wheel audit 40789883589 remains queued.** Keep #557 open and prepare its reply
-for review only. Runtime repairs below are on
-[candidate branch `validate/openvoice-interfaces-20261028`](https://github.com/CrispStrobe/CrispASR/tree/379146cb0d1dd590ae805686284bdb7b52d9ece8),
-not main or the immutable v0.8.47 release. Full-source CUDA version 2 is terminal with failed overall quality
-from application source `9259b9f3e`, bootstrap `379146cb0`; current CPU
-40795945687, CI 40795948208 and Lint 40795950893 are queued at `379146cb0`.
-Preserve these existing jobs. Read live status before dispatching a replacement.
-The earlier CPU run 40783760561 passed, but predates the latest BERT frontend
-repair and supplies only that older source's acceptance.
+wheel audit 40789883589 is accepted for all 11 distributions and readbacks.** Keep #557 open and prepare its reply
+for review only. The current CLI, BERT, final activation and duration repairs are on
+[candidate branch `validate/openvoice-interfaces-20261028`](https://github.com/CrispStrobe/CrispASR/tree/395daf6ae),
+not main or the immutable v0.8.47 release. The declared F16 BERT profile is
+under full qualification: CUDA `crispasr-openvoice-full-source` **version 5**,
+application/controller `97053abff`, bootstrap `395daf6ae`; CPU **40825101583**
+at that candidate. Require original component checks, actual automatic F16
+companion discovery through Session/C ABI and CLI, and all four original
+speech/speaker cases. No registry/default switch has happened yet.
+
+The completed BERT comparison isolates Q4 error (relative L2 0.136–0.165 versus
+original features) against F16 (about 0.0003). A fixed speech comparison on the
+same application passes the unchanged disclosed WER gate with F16 (0.125 /
+0.055556); Q4 still fails (0.25 / 0.333333). These are diagnostic receipts,
+not complete application acceptance. All terminal source/log/output/checkpoint
+and authenticated private archives are retained; do not repeat accepted
+component campaigns.
+
+#560's bounded CLI error is qualified: hosted **40807940665** passes on source
+`bd1e299e1`, plus CI **40807943181** (all 13 jobs) and Lint **40807945520**.
+Later candidate changes are validation tooling/receipts; C++ is unchanged.
+The issue remains open for its separate full-recording LID request, after I/J.
+#557 also remains open with its prepared reply held for review.
 
 | Item | State | Evidence |
 |---|---|---|
 | v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit 40736324867 PASS; task A complete. | [Receipt](release-publication-2026-10-28.md) |
-| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 is accepted; all 14 jobs in wheel producer 40751349609 pass. Pages 40776528499 passes and live index links are verified; wheel audit 40789883589 is queued. | Task B |
+| v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 is accepted; all 14 jobs in wheel producer 40751349609 pass. Pages 40776528499 passes and live index links are verified; wheel audit 40789883589 is accepted; B complete. | Task B |
 | #557 issue | Code merged. Issue still **open**. No public comment posted yet. | Task C |
 | data2vec-base nightly gate | COMPLETE: same-host cause, paired Q4/exact-F16 policy and actual production regression 40750908085 accepted. | Task D |
 | OpenVoice2 | Bounded conditioning/SDK Session proofs accepted. Full rebuilt CPU library/CLI at `7c158b325` is accepted. Latest BERT conditioning candidate needs its own current CPU/CUDA and CI gates; no model/default promotion. | Task F and follow-up below |
@@ -42,10 +56,10 @@ First actions for a fresh agent:
    (identified in the ignored local notes).
 2. Refresh open issues and PRs. Read each relevant whole thread (body, all
    comments, linked comments, latest follow-ups) before changing behavior. The
-   2026-10-28 check: open #456/#461/#483/#532/#557/#558, new PR #559,
+   2026-10-29 check: open #456/#461/#483/#532/#557/#558/#560, PR #559,
    zero comments on #557. The [PR #559 review checkpoint](qwen3-context-pr559-review-2026-10-28.md)
    scopes its remaining gates; no review or merge was submitted.
-3. A, D and bounded F are accepted; continue B → C in order. G is also accepted; do not duplicate it. E needs hardware.
+3. A, B, D, bounded F/G and K are accepted; C is prepared for review with #557 open. Continue H (full F16 qualification/default policy), then I → J in order; do not duplicate accepted campaigns. E needs hardware.
 4. For any task, record owner, source SHA, exact missing behavior, acceptance gates,
    resources and next action in PLAN.md before starting. Do not recreate a passing campaign.
 
@@ -59,7 +73,7 @@ source/CI/validation checks; do not retag v0.8.47 to include them.
 | Area | Implemented and accepted | Limits / evidence |
 |---|---|---|
 | v0.8.46 release | Promotes the qualified Nemotron F16 default with OpenMDW notices, the VoxCPM2 host-permute timing split, and wheel notice/provenance staging. Published 2026-10-28; native and wheel publication pass. The verifier now takes `tag`/`source` inputs, and `REVIEWED_TAGS` lists v0.8.45–v0.8.47. | Wheel audit 40736324867 accepted (task A complete). v0.8.45 tag/assets untouched. [Receipt](release-publication-2026-10-28.md). |
-| #557 Linux GPU wheels (code) | Producers `build-libs-linux-x86_64-vulkan` and `build-libs-linux-arm64-cuda`. Wheel legs `linux-x86_64-vulkan`, `linux-x86_64-hip` (`--host-provided libomp.so`) and `linux-arm64-cuda`. A `whl/hip` index. A Linux Vulkan clean-venv loader smoke. Version-gated (≥ 0.8.47) exact auditor expectations. Tagged for v0.8.47; publication verification is pending. | Packaging only; no physical-GPU run (task E). Jetson excluded. Publication unverified at hand-off (task B). |
+| #557 Linux GPU wheels (code) | Producers `build-libs-linux-x86_64-vulkan` and `build-libs-linux-arm64-cuda`. Wheel legs `linux-x86_64-vulkan`, `linux-x86_64-hip` (`--host-provided libomp.so`) and `linux-arm64-cuda`. A `whl/hip` index. A Linux Vulkan clean-venv loader smoke. Version-gated (≥ 0.8.47) exact auditor expectations. Tagged for v0.8.47; native and wheel/index readback audits are accepted. | Packaging only; no physical-GPU run (task E). Jetson excluded. Reply remains review-only (task C). |
 | v0.8.45 release | Native, Python, Rust and Dart publication completed. Native assets, CUDA splits, package notices, registry distributions and live GPU indexes were read back and verified. | Immutable tag source `e58bb48b5`. Native audit 40304161701; wheel audit 40313434985. This earlier receipt predates the separately scoped v0.8.46/v0.8.47 work. [Publication receipt](release-publication-2026-10-26.json). |
 | Nemotron default | Managed downloads now select the pinned qualified F16 profile only, retain OpenMDW/origin notices, and reject stale-Q4/missing-Q4 substitution. CPU and actual T4 pass 26/26 original transcript matches, 22/22 VoxCPM prompts, unchanged stage/magnitude gates, CLI, opaque-filename C ABI and fresh/reused-session controls. | Former plain Q4 fails both devices (11/26 and 8/22), so it is not an accepted default. Explicit existing Q4 files remain diagnostic. Existing v0.8.45 binaries still require explicit F16 selection. [Policy and full proof](nemotron-default-policy-2026-10-26.md). |
 | Qwen3-TTS #555 | Incompatible Base packs are rejected before prefill; failed replacement preserves the previous pack. Designed clear defaults use the matching original 1024/2048-dimensional encoders for 0.6B/1.7B. CPU/T4 speech/reference controls pass. | Model-specific embeddings/codes are not interchangeable voice packs. Apache/MIT notices, recipes and original declarations are retained; speaker identity/likeness rights and human listening are not inferred from ASR. [Runtime proof](issue555-voice-pack-2026-10-23.json), [designed voices](qwen3-designed-voices.md). |
@@ -127,7 +141,8 @@ source `2c733b9c3`; release inputs remain the frozen tag). Index commit
 **40776528499** succeeded; anonymous HIP/Vulkan and ARM CUDA v0.8.47
 index links are verified. Final wheel audit **40789883589** was dispatched
 on main with the exact frozen source and accepted producer/native-audit inputs.
-It is queued; preserve it rather than creating another run.
+It passed with complete/acceptance true, all 11 distributions and five PyPI
+readbacks, plus every GPU index/full-file readback. [Accepted wheel receipt](release-v0847-wheel-audit-2026-10-29.json). B is complete; do not repeat either accepted auditor.
 The [accepted native receipt](release-v0847-native-audit-2026-10-28.json)
 and [full inventory](release-v0847-native-assets-2026-10-28.json) are retained.
 Wheel readback still waits for successful
@@ -171,13 +186,13 @@ what delayed the live wheel index for v0.8.46.
   A real defect in a published distribution needs a new patch release, never a
   re-upload under the same version.
 
-### Task B — verify the v0.8.47 publication
+### Task B — complete: v0.8.47 publication verified
 
 - **Live:** native producer and native audit **40751444564** are accepted.
   Wheel producer **40751349609** is also successful (all 14 jobs). Pages
   **40776528499** at index commit `08ffbfaf1` and live index links pass.
-  Final wheel audit **40789883589** is queued. Steps 1–5 below have been
-  performed; collect that existing verifier instead of dispatching again. Use `native_audit_run=40751444564`
+  Final wheel audit **40789883589** passed. Steps 1–5 below are historical
+  completed instructions; do not repeat the producer, Pages or accepted audits. Use `native_audit_run=40751444564`
   for the eventual wheel verifier; do not repeat the accepted native audit.
 
 - **Do, in order:**
@@ -225,27 +240,17 @@ what delayed the live wheel index for v0.8.46.
 - **Accept:** both verifier runs succeed. Record run IDs, asset count and wheel
   filenames in [the receipt](release-publication-2026-10-28.md).
 
-### Task C — prepare #557 reply for review; keep the issue open
+### Task C — complete: #557 reply prepared for review; keep the issue open
 
-- **User decision (2026-10-28):** keep #557 open; prepare the final reply for review.
-  Do not post the comment or close the issue.
-- **Precondition for the draft claims below:** task B accepted.
-- **Draft for review only (unverified claims must remain conditional until B passes):**
+The [final reply for review](issue-557-reply-review-2026-10-29.md) is supported
+by accepted native audit **40751444564**, wheel audit **40789883589** and live
+Pages/index checks. The whole issue was refreshed: open, no comments, no new
+reporter requirements. It still explicitly states that physical AMD/Intel/ARM
+GPU execution is unverified.
 
-  > Linux GPU wheels are published from v0.8.47:
-  > `+vulkan` (x86_64) at `https://crispstrobe.github.io/CrispASR/whl/vulkan/`,
-  > `+hip` (x86_64, ROCm 6.3+) at `https://crispstrobe.github.io/CrispASR/whl/hip/`, and
-  > `+cuda` for aarch64 SBSA servers (Grace/GH200; not Jetson) at the existing
-  > `whl/cuda/` index. The host provides the GPU driver and vendor runtime
-  > (Vulkan loader; ROCm HIP/hipBLAS/rocBLAS and ROCm's libomp; CUDA 12 runtime
-  > and cuBLAS). The wheels pass relocation, dependency, notice and
-  > manylinux_2_35 checks, and the Vulkan wheel loads in a clean environment.
-  > We have not yet run any of them on a physical AMD, Intel or ARM NVIDIA GPU,
-  > so reports from your hardware (e.g. `crispasr.Session` with Parakeet ja)
-  > would be very welcome here.
-
-- **Then:** retain the verified final wording for review. Issue #557 stays open
-  under the user's explicit instruction; no external message is authorized.
+**User decision:** keep #557 open. No comment, closure or public review has
+been sent. Preparing the draft does not authorize posting it. Preserve it for
+the maintainer's review without asking again or sending it automatically.
 
 ### Task D — CPU-profile cause established; confirm the paired regression policy
 
@@ -489,15 +494,111 @@ publication occurred. Remaining scope:
    graph-call regression fails before and passes after correcting only that
    final slope. Upsample/residual slopes stay 0.1. Require actual captured
    pre/post tensors against the pinned original operator and an uninstrumented
-   waveform comparison before interpreting decoded quality. Current CPU
-   **40795945687**, CI **40795948208** and Lint **40795950893** were requested
-   once at `379146cb0`; the application source matches the CUDA campaign.
+   waveform comparison before interpreting decoded quality. Full-source
+   **version 3** is terminal from application/controller `01a288763`, bootstrap
+   `315339f65`. All three exact-input cases pass; actual final activation matches
+   the original operator exactly on CUDA0, with norm ratio 1.0 and zero maximum
+   error. Instrumented/plain waveform errors are zero. Both TCC 27-stage cases,
+   Session/CLI and rates pass, but disclosed CLI WER 0.25 / 0.333333 fails the
+   unchanged original 0.20 gate. [Retained failed receipt](openvoice-final-activation-attempt-2026-10-29.json).
+   The complete checkpoint and 108-file encrypted envelope were read back,
+   hashed and authenticated. Do not claim application acceptance.
+   **Decoder diagnostic version 1 is accepted:** all nine boundary comparisons
+   across three cases match the original Generator/residual blocks with shared
+   converted weights and native latent input. Waveform relative L2 is about
+   4e-6 and scale is within 1e-6 of unity. [Receipt](melotts-decoder-parity-2026-10-29.json).
+   **Encoder/inverse-flow diagnostic version 2 is accepted:** all fifteen
+   comparisons across three cases pass with relative errors below 5e-7,
+   using actual native BERT features and sampled latent as shared inputs.
+   [Receipt](melotts-upstream-parity-2026-10-29.json). Both terminal runs have
+   complete source/log/output readbacks and authenticated private envelopes.
+   Do not repeat these accepted diagnostics or infer full-model parity.
+
+   **Concrete duration defect and current repair:** the shipped model declares
+   zero SDP flows and zero DDS layers because the converter counts deterministic
+   `dp` names instead of `sdp`. Captured SDP outputs for different sentences
+   have byte-identical common prefixes: learned conditioning was ignored.
+   The candidate corrects converter counts and recovers legacy zero metadata
+   from the actual contiguous tensor inventory, rejecting incompatible nonzero
+   counts. It restores the original initial reverse Flip and the original
+   1e-3 spline minima/normalization. Four production-body tests pass after
+   failed before controls; ten of sixteen original scalar spline rows failed
+   before and all pass after. [Diagnosis](melotts-sdp-defect-2026-10-29.json).
+   New `tools/validation/melotts_duration.py` runs both pinned original
+   predictors with actual captured native encoder output and scaled noise;
+   RNG equivalence is not assumed. It preserves strict full parameter loading,
+   all original operators and shared model bytes. No seeds, recognizer,
+   speech threshold or model default changed.
+
+   Full-source CUDA **version 4** is terminal from application/controller
+   `9001ff913`, bootstrap `8b9511e79`. All three original deterministic and
+   stochastic duration cases pass, SDP relative error about 1.3e-6. Input,
+   activation/backend, instrumentation, TCC, Session/CLI and rates pass too;
+   disclosed CLI WER 0.25 / 0.333333 still fails 0.20. [Retained CUDA attempt](openvoice-duration-attempt-2026-10-29.json).
+   NN CPU **40806522459** finished at `8b9511e79`, likewise passing original
+   duration and functional checks while disclosed case 0 WER 0.25 fails.
+   [Retained CPU attempt](openvoice-cpu-duration-attempt-2026-10-29.json).
+   Both complete artifacts/checkpoints and authenticated 120-file envelopes
+   are retained. Do not rerun these unchanged failed default-profile campaigns.
+
+   **Important causal limit:** the shipped `sdp_ratio` is zero. The SDP defect
+   is genuine in the optional conditioning path, but repairing it cannot
+   change these default clips. Do not claim it caused or fixed their quality.
+   **BERT diagnosis is complete:** `crispasr-melotts-decoder` version 3,
+   controller `59751b4e2`, bootstrap `c0afba306`, compares pinned original
+   Transformers 4.57.1 and Melo phone expansion against actual native features.
+   Q4 relative L2 versus original FP32 is 0.1577 / 0.1646 / 0.1364; even the
+   shared-dequantized-weight comparison has relative L2 0.0586 / 0.0486 / 0.0386.
+   F16 matches shared weights within about 1e-6 and original FP32 within about
+   0.0003. Native BERT is CPU; original reference is CUDA. All token IDs/repeats
+   match. [BERT boundary receipt](melotts-bert-boundary-2026-10-29.json).
+   The version-3 speech phase failed because its diagnostic omitted the
+   adjacent converter copy. Complete source/log/output and authenticated
+   107-file envelope are retained; this was a harness staging error.
+
+   **Fixed speech diagnostic version 4 is complete:** controller `837e02957`,
+   bootstrap `07a12d7b7`, reuses the exact version-4 application checkpoint
+   (SHA-256 `5573e9c05f11e0b339660cc82eedf1d4a0ec11475ca0b700d51671b13b13b502`).
+   It stages the validated converter and runs only the missing speech phase,
+   without repeating the completed BERT component campaign or rebuilding.
+   Same seed 42, text, Melo/reference/TCC and tiny.en recognizer: Q4 neutral
+   WER 3/7, disclosed 0.25 / 0.333333; F16 neutral 1/7, disclosed 0.125 /
+   0.055556. [Precision speech receipt](melotts-bert-precision-speech-2026-10-29.json).
+   Complete source/log/output and authenticated 13-file envelope are retained.
+   This is diagnostic only; complete speaker/application acceptance is separate.
+
+   **Current bounded task:** full-source CUDA **version 5** is admitted once,
+   application/controller `97053abff`, bootstrap `395daf6ae`; CPU **40825101583**
+   targets that candidate. The driver explicitly selects `--bert-profile f16`,
+   retaining the old Q4 profile/failure receipts. F16 comes from the same model
+   revision `35522347b1bed9a913d6894803c5cab929ae42a5`, file
+   `bert-base-uncased.gguf`, SHA-256
+   `f7437929246c43d7300cbf6ff39b4715669a6053661117df99a456bdc5e8ecba`.
+   It is placed beside the renamed Melo model. No BERT environment override or
+   CLI codec argument is used; actual load logs must prove automatic F16
+   discovery through both C ABI/Session and every real CLI call. Require all
+   original inputs, final activation/backend/instrumentation, DP/SDP duration,
+   TCC stages, Session repeats/rates and four unchanged speech/speaker cases.
+   Preserve complete terminal source/log/output/checkpoints and authenticate
+   the envelope before replacement. Do not promote the profile or rewrite a
+   failed Q4 receipt unless both full CPU/CUDA runs pass.
+
+   After both pass, update the Melo V2 managed companion to the qualified F16
+   canonical filename and immutable model revision; preserve explicit Q4 use,
+   with no implicit Q4 fallback. CLI/C ABI already discover that F16 filename.
+   Retain BERT's own Apache-2.0 license/attribution independently of Melo/OpenVoice
+   MIT notices. Confirm the actual managed selection, finish current-source
+   integration and exact final-tree CI/Lint/secret checks before task I. C++
+   at `bd1e299e1` already passes CI **40807943181** (all 13 jobs) and Lint
+   **40807945520**; later changes are validation tooling, not runtime math.
    Earlier CPU **40783760561** passed its complete four-case matrix at
    `7c158b325`, including default-disclosed WER 0.1875 and zero; its full
    artifact and authenticated encrypted readback are retained.
    [Earlier CPU receipt](openvoice-cpu-pre-conditioning-2026-10-29.json).
-   That run predates the frontend repair and cannot qualify it. Earlier
-   CI/Lint **40787625795** / **40787628325** were superseded and canceled.
+   It predates both conditioning repairs and cannot qualify them. The queued
+   pre-activation CPU **40795945687** was canceled; old CI/Lint runs were
+   superseded by the current candidate. Preserve failed/older controls without
+   redispatching them as proof of the new source.
    The current CPU worker checkpoints its compiled application before model
    calls; artifacts are validation checkpoints, not audited release packages.
    Public receipts contain metrics/hashes; speech/transcripts stay encrypted
@@ -516,9 +617,33 @@ publication occurred. Remaining scope:
    bounded synthetic English cases. A default change needs an explicit scoped
    acceptance decision and cannot be inferred from stage parity alone.
 
+### Task K — standalone LID routing error #560
+
+The whole [issue #560](https://github.com/CrispStrobe/CrispASR/issues/560) has
+been read: no comments, linked issues or follow-ups at this checkpoint.
+Help/docs promise `--detect-language` exits after detection, but both old and
+unified CLI routes initialize ASR first and continue transcription. The bounded
+repair is committed at `bd1e299e1`; all three production caller/resolver controls
+pass after baseline failures. Hosted current CLI **40807940665** is accepted:
+full CPU build, default/auto/explicit Whisper, dedicated Silero, multiple input,
+invalid ASR/HF bypass, unsupported-mode and bad-input failures, and ordinary
+`-l auto` transcription all pass. CI **40807943181** (13 jobs) and Lint
+**40807945520** pass at that exact source. Checkpoint readback is verified.
+[Accepted receipt](issue-560-lid-cli-accepted-2026-10-29.json),
+[scope and review](issue-560-lid-cli-review-2026-10-29.md).
+K is complete; keep #560 open for its separate full-recording request. No
+public reply or closure has been sent.
+
+The requested full-recording mode is a separate later feature, after current
+error/release/PR #559 gates. Shared prefix detection caps input at 15 seconds;
+individual detectors have different 5/15/30-second bounds and memory costs.
+Use bounded windows with a declared aggregation/confidence policy and test
+late speech, mixed languages and invalid inputs; removing the cap is not
+sufficient. Default detection behavior stays unchanged until separately scoped.
+
 ### Task I — next patch after current error gates
 
-1. Complete B and H first. Refresh main and the candidate; preserve unrelated
+1. Complete B, H and K first. Refresh main and the candidate; preserve unrelated
    work. Merge the qualified runtime changes only when current-source CPU,
    CUDA, CI, lint and secret checks support them. Documentation-only main
    updates do not mean the candidate runtime changes are merged.
