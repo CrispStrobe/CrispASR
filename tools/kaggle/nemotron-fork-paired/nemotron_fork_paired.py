@@ -23,9 +23,9 @@ import zipfile
 import numpy as np
 
 
-VERSION = 'nemotron-f16-fork-paired-v2'
-OUT = Path('/kaggle/working/nemotron-fork-paired-v2')
-SCRATCH = Path('/kaggle/temp/nemotron-fork-paired-v2')
+VERSION = 'nemotron-f16-fork-paired-v3'
+OUT = Path('/kaggle/working/nemotron-fork-paired-v3')
+SCRATCH = Path('/kaggle/temp/nemotron-fork-paired-v3')
 LICENSE = dict(
     name='NVIDIA OpenMDW-1.1',
     upstream='https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b',
@@ -327,7 +327,7 @@ def clean_env(libdirs, preset=None):
 
 def crisp_run(binary, libdirs, model_path, cases, arm, label):
     for case in cases:
-        Path(case['file'] + '.txt').unlink(missing_ok=True)
+        Path(case['file']).with_suffix('.txt').unlink(missing_ok=True)
     preset = 3 if arm == 'crisp_r13' else None
     env = clean_env(libdirs, preset)
     env['CRISPASR_NEMOTRON_BENCH'] = '1'
@@ -351,12 +351,15 @@ def crisp_run(binary, libdirs, model_path, cases, arm, label):
                                              stderr, re.M)]
         assert len(vals) == len(cases), f'{arm}: expected {len(cases)} {name} timings, got {len(vals)}'
         stages[name + '_ms'] = vals
+    stdout_lines = stdout.splitlines()
+    assert len(stdout_lines) == len(cases), f'{arm}: expected one stdout line per input, got {len(stdout_lines)}'
     transcripts = []
-    for case in cases:
-        path = Path(case['file'] + '.txt')
+    for case, line in zip(cases, stdout_lines):
+        path = Path(case['file']).with_suffix('.txt')
         assert path.is_file(), f'Missing Crisp transcript {path}'
-        transcript = path.read_text().strip()
+        transcript = ' '.join(path.read_text().split())
         assert normalized_words(transcript), f'Empty Crisp transcript for {case["id"]}'
+        assert transcript == ' '.join(line.split()), f'Crisp stdout/TXT mismatch for {case["id"]}'
         transcripts.append(transcript)
     return dict(texts=transcripts, stages=stages, wall_s=elapsed, gpu=gpu,
                 context=dict(left=56, right=expected_r, offline=True, source='native runtime mask log'))

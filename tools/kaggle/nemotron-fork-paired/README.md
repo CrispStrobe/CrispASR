@@ -1,15 +1,22 @@
 # Private Nemotron F16 fork comparison
 
 Prepared only. Do not submit until the maintainer coordinates the T4 slot and
-reviews the pins. This v2 kernel uses the published CUDA native library and its
+reviews the pins. This v3 kernel uses the published CUDA native library and its
 matching pure Python API wheel, with no build. The v0.4.1 native tarball contains
 shared libraries, contract metadata, and licenses; it does not contain
 `transcribe-cli`. The Python API invokes the same offline `transcribe_run` C path
 as the CLI with batch size 1 and exposes the same per-utterance mel, encode, and
 decode timers. It writes a private `receipt.json` plus subprocess logs under
-`/kaggle/working/nemotron-fork-paired-v2`; the failed v1 run remains diagnostic
-evidence. The metadata id matches the title-derived Kaggle slug used by v1, so
-the successor is a new version of that existing private kernel.
+`/kaggle/working/nemotron-fork-paired-v3`; the failed v1 and v2 runs remain
+diagnostic evidence. The metadata id matches the title-derived Kaggle slug used
+by v1, so the successor is a new version of that existing private kernel.
+
+The v0.8.47 CLI strips the audio extension when `-otxt` writes a transcript:
+`audio.wav` produces `audio.txt`. The v2 adapter looked for `audio.wav.txt` and
+failed after all 27 Crisp R3 cases had completed. V3 removes each expected
+`audio.txt` before a run, then requires one nonempty output file and one stdout
+line per input. It matches each file's transcript against its corresponding
+stdout line, preserving the CLI's sequential input order as a quality gate.
 
 Three offline arms use exactly the same 16 kHz PCM16 WAV files: CrispASR v0.8.47
 production default R3, CrispASR v0.8.47 with `CRISPASR_NEMOTRON_CONTEXT_PRESET=3`
