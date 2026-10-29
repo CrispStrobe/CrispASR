@@ -1,0 +1,94 @@
+{
+  "schema": 1,
+  "complete": true,
+  "acceptance_scope": "Bounded CPU evidence for Qwen3 short-clip recognition and actual prompt routing; not full PR merge acceptance. The original run receipt incorrectly listed unrelated MiMo/JFK/Chinese scope, which was not exercised.",
+  "run": 40855248796,
+  "artifact": 12891256282,
+  "validation_source": "aa957975662d8eca7120fd2170cdc98ceab849d3",
+  "pr_head": "6b132720090cbb532f79f544c130381ddf1cf6c9",
+  "source_relation": "Six implementation/test blobs match the PR head; CLI contains an unrelated issue 560 early-exit overlay.",
+  "models": {
+    "qwen": [
+      "cstr/qwen3-asr-1.7b-GGUF",
+      "674df5d44b50a63e7102a18895ed20e3f91de301",
+      "qwen3-asr-1.7b-q8_0.gguf"
+    ],
+    "piper": [
+      "cstr/piper-en_US-lessac-medium-GGUF",
+      "6b3d385695cd2e91c1af9d37ca5684ee649e2e3d",
+      "piper-en_US-lessac-medium-f16.gguf"
+    ]
+  },
+  "qwen_cases": {
+    "hello": {
+      "expected": "Hello.",
+      "audio_sha256": "473057696b2a24a04c2698c1ab859e11d244a6ef83c9c811c55721e1ad6b1693",
+      "c_api_modes": [
+        "cleared",
+        "off",
+        "on",
+        "raw",
+        "raw-cleared"
+      ],
+      "cli_modes": [
+        "hotwords",
+        "raw-context",
+        "empty-context"
+      ]
+    },
+    "thanks": {
+      "expected": "Thank you.",
+      "audio_sha256": "e40c6e10898b2ceff3b64a1cf537d8e72cdf3612ef6afe9b1b1bf26643947873",
+      "c_api_modes": [
+        "cleared",
+        "off",
+        "on",
+        "raw",
+        "raw-cleared"
+      ],
+      "cli_modes": [
+        "hotwords",
+        "raw-context",
+        "empty-context"
+      ]
+    },
+    "fox": {
+      "expected": "The quick brown fox jumps over the lazy dog.",
+      "audio_sha256": "2922b7cd5360b373a650d8bf1ea39de16aa3d49e7a44cdec5f350d46c15556ff",
+      "c_api_modes": [
+        "cleared",
+        "off",
+        "on",
+        "raw",
+        "raw-cleared"
+      ],
+      "cli_modes": [
+        "hotwords",
+        "raw-context",
+        "empty-context"
+      ]
+    }
+  },
+  "retained_trace_reanalysis": {
+    "c_api_modes": [
+      "unset",
+      "zero",
+      "raw",
+      "changed",
+      "clear",
+      "auto",
+      "question"
+    ],
+    "exact_prompt_checks_passed": true,
+    "cli_exact_prompt_counts": {
+      "raw": 1,
+      "empty": 1,
+      "chunks": 4
+    }
+  },
+  "limitations": [
+    "Reporter Windows/Vulkan recordings were not replayed.",
+    "The full corrected hosted harness, CI and lint remain to pass.",
+    "No backend-exclusion runtime control or public merge has been performed."
+  ]
+}
