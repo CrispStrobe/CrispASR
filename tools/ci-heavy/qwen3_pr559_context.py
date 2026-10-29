@@ -88,6 +88,14 @@ for name, text in shorts.items():
          '--accept-marking-responsibility', '--tts', text, '--tts-output', raw], 'piper-' + name)
     run(['ffmpeg', '-y', '-i', raw, '-ar', '16000', '-ac', '1', audio], 'resample-' + name)
 qwen = download('qwen')
+# A test-only ELF interposer records the actual tokenizer inputs produced by
+# the C ABI. Use only synthetic clips and context; no user audio is involved.
+trace_lib = SCRATCH / 'qwen3-prompt-trace.so'
+run(['cc', '-shared', '-fPIC', '-O2', ROOT / 'tools/ci-heavy/qwen3_prompt_trace.c',
+     '-ldl', '-o', trace_lib], 'build-prompt-trace')
+run(['env', 'LD_PRELOAD=' + str(trace_lib), sys.executable,
+     ROOT / 'tools/ci-heavy/qwen3_pr559_trace.py', lib, qwen, OUT / 'hello.wav', OUT],
+    'c-abi-prompt-routing')
 with Session(str(qwen), lib_path=str(lib), backend='qwen3', n_threads=4) as session:
     session.set_source_language('en')
     session.set_max_new_tokens(128)
