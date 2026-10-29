@@ -45,7 +45,10 @@ and check actual GPU session availability before every Kaggle submission.
   fallback without lowering the Silero gate. Repair `de2e532dd` passes
   model-free actual-caller controls; CI **40858515815**, lint **40858519622**
   are queued; hosted long-clip rerun **40858523187** has started. Model acceptance and
-  main integration remain outstanding.
+  main integration remain outstanding. Kaggle CPU workers lack internet, and
+  the existing approved datasets do not contain the exact source, models and
+  dependencies for the full #559/#560 tests. Keep the hosted Actions jobs;
+  a reduced model-free check is not an acceptance substitute.
 - **Recent models:** [the Nemotron paired receipt](nemotron-original-t4-benchmark-2026-10-29.json)
   records T4 results for native F16 and original F32, with zero WER and GPU
   execution; precision and operation boundaries differ, and no per-step count
