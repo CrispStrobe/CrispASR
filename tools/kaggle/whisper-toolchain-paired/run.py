@@ -126,10 +126,15 @@ def main():
                 transcript = prefix.with_suffix('.txt')
                 row = {'phase':phase,'round':i,'engine':name,'seconds':elapsed,'rc':rc,'cuda_process_observed':observed[0],'resources':state}
                 if transcript.exists(): row['wer'] = wer(REFERENCE, transcript.read_text())
+                contents = log.read_text(errors='replace')
+                if 'CUDA0 total size' not in contents or 'using CUDA0 backend' not in contents:
+                    raise RuntimeError('CUDA model placement or execution backend missing: '+prefix.name)
                 if name == 'crisp-profile':
-                    lines = [x for x in log.read_text(errors='replace').splitlines() if 'whisper timing profile:' in x]
-                    if len(lines) < 2: raise RuntimeError('Missing loader or decoder profile')
-                    row['profile'] = lines
+                    loads = re.findall(r'whisper timing profile: load total_us=([0-9]+)', contents)
+                    decodes = re.findall(r'whisper timing profile: decode count=([0-9]+)', contents)
+                    if len(loads) != 1 or len(decodes) != 1 or int(decodes[0]) <= 0:
+                        raise RuntimeError('Missing loader or positive decoder profile')
+                    row['profile'] = [x for x in contents.splitlines() if 'whisper timing profile:' in x]
                 if transcript.exists(): row['transcript_sha256'] = sha(transcript)
                 receipt['runs'].append(row); save()
                 if rc or not observed[0] or row.get('wer',1)>0.2: raise RuntimeError('GPU, output or transcript quality gate failed: '+prefix.name)

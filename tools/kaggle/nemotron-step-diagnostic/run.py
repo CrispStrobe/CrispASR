@@ -155,6 +155,10 @@ def main():
     if sha(native) != NATIVE[3]:
         raise ValueError("Native model changed")
     base_env = dict(os.environ, CRISPASR_NEMOTRON_BENCH="1")
+    # Compare the shipped default greedy decoder with only timing toggled.
+    for name in ("CRISPASR_RNNT_BATCH", "CRISPASR_NEMOTRON_DEBUG",
+                 "CRISPASR_NEMOTRON_DECODE_TIMING"):
+        base_env.pop(name, None)
     base_env["LD_LIBRARY_PATH"] = str(binary.parent) + os.pathsep + base_env.get("LD_LIBRARY_PATH", "")
     for phase, count in (("warmup", 1), ("measured", 3)):
         for index in range(count):
