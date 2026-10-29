@@ -1,5 +1,5 @@
 {
-  "id": "${KAGGLE_ACCOUNT}/nemotron-f16-fork-paired-private",
+  "id": "${KAGGLE_ACCOUNT}/nemotron-f16-crispasr-and-transcribe-cpp-paired-t4",
   "title": "Nemotron F16 CrispASR and transcribe.cpp paired T4",
   "code_file": "nemotron_fork_paired.py",
   "language": "python",

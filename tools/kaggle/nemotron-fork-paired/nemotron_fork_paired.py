@@ -11,6 +11,7 @@ import shutil
 import statistics
 import struct
 import subprocess
+import sys
 import tarfile
 import threading
 import time
@@ -22,9 +23,9 @@ import zipfile
 import numpy as np
 
 
-VERSION = 'nemotron-f16-fork-paired-v1'
-OUT = Path('/kaggle/working/nemotron-fork-paired')
-SCRATCH = Path('/kaggle/temp/nemotron-fork-paired')
+VERSION = 'nemotron-f16-fork-paired-v2'
+OUT = Path('/kaggle/working/nemotron-fork-paired-v2')
+SCRATCH = Path('/kaggle/temp/nemotron-fork-paired-v2')
 LICENSE = dict(
     name='NVIDIA OpenMDW-1.1',
     upstream='https://huggingface.co/nvidia/nemotron-3.5-asr-streaming-0.6b',
@@ -48,6 +49,9 @@ TRANSCRIBE = dict(
     archive_url='https://github.com/handy-computer/transcribe.cpp/releases/download/v0.4.1/transcribe-native-0.4.1-linux-x86_64-cuda.tar.gz',
     archive_sha256='c4bdf9c4798bac1868ecdcaa04f27eb7712fb43125268313ce14d508c70d247d',
     archive_bytes=203199021,
+    python_wheel_url='https://github.com/handy-computer/transcribe.cpp/releases/download/v0.4.1/transcribe_cpp-0.4.1-py3-none-any.whl',
+    python_wheel_sha256='f373b6e20a4d897ed0dcaa2fe7fae183379777432b3a76641c42506c77b442ad',
+    python_wheel_bytes=47639,
     model_repo='handy-computer/nemotron-3.5-asr-streaming-0.6b-gguf',
     model_revision='53ce288f69326b415aeef030cfcb02a08a8096dd',
     model_file='nemotron-3.5-asr-streaming-0.6b-F16.gguf',
@@ -122,10 +126,12 @@ def unpack_release(spec, stem):
         assert members and len(members) < 500 and sum(m.size for m in members) < 1024**3
         assert all(safe_archive_member(m.name) and (m.isfile() or m.isdir()) for m in members)
         tf.extractall(root, filter='data')
-    candidate = 'crispasr' if stem == 'crisp' else 'transcribe-cli'
-    binaries = [p for p in root.rglob(candidate) if p.is_file() and os.access(p, os.X_OK)]
-    assert len(binaries) == 1, f'Expected one executable {candidate}, got {binaries}'
+    candidate = 'crispasr' if stem == 'crisp' else 'libtranscribe.so'
+    binaries = [p for p in root.rglob(candidate) if p.is_file()]
+    assert len(binaries) == 1, f'Expected one {candidate}, got {binaries}'
     binary = binaries[0]
+    if stem == 'crisp':
+        assert os.access(binary, os.X_OK), f'Not executable: {binary}'
     libdirs = sorted({str(p.parent) for p in root.rglob('*.so*') if p.is_file()})
     assert libdirs, f'No shared libraries in {stem} release'
     return binary, libdirs
@@ -356,13 +362,37 @@ def crisp_run(binary, libdirs, model_path, cases, arm, label):
                 context=dict(left=56, right=expected_r, offline=True, source='native runtime mask log'))
 
 
-def transcribe_run(binary, libdirs, model_path, cases, label):
+def transcribe_worker():
+    """Use the pinned Python API with the pinned native library in one GPU PID."""
+    assert len(sys.argv) == 4
+    import transcribe_cpp
+
+    assert transcribe_cpp.__version__ == transcribe_cpp.native_version() == '0.4.1'
+    assert transcribe_cpp.library_path() == os.environ['TRANSCRIBE_LIBRARY']
+    with transcribe_cpp.Model(sys.argv[2], backend='cuda') as model:
+        assert model.device.kind == 'cuda', f'Unexpected device {model.device.kind}: {model.backend}'
+        with model.session(n_threads=4) as session:
+            for index, file in enumerate(Path(sys.argv[3]).read_text().splitlines()):
+                with wave.open(file, 'rb') as wav:
+                    assert (wav.getnchannels(), wav.getsampwidth(), wav.getframerate()) == (1, 2, 16000)
+                    pcm = np.frombuffer(wav.readframes(wav.getnframes()), dtype='<i2').astype(np.float32) / 32768.0
+                result = session.run(pcm, language='en-US', timestamps='none')
+                if index == 0:
+                    print(json.dumps(dict(type='batch_header', load_ms=result.timings.load_ms)), flush=True)
+                print(json.dumps(dict(file=file, text=result.text,
+                                      mel_ms=result.timings.mel_ms,
+                                      encode_ms=result.timings.encode_ms,
+                                      decode_ms=result.timings.decode_ms)), flush=True)
+
+
+def transcribe_run(binary, libdirs, model_path, cases, label, python_wheel):
     batch_file = SCRATCH / (label + '.batch.txt')
     batch_file.write_text(''.join(case['file'] + '\n' for case in cases))
     env = clean_env(libdirs)
-    command = [str(binary), '-m', str(model_path), '--backend', 'cuda',
-               '--language', 'en-US', '--threads', '4', '--timestamps', 'none',
-               '--batch', str(batch_file), '--batch-jsonl', '--batch-size', '1']
+    env['TRANSCRIBE_LIBRARY'] = str(binary)
+    env['PYTHONPATH'] = str(python_wheel)
+    command = [sys.executable, str(Path(__file__).resolve()), '--transcribe-worker',
+               str(model_path), str(batch_file)]
     stdout, stderr, elapsed, gpu = run_process(command, env, label)
     rows = [json.loads(line) for line in stdout.splitlines() if line.strip()]
     assert len(rows) == len(cases) + 1 and rows[0].get('type') == 'batch_header'
@@ -380,7 +410,7 @@ def transcribe_run(binary, libdirs, model_path, cases, label):
     return dict(texts=texts, stages=stages, load_ms=rows[0]['load_ms'],
                 wall_s=elapsed, gpu=gpu,
                 context=dict(left=56, right=13, offline=True,
-                             source='pinned v0.4.1 model default; batch-size 1 offline path'))
+                             source='pinned v0.4.1 model default; single-utterance Python API offline path'))
 
 
 def score(cases, texts):
@@ -410,6 +440,8 @@ def main():
         progress('gpu.preflight', gpu=receipt['gpu'])
         crisp_bin, crisp_libdirs = unpack_release(CRISP, 'crisp')
         tc_bin, tc_libdirs = unpack_release(TRANSCRIBE, 'transcribe')
+        tc_wheel = download(TRANSCRIBE['python_wheel_url'], SCRATCH / 'transcribe_cpp-0.4.1-py3-none-any.whl',
+                            TRANSCRIBE['python_wheel_sha256'], TRANSCRIBE['python_wheel_bytes'])
         crisp_model = model(CRISP, 'crisp')
         tc_model = model(TRANSCRIBE, 'transcribe')
         receipt['transcribe_gguf_context'] = gguf_context(tc_model)
@@ -424,7 +456,7 @@ def main():
             if arm.startswith('crisp'):
                 result = crisp_run(binary, libdirs, model_path, cases, arm, arm + '-quality')
             else:
-                result = transcribe_run(binary, libdirs, model_path, cases, arm + '-quality')
+                result = transcribe_run(binary, libdirs, model_path, cases, arm + '-quality', tc_wheel)
             result['quality'] = score(cases, result['texts'])
             receipt['arms'][arm] = dict(quality_run=result)
             (OUT / 'receipt.json').write_text(json.dumps(receipt, indent=2) + '\n')
@@ -444,7 +476,7 @@ def main():
             if arm.startswith('crisp'):
                 result = crisp_run(binary, libdirs, model_path, perf_cases, arm, label)
             else:
-                result = transcribe_run(binary, libdirs, model_path, perf_cases, label)
+                result = transcribe_run(binary, libdirs, model_path, perf_cases, label, tc_wheel)
             assert normalized_words(result['texts'][1]) == normalized_words(receipt['arms'][arm]['quality_run']['texts'][-1])
             measured = {name: values[1] for name, values in result['stages'].items()}
             receipt['arms'][arm].setdefault('measured_repeats', []).append(dict(
@@ -477,4 +509,7 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    if len(sys.argv) > 1 and sys.argv[1] == '--transcribe-worker':
+        transcribe_worker()
+    else:
+        main()

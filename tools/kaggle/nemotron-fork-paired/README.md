@@ -1,8 +1,15 @@
 # Private Nemotron F16 fork comparison
 
 Prepared only. Do not submit until the maintainer coordinates the T4 slot and
-reviews the pins. This kernel uses published CUDA binaries and performs no build.
-It writes a private `receipt.json` plus subprocess logs under `/kaggle/working`.
+reviews the pins. This v2 kernel uses the published CUDA native library and its
+matching pure Python API wheel, with no build. The v0.4.1 native tarball contains
+shared libraries, contract metadata, and licenses; it does not contain
+`transcribe-cli`. The Python API invokes the same offline `transcribe_run` C path
+as the CLI with batch size 1 and exposes the same per-utterance mel, encode, and
+decode timers. It writes a private `receipt.json` plus subprocess logs under
+`/kaggle/working/nemotron-fork-paired-v2`; the failed v1 run remains diagnostic
+evidence. The metadata id matches the title-derived Kaggle slug used by v1, so
+the successor is a new version of that existing private kernel.
 
 Three offline arms use exactly the same 16 kHz PCM16 WAV files: CrispASR v0.8.47
 production default R3, CrispASR v0.8.47 with `CRISPASR_NEMOTRON_CONTEXT_PRESET=3`
@@ -38,7 +45,7 @@ encoder/decode sub-stages by name alone.
 The worker requires Crisp's per-file offline attention-mask log to show L56/R3
 or L56/R13 as appropriate. It reads transcribe.cpp's pinned GGUF header and
 requires `chunked_limited` with L56/R13; the pinned v0.4.1 offline source uses
-those fields as its mask and the batch CLI omits streaming options. A missing or
+those fields as its mask and the Python API omits streaming options. A missing or
 different field fails before inference.
 
 The script fails closed on a non-T4 allocation or unavailable pinned asset.
