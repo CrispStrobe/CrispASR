@@ -1,0 +1,280 @@
+{
+  "schema": 1,
+  "complete": true,
+  "acceptance": true,
+  "source": "bd1e299e18c43779a19c3c79c922e2b06f8b1592",
+  "models": [
+    {
+      "repo": "ggerganov/whisper.cpp",
+      "revision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+      "file": "ggml-tiny.bin",
+      "sha256": "be07e048e1e599ad46341c8d2a135645097a538221678b7acdd1b1919c6e1b21"
+    },
+    {
+      "repo": "cstr/silero-lid-lang95-GGUF",
+      "revision": "78fb93154156272b2448183dfbf62b648ece4e52",
+      "file": "silero-lid-lang95-f32.gguf",
+      "sha256": "ed161165bb6fabae895f8837761b57bde50ede273ec83f6ad37ba982ce3e54da"
+    }
+  ],
+  "resource_checks": [
+    {
+      "phase": "configure",
+      "available_bytes": 15776727040,
+      "load": [
+        1.0126953125,
+        0.544921875,
+        0.220703125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 115065987072
+    },
+    {
+      "phase": "build-current-cli",
+      "available_bytes": 15730520064,
+      "load": [
+        1.01123046875,
+        0.552734375,
+        0.22509765625
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 115054379008
+    },
+    {
+      "phase": "checkpoint",
+      "available_bytes": 15457546240,
+      "load": [
+        2.0390625,
+        1.7763671875,
+        0.96484375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114907779072
+    },
+    {
+      "phase": "download-ggml-tiny.bin",
+      "available_bytes": 15462092800,
+      "load": [
+        2.0390625,
+        1.7763671875,
+        0.96484375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114893639680
+    },
+    {
+      "phase": "download-silero-lid-lang95-f32.gguf",
+      "available_bytes": 15480352768,
+      "load": [
+        2.0390625,
+        1.7763671875,
+        0.96484375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114815946752
+    },
+    {
+      "phase": "default-cached-bypasses-asr",
+      "available_bytes": 15480836096,
+      "load": [
+        2.0390625,
+        1.7763671875,
+        0.96484375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114799042560
+    },
+    {
+      "phase": "auto-model-bypasses-asr",
+      "available_bytes": 15536373760,
+      "load": [
+        2.0390625,
+        1.7763671875,
+        0.96484375
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114799030272
+    },
+    {
+      "phase": "explicit-whisper-bypasses-asr",
+      "available_bytes": 15574745088,
+      "load": [
+        2.03564453125,
+        1.7802734375,
+        0.970703125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114799026176
+    },
+    {
+      "phase": "explicit-silero-bypasses-asr",
+      "available_bytes": 15668051968,
+      "load": [
+        2.03564453125,
+        1.7802734375,
+        0.970703125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114799022080
+    },
+    {
+      "phase": "unsupported-self",
+      "available_bytes": 15665864704,
+      "load": [
+        2.03564453125,
+        1.7802734375,
+        0.970703125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114799013888
+    },
+    {
+      "phase": "unsupported-probe",
+      "available_bytes": 15665606656,
+      "load": [
+        2.03564453125,
+        1.7802734375,
+        0.970703125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114799009792
+    },
+    {
+      "phase": "unsupported-off",
+      "available_bytes": 15665606656,
+      "load": [
+        2.03564453125,
+        1.7802734375,
+        0.970703125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114799005696
+    },
+    {
+      "phase": "unsupported-none",
+      "available_bytes": 15668367360,
+      "load": [
+        2.03564453125,
+        1.7802734375,
+        0.970703125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114799001600
+    },
+    {
+      "phase": "missing-audio",
+      "available_bytes": 15668367360,
+      "load": [
+        2.03564453125,
+        1.7802734375,
+        0.970703125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114798997504
+    },
+    {
+      "phase": "unreadable-audio",
+      "available_bytes": 15668367360,
+      "load": [
+        2.03564453125,
+        1.7802734375,
+        0.970703125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114798993408
+    },
+    {
+      "phase": "ordinary-auto-transcription",
+      "available_bytes": 15668367360,
+      "load": [
+        2.03564453125,
+        1.7802734375,
+        0.970703125
+      ],
+      "cpus": 4,
+      "scratch_free_bytes": 114798989312
+    }
+  ],
+  "phases": {
+    "configure": {
+      "returncode": 0
+    },
+    "build-current-cli": {
+      "returncode": 0
+    },
+    "default-cached-bypasses-asr": {
+      "returncode": 0
+    },
+    "auto-model-bypasses-asr": {
+      "returncode": 0
+    },
+    "explicit-whisper-bypasses-asr": {
+      "returncode": 0
+    },
+    "explicit-silero-bypasses-asr": {
+      "returncode": 0
+    },
+    "unsupported-self": {
+      "returncode": 2
+    },
+    "unsupported-probe": {
+      "returncode": 2
+    },
+    "unsupported-off": {
+      "returncode": 2
+    },
+    "unsupported-none": {
+      "returncode": 2
+    },
+    "missing-audio": {
+      "returncode": 2
+    },
+    "unreadable-audio": {
+      "returncode": 20
+    },
+    "ordinary-auto-transcription": {
+      "returncode": 0
+    }
+  },
+  "cli_sha256": "076ef6b7212163d29acadb1e0f4e8d1c6689ac74ce0560de5ad7a41bd4faa455",
+  "sample_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "checkpoint_sha256": "529357223fa8218a2b4980b3b145cc792988af005a757d7e854435edc42d36ae",
+  "results": {
+    "default-cached-bypasses-asr": [
+      {
+        "language": "en",
+        "confidence": 0.976644,
+        "source": "whisper"
+      }
+    ],
+    "auto-model-bypasses-asr": [
+      {
+        "language": "en",
+        "confidence": 0.976644,
+        "source": "whisper"
+      }
+    ],
+    "explicit-whisper-bypasses-asr": [
+      {
+        "language": "en",
+        "confidence": 0.976644,
+        "source": "whisper"
+      }
+    ],
+    "explicit-silero-bypasses-asr": [
+      {
+        "language": "en",
+        "confidence": 0.998506,
+        "source": "silero"
+      },
+      {
+        "language": "en",
+        "confidence": 0.998506,
+        "source": "silero"
+      }
+    ]
+  },
+  "workflow_run": 40807940665,
+  "artifact_id": 12869698946,
+  "readback_verified": true
+}

@@ -58,6 +58,7 @@ def main():
     parser.add_argument('--device', choices=['cpu','cuda'], default='cpu')
     parser.add_argument('--inputs', type=Path)
     parser.add_argument('--build-dir', type=Path)
+    parser.add_argument('--bert-profile', choices=['q4_k', 'f16'], default='q4_k')
     args = parser.parse_args()
     kaggle = Path('/kaggle/working').is_dir() and Path('/kaggle/input').is_dir()
     if os.environ.get('GITHUB_ACTIONS') != 'true' and not (kaggle and args.device == 'cuda'):
@@ -75,7 +76,7 @@ def main():
     receipt = dict(schema=1, complete=False, acceptance=False, scope='Current-source library and actual CLI; device='+args.device,
         source=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip(),
         ggml=subprocess.check_output(['git', '-C', ROOT/'ggml', 'rev-parse', 'HEAD'], text=True).strip(),
-        resource_checks=[], phases={}, cases=[], limitations=[
+        bert_profile=args.bert_profile, resource_checks=[], phases={}, cases=[], limitations=[
             'Full-source CPU build on Actions; CUDA profile may reuse pinned matching ggml DSOs',
             'Model-generated references; preset identity unknown; no voice rights clearance',
             'No model publication or registry default promotion',
@@ -140,8 +141,13 @@ def main():
         for name in ['reference-ATTRIBUTION.txt', 'reference-OpenVoice-LICENSE.txt']:
             shutil.copy2(data/name, out/name)
         melo = data/'opaque-engine.gguf'; bert = data/'bert.gguf'
+        bert_name = 'bert-base-uncased-q4k.gguf' if args.bert_profile == 'q4_k' else 'bert-base-uncased.gguf'
+        bert_digest = (original['melo']['bert_sha256'] if args.bert_profile == 'q4_k' else
+                       'f7437929246c43d7300cbf6ff39b4715669a6053661117df99a456bdc5e8ecba')
+        receipt['bert_input'] = dict(file=bert_name, sha256=bert_digest, revision=original['melo']['revision'])
+        save()
         for path, name, digest in [(melo, 'melotts-en-v2-f16.gguf', original['melo']['model_sha256']),
-                                   (bert, 'bert-base-uncased-q4k.gguf', original['melo']['bert_sha256'])]:
+                                   (bert, bert_name, bert_digest)]:
             with urllib.request.urlopen('https://huggingface.co/cstr/melotts-en-v2-GGUF/resolve/' +
                 original['melo']['revision'] + '/' + name, timeout=120) as response, path.open('wb') as dest:
                 shutil.copyfileobj(response, dest)

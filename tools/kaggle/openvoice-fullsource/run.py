@@ -171,7 +171,7 @@ set_property(TARGET ggml-cuda PROPERTY INTERFACE_LINK_LIBRARIES "ggml-base;CUDA:
             shutil.copy2(mounted[0].parent/name,data/name)
     native_env.update(HEAVY_OUT=str(OUT),HEAVY_SCRATCH=str(WORK/'validation'))
     helper.run([sys.executable,ROOT/'tools/ci-heavy/openvoice_interfaces.py','--device','cuda',
-                '--build-dir',BUILD,'--inputs',data,'--audio-public-key',RECIPIENT],
+                '--build-dir',BUILD,'--inputs',data,'--bert-profile','f16','--audio-public-key',RECIPIENT],
                'full-source-cuda-interfaces',env=native_env,timeout=7200)
     accepted=json.loads((OUT/'receipt.json').read_text())
     if not accepted.get('acceptance') or not accepted.get('cli_cuda_observed'):
