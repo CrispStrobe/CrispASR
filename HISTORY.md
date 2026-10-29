@@ -1,3 +1,16 @@
+## 2026-10-29 — Hosted issue and performance evidence
+
+The #560 full-recording CPU run **40858523187** passed the previously failing
+Silero-to-Whisper fallback and bounded long-clip controls. The #559 independent
+CPU run **40860832787** passed prompt-routing, chunking and short-clip controls;
+its candidate also passed CI, lint and secret scanning. Neither integration is
+complete. The [Nemotron fork T4 receipt](docs/nemotron-fork-t4-benchmark-2026-10-29.json)
+records a matched-context bounded comparison, and the [Whisper VMM receipt](docs/whisper-vmm-t4-diagnostic-2026-10-29.json)
+records that VMM alone did not explain the observed load gap. The upstream MIT
+short-DTW-window candidate passed extracted-function control **40864945021**;
+full inference and integration remain open. See the [current handoff](docs/maintenance-handoff.md)
+for live jobs, scope and remaining gates.
+
 ## 2026-10-29 — OpenVoice converter published with notices
 
 The accepted generic F32-sensitive converter was published at immutable model

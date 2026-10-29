@@ -12,6 +12,21 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
+### Current handoff — 2026-10-29 12:20 UTC
+
+No work is claimed. The [continuation snapshot](docs/maintenance-handoff.md#continuation-snapshot--2026-10-29-1220-utc) supersedes older owner/status prose below and gives sources, run IDs, gates and ordered recovery steps. The user asked that the loop remain open until #559 and #560 are integrated, all four recent-model groups have the required Kaggle comparisons, and Whisper matches the comparison implementation on Kaggle. Keep #557 open for reply review.
+
+| Priority | Open work | Current evidence / next gate |
+|---|---|---|
+| 1 | Observe the two running Kaggle Whisper jobs | Collect the same-toolchain v3 and loader-cache A/B v1 terminal source, logs and receipts; verify GPU, output and placement controls. |
+| 2 | Finish v0.8.48 wheel publication | All wheel builds passed; producer **40856452802** has publisher jobs queued. Verify outputs and run the wheel audit after success. |
+| 3 | Integrate #559, then #560 | Both have hosted model evidence and separate current-main candidates; exact-tree CI/lint/secret and #560 model tests remain queued. Refresh main and discussions before integration. |
+| 4 | Match Whisper speed | VMM on/off did not explain the gap; weight-buffer selection is a measured candidate. Require fake-backend equivalence, exact placements and same-toolchain A/B before integrating the cache. |
+| 5 | Complete original and fork measurements | Nemotron original and fork, Granite, CSM and OpenVoice have bounded receipts; full original Melo and meaningful per-step controls remain. Melo preflight **40866641921** is queued. |
+| 6 | Qualify upstream safety candidates | Short DTW extracted-function before/after control passed; CI/lint and full inference remain. VAD offset and vocabulary-bound candidates need their hosted controls and isolated integration. |
+| Holds | #557, #558, #532, #483, #461, #456, MUSA | See the handoff for explicit approval, evidence, device and rights limits. Do not close #557 or publish private paths. |
+
+
 - OpenVoice stage diagnosis owner: current agent, starting from the accepted paired adapter `8a5bb390b`. The warm converter comparison shows a large CPU-flow versus CUDA-original gap but has no native phase breakdown. Prepare a hosted-only run on the same qualified inputs and application, retaining unchanged waveform gates and reporting stage timers without private audio or embeddings. Do not infer a cause or change neural math until measured.
 
 - Recent-model timing: [Nemotron T4 paired receipt](docs/nemotron-original-t4-benchmark-2026-10-29.json) records one public clip, three measured calls per engine, GPU execution and zero WER. Native F16 and original F32 differ in precision; process medians include model load and do not establish a steady-state ranking. A separate native frame-count diagnostic is prepared. Granite's first paired run failed before inference on a truncated hash; the corrected run produced native warmup timings but failed before original inference because its snapshot omitted the chat template. The repaired third run completed with zero WER and GPU execution; see [the T4 receipt](docs/granite5-original-t4-benchmark-2026-10-29.json) for precision and timing-boundary limits. The [CSM T4 receipt](docs/csm-original-t4-benchmark-2026-10-29.json) records the private original-without-watermark comparison with different precision and load-inclusive timing. The [OpenVoice T4 receipt](docs/openvoice-original-t4-benchmark-2026-10-29.json) records two accepted warm conversions: native CPU flows/CUDA vocoder are much slower than the original CUDA converter. Full original Melo synthesis and comparable step/fork measurements remain outstanding.

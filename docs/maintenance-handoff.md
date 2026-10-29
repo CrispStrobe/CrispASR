@@ -13,6 +13,136 @@ PR, job-queue and ownership claims are not current instructions. Do not resume
 them automatically. Public path aliases describe roles; actual bindings stay
 in ignored local notes.
 
+## Continuation snapshot — 2026-10-29 12:20 UTC
+
+This snapshot supersedes older status and owner prose below. No task is claimed.
+The requested loop is **open**: #559 and #560 are not integrated, the four
+recent-model comparisons still need the full Melo and per-step work described
+below, and matching Whisper performance on Kaggle has not been established.
+Do not close #557: the user explicitly chose to keep it open and review a draft
+reply. Do not post issue comments without an explicit instruction. Read the full
+current issue/PR description, every comment and linked follow-up before acting.
+Use hosted workers for builds and inference; check load and available memory
+before each such operation. Check actual Kaggle GPU usage before every
+submission and retain terminal outputs and source readback before any retry.
+Kaggle has two GPU slots; do not submit a third job or bypass its limits.
+
+1. **Observe the two active Kaggle GPU jobs first.** `crispasr-whisper-toolchain-paired`
+   version 3 is running, with uploaded script SHA-256
+   `ea8666fc9ee9ebd64eeeaf0fb49b1cf76aeaef648bc737a60608b9bf1dbe8208`.
+   It compares CrispASR, the packaged-fork source and upstream with the same
+   toolchain, CUDA 12.8, SM75 and VMM disabled; all three must pass output,
+   GPU placement and decoder-count controls. Version 1 failed on a missing
+   CUDA driver CMake target; version 2 timed out compiling at 96%, before
+   inference. Version 3 allows 5,400 seconds per build. The independent
+   `crispasr-whisper-loader-device-ab` version 1 is running, script SHA-256
+   `71be7e494f39c08c443bc6688f3bd2bff337afe444201915a1f9b5cd3d648de2`.
+   It compares baseline `9df3071a9` with cache candidate `0a3a97c1e`, requiring
+   identical ordered per-tensor CPU and CUDA placements, GPU/quality and
+   transcript gates before measuring. Collect full terminal source, logs and
+   receipts, verify all controls and retain failed versions. Do not infer a
+   match or cause from a running job, a successful build, or a single timer.
+
+2. **Finish v0.8.48 publication before merging #559.** Tag/source remains
+   `cc114d2b4a5a9413738f390093e9131576743cb6`: never retag or replace immutable
+   PyPI bytes. Native producer **40833098926**, Rust/Dart **40833098923**, and
+   native audit **40856997446** passed. Wheel producer **40856452802** has
+   passed setup and all 11 build jobs; `publish-pypi` and `publish-gpu-index`
+   are queued. After the producer succeeds, verify all 11 distributions, five
+   anonymous PyPI readbacks, the GPU indexes and Pages; then dispatch
+   `verify-release-publication.yml` on main with `tag=v0.8.48`,
+   `source=cc114d2b4a5a9413738f390093e9131576743cb6`, `runner=ubuntu-latest`,
+   `release_run=40833098926`, `wheel_run=40856452802`,
+   `native_audit_run=40856997446`, `repair_notices=false`. Require the wheel
+   audit to pass. Preserve producer artifacts; do not start a duplicate wheel
+   publisher while the original is queued.
+
+3. **#559 integration.** PR head is `6b132720090cbb532f79f544c130381ddf1cf6c9`.
+   Candidate `5eef35019` passed CI **40848995923**, lint **40848999141** and
+   secret scan **40848764566**; hosted routing/short-clip run **40860832787**
+   passed with the bounded [receipt](qwen3-pr559-cpu-diagnostic-2026-10-29.json).
+   Its CLI includes a documented unrelated #560 overlay. Integration candidate
+   `17edd73db` on `validate/issue559-integration-20261029` starts at main
+   `e593f6921`; all nine changed file blobs match the CI-accepted candidate.
+   CI **40867676971**, lint **40867680937**, and secret scan **40867665636**
+   are queued. Refresh the entire PR discussion and head, check these results,
+   safely reconcile any newer main commits and revalidate the final integration
+   tree. Merge only after publication and all applicable exact-tree gates pass.
+   Preserve contributor attribution. Do not close any issue early.
+
+4. **#560 integration.** Full-recording source `de2e532dd` passed hosted
+   long-clip run **40858523187**, including the previously failing Silero-to-
+   Whisper fallback; see the [receipt](issue-560-full-recording-cpu-accepted-2026-10-29.json).
+   Candidate `86474234f` on `validate/issue560-integration-20261029` starts at
+   main `d6601bf8f`, with matching runtime/test blobs. Its CI **40867065497**,
+   lint **40867068371**, secret scan **40867056051** and model run
+   **40867071254** are queued/pending. Original-source CI **40858515815** is
+   running and lint **40858519622** queued. After #559 and the publication
+   gate, reconcile current main and #559, check conflicts and all final-tree
+   controls, then integrate without closing the loop prematurely. The default
+   15-second behavior remains unchanged; full-recording behavior is opt-in.
+
+5. **Whisper performance candidate.** The [VMM T4 receipt](whisper-vmm-t4-diagnostic-2026-10-29.json)
+   shows VMM-on/off load medians 559.6/554.3 ms and decode 2.51/2.52 ms per
+   call, with identical output and GPU gates; weight selection accounted for
+   about 232–233 ms in the instrumented runs. CUDA's device-type query calls
+   `cudaGetDeviceProperties`; that is a plausible mechanism, not yet proof.
+   Candidate `0a3a97c1e` caches device classification for one loader invocation,
+   retaining ordered per-weight support checks; baseline `9df3071a9` and
+   candidate share an opt-in exact placement tracer. The GPU A/B above measures
+   them. Model-free actual-function equivalence **40871174976** is queued from
+   `validate/whisper-buft-equivalence-20261029`; candidate CI **40870464042**
+   and lint **40870467717** are queued. Require CPU/CUDA per-tensor placement,
+   output identity, GPU use, multi-device/CPU-extra controls and meaningful
+   profiler-off speed improvement before integration. Rebase onto clean current
+   main, rerun exact-tree checks, and compare to upstream on Kaggle; do not
+   claim the user's performance goal met until that comparison supports it.
+
+6. **Finish recent-model measurements.** The four original-model group receipts
+   are linked from [PERFORMANCE.md](../PERFORMANCE.md), with precision and timing
+   limits. The [Nemotron fork receipt](nemotron-fork-t4-benchmark-2026-10-29.json)
+   additionally records accepted T4 R13 quality controls and process medians;
+   model bytes and stage boundaries differ. Run the prepared Granite original
+   forward-step diagnostic on a free slot and retain off/on profiling controls.
+   Run prepared CSM original/native step adapters only after their hosted build
+   and applicable code/output-identity and licensing gates pass; do not divide
+   accepted frames by original attempted frames or claim mismatched stages are
+   equivalent. Melo preflight **40859441388** failed on an eagerly imported
+   unused Japanese cleaner; wrapper repair `a06e8e650` blocks that path and
+   hosted rerun **40866641921** is queued. If it passes, run the prepared full
+   original Melo comparison with checkpoint/weight lineage, GPU and speech
+   quality gates. OpenVoice converter stages remain a separate diagnostic; the
+   existing native CPU-flow versus original CUDA timing is not causal proof.
+   For every run, preserve upstream model/software terms and do not publish
+   gated weights, private recordings, voice embeddings or local paths.
+
+7. **Other safety and external holds.** Upstream MIT short-DTW-window fix
+   `16375e71f` passed extracted-function before/after run **40864945021**
+   (artifact **12895747518**): 1–4-frame baseline aborts became successful,
+   and the normal window stayed unchanged. This is not full DTW inference.
+   CI **40864948252** and lint **40864951364** are queued. VAD offset fix
+   `291b69004` has CI **40865260917** and lint **40865264366** queued.
+   Vocabulary-bound candidate `c2e86fbce` requires valid legacy/serialized/
+   Tiron and malformed-model controls: CI **40865446248**, lint **40865449693**,
+   tiny-model run **40865458610** and actual-loader smoke **40866258121** are
+   queued. Whisper-ja's original model card has no stated license; do not use
+   a private conversion as permission. Obtain rights-cleared real-model
+   evidence before integration. The safety validation branches include other
+   experimental commits: isolate each change onto the eventual integration
+   tree and retest it. #558 still needs reporter/device and NeMo evidence;
+   #532 needs the failing clip and assertion; #483 needs the specified old
+   NVIDIA GPUs; #461 needs B390; #456 remains held on its model/lexicon terms.
+   The prior MUSA hold needs an authorized host and separate written terms.
+
+Kaggle CPU workers have no internet, and existing approved inputs do not
+contain the exact source, pinned models and dependencies for full #559/#560
+acceptance. A reduced model-free check is not a substitute. The two current
+integration trees were built from earlier main commits; main may advance through
+publication or docs, so compare blobs and revalidate rather than force-push.
+Private worktree bindings, artifact locations and credentials are in ignored
+local notes only. The public run IDs and branch names above are sufficient for
+read-only GitHub recovery.
+
 ## Current state and first actions
 
 ### Active continuation — 2026-10-29
