@@ -714,8 +714,8 @@ static int step(hikari_context* c, int64_t t) {
         const int e_dirty = std::max(0, (m0 - 1) / 2); // ceil((m0-2)/2)
         e0 = std::min(c->enc_valid, e_dirty);
     } else {
-        bool refresh = (c->win_start < 0) || slid || (c->enc_valid == 0) || (c->mel_used.empty()) ||
-                       ((c->j % stride) == 0);
+        bool refresh =
+            (c->win_start < 0) || slid || (c->enc_valid == 0) || (c->mel_used.empty()) || ((c->j % stride) == 0);
         const int n_commit = std::max(0, c->enc_valid - margin);
         if (!refresh && n_commit > 0) {
             const int t_cmp = std::max(0, 2 * n_commit - 4);
@@ -724,7 +724,8 @@ static int step(hikari_context* c, int64_t t) {
             for (int m = 0; m < upto; m++) {
                 for (int b = 0; b < 80; b++) {
                     const float d = std::abs(c->norm_mel[(size_t)m * 80 + b] - c->mel_used[(size_t)m * 80 + b]);
-                    if (d > max_diff) max_diff = d;
+                    if (d > max_diff)
+                        max_diff = d;
                 }
             }
             if (max_diff > stale_tol) {
@@ -744,14 +745,13 @@ static int step(hikari_context* c, int64_t t) {
                 c->mel_used.resize(c->norm_mel.size());
             }
             if ((size_t)t0_mel * 80 < c->norm_mel.size()) {
-                std::memcpy(c->mel_used.data() + (size_t)t0_mel * 80,
-                            c->norm_mel.data() + (size_t)t0_mel * 80,
+                std::memcpy(c->mel_used.data() + (size_t)t0_mel * 80, c->norm_mel.data() + (size_t)t0_mel * 80,
                             (c->norm_mel.size() - (size_t)t0_mel * 80) * sizeof(float));
             }
         }
         if (getenv("HIKARI_DEBUG_STRIDE")) {
-            fprintf(stderr, "stride_step %d: refresh=%d slid=%d e0=%d n_enc=%d enc_valid=%d\n",
-                    c->j, (int)refresh, (int)slid, e0, n_enc, c->enc_valid);
+            fprintf(stderr, "stride_step %d: refresh=%d slid=%d e0=%d n_enc=%d enc_valid=%d\n", c->j, (int)refresh,
+                    (int)slid, e0, n_enc, c->enc_valid);
         }
     }
     c->bench.mel += now_ms() - t0;
