@@ -1,0 +1,76 @@
+{
+  "schema": 1,
+  "complete": true,
+  "scope": "One public text prompt on a T4; one warmup and three alternating measured independent processes per engine. Native Q4_K and original F32 differ in precision, sampler implementations, and wrapper behavior. Original SilentCipher watermark is explicitly disabled. Process times include loading, Python/CLI setup and GPU monitoring.",
+  "hardware": "Tesla T4, compute capability 7.5",
+  "pins": {
+    "runtime": [
+      "https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.47/crispasr-linux-x86_64-cuda.tar.gz",
+      "90e23cffb44f4a80d929bf88cf3abb2d526ec4c0b95d88a82d1a8bf33135722d"
+    ],
+    "native": [
+      "cstr/csm-1b-GGUF",
+      "5abf936b9d17a839fca69e09baf31e0ea5068f97",
+      "csm-1b-q4_k.gguf",
+      "1123f9e8ff2d9212700d1fface749b8ec4f9765569bb996667a15a9a9832ee13"
+    ],
+    "asr": [
+      "cstr/parakeet-tdt-0.6b-v3-GGUF",
+      "815cc1bcb5cfb92f9cd0bbd22c7bc2f6e2d4ec13",
+      "parakeet-tdt-0.6b-v3-q4_k.gguf",
+      "1a60f6e53e5781240dde6e69a47a47a8a71995a3a106517b009225afcc514457"
+    ],
+    "sesame_source": "836f886515f0dec02c22ed2316cc78904bdc0f36",
+    "silentcipher_source": "d46d7d0893a583d8968ab3a6626e2289faec9152",
+    "csm_original": "c92a71e1c419772e25be7dc14d952c2521a740ab",
+    "llama_tokenizer": "4e20de362430cd3b72f300e6b0f18e50e7166e08",
+    "mimi": "2bfc9ae6e89079a5cc7ed2a68436010d91a3d289",
+    "silentcipher_weights_used": false
+  },
+  "settings": {
+    "text": "The quick brown fox jumps over the lazy dog",
+    "speaker": 0,
+    "context": [],
+    "seed": 1234,
+    "temperature": 0.9,
+    "topk": 50,
+    "original_max_audio_ms": 10000
+  },
+  "quality": {
+    "all_eight_gpu_processes_observed": true,
+    "all_eight_asr_word_error_rate": 0.0,
+    "quality_oracle": [
+      "cstr/parakeet-tdt-0.6b-v3-GGUF",
+      "815cc1bcb5cfb92f9cd0bbd22c7bc2f6e2d4ec13",
+      "parakeet-tdt-0.6b-v3-q4_k.gguf",
+      "1a60f6e53e5781240dde6e69a47a47a8a71995a3a106517b009225afcc514457"
+    ],
+    "reference": "public prompt; generated audio remains private"
+  },
+  "median_process_seconds": {
+    "native": 8.692139701000087,
+    "original": 41.124389761999964
+  },
+  "original_generate_median_seconds": 9.457611462999921,
+  "original_generate_frame_calls": [
+    39
+  ],
+  "native_generated_audio_frames": [
+    35
+  ],
+  "native_mimi_decode_median_ms": 125.16,
+  "limitations": [
+    "Original generation includes stages outside individual decoder calls; frame counts are not matched between implementations and do not establish a per-step speedup.",
+    "Native Q4_K and original F32 have different numerical precision and RNG implementations.",
+    "Original wrapper watermark is disabled; no SilentCipher model weights were used.",
+    "One prompt and one GPU do not establish general TTS quality or performance.",
+    "Gated CSM and Llama access applies; generated voice and reference material are not published."
+  ],
+  "license_sources": [
+    "https://github.com/SesameAILabs/csm/blob/836f886515f0dec02c22ed2316cc78904bdc0f36/LICENSE",
+    "https://huggingface.co/sesame/csm-1b",
+    "https://huggingface.co/meta-llama/Llama-3.2-1B",
+    "https://huggingface.co/kyutai/moshiko-pytorch-bf16"
+  ],
+  "benchmark_script_sha256": "d44358ee40f60fccadc889bef2b0ebaa9b8d37df512e07ac8e39094b3c123d23"
+}

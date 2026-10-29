@@ -51,10 +51,10 @@ and check actual GPU session availability before every Kaggle submission.
   version 1 failed on a truncated hash; version 2 ran native warmups but its
   original lacked the chat template. Version 3 completed with GPU and zero-WER
   controls; see the [T4 receipt](granite5-original-t4-benchmark-2026-10-29.json)
-  for the native 26-step decoder and non-equivalent original timing boundaries. Private CSM original-without-watermark version 1 passed native warmup but
-  failed in the original warmup because `bitsandbytes` was absent; its evidence
-  is retained and a dependency fix is in preparation. Gated access and no
-  redistribution are required. Melo/OpenVoice paired
+  for the native 26-step decoder and non-equivalent original timing boundaries. Private CSM original-without-watermark version 1 failed on missing
+  `bitsandbytes`; version 2 passed GPU and zero-WER controls. The [aggregate
+  receipt](csm-original-t4-benchmark-2026-10-29.json) discloses precision,
+  watermark and timing boundaries. Gated access and no redistribution apply. Melo/OpenVoice paired
   timing is being prepared and full original Melo synthesis remains unproven.
 - **Whisper:** the short-audio safety fix `4023a6080` has queued CI
   **40847257799**, lint **40847261708** and secret scan **40847251740**.
