@@ -2039,6 +2039,7 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
     wctx.t_start_us = t_start_us;
     const bool profile_load = getenv("CRISPASR_WHISPER_TIMING_PROFILE") != nullptr;
     int64_t profile_alloc_us = 0, profile_read_us = 0, profile_upload_us = 0;
+    int64_t profile_vocab_us = 0, profile_select_us = 0;
 
     auto& model = wctx.model;
     auto& vocab = wctx.vocab;
@@ -2138,6 +2139,7 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
     }
 
     // load vocab
+    const int64_t profile_vocab_start = profile_load ? ggml_time_us() : 0;
     {
         int32_t n_vocab = 0;
         read_safe(loader, n_vocab);
@@ -2309,6 +2311,9 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
         CRISPASR_LOG_INFO("%s: n_langs       = %d\n", __func__, vocab.num_languages());
     }
 
+    if (profile_load)
+        profile_vocab_us = ggml_time_us() - profile_vocab_start;
+
     const ggml_type wtype = wctx.wtype;
     const ggml_type vtype = wctx.wtype == GGML_TYPE_F32 ? GGML_TYPE_F32 : GGML_TYPE_F16; // conv type
 
@@ -2356,7 +2361,10 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
 
     auto create_tensor = [&](asr_tensor type, asr_system system, ggml_tensor* meta, int layer = 0) -> ggml_tensor* {
         ggml_op op = ASR_TENSOR_INFO.at(type);
+        const int64_t profile_select_start = profile_load ? ggml_time_us() : 0;
         ggml_backend_buffer_type_t buft = select_weight_buft(hparams, meta, op, buft_list);
+        if (profile_load)
+            profile_select_us += ggml_time_us() - profile_select_start;
         if (!buft) {
             throw std::runtime_error(
                 format("failed to find a compatible buffer type for tensor %s", ASR_TENSOR_NAMES.at(system).at(type)));
@@ -2676,6 +2684,9 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
         CRISPASR_LOG_INFO("whisper timing profile: load total_us=%lld alloc_us=%lld read_us=%lld upload_us=%lld\n",
                           (long long)wctx.t_load_us, (long long)profile_alloc_us, (long long)profile_read_us,
                           (long long)profile_upload_us);
+        CRISPASR_LOG_INFO("whisper timing profile: prealloc_us=%lld vocab_us=%lld select_us=%lld\n",
+                          (long long)(profile_alloc_start - t_start_us), (long long)profile_vocab_us,
+                          (long long)profile_select_us);
     }
 
     return true;
