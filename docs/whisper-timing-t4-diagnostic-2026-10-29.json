@@ -45,5 +45,10 @@
     "Profiled loader phases are partial and do not account for all load time.",
     "Decode compute includes scheduler synchronization and is host wall time.",
     "Matching one clip is not general speed or recognition acceptance."
-  ]
+  ],
+  "observed_build_differences": {
+    "source_built_crisp": "CUDA 12.8, architecture 750, VMM disabled because configure did not find libcuda; CUDA graphs enabled",
+    "packaged_fork": "CUDA architectures 750, 800, 860 and 890; runtime reports VMM available",
+    "interpretation": "Different builds and ggml/CUDA libraries prevent causal attribution. VMM is a hypothesis for controlled testing, not an established cause."
+  }
 }

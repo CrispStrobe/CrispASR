@@ -38,9 +38,12 @@ and check actual GPU session availability before every Kaggle submission.
   before deciding whether to merge.
 - **#560:** the standalone detect-and-exit repair is already on main. Opt-in
   full-recording detection candidate `f81fba67a` is on a validation branch;
-  CI **40850807041**, lint **40850810717** and hosted long-clip tests
-  **40850814403** are queued. Model-free caller controls pass, but real model
-  acceptance and main integration remain outstanding.
+  CI **40850807041** and lint **40850810717** are queued. Hosted long-clip
+  run **40850814403** failed: after Silero rejected a low-evidence Korean
+  window, fallback tried to load the explicit Silero GGUF as a Whisper model.
+  Whisper long-clip controls and Silero late-speech detection passed. Fix the
+  fallback and rerun the retained controls without lowering the Silero gate;
+  model acceptance and main integration remain outstanding.
 - **Recent models:** [the Nemotron paired receipt](nemotron-original-t4-benchmark-2026-10-29.json)
   records T4 results for native F16 and original F32, with zero WER and GPU
   execution; precision and operation boundaries differ, and no per-step count
