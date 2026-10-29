@@ -90,5 +90,21 @@
     "Reporter Windows/Vulkan recordings were not replayed.",
     "The full corrected hosted harness, CI and lint remain to pass.",
     "No backend-exclusion runtime control or public merge has been performed."
-  ]
+  ],
+  "strict_followup": {
+    "run": 40860832787,
+    "artifact": 12894486845,
+    "validation_source": "8a12a0ad731810d0e042f9b5b707fdf5d7e63473",
+    "pr_head": "6b132720090cbb532f79f544c130381ddf1cf6c9",
+    "passed": true,
+    "scope": "CPU synthetic English recognition plus actual C ABI and CLI prompt captures, four-chunk CLI routing, and actual CLI backend factory with stub constructors. Six PR blobs match; CLI has an unrelated issue 560 overlay. Not GPU or whole-PR acceptance.",
+    "factory": "Qwen aliases enabled; Mega-ASR and Raon aliases excluded",
+    "candidate_checks": {
+      "source": "5eef35019df470c1b7a098a3e9438deebd63bdb8",
+      "ci": 40848995923,
+      "lint": 40848999141,
+      "secret_scan": 40848764566,
+      "all_passed": true
+    }
+  }
 }

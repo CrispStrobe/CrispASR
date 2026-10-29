@@ -30,13 +30,16 @@ and check actual GPU session availability before every Kaggle submission.
   notice/producer checks. Automatic Python wheel producer **40856452802** is
   queued. Finish wheel publication, its audit and all wheel/index readbacks as
   task I specifies; do not retag v0.8.48.
-- **#559:** exact PR head `6b132720090cbb532f79f544c130381ddf1cf6c9` was
-  applied to a validation tree, candidate `5eef35019`. CI **40848995923** and
-  lint **40848999141** are queued. Hosted short-clip and actual C API prompt
-  routing run **40860832787** is queued on test tree `8a12a0ad7`, including exact C ABI, CLI, chunked routing and actual CLI factory exclusions. Earlier run **40855248796** passed; its retained C ABI and CLI traces were rechecked with the stricter parser, including four chunk prompts. Its receipt overstates unrelated coverage, so use only the bounded [Qwen evidence](qwen3-pr559-cpu-diagnostic-2026-10-29.json). Neither a
-  queued run nor the contributor's own probes establish independent acceptance.
-  Review the current discussion and complete CLI, C API and chunking controls
-  before deciding whether to merge.
+- **#559:** PR head `6b132720090cbb532f79f544c130381ddf1cf6c9` was
+  applied to candidate `5eef35019`. CI **40848995923**, lint **40848999141**
+  and secret scan **40848764566** passed on that source. Hosted exact-routing
+  run **40860832787** passed on test source `8a12a0ad7`; its [bounded receipt](qwen3-pr559-cpu-diagnostic-2026-10-29.json)
+  covers C API, CLI, four chunks, synthetic short clips and actual CLI factory
+  exclusions. Six PR blobs match; the CLI has an unrelated #560 overlay.
+  A fresh-main integration tree `17edd73db` on
+  `validate/issue559-integration-20261029` matches all relevant `5eef35019`
+  runtime and test blobs. Recheck the full current PR discussion, complete
+  exact-tree checks and the release publication gate before merge.
 - **#560:** the standalone detect-and-exit repair is already on main. Opt-in
   full-recording detection candidate `f81fba67a` is on a validation branch;
   Hosted long-clip run **40850814403** failed: after Silero rejected a low-evidence Korean
