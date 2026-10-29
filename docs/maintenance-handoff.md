@@ -44,8 +44,11 @@ and check actual GPU session availability before every Kaggle submission.
   Whisper long-clip controls and Silero late-speech detection passed. Fix the
   fallback without lowering the Silero gate. Repair `de2e532dd` passes
   model-free actual-caller controls; CI **40858515815**, lint **40858519622**
-  are queued; hosted long-clip rerun **40858523187** has started. Model acceptance and
-  main integration remain outstanding. Kaggle CPU workers lack internet, and
+  are queued. Hosted long-clip rerun **40858523187** passed on the exact repair
+  source; the [bounded receipt](issue-560-full-recording-cpu-accepted-2026-10-29.json)
+  records Whisper and Silero late speech, majority and short-tail checks, and
+  the Silero-to-Whisper fallback that failed previously. CI/lint and main
+  integration remain outstanding. Kaggle CPU workers lack internet, and
   the existing approved datasets do not contain the exact source, models and
   dependencies for the full #559/#560 tests. Keep the hosted Actions jobs;
   a reduced model-free check is not an acceptance substitute.
