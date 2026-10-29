@@ -140,7 +140,7 @@ def main():
             shutil.copy2(data/name, private/name)
         for name in ['reference-ATTRIBUTION.txt', 'reference-OpenVoice-LICENSE.txt']:
             shutil.copy2(data/name, out/name)
-        melo = data/'opaque-engine.gguf'; bert = data/'bert.gguf'
+        melo = data/'opaque-engine.gguf'; bert = data/('bert-base-uncased.gguf' if args.bert_profile == 'f16' else 'bert.gguf')
         bert_name = 'bert-base-uncased-q4k.gguf' if args.bert_profile == 'q4_k' else 'bert-base-uncased.gguf'
         bert_digest = (original['melo']['bert_sha256'] if args.bert_profile == 'q4_k' else
                        'f7437929246c43d7300cbf6ff39b4715669a6053661117df99a456bdc5e8ecba')
@@ -206,6 +206,8 @@ def main():
             save()
         env = dict(os.environ, CRISPASR_OV2_GPU='1' if args.device == 'cuda' else '0', CRISPASR_MELOTTS_BERT=str(bert),
                    OMP_NUM_THREADS='2', OPENBLAS_NUM_THREADS='1')
+        if args.bert_profile == 'f16':
+            env.pop('CRISPASR_MELOTTS_BERT', None)
         env.pop('CRISPASR_DIFF_USE_GPU', None); env.pop('LD_PRELOAD', None)
         if args.device == 'cuda':
             env['CRISPASR_DIFF_USE_GPU'] = '1'
@@ -249,9 +251,13 @@ def main():
         receipt['session_controls'] = session_result
         if args.device == 'cuda' and cuda_vocoder_segments((private/'rebuilt-session.log').read_text()) != 6:
             raise RuntimeError('Rebuilt Session converter CUDA work incomplete')
-        # Test the real command, with BERT specified independently from TCC.
-        common = [cli, '--backend', 'melotts', '-m', melo, '--codec-model', bert,
+        # The declared F16 profile also exercises the real adjacent-companion
+        # discovery used by CLI and C ABI, without a BERT environment override.
+        common = [cli, '--backend', 'melotts', '-m', melo,
                   '-t', '2', '--seed', '42', '--speaker-identity', 'unknown']
+        if args.bert_profile == 'q4_k':
+            common += ['--codec-model', bert]
+        receipt['cli_bert_autodiscovery'] = args.bert_profile == 'f16'
         common += ['--gpu-backend','cuda'] if args.device == 'cuda' else ['--no-gpu']
         for i, text in enumerate(TEXTS):
             run(common + ['--tts', text, '--tts-output', private/f'cli-baseline-{i}.wav'],
