@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Compare original encoder and flow on actual CUDA without rebuilding the application."""
+"""Isolate original BERT conditioning and a fixed precision control on CUDA without rebuilding the application."""
 
 import hashlib
 import importlib.util
@@ -13,8 +13,8 @@ import sys
 import tarfile
 import urllib.request
 
-APPLICATION_SOURCE = "01a2887632d343154f2ba447a9a2968c7accb567"
-CHECKPOINT_SHA = "9db22c7d50d70bee047746b3c33647d7df28cf066dee9c08164f0c0031dbba9b"
+APPLICATION_SOURCE = "9001ff91338e8a7417137ef4582f6805fcdd8e58"
+CHECKPOINT_SHA = "5573e9c05f11e0b339660cc82eedf1d4a0ec11475ca0b700d51671b13b13b502"
 CONDITIONING_SHA = "46badec89720409414dad5c61f3e5cc1c34928a3e0b8391a1cf4f92e4d90dec8"
 HELPER_SOURCE = "d84007612167105cf24c7af80014d1f0ea1bd8a3"
 HELPER_SHA = "b1fed1e4518ceeb517c749be67ce3eeee9d3243153b5f50043f6edf9c4584f20"
@@ -67,7 +67,7 @@ def main():
         source=source,
         application_source=APPLICATION_SOURCE,
         application_checkpoint_sha256=CHECKPOINT_SHA,
-        scope="Diagnostic only: original encoder and inverse flow, shared converted weights and native inputs",
+        scope="Diagnostic only: original BERT math and fixed Q4/F16 precision controls; no application acceptance",
         worker_sha256=sha(__file__),
         resource_checks=[],
         phases={},
@@ -143,6 +143,10 @@ def main():
             "cryptography",
             "huggingface_hub",
             "tokenizers",
+            "transformers==4.57.1",
+            "faster-whisper",
+            "soundfile",
+            "scipy",
         ],
         "dependencies",
     )
@@ -230,32 +234,151 @@ def main():
         if len(backends) != 3 or not all(name.startswith("CUDA") for name in backends):
             raise RuntimeError("Native captures did not use CUDA")
         receipt["native_activation_backends"] = backends
-        # Import failures/crashes remain isolated; finally seals every existing capture.
+        bert_f16 = data / "bert-f16.gguf"
+        helper.guard_resources("download-f16-control")
+        fetch(
+            "https://huggingface.co/cstr/melotts-en-v2-GGUF/resolve/"
+            + original["melo"]["revision"]
+            + "/bert-base-uncased.gguf",
+            bert_f16,
+            "f7437929246c43d7300cbf6ff39b4715669a6053661117df99a456bdc5e8ecba",
+        )
         run(
             [
                 sys.executable,
-                ROOT / "tools/validation/melotts_upstream.py",
-                "--model",
-                melo,
+                ROOT / "tools/validation/melotts_bert.py",
+                "--library",
+                library,
+                "--bert-q4",
+                bert,
+                "--bert-f16",
+                bert_f16,
                 "--captures",
                 captures,
                 "--output",
-                PRIVATE / "original-upstream",
+                PRIVATE / "original-bert",
             ],
-            "original-upstream",
+            "original-bert",
         )
-        receipt["upstream_controls"] = json.loads(
-            (PRIVATE / "original-upstream/upstream-controls.json").read_text()
+        receipt["bert_controls"] = json.loads(
+            (PRIVATE / "original-bert/bert-controls.json").read_text()
         )
+        precision_clips(helper, metadata[0], melo, bert, bert_f16, receipt, save)
+
         receipt["complete"] = True
     finally:
-        controls = PRIVATE / "original-upstream/upstream-controls.json"
+        controls = PRIVATE / "original-bert/bert-controls.json"
         if controls.exists():
-            receipt["upstream_controls"] = json.loads(controls.read_text())
+            receipt["bert_controls"] = json.loads(controls.read_text())
         receipt["private_evidence"] = seal_directory(
             PRIVATE, OUT / "private-evidence.bin", RECIPIENT
         )
         save()
+
+
+def precision_clips(helper, metadata_path, melo, q4, f16, receipt, save):
+    """Fixed original-precision control, never a replacement ASR or seed sweep."""
+    import math
+    import numpy as np
+    import soundfile as sf
+    from scipy.signal import resample_poly
+    from faster_whisper import WhisperModel
+    from huggingface_hub import snapshot_download
+
+    sys.path.insert(0, str(ROOT / "tools/ci-heavy"))
+    from openvoice_interfaces import DISCLOSURE, TEXTS, wer, cuda_vocoder_segments
+
+    metadata = json.loads(metadata_path.read_text())
+    reference = metadata_path.parent / "reference.wav"
+    converter = metadata_path.parent / "openvoice2-tcc-f32sens.gguf"
+    for name, path in [
+        ("reference.wav", reference),
+        ("openvoice2-tcc-f32sens.gguf", converter),
+    ]:
+        if sha(path) != metadata["artifacts"][name]["sha256"]:
+            raise ValueError("Fixed precision input changed")
+    probes = []
+    for label, bert in [("q4_k", q4), ("f16-control", f16)]:
+        env = dict(
+            os.environ,
+            CRISPASR_OV2_GPU="1",
+            CRISPASR_MELOTTS_BERT=str(bert),
+            GGML_SCHED_DEBUG="1",
+        )
+        common = [
+            WORK / "candidate/crispasr",
+            "--backend",
+            "melotts",
+            "-m",
+            melo,
+            "--codec-model",
+            bert,
+            "-t",
+            "2",
+            "--seed",
+            "42",
+            "--speaker-identity",
+            "unknown",
+            "--gpu-backend",
+            "cuda",
+        ]
+        cases = [("neutral", DISCLOSURE, [])] + [
+            (str(i), text, ["--voice", reference, "--i-have-rights"])
+            for i, text in enumerate(TEXTS)
+        ]
+        for case, text, flags in cases:
+            name = label + "-" + case
+            helper.guard_resources("precision-" + name)
+            path = PRIVATE / (name + ".wav")
+            with (PRIVATE / (name + ".log")).open("w") as output:
+                subprocess.run(
+                    list(
+                        map(str, common + flags + ["--tts", text, "--tts-output", path])
+                    ),
+                    env=env,
+                    stdout=output,
+                    stderr=subprocess.STDOUT,
+                    timeout=900,
+                    check=True,
+                )
+            log = (PRIVATE / (name + ".log")).read_text()
+            if case != "neutral" and cuda_vocoder_segments(log) != 1:
+                raise RuntimeError("Fixed precision conversion did not use actual CUDA")
+            expected = text if case == "neutral" else DISCLOSURE + " " + text
+            probes.append((label, case, path, expected))
+    helper.guard_resources("load-unchanged-tiny-oracle")
+    revision = "0d3d19a32d3338f10357c0889762bd8d64bbdeba"
+    decoder = WhisperModel(
+        snapshot_download("Systran/faster-whisper-tiny.en", revision=revision),
+        device="cpu",
+        compute_type="int8",
+        cpu_threads=2,
+    )
+    private = []
+    for label, case, path, expected in probes:
+        helper.guard_resources("decode-" + label + "-" + case)
+        pcm, rate = sf.read(path, dtype="float32")
+        divisor = math.gcd(rate, 16000)
+        samples = np.ascontiguousarray(
+            resample_poly(pcm, 16000 // divisor, rate // divisor), dtype=np.float32
+        )
+        segments, _ = decoder.transcribe(samples, language="en", beam_size=5)
+        transcript = " ".join(segment.text.strip() for segment in segments)
+        row = dict(
+            profile=label,
+            case=case,
+            wer=wer(expected, transcript),
+            rate=rate,
+            samples=len(pcm),
+            sha256=sha(path),
+        )
+        receipt.setdefault("precision_quality", []).append(row)
+        private.append(dict(**row, transcript=transcript, expected=expected))
+        (PRIVATE / "precision-quality.json").write_text(json.dumps(private, indent=2))
+        save()
+    receipt["precision_scope"] = (
+        "Diagnostic only; no speaker-quality/full-application/default acceptance"
+    )
 
 
 if __name__ == "__main__":
