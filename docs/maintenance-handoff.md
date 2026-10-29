@@ -52,10 +52,11 @@ and check actual GPU session availability before every Kaggle submission.
   timing is being prepared and full original Melo synthesis remains unproven.
 - **Whisper:** the short-audio safety fix `4023a6080` has queued CI
   **40847257799**, lint **40847261708** and secret scan **40847251740**.
-  A Kaggle timing diagnostic of `c5513ccfb` is running with profiling off/on
-  and output equality controls. A same-toolchain fork comparison is prepared.
-  Neither diagnostic has established the reason for the earlier process-time
-  gap or demonstrated matched performance. Keep all changes on validation
+  The [T4 timing diagnostic](whisper-timing-t4-diagnostic-2026-10-29.json) of
+  `c5513ccfb` passed output and GPU controls. Median decode was 2.52 ms/call
+  versus 2.41 ms for the packaged fork, and model load 531 ms versus 293 ms;
+  builds differ. A same-toolchain upstream and fork comparison is prepared.
+  These results do not establish the reason for the gap or matched performance. Keep all changes on validation
   branches until their own acceptance checks pass.
 
 The validation branch `validate/ordered-model-benchmarks-20261029` contains the
