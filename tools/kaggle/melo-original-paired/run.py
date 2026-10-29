@@ -351,6 +351,7 @@ def make_native(candidate, model, bert):
     lib.melotts_load_bert.argtypes = [ct.c_void_p, ct.c_char_p]
     lib.melotts_load_bert.restype = ct.c_bool
     lib.melotts_set_seed.argtypes = [ct.c_void_p, ct.c_uint32]
+    lib.melotts_set_dump_dir.argtypes = [ct.c_void_p, ct.c_char_p]
     lib.melotts_synthesize.argtypes = [ct.c_void_p, ct.c_char_p, ct.POINTER(fp), ct.POINTER(ct.c_int)]
     lib.melotts_synthesize.restype = ct.c_int
     lib.melotts_pcm_free.argtypes = [fp]
@@ -366,6 +367,8 @@ def make_native(candidate, model, bert):
     params.speaker_id = 0
     params.seed = 42
     private_log = WORK / "native-stage-private.log"
+    probe_dir = WORK / "native-cuda-probe"
+    probe_dir.mkdir(parents=True, exist_ok=True)
     old_stderr = os.dup(2)
     with private_log.open("wb") as log:
         os.dup2(log.fileno(), 2)
@@ -375,12 +378,28 @@ def make_native(candidate, model, bert):
             if ctx and not lib.melotts_load_bert(ctx, os.fsencode(bert)):
                 lib.melotts_free(ctx)
                 ctx = None
+            load_seconds = time.perf_counter() - started
+            if ctx:
+                lib.melotts_set_dump_dir(ctx, os.fsencode(probe_dir))
+                probe_out = fp()
+                probe_sr = ct.c_int()
+                probe_samples = lib.melotts_synthesize(ctx, b"Warmup.", ct.byref(probe_out), ct.byref(probe_sr))
+                if probe_out:
+                    lib.melotts_pcm_free(probe_out)
+                lib.melotts_set_dump_dir(ctx, b"")
+                if probe_samples <= 0 or probe_sr.value != 44100:
+                    lib.melotts_free(ctx)
+                    ctx = None
         finally:
             os.dup2(old_stderr, 2)
             os.close(old_stderr)
-    load_seconds = time.perf_counter() - started
-    if not ctx or "BERT conditioning enabled" not in private_log.read_text(errors="replace"):
+            shutil.rmtree(probe_dir, ignore_errors=True)
+    init_log = private_log.read_text(errors="replace")
+    private_log.write_bytes(b"")
+    if not ctx or "BERT conditioning enabled" not in init_log:
         raise RuntimeError("Native F16 Melo/BERT failed to load")
+    if "melotts: final activation backend CUDA" not in init_log:
+        raise RuntimeError("Native Melo CUDA work was not observed")
 
     def synth(text):
         lib.melotts_set_seed(ctx, 42)
@@ -405,8 +424,8 @@ def make_native(candidate, model, bert):
         if sample_rate.value != 44100:
             raise RuntimeError("Native Melo sample rate changed")
         log_text = private_log.read_text(errors="replace")
-        if "melotts: final activation backend CUDA" not in log_text:
-            raise RuntimeError("Native Melo CUDA work was not observed")
+        if "melotts: synthesized " not in log_text:
+            raise RuntimeError("Native Melo synthesis log missing")
         stages = {name: float(ms) for name, ms in re.findall(
             r"melotts_bench:\s+([a-z_]+)\s+([0-9.]+) ms", log_text)}
         if not {"synthesize", "text_encoder", "flow_inverse", "hifigan_decode"} <= stages.keys():
@@ -414,7 +433,7 @@ def make_native(candidate, model, bert):
         private_log.write_bytes(b"")
         return seconds, pcm, {"native_stages_ms": stages}
 
-    return synth, {"load_seconds": load_seconds, "device": "CUDA backend with CPU components"}, lambda: lib.melotts_free(ctx)
+    return synth, {"load_seconds": load_seconds, "device": "CUDA backend with CPU components", "final_activation_backend": "CUDA"}, lambda: lib.melotts_free(ctx)
 
 
 def main():
