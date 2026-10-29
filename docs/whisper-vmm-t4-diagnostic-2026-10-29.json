@@ -1,0 +1,54 @@
+{
+  "schema": 1,
+  "complete": true,
+  "performance_match_established": false,
+  "scope": "Same-source CUDA VMM-on/off comparison on one T4 and the public JFK clip; four alternating measured processes per arm, with separate profiling controls. Host wall times include synchronization.",
+  "source": "1c0114f74b08f7ff6f3fb7f71fc744ded7e2c3f6",
+  "model_sha256": "a03779c86df3323075f5e796cb2ce5029f00ec8869eee3fdfb897afe36c6d002",
+  "audio_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "quality": {
+    "runs": 20,
+    "all_gpu_process_observed": true,
+    "all_wer_zero": true,
+    "all_same_transcript": true,
+    "decode_calls": 27
+  },
+  "builds": {
+    "off": {
+      "binary_sha256": "b0607da6e9b275a9999adbac36d0e1c9f8b529b2520a3d6a4ecd27a1b7db7799",
+      "cuda_library_sha256": "d14f392fbb28b450d1d89002bb71cbeec5a56985e8e6ca5277befcded12baff3",
+      "driver_needed": false,
+      "effective_no_vmm": true,
+      "cuda_compile_command_sha256": "146c88cb437969f811bb2e6dce30e7867604abdcd9d5b6be2bc676f8a657ef65"
+    },
+    "on": {
+      "binary_sha256": "3cb620b8bbc64d3b057b5606bf84c23aeca95c2969ebf6567ae5b5920bf9b158",
+      "cuda_library_sha256": "dc512bb1ca4f3729a2a69f6e0e763bd80bded15aca4ded37d749e6607e124f93",
+      "driver_needed": true,
+      "effective_no_vmm": false,
+      "cuda_compile_command_sha256": "5e75ae7c05f627a016f9c08e111086b899c5870fb2d8ff6562073b4abc3ca4d2"
+    }
+  },
+  "medians": {
+    "off": {
+      "load_ms": 554.265,
+      "decode_ms_per_call": 2.5237037037037036,
+      "profile_prealloc_us": 312082.5,
+      "profile_weight_selection_us": 232074.0,
+      "profile_vocab_us": 71242.5
+    },
+    "on": {
+      "load_ms": 559.63,
+      "decode_ms_per_call": 2.5072222222222225,
+      "profile_prealloc_us": 315363.5,
+      "profile_weight_selection_us": 233337.5,
+      "profile_vocab_us": 72126.0
+    }
+  },
+  "limits": [
+    "VMM on/off does not isolate all differences from the separately packaged fork.",
+    "Selection time is a measured aggregate; the CUDA device-property call is a hypothesis requiring a controlled A/B.",
+    "One clip and GPU do not establish general speed or quality."
+  ],
+  "script_sha256": "26a73e7260a04092c702da67b4acc79282c431ce706227ef34b762fb8378ed8b"
+}
