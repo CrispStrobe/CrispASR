@@ -12,6 +12,8 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-28)
 
+- Whisper vocabulary bounds safety owner: current agent, starting source `8b402725d`. Upstream rejects models whose special-token indices exceed the logits vocabulary. Adapt the guard to serialized Whisper-ja and Tiron speaker ranges rather than assuming the timestamp token is always largest; require hosted valid-layout and malformed-bound tests plus real-model acceptance before integration. No local compilation or inference.
+
 - Whisper parallel VAD reuse safety owner: current agent, starting source `d7e9b9c77`. A no-VAD parallel call whose offset exceeds the audio clears results but leaves the prior VAD mapping. Clear that mapping on the early return and add a literal-caller hosted regression. CI and hosted test must pass before integration; no local builds.
 
 - Whisper DTW short-window safety owner: current agent, starting source `bfcaa7597`. Upstream MIT commit `a46fadb36a9b` avoids an abort when the alignment median filter is wider than a short audio window. Port the bounded filter-width rule; require hosted before/after short-window output and unchanged normal-window controls, plus CI/lint, before integration. No local compilation or inference.

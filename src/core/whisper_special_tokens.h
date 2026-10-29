@@ -35,6 +35,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 namespace core_whisper_specials {
 
 // Ids read out of the serialized vocab, or `kAbsent` when the name is not present.
@@ -57,6 +59,17 @@ struct Serialized {
 // a CrispASR-converted vocab writes all three.
 inline bool use_serialized(const Serialized& s) {
     return s.eot != kAbsent && s.sot != kAbsent && s.beg != kAbsent;
+}
+
+// Only mandatory IDs are checked here. Optional serialized specials may be
+// absent; Tiron speaker tokens can legitimately follow the timestamp range.
+inline bool valid_logits_indices(int vocab_size, int eot, int sot, int beg, bool has_speakers, int speaker_beg,
+                                 int n_speakers) {
+    const auto in_range = [vocab_size](int id) { return id >= 0 && id < vocab_size; };
+    if (vocab_size <= 0 || !in_range(eot) || !in_range(sot) || !in_range(beg))
+        return false;
+    return !has_speakers || (n_speakers > 0 && in_range(speaker_beg) &&
+                             static_cast<std::int64_t>(speaker_beg) + n_speakers <= vocab_size);
 }
 
 } // namespace core_whisper_specials

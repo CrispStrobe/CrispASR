@@ -21,6 +21,19 @@
 
 using core_whisper_specials::Serialized;
 using core_whisper_specials::use_serialized;
+using core_whisper_specials::valid_logits_indices;
+
+TEST_CASE("required special indices fit legacy, serialized and Tiron vocabularies", "[unit][whisper]") {
+    REQUIRE(valid_logits_indices(51864, 50256, 50257, 50363, false, 0, 0));
+    REQUIRE(valid_logits_indices(51865, 50257, 50258, 50364, false, 0, 0));
+    REQUIRE(valid_logits_indices(10240, 8631, 8632, 8739, false, 0, 0));
+    REQUIRE(valid_logits_indices(51904, 50257, 50258, 50365, true, 51866, 8));
+    REQUIRE_FALSE(valid_logits_indices(8739, 8631, 8632, 8739, false, 0, 0));
+    REQUIRE_FALSE(valid_logits_indices(100, 100, 1, 2, false, 0, 0));
+    REQUIRE_FALSE(valid_logits_indices(100, 0, 100, 2, false, 0, 0));
+    REQUIRE_FALSE(valid_logits_indices(51873, 50257, 50258, 50365, true, 51866, 8));
+    REQUIRE_FALSE(valid_logits_indices(100, -1, 1, 2, false, 0, 0));
+}
 
 TEST_CASE("prebuilt multilingual models use the legacy layout", "[unit][whisper]") {
     // ggerganov's ggml-tiny/base/large-v3 — what download-ggml-model.sh fetches —

@@ -2279,6 +2279,16 @@ static bool whisper_model_load(struct whisper_model_loader* loader, whisper_cont
             vocab.token_beg += dt;
         }
 
+        // Upstream b29763ed3f36 (MIT) validates the timestamp index before
+        // logits access. CrispASR also supports serialized specials and Tiron
+        // speaker IDs after the timestamp range, so validate both explicitly.
+        if (!core_whisper_specials::valid_logits_indices(vocab.n_vocab, vocab.token_eot, vocab.token_sot,
+                                                        vocab.token_beg, vocab.has_speakers,
+                                                        vocab.token_speaker_beg, vocab.n_speakers)) {
+            CRISPASR_LOG_ERROR("%s: invalid model (special token outside vocabulary of %d)\n", __func__, vocab.n_vocab);
+            return false;
+        }
+
         if (n_vocab < model.hparams.n_vocab) {
             CRISPASR_LOG_INFO("%s: adding %d extra tokens\n", __func__, model.hparams.n_vocab - n_vocab);
             for (int i = n_vocab; i < model.hparams.n_vocab; i++) {
