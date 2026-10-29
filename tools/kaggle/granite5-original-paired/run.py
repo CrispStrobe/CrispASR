@@ -20,7 +20,7 @@ import threading
 import time
 import urllib.request
 
-VERSION = "granite5-original-paired-v1"
+VERSION = "granite5-original-paired-v2"
 ROOT = Path("/kaggle/working")
 WORK = Path("/kaggle/temp/granite5-original-paired")
 INPUT = ("https://raw.githubusercontent.com/CrispStrobe/CrispASR/"
@@ -29,10 +29,10 @@ INPUT = ("https://raw.githubusercontent.com/CrispStrobe/CrispASR/"
 RUNTIME = ("https://github.com/CrispStrobe/CrispASR/releases/download/v0.8.47/"
            "crispasr-linux-x86_64-cuda.tar.gz",
            "90e23cffb44f4a80d929bf88cf3abb2d526ec4c0b95d88a82d1a8bf33135722d")
-NATIVE = ("cstr/crispasr-granite5-validation-public",
-          "d0e6349c7d0601fdd8ea38d1aad90e6b92ac47e2",
-          "q4-recipes/8fbb1794da4eea3851d8384934695d39b3518b72/granite-speech-5.0-2b-q4_k-value-down-f16.gguf",
-          "63324167e3a85a67539a44712aef1a31e864674d")
+NATIVE = ("cstr/granite-speech-5.0-2b-GGUF",
+          "e1df7d2cabb0ddba9863d7fc90cb6e78e8f19a6d",
+          "granite-speech-5.0-2b-q4_k.gguf",
+          "63324167e3a85a67539a44712aef1a4624882561a939597cc20e1a31e864674d")
 ORIGINAL = ("ibm-granite/granite-speech-5.0-2b",
             "c075cf19e041a2e4d16c5ee24763e5b037d8f479")
 REFERENCE = "and so my fellow americans ask not what your country can do for you ask what you can do for your country"
@@ -161,6 +161,9 @@ def run_call(command, env, label, receipt):
 
 def main():
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
+    pins = ((INPUT[1], 64), (RUNTIME[1], 64), (NATIVE[1], 40), (NATIVE[3], 64), (ORIGINAL[1], 40))
+    if any(len(value) != length or not re.fullmatch(r"[0-9a-f]+", value) for value, length in pins):
+        raise ValueError("Immutable revision or SHA-256 pin has an invalid shape")
     ROOT.mkdir(exist_ok=True)
     WORK.mkdir(parents=True, exist_ok=True)
     os.environ.update(HF_HOME=str(WORK / "hf"), HF_XET_CACHE=str(WORK / "xet"),
@@ -273,6 +276,15 @@ def main():
                     raise RuntimeError("Transcript quality gate failed: " + label)
     receipt["median_process_seconds"] = {engine: statistics.median(r["seconds"] for r in receipt["runs"]
         if r["label"].startswith("measured") and r["label"].endswith(engine)) for engine in ("native", "original")}
+    measured = [r for r in receipt["runs"] if r["label"].startswith("measured")]
+    receipt["median_second_call"] = {
+        "native_decode_ms": statistics.median(r["decode_profile"][1]["total_ms"] for r in measured
+                                               if r["label"].endswith("native")),
+        "native_decode_steps": statistics.median(r["decode_profile"][1]["steps"] for r in measured
+                                                  if r["label"].endswith("native")),
+        "original_generate_seconds": statistics.median(r["original"]["calls"][1]["generate_seconds"]
+                                                       for r in measured if r["label"].endswith("original")),
+    }
     receipt["complete"] = receipt["acceptance"] = True
     save()
     print("GRANITE5_ORIGINAL_PAIRED_ACCEPTED", receipt["median_process_seconds"], flush=True)
