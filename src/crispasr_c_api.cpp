@@ -1293,6 +1293,26 @@ static int crispasr_stream_run_decode(crispasr_stream* s) {
     wparams.detect_language = s->language.empty();
     wparams.no_context = true;
 
+    // Strided audio context for streaming: bound encoder evaluation context to
+    // the active sliding window instead of padding every step to 30s (1500 frames).
+    // Gated by CRISPASR_WHISPER_STREAM_AUDIO_CTX:
+    //   0 = default: full 1500 padding (100% baseline parity)
+    //   1 = adaptive context bounded to sliding window
+    //  >1 = explicit fixed context size (e.g. 1024 for 33% speedup)
+    static const int stream_audio_ctx_gate = []() {
+        const char* e = getenv("CRISPASR_WHISPER_STREAM_AUDIO_CTX");
+        return e ? atoi(e) : 0;
+    }();
+    if (stream_audio_ctx_gate != 0 && !pcm.empty()) {
+        if (stream_audio_ctx_gate > 1) {
+            wparams.audio_ctx = std::min(1500, stream_audio_ctx_gate);
+        } else {
+            const int enc_frames = (int)((pcm.size() + 319) / 320);
+            const int enc_ctx = std::min(1500, std::max(64, ((enc_frames + 31) / 32) * 32));
+            wparams.audio_ctx = enc_ctx;
+        }
+    }
+
     if (whisper_full(s->ctx, wparams, pcm.data(), (int)pcm.size()) != 0) {
         return -1;
     }
@@ -11697,6 +11717,77 @@ CA_EXPORT crispasr_stream* crispasr_session_stream_open(crispasr_session* s, int
             return nullptr;
         auto* w = new crispasr_stream();
         w->vibevoice_stream_state = vs;
+        return w;
+    }
+#endif
+#ifdef CA_HAVE_HIKARI
+    if (s->hikari_ctx) {
+        (void)n_threads;
+        (void)keep_ms;
+        (void)step_ms;
+        (void)length_ms;
+        const std::string tl = language ? language : s->target_language;
+        const bool tr = translate || (!tl.empty() && tl != "en" && tl != "auto");
+        hikari_set_task(s->hikari_ctx, tr ? 1 : 0, (!tl.empty() && tl != "auto") ? tl.c_str() : "en");
+        hikari_stream_reset(s->hikari_ctx);
+        if (s->hikari_vad) {
+            float z = 0.0f;
+            whisper_vad_detect_speech(s->hikari_vad, &z, 0);
+        }
+        auto* w = new crispasr_stream();
+        auto hc = s->hikari_ctx;
+        w->append = [w, hc](const float* pcm, int n, bool flush) {
+            int rc = 0;
+            if (n > 0 && pcm) {
+                rc = hikari_stream_push(hc, pcm, n);
+            }
+            if (flush) {
+                rc = hikari_stream_flush(hc);
+            }
+            if (rc < 0)
+                return -2;
+            char* txt = hikari_stream_text(hc);
+            std::string text_str = txt ? txt : "";
+            if (txt)
+                free(txt);
+            return crispasr_stream_publish(w, text_str);
+        };
+        return w;
+    }
+#endif
+#ifdef CA_HAVE_PARAKEET
+    if (s->parakeet_ctx) {
+        (void)n_threads;
+        (void)language;
+        (void)translate;
+        auto* w = new crispasr_stream();
+        auto pc = s->parakeet_ctx;
+        auto state = std::make_shared<std::vector<float>>();
+        const int step_samples = (step_ms > 0 ? step_ms : 1000) * 16;
+        const int length_samples = (length_ms > 0 ? length_ms : 8000) * 16;
+        auto pending = std::make_shared<std::vector<float>>();
+        w->append = [w, pc, state, pending, step_samples, length_samples](const float* pcm, int n, bool flush) {
+            if (n > 0 && pcm) {
+                pending->insert(pending->end(), pcm, pcm + n);
+            }
+            if ((int)pending->size() < step_samples && !flush) {
+                return 0;
+            }
+            state->insert(state->end(), pending->begin(), pending->end());
+            pending->clear();
+            if ((int)state->size() > length_samples) {
+                const int drop = (int)state->size() - length_samples;
+                state->erase(state->begin(), state->begin() + drop);
+            }
+            if (state->empty())
+                return 0;
+            parakeet_result* pr = parakeet_transcribe_ex(pc, state->data(), (int)state->size(), 0);
+            if (!pr)
+                return -2;
+            std::string text = pr->text ? pr->text : "";
+            parakeet_result_free(pr);
+            return crispasr_stream_publish(w, text);
+        };
         return w;
     }
 #endif

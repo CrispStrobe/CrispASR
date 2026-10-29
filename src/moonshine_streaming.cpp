@@ -205,6 +205,7 @@ struct moonshine_streaming_context {
     ggml_cgraph* cached_enc_gf = nullptr;
     ggml_context* cached_enc_ctx = nullptr;
     int cached_enc_T = 0;
+    std::vector<std::vector<ggml_fp16_t>> cached_masks;
 };
 
 // ── GGUF helpers ────────────────────────────────────────────────────────────
@@ -718,22 +719,58 @@ static int run_encoder(moonshine_streaming_context* ctx, const float* frontend_o
     ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "enc_input"), frontend_out, 0, (size_t)T_enc * d * sizeof(float));
 
     // Set masks
+    static const int mask_cache_gate = []() {
+        const char* e = getenv("CRISPASR_MOONSHINE_MASK_CACHE");
+        return e ? atoi(e) : 1;
+    }();
+
+    const bool use_cache = (mask_cache_gate != 0);
+    if (use_cache && ctx->cached_enc_T != T_enc) {
+        ctx->cached_masks.resize(hp.enc_n_layers);
+        const size_t mask_sz = (size_t)T_enc * T_enc;
+        const ggml_fp16_t neg_inf = ggml_fp32_to_fp16(-INFINITY);
+        const ggml_fp16_t zero = ggml_fp32_to_fp16(0.0f);
+        for (uint32_t li = 0; li < hp.enc_n_layers; li++) {
+            if (!masks[li]) {
+                ctx->cached_masks[li].clear();
+                continue;
+            }
+            auto [wl, wr] = hp.sliding_windows[li];
+            ctx->cached_masks[li].assign(mask_sz, neg_inf);
+            auto& mdata = ctx->cached_masks[li];
+            for (int tq = 0; tq < T_enc; tq++) {
+                const int k_lo = std::max(0, tq - (int)wl);
+                const int k_hi = std::min(T_enc - 1, tq + (int)wr);
+                if (k_lo <= k_hi) {
+                    std::fill(mdata.begin() + (size_t)tq * T_enc + k_lo, mdata.begin() + (size_t)tq * T_enc + k_hi + 1,
+                              zero);
+                }
+            }
+        }
+    }
+
     for (uint32_t li = 0; li < hp.enc_n_layers; li++) {
         if (!masks[li])
             continue;
-        auto [wl, wr] = hp.sliding_windows[li];
         size_t mask_sz = (size_t)T_enc * T_enc;
-        std::vector<ggml_fp16_t> mask_data(mask_sz);
-        for (int tq = 0; tq < T_enc; tq++)
-            for (int tk = 0; tk < T_enc; tk++) {
-                bool ok = (tk >= tq - (int)wl) && (tk <= tq + (int)wr);
-                mask_data[(size_t)tq * T_enc + tk] = ggml_fp32_to_fp16(ok ? 0.0f : -INFINITY);
-            }
         char name[32];
         snprintf(name, sizeof(name), "mask_%u", li);
         ggml_tensor* mt = ggml_graph_get_tensor(gf, name);
-        if (mt)
+        if (!mt)
+            continue;
+
+        if (use_cache && (int)ctx->cached_masks.size() > (int)li && !ctx->cached_masks[li].empty()) {
+            ggml_backend_tensor_set(mt, ctx->cached_masks[li].data(), 0, mask_sz * sizeof(ggml_fp16_t));
+        } else {
+            auto [wl, wr] = hp.sliding_windows[li];
+            std::vector<ggml_fp16_t> mask_data(mask_sz);
+            for (int tq = 0; tq < T_enc; tq++)
+                for (int tk = 0; tk < T_enc; tk++) {
+                    bool ok = (tk >= tq - (int)wl) && (tk <= tq + (int)wr);
+                    mask_data[(size_t)tq * T_enc + tk] = ggml_fp32_to_fp16(ok ? 0.0f : -INFINITY);
+                }
             ggml_backend_tensor_set(mt, mask_data.data(), 0, mask_sz * sizeof(ggml_fp16_t));
+        }
     }
 
     if (core_sched_prof::compute(ctx->sched, gf, "moonshine-streaming") != GGML_STATUS_SUCCESS) {

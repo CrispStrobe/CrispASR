@@ -105,6 +105,21 @@ public:
         wp.max_len = p.max_len;
         wp.split_on_word = p.split_on_word;
         wp.audio_ctx = p.audio_ctx;
+        if (wp.audio_ctx == 0 && p.stream && n_samples > 0) {
+            static const int stream_ac_gate = []() {
+                const char* e = getenv("CRISPASR_WHISPER_STREAM_AUDIO_CTX");
+                return e ? atoi(e) : 0;
+            }();
+            if (stream_ac_gate != 0) {
+                if (stream_ac_gate > 1) {
+                    wp.audio_ctx = std::min(1500, stream_ac_gate);
+                } else {
+                    const int enc_frames = (int)((n_samples + 319) / 320);
+                    const int enc_ctx = std::min(1500, std::max(64, ((enc_frames + 31) / 32) * 32));
+                    wp.audio_ctx = enc_ctx;
+                }
+            }
+        }
 
         wp.tdrz_enable = p.tinydiarize;
 
