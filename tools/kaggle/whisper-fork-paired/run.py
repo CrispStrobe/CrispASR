@@ -70,7 +70,7 @@ def main():
             if Path(item.filename).is_absolute() or '..' in Path(item.filename).parts: raise ValueError('Unsafe archive path')
         a.extractall(fork)
     c = [p for p in crisp.rglob('crispasr') if p.is_file()]
-    f = [p for p in fork.rglob('whisper-cli') if p.is_file()]
+    f = [p for p in fork.rglob('whisper-cpp-linux-x64-cuda') if p.is_file()]
     if len(c)!=1 or len(f)!=1: raise RuntimeError('Expected one executable per archive')
     for binary in [c[0], f[0]]: binary.chmod(binary.stat().st_mode | 0o111)
     receipt['binaries'] = {'crisp': sha(c[0]), 'fork': sha(f[0])}; save()
