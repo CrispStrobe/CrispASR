@@ -60,8 +60,9 @@ and check actual GPU session availability before every Kaggle submission.
   been submitted. Their READMEs specify GPU, model provenance, context and
   quality gates. Coordinate available Kaggle slots before submission.
   Native CSM opt-in graph-step profiling is on validation branch
-  `validate/csm-step-profile-20261029` at `dfdc0edd1`, with CI **40862476012**
-  and lint **40862479235** queued. This is unvalidated instrumentation, not a
+  `validate/csm-step-profile-20261029` at `399758238`, with CI **40862657041**
+  and lint **40862660572** queued. A reviewer identified partial-frame failures;
+  the revised profiler marks their counters incomplete. This is unvalidated instrumentation, not a
   performance result; require hosted build and profile-on/off output identity. Private CSM original-without-watermark version 1 failed on missing
   `bitsandbytes`; version 2 passed GPU and zero-WER controls. The [aggregate
   receipt](csm-original-t4-benchmark-2026-10-29.json) discloses precision,
