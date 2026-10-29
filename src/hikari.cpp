@@ -153,6 +153,14 @@ struct hikari_context {
     int enc_valid = 0;                                            // encoder frames valid in the caches
     int dec_valid = 0;                                            // decoder positions valid in the self-KV
     std::vector<int32_t> last_ids;                                // ids of the last decoder pass
+    struct {
+        std::vector<float> mel_used;
+        int forced_refreshes = 0;
+        void reset() {
+            mel_used.clear();
+            forced_refreshes = 0;
+        }
+    } stride;
     bench_acc bench;
 };
 
@@ -638,12 +646,107 @@ static int window_tokens(const hikari_context* c) {
     return std::min(std::max(c->pol.decoder_context, 50), c->hp.n_text_ctx);
 }
 
+// Window start audio offset (in samples) for decision at time t.
+static int64_t compute_window_start(const hikari_context* c, int64_t t, int W) {
+    const int K = c->pol.refresh_stride;
+    const int64_t exact_ws = std::max<int64_t>(0, t - (int64_t)W * kChunk);
+    if (K <= 1 || exact_ws == 0) {
+        return exact_ws;
+    }
+    const int64_t block = (int64_t)K * kChunk;
+    return (exact_ws / block) * block;
+}
+
+static void trim_window_ids(hikari_context* c, int64_t ws, int64_t t, int W, bool& out_popped) {
+    out_popped = false;
+    const int K = c->pol.refresh_stride;
+    if (K <= 1) {
+        if ((int)c->ids.size() > W) {
+            c->ids.erase(c->ids.begin() + 4);
+            out_popped = true;
+        }
+    } else {
+        const int max_ids = 4 + (int)((t - ws) / kChunk);
+        while ((int)c->ids.size() > max_ids && c->ids.size() > 4) {
+            c->ids.erase(c->ids.begin() + 4);
+            out_popped = true;
+        }
+    }
+}
+
+static int compute_encoder_start(hikari_context* c, bool slid, int nfr, const std::vector<float>& prev_mel) {
+    const int K = c->pol.refresh_stride;
+    if (K <= 1) {
+        if (slid) {
+            c->enc_valid = 0;
+            return 0;
+        }
+        int m0 = 0;
+        if (!prev_mel.empty()) {
+            const int nprev = (int)(prev_mel.size() / 80);
+            const int upto = std::max(nprev, nfr);
+            m0 = upto;
+            for (int m = 0; m < upto && m0 == upto; m++) {
+                for (int b = 0; b < 80; b++) {
+                    const float a = m < nprev ? prev_mel[(size_t)m * 80 + b] : 0.0f;
+                    const float bb = m < nfr ? c->norm_mel[(size_t)m * 80 + b] : 0.0f;
+                    if (a != bb) {
+                        m0 = m;
+                        break;
+                    }
+                }
+            }
+        }
+        const int e_dirty = std::max(0, (m0 - 1) / 2);
+        return std::min(c->enc_valid, e_dirty);
+    }
+
+    const int margin = std::max(1, c->pol.stride_margin);
+    const float stale_tol = c->pol.stale_tol;
+    bool refresh = (c->win_start < 0) || slid || (c->enc_valid == 0) || c->stride.mel_used.empty();
+    const int n_commit = std::max(0, c->enc_valid - margin);
+
+    if (!refresh && n_commit > 0) {
+        const int t_cmp = std::max(0, 2 * n_commit - 4);
+        const int upto = std::min({t_cmp, nfr, (int)(c->stride.mel_used.size() / 80)});
+        float max_diff = 0.0f;
+        for (int m = 0; m < upto; m++) {
+            for (int b = 0; b < 80; b++) {
+                const float d = std::abs(c->norm_mel[(size_t)m * 80 + b] - c->stride.mel_used[(size_t)m * 80 + b]);
+                if (d > max_diff) {
+                    max_diff = d;
+                }
+            }
+        }
+        if (max_diff > stale_tol) {
+            refresh = true;
+            c->stride.forced_refreshes++;
+        }
+    }
+
+    if (refresh) {
+        c->enc_valid = 0;
+        c->stride.mel_used = c->norm_mel;
+        return 0;
+    }
+
+    const int t0_mel = std::max(0, 2 * n_commit - 2);
+    if ((int)c->stride.mel_used.size() < (int)c->norm_mel.size()) {
+        c->stride.mel_used.resize(c->norm_mel.size());
+    }
+    if ((size_t)t0_mel * 80 < c->norm_mel.size()) {
+        std::memcpy(c->stride.mel_used.data() + (size_t)t0_mel * 80, c->norm_mel.data() + (size_t)t0_mel * 80,
+                    (c->norm_mel.size() - (size_t)t0_mel * 80) * sizeof(float));
+    }
+    return n_commit;
+}
+
 // One decision on audio [0, t). Returns the chosen token, -1 on error.
 static int step(hikari_context* c, int64_t t) {
     const auto& hp = c->hp;
     const int W = window_tokens(c);
     c->j++;
-    const int64_t ws = std::max<int64_t>(0, t - (int64_t)W * kChunk);
+    const int64_t ws = compute_window_start(c, t, W);
 
     // mel + first changed frame
     double t0 = now_ms();
@@ -653,26 +756,9 @@ static int step(hikari_context* c, int64_t t) {
     window_mel(c, ws, t, c->norm_mel);
     const int nfr = (int)(c->norm_mel.size() / 80);
     const int n_enc = nfr / 2;
-    int m0 = 0;
-    if (!slid && !prev.empty()) {
-        const int nprev = (int)(prev.size() / 80);
-        const int upto = std::max(nprev, nfr);
-        m0 = upto;
-        for (int m = 0; m < upto && m0 == upto; m++)
-            for (int b = 0; b < 80; b++) {
-                const float a = m < nprev ? prev[(size_t)m * 80 + b] : 0.0f;
-                const float bb = m < nfr ? c->norm_mel[(size_t)m * 80 + b] : 0.0f;
-                if (a != bb) {
-                    m0 = m;
-                    break;
-                }
-            }
-    }
+
+    const int e0 = compute_encoder_start(c, slid, nfr, prev);
     c->win_start = ws;
-    if (slid)
-        c->enc_valid = 0;
-    const int e_dirty = std::max(0, (m0 - 1) / 2); // ceil((m0-2)/2)
-    const int e0 = std::min(c->enc_valid, e_dirty);
     c->bench.mel += now_ms() - t0;
 
     t0 = now_ms();
@@ -697,10 +783,8 @@ static int step(hikari_context* c, int64_t t) {
     // decoder
     t0 = now_ms();
     bool popped = false;
-    if ((int)c->ids.size() > W) {
-        c->ids.erase(c->ids.begin() + 4);
-        popped = true;
-    }
+    trim_window_ids(c, ws, t, W, popped);
+
     const int pos = (int)c->ids.size() - 1;
     int p0 = std::min(c->dec_valid, pos);
     p0 = std::min(p0, e0 / hp.dilation + 1); // positions whose visible frames changed
@@ -791,7 +875,16 @@ extern "C" hikari_policy hikari_default_policy(void) {
     p.repetition_penalty = 40.0f;
     p.decoder_context = 337;
     p.speech_threshold = 0.8f;
+    p.refresh_stride = 0; // exact baseline mode by default
+    p.stride_margin = 4;
+    p.stale_tol = 0.05f;
     return p;
+}
+
+extern "C" void hikari_set_refresh_stride(hikari_context* c, int stride) {
+    if (c) {
+        c->pol.refresh_stride = std::max(0, stride);
+    }
 }
 
 extern "C" hikari_context* hikari_init_from_file(const char* path, hikari_context_params params) {
@@ -919,6 +1012,7 @@ extern "C" void hikari_stream_reset(hikari_context* c) {
     c->enc_valid = 0;
     c->dec_valid = 0;
     c->last_ids.clear();
+    c->stride.reset();
 }
 
 extern "C" int hikari_stream_push(hikari_context* c, const float* pcm, int n) {

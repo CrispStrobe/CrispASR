@@ -39,9 +39,13 @@ struct hikari_policy {
     float repetition_penalty;    // 40   on the arg-max if it is among the last 5 ids
     int decoder_context;         // 337  tokens (= 337 * 80 ms of audio), clamped [50, 375]
     float speech_threshold;      // 0.8  VAD probability for "speech"
+    int refresh_stride;          // 0 exact sliding (default); K > 0 = strided window refresh
+    int stride_margin;           // trailing lookahead margin frames to re-encode (default 4)
+    float stale_tol;             // mel divergence threshold triggering refresh (default 0.05f)
 };
 struct hikari_policy hikari_default_policy(void);
 void hikari_set_policy(struct hikari_context* ctx, const struct hikari_policy* p);
+void hikari_set_refresh_stride(struct hikari_context* ctx, int stride);
 
 // Speech probability of `n` samples (the newest 512 of the window), used by
 // the wait-penalty boost. NULL (default) = never speech = boost disabled —
