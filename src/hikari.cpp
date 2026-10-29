@@ -875,7 +875,7 @@ extern "C" hikari_policy hikari_default_policy(void) {
     p.repetition_penalty = 40.0f;
     p.decoder_context = 337;
     p.speech_threshold = 0.8f;
-    p.refresh_stride = 0; // exact baseline mode by default
+    p.refresh_stride = 16; // strided window refresh (K=16) by default per upstream design
     p.stride_margin = 4;
     p.stale_tol = 0.05f;
     return p;
