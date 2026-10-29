@@ -220,7 +220,7 @@ def main():
     subprocess.run(
         ["cmake", "--build", str(build), "--target", "crispasr-cli", "-j2"],
         check=True,
-        timeout=2400,
+        timeout=5400,
     )
     binary = build / "bin/crispasr"
     if not binary.is_file():

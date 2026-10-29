@@ -106,7 +106,7 @@ def build_arm(source, arm, driver):
         raise RuntimeError("VMM-off configuration unexpectedly linked the driver")
     guard()
     build_log = run_checked(["cmake", "--build", str(build), "--target", "crispasr-cli", "-j", "2"],
-                            timeout=2400, log=OUT / f"build-{arm}.log")
+                            timeout=5400, log=OUT / f"build-{arm}.log")
     if "Built target crispasr-cli" not in build_log and "Linking CXX executable" not in build_log:
         raise RuntimeError("Build produced no target/link proof")
     commands = json.loads((build / "compile_commands.json").read_text())

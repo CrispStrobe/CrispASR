@@ -75,7 +75,7 @@ def main():
     subprocess.run(['cmake', '-S', str(crisp), '-B', str(build), '-DCMAKE_BUILD_TYPE=Release',
                     '-DGGML_CUDA=ON', '-DGGML_CUDA_NO_VMM=ON', '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON', '-DGGML_NATIVE=OFF', '-DCMAKE_CUDA_ARCHITECTURES=75',
                     '-DCRISPASR_BUILD_TESTS=OFF', '-DCRISPASR_BUILD_SERVER=OFF'], check=True, timeout=300)
-    subprocess.run(['cmake', '--build', str(build), '--target', 'crispasr-cli', '-j', '2'], check=True, timeout=2400)
+    subprocess.run(['cmake', '--build', str(build), '--target', 'crispasr-cli', '-j', '2'], check=True, timeout=5400)
     # Build the pinned fork with the same compiler, CUDA toolkit and GPU
     # architecture as the candidate; ggml revisions still differ by project.
     subprocess.run(['git', 'init', str(fork)], check=True, timeout=60)
@@ -92,7 +92,7 @@ def main():
                     '-DGGML_CUDA=ON', '-DGGML_CUDA_NO_VMM=ON', '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON', '-DGGML_NATIVE=OFF', '-DCMAKE_CUDA_ARCHITECTURES=75',
                     '-DWHISPER_BUILD_TESTS=OFF', '-DWHISPER_BUILD_SERVER=OFF'], check=True, timeout=300)
     guard()
-    subprocess.run(['cmake', '--build', str(fork_build), '--target', 'whisper-cli', '-j', '2'], check=True, timeout=2400)
+    subprocess.run(['cmake', '--build', str(fork_build), '--target', 'whisper-cli', '-j', '2'], check=True, timeout=5400)
     # Also build upstream whisper.cpp at the audited current master pin; the
     # earlier packaged comparison used an independent fork, not upstream.
     upstream, upstream_build = WORK/'upstream', WORK/'upstream-build'
@@ -109,7 +109,7 @@ def main():
                     '-DGGML_CUDA=ON', '-DGGML_CUDA_NO_VMM=ON', '-DCMAKE_EXPORT_COMPILE_COMMANDS=ON', '-DGGML_NATIVE=OFF', '-DCMAKE_CUDA_ARCHITECTURES=75',
                     '-DWHISPER_BUILD_TESTS=OFF', '-DWHISPER_BUILD_SERVER=OFF'], check=True, timeout=300)
     guard()
-    subprocess.run(['cmake', '--build', str(upstream_build), '--target', 'whisper-cli', '-j', '2'], check=True, timeout=2400)
+    subprocess.run(['cmake', '--build', str(upstream_build), '--target', 'whisper-cli', '-j', '2'], check=True, timeout=5400)
     for tree in (build, fork_build, upstream_build):
         commands = json.loads((tree/'compile_commands.json').read_text())
         cuda = [row['command'] for row in commands if row['file'].endswith('ggml-cuda.cu')]

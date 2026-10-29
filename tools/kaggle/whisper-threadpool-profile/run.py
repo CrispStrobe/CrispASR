@@ -74,7 +74,7 @@ def main():
     subprocess.run(['cmake', '-S', str(crisp), '-B', str(build), '-DCMAKE_BUILD_TYPE=Release',
                     '-DGGML_CUDA=ON', '-DGGML_NATIVE=OFF', '-DCMAKE_CUDA_ARCHITECTURES=75',
                     '-DCRISPASR_BUILD_TESTS=OFF', '-DCRISPASR_BUILD_SERVER=OFF'], check=True, timeout=300)
-    subprocess.run(['cmake', '--build', str(build), '--target', 'crispasr-cli', '-j', '2'], check=True, timeout=2400)
+    subprocess.run(['cmake', '--build', str(build), '--target', 'crispasr-cli', '-j', '2'], check=True, timeout=5400)
     with zipfile.ZipFile(WORK/'fork.zip') as a:
         for item in a.infolist():
             if Path(item.filename).is_absolute() or '..' in Path(item.filename).parts: raise ValueError('Unsafe archive path')
