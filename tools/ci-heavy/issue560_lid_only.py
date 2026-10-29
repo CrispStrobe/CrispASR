@@ -266,12 +266,39 @@ def main():
         ]:
             selected = bypass + ["--lid-backend", provider, "--lid-model", cache / filename]
             full = selected + ["--lid-full-recording"]
-            _, rows = detect(full, provider + "-late-after-silence", files=[late])
-            if any(source != provider for _, _, source in rows):
-                raise RuntimeError("Full-recording provider silently fell back")
-            detect(selected, provider + "-first-window-control", files=[mixed], expected_language="ko")
-            detect(full, provider + "-late-majority", files=[mixed])
-            detect(full, provider + "-short-final-speech", files=[tail])
+            def check_route(label, flags, *, files, expected_language):
+                log, rows = detect(flags, label, files=files, expected_language=expected_language)
+                # The winning language can collect windows from both Silero
+                # and its Whisper fallback, in which case the caller reports
+                # the combined source as "mixed".
+                allowed = {provider} if provider == "whisper" else {"silero", "whisper", "mixed"}
+                if any(source not in allowed for _, _, source in rows):
+                    raise RuntimeError("Unexpected full-recording LID source")
+                if "invalid model data (bad magic)" in log:
+                    raise RuntimeError("Fallback used an incompatible provider model")
+                fallback = "falling back to whisper-tiny LID" in log
+                if provider == "silero" and fallback:
+                    loaded = re.findall(
+                        r"whisper_init_from_file_with_params_no_state: loading model from '([^']+)'",
+                        log,
+                    )
+                    if not loaded or any(Path(path).name != "ggml-tiny.bin" for path in loaded):
+                        raise RuntimeError("Silero fallback did not load Whisper's own checkpoint")
+                receipt.setdefault("long_clip_routes", {})[label] = dict(
+                    requested=provider, result_source=rows[0][2], fallback_observed=fallback
+                )
+                save()
+                return rows[0][0]
+
+            check_route(provider + "-late-after-silence", full, files=[late], expected_language="en")
+            first = check_route(provider + "-first-window-control", selected,
+                                files=[mixed], expected_language="ko")
+            whole = check_route(provider + "-late-majority", full,
+                                files=[mixed], expected_language="en")
+            if first == whole:
+                raise RuntimeError("Full-recording option did not change language coverage")
+            check_route(provider + "-short-final-speech", full,
+                        files=[tail], expected_language="en")
             for name, path in [("silence", silent), ("empty", empty)]:
                 log = run(
                     common + ["--detect-language"] + full + ["-f", path],

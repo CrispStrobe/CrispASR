@@ -70,7 +70,12 @@ std::string scratch_dir() {
 constexpr const char* kEcapaLidDefaultFile = "ecapa-lid-107.gguf";
 
 std::string resolve_whisper_lid_model(const whisper_params& p) {
-    if (!p.lid_model.empty() && p.lid_model != "auto")
+    // --lid-model belongs to the selected provider. A Silero GGUF (or
+    // another provider's checkpoint) must never be reused by Whisper when
+    // that provider declines a window and we take the default fallback.
+    const bool selected_whisper =
+        p.lid_backend.empty() || p.lid_backend == "whisper" || p.lid_backend == "whisper-tiny";
+    if (selected_whisper && !p.lid_model.empty() && p.lid_model != "auto")
         return expand_home(p.lid_model);
     return crispasr_cache::ensure_cached_file(kWhisperLidDefaultFile, kWhisperLidDefaultUrl, p.no_prints,
                                               "crispasr[lid]", p.cache_dir);

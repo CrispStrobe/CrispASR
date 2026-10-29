@@ -153,18 +153,45 @@ int main(int argc, char** argv) {
 
     def test_actual_whisper_model_resolver(self):
         lid = source(ROOT / "examples/cli/crispasr_lid_cli.cpp")
-        start = lid.index(
+        resolver_start = lid.index(
             "std::string resolve_whisper_lid_model(const whisper_params& p) {"
         )
-        end = lid.index("\nstd::string resolve_silero_lid_model(", start)
-        resolver = lid[start:end]
+        resolver_end = lid.index("\nstd::string resolve_silero_lid_model(", resolver_start)
+        detect_start = lid.index("static bool detect_whisper_cli(")
+        window_start = lid.index("static bool crispasr_detect_language_cli_window(", detect_start)
+        window_end = lid.index("\nbool crispasr_detect_language_cli(", window_start)
         harness = r"""
 #include <cstdio>
 #include <string>
 struct whisper_params {
+    std::string lid_backend;
     std::string lid_model;
     bool no_prints = true;
     std::string cache_dir;
+    int n_threads = 2;
+    bool use_gpu = false;
+    int gpu_device = 0;
+    bool flash_attn = false;
+};
+struct crispasr_lid_result {
+    std::string lang_code;
+    float confidence = 0;
+    std::string source;
+};
+enum class CrispasrLidMethod { Whisper, Silero, Firered, Ecapa };
+struct CrispasrLidOptions {
+    CrispasrLidMethod method = CrispasrLidMethod::Whisper;
+    std::string model_path;
+    int n_threads = 0;
+    bool use_gpu = false;
+    int gpu_device = 0;
+    bool flash_attn = false;
+    bool verbose = false;
+};
+struct CrispasrLidResult {
+    std::string lang_code;
+    float confidence = 0;
+    std::string source;
 };
 constexpr const char* kWhisperLidDefaultFile = "ggml-tiny.bin";
 constexpr const char* kWhisperLidDefaultUrl = "https://example.test/tiny";
@@ -177,14 +204,34 @@ std::string ensure_cached_file(const std::string& filename, const std::string&, 
     return "CACHE:" + filename;
 }
 }
+std::string resolve_silero_lid_model(const whisper_params& p) { return p.lid_model; }
+std::string resolve_firered_lid_model(const whisper_params& p) { return p.lid_model; }
+std::string resolve_ecapa_lid_model(const whisper_params& p) { return p.lid_model; }
+bool detect_with_sherpa(const float*, int, const whisper_params&, crispasr_lid_result&) { return false; }
+bool crispasr_detect_language(const float*, int, const CrispasrLidOptions& opts,
+                              CrispasrLidResult& result) {
+    if (opts.method == CrispasrLidMethod::Silero) {
+        if (opts.model_path != "success.gguf") return false;
+        result = {"ko", 0.7f, "silero"};
+        return true;
+    }
+    if (opts.method != CrispasrLidMethod::Whisper) return false;
+    fprintf(stdout, "WHISPER_MODEL=%s\n", opts.model_path.c_str());
+    result = {"ko", 0.8f, "whisper"};
+    return true;
+}
 """
-        harness += resolver
+        harness += lid[resolver_start:resolver_end]
+        harness += lid[detect_start:window_end]
         harness += r"""
 int main(int argc, char** argv) {
     whisper_params params;
-    if (argc > 1) params.lid_model = argv[1];
-    const std::string path = resolve_whisper_lid_model(params);
-    fprintf(stdout, "%s\t%d\n", path.c_str(), cache_calls);
+    if (argc > 1) params.lid_backend = argv[1];
+    if (argc > 2) params.lid_model = argv[2];
+    const float samples[10] = {};
+    crispasr_lid_result result;
+    if (!crispasr_detect_language_cli_window(samples, 10, params, result)) return 2;
+    fprintf(stdout, "SOURCE=%s\tCACHE_CALLS=%d\n", result.source.c_str(), cache_calls);
 }
 """
         assert_headroom()
@@ -198,12 +245,15 @@ int main(int argc, char** argv) {
                 cwd=ROOT,
             )
 
-            def call(model):
-                return subprocess.check_output([str(binary), model], text=True)
+            def call(backend, model):
+                return subprocess.check_output([str(binary), backend, model], text=True)
 
-            self.assertEqual(call(""), "CACHE:ggml-tiny.bin\t1\n")
-            self.assertEqual(call("auto"), "CACHE:ggml-tiny.bin\t1\n")
-            self.assertEqual(call("chosen.gguf"), "EXPLICIT:chosen.gguf\t0\n")
+            self.assertEqual(call("", ""), "WHISPER_MODEL=CACHE:ggml-tiny.bin\nSOURCE=whisper\tCACHE_CALLS=1\n")
+            self.assertEqual(call("", "chosen.bin"), "WHISPER_MODEL=EXPLICIT:chosen.bin\nSOURCE=whisper\tCACHE_CALLS=0\n")
+            self.assertEqual(call("whisper", "chosen.bin"), "WHISPER_MODEL=EXPLICIT:chosen.bin\nSOURCE=whisper\tCACHE_CALLS=0\n")
+            self.assertEqual(call("silero", "chosen.gguf"), "WHISPER_MODEL=CACHE:ggml-tiny.bin\nSOURCE=whisper\tCACHE_CALLS=1\n")
+            self.assertEqual(call("probe", "chosen.gguf"), "WHISPER_MODEL=CACHE:ggml-tiny.bin\nSOURCE=whisper\tCACHE_CALLS=1\n")
+            self.assertEqual(call("silero", "success.gguf"), "SOURCE=silero\tCACHE_CALLS=0\n")
 
 
 if __name__ == "__main__":
