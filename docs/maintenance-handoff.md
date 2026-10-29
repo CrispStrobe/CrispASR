@@ -63,7 +63,13 @@ and check actual GPU session availability before every Kaggle submission.
   `validate/csm-step-profile-20261029` at `399758238`, with CI **40862657041**
   and lint **40862660572** queued. A reviewer identified partial-frame failures;
   the revised profiler marks their counters incomplete. This is unvalidated instrumentation, not a
-  performance result; require hosted build and profile-on/off output identity. Private CSM original-without-watermark version 1 failed on missing
+  performance result; require hosted build and profile-on/off output identity.
+  Native and original CSM step adapters are prepared, not submitted, at
+  `validate/csm-native-steps-20261029` commit `9ac9888fb`. Each README sets
+  separate boundaries, GPU/identity/ASR gates and license limits. The native
+  adapter builds the pinned profiler and rejects incomplete frame traces; the
+  original adapter checks actual frame and decoder forwards. The native parser
+  and original fake-module checks passed locally without inference or builds. Private CSM original-without-watermark version 1 failed on missing
   `bitsandbytes`; version 2 passed GPU and zero-WER controls. The [aggregate
   receipt](csm-original-t4-benchmark-2026-10-29.json) discloses precision,
   watermark and timing boundaries. Gated access and no redistribution apply.
