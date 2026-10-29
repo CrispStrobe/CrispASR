@@ -454,7 +454,6 @@ def main():
     import numpy as np
     import torch
     from faster_whisper import WhisperModel
-    from gguf import GGUFReader
     from huggingface_hub import hf_hub_download, snapshot_download
     from scipy.signal import resample_poly
     if not torch.cuda.is_available() or not torch.version.cuda:
