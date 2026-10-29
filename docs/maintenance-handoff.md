@@ -106,7 +106,8 @@ and check actual GPU session availability before every Kaggle submission.
   Version 2 disabled CUDA VMM for all three builds but timed out before
   completing the first source build (96% at 2,400 seconds); its terminal source
   and output are retained. No v2 inference result exists. The revised adapter
-  allows 5,400 seconds per build; submit a new version only when a slot is free.
+  allows 5,400 seconds per build, on `validate/hosted-build-timeouts-20261029`
+  at `eaa50d2cd`; submit a new version only when a slot is free.
   Its v2 uploaded script SHA-256 was
   `ea0d3c6b3ed61b00927c44c4994be463af79943d7d3629e32cb6af27eb2f883e`.
   The independent `crispasr-whisper-vmm-ab` version 1 tests VMM on and off on
