@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "complete": true,
-  "scope": "One public text prompt on a T4; one warmup and three alternating measured independent processes per engine. Native mixed Q4_K and original F32 differ in precision, sampler implementations, and wrapper behavior. Original SilentCipher watermark is explicitly disabled. Process times include loading, Python/CLI setup and GPU monitoring.",
+  "scope": "One public text prompt on a T4; one warmup and three alternating measured independent processes per engine. Native Q4_K and original F32 differ in precision, sampler implementations, and wrapper behavior. Original SilentCipher watermark is explicitly disabled. Process times include loading, Python/CLI setup and GPU monitoring.",
   "hardware": "Tesla T4, compute capability 7.5",
   "pins": {
     "runtime": [
