@@ -41,8 +41,8 @@ int bert_encoder_hidden_size(const struct bert_encoder_context* ctx);
 // Returns number of tokens. out_ids must be freed by caller.
 int bert_encoder_tokenize(const struct bert_encoder_context* ctx, const char* text, int** out_ids);
 
-// Get the number of whitespace words that a BERT token sequence spans.
-// For each whitespace word, returns the number of BERT subword tokens.
+// Get the number of BERT basic-tokenizer words (including isolated punctuation).
+// For each such word, return the number of WordPiece tokens from the same pass.
 // E.g. "seashells" → ["seas", "##hell", "##s"] → n_subtokens=3.
 // out_subtokens: array of subtokens-per-word. Caller frees.
 // Returns number of words.

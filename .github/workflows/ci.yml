@@ -226,6 +226,7 @@ jobs:
           python3 tests/test_openvoice_current_replay.py -v
           python3 tests/test_openvoice_cli_routing.py -v
           python3 tests/test_melotts_speaker_range.py -v
+          python3 tests/test_melotts_bert_alignment.py -v
           python3 tests/test_private_evidence.py -v
           python3 tests/test_openvoice_cuda_attribution.py -v
 

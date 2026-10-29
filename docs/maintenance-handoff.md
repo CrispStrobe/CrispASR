@@ -438,29 +438,47 @@ publication occurred. Remaining scope:
    private speech were retained and the checkpoint hash read back. Do not
    rebuild it merely to repeat this proof; do not change seeds, thresholds or
    the recognition oracle to make the failed gate green.
-   **Claimed next action:** `tools/kaggle/openvoice-disclosure` prepares a
-   hosted diagnostic using that exact checkpoint and accepted real reference
-   data. Compare neutral speech alone, actual prefix/content segments and joined
-   clips using the unchanged pinned tiny.en plus an independently pinned small.en
-   recognizer. Diagnostic version 1 failed before inference because Kaggle
-   rejected the failed full-source run as an unversioned input attachment.
-   Its source/logs/output are preserved. The prepared transport repair uses
-   the existing output API's fresh download URL for that checkpoint;
-   render the URL placeholder only into a private push copy, never commit it
-   or copy an account API token into the worker. The private-cache alternative
-   hit the account storage limit; no assets were removed or made public.
-   This diagnostic never sets application acceptance true. Establish
-   a synthesis defect versus decoding limitation before proposing a repair or
-   acceptance-policy change. No NN code change or new tooling dataset is needed.
-   Actions CPU **40783760561** remains queued at `7c158b325` (identical application
-   C++); candidate CI **40787625795**, Lint **40787628325** and Secret scan
-   **40787631487** at `b1561def7` were also requested. Read their live status;
-   allocation/building is not acceptance. Preserve terminal evidence before any
-   replacement. Before every compile/inference check load, memory and storage.
-   Public receipts contain metrics/hashes; speech, transcripts and phase logs
-   stay encrypted to the operator key recovered from ignored local notes.
-   Preset identity remains unknown. CPU acceptance and exact-source CI remain
-   separate. Merge only after those gates; prepare the next patch afterward.
+   **Disclosure diagnostic version 2 is complete:** controller `f2729e429`,
+   bootstrap `a455b144f`, exact retained application/checkpoint, no rebuild.
+   Neutral speech and extracted prefixes score tiny.en WER 2/7; small.en scores
+   them 1/7. Content passes both. The prefix agrees with the neutral baseline
+   after resampling (cosine 0.999937, norm ratio 0.999637); conversion/rate
+   routing is not the cause. [Diagnostic receipt](openvoice-disclosure-diagnostic-2026-10-29.json).
+   Original tiny.en acceptance remains failed; the additional recognizer does
+   not replace it. All terminal source/logs/output and encrypted speech are
+   retained, including the version-1 transport failure before inference.
+   Kaggle rejected the failed full-source run as an input attachment. The
+   corrected transport obtains the existing output API's download URL for the
+   exact checkpoint and renders its placeholder only into a private push copy;
+   never commit that capability URL or copy an account API token into a worker.
+   The private-cache alternative reached the account storage limit; no assets
+   were deleted or made public.
+   **Claimed conditioning repair, runtime acceptance pending:** original Melo
+   `209145371cff8fc3bd60d7be902ea69cbdb7965a` exposes two concrete frontend
+   mismatches. Native BERT retained punctuation inside whitespace words and
+   distributed already-doubled phone counts over WordPieces. The original
+   isolates punctuation and distributes raw phones before inserting blanks.
+   Actual-function model-free controls fail before and pass after the repair.
+   Shared existing Unicode normalization/pretokenization now feeds both callers;
+   counts come from the same WordPiece pass, unknown words are atomic, and
+   mismatched token/phone shapes fail closed. No neural operators, weights,
+   seeds, ASR oracle or quality threshold were changed.
+   Next rebuild the full candidate on a hosted CUDA worker. Require exact
+   captured native token/phoneme/tone/language/phone-count arrays against pinned
+   original Python functions in `tools/validation/melotts_inputs.py`, then both
+   original TCC 27-stage cases, Session/C ABI, actual CLI and all four original
+   quality cases, including tiny.en default-disclosed WER <=0.20. This is input
+   protocol proof plus decoded acceptance, not complete original Melo neural
+   stage parity or broad-language acceptance. Before every compile/inference
+   check load, memory and storage. Retain terminal source/logs/checkpoints and
+   encrypted evidence before any replacement. Current CPU **40783760561** and
+   CI **40787625795** / Lint **40787628325** predate this conditioning repair;
+   they cannot qualify it. Replace the obsolete queued CPU run once the new
+   candidate is pushed; request CI/Lint on the final candidate. Public receipts
+   contain metrics/hashes; speech/transcripts stay encrypted to the operator
+   key recovered from ignored local notes. Preset identity stays unknown.
+   Merge only after original quality, CPU and CI gates; prepare the next patch
+   afterward.
 2. **Publication:** no Hub write was attempted by the accepted read-only run.
    Earlier repository creation returned 403. Use an authorized destination,
    retain original MIT notices, converter precision recipe, immutable model/

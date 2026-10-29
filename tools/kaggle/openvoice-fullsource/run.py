@@ -77,7 +77,7 @@ def main():
     receipt['ggml_provider_files']={p.name:helper.sha(p) for p in GGML_LIB.iterdir() if p.is_file()}
     helper.save()
     # These dependencies do not install or replace the host's Torch package.
-    helper.run([sys.executable,'-m','pip','install','-q','faster-whisper','soundfile','scipy','cryptography'],
+    helper.run([sys.executable,'-m','pip','install','-q','faster-whisper','soundfile','scipy','cryptography','gguf==0.17.1'],
                'quality-dependencies')
     helper.run([sys.executable,'-m','pip','install','-q','--no-deps','resemblyzer','webrtcvad-wheels'],
                'speaker-dependencies')

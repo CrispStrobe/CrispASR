@@ -165,6 +165,7 @@ def main():
         receipt['built_sha256'] = dict(library=sha(library), cli=sha(cli), diff=sha(build/'bin/crispasr-diff'))
         receipt['model_source_sha256'] = {name: sha(ROOT/name) for name in [
             'src/openvoice2.cpp', 'src/melotts.cpp', 'src/crispasr_c_api.cpp',
+            'src/bert_encoder.cpp', 'src/core/bert_words.h', 'src/core/melotts_bert_alignment.h',
             'examples/cli/crispasr_backend_melotts.cpp']}
         env = dict(os.environ, CRISPASR_OV2_GPU='1' if args.device == 'cuda' else '0', CRISPASR_MELOTTS_BERT=str(bert),
                    OMP_NUM_THREADS='2', OPENBLAS_NUM_THREADS='1')
@@ -172,6 +173,14 @@ def main():
         if args.device == 'cuda':
             env['CRISPASR_DIFF_USE_GPU'] = '1'
             env['GGML_SCHED_DEBUG'] = '1'
+        run([sys.executable, ROOT/'tools/validation/melotts_inputs.py', '--library', library,
+             '--model', melo, '--bert', bert, '--output', private/'melo-inputs', '--device', args.device],
+            'melo-original-inputs', env=env, private_log=True)
+        inputs = json.loads((private/'melo-inputs/controls.json').read_text())
+        if not inputs['complete'] or len(inputs['cases']) != 3 or not all(row['accepted'] for row in inputs['cases']):
+            raise RuntimeError('Original Melo input protocol controls incomplete')
+        receipt['melo_input_controls'] = inputs
+        save()
         for i in range(2):
             label = 'original-reference-' + str(i)
             run([build/'bin/crispasr-diff', 'openvoice2', data/'openvoice2-tcc-f32sens.gguf',

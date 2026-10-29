@@ -16,6 +16,8 @@
 // data-dependent control flow into one monolithic graph.
 
 #include "melotts.h"
+#include "core/bert_words.h"
+#include "core/melotts_bert_alignment.h"
 #include "bert_encoder.h"
 
 #include "ggml.h"
@@ -289,25 +291,7 @@ static std::string post_replace_ph(const std::string& ph, const std::map<std::st
 
 // Simple tokenizer: split on punctuation/spaces, keep punctuation as tokens
 static std::vector<std::string> tokenize_english(const std::string& text) {
-    std::vector<std::string> tokens;
-    std::string cur;
-    for (char c : text) {
-        if (c == ' ' || c == ',' || c == '.' || c == '!' || c == '?' || c == ';' || c == ':' || c == '-' || c == '\'' ||
-            c == '\n') {
-            if (!cur.empty()) {
-                tokens.push_back(cur);
-                cur.clear();
-            }
-            if (c != ' ') {
-                tokens.push_back(std::string(1, c));
-            }
-        } else {
-            cur += c;
-        }
-    }
-    if (!cur.empty())
-        tokens.push_back(cur);
-    return tokens;
+    return core_bert::uncased_words(text);
 }
 
 // ── Rule-based letter-to-sound for OOV words ─────────────────────
@@ -945,6 +929,17 @@ static void dump_stage(const melotts_context* ctx, const char* label, const floa
     if (f) {
         fwrite(data, sizeof(float), n, f);
         fclose(f);
+    }
+}
+
+static void dump_input_ids(const melotts_context* ctx, const char* label, const std::vector<int>& ids) {
+    if (ctx->dump_dir.empty())
+        return;
+    const std::vector<int32_t> data(ids.begin(), ids.end());
+    const std::string path = ctx->dump_dir + "/" + label + ".bin";
+    if (FILE* file = fopen(path.c_str(), "wb")) {
+        fwrite(data.data(), sizeof(int32_t), data.size(), file);
+        fclose(file);
     }
 }
 
@@ -2874,6 +2869,9 @@ int melotts_synthesize(struct melotts_context* ctx, const char* text, float** pc
         melotts_bench_stage _bs("g2p");
         g2p_english(ctx->g2p, text, phone_ids, tone_ids, lang_ids, word2ph);
     }
+    dump_input_ids(ctx, "phoneme_ids", phone_ids);
+    dump_input_ids(ctx, "tone_ids", tone_ids);
+    dump_input_ids(ctx, "lang_ids", lang_ids);
     int T = (int)phone_ids.size();
 
     if (ctx->verbosity >= 2) {
@@ -2907,53 +2905,40 @@ int melotts_synthesize(struct melotts_context* ctx, const char* text, float** pc
             int n_words = bert_encoder_word_subtokens(ctx->bert_ctx, text, &subtokens);
 
             // Build per-BERT-token phone counts
-            // word2ph has: [pad] [word0_phones] [word1_phones] ... [pad]
-            // subtokens has: [n_sub_word0] [n_sub_word1] ...
-            // BERT tokens: [CLS] [sub00 sub01..] [sub10..] ... [SEP]
             std::vector<int> bert_word2ph;
-            bert_word2ph.push_back(word2ph[0]); // leading pad → [CLS]
-
-            int w2p_idx = 1; // skip leading pad
-            for (int wi = 0; wi < n_words && w2p_idx < (int)word2ph.size() - 1; wi++) {
-                int n_phones_word = word2ph[w2p_idx];
-                int n_sub = subtokens[wi];
-                // distribute_phone: split n_phones evenly across n_sub tokens
-                if (n_sub <= 1) {
-                    bert_word2ph.push_back(n_phones_word);
-                } else {
-                    int base = n_phones_word / n_sub;
-                    int remainder = n_phones_word % n_sub;
-                    for (int s = 0; s < n_sub; s++) {
-                        bert_word2ph.push_back(base + (s < remainder ? 1 : 0));
-                    }
-                }
-                w2p_idx++;
-            }
-
-            // trailing pad → [SEP]
-            if (w2p_idx < (int)word2ph.size())
-                bert_word2ph.push_back(word2ph.back());
+            std::vector<int> word_subtokens;
+            if (n_words > 0)
+                word_subtokens.assign(subtokens, subtokens + n_words);
             free(subtokens);
+            if (!core_melotts::bert_phone_counts(word2ph, word_subtokens, n_bert_tokens, T, bert_word2ph)) {
+                free(bert_out);
+                fprintf(stderr, "melotts: BERT token/phone alignment mismatch\n");
+                g_melotts_ctx = nullptr;
+                return 0;
+            }
+            dump_input_ids(ctx, "bert_word2ph", bert_word2ph);
+            if (!ctx->dump_dir.empty()) {
+                int* ids = nullptr;
+                const int count = bert_encoder_tokenize(ctx->bert_ctx, text, &ids);
+                if (count > 0)
+                    dump_input_ids(ctx, "bert_token_ids", std::vector<int>(ids, ids + count));
+                free(ids);
+            }
 
             // Expand BERT features using bert_word2ph
             ja_bert_features.resize(bert_dim * T, 0.0f);
             int phone_pos = 0;
             for (int bi = 0; bi < (int)bert_word2ph.size() && phone_pos < T; bi++) {
                 int n_phones = bert_word2ph[bi];
-                int bt = std::clamp(bi, 0, n_bert_tokens - 1);
+                int bt = bi;
                 for (int p = 0; p < n_phones && phone_pos < T; p++) {
                     for (int c = 0; c < bert_dim; c++)
                         ja_bert_features[c * T + phone_pos] = bert_out[bt * bert_dim + c];
                     phone_pos++;
                 }
             }
-            while (phone_pos < T) {
-                int bt = n_bert_tokens - 1;
-                for (int c = 0; c < bert_dim; c++)
-                    ja_bert_features[c * T + phone_pos] = bert_out[bt * bert_dim + c];
-                phone_pos++;
-            }
             free(bert_out);
+            dump_stage(ctx, "ja_bert_features", ja_bert_features.data(), ja_bert_features.size());
             if (ctx->verbosity >= 2)
                 fprintf(stderr, "melotts: BERT %d tokens, %d word2ph entries → %d phones\n", n_bert_tokens,
                         (int)bert_word2ph.size(), T);
