@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Private, hosted CSM graph-step profile with off/on output controls."""
 
+import atexit
 import hashlib
 import json
 import os
@@ -126,6 +127,16 @@ def main():
     resource.setrlimit(resource.RLIMIT_CORE, (0, 0))
     OUT.mkdir(exist_ok=True)
     WORK.mkdir(parents=True, exist_ok=True)
+
+    def preserve_private_evidence():
+        destination = OUT / "private-evidence"
+        destination.mkdir(exist_ok=True)
+        for pattern in ("*.wav", "*.log"):
+            for path in WORK.glob(pattern):
+                if path.is_file():
+                    shutil.copy2(path, destination / path.name)
+
+    atexit.register(preserve_private_evidence)
     receipt = {
         "complete": False,
         "acceptance": False,
