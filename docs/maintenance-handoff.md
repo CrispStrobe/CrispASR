@@ -100,7 +100,7 @@ and check actual GPU session availability before every Kaggle submission.
   source of overhead, not a proven cause. Optional timing source `e34ca22e4`
   is on `validate/whisper-threadpool-profile-20261029`, with CI **40864034522**
   and lint **40864037912** requested. The prepared, unsubmitted adapter is on
-  `validate/whisper-threadpool-adapter-20261029` at `c6ea7a3a6`. Only run it if
+  `validate/whisper-threadpool-adapter-20261029` at `b35e0f32f`. Only run it if
   current comparisons leave that hypothesis relevant; keep CPU ownership and
   synchronization behavior unchanged until correctness and speed are proved.
 
