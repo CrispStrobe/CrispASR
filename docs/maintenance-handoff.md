@@ -44,7 +44,7 @@ and check actual GPU session availability before every Kaggle submission.
   Whisper long-clip controls and Silero late-speech detection passed. Fix the
   fallback without lowering the Silero gate. Repair `de2e532dd` passes
   model-free actual-caller controls; CI **40858515815**, lint **40858519622**
-  and hosted long-clip rerun **40858523187** are queued. Model acceptance and
+  are queued; hosted long-clip rerun **40858523187** has started. Model acceptance and
   main integration remain outstanding.
 - **Recent models:** [the Nemotron paired receipt](nemotron-original-t4-benchmark-2026-10-29.json)
   records T4 results for native F16 and original F32, with zero WER and GPU
@@ -92,7 +92,14 @@ and check actual GPU session availability before every Kaggle submission.
   the same CrispASR source. Collect and check both terminal outputs before
   drawing conclusions or scheduling another run. These results do not yet
   establish the reason for the gap or matched performance. Keep changes on
-  validation branches until their own acceptance checks pass.
+  validation branches until their own acceptance checks pass. A static upstream
+  comparison identified per-call persistent CPU-threadpool setup as a possible
+  source of overhead, not a proven cause. Optional timing source `e34ca22e4`
+  is on `validate/whisper-threadpool-profile-20261029`, with CI **40864034522**
+  and lint **40864037912** requested. The prepared, unsubmitted adapter is on
+  `validate/whisper-threadpool-adapter-20261029` at `c6ea7a3a6`. Only run it if
+  current comparisons leave that hypothesis relevant; keep CPU ownership and
+  synchronization behavior unchanged until correctness and speed are proved.
 
 The validation branch `validate/ordered-model-benchmarks-20261029` contains the
 prepared adapters and bounded Nemotron receipt. Later local changes and private
