@@ -114,6 +114,8 @@ std::unique_ptr<CrispasrBackend> crispasr_make_csm_tts_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_bananamind_tts_backend();
 // omnivoice: k2-fsa/OmniVoice — Qwen3-based masked iterative TTS (600+ languages).
 std::unique_ptr<CrispasrBackend> crispasr_make_omnivoice_backend();
+// meanvc2: ASLP MeanVC2 zero-shot streaming voice conversion.
+std::unique_ptr<CrispasrBackend> crispasr_make_meanvc2_backend();
 
 #include "ggml.h"
 #include "gguf.h"
@@ -304,6 +306,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_tabcnn_backend();
     if (name == "rvc-svc" || name == "rvc" || name == "svc")
         return crispasr_make_rvc_backend();
+    if (name == "meanvc2" || name == "mean-vc2")
+        return crispasr_make_meanvc2_backend();
     if (name == "beat-this" || name == "beatthis" || name == "beat_this" || name == "beats")
         return crispasr_make_beat_this_backend();
     if (name == "kyutai-stt" || name == "kyutai" || name == "moshi-stt" || name == "kyutai-stt-2.6b")
@@ -520,6 +524,7 @@ std::vector<std::string> crispasr_list_backends() {
         "btc-chords",
         "tabcnn",
         "rvc-svc",
+        "meanvc2",
         "beat-this",
     };
 }

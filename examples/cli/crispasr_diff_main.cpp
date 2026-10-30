@@ -104,6 +104,7 @@
 #include "melotts.h"
 #include "moss_audio.h"
 #include "arktts.h"
+#include "meanvc2.h"
 #include "hojo_asr.h"
 #include "moss_transcribe.h"
 #include "lfm2_audio.h"
@@ -10217,6 +10218,79 @@ int main(int argc, char** argv) {
         }
 
         arktts_free(ctx);
+
+    } else if (backend_name == "meanvc2" || backend_name == "mean-vc2") {
+        auto cp = meanvc2_context_default_params();
+        cp.verbosity = 0;
+        meanvc2_context* ctx = meanvc2_init_from_file(model_path.c_str(), cp);
+        if (!ctx) {
+            fprintf(stderr, "failed to load meanvc2 model '%s'\n", model_path.c_str());
+            return 4;
+        }
+
+        // Stage 1: ASR Fast-U2++ BNF
+        auto raw_audio = ref.get_f32("raw_audio");
+        if (raw_audio.first) {
+            int out_frames = 0, out_dim = 0;
+            float* bns = meanvc2_run_asr(ctx, raw_audio.first, (int)raw_audio.second, &out_frames, &out_dim);
+            if (bns && ref.has("asr_bn")) {
+                auto rep = ref.compare("asr_bn", bns, (size_t)out_frames * out_dim);
+                print_row("asr_bn", rep, COS_THRESHOLD);
+                record(rep);
+                std::free(bns);
+            }
+        }
+
+        // Stage 2: GTM memory KV
+        auto spk_pair = ref.get_f32("spk_emb");
+        if (spk_pair.first && spk_pair.second >= 256) {
+            std::vector<float> k_mem(32 * 256), v_mem(32 * 256);
+            if (meanvc2_run_gtm(ctx, spk_pair.first, k_mem.data(), v_mem.data()) == 0) {
+                if (ref.has("gtm_k")) {
+                    auto rep_k = ref.compare("gtm_k", k_mem.data(), 32 * 256);
+                    print_row("gtm_k", rep_k, COS_THRESHOLD);
+                    record(rep_k);
+                }
+                if (ref.has("gtm_v")) {
+                    auto rep_v = ref.compare("gtm_v", v_mem.data(), 32 * 256);
+                    print_row("gtm_v", rep_v, COS_THRESHOLD);
+                    record(rep_v);
+                }
+            }
+
+            // Stage 3: DiT mel
+            auto bn_interp = ref.get_f32("asr_bn_interp");
+            auto noise_pair = ref.get_f32("noise");
+            if (bn_interp.first && noise_pair.first) {
+                int n_frames = (int)bn_interp.second / 256;
+                int out_mel_dim = 0;
+                float* mel =
+                    meanvc2_run_dit(ctx, bn_interp.first, n_frames, spk_pair.first, noise_pair.first, &out_mel_dim);
+                if (mel && ref.has("dit_mel")) {
+                    auto rep_mel = ref.compare("dit_mel", mel, (size_t)out_mel_dim * n_frames);
+                    print_row("dit_mel", rep_mel, COS_THRESHOLD);
+                    record(rep_mel);
+
+                    // Stage 4: Vocos waveform decode
+                    if (ref.has("vocos_pcm")) {
+                        int out_pcm_samples = 0;
+                        auto ref_mel = ref.get_f32("dit_mel");
+                        const float* vocos_in =
+                            (ref_mel.first && ref_mel.second == (size_t)out_mel_dim * n_frames) ? ref_mel.first : mel;
+                        float* pcm = meanvc2_run_vocos(ctx, vocos_in, n_frames, &out_pcm_samples);
+                        if (pcm) {
+                            auto rep_pcm = ref.compare("vocos_pcm", pcm, out_pcm_samples);
+                            print_row("vocos_pcm", rep_pcm, COS_THRESHOLD);
+                            record(rep_pcm);
+                            meanvc2_free_audio(pcm);
+                        }
+                    }
+                    std::free(mel);
+                }
+            }
+        }
+
+        meanvc2_free(ctx);
 
     } else {
         fprintf(stderr,

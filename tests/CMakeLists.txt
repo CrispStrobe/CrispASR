@@ -2868,6 +2868,34 @@ target_link_libraries(test-openvoice2-hifi PRIVATE
     openvoice2
 )
 
+# ─── test-meanvc2-params — Catch2 unit tests for meanvc2_context_params defaults
+# and null-guard coverage. No GGUF required. ───────────────────────────────────
+add_executable(test-meanvc2-params
+    test-meanvc2-params.cpp
+)
+target_include_directories(test-meanvc2-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-meanvc2-params PRIVATE
+    Catch2::Catch2WithMain
+    meanvc2
+)
+catch_discover_tests(test-meanvc2-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;meanvc2"
+)
+
+# ─── test-meanvc2-convert — standalone convert harness (needs GGUF + wav). ────
+add_executable(test-meanvc2-convert
+    test-meanvc2-convert.cpp
+)
+target_include_directories(test-meanvc2-convert PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-meanvc2-convert PRIVATE
+    meanvc2
+)
+
 # ─── test-t5translate-params — Catch2 unit tests for t5_translate_context_params defaults
 # and null-guard coverage. No GGUF required. ───────────────────────────────────
 add_executable(test-t5translate-params

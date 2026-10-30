@@ -82,6 +82,7 @@ add_executable(${TARGET}
     crispasr_backend_crepe.cpp
     crispasr_backend_btc.cpp
     crispasr_backend_rvc.cpp
+    crispasr_backend_meanvc2.cpp
     crispasr_piano_cli.cpp
     crispasr_backend_beat_this.cpp
     crispasr_backend_mel_band_roformer.cpp
@@ -295,6 +296,7 @@ target_link_libraries(crispasr-diff PRIVATE
     miotts
     miocodec
     arktts
+    meanvc2
     breeze_tts_2
     crepe
     omniasr
@@ -436,6 +438,7 @@ target_link_libraries(${TARGET} PRIVATE
     moss_transcribe_diarize
     miotts
     arktts
+    meanvc2
     breeze_tts_2
     ${FFMPEG_LIBRARIES}
     ${CMAKE_THREAD_LIBS_INIT}

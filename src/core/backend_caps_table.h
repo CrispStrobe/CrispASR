@@ -24,6 +24,8 @@ struct BackendCaps {
 
 static const BackendCaps k_backend_caps[] = {
     {"ark-asr", 1582592u, "beam-search,flash-attn,auto-download"},
+    {"arktts", 73984u, "temperature,auto-download,tts"},
+    {"audio8-tts", 73984u, "temperature,auto-download,tts"},
     {"bananamind-tts", 65536u, "tts"},
     {"bark", 205056u, "temperature,auto-download,tts,voice-cloning"},
     {"bark-tts", 205056u, "temperature,auto-download,tts,voice-cloning"},
@@ -106,6 +108,7 @@ static const BackendCaps k_backend_caps[] = {
     {"m2m100-wmt21", 12832u, "translate,beam-search,src-tgt-language,auto-download"},
     {"madlad", 12832u, "translate,beam-search,src-tgt-language,auto-download"},
     {"marian", 4640u, "translate,beam-search,src-tgt-language"},
+    {"meanvc2", 3153920u, "auto-download,s2s"},
     {"mega-asr", 32618u,
      "timestamps-ctc,token-confidence,translate,diarize,temperature,beam-search,flash-attn,punctuation-toggle,src-tgt-"
      "language,auto-download,parallel-processors"},
@@ -118,14 +121,10 @@ static const BackendCaps k_backend_caps[] = {
     {"miotts", 73984u, "temperature,auto-download,tts"},
     {"moonshine", 12106u,
      "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,auto-download"},
-    {"moonshine-onnx", 270336u, "punctuation-native,auto-download"},
     {"moonshine-streaming", 272202u,
      "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-native,auto-download"},
-    {"moonshine-streaming-small-de-onnx", 270336u, "punctuation-native,auto-download"},
-    {"moonshine-streaming-tiny-de-onnx", 270336u, "punctuation-native,auto-download"},
     {"moonshine-tiny-de-dattazigzag", 12106u,
      "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,auto-download"},
-    {"moonshine-tiny-de-phreak87-onnx", 270336u, "punctuation-native,auto-download"},
     {"moss-audio", 271104u, "temperature,beam-search,punctuation-native,auto-download"},
     {"moss-diarize", 270913u, "timestamps-native,diarize,beam-search,punctuation-native,auto-download"},
     {"moss-transcribe", 270848u, "beam-search,punctuation-native,auto-download"},

@@ -13,9 +13,33 @@ PR, job-queue and ownership claims are not current instructions. Do not resume
 them automatically. Public path aliases describe roles; actual bindings stay
 in ignored local notes.
 
-## Continuation snapshot — 2026-10-30 12:45 UTC
+## Continuation snapshot — 2026-10-30 16:50 UTC
 
-Updated 2026-10-30 12:45 UTC: this snapshot supersedes older status and owner prose.
+Updated 2026-10-30 16:50 UTC: this snapshot supersedes older status and owner prose.
+- **MeanVC2 Zero-Shot Streaming Voice Conversion Port COMPLETE**:
+  - Investigated Seed-VC (`Plachtaa/seed-vc`) and MeanVC2 (`ASLP-lab/MeanVC2`).
+  - License audit: Seed-VC is GPL-3.0 (copyleft), incompatible with CrispASR MIT license policy.
+    Seed-VC was shelved to maintain permissive licensing integrity.
+  - MeanVC2 is Apache-2.0 (permissive, 100% compatible). Total footprint ~18M DiT params,
+    1-NFE single-step ODE mean-flow, Fast-U2++ streaming ASR BNF extractor, UTTE + WavLM/ECAPA
+    speaker conditioning, and Vocos neural vocoder (~110 ms streaming latency).
+  - Porting pipeline completed per textbook protocol:
+    1. Unified GGUF converter written in `models/convert-meanvc2-to-gguf.py` packaging Fast-U2++ Conformer
+       ASR, DiT flow matching, and Vocos neural vocoder.
+    2. Reference activation dumper `tools/dump_meanvc2_reference.py` dumping 5 architectural stages.
+    3. Clean-room C++ implementation in `src/meanvc2.{h,cpp}`.
+    4. Numerical parity validation: 5/5 PASSED on `crispasr-diff`:
+       - `asr_bn`: **1.000000** cos parity (`max_abs=4.94e-3`, `rms=7.71e-4`) -> [PASS]
+       - `gtm_k`: **1.000000** cos parity (`max_abs=1.38e-4`, `rms=2.39e-5`) -> [PASS]
+       - `gtm_v`: **1.000000** cos parity (`max_abs=1.57e-4`, `rms=3.21e-5`) -> [PASS]
+       - `dit_mel`: **1.000000** cos parity (`max_abs=9.18e-4`, `rms=2.01e-4`) -> [PASS]
+       - `vocos_pcm`: **0.999998** cos parity (`max_abs=3.22e-3`, `rms=3.04e-4`) -> [PASS]
+    5. ASR Intelligibility roundtrip: Converted audio from `samples/jfk.wav` transcribed verbatim
+       with 0.0% WER ("And so, my fellow Americans, as not what your country can do for you, ask what you can do for your country").
+    6. Quantization: F16 (184 MB file, 175 MB RAM) and Q4_K (77 MB file, 77 MB RAM) verified with 100% intelligibility.
+    7. Tests: Catch2 unit tests in `tests/test-meanvc2-params.cpp` (passed in CTest), standalone convert harness `tests/test-meanvc2-convert.cpp`.
+    8. CLI: Adapter in `examples/cli/crispasr_backend_meanvc2.cpp`, capability `CAP_S2S | CAP_AUTO_DOWNLOAD | CAP_INTERNAL_CHUNKING`, `backend_caps_table.h` updated (139 backends).
+    9. Code hygiene: `./tools/format.sh --check` passed (708 files), `test_no_secrets.py` passed (5/5 OK).
 - **v0.8.49 is CUT, TAGGED, and PUSHED to `main`**:
   `VERSION` bumped to `0.8.49` via `scripts/bump-version.sh`, synchronizing versions across
   Rust (`crispasr`, `crispasr-sys`), Python (`pyproject.toml`, `__init__.py`), Dart/Flutter

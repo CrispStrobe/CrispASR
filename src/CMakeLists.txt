@@ -1836,6 +1836,18 @@ if(NOT MSVC)
     target_compile_options(arktts PRIVATE -O3)
 endif()
 
+# ---------------------------------------------------------------------------
+# meanvc2 — ASLP@NPU MeanVC2 Streaming Zero-Shot Voice Conversion (Apache-2.0)
+# ---------------------------------------------------------------------------
+add_library(meanvc2 STATIC meanvc2.h meanvc2.cpp)
+set_target_properties(meanvc2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(meanvc2 PUBLIC .)
+target_compile_features   (meanvc2 PUBLIC cxx_std_17)
+target_link_libraries     (meanvc2 PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+if(NOT MSVC)
+    target_compile_options(meanvc2 PRIVATE -O3)
+endif()
+
 # miocodec — Aratako/MioCodec-25Hz-44.1kHz-v2 (MIT, 133M params)
 # Standalone audio codec: FSQ → Transformer + AdaLN-Zero → iSTFT → 44.1kHz
 add_library(miocodec STATIC miocodec.h miocodec.cpp)
@@ -3048,6 +3060,9 @@ if (TARGET miotts)
 endif()
 if (TARGET arktts)
     target_link_libraries(crispasr-lib PUBLIC arktts)
+endif()
+if (TARGET meanvc2)
+    target_link_libraries(crispasr-lib PUBLIC meanvc2)
 endif()
 if (TARGET mini-omni2)
     target_link_libraries(crispasr-lib PUBLIC mini-omni2)

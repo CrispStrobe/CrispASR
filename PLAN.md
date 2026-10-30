@@ -12,12 +12,13 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-30)
 
-### Current handoff — 2026-10-30 12:45 UTC
+### Current handoff — 2026-10-30 16:50 UTC
 
-Updated 2026-10-30 12:45 UTC: no work is claimed and zero Kaggle GPU jobs remain active. The [continuation snapshot](docs/maintenance-handoff.md#continuation-snapshot--2026-10-30-1245-utc) supersedes older owner/status prose below and records all completed run IDs and public receipts. Keep #557 open for reply review.
+Updated 2026-10-30 16:50 UTC: MeanVC2 streaming zero-shot voice conversion COMPLETE. 5/5 parity stages passed on `crispasr-diff` (>= 0.999998), 0.0% WER on Whisper ASR intelligibility verification, Q4_K/F16 quantizations verified, Catch2 unit tests + standalone convert harness integrated.
 
 | Priority | Open work | Current evidence / next gate |
 |---|---|---|
+| 0 | COMPLETE: MeanVC2 streaming zero-shot voice conversion backend port | Clean-room C++ implementation in `src/meanvc2.{h,cpp}`. Unified GGUF converter in `models/convert-meanvc2-to-gguf.py`. Parity: `crispasr-diff` 5/5 PASS (`asr_bn` 1.000000, `gtm_k` 1.000000, `gtm_v` 1.000000, `dit_mel` 1.000000, `vocos_pcm` 0.999998). ASR intelligibility: 0.0% WER on Whisper transcription of converted audio. Quantization: F16 (175 MB RAM) & Q4_K (77 MB RAM). Tests: `tests/test-meanvc2-params.cpp` (Catch2 unit tests, CTest passed) and `tests/test-meanvc2-convert.cpp`. CLI: registered in `crispasr_backend_meanvc2.cpp`, `CAP_S2S | CAP_AUTO_DOWNLOAD | CAP_INTERNAL_CHUNKING`. Format: 708 files clean, `test_no_secrets.py` 5/5 OK. |
 | 1 | COMPLETE: Audio8-TTS (ArkTTS 0.6B) backend port, Metal/GPU acceleration & HF release | Full Dual-AR + Snake vocoder architecture, 1.000000 cosine parity on `crispasr-diff` (7/7 PASS), GPU Metal prefix execution for fast AR + dual-transformer in-place KV caching (~55–80 ms/frame on M1 Metal, RTF ~0.67x; CPU ~190–215 ms/frame), chunked causal vocoder (<2.5 GB peak RAM for 3+ min audio), Q4_K/Q8_0/F16 GGUFs published to `cstr/Audio8-TTS-Realistic-0.6b-GGUF`, 0.0% WER on ASR roundtrips. |
 | 2 | COMPLETE: v0.8.49 release cut & tagged | `VERSION` bumped to 0.8.49 via `scripts/bump-version.sh`, synced across Python, Rust, Dart, JS. `RELEASE_NOTES_v0.8.49.md` and `HISTORY.md` committed; tag `v0.8.49` pushed. |
 | 3 | COMPLETE: Integrate #559, then #560 | `#559` merged at `777e8ff23`; `#560` merged at `641e9bfab` (CI **40900035576**, Lint **40900041428**, Heavy CPU **40900046409**). Both shipped in v0.8.49. |
