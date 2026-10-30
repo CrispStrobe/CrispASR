@@ -555,6 +555,18 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     // and output/embedding can be quantized.
     const bool is_miotts = (arch.find("miotts") != std::string::npos);
 
+    // ArkTTS (Audio8-TTS-Realistic-0.6b): 24-layer slow transformer + 4-layer
+    // fast subnetwork + BigVGAN/Snake vocoder. The codec (codec.*) is
+    // precision-sensitive: Snake activations amplify quantization noise through
+    // the ConvTranspose upsampling chain. The token embedding (embeddings.weight)
+    // is tied with the LM head (155776 x 896) and drives autoregressive next-token
+    // logits; quantizing it degrades logit margins. The codebook embeddings
+    // (codebook_embeddings, fast_embeddings, fast_output) are small codebook
+    // lookup tables. Keep codec.*, embeddings.weight, codebook_embeddings.*,
+    // and fast_embeddings/output at source precision; the 24 slow transformer
+    // layers and 4 fast transformer layers are safe to quantize.
+    const bool is_arktts = (arch == "arktts" || arch == "audio8-tts" || arch == "ark-tts");
+
     // Canary-Qwen: FastConformer encoder + linear projection + Qwen3-1.7B LLM.
     // The encoder is precision-sensitive (conformer drift), keep at source.
     // Only LLM block projections (blk.*.attn_*, blk.*.ffn_*) should be quantized.
@@ -1062,6 +1074,9 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                            sname.find("feature_projection.projection.") != std::string::npos)) &&
             !(is_higgs && (sname == "token_embd.weight" || sname == "output.weight")) &&
             !(is_miotts && sname.find("codec.") == 0) &&
+            !(is_arktts && (sname.find("codec.") == 0 || sname == "embeddings.weight" ||
+                            sname.find("codebook_embeddings") == 0 || sname.find("fast_embeddings") == 0 ||
+                            sname.find("fast_output") == 0)) &&
             !(is_parakeet && parakeet_is_rnnt && !parakeet_quant_all &&
               (sname.find("joint.") == 0 || sname.find("decoder.embed") == 0)) &&
             // encoder.pre.* stays unquantized for the same reason it is F32 in the

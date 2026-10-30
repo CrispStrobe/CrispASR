@@ -112,7 +112,6 @@ def convert_arktts(
         cfg = json.load(f)
 
     writer = GGUFWriter(str(output_path), "arktts")
-    writer.add_architecture()
     writer.add_name("Audio8-TTS-Realistic-0.6b")
 
     # Architecture metadata
@@ -184,8 +183,25 @@ def convert_arktts(
             codec_sd = codec_sd["state_dict"]
         for key, tensor in codec_sd.items():
             if isinstance(tensor, torch.Tensor):
-                arr = tensor.float().numpy()
-                write_tensor(writer, f"codec.{key}", arr, dtype)
+                if "parametrizations.weight.original0" in key:
+                    g = tensor.float()
+                    v = codec_sd[key.replace("original0", "original1")].float()
+                    folded_w = torch._weight_norm(v, g, 0).numpy()
+                    out_name = "codec." + key.replace(".parametrizations.weight.original0", ".weight")
+                    write_tensor(writer, out_name, folded_w, dtype)
+                elif "parametrizations.weight.original1" in key:
+                    continue
+                elif "weight_g" in key:
+                    g = tensor.float()
+                    v = codec_sd[key.replace("weight_g", "weight_v")].float()
+                    folded_w = torch._weight_norm(v, g, 0).numpy()
+                    out_name = "codec." + key.replace(".weight_g", ".weight")
+                    write_tensor(writer, out_name, folded_w, dtype)
+                elif "weight_v" in key:
+                    continue
+                else:
+                    arr = tensor.float().numpy()
+                    write_tensor(writer, f"codec.{key}", arr, dtype)
 
     # 3. Add tokenizer if tokenizer.json present
     tok_path = model_dir / "tokenizer.json"
@@ -202,6 +218,16 @@ def convert_arktts(
             writer.add_token_list(tokens)
             writer.add_token_scores(scores)
             writer.add_token_types(token_types)
+
+            raw_merges = tok_data.get("model", {}).get("merges", [])
+            merges = []
+            for m in raw_merges:
+                if isinstance(m, list):
+                    merges.append(" ".join(m))
+                elif isinstance(m, str) and m and not m.startswith("#"):
+                    merges.append(m)
+            if merges:
+                writer.add_token_merges(merges)
 
     print(f"Writing GGUF to {output_path}...")
     writer.write_header_to_file()

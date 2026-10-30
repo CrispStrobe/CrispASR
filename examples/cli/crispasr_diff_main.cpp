@@ -103,6 +103,7 @@
 #include "parler_tts.h"
 #include "melotts.h"
 #include "moss_audio.h"
+#include "arktts.h"
 #include "hojo_asr.h"
 #include "moss_transcribe.h"
 #include "lfm2_audio.h"
@@ -10103,6 +10104,119 @@ int main(int argc, char** argv) {
         }
 
         crepe_free(ctx);
+
+    } else if (backend_name == "arktts") {
+        auto cp = arktts_context_default_params();
+        cp.n_threads = 4;
+        cp.verbosity = 0;
+        cp.temperature = 0.0f;
+        arktts_context* ctx = arktts_init_from_file(model_path.c_str(), cp);
+        if (!ctx) {
+            fprintf(stderr, "failed to load arktts model '%s'\n", model_path.c_str());
+            return 4;
+        }
+
+        // Stage 1: embed_tokens
+        auto ids_pair = ref.get_f32("text_input_ids");
+        if (ids_pair.first) {
+            int n_tokens = (int)ids_pair.second / 11;
+            if (n_tokens <= 0)
+                n_tokens = (int)ids_pair.second;
+            std::vector<int32_t> ids(ids_pair.second);
+            for (size_t i = 0; i < ids_pair.second; i++)
+                ids[i] = (int32_t)ids_pair.first[i];
+
+            int out_dim = 0;
+            float* embeds = arktts_run_embed(ctx, ids.data(), n_tokens, &out_dim);
+            if (embeds) {
+                auto rep = ref.compare("embed_tokens", embeds, (size_t)n_tokens * out_dim);
+                print_row("embed_tokens", rep, COS_THRESHOLD);
+                record(rep);
+
+                // Stage 2: slow_logits_last
+                int out_vocab = 0;
+                float* logits = arktts_run_slow_transformer(ctx, embeds, n_tokens, &out_vocab);
+                if (logits) {
+                    if (ref.has("slow_logits_last")) {
+                        auto rep_l = ref.compare("slow_logits_last", logits, out_vocab);
+                        print_row("slow_logits_last", rep_l, COS_THRESHOLD);
+                        record(rep_l);
+                    }
+                    std::free(logits);
+                }
+                std::free(embeds);
+            }
+        }
+
+        // Stage 3: frame0_codebooks
+        if (ref.has("frame0_codebooks")) {
+            auto sem_pair = ref.get_f32("selected_semantic_id");
+            int32_t sem_id = sem_pair.first ? (int32_t)sem_pair.first[0] : 151678;
+            int32_t codes[10] = {0};
+            if (arktts_run_fast_subnetwork(ctx, nullptr, sem_id, codes) == 0) {
+                float codes_f[10];
+                for (int i = 0; i < 10; i++)
+                    codes_f[i] = (float)codes[i];
+                auto rep_c = ref.compare("frame0_codebooks", codes_f, 10);
+                print_row("frame0_codebooks", rep_c, COS_THRESHOLD);
+                record(rep_c);
+            }
+        }
+
+        // Stage 4: vocoder stages
+        if (ref.has("test_codes_4frames")) {
+            auto c_pair = ref.get_f32("test_codes_4frames");
+            if (c_pair.first && c_pair.second >= 40) {
+                std::vector<int32_t> test_codes(c_pair.second);
+                for (size_t i = 0; i < c_pair.second; i++)
+                    test_codes[i] = (int32_t)c_pair.first[i];
+
+                if (ref.has("quant_sum_latents")) {
+                    float* qs = arktts_run_quant_sum(ctx, test_codes.data(), 10, 4);
+                    if (qs) {
+                        auto rep_qs = ref.compare("quant_sum_latents", qs, 1024 * 4);
+                        print_row("quant_sum_latents", rep_qs, COS_THRESHOLD);
+                        record(rep_qs);
+                        std::free(qs);
+                    }
+                }
+
+                auto qs_pair = ref.get_f32("quant_sum_latents");
+                if (qs_pair.first && ref.has("post_module_out")) {
+                    float* pm = arktts_run_post_module(ctx, qs_pair.first, 4);
+                    if (pm) {
+                        auto rep_pm = ref.compare("post_module_out", pm, 1024 * 4);
+                        print_row("post_module_out", rep_pm, COS_THRESHOLD);
+                        record(rep_pm);
+                        std::free(pm);
+                    }
+                }
+
+                auto pm_pair = ref.get_f32("post_module_out");
+                if (pm_pair.first && ref.has("upsample_out")) {
+                    float* up = arktts_run_upsample(ctx, pm_pair.first, 4);
+                    if (up) {
+                        auto rep_up = ref.compare("upsample_out", up, 1024 * 16);
+                        print_row("upsample_out", rep_up, COS_THRESHOLD);
+                        record(rep_up);
+                        std::free(up);
+                    }
+                }
+
+                if (ref.has("decoded_pcm")) {
+                    int out_samples = 0;
+                    float* pcm = arktts_decode_codes(ctx, test_codes.data(), 10, 4, &out_samples);
+                    if (pcm) {
+                        auto rep_pcm = ref.compare("decoded_pcm", pcm, out_samples);
+                        print_row("decoded_pcm", rep_pcm, COS_THRESHOLD);
+                        record(rep_pcm);
+                        arktts_free_audio(pcm);
+                    }
+                }
+            }
+        }
+
+        arktts_free(ctx);
 
     } else {
         fprintf(stderr,

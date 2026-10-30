@@ -51,6 +51,17 @@ void arktts_set_seed(struct arktts_context* ctx, uint64_t seed);
 // Synthesize text to 44.1 kHz mono float PCM. Caller frees with arktts_free_audio.
 float* arktts_synthesize(struct arktts_context* ctx, const char* text, int* out_n);
 
+// Diagnostic stage APIs for diff harness
+float* arktts_run_embed(struct arktts_context* ctx, const int32_t* input_ids, int n_tokens, int* out_dim);
+float* arktts_run_slow_transformer(struct arktts_context* ctx, const float* embeds, int n_tokens, int* out_vocab);
+int arktts_run_fast_subnetwork(struct arktts_context* ctx, const float* slow_hidden, int32_t semantic_code,
+                               int32_t* out_codebooks);
+float* arktts_run_quant_sum(struct arktts_context* ctx, const int32_t* codes, int n_codebooks, int n_frames);
+float* arktts_run_post_module(struct arktts_context* ctx, const float* latents, int n_frames);
+float* arktts_run_upsample(struct arktts_context* ctx, const float* post_out, int n_frames);
+float* arktts_decode_codes(struct arktts_context* ctx, const int32_t* codes, int n_codebooks, int n_frames,
+                           int* out_samples);
+
 void arktts_free_audio(float* pcm);
 void arktts_free(struct arktts_context* ctx);
 
