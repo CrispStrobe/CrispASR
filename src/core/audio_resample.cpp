@@ -1,6 +1,7 @@
 // src/core/audio_resample.cpp — see header for the contract.
 
 #include "audio_resample.h"
+#include "parallel_for.h"
 
 #include <algorithm>
 #include <climits>
@@ -127,8 +128,25 @@ std::vector<float> resample_polyphase(const float* in, int n_in, int src_rate, i
     // input samples.
     const int n_out = (int)n_out64;
 
-    auto h = build_filter(L, M, num_zeros, kaiser_beta);
-    const int half_len = ((int)h.size() - 1) / 2;
+    struct FilterKey {
+        int L = 0, M = 0, num_zeros = 0;
+        float kaiser_beta = 0.0f;
+        bool operator==(const FilterKey& o) const {
+            return L == o.L && M == o.M && num_zeros == o.num_zeros && kaiser_beta == o.kaiser_beta;
+        }
+    };
+    static thread_local FilterKey cached_filter_key = {0, 0, 0, 0.0f};
+    static thread_local std::vector<float> cached_filter;
+
+    const FilterKey cur_key = {L, M, num_zeros, kaiser_beta};
+    if (!(cached_filter_key == cur_key) || cached_filter.empty()) {
+        cached_filter = build_filter(L, M, num_zeros, kaiser_beta);
+        cached_filter_key = cur_key;
+    }
+
+    const float* h_ptr = cached_filter.data();
+    const int total_len = (int)cached_filter.size();
+    const int half_len = (total_len - 1) / 2;
 
     // For each output sample at index `i` (in dst_rate samples), the
     // corresponding fractional position in the upsampled stream
@@ -149,28 +167,39 @@ std::vector<float> resample_polyphase(const float* in, int n_in, int src_rate, i
     const int j_span = half_len / L + 1;
 
     std::vector<float> out((size_t)n_out, 0.0f);
-    for (int i = 0; i < n_out; i++) {
-        const int64_t i_up = (int64_t)i * M;      // position in upsampled stream
-        const int j_center = (int)(i_up / L);     // nearest input sample (lower)
-        const int phase_offset = (int)(i_up % L); // fractional component
-        // Iterate over the input window that covers half_len upsampled
-        // taps in each direction.
-        const int j_min = std::max(0, j_center - j_span);
-        const int j_max = std::min(n_in - 1, j_center + j_span);
-        double s = 0.0;
-        for (int j = j_min; j <= j_max; j++) {
-            // Filter tap index for this (i, j) pair:
-            //   tap = i*M - j*L + half_len
-            //       = (j_center - j) * L + phase_offset + half_len
-            const int tap = (j_center - j) * L + phase_offset + half_len;
-            if (tap < 0 || tap >= (int)h.size())
-                continue;
-            s += (double)in[(size_t)j] * (double)h[(size_t)tap];
+    float* out_ptr = out.data();
+
+    auto process_range = [&](int i0, int i1) {
+        for (int i = i0; i < i1; i++) {
+            const int64_t i_up = (int64_t)i * M;      // position in upsampled stream
+            const int j_center = (int)(i_up / L);     // nearest input sample (lower)
+            const int phase_offset = (int)(i_up % L); // fractional component
+            // Iterate over the input window that covers half_len upsampled
+            // taps in each direction.
+            const int j_min = std::max(0, j_center - j_span);
+            const int j_max = std::min(n_in - 1, j_center + j_span);
+
+            // Bounds on j where tap = (j_center - j)*L + phase_offset + half_len is in [0, total_len)
+            const int val = phase_offset + half_len;
+            const int j_start = std::max(j_min, j_center - (total_len - 1 - val) / L);
+            const int j_end = std::min(j_max, j_center + val / L);
+
+            double s = 0.0;
+            int tap = (j_center - j_start) * L + val;
+            for (int j = j_start; j <= j_end; j++, tap -= L) {
+                s += (double)in[(size_t)j] * (double)h_ptr[(size_t)tap];
+            }
+            // Compensate for the implicit factor-L upsample (zero-stuffing
+            // multiplies the spectrum by 1/L; a corresponding factor-L gain
+            // restores unity DC).
+            out_ptr[(size_t)i] = (float)(s * (double)L);
         }
-        // Compensate for the implicit factor-L upsample (zero-stuffing
-        // multiplies the spectrum by 1/L; a corresponding factor-L gain
-        // restores unity DC).
-        out[(size_t)i] = (float)(s * (double)L);
+    };
+
+    if (n_out >= 4096) {
+        core_parallel::for_each_chunk(n_out, 0, process_range);
+    } else {
+        process_range(0, n_out);
     }
     return out;
 }

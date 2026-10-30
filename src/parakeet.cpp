@@ -1305,8 +1305,19 @@ struct parakeet_kda_layer_state {
     std::vector<float> S;      // [num_heads * head_dim * head_dim]
 };
 
+struct parakeet_kda_scratch {
+    std::vector<float> cur_x;
+    std::vector<float> x_norm;
+    std::vector<float> q_raw, k_raw, v_raw;
+    std::vector<float> q_conv, k_conv, v_conv;
+    std::vector<float> q, k;
+    std::vector<float> f_mid, g, beta;
+    std::vector<float> o, g_mid, g_out, o_flat;
+};
+
 struct parakeet_kda_state {
     std::vector<parakeet_kda_layer_state> layers;
+    parakeet_kda_scratch scratch;
 };
 
 struct parakeet_lstm_state {
@@ -1452,11 +1463,52 @@ static void kda_predictor_step(const parakeet_predictor_weights& W, int token_id
         }
     }
 
+    auto& sc = state.scratch;
+    const int max_f_mid = W.kda_layers.empty() ? 64 : (int)(W.kda_layers[0].f_proj0_w.size() / H_dim);
+    const int max_g_mid = W.kda_layers.empty() ? 64 : (int)(W.kda_layers[0].g_proj0_w.size() / H_dim);
+    if ((int)sc.cur_x.size() != H_dim || (int)sc.q_raw.size() != total_dim || (int)sc.f_mid.size() != max_f_mid ||
+        (int)sc.g_mid.size() != max_g_mid) {
+        sc.cur_x.assign(H_dim, 0.0f);
+        sc.x_norm.assign(H_dim, 0.0f);
+        sc.q_raw.assign(total_dim, 0.0f);
+        sc.k_raw.assign(total_dim, 0.0f);
+        sc.v_raw.assign(total_dim, 0.0f);
+        sc.q_conv.assign(total_dim, 0.0f);
+        sc.k_conv.assign(total_dim, 0.0f);
+        sc.v_conv.assign(total_dim, 0.0f);
+        sc.q.assign(total_dim, 0.0f);
+        sc.k.assign(total_dim, 0.0f);
+        sc.f_mid.assign(max_f_mid, 0.0f);
+        sc.g.assign(total_dim, 0.0f);
+        sc.beta.assign(num_heads, 0.0f);
+        sc.o.assign(total_dim, 0.0f);
+        sc.g_mid.assign(max_g_mid, 0.0f);
+        sc.g_out.assign(total_dim, 0.0f);
+        sc.o_flat.assign(total_dim, 0.0f);
+    }
+
+    float* cur_x = sc.cur_x.data();
+    float* x_norm = sc.x_norm.data();
+    float* q_raw = sc.q_raw.data();
+    float* k_raw = sc.k_raw.data();
+    float* v_raw = sc.v_raw.data();
+    float* q_conv = sc.q_conv.data();
+    float* k_conv = sc.k_conv.data();
+    float* v_conv = sc.v_conv.data();
+    float* q = sc.q.data();
+    float* k = sc.k.data();
+    float* f_mid = sc.f_mid.data();
+    float* g = sc.g.data();
+    float* beta = sc.beta.data();
+    float* o = sc.o.data();
+    float* g_mid = sc.g_mid.data();
+    float* g_out = sc.g_out.data();
+    float* o_flat = sc.o_flat.data();
+
     // Embed token
-    std::vector<float> cur_x(H_dim, 0.0f);
+    std::fill(cur_x, cur_x + H_dim, 0.0f);
     if ((size_t)(token_id + 1) * H_dim <= W.embed.size()) {
-        std::copy(W.embed.data() + (size_t)token_id * H_dim, W.embed.data() + (size_t)(token_id + 1) * H_dim,
-                  cur_x.data());
+        std::copy(W.embed.data() + (size_t)token_id * H_dim, W.embed.data() + (size_t)(token_id + 1) * H_dim, cur_x);
     }
 
     auto silu = [](float x) { return x / (1.0f + std::exp(-x)); };
@@ -1479,35 +1531,39 @@ static void kda_predictor_step(const parakeet_predictor_weights& W, int token_id
         }
         var /= (float)H_dim;
         float inv_std = 1.0f / std::sqrt(var + 1e-5f);
-        std::vector<float> x_norm(H_dim);
         for (int i = 0; i < H_dim; ++i) {
             x_norm[i] = (cur_x[i] - mean) * inv_std * L.norm_w[i] + L.norm_b[i];
         }
 
         // 2. Linear projections: q, k, v [320, 640]
-        std::vector<float> q_raw(total_dim, 0.0f);
-        std::vector<float> k_raw(total_dim, 0.0f);
-        std::vector<float> v_raw(total_dim, 0.0f);
-        for (int i = 0; i < total_dim; ++i) {
-            const float* qw = L.q_proj_w.data() + (size_t)i * H_dim;
-            const float* kw = L.k_proj_w.data() + (size_t)i * H_dim;
-            const float* vw = L.v_proj_w.data() + (size_t)i * H_dim;
-            float sq = 0.0f, sk = 0.0f, sv = 0.0f;
-            for (int j = 0; j < H_dim; ++j) {
-                sq += qw[j] * x_norm[j];
-                sk += kw[j] * x_norm[j];
-                sv += vw[j] * x_norm[j];
+#if defined(HAVE_PARAKEET_BLAS)
+        if (parakeet_use_blas()) {
+            cblas_sgemv(CblasRowMajor, CblasNoTrans, total_dim, H_dim, 1.0f, L.q_proj_w.data(), H_dim, x_norm, 1, 0.0f,
+                        q_raw, 1);
+            cblas_sgemv(CblasRowMajor, CblasNoTrans, total_dim, H_dim, 1.0f, L.k_proj_w.data(), H_dim, x_norm, 1, 0.0f,
+                        k_raw, 1);
+            cblas_sgemv(CblasRowMajor, CblasNoTrans, total_dim, H_dim, 1.0f, L.v_proj_w.data(), H_dim, x_norm, 1, 0.0f,
+                        v_raw, 1);
+        } else
+#endif
+        {
+            for (int i = 0; i < total_dim; ++i) {
+                const float* qw = L.q_proj_w.data() + (size_t)i * H_dim;
+                const float* kw = L.k_proj_w.data() + (size_t)i * H_dim;
+                const float* vw = L.v_proj_w.data() + (size_t)i * H_dim;
+                float sq = 0.0f, sk = 0.0f, sv = 0.0f;
+                for (int j = 0; j < H_dim; ++j) {
+                    sq += qw[j] * x_norm[j];
+                    sk += kw[j] * x_norm[j];
+                    sv += vw[j] * x_norm[j];
+                }
+                q_raw[i] = sq;
+                k_raw[i] = sk;
+                v_raw[i] = sv;
             }
-            q_raw[i] = sq;
-            k_raw[i] = sk;
-            v_raw[i] = sv;
         }
 
         // 3. Conv1D causal step: shift left and append new value at index conv_k - 1 (3)
-        std::vector<float> q_conv(total_dim);
-        std::vector<float> k_conv(total_dim);
-        std::vector<float> v_conv(total_dim);
-
         for (int c = 0; c < total_dim; ++c) {
             float* qc = st.q_conv.data() + (size_t)c * conv_k;
             float* kc = st.k_conv.data() + (size_t)c * conv_k;
@@ -1540,9 +1596,7 @@ static void kda_predictor_step(const parakeet_predictor_weights& W, int token_id
         }
 
         // 4. L2 norm & scaling over head dimension
-        std::vector<float> q(total_dim);
-        std::vector<float> k(total_dim);
-        std::vector<float> v = v_conv;
+        const float* v = v_conv;
 
         for (int h = 0; h < num_heads; ++h) {
             float sum_sq_q = 0.0f, sum_sq_k = 0.0f;
@@ -1563,46 +1617,72 @@ static void kda_predictor_step(const parakeet_predictor_weights& W, int token_id
 
         // 5. Gate g: f_proj0 [64, 640] -> f_proj1 [320, 64] + dt_bias [320] -> -exp(a_log) * softplus(...)
         const int f_mid_dim = (int)(L.f_proj0_w.size() / H_dim);
-        std::vector<float> f_mid(f_mid_dim, 0.0f);
-        for (int i = 0; i < f_mid_dim; ++i) {
-            const float* row = L.f_proj0_w.data() + (size_t)i * H_dim;
-            float s = 0.0f;
-            for (int j = 0; j < H_dim; ++j)
-                s += row[j] * x_norm[j];
-            f_mid[i] = s;
-        }
-        std::vector<float> g(total_dim);
-        for (int h = 0; h < num_heads; ++h) {
-            float exp_a = std::exp(L.a_log[h]);
-            for (int d = 0; d < head_dim; ++d) {
-                int idx = h * head_dim + d;
-                const float* row = L.f_proj1_w.data() + (size_t)idx * f_mid_dim;
+#if defined(HAVE_PARAKEET_BLAS)
+        if (parakeet_use_blas()) {
+            cblas_sgemv(CblasRowMajor, CblasNoTrans, f_mid_dim, H_dim, 1.0f, L.f_proj0_w.data(), H_dim, x_norm, 1, 0.0f,
+                        f_mid, 1);
+            std::copy(L.dt_bias.data(), L.dt_bias.data() + total_dim, g);
+            cblas_sgemv(CblasRowMajor, CblasNoTrans, total_dim, f_mid_dim, 1.0f, L.f_proj1_w.data(), f_mid_dim, f_mid,
+                        1, 1.0f, g, 1);
+            for (int h = 0; h < num_heads; ++h) {
+                float exp_a = std::exp(L.a_log[h]);
+                for (int d = 0; d < head_dim; ++d) {
+                    int idx = h * head_dim + d;
+                    g[idx] = -exp_a * softplus(g[idx]);
+                }
+            }
+        } else
+#endif
+        {
+            for (int i = 0; i < f_mid_dim; ++i) {
+                const float* row = L.f_proj0_w.data() + (size_t)i * H_dim;
                 float s = 0.0f;
-                for (int j = 0; j < f_mid_dim; ++j)
-                    s += row[j] * f_mid[j];
-                s += L.dt_bias[idx];
-                g[idx] = -exp_a * softplus(s);
+                for (int j = 0; j < H_dim; ++j)
+                    s += row[j] * x_norm[j];
+                f_mid[i] = s;
+            }
+            for (int h = 0; h < num_heads; ++h) {
+                float exp_a = std::exp(L.a_log[h]);
+                for (int d = 0; d < head_dim; ++d) {
+                    int idx = h * head_dim + d;
+                    const float* row = L.f_proj1_w.data() + (size_t)idx * f_mid_dim;
+                    float s = 0.0f;
+                    for (int j = 0; j < f_mid_dim; ++j)
+                        s += row[j] * f_mid[j];
+                    s += L.dt_bias[idx];
+                    g[idx] = -exp_a * softplus(s);
+                }
             }
         }
 
         // 6. Beta: b_proj [5, 640] -> sigmoid
-        std::vector<float> beta(num_heads);
-        for (int h = 0; h < num_heads; ++h) {
-            const float* row = L.b_proj_w.data() + (size_t)h * H_dim;
-            float s = 0.0f;
-            for (int j = 0; j < H_dim; ++j)
-                s += row[j] * x_norm[j];
-            beta[h] = sigmoid(s);
+#if defined(HAVE_PARAKEET_BLAS)
+        if (parakeet_use_blas()) {
+            cblas_sgemv(CblasRowMajor, CblasNoTrans, num_heads, H_dim, 1.0f, L.b_proj_w.data(), H_dim, x_norm, 1, 0.0f,
+                        beta, 1);
+            for (int h = 0; h < num_heads; ++h) {
+                beta[h] = sigmoid(beta[h]);
+            }
+        } else
+#endif
+        {
+            for (int h = 0; h < num_heads; ++h) {
+                const float* row = L.b_proj_w.data() + (size_t)h * H_dim;
+                float s = 0.0f;
+                for (int j = 0; j < H_dim; ++j)
+                    s += row[j] * x_norm[j];
+                beta[h] = sigmoid(s);
+            }
         }
 
         // 7. Recurrent state S [5, 64, 64] update (state_v_first: S[h, v, k])
-        std::vector<float> o(total_dim, 0.0f);
+        std::fill(o, o + total_dim, 0.0f);
         for (int h = 0; h < num_heads; ++h) {
             float* Sh = st.S.data() + (size_t)h * head_dim * head_dim;
-            const float* gh = g.data() + h * head_dim;
-            const float* kh = k.data() + h * head_dim;
-            const float* qh = q.data() + h * head_dim;
-            const float* vh = v.data() + h * head_dim;
+            const float* gh = g + h * head_dim;
+            const float* kh = k + h * head_dim;
+            const float* qh = q + h * head_dim;
+            const float* vh = v + h * head_dim;
             const float b = beta[h];
 
             float exp_g[64];
@@ -1631,24 +1711,32 @@ static void kda_predictor_step(const parakeet_predictor_weights& W, int token_id
         // 8. Output norm & gate:
         //    g_proj0 [64, 640] -> g_proj1 [320, 64] + g_proj1_b [320]
         const int g_mid_dim = (int)(L.g_proj0_w.size() / H_dim);
-        std::vector<float> g_mid(g_mid_dim, 0.0f);
-        for (int i = 0; i < g_mid_dim; ++i) {
-            const float* row = L.g_proj0_w.data() + (size_t)i * H_dim;
-            float s = 0.0f;
-            for (int j = 0; j < H_dim; ++j)
-                s += row[j] * x_norm[j];
-            g_mid[i] = s;
-        }
-        std::vector<float> g_out(total_dim);
-        for (int i = 0; i < total_dim; ++i) {
-            const float* row = L.g_proj1_w.data() + (size_t)i * g_mid_dim;
-            float s = L.g_proj1_b[i];
-            for (int j = 0; j < g_mid_dim; ++j)
-                s += row[j] * g_mid[j];
-            g_out[i] = s;
+#if defined(HAVE_PARAKEET_BLAS)
+        if (parakeet_use_blas()) {
+            cblas_sgemv(CblasRowMajor, CblasNoTrans, g_mid_dim, H_dim, 1.0f, L.g_proj0_w.data(), H_dim, x_norm, 1, 0.0f,
+                        g_mid, 1);
+            std::copy(L.g_proj1_b.data(), L.g_proj1_b.data() + total_dim, g_out);
+            cblas_sgemv(CblasRowMajor, CblasNoTrans, total_dim, g_mid_dim, 1.0f, L.g_proj1_w.data(), g_mid_dim, g_mid,
+                        1, 1.0f, g_out, 1);
+        } else
+#endif
+        {
+            for (int i = 0; i < g_mid_dim; ++i) {
+                const float* row = L.g_proj0_w.data() + (size_t)i * H_dim;
+                float s = 0.0f;
+                for (int j = 0; j < H_dim; ++j)
+                    s += row[j] * x_norm[j];
+                g_mid[i] = s;
+            }
+            for (int i = 0; i < total_dim; ++i) {
+                const float* row = L.g_proj1_w.data() + (size_t)i * g_mid_dim;
+                float s = L.g_proj1_b[i];
+                for (int j = 0; j < g_mid_dim; ++j)
+                    s += row[j] * g_mid[j];
+                g_out[i] = s;
+            }
         }
 
-        std::vector<float> o_flat(total_dim);
         for (int h = 0; h < num_heads; ++h) {
             const int offset = h * head_dim;
             float sum_sq = 0.0f;
@@ -1665,12 +1753,20 @@ static void kda_predictor_step(const parakeet_predictor_weights& W, int token_id
         }
 
         // 9. Output projection [640, 320] + residual
-        for (int i = 0; i < H_dim; ++i) {
-            const float* row = L.o_proj_w.data() + (size_t)i * total_dim;
-            float s = 0.0f;
-            for (int j = 0; j < total_dim; ++j)
-                s += row[j] * o_flat[j];
-            cur_x[i] += s;
+#if defined(HAVE_PARAKEET_BLAS)
+        if (parakeet_use_blas()) {
+            cblas_sgemv(CblasRowMajor, CblasNoTrans, H_dim, total_dim, 1.0f, L.o_proj_w.data(), total_dim, o_flat, 1,
+                        1.0f, cur_x, 1);
+        } else
+#endif
+        {
+            for (int i = 0; i < H_dim; ++i) {
+                const float* row = L.o_proj_w.data() + (size_t)i * total_dim;
+                float s = 0.0f;
+                for (int j = 0; j < total_dim; ++j)
+                    s += row[j] * o_flat[j];
+                cur_x[i] += s;
+            }
         }
     }
 
@@ -1691,7 +1787,7 @@ static void kda_predictor_step(const parakeet_predictor_weights& W, int token_id
             pred_out[i] = (cur_x[i] - mean) * inv_std * W.kda_final_norm_w[i] + W.kda_final_norm_b[i];
         }
     } else {
-        pred_out = cur_x;
+        std::copy(cur_x, cur_x + H_dim, pred_out.data());
     }
 }
 

@@ -4,6 +4,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include <algorithm>
+#include <chrono>
 #include <cmath>
 #include <cstddef>
 #include <vector>
@@ -164,4 +165,17 @@ TEST_CASE("polyphase resampling bounds the expansion ratio", "[unit][audio-resam
             CHECK(out.empty());
         }
     }
+}
+
+TEST_CASE("polyphase resampling benchmark: 10s audio", "[audio-resample][perf]") {
+    const std::vector<float> input(480000, 0.25f); // 10 seconds at 48kHz
+    auto t0 = std::chrono::steady_clock::now();
+    for (int it = 0; it < 10; ++it) {
+        const auto output = core_audio::resample_polyphase(input.data(), static_cast<int>(input.size()), 48000, 16000);
+        REQUIRE(output.size() == 160000);
+    }
+    auto t1 = std::chrono::steady_clock::now();
+    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count() / 10.0;
+    INFO("10s 48k->16k resample took " << ms << " ms per run");
+    CHECK(ms > 0.0);
 }
