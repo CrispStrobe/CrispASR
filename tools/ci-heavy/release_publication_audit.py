@@ -670,7 +670,7 @@ def wheels(args, result):
                             gpu_index_and_full_readbacks_verified=True)
 
 
-REVIEWED_TAGS = {"v0.8.45", "v0.8.46", "v0.8.47", "v0.8.48"}
+REVIEWED_TAGS = {"v0.8.45", "v0.8.46", "v0.8.47", "v0.8.48", "v0.8.49"}
 NOTICE_REPAIR_TAGS = {"v0.8.45"}
 
 

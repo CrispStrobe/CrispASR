@@ -2,6 +2,19 @@
 
 ## Unreleased
 
+## 0.8.49
+
+* **Native speech:** integrate Audio8-TTS (ArkTTS 0.6B) dual-autoregressive TTS
+  and causal neural vocoder; chunked causal decoding bounds memory (<2.5 GB) for
+  arbitrary audio lengths, with FASTCONV k=1 bypass and dual-transformer KV caching.
+* **Recognition:** support free-form transcription context in Qwen3-ASR (#559);
+  standalone LID mode exits before model load, and dominant language detection
+  spans full recordings (#560).
+* **Streaming & Context:** adaptive strided audio context gating for Hikari and
+  Parakeet; Moonshine attention mask caching.
+* **Bindings:** synchronize audio context and strided refresh parameters across
+  Dart, Go, Rust, Python, JavaScript, and C ABI.
+
 ## 0.8.48
 
 * **Native speech:** restore original Melo/OpenVoice conditioning, duration and

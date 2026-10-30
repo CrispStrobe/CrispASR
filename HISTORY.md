@@ -1,3 +1,16 @@
+## 2026-10-30 — v0.8.49 Audio8-TTS (ArkTTS 0.6B), standalone LID, and Qwen3 context
+
+Release v0.8.49 completes integration of the Audio8-TTS (ArkTTS 0.6B) dual-autoregressive
+TTS architecture with causal ConvNeXt + Snake neural vocoder at 44.1 kHz. Linear weights
+quantized to Q4_K and Q8_0 with precision-preserving FP16 carve-outs for conv kernels
+and discrete codebooks, verified with 1.000000 cosine parity across all 7 stages.
+Chunked causal vocoder decoding bounds peak memory usage strictly under 2.5 GB for
+long audio (3+ minutes). FASTCONV k=1 bypass and dual-transformer in-place KV caching
+deliver ~190-215 ms/frame total on CPU (~2x faster than PyTorch). Official GGUFs
+published at cstr/Audio8-TTS-Realistic-0.6b-GGUF and wired in crispasr_model_registry.
+Includes standalone LID exit and full-recording aggregation (#560), Qwen3-ASR free-form
+transcription context (#559), adaptive strided context gating, and cross-language binding sync.
+
 ## 2026-10-29 — v0.8.48 wheel audit, #559/#560 main integration, and T4 step/toolchain receipts
 
 v0.8.48 Python wheel producer **40856452802**, Pages index deployment at
