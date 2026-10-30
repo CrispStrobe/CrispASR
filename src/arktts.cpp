@@ -417,24 +417,12 @@ float* arktts_run_slow_transformer(struct arktts_context* ctx, const float* embe
 
 static float* arktts_step_slow_transformer(struct arktts_context* ctx, const float* single_embed, int pos,
                                            int* out_vocab) {
-    if (!ctx || !single_embed || pos < 0 || pos >= ctx->max_seq_len)
+    if (!ctx || !single_embed || pos < 0)
         return nullptr;
     const int dim = ctx->hp.dim;
     const int vocab_size = ctx->hp.vocab_size;
     if (out_vocab)
         *out_vocab = vocab_size;
-
-    size_t mem_size = 32 * 1024 * 1024;
-    ggml_init_params gip = {mem_size, nullptr, false};
-    ggml_context* gctx = ggml_init(gip);
-    if (!gctx)
-        return nullptr;
-
-    ggml_tensor* cur = ggml_new_tensor_2d(gctx, GGML_TYPE_F32, dim, 1);
-    memcpy(cur->data, single_embed, dim * sizeof(float));
-
-    ggml_tensor* pos_ids = ggml_new_tensor_1d(gctx, GGML_TYPE_I32, 1);
-    *(int32_t*)pos_ids->data = pos;
 
     const int n_head = ctx->hp.n_head;
     const int n_local_heads = ctx->hp.n_local_heads;
@@ -453,6 +441,18 @@ static float* arktts_step_slow_transformer(struct arktts_context* ctx, const flo
         }
         ctx->max_seq_len = new_max;
     }
+
+    size_t mem_size = (size_t)192 * 1024 * 1024 + (size_t)pos * 128 * 1024;
+    ggml_init_params gip = {mem_size, nullptr, false};
+    ggml_context* gctx = ggml_init(gip);
+    if (!gctx)
+        return nullptr;
+
+    ggml_tensor* cur = ggml_new_tensor_2d(gctx, GGML_TYPE_F32, dim, 1);
+    memcpy(cur->data, single_embed, dim * sizeof(float));
+
+    ggml_tensor* pos_ids = ggml_new_tensor_1d(gctx, GGML_TYPE_I32, 1);
+    *(int32_t*)pos_ids->data = pos;
 
     std::vector<ggml_tensor*> k_step_saved(ctx->hp.n_layer);
     std::vector<ggml_tensor*> v_step_saved(ctx->hp.n_layer);
@@ -768,6 +768,17 @@ int arktts_run_fast_subnetwork(struct arktts_context* ctx, const float* slow_hid
 
 static inline ggml_tensor* causal_conv1d(ggml_context* ctx, ggml_tensor* x, ggml_tensor* w, ggml_tensor* b, int K,
                                          int dil = 1) {
+    if (K == 1) {
+        // FASTCONV: k=1 conv is pure channel matmul on (Cin, T) -> (Cout, T)
+        const int Cin = (int)w->ne[1];
+        const int Cout = (int)w->ne[2];
+        ggml_tensor* w2 = ggml_reshape_2d(ctx, w, Cin, Cout);
+        ggml_tensor* y = ggml_mul_mat(ctx, w2, x);
+        if (b) {
+            y = ggml_add(ctx, y, b);
+        }
+        return y;
+    }
     const int pad_left = (K - 1) * dil;
     ggml_tensor* xT = ggml_cont(ctx, ggml_transpose(ctx, x)); // (T, Cin)
     if (pad_left > 0) {
@@ -1167,12 +1178,12 @@ float* arktts_run_upsample(struct arktts_context* ctx, const float* post_out, in
     return out;
 }
 
-float* arktts_decode_codes(struct arktts_context* ctx, const int32_t* codes, int n_codebooks, int n_frames,
-                           int* out_samples) {
+static float* arktts_decode_codes_single_chunk(struct arktts_context* ctx, const int32_t* codes, int n_codebooks,
+                                               int n_frames, int* out_samples) {
     if (!ctx || !codes || n_codebooks <= 0 || n_frames <= 0)
         return nullptr;
 
-    const size_t ctx_size = (size_t)(1024 + (size_t)n_frames * 64) * 1024 * 1024;
+    const size_t ctx_size = (size_t)(1536 + (size_t)n_frames * 96) * 1024 * 1024;
     struct ggml_init_params params = {ctx_size, nullptr, false};
     ggml_context* gctx = ggml_init(params);
     if (!gctx)
@@ -1204,6 +1215,62 @@ float* arktts_decode_codes(struct arktts_context* ctx, const int32_t* codes, int
         memcpy(out, pcm->data, total_samples * sizeof(float));
     }
     ggml_free(gctx);
+    return out;
+}
+
+float* arktts_decode_codes(struct arktts_context* ctx, const int32_t* codes, int n_codebooks, int n_frames,
+                           int* out_samples) {
+    if (!ctx || !codes || n_codebooks <= 0 || n_frames <= 0)
+        return nullptr;
+
+    // For short audio (<= 20 frames), decode in a single graph.
+    if (n_frames <= 20) {
+        return arktts_decode_codes_single_chunk(ctx, codes, n_codebooks, n_frames, out_samples);
+    }
+
+    // For longer audio, chunk the vocoder decode to keep peak memory strictly bounded (<2 GB)
+    // even for minutes of audio. Causal receptive field is warmed with 4 frames of overlap.
+    const int chunk_size = 8;
+    const int overlap = 4;
+    std::vector<float> result;
+    result.reserve((size_t)n_frames * 2048);
+
+    for (int start = 0; start < n_frames; start += chunk_size) {
+        int end = std::min(start + chunk_size, n_frames);
+        int chunk_overlap = (start > 0) ? std::min(overlap, start) : 0;
+        int chunk_start = start - chunk_overlap;
+        int cur_chunk_frames = end - chunk_start;
+
+        // Slice codes for this chunk: shape [n_codebooks, cur_chunk_frames]
+        std::vector<int32_t> chunk_codes(n_codebooks * cur_chunk_frames);
+        for (int k = 0; k < n_codebooks; k++) {
+            for (int f = 0; f < cur_chunk_frames; f++) {
+                chunk_codes[k * cur_chunk_frames + f] = codes[k * n_frames + (chunk_start + f)];
+            }
+        }
+
+        int chunk_samples = 0;
+        float* chunk_pcm =
+            arktts_decode_codes_single_chunk(ctx, chunk_codes.data(), n_codebooks, cur_chunk_frames, &chunk_samples);
+        if (!chunk_pcm) {
+            return nullptr;
+        }
+
+        // Discard warm-up overlap samples from the start of this chunk
+        int skip_samples = chunk_overlap * 2048;
+        int keep_samples = chunk_samples - skip_samples;
+        if (keep_samples > 0) {
+            result.insert(result.end(), chunk_pcm + skip_samples, chunk_pcm + chunk_samples);
+        }
+        free(chunk_pcm);
+    }
+
+    if (out_samples)
+        *out_samples = (int)result.size();
+    float* out = (float*)malloc(result.size() * sizeof(float));
+    if (out) {
+        memcpy(out, result.data(), result.size() * sizeof(float));
+    }
     return out;
 }
 
