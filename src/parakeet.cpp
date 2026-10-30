@@ -120,6 +120,26 @@ struct parakeet_bench_stage {
 // ===========================================================================
 
 struct parakeet_predictor_weights {
+    struct kda_layer_weights {
+        std::vector<float> norm_w, norm_b;
+        std::vector<float> q_proj_w, k_proj_w, v_proj_w;
+        std::vector<float> q_conv_w, k_conv_w, v_conv_w;
+        std::vector<float> f_proj0_w, f_proj1_w;
+        std::vector<float> b_proj_w;
+        std::vector<float> a_log;
+        std::vector<float> dt_bias;
+        std::vector<float> g_proj0_w, g_proj1_w, g_proj1_b;
+        std::vector<float> o_norm_w;
+        std::vector<float> o_proj_w;
+    };
+    bool is_kda = false;
+    uint32_t kda_num_heads = 5;
+    uint32_t kda_head_dim = 64;
+    uint32_t kda_conv_size = 4;
+    std::vector<kda_layer_weights> kda_layers;
+    std::vector<float> kda_final_norm_w;
+    std::vector<float> kda_final_norm_b;
+
     std::vector<float> embed; // [vocab+1, H]
     std::vector<float> w_ih_0, w_hh_0, b_ih_0, b_hh_0;
     std::vector<float> w_ih_1, w_hh_1, b_ih_1, b_hh_1;
@@ -188,12 +208,34 @@ struct parakeet_enc_layer : core_conformer::BlockWeights {
 };
 
 struct parakeet_predictor {
+    bool is_kda = false;
+    uint32_t kda_num_heads = 5;
+    uint32_t kda_head_dim = 64;
+    uint32_t kda_conv_size = 4;
+    bool kda_final_norm = true;
+
     ggml_tensor* embed_w = nullptr; // (vocab+1, pred_hidden)
     // 2-layer LSTM (PyTorch convention: w_ih [4H, in], w_hh [4H, H], b_ih [4H], b_hh [4H])
     ggml_tensor *lstm0_w_ih = nullptr, *lstm0_w_hh = nullptr;
     ggml_tensor *lstm0_b_ih = nullptr, *lstm0_b_hh = nullptr;
     ggml_tensor *lstm1_w_ih = nullptr, *lstm1_w_hh = nullptr;
     ggml_tensor *lstm1_b_ih = nullptr, *lstm1_b_hh = nullptr;
+
+    // KDA (Kimi Delta Attention) predictor layers
+    struct kda_layer_tensors {
+        ggml_tensor *norm_w = nullptr, *norm_b = nullptr;
+        ggml_tensor *q_proj_w = nullptr, *k_proj_w = nullptr, *v_proj_w = nullptr;
+        ggml_tensor *q_conv_w = nullptr, *k_conv_w = nullptr, *v_conv_w = nullptr;
+        ggml_tensor *f_proj0_w = nullptr, *f_proj1_w = nullptr;
+        ggml_tensor* b_proj_w = nullptr;
+        ggml_tensor* a_log = nullptr;
+        ggml_tensor* dt_bias = nullptr;
+        ggml_tensor *g_proj0_w = nullptr, *g_proj1_w = nullptr, *g_proj1_b = nullptr;
+        ggml_tensor* o_norm_w = nullptr;
+        ggml_tensor* o_proj_w = nullptr;
+    };
+    std::vector<kda_layer_tensors> kda_layers;
+    ggml_tensor *kda_final_norm_w = nullptr, *kda_final_norm_b = nullptr;
 };
 
 struct parakeet_joint {
@@ -224,6 +266,7 @@ struct parakeet_model {
     bool phonon2 = false;
     bool english_only = false; // model identity, independent of its filename
     bool has_ctc = false;
+    bool is_kda = false;
     uint32_t ctc_vocab_size = 0;
 
     ggml_context* ctx = nullptr;
@@ -415,6 +458,11 @@ static bool parakeet_load_model(parakeet_model& model, parakeet_vocab& vocab, co
         hp.n_tdt_durations = core_gguf::kv_u32(gctx, "parakeet.n_tdt_durations", hp.n_tdt_durations);
         hp.frame_dur_cs = core_gguf::kv_u32(gctx, "parakeet.frame_dur_cs", hp.frame_dur_cs);
 
+        model.predictor.kda_num_heads = core_gguf::kv_u32(gctx, "haas.kda_num_heads", 5);
+        model.predictor.kda_head_dim = core_gguf::kv_u32(gctx, "haas.kda_head_dim", 64);
+        model.predictor.kda_conv_size = core_gguf::kv_u32(gctx, "haas.kda_conv_size", 4);
+        model.predictor.kda_final_norm = core_gguf::kv_bool(gctx, "haas.kda_final_norm", true);
+
         // Local attention context (rel_pos_local_attn models).
         hp.att_context_left = core_gguf::kv_i32(gctx, "parakeet.att_context_left", hp.att_context_left);
         hp.att_context_right = core_gguf::kv_i32(gctx, "parakeet.att_context_right", hp.att_context_right);
@@ -553,19 +601,72 @@ static bool parakeet_load_model(parakeet_model& model, parakeet_vocab& vocab, co
 
     // Predictor
     auto& p = model.predictor;
+    p.is_kda = (model.tensors.find("decoder.kda.0.q_proj.weight") != model.tensors.end());
+    model.is_kda = p.is_kda;
     p.embed_w = require(model, "decoder.embed.weight");
-    p.lstm0_w_ih = require(model, "decoder.lstm.0.w_ih");
-    p.lstm0_w_hh = require(model, "decoder.lstm.0.w_hh");
-    p.lstm0_b_ih = require(model, "decoder.lstm.0.b_ih");
-    p.lstm0_b_hh = require(model, "decoder.lstm.0.b_hh");
-    // lstm.1 only exists when pred_layers >= 2 (v2/v3/0.6b-ja). Single-LSTM
-    // hybrids (e.g. parakeet-tdt_ctc-110m has pred_layers=1) keep them null
-    // and must use the CTC head — TDT decode requires a 2-LSTM predictor.
-    const bool has_lstm1 = model.hparams.pred_layers >= 2;
-    p.lstm1_w_ih = has_lstm1 ? require(model, "decoder.lstm.1.w_ih") : nullptr;
-    p.lstm1_w_hh = has_lstm1 ? require(model, "decoder.lstm.1.w_hh") : nullptr;
-    p.lstm1_b_ih = has_lstm1 ? require(model, "decoder.lstm.1.b_ih") : nullptr;
-    p.lstm1_b_hh = has_lstm1 ? require(model, "decoder.lstm.1.b_hh") : nullptr;
+    if (!p.is_kda) {
+        p.lstm0_w_ih = require(model, "decoder.lstm.0.w_ih");
+        p.lstm0_w_hh = require(model, "decoder.lstm.0.w_hh");
+        p.lstm0_b_ih = require(model, "decoder.lstm.0.b_ih");
+        p.lstm0_b_hh = require(model, "decoder.lstm.0.b_hh");
+        // lstm.1 only exists when pred_layers >= 2 (v2/v3/0.6b-ja). Single-LSTM
+        // hybrids (e.g. parakeet-tdt_ctc-110m has pred_layers=1) keep them null
+        // and must use the CTC head — TDT decode requires a 2-LSTM predictor.
+        const bool has_lstm1 = model.hparams.pred_layers >= 2;
+        p.lstm1_w_ih = has_lstm1 ? require(model, "decoder.lstm.1.w_ih") : nullptr;
+        p.lstm1_w_hh = has_lstm1 ? require(model, "decoder.lstm.1.w_hh") : nullptr;
+        p.lstm1_b_ih = has_lstm1 ? require(model, "decoder.lstm.1.b_ih") : nullptr;
+        p.lstm1_b_hh = has_lstm1 ? require(model, "decoder.lstm.1.b_hh") : nullptr;
+    } else {
+        const uint32_t n_layers = model.hparams.pred_layers;
+        p.kda_layers.resize(n_layers);
+        for (uint32_t l = 0; l < n_layers; ++l) {
+            auto& kl = p.kda_layers[l];
+            char buf[128];
+            snprintf(buf, sizeof(buf), "decoder.kda.norm.%u.weight", l);
+            kl.norm_w = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.norm.%u.bias", l);
+            kl.norm_b = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.q_proj.weight", l);
+            kl.q_proj_w = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.k_proj.weight", l);
+            kl.k_proj_w = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.v_proj.weight", l);
+            kl.v_proj_w = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.q_conv.weight", l);
+            kl.q_conv_w = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.k_conv.weight", l);
+            kl.k_conv_w = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.v_conv.weight", l);
+            kl.v_conv_w = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.f_proj.0.weight", l);
+            kl.f_proj0_w = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.f_proj.1.weight", l);
+            kl.f_proj1_w = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.b_proj.weight", l);
+            kl.b_proj_w = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.a_log", l);
+            kl.a_log = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.dt_bias", l);
+            kl.dt_bias = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.g_proj.0.weight", l);
+            kl.g_proj0_w = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.g_proj.1.weight", l);
+            kl.g_proj1_w = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.g_proj.1.bias", l);
+            kl.g_proj1_b = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.o_norm.weight", l);
+            kl.o_norm_w = require(model, buf);
+            snprintf(buf, sizeof(buf), "decoder.kda.%u.o_proj.weight", l);
+            kl.o_proj_w = require(model, buf);
+        }
+        auto try_kda = [&](const char* name) -> ggml_tensor* {
+            auto it = model.tensors.find(name);
+            return it != model.tensors.end() ? it->second : nullptr;
+        };
+        p.kda_final_norm_w = try_kda("decoder.kda.final_norm.weight");
+        p.kda_final_norm_b = try_kda("decoder.kda.final_norm.bias");
+    }
 
     // Joint
     auto& j = model.joint;
@@ -1197,9 +1298,21 @@ static std::vector<float> parakeet_encode_mel(parakeet_context* ctx, const float
 //   h' = o * tanh(c')
 // ===========================================================================
 
+struct parakeet_kda_layer_state {
+    std::vector<float> q_conv; // [total_dim * conv_k]
+    std::vector<float> k_conv; // [total_dim * conv_k]
+    std::vector<float> v_conv; // [total_dim * conv_k]
+    std::vector<float> S;      // [num_heads * head_dim * head_dim]
+};
+
+struct parakeet_kda_state {
+    std::vector<parakeet_kda_layer_state> layers;
+};
+
 struct parakeet_lstm_state {
     std::vector<float> h0, c0; // layer 0
     std::vector<float> h1, c1; // layer 1
+    parakeet_kda_state kda;
 };
 
 static void lstm_init_state(parakeet_lstm_state& s, int H) {
@@ -1207,6 +1320,7 @@ static void lstm_init_state(parakeet_lstm_state& s, int H) {
     s.c0.assign(H, 0.0f);
     s.h1.assign(H, 0.0f);
     s.c1.assign(H, 0.0f);
+    s.kda.layers.clear();
 }
 
 // Read an F16/F32 ggml tensor into a flat F32 std::vector for CPU stepping.
@@ -1314,9 +1428,280 @@ static void lstm_step_layer(const float* x, // [in_dim]
     }
 }
 
+// Run one Kimi Delta Attention (KDA) predictor step
+static void kda_predictor_step(const parakeet_predictor_weights& W, int token_id, parakeet_kda_state& state,
+                               std::vector<float>& pred_out) {
+    const int H_dim = W.H;
+    pred_out.assign(H_dim, 0.0f);
+
+    const int num_heads = (int)W.kda_num_heads;
+    const int head_dim = (int)W.kda_head_dim;
+    const int total_dim = num_heads * head_dim;
+    const int conv_k = (int)W.kda_conv_size;
+    const float eps_l2 = 1e-6f;
+    const float eps_rms = 1e-5f;
+    const float inv_sqrt_d = 1.0f / std::sqrt((float)head_dim);
+
+    if (state.layers.size() != W.kda_layers.size()) {
+        state.layers.resize(W.kda_layers.size());
+        for (auto& l : state.layers) {
+            l.q_conv.assign((size_t)total_dim * conv_k, 0.0f);
+            l.k_conv.assign((size_t)total_dim * conv_k, 0.0f);
+            l.v_conv.assign((size_t)total_dim * conv_k, 0.0f);
+            l.S.assign((size_t)num_heads * head_dim * head_dim, 0.0f);
+        }
+    }
+
+    // Embed token
+    std::vector<float> cur_x(H_dim, 0.0f);
+    if ((size_t)(token_id + 1) * H_dim <= W.embed.size()) {
+        std::copy(W.embed.data() + (size_t)token_id * H_dim, W.embed.data() + (size_t)(token_id + 1) * H_dim,
+                  cur_x.data());
+    }
+
+    auto silu = [](float x) { return x / (1.0f + std::exp(-x)); };
+    auto sigmoid = [](float x) { return 1.0f / (1.0f + std::exp(-x)); };
+    auto softplus = [](float x) { return x > 20.0f ? x : std::log1p(std::exp(x)); };
+
+    for (size_t l_idx = 0; l_idx < W.kda_layers.size(); ++l_idx) {
+        const auto& L = W.kda_layers[l_idx];
+        auto& st = state.layers[l_idx];
+
+        // 1. LayerNorm on cur_x
+        float mean = 0.0f;
+        for (int i = 0; i < H_dim; ++i)
+            mean += cur_x[i];
+        mean /= (float)H_dim;
+        float var = 0.0f;
+        for (int i = 0; i < H_dim; ++i) {
+            float d = cur_x[i] - mean;
+            var += d * d;
+        }
+        var /= (float)H_dim;
+        float inv_std = 1.0f / std::sqrt(var + 1e-5f);
+        std::vector<float> x_norm(H_dim);
+        for (int i = 0; i < H_dim; ++i) {
+            x_norm[i] = (cur_x[i] - mean) * inv_std * L.norm_w[i] + L.norm_b[i];
+        }
+
+        // 2. Linear projections: q, k, v [320, 640]
+        std::vector<float> q_raw(total_dim, 0.0f);
+        std::vector<float> k_raw(total_dim, 0.0f);
+        std::vector<float> v_raw(total_dim, 0.0f);
+        for (int i = 0; i < total_dim; ++i) {
+            const float* qw = L.q_proj_w.data() + (size_t)i * H_dim;
+            const float* kw = L.k_proj_w.data() + (size_t)i * H_dim;
+            const float* vw = L.v_proj_w.data() + (size_t)i * H_dim;
+            float sq = 0.0f, sk = 0.0f, sv = 0.0f;
+            for (int j = 0; j < H_dim; ++j) {
+                sq += qw[j] * x_norm[j];
+                sk += kw[j] * x_norm[j];
+                sv += vw[j] * x_norm[j];
+            }
+            q_raw[i] = sq;
+            k_raw[i] = sk;
+            v_raw[i] = sv;
+        }
+
+        // 3. Conv1D causal step: shift left and append new value at index conv_k - 1 (3)
+        std::vector<float> q_conv(total_dim);
+        std::vector<float> k_conv(total_dim);
+        std::vector<float> v_conv(total_dim);
+
+        for (int c = 0; c < total_dim; ++c) {
+            float* qc = st.q_conv.data() + (size_t)c * conv_k;
+            float* kc = st.k_conv.data() + (size_t)c * conv_k;
+            float* vc = st.v_conv.data() + (size_t)c * conv_k;
+
+            qc[0] = qc[1];
+            qc[1] = qc[2];
+            qc[2] = qc[3];
+            qc[3] = q_raw[c];
+            kc[0] = kc[1];
+            kc[1] = kc[2];
+            kc[2] = kc[3];
+            kc[3] = k_raw[c];
+            vc[0] = vc[1];
+            vc[1] = vc[2];
+            vc[2] = vc[3];
+            vc[3] = v_raw[c];
+
+            const float* qcw = L.q_conv_w.data() + (size_t)c * conv_k;
+            const float* kcw = L.k_conv_w.data() + (size_t)c * conv_k;
+            const float* vcw = L.v_conv_w.data() + (size_t)c * conv_k;
+
+            float dot_q = qc[0] * qcw[0] + qc[1] * qcw[1] + qc[2] * qcw[2] + qc[3] * qcw[3];
+            float dot_k = kc[0] * kcw[0] + kc[1] * kcw[1] + kc[2] * kcw[2] + kc[3] * kcw[3];
+            float dot_v = vc[0] * vcw[0] + vc[1] * vcw[1] + vc[2] * vcw[2] + vc[3] * vcw[3];
+
+            q_conv[c] = silu(dot_q);
+            k_conv[c] = silu(dot_k);
+            v_conv[c] = silu(dot_v);
+        }
+
+        // 4. L2 norm & scaling over head dimension
+        std::vector<float> q(total_dim);
+        std::vector<float> k(total_dim);
+        std::vector<float> v = v_conv;
+
+        for (int h = 0; h < num_heads; ++h) {
+            float sum_sq_q = 0.0f, sum_sq_k = 0.0f;
+            const int offset = h * head_dim;
+            for (int d = 0; d < head_dim; ++d) {
+                sum_sq_q += q_conv[offset + d] * q_conv[offset + d];
+                sum_sq_k += k_conv[offset + d] * k_conv[offset + d];
+            }
+            float norm_q = std::sqrt(sum_sq_q + eps_l2);
+            float norm_k = std::sqrt(sum_sq_k + eps_l2);
+            float scale_q = inv_sqrt_d / norm_q;
+            float scale_k = 1.0f / norm_k;
+            for (int d = 0; d < head_dim; ++d) {
+                q[offset + d] = q_conv[offset + d] * scale_q;
+                k[offset + d] = k_conv[offset + d] * scale_k;
+            }
+        }
+
+        // 5. Gate g: f_proj0 [64, 640] -> f_proj1 [320, 64] + dt_bias [320] -> -exp(a_log) * softplus(...)
+        const int f_mid_dim = (int)(L.f_proj0_w.size() / H_dim);
+        std::vector<float> f_mid(f_mid_dim, 0.0f);
+        for (int i = 0; i < f_mid_dim; ++i) {
+            const float* row = L.f_proj0_w.data() + (size_t)i * H_dim;
+            float s = 0.0f;
+            for (int j = 0; j < H_dim; ++j)
+                s += row[j] * x_norm[j];
+            f_mid[i] = s;
+        }
+        std::vector<float> g(total_dim);
+        for (int h = 0; h < num_heads; ++h) {
+            float exp_a = std::exp(L.a_log[h]);
+            for (int d = 0; d < head_dim; ++d) {
+                int idx = h * head_dim + d;
+                const float* row = L.f_proj1_w.data() + (size_t)idx * f_mid_dim;
+                float s = 0.0f;
+                for (int j = 0; j < f_mid_dim; ++j)
+                    s += row[j] * f_mid[j];
+                s += L.dt_bias[idx];
+                g[idx] = -exp_a * softplus(s);
+            }
+        }
+
+        // 6. Beta: b_proj [5, 640] -> sigmoid
+        std::vector<float> beta(num_heads);
+        for (int h = 0; h < num_heads; ++h) {
+            const float* row = L.b_proj_w.data() + (size_t)h * H_dim;
+            float s = 0.0f;
+            for (int j = 0; j < H_dim; ++j)
+                s += row[j] * x_norm[j];
+            beta[h] = sigmoid(s);
+        }
+
+        // 7. Recurrent state S [5, 64, 64] update (state_v_first: S[h, v, k])
+        std::vector<float> o(total_dim, 0.0f);
+        for (int h = 0; h < num_heads; ++h) {
+            float* Sh = st.S.data() + (size_t)h * head_dim * head_dim;
+            const float* gh = g.data() + h * head_dim;
+            const float* kh = k.data() + h * head_dim;
+            const float* qh = q.data() + h * head_dim;
+            const float* vh = v.data() + h * head_dim;
+            const float b = beta[h];
+
+            float exp_g[64];
+            for (int k_idx = 0; k_idx < head_dim; ++k_idx) {
+                exp_g[k_idx] = std::exp(gh[k_idx]);
+            }
+
+            for (int v_idx = 0; v_idx < head_dim; ++v_idx) {
+                float* S_row = Sh + v_idx * head_dim;
+                float p_v = 0.0f;
+                for (int k_idx = 0; k_idx < head_dim; ++k_idx) {
+                    S_row[k_idx] *= exp_g[k_idx];
+                    p_v += S_row[k_idx] * kh[k_idx];
+                }
+                float diff_v = vh[v_idx] - p_v;
+                float u_v = b * diff_v;
+                float o_v = 0.0f;
+                for (int k_idx = 0; k_idx < head_dim; ++k_idx) {
+                    S_row[k_idx] += u_v * kh[k_idx];
+                    o_v += S_row[k_idx] * qh[k_idx];
+                }
+                o[h * head_dim + v_idx] = o_v;
+            }
+        }
+
+        // 8. Output norm & gate:
+        //    g_proj0 [64, 640] -> g_proj1 [320, 64] + g_proj1_b [320]
+        const int g_mid_dim = (int)(L.g_proj0_w.size() / H_dim);
+        std::vector<float> g_mid(g_mid_dim, 0.0f);
+        for (int i = 0; i < g_mid_dim; ++i) {
+            const float* row = L.g_proj0_w.data() + (size_t)i * H_dim;
+            float s = 0.0f;
+            for (int j = 0; j < H_dim; ++j)
+                s += row[j] * x_norm[j];
+            g_mid[i] = s;
+        }
+        std::vector<float> g_out(total_dim);
+        for (int i = 0; i < total_dim; ++i) {
+            const float* row = L.g_proj1_w.data() + (size_t)i * g_mid_dim;
+            float s = L.g_proj1_b[i];
+            for (int j = 0; j < g_mid_dim; ++j)
+                s += row[j] * g_mid[j];
+            g_out[i] = s;
+        }
+
+        std::vector<float> o_flat(total_dim);
+        for (int h = 0; h < num_heads; ++h) {
+            const int offset = h * head_dim;
+            float sum_sq = 0.0f;
+            for (int d = 0; d < head_dim; ++d) {
+                float val = o[offset + d];
+                sum_sq += val * val;
+            }
+            float rms = std::sqrt(sum_sq / (float)head_dim + eps_rms);
+            float inv_rms = 1.0f / rms;
+            for (int d = 0; d < head_dim; ++d) {
+                int idx = offset + d;
+                o_flat[idx] = (o[idx] * inv_rms) * L.o_norm_w[d] * sigmoid(g_out[idx]);
+            }
+        }
+
+        // 9. Output projection [640, 320] + residual
+        for (int i = 0; i < H_dim; ++i) {
+            const float* row = L.o_proj_w.data() + (size_t)i * total_dim;
+            float s = 0.0f;
+            for (int j = 0; j < total_dim; ++j)
+                s += row[j] * o_flat[j];
+            cur_x[i] += s;
+        }
+    }
+
+    // 10. Final norm
+    if (W.is_kda && !W.kda_final_norm_w.empty()) {
+        float mean = 0.0f;
+        for (int i = 0; i < H_dim; ++i)
+            mean += cur_x[i];
+        mean /= (float)H_dim;
+        float var = 0.0f;
+        for (int i = 0; i < H_dim; ++i) {
+            float d = cur_x[i] - mean;
+            var += d * d;
+        }
+        var /= (float)H_dim;
+        float inv_std = 1.0f / std::sqrt(var + 1e-5f);
+        for (int i = 0; i < H_dim; ++i) {
+            pred_out[i] = (cur_x[i] - mean) * inv_std * W.kda_final_norm_w[i] + W.kda_final_norm_b[i];
+        }
+    } else {
+        pred_out = cur_x;
+    }
+}
+
 // Run one predictor step:  input token id  →  pred_out [H]
 static void predictor_step(const parakeet_predictor_weights& W, int token_id, parakeet_lstm_state& state,
                            std::vector<float>& pred_out) {
+    if (W.is_kda) {
+        kda_predictor_step(W, token_id, state.kda, pred_out);
+        return;
+    }
     const int H = W.H;
     pred_out.assign(H, 0.0f);
 
@@ -1461,6 +1846,44 @@ static void parakeet_init_pred_weights(parakeet_context* ctx) {
     const int H = (int)ctx->model.hparams.pred_hidden;
     const int blank_id = (int)ctx->model.hparams.blank_id;
 
+    if (p.is_kda) {
+        W.is_kda = true;
+        W.kda_num_heads = p.kda_num_heads;
+        W.kda_head_dim = p.kda_head_dim;
+        W.kda_conv_size = p.kda_conv_size;
+        W.embed = tensor_to_f32(p.embed_w);
+        W.kda_layers.resize(p.kda_layers.size());
+        for (size_t l = 0; l < p.kda_layers.size(); ++l) {
+            const auto& kl = p.kda_layers[l];
+            auto& kw = W.kda_layers[l];
+            kw.norm_w = tensor_to_f32(kl.norm_w);
+            kw.norm_b = tensor_to_f32(kl.norm_b);
+            kw.q_proj_w = tensor_to_f32(kl.q_proj_w);
+            kw.k_proj_w = tensor_to_f32(kl.k_proj_w);
+            kw.v_proj_w = tensor_to_f32(kl.v_proj_w);
+            kw.q_conv_w = tensor_to_f32(kl.q_conv_w);
+            kw.k_conv_w = tensor_to_f32(kl.k_conv_w);
+            kw.v_conv_w = tensor_to_f32(kl.v_conv_w);
+            kw.f_proj0_w = tensor_to_f32(kl.f_proj0_w);
+            kw.f_proj1_w = tensor_to_f32(kl.f_proj1_w);
+            kw.b_proj_w = tensor_to_f32(kl.b_proj_w);
+            kw.a_log = tensor_to_f32(kl.a_log);
+            kw.dt_bias = tensor_to_f32(kl.dt_bias);
+            kw.g_proj0_w = tensor_to_f32(kl.g_proj0_w);
+            kw.g_proj1_w = tensor_to_f32(kl.g_proj1_w);
+            kw.g_proj1_b = tensor_to_f32(kl.g_proj1_b);
+            kw.o_norm_w = tensor_to_f32(kl.o_norm_w);
+            kw.o_proj_w = tensor_to_f32(kl.o_proj_w);
+        }
+        if (p.kda_final_norm_w)
+            W.kda_final_norm_w = tensor_to_f32(p.kda_final_norm_w);
+        if (p.kda_final_norm_b)
+            W.kda_final_norm_b = tensor_to_f32(p.kda_final_norm_b);
+        W.H = H;
+        W.initialised = true;
+        return;
+    }
+
     W.embed = tensor_to_f32(p.embed_w);
     W.w_ih_0 = tensor_to_f32(p.lstm0_w_ih);
     W.w_hh_0 = tensor_to_f32(p.lstm0_w_hh);
@@ -1598,6 +2021,8 @@ static bool parakeet_native_cpu_decode_default(const parakeet_context* ctx) {
 }
 
 static bool parakeet_ggml_decode_active(const parakeet_context* ctx) {
+    if (ctx && ctx->model.is_kda)
+        return false;
     bool ggml_dec = !core_cpu_backend::is_cpu(ctx->backend) || parakeet_native_cpu_decode_default(ctx);
     // ggml decode wins on CUDA/Vulkan (slow CPU BLAS: P100 5-12x) but LOSES on
     // Metal, where Apple Accelerate cblas beats the small-matmul GPU decode (M1

@@ -12,8 +12,9 @@
 namespace core_parakeet_gguf {
 
 inline bool family_backend(const char* name) {
-    for (const char* candidate : {"parakeet", "phonon2", "reazonspeech", "quds", "quds-fa", "fastconformer-ctc",
-                                  "fastconformer_ctc", "canary-ctc", "canary_ctc"}) {
+    for (const char* candidate :
+         {"parakeet", "haas", "haas-asr", "haas_asr", "haas-ja", "haas_ja", "phonon2", "reazonspeech", "quds",
+          "quds-fa", "fastconformer-ctc", "fastconformer_ctc", "canary-ctc", "canary_ctc"}) {
         if (std::strcmp(name, candidate) == 0)
             return true;
     }

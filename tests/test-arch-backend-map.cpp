@@ -44,6 +44,7 @@ static const std::vector<std::pair<std::string, std::string>>& converter_archs()
         // ── ASR ──
         {"whisper", "whisper"},
         {"parakeet", "parakeet"},
+        {"haas", "parakeet"},
         {"nemotron", "nemotron"},
         {"gigaam", "gigaam"},
         {"dolphin", "dolphin"},
@@ -273,6 +274,8 @@ TEST_CASE("every emitted backend name is a name a surface can open", "[unit][arc
         "mt3",
         "bt2-tts", // Breeze-TTS-2 (#412)
         "hikari",  // sbintuitions/hikari-medium
+        "arktts",
+        "meanvc2",
     };
     size_t n = 0;
     const core_arch::entry* k = core_arch::table(&n);

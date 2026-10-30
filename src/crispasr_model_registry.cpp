@@ -113,6 +113,27 @@ constexpr Entry k_registry[] = {
      nullptr,
      "CC-BY-NC-4.0 — NON-COMMERCIAL use only (Quds v4 by hojreh, "
      "https://huggingface.co/hojreh/Quds-v4-onnx; base model nvidia/stt_fa_fastconformer_hybrid_large, CC-BY-4.0)"},
+    // Haas-ja-v1.0 (#561): Japanese ASR (third-intelligence/Haas-ja-v1.0).
+    // FastConformer-TDT + 2-layer KDA predictor (Kimi Delta Attention).
+    // Apache-2.0. Runs on parakeet runtime. Q8_0 (~626 MB) recommended; Q4_K (~368 MB); F16 (~1.18 GB).
+    {"haas", "haas-ja-v1.0-q8_0.gguf",
+     "https://huggingface.co/cstr/Haas-ja-v1.0-GGUF/resolve/main/haas-ja-v1.0-q8_0.gguf", "~626 MB", nullptr, nullptr,
+     nullptr, "Apache-2.0 (see https://huggingface.co/third-intelligence/Haas-ja-v1.0)"},
+    {"haas", "haas-ja-v1.0-q4_k.gguf",
+     "https://huggingface.co/cstr/Haas-ja-v1.0-GGUF/resolve/main/haas-ja-v1.0-q4_k.gguf", "~368 MB", nullptr, nullptr,
+     nullptr, "Apache-2.0 (see https://huggingface.co/third-intelligence/Haas-ja-v1.0)"},
+    {"haas", "haas-ja-v1.0-f16.gguf",
+     "https://huggingface.co/cstr/Haas-ja-v1.0-GGUF/resolve/main/haas-ja-v1.0-f16.gguf", "~1.18 GB", nullptr, nullptr,
+     nullptr, "Apache-2.0 (see https://huggingface.co/third-intelligence/Haas-ja-v1.0)"},
+    {"haas-ja", "haas-ja-v1.0-q8_0.gguf",
+     "https://huggingface.co/cstr/Haas-ja-v1.0-GGUF/resolve/main/haas-ja-v1.0-q8_0.gguf", "~626 MB", nullptr, nullptr,
+     nullptr, "Apache-2.0 (see https://huggingface.co/third-intelligence/Haas-ja-v1.0)"},
+    {"haas-ja", "haas-ja-v1.0-q4_k.gguf",
+     "https://huggingface.co/cstr/Haas-ja-v1.0-GGUF/resolve/main/haas-ja-v1.0-q4_k.gguf", "~368 MB", nullptr, nullptr,
+     nullptr, "Apache-2.0 (see https://huggingface.co/third-intelligence/Haas-ja-v1.0)"},
+    {"haas-ja", "haas-ja-v1.0-f16.gguf",
+     "https://huggingface.co/cstr/Haas-ja-v1.0-GGUF/resolve/main/haas-ja-v1.0-f16.gguf", "~1.18 GB", nullptr, nullptr,
+     nullptr, "Apache-2.0 (see https://huggingface.co/third-intelligence/Haas-ja-v1.0)"},
     {"canary", "canary-1b-v2-q4_k.gguf",
      "https://huggingface.co/cstr/canary-1b-v2-GGUF/resolve/main/canary-1b-v2-q4_k.gguf", "~600 MB", nullptr, nullptr, nullptr, "CC-BY-4.0 (see https://huggingface.co/nvidia/canary-1b-v2)"},
     {"canary-qwen", "canary-qwen-2.5b-q8_0.gguf",

@@ -293,6 +293,18 @@ TEST_CASE("registry: parakeet entry has correct filename", "[unit][registry]") {
     REQUIRE(std::string(e.filename).find("parakeet") != std::string::npos);
 }
 
+TEST_CASE("registry: haas-ja has entry (#561)", "[unit][registry]") {
+    CrispasrRegistryEntry e;
+    REQUIRE(crispasr_registry_lookup("haas", e));
+    REQUIRE(std::string(e.filename) == "haas-ja-v1.0-q8_0.gguf");
+    REQUIRE(crispasr_registry_lookup("haas-ja", e));
+    REQUIRE(std::string(e.filename) == "haas-ja-v1.0-q8_0.gguf");
+    REQUIRE(crispasr_registry_lookup("haas-ja", e, "q4_k"));
+    REQUIRE(std::string(e.filename) == "haas-ja-v1.0-q4_k.gguf");
+    REQUIRE(crispasr_registry_lookup("haas-ja", e, "f16"));
+    REQUIRE(std::string(e.filename) == "haas-ja-v1.0-f16.gguf");
+}
+
 TEST_CASE("registry: mimo-asr has entry (added in #63)", "[unit][registry]") {
     CrispasrRegistryEntry e;
     bool found = crispasr_registry_lookup("mimo-asr", e);
