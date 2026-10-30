@@ -1,6 +1,7 @@
 // src/core/kaldi_fbank.cpp — see kaldi_fbank.h for the contract.
 
 #include "kaldi_fbank.h"
+#include "parallel_for.h"
 
 #include <algorithm>
 #include <cmath>
@@ -173,7 +174,12 @@ std::vector<float> compute_fbank(const float* pcm, int n_samples, const FbankPar
         return {};
     }
 
+    struct MelRange {
+        int first_bin = 0;
+        int last_bin = 0;
+    };
     static thread_local std::vector<float> mel_fb;
+    static thread_local std::vector<MelRange> mel_ranges;
     // Everything the bank depends on: a thread that alternates configurations
     // must never be handed the previous one's filters.
     static thread_local std::vector<float> mel_fb_key;
@@ -182,6 +188,17 @@ std::vector<float> compute_fbank(const float* pcm, int n_samples, const FbankPar
     if (mel_fb_key != key || mel_fb.empty()) {
         mel_fb = build_kaldi_mel_fb(p.sample_rate, n_fft, n_mels, p.low_freq, p.high_freq, p.mel_domain_triangles);
         mel_fb_key = key;
+        mel_ranges.resize((size_t)n_mels);
+        for (int m = 0; m < n_mels; m++) {
+            const float* row = mel_fb.data() + (size_t)m * (size_t)n_bins;
+            int first = 0;
+            while (first < n_bins && row[first] == 0.0f)
+                first++;
+            int last = n_bins - 1;
+            while (last >= first && row[last] == 0.0f)
+                last--;
+            mel_ranges[(size_t)m] = {first, last};
+        }
     }
 
     static thread_local std::vector<float> window;
@@ -201,17 +218,12 @@ std::vector<float> compute_fbank(const float* pcm, int n_samples, const FbankPar
     }
 
     std::vector<float> features((size_t)T * (size_t)n_mels);
-    // Thread-local scratch avoids per-call heap allocation for the FFT
-    // buffers and windowed frame (§176f).
-    static thread_local std::vector<float> fft_re, fft_im, frame;
-    if ((int)fft_re.size() < n_fft) {
-        fft_re.resize((size_t)n_fft);
-        fft_im.resize((size_t)n_fft);
-    }
-    if ((int)frame.size() < win)
-        frame.resize((size_t)win);
 
-    for (int t = 0; t < T; t++) {
+    const float* mel_fb_data = mel_fb.data();
+    const float* window_data = window.data();
+    const MelRange* ranges_data = mel_ranges.data();
+
+    auto process_frame = [&](int t, float* f_re, float* f_im, float* f_buf, float* power) {
         const int offset = p.snip_edges ? t * hop : t * hop + hop / 2 - win / 2;
 
         // Pull frame and (optionally) scale to int16-magnitude. Without
@@ -227,13 +239,13 @@ std::vector<float> compute_fbank(const float* pcm, int n_samples, const FbankPar
                     j = j < 0 ? -j - 1 : 2 * n_samples - 1 - j;
                 s = pcm[j];
             }
-            frame[(size_t)i] = s * scale;
-            dc += frame[(size_t)i];
+            f_buf[(size_t)i] = s * scale;
+            dc += f_buf[(size_t)i];
         }
         if (p.remove_dc_offset) {
             dc /= (float)win;
             for (int i = 0; i < win; i++)
-                frame[(size_t)i] -= dc;
+                f_buf[(size_t)i] -= dc;
         }
 
         // Pre-emphasis: s[i] -= preemph * s[i-1]. Kaldi uses s[-1] = s[0]
@@ -242,29 +254,63 @@ std::vector<float> compute_fbank(const float* pcm, int n_samples, const FbankPar
         // each step reads the unmodified s[i-1].
         if (p.preemph > 0.0f) {
             for (int i = win - 1; i > 0; i--) {
-                frame[(size_t)i] -= p.preemph * frame[(size_t)(i - 1)];
+                f_buf[(size_t)i] -= p.preemph * f_buf[(size_t)(i - 1)];
             }
-            frame[0] -= p.preemph * frame[0];
+            f_buf[0] -= p.preemph * f_buf[0];
         }
 
         // Apply window + zero-pad to n_fft.
-        std::fill(fft_re.begin(), fft_re.end(), 0.0f);
-        std::fill(fft_im.begin(), fft_im.end(), 0.0f);
+        std::fill(f_re, f_re + n_fft, 0.0f);
+        std::fill(f_im, f_im + n_fft, 0.0f);
         for (int i = 0; i < win; i++) {
-            fft_re[(size_t)i] = frame[(size_t)i] * window[(size_t)i];
+            f_re[(size_t)i] = f_buf[(size_t)i] * window_data[(size_t)i];
         }
 
-        fft_radix2(fft_re.data(), fft_im.data(), n_fft);
+        fft_radix2(f_re, f_im, n_fft);
+
+        // Precompute power once per frame across bins
+        for (int k = 0; k < n_bins; k++) {
+            power[k] = f_re[k] * f_re[k] + f_im[k] * f_im[k];
+        }
 
         // Power → mel projection → log(max(x, eps)).
+        float* feat_row = features.data() + (size_t)t * (size_t)n_mels;
         for (int m = 0; m < n_mels; m++) {
-            const float* row = mel_fb.data() + (size_t)m * (size_t)n_bins;
+            const float* row = mel_fb_data + (size_t)m * (size_t)n_bins;
+            const auto& r = ranges_data[m];
             float sum = 0.0f;
-            for (int k = 0; k < n_bins; k++) {
-                const float power = fft_re[(size_t)k] * fft_re[(size_t)k] + fft_im[(size_t)k] * fft_im[(size_t)k];
-                sum += power * row[(size_t)k];
+            for (int k = r.first_bin; k <= r.last_bin; k++) {
+                sum += power[k] * row[k];
             }
-            features[(size_t)t * (size_t)n_mels + (size_t)m] = std::log(std::max(sum, p.log_floor));
+            feat_row[m] = std::log(std::max(sum, p.log_floor));
+        }
+    };
+
+    if (T >= 32) {
+        core_parallel::for_each_chunk(T, 0, [&](int t0, int t1) {
+            std::vector<float> thread_re((size_t)n_fft);
+            std::vector<float> thread_im((size_t)n_fft);
+            std::vector<float> thread_frame((size_t)win);
+            std::vector<float> thread_power((size_t)n_bins);
+            for (int t = t0; t < t1; t++) {
+                process_frame(t, thread_re.data(), thread_im.data(), thread_frame.data(), thread_power.data());
+            }
+        });
+    } else {
+        // Thread-local scratch avoids per-call heap allocation for the FFT
+        // buffers and windowed frame (§176f).
+        static thread_local std::vector<float> fft_re, fft_im, frame, power;
+        if ((int)fft_re.size() < n_fft) {
+            fft_re.resize((size_t)n_fft);
+            fft_im.resize((size_t)n_fft);
+        }
+        if ((int)frame.size() < win)
+            frame.resize((size_t)win);
+        if ((int)power.size() < n_bins)
+            power.resize((size_t)n_bins);
+
+        for (int t = 0; t < T; t++) {
+            process_frame(t, fft_re.data(), fft_im.data(), frame.data(), power.data());
         }
     }
 

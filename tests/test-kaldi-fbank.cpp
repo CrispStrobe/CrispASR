@@ -7,6 +7,7 @@
 // cache never hands one configuration another's filters.
 
 #include "core/kaldi_fbank.h"
+#include "core/lfr.h"
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -114,4 +115,34 @@ TEST_CASE("filter cache keys on every bank parameter", "[kaldi_fbank]") {
     REQUIRE(first == again);
     CHECK(n4k[40] != first[40]); // same sr / n_fft / n_mels, different band
     (void)mel;
+}
+
+TEST_CASE("core_lfr: stacking matches FunASR padding and striding contract", "[lfr][unit]") {
+    // 5 frames of 2 features: [[1, 2], [3, 4], [5, 6], [7, 8], [9, 10]]
+    const std::vector<float> in = {1.0f, 2.0f, 3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f, 9.0f, 10.0f};
+    int T_out = 0;
+
+    // m = 3, n = 2. left = (3-1)/2 = 1.
+    // T_lfr = (5 + 2 - 1) / 2 = 3.
+    // super-frame 0: t=0, start=0-1=-1 -> frames [0, 0, 1] -> [1,2, 1,2, 3,4]
+    // super-frame 1: t=1, start=2-1= 1 -> frames [1, 2, 3] -> [3,4, 5,6, 7,8]
+    // super-frame 2: t=2, start=4-1= 3 -> frames [3, 4, 4] -> [7,8, 9,10, 9,10]
+    const auto out = core_lfr::stack(in.data(), 5, 2, 3, 2, T_out);
+    REQUIRE(T_out == 3);
+    REQUIRE(out.size() == 3 * 3 * 2);
+
+    const std::vector<float> expected = {
+        1.0f, 2.0f, 1.0f, 2.0f, 3.0f, 4.0f,
+        3.0f, 4.0f, 5.0f, 6.0f, 7.0f, 8.0f,
+        7.0f, 8.0f, 9.0f, 10.0f, 9.0f, 10.0f
+    };
+    CHECK(out == expected);
+
+    // Single frame degenerate test
+    const std::vector<float> single = {42.0f};
+    int T_single = 0;
+    const auto out_single = core_lfr::stack(single.data(), 1, 1, 3, 1, T_single);
+    REQUIRE(T_single == 1);
+    REQUIRE(out_single.size() == 3);
+    CHECK(out_single == std::vector<float>{42.0f, 42.0f, 42.0f});
 }

@@ -48,30 +48,20 @@ inline std::vector<float> stack(const float* feats, int T, int D, int m, int n, 
 
     const int T_lfr = lfr_t_out(T, n);
     const int left = (m - 1) / 2;
-    // T_padded must satisfy: (T_lfr - 1) * n + m ≤ T_padded.
-    const int needed_rows = (T_lfr - 1) * n + m;
-    const int T_padded_min = T + left;
-    const int right = (needed_rows > T_padded_min) ? (needed_rows - T_padded_min) : 0;
-    const int T_padded = T_padded_min + right;
-
-    // Build padded buffer.
-    std::vector<float> padded((size_t)T_padded * (size_t)D);
-    // Left: repeat frame[0].
-    for (int i = 0; i < left; i++) {
-        std::copy(feats, feats + D, padded.data() + (size_t)i * D);
-    }
-    // Original frames.
-    std::copy(feats, feats + (size_t)T * D, padded.data() + (size_t)left * D);
-    // Right: repeat frame[T-1].
-    for (int i = 0; i < right; i++) {
-        std::copy(feats + (size_t)(T - 1) * D, feats + (size_t)T * D, padded.data() + (size_t)(T_padded_min + i) * D);
-    }
 
     std::vector<float> out((size_t)T_lfr * (size_t)m * (size_t)D);
+    float* dst = out.data();
     for (int t = 0; t < T_lfr; t++) {
-        const float* src = padded.data() + (size_t)(t * n) * (size_t)D;
-        float* dst = out.data() + (size_t)t * (size_t)m * (size_t)D;
-        std::copy(src, src + (size_t)m * (size_t)D, dst);
+        const int start_frame = t * n - left;
+        for (int k = 0; k < m; k++) {
+            int src_frame = start_frame + k;
+            if (src_frame < 0)
+                src_frame = 0;
+            else if (src_frame >= T)
+                src_frame = T - 1;
+            std::memcpy(dst, feats + (size_t)src_frame * (size_t)D, (size_t)D * sizeof(float));
+            dst += D;
+        }
     }
     T_lfr_out = T_lfr;
     return out;
