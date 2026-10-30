@@ -31,7 +31,7 @@ unchanged.
 
 ## Verified preservation and independent sidecar audit
 
-[Completed preservation and proof](../../../docs/cuda126-mmq-preservation-2026-10-26.md).
+[Completed preservation and proof](../../../docs/historical/cuda126-mmq-preservation-2026-10-26.md).
 The worker checks resource headroom before transfers and waits at most five
 minutes for startup load/memory pressure to settle, retaining every sample.
 The thresholds stay unchanged; insufficient disk stops immediately.

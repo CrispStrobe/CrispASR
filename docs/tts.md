@@ -167,9 +167,9 @@ input rows/1210 code frames and WER0 through native DAC, original DAC and CLI.
 The other cache/sampler combinations fail this same control. These controls
 are not an accepted general recipe for the published model or `-m auto`.
 Additional texts/seeds are in validation; GPU/Q4 and performance are separate.
-[Results, complete public proofs and first-fork diagnosis](dia-cache-sampler-results-2026-10-16.md).
+[Results, complete public proofs and first-fork diagnosis](historical/dia-cache-sampler-results-2026-10-16.md).
 The public original dumper and text-only `crispasr-diff` route now cover the
-complete neural/codec stage map; [wiring proof](dia-reference-wire-composed-2026-10-16.json).
+complete neural/codec stage map; [wiring proof](historical/dia-reference-wire-composed-2026-10-16.json).
 
 ## dots.tts — voice cloning and performance
 
@@ -721,8 +721,8 @@ select CPU. The transformer currently builds flash-attention nodes directly;
 the generic flash flag is not a validated alternate-kernel benchmark control.
 
 The controlled model pins, complete build flags, per-run times and ASR receipts
-are in [the engine comparison](omnivoice-m1-comparison-2026-10-23.md) and
-[the generation/startup report](omnivoice-m1-startup-generation-2026-10-23.md).
+are in [the engine comparison](historical/omnivoice-m1-comparison-2026-10-23.md) and
+[the generation/startup report](historical/omnivoice-m1-startup-generation-2026-10-23.md).
 Warm model loads on the internal SSD settle near 0.5 seconds. Retain a Session
 for repeated calls. Precompiled Metal libraries use
 `-DGGML_METAL_EMBED_LIBRARY=OFF` with `ggml-metal-lib` built and the metallib
@@ -2430,7 +2430,7 @@ crispasr --backend supertonic -m auto --tts "Guten Tag, wie geht es dir?" \
 Dia cache precision checkpoint (2026-10-13): full F32 weights and F32 cross
 caches still reject the unchanged short seed-42 control through CLI and C ABI
 (empty transcript/WER 1), despite 40/40 canonical stage passes. No default or
-model pin was promoted; see [the complete OFF/ON/OFF receipt](dia-cross-cache-hosted-2026-10-13.json).
+model pin was promoted; see [the complete OFF/ON/OFF receipt](historical/dia-cross-cache-hosted-2026-10-13.json).
 
 
 Actual T4 CUDA cache controls (2026-10-13) are complete: all 120 canonical
@@ -2439,7 +2439,7 @@ replay stages pass with real scheduler splits and sampled process GPU memory
 transcripts/WER 1. F16 cache shares 353 original input steps; F32 shares 979
 and reaches the same step-978/head-2 divergence as CPU. OFF/repeat full arrays
 match exactly. These are correctness diagnostics, not accepted native speech
-or performance measurements. [Complete physical CUDA proof](dia-cuda-cache-physical-2026-10-13.json).
+or performance measurements. [Complete physical CUDA proof](historical/dia-cuda-cache-physical-2026-10-13.json).
 
 
 Actual T4 original-timescale OFF/ON/OFF control (2026-10-13) is complete
@@ -2453,7 +2453,7 @@ matches the CPU auxiliary model; complete physical audits and downloaded source
 files match their immutable controls. Nine TTS executions show actual CUDA
 splits and sampled allocation 8,528–8,734 MiB. This rejects the numerical
 candidate; it establishes no native speech, Q4 or speed acceptance.
-[Complete physical rotary proof](dia-original-rope-cuda-physical-2026-10-13.json).
+[Complete physical rotary proof](historical/dia-original-rope-cuda-physical-2026-10-13.json).
 
 
 The exact-shape output-head probe reproduces every retained native step-978
@@ -2463,7 +2463,7 @@ original-filter controls choose token 877 with original hidden states and 904
 with native hidden states. The cause at this boundary precedes the output
 head. This is isolated numerical evidence, not accepted speech or speed; the
 local original projection is not byte-identical to the hosted original one.
-[Projection audit](dia-head-projection-isolation-2026-10-13.json).
+[Projection audit](historical/dia-head-projection-isolation-2026-10-13.json).
 
 
 The learned final norm is byte-identical on retained original/native layer-17
@@ -2472,7 +2472,7 @@ captures also match exactly at four checkpoints, including step 978. Repeats
 and changed-feedback/scaled-output negatives pass. The remaining hidden
 variation is inside the decoder blocks or their attention inputs; these
 isolated controls do not accept native speech, Q4 or speed.
-[Norm/input audit](dia-norm-embedding-isolation-2026-10-13.json).
+[Norm/input audit](historical/dia-norm-embedding-isolation-2026-10-13.json).
 
 OpenVoice2 cloning reference/quality scope and reproducible per-stage validation
 are documented in [OpenVoice2 baking](openvoice2-baking.md). Native conversion
@@ -2480,7 +2480,7 @@ uses a raw reference clip; automatic upstream VAD/clip averaging is not implied.
 
 Fresh-reference encoder measurements, all five A/B modes, raw timings, memory
 costs and exact default code/PCM evidence are in the
-[encoder report](omnivoice-encoder-2026-10-23.md). On the measured M1, the
+[encoder report](historical/omnivoice-encoder-2026-10-23.md). On the measured M1, the
 low-memory CPU default cuts uncached encoding5–8%; cached reference requests
 already skip this stage. Explicitly set all five `ENCODER_*` switches to `0`
 for the pre-experiment encoder path. Full baking uses literal `2`; the remaining
@@ -2489,9 +2489,9 @@ switches use literal `0`/`1`. License acceptance and marking remain required.
 For explicit reproducible selection of the corrected GPU encoder, set both
 `CRISPASR_OMNIVOICE_ENCODER_HYBRID=1` and
 `CRISPASR_OMNIVOICE_ENCODER_SEMANTIC_F32=1`. The
-[semantic precision audit](omnivoice-semantic-precision-2026-10-23.md) records
+[semantic precision audit](historical/omnivoice-semantic-precision-2026-10-23.md) records
 boundary isolation, seven reference clips, exact-code/PCM checks and
 paired timings. Following listening approval, the eligible macOS Metal profile now selects
 this path by default; explicit precision `0` retains the original numerical
-A/B control. See the [default promotion](omnivoice-metal-defaults-2026-10-23.md)
+A/B control. See the [default promotion](historical/omnivoice-metal-defaults-2026-10-23.md)
 for eligibility, rollback, startup/memory measurements and CPU recovery.

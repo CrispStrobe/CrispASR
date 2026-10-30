@@ -7,7 +7,7 @@ mandatory method. Read gitignored local `CLAUDE.md` for private worktree/storage
 account, credential and recovery bindings. Then claim one bounded task in
 [PLAN.md](../PLAN.md) before implementation.
 
-The 2026-10-27 version of this file is in Git history. The prior [October 19 handoff](maintenance-handoff-2026-10-19.md) and
+The 2026-10-27 version of this file is in Git history. The prior [October 19 handoff](historical/maintenance-handoff-2026-10-19.md) and
 [historical plan](../PLAN-ARCHIVE.md) are archived snapshots. Their old release,
 PR, job-queue and ownership claims are not current instructions. Do not resume
 them automatically. Public path aliases describe roles; actual bindings stay
@@ -22,24 +22,24 @@ status and owner prose. No task is claimed and **zero Kaggle GPU jobs are active
   Pages deployed index commit `a17d1957e`, and final wheel audit **40895402248**
   passed (`complete: true, acceptance: true`, 11 distributions, 5 PyPI anonymous
   readbacks, 52 native assets via **40856997446**). See
-  [wheel audit receipt](release-v0848-wheel-audit-2026-10-29.json) and updated
-  [qualification receipt](release-v0848-qualification-2026-10-29.json).
+  [wheel audit receipt](historical/release-v0848-wheel-audit-2026-10-29.json) and updated
+  [qualification receipt](historical/release-v0848-qualification-2026-10-29.json).
 - **PR #559 (`Task J`) and Issue #560 full-recording LID are INTEGRATED on `main`**:
   `#559` exact-tree CI **40899681646** (13/13) and Lint **40899687134** (10/10)
   passed on `777e8ff23` and fast-forwarded `main`. `#560` rebased onto `777e8ff23`
   at `641e9bfab` and passed exact-tree CI **40900035576** (13/13), Lint
   **40900041428** (10/10) and Heavy CPU **40900046409** (`issue560_lid_only.py`,
   `complete: true, acceptance: true`), then fast-forwarded `main`
-  ([receipt](issue-560-exact-tree-integration-2026-10-29.json)). Keep `#557`
+  ([receipt](historical/issue-560-exact-tree-integration-2026-10-29.json)). Keep `#557`
   open for reply review; do not post issue comments without explicit instruction.
 - **Whisper loader-cache A/B, DTW safety, fake-backend equivalence and same-toolchain v4 are COMPLETE**:
-  fake-backend equivalence **40899209565** ([receipt](whisper-buft-equivalence-2026-10-29.json)),
+  fake-backend equivalence **40899209565** ([receipt](historical/whisper-buft-equivalence-2026-10-29.json)),
   integrated candidate `d28102214` CI **40903036393** (13/13), Lint **40903042314** (10/10),
-  DTW short-window **40903516297** ([receipt](whisper-dtw-short-2026-10-29.json)),
-  and Kaggle T4 `crispasr-whisper-loader-device-ab` v1 ([receipt](whisper-loader-device-ab-t4-diagnostic-2026-10-29.json),
+  DTW short-window **40903516297** ([receipt](historical/whisper-dtw-short-2026-10-29.json)),
+  and Kaggle T4 `crispasr-whisper-loader-device-ab` v1 ([receipt](historical/whisper-loader-device-ab-t4-diagnostic-2026-10-29.json),
   `load_select_us` `286352 us -> 8 us`, `load_ms` `576.68 ms -> 318.37 ms`) all
   passed. Same-toolchain T4 `crispasr-whisper-toolchain-paired` v4 completed all
-  20 runs ([receipt](whisper-toolchain-paired-t4-diagnostic-2026-10-29.json)):
+  20 runs ([receipt](historical/whisper-toolchain-paired-t4-diagnostic-2026-10-29.json)):
   `crisp` (`d28102214`) beat `upstream` on load (`329.66 ms` vs `557.14 ms`) and
   process wall time (`1.1420 s` vs `1.2923 s`), while remaining `+12.3%` above
   the whisper-only `fork` binary (`1.0167 s`, decode `2.524 ms/call` vs `3.226 ms/call`).
@@ -48,14 +48,14 @@ status and owner prose. No task is claimed and **zero Kaggle GPU jobs are active
   `d28102214` remains on `validate/whisper-integration-20261029`.
 - **Recent-model T4 step and paired diagnostics are COMPLETE and archived**:
   Granite 5.0 original steps (`crispasr-granite5-original-steps` v1,
-  [receipt](granite5-original-steps-t4-2026-10-29.json)) and CSM 1B original
-  steps (`crispasr-csm-original-steps` v1, [receipt](csm-original-steps-t4-2026-10-29.json))
+  [receipt](historical/granite5-original-steps-t4-2026-10-29.json)) and CSM 1B original
+  steps (`crispasr-csm-original-steps` v1, [receipt](historical/csm-original-steps-t4-2026-10-29.json))
   passed with `acceptance: true`. CSM 1B native steps (`crispasr-csm-native-steps` v1,
-  [receipt](csm-native-steps-t4-2026-10-29.json)) completed all 6 runs with zero
+  [receipt](historical/csm-native-steps-t4-2026-10-29.json)) completed all 6 runs with zero
   WER and bit-identical 134,444-byte RIFF+PCM audio payloads (`da5f956fdf447fe9ccfdd6a288ecb9555b0cb4991ef4cb0f431aa644af42796c`),
   tripping only on the post-loop whole-file hash check due to the 1,840-byte
   per-run C2PA signature trailer. MeloTTS paired T4 (`crispasr-melo-original-paired`
-  v1–v3, [receipt](melo-original-paired-t4-diagnostic-2026-10-29.json)) passed
+  v1–v3, [receipt](historical/melo-original-paired-t4-diagnostic-2026-10-29.json)) passed
   hosted import preflight **40866641921**, 853-tensor lineage, and Case 0
   (`native` 1.513 s / WER 0.0; `original` 0.151 s / WER 0.1111), while unchanged
   upstream `melo.api.TTS` (`seed=42`) produced `tiny.en` WER `0.2727 > 0.20` on
@@ -96,7 +96,7 @@ The historical 12:20 UTC notes below are retained for provenance.
 3. **#559 integration.** PR head is `6b132720090cbb532f79f544c130381ddf1cf6c9`.
    Candidate `5eef35019` passed CI **40848995923**, lint **40848999141** and
    secret scan **40848764566**; hosted routing/short-clip run **40860832787**
-   passed with the bounded [receipt](qwen3-pr559-cpu-diagnostic-2026-10-29.json).
+   passed with the bounded [receipt](historical/qwen3-pr559-cpu-diagnostic-2026-10-29.json).
    Its CLI includes a documented unrelated #560 overlay. Integration candidate
    `17edd73db` on `validate/issue559-integration-20261029` starts at main
    `e593f6921`; all nine changed file blobs match the CI-accepted candidate.
@@ -108,7 +108,7 @@ The historical 12:20 UTC notes below are retained for provenance.
 
 4. **#560 integration.** Full-recording source `de2e532dd` passed hosted
    long-clip run **40858523187**, including the previously failing Silero-to-
-   Whisper fallback; see the [receipt](issue-560-full-recording-cpu-accepted-2026-10-29.json).
+   Whisper fallback; see the [receipt](historical/issue-560-full-recording-cpu-accepted-2026-10-29.json).
    Candidate `86474234f` on `validate/issue560-integration-20261029` starts at
    main `d6601bf8f`, with matching runtime/test blobs. Its CI **40867065497**,
    lint **40867068371**, secret scan **40867056051** and model run
@@ -118,7 +118,7 @@ The historical 12:20 UTC notes below are retained for provenance.
    controls, then integrate without closing the loop prematurely. The default
    15-second behavior remains unchanged; full-recording behavior is opt-in.
 
-5. **Whisper performance candidate.** The [VMM T4 receipt](whisper-vmm-t4-diagnostic-2026-10-29.json)
+5. **Whisper performance candidate.** The [VMM T4 receipt](historical/whisper-vmm-t4-diagnostic-2026-10-29.json)
    shows VMM-on/off load medians 559.6/554.3 ms and decode 2.51/2.52 ms per
    call, with identical output and GPU gates; weight selection accounted for
    about 232–233 ms in the instrumented runs. CUDA's device-type query calls
@@ -136,7 +136,7 @@ The historical 12:20 UTC notes below are retained for provenance.
 
 6. **Finish recent-model measurements.** The four original-model group receipts
    are linked from [PERFORMANCE.md](../PERFORMANCE.md), with precision and timing
-   limits. The [Nemotron fork receipt](nemotron-fork-t4-benchmark-2026-10-29.json)
+   limits. The [Nemotron fork receipt](historical/nemotron-fork-t4-benchmark-2026-10-29.json)
    additionally records accepted T4 R13 quality controls and process medians;
    model bytes and stage boundaries differ. Run the prepared Granite original
    forward-step diagnostic on a free slot and retain off/on profiling controls.
@@ -199,7 +199,7 @@ and check actual GPU session availability before every Kaggle submission.
 - **#559:** PR head `6b132720090cbb532f79f544c130381ddf1cf6c9` was
   applied to candidate `5eef35019`. CI **40848995923**, lint **40848999141**
   and secret scan **40848764566** passed on that source. Hosted exact-routing
-  run **40860832787** passed on test source `8a12a0ad7`; its [bounded receipt](qwen3-pr559-cpu-diagnostic-2026-10-29.json)
+  run **40860832787** passed on test source `8a12a0ad7`; its [bounded receipt](historical/qwen3-pr559-cpu-diagnostic-2026-10-29.json)
   covers C API, CLI, four chunks, synthetic short clips and actual CLI factory
   exclusions. Six PR blobs match; the CLI has an unrelated #560 overlay.
   A fresh-main integration tree `17edd73db` on
@@ -215,7 +215,7 @@ and check actual GPU session availability before every Kaggle submission.
   fallback without lowering the Silero gate. Repair `de2e532dd` passes
   model-free actual-caller controls; CI **40858515815**, lint **40858519622**
   are queued. Hosted long-clip rerun **40858523187** passed on the exact repair
-  source; the [bounded receipt](issue-560-full-recording-cpu-accepted-2026-10-29.json)
+  source; the [bounded receipt](historical/issue-560-full-recording-cpu-accepted-2026-10-29.json)
   records Whisper and Silero late speech, majority and short-tail checks, and
   the Silero-to-Whisper fallback that failed previously. An integration tree
   `86474234f` on `validate/issue560-integration-20261029` starts from main
@@ -225,13 +225,13 @@ and check actual GPU session availability before every Kaggle submission.
   the existing approved datasets do not contain the exact source, models and
   dependencies for the full #559/#560 tests. Keep the hosted Actions jobs;
   a reduced model-free check is not an acceptance substitute.
-- **Recent models:** [the Nemotron paired receipt](nemotron-original-t4-benchmark-2026-10-29.json)
+- **Recent models:** [the Nemotron paired receipt](historical/nemotron-original-t4-benchmark-2026-10-29.json)
   records T4 results for native F16 and original F32, with zero WER and GPU
   execution; precision and operation boundaries differ, and no per-step count
   was captured. A native step-count diagnostic is prepared. Granite Q4_K
   version 1 failed on a truncated hash; version 2 ran native warmups but its
   original lacked the chat template. Version 3 completed with GPU and zero-WER
-  controls; see the [T4 receipt](granite5-original-t4-benchmark-2026-10-29.json)
+  controls; see the [T4 receipt](historical/granite5-original-t4-benchmark-2026-10-29.json)
   for the native 26-step decoder and non-equivalent original timing boundaries.
   The Granite original forward-step diagnostic and Nemotron F16 comparison
   against MIT-licensed transcribe.cpp are prepared on validation branch
@@ -244,7 +244,7 @@ and check actual GPU session availability before every Kaggle submission.
   static API checks passed. Version 2 processed all 27 native cases on GPU,
   then failed because the harness expected the wrong output paths. Version 3
   verifies the actual `.txt` paths against stdout and completed with GPU and
-  quality gates; see the [fork receipt](nemotron-fork-t4-benchmark-2026-10-29.json).
+  quality gates; see the [fork receipt](historical/nemotron-fork-t4-benchmark-2026-10-29.json).
   For matched R13 context, both engines have 0.0082 WER against 26 original
   transcripts and zero JFK WER. Four measured JFK process medians are 3.93 s
   native and 6.50 s transcribe.cpp; GGUF bytes, artifacts and stage boundaries
@@ -266,9 +266,9 @@ and check actual GPU session availability before every Kaggle submission.
   original adapter checks actual frame and decoder forwards. The native parser
   and original fake-module checks passed locally without inference or builds. Private CSM original-without-watermark version 1 failed on missing
   `bitsandbytes`; version 2 passed GPU and zero-WER controls. The [aggregate
-  receipt](csm-original-t4-benchmark-2026-10-29.json) discloses precision,
+  receipt](historical/csm-original-t4-benchmark-2026-10-29.json) discloses precision,
   watermark and timing boundaries. Gated access and no redistribution apply.
-  [OpenVoice paired T4 timing](openvoice-original-t4-benchmark-2026-10-29.json)
+  [OpenVoice paired T4 timing](historical/openvoice-original-t4-benchmark-2026-10-29.json)
   completed on two cases with output parity; native CPU flows/CUDA vocoder
   were substantially slower than the original CUDA converter. Full original
   Melo synthesis remains unproven. Original Melo import preflight
@@ -280,7 +280,7 @@ and check actual GPU session availability before every Kaggle submission.
   after this preflight passes and a slot is verified free.
 - **Whisper:** the short-audio safety fix `4023a6080` has queued CI
   **40847257799**, lint **40847261708** and secret scan **40847251740**.
-  The [T4 timing diagnostic](whisper-timing-t4-diagnostic-2026-10-29.json) of
+  The [T4 timing diagnostic](historical/whisper-timing-t4-diagnostic-2026-10-29.json) of
   `c5513ccfb` passed output and GPU controls. Median decode was 2.52 ms/call
   versus 2.41 ms for the packaged fork, and model load 531 ms versus 293 ms;
   builds differ. Same-toolchain comparison `crispasr-whisper-toolchain-paired`
@@ -296,7 +296,7 @@ and check actual GPU session availability before every Kaggle submission.
   Its v2 uploaded script SHA-256 was
   `ea0d3c6b3ed61b00927c44c4994be463af79943d7d3629e32cb6af27eb2f883e`.
   The independent `crispasr-whisper-vmm-ab` version 1 completed on the same
-  source: [receipt](whisper-vmm-t4-diagnostic-2026-10-29.json). All 20 GPU,
+  source: [receipt](historical/whisper-vmm-t4-diagnostic-2026-10-29.json). All 20 GPU,
   WER, transcript and 27-call controls pass. Median load is 554.3 ms VMM off
   and 559.6 ms on; decode is 2.52 and 2.51 ms/call. Profiled weight-buffer
   selection takes about 232–233 ms in either arm. A loader-local device-type
@@ -364,9 +364,9 @@ and Dart **40830201120**. Main and the new annotated v0.8.48 tag were pushed
 atomically and both remote commit readbacks match. Native Release
 **40833098926** and language wrappers **40833098923** have started; no
 publication acceptance is inferred from the tag. Continue task I, then J.
-[Release qualification receipt](release-v0848-qualification-2026-10-29.json).
-[CPU acceptance](openvoice-full-f16-cpu-accepted-2026-10-29.json),
-[CUDA acceptance](openvoice-full-f16-cuda-accepted-2026-10-29.json).
+[Release qualification receipt](historical/release-v0848-qualification-2026-10-29.json).
+[CPU acceptance](historical/openvoice-full-f16-cpu-accepted-2026-10-29.json),
+[CUDA acceptance](historical/openvoice-full-f16-cuda-accepted-2026-10-29.json).
 
 The completed BERT comparison isolates Q4 error (relative L2 0.136–0.165 versus
 original features) against F16 (about 0.0003). A fixed speech comparison on the
@@ -384,7 +384,7 @@ The issue remains open for its separate full-recording LID request, after I/J.
 
 | Item | State | Evidence |
 |---|---|---|
-| v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit 40736324867 PASS; task A complete. | [Receipt](release-publication-2026-10-28.md) |
+| v0.8.46 (Nemotron F16 default, packaging provenance) | Published, latest at the time, 50 native assets. Native audit PASS. Wheels, PyPI and Rust/Dart PASS. Formal wheel audit 40736324867 PASS; task A complete. | [Receipt](historical/release-publication-2026-10-28.md) |
 | v0.8.47 (#557 Linux GPU wheels) | Tag `v0.8.47` → `5f87a56265e4bbd7e2adc7052254e576d5774abb`. Release run **40711745769** passes all 38 jobs including publish, with 52 expected public asset names. Native audit 40751444564 is accepted; all 14 jobs in wheel producer 40751349609 pass. Pages 40776528499 passes and live index links are verified; wheel audit 40789883589 is accepted; B complete. | Task B |
 | #557 issue | Code merged. Issue still **open**. No public comment posted yet. | Task C |
 | data2vec-base nightly gate | COMPLETE: same-host cause, paired Q4/exact-F16 policy and actual production regression 40750908085 accepted. | Task D |
@@ -398,7 +398,7 @@ First actions for a fresh agent:
 2. Refresh open issues and PRs. Read each relevant whole thread (body, all
    comments, linked comments, latest follow-ups) before changing behavior. The
    2026-10-29 check: open #456/#461/#483/#532/#557/#558/#560, PR #559,
-   zero comments on #557. The [PR #559 review checkpoint](qwen3-context-pr559-review-2026-10-28.md)
+   zero comments on #557. The [PR #559 review checkpoint](historical/qwen3-context-pr559-review-2026-10-28.md)
    scopes its remaining gates; no review or merge was submitted.
 3. A, B, D, bounded F/G and K are accepted; C is prepared for review with #557 open. H is accepted; continue I → J in order; do not duplicate accepted campaigns. E needs hardware.
 4. For any task, record owner, source SHA, exact missing behavior, acceptance gates,
@@ -413,19 +413,19 @@ source/CI/validation checks; do not retag v0.8.47 to include them.
 
 | Area | Implemented and accepted | Limits / evidence |
 |---|---|---|
-| v0.8.46 release | Promotes the qualified Nemotron F16 default with OpenMDW notices, the VoxCPM2 host-permute timing split, and wheel notice/provenance staging. Published 2026-10-28; native and wheel publication pass. The verifier now takes `tag`/`source` inputs, and `REVIEWED_TAGS` lists v0.8.45–v0.8.47. | Wheel audit 40736324867 accepted (task A complete). v0.8.45 tag/assets untouched. [Receipt](release-publication-2026-10-28.md). |
+| v0.8.46 release | Promotes the qualified Nemotron F16 default with OpenMDW notices, the VoxCPM2 host-permute timing split, and wheel notice/provenance staging. Published 2026-10-28; native and wheel publication pass. The verifier now takes `tag`/`source` inputs, and `REVIEWED_TAGS` lists v0.8.45–v0.8.47. | Wheel audit 40736324867 accepted (task A complete). v0.8.45 tag/assets untouched. [Receipt](historical/release-publication-2026-10-28.md). |
 | #557 Linux GPU wheels (code) | Producers `build-libs-linux-x86_64-vulkan` and `build-libs-linux-arm64-cuda`. Wheel legs `linux-x86_64-vulkan`, `linux-x86_64-hip` (`--host-provided libomp.so`) and `linux-arm64-cuda`. A `whl/hip` index. A Linux Vulkan clean-venv loader smoke. Version-gated (≥ 0.8.47) exact auditor expectations. Tagged for v0.8.47; native and wheel/index readback audits are accepted. | Packaging only; no physical-GPU run (task E). Jetson excluded. Reply remains review-only (task C). |
-| v0.8.45 release | Native, Python, Rust and Dart publication completed. Native assets, CUDA splits, package notices, registry distributions and live GPU indexes were read back and verified. | Immutable tag source `e58bb48b5`. Native audit 40304161701; wheel audit 40313434985. This earlier receipt predates the separately scoped v0.8.46/v0.8.47 work. [Publication receipt](release-publication-2026-10-26.json). |
-| Nemotron default | Managed downloads now select the pinned qualified F16 profile only, retain OpenMDW/origin notices, and reject stale-Q4/missing-Q4 substitution. CPU and actual T4 pass 26/26 original transcript matches, 22/22 VoxCPM prompts, unchanged stage/magnitude gates, CLI, opaque-filename C ABI and fresh/reused-session controls. | Former plain Q4 fails both devices (11/26 and 8/22), so it is not an accepted default. Explicit existing Q4 files remain diagnostic. Existing v0.8.45 binaries still require explicit F16 selection. [Policy and full proof](nemotron-default-policy-2026-10-26.md). |
-| Qwen3-TTS #555 | Incompatible Base packs are rejected before prefill; failed replacement preserves the previous pack. Designed clear defaults use the matching original 1024/2048-dimensional encoders for 0.6B/1.7B. CPU/T4 speech/reference controls pass. | Model-specific embeddings/codes are not interchangeable voice packs. Apache/MIT notices, recipes and original declarations are retained; speaker identity/likeness rights and human listening are not inferred from ASR. [Runtime proof](issue555-voice-pack-2026-10-23.json), [designed voices](qwen3-designed-voices.md). |
-| Granite5 #552 | Qualified mixed Q4_K is the approximately 4.07 GB default. Bare `crispasr-quantize input-f16.gguf output.gguf q4_k` reproduces the accepted model byte-for-byte. CPU/T4 original-reference and C ABI/default checks pass; full model/recipe notices are retained. | Native context remains 4096; no full-16k or speed claim. Q8/Q6 and earlier failed Q4 recipes remain rejected despite matching words. [Q4_K proof](granite5-q4k-2026-10-24.json). |
-| CSM | Original Llama-3 rotary scaling and independent depth theta restored without changing sampling/weights/seed/gates. Nineteen original F16 stages and 442 quantized payloads verified; CPU and actual T4 speech controls pass. | Do not claim full depth-decoder/Mimi stage parity. Preserve the diagnostic legacy switch and original failures. Shipped in v0.8.45. [Qualification](csm-cpu-profile-2026-10-25.json). |
-| Bindings and wheels | #549/#551/#556 and contributor PR553/554 fixes integrated, authorship preserved, accepted API/package checks passed. Reporter #557 confirms Windows CUDA sessions now work for their Japanese subtitle pipeline. | CLI filename detection alone is not C ABI proof. Actual shared-header/device/loader surfaces need their own tests. [Earlier closure receipt](release-errors-2026-10-25.json). |
-| OmniVoice processing | Corrected CPU campaign includes every integrity-eligible reference; accepted upstream audio/text utilities are merged. Exact encoder cache/Apple ARM CPU pointwise path is accepted within its scope. | Keep hybrid/graph/fused GPU encode off: changed codes are not waived by WER 0. Broader GPU, cloning/speaker and human-listening scope is separate. [Encoder decisions](omnivoice-encoder-2026-10-23.md), [processing method](omnivoice-audio-processing.md). |
-| B390 diagnostics | VAE upload timing now separates host permutation. Existing weight/context caches and batched prefill were audited. | No graph/math/default change or new B390 speed claim. Ten inference steps remain the quality default. [Capture procedure](voxcpm2-b390-review-2026-10-26.md). |
-| MMQ preservation | Original OFF/ON ZIPs preserved byte-exact with full NVIDIA CUDA 12.6.3/cuBLAS and original notices; both uploaded assets pass full hash readback. Independent sidecar audit reads only 203,920 bytes and rejects three invalid receipts. | Maintainer draft 424870665 remains unpublished; no GPU execution/rebuild or target performance acceptance. [Preservation and reproducible proof](cuda126-mmq-preservation-2026-10-26.md). |
+| v0.8.45 release | Native, Python, Rust and Dart publication completed. Native assets, CUDA splits, package notices, registry distributions and live GPU indexes were read back and verified. | Immutable tag source `e58bb48b5`. Native audit 40304161701; wheel audit 40313434985. This earlier receipt predates the separately scoped v0.8.46/v0.8.47 work. [Publication receipt](historical/release-publication-2026-10-26.json). |
+| Nemotron default | Managed downloads now select the pinned qualified F16 profile only, retain OpenMDW/origin notices, and reject stale-Q4/missing-Q4 substitution. CPU and actual T4 pass 26/26 original transcript matches, 22/22 VoxCPM prompts, unchanged stage/magnitude gates, CLI, opaque-filename C ABI and fresh/reused-session controls. | Former plain Q4 fails both devices (11/26 and 8/22), so it is not an accepted default. Explicit existing Q4 files remain diagnostic. Existing v0.8.45 binaries still require explicit F16 selection. [Policy and full proof](historical/nemotron-default-policy-2026-10-26.md). |
+| Qwen3-TTS #555 | Incompatible Base packs are rejected before prefill; failed replacement preserves the previous pack. Designed clear defaults use the matching original 1024/2048-dimensional encoders for 0.6B/1.7B. CPU/T4 speech/reference controls pass. | Model-specific embeddings/codes are not interchangeable voice packs. Apache/MIT notices, recipes and original declarations are retained; speaker identity/likeness rights and human listening are not inferred from ASR. [Runtime proof](historical/issue555-voice-pack-2026-10-23.json), [designed voices](qwen3-designed-voices.md). |
+| Granite5 #552 | Qualified mixed Q4_K is the approximately 4.07 GB default. Bare `crispasr-quantize input-f16.gguf output.gguf q4_k` reproduces the accepted model byte-for-byte. CPU/T4 original-reference and C ABI/default checks pass; full model/recipe notices are retained. | Native context remains 4096; no full-16k or speed claim. Q8/Q6 and earlier failed Q4 recipes remain rejected despite matching words. [Q4_K proof](historical/granite5-q4k-2026-10-24.json). |
+| CSM | Original Llama-3 rotary scaling and independent depth theta restored without changing sampling/weights/seed/gates. Nineteen original F16 stages and 442 quantized payloads verified; CPU and actual T4 speech controls pass. | Do not claim full depth-decoder/Mimi stage parity. Preserve the diagnostic legacy switch and original failures. Shipped in v0.8.45. [Qualification](historical/csm-cpu-profile-2026-10-25.json). |
+| Bindings and wheels | #549/#551/#556 and contributor PR553/554 fixes integrated, authorship preserved, accepted API/package checks passed. Reporter #557 confirms Windows CUDA sessions now work for their Japanese subtitle pipeline. | CLI filename detection alone is not C ABI proof. Actual shared-header/device/loader surfaces need their own tests. [Earlier closure receipt](historical/release-errors-2026-10-25.json). |
+| OmniVoice processing | Corrected CPU campaign includes every integrity-eligible reference; accepted upstream audio/text utilities are merged. Exact encoder cache/Apple ARM CPU pointwise path is accepted within its scope. | Keep hybrid/graph/fused GPU encode off: changed codes are not waived by WER 0. Broader GPU, cloning/speaker and human-listening scope is separate. [Encoder decisions](historical/omnivoice-encoder-2026-10-23.md), [processing method](omnivoice-audio-processing.md). |
+| B390 diagnostics | VAE upload timing now separates host permutation. Existing weight/context caches and batched prefill were audited. | No graph/math/default change or new B390 speed claim. Ten inference steps remain the quality default. [Capture procedure](historical/voxcpm2-b390-review-2026-10-26.md). |
+| MMQ preservation | Original OFF/ON ZIPs preserved byte-exact with full NVIDIA CUDA 12.6.3/cuBLAS and original notices; both uploaded assets pass full hash readback. Independent sidecar audit reads only 203,920 bytes and rejects three invalid receipts. | Maintainer draft 424870665 remains unpublished; no GPU execution/rebuild or target performance acceptance. [Preservation and reproducible proof](historical/cuda126-mmq-preservation-2026-10-26.md). |
 | MUSA compiler candidate | SDK 5.2/architecture 31 compiles unchanged tagged WKV/full CLI; actual Docker recipe selects that profile. Manual workflows enforce physical platform/resource checks; hosted policy controls pass without SDK use. | S5000 runtime/image/speech, redistribution and older architectures are not qualified. Historical hosted compilation is not permission for further non-MUSA SDK use. [Build/terms](musa-build.md). |
-| Nyra review | Complete pinned software/model/output terms reviewed. | MIT inference code does not license model/lexicon/configuration assets or outputs. Integration remains deferred; no conversion, registry entry, backend or output dataset was added. [Full review](nyra-license-review-2026-10-26.md). |
+| Nyra review | Complete pinned software/model/output terms reviewed. | MIT inference code does not license model/lexicon/configuration assets or outputs. Integration remains deferred; no conversion, registry entry, backend or output dataset was added. [Full review](historical/nyra-license-review-2026-10-26.md). |
 
 Qualified Nemotron F16: model repository `cstr/nemotron-3.5-asr-streaming-GGUF`,
 revision `bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2`, file
@@ -451,7 +451,7 @@ voice pack or requantize Granite merely to reproduce these completed results.
   - Release **40711745769** remains in progress: task B.
   - Wrappers **40711745994** pass all three jobs. Full small registry archive
     readbacks match checksums, version, original manifests, package licenses and
-    tagged Rust/Dart sources: [receipt](release-wrappers-readback-2026-10-28.json).
+    tagged Rust/Dart sources: [receipt](historical/release-wrappers-readback-2026-10-28.json).
 - **#557 dry runs** of the new library producers pass:
   - Vulkan **40460158618**: build, relocated-load verify, dependency gate.
   - ARM64 CUDA **40661942703**: same gates.
@@ -460,7 +460,7 @@ voice pack or requantize Granite merely to reproduce these completed results.
 - Earlier evidence for v0.8.45 and the Nemotron, Qwen3, Granite, CSM, MMQ and
   MUSA work (CI 40403357613, lint 40403361382, preservation 40414804633 and
   related runs) is unchanged. See the Git history of this file and
-  [ordered-agenda-2026-10-26.json](ordered-agenda-2026-10-26.json).
+  [ordered-agenda-2026-10-26.json](historical/ordered-agenda-2026-10-26.json).
 
 Public aliases such as `${CRISPASR_STORAGE}`, `${CRISPASR_WORKTREES}` and
 `${CRISPASR_SCRATCH}` denote storage roles, not literal machine layouts. Private
@@ -469,7 +469,7 @@ locations and exact recovery commands are in ignored notes, not in this ledger.
 ## Open tasks — fully scoped
 
 A is complete: **40736324867** passed; its accepted full-distribution readback
-receipt is [retained here](release-v0846-wheel-audit-2026-10-28.json).
+receipt is [retained here](historical/release-v0846-wheel-audit-2026-10-28.json).
 B native producer **40711745769** has all **38 jobs successful**, including
 final publish, and the exact 52 expected public asset names. Native readback
 audit **40751444564** passed on `ubuntu-latest` with `complete: true, acceptance: true`, auditor source
@@ -483,13 +483,13 @@ source `2c733b9c3`; release inputs remain the frozen tag). Index commit
 index links are verified. Final wheel audit **40789883589** was dispatched
 on main with the exact frozen source and accepted producer/native-audit inputs.
 It passed with complete/acceptance true, all 11 distributions and five PyPI
-readbacks, plus every GPU index/full-file readback. [Accepted wheel receipt](release-v0847-wheel-audit-2026-10-29.json). B is complete; do not repeat either accepted auditor.
-The [accepted native receipt](release-v0847-native-audit-2026-10-28.json)
-and [full inventory](release-v0847-native-assets-2026-10-28.json) are retained.
+readbacks, plus every GPU index/full-file readback. [Accepted wheel receipt](historical/release-v0847-wheel-audit-2026-10-29.json). B is complete; do not repeat either accepted auditor.
+The [accepted native receipt](historical/release-v0847-native-audit-2026-10-28.json)
+and [full inventory](historical/release-v0847-native-assets-2026-10-28.json) are retained.
 Wheel readback still waits for successful
 wheel/index/Pages publication and the accepted native inventory.
 D production confirmation **40750908085** passed; its
-[accepted receipt](data2vec-production-regression-2026-10-28.json) closes this
+[accepted receipt](historical/data2vec-production-regression-2026-10-28.json) closes this
 bounded nightly-gate repair. Diagnostic **40735433388** completed on EPYC 9V74 with all three actual CPU profiles.
 Its independently decoded retained arrays establish the quantized profile
 sensitivity. No further capability attempts are needed. See task D for the fix
@@ -506,7 +506,7 @@ what delayed the live wheel index for v0.8.46.
   `complete: true, acceptance: true`; all eight distributions and five PyPI
   anonymous readbacks pass, along with GPU index/file readbacks. Auditor source
   `eafae0f48819eaf2a0c75d5d250383335ae70b23`. Do not rerun an accepted task.
-  [Portable receipt](release-v0846-wheel-audit-2026-10-28.json).
+  [Portable receipt](historical/release-v0846-wheel-audit-2026-10-28.json).
 - The following dispatch details explain the completed rerun, not another job.
 - **Why:** wheel audit run **40703639437** failed with HTTP 404 on
   `https://crispstrobe.github.io/CrispASR/whl/hip/crispasr/`. The cause was the
@@ -522,7 +522,7 @@ what delayed the live wheel index for v0.8.46.
   pinned Ubuntu 24.04 is also supported).
 - **Accept:** the run concludes `success`, and its `release-publication-<run>`
   artifact `receipt.json` has `complete: true, acceptance: true`. Add the run ID
-  to [the receipt](release-publication-2026-10-28.md).
+  to [the receipt](historical/release-publication-2026-10-28.md).
 - **If it fails:** read the traceback. Do not weaken an assertion to pass it.
   A real defect in a published distribution needs a new patch release, never a
   re-upload under the same version.
@@ -579,11 +579,11 @@ what delayed the live wheel index for v0.8.46.
   - **ARM CUDA:** the `ubuntu-22.04-arm` runner must build the wheel against
     `manylinux_2_35_aarch64`.
 - **Accept:** both verifier runs succeed. Record run IDs, asset count and wheel
-  filenames in [the receipt](release-publication-2026-10-28.md).
+  filenames in [the receipt](historical/release-publication-2026-10-28.md).
 
 ### Task C — complete: #557 reply prepared for review; keep the issue open
 
-The [final reply for review](issue-557-reply-review-2026-10-29.md) is supported
+The [final reply for review](historical/issue-557-reply-review-2026-10-29.md) is supported
 by accepted native audit **40751444564**, wheel audit **40789883589** and live
 Pages/index checks. The whole issue was refreshed: open, no comments, no new
 reporter requirements. It still explicitly states that physical AMD/Intel/ARM
@@ -600,7 +600,7 @@ the maintainer's review without asking again or sending it automatically.
   F16 stage cosine passed at 0.999138. The preceding green workflow skipped
   data2vec and is not a passing control.
 - First controlled run **40723799365** on EPYC 7763 passes native/AVX2 but has
-  no AVX-512. [First controls](data2vec-avx2-controls-2026-10-28.json).
+  no AVX-512. [First controls](historical/data2vec-avx2-controls-2026-10-28.json).
 - Decisive run **40735433388**, source
   `a21687e2918cbb1de9850e94b3350aac7f473afb`, artifact **12841953440**,
   completed on EPYC 9V74. Native, explicit AVX2 and explicit AVX512 use identical
@@ -612,7 +612,7 @@ the maintainer's review without asking again or sending it automatically.
   and passes unchanged stage minima 0.999138/0.999141/0.999138. Explicit-English
   pipeline and exact nightly invocations agree. This rules out punctuation/LID
   as the cause in the controlled reproduction.
-  [Portable retained-byte summary](data2vec-avx512-controls-2026-10-28.json).
+  [Portable retained-byte summary](historical/data2vec-avx512-controls-2026-10-28.json).
 - Implemented in `tests/regression/run_one.py` and
   `tools/kaggle/crispasr-regression.py`: data2vec Q4 allows **one word error over
   23 original reference words**, with `require_exact_diff_transcript: true`
@@ -634,7 +634,7 @@ the maintainer's review without asking again or sending it automatically.
   Q4 WER is 1/23, exact F16 WER is zero, and CTC-logit cosine minimum is
   0.999138 against the unchanged 0.999 threshold (one pass, no fail/skip).
   Artifact 12854280702 and complete raw logs are retained privately;
-  [portable accepted receipt](data2vec-production-regression-2026-10-28.json).
+  [portable accepted receipt](historical/data2vec-production-regression-2026-10-28.json).
   Do not duplicate it. Local validation passed 60 driver, seven diagnostics and
   19 publication-audit tests, plus all five privacy guards. The ad hoc Ruff
   check reports the same seven pre-existing findings as the parent; no new
@@ -666,7 +666,7 @@ the maintainer's review without asking again or sending it automatically.
   uninstrumented conversion and both clip-mean controls pass. Clone WER is
   0.1111, 0 and 0.1111; speaker improvement is 0.1833, 0.2373 and 0.1494.
   All retained artifact bytes and WER arithmetic were independently checked.
-  [Accepted receipt](openvoice-conditioning-accepted-2026-10-28.json).
+  [Accepted receipt](historical/openvoice-conditioning-accepted-2026-10-28.json).
   Validation was read-only; publication remains false. Do not repeat this
   passing matrix merely to recover the same evidence.
   The full quality matrix used the frozen `0a8620765` runtime; the current
@@ -676,12 +676,12 @@ the maintainer's review without asking again or sending it automatically.
   broader devices or a production default. Follow-up scope is below.
 - **Accepted structural result:** frozen replay kernel version2 passes **27/27
   on both CPU and T4 CUDA**, unchanged model/reference/gates. Raw waveform cosine
-  is0.99999973, norm ratio1.000042. [Verified receipt](openvoice-frozen-replay-accepted-2026-10-28.json).
+  is0.99999973, norm ratio1.000042. [Verified receipt](historical/openvoice-frozen-replay-accepted-2026-10-28.json).
   Native CPP is `1b874a104`; worker is `d84007612`. Full conditioning kernel
   version 3 finished all three native cases: 27/27, 27/27 and 28/28 T4 CUDA
   stages, exact repeats, raw C API and clip-mean controls. Its independent
   quality process failed because installed PyAV rejects `metadata_errors`;
-  no ASR/speaker acceptance is claimed. [Retained proof](openvoice-conditioning-structural-2026-10-28.json).
+  no ASR/speaker acceptance is claimed. [Retained proof](historical/openvoice-conditioning-structural-2026-10-28.json).
   Repair decodes the generated PCM WAVs directly into mono float32 at 16 kHz,
   preserving the same ASR model and WER/speaker thresholds. The repaired full
   worker passed as version 4 above. Version 3 source, terminal logs and all
@@ -692,7 +692,7 @@ the maintainer's review without asking again or sending it automatically.
   with matching `e2ae679a` ggml headers and only the verified model overlay.
   Dependencies resolve, all four model symbols belong to the overlay, and
   all 27 stages pass on both CPU and T4 CUDA. Raw waveform norm ratio is
-  1.000042. [Receipt](openvoice-current-runtime-replay-2026-10-28.json).
+  1.000042. [Receipt](historical/openvoice-current-runtime-replay-2026-10-28.json).
   Keep model acceptance false; Session/CLI and speech quality are separate.
   No full SDK rebuild or local model run was needed. Do not repeat this proof.
 - **Historical failed control:** frozen replay v1 passes 26/27 on CPU and actual T4 CUDA.
@@ -701,13 +701,13 @@ the maintainer's review without asking again or sending it automatically.
   uses slope 0.01; native used 0.1. The final slope is corrected with a failing-
   before/passing-after graph-call test and an isolated owned-input check
   (norm 1.111307 → 0.999915). Repeat the exact frozen replay with the new CPP
-  delta subsequently passed in version 2 above. [Both profiles](openvoice-frozen-replay-2026-10-28.json).
+  delta subsequently passed in version 2 above. [Both profiles](historical/openvoice-frozen-replay-2026-10-28.json).
 - **Historical failed control:** conditioning version 2 reached actual T4 CUDA work and failed 11/27 stages.
   The original reference/model bytes are retained and verified. The two
   original-recipe corrections (preserve zero-input conditioning bias; couple
   before forward flip) pass tiny production-body negative controls. Exact owned
   input CPU/CUDA replay subsequently passed; full speech acceptance is not claimed.
-  [All stages](openvoice-original-parity-failure-2026-10-28.json) and
+  [All stages](historical/openvoice-original-parity-failure-2026-10-28.json) and
   [repair method](openvoice2-baking.md#first-pretrained-numerical-failure-and-bounded-repair).
 - The frozen replay data attachment is ready: real model/reference data only,
   with MIT notices and synthetic-audio provenance. Model SHA-256
@@ -730,7 +730,7 @@ the maintainer's review without asking again or sending it automatically.
   native C++ deltas and converted F32-sensitive weights on a two-T4 allocation,
   then failed Hub repository creation with 403 **before inference**. All five
   retained compute resource checks passed. `gpu_executed` and acceptance remain
-  false. [Portable receipt](openvoice-conditioning-attempt-2026-10-28.json).
+  false. [Portable receipt](historical/openvoice-conditioning-attempt-2026-10-28.json).
   Previous source/logs/output are retained privately; do not erase them.
 - Worker `.3` defaults to read-only validation: model/reference/notice/hash
   checkpoints remain in kernel output. Only `CRISPASR_OV2_PUBLISH=1` requests
@@ -758,7 +758,7 @@ repeats, raw and normal marked synthesis all pass. Actual CUDA is observed.
 Marked-clone WER is 0.1111 and 0; independent speaker improvements are 0.1823
 and 0.2731. Raw speech passes too. Exact controller bytes, source/header/model
 pins, all resource checks and WER arithmetic were independently verified.
-[Accepted Session receipt](openvoice-session-accepted-2026-10-28.json).
+[Accepted Session receipt](historical/openvoice-session-accepted-2026-10-28.json).
 Preset identity is explicitly `unknown`: model-generated audio does not prove
 whose identity a preset represents. Raw artifacts remain private and labelled;
 these tests grant no identity, consent or voice-pack publication rights.
@@ -787,7 +787,7 @@ publication occurred. Remaining scope:
    **Overall acceptance remains false:** default-disclosed CLI case 0 has
    tiny.en WER **0.25**, above the unchanged **0.20** gate. Its content-only
    clone passes at 0.111 with speaker gain above 0.01; both Session cases and
-   CLI case 1 pass. [Failed quality receipt](openvoice-fullsource-attempt-2026-10-28.json).
+   CLI case 1 pass. [Failed quality receipt](historical/openvoice-fullsource-attempt-2026-10-28.json).
    All source/logs, the exact compiled application checkpoint and encrypted
    private speech were retained and the checkpoint hash read back. Do not
    rebuild it merely to repeat this proof; do not change seeds, thresholds or
@@ -797,7 +797,7 @@ publication occurred. Remaining scope:
    Neutral speech and extracted prefixes score tiny.en WER 2/7; small.en scores
    them 1/7. Content passes both. The prefix agrees with the neutral baseline
    after resampling (cosine 0.999937, norm ratio 0.999637); conversion/rate
-   routing is not the cause. [Diagnostic receipt](openvoice-disclosure-diagnostic-2026-10-29.json).
+   routing is not the cause. [Diagnostic receipt](historical/openvoice-disclosure-diagnostic-2026-10-29.json).
    Original tiny.en acceptance remains failed; the additional recognizer does
    not replace it. All terminal source/logs/output and encrypted speech are
    retained, including the version-1 transport failure before inference.
@@ -829,7 +829,7 @@ publication occurred. Remaining scope:
    is terminal from source `9259b9f3e`, bootstrap `379146cb0`. All three
    original-input controls, TCC stages and functional surfaces pass, but
    default-disclosed CLI case 0 still has tiny.en WER 0.25 >0.20.
-   [Retained failed attempt](openvoice-conditioning-inputs-attempt-2026-10-29.json).
+   [Retained failed attempt](historical/openvoice-conditioning-inputs-attempt-2026-10-29.json).
    The next concrete repair follows original `Generator.forward`: its final
    `F.leaky_relu(x)` uses default 0.01; native Melo used 0.1 there. The actual
    graph-call regression fails before and passes after correcting only that
@@ -841,17 +841,17 @@ publication occurred. Remaining scope:
    the original operator exactly on CUDA0, with norm ratio 1.0 and zero maximum
    error. Instrumented/plain waveform errors are zero. Both TCC 27-stage cases,
    Session/CLI and rates pass, but disclosed CLI WER 0.25 / 0.333333 fails the
-   unchanged original 0.20 gate. [Retained failed receipt](openvoice-final-activation-attempt-2026-10-29.json).
+   unchanged original 0.20 gate. [Retained failed receipt](historical/openvoice-final-activation-attempt-2026-10-29.json).
    The complete checkpoint and 108-file encrypted envelope were read back,
    hashed and authenticated. Do not claim application acceptance.
    **Decoder diagnostic version 1 is accepted:** all nine boundary comparisons
    across three cases match the original Generator/residual blocks with shared
    converted weights and native latent input. Waveform relative L2 is about
-   4e-6 and scale is within 1e-6 of unity. [Receipt](melotts-decoder-parity-2026-10-29.json).
+   4e-6 and scale is within 1e-6 of unity. [Receipt](historical/melotts-decoder-parity-2026-10-29.json).
    **Encoder/inverse-flow diagnostic version 2 is accepted:** all fifteen
    comparisons across three cases pass with relative errors below 5e-7,
    using actual native BERT features and sampled latent as shared inputs.
-   [Receipt](melotts-upstream-parity-2026-10-29.json). Both terminal runs have
+   [Receipt](historical/melotts-upstream-parity-2026-10-29.json). Both terminal runs have
    complete source/log/output readbacks and authenticated private envelopes.
    Do not repeat these accepted diagnostics or infer full-model parity.
 
@@ -864,7 +864,7 @@ publication occurred. Remaining scope:
    counts. It restores the original initial reverse Flip and the original
    1e-3 spline minima/normalization. Four production-body tests pass after
    failed before controls; ten of sixteen original scalar spline rows failed
-   before and all pass after. [Diagnosis](melotts-sdp-defect-2026-10-29.json).
+   before and all pass after. [Diagnosis](historical/melotts-sdp-defect-2026-10-29.json).
    New `tools/validation/melotts_duration.py` runs both pinned original
    predictors with actual captured native encoder output and scaled noise;
    RNG equivalence is not assumed. It preserves strict full parameter loading,
@@ -875,10 +875,10 @@ publication occurred. Remaining scope:
    `9001ff913`, bootstrap `8b9511e79`. All three original deterministic and
    stochastic duration cases pass, SDP relative error about 1.3e-6. Input,
    activation/backend, instrumentation, TCC, Session/CLI and rates pass too;
-   disclosed CLI WER 0.25 / 0.333333 still fails 0.20. [Retained CUDA attempt](openvoice-duration-attempt-2026-10-29.json).
+   disclosed CLI WER 0.25 / 0.333333 still fails 0.20. [Retained CUDA attempt](historical/openvoice-duration-attempt-2026-10-29.json).
    NN CPU **40806522459** finished at `8b9511e79`, likewise passing original
    duration and functional checks while disclosed case 0 WER 0.25 fails.
-   [Retained CPU attempt](openvoice-cpu-duration-attempt-2026-10-29.json).
+   [Retained CPU attempt](historical/openvoice-cpu-duration-attempt-2026-10-29.json).
    Both complete artifacts/checkpoints and authenticated 120-file envelopes
    are retained. Do not rerun these unchanged failed default-profile campaigns.
 
@@ -892,7 +892,7 @@ publication occurred. Remaining scope:
    shared-dequantized-weight comparison has relative L2 0.0586 / 0.0486 / 0.0386.
    F16 matches shared weights within about 1e-6 and original FP32 within about
    0.0003. Native BERT is CPU; original reference is CUDA. All token IDs/repeats
-   match. [BERT boundary receipt](melotts-bert-boundary-2026-10-29.json).
+   match. [BERT boundary receipt](historical/melotts-bert-boundary-2026-10-29.json).
    The version-3 speech phase failed because its diagnostic omitted the
    adjacent converter copy. Complete source/log/output and authenticated
    107-file envelope are retained; this was a harness staging error.
@@ -904,7 +904,7 @@ publication occurred. Remaining scope:
    without repeating the completed BERT component campaign or rebuilding.
    Same seed 42, text, Melo/reference/TCC and tiny.en recognizer: Q4 neutral
    WER 3/7, disclosed 0.25 / 0.333333; F16 neutral 1/7, disclosed 0.125 /
-   0.055556. [Precision speech receipt](melotts-bert-precision-speech-2026-10-29.json).
+   0.055556. [Precision speech receipt](historical/melotts-bert-precision-speech-2026-10-29.json).
    Complete source/log/output and authenticated 13-file envelope are retained.
    This is diagnostic only; complete speaker/application acceptance is separate.
 
@@ -920,8 +920,8 @@ publication occurred. Remaining scope:
    speech/speaker cases pass. CPU disclosed WER is 0.0625 / 0.055556; CUDA is
    0.125 / 0.055556. Complete source/log/output/checkpoints and both 120-file
    private archives are authenticated and retained; never repeat accepted
-   component campaigns. [CPU receipt](openvoice-full-f16-cpu-accepted-2026-10-29.json),
-   [CUDA receipt](openvoice-full-f16-cuda-accepted-2026-10-29.json).
+   component campaigns. [CPU receipt](historical/openvoice-full-f16-cpu-accepted-2026-10-29.json),
+   [CUDA receipt](historical/openvoice-full-f16-cuda-accepted-2026-10-29.json).
 
    **Current integration task:** candidate starting `2d388274b` changes only
    managed Melo V2 to that canonical F16 companion and pins both URLs to the
@@ -944,7 +944,7 @@ publication occurred. Remaining scope:
    Earlier CPU **40783760561** passed its complete four-case matrix at
    `7c158b325`, including default-disclosed WER 0.1875 and zero; its full
    artifact and authenticated encrypted readback are retained.
-   [Earlier CPU receipt](openvoice-cpu-pre-conditioning-2026-10-29.json).
+   [Earlier CPU receipt](historical/openvoice-cpu-pre-conditioning-2026-10-29.json).
    It predates both conditioning repairs and cannot qualify them. The queued
    pre-activation CPU **40795945687** was canceled; old CI/Lint runs were
    superseded by the current candidate. Preserve failed/older controls without
@@ -978,8 +978,8 @@ full CPU build, default/auto/explicit Whisper, dedicated Silero, multiple input,
 invalid ASR/HF bypass, unsupported-mode and bad-input failures, and ordinary
 `-l auto` transcription all pass. CI **40807943181** (13 jobs) and Lint
 **40807945520** pass at that exact source. Checkpoint readback is verified.
-[Accepted receipt](issue-560-lid-cli-accepted-2026-10-29.json),
-[scope and review](issue-560-lid-cli-review-2026-10-29.md).
+[Accepted receipt](historical/issue-560-lid-cli-accepted-2026-10-29.json),
+[scope and review](historical/issue-560-lid-cli-review-2026-10-29.md).
 K is complete; keep #560 open for its separate full-recording request. No
 public reply or closure has been sent.
 
@@ -998,7 +998,7 @@ card and pinned provenance all pass anonymous full-byte SHA-256 readback.
 No validation audio, target embedding or reference capture was uploaded.
 Preset identity and rights in a reference voice remain separate; qualification
 is bounded to the documented synthetic English CPU/T4 cases.
-[Publication receipt](openvoice2-tcc-publication-2026-10-29.json).
+[Publication receipt](historical/openvoice2-tcc-publication-2026-10-29.json).
 
 ### Matched Whisper CUDA fork benchmark
 
@@ -1008,7 +1008,7 @@ on all ten calls. Four alternating measured calls per engine give medians
 1.468 s (CrispASR v0.8.47) and 1.017 s (OpenWhispr fork v1.0.0).
 This measures process startup and model loading with concurrent GPU monitoring,
 not per-step execution; builds and CUDA libraries differ. It is one input and
-not a general model ranking. [Receipt](whisper-fork-t4-benchmark-2026-10-29.json).
+not a general model ranking. [Receipt](historical/whisper-fork-t4-benchmark-2026-10-29.json).
 All terminal source/log/output retained; version 1's missing-executable failure
 preceded inference and is retained separately. Do not repeat accepted runs
 without a new question. Per-step and upstream-original comparison remain to be
@@ -1056,7 +1056,7 @@ jobs for transient failures. J starts only after this acceptance.
 
 ### Task J — PR #559 after error and release acceptance
 
-Follow [the scoped review](qwen3-context-pr559-review-2026-10-28.md). Refresh
+Follow [the scoped review](historical/qwen3-context-pr559-review-2026-10-28.md). Refresh
 its entire description, comments, reviews, inline comments, linked #218/#488
 follow-ups and current head before acting. The earlier reviewed head was
 `6b132720090cbb532f79f544c130381ddf1cf6c9`; source review was not independent
@@ -1083,7 +1083,7 @@ No public review/comment or merge has been sent for this PR.
 The full report and linked #15 thread were read. A standalone SentencePiece
 space is preserved in full token text but was lost as a word-grouping boundary.
 The shared range helper is repaired and model-free before/after controls cover
-the demonstrated defect. See [repair and remaining evidence](parakeet-word-boundary-558-2026-10-28.md).
+the demonstrated defect. See [repair and remaining evidence](historical/parakeet-word-boundary-558-2026-10-28.md).
 This later source fix is outside frozen v0.8.47. Personal natural-speech input,
 matched NeMo token traces and device acceptance are still missing; keep #558 open.
 
@@ -1094,7 +1094,7 @@ Keep these holds until new evidence changes the stated condition.
 
 | Front | Resume input | Bounded action and acceptance |
 |---|---|---|
-| #532 Canary | Shareable failing German clip; assertion immediately before the trace; exact startup device/build and selected ASR/alignment filenames. | Reproduce the translation/VAD/diarization/alignment pipeline, then isolate allocation/cache behavior. Existing probes and later Viterbi changes do not prove the private crash fixed. [Assessment](canary-532-reproducer-review-2026-10-26.json). |
+| #532 Canary | Shareable failing German clip; assertion immediately before the trace; exact startup device/build and selected ASR/alignment filenames. | Reproduce the translation/VAD/diarization/alignment pipeline, then isolate allocation/cache behavior. Existing probes and later Viterbi changes do not prove the private crash fixed. [Assessment](historical/canary-532-reproducer-review-2026-10-26.json). |
 | #483 MMQ | GTX1660/MX150 access. | Run the exact preserved OFF/ON pair on the same device/model/audio/settings, verify correctness and separate cold PTX JIT from repeated warm timing. No T4 substitution or release-default change. Preserve original/additive notices. |
 | #461 B390 | Real B390 access and complete current capture. | Fixed mixed model/seed/sentence, ten steps, full stage/per-op logs plus WAV/listening. Distinguish process restarts from reused context, and VAE initialization from compute. Do not revive the withdrawn RTF projection or reduce quality to eight steps. |
 | MUSA | Authorized S5000 host; applicable SDK terms/permissions for the intended work. | Validate the actual candidate image/dependency closure and original-reference speech/operations. SDK 5.2 architecture 31 compilation alone does not establish runtime or older-target support. Review all redistributed SDK components; benchmark disclosure has a separate written-permission condition. No non-MUSA SDK execution absent an applicable exception. |
@@ -1120,12 +1120,12 @@ outputs; define a new hypothesis/input and acceptance boundary.
 | Front | First bounded next action | Preserve / do not repeat |
 |---|---|---|
 | Callable wrappers/lifecycle | Audit one genuinely missing exported/wrapped operation or new model/platform lifecycle case using [the coverage ledger](wrapper-callable-coverage.md). | Existing primitive repairs, high-level Go CPU lifecycle and accepted binding/metadata fixes are done. Raw low-level handles remain caller-serialized; API presence does not imply universal concurrent/model acceptance. |
-| Alignment #217 | Scope labeled natural-speech boundaries, additional long-form/model/device coverage using [the clean-room audit](alignment-cleanroom-2026-10-18.md). | Character/subword synthetic and bounded Japanese CPU evidence exists; #550 actual T4 memory/reuse is complete. Preserve default-off optimization gates and exact timestamps; do not repeat the accepted 45-minute CUDA matrix or claim Subtimer rankings. |
-| CANN | Obtain physical Ascend evidence under [the CANN TODO](cann-todo.md) and [layout procedure](cann-layout-followup-2026-10-20.md). | Host/SDK controls are accepted. Physical full-model placement, fallback, ACL replay and cache-on/off require target hardware; no Kaggle replacement. Keep optional caches off until qualified. |
+| Alignment #217 | Scope labeled natural-speech boundaries, additional long-form/model/device coverage using [the clean-room audit](historical/alignment-cleanroom-2026-10-18.md). | Character/subword synthetic and bounded Japanese CPU evidence exists; #550 actual T4 memory/reuse is complete. Preserve default-off optimization gates and exact timestamps; do not repeat the accepted 45-minute CUDA matrix or claim Subtimer rankings. |
+| CANN | Obtain physical Ascend evidence under [the CANN TODO](cann-todo.md) and [layout procedure](historical/cann-layout-followup-2026-10-20.md). | Host/SDK controls are accepted. Physical full-model placement, fallback, ACL replay and cache-on/off require target hardware; no Kaggle replacement. Keep optional caches off until qualified. |
 | OpenVoice2 | Active task F above uses the repaired read-only worker under [the baking method](openvoice2-baking.md). | Old queued/session-cap notes are stale. Synthetic encoder proof is not pretrained quality. Preserve original hooks, 27/28 stage gates, noise/clip-mean controls, WER <=0.2 and speaker improvement >0.01; do not relaunch an old worker blindly. |
-| Echo9B quantization | One identical-owned-input projection intervention, beginning with down-projection layer 25; [accepted attribution](index-echo-owned-ffn-audit-2026-10-19.json). | Seven recipes remain rejected. Component improvement is not complete EN/ZH trajectory, speech, cache, GPU or default acceptance. No duplicate attribution campaign. |
-| MiMo attention | Capture the actual failing 71-row Q/K/V, mask, scores/probabilities and pre-output projection with OFF/ON/OFF identity; [operator audit](mimo-attention-operator-2026-10-17.md). | Tiny F16-accumulator findings do not repair the F32 71-row path. Old cache-read/BLAS hypotheses were rejected. Preserve existing error gates and PR492's closed/unmerged status. |
-| Dia | Require a new operator hypothesis on identical original/native inputs; otherwise leave experimental. [Factorial results](dia-cuda-factorial-results-2026-10-16.json). | Original, precision/recipe, draw-placement and BOS/source sweeps did not recover all speech cases. Keep failed controls, seeds and thresholds; no token overrides or repeated full sweeps. |
+| Echo9B quantization | One identical-owned-input projection intervention, beginning with down-projection layer 25; [accepted attribution](historical/index-echo-owned-ffn-audit-2026-10-19.json). | Seven recipes remain rejected. Component improvement is not complete EN/ZH trajectory, speech, cache, GPU or default acceptance. No duplicate attribution campaign. |
+| MiMo attention | Capture the actual failing 71-row Q/K/V, mask, scores/probabilities and pre-output projection with OFF/ON/OFF identity; [operator audit](historical/mimo-attention-operator-2026-10-17.md). | Tiny F16-accumulator findings do not repair the F32 71-row path. Old cache-read/BLAS hypotheses were rejected. Preserve existing error gates and PR492's closed/unmerged status. |
+| Dia | Require a new operator hypothesis on identical original/native inputs; otherwise leave experimental. [Factorial results](historical/dia-cuda-factorial-results-2026-10-16.json). | Original, precision/recipe, draw-placement and BOS/source sweeps did not recover all speech cases. Keep failed controls, seeds and thresholds; no token overrides or repeated full sweeps. |
 | OmniVoice | New GPU semantic-boundary, speaker or human-listening evidence only. | Corrected CPU processing campaign includes all eligible references. Do not outcome-filter references or promote GPU encode modes that change codes merely because ASR words match. |
 | Breeze / Dolphin | Only a new reproducible quality/grid hypothesis or the actual failing host/clip. | Accepted API/server/voice fixes and original-reference repairs are not work to redo. Historical grid or platform qualifications are not blanket acceptance. |
 | Other older models/API/performance ideas | Audit the named requirement in PLAN-ARCHIVE.md against code and HISTORY.md before claiming a task. | No old OPEN label starts a task. Drama3/custom research-output restrictions remain deferred; a new trained speech reader needs separate data/rights/evaluation scope. |

@@ -58,7 +58,7 @@ a converted companion, select its path explicitly with `--codec-model`.
 reproduces the candidate byte for byte and passes strict comparisons against
 both retained originals: **48/48 startup stages** and **40/40 full-utterance
 stages**, including cosine and magnitude. The
-[complete receipt](dia-dac-standalone-export-2026-10-12.json) contains every
+[complete receipt](historical/dia-dac-standalone-export-2026-10-12.json) contains every
 stage result, physical audit and retained-file hash.
 
 Those comparisons replay original decoder inputs and original DAC codes.

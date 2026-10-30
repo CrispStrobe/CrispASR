@@ -10,7 +10,7 @@ import urllib.request
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
-INDEX = ROOT / 'docs/dia-public-proof-archives-2026-10-13.json'
+INDEX = ROOT / 'docs/historical/dia-public-proof-archives-2026-10-13.json'
 
 
 def digest(path):

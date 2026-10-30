@@ -869,6 +869,9 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `HIKARI_VAD_MODEL` — Silero file for the policy's speech probability (default: `ggml-silero-v6.2.0.bin` next to the model, else the managed download; CLI also `--vad-model`).
 - `HIKARI_VAD` — `0` turns Silero off (the model then rarely emits; for A/B only).
 - `HIKARI_WP_BASE`, `HIKARI_WP_BOOST`, `HIKARI_WP_DECAY`, `HIKARI_REP`, `HIKARI_CTX`, `HIKARI_TAIL_MS` — the upstream client's policy knobs (defaults 0, 0.6, 0.3, 40, 337 tokens, 2000 ms).
+- `HIKARI_STRIDE` / `CRISPASR_HIKARI_REFRESH_STRIDE` — strided window refresh interval $K$ for streaming (default: 16 strided, `0` = exact sliding baseline).
+- `HIKARI_STRIDE_MARGIN` — trailing lookahead margin frames to re-encode (default: 4).
+- `HIKARI_STALE_TOL` — mel divergence threshold triggering encoder invalidation (default: 0.05).
 - `HIKARI_VERBOSE`, `HIKARI_BENCH` — per-step trace, per-stage timings.
 - `HIKARI_GPU` — `0` keeps hikari on the CPU (default: the GPU when there is one).
 
@@ -947,6 +950,7 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `CRISPASR_MOONSHINE_ALL_GPU`
 - `CRISPASR_MOONSHINE_BENCH`
 - `CRISPASR_MOONSHINE_ENC_ATTN`
+- `CRISPASR_MOONSHINE_MASK_CACHE` — `1` (default) enables reusable banded attention mask caching and fast interval fill, yielding 2x faster streaming; `0` reverts to per-step un-cached mask loop.
 - `CRISPASR_MOONSHINE_NO_REPEAT_BREAK`
 - `CRISPASR_MOONSHINE_STREAMING_BENCH`
 - `CRISPASR_MOONSHINE_STREAMING_GPU`
@@ -1712,6 +1716,7 @@ end-to-end cosine cannot do.
 
 ### Whisper (Tiron speaker attribution)
 
+- `CRISPASR_WHISPER_STREAM_AUDIO_CTX` — bounds Whisper encoder audio context during streaming (in 20 ms frames, e.g. `1024` for 33% speedup, `1` for adaptive window bounds; default: `0` = full 1500 padding / 30s).
 - `CRISPASR_WHISPER_TIRON` — `0` forces the stock whisper decode for A/B. The
   Tiron constrained-decoding grammar is auto-on whenever the model's vocab has
   speaker tokens; plain greedy loses ~5 cpWER.

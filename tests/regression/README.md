@@ -27,7 +27,7 @@ in addition to the unchanged stage thresholds. Both normal and Kaggle drivers
 apply these controls; F16 diagnostics have their own `transcript-f16` label.
 Missing model/reference controls fail before downloads. The separate human
 reference still reports 4.55% WER as an accuracy advisory. Weights and decoder
-are unchanged. [Retained controls](../../docs/data2vec-avx512-controls-2026-10-28.json).
+are unchanged. [Retained controls](../../docs/historical/data2vec-avx512-controls-2026-10-28.json).
 The previous target was a native Q4 capture from July, not the Python reference.
 
 ## Why pin everything

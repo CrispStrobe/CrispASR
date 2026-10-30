@@ -1,0 +1,1449 @@
+{
+  "independent_integration_audit_pass": true,
+  "source": "1a36c871d76b162dcf0512a0fec450ce61ed4840",
+  "ggml": "0a862076567afd8468822ccc512c97ac6a69b340",
+  "run": 38541851377,
+  "run_url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377",
+  "conclusion": "success",
+  "jobs": [
+    {
+      "name": "linux-x86_64",
+      "job_id": 115778267291,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377/job/115778267291",
+      "conclusion": "success",
+      "ggml_checkout_verified": true,
+      "build_evidence": [
+        "2026-10-14T09:59:52.5325463Z [100%] Linking CXX static library libcrispasr-diff-lib.a",
+        "2026-10-14T10:00:06.4456029Z [100%] Linking CXX executable ../../bin/crispasr-diff",
+        "2026-10-14T10:00:06.8608200Z [ 97%] Built target crispasr-lib",
+        "2026-10-14T10:00:09.6767135Z [100%] Linking CXX executable ../../bin/crispasr-quantize"
+      ],
+      "test_evidence": [
+        "2026-10-14T10:00:16.6306193Z RESULT: PASS"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install dependencies",
+          "conclusion": "success"
+        },
+        {
+          "name": "Configure",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build",
+          "conclusion": "success"
+        },
+        {
+          "name": "Smoke test - help",
+          "conclusion": "success"
+        },
+        {
+          "name": "Smoke test - list backends",
+          "conclusion": "success"
+        },
+        {
+          "name": "Backend wiring audit",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "linux-fuzz-smoke",
+      "job_id": 115778267626,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377/job/115778267626",
+      "conclusion": "success",
+      "ggml_checkout_verified": true,
+      "build_evidence": [
+        "2026-10-14T10:08:54.9971920Z [ 74%] Linking CXX static library libcrispasr-llama-core.a",
+        "2026-10-14T10:10:04.5624292Z [ 97%] Linking CXX shared library libcrispasr.so",
+        "2026-10-14T10:10:06.2746395Z [ 97%] Built target crispasr-lib",
+        "2026-10-14T10:10:06.3152284Z [100%] Linking CXX executable ../bin/crispasr-fuzz-audio"
+      ],
+      "test_evidence": [
+        "2026-10-14T10:11:12.9773347Z Done 268 runs in 66 second(s)"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install dependencies",
+          "conclusion": "success"
+        },
+        {
+          "name": "Configure (fuzzer + ASan/UBSan, clang)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build the fuzz harness",
+          "conclusion": "success"
+        },
+        {
+          "name": "Smoke fuzz (seeded from samples/, ~45s; a crash fails CI)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Upload the crashing input",
+          "conclusion": "skipped"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "macos",
+      "job_id": 115778267697,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377/job/115778267697",
+      "conclusion": "success",
+      "ggml_checkout_verified": true,
+      "build_evidence": [
+        "2026-10-14T09:42:38.2731370Z [ 84%] Linking CXX shared library libcrispasr.dylib",
+        "2026-10-14T09:42:39.1834210Z [ 84%] Built target crispasr-lib",
+        "2026-10-14T09:44:06.4623240Z [100%] Linking CXX executable ../../bin/crispasr",
+        "2026-10-14T09:44:07.5471630Z [100%] Built target crispasr-cli"
+      ],
+      "test_evidence": [],
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Configure with Metal",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build",
+          "conclusion": "success"
+        },
+        {
+          "name": "Smoke test",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "linux-backend-dl",
+      "job_id": 115778267724,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377/job/115778267724",
+      "conclusion": "success",
+      "ggml_checkout_verified": true,
+      "build_evidence": [
+        "2026-10-14T10:11:04.5908656Z [ 81%] Linking CXX shared library libcrispasr.so",
+        "2026-10-14T10:11:05.0118669Z [ 81%] Built target crispasr-lib",
+        "2026-10-14T10:12:43.3649296Z [100%] Linking CXX executable ../../bin/crispasr",
+        "2026-10-14T10:12:43.5549229Z [100%] Built target crispasr-cli"
+      ],
+      "test_evidence": [],
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install dependencies",
+          "conclusion": "success"
+        },
+        {
+          "name": "Configure (GGML_BACKEND_DL, as the CUDA packages are built)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build (the link is the test)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Smoke test - the CPU backend still loads as a module",
+          "conclusion": "success"
+        },
+        {
+          "name": "Packaged C ABI discovers adjacent plugins outside the package directory",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "linux-vulkan",
+      "job_id": 115778267771,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377/job/115778267771",
+      "conclusion": "success",
+      "ggml_checkout_verified": true,
+      "build_evidence": [
+        "2026-10-14T10:04:11.9183821Z [ 87%] Linking CXX shared library libcrispasr.so",
+        "2026-10-14T10:04:12.3005624Z [ 87%] Built target crispasr-lib",
+        "2026-10-14T10:05:41.0379002Z [100%] Linking CXX executable ../../bin/crispasr",
+        "2026-10-14T10:05:41.2091902Z [100%] Built target crispasr-cli"
+      ],
+      "test_evidence": [],
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install Vulkan SDK + glslc",
+          "conclusion": "success"
+        },
+        {
+          "name": "Configure with Vulkan",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build",
+          "conclusion": "success"
+        },
+        {
+          "name": "Smoke test",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "linux-asan-audio",
+      "job_id": 115778267841,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377/job/115778267841",
+      "conclusion": "success",
+      "ggml_checkout_verified": true,
+      "build_evidence": [
+        "2026-10-14T10:02:19.7792943Z [ 40%] Linking CXX static library libcrispasr-core.a",
+        "2026-10-14T10:04:25.5552968Z [ 84%] Linking CXX static library libcrispasr-llama-core.a",
+        "2026-10-14T10:05:19.4397684Z [ 97%] Linking CXX shared library libcrispasr.so",
+        "2026-10-14T10:05:20.9395493Z [ 97%] Built target crispasr-lib"
+      ],
+      "test_evidence": [
+        "2026-10-14T10:05:28.6698229Z All tests passed (121 assertions in 17 test cases)"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install dependencies",
+          "conclusion": "success"
+        },
+        {
+          "name": "Configure (ASan + UBSan)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build audio-format tests under sanitizers",
+          "conclusion": "success"
+        },
+        {
+          "name": "Decode samples under ASan/UBSan",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "linux-unit",
+      "job_id": 115778267872,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377/job/115778267872",
+      "conclusion": "success",
+      "ggml_checkout_verified": true,
+      "build_evidence": [
+        "2026-10-14T09:48:06.1820377Z [1470/1487] Linking CXX executable bin/crispasr-legacy-quantize",
+        "2026-10-14T09:48:06.2071224Z [1471/1487] Linking CXX executable bin/crispasr-vad-speech-segments",
+        "2026-10-14T09:48:06.2190399Z [1472/1487] Linking CXX executable bin/crispasr-server",
+        "2026-10-14T09:48:06.3067653Z [1473/1487] Linking CXX executable bin/crispasr-quantize"
+      ],
+      "test_evidence": [
+        "2026-10-14T09:48:23.3793792Z 100% tests passed, 0 tests failed out of 2020"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install dependencies",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install pinned capability-table formatter",
+          "conclusion": "success"
+        },
+        {
+          "name": "Fetch pinned ONNX Runtime SDK for the complete capability check",
+          "conclusion": "success"
+        },
+        {
+          "name": "Configure (tests ON)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build",
+          "conclusion": "success"
+        },
+        {
+          "name": "Check generated capability table and C ABI",
+          "conclusion": "success"
+        },
+        {
+          "name": "Check production GPU backend/device selection without hardware",
+          "conclusion": "success"
+        },
+        {
+          "name": "Breeze guided acceptance deletion controls",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run the unit tier",
+          "conclusion": "success"
+        },
+        {
+          "name": "TTS session failure, ownership and conversion contracts",
+          "conclusion": "success"
+        },
+        {
+          "name": "Supertonic speaker API null and bounds contracts",
+          "conclusion": "success"
+        },
+        {
+          "name": "UTF-8 loop cleanup under platform ctype classification",
+          "conclusion": "success"
+        },
+        {
+          "name": "Breeze session sampler controls",
+          "conclusion": "success"
+        },
+        {
+          "name": "Session result UTF-8 contract (native functions and strict Python decode)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Breeze session reference and instruction composition",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "linux-amr-fetch (g++)",
+      "job_id": 115778267876,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377/job/115778267876",
+      "conclusion": "success",
+      "ggml_checkout_verified": true,
+      "build_evidence": [
+        "2026-10-14T09:53:09.2869608Z [ 43%] Linking CXX static library libcrispasr-core.a",
+        "2026-10-14T09:55:49.1254407Z [ 80%] Linking CXX static library libcrispasr-llama-core.a",
+        "2026-10-14T09:57:05.6390850Z [100%] Linking CXX shared library libcrispasr.so",
+        "2026-10-14T09:57:06.0885130Z [100%] Built target crispasr-lib"
+      ],
+      "test_evidence": [
+        "2026-10-14T09:57:09.1733341Z All tests passed (11 assertions in 1 test case)"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install dependencies",
+          "conclusion": "success"
+        },
+        {
+          "name": "Configure (AMR FetchContent static) + assert gate enabled",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build audio-format tests (compiles + links opencore-amr static)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Decode AMR end-to-end (samples/jfk.amr)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "ios",
+      "job_id": 115778267877,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377/job/115778267877",
+      "conclusion": "success",
+      "ggml_checkout_verified": true,
+      "build_evidence": [
+        "2026-10-14T09:43:28.9562410Z [ 30%] Linking CXX static library libcrispasr-core.a",
+        "2026-10-14T09:45:30.0082660Z [ 76%] Linking CXX static library libcrispasr-llama-core.a",
+        "2026-10-14T09:46:57.9463590Z [100%] Linking CXX static library libcrispasr.a",
+        "2026-10-14T09:46:58.1536060Z [100%] Built target crispasr-lib"
+      ],
+      "test_evidence": [],
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Configure for iOS",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "linux-opus-fetch",
+      "job_id": 115778267986,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377/job/115778267986",
+      "conclusion": "success",
+      "ggml_checkout_verified": true,
+      "build_evidence": [
+        "2026-10-14T10:11:08.1762128Z [ 50%] Linking CXX static library libcrispasr-core.a",
+        "2026-10-14T10:13:46.0982050Z [ 86%] Linking CXX static library libcrispasr-llama-core.a",
+        "2026-10-14T10:15:01.8964951Z [100%] Linking CXX shared library libcrispasr.so",
+        "2026-10-14T10:15:02.3324861Z [100%] Built target crispasr-lib"
+      ],
+      "test_evidence": [
+        "2026-10-14T10:15:05.8639611Z All tests passed (48 assertions in 4 test cases)"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install dependencies",
+          "conclusion": "success"
+        },
+        {
+          "name": "Configure (Opus FetchContent static) + assert gate enabled",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build audio-format tests (compiles + links opus/ogg/opusfile static)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Decode Opus-in-WebM end-to-end (samples/jfk.webm)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "linux-amr-fetch (clang++)",
+      "job_id": 115778268009,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377/job/115778268009",
+      "conclusion": "success",
+      "ggml_checkout_verified": true,
+      "build_evidence": [
+        "2026-10-14T10:14:44.7622642Z [ 43%] Linking CXX static library libcrispasr-core.a",
+        "2026-10-14T10:16:54.9502625Z [ 84%] Linking CXX static library libcrispasr-llama-core.a",
+        "2026-10-14T10:17:38.8806599Z [100%] Linking CXX shared library libcrispasr.so",
+        "2026-10-14T10:17:39.3592129Z [100%] Built target crispasr-lib"
+      ],
+      "test_evidence": [
+        "2026-10-14T10:17:41.7014865Z All tests passed (11 assertions in 1 test case)"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Install dependencies",
+          "conclusion": "success"
+        },
+        {
+          "name": "Configure (AMR FetchContent static) + assert gate enabled",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build audio-format tests (compiles + links opencore-amr static)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Decode AMR end-to-end (samples/jfk.amr)",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "windows",
+      "job_id": 115778268025,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377/job/115778268025",
+      "conclusion": "success",
+      "ggml_checkout_verified": true,
+      "build_evidence": [
+        "2026-10-14T09:50:39.2959317Z   tada-tts.vcxproj -> D:\\a\\CrispASR\\CrispASR\\build\\src\\Release\\tada-tts.lib",
+        "2026-10-14T09:50:39.6311357Z   crispasr-lib.vcxproj -> D:\\a\\CrispASR\\CrispASR\\build\\bin\\Release\\crispasr.dll",
+        "2026-10-14T09:50:39.8895843Z   common.vcxproj -> D:\\a\\CrispASR\\CrispASR\\build\\examples\\Release\\common.lib",
+        "2026-10-14T09:50:42.3807227Z   test-params.vcxproj -> D:\\a\\CrispASR\\CrispASR\\build\\bin\\Release\\test-params.exe"
+      ],
+      "test_evidence": [
+        "2026-10-14T09:50:43.3145192Z 100% tests passed out of 42"
+      ],
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Vulkan SDK download retry checks",
+          "conclusion": "success"
+        },
+        {
+          "name": "Configure",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build",
+          "conclusion": "success"
+        },
+        {
+          "name": "Smoke test",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build speaker-db unit tests",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run speaker-db unit tests",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    },
+    {
+      "name": "android",
+      "job_id": 115778268311,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38541851377/job/115778268311",
+      "conclusion": "success",
+      "ggml_checkout_verified": true,
+      "build_evidence": [
+        "2026-10-14T10:14:38.3122290Z [ 31%] Linking CXX static library libcrispasr-core.a",
+        "2026-10-14T10:15:59.4952323Z [ 74%] Linking CXX static library libcrispasr-llama-core.a",
+        "2026-10-14T10:17:03.9453987Z [100%] Linking CXX static library libcrispasr.a",
+        "2026-10-14T10:17:03.9826228Z [100%] Built target crispasr-lib"
+      ],
+      "test_evidence": [],
+      "steps": [
+        {
+          "name": "Set up job",
+          "conclusion": "success"
+        },
+        {
+          "name": "Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Set up NDK",
+          "conclusion": "success"
+        },
+        {
+          "name": "Configure for Android arm64",
+          "conclusion": "success"
+        },
+        {
+          "name": "Build",
+          "conclusion": "success"
+        },
+        {
+          "name": "Post Run actions/checkout@v6",
+          "conclusion": "success"
+        },
+        {
+          "name": "Complete job",
+          "conclusion": "success"
+        }
+      ]
+    }
+  ],
+  "log_zip_bytes": 1918837,
+  "log_zip_sha256": "bc685989ebcba300c1bdc6c3e383d7b69f65f18de7d3bba3bebf9688f24e1fd8",
+  "log_members": [
+    {
+      "path": "0_android.txt",
+      "bytes": 427745,
+      "sha256": "341da787eb1cce5ebe0aaed7b338e228fdddeca255bfb6cbc4102ddcf8958c20"
+    },
+    {
+      "path": "android/system.txt",
+      "bytes": 594,
+      "sha256": "794809030079205cd61ea3849e8775ffc18a258408bd70c2692f27b64462aac1"
+    },
+    {
+      "path": "android/1_Set up job.txt",
+      "bytes": 2062,
+      "sha256": "12753473080954d16abb4604b964350d78fbe0cc225639e129300d72f3c95dc6"
+    },
+    {
+      "path": "android/2_Run actions_checkout@v6.txt",
+      "bytes": 12664,
+      "sha256": "a85a269d443589fdd663dbf36ef65b7cd6df7d97dd41df4e77b25c24188b0167"
+    },
+    {
+      "path": "android/3_Set up NDK.txt",
+      "bytes": 751,
+      "sha256": "3b142e095a60548d36488532ec02db7a60cbeb901b853c5ab01e614b9a192a43"
+    },
+    {
+      "path": "android/4_Configure for Android arm64.txt",
+      "bytes": 76384,
+      "sha256": "bb5c215f95c15f282b540176d21aaca380abb6d3269556396bdeba3955854f3e"
+    },
+    {
+      "path": "android/5_Build.txt",
+      "bytes": 327867,
+      "sha256": "383bfb8bbf553f5c10a476caf8f794e7a1af23c66144ea66515a8ff37ab5987e"
+    },
+    {
+      "path": "android/10_Post Run actions_checkout@v6.txt",
+      "bytes": 7974,
+      "sha256": "f5fc3bd769d4f8346afb1f00ec1f57ebb9397df79374e74d6d650b5b7520741c"
+    },
+    {
+      "path": "android/11_Complete job.txt",
+      "bytes": 61,
+      "sha256": "69eabeea5ebfd5cc40db18128d5c69bbe6c45511aeb842dd98878e02723ff67a"
+    },
+    {
+      "path": "1_linux-amr-fetch (clang++).txt",
+      "bytes": 410407,
+      "sha256": "678f135e2808d52639932fac294481ba37b56de724f6d6597541b0295b22bbe2"
+    },
+    {
+      "path": "linux-amr-fetch (clang++)/system.txt",
+      "bytes": 602,
+      "sha256": "a3ad047b7d328824ad2d8c923143905ab00ed2657ab4abf08faedb4c637f86a6"
+    },
+    {
+      "path": "linux-amr-fetch (clang++)/1_Set up job.txt",
+      "bytes": 1956,
+      "sha256": "f7e828cfa38a1d5ceb67cff235d8d2fb8816cc76c17b21489f1e56875283af44"
+    },
+    {
+      "path": "linux-amr-fetch (clang++)/2_Run actions_checkout@v6.txt",
+      "bytes": 12664,
+      "sha256": "3132f5564583c545ce3797b21e52abeb3ea41b5fec8a3b0ce7847eddca436b85"
+    },
+    {
+      "path": "linux-amr-fetch (clang++)/3_Install dependencies.txt",
+      "bytes": 12503,
+      "sha256": "b90bff96a3ac00c7e0a22a254deb533186773a7e85466cebf2129ed1425ce1a7"
+    },
+    {
+      "path": "linux-amr-fetch (clang++)/4_Configure (AMR FetchContent static) + assert gate enabled.txt",
+      "bytes": 6940,
+      "sha256": "501be9378f8e19d0a85f290d427f7f3f94d95b3f50d72744313754e96d05bc4a"
+    },
+    {
+      "path": "linux-amr-fetch (clang++)/5_Build audio-format tests (compiles + links opencore-amr static).txt",
+      "bytes": 367738,
+      "sha256": "9d6d57ccf1b12b7da1d27398ac283ead2e29180252ba2e3c9090add9a3c0bc9c"
+    },
+    {
+      "path": "linux-amr-fetch (clang++)/6_Decode AMR end-to-end (samples_jfk.amr).txt",
+      "bytes": 592,
+      "sha256": "25285bbb62c67df4057ec5af0a62d7de115e0903117bd4f25bc9701ebc5dae7d"
+    },
+    {
+      "path": "linux-amr-fetch (clang++)/12_Post Run actions_checkout@v6.txt",
+      "bytes": 7974,
+      "sha256": "a3de4dcc836147d406f37cbba47ff48f63a8ab2d7dc2ed3e97f344005173ca80"
+    },
+    {
+      "path": "linux-amr-fetch (clang++)/13_Complete job.txt",
+      "bytes": 61,
+      "sha256": "33728575ec6b24a2f70491a15d69b23699e3a2812674cd53f7f422a4ee6955ec"
+    },
+    {
+      "path": "2_linux-opus-fetch.txt",
+      "bytes": 641661,
+      "sha256": "72f927ef4e301030ebe1339761bf37db60e032d8efef1055f20b6ae5fee2b503"
+    },
+    {
+      "path": "linux-opus-fetch/system.txt",
+      "bytes": 603,
+      "sha256": "08219518c4bd4cc3d619e4b414d8aaf5cb0b89e79935c25ea2d164b85ab8b8a3"
+    },
+    {
+      "path": "linux-opus-fetch/1_Set up job.txt",
+      "bytes": 1946,
+      "sha256": "73ad9e8405aa8defba9b64085cebf2d7042931ca0ff064696360527e2ba3b04c"
+    },
+    {
+      "path": "linux-opus-fetch/2_Run actions_checkout@v6.txt",
+      "bytes": 12664,
+      "sha256": "e3ef8a8ce7e6647e16b88a2d3e3ddaad8049e8cf270ba572a6b3122b9a30fdc0"
+    },
+    {
+      "path": "linux-opus-fetch/3_Install dependencies.txt",
+      "bytes": 12057,
+      "sha256": "57c47e129f368fa287c37c6c666c3995406aad1bdba5db9e851e0bd09400c76d"
+    },
+    {
+      "path": "linux-opus-fetch/4_Configure (Opus FetchContent static) + assert gate enabled.txt",
+      "bytes": 17511,
+      "sha256": "424de09bcc902389565318fc4248f02988278256cb956de101e06a423d12fadf"
+    },
+    {
+      "path": "linux-opus-fetch/5_Build audio-format tests (compiles + links opus_ogg_opusfile static).txt",
+      "bytes": 588871,
+      "sha256": "ba2d3cf4af106ea61565c921121506a39c417e3001c278343f23b6a4cae139ab"
+    },
+    {
+      "path": "linux-opus-fetch/6_Decode Opus-in-WebM end-to-end (samples_jfk.webm).txt",
+      "bytes": 598,
+      "sha256": "e24fcec6d7257088b9ee27e81bdb12268d2920c9af10d98baf00a14015bec437"
+    },
+    {
+      "path": "linux-opus-fetch/12_Post Run actions_checkout@v6.txt",
+      "bytes": 7974,
+      "sha256": "281654a58e3de1c5f697a4b1292b0092b5b16180cfcd0871773d55624c037348"
+    },
+    {
+      "path": "linux-opus-fetch/13_Complete job.txt",
+      "bytes": 61,
+      "sha256": "1d70874598c7f53220084119841200d8bb978742fd59c9aea7ea434b7512ef28"
+    },
+    {
+      "path": "3_windows.txt",
+      "bytes": 240021,
+      "sha256": "fff9a6fa3c346643805aa7bd428718197edf47bfb699abd0c561b182bc33e203"
+    },
+    {
+      "path": "windows/system.txt",
+      "bytes": 751,
+      "sha256": "abce109f347e52cc64a3b3f7e3e2edc5711f2a2103cd3fd3e7d81902eb808996"
+    },
+    {
+      "path": "windows/1_Set up job.txt",
+      "bytes": 1990,
+      "sha256": "be1fc1d51c27d8da3df146ffcb6da99eb3889972dbdd9aa3b062593d321d2518"
+    },
+    {
+      "path": "windows/2_Run actions_checkout@v6.txt",
+      "bytes": 13969,
+      "sha256": "34207bd3f7f57f75be645338197caf190b356e11a416c8b332b6eb9c32b10342"
+    },
+    {
+      "path": "windows/3_Vulkan SDK download retry checks.txt",
+      "bytes": 542,
+      "sha256": "e32fc84968e15069d93b28b5412255c573f37458008a02175a982f136c444fc7"
+    },
+    {
+      "path": "windows/4_Configure.txt",
+      "bytes": 6175,
+      "sha256": "5cdd9bd1cdc0566692bde55991a1c0b595ecf35c9ff19f644e1839d34abbba58"
+    },
+    {
+      "path": "windows/5_Build.txt",
+      "bytes": 90157,
+      "sha256": "394b0d3b9eb466a4c1976d25b772060184860fab35536c79b52efc700e319d72"
+    },
+    {
+      "path": "windows/6_Smoke test.txt",
+      "bytes": 56371,
+      "sha256": "e0e78c37eb9500079c2792b718950d5c97e8046af0f8c4a35a3eca8c6c42a277"
+    },
+    {
+      "path": "windows/7_Build speaker-db unit tests.txt",
+      "bytes": 50940,
+      "sha256": "4fdef81793263fc86b9bb77928060f9299b805a530e11be19bbe8c1256848329"
+    },
+    {
+      "path": "windows/8_Run speaker-db unit tests.txt",
+      "bytes": 11290,
+      "sha256": "1470ed9013cabc48dd8e07f0f2e8ece34070c127680ee0816db658a75fd06cc7"
+    },
+    {
+      "path": "windows/16_Post Run actions_checkout@v6.txt",
+      "bytes": 8169,
+      "sha256": "247042ab8c33b720daf5ae2b480838b6becd91a98980f8056e4fa01a5ba4b9a7"
+    },
+    {
+      "path": "windows/17_Complete job.txt",
+      "bytes": 445,
+      "sha256": "36b37e91caa482c2846738d92062a793a88d73c40e86beb9bda0120dddea1580"
+    },
+    {
+      "path": "4_linux-amr-fetch (g++).txt",
+      "bytes": 623694,
+      "sha256": "4bd107a3ba91f7b8a1d2ad062a02a3fc2ce9771b292a5d4390138b0db00e5d56"
+    },
+    {
+      "path": "linux-amr-fetch (g++)/system.txt",
+      "bytes": 602,
+      "sha256": "06c17ac59d17632c5ec4318d3eb887b20ae57595337a9ac4aa4f22d768a336b8"
+    },
+    {
+      "path": "linux-amr-fetch (g++)/1_Set up job.txt",
+      "bytes": 1951,
+      "sha256": "ec32fdb37f2a97de8490c206b59e290ced4e5063bffc6380c36e91e0cd55266b"
+    },
+    {
+      "path": "linux-amr-fetch (g++)/2_Run actions_checkout@v6.txt",
+      "bytes": 12664,
+      "sha256": "ea604565ad2737c96385b4325ecef6a3f93c2d3da0421c6a2666eb33221e51f3"
+    },
+    {
+      "path": "linux-amr-fetch (g++)/3_Install dependencies.txt",
+      "bytes": 12503,
+      "sha256": "30454359a3acb13864a202b0bda79df4e937fc7ed370497256c69d9bd1be5337"
+    },
+    {
+      "path": "linux-amr-fetch (g++)/4_Configure (AMR FetchContent static) + assert gate enabled.txt",
+      "bytes": 6475,
+      "sha256": "1c79bb95eb6d16ecb5ee1a22ee10a9fddfdadd0348061885f53e0fe9f8d49233"
+    },
+    {
+      "path": "linux-amr-fetch (g++)/5_Build audio-format tests (compiles + links opencore-amr static).txt",
+      "bytes": 581495,
+      "sha256": "2948751dc765b9a54a67e40f19ff6ed23334d3aefb5a208f16e4aa6147725c70"
+    },
+    {
+      "path": "linux-amr-fetch (g++)/6_Decode AMR end-to-end (samples_jfk.amr).txt",
+      "bytes": 592,
+      "sha256": "522d77680200c527bb846a0f36b5b1987101083518e63fee1f36f495cbbcfd96"
+    },
+    {
+      "path": "linux-amr-fetch (g++)/12_Post Run actions_checkout@v6.txt",
+      "bytes": 7974,
+      "sha256": "f8367033f41dc37c4ce45c6e93c483fd5ca7f41f744a63fe7e4b731974a74f29"
+    },
+    {
+      "path": "linux-amr-fetch (g++)/13_Complete job.txt",
+      "bytes": 61,
+      "sha256": "bce9cf51938fd559bdc252b10c30959753f023a362a1a7c0af51bcb577641dcc"
+    },
+    {
+      "path": "5_linux-unit.txt",
+      "bytes": 1274998,
+      "sha256": "5aa0a20e0464ab41fc6c0f5ad77ef982060cafd223e7ff38aecab76e8e13699c"
+    },
+    {
+      "path": "linux-unit/system.txt",
+      "bytes": 750,
+      "sha256": "12ad7e1f22259640c8b546d3a837b6656f128801ddc10e26caf36d9e518c17fb"
+    },
+    {
+      "path": "linux-unit/1_Set up job.txt",
+      "bytes": 1948,
+      "sha256": "7bdf4faed6755c612fc7d2fba46ef00c7ac5aa78465b6982cafb76614751cf17"
+    },
+    {
+      "path": "linux-unit/2_Run actions_checkout@v6.txt",
+      "bytes": 12664,
+      "sha256": "46d5e6633f86d7ed07578918a0d628b1515c1daf59f51c3c210a7674ad92cc52"
+    },
+    {
+      "path": "linux-unit/3_Install dependencies.txt",
+      "bytes": 12764,
+      "sha256": "5454c117190b8c32dde4ce4bd212f398f986ffd6d6d6be2965a95b17d0ba27ea"
+    },
+    {
+      "path": "linux-unit/4_Install pinned capability-table formatter.txt",
+      "bytes": 1089,
+      "sha256": "72047b1b0ca43e6ce75c858bdad190f473b2ac4930635c2c491afa90753db9ef"
+    },
+    {
+      "path": "linux-unit/5_Fetch pinned ONNX Runtime SDK for the complete capability check.txt",
+      "bytes": 383,
+      "sha256": "2615dd6a915f53d225d783a13925486b681adab964ad78afa2738324878981f8"
+    },
+    {
+      "path": "linux-unit/6_Configure (tests ON).txt",
+      "bytes": 4888,
+      "sha256": "26ad880227f4c3abc623d1d29d3360e4f8119d489b9fc95b48a7eaa44bdb3615"
+    },
+    {
+      "path": "linux-unit/7_Build.txt",
+      "bytes": 656074,
+      "sha256": "ffee67a9713cac7ba52d69dd4c30a9b21c5aa2583a394dc9a1ea0f0d753c5c83"
+    },
+    {
+      "path": "linux-unit/8_Check generated capability table and C ABI.txt",
+      "bytes": 647,
+      "sha256": "10327a1473117e021dd63f4bfea0273964f6cc05ca62182a6beaa107ec20d7e7"
+    },
+    {
+      "path": "linux-unit/9_Check production GPU backend_device selection without hardware.txt",
+      "bytes": 615,
+      "sha256": "f41bbb1dfe3e2347b6a92fe331336b1b6b2b4862fc37c4ab7effaa09cdba28c2"
+    },
+    {
+      "path": "linux-unit/10_Breeze guided acceptance deletion controls.txt",
+      "bytes": 1996,
+      "sha256": "d833e43588ffd58982958928898090b6780ec393970eeff7510b0fb47c86bed2"
+    },
+    {
+      "path": "linux-unit/11_Run the unit tier.txt",
+      "bytes": 567041,
+      "sha256": "a2b6b7bb39bce9c9200f00ec10f1a3c74a3038efe5c781b0caf9aedf95209a44"
+    },
+    {
+      "path": "linux-unit/12_TTS session failure, ownership and conversion contracts.txt",
+      "bytes": 1746,
+      "sha256": "882538b6dbd021cd4a8015d71f8030dec8d8739b8f5d4a15ffca441a64bce636"
+    },
+    {
+      "path": "linux-unit/13_Supertonic speaker API null and bounds contracts.txt",
+      "bytes": 844,
+      "sha256": "7d5350df6f20f4ec21f444fe802dbe0a5d06babfcf565dc67b9419e38ab20b0a"
+    },
+    {
+      "path": "linux-unit/14_UTF-8 loop cleanup under platform ctype classification.txt",
+      "bytes": 996,
+      "sha256": "1f8ce057a07b6ab1386aa36327984ba2e189ebcc5a166f2875e7e0f65d992fac"
+    },
+    {
+      "path": "linux-unit/15_Breeze session sampler controls.txt",
+      "bytes": 1279,
+      "sha256": "85043357d08abe37cc95714e2fa061e58213795f7716d1ca2b513f21d726e917"
+    },
+    {
+      "path": "linux-unit/16_Session result UTF-8 contract (native functions and strict Python decode).txt",
+      "bytes": 911,
+      "sha256": "5a50fdc21ac38cdb9ec607570c88502517e7bcefee6f8582819298b0e9c0d781"
+    },
+    {
+      "path": "linux-unit/17_Breeze session reference and instruction composition.txt",
+      "bytes": 1132,
+      "sha256": "c7ab0865a5103260b3d46271402ab595cda9aa49f0dbd55b79917df254ec85cf"
+    },
+    {
+      "path": "linux-unit/34_Post Run actions_checkout@v6.txt",
+      "bytes": 7974,
+      "sha256": "c730b461a0192a1f68770ca16d2aa3066e1315deab3e890a3f331ea5d21514e0"
+    },
+    {
+      "path": "linux-unit/35_Complete job.txt",
+      "bytes": 61,
+      "sha256": "8d50dba5474d359b8b69abe940b52969bb0cf36fc8e77be92065ed9cbb8f630d"
+    },
+    {
+      "path": "6_linux-asan-audio.txt",
+      "bytes": 584503,
+      "sha256": "132726a6bf0f6de6adf5c19eccbd3b4ad266b524300bd917614aee734c4e81a8"
+    },
+    {
+      "path": "linux-asan-audio/system.txt",
+      "bytes": 603,
+      "sha256": "a0a76d9a17ace6955a66e81c9f338ca7859fb8aa506b9baeb7216aaaaa0897d1"
+    },
+    {
+      "path": "linux-asan-audio/1_Set up job.txt",
+      "bytes": 1954,
+      "sha256": "165a52168783cb1b1a363cf718ee49e6de4164a39557285f9d998c7d174112be"
+    },
+    {
+      "path": "linux-asan-audio/2_Run actions_checkout@v6.txt",
+      "bytes": 12664,
+      "sha256": "bca1859f9126fd910ab9999850a0a93cdd5ab2fa568e51d9cd9553b55cd7fe58"
+    },
+    {
+      "path": "linux-asan-audio/3_Install dependencies.txt",
+      "bytes": 14572,
+      "sha256": "e480a8c6d768d76bd260b390c09ce37b5b8b869db1ff16a549156288982c0f01"
+    },
+    {
+      "path": "linux-asan-audio/4_Configure (ASan + UBSan).txt",
+      "bytes": 4811,
+      "sha256": "ff8674d7bcd116baa83cd74f80acea76aa128c95454f80e4fd806c9108ba0cda"
+    },
+    {
+      "path": "linux-asan-audio/5_Build audio-format tests under sanitizers.txt",
+      "bytes": 538995,
+      "sha256": "fa09d9d0cfbdc3ba701314196471ab87037a7dd9b3c254eb4b709179a4a1ea13"
+    },
+    {
+      "path": "linux-asan-audio/6_Decode samples under ASan_UBSan.txt",
+      "bytes": 3493,
+      "sha256": "b11534cdd3ca95f9a792d9bc095fcc3c0f8c7b6653f8bf5dcb11cb96eaf2c33b"
+    },
+    {
+      "path": "linux-asan-audio/12_Post Run actions_checkout@v6.txt",
+      "bytes": 7974,
+      "sha256": "b99f3154a900440042bea16bd6ff172f4d93d3fb1b3653670673882fd028ffa0"
+    },
+    {
+      "path": "linux-asan-audio/13_Complete job.txt",
+      "bytes": 61,
+      "sha256": "2db3775dfe8ec557762594a407b2277ec2d923b2eb9ac775371a189ce7e4c2c5"
+    },
+    {
+      "path": "7_linux-backend-dl.txt",
+      "bytes": 634771,
+      "sha256": "06e0e8834a3688450c888163b16c7825d71063a7bfed35728ef7f22580df42d3"
+    },
+    {
+      "path": "linux-backend-dl/system.txt",
+      "bytes": 603,
+      "sha256": "a8dc40066aedbe391844d7c807f60d401cc286308a3734720e30662af899443d"
+    },
+    {
+      "path": "linux-backend-dl/1_Set up job.txt",
+      "bytes": 1946,
+      "sha256": "bdd645a4b5fdc8b012c92515e4d380aabc24bec1c0a5d8b4b0ff22f400dc353a"
+    },
+    {
+      "path": "linux-backend-dl/2_Run actions_checkout@v6.txt",
+      "bytes": 12664,
+      "sha256": "15329623f968cdd31068961179d8533cbe861e645222fb07dd67070aa995e729"
+    },
+    {
+      "path": "linux-backend-dl/3_Install dependencies.txt",
+      "bytes": 8411,
+      "sha256": "3263ffe3e13eb93b7459bbb401e5e17bda65abc54d18766d1f1f7cb43b3f8951"
+    },
+    {
+      "path": "linux-backend-dl/4_Configure (GGML_BACKEND_DL, as the CUDA packages are built).txt",
+      "bytes": 4692,
+      "sha256": "ccd6bd97f008183cc3e70a3d387be8f96bff3a5c39133cf19c326dd9e6a6bc7e"
+    },
+    {
+      "path": "linux-backend-dl/5_Build (the link is the test).txt",
+      "bytes": 540677,
+      "sha256": "c4dbf5fd8b38842ca389ec174cead50a789fe3ef4ecbea8daaf36d73ae63548d"
+    },
+    {
+      "path": "linux-backend-dl/6_Smoke test - the CPU backend still loads as a module.txt",
+      "bytes": 56164,
+      "sha256": "426c69645812724ddbc664bcac725c8b6edaab3f620d8f0cb6d87dd2afd49ebb"
+    },
+    {
+      "path": "linux-backend-dl/7_Packaged C ABI discovers adjacent plugins outside the package directory.txt",
+      "bytes": 2206,
+      "sha256": "fc1e24857bced1388369b672008f81f50142dd4281f8f79b8a6aef2c156dea77"
+    },
+    {
+      "path": "linux-backend-dl/14_Post Run actions_checkout@v6.txt",
+      "bytes": 7974,
+      "sha256": "4c1126cacfa7e289b48fc88142480891a0ac31f50bcf686257eab3cc5be4c552"
+    },
+    {
+      "path": "linux-backend-dl/15_Complete job.txt",
+      "bytes": 61,
+      "sha256": "c743d6b28725b37bc4999ca8010c26d0f0975e20a2d8730cdf3bfd40a7c27bad"
+    },
+    {
+      "path": "8_ios.txt",
+      "bytes": 403884,
+      "sha256": "41bd09c786f94e5a4bf509b302fa253d589486d80e7cdec809e70b282db44200"
+    },
+    {
+      "path": "ios/system.txt",
+      "bytes": 743,
+      "sha256": "1cde86dff2f871c6d1002af7ea8f528abc6509a2e8f2d7d3ca1b1e460be56c67"
+    },
+    {
+      "path": "ios/1_Set up job.txt",
+      "bytes": 1917,
+      "sha256": "c56f18a6f7511e1e5979991a1bc9b7ed4fd2c32304aa5ed4fc2f1373accb730a"
+    },
+    {
+      "path": "ios/2_Run actions_checkout@v6.txt",
+      "bytes": 13182,
+      "sha256": "3e97b74aba060f334fba5703ad3fac356dd84e403ffc5d47471f558972b47a3f"
+    },
+    {
+      "path": "ios/3_Configure for iOS.txt",
+      "bytes": 7092,
+      "sha256": "fce906a44dbee535128a0a76041c96a97db00ed68d2635cb2e7a9b3e30d13f10"
+    },
+    {
+      "path": "ios/4_Build.txt",
+      "bytes": 373262,
+      "sha256": "9b424ea8fcab36b41e7679935914904d959bbebafc165d7786302388ca244136"
+    },
+    {
+      "path": "ios/8_Post Run actions_checkout@v6.txt",
+      "bytes": 8385,
+      "sha256": "5265c4b5d6c84ae1f5575c78068f34d272a6bd66175c1474c157438eecce2b0d"
+    },
+    {
+      "path": "ios/9_Complete job.txt",
+      "bytes": 61,
+      "sha256": "0f071d3f1d5579ee0ddab3dad86816aef53d09b33df3d024230322811b46d0f0"
+    },
+    {
+      "path": "9_linux-fuzz-smoke.txt",
+      "bytes": 387168,
+      "sha256": "6d2fc97d08735bbec74fa4fca69eadc0fdc8563c9898a2a8346014e6d0003fc4"
+    },
+    {
+      "path": "linux-fuzz-smoke/system.txt",
+      "bytes": 603,
+      "sha256": "e1f9d666619016aa4f214500e83e3823b0eab3ad72beebfd2d811c4b6124c19c"
+    },
+    {
+      "path": "linux-fuzz-smoke/1_Set up job.txt",
+      "bytes": 2081,
+      "sha256": "8425bc4067a153f5512026a5ccb1fbec6c9595e692591275036317280e1ce230"
+    },
+    {
+      "path": "linux-fuzz-smoke/2_Run actions_checkout@v6.txt",
+      "bytes": 12664,
+      "sha256": "8c37da5e2a82760cb1d45e112e02e7c6350ade7ac4c35276dd825c615a04bf62"
+    },
+    {
+      "path": "linux-fuzz-smoke/3_Install dependencies.txt",
+      "bytes": 14927,
+      "sha256": "b1d54bfaefba88453b5b259da0544e0b78e4339a5766af9e11573af375d0d79b"
+    },
+    {
+      "path": "linux-fuzz-smoke/4_Configure (fuzzer + ASan_UBSan, clang).txt",
+      "bytes": 5427,
+      "sha256": "04715090da2f746566dac93be77247e480568b48d61c8aae18175ab97e22510b"
+    },
+    {
+      "path": "linux-fuzz-smoke/5_Build the fuzz harness.txt",
+      "bytes": 324087,
+      "sha256": "0ba788e66ea91007fac715f1d16e96fa074e8129e74c6532d23491df318f60e7"
+    },
+    {
+      "path": "linux-fuzz-smoke/6_Smoke fuzz (seeded from samples_, ~45s; a crash fails CI).txt",
+      "bytes": 19968,
+      "sha256": "e0c1997122eb45cdc3858a4c0702094810cd70cfdd1516ac89d0521d5f90eff8"
+    },
+    {
+      "path": "linux-fuzz-smoke/14_Post Run actions_checkout@v6.txt",
+      "bytes": 7974,
+      "sha256": "5c71f187cda145c29341c34c5ff4e957790629525f2c907b3dfef46bb1c314bb"
+    },
+    {
+      "path": "linux-fuzz-smoke/15_Complete job.txt",
+      "bytes": 61,
+      "sha256": "d9548067d9d0586d1acca3efecb3ccdca1ba78be02c63992ef0668f669b88478"
+    },
+    {
+      "path": "10_linux-vulkan.txt",
+      "bytes": 671466,
+      "sha256": "7221b06305665d4d0347aa85bc7729c8d50dba594fe5e3ea7a749c823057572a"
+    },
+    {
+      "path": "linux-vulkan/system.txt",
+      "bytes": 599,
+      "sha256": "e43efdd35493fa7e45e2d9b19f17b01f0ac16b45dc5eb8d0f1941c6d8c795f19"
+    },
+    {
+      "path": "linux-vulkan/1_Set up job.txt",
+      "bytes": 1945,
+      "sha256": "274b4b28e8a4b11a1dae310ea8ba09b656f45821fcc57ae251ddd2cb24ed1b40"
+    },
+    {
+      "path": "linux-vulkan/2_Run actions_checkout@v6.txt",
+      "bytes": 12664,
+      "sha256": "42052a473d5224a9b8405e768d08d24c2eeb820d00b98b8ed4a4aded6daadd70"
+    },
+    {
+      "path": "linux-vulkan/3_Install Vulkan SDK + glslc.txt",
+      "bytes": 11129,
+      "sha256": "d1095771cb710663e80da7b241534ea7cf890feb854f8bb7542baff287899ffa"
+    },
+    {
+      "path": "linux-vulkan/4_Configure with Vulkan.txt",
+      "bytes": 5326,
+      "sha256": "9a27fba7215fccf0b3097011b8bca71539e18e3a33ba821a2a033b3f8fc96749"
+    },
+    {
+      "path": "linux-vulkan/5_Build.txt",
+      "bytes": 576230,
+      "sha256": "c2c5730166e0e458c75b3cfec91b525c701b5802d466f1de04afe026e6300442"
+    },
+    {
+      "path": "linux-vulkan/6_Smoke test.txt",
+      "bytes": 56158,
+      "sha256": "0505ccfc1a21cadd8a027da8dbae0ee0158998fdfcddcdc690112f867c81113d"
+    },
+    {
+      "path": "linux-vulkan/12_Post Run actions_checkout@v6.txt",
+      "bytes": 7974,
+      "sha256": "e207d62ec8e3803cce9393e94213fdde3000d69374f5d1f7c9a5a384c4404878"
+    },
+    {
+      "path": "linux-vulkan/13_Complete job.txt",
+      "bytes": 61,
+      "sha256": "8dc4e26b14a0f7b3df3e51934fd2224be6d78424f993ea0fcb612096379640a8"
+    },
+    {
+      "path": "11_macos.txt",
+      "bytes": 416350,
+      "sha256": "2d057ec4560523a22dd2c71bfbab063f6bd04bb0f9d52d11672cd40b0c5469e7"
+    },
+    {
+      "path": "macos/system.txt",
+      "bytes": 745,
+      "sha256": "d0f3005249d9a2fae6c43c4cb70773eb188dca19dd0354974f501eea738f4dac"
+    },
+    {
+      "path": "macos/1_Set up job.txt",
+      "bytes": 1919,
+      "sha256": "98b1a35115561c05b1457837c3397115b8441c5929a04ac716341f577f5b7ced"
+    },
+    {
+      "path": "macos/2_Run actions_checkout@v6.txt",
+      "bytes": 13182,
+      "sha256": "162a1973dad45c9a3c3761fd5949de6a31e9095b0a28818f21826e34d16c8268"
+    },
+    {
+      "path": "macos/3_Configure with Metal.txt",
+      "bytes": 8706,
+      "sha256": "575a4aad5ed698e34d88a81261acfe62e41f9bfde8766313a37beff50805a3d3"
+    },
+    {
+      "path": "macos/4_Build.txt",
+      "bytes": 327961,
+      "sha256": "af4d49706d6f6e24d3fa9ab8bc1911a96e4a54ba8b91d5d786089c9bf5278045"
+    },
+    {
+      "path": "macos/5_Smoke test.txt",
+      "bytes": 56154,
+      "sha256": "fafc28f67a0ecb68f8357aba3f96a0e295798aeab9f56e639917082e06864386"
+    },
+    {
+      "path": "macos/10_Post Run actions_checkout@v6.txt",
+      "bytes": 8385,
+      "sha256": "f020198f6fd869f737609b87e1eb1a4afac14024a63231f425ca9ba6269f414d"
+    },
+    {
+      "path": "macos/11_Complete job.txt",
+      "bytes": 61,
+      "sha256": "5b94070849d37f6d29f6a7727112357014a583d485160ec377d8da14a94b88da"
+    },
+    {
+      "path": "12_linux-x86_64.txt",
+      "bytes": 697071,
+      "sha256": "84509937f72d180b016ba429726162a74770bfd1829ad890f531d9b3c437e4a0"
+    },
+    {
+      "path": "linux-x86_64/system.txt",
+      "bytes": 599,
+      "sha256": "b61ff46a53ac10b6a98f2eba51d534415bec7f2d095c8ad64168970387f7fcdc"
+    },
+    {
+      "path": "linux-x86_64/1_Set up job.txt",
+      "bytes": 1945,
+      "sha256": "bd8218c0ac9a481c784bb1dc7e63e9b84ffe50543f7a7d3c70dcf6fad487a8fc"
+    },
+    {
+      "path": "linux-x86_64/2_Run actions_checkout@v6.txt",
+      "bytes": 12664,
+      "sha256": "a6fa9e24af25dc2880df85a3f628382fe62ab9861e4c674494b2008aa5fefc63"
+    },
+    {
+      "path": "linux-x86_64/3_Install dependencies.txt",
+      "bytes": 12057,
+      "sha256": "feb9e618e0904ff768b094c6235adc74ebc7ae080fba2a8bc996d36452de7152"
+    },
+    {
+      "path": "linux-x86_64/4_Configure.txt",
+      "bytes": 4470,
+      "sha256": "de4b9b00202255e82ab4550a61a5d651ba131af17e2a51d3bcc71843377c5fd6"
+    },
+    {
+      "path": "linux-x86_64/5_Build.txt",
+      "bytes": 560202,
+      "sha256": "0db6c36309e8b118461387ea2ff98dae256b7f7ac1f33fd0de42f6d3f017a601"
+    },
+    {
+      "path": "linux-x86_64/6_Smoke test - help.txt",
+      "bytes": 39636,
+      "sha256": "68212c26eba9a749e275827166adf7e591e204ef374944f47a471624b0cd98b7"
+    },
+    {
+      "path": "linux-x86_64/7_Smoke test - list backends.txt",
+      "bytes": 56158,
+      "sha256": "65322adde0966606142346a0858ae8f5cde5a7725bb204bc53cacd1d546293f9"
+    },
+    {
+      "path": "linux-x86_64/8_Backend wiring audit.txt",
+      "bytes": 1931,
+      "sha256": "440eb84f2c410a8925707d6c6945beb21381b50de19a3a670ffeed607d621749"
+    },
+    {
+      "path": "linux-x86_64/16_Post Run actions_checkout@v6.txt",
+      "bytes": 7974,
+      "sha256": "f457f4c1de846c1d79df7746ecaea56bd020cc228ac78ce09cd4a86ac1a4b2da"
+    },
+    {
+      "path": "linux-x86_64/17_Complete job.txt",
+      "bytes": 61,
+      "sha256": "48b8647f9daad929f7862f32bc1f08286cebd2b8f86b18f1913d5ccb59901f55"
+    }
+  ],
+  "documentation_only_composition_changes": [
+    "HISTORY.md",
+    "PERFORMANCE.md",
+    "PLAN.md",
+    "RELEASE_NOTES_v0.8.44.md",
+    "docs/historical/cann-rope-sdk-2026-10-14.json",
+    "docs/historical/cann-rope-sdk-2026-10-14.md",
+    "docs/cann-todo.md",
+    "docs/release-notes-next.md"
+  ],
+  "shared_fork_merge": "ea526e120deff8333fc42decc315137d7e297fca",
+  "shared_fork_candidate_tree_identical": true,
+  "unit_tests": 2020,
+  "scope": "Composed general CI and source identity; separate SDK and physical operator proofs required. No full NPU model, quantized speech, captured ACL-graph execution or performance acceptance.",
+  "production_ggml": "0a862076567afd8468822ccc512c97ac6a69b340",
+  "integration_runtime_commit": "f693bfe254cdc3e7156a2ff3214aa45aa4a76899",
+  "shared_fork_pushed": true,
+  "sdk_receipt": "cann-rope-sdk-2026-10-14.json",
+  "physical_receipt": "cann-910b3-rope-physical-2026-10-14.json",
+  "physical_broad_passed": 1691,
+  "physical_broad_unsupported": 1474,
+  "physical_repeat_passed": 452,
+  "physical_repeat_unsupported": 18,
+  "publication": {
+    "repo": "cstr/crispasr-regression-fixtures",
+    "file": "cann-20261014-rope-capacity/complete-integration-proof.zip",
+    "bytes": 4069034,
+    "sha256": "536f1c7ef82412b46febbf4c54f869b800432fee01207d6fd8c00fce9452b657",
+    "payloads": 9,
+    "anonymous_verified": true,
+    "revision": "805706c285182f008b04207e4e93ef9ae689fc34"
+  },
+  "main_integration_commit": "d17c5d8b90fe941ed823580b3bf9234610347b59"
+}

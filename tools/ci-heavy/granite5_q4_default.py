@@ -90,7 +90,7 @@ def main():
         fallback = out / 'failed-byte-equivalence'
         fallback.mkdir()
         shutil.copyfile(candidate, fallback / candidate.name)
-        legal = json.loads((ROOT / 'docs/granite5-2026-10-23.json').read_text())['license']['assets']
+        legal = json.loads((ROOT / 'docs/historical/granite5-2026-10-23.json').read_text())['license']['assets']
         for name, identity in legal.items():
             companion = fetch(dict(repo=cpu['f16']['repo'], revision=cpu['f16']['revision'],
                                    path=name, **identity))

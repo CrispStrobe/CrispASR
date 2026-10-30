@@ -22,24 +22,24 @@ unsubscribe from the merged PR; this document is the durable follow-up list.
 | 6 | Profile and optimize | Only after output acceptance: prove offload/fallback, time load/encoder/decode separately, warm up and use repeated medians under identical load. Gate changes; compare quality and speed before changing defaults. No NPU performance claim yet. | Maintainer analyses; physical NPU timing needed |
 | 7 | Maintain coverage and release documentation | Keep lightweight regressions, manual official SDK matrix and complete device receipts. Add model/device evidence when available; release only after applicable CI and acceptance gates pass. | Maintainer; hosted CI covers compilation only |
 
-Evidence: [310P BF16 integration](cann-310p-bf16-integration-2026-10-13.json),
-[910B rotary physical proof](cann-910b3-rope-physical-2026-10-14.md),
-[rotary SDK proof](cann-rope-sdk-2026-10-14.md),
-[hardware protocol](cann-hardware-validation-2026-10-12.md).
+Evidence: [310P BF16 integration](historical/cann-310p-bf16-integration-2026-10-13.json),
+[910B rotary physical proof](historical/cann-910b3-rope-physical-2026-10-14.md),
+[rotary SDK proof](historical/cann-rope-sdk-2026-10-14.md),
+[hardware protocol](historical/cann-hardware-validation-2026-10-12.md).
 Physical tests preserve unsupported cases, prior failures and unchanged
 upstream tolerances. Passing operator suites alone cannot accept a model.
 
-[Completed rotary integration receipt](cann-rope-integration-2026-10-14.md).
+[Completed rotary integration receipt](historical/cann-rope-integration-2026-10-14.md).
 
-[Completed CPU fixture preparation](cann-model-fixture-preparation-2026-10-14.md).
+[Completed CPU fixture preparation](historical/cann-model-fixture-preparation-2026-10-14.md).
 
-[Actual native CPU backend proof](moonshine-native-backend-fixture-2026-10-14.md).
+[Actual native CPU backend proof](historical/moonshine-native-backend-fixture-2026-10-14.md).
 
-[Completed full CPU fixture proof](moonshine-hosted-cpu-fixture-2026-10-14.md).
+[Completed full CPU fixture proof](historical/moonshine-hosted-cpu-fixture-2026-10-14.md).
 
-[Integrated strict device validation and bounded controls](moonshine-strict-device-validation-2026-10-14.md).
+[Integrated strict device validation and bounded controls](historical/moonshine-strict-device-validation-2026-10-14.md).
 
-[Portable full-model validator preparation and live GPU-argument controls](cann-model-validator-preparation-2026-10-14.md); hosted interface and actual binary-snapshot proof pass and are integrated; physical NPU success remains pending.
+[Portable full-model validator preparation and live GPU-argument controls](historical/cann-model-validator-preparation-2026-10-14.md); hosted interface and actual binary-snapshot proof pass and are integrated; physical NPU success remains pending.
 
 Official compiler-metadata follow-up38605386237 is accepted on both chips: actual
 ASCEND/ACL definitions and all six target links are independently audited from
@@ -50,7 +50,7 @@ Current priorities and maintainer claims are in [PLAN.md](../PLAN.md).
 Completed preparation/compiler/operator work is historical evidence; the
 remaining tasks above require full-model or composed-graph device validation.
 
-[Composed graph preparation](cann-composed-preparation-2026-10-15.md) is
+[Composed graph preparation](historical/cann-composed-preparation-2026-10-15.md) is
 integrated after independently audited hosted CPU and both official SDK final
 executable links,13 general CI jobs,10 lint checks and the secret scan. The
 [actual mixed-graph probe](../tools/ci-heavy/cann-composed/README.md) checks18

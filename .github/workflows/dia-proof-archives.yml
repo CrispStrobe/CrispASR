@@ -6,13 +6,13 @@ on:
     paths:
       - 'tools/dia_proof_archives.py'
       - 'tests/test_dia_proof_archives.py'
-      - 'docs/dia-public-proof-archives-2026-10-13.json'
+      - 'docs/historical/dia-public-proof-archives-2026-10-13.json'
       - '.github/workflows/dia-proof-archives.yml'
   pull_request:
     paths:
       - 'tools/dia_proof_archives.py'
       - 'tests/test_dia_proof_archives.py'
-      - 'docs/dia-public-proof-archives-2026-10-13.json'
+      - 'docs/historical/dia-public-proof-archives-2026-10-13.json'
       - '.github/workflows/dia-proof-archives.yml'
   workflow_dispatch:
 

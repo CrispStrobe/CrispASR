@@ -66,5 +66,5 @@ full campaign is required.
 between ASR models supports a fixture concern, but does not prove a particular
 pronunciation or establish that every native cloning defect is excluded.
 Historical measurements remain in
-`docs/omnivoice-clone-reference-integrity-2026-10-22.json`; audit scope and next
-gates are in `docs/omnivoice-audit-2026-10-22.md`.
+`docs/historical/omnivoice-clone-reference-integrity-2026-10-22.json`; audit scope and next
+gates are in `docs/historical/omnivoice-audit-2026-10-22.md`.

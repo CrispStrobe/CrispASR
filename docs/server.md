@@ -146,6 +146,7 @@ curl http://localhost:8080/v1/audio/transcriptions \
 | `split_on_punct` | `true`/`false` — split segments on punctuation (default: `false`) |
 | `max_context` | Maximum decoder text-context tokens carried across chunks (default: `-1` = model default) |
 | `audio_ctx` | Truncated audio context (whisper; default: `0` = full) |
+| `hikari_refresh_stride` | Strided window refresh interval for Hikari streaming (0 = exact sliding, K > 0 = strided; alias `hikari_stride`) |
 | `word_thold` | Word-timestamp probability threshold (default: 0.01) |
 | `carry_initial_prompt` | `true`/`false` — re-inject the initial prompt on every chunk (default: `false`) |
 | `lcs_dedup` | NeMo-style LCS hypothesis stitching at chunk boundaries: `auto` (default, fires when chunking with overlap is active), `on`, `off` |

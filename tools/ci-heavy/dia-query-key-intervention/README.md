@@ -64,7 +64,7 @@ gh workflow run heavy-cpu.yml --ref diag/dia-query-key-20261015 \
 The [completed hosted run](https://github.com/CrispStrobe/CrispASR/actions/runs/38764924112)
 and independent739-payload audit pass; the result does not restore the original
 ordering or support. Exact source, terminal CI and public proof are recorded in
-[the result receipt](../../../docs/dia-query-key-results-2026-10-15.md). Do not
+[the result receipt](../../../docs/historical/dia-query-key-results-2026-10-15.md). Do not
 repeat the unchanged historical experiment.
 No new model runs belong on the VPS; local evidence and all large files stay
 under ${CRISPASR_STORAGE}/crispasr/dia-query-key-20261015.

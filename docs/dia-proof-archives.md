@@ -1,6 +1,6 @@
 # Reproducing the retained Dia proofs
 
-The [public archive receipt](dia-public-proof-archives-2026-10-13.json) pins four
+The [public archive receipt](historical/dia-public-proof-archives-2026-10-13.json) pins four
 complete proof ZIPs in `cstr/crispasr-regression-fixtures` at immutable revision
 `6693718d8112b62425dfab5b941e61fb7b0334eb`. All 77 original files retain their
 recorded hashes. All four public ZIPs were downloaded anonymously and verified
@@ -34,14 +34,14 @@ retrieves the full public RNG proof in CI.
 These archives preserve the original references and negative controls. They do
 not establish native free-speech, Q4 or GPU acceptance. The current neural
 precision investigation is tracked in `PLAN.md` and the
-[completed precision-control receipt](dia-neural-precision-hosted-2026-10-13.json).
+[completed precision-control receipt](historical/dia-neural-precision-hosted-2026-10-13.json).
 
 Two supplementary archives at public revision
 `68873c45c08a36372667fa6b62e746072b9bf1f5`, folder `dia-20261013-neural`,
 preserve the 41-file neural precision artifact plus its complete hosted log
 and all four original tiny-cache probe files. Full anonymous size/SHA checks
 pass for both ZIPs (245,203,012 bytes combined). The
-[supplementary public receipt](dia-neural-public-proof-2026-10-13.json) provides
+[supplementary public receipt](historical/dia-neural-public-proof-2026-10-13.json) provides
 pinned download URLs and complete per-file manifests. The neural archive
 retains both 40/40 stage passes and all four rejected free-speech results; the
 tiny probe establishes cache-rounding effects only.
@@ -64,4 +64,4 @@ speech or performance.
 | [rotary-coefficient-probe.zip](https://huggingface.co/datasets/cstr/crispasr-regression-fixtures/resolve/13cfd81146f17b746a47ce154013603aeabef658/dia-20261013-cache/rotary-coefficient-probe.zip) | Tiny actual-source rotary cache coefficient controls including negative; no full graph/model/GPU/speech acceptance. |
 | [cache-first-draw-boundary.zip](https://huggingface.co/datasets/cstr/crispasr-regression-fixtures/resolve/13cfd81146f17b746a47ce154013603aeabef658/dia-20261013-cache/cache-first-draw-boundary.zip) | Weight-free actual-original/native filter replay from retained logits and unchanged portable noise; identical-logit supports agree, neural differences change nucleus membership. |
 
-[Complete publication and per-file verification receipt](dia-cache-public-proof-2026-10-13.json).
+[Complete publication and per-file verification receipt](historical/dia-cache-public-proof-2026-10-13.json).

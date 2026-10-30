@@ -91,7 +91,7 @@ into the shallow checkout. Fetch now precedes the guard. The failed raw artifact
 is retained; a fresh shallow repository exercises the corrected order. The
 runtime, model, sampler, recipe, controls and quality thresholds stay fixed.
 
-Completed result: [audited reciprocal speech/trajectory recovery](../../../docs/dia-native-fork-results-2026-10-16.md).
+Completed result: [audited reciprocal speech/trajectory recovery](../../../docs/historical/dia-native-fork-results-2026-10-16.md).
 The auditor accepts silent capacity logs because that pinned runtime message is
 verbosity-gated; any printed capacity must remain3072. Exact immutable worker/
 runtime/export provenance remains required. Imports never write bytecode into

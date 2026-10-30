@@ -69,4 +69,4 @@ The repaired full native control is still mandatory before interpreting arms.
 
 The repaired five-arm run and independent audit are complete; key replacement
 alone does not restore the disputed ordering. See the
-[complete result](../../../docs/dia-cache-intervention-results-2026-10-15.md).
+[complete result](../../../docs/historical/dia-cache-intervention-results-2026-10-15.md).

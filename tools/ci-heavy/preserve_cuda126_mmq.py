@@ -192,7 +192,7 @@ def main():
         wait_for_resources(scratch, receipt, save)
         producer = api(f'actions/runs/{PRODUCER}')
         assert producer['conclusion'] == 'success' and producer['head_sha'] == SOURCE
-        pin = json.loads((ROOT / 'docs/cuda126-mmq-experiment-2026-10-08.json').read_text())
+        pin = json.loads((ROOT / 'docs/historical/cuda126-mmq-experiment-2026-10-08.json').read_text())
         with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
             jobs = {mode: pool.submit(preserve, mode, out, scratch, pin) for mode in ARTIFACTS}
             results = {mode: job.result() for mode, job in jobs.items()}

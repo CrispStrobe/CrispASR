@@ -17,8 +17,8 @@ final source acceptance and the closure/issue/PR audit. Available implementation
 preservation and full license reviews are complete. Four existing issues retain explicit
 external dependencies confirmed by the user. The final sweep also found new
 feature #557; none was closed speculatively.
-[Complete result](docs/ordered-agenda-2026-10-26.md),
-[source/check receipt](docs/ordered-agenda-2026-10-26.json).
+[Complete result](docs/historical/ordered-agenda-2026-10-26.md),
+[source/check receipt](docs/historical/ordered-agenda-2026-10-26.json).
 
 1. **Nemotron fixed and qualified:** CPU and actual T4 accept pinned F16 at all
    26 original transcript/22 VoxCPM controls and unchanged stage/magnitude gates;
@@ -32,7 +32,7 @@ feature #557; none was closed speculatively.
    cuBLAS and original notices. Full asset readbacks and independent 203,920-byte
    sidecar audit pass. Resource startup wait retains the original limits. No
    GTX1660/MX150 access or target correctness/performance claim.
-   [Preservation proof](docs/cuda126-mmq-preservation-2026-10-26.md).
+   [Preservation proof](docs/historical/cuda126-mmq-preservation-2026-10-26.md).
 4. **B390 #461 held:** source/log audit and upload/host-permutation timer split
    complete; ten-step quality retained. No target access or new speed claim.
 5. **MUSA held:** complete current terms review and pre-SDK resource enforcement;
@@ -61,12 +61,12 @@ exists, wheel/index/publication-audit support missing), and ARM CUDA afterward
 (separate native toolchain/bundle/device target). Preserve runtime-dependency,
 notice, ABI and actual-device acceptance. No implementation or publication was
 started outside the completed six-item batch.
-[Code/asset audit and next steps](docs/issue-557-linux-gpu-wheels-review-2026-10-26.md).
+[Code/asset audit and next steps](docs/historical/issue-557-linux-gpu-wheels-review-2026-10-26.md).
 
 ## Published and verified — 0.8.45 (2026-10-26)
 
 Owner: Codex. The authorized native/Python/Rust/Dart publication is complete.
-[Permanent publication receipt](docs/release-publication-2026-10-26.json).
+[Permanent publication receipt](docs/historical/release-publication-2026-10-26.json).
 
 - The original annotated tag and source `e58bb48b5` are preserved. Native producer
   40284721476 and wrapper publisher 40284721364 passed; anonymous registry reads
@@ -107,7 +107,7 @@ compiled the unchanged tagged WKV object, linked the full CLI through all 767
 remaining build steps and produced the MUSA shared library. Run 40330966977
 passed; root and ggml compiled-source diffs are empty. The first attempt failed
 on CMake's generated source-tree files before WKV was tested; the corrected mount
-retains source-diff guards. [Permanent evidence](docs/musa-sdk52-2026-10-26.json).
+retains source-diff guards. [Permanent evidence](docs/historical/musa-sdk52-2026-10-26.json).
 
 The image digest, compiler revision, installed package versions and copyright
 metadata are retained. These metadata files mostly reference proprietary terms;
@@ -128,7 +128,7 @@ qualification remain open. No kernel changes or MUSA hardware inference claims.
 
 Owner: Codex. The complete authorized agenda is integrated on main. All fourteen
 final-source workflows passed before the closure review and fresh issue/PR sweep.
-[Release-preparation receipt](docs/csm-release-preparation-2026-10-25.json).
+[Release-preparation receipt](docs/historical/csm-release-preparation-2026-10-25.json).
 
 1. **Complete: recurring CSM speech failure.** Conversion and runtime now preserve
    original Llama-3 rotary scaling for both transformer stacks and the independent
@@ -144,7 +144,7 @@ final-source workflows passed before the closure review and fresh issue/PR sweep
    all eight speech cells with exact PCM identity. Actual Tesla T4 version 1
    passes rotary controls and both speech repeats at WER 0 with exact PCM;
    synthesis GPU peaks are 1696/1590 MiB. Full depth-decoder and Mimi model-stage
-   parity is not claimed. [Qualification ledger](docs/csm-cpu-profile-2026-10-25.json).
+   parity is not claimed. [Qualification ledger](docs/historical/csm-cpu-profile-2026-10-25.json).
 3. **Complete: external dependencies reviewed in full.** Descriptions, all
    comments, timelines and latest owner/reporter requirements were reviewed.
    Keep #532 open for the German crash reproducer, #483 for GTX 1660/MX150 MMQ
@@ -184,7 +184,7 @@ The reviewed agenda was processed through the final license item before any
 closure. Six resolved issues (#556, #555, #552, #551, #549, #518) and two
 integrated PRs (#553, #554) are closed. The subsequent 08:26 UTC sweep found
 no new issues, PRs or actionable follow-ups; only the four dependencies below
-remain open. [Complete receipt](docs/release-errors-2026-10-25.json).
+remain open. [Complete receipt](docs/historical/release-errors-2026-10-25.json).
 
 - Original 0.8.44 CPU wheels and sdist are on PyPI, with all five full anonymous
   readbacks matching original producer hashes. Recovery 40171262926 reused the
@@ -242,7 +242,7 @@ raw-array replay and all44-file anonymous proof readback pass at immutable
 validation revision3df6d8a66f94036d4773ee2424e42ab2ece9b046. Native2093 tests
 include actual C ABI/default-bundle and CLI resolver checks. Cached F16-era
 provenance upgrades to the new pinned Q4 release through the native resolver.
-[Complete source/model/legal/CPU/CUDA proof](docs/granite5-q4k-2026-10-24.json).
+[Complete source/model/legal/CPU/CUDA proof](docs/historical/granite5-q4k-2026-10-24.json).
 
 The lint pipeline now propagates build failures through `tee`, proven with
 successful and failing command controls. Granite-only replay skips unrelated
@@ -282,7 +282,7 @@ F16 regression repeats the full original stage/magnitude, prompt, both decodes,
 renamed-model C ABI and CLI acceptance on that final source. Its21 output files
 and manifest are permanently checkpointed in the public validation dataset at
 `0fa4dbaf1041069dbf5fecacbb41ac1149af8767`; the portable
-[receipt](docs/granite5-2026-10-23.json) pins the exact prefix and hash.
+[receipt](docs/historical/granite5-2026-10-23.json) pins the exact prefix and hash.
 Rebasing onto current main preserves the validated tree; subsequent changes only
 record these results. Integration is complete. No release tag, PR or issue
 comments are part of this task.
@@ -317,7 +317,7 @@ complete source declarations, reference, arrays and exact recipes. Registry
 uses separate immutable URLs and includes notices/provenance. Speaker identity
 stays unknown; human listening feedback is pending, not inferred as approval.
 Publisher grants do not independently clear upstream training or likeness rights.
-[Method](docs/qwen3-designed-voices.md), [receipt](docs/qwen3-designed-voices-2026-10-23.json).
+[Method](docs/qwen3-designed-voices.md), [receipt](docs/historical/qwen3-designed-voices-2026-10-23.json).
 Granite5 F16 integration and final accepted checks are recorded above.
 
 ## OmniVoice listened Metal default promotion — completed (2026-10-23)
@@ -333,7 +333,7 @@ Anna omission and older fox/Linux limits remain. Five CTest cases, ASan/UBSan,
 wrong-tie control, fresh-context cache hit and no-GPU checks pass. Injected
 failures at all3GPU stages recover exact CPU codes and stay CPU; failed attempts
 skip reference-cache publication. HYBRID=0 restores prior CPU encoding.
-[Eligibility, switches and complete receipt](docs/omnivoice-metal-defaults-2026-10-23.md).
+[Eligibility, switches and complete receipt](docs/historical/omnivoice-metal-defaults-2026-10-23.md).
 Hosted checks remain separately pending; no release/tag or model/audio upload.
 
 ## OmniVoice GPU semantic divergence — completed (2026-10-23)
@@ -352,7 +352,7 @@ C2PA present. Five CTest cases, ASan/UBSan and negative controls pass.
 Local original and corrected listening WAVs prepared; corrected copies equal
 CPU WAV bytes. GPU/precision defaults stay off; broader fox/Linux acceptance
 and cross-device/quant evidence remain open.
-[Recipes, stage/margin evidence and raw receipt](docs/omnivoice-semantic-precision-2026-10-23.md).
+[Recipes, stage/margin evidence and raw receipt](docs/historical/omnivoice-semantic-precision-2026-10-23.md).
 
 ## OmniVoice encoder A/B — completed (2026-10-23)
 
@@ -366,7 +366,7 @@ codes, so hybrid/graph/fused stay off despite WER0 in both frozen judges on all
 new controls. Unit/default/mode-switch/allocation/tie tests, five CTest cases,
 ASan/UBSan, wrong-tie mutant and full lib/CLI checks pass. Broader fox-cloning,
 hosted acceptance and GPU semantic boundary parity remain open.
-[Parameters, commands, decisions and receipt](docs/omnivoice-encoder-2026-10-23.md).
+[Parameters, commands, decisions and receipt](docs/historical/omnivoice-encoder-2026-10-23.md).
 
 ## Issue555 Base voice-pack crash — runtime validated (2026-10-23)
 
@@ -384,7 +384,7 @@ passes the same10 cases: both wrong-pack CLI calls exit15, both public loader
 probes pass11 checks each, and all three0.6B-Q8/1.7B-F16 speech controls have
 WER0 on CPU and CUDA. Native CUDA graph logs and per-child GPU-residency peaks
 are retained. No idle-GPU denominator or new default/performance claim.
-[Receipt](docs/issue555-voice-pack-2026-10-23.json) and the public60-file proof
+[Receipt](docs/historical/issue555-voice-pack-2026-10-23.json) and the public60-file proof
 include all logs/WAVs, source/model/binary pins and an independent saved-data
 replay with three rejected negative controls. Anonymous archive/expanded hashes
 and replay pass. Full platform CI/lint on the final documentation tip remain
@@ -402,7 +402,7 @@ inconclusive. All 16 CrispASR PCM/code arrays are exact. Same-active-weight
 omnivoice.cpp median 35.28 s (sequential, shared-host scope); both ASR judges
 score all three longer controls zero. Full marked CLI emits identical codes.
 TTS guide now documents defaults/interactions, sampling, commands and costs;
-[long-input report](docs/omnivoice-m1-long-input-2026-10-23.md) includes source/
+[long-input report](docs/historical/omnivoice-m1-long-input-2026-10-23.md) includes source/
 model/judge pins, exact recipes/builds, individual timing receipt and limits.
 A public isolated matmul probe tests actual Q8 versus derived F16 weights at
 150/450 columns with exact outputs, norm/CPU/wall checks. Its modest hot-op
@@ -425,7 +425,7 @@ checks unconditioned, both synthetic reference voices and combined gates.
 Both pinned ASR judges score these new walk-sentence controls and marked CLI
 output zero. Actual F32/F16/Q8_0/Q4_K graph parity, allocation checks, four CTest
 cases, ASan/UBSan and a deliberately wrong K-offset negative control pass.
-[Samples and scope](docs/omnivoice-m1-startup-generation-2026-10-23.md).
+[Samples and scope](docs/historical/omnivoice-m1-startup-generation-2026-10-23.md).
 All new gates stay off by default; broader fox-cloning acceptance stays open.
 Next target is the dominant matrix kernels/longer inputs and cross-device
 coverage before a default change. No ggml bump or release is implied.
@@ -441,7 +441,7 @@ bytes/codes; four selected CTest cases, ASan/UBSan and negative control pass.
 The full Release CLI/shared library builds; live Python Session C ABI outputs
 match the scored native code/PCM bytes for CPU and resident modes.
 Resident weight/cache buffers 124 MB. Split/resident/decomposition remain off
-by default. [Scope, commands and receipt](docs/omnivoice-m1-comparison-2026-10-23.md).
+by default. [Scope, commands and receipt](docs/historical/omnivoice-m1-comparison-2026-10-23.md).
 Next optimization target is the dominant generation stage and expensive
 initialization; these measurements do not validate a ggml bump or a
 platform-wide default. Broad cloning acceptance is still open.
@@ -468,7 +468,7 @@ for every surface.
 Superseded39860613583 was cancelled before acceptance. CI/lint follow the latest
 main tip; earlier partial green jobs do not certify the tip. No full hosted or
 cloning acceptance is claimed.
-See `docs/omnivoice-audit-2026-10-22.md` and its live receipt.
+See `docs/historical/omnivoice-audit-2026-10-22.md` and its live receipt.
 
 ## Issue551 schema rejection — validation complete (2026-10-23)
 
@@ -479,7 +479,7 @@ and C ABI/Python rejection. Actual external Unified metadata is RNN-T; full
 Unified inference/streaming support is separate. All 24 CLI controls,113 schema
 assertions,64 registry cases and existing architecture/parameter guards pass.
 CTest selects and executes all 5 routing tests; CI now requires that registration.
-[Scoped evidence](docs/issue551-routing-2026-10-22.json).
+[Scoped evidence](docs/historical/issue551-routing-2026-10-22.json).
 
 Hosted CI39722231798 passes all13 jobs and lint39722234064 passes all10
 jobs, checked individually on2026-10-23. Both target immutable source `17de1a7`;
@@ -487,7 +487,7 @@ this validates the explicit unsupported-layout handling, not Unified inference. 
 affirm the user's eligibility/compliance obligations; project redistribution
 obligations remain ours. Five corrected model-card/notice documents are published
 and anonymously verified, with no weight changes.
-[Notice receipt](docs/omnivoice-license-notices-2026-10-22.json).
+[Notice receipt](docs/historical/omnivoice-license-notices-2026-10-22.json).
 PR #521 has merged; the complete corrected cloning gate remains pending.
 
 ## NOW — v0.8.44 publication and wheel compatibility (2026-10-21)
@@ -544,7 +544,7 @@ Issue550 actual T4 long-input and issue549 actual Metal metadata controls pass
 independent review. Shared ggml PR2 passes CPU/Metal and hosted CPU/software-
 Vulkan controls and remains unmerged. Repaired Linux/Mac/Windows native bundles
 and all three hosted installed-wheel checks pass; library bytes match the
-frozen bundles. [Package acceptance](docs/followup-package-dry-runs-2026-10-20.json).
+frozen bundles. [Package acceptance](docs/historical/followup-package-dry-runs-2026-10-20.json).
 Main `0c355f398` now passes all 13 CI39445302976 jobs and all 10 lint39445303065
 jobs. The remaining host review now passes 108 cases each on Mac CPU,
 Metal/CPU, Linux CPU and software Vulkan/CPU, including BF16-weight and
@@ -552,10 +552,10 @@ strided-input fallback with actual placement checks. The candidate is unchanged.
 The retained T4 trace also proves a sampled 2,735 → 125 MiB transition after the
 public cache-free call and before fresh CLI model residency; six guards reject
 wrong-device/phase interpretations. No new Kaggle run is needed.
-[Cache-release audit](docs/alignment-cache-release-2026-10-20.json).
+[Cache-release audit](docs/historical/alignment-cache-release-2026-10-20.json).
 Future release checks, custom-license review and actual Radeon/Ascend gates
 remain open. No tag or release is published here.
-Checkpoint: [follow-up evidence and reporter actions](docs/issue-followups-2026-10-20.md).
+Checkpoint: [follow-up evidence and reporter actions](docs/historical/issue-followups-2026-10-20.md).
 NC models remain eligible behind explicit license opt-in; research-only and
 additional use/revenue/hosting restrictions require separate review and are not
 automatically accepted by a generic switch. Audit original revision and codec
@@ -573,7 +573,7 @@ NOW (2026-10-20), owner Codex: lifecycle/telemetry and pinned physical runner
 are implemented at18b540bd5 (ggmle2ae679a).53 host lifecycle checks and576
 independently audited CPU probe computes pass. The real Mac CPU/Metal F32
 reference/CLI/Session/short-long-short matrix passes unchanged gates, with
-22/44/22 words on each device. [Complete receipt and pinned device procedure](docs/cann-layout-followup-2026-10-20.md).
+22/44/22 words on each device. [Complete receipt and pinned device procedure](docs/historical/cann-layout-followup-2026-10-20.md).
 SDK39401353196 (both device families), all13 CI39401352847 jobs and all10
 lint39401352899 jobs pass for this exact source. Code and evidence are on remote main; verified scope and the optional
 bounded request are posted on [PR544](https://github.com/CrispStrobe/CrispASR/pull/544#issuecomment-6288185477)
@@ -587,7 +587,7 @@ ND representation is retained for reads/copies/fallback, with chunk coverage,
 write invalidation and captured-graph pointer invalidation. Published artifacts
 remain unchanged; the cache is off by default and the old path remains for A/B.
 
-Host proof: [receipt](docs/cann-weight-layout-host-2026-10-20.json):83 usage
+Host proof: [receipt](docs/historical/cann-weight-layout-host-2026-10-20.json):83 usage
 assertions in each mmap mode,188 split/11 bounds/28 release assertions,26 SDK-free
 policy checks and432 actual CPU probe computes over48 cases pass. The actual
 CANN request correctly rejects absent hardware. MiMo/Moonshine/core/shared ABI
@@ -673,7 +673,7 @@ Closed after the independently audited T4 short/long/short matrix: complete
 and 95 actual CUDA encoder splits. Long-phase sampled device total peaks at
 2,735 MiB. The complete former procedure and failed controls are archived in
 HISTORY.md; do not submit another run to recreate this acceptance.
-[Receipt](docs/alignment-cuda-live-2026-10-20.json),
+[Receipt](docs/historical/alignment-cuda-live-2026-10-20.json),
 [closure and scope](https://github.com/CrispStrobe/CrispASR/issues/550#issuecomment-6291711315).
 Host memory still grows with duration; natural-speech boundary accuracy and
 RTX3090-specific behavior are not certified.
@@ -682,7 +682,7 @@ RTX3090-specific behavior are not certified.
 
 High-level Model implementation,51 Go race cases/35 Rust cases/five doctests,
 and the real tiny.en/JFK Go model proof are complete; see HISTORY.md and
-[the independent audit](docs/go-model-lifecycle-audit-2026-10-19.json).
+[the independent audit](docs/historical/go-model-lifecycle-audit-2026-10-19.json).
 Run39228691810/source5aba585ce verifies actual callback close/re-entry,
 concurrent rejection, cancellation/recovery, parallel decoding and owned results.
 Do not rerun the same accepted fixture merely because an older note says pending.
@@ -718,7 +718,7 @@ metadata fixture optional-signature repair (see HISTORY.md).
 Continue the cross-language wrapper task; the bounded external agent tasks have
 ended. Start with the incremental
 [callable ledger](docs/wrapper-callable-coverage.md), then inspect actual code.
-The [initial audit](docs/binding-gaps-2026-10-18.md) is a historical snapshot.
+The [initial audit](docs/historical/binding-gaps-2026-10-18.md) is a historical snapshot.
 Do not reimplement rows merely because an older note says they are missing.
 
 The shared census covers **297 unique `crispasr_*` exports** across the two
@@ -794,7 +794,7 @@ Recommended implementation order and concrete acceptance:
 CPU actual-model metadata acceptance is complete: run39211685024 passes all12
 native and six Python cases, independently audited against exact source/library/
 probe/audio identities and raw timestamps. See
-[the receipt](docs/whisper-wrapper-model-audit-2026-10-19.json) and HISTORY.md.
+[the receipt](docs/historical/whisper-wrapper-model-audit-2026-10-19.json) and HISTORY.md.
 The tiny suites (22 parallel,13 VAD/entry, six emission) remain CTest/CI gates.
 Do not rerun the same tiny.en/JFK matrix merely because an old note says failed.
 Extend coverage to beam candidates, partial UTF-8, actual VAD-model detections,
@@ -964,7 +964,7 @@ Owner: maintainer coordinator. Work is isolated on
 into this tree. The external review is pinned to Subtimer
 `4a894d0e166191d41ebc734b61d68f5c531fb55b`; project-wide licensing is absent
 from inspected metadata, while native/vendor notices have their own scope.
-Read [the full comparison and clean-room record](docs/alignment-cleanroom-2026-10-18.md).
+Read [the full comparison and clean-room record](docs/historical/alignment-cleanroom-2026-10-18.md).
 No matched Subtimer/current-CrispASR accuracy/runtime benchmark exists here.
 A research agent's unsupported DP-bottleneck and small-banding-quality-cost
 claims were rejected; do not promote them as measurements.
@@ -978,7 +978,7 @@ word bounds. Only `CRISPASR_CTC_ALIGN_OPT=1` enables it; default stays unchanged
 Six acceptance tests pass: 240 randomized cases, 60 unique-optimum exhaustive
 path checks, ties/repeats/Unicode, invalid/nonfinite cases, and memory acceptance.
 Local synthetic measurements and their noisy timing ranges are retained in
-`docs/alignment-ctc-local-2026-10-18.json`; they do not measure encoder/model
+`docs/historical/alignment-ctc-local-2026-10-18.json`; they do not measure encoder/model
 or Japanese Parakeet/Canary subword performance.
 
 Frozen character-performance source `567fc431e333d3cf1e2cb895f3d2895364e54328`
@@ -990,7 +990,7 @@ pass; this aggregate receipt retains no raw per-call output/timing arrays.
 Gate-off/on median ratios are 1.124–1.215×; frozen-reference/on ratios are
 1.089–1.388×. Largest T4096/V16384/W256: gate-off339.608ms → on288.506ms,
 tracked heap275,986,668 → 7,556,460 bytes (36.52×). See
-`docs/alignment-ctc-hosted-2026-10-18.json`; this is synthetic DP, not encoder,
+`docs/historical/alignment-ctc-hosted-2026-10-18.json`; this is synthetic DP, not encoder,
 model, RSS/VRAM or Japanese/subword acceptance. CI `39112823566`
 was also dispatched for that source and is retained while progressing.
 Queued lint `39112825190` was superseded/cancelled in favor of combined-source
@@ -1031,7 +1031,7 @@ retaining the frozen `deaf9c010` tokenizer/DP return/text/timestamp behavior.
 Five tests pass under GCC and Clang (240 seeded random, 60 unique-optimum
 exhaustive tiny paths plus edge/memory cases); four contracts exercise both
 gates and six character tests remain green. CTest/CI run all suites. The local
-receipt and scope are in the [comparison](docs/alignment-cleanroom-2026-10-18.md#independent-subword-workspace-experiment).
+receipt and scope are in the [comparison](docs/historical/alignment-cleanroom-2026-10-18.md#independent-subword-workspace-experiment).
 Frozen source `a1434c9b2d2484e7af572b577cb1f53127662775` is on
 `diag/217-subword-workspace-20261018`. Heavy CPU `39115492999` runs
 `tools/ci-heavy/alignment_subword_bench.py --large` (NumPy; timeout30), CI is
@@ -1043,7 +1043,7 @@ synthetic results alone. Keep input/encoder memory and model quality separate.
 ## #217 Japanese alignment — CPU proof audited; long-form/hardware pending
 
 Completed CPU evidence is archived in HISTORY.md and the
-[verified audit](docs/alignment-japanese-audit-2026-10-19.json). Keep both workspace
+[verified audit](docs/historical/alignment-japanese-audit-2026-10-19.json). Keep both workspace
 gates default-off. The measured DP saving is0.055ms beside4591ms encoder time;
 do not prioritize another DP micro-optimization as an end-to-end speed fix.
 Issue550 long-window CUDA worker is completed; do not repeat it. Next: inspect release bundles
@@ -1069,7 +1069,7 @@ RAM/VRAM on a long clip. Evaluate optional VAD/vocal signals and independently
 trained boundary refinement against a raw-audio baseline. No external fitted
 parameters, exact feature recipes or source may be reused. The comparison and
 licensing/provenance constraints are in
-[the audit](docs/alignment-cleanroom-2026-10-18.md).
+[the audit](docs/historical/alignment-cleanroom-2026-10-18.md).
 
 ## #549 — token ownership and real Metal metadata accepted; packaging pending
 
@@ -1112,7 +1112,7 @@ is frozen on `diag/549-token-boundaries-20261018`, CI `39117921894` and lint
 is independently audited. The real licensed Japanese Metal short/long/short
 Session matrix also passes 17/123/17 tokens, exact returning-short metadata and
 a distinct native short-token byte/time/probability comparison.
-[Live receipt](docs/ja-session-metadata-live-2026-10-20.json). The CTC-aligner profile for #217 is a different model
+[Live receipt](docs/historical/ja-session-metadata-live-2026-10-20.json). The CTC-aligner profile for #217 is a different model
 route and cannot stand in for this transcription validation. Generic CLI
 postprocessing (`examples/cli/crispasr_gap_fill.h`) retains timestamp-based token
 filtering for multiple model families; audit that separately before claiming
@@ -1267,7 +1267,7 @@ validator and its original/CPU/CLI/Session proof are ready. Remaining actions:
 Maintainer owns the preparation; contributor hardware help is optional. No
 further rerun of the already accepted rotary repair is requested. Details and
 commands: [CANN TODO](docs/cann-todo.md) and
-[portable validator](docs/cann-model-validator-preparation-2026-10-14.md).
+[portable validator](docs/historical/cann-model-validator-preparation-2026-10-14.md).
 
 ## Remaining PRs — scoped salvage and acceptance
 
@@ -1282,7 +1282,7 @@ prevent full-runtime/default acceptance. Do not repeat accepted utility proof.
   it is no longer an open merge candidate. Independent opt-in mel/cached-decode pieces are merged.
   Dynamic Q8 activation amplification is measured; the existing F32 cache-read
   hypothesis is independently rejected and archived in HISTORY.md.
-  [Four-arm result](docs/mimo-kvread-ab-2026-10-15.md): hidden/logit error remains
+  [Four-arm result](docs/historical/mimo-kvread-ab-2026-10-15.md): hidden/logit error remains
   5.73%/5.13%, with a0.5% gate. The default Q4 original-stage gap also remains.
   The completed64-cell tiny attention audit proves a scalar F16 value-accumulator
   error (0.460% on constant V, exact repeated-half prediction). The old71-row
@@ -1310,7 +1310,7 @@ prevent full-runtime/default acceptance. Do not repeat accepted utility proof.
   raises a fixture concern without proving the cause of all cloning errors.
   Merge scope also closed the helper-test conflict, the stale ggml pin, the
   signed128-minimum UBSan overflow and the CLANG64 `<cstdlib>` include. Receipt
-  `docs/omnivoice-clone-reference-integrity-2026-10-22.json`, method in
+  `docs/historical/omnivoice-clone-reference-integrity-2026-10-22.json`, method in
   `docs/omnivoice-audio-processing.md`. The pre-merge head passed CI, Lint,
   Build WASM, Docker Smoke, Binding ABI contracts, Bindings (Ruby) and
   Regression (nightly) on `ed6c21ecb`; contributor history is preserved in the
@@ -1332,7 +1332,7 @@ prevent full-runtime/default acceptance. Do not repeat accepted utility proof.
   for JFK/JFK-tail/ZH. These differ from native per-stage quantized gates: JFK's
   literal FAIL remains teacherforced_logits (.967303/.983031/.979347).
   Block4 middle cosine0.999908 passes0.999. Completed owned-input attribution is
-  audited; see HISTORY.md and [the receipt](docs/index-echo-owned-ffn-audit-2026-10-19.json).
+  audited; see HISTORY.md and [the receipt](docs/historical/index-echo-owned-ffn-audit-2026-10-19.json).
   Next evaluate one bounded projection intervention on identical saved inputs
   before a full decoder: isolate down-projection layer25 (worst owned-down-input
   error,8.00% on Mandarin), then inspect gate/up error if MLP output remains
@@ -1357,7 +1357,7 @@ prevent full-runtime/default acceptance. Do not repeat accepted utility proof.
 - **Issue532 / Canary:** CPU/T4 reuse/allocation controls did not reproduce the
   crash; await original recording/device details. Do not apply a speculative fix.
 - **Issue483:** original matched CUDA/MMQ packages and complete vendor notices
-  are [preserved in a verified maintainer draft](docs/cuda126-mmq-preservation-2026-10-26.md).
+  are [preserved in a verified maintainer draft](docs/historical/cuda126-mmq-preservation-2026-10-26.md).
   Actual GTX1660/MX150 correctness and timing remain external.
 - **Issue461 / VoxCPM2:** profile VAE setup and Vulkan LocDiT on relevant hardware.
   Eight-step RTF1.019 and poorer reported quality do not justify changing the
@@ -1379,7 +1379,7 @@ prevent full-runtime/default acceptance. Do not repeat accepted utility proof.
 The old v0.8.44 preparation checklist is no longer pending work. The prepared
 successor v0.8.45 was published and its native/Python/Rust/Dart packages and
 notices verified on October 26; see the
-[publication receipt](docs/release-publication-2026-10-26.json) and the current
+[publication receipt](docs/historical/release-publication-2026-10-26.json) and the current
 published section above. Historical v0.8.44 notes remain in
 RELEASE_NOTES_v0.8.44.md. Later source fixes, including Nemotron default selection,
 are not retroactively present in the published tag or binaries.
@@ -1414,7 +1414,7 @@ behind correctness work and avoid an unbounded35B download on this VPS.
 User requested a concrete task for an independently trained reader, word bank
 and reproducible decoder. This is a research backlog task, not implemented
 support or a claim to reproduce the author's unpublished reader. Feasibility:
-`docs/embeddinggemma2-asr-feasibility-2026-10-13.md`.
+`docs/historical/embeddinggemma2-asr-feasibility-2026-10-13.md`.
 
 1. Pin and read the official encoder implementation and preprocessing. Compare
    temporal audio-tower features with features after the shared backbone; do

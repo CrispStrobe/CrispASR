@@ -1,0 +1,671 @@
+{
+  "status": "accepted official F16 numerical/feedback parity, complete F16/Q8 CPU speech, and CLI/server context policy; main CI/lint/selected regression accepted",
+  "date": "2026-10-02",
+  "runtime_source": "09804bb5d",
+  "scope": "Dia sampler, cross-attention RoPE, BOS delay, complete model generation and explicit C ABI/CLI limits",
+  "official_reference": {
+    "source_pin": "4a9e29b1bdbfe1be721353ec034a8c66c9f0a1a8",
+    "model_pin": "257bc72f9b78182ccc6fa07675a9ae4c1a44e2cd",
+    "text": "[S1] Hello there, how are you doing today? I really hope you are having a wonderful and pleasant time. The weather outside is lovely and bright.",
+    "steps": 127,
+    "shape": [
+      127,
+      2,
+      9,
+      1028
+    ],
+    "precision": "F32",
+    "torch_version": "2.14.1+cpu",
+    "reference_parameters": {
+      "seed": 42,
+      "temperature": 1.2,
+      "cfg_scale": 3.0,
+      "top_p": 0.95,
+      "top_k": 45,
+      "max_tokens": 128
+    }
+  },
+  "native_models": {
+    "repo": "cstr/dia-1.6b-GGUF",
+    "revision": "3233fbcb32be47761d2e736857b6d1a075b9ba7e",
+    "default": "dia-1.6b-f16.gguf",
+    "codec": "dac-44khz.gguf"
+  },
+  "recognizer": {
+    "repo": "cstr/nemotron-3.5-asr-streaming-GGUF",
+    "revision": "bbd95a9ca5fa0dfca3312a122dfc45a2b578b9c2",
+    "file": "nemotron-3.5-asr-streaming-0.6b-q4_k.gguf"
+  },
+  "numerical_gate": {
+    "minimum_cosine": 0.9995,
+    "maximum_norm_error": 0.02,
+    "quant": "f16",
+    "both_cfg_batches": true,
+    "steps": 127,
+    "heads_per_batch": 9
+  },
+  "before": {
+    "run": 36973899601,
+    "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36973899601",
+    "passed": false,
+    "minimum_cosine": 0.979274812,
+    "max_norm_error": 0.097132434
+  },
+  "after": {
+    "run": 36976267766,
+    "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36976267766",
+    "passed": true,
+    "minimum_cosine": 0.9999991159784164,
+    "max_norm_error": 0.0006638800502446474,
+    "feedback": {
+      "steps": 126,
+      "exact_source_inputs": true,
+      "old_mismatch": [
+        [
+          15,
+          8
+        ]
+      ],
+      "old": 1026,
+      "reference": 890
+    }
+  },
+  "reference_hashes": {
+    "reference-logits.f32": "f8e4bf1e2f6243a7d6d6862437dc9539e1b9c904b171d762f0329ca54ca1d1fe",
+    "inputs.i32": "fc407b85240f43db3d260b8a17e9f0068190b7cad3691868a2578dfeb443a72f",
+    "outputs.i32": "5ebd09eeea05eb281748443a112bf5e8d653e62e86fa773214a2a66ebd912ba5",
+    "old-bos-inputs.i32": "a4d013e20cde307571bd7e4c7a5ea03b90052c7a55605e165b8cc8311b694793",
+    "feedback-inputs.i32": "a63e9b36fc111b1a9061e7be6bff4e1dd9522bb7e486a3ce2bce51e0221cbc12"
+  },
+  "sampler": {
+    "run": 36974440119,
+    "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36974440119",
+    "passed": true,
+    "fixtures": 13,
+    "negative_control": "Old compiled sampler selected token0 in all1000 trials with dominant token2; source/candidate retain token2."
+  },
+  "q8_diagnostic": {
+    "run": 36977167440,
+    "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36977167440",
+    "passed": false,
+    "minimum_cosine": 0.9984085265401985,
+    "max_norm_error": 0.028122569855661528,
+    "scope": "Q8 does not satisfy the unchanged F16 full-precision guard; this is not claimed as numerical parity."
+  },
+  "complete_speech_explicit_1024": {
+    "run": 36975526523,
+    "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36975526523",
+    "passed": true,
+    "cases": [
+      {
+        "phrase": "Hello there, how are you doing today? I really hope you are having a wonderful and pleasant time. The weather outside is lovely and bright.",
+        "seed": 42,
+        "threads": 4,
+        "steps_override": 1024,
+        "audio_seconds": 5.584399092970521,
+        "generation_seconds": 105.67918907599994,
+        "transcript": "Hello there, how are you doing today? <en-US>  I really hope you are having a wonderful and pleasant time. <en-US> The weather outside is lovely and bright. <en-US>",
+        "wer": 0.0
+      },
+      {
+        "phrase": "The quick brown fox jumps over the lazy dog. Please listen carefully, because this is a test of speech synthesis with a chosen number of CPU threads.",
+        "seed": 123,
+        "threads": 4,
+        "steps_override": 1024,
+        "audio_seconds": 6.629297052154195,
+        "generation_seconds": 139.68604007399995,
+        "transcript": "The quick brown Fox jumps over the lazy dog. <en-US> Please listen carefully, because this is a test of speech synthesis with a chosen number of CPU threads. <en-US>",
+        "wer": 0.0
+      }
+    ]
+  },
+  "final_gates": {
+    "q8_default_threads_cli": {
+      "run": 36979527236,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36979527236",
+      "status": "completed",
+      "aggregate_passed": false,
+      "reason": "All six speech cases and C ABI limit/reset passed; CLI harness incorrectly named output binary bin/crispasr-cli.",
+      "speech_matrix_passed": true,
+      "cases": [
+        {
+          "phrase": "Hello there, how are you doing today? I really hope you are having a wonderful and pleasant time. The weather outside is lovely and bright.",
+          "seed": 42,
+          "threads": 1,
+          "steps_override": 0,
+          "audio_seconds": 5.584399092970521,
+          "generation_seconds": 162.59895885000003,
+          "cabi_limit_32_seconds": null,
+          "transcript": "Hello there, how are you doing today? <en-US>  I really hope you are having a wonderful and pleasant time. <en-US> The weather outside is lovely and bright. <en-US>",
+          "wer": 0.0
+        },
+        {
+          "phrase": "Hello there, how are you doing today? I really hope you are having a wonderful and pleasant time. The weather outside is lovely and bright.",
+          "seed": 42,
+          "threads": 4,
+          "steps_override": 0,
+          "audio_seconds": 5.584399092970521,
+          "generation_seconds": 85.87770987399995,
+          "cabi_limit_32_seconds": 0.18575963718820862,
+          "transcript": "Hello there, how are you doing today? <en-US>  I really hope you are having a wonderful and pleasant time. <en-US> The weather outside is lovely and bright. <en-US>",
+          "wer": 0.0
+        },
+        {
+          "phrase": "Hello there, how are you doing today? I really hope you are having a wonderful and pleasant time. The weather outside is lovely and bright.",
+          "seed": 42,
+          "threads": 8,
+          "steps_override": 0,
+          "audio_seconds": 5.584399092970521,
+          "generation_seconds": 98.28466918099991,
+          "cabi_limit_32_seconds": null,
+          "transcript": "Hello there, how are you doing today? <en-US>  I really hope you are having a wonderful and pleasant time. <en-US> The weather outside is lovely and bright. <en-US>",
+          "wer": 0.0
+        },
+        {
+          "phrase": "The quick brown fox jumps over the lazy dog. Please listen carefully, because this is a test of speech synthesis with a chosen number of CPU threads.",
+          "seed": 123,
+          "threads": 1,
+          "steps_override": 0,
+          "audio_seconds": 6.629297052154195,
+          "generation_seconds": 207.49335564800003,
+          "cabi_limit_32_seconds": null,
+          "transcript": "The quick brown Fox jumps over the lazy dog. <en-US> Please listen carefully, because this is a test of speech synthesis with a chosen number of CPU threads. <en-US>",
+          "wer": 0.0
+        },
+        {
+          "phrase": "The quick brown fox jumps over the lazy dog. Please listen carefully, because this is a test of speech synthesis with a chosen number of CPU threads.",
+          "seed": 123,
+          "threads": 4,
+          "steps_override": 0,
+          "audio_seconds": 6.629297052154195,
+          "generation_seconds": 108.91433164199998,
+          "cabi_limit_32_seconds": null,
+          "transcript": "The quick brown Fox jumps over the lazy dog. <en-US> Please listen carefully, because this is a test of speech synthesis with a chosen number of CPU threads. <en-US>",
+          "wer": 0.0
+        },
+        {
+          "phrase": "The quick brown fox jumps over the lazy dog. Please listen carefully, because this is a test of speech synthesis with a chosen number of CPU threads.",
+          "seed": 123,
+          "threads": 8,
+          "steps_override": 0,
+          "audio_seconds": 6.629297052154195,
+          "generation_seconds": 118.18582906699999,
+          "cabi_limit_32_seconds": null,
+          "transcript": "The quick brown Fox jumps over the lazy dog. <en-US> Please listen carefully, because this is a test of speech synthesis with a chosen number of CPU threads. <en-US>",
+          "wer": 0.0
+        }
+      ],
+      "npy_hashes": {
+        "hello-1": "7f1f8020661d330a659092fc0339847b2eed4235dcc180f691be6e59ab12a5df",
+        "hello-4": "7f1f8020661d330a659092fc0339847b2eed4235dcc180f691be6e59ab12a5df",
+        "hello-8": "7f1f8020661d330a659092fc0339847b2eed4235dcc180f691be6e59ab12a5df",
+        "fox-1": "f7a1a51f777beb28b3006579daba59e81d223244a149ec0598a355b163da7f23",
+        "fox-4": "f7a1a51f777beb28b3006579daba59e81d223244a149ec0598a355b163da7f23",
+        "fox-8": "f7a1a51f777beb28b3006579daba59e81d223244a149ec0598a355b163da7f23"
+      },
+      "audio_bit_identical_across_thread_counts": true
+    },
+    "f16_default_cpu": {
+      "run": 36980002984,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36980002984",
+      "status": "completed",
+      "passed": true,
+      "cases": [
+        {
+          "phrase": "Hello there, how are you doing today? I really hope you are having a wonderful and pleasant time. The weather outside is lovely and bright.",
+          "seed": 42,
+          "threads": 4,
+          "steps_override": 0,
+          "audio_seconds": 6.989206349206349,
+          "generation_seconds": 152.73842804499998,
+          "cabi_limit_32_seconds": null,
+          "transcript": "Hello there, how are you doing today? <en-US>  I really hope you are having a wonderful and pleasant time. <en-US> The weather outside is lovely and bright. <en-US>",
+          "wer": 0.0
+        },
+        {
+          "phrase": "The quick brown fox jumps over the lazy dog. Please listen carefully, because this is a test of speech synthesis with a chosen number of CPU threads.",
+          "seed": 123,
+          "threads": 4,
+          "steps_override": 0,
+          "audio_seconds": 5.874648526077097,
+          "generation_seconds": 123.66436700700001,
+          "cabi_limit_32_seconds": null,
+          "transcript": "The Quick Brown Fox jumps over the lazy dog. <en-US> Please listen carefully because this is a test of speech synthesis with a chosen number of CPU threads. <en-US>",
+          "wer": 0.0
+        }
+      ]
+    },
+    "f16_metal": {
+      "run": 36980351443,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36980351443",
+      "status": "timed out; not acceptance",
+      "passed": false,
+      "reason": "Hosted runner exposed Apple Paravirtual device without SIMD matrix acceleration. No completed model generation in2400seconds."
+    },
+    "q8_cli_retry": {
+      "run": 36982203366,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36982203366",
+      "status": "completed",
+      "scope": "Correct bin/crispasr name; short explicit32 limit and complete default fox speech.",
+      "passed": false,
+      "reason": "Actual production planner split the paragraph into two short prompts, applying cap32 twice and inserting .2s of silence; output .571519s. Candidate388a7ad86 preserves complete Dia dialogue."
+    },
+    "f16_metal_cli_retry": {
+      "run": 36982206126,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36982206126",
+      "status": "cancelled before execution",
+      "scope": "Correct bin/crispasr name; actual MTL backend required, short32 and complete default fox speech.",
+      "reason": "Superseded by the whole-dialogue production fix."
+    },
+    "q8_cli_whole_dialogue": {
+      "run": 36983650376,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36983650376",
+      "status": "completed",
+      "passed": true,
+      "explicit_limit": {
+        "max_new_tokens": 32,
+        "audio_seconds": 0.18575963718820862
+      },
+      "default_speech": {
+        "phrase": "The quick brown fox jumps over the lazy dog. Please listen carefully, because this is a test of speech synthesis with a chosen number of CPU threads.",
+        "audio_seconds": 6.629297052154195,
+        "cli": true,
+        "transcript": "The quick brown Fox jumps over the lazy dog. <en-US> Please listen carefully, because this is a test of speech synthesis with a chosen number of CPU threads. <en-US>",
+        "wer": 0.0
+      },
+      "generation_capacity": 3072,
+      "decoder_loops_per_request": 1
+    },
+    "f16_metal_whole_dialogue": {
+      "run": 36983652977,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36983652977",
+      "status": "cancelled",
+      "reason": "Hosted GPU probe proves Metal unavailable; physical-Mac runtime acceptance cannot be claimed."
+    }
+  },
+  "standard_ci": {
+    "run": 36983655538,
+    "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36983655538",
+    "status": "completed",
+    "scope": "includes shared CLI/server whole-dialogue fix and permanent chunking regression",
+    "passed": true,
+    "jobs": 13
+  },
+  "lint": {
+    "run": 36983658133,
+    "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36983658133",
+    "status": "completed",
+    "passed": true,
+    "jobs": 10
+  },
+  "limitations": [
+    "Full-speech acceptance uses two prompts longer than100characters and fixed seeds. Short prompts remain model-sensitive.",
+    "Q8 is an explicit model choice; the automatic download remains F16.",
+    "CUDA/Vulkan Dia acceleration remains opt-in; no new validation claim for those backends.",
+    "Metal compiles in standard CI, but physical-Mac runtime proof is unavailable on these hosted VMs. No Metal runtime acceptance claim; hardware preflight now rejects nil/paravirtual devices before model work."
+  ],
+  "rejected_full_speech": [
+    {
+      "run": 36965187732,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36965187732",
+      "wer": 0.852
+    },
+    {
+      "run": 36966653943,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36966653943",
+      "wer": 0.72
+    },
+    {
+      "run": 36972564262,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36972564262",
+      "wer": 1.0
+    }
+  ],
+  "chunk_policy_negative_control": {
+    "baseline": "b33138b057",
+    "text": "[S1] The quick brown fox jumps over the lazy dog. Please listen carefully, because this is a test of speech synthesis with a chosen number of CPU threads.",
+    "before_chunks": 2,
+    "before_single_context_gate_passed": false,
+    "after_chunks": 1,
+    "after_single_context_gate_passed": true,
+    "source": "388a7ad86",
+    "cold_receipt": "${CRISPASR_WORKTREES}/tmp-overflow/dia-chunk-policy/receipt.json"
+  },
+  "metal_hardware_probe": {
+    "run": 36984356005,
+    "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36984356005",
+    "passed": false,
+    "exit_code": 77,
+    "output": "METAL_UNAVAILABLE: no MTLDevice",
+    "scope": "Another standard macos14 ARM VM has no Metal device; compiled Metal support is not hardware-execution proof."
+  },
+  "runtime_sources": {
+    "dia_core": "09804bb5d",
+    "cli_server_policy": "388a7ad86"
+  },
+  "ggml_pin": "2f5a80d258c46e6ac8eee95f1328c0f58376d7ee",
+  "integration_main": {
+    "status": "accepted",
+    "source": "9a184adeb727454a3be3238933556fe8f01d4c4b",
+    "ci": {
+      "run": 36986270531,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36986270531",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "android",
+          "conclusion": "success"
+        },
+        {
+          "name": "windows",
+          "conclusion": "success"
+        },
+        {
+          "name": "linux-backend-dl",
+          "conclusion": "success"
+        },
+        {
+          "name": "linux-asan-audio",
+          "conclusion": "success"
+        },
+        {
+          "name": "linux-amr-fetch (clang++)",
+          "conclusion": "success"
+        },
+        {
+          "name": "ios",
+          "conclusion": "success"
+        },
+        {
+          "name": "linux-fuzz-smoke",
+          "conclusion": "success"
+        },
+        {
+          "name": "macos",
+          "conclusion": "success"
+        },
+        {
+          "name": "linux-unit",
+          "conclusion": "success"
+        },
+        {
+          "name": "linux-opus-fetch",
+          "conclusion": "success"
+        },
+        {
+          "name": "linux-vulkan",
+          "conclusion": "success"
+        },
+        {
+          "name": "linux-amr-fetch (g++)",
+          "conclusion": "success"
+        },
+        {
+          "name": "linux-x86_64",
+          "conclusion": "success"
+        }
+      ]
+    },
+    "lint": {
+      "run": 36986270376,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36986270376",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "clang-tidy (lint / types / security)",
+          "conclusion": "success"
+        },
+        {
+          "name": "CUDA runtime ships split from every package",
+          "conclusion": "success"
+        },
+        {
+          "name": "README language metadata",
+          "conclusion": "success"
+        },
+        {
+          "name": "core_cpu_backend header reachable everywhere",
+          "conclusion": "success"
+        },
+        {
+          "name": "model-registry URLs resolve",
+          "conclusion": "success"
+        },
+        {
+          "name": "doc anchors resolve",
+          "conclusion": "success"
+        },
+        {
+          "name": "kaggle_harness bundled-copy sync",
+          "conclusion": "success"
+        },
+        {
+          "name": "version files agree with VERSION",
+          "conclusion": "success"
+        },
+        {
+          "name": "clang-format (style)",
+          "conclusion": "success"
+        },
+        {
+          "name": "chat ABI bound by every binding",
+          "conclusion": "success"
+        }
+      ]
+    },
+    "selected_regression": {
+      "run": 36986270337,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36986270337",
+      "status": "completed",
+      "conclusion": "success",
+      "jobs": [
+        {
+          "name": "select",
+          "conclusion": "success"
+        },
+        {
+          "name": "unit-tests",
+          "conclusion": "success"
+        },
+        {
+          "name": "smoke",
+          "conclusion": "success"
+        },
+        {
+          "name": "preflight",
+          "conclusion": "success"
+        },
+        {
+          "name": "regression (nemotron-3.5-asr-streaming-0.6b)",
+          "conclusion": "success"
+        }
+      ]
+    },
+    "unit_tests": {
+      "total": 1982,
+      "failed": 0,
+      "includes": [
+        "Dia nucleus sampler",
+        "whole Dia dialogue in shared CLI/server planner"
+      ]
+    },
+    "nemotron_regression": {
+      "transcript": "byte-equal",
+      "encoder_output_cosine_min": 0.999982,
+      "threshold": 0.999
+    },
+    "additional_checks": {
+      "wasm": {
+        "run": 36986270752,
+        "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36986270752",
+        "status": "completed",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "name": "build-wasm (proxy-to-pthread)",
+            "conclusion": "success"
+          },
+          {
+            "name": "build-wasm (default)",
+            "conclusion": "success"
+          },
+          {
+            "name": "build-wasm (single-thread)",
+            "conclusion": "success"
+          }
+        ]
+      },
+      "ruby": {
+        "run": 36986271211,
+        "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36986271211",
+        "status": "completed",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "name": "ubuntu-22",
+            "conclusion": "success"
+          }
+        ]
+      },
+      "rust": {
+        "run": 36986270299,
+        "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36986270299",
+        "status": "completed",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "name": "ubuntu-22",
+            "conclusion": "success"
+          }
+        ]
+      },
+      "csharp": {
+        "run": 36986271021,
+        "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36986271021",
+        "status": "completed",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "name": "ubuntu",
+            "conclusion": "success"
+          },
+          {
+            "name": "windows",
+            "conclusion": "success"
+          }
+        ]
+      },
+      "dart": {
+        "run": 36986270892,
+        "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36986270892",
+        "status": "completed",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "name": "ubuntu-22",
+            "conclusion": "success"
+          }
+        ]
+      },
+      "docker": {
+        "run": 36986270325,
+        "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36986270325",
+        "status": "completed",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "name": "hf-space-build",
+            "conclusion": "success"
+          },
+          {
+            "name": "smoke",
+            "conclusion": "success"
+          }
+        ]
+      },
+      "secrets": {
+        "run": 36986270768,
+        "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36986270768",
+        "status": "completed",
+        "conclusion": "success",
+        "jobs": [
+          {
+            "name": "scan",
+            "conclusion": "success"
+          }
+        ]
+      },
+      "cppcheck": {
+        "run": 36986270785,
+        "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36986270785",
+        "status": "pending",
+        "conclusion": "",
+        "jobs": []
+      }
+    },
+    "runtime_source_equality": {
+      "dia": {
+        "src/dia_tts.cpp": {
+          "sha256": "0aa4ba4ad2b24039df9fbfab3809453aa5edb486cfecb0bacdfce4b936210813",
+          "identical_to_tested_source": "388a7ad86"
+        },
+        "src/dia_tts.h": {
+          "sha256": "4ced70a64ec6afe9feb8b022a2d5fbca66e4dae195271c1ab063233720c7b640",
+          "identical_to_tested_source": "388a7ad86"
+        },
+        "src/dia_sampling.h": {
+          "sha256": "ff0953df65d9dc16cbea97fd5a0f5c7c70ccb0b4da4b8903b2247021b186b1b6",
+          "identical_to_tested_source": "388a7ad86"
+        },
+        "src/crispasr_c_api.cpp": {
+          "sha256": "ccaf128313bd7e524ccd558f9586608278c56e68f486a91e779829c1d94dc73d",
+          "identical_to_tested_source": "388a7ad86"
+        },
+        "examples/cli/crispasr_backend_dia.cpp": {
+          "sha256": "5ca2eacb9e5e9f01ddf13a2f8386a630d5b3448cfdf4836f20846f7104271349",
+          "identical_to_tested_source": "388a7ad86"
+        },
+        "examples/cli/crispasr_tts_chunking.cpp": {
+          "sha256": "ae9529739fcff5f2e6e75df6bbd2ca1fd7d5ed89dff05a52bfffb6a8103b843f",
+          "identical_to_tested_source": "388a7ad86"
+        }
+      },
+      "nemotron": {
+        "src/nemotron.cpp": {
+          "sha256": "648cdd5290c4c55a2d31b1ec4cf7b97343460a0b2d3ae206e37be5648ef04ecf",
+          "identical_to_tested_source": "7cddcdeee14757bcff0f4293aec67a78182b0294"
+        },
+        "examples/server/realtime_server.cpp": {
+          "sha256": "df4e818a86bf572ecdc6b1de887fba9b4da4150b258cb3f02243207e3ba31113",
+          "identical_to_tested_source": "7cddcdeee14757bcff0f4293aec67a78182b0294"
+        },
+        "examples/server/ws_stream.cpp": {
+          "sha256": "a37289b736747d629a843e4393b8f02d8014ff009fa39036a06d0a0fd29d4c6b",
+          "identical_to_tested_source": "7cddcdeee14757bcff0f4293aec67a78182b0294"
+        }
+      }
+    },
+    "tested_source_archive": {
+      "file": "${CRISPASR_WORKTREES}/tmp-overflow/dia-nemotron-main-integration/tested-sources.bundle",
+      "bytes": 58446,
+      "sha256": "3aebaf8239e0d8fa49ab51076d91e52914bf47e22a30a033e7e8eb8c431679c6",
+      "prerequisite": "b33138b057268f573757ded8258e4afef2461ea8",
+      "refs": {
+        "dia": "95dd38592f219c0750577d4066f2aaaceada21f3",
+        "nemotron": "1da7d0fefed00c82d0a9a00f583ecee370fd1ce6"
+      },
+      "verified": true
+    },
+    "cold_receipts": "${CRISPASR_WORKTREES}/tmp-overflow/dia-nemotron-main-integration",
+    "scoped_cppcheck": {
+      "run": 36992014618,
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/36992014618",
+      "passed": true,
+      "version": "2.7",
+      "files": 7,
+      "receipt": "docs/historical/dia-nemotron-cppcheck-2026-10-02.json"
+    }
+  }
+}

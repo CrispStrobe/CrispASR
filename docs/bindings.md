@@ -2,7 +2,7 @@
 
 The wrappers expose parts of the shared C ABI in `src/crispasr_c_api.cpp`.
 Coverage differs by language; adding a native function does not expose it
-through every wrapper. The [2026-10-18 source audit](binding-gaps-2026-10-18.md)
+through every wrapper. The [2026-10-18 source audit](historical/binding-gaps-2026-10-18.md)
 records confirmed gaps and PLAN.md tracks their repair. Python's separate
 [API inventory](python-api-coverage.md) does not establish other-language parity.
 
@@ -90,6 +90,9 @@ invalid preset and must raise. Do not universally swallow this code.
 | `set_punc_model(alias\|path)` | `set_punc_model` / `set_punc_model` / `SetPuncModel` / `setPuncModel` | Load FireRedPunc/PCS punctuation restoration on the session (`auto`/`firered`/`fullstop`/`punctuate-all`/`pcs`/path; auto-downloads). Restores punctuation on backends that emit none (parakeet RNNT/CTC, …). `"none"`/`""` unloads. (Also Java/Ruby.) |
 | `set_hotwords(words, boost)` | `set_hotwords` / `set_hotwords` / `SetHotwords` / `setHotwords` | Comma-separated contextual-biasing hotwords, boosted per token match (parakeet CTC/TDT trie; LLM-backend prompt injection; Qwen3 uses the system turn and preserves the language prefill). Empty string clears. (All six wrappers.) |
 | `set_tts_phonemes(ipa)` | `set_tts_phonemes` / `set_tts_phonemes` / `SetTTSPhonemes` / `setTtsPhonemes` | #316: synthesize the given phonemes verbatim, skipping the G2P — the seam between text processing and the acoustic model. Use it to reproduce another implementation's pronunciation, or to tell a G2P bug from a model bug. Empty clears; rc=-2 on a backend with no phonemes-in call (kokoro and piper have one). Server: `"phonemes"` on `/v1/audio/speech`. CLI: `--tts-phonemes`. (All wrappers.) |
+| `set_audio_ctx(audio_ctx)` | `set_audio_ctx` / `set_audio_ctx` / `SetAudioCtx` / `setAudioCtx` | Whisper encoder audio context size in 20 ms frames (default: `0` = full 1500 pad; `1024` for 33% streaming speedup). (All wrappers.) |
+| `set_hikari_refresh_stride(stride)` | `set_hikari_refresh_stride` / `set_hikari_refresh_stride` / `SetHikariRefreshStride` / `setHikariRefreshStride` | Hikari strided encoder refresh interval (default: `16` strided, `0` = exact sliding baseline). (All wrappers.) |
+| `set_parakeet_att_context(left, right)` | `set_parakeet_att_context` / `set_parakeet_att_context` / `SetParakeetAttContext` / `setParakeetAttContext` | Parakeet local attention window in encoder frames (~80 ms each). Bounds encoder memory to O(T·window). (All wrappers.) |
 | `set_g2p_dict(source)` | `set_g2p_dict` / `set_g2p_dict` / `SetG2PDict` / `setG2pDict` | Select the G2P pronunciation dictionary for TTS phonemization (`olaph`/`open-dict`/path). (All six wrappers.) |
 
 ## Result field reference

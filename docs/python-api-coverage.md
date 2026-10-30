@@ -7,7 +7,7 @@ appropriate. `tools/check-python-api-coverage.py` inventories every unique
 The inventory now reads both `include/crispasr_session.h` and
 `include/crispasr.h`: 297 unique `crispasr_*` functions. Upstream `whisper_*`
 declarations are outside this census. The eight additional audio/container/
-channel omissions from the [initial expanded audit](binding-gaps-2026-10-18.md#python-census-boundary)
+channel omissions from the [initial expanded audit](historical/binding-gaps-2026-10-18.md#python-census-boundary)
 are implemented and tested through model-free native probes.
 The inventory is a source drift guard; it does not establish model accuracy,
 platform support, or successful inference from a particular checkpoint.

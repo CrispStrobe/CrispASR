@@ -32,7 +32,7 @@ unspecified). Pin language explicitly before calling the recipes matched.
 And record host load: the same M1 CPU decode ranged from roughly 0.4 s quiet to
 2 s contended. Counterbalanced within-context whole-request A/B and a separately
 reported cold initialization are stronger than comparing isolated fastest runs.
-See `docs/omnivoice-m1-comparison-2026-10-23.md` for the actual scope and gates.
+See `docs/historical/omnivoice-m1-comparison-2026-10-23.md` for the actual scope and gates.
 
 ## The OmniVoice tokenizer buffer serves BOTH the decoder and the voice-clone ENCODER — so moving the codec to another backend changes the clone, not just the decode (2026-10-22)
 
@@ -59,7 +59,7 @@ after allocation succeeds. Decomposition also made a crop-kernel F32 copy
 unused: prepare permutations first and bake the crop kernel only for blocks
 that need fallback, saving 40 MB on the pinned tokenizer. A decoder-only GPU
 budget must include current F32 caches and graph scratch, not just its roughly
-44 MB of serialized source weights. See `docs/omnivoice-audit-2026-10-22.md`.
+44 MB of serialized source weights. See `docs/historical/omnivoice-audit-2026-10-22.md`.
 
 ## An A/B on a shared box needs a load check and a min-of-N — one benchmark number is worth nothing (2026-10-22)
 
@@ -99,7 +99,7 @@ shared sentence splitter restarted context and applied a requested cap twice;
 keep the complete speaker-tagged dialogue together. F16 source parity and Q8
 speech acceptance are separate gates: preserve strict Q8 numerical failures
 rather than relaxing the F16 threshold. Proof is in
-`docs/dia-full-generation-2026-10-02.json`.
+`docs/historical/dia-full-generation-2026-10-02.json`.
 
 A tiny logit error can change nucleus SUPPORT even when the winning race is
 not close. On actual Dia step864/head6, cache rounding swaps tokens55/1008
@@ -110,7 +110,7 @@ the token, filtered probabilities and the exact random noise; cosine or argmax
 alone misses this. Replay the actual Python and native samplers on the SAME
 captured logits before blaming random state. The complete current-runtime
 factorial and27 actual-logit replay choices are documented in
-`docs/dia-cache-sampler-results-2026-10-16.md`. This does not isolate a layer or
+`docs/historical/dia-cache-sampler-results-2026-10-16.md`. This does not isolate a layer or
 promote a broad speech/default precision recipe.
 
 ## Nemotron: CPU window parity does not establish CUDA window parity (2026-10-02, #487)
@@ -129,7 +129,7 @@ on the same hardware, then restore the candidate and require byte-identical
 captures for every shipped quant. Test the actual live server too: ping/pong,
 VAD, a configured turn longer than 30 seconds, and reset on the same socket.
 Keep fallback PCM bounded and intact. Receipt:
-`docs/nemotron-realtime-2026-10-02.json`.
+`docs/historical/nemotron-realtime-2026-10-02.json`.
 
 Hosted macOS compilation is not physical Metal execution proof. A nil MTLDevice
 or an Apple Paravirtual device cannot establish model GPU correctness; preflight
@@ -19518,7 +19518,7 @@ script version `2026-10-02.3`. All three direct clips pass 75 numerical rows
 plus a prompt check each (228 reported checks per device), all 32 encoder and
 32 decoder layers, 48 cached predictions and exact complete decoded cues.
 All five complete file cases and three real Piper roundtrips pass. The retained
-receipt is `docs/index-echo-9b-acceptance-2026-10-02.json`.
+receipt is `docs/historical/index-echo-9b-acceptance-2026-10-02.json`.
 
 Quantization still needs behavioral acceptance after numerical parity. Plain
 Q8 changes Chinese output and JFK punctuation; selective Q8 and quantizing only
@@ -19681,8 +19681,8 @@ Read both norms and full arrays before accepting a first divergent layer.
 Report frame-axis comparisons separately from the existing diff-tool row
 convention; do not change that convention to make a quantization pass. Complete
 original/initial-invalid/fixed evidence is pinned in
-`docs/nemotron-layer-probe-2026-10-09.json`; the later group comparison is in
-`docs/nemotron-encoder-groups-2026-10-09.json`.
+`docs/historical/nemotron-layer-probe-2026-10-09.json`; the later group comparison is in
+`docs/historical/nemotron-encoder-groups-2026-10-09.json`.
 
 ## Dolphin noncausal CSGU needs padding after LayerNorm (2026-10-12, #540)
 
@@ -19737,7 +19737,7 @@ starts settle near 0.5 s for BOTH embedded-source and precompiled Metal builds.
 Warm OS shader caches reduce source-library startup to ~20 ms; an AOT library
 loads in 2–3 ms. Do not relabel external I/O or warm-cache changes as a compiler
 optimization. Preserve both timings and control file location and cache scope.
-See `docs/omnivoice-m1-startup-generation-2026-10-23.md` and its receipt.
+See `docs/historical/omnivoice-m1-startup-generation-2026-10-23.md` and its receipt.
 
 
 ## Granite5 quantization and actual CUDA work evidence (2026-10-23)

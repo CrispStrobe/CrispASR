@@ -219,7 +219,7 @@ idempotent after inference ends; a rejected close leaves the model usable.
 
 A hosted real tiny.en/JFK CPU run independently verifies callback/concurrent
 rejection, cancellation recovery, parallel decode and owned outputs. See
-[the audit](../../docs/go-model-lifecycle-audit-2026-10-19.json) for exact source
+[the audit](../../docs/historical/go-model-lifecycle-audit-2026-10-19.json) for exact source
 and limits; this does not certify raw contexts, other devices or model modes.
 
 Go-owned option setters use a separate mutex and can update the next decode's

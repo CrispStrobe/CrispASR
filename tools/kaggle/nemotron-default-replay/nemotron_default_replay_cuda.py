@@ -13,7 +13,7 @@ import urllib.request
 SOURCE = 'cc191e718595aa4be90d62fcd66b66360d44e426'
 CPU_RUN = 40377479500
 CPU_SOURCE = '6143b9aa2ff0457092a2f35b0dcb2a4aa42a5ff8'
-CPU_RECEIPT = 'docs/nemotron-default-replay-2026-10-26-cpu.json'
+CPU_RECEIPT = 'docs/historical/nemotron-default-replay-2026-10-26-cpu.json'
 CPU_SHA256 = 'f4e078e83504da76b7a0b2bf85847d21b14c9232ab8bacd112b52b3e81bc62fb'
 ASSET = 'crispasr-linux-x86_64-cuda.tar.gz'
 ASSET_SHA256 = '90e4fcf737b714dfbb899f426cdd20781600dc8e993c05f1b068d6cdcf4cc1e9'

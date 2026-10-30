@@ -809,7 +809,7 @@ Ruby/WASM share this oracle. Go generic handles still need caller serialization;
 the high-level Whisper borrow guard does not protect unrelated model handles.
 
 The actual high-level Go tiny.en/JFK run is independently audited in
-[the model receipt](go-model-lifecycle-audit-2026-10-19.json). Preserve that
+[the model receipt](historical/go-model-lifecycle-audit-2026-10-19.json). Preserve that
 accepted bounded fixture; expand VAD/DTW/beam/device scope rather than repeating
 it as a substitute for a missing acceptance gate. Build native Go validation
 with `CRISPASR_OPUS_FETCH=ON`, matching the ordinary generated link; never remove
@@ -886,7 +886,7 @@ Whisper emission changes must also run
 checks segment/token/DTW bounds before callbacks, wrapped output, negative
 sentinels and later-window DTW new-segment counts. Model-free callback tests do
 not replace hosted actual-model validation. The scoped CPU pointer/Python
-[model audit](whisper-wrapper-model-audit-2026-10-19.json) passes12 native/six
+[model audit](historical/whisper-wrapper-model-audit-2026-10-19.json) passes12 native/six
 Python cases; extend its stated limits rather than treating it as full parity.
 
 ## 7. Task-shaped backends (`--separate`, `--pitch`, `--chords`)

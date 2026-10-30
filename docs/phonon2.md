@@ -260,7 +260,7 @@ of instrumented encoder compute and 140 ms of decode. Callback overhead and
 the virtual GPU prevent extrapolating these numbers to physical M1/M5 hardware
 or comparing them against Fermion's 174× MLX result.
 
-[The checked-in receipt](phonon2-profile-2026-09-30.json) retains every raw
+[The checked-in receipt](historical/phonon2-profile-2026-09-30.json) retains every raw
 benchmark time, transcript, per-stage cosine/magnitude bound, model checksum
 and pinned revision. The linked CI run additionally retains full wiring/live
 logs, per-node traces, host details and Python dependency versions. Both Linux
@@ -317,7 +317,7 @@ a general default; retain the gated experiment and its corpus output changes.
 passes all 13 jobs, including 1,960 Linux unit tests, dynamic backend loading,
 Vulkan, ASan, Windows, macOS, iOS and Android. Go/Rust binding checks, linkage
 generator checks and the local auto/explicit/renamed/repeated/flash-off live guard
-also pass. The [complete receipt](phonon2-cpu-2026-10-01.json) retains raw repeated
+also pass. The [complete receipt](historical/phonon2-cpu-2026-10-01.json) retains raw repeated
 times, all stages, exact transcripts, corpus comparisons, host details and model
 checksums for both CPU sweeps.
 
@@ -401,7 +401,7 @@ These checks do not establish all autoregressive states or word-timing parity.
 [all 13 cross-platform jobs](https://github.com/CrispStrobe/CrispASR/actions/runs/36834689343),
 [lint](https://github.com/CrispStrobe/CrispASR/actions/runs/36834688811) and
 [cross-ISA kernel probes](https://github.com/CrispStrobe/CrispASR/actions/runs/36834375261)
-pass. The [complete receipt](phonon2-ffn-cpu-2026-10-01.json) retains host/model
+pass. The [complete receipt](historical/phonon2-ffn-cpu-2026-10-01.json) retains host/model
 identities, raw timings, stage rows, corpus text and labelled word comparisons,
 including rejected numerical experiments. These are CPU measurements; no GPU
 or Apple performance improvement is claimed.

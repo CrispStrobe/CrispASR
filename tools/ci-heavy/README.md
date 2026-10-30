@@ -177,7 +177,7 @@ It executes hash-pinned original numpy/pydub functions against the preserved C++
 helper/probe on738 waveform and18 text cases, retaining full inputs and both
 output arrays, compiler/actual ELF and per-file hashes. It changes no native
 speech funnel or default. Run with `-f pip="numpy==1.26.4 pydub==0.25.1"` on
-Linux Python3.12. Details: [standalone utility scope](../../docs/omnivoice-utility-split-2026-10-15.md).
+Linux Python3.12. Details: [standalone utility scope](../../docs/historical/omnivoice-utility-split-2026-10-15.md).
 
 `omnivoice_audio_acceptance.py` is the speech gate for PR521. It runs that
 utility oracle, builds the CLI, checks same-code raw/processed waveform parity,
@@ -187,7 +187,7 @@ at WER <= 0.2 against the unchanged gate. Clones are cross-sentence on the
 vetted `window` reference; `fox` is kept only as the known-bad control because
 its own audio says "fex/dig" (0.222 under both judges), which is why every
 earlier clone arm failed. Run with `-f pip="numpy pydub"`. Receipt:
-[reference integrity](../../docs/omnivoice-clone-reference-integrity-2026-10-22.json).
+[reference integrity](../../docs/historical/omnivoice-clone-reference-integrity-2026-10-22.json).
 
 `dia_full_codec_crossdecode.py` replays retained native stopping/BOS/delay
 records, verifies every feedback row and complete code/PCM frame count, then
@@ -216,7 +216,7 @@ native encoder arrays with cosine, norm and relative-error gates. It also runs
 `crispasr-diff`, CLI and repeated auto/explicit Python Session dispatch. Full
 logs, reference, model/tokenizer, raw arrays and receipts survive failures.
 Hosted run38555394740 and its independently audited artifact pass; see
-[full CPU fixture proof](../../docs/moonshine-hosted-cpu-fixture-2026-10-14.md).
+[full CPU fixture proof](../../docs/historical/moonshine-hosted-cpu-fixture-2026-10-14.md).
 No CANN hardware procedure is published by this worker.
 Run with `-f pip="numpy==1.26.4 torch==2.6.0 transformers==4.57.6 huggingface_hub==0.36.0 safetensors==0.5.3 pillow librosa==0.11.0 gguf"`.
 
@@ -268,7 +268,7 @@ It records allocated encoder backend/op counts and successful computation,
 and rejects scaled/nonfinite/wrong-shape/missing-stage reference archives,
 changed input PCM, missing CANN and invalid/unavailable device ordinals.
 Use the same dependency pins as `cann_model_fixture.py`. Hosted run38575701613 passes all13 controls with independently audited raw
-archives; [acceptance proof](../../docs/moonshine-strict-device-validation-2026-10-14.md).
+archives; [acceptance proof](../../docs/historical/moonshine-strict-device-validation-2026-10-14.md).
 These CPU controls cannot establish physical NPU work or ACL capture/replay.
 
 `cann_model_validator.py` is the full portable model-runner control job. It
@@ -277,7 +277,7 @@ with the immutable accepted archive through diff, repeated CLI and automatic/
 explicit Sessions. It must reject a CANN request on the CPU build after CPU
 controls, and checks the real public encoder GPU=true forwarding independently.
 Use the same dependency pins as `cann_model_fixture.py`. Hosted run38602252235 passes the full interface;
-[complete acceptance and binary-snapshot proof](../../docs/cann-model-validator-preparation-2026-10-14.md).
+[complete acceptance and binary-snapshot proof](../../docs/historical/cann-model-validator-preparation-2026-10-14.md).
 Actual physical CANN model acceptance remains pending.
 
 `dia_suffix_replay.py` imports the audited native self-cache prefix and runs
@@ -322,7 +322,7 @@ with the default-off one-frame workspace gate, frozen own baseline and exact
 return/text/centisecond acceptance. Run with `-f pip="numpy"`, timeout30 and an
 immutable source branch. It measures kernel time and live C++ allocations,
 not encoder, model quality, RSS or VRAM. Tiny local runs require `--output`;
-large shapes require hosted Actions. See the [alignment audit](../../docs/alignment-cleanroom-2026-10-18.md#independent-subword-workspace-experiment).
+large shapes require hosted Actions. See the [alignment audit](../../docs/historical/alignment-cleanroom-2026-10-18.md#independent-subword-workspace-experiment).
 
 `alignment_model_profile.py` builds the actual native CPU library/CLI for the
 pinned Japanese CTC 1.1B F16 model and a pinned CC BY 4.0 FLEURS recording.
@@ -344,11 +344,11 @@ weights and establishes no physical Radeon speed or speech acceptance.
 --use-gpu` runs one real public Session through short/long/short Japanese ASR
 and independently compares the short native token bytes/times/probabilities.
 The validated fixture/model/binary identities and scope are in
-`docs/ja-session-metadata-live-2026-10-20.json`. For CPU use, supply a CPU-only
+`docs/historical/ja-session-metadata-live-2026-10-20.json`. For CPU use, supply a CPU-only
 library: the direct Parakeet wrapper follows the native default device.
 
 `audit_alignment_cuda_memory.py OUTPUT FIXTURE --receipt FILE` independently
 checks the retained issue550 word arrays, input hashes, CLI/public equality,
 return offsets, CUDA splits and sampled memory. The actual T4 results are in
-`docs/alignment-cuda-live-2026-10-20.json`; this is not an original-model
+`docs/historical/alignment-cuda-live-2026-10-20.json`; this is not an original-model
 acoustic-accuracy or constant-host-memory gate.

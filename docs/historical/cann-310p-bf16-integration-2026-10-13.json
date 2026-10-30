@@ -1,0 +1,84 @@
+{
+  "scope": "Integrated scoped 310P BF16 capability repair only. Original failures retained; exact physical source passes 924 operator cases, SDK architectures and all 13 composed general CI jobs. No NPU model/quantized speech/performance acceptance.",
+  "integration_code_parent": "557340d327497e481a379d11d53af039bef4f025",
+  "ggml_pin": "21acf3162beeb4e51260f0f86deda80995423712",
+  "shared_fork_merge": "985ba50d8c12bab81273040575d155926570544e",
+  "shared_merge_tree_identical_to_physical_candidate": true,
+  "physical_source": "bfb4943ac1e4488e377257a47163a0edcea7d6cd",
+  "physical_receipt": "docs/historical/cann-310p3-bf16-physical-2026-10-13.json",
+  "sdk_compile_run": 38365667723,
+  "general_ci_run": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169",
+  "general_ci_source": "ba9f801f821c5da7c682a9d72d70a46e230e64d9",
+  "jobs": [
+    {
+      "name": "linux-fuzz-smoke",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169/job/115250686567"
+    },
+    {
+      "name": "linux-opus-fetch",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169/job/115250686726"
+    },
+    {
+      "name": "linux-amr-fetch (clang++)",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169/job/115250686847"
+    },
+    {
+      "name": "linux-asan-audio",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169/job/115250686870"
+    },
+    {
+      "name": "linux-amr-fetch (g++)",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169/job/115250686895"
+    },
+    {
+      "name": "linux-unit",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169/job/115250686897"
+    },
+    {
+      "name": "linux-x86_64",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169/job/115250686940"
+    },
+    {
+      "name": "linux-backend-dl",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169/job/115250686973"
+    },
+    {
+      "name": "android",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169/job/115250687012"
+    },
+    {
+      "name": "windows",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169/job/115250687049"
+    },
+    {
+      "name": "linux-vulkan",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169/job/115250687061"
+    },
+    {
+      "name": "macos",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169/job/115250687073"
+    },
+    {
+      "name": "ios",
+      "conclusion": "success",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/38383864169/job/115250687129"
+    }
+  ],
+  "complete_ci_log": {
+    "bytes": 9321849,
+    "sha256": "00a6e7ed4b511d85b2fef4972841b2e23c7764254d44ec626f479ec24ef7d9c1"
+  },
+  "code_outside_docs_identical_to_general_ci_source": true
+}

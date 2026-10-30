@@ -1,0 +1,67 @@
+{
+  "source": "a54bbb5e34c24c8fcb2f50539ca1bd4517e52982",
+  "kernel_slug": "crispasr-dia-bos-boundary-v1",
+  "kernel_version": 1,
+  "uploaded_source_exact": true,
+  "script_sha256": "e46c44131064ac48fe7a1b1aa0e202d4d1914f9601f2d4dcb69e2bd2b9397f66",
+  "status": "KernelWorkerStatus.COMPLETE",
+  "counterfactual_not_native_parity_fix": true,
+  "original_behavior_documented": "LEARNINGS.md:20 and src/dia_tts.cpp original countdown mirror",
+  "intervention": "Preserve only original prepared final BOS at target row15/book8 by changing update_one apply_mask once per case",
+  "arms": [
+    "original",
+    "preserve-final-bos",
+    "original-anchor"
+  ],
+  "same_model_instance": true,
+  "neural_device": "cuda",
+  "compute_dtype": "float32",
+  "recipe": {
+    "temperature": 1.2,
+    "top_k": 45,
+    "top_p": 0.95,
+    "cfg_scale": 3.0,
+    "capacity": 3072
+  },
+  "fixed_cases": 5,
+  "syntheses_planned": 15,
+  "recognitions_planned": 17,
+  "local_controls": {
+    "torch211_original_generate_BOS_invariant": "PASS",
+    "torch26_original_generate_and_disabled_wrapper_identity": "PASS",
+    "sampled_and_capacity_EOS": "PASS",
+    "changed_boundary_slots": 1,
+    "removed_preservation_negative": "REJECTED",
+    "wrong_step_negative": "REJECTED",
+    "normal_and_exception_restoration": "PASS",
+    "literal_native_original_protocol": "PASS unchanged",
+    "source_preservation": {
+      "unchanged_from_audited_sampler_worker": [
+        "sha",
+        "score",
+        "validate_install_plan",
+        "construct_model",
+        "generate_case",
+        "rng_snapshot",
+        "draw_placement"
+      ],
+      "intervention": "Only target-row15/book8 prepared BOS mask in original update_one",
+      "source_sha256": "e46c44131064ac48fe7a1b1aa0e202d4d1914f9601f2d4dcb69e2bd2b9397f66",
+      "native_graph_unchanged": true,
+      "no_new_seed_prompt_recipe_weight_changes": true,
+      "full_model_acceptance": false
+    },
+    "read_only_review": "No concrete blocking source defect found"
+  },
+  "prelaunch_recent_sessions_checked": 4,
+  "prelaunch_active_sessions": 0,
+  "submission_count": 1,
+  "public_raw_prefix": "dia-20261017-original-cuda/bos-boundary-v1",
+  "full_model_results": "Counterfactual rejected for speech recovery; same three failures in all arms",
+  "independent_terminal_audit": "PASS260payloads/261anonymous downloads",
+  "speech_acceptance": false,
+  "native_acceptance": false,
+  "q4_acceptance": false,
+  "production_defaults_changed": false,
+  "result_receipt": "docs/historical/dia-bos-boundary-results-2026-10-17.json"
+}

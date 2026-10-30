@@ -418,7 +418,7 @@ all 32 encoder and 32 decoder layers, 48 cached greedy predictions and complete
 direct decoded cues. All five complete F32-source file cases match at the
 existing 5.1 ms timestamp bound, including target selection and previous-window
 context; three real Piper roundtrips produce WER 0 with CLI/C ABI agreement.
-The [9B receipt](index-echo-9b-acceptance-2026-10-02.json) preserves each stage
+The [9B receipt](historical/index-echo-9b-acceptance-2026-10-02.json) preserves each stage
 cosine/magnitude metric and the original failed BF16 timing diagnostics.
 No mixed-source cue alternatives or wider timestamp bound are used. The released
 source itself fails a separately retained repeated-English context stress;
@@ -1850,8 +1850,8 @@ THIRD_PARTY_NOTICES.txt. Explicit companion paths remain supported.
 
 The full current application passes the unchanged four-case speech/speaker
 matrix on CPU and T4 CUDA with actual Session/C ABI and CLI companion discovery.
-[CPU evidence](openvoice-full-f16-cpu-accepted-2026-10-29.json) and
-[CUDA evidence](openvoice-full-f16-cuda-accepted-2026-10-29.json) retain exact model
+[CPU evidence](historical/openvoice-full-f16-cpu-accepted-2026-10-29.json) and
+[CUDA evidence](historical/openvoice-full-f16-cuda-accepted-2026-10-29.json) retain exact model
 hashes and scope. The older Q4 BERT profile fails the fixed content controls and
 is not the managed default. This qualification does not cover Melo V3.
 

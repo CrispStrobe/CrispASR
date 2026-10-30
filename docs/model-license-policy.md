@@ -29,7 +29,7 @@ terms are not evidence of permission.
 
 - Drama-3: the Fish Audio Community License includes revenue and hosted-service
   conditions. Keep issues545/546 outside implementation/release scope.
-- Nyra: the [full pinned review](nyra-license-review-2026-10-26.md) keeps issue456
+- Nyra: the [full pinned review](historical/nyra-license-review-2026-10-26.md) keeps issue456
   deferred. Terms exclude production/operational and hosted/API use, restrict
   generated outputs and impose derivative/recipient obligations. A normal NC
   acceptance switch does not clear integration.
@@ -122,5 +122,5 @@ The converted bundle now includes the full Boson/Meta texts, acceptable-use poli
 and NOTICE, plus corrected card attribution/provenance, at immutable HF revision
 [`a2ad263`](https://huggingface.co/cstr/omnivoice-GGUF/tree/a2ad2630338fc80d1a0565c8e58aa8eff615db85).
 All five text files were anonymously downloaded and hashed; no weights changed.
-[Publication receipt](omnivoice-license-notices-2026-10-22.json). These notices do
+[Publication receipt](historical/omnivoice-license-notices-2026-10-22.json). These notices do
 not certify every downstream use or resolve every possible naming question.

@@ -1,6 +1,6 @@
 # All-step serial F32 head graph experiment
 
-This tests the [measured CPU reduction cause](../../../docs/dia-reduction-cause-2026-10-16.md)
+This tests the [measured CPU reduction cause](../../../docs/historical/dia-reduction-cause-2026-10-16.md)
 through full native generation. It changes no sampled token, reference input,
 seed, noise, filter or acceptance threshold. The same generic graph callback
 runs every head at every step using only loaded native F32 weights and current

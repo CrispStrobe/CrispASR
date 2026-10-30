@@ -1,0 +1,179 @@
+{
+  "source": "4d622e7e9574c360c0f38154797a3453f26e2096",
+  "kernel_slug": "crispasr-dia-sampler-device-v1",
+  "kernel_version": 1,
+  "uploaded_source_exact": true,
+  "script_sha256": "4db1fd69a641f6960cff2c9f5969ed6570ee0c47890dcff75f80f5468781d435",
+  "status": "KernelWorkerStatus.COMPLETE",
+  "arms": [
+    "cuda-draw",
+    "cpu-draw",
+    "cuda-draw-anchor"
+  ],
+  "same_model_instance": true,
+  "neural_device": "cuda",
+  "compute_dtype": "float32",
+  "recipe": {
+    "temperature": 1.2,
+    "top_k": 45,
+    "top_p": 0.95,
+    "cfg_scale": 3.0,
+    "capacity": 3072
+  },
+  "fixed_cases": 5,
+  "syntheses_planned": 15,
+  "recognizer_positives": 2,
+  "source_preservation": "Original constructors, generate, CFG/filtering and DAC; explicit torch.multinomial placement intervention",
+  "added_sampler_observation": "First64 final probability inputs and every pre-override sampled ID; owned copies",
+  "observer_transparency_acceptance": false,
+  "local_controls": {
+    "original_cpu_sampler_ids_and_rng": "PASS under Torch2.6 and2.11",
+    "original_generate_delay_removal_codec_input_frame_count": "PASS sampledEOS33draws/8704samples; capacityEOS127draws/56832samples",
+    "restoration": "PASS normal and exception paths; broken-restoration negative rejected",
+    "invalid_inputs_rejected": 3,
+    "package_stack_changes_rejected": 4,
+    "read_only_review": "No concrete blocking source defect found"
+  },
+  "prelaunch_recent_sessions_checked": 3,
+  "prelaunch_active_sessions": 0,
+  "submission_count": 1,
+  "unsupported_gpu_policy": "Exit inconclusive; no CPU neural fallback/framework replacement/automatic retry",
+  "public_raw_prefix": "dia-20261016-original-cuda/sampler-device-v1",
+  "public_tiny_prefix": "dia-20261016-original-cuda/sampler-device-v1-preflight",
+  "full_model_results": "Complete; diagnostic quality only",
+  "independent_terminal_audit": "PASS288payloads/289anonymous files",
+  "speech_acceptance": false,
+  "native_acceptance": false,
+  "q4_acceptance": false,
+  "production_defaults_changed": false,
+  "tiny_cuda_checkpoint": {
+    "revision": "65b7524ef49366fc4c570870be2b1620b8446501",
+    "prefix": "dia-20261016-original-cuda/sampler-device-v1-preflight",
+    "public_files_full_anonymous_verified": 73,
+    "gpu": {
+      "version": "dia-sampler-device-v1",
+      "torch": "2.11.0+cu128",
+      "cuda": "12.8",
+      "capability": [
+        7,
+        5
+      ],
+      "gpu": "Tesla T4",
+      "actual_cuda_probe_passed": true
+    },
+    "comparisons": {
+      "uniform-42": {
+        "exact": false,
+        "identical_ids": 0,
+        "total_ids": 72
+      },
+      "uniform-123": {
+        "exact": false,
+        "identical_ids": 0,
+        "total_ids": 72
+      },
+      "linear-42": {
+        "exact": false,
+        "identical_ids": 0,
+        "total_ids": 72
+      },
+      "linear-123": {
+        "exact": false,
+        "identical_ids": 0,
+        "total_ids": 72
+      },
+      "onehot-42": {
+        "exact": true,
+        "identical_ids": 72,
+        "total_ids": 72
+      },
+      "onehot-123": {
+        "exact": true,
+        "identical_ids": 72,
+        "total_ids": 72
+      }
+    },
+    "placement": {
+      "uniform": {
+        "cpu_draw_exact": true,
+        "returned_to_cuda": true,
+        "cuda_rng_unchanged": true,
+        "cpu_rng_exact": true,
+        "restored": true,
+        "transfer_checks": 8
+      },
+      "linear": {
+        "cpu_draw_exact": true,
+        "returned_to_cuda": true,
+        "cuda_rng_unchanged": true,
+        "cpu_rng_exact": true,
+        "restored": true,
+        "transfer_checks": 8
+      },
+      "onehot": {
+        "cpu_draw_exact": true,
+        "returned_to_cuda": true,
+        "cuda_rng_unchanged": true,
+        "cpu_rng_exact": true,
+        "restored": true,
+        "transfer_checks": 8
+      }
+    },
+    "independent_cpu_replay": {
+      "status": "PASS",
+      "torch": "2.11.0+cu130",
+      "torch_source": "70d99e998b4955e0049d13a98d77ae1b14db1f45",
+      "public_revision": "65b7524ef49366fc4c570870be2b1620b8446501",
+      "public_files_full_anonymous_verified": 73,
+      "actual_cpu_replay_cells": 6,
+      "actual_cpu_replay_ids": 432,
+      "exact_cpu_after_rng_states": 6,
+      "comparisons": {
+        "uniform-42": {
+          "exact": false,
+          "identical_ids": 0,
+          "total_ids": 72
+        },
+        "uniform-123": {
+          "exact": false,
+          "identical_ids": 0,
+          "total_ids": 72
+        },
+        "linear-42": {
+          "exact": false,
+          "identical_ids": 0,
+          "total_ids": 72
+        },
+        "linear-123": {
+          "exact": false,
+          "identical_ids": 0,
+          "total_ids": 72
+        },
+        "onehot-42": {
+          "exact": true,
+          "identical_ids": 72,
+          "total_ids": 72
+        },
+        "onehot-123": {
+          "exact": true,
+          "identical_ids": 72,
+          "total_ids": 72
+        }
+      },
+      "scope": "No neural weights; local CPU replay plus byte-level original GPU proof validation. No full-model speech causation."
+    }
+  },
+  "first_full_model_checkpoint": {
+    "revision": "15ce3f04cac9d7274a1ff59fa76613a666e2d87f",
+    "last_completed_stage": "cuda-draw",
+    "completed_syntheses": 5,
+    "completed_arms": [
+      "cuda-draw"
+    ],
+    "complete": false,
+    "recognition_cells": 0,
+    "receipt_sha256": "1e1f895413e2a0799f64b13b1eb3c04d05db2b7e475e8a1c1acb01eab23ca5f8",
+    "scope": "Anonymous pinned receipt only; full payload and speech audit pending"
+  },
+  "result_receipt": "docs/historical/dia-sampler-device-results-2026-10-17.json"
+}

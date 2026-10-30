@@ -83,7 +83,7 @@ Linux CPU/CANN for the physical test. Metal cannot satisfy an NZ-on request.
 
 ## Host controls
 
-The [retained host receipt](cann-weight-layout-host-2026-10-20.json) records both
+The [retained host receipt](historical/cann-weight-layout-host-2026-10-20.json) records both
 mmap modes, loader regressions, the432-compute CPU execution control and rejection
 of an unavailable CANN device. It establishes no NPU result.
 
@@ -178,4 +178,4 @@ Full-model ACL capture and performance are still separate acceptance tasks.
 Return the complete proof directory, including failures, rather than just the
 final PASS line. Review private machine paths before publishing raw logs.
 
-[Completed follow-up host/Mac controls and immutable device procedure](cann-layout-followup-2026-10-20.md).
+[Completed follow-up host/Mac controls and immutable device procedure](historical/cann-layout-followup-2026-10-20.md).

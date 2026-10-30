@@ -142,7 +142,7 @@ def main():
     out = Path(sys.argv[2])
     repo = Path(sys.argv[3]).resolve()
     receipt = json.loads((folder / "receipt.json").read_text())
-    pin = json.loads((repo / "docs/cuda126-mmq-experiment-2026-10-08.json").read_text())
+    pin = json.loads((repo / "docs/historical/cuda126-mmq-experiment-2026-10-08.json").read_text())
     assert (
         receipt["complete"] is True
         and receipt["published"] is False

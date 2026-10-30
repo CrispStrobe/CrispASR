@@ -1,0 +1,132 @@
+{
+  "source": "06c3d758bffa632e11e1b2578c5fc41b4387af82",
+  "uploaded_source_exact": true,
+  "script_sha256": "47cd65900c76748a1f15b10a66d881f945b14713b5b8ad165d1602ee38ad9535",
+  "kernel_slug": "crispasr-dia-original-cuda-trace-v1",
+  "kernel_version": 1,
+  "status": "ERROR at complete strict observer identity gate",
+  "actual_full_model_observer_identity": "Failed legacy OFF0; four cases exact; all RNG states exact",
+  "actual_speech_acceptance": false,
+  "native_acceptance": false,
+  "production_defaults_changed": false,
+  "tiny_method_controls": {
+    "status": "PASS",
+    "phases": 3,
+    "steps_per_phase": 5,
+    "actual_original_methods": 5,
+    "trajectory_arrays": 9,
+    "pcm_rng_prediction_identity": true,
+    "invalid_code_clamp_verified": true,
+    "exception_restoration": true,
+    "original_weightnorm_hooks_preserved": 9,
+    "neural_logits_and_codec_weights": "tiny synthetic",
+    "full_model_acceptance": false
+  },
+  "scientific_source_controls": {
+    "source_constants_and_asr_unchanged": true,
+    "actual_constructor_weights_dtypes_dac_source_exact": true,
+    "generation_kwargs_unchanged": true,
+    "changed_capacity_negative_rejected": true,
+    "code_sha256": "47cd65900c76748a1f15b10a66d881f945b14713b5b8ad165d1602ee38ad9535"
+  },
+  "boundary_arrays": [
+    "feedback",
+    "predictions",
+    "sampler_logits",
+    "raw_delayed_codes",
+    "rvq_codes",
+    "rvq_zq",
+    "rvq_zp",
+    "decoder_input",
+    "decoder_output"
+  ],
+  "phases": [
+    "off0",
+    "on",
+    "off1"
+  ],
+  "rng_controls": [
+    "CPU before/after",
+    "CUDA before/after"
+  ],
+  "independent_review": "No blocking finding. Input self-comparison deliberately validates F32, finite, nonempty 1-D PCM; cross-phase equality is checked separately.",
+  "hardware_and_full_model_results": "Pending; unsupported GPU returns inconclusive without a fallback or automatic retry.",
+  "prelaunch": "One recent account session verified terminal after API rate-limit cooldown; one submission. No account/quota changes.",
+  "storage": "${CRISPASR_STORAGE}/crispasr/dia-cuda-trace-20261016",
+  "independent_integer_replay_controls": {
+    "status": "PASS",
+    "torch": "2.6.0+cpu",
+    "actual_original_generate_and_decoder_output": true,
+    "results": {
+      "sampled_eos": {
+        "steps": 33,
+        "raw_rows": 32,
+        "rejected_corruptions": 4
+      },
+      "capacity_eos": {
+        "steps": 95,
+        "raw_rows": 94,
+        "rejected_corruptions": 4
+      }
+    },
+    "neural_weights_loaded": false
+  },
+  "tiny_norm_version_boundary": {
+    "versions": [
+      "2.6.0+cpu",
+      "2.11.0+cu130"
+    ],
+    "device": "cpu",
+    "raw_norm_dtypes": [
+      "torch.float32",
+      "torch.float16"
+    ],
+    "after_explicit_original_cast_values_exact": true,
+    "dense_values_exact": true,
+    "actual_norm_call_sites": [
+      {
+        "line": 554,
+        "norm": "norm",
+        "explicit_cast": false
+      },
+      {
+        "line": 599,
+        "norm": "norm",
+        "explicit_cast": false
+      },
+      {
+        "line": 307,
+        "norm": "pre_sa_norm",
+        "explicit_cast": true
+      },
+      {
+        "line": 319,
+        "norm": "post_sa_norm",
+        "explicit_cast": true
+      },
+      {
+        "line": 358,
+        "norm": "norm",
+        "explicit_cast": true
+      },
+      {
+        "line": 432,
+        "norm": "pre_sa_norm",
+        "explicit_cast": true
+      },
+      {
+        "line": 448,
+        "norm": "pre_ca_norm",
+        "explicit_cast": true
+      },
+      {
+        "line": 460,
+        "norm": "pre_mlp_norm",
+        "explicit_cast": true
+      }
+    ],
+    "scope": "One tiny fixture; no general RMSNorm algorithm or GPU/full-model equivalence claim"
+  },
+  "independent_full_proof_audit": "Complete:201 payloads,202 full anonymous hash checks; global observer acceptance remains false",
+  "result_receipt": "docs/historical/dia-cuda-trajectory-results-2026-10-16.json"
+}

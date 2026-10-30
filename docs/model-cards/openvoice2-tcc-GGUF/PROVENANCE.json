@@ -46,8 +46,8 @@
     "cuda_kernel_version": 5,
     "bert_profile": "f16",
     "receipts": [
-      "https://github.com/CrispStrobe/CrispASR/blob/3a19c0a3177d92e7533aec56513b39fdfd5310d6/docs/openvoice-full-f16-cpu-accepted-2026-10-29.json",
-      "https://github.com/CrispStrobe/CrispASR/blob/3a19c0a3177d92e7533aec56513b39fdfd5310d6/docs/openvoice-full-f16-cuda-accepted-2026-10-29.json"
+      "https://github.com/CrispStrobe/CrispASR/blob/3a19c0a3177d92e7533aec56513b39fdfd5310d6/docs/historical/openvoice-full-f16-cpu-accepted-2026-10-29.json",
+      "https://github.com/CrispStrobe/CrispASR/blob/3a19c0a3177d92e7533aec56513b39fdfd5310d6/docs/historical/openvoice-full-f16-cuda-accepted-2026-10-29.json"
     ]
   },
   "publication_scope": {

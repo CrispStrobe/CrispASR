@@ -234,7 +234,7 @@ class MandatoryDiffGateTests(unittest.TestCase):
         function = next(n for n in tree.body if isinstance(n, ast.FunctionDef) and n.name == "run_validate")
         entry = next(b for b in json.loads((HERE / "manifest.json").read_text())["backends"]
                      if b["name"] == "data2vec-base")
-        receipt = json.loads((root / "docs/data2vec-avx512-controls-2026-10-28.json").read_text())
+        receipt = json.loads((root / "docs/historical/data2vec-avx512-controls-2026-10-28.json").read_text())
         for profile, row in receipt["profiles"].items():
             for surface in ["raw_transcript", "fixed_language_pipeline", "nightly_invocation"]:
                 q4 = row["models"]["q4"][surface].splitlines()[-1]

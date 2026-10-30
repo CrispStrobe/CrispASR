@@ -15,7 +15,7 @@ def check_policy(dockerfile, publisher, sdk_workflows):
     assert image and re.fullmatch(
         r'registry\.mthreads\.com/mcconline/musa_sdk:5\.2\.0-devel-ubuntu22\.04-s5000@sha256:[0-9a-f]{64}',
         image[1]), 'SDK must be pinned to the tested S5000 profile'
-    receipt = json.loads((ROOT / 'docs/musa-sdk52-2026-10-26.json').read_text())
+    receipt = json.loads((ROOT / 'docs/historical/musa-sdk52-2026-10-26.json').read_text())
     assert image[1] == receipt['sdk_image'], 'SDK differs from the successful compiler probe'
     assert '-DMUSA_ARCHITECTURES=31' in dockerfile
     assert not re.search(r'-DMUSA_ARCHITECTURES=31[;0-9]', dockerfile)

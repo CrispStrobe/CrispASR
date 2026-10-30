@@ -2,7 +2,7 @@
 
 `.devops/main-musa.Dockerfile` uses the official SDK 5.2 S5000 image pinned by
 digest and builds only architecture 31. SDK 4.2 and 4.3 failed WKV compilation;
-the [SDK 5.2 probe](musa-sdk52-2026-10-26.json) compiled the unchanged WKV source
+the [SDK 5.2 probe](historical/musa-sdk52-2026-10-26.json) compiled the unchanged WKV source
 and linked the complete CLI/backend. This proves the tested build configuration,
 without qualifying older architectures or GPU output.
 
@@ -57,7 +57,7 @@ performance/benchmark disclosure needs the vendor's written permission. A
 hardware runner alone does not resolve that separate condition. No applicable
 written exception has been supplied, and the repository runner API currently
 lists zero self-hosted runners. No new SDK execution, image build or inference
-was dispatched in this review. [Review receipt](musa-permissions-review-2026-10-26.json).
+was dispatched in this review. [Review receipt](historical/musa-permissions-review-2026-10-26.json).
 
 To resume, provide an appropriately configured and authorized S5000 host, plus
 applicable SDK-specific terms or written authorization covering any proposed

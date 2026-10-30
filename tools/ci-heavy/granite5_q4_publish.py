@@ -175,7 +175,7 @@ def main():
     subprocess.run([sys.executable, ROOT / 'tools/ci-heavy/granite5_result_audit.py', '--reference', reference,
                     '--results-root', gpu_root, '--quants', 'q4_k', '--output', audit], check=True)
     check_independent(json.loads(audit.read_text()))
-    original = json.loads((ROOT / 'docs/granite5-2026-10-23.json').read_text())
+    original = json.loads((ROOT / 'docs/historical/granite5-2026-10-23.json').read_text())
     if original['release']['revision'] != BASE or original['release']['repo'] != DESTINATION:
         raise ValueError('Expected accepted F16 release provenance required')
     if cpu['reference'] != original['reference'] or cpu['instruction'] != 'transcribe the speech with proper punctuation and capitalization.':

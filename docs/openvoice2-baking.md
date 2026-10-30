@@ -3,13 +3,13 @@
 Status (2026-10-28): the bounded three-case conditioned-cloning test is accepted
 on T4 CUDA: 27/27, 27/27 and 28/28 original-reference stages, raw C API,
 exact-repeat/cache and clip-mean controls, WER <=0.2 and independent speaker
-improvement >0.01. [Accepted quality receipt](openvoice-conditioning-accepted-2026-10-28.json).
+improvement >0.01. [Accepted quality receipt](historical/openvoice-conditioning-accepted-2026-10-28.json).
 The separate current-runtime replay also passes all 27 stages on CPU and CUDA
 against the v0.8.47 SDK and matching ggml headers. The real Python Session/C ABI
 composition also passes both sentences through
 raw and normal marked output, with architecture detection, exact repeats,
 native rates, actual CUDA and unchanged quality gates.
-[Session receipt](openvoice-session-accepted-2026-10-28.json). Actual CLI and full rebuilt-current-library acceptance, and model publication,
+[Session receipt](historical/openvoice-session-accepted-2026-10-28.json). Actual CLI and full rebuilt-current-library acceptance, and model publication,
 are recorded in the current update below. Broader voices/languages remain separate. The older attempts below are historical failed controls,
 not instructions to repeat a passing campaign. See [the handoff](maintenance-handoff.md).
 
@@ -20,7 +20,7 @@ the original MIT notice and pinned provenance. All four uploaded files pass
 anonymous full-byte readback; validation recordings, target embeddings and
 reference captures remain private. Broader languages, natural references,
 other devices and voice identity rights remain separate. See the
-[publication receipt](openvoice2-tcc-publication-2026-10-29.json) and
+[publication receipt](historical/openvoice2-tcc-publication-2026-10-29.json) and
 [maintainer handoff](maintenance-handoff.md).
 
 ## Recovered execution state — 2026-10-28
@@ -48,7 +48,7 @@ and retained five successful resource checks. It then failed with HTTP 403
 while trying to create a Hugging Face staging model repository, **before model
 loading or inference**. GPU allocation is not GPU execution. The receipt has
 `complete: false`, `model_acceptance: false`, `gpu_executed: false`.
-[Portable failed-attempt receipt](openvoice-conditioning-attempt-2026-10-28.json).
+[Portable failed-attempt receipt](historical/openvoice-conditioning-attempt-2026-10-28.json).
 The uploaded source, terminal log and output are preserved before replacement.
 
 Worker `2026-10-28.openvoice-conditioning.3` separates validation from publication.
@@ -75,7 +75,7 @@ inputs and frontend/reference encoder match closely; the first material
 posterior WaveNet difference is cosine 0.994142 and norm ratio 0.980296.
 Posterior statistics fail the unchanged magnitude gate; forward-flow cosine
 then drops to 0.133117, and waveform cosine is -0.030380.
-[Full stage receipt](openvoice-original-parity-failure-2026-10-28.json).
+[Full stage receipt](historical/openvoice-original-parity-failure-2026-10-28.json).
 The producer's `gpu_executed` flag is set only after every case; its false flag
 in this failed first case does not negate the scheduler's actual CUDA splits
 and completed vocoder output. Numerical/model acceptance remains false.
@@ -109,7 +109,7 @@ model CPP `581234dfb` and the original audited runtime/header ABI. Both now pass
 **26/27** unchanged gates. Posterior WaveNet and forward/reverse flows reach
 cosine 1.0 and near-unit magnitudes. This verifies the zero-input bias and flow
 ordering corrections on the actual pretrained case.
-[Both full stage tables](openvoice-frozen-replay-2026-10-28.json).
+[Both full stage tables](historical/openvoice-frozen-replay-2026-10-28.json).
 
 Only raw `dec_output` still fails: norm ratio 1.11145, despite cosine 0.999420.
 The normalized waveform passes, illustrating why raw magnitude is mandatory.
@@ -123,7 +123,7 @@ upsample slope. Separately, an owned-input replay of just the last activation,
 224-weight convolution and tanh uses frozen original `dec_stage3` plus unchanged
 F16 model weights. Correcting the slope changes norm ratio 1.111307 to 0.999915
 and relative L2 0.116960 to 0.000125; cosine becomes 0.999999996.
-[Owned-input evidence](openvoice-final-activation-owned-input-2026-10-28.json).
+[Owned-input evidence](historical/openvoice-final-activation-owned-input-2026-10-28.json).
 This subsecond boundary check used one CPU thread after a resource check, without
 running the full model locally. Whole-model CPU/CUDA replay of the final slope
 and the full cloning/quality gates remain required. No acceptance bar changed.
@@ -134,7 +134,7 @@ With model CPP `1b874a104`, the same model/reference bytes now pass **all 27**
 unchanged stage and magnitude gates on CPU and actual T4 CUDA. Raw waveform
 cosine is 0.99999973 and norm ratio is 1.000042 (relative L2 about0.000735).
 All input/source/hash, device-work and resource evidence was independently
-checked. [Accepted structural receipt](openvoice-frozen-replay-accepted-2026-10-28.json).
+checked. [Accepted structural receipt](historical/openvoice-frozen-replay-accepted-2026-10-28.json).
 `replay_acceptance` is true; `model_acceptance` intentionally remains false.
 
 The next proof is the original three-case conditioning/quality worker with the
@@ -278,7 +278,7 @@ operational paths and account details in ignored maintainer notes.
 
 ## Checkpoint-free numerical encoder probe
 
-[The synthetic receipt](openvoice2-refenc-synthetic-2026-10-19.json) compares
+[The synthetic receipt](historical/openvoice2-refenc-synthetic-2026-10-19.json) compares
 the unmodified original ReferenceEncoder class to the literal native CPU encoder
 body, using deterministic F32 tensors and synthetic coefficients. Input129x513
 exercises all six convolutions and three GRU steps. All nine boundaries pass:
@@ -316,7 +316,7 @@ before ASR results; this historical failure is superseded by accepted version 4.
 generated WAVs with SoundFile, averages channels and resamples to mono float32
 at 16 kHz before passing arrays to the unchanged Whisper decoder. It preserves
 the WER <=0.2 and independent speaker-improvement >0.01 gates.
-[Structural receipt](openvoice-conditioning-structural-2026-10-28.json).
+[Structural receipt](historical/openvoice-conditioning-structural-2026-10-28.json).
 
 The separate `tools/kaggle/openvoice-current-replay` worker qualifies the same
 frozen inputs against the shipped v0.8.47 CUDA SDK and matching `e2ae679a` ggml
@@ -327,7 +327,7 @@ Torch rebuild is involved. This structural profile keeps `model_acceptance`
 false and does not replace full speech, Session or CLI qualification. Kernel
 version 1 has now passed all 27 stages on CPU and T4 CUDA, with resolved
 dependencies and verified overlay symbol owners. Raw waveform norm ratio is
-1.000042. [Current-runtime receipt](openvoice-current-runtime-replay-2026-10-28.json).
+1.000042. [Current-runtime receipt](historical/openvoice-current-runtime-replay-2026-10-28.json).
 
 The shared worker checkpoints the converted GGUF under an explicitly unvalidated
 staging path and each original-module reference before native execution. Each

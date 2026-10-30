@@ -1,0 +1,35 @@
+{
+  "source": "acb956c74c04083e6ae4915d664ed7082b529da5",
+  "uploaded_script_sha256": "70cf784c70ef8455750fc8069587758dad2facc266c46ce7ced1e3b1a23329a9",
+  "uploaded_source_exact": true,
+  "status": "ERROR at completed experiment quality gate",
+  "kernel_slug": "crispasr-dia-original-cuda-v1",
+  "kernel_version": 2,
+  "script_version": "dia-original-cuda-v2",
+  "actual_gpu_model_validation": "Complete: Tesla T4; 2/5 fixed speech cases pass; both recognizer controls pass",
+  "native_acceptance": false,
+  "speech_acceptance": false,
+  "first_attempt": {
+    "source": "1e390814443620e6eea5a13cf6c47e9d9a7e9915",
+    "status": "ERROR before install/model download",
+    "reason": "Overbroad torch prefix guard rejected torch-stoi",
+    "terminal_logs_retained": true
+  },
+  "package_guard_controls": {
+    "real_resolver_packages": 14,
+    "core_injection_rejections": 9,
+    "real_plan_sha256": "87291cd93f862e9352177b97be63dc5f6bcf5b94f626aaeac7b40f150ba1c06f"
+  },
+  "original_norm_control": {
+    "torch": "2.6.0+cpu",
+    "tiny_actual_parameters": 47,
+    "source_norms_remain_f32": true,
+    "naive_half_negative_rejected": true,
+    "full_model_loaded_locally": false
+  },
+  "scientific_generation_recognition_source_ast_unchanged": true,
+  "automatic_gpu_draw_loop": false,
+  "production_defaults_changed": false,
+  "independent_audit_complete": true,
+  "result_receipt": "docs/historical/dia-original-cuda-results-2026-10-16.json"
+}

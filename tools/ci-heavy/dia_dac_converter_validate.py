@@ -15,7 +15,7 @@ os.environ['TMPDIR'] = str(SCRATCH)
 sys.path.insert(0, str(ROOT / 'tools'))
 from dia_dac_export import digest
 
-prior = json.loads((ROOT / 'docs/dia-dac-standalone-export-2026-10-12.json').read_text())
+prior = json.loads((ROOT / 'docs/historical/dia-dac-standalone-export-2026-10-12.json').read_text())
 assert prior['source'] == 'a0b702d0d26b543a82bee689c69ac296d319e5b2'
 assert prior['conclusion'] == 'success' and prior['worker_receipt']['codec_export_validation_pass']
 assert len(prior['stages']['startup']) == 48 and len(prior['stages']['full']) == 40
@@ -26,7 +26,7 @@ report = dict(source=subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=R
                   'tools/dia_dac_export.py', 'models/convert-dia-dac-to-gguf.py',
                   'tests/test_dia_codec_parameters.py', 'tests/test_dia_dac_export.py',
                   'tools/ci-heavy/dia_dac_converter_validate.py')},
-              numerical_proof_run=38306172119, numerical_proof_receipt_sha256=digest(ROOT / 'docs/dia-dac-standalone-export-2026-10-12.json'),
+              numerical_proof_run=38306172119, numerical_proof_receipt_sha256=digest(ROOT / 'docs/historical/dia-dac-standalone-export-2026-10-12.json'),
               runs=[], production_defaults_changed=False, native_speech_acceptance=False,
               scope='Isolated converter integration: real original export must reproduce the byte-identical prior numerical candidate; no new neural, speech or GPU claim.')
 

@@ -11,7 +11,7 @@ are verified. Version2 downloads an anonymously verified immutable public HF
 mirror of the audited archive and five licensed fixture files; no Actions
 credential is needed. The ordinary HF token supports progress uploads. Mirror
 revision and full-byte verification are in
-[the delivery receipt](../../../docs/alignment-cuda-mirror-2026-10-19.json).
+[the delivery receipt](../../../docs/historical/alignment-cuda-mirror-2026-10-19.json).
 Never silently fetch the latest build or change runtime/model pins. Version1
 failed before inference when a missing GH token resolved to an HF fallback;
 its terminal logs were retained before preparing version2.
