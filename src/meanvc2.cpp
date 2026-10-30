@@ -81,7 +81,7 @@ struct meanvc2_cached_weights {
         std::vector<float> attn_norm_w, attn_norm_b, q_w, q_b, k_w, k_b, v_w, v_b, out_w, out_b;
         std::vector<float> pos_u, pos_v, linear_pos_w;
         std::vector<float> conv_norm_w, conv_norm_b, conv_pw1_w, conv_pw1_b;
-        std::vector<float> conv_dw_w, conv_dw_b, conv_ln_w, conv_ln_b, conv_pw2_w, conv_pw2_b;
+        std::vector<float> conv_dw_w, conv_dw_w_kfirst, conv_dw_b, conv_ln_w, conv_ln_b, conv_pw2_w, conv_pw2_b;
         std::vector<float> ff2_norm_w, ff2_norm_b, ff2_w1_w, ff2_w1_b, ff2_w2_w, ff2_w2_b;
         std::vector<float> norm_final_w, norm_final_b;
     };
@@ -381,6 +381,14 @@ static void ensure_weights_cached(meanvc2_context* ctx) {
                                 w.asr_layers[l].conv_dw_w);
         dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.depthwise_conv.bias"),
                                 w.asr_layers[l].conv_dw_b);
+        if (!w.asr_layers[l].conv_dw_w.empty()) {
+            w.asr_layers[l].conv_dw_w_kfirst.resize(9 * 256);
+            for (int c = 0; c < 256; c++) {
+                for (int k_i = 0; k_i < 9; k_i++) {
+                    w.asr_layers[l].conv_dw_w_kfirst[k_i * 256 + c] = w.asr_layers[l].conv_dw_w[c * 9 + k_i];
+                }
+            }
+        }
         dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.norm.weight"),
                                 w.asr_layers[l].conv_ln_w);
         dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.norm.bias"), w.asr_layers[l].conv_ln_b);
@@ -738,6 +746,11 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
                 const float* v_vec = lw.pos_v.data() + head * 64;
                 for (int qi = 0; qi < 4; qi++) {
                     const float* q_vec = q.data() + qi * 256 + head * 64;
+                    float q_u[64], q_v[64];
+                    for (int d = 0; d < 64; d++) {
+                        q_u[d] = q_vec[d] + u_vec[d];
+                        q_v[d] = q_vec[d] + v_vec[d];
+                    }
                     float scores[12];
                     float max_score = -1e9f;
                     for (int kj = 0; kj < 12; kj++) {
@@ -745,7 +758,7 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
                         const float* p_vec = p.data() + kj * 256 + head * 64;
                         float sc = 0.0f;
                         for (int d = 0; d < 64; d++) {
-                            sc += (q_vec[d] + u_vec[d]) * k_vec[d] + (q_vec[d] + v_vec[d]) * p_vec[d];
+                            sc += q_u[d] * k_vec[d] + q_v[d] * p_vec[d];
                         }
                         sc *= 0.125f; // 1.0f / sqrt(64)
                         scores[kj] = sc;
@@ -795,16 +808,19 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
             }
 
             // Depthwise conv (kernel 9, no pad): input 12 frames -> output 4 frames
-            std::fill(dw_out.begin(), dw_out.end(), 0.0f);
             for (int t = 0; t < 4; t++) {
-                for (int c = 0; c < 256; c++) {
-                    float b = lw.conv_dw_b.empty() ? 0.0f : lw.conv_dw_b[c];
-                    float s = b;
-                    const float* kw = lw.conv_dw_w.data() + c * 9;
-                    for (int k_i = 0; k_i < 9; k_i++) {
-                        s += glu_out[(t + k_i) * 256 + c] * kw[k_i];
+                if (!lw.conv_dw_b.empty()) {
+                    memcpy(dw_out.data() + t * 256, lw.conv_dw_b.data(), 256 * sizeof(float));
+                } else {
+                    memset(dw_out.data() + t * 256, 0, 256 * sizeof(float));
+                }
+                float* out_row = dw_out.data() + t * 256;
+                for (int k_i = 0; k_i < 9; k_i++) {
+                    const float* in_row = glu_out.data() + (t + k_i) * 256;
+                    const float* kw_row = lw.conv_dw_w_kfirst.data() + k_i * 256;
+                    for (int c = 0; c < 256; c++) {
+                        out_row[c] += in_row[c] * kw_row[c];
                     }
-                    dw_out[t * 256 + c] = s;
                 }
             }
             // Norm + SiLU + Pointwise 2
@@ -1433,25 +1449,49 @@ static std::vector<float> run_vocos_decode(meanvc2_context* ctx, const float* me
     }
 
     // 3. 8 ConvNeXt blocks
+    std::vector<float> residual(D * T);
+    std::vector<float> dw_out(D * T);
+    std::vector<float> pw1(T * inter_dim);
+    std::vector<float> pw2(T * D);
+
     for (int b = 0; b < num_layers; b++) {
         const auto& bc = blocks[b];
-        std::vector<float> residual = x_ct;
+        memcpy(residual.data(), x_ct.data(), D * T * sizeof(float));
 
         // Depthwise Conv1d (320, k=7, pad=3)
-        std::vector<float> dw_out(D * T, 0.0f);
         for (int c = 0; c < D; c++) {
             float b_val = bc.dw_b.empty() ? 0.0f : bc.dw_b[c];
             const float* kw = bc.dw_w.data() + c * 7;
             const float* in_row = x_ct.data() + c * T;
-            for (int t = 0; t < T; t++) {
+            float* out_row = dw_out.data() + c * T;
+
+            // Head with padding
+            int head_end = std::min(3, T);
+            for (int t = 0; t < head_end; t++) {
                 float s = b_val;
                 for (int k = 0; k < 7; k++) {
                     int in_t = t + k - 3;
-                    if (in_t >= 0 && in_t < T) {
+                    if (in_t >= 0 && in_t < T)
                         s += in_row[in_t] * kw[k];
-                    }
                 }
-                dw_out[c * T + t] = s;
+                out_row[t] = s;
+            }
+            // Interior unrolled branchless SIMD
+            for (int t = 3; t < T - 3; t++) {
+                out_row[t] = b_val + in_row[t - 3] * kw[0] + in_row[t - 2] * kw[1] + in_row[t - 1] * kw[2] +
+                             in_row[t + 0] * kw[3] + in_row[t + 1] * kw[4] + in_row[t + 2] * kw[5] +
+                             in_row[t + 3] * kw[6];
+            }
+            // Tail with padding
+            int tail_start = std::max(3, T - 3);
+            for (int t = tail_start; t < T; t++) {
+                float s = b_val;
+                for (int k = 0; k < 7; k++) {
+                    int in_t = t + k - 3;
+                    if (in_t >= 0 && in_t < T)
+                        s += in_row[in_t] * kw[k];
+                }
+                out_row[t] = s;
             }
         }
 
@@ -1464,13 +1504,11 @@ static std::vector<float> run_vocos_decode(meanvc2_context* ctx, const float* me
         cpu_layer_norm(x_td.data(), T, D, bc.norm_w.data(), bc.norm_b.data());
 
         // Pointwise 1: Linear(320 -> 1536, GELU)
-        std::vector<float> pw1(T * inter_dim);
         cpu_gemm_linear(x_td.data(), bc.pw1_w.data(), bc.pw1_b.data(), pw1.data(), T, D, inter_dim);
         for (auto& v : pw1)
             v = gelu(v);
 
         // Pointwise 2: Linear(1536 -> 320)
-        std::vector<float> pw2(T * D);
         cpu_gemm_linear(pw1.data(), bc.pw2_w.data(), bc.pw2_b.data(), pw2.data(), T, inter_dim, D);
 
         // Gamma scale + residual add

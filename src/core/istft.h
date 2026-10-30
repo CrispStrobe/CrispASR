@@ -48,6 +48,8 @@
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
+#include <map>
+#include <mutex>
 #include <vector>
 
 #ifndef M_PI
@@ -149,16 +151,37 @@ static inline std::vector<float> istft(const float* mag, const float* phase, int
     if (n_freq >= 3) {
         const int K = n_freq - 2;
         const double inv_N = 1.0 / n_fft;
-        std::vector<float> M_cos(n_fft * K);
-        std::vector<float> M_sin(n_fft * K);
-        for (int n = 0; n < n_fft; n++) {
-            double angle_base = 2.0 * M_PI * n * inv_N;
-            for (int k = 1; k < n_freq - 1; k++) {
-                double angle = angle_base * k;
-                M_cos[n * K + (k - 1)] = (float)(2.0 * std::cos(angle));
-                M_sin[n * K + (k - 1)] = (float)(-2.0 * std::sin(angle));
+
+        struct FourierBasis {
+            std::vector<float> M_cos;
+            std::vector<float> M_sin;
+        };
+        static std::map<int, FourierBasis> s_basis_cache;
+        static std::mutex s_basis_mtx;
+
+        const FourierBasis* basis_ptr = nullptr;
+        {
+            std::lock_guard<std::mutex> lock(s_basis_mtx);
+            auto it = s_basis_cache.find(n_fft);
+            if (it == s_basis_cache.end()) {
+                FourierBasis fb;
+                fb.M_cos.resize(n_fft * K);
+                fb.M_sin.resize(n_fft * K);
+                for (int n = 0; n < n_fft; n++) {
+                    double angle_base = 2.0 * M_PI * n * inv_N;
+                    for (int k = 1; k < n_freq - 1; k++) {
+                        double angle = angle_base * k;
+                        fb.M_cos[n * K + (k - 1)] = (float)(2.0 * std::cos(angle));
+                        fb.M_sin[n * K + (k - 1)] = (float)(-2.0 * std::sin(angle));
+                    }
+                }
+                it = s_basis_cache.emplace(n_fft, std::move(fb)).first;
             }
+            basis_ptr = &it->second;
         }
+
+        const auto& M_cos = basis_ptr->M_cos;
+        const auto& M_sin = basis_ptr->M_sin;
 
         std::vector<float> spec_re(T_frames * K);
         std::vector<float> spec_im(T_frames * K);
@@ -166,8 +189,17 @@ static inline std::vector<float> istft(const float* mag, const float* phase, int
             const float* m_row = mag + (size_t)t * n_freq;
             const float* p_row = phase + (size_t)t * n_freq;
             for (int k = 1; k < n_freq - 1; k++) {
-                spec_re[t * K + (k - 1)] = m_row[k] * std::cos(p_row[k]);
-                spec_im[t * K + (k - 1)] = m_row[k] * std::sin(p_row[k]);
+                float s, c;
+#if defined(__APPLE__)
+                __sincosf(p_row[k], &s, &c);
+#elif defined(_GNU_SOURCE)
+                sincosf(p_row[k], &s, &c);
+#else
+                s = std::sin(p_row[k]);
+                c = std::cos(p_row[k]);
+#endif
+                spec_re[t * K + (k - 1)] = m_row[k] * c;
+                spec_im[t * K + (k - 1)] = m_row[k] * s;
             }
         }
 
