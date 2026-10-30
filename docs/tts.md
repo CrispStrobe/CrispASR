@@ -55,7 +55,7 @@ can reduce speech quality.
 | [`kokoro`](#kokoro--multilingual-smallest) | Smallest + fastest. 82 M-param StyleTTS2-derived model. Multilingual via built-in G2P or espeak-ng (dlopen/popen fallback). | No (preset voice packs) | Manual `wget` (no `-m auto`) |
 | [`qwen3-tts`](#qwen3-tts--voice-cloning-highest-fidelity) | Highest fidelity / strongest cloning. Speech-LLM (talker + code predictor + 12 Hz codec). Default voice auto-downloaded with `-m auto`; or supply your own WAV + ref-text. | Optional (auto default voice; or WAV + ref-text or baked voice GGUF) | ~1.3 GB via `-m auto` |
 | **`miotts`** | MioTTS-0.6B (Qwen3 LLM + MioCodec-v2). EN/JA. Single GGUF, model-derived output rate (44.1 kHz for MioCodec-v2; 24 kHz for legacy codecs). Codec-aware mixed quantization (LLM Q4_K + codec F16). | Preset embeddings via `--voice preset.emb.gguf` (required for intelligible speech) | ~793 MB Q8_0 + tokenizer via `-m auto`; 502 MB Q4_K also available |
-| **`arktts`** | Audio8-TTS-Realistic-0.6b (Edge0/Audio8-TTS). 24-layer AR backbone + 4-layer RAS subnetwork predicting 10 acoustic codebooks, causal Snake vocoder producing 44.1 kHz audio. | Reference audio WAV (`--prompt ref.wav --context "ref text"`) | ~1.2 GB F16 / ~500 MB Q4_K |
+| **`arktts`** | Audio8-TTS-Realistic-0.6b (Edge0/Audio8-TTS). 28-layer Dual-AR backbone + 8-layer fast subnetwork predicting 10 acoustic codebooks, causal Snake + ConvNeXt vocoder producing 44.1 kHz audio. Chunked causal decoding bounds memory (<2.5 GB) for arbitrary durations. | Reference audio WAV (`--prompt ref.wav --context "ref text"`) | ~1.28 GB Q4_K / ~1.49 GB Q8_0 / ~1.88 GB F16 via `-m auto` |
 | **`moss-tts`** | MOSS-TTS-v1.5 (MossTTSDelay): Qwen3-8B backbone emitting 32 RVQ audio codebooks under a delay pattern, decoded by a 1.6B transformer codec. Needs the codec companion (`--codec-model`, or auto-downloaded/sibling). | Yes — `--voice ref.wav` (the codec encoder clones the reference speaker) | ~5 GB Q4_K backbone + ~3.5 GB F16 codec via `-m auto` |
 | **`moss-tts-local`** | MOSS-TTS-Local-Transformer-v1.5 (MossTTSLocal, 4B): Qwen3-4B backbone + a 1-layer local/depth transformer that autoregressively emits 12 RVQ codebooks per frame (RQ-Transformer; no delay pattern), decoded to 48 kHz stereo by MOSS-Audio-Tokenizer-v2 (downmixed to mono). Needs the codec companion (`--codec-model`, or auto-downloaded/sibling). | `--voice ref.wav --i-have-rights` (needs the encoder-carrying codec, `--codec-model moss-tts-local-v1.5-codec-enc.gguf`; the plain `-codec.gguf` is decode-only and falls back to the default voice) | ~9.1 GB F16 backbone + ~2.1 GB codec via `-m auto` (F16 is the reliable target; Q4_K long-form runs away) |
 | **`omnivoice`** | 600+ languages, selected with `-l` / `-tl` (or `"language"` on `/v1/audio/speech`) — see the language note below. Qwen3-0.6B backbone with masked iterative 8-codebook TTS (SoundStorm-style). Zero-shot voice cloning from reference audio. Supports finetunes (omnivoice-singing). | Yes (`--voice <wav> --ref-text "..."`) | ~1.2 GB F16 + ~400 MB tokenizer |
@@ -1340,6 +1340,37 @@ embedding publisher's license and personality-rights terms.
 | `CRISPASR_POCKET_MANUAL_MIMI` | unset | Force the CPU Mimi decoder path (bypass the ggml/GPU decode). |
 | `CRISPASR_POCKET_MANUAL_BACKBONE` | unset | Force the CPU FlowLM backbone path. |
 | `CRISPASR_POCKET_VULKAN_MIMI_MAX_FRAMES` | `120` | Vulkan-only guard (issue #256): fall back to the CPU Mimi decoder when a generation exceeds this many frames, avoiding the `maxComputeWorkGroupCount` abort on constrained iGPUs (e.g. AMD 780M / gfx1103). Set `<=0` to disable the guard and always attempt the GPU decode. No effect on non-Vulkan backends. |
+
+## Audio8-TTS (ArkTTS) — Dual-AR Multilingual TTS
+
+`arktts` ports the 600M parameter **Audio8-TTS-Realistic-0.6b** model (`Edge0/Audio8-TTS-Realistic-0.6b`).
+It pairs a 28-layer slow semantic transformer with an 8-layer fast acoustic subnetwork generating 10 codebooks per frame at 44.1 kHz, decoded through a causal neural vocoder (Snake activations + ConvNeXt blocks).
+
+```bash
+# Auto-downloads arktts-q4_k.gguf from registry:
+crispasr --backend arktts -m auto --tts "The quick brown fox jumps over the lazy dog." --tts-output speech.wav
+
+# Optional zero-shot voice cloning with prompt audio:
+crispasr --backend arktts -m auto --prompt reference.wav --context "transcript of reference" \
+  --tts "Synthesize speech in the cloned voice." --tts-output cloned.wav
+```
+
+### Quantization & Precision Details
+
+To avoid high-frequency acoustic noise and degradation:
+- Linear attention and FFN projection matrices are quantized to `Q4_K` or `Q8_0`.
+- 1D causal convolution kernels ($K \le 16$) and discrete acoustic centroids ($k=1024$) are preserved at `FP16`.
+- Verified at 1.000000 cosine parity on `crispasr-diff` across all 7 stages against PyTorch.
+
+### Long Audio & Memory Bounding
+
+Audio8-TTS outputs audio at 21.5 frames per second ($2048\times$ hop factor at 44.1 kHz).
+Monolithic vocoder evaluation expands activations by $2048\times$, requiring $>160$ GB for 3 minutes of audio.
+CrispASR implements **chunked causal vocoder decoding** with 4 frames of causal receptive field warm-up:
+- Decodes 8-frame blocks and overlaps 4 frames to preserve causal convolution context.
+- Peak RAM usage is strictly bounded under **2.5 GB** regardless of whether synthesizing 5 seconds or 2 hours.
+- Combined with the **FASTCONV $K=1$ bypass**, end-to-end CPU synthesis runs at ~190–215 ms per acoustic frame (~2× faster than PyTorch).
+
 
 ## VibeVoice — realtime streaming TTS
 

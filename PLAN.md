@@ -1,29 +1,30 @@
 # CrispASR — Current work plan
 
-Updated 2026-10-29. Start with [the maintainer handoff](docs/maintenance-handoff.md).
+Updated 2026-10-30. Start with [the maintainer handoff](docs/maintenance-handoff.md).
 It contains the completed work, exact evidence, bounded next actions and blockers
 needed by a fresh agent; no earlier chat is required. Follow `AGENTS.md` and its
 mandatory maintainer-guide instructions before implementation.
 
-**A, B, D, bounded F, G, H, I, J (#559) and K + full-recording #560 are complete. C is prepared for review; keep #557 open.** Claim work by adding owner,
+**v0.8.49 is tagged and pushed. ArkTTS (Audio8-TTS 0.6B) port, GGUFs, registry, and long-audio bounded vocoder are complete. #559 and #560 are integrated and shipped in v0.8.49. C is prepared for review; keep #557 open.** Claim work by adding owner,
 source SHA, missing behavior, acceptance gates and next action under "NOW"
 before starting. The full scope of each task (exact runs, inputs, commands and
 acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-tasks--fully-scoped).
 
-## NOW — release verification and nightly diagnosis (2026-10-28)
+## NOW — release verification and nightly diagnosis (2026-10-30)
 
-### Current handoff — 2026-10-29 12:20 UTC
+### Current handoff — 2026-10-30 12:45 UTC
 
-Updated 2026-10-29 17:35 UTC: no work is claimed and zero Kaggle GPU jobs remain active. The [continuation snapshot](docs/maintenance-handoff.md#continuation-snapshot--2026-10-29-1220-utc) supersedes older owner/status prose below and records all completed run IDs and public receipts. Keep #557 open for reply review.
+Updated 2026-10-30 12:45 UTC: no work is claimed and zero Kaggle GPU jobs remain active. The [continuation snapshot](docs/maintenance-handoff.md#continuation-snapshot--2026-10-30-1245-utc) supersedes older owner/status prose below and records all completed run IDs and public receipts. Keep #557 open for reply review.
 
 | Priority | Open work | Current evidence / next gate |
 |---|---|---|
-| 1 | COMPLETE: Kaggle Whisper loader A/B and same-toolchain v4 | Loader-cache A/B v1 passed (`576.68 -> 318.37 ms`, [receipt](docs/historical/whisper-loader-device-ab-t4-diagnostic-2026-10-29.json)). Same-toolchain v4 completed ([receipt](docs/historical/whisper-toolchain-paired-t4-diagnostic-2026-10-29.json)): `crisp` beats `upstream` (`1.142 s` vs `1.292 s`) but is `+12.3%` vs whisper-only `fork` (`1.017 s`, decode `3.23` vs `2.52 ms/call`); `d28102214` stays on `validate/whisper-integration-20261029`. |
-| 2 | COMPLETE: v0.8.48 wheel publication and audit | Producer **40856452802**, Pages `a17d1957e`, and final wheel audit **40895402248** passed ([receipt](docs/historical/release-v0848-wheel-audit-2026-10-29.json)). |
-| 3 | COMPLETE: Integrate #559, then #560 | `#559` merged at `777e8ff23` (CI **40899681646**, Lint **40899687134**); `#560` merged at `641e9bfab` (CI **40900035576**, Lint **40900041428**, Heavy CPU **40900046409**, [receipt](docs/historical/issue-560-exact-tree-integration-2026-10-29.json)). |
-| 4 | Follow-up: Whisper per-step decode gap vs whisper-only fork | Per-call threadpool overhead was ruled out (`21–30 us` total across 27 calls); remaining gap vs `fork` is ~`0.70 ms/call` in decode (`3.226` vs `2.524 ms/call`). Isolate per-op CUDA graph/scheduler difference before merging `d28102214`. |
-| 5 | COMPLETE: Original and native step / paired measurements | Granite original steps ([receipt](docs/historical/granite5-original-steps-t4-2026-10-29.json)), CSM original steps ([receipt](docs/historical/csm-original-steps-t4-2026-10-29.json)), CSM native steps ([receipt](docs/historical/csm-native-steps-t4-2026-10-29.json)) and Melo paired v1–v3 ([receipt](docs/historical/melo-original-paired-t4-diagnostic-2026-10-29.json)) are archived. |
-| 6 | Qualify remaining upstream safety candidates | Short DTW (`d28102214`) passed CI **40903036393**, Lint **40903042314** and full inference **40903516297** ([receipt](docs/historical/whisper-dtw-short-2026-10-29.json)). VAD offset and vocab-bounds remain on validation branches pending rights-cleared model checks. |
+| 1 | COMPLETE: Audio8-TTS (ArkTTS 0.6B) backend port & HF release | Full Dual-AR + Snake vocoder architecture, 1.000000 cosine parity on `crispasr-diff` (7/7 PASS), FASTCONV k=1 bypass (~190–215 ms/frame), chunked causal vocoder (<2.5 GB peak RAM for 3+ min audio), Q4_K/Q8_0/F16 GGUFs published to `cstr/Audio8-TTS-Realistic-0.6b-GGUF`, 0.0% WER on ASR roundtrips. |
+| 2 | COMPLETE: v0.8.49 release cut & tagged | `VERSION` bumped to 0.8.49 via `scripts/bump-version.sh`, synced across Python, Rust, Dart, JS. `RELEASE_NOTES_v0.8.49.md` and `HISTORY.md` committed; tag `v0.8.49` pushed. |
+| 3 | COMPLETE: Integrate #559, then #560 | `#559` merged at `777e8ff23`; `#560` merged at `641e9bfab` (CI **40900035576**, Lint **40900041428**, Heavy CPU **40900046409**). Both shipped in v0.8.49. |
+| 4 | COMPLETE: Kaggle Whisper loader A/B and same-toolchain v4 | Loader-cache A/B v1 passed (`576.68 -> 318.37 ms`, [receipt](docs/historical/whisper-loader-device-ab-t4-diagnostic-2026-10-29.json)). Same-toolchain v4 completed ([receipt](docs/historical/whisper-toolchain-paired-t4-diagnostic-2026-10-29.json)): `crisp` beats `upstream` (`1.142 s` vs `1.292 s`) but is `+12.3%` vs whisper-only `fork` (`1.017 s`, decode `3.23` vs `2.52 ms/call`); `d28102214` stays on `validate/whisper-integration-20261029`. |
+| 5 | Follow-up: Whisper per-step decode gap vs whisper-only fork | Per-call threadpool overhead was ruled out (`21–30 us` total across 27 calls); remaining gap vs `fork` is ~`0.70 ms/call` in decode (`3.226` vs `2.524 ms/call`). Isolate per-op CUDA graph/scheduler difference before merging `d28102214`. |
+| 6 | COMPLETE: Original and native step / paired measurements | Granite original steps ([receipt](docs/historical/granite5-original-steps-t4-2026-10-29.json)), CSM original steps ([receipt](docs/historical/csm-original-steps-t4-2026-10-29.json)), CSM native steps ([receipt](docs/historical/csm-native-steps-t4-2026-10-29.json)) and Melo paired v1–v3 ([receipt](docs/historical/melo-original-paired-t4-diagnostic-2026-10-29.json)) are archived. |
+| 7 | Qualify remaining upstream safety candidates | Short DTW (`d28102214`) passed CI **40903036393**, Lint **40903042314** and full inference **40903516297** ([receipt](docs/historical/whisper-dtw-short-2026-10-29.json)). VAD offset and vocab-bounds remain on validation branches pending rights-cleared model checks. |
 | Holds | #557, #558, #532, #483, #461, #456, MUSA | See the handoff for explicit approval, evidence, device and rights limits. Do not close #557 or publish private paths. |
 
 

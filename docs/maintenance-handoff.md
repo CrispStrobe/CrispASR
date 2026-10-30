@@ -13,6 +13,35 @@ PR, job-queue and ownership claims are not current instructions. Do not resume
 them automatically. Public path aliases describe roles; actual bindings stay
 in ignored local notes.
 
+## Continuation snapshot — 2026-10-30 12:45 UTC
+
+Updated 2026-10-30 12:45 UTC: this snapshot supersedes older status and owner prose.
+- **v0.8.49 is CUT, TAGGED, and PUSHED to `main`**:
+  `VERSION` bumped to `0.8.49` via `scripts/bump-version.sh`, synchronizing versions across
+  Rust (`crispasr`, `crispasr-sys`), Python (`pyproject.toml`, `__init__.py`), Dart/Flutter
+  (`pubspec.yaml`, `CHANGELOG.md`), and JavaScript (`package.json`). Annotated tag `v0.8.49`
+  pushed to GitHub with passing CI/release matrix runs. Release notes recorded in
+  `RELEASE_NOTES_v0.8.49.md`.
+- **Audio8-TTS (ArkTTS 0.6B) is COMPLETE, VALIDATED, and PUBLISHED**:
+  - Full backend port (`Edge0/Audio8-TTS-Realistic-0.6b`), dual-autoregressive 28-layer slow
+    semantic transformer + 8-layer fast acoustic subnetwork (10 codebooks/frame at 44.1 kHz)
+    and causal ConvNeXt + Snake neural vocoder.
+  - Bit-exact parity verified with `crispasr-diff` (7/7 PASS, 1.000000 cosine parity across all
+    stages against PyTorch).
+  - FASTCONV $K=1$ bypass and dual-transformer in-place KV caching (~190–215 ms/frame on CPU,
+    ~2x faster than PyTorch).
+  - Chunked vocoder decoding with causal history overlap bounds peak memory strictly under
+    2.5 GB for arbitrary audio length (3+ minutes).
+  - GGUF weights published to Hugging Face repository `cstr/Audio8-TTS-Realistic-0.6b-GGUF`
+    (`arktts-q4_k.gguf`, `arktts-q8_0.gguf`, `arktts-f16.gguf`) with precision carve-outs
+    retaining conv kernels and codebook centroids at FP16. Wired into `crispasr_model_registry`.
+  - 0.0% Word Error Rate (WER) verified via Parakeet ASR roundtrips.
+- **PR #559 and Issue #560 SHIPPED in v0.8.49**:
+  - Qwen3-ASR free-form transcription context (#559).
+  - Standalone `--detect-language` (`-dl`) exit and full-recording aggregation (#560).
+- **Streaming & Context**: Adaptive strided context gating, Moonshine mask caching, and
+  synchronized wrapper bindings across all supported languages.
+
 ## Continuation snapshot — 2026-10-29 12:20 UTC
 
 Updated 2026-10-29 17:35 UTC: this snapshot and the update below supersede older

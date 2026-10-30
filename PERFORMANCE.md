@@ -709,6 +709,7 @@ and where the gaps are. Last refresh: **2026-05-04** (after PLAN §79 —
 | chatterbox (T3 + CFG cache) | ✓ | ✓ | ✓ | · | uses kv_self_attn natively |
 | qwen3-tts (0.6B + 1.7B variants) | ✓ talker | ✓ talker | ✓ talker | · | code-predictor cache stays F16 (separate path) |
 | vibevoice (4B TTS mode) | F16 | F16 | F16 | ✓ | KV migration still pending; layer offload routes `tts_lm.layers.<N>.*` |
+| arktts (Audio8-TTS 0.6B) | F32 | F32 | ✓ | · | dual-AR slow/fast transformers with in-place KV cache; FASTCONV k=1 bypass (~190–215 ms/frame total on CPU); chunked vocoder (<2.5 GB peak RAM) |
 | kokoro | — | — | — | — | non-AR vocoder, no transformer KV |
 
 ### Batched classifier-free guidance (CFG) — the dispatch/bandwidth lever (§214)
