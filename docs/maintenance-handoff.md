@@ -59,6 +59,11 @@ Updated 2026-10-30 18:05 UTC: this snapshot supersedes older status and owner pr
          * Vectorized Vocos Conv1d embed (im2col + GEMM) and fast Abramowitz-Stegun polynomial GELU (`fast_gelu`).
          * Vectorized `core_istft::istft` real IFFT via dual matrix GEMMs (`cblas_sgemm`), dropping ISTFT from 477 ms down to 4.19 ms (114x faster).
        - After: **242.91 ms for 1.60 s audio (RTF: 0.1518, 6.59x realtime)** on Apple M1 CPU (vs audio.cpp's RTF 0.633).
+          * Zero-dequantization FP32 cached weights in `meanvc2_context` (`ensure_weights_cached`), dequantizing Fast-U2++ Conformer, GTM, TVT, DiT, and Vocos weights once at model load.
+          * AdaLayerNorm precomputation across all 4 DiT blocks and final norm outside the chunk loop, eliminating 60 matrix-vector multiplications.
+          * Precalculated RoPE inverse frequencies, avoiding repeated `powf` invocations in DiT attention.
+          * Zero-allocation streaming scratch vectors in `run_fastu2pp_asr` and `run_dit_flow`, avoiding thousands of heap allocations per conversion.
+          * Extended `HAVE_ACCELERATE` / `ACCELERATE_LIB` and `core_istft` dual-GEMM acceleration across other audio runtimes: `fireredtts3`, `lfm2_audio`, `miotts`, and `miocodec`.
     7. Quantization: F16 (184 MB file, 175 MB RAM) and Q4_K (77 MB file, 77 MB RAM) verified with 100% intelligibility.
     8. Tests: Catch2 unit tests in `tests/test-meanvc2-params.cpp` (passed in CTest), standalone convert harness `tests/test-meanvc2-convert.cpp`.
     9. CLI: Adapter in `examples/cli/crispasr_backend_meanvc2.cpp`, capability `CAP_S2S | CAP_AUTO_DOWNLOAD | CAP_INTERNAL_CHUNKING`, `backend_caps_table.h` updated (139 backends).

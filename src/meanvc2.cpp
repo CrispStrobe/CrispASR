@@ -71,6 +71,52 @@ struct meanvc2_hparams {
     uint32_t asr_req_cache = 8;
 };
 
+struct meanvc2_cached_weights {
+    bool initialized = false;
+
+    // Fast-U2++ ASR
+    std::vector<float> conv0_w, conv0_b, conv2_w, conv2_b, out_w, out_b, after_w, after_b;
+    struct AsrLayerWeights {
+        std::vector<float> ff1_norm_w, ff1_norm_b, ff1_w1_w, ff1_w1_b, ff1_w2_w, ff1_w2_b;
+        std::vector<float> attn_norm_w, attn_norm_b, q_w, q_b, k_w, k_b, v_w, v_b, out_w, out_b;
+        std::vector<float> pos_u, pos_v, linear_pos_w;
+        std::vector<float> conv_norm_w, conv_norm_b, conv_pw1_w, conv_pw1_b;
+        std::vector<float> conv_dw_w, conv_dw_b, conv_ln_w, conv_ln_b, conv_pw2_w, conv_pw2_b;
+        std::vector<float> ff2_norm_w, ff2_norm_b, ff2_w1_w, ff2_w1_b, ff2_w2_w, ff2_w2_b;
+        std::vector<float> norm_final_w, norm_final_b;
+    };
+    std::vector<AsrLayerWeights> asr_layers;
+
+    // GTM
+    std::vector<float> k0_w, k0_b, k2_w, k2_b, v0_w, v0_b, v2_w, v2_b;
+    std::vector<float> k_prior, v_prior, norm_k_w, norm_k_b, norm_v_w, norm_v_b;
+
+    // TVT
+    std::vector<float> tvt_q_w, tvt_q_b, tvt_k_w, tvt_k_b, tvt_v_w, tvt_v_b;
+    std::vector<float> tvt_out_w, tvt_out_b, tvt_norm_w, tvt_norm_b;
+
+    // DiT
+    std::vector<float> t_mlp0_w, t_mlp0_b, t_mlp2_w, t_mlp2_b;
+    std::vector<float> r_mlp0_w, r_mlp0_b, r_mlp2_w, r_mlp2_b;
+    std::vector<float> inp_w, inp_b;
+    struct DiTBlockWeights {
+        std::vector<float> adal_w, adal_b;
+        std::vector<float> q_w, q_b, k_w, k_b, v_w, v_b, out_w, out_b;
+        std::vector<float> q_norm_w, k_norm_w;
+        std::vector<float> ff1_w, ff1_b, ff2_w, ff2_b;
+    };
+    std::vector<DiTBlockWeights> dit_blocks;
+    std::vector<float> norm_out_w, norm_out_b, proj_out_w, proj_out_b;
+
+    // Vocos
+    std::vector<float> voc_embed_w, voc_embed_b, voc_norm_w, voc_norm_b;
+    struct VocosBlock {
+        std::vector<float> dw_w, dw_b, norm_w, norm_b, pw1_w, pw1_b, pw2_w, pw2_b, gamma;
+    };
+    std::vector<VocosBlock> voc_blocks;
+    std::vector<float> voc_final_norm_w, voc_final_norm_b, voc_head_w, voc_head_b;
+};
+
 struct meanvc2_context {
     meanvc2_hparams hp;
     meanvc2_context_params params;
@@ -82,6 +128,9 @@ struct meanvc2_context {
 
     // Cached speaker embedding
     std::vector<float> speaker_emb;
+
+    // Pre-dequantized FP32 weights cache
+    meanvc2_cached_weights weights;
 };
 
 struct meanvc2_context_params meanvc2_context_default_params(void) {
@@ -283,6 +332,168 @@ static void dequant_tensor_to_float(const ggml_tensor* t, std::vector<float>& bu
     }
 }
 
+static void ensure_weights_cached(meanvc2_context* ctx) {
+    if (!ctx || ctx->weights.initialized)
+        return;
+    auto& w = ctx->weights;
+
+    // Fast-U2++ ASR
+    dequant_tensor_to_float(get_tensor(ctx, "asr.m.encoder.embed.conv.0.weight"), w.conv0_w);
+    dequant_tensor_to_float(get_tensor(ctx, "asr.m.encoder.embed.conv.0.bias"), w.conv0_b);
+    dequant_tensor_to_float(get_tensor(ctx, "asr.m.encoder.embed.conv.2.weight"), w.conv2_w);
+    dequant_tensor_to_float(get_tensor(ctx, "asr.m.encoder.embed.conv.2.bias"), w.conv2_b);
+    dequant_tensor_to_float(get_tensor(ctx, "asr.m.encoder.embed.out.0.weight"), w.out_w);
+    dequant_tensor_to_float(get_tensor(ctx, "asr.m.encoder.embed.out.0.bias"), w.out_b);
+    dequant_tensor_to_float(get_tensor(ctx, "asr.m.encoder.after_norm.weight"), w.after_w);
+    dequant_tensor_to_float(get_tensor(ctx, "asr.m.encoder.after_norm.bias"), w.after_b);
+
+    w.asr_layers.resize(6);
+    for (int l = 0; l < 6; l++) {
+        std::string p = "asr.m.encoder.encoders." + std::to_string(l) + ".";
+        dequant_tensor_to_float(get_tensor(ctx, p + "norm_ff_macaron.weight"), w.asr_layers[l].ff1_norm_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "norm_ff_macaron.bias"), w.asr_layers[l].ff1_norm_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward_macaron.w_1.weight"), w.asr_layers[l].ff1_w1_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward_macaron.w_1.bias"), w.asr_layers[l].ff1_w1_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward_macaron.w_2.weight"), w.asr_layers[l].ff1_w2_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward_macaron.w_2.bias"), w.asr_layers[l].ff1_w2_b);
+
+        dequant_tensor_to_float(get_tensor(ctx, p + "norm_mha.weight"), w.asr_layers[l].attn_norm_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "norm_mha.bias"), w.asr_layers[l].attn_norm_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_q.weight"), w.asr_layers[l].q_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_q.bias"), w.asr_layers[l].q_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_k.weight"), w.asr_layers[l].k_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_k.bias"), w.asr_layers[l].k_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_v.weight"), w.asr_layers[l].v_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_v.bias"), w.asr_layers[l].v_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_out.weight"), w.asr_layers[l].out_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_out.bias"), w.asr_layers[l].out_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.pos_bias_u"), w.asr_layers[l].pos_u);
+        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.pos_bias_v"), w.asr_layers[l].pos_v);
+        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_pos.weight"), w.asr_layers[l].linear_pos_w);
+
+        dequant_tensor_to_float(get_tensor(ctx, p + "norm_conv.weight"), w.asr_layers[l].conv_norm_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "norm_conv.bias"), w.asr_layers[l].conv_norm_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.pointwise_conv1.weight"),
+                                w.asr_layers[l].conv_pw1_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.pointwise_conv1.bias"),
+                                w.asr_layers[l].conv_pw1_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.depthwise_conv.weight"),
+                                w.asr_layers[l].conv_dw_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.depthwise_conv.bias"),
+                                w.asr_layers[l].conv_dw_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.norm.weight"),
+                                w.asr_layers[l].conv_ln_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.norm.bias"), w.asr_layers[l].conv_ln_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.pointwise_conv2.weight"),
+                                w.asr_layers[l].conv_pw2_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.pointwise_conv2.bias"),
+                                w.asr_layers[l].conv_pw2_b);
+
+        dequant_tensor_to_float(get_tensor(ctx, p + "norm_ff.weight"), w.asr_layers[l].ff2_norm_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "norm_ff.bias"), w.asr_layers[l].ff2_norm_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward.w_1.weight"), w.asr_layers[l].ff2_w1_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward.w_1.bias"), w.asr_layers[l].ff2_w1_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward.w_2.weight"), w.asr_layers[l].ff2_w2_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward.w_2.bias"), w.asr_layers[l].ff2_w2_b);
+
+        dequant_tensor_to_float(get_tensor(ctx, p + "norm_final.weight"), w.asr_layers[l].norm_final_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "norm_final.bias"), w.asr_layers[l].norm_final_b);
+    }
+
+    // GTM
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_k.0.weight"), w.k0_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_k.0.bias"), w.k0_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_k.2.weight"), w.k2_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_k.2.bias"), w.k2_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_v.0.weight"), w.v0_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_v.0.bias"), w.v0_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_v.2.weight"), w.v2_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_v.2.bias"), w.v2_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.k_prior"), w.k_prior);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.v_prior"), w.v_prior);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.norm_k.weight"), w.norm_k_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.norm_k.bias"), w.norm_k_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.norm_v.weight"), w.norm_v_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.norm_v.bias"), w.norm_v_b);
+
+    // TVT
+    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.q_proj.weight"), w.tvt_q_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.q_proj.bias"), w.tvt_q_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.k_proj.weight"), w.tvt_k_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.k_proj.bias"), w.tvt_k_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.v_proj.weight"), w.tvt_v_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.v_proj.bias"), w.tvt_v_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.out_proj.weight"), w.tvt_out_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.out_proj.bias"), w.tvt_out_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.attn_norm.weight"), w.tvt_norm_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.attn_norm.bias"), w.tvt_norm_b);
+
+    // DiT
+    dequant_tensor_to_float(get_tensor(ctx, "vc.t_time_embed.time_mlp.0.weight"), w.t_mlp0_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.t_time_embed.time_mlp.0.bias"), w.t_mlp0_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.t_time_embed.time_mlp.2.weight"), w.t_mlp2_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.t_time_embed.time_mlp.2.bias"), w.t_mlp2_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.r_time_embed.time_mlp.0.weight"), w.r_mlp0_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.r_time_embed.time_mlp.0.bias"), w.r_mlp0_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.r_time_embed.time_mlp.2.weight"), w.r_mlp2_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.r_time_embed.time_mlp.2.bias"), w.r_mlp2_b);
+
+    dequant_tensor_to_float(get_tensor(ctx, "vc.input_embed.proj.weight"), w.inp_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.input_embed.proj.bias"), w.inp_b);
+
+    w.dit_blocks.resize(ctx->hp.depth);
+    for (int l = 0; l < (int)ctx->hp.depth; l++) {
+        std::string p = "vc.transformer_blocks." + std::to_string(l) + ".";
+        dequant_tensor_to_float(get_tensor(ctx, p + "attn_norm.linear.weight"), w.dit_blocks[l].adal_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "attn_norm.linear.bias"), w.dit_blocks[l].adal_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_q.weight"), w.dit_blocks[l].q_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_q.bias"), w.dit_blocks[l].q_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_k.weight"), w.dit_blocks[l].k_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_k.bias"), w.dit_blocks[l].k_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_v.weight"), w.dit_blocks[l].v_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_v.bias"), w.dit_blocks[l].v_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_out.0.weight"), w.dit_blocks[l].out_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_out.0.bias"), w.dit_blocks[l].out_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "attn.q_norm.weight"), w.dit_blocks[l].q_norm_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "attn.k_norm.weight"), w.dit_blocks[l].k_norm_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "ff.ff.0.0.weight"), w.dit_blocks[l].ff1_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "ff.ff.0.0.bias"), w.dit_blocks[l].ff1_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "ff.ff.2.weight"), w.dit_blocks[l].ff2_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "ff.ff.2.bias"), w.dit_blocks[l].ff2_b);
+    }
+
+    dequant_tensor_to_float(get_tensor(ctx, "vc.norm_out.linear.weight"), w.norm_out_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.norm_out.linear.bias"), w.norm_out_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.proj_out.weight"), w.proj_out_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vc.proj_out.bias"), w.proj_out_b);
+
+    // Vocos
+    dequant_tensor_to_float(get_tensor(ctx, "vocos.backbone.embed.weight"), w.voc_embed_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vocos.backbone.embed.bias"), w.voc_embed_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vocos.backbone.norm.weight"), w.voc_norm_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vocos.backbone.norm.bias"), w.voc_norm_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vocos.backbone.final_layer_norm.weight"), w.voc_final_norm_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vocos.backbone.final_layer_norm.bias"), w.voc_final_norm_b);
+    dequant_tensor_to_float(get_tensor(ctx, "vocos.head.out.weight"), w.voc_head_w);
+    dequant_tensor_to_float(get_tensor(ctx, "vocos.head.out.bias"), w.voc_head_b);
+
+    w.voc_blocks.resize(ctx->hp.voc_num_layers);
+    for (int l = 0; l < (int)ctx->hp.voc_num_layers; l++) {
+        std::string p = "vocos.backbone.convnext." + std::to_string(l) + ".";
+        dequant_tensor_to_float(get_tensor(ctx, p + "dwconv.weight"), w.voc_blocks[l].dw_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "dwconv.bias"), w.voc_blocks[l].dw_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "norm.weight"), w.voc_blocks[l].norm_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "norm.bias"), w.voc_blocks[l].norm_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "pwconv1.weight"), w.voc_blocks[l].pw1_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "pwconv1.bias"), w.voc_blocks[l].pw1_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "pwconv2.weight"), w.voc_blocks[l].pw2_w);
+        dequant_tensor_to_float(get_tensor(ctx, p + "pwconv2.bias"), w.voc_blocks[l].pw2_b);
+        dequant_tensor_to_float(get_tensor(ctx, p + "gamma"), w.voc_blocks[l].gamma);
+    }
+
+    w.initialized = true;
+}
+
 // ---------------------------------------------------------------------------
 // 1. ASR Bottleneck Feature Extraction (Fast-U2++)
 // ---------------------------------------------------------------------------
@@ -326,87 +537,17 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
     const int total_bn_frames = n_chunks * chunk_frames;
     std::vector<float> bns(total_bn_frames * bn_dim, 0.0f);
 
-    // Fast-U2++ subsampling & encoder weights
-    auto t_conv0_w = get_tensor(ctx, "asr.m.encoder.embed.conv.0.weight");
-    auto t_conv0_b = get_tensor(ctx, "asr.m.encoder.embed.conv.0.bias");
-    auto t_conv2_w = get_tensor(ctx, "asr.m.encoder.embed.conv.2.weight");
-    auto t_conv2_b = get_tensor(ctx, "asr.m.encoder.embed.conv.2.bias");
-    auto t_out_w = get_tensor(ctx, "asr.m.encoder.embed.out.0.weight");
-    auto t_out_b = get_tensor(ctx, "asr.m.encoder.embed.out.0.bias");
-    auto t_after_w = get_tensor(ctx, "asr.m.encoder.after_norm.weight");
-    auto t_after_b = get_tensor(ctx, "asr.m.encoder.after_norm.bias");
-
-    std::vector<float> conv0_w, conv0_b, conv2_w, conv2_b, out_w, out_b, after_w, after_b;
-    dequant_tensor_to_float(t_conv0_w, conv0_w);
-    dequant_tensor_to_float(t_conv0_b, conv0_b);
-    dequant_tensor_to_float(t_conv2_w, conv2_w);
-    dequant_tensor_to_float(t_conv2_b, conv2_b);
-    dequant_tensor_to_float(t_out_w, out_w);
-    dequant_tensor_to_float(t_out_b, out_b);
-    dequant_tensor_to_float(t_after_w, after_w);
-    dequant_tensor_to_float(t_after_b, after_b);
-
-    // Conformer layer weights (6 layers)
-    struct AsrLayerWeights {
-        std::vector<float> ff1_norm_w, ff1_norm_b, ff1_w1_w, ff1_w1_b, ff1_w2_w, ff1_w2_b;
-        std::vector<float> attn_norm_w, attn_norm_b, q_w, q_b, k_w, k_b, v_w, v_b, out_w, out_b;
-        std::vector<float> pos_u, pos_v, linear_pos_w;
-        std::vector<float> conv_norm_w, conv_norm_b, conv_pw1_w, conv_pw1_b;
-        std::vector<float> conv_dw_w, conv_dw_b, conv_ln_w, conv_ln_b, conv_pw2_w, conv_pw2_b;
-        std::vector<float> ff2_norm_w, ff2_norm_b, ff2_w1_w, ff2_w1_b, ff2_w2_w, ff2_w2_b;
-        std::vector<float> norm_final_w, norm_final_b;
-    };
-    std::vector<AsrLayerWeights> layers(6);
-    for (int l = 0; l < 6; l++) {
-        std::string p = "asr.m.encoder.encoders." + std::to_string(l) + ".";
-        dequant_tensor_to_float(get_tensor(ctx, p + "norm_ff_macaron.weight"), layers[l].ff1_norm_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "norm_ff_macaron.bias"), layers[l].ff1_norm_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward_macaron.w_1.weight"), layers[l].ff1_w1_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward_macaron.w_1.bias"), layers[l].ff1_w1_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward_macaron.w_2.weight"), layers[l].ff1_w2_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward_macaron.w_2.bias"), layers[l].ff1_w2_b);
-
-        dequant_tensor_to_float(get_tensor(ctx, p + "norm_mha.weight"), layers[l].attn_norm_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "norm_mha.bias"), layers[l].attn_norm_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_q.weight"), layers[l].q_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_q.bias"), layers[l].q_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_k.weight"), layers[l].k_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_k.bias"), layers[l].k_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_v.weight"), layers[l].v_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_v.bias"), layers[l].v_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_out.weight"), layers[l].out_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_out.bias"), layers[l].out_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.pos_bias_u"), layers[l].pos_u);
-        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.pos_bias_v"), layers[l].pos_v);
-        dequant_tensor_to_float(get_tensor(ctx, p + "self_attn.linear_pos.weight"), layers[l].linear_pos_w);
-
-        dequant_tensor_to_float(get_tensor(ctx, p + "norm_conv.weight"), layers[l].conv_norm_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "norm_conv.bias"), layers[l].conv_norm_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.pointwise_conv1.weight"),
-                                layers[l].conv_pw1_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.pointwise_conv1.bias"),
-                                layers[l].conv_pw1_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.depthwise_conv.weight"),
-                                layers[l].conv_dw_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.depthwise_conv.bias"),
-                                layers[l].conv_dw_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.norm.weight"), layers[l].conv_ln_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.norm.bias"), layers[l].conv_ln_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.pointwise_conv2.weight"),
-                                layers[l].conv_pw2_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "conv_module.streaming_conv.pointwise_conv2.bias"),
-                                layers[l].conv_pw2_b);
-
-        dequant_tensor_to_float(get_tensor(ctx, p + "norm_ff.weight"), layers[l].ff2_norm_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "norm_ff.bias"), layers[l].ff2_norm_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward.w_1.weight"), layers[l].ff2_w1_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward.w_1.bias"), layers[l].ff2_w1_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward.w_2.weight"), layers[l].ff2_w2_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "feed_forward.w_2.bias"), layers[l].ff2_w2_b);
-
-        dequant_tensor_to_float(get_tensor(ctx, p + "norm_final.weight"), layers[l].norm_final_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "norm_final.bias"), layers[l].norm_final_b);
-    }
+    ensure_weights_cached(ctx);
+    const auto& w = ctx->weights;
+    const auto& conv0_w = w.conv0_w;
+    const auto& conv0_b = w.conv0_b;
+    const auto& conv2_w = w.conv2_w;
+    const auto& conv2_b = w.conv2_b;
+    const auto& out_w = w.out_w;
+    const auto& out_b = w.out_b;
+    const auto& after_w = w.after_w;
+    const auto& after_b = w.after_b;
+    const auto& layers = w.asr_layers;
 
     // Process chunk by chunk
     int chunk_idx = 0;
@@ -425,14 +566,39 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
         }
     }
 
+    // Scratch buffers for zero-allocation streaming chunks
+    std::vector<float> c0(256 * 9 * 39, 0.0f);
+    std::vector<float> col0(9 * 351);
+    std::vector<float> col2(2304 * 76);
+    std::vector<float> gemm2(256 * 76);
+    std::vector<float> c2(256 * 4 * 19, 0.0f);
+    std::vector<float> h(4 * 256);
+    std::vector<float> ffn1(4 * 256);
+    std::vector<float> f1_mid(4 * 2048);
+    std::vector<float> f1_out(4 * 256);
+    std::vector<float> attn_in(4 * 256);
+    std::vector<float> q(4 * 256), k(4 * 256), v(4 * 256);
+    std::vector<float> p(12 * 256);
+    std::vector<float> full_k(12 * 256), full_v(12 * 256);
+    std::vector<float> mha_out(4 * 256);
+    std::vector<float> mha_proj(4 * 256);
+    std::vector<float> conv_in(4 * 256);
+    std::vector<float> full_conv_in(12 * 256);
+    std::vector<float> glu_raw(12 * 512);
+    std::vector<float> glu_out(12 * 256);
+    std::vector<float> dw_out(4 * 256);
+    std::vector<float> pw2_out(4 * 256);
+    std::vector<float> ffn2(4 * 256);
+    std::vector<float> f2_mid(4 * 2048);
+    std::vector<float> f2_out(4 * 256);
+
     for (int start_f = 0; start_f + window <= T_fbank; start_f += stride, chunk_idx++) {
         const float* fb_chunk = fbanks.data() + start_f * 80;
 
         // Subsampling: Conv0 -> ReLU -> Conv2 -> ReLU -> Linear(4864, 256)
         // Conv0: input (1, 19, 80), weight (256, 1, 3, 3), stride 2 -> out (256, 9, 39)
-        std::vector<float> c0(256 * 9 * 39, 0.0f);
+        std::fill(c0.begin(), c0.end(), 0.0f);
 #if defined(HAVE_ACCELERATE) || defined(CRISPASR_HAVE_BLAS)
-        std::vector<float> col0(9 * 351);
         for (int oh = 0; oh < 9; oh++) {
             for (int ow = 0; ow < 39; ow++) {
                 int s = oh * 39 + ow;
@@ -474,9 +640,8 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
 #endif
 
         // Conv2: input (256, 9, 39), weight (256, 256, 3, 3), stride 2 -> out (256, 4, 19)
-        std::vector<float> c2(256 * 4 * 19, 0.0f);
+        std::fill(c2.begin(), c2.end(), 0.0f);
 #if defined(HAVE_ACCELERATE) || defined(CRISPASR_HAVE_BLAS)
-        std::vector<float> col2(2304 * 76);
         for (int oh = 0; oh < 4; oh++) {
             for (int ow = 0; ow < 19; ow++) {
                 int s_idx = oh * 19 + ow;
@@ -491,7 +656,6 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
                 }
             }
         }
-        std::vector<float> gemm2(256 * 76);
         cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 256, 76, 2304, 1.0f, conv2_w.data(), 2304, col2.data(),
                     76, 0.0f, gemm2.data(), 76);
         for (int oh = 0; oh < 4; oh++) {
@@ -527,7 +691,6 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
 #endif
 
         // Linear out: flatten 256 * 19 = 4864 -> 256 per time step (T=4), scaled by sqrt(d_model) = 16.0f
-        std::vector<float> h(4 * 256);
         cpu_gemm_linear(c2.data(), out_w.data(), out_b.data(), h.data(), 4, 4864, 256);
         for (int i = 0; i < 4 * 256; i++) {
             h[i] *= 16.0f;
@@ -540,31 +703,26 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
         for (int l = 0; l < 6; l++) {
             const auto& lw = layers[l];
             // 1. Macaron FFN (scale 0.5)
-            std::vector<float> ffn1 = h;
+            memcpy(ffn1.data(), h.data(), 4 * 256 * sizeof(float));
             cpu_layer_norm(ffn1.data(), 4, 256, lw.ff1_norm_w.data(), lw.ff1_norm_b.data());
-            std::vector<float> f1_mid(4 * 2048);
             cpu_gemm_linear(ffn1.data(), lw.ff1_w1_w.data(), lw.ff1_w1_b.data(), f1_mid.data(), 4, 256, 2048);
             for (auto& v : f1_mid)
                 v = silu(v);
-            std::vector<float> f1_out(4 * 256);
             cpu_gemm_linear(f1_mid.data(), lw.ff1_w2_w.data(), lw.ff1_w2_b.data(), f1_out.data(), 4, 2048, 256);
             for (int i = 0; i < 4 * 256; i++)
                 h[i] += 0.5f * f1_out[i];
 
             // 2. MHA self-attention with relative positional encoding
-            std::vector<float> attn_in = h;
+            memcpy(attn_in.data(), h.data(), 4 * 256 * sizeof(float));
             cpu_layer_norm(attn_in.data(), 4, 256, lw.attn_norm_w.data(), lw.attn_norm_b.data());
-            std::vector<float> q(4 * 256), k(4 * 256), v(4 * 256);
             cpu_gemm_linear(attn_in.data(), lw.q_w.data(), lw.q_b.data(), q.data(), 4, 256, 256);
             cpu_gemm_linear(attn_in.data(), lw.k_w.data(), lw.k_b.data(), k.data(), 4, 256, 256);
             cpu_gemm_linear(attn_in.data(), lw.v_w.data(), lw.v_b.data(), v.data(), 4, 256, 256);
 
             // Project pos_emb (12 frames): p = linear_pos(pos_emb)
-            std::vector<float> p(12 * 256);
             cpu_gemm_linear(pos_emb, lw.linear_pos_w.data(), nullptr, p.data(), 12, 256, 256);
 
             // Append K/V to cache
-            std::vector<float> full_k(12 * 256), full_v(12 * 256);
             memcpy(full_k.data(), att_k_cache[l].data(), 8 * 256 * sizeof(float));
             memcpy(full_k.data() + 8 * 256, k.data(), 4 * 256 * sizeof(float));
             memcpy(full_v.data(), att_v_cache[l].data(), 8 * 256 * sizeof(float));
@@ -574,13 +732,13 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
             memcpy(att_v_cache[l].data(), full_v.data() + 4 * 256, 8 * 256 * sizeof(float));
 
             // Attention heads (4 heads, d=64)
-            std::vector<float> mha_out(4 * 256, 0.0f);
+            std::fill(mha_out.begin(), mha_out.end(), 0.0f);
             for (int head = 0; head < 4; head++) {
                 const float* u_vec = lw.pos_u.data() + head * 64;
                 const float* v_vec = lw.pos_v.data() + head * 64;
                 for (int qi = 0; qi < 4; qi++) {
                     const float* q_vec = q.data() + qi * 256 + head * 64;
-                    std::vector<float> scores(12);
+                    float scores[12];
                     float max_score = -1e9f;
                     for (int kj = 0; kj < 12; kj++) {
                         const float* k_vec = full_k.data() + kj * 256 + head * 64;
@@ -611,27 +769,23 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
                     }
                 }
             }
-            std::vector<float> mha_proj(4 * 256);
             cpu_gemm_linear(mha_out.data(), lw.out_w.data(), lw.out_b.data(), mha_proj.data(), 4, 256, 256);
             for (int i = 0; i < 4 * 256; i++)
                 h[i] += mha_proj[i];
 
             // 3. Conv module
-            std::vector<float> conv_in = h;
+            memcpy(conv_in.data(), h.data(), 4 * 256 * sizeof(float));
             cpu_layer_norm(conv_in.data(), 4, 256, lw.conv_norm_w.data(), lw.conv_norm_b.data());
 
             // Concatenate cnn_cache (8 frames) + conv_in (4 frames) -> full_conv_in (12 frames)
-            std::vector<float> full_conv_in(12 * 256);
             memcpy(full_conv_in.data(), cnn_cache[l].data(), 8 * 256 * sizeof(float));
             memcpy(full_conv_in.data() + 8 * 256, conv_in.data(), 4 * 256 * sizeof(float));
             // Update cnn_cache: keep last 8 frames
             memcpy(cnn_cache[l].data(), full_conv_in.data() + 4 * 256, 8 * 256 * sizeof(float));
 
             // Pointwise 1: 12 frames: 256 -> 512 (GLU)
-            std::vector<float> glu_raw(12 * 512);
             cpu_gemm_linear(full_conv_in.data(), lw.conv_pw1_w.data(), lw.conv_pw1_b.data(), glu_raw.data(), 12, 256,
                             512);
-            std::vector<float> glu_out(12 * 256);
             for (int t = 0; t < 12; t++) {
                 for (int d = 0; d < 256; d++) {
                     float a = glu_raw[t * 512 + d];
@@ -641,7 +795,7 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
             }
 
             // Depthwise conv (kernel 9, no pad): input 12 frames -> output 4 frames
-            std::vector<float> dw_out(4 * 256, 0.0f);
+            std::fill(dw_out.begin(), dw_out.end(), 0.0f);
             for (int t = 0; t < 4; t++) {
                 for (int c = 0; c < 256; c++) {
                     float b = lw.conv_dw_b.empty() ? 0.0f : lw.conv_dw_b[c];
@@ -657,19 +811,16 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
             cpu_layer_norm(dw_out.data(), 4, 256, lw.conv_ln_w.data(), lw.conv_ln_b.data());
             for (auto& v : dw_out)
                 v = silu(v);
-            std::vector<float> pw2_out(4 * 256);
             cpu_gemm_linear(dw_out.data(), lw.conv_pw2_w.data(), lw.conv_pw2_b.data(), pw2_out.data(), 4, 256, 256);
             for (int i = 0; i < 4 * 256; i++)
                 h[i] += pw2_out[i];
 
             // 4. Second FFN (scale 0.5)
-            std::vector<float> ffn2 = h;
+            memcpy(ffn2.data(), h.data(), 4 * 256 * sizeof(float));
             cpu_layer_norm(ffn2.data(), 4, 256, lw.ff2_norm_w.data(), lw.ff2_norm_b.data());
-            std::vector<float> f2_mid(4 * 2048);
             cpu_gemm_linear(ffn2.data(), lw.ff2_w1_w.data(), lw.ff2_w1_b.data(), f2_mid.data(), 4, 256, 2048);
             for (auto& v : f2_mid)
                 v = silu(v);
-            std::vector<float> f2_out(4 * 256);
             cpu_gemm_linear(f2_mid.data(), lw.ff2_w2_w.data(), lw.ff2_w2_b.data(), f2_out.data(), 4, 2048, 256);
             for (int i = 0; i < 4 * 256; i++)
                 h[i] += 0.5f * f2_out[i];
@@ -704,26 +855,22 @@ static int run_gtm(meanvc2_context* ctx, const float* spk_emb, float* out_k_mem,
     const int slots = ctx->hp.memory_slots;  // 32
     const int total_mem = slots * spk_dim;   // 8192
 
-    std::vector<float> k0_w, k0_b, k2_w, k2_b, v0_w, v0_b, v2_w, v2_b;
-    std::vector<float> k_prior, v_prior, norm_k_w, norm_k_b, norm_v_w, norm_v_b;
-
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_k.0.weight"), k0_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_k.0.bias"), k0_b);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_k.2.weight"), k2_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_k.2.bias"), k2_b);
-
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_v.0.weight"), v0_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_v.0.bias"), v0_b);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_v.2.weight"), v2_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.mlp_v.2.bias"), v2_b);
-
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.k_prior"), k_prior);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.v_prior"), v_prior);
-
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.norm_k.weight"), norm_k_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.norm_k.bias"), norm_k_b);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.norm_v.weight"), norm_v_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.gtm.norm_v.bias"), norm_v_b);
+    ensure_weights_cached(ctx);
+    const auto& w = ctx->weights;
+    const auto& k0_w = w.k0_w;
+    const auto& k0_b = w.k0_b;
+    const auto& k2_w = w.k2_w;
+    const auto& k2_b = w.k2_b;
+    const auto& v0_w = w.v0_w;
+    const auto& v0_b = w.v0_b;
+    const auto& v2_w = w.v2_w;
+    const auto& v2_b = w.v2_b;
+    const auto& k_prior = w.k_prior;
+    const auto& v_prior = w.v_prior;
+    const auto& norm_k_w = w.norm_k_w;
+    const auto& norm_k_b = w.norm_k_b;
+    const auto& norm_v_w = w.norm_v_w;
+    const auto& norm_v_b = w.norm_v_b;
 
     // K memory: Linear(256->256) -> SiLU -> Linear(256->8192)
     std::vector<float> h_k(spk_dim);
@@ -772,17 +919,18 @@ static std::vector<float> run_tvt(meanvc2_context* ctx, const float* bn_interp, 
     const int head_dim = attn_dim / num_heads; // 32
     const int K = ctx->hp.memory_slots;        // 32
 
-    std::vector<float> q_w, q_b, k_w, k_b, v_w, v_b, out_w, out_b, norm_w, norm_b;
-    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.q_proj.weight"), q_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.q_proj.bias"), q_b);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.k_proj.weight"), k_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.k_proj.bias"), k_b);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.v_proj.weight"), v_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.v_proj.bias"), v_b);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.out_proj.weight"), out_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.out_proj.bias"), out_b);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.attn_norm.weight"), norm_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.temporal_timbre.attn_norm.bias"), norm_b);
+    ensure_weights_cached(ctx);
+    const auto& w = ctx->weights;
+    const auto& q_w = w.tvt_q_w;
+    const auto& q_b = w.tvt_q_b;
+    const auto& k_w = w.tvt_k_w;
+    const auto& k_b = w.tvt_k_b;
+    const auto& v_w = w.tvt_v_w;
+    const auto& v_b = w.tvt_v_b;
+    const auto& out_w = w.tvt_out_w;
+    const auto& out_b = w.tvt_out_b;
+    const auto& norm_w = w.tvt_norm_w;
+    const auto& norm_b = w.tvt_norm_b;
 
     std::vector<float> q(n_frames * attn_dim), k(K * attn_dim), v(K * attn_dim);
     cpu_gemm_linear(bn_interp, q_w.data(), q_b.data(), q.data(), n_frames, spk_dim, attn_dim);
@@ -875,18 +1023,25 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
     get_sinusoidal(1.0f, 256, t_sin);
     get_sinusoidal(0.0f, 256, r_sin);
 
-    std::vector<float> t_mlp0_w, t_mlp0_b, t_mlp2_w, t_mlp2_b;
-    std::vector<float> r_mlp0_w, r_mlp0_b, r_mlp2_w, r_mlp2_b;
-    dequant_tensor_to_float(get_tensor(ctx, "vc.t_time_embed.time_mlp.0.weight"), t_mlp0_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.t_time_embed.time_mlp.0.bias"), t_mlp0_b);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.t_time_embed.time_mlp.2.weight"), t_mlp2_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.t_time_embed.time_mlp.2.bias"), t_mlp2_b);
+    ensure_weights_cached(ctx);
+    const auto& w = ctx->weights;
+    const auto& t_mlp0_w = w.t_mlp0_w;
+    const auto& t_mlp0_b = w.t_mlp0_b;
+    const auto& t_mlp2_w = w.t_mlp2_w;
+    const auto& t_mlp2_b = w.t_mlp2_b;
+    const auto& r_mlp0_w = w.r_mlp0_w;
+    const auto& r_mlp0_b = w.r_mlp0_b;
+    const auto& r_mlp2_w = w.r_mlp2_w;
+    const auto& r_mlp2_b = w.r_mlp2_b;
+    const auto& inp_w = w.inp_w;
+    const auto& inp_b = w.inp_b;
+    const auto& blocks = w.dit_blocks;
+    const auto& norm_out_w = w.norm_out_w;
+    const auto& norm_out_b = w.norm_out_b;
+    const auto& proj_out_w = w.proj_out_w;
+    const auto& proj_out_b = w.proj_out_b;
 
-    dequant_tensor_to_float(get_tensor(ctx, "vc.r_time_embed.time_mlp.0.weight"), r_mlp0_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.r_time_embed.time_mlp.0.bias"), r_mlp0_b);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.r_time_embed.time_mlp.2.weight"), r_mlp2_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.r_time_embed.time_mlp.2.bias"), r_mlp2_b);
-
+    // Time and step embeddings
     std::vector<float> t_emb(dim), r_emb(dim);
     {
         std::vector<float> mid(dim);
@@ -909,44 +1064,22 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
     for (int i = 0; i < dim; i++)
         t_emb_silu[i] = silu(t_emb[i]);
 
-    // Input embedding: Linear(80 + 256 + 256 = 592 -> 512)
-    std::vector<float> inp_w, inp_b;
-    dequant_tensor_to_float(get_tensor(ctx, "vc.input_embed.proj.weight"), inp_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.input_embed.proj.bias"), inp_b);
-
-    // DiT block weights
-    struct DiTBlockWeights {
-        std::vector<float> adal_w, adal_b;
-        std::vector<float> q_w, q_b, k_w, k_b, v_w, v_b, out_w, out_b;
-        std::vector<float> q_norm_w, k_norm_w;
-        std::vector<float> ff1_w, ff1_b, ff2_w, ff2_b;
-    };
-    std::vector<DiTBlockWeights> blocks(depth);
-    for (int l = 0; l < (int)depth; l++) {
-        std::string p = "vc.transformer_blocks." + std::to_string(l) + ".";
-        dequant_tensor_to_float(get_tensor(ctx, p + "attn_norm.linear.weight"), blocks[l].adal_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "attn_norm.linear.bias"), blocks[l].adal_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_q.weight"), blocks[l].q_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_q.bias"), blocks[l].q_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_k.weight"), blocks[l].k_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_k.bias"), blocks[l].k_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_v.weight"), blocks[l].v_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_v.bias"), blocks[l].v_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_out.0.weight"), blocks[l].out_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "attn.to_out.0.bias"), blocks[l].out_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "attn.q_norm.weight"), blocks[l].q_norm_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "attn.k_norm.weight"), blocks[l].k_norm_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "ff.ff.0.0.weight"), blocks[l].ff1_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "ff.ff.0.0.bias"), blocks[l].ff1_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "ff.ff.2.weight"), blocks[l].ff2_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "ff.ff.2.bias"), blocks[l].ff2_b);
+    // Precompute AdaLayerNorm modulations for all blocks & final norm (constant across all chunks!)
+    std::vector<std::vector<float>> block_ada(depth, std::vector<float>(6 * dim));
+    for (int l = 0; l < depth; l++) {
+        cpu_gemm_linear(t_emb_silu.data(), blocks[l].adal_w.data(), blocks[l].adal_b.data(), block_ada[l].data(), 1,
+                        dim, 6 * dim);
     }
+    std::vector<float> final_ada(2 * dim);
+    cpu_gemm_linear(t_emb_silu.data(), norm_out_w.data(), norm_out_b.data(), final_ada.data(), 1, dim, 2 * dim);
+    const float* final_scale = final_ada.data();
+    const float* final_shift = final_ada.data() + dim;
 
-    std::vector<float> norm_out_w, norm_out_b, proj_out_w, proj_out_b;
-    dequant_tensor_to_float(get_tensor(ctx, "vc.norm_out.linear.weight"), norm_out_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.norm_out.linear.bias"), norm_out_b);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.proj_out.weight"), proj_out_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vc.proj_out.bias"), proj_out_b);
+    // Precompute RoPE inv_freq (constant across all frames!)
+    std::vector<float> inv_freq(head_dim / 2);
+    for (int i = 0; i < (int)head_dim / 2; i++) {
+        inv_freq[i] = 1.0f / powf(10000.0f, (float)(2 * i) / (float)head_dim);
+    }
 
     // Chunk streaming loop
     int num_chunks = (n_frames + chunk_size - 1) / chunk_size;
@@ -982,14 +1115,12 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
         for (int l = 0; l < depth; l++) {
             const auto& bw = blocks[l];
             // AdaLayerNorm: scale_msa, shift_msa, gate_msa, scale_mlp, shift_mlp, gate_mlp
-            std::vector<float> ada(6 * dim);
-            cpu_gemm_linear(t_emb_silu.data(), bw.adal_w.data(), bw.adal_b.data(), ada.data(), 1, dim, 6 * dim);
-            const float* shift_msa = ada.data();
-            const float* scale_msa = ada.data() + dim;
-            const float* gate_msa = ada.data() + 2 * dim;
-            const float* shift_mlp = ada.data() + 3 * dim;
-            const float* scale_mlp = ada.data() + 4 * dim;
-            const float* gate_mlp = ada.data() + 5 * dim;
+            const float* shift_msa = block_ada[l].data();
+            const float* scale_msa = block_ada[l].data() + dim;
+            const float* gate_msa = block_ada[l].data() + 2 * dim;
+            const float* shift_mlp = block_ada[l].data() + 3 * dim;
+            const float* scale_mlp = block_ada[l].data() + 4 * dim;
+            const float* gate_mlp = block_ada[l].data() + 5 * dim;
 
             // Self-Attention modulation
             std::vector<float> x_norm = x;
@@ -1045,9 +1176,8 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
                 int pos = offset_val + t;
                 for (int h = 0; h < heads; h++) {
                     float* q_head = q.data() + (t * heads + h) * head_dim;
-                    for (int i = 0; i < head_dim / 2; i++) {
-                        float freq = 1.0f / powf(10000.0f, (float)(2 * i) / (float)head_dim);
-                        float theta = (float)pos * freq;
+                    for (int i = 0; i < (int)head_dim / 2; i++) {
+                        float theta = (float)pos * inv_freq[i];
                         float cos_t = cosf(theta);
                         float sin_t = sinf(theta);
                         float q0 = q_head[2 * i];
@@ -1063,9 +1193,8 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
                 int pos = (offset_val + total_len - full_seq_len) + t;
                 for (int h = 0; h < heads; h++) {
                     float* k_head = full_k.data() + (t * heads + h) * head_dim;
-                    for (int i = 0; i < head_dim / 2; i++) {
-                        float freq = 1.0f / powf(10000.0f, (float)(2 * i) / (float)head_dim);
-                        float theta = (float)pos * freq;
+                    for (int i = 0; i < (int)head_dim / 2; i++) {
+                        float theta = (float)pos * inv_freq[i];
                         float cos_t = cosf(theta);
                         float sin_t = sinf(theta);
                         float k0 = k_head[2 * i];
@@ -1086,7 +1215,7 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
                     int row_in_mask = (full_seq_len - total_len) + qi;
                     int qi_chunk = row_in_mask / chunk_size;
 
-                    std::vector<float> scores(full_seq_len);
+                    float scores[128];
                     float max_sc = -1e9f;
                     for (int kj = 0; kj < full_seq_len; kj++) {
                         int kj_chunk = kj / chunk_size;
@@ -1179,12 +1308,7 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
             }
         }
 
-        // Final AdaLayerNorm: Linear(silu(t_emb)) -> 2 * dim (scale, shift)
-        std::vector<float> final_ada(2 * dim);
-        cpu_gemm_linear(t_emb_silu.data(), norm_out_w.data(), norm_out_b.data(), final_ada.data(), 1, dim, 2 * dim);
-        const float* final_scale = final_ada.data();
-        const float* final_shift = final_ada.data() + dim;
-
+        // Final AdaLayerNorm modulation
         cpu_layer_norm(x.data(), total_len, dim, nullptr, nullptr, 1e-6f);
         for (int t = 0; t < total_len; t++) {
             for (int d = 0; d < dim; d++) {
@@ -1239,32 +1363,17 @@ static std::vector<float> run_vocos_decode(meanvc2_context* ctx, const float* me
     const int n_freqs = n_fft / 2 + 1;                  // 321
     const int head_out_dim = n_fft + 2;                 // 642
 
-    std::vector<float> embed_w, embed_b, norm_w, norm_b, final_norm_w, final_norm_b, head_w, head_b;
-    dequant_tensor_to_float(get_tensor(ctx, "vocos.backbone.embed.weight"), embed_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vocos.backbone.embed.bias"), embed_b);
-    dequant_tensor_to_float(get_tensor(ctx, "vocos.backbone.norm.weight"), norm_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vocos.backbone.norm.bias"), norm_b);
-    dequant_tensor_to_float(get_tensor(ctx, "vocos.backbone.final_layer_norm.weight"), final_norm_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vocos.backbone.final_layer_norm.bias"), final_norm_b);
-    dequant_tensor_to_float(get_tensor(ctx, "vocos.head.out.weight"), head_w);
-    dequant_tensor_to_float(get_tensor(ctx, "vocos.head.out.bias"), head_b);
-
-    struct VocosBlock {
-        std::vector<float> dw_w, dw_b, norm_w, norm_b, pw1_w, pw1_b, pw2_w, pw2_b, gamma;
-    };
-    std::vector<VocosBlock> blocks(num_layers);
-    for (int l = 0; l < num_layers; l++) {
-        std::string p = "vocos.backbone.convnext." + std::to_string(l) + ".";
-        dequant_tensor_to_float(get_tensor(ctx, p + "dwconv.weight"), blocks[l].dw_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "dwconv.bias"), blocks[l].dw_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "norm.weight"), blocks[l].norm_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "norm.bias"), blocks[l].norm_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "pwconv1.weight"), blocks[l].pw1_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "pwconv1.bias"), blocks[l].pw1_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "pwconv2.weight"), blocks[l].pw2_w);
-        dequant_tensor_to_float(get_tensor(ctx, p + "pwconv2.bias"), blocks[l].pw2_b);
-        dequant_tensor_to_float(get_tensor(ctx, p + "gamma"), blocks[l].gamma);
-    }
+    ensure_weights_cached(ctx);
+    const auto& w = ctx->weights;
+    const auto& embed_w = w.voc_embed_w;
+    const auto& embed_b = w.voc_embed_b;
+    const auto& norm_w = w.voc_norm_w;
+    const auto& norm_b = w.voc_norm_b;
+    const auto& final_norm_w = w.voc_final_norm_w;
+    const auto& final_norm_b = w.voc_final_norm_b;
+    const auto& head_w = w.voc_head_w;
+    const auto& head_b = w.voc_head_b;
+    const auto& blocks = w.voc_blocks;
 
     // 1. Conv1d embed: input (80, T), weight (320, 80, 7), pad 3 -> out (320, T)
     std::vector<float> x_ct(D * T, 0.0f);
@@ -1435,6 +1544,8 @@ struct meanvc2_context* meanvc2_init_from_file(const char* path_model, struct me
     if (params.verbosity >= 1) {
         fprintf(stderr, "meanvc2: loaded model '%s' (%zu tensors)\n", path_model, c->tensors.size());
     }
+
+    ensure_weights_cached(c);
 
     return c;
 }
