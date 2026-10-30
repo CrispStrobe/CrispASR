@@ -13,9 +13,24 @@ PR, job-queue and ownership claims are not current instructions. Do not resume
 them automatically. Public path aliases describe roles; actual bindings stay
 in ignored local notes.
 
-## Continuation snapshot — 2026-10-30 16:50 UTC
+## Continuation snapshot — 2026-10-30 18:05 UTC
 
-Updated 2026-10-30 16:50 UTC: this snapshot supersedes older status and owner prose.
+Updated 2026-10-30 18:05 UTC: this snapshot supersedes older status and owner prose.
+- **Haas-ja-v1.0 Japanese ASR Port COMPLETE (Issue #561)**:
+  - Architecture: 600M param Japanese ASR (`third-intelligence/Haas-ja-v1.0`, Apache-2.0). Combines 24-layer FastConformer encoder (1024 d_model), 2-layer Kimi Delta Attention (KDA) predictor (linear RNN with rank-1 state update $S_{t} = S_{t-1} + v_t k_t^T$ and gated RMSNorm per head), and TDT joint network.
+  - Reused existing `src/parakeet.{h,cpp}` runtime directly without duplicating FastConformer encoder/TDT joint code. Added KDA predictor execution path and weight loaders.
+  - Converter `models/convert-haas-to-gguf.py` written and verified; reference dumper `tools/dump_haas_reference.py` written.
+  - Numerical parity validation (`crispasr-diff`):
+    - `encoder_output_ref_mel`: **1.000000** cos parity (cos_min=0.999979) [PASS]
+    - `decoder_sos`: **1.000000** cos parity (max_abs=2.86e-6) [PASS]
+    - `joint_sos_t0`: **1.000000** cos parity (max_abs=1.53e-5) [PASS]
+  - End-to-end transcription accuracy: 0 CER verbatim match on Japanese test audio (`samples/ja_test.wav`): `こんにちは。本日はお日柄も良く、素晴らしい天気です。`.
+  - Speed: **11.3x realtime** on Apple M1 base GPU (0.41s for 4.6s audio).
+  - Quantization: `haas-ja-v1.0-q8_0.gguf` (~626 MB) and `haas-ja-v1.0-q4_k.gguf` (~368 MB) generated and tested with 0 CER verbatim match.
+  - Hugging Face repository created and published: [cstr/Haas-ja-v1.0-GGUF](https://huggingface.co/cstr/Haas-ja-v1.0-GGUF) (`q8_0`, `q4_k`, `f16`).
+  - Registered in `src/crispasr_model_registry.cpp` under `haas` and `haas-ja` with one-line auto-download.
+  - All wiring checks (`tools/check-backend-wiring.py`, `test-arch-backend-map`, `test-registry`, `pytest tests/test_no_secrets.py`, clang-format 18) PASSED.
+  - Issue #561 closed.
 - **MeanVC2 Zero-Shot Streaming Voice Conversion Port COMPLETE**:
   - Investigated Seed-VC (`Plachtaa/seed-vc`) and MeanVC2 (`ASLP-lab/MeanVC2`).
   - License audit: Seed-VC is GPL-3.0 (copyleft), incompatible with CrispASR MIT license policy.
