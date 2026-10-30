@@ -5662,8 +5662,7 @@ class CrispasrSession {
     if (!_lib.providesSymbol('crispasr_session_set_audio_ctx')) {
       return;
     }
-    final fn = _lib.lookupFunction<
-        Int32 Function(Pointer<Void>, Int32),
+    final fn = _lib.lookupFunction<Int32 Function(Pointer<Void>, Int32),
         int Function(Pointer<Void>, int)>('crispasr_session_set_audio_ctx');
     final rc = fn(_handle, audioCtx);
     if (rc != 0) throw Exception('setAudioCtx failed (rc=$rc)');
