@@ -403,6 +403,10 @@
 #include "rvc_svc.h"
 #define CA_HAVE_RVC_SVC 1
 #endif
+#if __has_include("meanvc2.h")
+#include "meanvc2.h"
+#define CA_HAVE_MEANVC2 1
+#endif
 #if __has_include("btc_chords.h")
 #include "btc_chords.h"
 #define CA_HAVE_BTC_CHORDS 1
@@ -2306,6 +2310,9 @@ struct crispasr_session {
     rvc_svc_context* rvc_ctx = nullptr;
     rvc_svc_result* rvc_last = nullptr;
 #endif
+#ifdef CA_HAVE_MEANVC2
+    meanvc2_context* meanvc2_ctx = nullptr;
+#endif
 #ifdef CA_HAVE_TABCNN
     // Emission scores from the last crispasr_session_tab() call, kept alive so
     // the flat view below stays valid until the next call or session close.
@@ -3496,6 +3503,19 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         p.use_gpu = g_open_use_gpu_tls;
         s->rvc_ctx = rvc_svc_init_from_file(model_path, p);
         if (!s->rvc_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_MEANVC2
+    if (s->backend == "meanvc2" || s->backend == "mean-vc2") {
+        meanvc2_context_params p = meanvc2_context_default_params();
+        p.n_threads = s->n_threads;
+        p.use_gpu = g_open_use_gpu_tls;
+        s->meanvc2_ctx = meanvc2_init_from_file(model_path, p);
+        if (!s->meanvc2_ctx) {
             delete s;
             return nullptr;
         }
@@ -4940,6 +4960,10 @@ CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
     if (s->speecht5_ctx)
         return 16000;
 #endif
+#ifdef CA_HAVE_MEANVC2
+    if (s->meanvc2_ctx)
+        return 16000;
+#endif
         // Every remaining audio-producing ctx uses the 24 kHz adapter default.
 #ifdef CA_HAVE_BT2_TTS
     // Breeze-TTS-2 renders through the qwen3-tts-tokenizer-12hz codec (24 kHz),
@@ -5231,6 +5255,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_RVC_SVC
     list += ",rvc-svc";
+#endif
+#ifdef CA_HAVE_MEANVC2
+    list += ",meanvc2";
 #endif
 #ifdef CA_HAVE_KYUTAI
     list += ",kyutai-stt";
@@ -11391,6 +11418,21 @@ static float* crispasr_session_speech_to_speech_impl(crispasr_session* s, const 
         return pcm;
     }
 #endif
+#ifdef CA_HAVE_MEANVC2
+    if (s->meanvc2_ctx) {
+        int n = 0;
+        float* pcm = meanvc2_convert(s->meanvc2_ctx, in_samples, n_in_samples, &n);
+        if (!pcm || n <= 0) {
+            s->last_synth_error = "MeanVC2 voice conversion produced no audio";
+            if (pcm)
+                meanvc2_free_audio(pcm);
+            return nullptr;
+        }
+        if (out_n_samples)
+            *out_n_samples = n;
+        return pcm;
+    }
+#endif
 
     s->last_synth_error = "backend '" + s->backend + "' does not support speech-to-speech";
     return nullptr;
@@ -12847,6 +12889,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
         rvc_svc_result_free(s->rvc_last);
     if (s->rvc_ctx)
         rvc_svc_free(s->rvc_ctx);
+#endif
+#ifdef CA_HAVE_MEANVC2
+    if (s->meanvc2_ctx)
+        meanvc2_free(s->meanvc2_ctx);
 #endif
 #ifdef CA_HAVE_BTC_CHORDS
     if (s->btc_ctx)

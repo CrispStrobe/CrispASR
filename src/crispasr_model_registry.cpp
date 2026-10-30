@@ -1563,6 +1563,13 @@ constexpr Entry k_registry[] = {
      "https://huggingface.co/cstr/Audio8-TTS-Realistic-0.6b-GGUF/resolve/main/arktts-q4_k.gguf",
      "~1.2 GB", nullptr, nullptr},
 
+    // MeanVC2: 18M param streaming zero-shot voice conversion (16 kHz).
+    // ASLP-lab/MeanVC2 (Apache-2.0). Fast-U2++ ASR + UTTE + ChunkDiT + Vocos.
+    // Default Q4_K (~77 MB); Q8_0 (~111 MB); F16 (~175 MB).
+    {"meanvc2", "meanvc2-120ms-40ms-q4_k.gguf",
+     "https://huggingface.co/cstr/MeanVC2-GGUF/resolve/main/meanvc2-120ms-40ms-q4_k.gguf",
+     "~77 MB", nullptr, nullptr},
+
     // MeloTTS: VITS2 52M param TTS (myshell-ai/MeloTTS). 44.1 kHz mono.
     // MIT license. Single GGUF with embedded CMU dictionary + neural G2P.
     // V2: 4 English speakers (US/BR/India/AU), 112 symbols, 11 tones.
