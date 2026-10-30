@@ -9975,6 +9975,12 @@ int main(int argc, char** argv) {
 
         printf("miocodec: %d tokens, global_emb dim=%zu\n", n_tokens, emb_pair.second);
 
+        int target_audio_len = 0;
+        auto wav_pair = ref.get_f32("output_waveform");
+        if (wav_pair.first && wav_pair.second > 0) {
+            target_audio_len = (int)wav_pair.second;
+        }
+
         // Compare each stage that exists in the reference
         const char* stages[] = {"fsq_decoded",       "wave_prenet_out",    "wave_prior_net_out", "wave_decoder_out",
                                 "wave_post_net_out", "wave_upsampler_out", "istft_mag_phase",    "output_waveform"};
@@ -9987,7 +9993,8 @@ int main(int argc, char** argv) {
             }
 
             int out_n = 0;
-            float* cpp_data = miocodec_extract_stage(ctx, tokens.data(), n_tokens, global_emb, 0, stage, &out_n);
+            float* cpp_data =
+                miocodec_extract_stage(ctx, tokens.data(), n_tokens, global_emb, target_audio_len, stage, &out_n);
             if (!cpp_data || out_n == 0) {
                 printf("[SKIP] %-25s (stage not implemented)\n", stage);
                 n_skip++;

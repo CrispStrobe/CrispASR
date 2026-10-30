@@ -1166,10 +1166,7 @@ float* arktts_run_quant_sum(struct arktts_context* ctx, const int32_t* codes, in
 
     ggml_cgraph* gf = ggml_new_graph(gctx);
     ggml_build_forward_expand(gf, quant_sum_T);
-    struct ggml_cplan cplan = ggml_graph_plan(gf, ctx->params.n_threads, nullptr);
-    std::vector<uint8_t> work_data(cplan.work_size + 16);
-    cplan.work_data = work_data.data();
-    ggml_graph_compute(gf, &cplan);
+    core_cpu_backend::compute(gctx, gf, ctx->params.n_threads);
 
     const int total = 1024 * n_frames;
     float* out = (float*)malloc(total * sizeof(float));
@@ -1198,10 +1195,7 @@ float* arktts_run_post_module(struct arktts_context* ctx, const float* latents, 
 
     ggml_cgraph* gf = ggml_new_graph(gctx);
     ggml_build_forward_expand(gf, post_out_T);
-    struct ggml_cplan cplan = ggml_graph_plan(gf, ctx->params.n_threads, nullptr);
-    std::vector<uint8_t> work_data(cplan.work_size + 16);
-    cplan.work_data = work_data.data();
-    ggml_graph_compute(gf, &cplan);
+    core_cpu_backend::compute(gctx, gf, ctx->params.n_threads);
 
     const int total = 1024 * n_frames;
     float* out = (float*)malloc(total * sizeof(float));
@@ -1230,10 +1224,7 @@ float* arktts_run_upsample(struct arktts_context* ctx, const float* post_out, in
 
     ggml_cgraph* gf = ggml_new_graph(gctx);
     ggml_build_forward_expand(gf, up_out_T);
-    struct ggml_cplan cplan = ggml_graph_plan(gf, ctx->params.n_threads, nullptr);
-    std::vector<uint8_t> work_data(cplan.work_size + 16);
-    cplan.work_data = work_data.data();
-    ggml_graph_compute(gf, &cplan);
+    core_cpu_backend::compute(gctx, gf, ctx->params.n_threads);
 
     const int total = 1024 * n_frames * 4;
     float* out = (float*)malloc(total * sizeof(float));
@@ -1267,10 +1258,7 @@ static float* arktts_decode_codes_single_chunk(struct arktts_context* ctx, const
     ggml_cgraph* gf = ggml_new_graph(gctx);
     ggml_build_forward_expand(gf, pcm);
 
-    struct ggml_cplan cplan = ggml_graph_plan(gf, ctx->params.n_threads, nullptr);
-    std::vector<uint8_t> work_data(cplan.work_size + 16);
-    cplan.work_data = work_data.data();
-    ggml_graph_compute(gf, &cplan);
+    core_cpu_backend::compute(gctx, gf, ctx->params.n_threads);
 
     const int total_samples = (int)pcm->ne[0];
     if (out_samples)
