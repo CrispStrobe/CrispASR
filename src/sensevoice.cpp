@@ -20,6 +20,7 @@
 #include "core/sanm.h"
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/crispasr_env.h"
+#include "core/parallel_for.h"
 
 #include <algorithm>
 #include <cassert>
@@ -132,6 +133,7 @@ struct sensevoice_model {
     sensevoice_hparams hparams;
     sensevoice_encoder enc;
     ggml_tensor* query_embed_w = nullptr; // (16, 560)
+    std::vector<float> query_embed_f32;   // cached dequantized query table (16 * 560)
     ggml_tensor* ctc_w = nullptr;         // (25055, 512)
     ggml_tensor* ctc_b = nullptr;         // (25055,)
     // am.mvn: x = (x + shift) * scale on the LFR features. Upstream applies it;
@@ -287,6 +289,9 @@ static bool sensevoice_load_model(sensevoice_model& model, sensevoice_vocab& voc
     model.enc.tp_norm_w = require(model, "sensevoice.enc.tp_norm.w");
     model.enc.tp_norm_b = require(model, "sensevoice.enc.tp_norm.b");
     model.query_embed_w = require(model, "sensevoice.query_embed.w");
+    if (model.query_embed_w) {
+        model.query_embed_f32 = core_cpu::to_f32(model.query_embed_w);
+    }
     model.ctc_w = require(model, "sensevoice.ctc.w");
     model.ctc_b = require(model, "sensevoice.ctc.b");
     ggml_tensor* cs = core_gguf::try_get(model.tensors, "sensevoice.cmvn_shift");
@@ -332,9 +337,21 @@ static std::vector<float> sensevoice_compute_features(sensevoice_context* ctx, c
     const auto& sc = ctx->model.cmvn_scale;
     if (!sh.empty()) {
         const size_t D = sh.size();
-        for (size_t t = 0; t < (size_t)T_lfr; t++)
-            for (size_t d = 0; d < D; d++)
-                lfr[t * D + d] = (lfr[t * D + d] + sh[d]) * sc[d];
+        const float* sh_ptr = sh.data();
+        const float* sc_ptr = sc.data();
+        float* lfr_ptr = lfr.data();
+        auto apply_cmvn = [&](int t0, int t1) {
+            for (int t = t0; t < t1; t++) {
+                float* row = lfr_ptr + (size_t)t * D;
+                for (size_t d = 0; d < D; d++)
+                    row[d] = (row[d] + sh_ptr[d]) * sc_ptr[d];
+            }
+        };
+        if (T_lfr >= 16) {
+            core_parallel::for_each_chunk(T_lfr, 0, apply_cmvn);
+        } else {
+            apply_cmvn(0, T_lfr);
+        }
     }
     T_lfr_out = T_lfr;
     D_lfr_out = (int)hp.input_size;
@@ -479,13 +496,21 @@ static std::vector<float> sensevoice_gather_query_rows(sensevoice_context* ctx, 
     const int row_ids[4] = {lang_id, (int)hp.event_query, (int)hp.emo_query, textnorm_id};
 
     std::vector<float> out((size_t)4 * (size_t)D_in, 0.0f);
-    ggml_tensor* emb = ctx->model.query_embed_w;
-    // emb is tiny (D_in, 16); dequantize the whole table (F32/F16/quantized-safe)
-    // and gather the 4 query rows. ggml layout ne0=D_in → row rid at [rid*D_in ...].
-    std::vector<float> emb_f32 = core_cpu::to_f32(emb);
-    for (int r = 0; r < 4; r++) {
-        const int rid = row_ids[r];
-        std::memcpy(out.data() + (size_t)r * D_in, emb_f32.data() + (size_t)rid * D_in, (size_t)D_in * sizeof(float));
+    const auto& emb_f32 = ctx->model.query_embed_f32;
+    if (!emb_f32.empty()) {
+        for (int r = 0; r < 4; r++) {
+            const int rid = row_ids[r];
+            std::memcpy(out.data() + (size_t)r * D_in, emb_f32.data() + (size_t)rid * D_in,
+                        (size_t)D_in * sizeof(float));
+        }
+    } else {
+        ggml_tensor* emb = ctx->model.query_embed_w;
+        std::vector<float> tmp_emb = core_cpu::to_f32(emb);
+        for (int r = 0; r < 4; r++) {
+            const int rid = row_ids[r];
+            std::memcpy(out.data() + (size_t)r * D_in, tmp_emb.data() + (size_t)rid * D_in,
+                        (size_t)D_in * sizeof(float));
+        }
     }
     return out;
 }
@@ -495,7 +520,9 @@ static std::vector<float> sensevoice_gather_query_rows(sensevoice_context* ctx, 
 // ===========================================================================
 
 static std::vector<int32_t> sensevoice_ctc_greedy(const float* logits, int T_total, int vocab, int blank_id) {
-    std::vector<int32_t> raw((size_t)T_total);
+    std::vector<int32_t> kept;
+    kept.reserve(T_total);
+    int32_t prev = -1;
     for (int t = 0; t < T_total; t++) {
         const float* row = logits + (size_t)t * vocab;
         int best = 0;
@@ -506,23 +533,13 @@ static std::vector<int32_t> sensevoice_ctc_greedy(const float* logits, int T_tot
                 best = v;
             }
         }
-        raw[(size_t)t] = best;
+        if (best != prev) {
+            prev = best;
+            if (best != (int32_t)blank_id) {
+                kept.push_back(best);
+            }
+        }
     }
-    // unique_consecutive — drop adjacent duplicates first
-    std::vector<int32_t> uc;
-    uc.reserve(raw.size());
-    int32_t prev = -1;
-    for (int32_t id : raw) {
-        if (id != prev)
-            uc.push_back(id);
-        prev = id;
-    }
-    // then drop blank_id
-    std::vector<int32_t> kept;
-    kept.reserve(uc.size());
-    for (int32_t id : uc)
-        if (id != (int32_t)blank_id)
-            kept.push_back(id);
     return kept;
 }
 
@@ -654,16 +671,23 @@ static std::string sensevoice_transcribe_impl(sensevoice_context* ctx, const flo
         // Convert raw logits to log-softmax first.
         const int V = (int)hp.vocab_size;
         std::vector<float> logprobs((size_t)T_total * V);
-        for (int t = 0; t < T_total; t++) {
-            const float* row = logits.data() + (size_t)t * V;
-            float* lp = logprobs.data() + (size_t)t * V;
-            float mx = *std::max_element(row, row + V);
-            double sum = 0.0;
-            for (int v = 0; v < V; v++)
-                sum += std::exp((double)(row[v] - mx));
-            double log_sum = (double)mx + std::log(sum);
-            for (int v = 0; v < V; v++)
-                lp[v] = (float)((double)row[v] - log_sum);
+        auto compute_logprobs = [&](int t0, int t1) {
+            for (int t = t0; t < t1; t++) {
+                const float* row = logits.data() + (size_t)t * V;
+                float* lp = logprobs.data() + (size_t)t * V;
+                float mx = *std::max_element(row, row + V);
+                double sum = 0.0;
+                for (int v = 0; v < V; v++)
+                    sum += std::exp((double)(row[v] - mx));
+                double log_sum = (double)mx + std::log(sum);
+                for (int v = 0; v < V; v++)
+                    lp[v] = (float)((double)row[v] - log_sum);
+            }
+        };
+        if (T_total >= 4) {
+            core_parallel::for_each_chunk(T_total, 0, compute_logprobs);
+        } else {
+            compute_logprobs(0, T_total);
         }
         auto br = core_ctc::prefix_beam_search(logprobs.data(), T_total, V, (int)hp.blank_id, /*shift=*/0,
                                                ctx->beam_size, ctx->beam_gamma);
