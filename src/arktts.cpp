@@ -73,6 +73,15 @@ struct arktts_context {
     std::unordered_map<std::string, int32_t> token_to_id;
     std::unordered_map<std::string, int32_t> merge_rank;
     std::vector<float> last_slow_normed;
+
+    // KV Cache for Slow Transformer (24 layers, up to max_seq_len tokens)
+    int max_seq_len = 1024;
+    std::vector<std::vector<float>> slow_kv_k;
+    std::vector<std::vector<float>> slow_kv_v;
+
+    // KV Cache for Fast Subnetwork (4 layers, 10 codebooks)
+    std::vector<std::vector<float>> fast_kv_k;
+    std::vector<std::vector<float>> fast_kv_v;
 };
 
 static ggml_tensor* get_tensor(const arktts_context* ctx, const std::string& name) {
@@ -187,6 +196,15 @@ struct arktts_context* arktts_init_from_file(const char* path_model, struct arkt
     }
     c->tensors = std::move(c->wl.tensors);
 
+    c->max_seq_len = 1024;
+    const int kv_dim = c->hp.n_local_heads * c->hp.head_dim;
+    c->slow_kv_k.resize(c->hp.n_layer, std::vector<float>((size_t)c->max_seq_len * kv_dim, 0.0f));
+    c->slow_kv_v.resize(c->hp.n_layer, std::vector<float>((size_t)c->max_seq_len * kv_dim, 0.0f));
+
+    const int fast_kv_dim = c->hp.fast_n_local_heads * c->hp.fast_head_dim;
+    c->fast_kv_k.resize(c->hp.n_fast_layer, std::vector<float>((size_t)c->hp.num_codebooks * fast_kv_dim, 0.0f));
+    c->fast_kv_v.resize(c->hp.n_fast_layer, std::vector<float>((size_t)c->hp.num_codebooks * fast_kv_dim, 0.0f));
+
     return c.release();
 }
 
@@ -271,6 +289,9 @@ float* arktts_run_slow_transformer(struct arktts_context* ctx, const float* embe
     const int total_dim = q_dim + 2 * kv_dim;
     const size_t esz = sizeof(float);
 
+    std::vector<ggml_tensor*> k_saved(ctx->hp.n_layer);
+    std::vector<ggml_tensor*> v_saved(ctx->hp.n_layer);
+
     for (int l = 0; l < (int)ctx->hp.n_layer; l++) {
         char name[128];
         snprintf(name, sizeof(name), "layers.%d.attention_norm.weight", l);
@@ -312,6 +333,9 @@ float* arktts_run_slow_transformer(struct arktts_context* ctx, const float* embe
         k = ggml_rope_ext(gctx, k, pos_ids, nullptr, head_dim, GGML_ROPE_TYPE_NORMAL, 0, ctx->hp.rope_theta, 1.0f, 0.0f,
                           1.0f, 0.0f, 0.0f);
 
+        k_saved[l] = k;
+        v_saved[l] = v;
+
         const int grp = n_head / n_local_heads;
         if (grp > 1) {
             ggml_tensor* K4 = ggml_reshape_4d(gctx, k, head_dim, 1, n_local_heads, n_tokens);
@@ -350,11 +374,182 @@ float* arktts_run_slow_transformer(struct arktts_context* ctx, const float* embe
     ggml_cgraph* gf = ggml_new_graph(gctx);
     ggml_build_forward_expand(gf, logits);
     ggml_build_forward_expand(gf, last_hidden);
+    for (int l = 0; l < (int)ctx->hp.n_layer; l++) {
+        ggml_build_forward_expand(gf, k_saved[l]);
+        ggml_build_forward_expand(gf, v_saved[l]);
+    }
 
     struct ggml_cplan cplan = ggml_graph_plan(gf, ctx->params.n_threads, nullptr);
     std::vector<uint8_t> work_data(cplan.work_size + 16);
     cplan.work_data = work_data.data();
     ggml_graph_compute(gf, &cplan);
+
+    ctx->last_slow_normed.resize(dim);
+    memcpy(ctx->last_slow_normed.data(), last_hidden->data, dim * sizeof(float));
+
+    if ((int)ctx->slow_kv_k.size() < (int)ctx->hp.n_layer) {
+        ctx->slow_kv_k.resize(ctx->hp.n_layer);
+        ctx->slow_kv_v.resize(ctx->hp.n_layer);
+    }
+    for (int l = 0; l < (int)ctx->hp.n_layer; l++) {
+        if ((int)ctx->slow_kv_k[l].size() < ctx->max_seq_len * kv_dim) {
+            ctx->slow_kv_k[l].resize((size_t)ctx->max_seq_len * kv_dim, 0.0f);
+            ctx->slow_kv_v[l].resize((size_t)ctx->max_seq_len * kv_dim, 0.0f);
+        }
+        memcpy(ctx->slow_kv_k[l].data(), k_saved[l]->data, (size_t)n_tokens * kv_dim * sizeof(float));
+        memcpy(ctx->slow_kv_v[l].data(), v_saved[l]->data, (size_t)n_tokens * kv_dim * sizeof(float));
+    }
+
+    float* out = (float*)malloc(vocab_size * sizeof(float));
+    if (out) {
+        memcpy(out, logits->data, vocab_size * sizeof(float));
+    }
+    ggml_free(gctx);
+    return out;
+}
+
+static float* arktts_step_slow_transformer(struct arktts_context* ctx, const float* single_embed, int pos,
+                                           int* out_vocab) {
+    if (!ctx || !single_embed || pos < 0 || pos >= ctx->max_seq_len)
+        return nullptr;
+    const int dim = ctx->hp.dim;
+    const int vocab_size = ctx->hp.vocab_size;
+    if (out_vocab)
+        *out_vocab = vocab_size;
+
+    size_t mem_size = 32 * 1024 * 1024;
+    ggml_init_params gip = {mem_size, nullptr, false};
+    ggml_context* gctx = ggml_init(gip);
+    if (!gctx)
+        return nullptr;
+
+    ggml_tensor* cur = ggml_new_tensor_2d(gctx, GGML_TYPE_F32, dim, 1);
+    memcpy(cur->data, single_embed, dim * sizeof(float));
+
+    ggml_tensor* pos_ids = ggml_new_tensor_1d(gctx, GGML_TYPE_I32, 1);
+    *(int32_t*)pos_ids->data = pos;
+
+    const int n_head = ctx->hp.n_head;
+    const int n_local_heads = ctx->hp.n_local_heads;
+    const int head_dim = ctx->hp.head_dim;
+    const int q_dim = n_head * head_dim;
+    const int kv_dim = n_local_heads * head_dim;
+    const int total_dim = q_dim + 2 * kv_dim;
+    const size_t esz = sizeof(float);
+    const int grp = n_head / n_local_heads;
+
+    std::vector<ggml_tensor*> k_step_saved(ctx->hp.n_layer);
+    std::vector<ggml_tensor*> v_step_saved(ctx->hp.n_layer);
+
+    for (int l = 0; l < (int)ctx->hp.n_layer; l++) {
+        char name[128];
+        snprintf(name, sizeof(name), "layers.%d.attention_norm.weight", l);
+        ggml_tensor* attn_norm_w = get_tensor(ctx, name);
+        snprintf(name, sizeof(name), "layers.%d.attention.wqkv.weight", l);
+        ggml_tensor* wqkv = get_tensor(ctx, name);
+        snprintf(name, sizeof(name), "layers.%d.attention.wqkv.bias", l);
+        ggml_tensor* wqkv_b = get_tensor(ctx, name);
+        snprintf(name, sizeof(name), "layers.%d.attention.wo.weight", l);
+        ggml_tensor* wo = get_tensor(ctx, name);
+        snprintf(name, sizeof(name), "layers.%d.ffn_norm.weight", l);
+        ggml_tensor* ffn_norm_w = get_tensor(ctx, name);
+        snprintf(name, sizeof(name), "layers.%d.feed_forward.w1.weight", l);
+        ggml_tensor* w1 = get_tensor(ctx, name);
+        snprintf(name, sizeof(name), "layers.%d.feed_forward.w2.weight", l);
+        ggml_tensor* w2 = get_tensor(ctx, name);
+        snprintf(name, sizeof(name), "layers.%d.feed_forward.w3.weight", l);
+        ggml_tensor* w3 = get_tensor(ctx, name);
+
+        ggml_tensor* an = ggml_rms_norm(gctx, cur, ctx->hp.norm_eps);
+        if (attn_norm_w)
+            an = ggml_mul(gctx, an, attn_norm_w);
+
+        ggml_tensor* qkv = ggml_mul_mat(gctx, wqkv, an);
+        if (wqkv_b)
+            qkv = ggml_add(gctx, qkv, wqkv_b);
+
+        ggml_tensor* q = ggml_cont(gctx, ggml_view_2d(gctx, qkv, q_dim, 1, total_dim * esz, 0));
+        ggml_tensor* k_new = ggml_cont(gctx, ggml_view_2d(gctx, qkv, kv_dim, 1, total_dim * esz, q_dim * esz));
+        ggml_tensor* v_new =
+            ggml_cont(gctx, ggml_view_2d(gctx, qkv, kv_dim, 1, total_dim * esz, (q_dim + kv_dim) * esz));
+
+        q = ggml_reshape_3d(gctx, q, head_dim, n_head, 1);
+        k_new = ggml_reshape_3d(gctx, k_new, head_dim, n_local_heads, 1);
+        v_new = ggml_reshape_3d(gctx, v_new, head_dim, n_local_heads, 1);
+
+        q = ggml_rope_ext(gctx, q, pos_ids, nullptr, head_dim, GGML_ROPE_TYPE_NORMAL, 0, ctx->hp.rope_theta, 1.0f, 0.0f,
+                          1.0f, 0.0f, 0.0f);
+        k_new = ggml_rope_ext(gctx, k_new, pos_ids, nullptr, head_dim, GGML_ROPE_TYPE_NORMAL, 0, ctx->hp.rope_theta,
+                              1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+
+        k_step_saved[l] = k_new;
+        v_step_saved[l] = v_new;
+
+        ggml_tensor* k_all = k_new;
+        ggml_tensor* v_all = v_new;
+        if (pos > 0) {
+            ggml_tensor* k_past = ggml_new_tensor_3d(gctx, GGML_TYPE_F32, head_dim, n_local_heads, pos);
+            k_past->data = ctx->slow_kv_k[l].data();
+            ggml_tensor* v_past = ggml_new_tensor_3d(gctx, GGML_TYPE_F32, head_dim, n_local_heads, pos);
+            v_past->data = ctx->slow_kv_v[l].data();
+
+            k_all = ggml_concat(gctx, k_past, k_new, 2);
+            v_all = ggml_concat(gctx, v_past, v_new, 2);
+        }
+
+        const int total_len = pos + 1;
+        if (grp > 1) {
+            ggml_tensor* K4 = ggml_reshape_4d(gctx, k_all, head_dim, 1, n_local_heads, total_len);
+            ggml_tensor* V4 = ggml_reshape_4d(gctx, v_all, head_dim, 1, n_local_heads, total_len);
+            K4 = ggml_repeat_4d(gctx, K4, head_dim, grp, n_local_heads, total_len);
+            V4 = ggml_repeat_4d(gctx, V4, head_dim, grp, n_local_heads, total_len);
+            k_all = ggml_cont(gctx, ggml_reshape_3d(gctx, K4, head_dim, n_head, total_len));
+            v_all = ggml_cont(gctx, ggml_reshape_3d(gctx, V4, head_dim, n_head, total_len));
+        }
+
+        q = ggml_permute(gctx, q, 0, 2, 1, 3);
+        k_all = ggml_permute(gctx, k_all, 0, 2, 1, 3);
+        v_all = ggml_permute(gctx, v_all, 0, 2, 1, 3);
+
+        ggml_tensor* attn =
+            core_sdpa::attn(gctx, q, k_all, v_all, nullptr, dim, 1, 1.0f / sqrtf((float)head_dim), false);
+        ggml_tensor* attn_out = ggml_mul_mat(gctx, wo, attn);
+        cur = ggml_add(gctx, cur, attn_out);
+
+        ggml_tensor* fn = ggml_rms_norm(gctx, cur, ctx->hp.norm_eps);
+        if (ffn_norm_w)
+            fn = ggml_mul(gctx, fn, ffn_norm_w);
+
+        ggml_tensor* mlp = core_ffn::swiglu(gctx, fn, w1, w3, w2);
+        cur = ggml_add(gctx, cur, mlp);
+    }
+
+    ggml_tensor* norm_w = get_tensor(ctx, "norm.weight");
+    cur = ggml_rms_norm(gctx, cur, ctx->hp.norm_eps);
+    if (norm_w)
+        cur = ggml_mul(gctx, cur, norm_w);
+
+    ggml_tensor* last_hidden = cur;
+    ggml_tensor* emb_w = get_tensor(ctx, "embeddings.weight");
+    ggml_tensor* logits = ggml_mul_mat(gctx, emb_w, last_hidden);
+
+    ggml_cgraph* gf = ggml_new_graph(gctx);
+    ggml_build_forward_expand(gf, logits);
+    ggml_build_forward_expand(gf, last_hidden);
+    for (int l = 0; l < (int)ctx->hp.n_layer; l++) {
+        ggml_build_forward_expand(gf, k_step_saved[l]);
+        ggml_build_forward_expand(gf, v_step_saved[l]);
+    }
+
+    struct ggml_cplan cplan = ggml_graph_plan(gf, ctx->params.n_threads, nullptr);
+    std::vector<uint8_t> work_data(cplan.work_size + 16);
+    cplan.work_data = work_data.data();
+    ggml_graph_compute(gf, &cplan);
+
+    for (int l = 0; l < (int)ctx->hp.n_layer; l++) {
+        memcpy(ctx->slow_kv_k[l].data() + (size_t)pos * kv_dim, k_step_saved[l]->data, kv_dim * sizeof(float));
+        memcpy(ctx->slow_kv_v[l].data() + (size_t)pos * kv_dim, v_step_saved[l]->data, kv_dim * sizeof(float));
+    }
 
     ctx->last_slow_normed.resize(dim);
     memcpy(ctx->last_slow_normed.data(), last_hidden->data, dim * sizeof(float));
@@ -367,17 +562,157 @@ float* arktts_run_slow_transformer(struct arktts_context* ctx, const float* embe
     return out;
 }
 
+static void arktts_step_fast_subnetwork(struct arktts_context* ctx, const float* token_embed, int pos,
+                                        float* out_logits) {
+    const int dim = ctx->hp.fast_dim;
+    const int codebook_size = ctx->hp.codebook_size;
+    const int n_head = ctx->hp.fast_n_head;
+    const int n_local_heads = ctx->hp.fast_n_local_heads;
+    const int head_dim = ctx->hp.fast_head_dim;
+    const int q_dim = n_head * head_dim;
+    const int kv_dim = n_local_heads * head_dim;
+    const int total_dim = q_dim + 2 * kv_dim;
+    const size_t esz = sizeof(float);
+    const int grp = n_head / n_local_heads;
+
+    size_t mem_size = 4 * 1024 * 1024;
+    ggml_init_params gip = {mem_size, nullptr, false};
+    ggml_context* gctx = ggml_init(gip);
+    if (!gctx)
+        return;
+
+    ggml_tensor* cur = ggml_new_tensor_2d(gctx, GGML_TYPE_F32, dim, 1);
+    memcpy(cur->data, token_embed, dim * sizeof(float));
+
+    ggml_tensor* pos_ids = ggml_new_tensor_1d(gctx, GGML_TYPE_I32, 1);
+    *(int32_t*)pos_ids->data = pos;
+
+    std::vector<ggml_tensor*> k_step_saved(ctx->hp.n_fast_layer);
+    std::vector<ggml_tensor*> v_step_saved(ctx->hp.n_fast_layer);
+
+    for (int l = 0; l < (int)ctx->hp.n_fast_layer; l++) {
+        char name[128];
+        snprintf(name, sizeof(name), "fast_layers.%d.attention_norm.weight", l);
+        ggml_tensor* attn_norm_w = get_tensor(ctx, name);
+        snprintf(name, sizeof(name), "fast_layers.%d.attention.wqkv.weight", l);
+        ggml_tensor* wqkv = get_tensor(ctx, name);
+        snprintf(name, sizeof(name), "fast_layers.%d.attention.wo.weight", l);
+        ggml_tensor* wo = get_tensor(ctx, name);
+        snprintf(name, sizeof(name), "fast_layers.%d.ffn_norm.weight", l);
+        ggml_tensor* ffn_norm_w = get_tensor(ctx, name);
+        snprintf(name, sizeof(name), "fast_layers.%d.feed_forward.w1.weight", l);
+        ggml_tensor* w1 = get_tensor(ctx, name);
+        snprintf(name, sizeof(name), "fast_layers.%d.feed_forward.w2.weight", l);
+        ggml_tensor* w2 = get_tensor(ctx, name);
+        snprintf(name, sizeof(name), "fast_layers.%d.feed_forward.w3.weight", l);
+        ggml_tensor* w3 = get_tensor(ctx, name);
+
+        ggml_tensor* an = ggml_rms_norm(gctx, cur, ctx->hp.norm_eps);
+        if (attn_norm_w)
+            an = ggml_mul(gctx, an, attn_norm_w);
+
+        ggml_tensor* qkv = ggml_mul_mat(gctx, wqkv, an);
+
+        ggml_tensor* q = ggml_cont(gctx, ggml_view_2d(gctx, qkv, q_dim, 1, total_dim * esz, 0));
+        ggml_tensor* k_new = ggml_cont(gctx, ggml_view_2d(gctx, qkv, kv_dim, 1, total_dim * esz, q_dim * esz));
+        ggml_tensor* v_new =
+            ggml_cont(gctx, ggml_view_2d(gctx, qkv, kv_dim, 1, total_dim * esz, (q_dim + kv_dim) * esz));
+
+        q = ggml_reshape_3d(gctx, q, head_dim, n_head, 1);
+        k_new = ggml_reshape_3d(gctx, k_new, head_dim, n_local_heads, 1);
+        v_new = ggml_reshape_3d(gctx, v_new, head_dim, n_local_heads, 1);
+
+        q = ggml_rope_ext(gctx, q, pos_ids, nullptr, head_dim, GGML_ROPE_TYPE_NORMAL, 0, ctx->hp.rope_theta, 1.0f, 0.0f,
+                          1.0f, 0.0f, 0.0f);
+        k_new = ggml_rope_ext(gctx, k_new, pos_ids, nullptr, head_dim, GGML_ROPE_TYPE_NORMAL, 0, ctx->hp.rope_theta,
+                              1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
+
+        k_step_saved[l] = k_new;
+        v_step_saved[l] = v_new;
+
+        ggml_tensor* k_all = k_new;
+        ggml_tensor* v_all = v_new;
+        if (pos > 0) {
+            ggml_tensor* k_past = ggml_new_tensor_3d(gctx, GGML_TYPE_F32, head_dim, n_local_heads, pos);
+            k_past->data = ctx->fast_kv_k[l].data();
+            ggml_tensor* v_past = ggml_new_tensor_3d(gctx, GGML_TYPE_F32, head_dim, n_local_heads, pos);
+            v_past->data = ctx->fast_kv_v[l].data();
+
+            k_all = ggml_concat(gctx, k_past, k_new, 2);
+            v_all = ggml_concat(gctx, v_past, v_new, 2);
+        }
+
+        const int total_len = pos + 1;
+        if (grp > 1) {
+            ggml_tensor* K4 = ggml_reshape_4d(gctx, k_all, head_dim, 1, n_local_heads, total_len);
+            ggml_tensor* V4 = ggml_reshape_4d(gctx, v_all, head_dim, 1, n_local_heads, total_len);
+            K4 = ggml_repeat_4d(gctx, K4, head_dim, grp, n_local_heads, total_len);
+            V4 = ggml_repeat_4d(gctx, V4, head_dim, grp, n_local_heads, total_len);
+            k_all = ggml_cont(gctx, ggml_reshape_3d(gctx, K4, head_dim, n_head, total_len));
+            v_all = ggml_cont(gctx, ggml_reshape_3d(gctx, V4, head_dim, n_head, total_len));
+        }
+
+        q = ggml_permute(gctx, q, 0, 2, 1, 3);
+        k_all = ggml_permute(gctx, k_all, 0, 2, 1, 3);
+        v_all = ggml_permute(gctx, v_all, 0, 2, 1, 3);
+
+        ggml_tensor* attn =
+            core_sdpa::attn(gctx, q, k_all, v_all, nullptr, dim, 1, 1.0f / sqrtf((float)head_dim), false);
+        ggml_tensor* attn_out = ggml_mul_mat(gctx, wo, attn);
+        cur = ggml_add(gctx, cur, attn_out);
+
+        ggml_tensor* fn = ggml_rms_norm(gctx, cur, ctx->hp.norm_eps);
+        if (ffn_norm_w)
+            fn = ggml_mul(gctx, fn, ffn_norm_w);
+
+        ggml_tensor* mlp = core_ffn::swiglu(gctx, fn, w1, w3, w2);
+        cur = ggml_add(gctx, cur, mlp);
+    }
+
+    ggml_cgraph* gf = ggml_new_graph(gctx);
+    ggml_tensor* logits = nullptr;
+    if (out_logits) {
+        ggml_tensor* fast_norm_w = get_tensor(ctx, "fast_norm.weight");
+        cur = ggml_rms_norm(gctx, cur, ctx->hp.norm_eps);
+        if (fast_norm_w)
+            cur = ggml_mul(gctx, cur, fast_norm_w);
+        ggml_tensor* fast_out_w = get_tensor(ctx, "fast_output.weight");
+        logits = ggml_mul_mat(gctx, fast_out_w, cur);
+        ggml_build_forward_expand(gf, logits);
+    }
+    for (int l = 0; l < (int)ctx->hp.n_fast_layer; l++) {
+        ggml_build_forward_expand(gf, k_step_saved[l]);
+        ggml_build_forward_expand(gf, v_step_saved[l]);
+    }
+
+    struct ggml_cplan cplan = ggml_graph_plan(gf, ctx->params.n_threads, nullptr);
+    std::vector<uint8_t> work_data(cplan.work_size + 16);
+    cplan.work_data = work_data.data();
+    ggml_graph_compute(gf, &cplan);
+
+    for (int l = 0; l < (int)ctx->hp.n_fast_layer; l++) {
+        memcpy(ctx->fast_kv_k[l].data() + (size_t)pos * kv_dim, k_step_saved[l]->data, kv_dim * sizeof(float));
+        memcpy(ctx->fast_kv_v[l].data() + (size_t)pos * kv_dim, v_step_saved[l]->data, kv_dim * sizeof(float));
+    }
+
+    if (out_logits && logits) {
+        memcpy(out_logits, logits->data, codebook_size * sizeof(float));
+    }
+    ggml_free(gctx);
+}
+
 int arktts_run_fast_subnetwork(struct arktts_context* ctx, const float* slow_hidden, int32_t semantic_code,
                                int32_t* out_codebooks) {
     if (!ctx || !out_codebooks)
         return -1;
     const int dim = ctx->hp.fast_dim;
     const int n_cb = ctx->hp.num_codebooks;
+    const int cb_size = ctx->hp.codebook_size;
 
     // Codebook 0 is direct semantic offset
     int32_t c0 = semantic_code - (int32_t)ctx->hp.semantic_begin_id;
-    if (c0 < 0 || c0 >= (int32_t)ctx->hp.codebook_size) {
-        c0 = std::clamp(c0, 0, (int32_t)ctx->hp.codebook_size - 1);
+    if (c0 < 0 || c0 >= cb_size) {
+        c0 = std::clamp(c0, 0, cb_size - 1);
     }
     out_codebooks[0] = c0;
 
@@ -386,141 +721,30 @@ int arktts_run_fast_subnetwork(struct arktts_context* ctx, const float* slow_hid
         return -1;
 
     ggml_tensor* fast_emb_w = get_tensor(ctx, "fast_embeddings.weight");
-    ggml_tensor* fast_norm_w = get_tensor(ctx, "fast_norm.weight");
-    ggml_tensor* fast_out_w = get_tensor(ctx, "fast_output.weight");
-    if (!fast_emb_w || !fast_norm_w || !fast_out_w)
+    if (!fast_emb_w)
         return -1;
 
-    // Fast subnetwork autoregressive generation across 10 steps
+    // Step position 0 with slow_hidden (primes fast KV cache)
+    arktts_step_fast_subnetwork(ctx, h0, 0, nullptr);
+
+    // Step positions 1..n_cb-1 with previous codebook embeddings
     std::vector<float> cb_embed(dim);
+    std::vector<float> scores(cb_size);
     for (int pos = 1; pos < n_cb; pos++) {
-        int seq_len = pos + 1;
-        size_t mem_size = 32 * 1024 * 1024;
-        ggml_init_params gip = {mem_size, nullptr, false};
-        ggml_context* gctx = ggml_init(gip);
-        if (!gctx)
-            return -1;
+        int32_t prev_code = out_codebooks[pos - 1];
+        dequant_row(fast_emb_w, prev_code, cb_embed.data());
 
-        ggml_tensor* cur = ggml_new_tensor_2d(gctx, GGML_TYPE_F32, dim, seq_len);
-        // Position 0 input is slow_hidden
-        memcpy(cur->data, h0, dim * sizeof(float));
-        // Positions 1..pos inputs are fast_embeddings of previous codebooks
-        for (int p = 1; p <= pos; p++) {
-            int32_t prev_code = out_codebooks[p - 1];
-            dequant_row(fast_emb_w, prev_code, (float*)cur->data + (size_t)p * dim);
-        }
+        arktts_step_fast_subnetwork(ctx, cb_embed.data(), pos, scores.data());
 
-        ggml_tensor* pos_ids = ggml_new_tensor_1d(gctx, GGML_TYPE_I32, seq_len);
-        int32_t* pos_data = (int32_t*)pos_ids->data;
-        for (int i = 0; i < seq_len; i++)
-            pos_data[i] = i;
-
-        ggml_tensor* mask = ggml_new_tensor_2d(gctx, GGML_TYPE_F32, seq_len, seq_len);
-        float* mask_data = (float*)mask->data;
-        for (int i = 0; i < seq_len; i++) {
-            for (int j = 0; j < seq_len; j++) {
-                mask_data[i * seq_len + j] = (j <= i) ? 0.0f : -1e9f;
+        int32_t best_c = 0;
+        float best_s = scores[0];
+        for (int c = 1; c < cb_size; c++) {
+            if (scores[c] > best_s) {
+                best_s = scores[c];
+                best_c = c;
             }
         }
-
-        const int n_head = ctx->hp.fast_n_head;
-        const int n_local_heads = ctx->hp.fast_n_local_heads;
-        const int head_dim = ctx->hp.fast_head_dim;
-        const int q_dim = n_head * head_dim;
-        const int kv_dim = n_local_heads * head_dim;
-        const int total_dim = q_dim + 2 * kv_dim;
-        const size_t esz = sizeof(float);
-
-        for (int l = 0; l < (int)ctx->hp.n_fast_layer; l++) {
-            char name[128];
-            snprintf(name, sizeof(name), "fast_layers.%d.attention_norm.weight", l);
-            ggml_tensor* attn_norm_w = get_tensor(ctx, name);
-            snprintf(name, sizeof(name), "fast_layers.%d.attention.wqkv.weight", l);
-            ggml_tensor* wqkv = get_tensor(ctx, name);
-            snprintf(name, sizeof(name), "fast_layers.%d.attention.wo.weight", l);
-            ggml_tensor* wo = get_tensor(ctx, name);
-            snprintf(name, sizeof(name), "fast_layers.%d.ffn_norm.weight", l);
-            ggml_tensor* ffn_norm_w = get_tensor(ctx, name);
-            snprintf(name, sizeof(name), "fast_layers.%d.feed_forward.w1.weight", l);
-            ggml_tensor* w1 = get_tensor(ctx, name);
-            snprintf(name, sizeof(name), "fast_layers.%d.feed_forward.w2.weight", l);
-            ggml_tensor* w2 = get_tensor(ctx, name);
-            snprintf(name, sizeof(name), "fast_layers.%d.feed_forward.w3.weight", l);
-            ggml_tensor* w3 = get_tensor(ctx, name);
-
-            ggml_tensor* an = ggml_rms_norm(gctx, cur, ctx->hp.norm_eps);
-            if (attn_norm_w)
-                an = ggml_mul(gctx, an, attn_norm_w);
-
-            ggml_tensor* qkv = ggml_mul_mat(gctx, wqkv, an);
-
-            ggml_tensor* q = ggml_cont(gctx, ggml_view_2d(gctx, qkv, q_dim, seq_len, total_dim * esz, 0));
-            ggml_tensor* k = ggml_cont(gctx, ggml_view_2d(gctx, qkv, kv_dim, seq_len, total_dim * esz, q_dim * esz));
-            ggml_tensor* v =
-                ggml_cont(gctx, ggml_view_2d(gctx, qkv, kv_dim, seq_len, total_dim * esz, (q_dim + kv_dim) * esz));
-
-            q = ggml_reshape_3d(gctx, q, head_dim, n_head, seq_len);
-            k = ggml_reshape_3d(gctx, k, head_dim, n_local_heads, seq_len);
-            v = ggml_reshape_3d(gctx, v, head_dim, n_local_heads, seq_len);
-
-            q = ggml_rope_ext(gctx, q, pos_ids, nullptr, head_dim, GGML_ROPE_TYPE_NORMAL, 0, ctx->hp.rope_theta, 1.0f,
-                              0.0f, 1.0f, 0.0f, 0.0f);
-            k = ggml_rope_ext(gctx, k, pos_ids, nullptr, head_dim, GGML_ROPE_TYPE_NORMAL, 0, ctx->hp.rope_theta, 1.0f,
-                              0.0f, 1.0f, 0.0f, 0.0f);
-
-            const int grp = n_head / n_local_heads;
-            if (grp > 1) {
-                ggml_tensor* K4 = ggml_reshape_4d(gctx, k, head_dim, 1, n_local_heads, seq_len);
-                ggml_tensor* V4 = ggml_reshape_4d(gctx, v, head_dim, 1, n_local_heads, seq_len);
-                K4 = ggml_repeat_4d(gctx, K4, head_dim, grp, n_local_heads, seq_len);
-                V4 = ggml_repeat_4d(gctx, V4, head_dim, grp, n_local_heads, seq_len);
-                k = ggml_cont(gctx, ggml_reshape_3d(gctx, K4, head_dim, n_head, seq_len));
-                v = ggml_cont(gctx, ggml_reshape_3d(gctx, V4, head_dim, n_head, seq_len));
-            }
-
-            q = ggml_permute(gctx, q, 0, 2, 1, 3);
-            k = ggml_permute(gctx, k, 0, 2, 1, 3);
-            v = ggml_permute(gctx, v, 0, 2, 1, 3);
-
-            ggml_tensor* attn =
-                core_sdpa::attn(gctx, q, k, v, mask, dim, seq_len, 1.0f / sqrtf((float)head_dim), false);
-            ggml_tensor* attn_out = ggml_mul_mat(gctx, wo, attn);
-            cur = ggml_add(gctx, cur, attn_out);
-
-            ggml_tensor* fn = ggml_rms_norm(gctx, cur, ctx->hp.norm_eps);
-            if (ffn_norm_w)
-                fn = ggml_mul(gctx, fn, ffn_norm_w);
-
-            ggml_tensor* mlp = core_ffn::swiglu(gctx, fn, w1, w3, w2);
-            cur = ggml_add(gctx, cur, mlp);
-        }
-
-        cur = ggml_rms_norm(gctx, cur, ctx->hp.norm_eps);
-        if (fast_norm_w)
-            cur = ggml_mul(gctx, cur, fast_norm_w);
-
-        ggml_tensor* last_cur = ggml_view_1d(gctx, cur, dim, (size_t)pos * dim * sizeof(float));
-        ggml_tensor* logits = ggml_mul_mat(gctx, fast_out_w, last_cur);
-
-        ggml_cgraph* gf = ggml_new_graph(gctx);
-        ggml_build_forward_expand(gf, logits);
-
-        struct ggml_cplan cplan = ggml_graph_plan(gf, ctx->params.n_threads, nullptr);
-        std::vector<uint8_t> work_data(cplan.work_size + 16);
-        cplan.work_data = work_data.data();
-        ggml_graph_compute(gf, &cplan);
-
-        const float* logit_data = (const float*)logits->data;
-        int best_idx = 0;
-        float best_val = logit_data[0];
-        for (int i = 1; i < (int)ctx->hp.codebook_size; i++) {
-            if (logit_data[i] > best_val) {
-                best_val = logit_data[i];
-                best_idx = i;
-            }
-        }
-        out_codebooks[pos] = best_idx;
-        ggml_free(gctx);
+        out_codebooks[pos] = best_c;
     }
 
     return 0;
@@ -1067,14 +1291,12 @@ float* arktts_synthesize(struct arktts_context* ctx, const char* text, int* out_
     const int32_t sem_end = (int32_t)ctx->hp.semantic_end_id;
     const int32_t eos_id = 151645;
 
+    int vocab_size = 0;
+    float* logits = arktts_run_slow_transformer(ctx, embeds.data(), n_prompt, &vocab_size);
+    if (!logits)
+        return nullptr;
+
     for (int step = 0; step < max_tokens; step++) {
-        const int cur_len = n_prompt + step;
-        int vocab_size = 0;
-        float* logits = arktts_run_slow_transformer(ctx, embeds.data(), cur_len, &vocab_size);
-        if (!logits)
-            break;
-
-
         int32_t best_tok = sem_beg;
         float best_val = -1e30f;
 
@@ -1133,21 +1355,20 @@ float* arktts_synthesize(struct arktts_context* ctx, const char* text, int* out_
             }
         }
         free(logits);
+        logits = nullptr;
 
         if (best_tok == eos_id) {
             break;
         }
 
+        auto t0_fast = std::chrono::steady_clock::now();
         std::vector<int32_t> frame_cb(10, 0);
         if (arktts_run_fast_subnetwork(ctx, ctx->last_slow_normed.data(), best_tok, frame_cb.data()) != 0) {
             break;
         }
+        auto t1_fast = std::chrono::steady_clock::now();
         generated_frames.push_back(frame_cb);
         prev_tokens.push_back(best_tok);
-
-        if (ctx->params.verbosity >= 1 && (step + 1) % 20 == 0) {
-            fprintf(stderr, "arktts: step %d/%d (frames: %d)\n", step + 1, max_tokens, (int)generated_frames.size());
-        }
 
         std::vector<float> step_embed(dim, 0.0f);
         dequant_row(emb_w, best_tok, step_embed.data());
@@ -1160,7 +1381,26 @@ float* arktts_synthesize(struct arktts_context* ctx, const char* text, int* out_
                 step_embed[d] += cb_row[d];
             }
         }
-        embeds.insert(embeds.end(), step_embed.begin(), step_embed.end());
+
+        const int cur_pos = n_prompt + step;
+        auto t0_slow = std::chrono::steady_clock::now();
+        logits = arktts_step_slow_transformer(ctx, step_embed.data(), cur_pos, &vocab_size);
+        auto t1_slow = std::chrono::steady_clock::now();
+
+        if (ctx->params.verbosity >= 1 || true) {
+            double ms_fast = std::chrono::duration<double, std::milli>(t1_fast - t0_fast).count();
+            double ms_slow = std::chrono::duration<double, std::milli>(t1_slow - t0_slow).count();
+            fprintf(stderr, "arktts: frame %d: fast=%.1fms, slow=%.1fms (total=%.1fms)\n", step + 1, ms_fast, ms_slow,
+                    ms_fast + ms_slow);
+        }
+
+        if (!logits) {
+            break;
+        }
+    }
+    if (logits) {
+        free(logits);
+        logits = nullptr;
     }
 
     if (generated_frames.empty())
