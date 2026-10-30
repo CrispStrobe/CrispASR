@@ -1868,6 +1868,7 @@ default quantized model for the selected backend into
 | piper | `cstr/piper-en_US-lessac-medium-GGUF` (F16) | ~30 MB | Lightweight, many voices via `--voice` |
 | tada-1b | `cstr/tada-tts-1b-GGUF` (Q4_K + F16 codec) | ~1.7 GB + ~250 MB | English-only; `--voice tada-ref.gguf` |
 | tada / tada-3b-ml | `cstr/tada-tts-3b-ml-GGUF` (F16 + F16 codec) | ~6.6 GB + ~250 MB | 9 languages; `-l fr` auto-downloads `tada-ref-fr.gguf` — see [tts.md §TADA](tts.md#tada--multilingual-and-voice-cloning) |
+| arktts | `cstr/Audio8-TTS-Realistic-0.6b-GGUF` (Q4_K) | ~1.2 GB | Audio8-TTS 44.1 kHz dual transformer; Q8_0 (~1.4 GB) supported |
 
 Downloads go through `curl` (preferred) with a `wget` fallback — **no
 Python, no libcurl link dependency**. Works identically on Linux,

@@ -134,6 +134,13 @@ void arktts_set_seed(struct arktts_context* ctx, uint64_t seed) {
     }
 }
 
+int arktts_set_max_new_tokens(struct arktts_context* ctx, int max_new_tokens) {
+    if (!ctx)
+        return -1;
+    ctx->params.max_tokens = max_new_tokens > 0 ? max_new_tokens : 512;
+    return 0;
+}
+
 int arktts_set_reference(struct arktts_context* ctx, const float* audio_44k, int n_samples,
                          const char* reference_text) {
     if (!ctx)
@@ -437,6 +444,15 @@ static float* arktts_step_slow_transformer(struct arktts_context* ctx, const flo
     const int total_dim = q_dim + 2 * kv_dim;
     const size_t esz = sizeof(float);
     const int grp = n_head / n_local_heads;
+
+    if (pos >= ctx->max_seq_len) {
+        int new_max = std::max(pos + 512, ctx->max_seq_len * 2);
+        for (int l = 0; l < (int)ctx->hp.n_layer; l++) {
+            ctx->slow_kv_k[l].resize((size_t)new_max * kv_dim, 0.0f);
+            ctx->slow_kv_v[l].resize((size_t)new_max * kv_dim, 0.0f);
+        }
+        ctx->max_seq_len = new_max;
+    }
 
     std::vector<ggml_tensor*> k_step_saved(ctx->hp.n_layer);
     std::vector<ggml_tensor*> v_step_saved(ctx->hp.n_layer);
@@ -1156,7 +1172,7 @@ float* arktts_decode_codes(struct arktts_context* ctx, const int32_t* codes, int
     if (!ctx || !codes || n_codebooks <= 0 || n_frames <= 0)
         return nullptr;
 
-    const size_t ctx_size = (size_t)(1024 + (size_t)n_frames * 160) * 1024 * 1024;
+    const size_t ctx_size = (size_t)(1024 + (size_t)n_frames * 64) * 1024 * 1024;
     struct ggml_init_params params = {ctx_size, nullptr, false};
     ggml_context* gctx = ggml_init(params);
     if (!gctx)

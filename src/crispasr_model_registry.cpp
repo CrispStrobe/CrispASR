@@ -1556,6 +1556,13 @@ constexpr Entry k_registry[] = {
      "https://huggingface.co/cstr/csm-1b-GGUF/resolve/main/csm-1b-q4_k.gguf",
      "~1.4 GB", nullptr, nullptr},
 
+    // ArkTTS (Audio8-TTS-Realistic-0.6b): 600M param dual-transformer TTS (44.1 kHz).
+    // Edge0/Audio8-TTS-Realistic-0.6b. Slow transformer + fast subnetwork with
+    // causal ConvNeXt + Snake vocoder. Default Q4_K (1.2 GB); Q8_0 (1.4 GB).
+    {"arktts", "arktts-q4_k.gguf",
+     "https://huggingface.co/cstr/Audio8-TTS-Realistic-0.6b-GGUF/resolve/main/arktts-q4_k.gguf",
+     "~1.2 GB", nullptr, nullptr},
+
     // MeloTTS: VITS2 52M param TTS (myshell-ai/MeloTTS). 44.1 kHz mono.
     // MIT license. Single GGUF with embedded CMU dictionary + neural G2P.
     // V2: 4 English speakers (US/BR/India/AU), 112 symbols, 11 tones.

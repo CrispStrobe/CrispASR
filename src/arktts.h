@@ -47,6 +47,7 @@ int arktts_get_sample_rate(const struct arktts_context* ctx);
 // Sampling controls
 void arktts_set_temperature(struct arktts_context* ctx, float temperature);
 void arktts_set_seed(struct arktts_context* ctx, uint64_t seed);
+int arktts_set_max_new_tokens(struct arktts_context* ctx, int max_new_tokens);
 
 // Synthesize text to 44.1 kHz mono float PCM. Caller frees with arktts_free_audio.
 float* arktts_synthesize(struct arktts_context* ctx, const char* text, int* out_n);

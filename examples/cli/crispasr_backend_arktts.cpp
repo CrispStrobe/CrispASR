@@ -60,6 +60,9 @@ public:
             return {};
         arktts_set_temperature(ctx_, p.temperature);
         arktts_set_seed(ctx_, p.seed);
+        if (p.max_new_tokens_explicit && p.max_new_tokens > 0) {
+            arktts_set_max_new_tokens(ctx_, p.max_new_tokens);
+        }
         int n = 0;
         float* pcm = arktts_synthesize(ctx_, text.c_str(), &n);
         if (!pcm || n <= 0)

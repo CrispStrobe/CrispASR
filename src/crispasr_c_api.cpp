@@ -10674,6 +10674,8 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
 #endif
 #ifdef CA_HAVE_ARKTTS
     if (s->arktts_ctx) {
+        if (s->max_new_tokens > 0)
+            arktts_set_max_new_tokens(s->arktts_ctx, s->max_new_tokens);
         int n = 0;
         float* pcm = arktts_synthesize(s->arktts_ctx, text, &n);
         if (out_n_samples)
@@ -14192,6 +14194,10 @@ CA_EXPORT int crispasr_session_set_max_new_tokens(crispasr_session* s, int n) {
 #ifdef CA_HAVE_DIA
     if (s->dia_tts_ctx)
         dia_tts_set_max_tokens(s->dia_tts_ctx, s->max_new_tokens);
+#endif
+#ifdef CA_HAVE_ARKTTS
+    if (s->arktts_ctx)
+        arktts_set_max_new_tokens(s->arktts_ctx, s->max_new_tokens);
 #endif
     return 0;
 }
