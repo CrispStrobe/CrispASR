@@ -1133,11 +1133,13 @@ static Lfm2StepResult lfm2_backbone_step(lfm2_audio_context* ctx, const float* e
     }
     if (causal_mask) {
         const int Lk = n_past + T_in;
-        std::vector<ggml_fp16_t> mask_data(Lk * T_in);
-        ggml_fp16_t zero = ggml_fp32_to_fp16(0.0f), neginf = ggml_fp32_to_fp16(-INFINITY);
-        for (int q = 0; q < T_in; q++)
-            for (int k = 0; k < Lk; k++)
-                mask_data[q * Lk + k] = (k <= n_past + q) ? zero : neginf;
+        const ggml_fp16_t zero = ggml_fp32_to_fp16(0.0f), neginf = ggml_fp32_to_fp16(-INFINITY);
+        std::vector<ggml_fp16_t> mask_data((size_t)Lk * T_in, neginf);
+        for (int q = 0; q < T_in; q++) {
+            int count = std::min(Lk, n_past + q + 1);
+            if (count > 0)
+                std::fill_n(mask_data.data() + (size_t)q * Lk, count, zero);
+        }
         ggml_backend_tensor_set(causal_mask, mask_data.data(), 0, mask_data.size() * sizeof(ggml_fp16_t));
     }
     // Set conv state inputs
@@ -1734,11 +1736,11 @@ float* lfm2_audio_run_lfm(lfm2_audio_context* ctx, const float* samples, int n_s
         ggml_backend_tensor_set(positions, pos.data(), 0, T * sizeof(int32_t));
     }
     if (mask->buffer) {
-        std::vector<ggml_fp16_t> m((size_t)T * T);
         const ggml_fp16_t zero = ggml_fp32_to_fp16(0.0f), neginf = ggml_fp32_to_fp16(-INFINITY);
-        for (int i = 0; i < T; i++)
-            for (int j = 0; j < T; j++)
-                m[(size_t)i * T + j] = (j <= i) ? zero : neginf;
+        std::vector<ggml_fp16_t> m((size_t)T * T, neginf);
+        for (int i = 0; i < T; i++) {
+            std::fill_n(m.data() + (size_t)i * T, i + 1, zero);
+        }
         ggml_backend_tensor_set(mask, m.data(), 0, m.size() * sizeof(ggml_fp16_t));
     }
 
@@ -2318,10 +2320,15 @@ static float* lfm2_detokenize(lfm2_audio_context* ctx, const std::vector<std::ve
     memcpy(x->data, up.data(), sizeof(float) * Tu * h);
     ggml_tensor* mask = ggml_new_tensor_2d(c0, GGML_TYPE_F16, Tu, Tu);
     {
-        ggml_fp16_t *m = (ggml_fp16_t*)mask->data, z = ggml_fp32_to_fp16(0.0f), ni = ggml_fp32_to_fp16(-INFINITY);
-        for (int q = 0; q < Tu; q++)
-            for (int k = 0; k < Tu; k++)
-                m[q * Tu + k] = ((k <= q) && (q - k) < d.sliding_window) ? z : ni;
+        ggml_fp16_t* m = (ggml_fp16_t*)mask->data;
+        const ggml_fp16_t z = ggml_fp32_to_fp16(0.0f), ni = ggml_fp32_to_fp16(-INFINITY);
+        std::fill_n(m, (size_t)Tu * Tu, ni);
+        for (int q = 0; q < Tu; q++) {
+            int k_start = std::max(0, q - (int)d.sliding_window + 1);
+            int count = q - k_start + 1;
+            if (count > 0)
+                std::fill_n(m + (size_t)q * Tu + k_start, count, z);
+        }
     }
     ggml_tensor* pos = ggml_new_tensor_1d(c0, GGML_TYPE_I32, Tu);
     for (int i = 0; i < Tu; i++)

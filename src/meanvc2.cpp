@@ -1108,6 +1108,19 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
     const int t_p[4] = {2, 2, 1, 1};
     const int t_f[4] = {1, 0, 0, 0};
 
+    // Pre-allocate scratch buffers outside chunk loop to eliminate heap reallocations
+    const int max_chunk_frames = chunk_size + block_size;
+    std::vector<float> fused_in(max_chunk_frames * 592);
+    std::vector<float> x(max_chunk_frames * dim);
+    std::vector<float> x_norm(max_chunk_frames * dim);
+    std::vector<float> q(max_chunk_frames * 128), k(max_chunk_frames * 128), v(max_chunk_frames * 128);
+    std::vector<float> attn_out(max_chunk_frames * 128);
+    std::vector<float> attn_proj(max_chunk_frames * dim);
+    std::vector<float> x_norm2(max_chunk_frames * dim);
+    std::vector<float> ffn_mid(max_chunk_frames * 1024);
+    std::vector<float> ffn_out(max_chunk_frames * dim);
+    std::vector<float> u(max_chunk_frames * mel_dim);
+
     for (int chunk_id = 0; chunk_id < num_chunks; chunk_id++) {
         int start = chunk_id * chunk_size;
         int mid = std::min(start + chunk_size, n_frames);
@@ -1116,7 +1129,7 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
         int total_len = end - start;
 
         // Input embedding: concat (noise, timbre_cond, spk_emb)
-        std::vector<float> fused_in(total_len * 592);
+        fused_in.resize(total_len * 592);
         for (int t = 0; t < total_len; t++) {
             int src_t = start + t;
             memcpy(fused_in.data() + t * 592, noise + src_t * 80, 80 * sizeof(float));
@@ -1124,7 +1137,7 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
             memcpy(fused_in.data() + t * 592 + 336, spk_emb, 256 * sizeof(float));
         }
 
-        std::vector<float> x(total_len * dim);
+        x.resize(total_len * dim);
         cpu_gemm_linear(fused_in.data(), inp_w.data(), inp_b.data(), x.data(), total_len, 592, dim);
 
         // Transformer blocks
@@ -1139,7 +1152,8 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
             const float* gate_mlp = block_ada[l].data() + 5 * dim;
 
             // Self-Attention modulation
-            std::vector<float> x_norm = x;
+            x_norm.resize(total_len * dim);
+            memcpy(x_norm.data(), x.data(), total_len * dim * sizeof(float));
             cpu_layer_norm(x_norm.data(), total_len, dim, nullptr, nullptr, 1e-6f);
             for (int t = 0; t < total_len; t++) {
                 for (int d = 0; d < dim; d++) {
@@ -1148,7 +1162,9 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
             }
 
             // Q, K, V
-            std::vector<float> q(total_len * 128), k(total_len * 128), v(total_len * 128);
+            q.resize(total_len * 128);
+            k.resize(total_len * 128);
+            v.resize(total_len * 128);
             cpu_gemm_linear(x_norm.data(), bw.q_w.data(), bw.q_b.data(), q.data(), total_len, dim, 128);
             cpu_gemm_linear(x_norm.data(), bw.k_w.data(), bw.k_b.data(), k.data(), total_len, dim, 128);
             cpu_gemm_linear(x_norm.data(), bw.v_w.data(), bw.v_b.data(), v.data(), total_len, dim, 128);
@@ -1190,16 +1206,25 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
             // RoPE on Q (total_len frames)
             for (int t = 0; t < total_len; t++) {
                 int pos = offset_val + t;
+                float cos_t[32], sin_t[32];
+                for (int i = 0; i < (int)head_dim / 2; i++) {
+                    float theta = (float)pos * inv_freq[i];
+#if defined(__APPLE__)
+                    __sincosf(theta, &sin_t[i], &cos_t[i]);
+#elif defined(_GNU_SOURCE) || defined(__GLIBC__)
+                    sincosf(theta, &sin_t[i], &cos_t[i]);
+#else
+                    cos_t[i] = cosf(theta);
+                    sin_t[i] = sinf(theta);
+#endif
+                }
                 for (int h = 0; h < heads; h++) {
                     float* q_head = q.data() + (t * heads + h) * head_dim;
                     for (int i = 0; i < (int)head_dim / 2; i++) {
-                        float theta = (float)pos * inv_freq[i];
-                        float cos_t = cosf(theta);
-                        float sin_t = sinf(theta);
                         float q0 = q_head[2 * i];
                         float q1 = q_head[2 * i + 1];
-                        q_head[2 * i] = q0 * cos_t - q1 * sin_t;
-                        q_head[2 * i + 1] = q0 * sin_t + q1 * cos_t;
+                        q_head[2 * i] = q0 * cos_t[i] - q1 * sin_t[i];
+                        q_head[2 * i + 1] = q0 * sin_t[i] + q1 * cos_t[i];
                     }
                 }
             }
@@ -1207,22 +1232,31 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
             // RoPE on full_k (full_seq_len frames)
             for (int t = 0; t < full_seq_len; t++) {
                 int pos = (offset_val + total_len - full_seq_len) + t;
+                float cos_t[32], sin_t[32];
+                for (int i = 0; i < (int)head_dim / 2; i++) {
+                    float theta = (float)pos * inv_freq[i];
+#if defined(__APPLE__)
+                    __sincosf(theta, &sin_t[i], &cos_t[i]);
+#elif defined(_GNU_SOURCE) || defined(__GLIBC__)
+                    sincosf(theta, &sin_t[i], &cos_t[i]);
+#else
+                    cos_t[i] = cosf(theta);
+                    sin_t[i] = sinf(theta);
+#endif
+                }
                 for (int h = 0; h < heads; h++) {
                     float* k_head = full_k.data() + (t * heads + h) * head_dim;
                     for (int i = 0; i < (int)head_dim / 2; i++) {
-                        float theta = (float)pos * inv_freq[i];
-                        float cos_t = cosf(theta);
-                        float sin_t = sinf(theta);
                         float k0 = k_head[2 * i];
                         float k1 = k_head[2 * i + 1];
-                        k_head[2 * i] = k0 * cos_t - k1 * sin_t;
-                        k_head[2 * i + 1] = k0 * sin_t + k1 * cos_t;
+                        k_head[2 * i] = k0 * cos_t[i] - k1 * sin_t[i];
+                        k_head[2 * i + 1] = k0 * sin_t[i] + k1 * cos_t[i];
                     }
                 }
             }
 
             // Scaled dot-product attention with chunk mask
-            std::vector<float> attn_out(total_len * 128, 0.0f);
+            attn_out.assign(total_len * 128, 0.0f);
             float scale_attn = 1.0f / sqrtf((float)head_dim);
 
             for (int h = 0; h < heads; h++) {
@@ -1231,27 +1265,13 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
                     int row_in_mask = (full_seq_len - total_len) + qi;
                     int qi_chunk = row_in_mask / chunk_size;
 
+                    int kj_start = std::max(0, qi_chunk - t_p[l]) * chunk_size;
+                    int kj_end = std::min(full_seq_len, (qi_chunk + 1) * chunk_size + block_size * t_f[l]);
+                    kj_start = std::min(kj_start, full_seq_len);
+
                     float scores[128];
                     float max_sc = -1e9f;
-                    for (int kj = 0; kj < full_seq_len; kj++) {
-                        int kj_chunk = kj / chunk_size;
-                        int offset_in_chunk = kj % chunk_size;
-
-                        // Chunk+block visibility check
-                        bool visible = false;
-                        if (qi_chunk == kj_chunk) {
-                            visible = true; // same chunk
-                        } else if (kj_chunk >= (qi_chunk - t_p[l]) && kj_chunk < qi_chunk) {
-                            visible = true; // previous t_p chunks
-                        } else if (kj_chunk == (qi_chunk + 1) && (offset_in_chunk < block_size * t_f[l])) {
-                            visible = true; // future chunk first t_f blocks
-                        }
-
-                        if (!visible) {
-                            scores[kj] = -1e9f;
-                            continue;
-                        }
-
+                    for (int kj = kj_start; kj < kj_end; kj++) {
                         const float* k_vec = full_k.data() + (kj * heads + h) * head_dim;
                         float s = 0.0f;
                         for (int d = 0; d < head_dim; d++)
@@ -1263,33 +1283,28 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
                     }
 
                     float exp_sum = 0.0f;
-                    for (int kj = 0; kj < full_seq_len; kj++) {
-                        if (scores[kj] > -1e8f) {
-                            scores[kj] = expf(scores[kj] - max_sc);
-                            exp_sum += scores[kj];
-                        } else {
-                            scores[kj] = 0.0f;
-                        }
+                    for (int kj = kj_start; kj < kj_end; kj++) {
+                        scores[kj] = expf(scores[kj] - max_sc);
+                        exp_sum += scores[kj];
                     }
                     if (exp_sum > 0.0f) {
-                        for (int kj = 0; kj < full_seq_len; kj++)
-                            scores[kj] /= exp_sum;
+                        float inv_exp_sum = 1.0f / exp_sum;
+                        for (int kj = kj_start; kj < kj_end; kj++)
+                            scores[kj] *= inv_exp_sum;
                     }
 
                     float* out_vec = attn_out.data() + (qi * heads + h) * head_dim;
-                    for (int kj = 0; kj < full_seq_len; kj++) {
-                        if (scores[kj] > 0.0f) {
-                            const float* v_vec = full_v.data() + (kj * heads + h) * head_dim;
-                            float w = scores[kj];
-                            for (int d = 0; d < head_dim; d++)
-                                out_vec[d] += w * v_vec[d];
-                        }
+                    for (int kj = kj_start; kj < kj_end; kj++) {
+                        const float* v_vec = full_v.data() + (kj * heads + h) * head_dim;
+                        float w = scores[kj];
+                        for (int d = 0; d < head_dim; d++)
+                            out_vec[d] += w * v_vec[d];
                     }
                 }
             }
 
             // Project attention out: 128 -> 512
-            std::vector<float> attn_proj(total_len * dim);
+            attn_proj.resize(total_len * dim);
             cpu_gemm_linear(attn_out.data(), bw.out_w.data(), bw.out_b.data(), attn_proj.data(), total_len, 128, dim);
 
             // Residual add with gate_msa
@@ -1300,7 +1315,8 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
             }
 
             // FFN modulation
-            std::vector<float> x_norm2 = x;
+            x_norm2.resize(total_len * dim);
+            memcpy(x_norm2.data(), x.data(), total_len * dim * sizeof(float));
             cpu_layer_norm(x_norm2.data(), total_len, dim, nullptr, nullptr, 1e-6f);
             for (int t = 0; t < total_len; t++) {
                 for (int d = 0; d < dim; d++) {
@@ -1309,11 +1325,11 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
             }
 
             // FFN: 512 -> 1024 (GELU tanh) -> 512
-            std::vector<float> ffn_mid(total_len * 1024);
+            ffn_mid.resize(total_len * 1024);
             cpu_gemm_linear(x_norm2.data(), bw.ff1_w.data(), bw.ff1_b.data(), ffn_mid.data(), total_len, dim, 1024);
             for (auto& v : ffn_mid)
                 v = gelu_tanh(v);
-            std::vector<float> ffn_out(total_len * dim);
+            ffn_out.resize(total_len * dim);
             cpu_gemm_linear(ffn_mid.data(), bw.ff2_w.data(), bw.ff2_b.data(), ffn_out.data(), total_len, 1024, dim);
 
             // Residual add with gate_mlp
@@ -1333,7 +1349,7 @@ static std::vector<float> run_dit_flow(meanvc2_context* ctx, const float* bn_int
         }
 
         // Final projection: 512 -> 80
-        std::vector<float> u(total_len * mel_dim);
+        u.resize(total_len * mel_dim);
         cpu_gemm_linear(x.data(), proj_out_w.data(), proj_out_b.data(), u.data(), total_len, dim, mel_dim);
 
         // 1-NFE Euler step: x_pred = noise - u

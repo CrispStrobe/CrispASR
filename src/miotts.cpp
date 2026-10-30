@@ -1248,11 +1248,11 @@ float* miotts_forward_logits(miotts_context* ctx, const int32_t* token_ids, int 
     if (n_tokens > 1) {
         ggml_tensor* mask_t = ggml_graph_get_tensor(gf, "causal_mask");
         const int Lk = n_tokens;
-        std::vector<ggml_fp16_t> mask(Lk * n_tokens);
+        const ggml_fp16_t zero_fp16 = ggml_fp32_to_fp16(0.0f);
+        const ggml_fp16_t neg_inf_fp16 = ggml_fp32_to_fp16(-INFINITY);
+        std::vector<ggml_fp16_t> mask((size_t)Lk * n_tokens, neg_inf_fp16);
         for (int q = 0; q < n_tokens; q++) {
-            for (int k = 0; k < Lk; k++) {
-                mask[q * Lk + k] = (k <= q) ? ggml_fp32_to_fp16(0.0f) : ggml_fp32_to_fp16(-INFINITY);
-            }
+            std::fill_n(mask.data() + (size_t)q * Lk, q + 1, zero_fp16);
         }
         ggml_backend_tensor_set(mask_t, mask.data(), 0, mask.size() * sizeof(ggml_fp16_t));
     }
@@ -1668,12 +1668,14 @@ float* miotts_wave_prenet_forward(miotts_context* ctx, const float* fsq_emb, int
     ggml_tensor* mask_t = ggml_graph_get_tensor(gf, "win_mask");
     if (mask_t) {
         const int w = 62; // window_size // 2
-        std::vector<ggml_fp16_t> mask(T * T);
+        const ggml_fp16_t zero_fp16 = ggml_fp32_to_fp16(0.0f);
+        const ggml_fp16_t neg_inf_fp16 = ggml_fp32_to_fp16(-INFINITY);
+        std::vector<ggml_fp16_t> mask((size_t)T * T, neg_inf_fp16);
         for (int q = 0; q < T; q++) {
-            for (int k = 0; k < T; k++) {
-                bool in_window = (k >= q - w) && (k <= q + w);
-                mask[q * T + k] = in_window ? ggml_fp32_to_fp16(0.0f) : ggml_fp32_to_fp16(-INFINITY);
-            }
+            int k_start = std::max(0, q - w);
+            int k_end = std::min(T, q + w + 1);
+            if (k_end > k_start)
+                std::fill_n(mask.data() + (size_t)q * T + k_start, k_end - k_start, zero_fp16);
         }
         ggml_backend_tensor_set(mask_t, mask.data(), 0, mask.size() * sizeof(ggml_fp16_t));
     }
@@ -1965,10 +1967,12 @@ float* miotts_synthesize(miotts_context* ctx, const char* text, int* out_n) {
         if (mask_t) {
             const int T = (int)input_ids.size();
             const int Lk = T; // n_past=0 so Lk=T
-            std::vector<ggml_fp16_t> mask(Lk * T);
-            for (int q = 0; q < T; q++)
-                for (int k = 0; k < Lk; k++)
-                    mask[q * Lk + k] = (k <= q) ? ggml_fp32_to_fp16(0.0f) : ggml_fp32_to_fp16(-INFINITY);
+            const ggml_fp16_t zero_fp16 = ggml_fp32_to_fp16(0.0f);
+            const ggml_fp16_t neg_inf_fp16 = ggml_fp32_to_fp16(-INFINITY);
+            std::vector<ggml_fp16_t> mask((size_t)Lk * T, neg_inf_fp16);
+            for (int q = 0; q < T; q++) {
+                std::fill_n(mask.data() + (size_t)q * Lk, q + 1, zero_fp16);
+            }
             ggml_backend_tensor_set(mask_t, mask.data(), 0, mask.size() * sizeof(ggml_fp16_t));
         }
         ggml_backend_sched_graph_compute(ctx->sched, gf);

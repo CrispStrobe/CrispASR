@@ -22,6 +22,14 @@
 #include <vector>
 #include "core/ggml_cpu_backend.h"
 
+#if defined(__APPLE__)
+#include <Accelerate/Accelerate.h>
+#define CRISPASR_MIOCODEC_BLAS 1
+#elif defined(HAVE_BLAS)
+#include <cblas.h>
+#define CRISPASR_MIOCODEC_BLAS 1
+#endif
+
 // ============================================================================
 // Model hyperparameters (read from GGUF metadata)
 // ============================================================================
@@ -164,6 +172,12 @@ struct miocodec_context {
     ggml_backend_sched_t sched = nullptr; // scheduler for graph compute
 
     int verbosity = 0;
+
+    // Pre-cached dequantized weights for fast CPU paths
+    std::vector<float> fsq_proj_out_w_cached;
+    std::vector<float> fsq_proj_out_b_cached;
+    std::vector<float> istft_out_w_cached;
+    std::vector<float> istft_out_b_cached;
 };
 
 // ============================================================================
@@ -411,6 +425,16 @@ struct miocodec_context* miocodec_init_from_file(const char* path, struct miocod
     // Create scheduler for graph compute (handles weight buffer + compute buffer)
     ggml_backend_t backends[] = {ctx->backend};
     ctx->sched = ggml_backend_sched_new(backends, nullptr, 1, 8192, false, false);
+
+    // Pre-cache dequantized weights for fast CPU stages
+    if (ctx->weights.fsq_proj_out_w)
+        ctx->fsq_proj_out_w_cached = miocodec_dequant_tensor(ctx->weights.fsq_proj_out_w);
+    if (ctx->weights.fsq_proj_out_b)
+        ctx->fsq_proj_out_b_cached = miocodec_dequant_tensor(ctx->weights.fsq_proj_out_b);
+    if (ctx->weights.istft_out_w)
+        ctx->istft_out_w_cached = miocodec_dequant_tensor(ctx->weights.istft_out_w);
+    if (ctx->weights.istft_out_b)
+        ctx->istft_out_b_cached = miocodec_dequant_tensor(ctx->weights.istft_out_b);
 
     if (params.verbosity > 0) {
         fprintf(stderr, "miocodec: loaded model from '%s'\n", path);
@@ -712,12 +736,8 @@ float* miocodec_decode(struct miocodec_context* ctx, const int32_t* token_indice
     if (!ctx || !token_indices || n_tokens <= 0 || !global_embedding || !out_n_samples)
         return nullptr;
 
-    // TODO: implement full decode graph
-    (void)target_audio_length;
-    *out_n_samples = 0;
-
-    fprintf(stderr, "miocodec_decode: not yet fully implemented\n");
-    return nullptr;
+    return miocodec_extract_stage(ctx, token_indices, n_tokens, global_embedding, target_audio_length,
+                                  "output_waveform", out_n_samples);
 }
 
 float* miocodec_extract_stage(struct miocodec_context* ctx, const int32_t* token_indices, int n_tokens,
@@ -742,9 +762,18 @@ float* miocodec_extract_stage(struct miocodec_context* ctx, const int32_t* token
         if (!result)
             return nullptr;
 
-        // Get weight data (handles F16/F32/quantized)
-        std::vector<float> proj_w = miocodec_dequant_tensor(ctx->weights.fsq_proj_out_w);
-        std::vector<float> proj_b = miocodec_dequant_tensor(ctx->weights.fsq_proj_out_b);
+        // Get weight data (cached F32 or dequantize fallback)
+        const float* proj_w = ctx->fsq_proj_out_w_cached.empty() ? nullptr : ctx->fsq_proj_out_w_cached.data();
+        const float* proj_b = ctx->fsq_proj_out_b_cached.empty() ? nullptr : ctx->fsq_proj_out_b_cached.data();
+        std::vector<float> pw_fb, pb_fb;
+        if (!proj_w) {
+            pw_fb = miocodec_dequant_tensor(ctx->weights.fsq_proj_out_w);
+            proj_w = pw_fb.data();
+        }
+        if (!proj_b) {
+            pb_fb = miocodec_dequant_tensor(ctx->weights.fsq_proj_out_b);
+            proj_b = pb_fb.data();
+        }
 
         // result[t, d] = sum_k(codes[t, k] * W[d, k]) + bias[d]
         // GGUF shape is [5, 768] meaning ne[0]=5, ne[1]=768.
@@ -770,8 +799,17 @@ float* miocodec_extract_stage(struct miocodec_context* ctx, const int32_t* token
         fsq_indices_to_codes(token_indices, n_tokens, codes.data());
         std::vector<float> fsq_emb(n_tokens * 768);
         {
-            std::vector<float> proj_w = miocodec_dequant_tensor(ctx->weights.fsq_proj_out_w);
-            std::vector<float> proj_b = miocodec_dequant_tensor(ctx->weights.fsq_proj_out_b);
+            const float* proj_w = ctx->fsq_proj_out_w_cached.empty() ? nullptr : ctx->fsq_proj_out_w_cached.data();
+            const float* proj_b = ctx->fsq_proj_out_b_cached.empty() ? nullptr : ctx->fsq_proj_out_b_cached.data();
+            std::vector<float> pw_fb, pb_fb;
+            if (!proj_w) {
+                pw_fb = miocodec_dequant_tensor(ctx->weights.fsq_proj_out_w);
+                proj_w = pw_fb.data();
+            }
+            if (!proj_b) {
+                pb_fb = miocodec_dequant_tensor(ctx->weights.fsq_proj_out_b);
+                proj_b = pb_fb.data();
+            }
             for (int t = 0; t < n_tokens; t++) {
                 for (int d = 0; d < 768; d++) {
                     float sum = proj_b[d];
@@ -874,12 +912,12 @@ float* miocodec_extract_stage(struct miocodec_context* ctx, const int32_t* token
         // Set windowed attention mask (F32, additive: 0=attend, -inf=mask)
         if (win_mask) {
             const int wps = window_per_side;
-            std::vector<float> mask_data(T * T);
+            std::vector<float> mask_data((size_t)T * T, -INFINITY);
             for (int q = 0; q < T; q++) {
-                for (int k = 0; k < T; k++) {
-                    bool in_window = (k >= q - wps) && (k <= q + wps);
-                    mask_data[q * T + k] = in_window ? 0.0f : -INFINITY;
-                }
+                int k_start = std::max(0, q - wps);
+                int k_end = std::min(T, q + wps + 1);
+                if (k_end > k_start)
+                    std::fill_n(mask_data.data() + (size_t)q * T + k_start, k_end - k_start, 0.0f);
             }
             ggml_backend_tensor_set(win_mask, mask_data.data(), 0, sizeof(float) * T * T);
         }
@@ -1120,10 +1158,13 @@ float* miocodec_extract_stage(struct miocodec_context* ctx, const int32_t* token
 
         // Decoder window mask
         if (dec_mask) {
-            std::vector<float> mask_data(T_stft * T_stft);
-            for (int q = 0; q < T_stft; q++)
-                for (int k = 0; k < T_stft; k++)
-                    mask_data[q * T_stft + k] = (k >= q - dec_window_ps && k <= q + dec_window_ps) ? 0.0f : -INFINITY;
+            std::vector<float> mask_data((size_t)T_stft * T_stft, -INFINITY);
+            for (int q = 0; q < T_stft; q++) {
+                int k_start = std::max(0, q - dec_window_ps);
+                int k_end = std::min(T_stft, q + dec_window_ps + 1);
+                if (k_end > k_start)
+                    std::fill_n(mask_data.data() + (size_t)q * T_stft + k_start, k_end - k_start, 0.0f);
+            }
             ggml_backend_tensor_set(dec_mask, mask_data.data(), 0, sizeof(float) * T_stft * T_stft);
         }
 
@@ -1141,19 +1182,44 @@ float* miocodec_extract_stage(struct miocodec_context* ctx, const int32_t* token
             int T_is = up_n / 512;
             int D_out = (int)ctx->weights.istft_out_w->ne[1]; // 394
             int D_in = 512;
-            // Read weight & bias (handles F16/F32/quantized)
-            std::vector<float> w_d = miocodec_dequant_tensor(ctx->weights.istft_out_w);
-            std::vector<float> b_d = miocodec_dequant_tensor(ctx->weights.istft_out_b);
+            // Read weight & bias (cached F32 or dequantize fallback)
+            const float* w_d = ctx->istft_out_w_cached.empty() ? nullptr : ctx->istft_out_w_cached.data();
+            const float* b_d = ctx->istft_out_b_cached.empty() ? nullptr : ctx->istft_out_b_cached.data();
+            std::vector<float> w_fb, b_fb;
+            if (!w_d) {
+                w_fb = miocodec_dequant_tensor(ctx->weights.istft_out_w);
+                w_d = w_fb.data();
+            }
+            if (!b_d) {
+                b_fb = miocodec_dequant_tensor(ctx->weights.istft_out_b);
+                b_d = b_fb.data();
+            }
             // Linear: result[d, t] = sum_k W[d,k] * up[t,k] + b[d]
             // Store in (D_out, T) layout = (394, T) matching Python's transpose(0,1) output
             float* result = (float*)malloc(sizeof(float) * D_out * T_is);
-            for (int d = 0; d < D_out; d++)
+#if defined(CRISPASR_MIOCODEC_BLAS)
+            cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, D_out, T_is, D_in, 1.0f, w_d, D_in, up_dat.data(),
+                        D_in, 0.0f, result, T_is);
+            for (int d = 0; d < D_out; d++) {
+                const float bias = b_d[d];
+                float* r_row = result + d * T_is;
+                for (int t = 0; t < T_is; t++)
+                    r_row[t] += bias;
+            }
+#else
+            for (int d = 0; d < D_out; d++) {
+                const float bias = b_d[d];
+                const float* w_row = w_d + d * D_in;
+                float* r_row = result + d * T_is;
                 for (int t = 0; t < T_is; t++) {
-                    float sum = b_d[d];
+                    const float* up_row = up_dat.data() + t * D_in;
+                    float sum = bias;
                     for (int k = 0; k < D_in; k++)
-                        sum += w_d[d * D_in + k] * up_dat[t * D_in + k];
-                    result[d * T_is + t] = sum;
+                        sum += w_row[k] * up_row[k];
+                    r_row[t] = sum;
                 }
+            }
+#endif
             if (strcmp(stage_name, "istft_mag_phase") == 0) {
                 ggml_free(ctx0);
                 *out_n = D_out * T_is;

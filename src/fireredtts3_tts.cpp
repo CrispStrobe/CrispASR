@@ -334,19 +334,29 @@ static void frt_graph_end(frt_graph& g) {
 //   causal: j <= i;  sliding window w: j >= i-w+1
 //   block-diagonal blocks of size B (block b: tokens [bB, (b+1)B))
 static void frt_fill_mask(std::vector<float>& m, int T, bool causal, int window, int block) {
-    m.assign((size_t)T * T, 0.0f);
     const float NEG = -1e30f;
+    m.assign((size_t)T * T, NEG);
     for (int i = 0; i < T; i++) {
-        for (int j = 0; j < T; j++) {
-            bool ok = true;
-            if (causal && j > i)
-                ok = false;
-            if (window > 0 && j < i - window + 1)
-                ok = false;
-            if (block > 0 && (j / block) != (i / block))
-                ok = false;
-            if (!ok)
-                m[(size_t)i * T + j] = NEG;
+        int j_min = 0;
+        int j_max = T - 1;
+        if (causal && i < j_max)
+            j_max = i;
+        if (window > 0) {
+            int w_min = i - window + 1;
+            if (w_min > j_min)
+                j_min = w_min;
+        }
+        if (block > 0) {
+            int b = i / block;
+            int b_start = b * block;
+            int b_end = (b + 1) * block - 1;
+            if (b_start > j_min)
+                j_min = b_start;
+            if (b_end < j_max)
+                j_max = b_end;
+        }
+        if (j_min <= j_max) {
+            std::fill_n(m.data() + (size_t)i * T + j_min, j_max - j_min + 1, 0.0f);
         }
     }
 }
