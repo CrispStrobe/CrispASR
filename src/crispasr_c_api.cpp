@@ -210,6 +210,10 @@
 #include "miotts.h"
 #define CA_HAVE_MIOTTS 1
 #endif
+#if __has_include("arktts.h")
+#include "arktts.h"
+#define CA_HAVE_ARKTTS 1
+#endif
 #if __has_include("confucius4_tts.h")
 #include "confucius4_tts.h"
 #define CA_HAVE_CONFUCIUS4_TTS 1
@@ -2235,6 +2239,9 @@ struct crispasr_session {
 #ifdef CA_HAVE_MIOTTS
     miotts_context* miotts_ctx = nullptr;
 #endif
+#ifdef CA_HAVE_ARKTTS
+    arktts_context* arktts_ctx = nullptr;
+#endif
 #ifdef CA_HAVE_CONFUCIUS4_TTS
     confucius4_tts_context* confucius4_ctx = nullptr;
 #endif
@@ -3304,6 +3311,21 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         p.temperature = 0.8f;
         s->miotts_ctx = miotts_init_from_file(model_path, p);
         if (!s->miotts_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_ARKTTS
+    if (s->backend == "arktts" || s->backend == "audio8-tts" || s->backend == "ark-tts") {
+        arktts_context_params p = arktts_context_default_params();
+        p.n_threads = s->n_threads;
+        p.verbosity = g_open_verbosity_tls;
+        p.use_gpu = s->use_gpu;
+        p.temperature = 0.8f;
+        s->arktts_ctx = arktts_init_from_file(model_path, p);
+        if (!s->arktts_ctx) {
             delete s;
             return nullptr;
         }
@@ -4966,6 +4988,10 @@ CA_EXPORT int crispasr_session_output_sample_rate(crispasr_session* s) {
     if (s->miotts_ctx)
         return miotts_get_sample_rate(s->miotts_ctx);
 #endif
+#ifdef CA_HAVE_ARKTTS
+    if (s->arktts_ctx)
+        return arktts_get_sample_rate(s->arktts_ctx);
+#endif
 #ifdef CA_HAVE_CONFUCIUS4_TTS
     if (s->confucius4_ctx)
         return 22050;
@@ -5148,6 +5174,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_MIOTTS
     list += ",miotts";
+#endif
+#ifdef CA_HAVE_ARKTTS
+    list += ",arktts";
 #endif
 #ifdef CA_HAVE_CONFUCIUS4_TTS
     list += ",confucius4-tts";
@@ -10643,6 +10672,15 @@ static float* crispasr_session_synthesize_raw_impl(crispasr_session* s, const ch
         return pcm;
     }
 #endif
+#ifdef CA_HAVE_ARKTTS
+    if (s->arktts_ctx) {
+        int n = 0;
+        float* pcm = arktts_synthesize(s->arktts_ctx, text, &n);
+        if (out_n_samples)
+            *out_n_samples = n;
+        return pcm;
+    }
+#endif
 #ifdef CA_HAVE_CONFUCIUS4_TTS
 #ifdef CA_HAVE_BT2_TTS
     if (s->bt2_ctx) {
@@ -12738,6 +12776,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
     if (s->miotts_ctx)
         miotts_free(s->miotts_ctx);
 #endif
+#ifdef CA_HAVE_ARKTTS
+    if (s->arktts_ctx)
+        arktts_free(s->arktts_ctx);
+#endif
 #ifdef CA_HAVE_CONFUCIUS4_TTS
     if (s->confucius4_ctx)
         confucius4_tts_free(s->confucius4_ctx);
@@ -13454,6 +13496,13 @@ CA_EXPORT int crispasr_session_set_temperature(crispasr_session* s, float temper
         touched++;
     }
 #endif
+#ifdef CA_HAVE_ARKTTS
+    if (s->arktts_ctx) {
+        arktts_set_temperature(s->arktts_ctx, temperature);
+        arktts_set_seed(s->arktts_ctx, seed);
+        touched++;
+    }
+#endif
 #ifdef CA_HAVE_CANARY
     if (s->canary_ctx) {
         canary_set_temperature(s->canary_ctx, temperature, seed);
@@ -13585,6 +13634,12 @@ CA_EXPORT int crispasr_session_set_tts_seed(crispasr_session* s, uint64_t seed) 
 #ifdef CA_HAVE_MIOTTS
     if (s->miotts_ctx) {
         miotts_set_seed(s->miotts_ctx, seed);
+        touched++;
+    }
+#endif
+#ifdef CA_HAVE_ARKTTS
+    if (s->arktts_ctx) {
+        arktts_set_seed(s->arktts_ctx, seed);
         touched++;
     }
 #endif

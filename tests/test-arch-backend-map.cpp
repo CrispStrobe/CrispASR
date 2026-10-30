@@ -82,6 +82,7 @@ static const std::vector<std::pair<std::string, std::string>>& converter_archs()
         // ── TTS ──
         {"qwen3tts", "qwen3-tts"},
         {"miotts", "miotts"},
+        {"arktts", "arktts"},
         {"moss-tts", "moss-tts"},
         {"moss-tts-local", "moss-tts-local"},
         {"orpheus", "orpheus"},

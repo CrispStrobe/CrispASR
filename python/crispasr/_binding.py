@@ -2215,7 +2215,7 @@ class Session(SessionExtras):
         return vocab
 
     # ---------------------------------------------------------------------
-    # TTS synthesis (vibevoice, qwen3-tts, miotts, moss-tts, moss-tts-local, confucius4-tts, omnivoice, kokoro, orpheus, chatterbox, outetts, indextts, voxcpm2, csm, dia, zonos-tts, bark, speecht5, parler-tts, pocket-tts, kugelaudio, tada, lfm2-audio, dots-tts, fireredtts3)
+    # TTS synthesis (vibevoice, qwen3-tts, miotts, arktts, moss-tts, moss-tts-local, confucius4-tts, omnivoice, kokoro, orpheus, chatterbox, outetts, indextts, voxcpm2, csm, dia, zonos-tts, bark, speecht5, parler-tts, pocket-tts, kugelaudio, tada, lfm2-audio, dots-tts, fireredtts3)
     # ---------------------------------------------------------------------
 
     def set_codec_path(self, path: str) -> None:
@@ -3233,7 +3233,7 @@ class Session(SessionExtras):
         ``csm``, ``dia``, ``fastpitch``, ``bananamind-tts``, ``speecht5``,
         ``melotts``, ``piper``, ``parler-tts``, ``outetts``, ``cosyvoice3-tts``,
         ``pocket-tts``, ``f5-tts``, ``irodori-tts``, ``supertonic``, ``bark``, ``kugelaudio``, ``tada``,
-        ``lfm2-audio``, ``voxtral-tts``, ``dots-tts``, ``fireredtts3``, ``omnivoice``, ``miotts``.
+        ``lfm2-audio``, ``voxtral-tts``, ``dots-tts``, ``fireredtts3``, ``omnivoice``, ``miotts``, ``arktts``.
         For MioTTS, call :meth:`set_voice` with a preset embedding GGUF and
         use :meth:`output_sample_rate` (44.1 kHz for MioCodec-v2).
         For qwen3-tts call :meth:`set_codec_path` and one of:

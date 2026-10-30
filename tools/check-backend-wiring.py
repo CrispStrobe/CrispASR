@@ -213,7 +213,7 @@ def main():
     # Only the handful not already in the roster need probing.
     def cli_resolves(name):
         r = subprocess.run([args.crispasr, "--backend", name, "-m", os.devnull, "-f", os.devnull],
-                           capture_output=True, text=True)
+                           stdin=subprocess.DEVNULL, capture_output=True, text=True)
         return f"unknown backend '{name}'" not in (r.stderr + r.stdout)
 
     capi_only = sorted(n for n in capi_flat if n not in cli_names and not cli_resolves(n))

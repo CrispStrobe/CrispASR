@@ -1922,6 +1922,23 @@ catch_discover_tests(test-confucius4-tts-params
 )
 endif()
 
+if (TARGET arktts)
+add_executable(test-arktts-params
+    test-arktts-params.cpp
+)
+target_include_directories(test-arktts-params PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-arktts-params PRIVATE
+    Catch2::Catch2WithMain
+    arktts
+)
+catch_discover_tests(test-arktts-params
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;arktts"
+)
+endif()
+
 # ─── test-funasr-params — Catch2 unit tests for funasr_context_params defaults
 # and null-guard coverage. No GGUF required. ───────────────────────────────────
 add_executable(test-funasr-params

@@ -1824,6 +1824,18 @@ if(NOT MSVC)
     target_compile_options(miotts PRIVATE -O3)
 endif()
 
+# ---------------------------------------------------------------------------
+# arktts — Edge0/Audio8-TTS-Realistic-0.6b (ArkttsModel + Snake vocoder)
+# ---------------------------------------------------------------------------
+add_library(arktts STATIC arktts.h arktts.cpp)
+set_target_properties(arktts PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(arktts PUBLIC .)
+target_compile_features   (arktts PUBLIC cxx_std_17)
+target_link_libraries     (arktts PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+if(NOT MSVC)
+    target_compile_options(arktts PRIVATE -O3)
+endif()
+
 # miocodec — Aratako/MioCodec-25Hz-44.1kHz-v2 (MIT, 133M params)
 # Standalone audio codec: FSQ → Transformer + AdaLN-Zero → iSTFT → 44.1kHz
 add_library(miocodec STATIC miocodec.h miocodec.cpp)
@@ -3033,6 +3045,9 @@ endif()
 # failed to link with undefined _miotts_* symbols.
 if (TARGET miotts)
     target_link_libraries(crispasr-lib PUBLIC miotts)
+endif()
+if (TARGET arktts)
+    target_link_libraries(crispasr-lib PUBLIC arktts)
 endif()
 if (TARGET mini-omni2)
     target_link_libraries(crispasr-lib PUBLIC mini-omni2)
