@@ -28,10 +28,11 @@ Updated 2026-10-30 12:45 UTC: this snapshot supersedes older status and owner pr
     and causal ConvNeXt + Snake neural vocoder.
   - Bit-exact parity verified with `crispasr-diff` (7/7 PASS, 1.000000 cosine parity across all
     stages against PyTorch).
-  - FASTCONV $K=1$ bypass and dual-transformer in-place KV caching (~190–215 ms/frame on CPU,
-    ~2x faster than PyTorch).
-  - Chunked vocoder decoding with causal history overlap bounds peak memory strictly under
-    2.5 GB for arbitrary audio length (3+ minutes).
+  - Metal / GPU acceleration for fast subnetwork autoregression via `ggml_gallocr` prefix
+    execution and dual-transformer in-place KV caching: ~55–80 ms/frame total generation on M1 Metal
+    (RTF ~0.67x, faster than real-time), vs ~190–215 ms/frame on CPU.
+  - Robust chunked vocoder decoding with codebook clamping and causal history overlap bounds
+    peak memory strictly under 2.5 GB for arbitrary audio length (3+ minutes).
   - GGUF weights published to Hugging Face repository `cstr/Audio8-TTS-Realistic-0.6b-GGUF`
     (`arktts-q4_k.gguf`, `arktts-q8_0.gguf`, `arktts-f16.gguf`) with precision carve-outs
     retaining conv kernels and codebook centroids at FP16. Wired into `crispasr_model_registry`.
