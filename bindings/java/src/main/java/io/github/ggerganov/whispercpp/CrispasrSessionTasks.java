@@ -88,6 +88,8 @@ public abstract class CrispasrSessionTasks extends CrispasrUtilities {
     void crispasr_reset_streamed_tokens();
     int crispasr_session_set_pcm_sample_rate(Pointer s, int rate);
     int crispasr_session_set_parakeet_att_context(Pointer s, int left, int right);
+    int crispasr_session_set_audio_ctx(Pointer s, int audio_ctx);
+    int crispasr_session_set_hikari_refresh_stride(Pointer s, int stride);
     int crispasr_session_set_grammar_strict(Pointer s, int strict);
     void crispasr_free_aligner_cache();
   }
@@ -456,6 +458,14 @@ public abstract class CrispasrSessionTasks extends CrispasrUtilities {
   public void setParakeetAttContext(int left, int right) {
     checkSetter(Tasks.INSTANCE.crispasr_session_set_parakeet_att_context(nativeHandle(), left, right),
         "set_parakeet_att_context");
+  }
+  public void setAudioCtx(int audioCtx) {
+    checkSetter(Tasks.INSTANCE.crispasr_session_set_audio_ctx(nativeHandle(), audioCtx),
+        "set_audio_ctx");
+  }
+  public void setHikariRefreshStride(int stride) {
+    checkSetter(Tasks.INSTANCE.crispasr_session_set_hikari_refresh_stride(nativeHandle(), stride),
+        "set_hikari_refresh_stride");
   }
   public void setGrammarStrict(boolean strict) {
     checkSetter(Tasks.INSTANCE.crispasr_session_set_grammar_strict(nativeHandle(), strict ? 1 : 0),

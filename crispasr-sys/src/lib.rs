@@ -1628,6 +1628,11 @@ extern "C" {
         left: c_int,
         right: c_int,
     ) -> c_int;
+    pub fn crispasr_session_set_audio_ctx(s: *mut CrispasrSession, audio_ctx: c_int) -> c_int;
+    pub fn crispasr_session_set_hikari_refresh_stride(
+        s: *mut CrispasrSession,
+        stride: c_int,
+    ) -> c_int;
     pub fn crispasr_session_set_grammar_strict(s: *mut CrispasrSession, strict: c_int) -> c_int;
     pub fn crispasr_session_score_texts(
         s: *mut CrispasrSession,

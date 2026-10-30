@@ -1938,6 +1938,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         rp.vad_import_json = form_string(req, "vad_import", rp.vad_import_json);
         rp.max_context = form_int(req, "max_context", rp.max_context);
         rp.audio_ctx = form_int(req, "audio_ctx", rp.audio_ctx);
+        rp.hikari_refresh_stride =
+            form_int(req, "hikari_refresh_stride", form_int(req, "hikari_stride", rp.hikari_refresh_stride));
         rp.word_thold = form_float(req, "word_thold", rp.word_thold);
         rp.carry_initial_prompt = form_bool(req, "carry_initial_prompt", rp.carry_initial_prompt);
         rp.chunk_overlap_seconds = form_float(req, "chunk_overlap", rp.chunk_overlap_seconds);
@@ -2159,6 +2161,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         rp.vad_import_json = form_string(req, "vad_import", rp.vad_import_json);
         rp.max_context = form_int(req, "max_context", rp.max_context);
         rp.audio_ctx = form_int(req, "audio_ctx", rp.audio_ctx);
+        rp.hikari_refresh_stride =
+            form_int(req, "hikari_refresh_stride", form_int(req, "hikari_stride", rp.hikari_refresh_stride));
         rp.word_thold = form_float(req, "word_thold", rp.word_thold);
         rp.carry_initial_prompt = form_bool(req, "carry_initial_prompt", rp.carry_initial_prompt);
         rp.chunk_overlap_seconds = form_float(req, "chunk_overlap", rp.chunk_overlap_seconds);

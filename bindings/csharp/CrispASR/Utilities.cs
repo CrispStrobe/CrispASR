@@ -18,6 +18,8 @@ namespace CrispASR
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] internal static extern IntPtr crispasr_session_backend(IntPtr s);
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] internal static extern int crispasr_session_set_pcm_sample_rate(IntPtr s, int rate);
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] internal static extern int crispasr_session_set_parakeet_att_context(IntPtr s, int left, int right);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] internal static extern int crispasr_session_set_audio_ctx(IntPtr s, int audioCtx);
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] internal static extern int crispasr_session_set_hikari_refresh_stride(IntPtr s, int stride);
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] internal static extern int crispasr_session_set_grammar_strict(IntPtr s, int enabled);
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] internal static extern void crispasr_free_aligner_cache();
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)] internal static extern int crispasr_session_score_texts(IntPtr session, float[] pcm, int n, [MarshalAs(UnmanagedType.LPUTF8Str)] string? language, [MarshalAs(UnmanagedType.LPUTF8Str)] string? prompt, IntPtr texts, int count, [Out] float[] scores, [Out] int[] tokens);
@@ -85,6 +87,8 @@ namespace CrispASR
         public string Backend => NativeMethods.PtrToUtf8(NativeMethods.crispasr_session_backend(Handle)) ?? "";
         public void SetPcmSampleRate(int rate) { if (rate <= 0) throw new ArgumentOutOfRangeException(nameof(rate)); StrictCheck(NativeMethods.crispasr_session_set_pcm_sample_rate(Handle, rate), "set_pcm_sample_rate"); }
         public void SetParakeetAttentionContext(int left, int right) => StrictCheck(NativeMethods.crispasr_session_set_parakeet_att_context(Handle, left, right), "set_parakeet_att_context");
+        public void SetAudioCtx(int audioCtx) => StrictCheck(NativeMethods.crispasr_session_set_audio_ctx(Handle, audioCtx), "set_audio_ctx");
+        public void SetHikariRefreshStride(int stride) => StrictCheck(NativeMethods.crispasr_session_set_hikari_refresh_stride(Handle, stride), "set_hikari_refresh_stride");
         public void SetGrammarStrict(bool enabled) => StrictCheck(NativeMethods.crispasr_session_set_grammar_strict(Handle, enabled ? 1 : 0), "set_grammar_strict");
         public static void FreeAlignerCache() => NativeMethods.crispasr_free_aligner_cache();
         public (float[] LogProbabilities, int[] TokenCounts) ScoreTexts(float[] pcm, string[] candidates, string? language = null, string? prompt = null)

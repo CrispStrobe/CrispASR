@@ -1090,6 +1090,7 @@ struct crispasr_stream {
     int keep_ms = 200;
     std::string language; // empty = auto
     bool translate = false;
+    int audio_ctx = 0;
 
     int n_samples_step = 0; // cached from step_ms
     int n_samples_length = 0;
@@ -1295,7 +1296,7 @@ static int crispasr_stream_run_decode(crispasr_stream* s) {
 
     // Strided audio context for streaming: bound encoder evaluation context to
     // the active sliding window instead of padding every step to 30s (1500 frames).
-    // Gated by CRISPASR_WHISPER_STREAM_AUDIO_CTX:
+    // Gated by CRISPASR_WHISPER_STREAM_AUDIO_CTX or crispasr_session_set_audio_ctx:
     //   0 = default: full 1500 padding (100% baseline parity)
     //   1 = adaptive context bounded to sliding window
     //  >1 = explicit fixed context size (e.g. 1024 for 33% speedup)
@@ -1303,9 +1304,10 @@ static int crispasr_stream_run_decode(crispasr_stream* s) {
         const char* e = getenv("CRISPASR_WHISPER_STREAM_AUDIO_CTX");
         return e ? atoi(e) : 0;
     }();
-    if (stream_audio_ctx_gate != 0 && !pcm.empty()) {
-        if (stream_audio_ctx_gate > 1) {
-            wparams.audio_ctx = std::min(1500, stream_audio_ctx_gate);
+    const int effective_audio_ctx = (s->audio_ctx > 0) ? s->audio_ctx : stream_audio_ctx_gate;
+    if (effective_audio_ctx != 0 && !pcm.empty()) {
+        if (effective_audio_ctx > 1) {
+            wparams.audio_ctx = std::min(1500, effective_audio_ctx);
         } else {
             const int enc_frames = (int)((pcm.size() + 319) / 320);
             const int enc_ctx = std::min(1500, std::max(64, ((enc_frames + 31) / 32) * 32));
@@ -2102,6 +2104,10 @@ struct crispasr_session {
     // (keep the model default). Applied to parakeet_ctx before each transcribe.
     int parakeet_att_context_left = INT_MIN;
     int parakeet_att_context_right = INT_MIN;
+    // Whisper audio context: bounds encoder evaluation context (0 = full 1500 pad).
+    int audio_ctx = 0;
+    // Strided window refresh interval for Hikari streaming (-1 = default 16, 0 = exact).
+    int hikari_refresh_stride = -1;
 
     // Issue #208: per-session progress callback for long-form (chunked)
     // transcription. Fired once per finished window from the chunked merge
@@ -3564,6 +3570,9 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         if (!s->hikari_ctx) {
             delete s;
             return nullptr;
+        }
+        if (s->hikari_refresh_stride >= 0) {
+            hikari_set_refresh_stride(s->hikari_ctx, s->hikari_refresh_stride);
         }
         // Without Silero's speech probability the policy's wait penalty never
         // rises and the model hardly emits (en->de on jfk: empty text). Same
@@ -6331,6 +6340,10 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             wparams.i_start_rule = s->grammar_root_rule_id;
             wparams.grammar_penalty = s->grammar_penalty;
             wparams.grammar_strict = s->grammar_strict;
+        }
+
+        if (s->audio_ctx > 0) {
+            wparams.audio_ctx = s->audio_ctx;
         }
 
         // Set progress callback — writes to the module-level atomic so
@@ -9430,6 +9443,25 @@ CA_EXPORT int crispasr_session_set_parakeet_att_context(crispasr_session* s, int
     return 0;
 }
 
+CA_EXPORT int crispasr_session_set_audio_ctx(crispasr_session* s, int audio_ctx) {
+    if (!s || audio_ctx < 0)
+        return -1;
+    s->audio_ctx = audio_ctx;
+    return 0;
+}
+
+CA_EXPORT int crispasr_session_set_hikari_refresh_stride(crispasr_session* s, int stride) {
+    if (!s || stride < 0)
+        return -1;
+    s->hikari_refresh_stride = stride;
+#ifdef CA_HAVE_HIKARI
+    if (s->hikari_ctx) {
+        hikari_set_refresh_stride(s->hikari_ctx, stride);
+    }
+#endif
+    return 0;
+}
+
 CA_EXPORT int crispasr_session_set_codec_path(crispasr_session* s, const char* path) {
     if (!s || !path)
         return -1;
@@ -11636,8 +11668,14 @@ CA_EXPORT crispasr_stream* crispasr_session_stream_open(crispasr_session* s, int
         return w;
     }
 #endif
-    if (s->whisper_ctx)
-        return crispasr_stream_open(s->whisper_ctx, n_threads, step_ms, length_ms, keep_ms, language, translate);
+    if (s->whisper_ctx) {
+        crispasr_stream* st =
+            crispasr_stream_open(s->whisper_ctx, n_threads, step_ms, length_ms, keep_ms, language, translate);
+        if (st) {
+            st->audio_ctx = s->audio_ctx;
+        }
+        return st;
+    }
 #if __has_include("kyutai_stt.h")
     if (s->kyutai_ctx) {
         // Chunked-batch over a rolling window — see PLAN #62c.
@@ -11729,6 +11767,9 @@ CA_EXPORT crispasr_stream* crispasr_session_stream_open(crispasr_session* s, int
         const std::string tl = language ? language : s->target_language;
         const bool tr = translate || (!tl.empty() && tl != "en" && tl != "auto");
         hikari_set_task(s->hikari_ctx, tr ? 1 : 0, (!tl.empty() && tl != "auto") ? tl.c_str() : "en");
+        if (s->hikari_refresh_stride >= 0) {
+            hikari_set_refresh_stride(s->hikari_ctx, s->hikari_refresh_stride);
+        }
         hikari_stream_reset(s->hikari_ctx);
         if (s->hikari_vad) {
             float z = 0.0f;

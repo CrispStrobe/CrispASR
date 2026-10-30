@@ -130,6 +130,16 @@ int crispasr_session_set_parakeet_att_context(crispasr_session* s, int l, int r)
     (void)r;
     return 0;
 }
+int crispasr_session_set_audio_ctx(crispasr_session* s, int audio_ctx) {
+    (void)s;
+    (void)audio_ctx;
+    return 0;
+}
+int crispasr_session_set_hikari_refresh_stride(crispasr_session* s, int stride) {
+    (void)s;
+    (void)stride;
+    return 0;
+}
 void crispasr_session_set_tts_pad_silence_ms(crispasr_session* s, int ms) {
     (void)s;
     (void)ms;

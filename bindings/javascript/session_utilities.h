@@ -173,6 +173,14 @@ static void binding_register_utilities() {
                              binding_require_session();
                              return crispasr_session_set_parakeet_att_context(g_tts_session, left, right);
                          }));
+    emscripten::function("sessionSetAudioCtx", emscripten::optional_override([](int audio_ctx) {
+                             binding_require_session();
+                             return crispasr_session_set_audio_ctx(g_tts_session, audio_ctx);
+                         }));
+    emscripten::function("sessionSetHikariRefreshStride", emscripten::optional_override([](int stride) {
+                             binding_require_session();
+                             return crispasr_session_set_hikari_refresh_stride(g_tts_session, stride);
+                         }));
     emscripten::function("sessionSetGrammarStrict", emscripten::optional_override([](bool enabled) {
                              binding_require_session();
                              return crispasr_session_set_grammar_strict(g_tts_session, enabled);

@@ -851,6 +851,30 @@ func (s *CrispasrSession) SetParakeetAttContext(left, right int) error {
 	return nil
 }
 
+func (s *CrispasrSession) SetAudioCtx(audioCtx int) error {
+	s.nativeHandle()
+	if s.handle == nil {
+		return errors.New("session is closed")
+	}
+	rc := C.crispasr_session_set_audio_ctx((*C.struct_crispasr_session)(unsafe.Pointer(s.nativeHandle())), C.int(audioCtx))
+	if rc != 0 {
+		return fmt.Errorf("SetAudioCtx failed (rc=%d)", int(rc))
+	}
+	return nil
+}
+
+func (s *CrispasrSession) SetHikariRefreshStride(stride int) error {
+	s.nativeHandle()
+	if s.handle == nil {
+		return errors.New("session is closed")
+	}
+	rc := C.crispasr_session_set_hikari_refresh_stride((*C.struct_crispasr_session)(unsafe.Pointer(s.nativeHandle())), C.int(stride))
+	if rc != 0 {
+		return fmt.Errorf("SetHikariRefreshStride failed (rc=%d)", int(rc))
+	}
+	return nil
+}
+
 func (s *CrispasrSession) SetGrammarStrict(strict bool) error {
 	s.nativeHandle()
 	if s.handle == nil {

@@ -136,6 +136,9 @@ public:
         pol.repetition_penalty = env_f("HIKARI_REP", pol.repetition_penalty);
         pol.decoder_context = env_i("HIKARI_CTX", pol.decoder_context);
         pol.refresh_stride = env_i("HIKARI_STRIDE", env_i("CRISPASR_HIKARI_REFRESH_STRIDE", pol.refresh_stride));
+        if (p.hikari_refresh_stride >= 0) {
+            pol.refresh_stride = p.hikari_refresh_stride;
+        }
         pol.stride_margin = env_i("HIKARI_STRIDE_MARGIN", pol.stride_margin);
         pol.stale_tol = env_f("HIKARI_STALE_TOL", pol.stale_tol);
         hikari_set_policy(ctx_, &pol);

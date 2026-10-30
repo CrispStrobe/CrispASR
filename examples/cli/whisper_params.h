@@ -248,6 +248,8 @@ struct whisper_params {
     // negative = full attention. Set via --att-context "L,R".
     int att_context_left = INT_MIN;
     int att_context_right = INT_MIN;
+    // Hikari streaming strided encoder refresh interval (0 = exact, K > 0 = strided, -1 = default).
+    int hikari_refresh_stride = -1;
     std::string hotwords;        // comma-separated hotword list (PLAN #98)
     float hotwords_boost = 2.0f; // per-token log-prob boost for hotword prefix matches
     // Free-form context injected verbatim into Qwen3-ASR's system turn or

@@ -43,6 +43,8 @@ extern int crispasr_session_score_texts(struct CrispasrSession* s, const float* 
                                         int n_texts, float* out_logprobs, int* out_n_tokens);
 extern int crispasr_session_set_pcm_sample_rate(struct CrispasrSession* s, int rate);
 extern int crispasr_session_set_parakeet_att_context(struct CrispasrSession* s, int left, int right);
+extern int crispasr_session_set_audio_ctx(struct CrispasrSession* s, int audio_ctx);
+extern int crispasr_session_set_hikari_refresh_stride(struct CrispasrSession* s, int stride);
 extern int crispasr_session_set_grammar_strict(struct CrispasrSession* s, int strict);
 extern void* crispasr_punc_init(const char* model);
 extern const char* crispasr_punc_process(void* ctx, const char* text);
@@ -593,6 +595,20 @@ static VALUE rb_aux_set_att(VALUE self, VALUE handle, VALUE left, VALUE right) {
     int rc = crispasr_session_set_parakeet_att_context(s, NUM2INT(left), NUM2INT(right));
     if (rc != 0)
         rb_raise(rb_eRuntimeError, "set_parakeet_att_context failed (rc=%d)", rc);
+    return Qnil;
+}
+static VALUE rb_aux_set_audio_ctx(VALUE self, VALUE handle, VALUE audio_ctx) {
+    struct CrispasrSession* s = rb_extra_handle(handle);
+    int rc = crispasr_session_set_audio_ctx(s, NUM2INT(audio_ctx));
+    if (rc != 0)
+        rb_raise(rb_eRuntimeError, "set_audio_ctx failed (rc=%d)", rc);
+    return Qnil;
+}
+static VALUE rb_aux_set_hikari_refresh_stride(VALUE self, VALUE handle, VALUE stride) {
+    struct CrispasrSession* s = rb_extra_handle(handle);
+    int rc = crispasr_session_set_hikari_refresh_stride(s, NUM2INT(stride));
+    if (rc != 0)
+        rb_raise(rb_eRuntimeError, "set_hikari_refresh_stride failed (rc=%d)", rc);
     return Qnil;
 }
 static VALUE rb_aux_set_grammar_strict(VALUE self, VALUE handle, VALUE v) {
@@ -1584,6 +1600,8 @@ RB_CONTEXT_WRAPPER_1(rb_aux_backend_getter);
 RB_CONTEXT_WRAPPER_5(rb_aux_score_texts);
 RB_CONTEXT_WRAPPER_2(rb_aux_set_pcm_rate);
 RB_CONTEXT_WRAPPER_3(rb_aux_set_att);
+RB_CONTEXT_WRAPPER_2(rb_aux_set_audio_ctx);
+RB_CONTEXT_WRAPPER_2(rb_aux_set_hikari_refresh_stride);
 RB_CONTEXT_WRAPPER_2(rb_aux_set_grammar_strict);
 RB_CONTEXT_WRAPPER_1(rb_aux_punc_init);
 RB_CONTEXT_WRAPPER_2(rb_aux_punc_process);
@@ -1664,6 +1682,8 @@ static void rb_aux_init(void) {
     rb_define_singleton_method(mSession, "score_texts", rb_context_guard_rb_aux_score_texts, 5);
     rb_define_singleton_method(mSession, "set_pcm_sample_rate", rb_context_guard_rb_aux_set_pcm_rate, 2);
     rb_define_singleton_method(mSession, "set_parakeet_att_context", rb_context_guard_rb_aux_set_att, 3);
+    rb_define_singleton_method(mSession, "set_audio_ctx", rb_context_guard_rb_aux_set_audio_ctx, 2);
+    rb_define_singleton_method(mSession, "set_hikari_refresh_stride", rb_context_guard_rb_aux_set_hikari_refresh_stride, 2);
     rb_define_singleton_method(mSession, "set_grammar_strict", rb_context_guard_rb_aux_set_grammar_strict, 2);
     rb_define_singleton_method(mSession, "punc_init", rb_context_guard_rb_aux_punc_init, 1);
     rb_define_singleton_method(mSession, "punc_process", rb_context_guard_rb_aux_punc_process, 2);

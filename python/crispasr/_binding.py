@@ -2261,6 +2261,26 @@ class Session(SessionExtras):
         if rc != 0:
             raise RuntimeError(f"set_parakeet_att_context failed (rc={rc}) for backend {self.backend!r}")
 
+    def set_audio_ctx(self, audio_ctx: int) -> None:
+        """Set Whisper encoder evaluation audio context size (in 20ms frames, e.g. 1024; 0 = all/1500)."""
+        if not hasattr(self._lib, "crispasr_session_set_audio_ctx"):
+            raise RuntimeError("crispasr_session_set_audio_ctx not present in this libcrispasr build")
+        self._lib.crispasr_session_set_audio_ctx.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        self._lib.crispasr_session_set_audio_ctx.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_audio_ctx(self._handle, int(audio_ctx))
+        if rc != 0:
+            raise RuntimeError(f"set_audio_ctx failed (rc={rc}) for backend {self.backend!r}")
+
+    def set_hikari_refresh_stride(self, stride: int) -> None:
+        """Set Hikari streaming strided window refresh interval (0 = exact sliding, K > 0 = strided)."""
+        if not hasattr(self._lib, "crispasr_session_set_hikari_refresh_stride"):
+            raise RuntimeError("crispasr_session_set_hikari_refresh_stride not present in this libcrispasr build")
+        self._lib.crispasr_session_set_hikari_refresh_stride.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        self._lib.crispasr_session_set_hikari_refresh_stride.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_hikari_refresh_stride(self._handle, int(stride))
+        if rc != 0:
+            raise RuntimeError(f"set_hikari_refresh_stride failed (rc={rc}) for backend {self.backend!r}")
+
     def set_voice(self, path: str, ref_text: Optional[str] = None) -> None:
         """Load a voice prompt: a baked GGUF voice pack OR a *.wav reference.
 

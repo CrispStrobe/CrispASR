@@ -728,6 +728,26 @@ impl Session {
         Ok(())
     }
 
+    pub fn set_audio_ctx(&self, audio_ctx: i32) -> Result<(), String> {
+        let rc = unsafe {
+            crispasr_sys::crispasr_session_set_audio_ctx(self.handle, audio_ctx as c_int)
+        };
+        if rc != 0 {
+            return Err(format!("set_audio_ctx failed (rc={})", rc));
+        }
+        Ok(())
+    }
+
+    pub fn set_hikari_refresh_stride(&self, stride: i32) -> Result<(), String> {
+        let rc = unsafe {
+            crispasr_sys::crispasr_session_set_hikari_refresh_stride(self.handle, stride as c_int)
+        };
+        if rc != 0 {
+            return Err(format!("set_hikari_refresh_stride failed (rc={})", rc));
+        }
+        Ok(())
+    }
+
     pub fn set_grammar_strict(&self, strict: bool) -> Result<(), String> {
         let rc = unsafe {
             crispasr_sys::crispasr_session_set_grammar_strict(

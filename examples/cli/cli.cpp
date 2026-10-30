@@ -496,6 +496,8 @@ static bool whisper_params_parse_arg_backend_vad(int argc, char** argv, int& i, 
         } else {
             fprintf(stderr, "crispasr: --att-context expects \"L,R\" (e.g. 128,128 or -1,-1), got '%s'\n", v.c_str());
         }
+    } else if (arg == "--hikari-stride" || arg == "--hikari-refresh-stride") {
+        params.hikari_refresh_stride = std::stoi(ARGV_NEXT);
     } else if (arg == "--lid-backend") {
         params.lid_backend = ARGV_NEXT;
     } else if (arg == "--lid-model") {
@@ -1490,6 +1492,9 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             "frames (~80ms ea) — true windowed attn (O(T*window) mem, NeMo rel_pos_local_attn); "
             "-1,-1 = full. CRISPASR_FC_WINDOWED_ATTN=0 forces legacy masked-full\n",
             "model");
+    fprintf(out,
+            "             --hikari-stride N      [%-7d] hikari strided encoder refresh interval (0 = exact, K>0)\n",
+            params.hikari_refresh_stride);
     fprintf(out, "             --lcs-dedup VAL        [%-7s] sub-word LCS dedup across chunk boundaries: auto|on|off\n",
             params.lcs_dedup.c_str());
     fprintf(out,

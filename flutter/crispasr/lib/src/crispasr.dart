@@ -5656,6 +5656,33 @@ class CrispasrSession {
     if (rc != 0) throw Exception('setParakeetAttContext failed (rc=$rc)');
   }
 
+  /// Whisper encoder audio context size (0 = all/1500, >0 = explicit frames).
+  void setAudioCtx(int audioCtx) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_audio_ctx')) {
+      return;
+    }
+    final fn = _lib.lookupFunction<
+        Int32 Function(Pointer<Void>, Int32),
+        int Function(Pointer<Void>, int)>('crispasr_session_set_audio_ctx');
+    final rc = fn(_handle, audioCtx);
+    if (rc != 0) throw Exception('setAudioCtx failed (rc=$rc)');
+  }
+
+  /// Hikari streaming strided window refresh interval (0 = exact, K > 0 = strided).
+  void setHikariRefreshStride(int stride) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_hikari_refresh_stride')) {
+      return;
+    }
+    final fn = _lib.lookupFunction<
+        Int32 Function(Pointer<Void>, Int32),
+        int Function(
+            Pointer<Void>, int)>('crispasr_session_set_hikari_refresh_stride');
+    final rc = fn(_handle, stride);
+    if (rc != 0) throw Exception('setHikariRefreshStride failed (rc=$rc)');
+  }
+
   /// Pad N ms of silence at the beginning of TTS output.
   void setTtsPadSilenceMs(int ms) {
     if (_closed) throw StateError('CrispasrSession is closed');

@@ -449,6 +449,12 @@ CRISPASR_SESSION_API void crispasr_session_result_free(crispasr_session_result* 
 // values = full attention; INT_MIN,INT_MIN = clear (use the model default).
 // No-op for non-parakeet backends. Returns 0 on success.
 CRISPASR_SESSION_API int crispasr_session_set_parakeet_att_context(crispasr_session* s, int left, int right);
+// Audio context size (in 20ms frames, e.g. 1024; 0 = all/1500). Bounds Whisper
+// encoder evaluation context for batch and streaming decodes. Returns 0 on success.
+CRISPASR_SESSION_API int crispasr_session_set_audio_ctx(crispasr_session* s, int audio_ctx);
+// Strided window refresh interval for Hikari streaming (0 = exact sliding, K > 0 = strided).
+// Returns 0 on success.
+CRISPASR_SESSION_API int crispasr_session_set_hikari_refresh_stride(crispasr_session* s, int stride);
 // Set the active backend's companion codec/tokenizer model. For OmniVoice this
 // is its HiggsAudioV2 tokenizer; for Chatterbox it is S3Gen.
 CRISPASR_SESSION_API int crispasr_session_set_codec_path(crispasr_session* s, const char* path);

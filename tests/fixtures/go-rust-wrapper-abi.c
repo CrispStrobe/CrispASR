@@ -614,6 +614,12 @@ int crispasr_session_set_pcm_sample_rate(crispasr_session* s, int rate) {
 int crispasr_session_set_parakeet_att_context(crispasr_session* s, int l, int r) {
     return 0;
 }
+int crispasr_session_set_audio_ctx(crispasr_session* s, int audio_ctx) {
+    return 0;
+}
+int crispasr_session_set_hikari_refresh_stride(crispasr_session* s, int stride) {
+    return 0;
+}
 int crispasr_session_set_grammar_strict(crispasr_session* s, int v) {
     return 0;
 }
