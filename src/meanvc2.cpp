@@ -16,6 +16,12 @@
 #include "ggml-cpu.h"
 #include "ggml.h"
 
+#if defined(HAVE_ACCELERATE)
+#include <Accelerate/Accelerate.h>
+#elif defined(CRISPASR_HAVE_BLAS)
+#include <cblas.h>
+#endif
+
 #include <algorithm>
 #include <cassert>
 #include <chrono>
@@ -119,8 +125,18 @@ static ggml_tensor* get_tensor(const meanvc2_context* ctx, const std::string& na
 // CPU Math Primitives
 // ---------------------------------------------------------------------------
 
+static inline float fast_erf(float x) {
+    float sign = (x < 0.0f) ? -1.0f : 1.0f;
+    float abs_x = fabsf(x);
+    if (abs_x > 4.0f)
+        return sign;
+    float t = 1.0f / (1.0f + 0.3275911f * abs_x);
+    float poly = t * (0.254829592f + t * (-0.284496736f + t * (1.421413741f + t * (-1.453152027f + t * 1.061405429f))));
+    return sign * (1.0f - poly * expf(-abs_x * abs_x));
+}
+
 static inline float gelu(float x) {
-    return 0.5f * x * (1.0f + erff(x * 0.7071067811865475f));
+    return 0.5f * x * (1.0f + fast_erf(x * 0.7071067811865475f));
 }
 
 static inline float gelu_tanh(float x) {
@@ -209,6 +225,17 @@ static void fft_radix2(float* re, float* im, int N, int sign) {
 
 static void cpu_gemm_linear(const float* x, const float* w, const float* b, float* out, int M, int K, int N) {
     // x: (M, K), w: (N, K) row-major PyTorch weight, out: (M, N)
+#if defined(HAVE_ACCELERATE) || defined(CRISPASR_HAVE_BLAS)
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, M, N, K, 1.0f, x, K, w, K, 0.0f, out, N);
+    if (b) {
+        for (int m = 0; m < M; m++) {
+            float* row = out + m * N;
+            for (int n = 0; n < N; n++) {
+                row[n] += b[n];
+            }
+        }
+    }
+#else
     for (int m = 0; m < M; m++) {
         for (int n = 0; n < N; n++) {
             float sum = b ? b[n] : 0.0f;
@@ -220,6 +247,7 @@ static void cpu_gemm_linear(const float* x, const float* w, const float* b, floa
             out[m * N + n] = sum;
         }
     }
+#endif
 }
 
 static void dequant_tensor_to_float(const ggml_tensor* t, std::vector<float>& buf) {
@@ -403,6 +431,29 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
         // Subsampling: Conv0 -> ReLU -> Conv2 -> ReLU -> Linear(4864, 256)
         // Conv0: input (1, 19, 80), weight (256, 1, 3, 3), stride 2 -> out (256, 9, 39)
         std::vector<float> c0(256 * 9 * 39, 0.0f);
+#if defined(HAVE_ACCELERATE) || defined(CRISPASR_HAVE_BLAS)
+        std::vector<float> col0(9 * 351);
+        for (int oh = 0; oh < 9; oh++) {
+            for (int ow = 0; ow < 39; ow++) {
+                int s = oh * 39 + ow;
+                for (int kh = 0; kh < 3; kh++) {
+                    for (int kw = 0; kw < 3; kw++) {
+                        col0[(kh * 3 + kw) * 351 + s] = fb_chunk[(oh * 2 + kh) * 80 + (ow * 2 + kw)];
+                    }
+                }
+            }
+        }
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 256, 351, 9, 1.0f, conv0_w.data(), 9, col0.data(), 351,
+                    0.0f, c0.data(), 351);
+        for (int oc = 0; oc < 256; oc++) {
+            float b = conv0_b.empty() ? 0.0f : conv0_b[oc];
+            float* row = c0.data() + oc * 351;
+            for (int i = 0; i < 351; i++) {
+                float val = row[i] + b;
+                row[i] = val > 0.0f ? val : 0.0f; // ReLU
+            }
+        }
+#else
         for (int oc = 0; oc < 256; oc++) {
             float b = conv0_b.empty() ? 0.0f : conv0_b[oc];
             const float* kw = conv0_w.data() + oc * 9;
@@ -420,9 +471,39 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
                 }
             }
         }
+#endif
 
         // Conv2: input (256, 9, 39), weight (256, 256, 3, 3), stride 2 -> out (256, 4, 19)
         std::vector<float> c2(256 * 4 * 19, 0.0f);
+#if defined(HAVE_ACCELERATE) || defined(CRISPASR_HAVE_BLAS)
+        std::vector<float> col2(2304 * 76);
+        for (int oh = 0; oh < 4; oh++) {
+            for (int ow = 0; ow < 19; ow++) {
+                int s_idx = oh * 19 + ow;
+                for (int ic = 0; ic < 256; ic++) {
+                    const float* in_plane = c0.data() + (ic * 9) * 39;
+                    for (int kh = 0; kh < 3; kh++) {
+                        for (int kw_i = 0; kw_i < 3; kw_i++) {
+                            int k_idx = (ic * 3 + kh) * 3 + kw_i;
+                            col2[k_idx * 76 + s_idx] = in_plane[(oh * 2 + kh) * 39 + (ow * 2 + kw_i)];
+                        }
+                    }
+                }
+            }
+        }
+        std::vector<float> gemm2(256 * 76);
+        cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, 256, 76, 2304, 1.0f, conv2_w.data(), 2304, col2.data(),
+                    76, 0.0f, gemm2.data(), 76);
+        for (int oh = 0; oh < 4; oh++) {
+            for (int oc = 0; oc < 256; oc++) {
+                float b = conv2_b.empty() ? 0.0f : conv2_b[oc];
+                for (int ow = 0; ow < 19; ow++) {
+                    float s = gemm2[oc * 76 + (oh * 19 + ow)] + b;
+                    c2[(oh * 256 + oc) * 19 + ow] = s > 0.0f ? s : 0.0f; // Shape (4, 256, 19)
+                }
+            }
+        }
+#else
         for (int oc = 0; oc < 256; oc++) {
             float b = conv2_b.empty() ? 0.0f : conv2_b[oc];
             for (int oh = 0; oh < 4; oh++) {
@@ -443,18 +524,13 @@ static std::vector<float> run_fastu2pp_asr(meanvc2_context* ctx, const float* au
                 }
             }
         }
+#endif
 
         // Linear out: flatten 256 * 19 = 4864 -> 256 per time step (T=4), scaled by sqrt(d_model) = 16.0f
         std::vector<float> h(4 * 256);
-        for (int t = 0; t < 4; t++) {
-            const float* in_vec = c2.data() + t * 4864;
-            for (int d = 0; d < 256; d++) {
-                float s = out_b.empty() ? 0.0f : out_b[d];
-                const float* ow = out_w.data() + d * 4864;
-                for (int k = 0; k < 4864; k++)
-                    s += in_vec[k] * ow[k];
-                h[t * 256 + d] = s * 16.0f;
-            }
+        cpu_gemm_linear(c2.data(), out_w.data(), out_b.data(), h.data(), 4, 4864, 256);
+        for (int i = 0; i < 4 * 256; i++) {
+            h[i] *= 16.0f;
         }
 
         int offset_asr = 8 + 4 * chunk_idx;
@@ -1192,6 +1268,28 @@ static std::vector<float> run_vocos_decode(meanvc2_context* ctx, const float* me
 
     // 1. Conv1d embed: input (80, T), weight (320, 80, 7), pad 3 -> out (320, T)
     std::vector<float> x_ct(D * T, 0.0f);
+#if defined(HAVE_ACCELERATE) || defined(CRISPASR_HAVE_BLAS)
+    std::vector<float> col_embed(80 * 7 * T);
+    for (int t = 0; t < T; t++) {
+        for (int ic = 0; ic < 80; ic++) {
+            const float* in_row = mel_80_t + ic * T;
+            for (int k = 0; k < 7; k++) {
+                int in_t = t + k - 3;
+                float val = (in_t >= 0 && in_t < T) ? in_row[in_t] : 0.0f;
+                col_embed[(ic * 7 + k) * T + t] = val;
+            }
+        }
+    }
+    cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasNoTrans, D, T, 80 * 7, 1.0f, embed_w.data(), 80 * 7, col_embed.data(),
+                T, 0.0f, x_ct.data(), T);
+    for (int oc = 0; oc < D; oc++) {
+        float b = embed_b.empty() ? 0.0f : embed_b[oc];
+        float* row = x_ct.data() + oc * T;
+        for (int t = 0; t < T; t++) {
+            row[t] += b;
+        }
+    }
+#else
     for (int oc = 0; oc < D; oc++) {
         float b = embed_b.empty() ? 0.0f : embed_b[oc];
         const float* kw = embed_w.data() + oc * 80 * 7;
@@ -1209,6 +1307,7 @@ static std::vector<float> run_vocos_decode(meanvc2_context* ctx, const float* me
             x_ct[oc * T + t] = s;
         }
     }
+#endif
 
     // 2. Initial LayerNorm: transpose to (T, D)
     std::vector<float> x_td(T * D);
@@ -1365,10 +1464,12 @@ float* meanvc2_convert(struct meanvc2_context* ctx, const float* source_16k, int
         ctx->speaker_emb[0] = 1.0f; // Default unit vector
     }
 
+    auto t_start = std::chrono::high_resolution_clock::now();
     int bn_frames = 0, bn_dim = 256;
     std::vector<float> bns = run_fastu2pp_asr(ctx, source_16k, n_source_samples, &bn_frames, &bn_dim);
     if (bn_frames <= 0)
         return nullptr;
+    auto t_asr = std::chrono::high_resolution_clock::now();
 
     // 4x linear interpolation of BNF
     int T_mel = bn_frames * 4;
@@ -1394,9 +1495,19 @@ float* meanvc2_convert(struct meanvc2_context* ctx, const float* source_16k, int
     int mel_dim = 80;
     std::vector<float> mel =
         run_dit_flow(ctx, bn_interp.data(), T_mel, ctx->speaker_emb.data(), noise.data(), &mel_dim);
+    auto t_dit = std::chrono::high_resolution_clock::now();
 
     int final_samples = 0;
     std::vector<float> pcm = run_vocos_decode(ctx, mel.data(), T_mel, &final_samples);
+    auto t_vocos = std::chrono::high_resolution_clock::now();
+
+    if (ctx->params.verbosity >= 1) {
+        double d_asr = std::chrono::duration<double, std::milli>(t_asr - t_start).count();
+        double d_dit = std::chrono::duration<double, std::milli>(t_dit - t_asr).count();
+        double d_voc = std::chrono::duration<double, std::milli>(t_vocos - t_dit).count();
+        fprintf(stderr, "meanvc2 profile: asr=%.2f ms, dit=%.2f ms, vocos=%.2f ms (total=%.2f ms)\n", d_asr, d_dit,
+                d_voc, d_asr + d_dit + d_voc);
+    }
 
     float* out = (float*)malloc(final_samples * sizeof(float));
     memcpy(out, pcm.data(), final_samples * sizeof(float));

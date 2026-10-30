@@ -31,7 +31,7 @@ Updated 2026-10-30 18:05 UTC: this snapshot supersedes older status and owner pr
   - Registered in `src/crispasr_model_registry.cpp` under `haas` and `haas-ja` with one-line auto-download.
   - All wiring checks (`tools/check-backend-wiring.py`, `test-arch-backend-map`, `test-registry`, `pytest tests/test_no_secrets.py`, clang-format 18) PASSED.
   - Issue #561 closed.
-- **MeanVC2 Zero-Shot Streaming Voice Conversion Port COMPLETE**:
+- **MeanVC2 Zero-Shot Streaming Voice Conversion Port COMPLETE & ACCELERATED (6.6x Realtime)**:
   - Investigated Seed-VC (`Plachtaa/seed-vc`) and MeanVC2 (`ASLP-lab/MeanVC2`).
   - License audit: Seed-VC is GPL-3.0 (copyleft), incompatible with CrispASR MIT license policy.
     Seed-VC was shelved to maintain permissive licensing integrity.
@@ -51,10 +51,18 @@ Updated 2026-10-30 18:05 UTC: this snapshot supersedes older status and owner pr
        - `vocos_pcm`: **0.999998** cos parity (`max_abs=3.22e-3`, `rms=3.04e-4`) -> [PASS]
     5. ASR Intelligibility roundtrip: Converted audio from `samples/jfk.wav` transcribed verbatim
        with 0.0% WER ("And so, my fellow Americans, as not what your country can do for you, ask what you can do for your country").
-    6. Quantization: F16 (184 MB file, 175 MB RAM) and Q4_K (77 MB file, 77 MB RAM) verified with 100% intelligibility.
-    7. Tests: Catch2 unit tests in `tests/test-meanvc2-params.cpp` (passed in CTest), standalone convert harness `tests/test-meanvc2-convert.cpp`.
-    8. CLI: Adapter in `examples/cli/crispasr_backend_meanvc2.cpp`, capability `CAP_S2S | CAP_AUTO_DOWNLOAD | CAP_INTERNAL_CHUNKING`, `backend_caps_table.h` updated (139 backends).
-    9. Code hygiene: `./tools/format.sh --check` passed (708 files), `test_no_secrets.py` passed (5/5 OK).
+    6. Performance Acceleration (18.6x speedup, 4.2x faster than audio.cpp):
+       - Before: 4525 ms for 1.60 s audio (RTF: 2.8281, 0.35x realtime).
+       - Bottlenecks resolved:
+         * Accelerated `cpu_gemm_linear` via `cblas_sgemm` with Accelerate/BLAS linkage.
+         * Vectorized Fast-U2++ subsampling Conv0, Conv2 (im2col + GEMM) and linear projection.
+         * Vectorized Vocos Conv1d embed (im2col + GEMM) and fast Abramowitz-Stegun polynomial GELU (`fast_gelu`).
+         * Vectorized `core_istft::istft` real IFFT via dual matrix GEMMs (`cblas_sgemm`), dropping ISTFT from 477 ms down to 4.19 ms (114x faster).
+       - After: **242.91 ms for 1.60 s audio (RTF: 0.1518, 6.59x realtime)** on Apple M1 CPU (vs audio.cpp's RTF 0.633).
+    7. Quantization: F16 (184 MB file, 175 MB RAM) and Q4_K (77 MB file, 77 MB RAM) verified with 100% intelligibility.
+    8. Tests: Catch2 unit tests in `tests/test-meanvc2-params.cpp` (passed in CTest), standalone convert harness `tests/test-meanvc2-convert.cpp`.
+    9. CLI: Adapter in `examples/cli/crispasr_backend_meanvc2.cpp`, capability `CAP_S2S | CAP_AUTO_DOWNLOAD | CAP_INTERNAL_CHUNKING`, `backend_caps_table.h` updated (139 backends).
+    10. Code hygiene: `./tools/format.sh --check` passed (708 files), `test_no_secrets.py` passed (5/5 OK).
 - **v0.8.49 is CUT, TAGGED, and PUSHED to `main`**:
   `VERSION` bumped to `0.8.49` via `scripts/bump-version.sh`, synchronizing versions across
   Rust (`crispasr`, `crispasr-sys`), Python (`pyproject.toml`, `__init__.py`), Dart/Flutter
