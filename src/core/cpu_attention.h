@@ -66,10 +66,24 @@ static inline void cpu_online_softmax_accumulate(int T, int hd, const float* __r
         // If a new maximum is found, previous accumulated values must be
         // rescaled. Otherwise exp_scale == 1 and the multiply can be skipped.
         if (m_new > m) {
-            for (int dd = 0; dd < hd; dd++)
+            int dd = 0;
+            for (; dd + 4 <= hd; dd += 4) {
+                out[dd + 0] = out[dd + 0] * exp_scale + e * v[dd + 0];
+                out[dd + 1] = out[dd + 1] * exp_scale + e * v[dd + 1];
+                out[dd + 2] = out[dd + 2] * exp_scale + e * v[dd + 2];
+                out[dd + 3] = out[dd + 3] * exp_scale + e * v[dd + 3];
+            }
+            for (; dd < hd; dd++)
                 out[dd] = out[dd] * exp_scale + e * v[dd];
         } else {
-            for (int dd = 0; dd < hd; dd++)
+            int dd = 0;
+            for (; dd + 4 <= hd; dd += 4) {
+                out[dd + 0] += e * v[dd + 0];
+                out[dd + 1] += e * v[dd + 1];
+                out[dd + 2] += e * v[dd + 2];
+                out[dd + 3] += e * v[dd + 3];
+            }
+            for (; dd < hd; dd++)
                 out[dd] += e * v[dd];
         }
 
@@ -78,7 +92,14 @@ static inline void cpu_online_softmax_accumulate(int T, int hd, const float* __r
     }
 
     float inv_l = 1.0f / l;
-    for (int dd = 0; dd < hd; dd++)
+    int dd = 0;
+    for (; dd + 4 <= hd; dd += 4) {
+        out[dd + 0] *= inv_l;
+        out[dd + 1] *= inv_l;
+        out[dd + 2] *= inv_l;
+        out[dd + 3] *= inv_l;
+    }
+    for (; dd < hd; dd++)
         out[dd] *= inv_l;
 }
 

@@ -18,13 +18,16 @@
 
 #pragma once
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <vector>
 
+#include "parallel_for.h"
 #include "ggml.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
@@ -212,17 +215,15 @@ static inline bool run_conv_module(std::vector<uint8_t>& compute_meta, ggml_back
 //     attn[c,r] = (Q[c]·K[r] + Q[c]·RPE[c,r]) * scale,  softmax along r,
 //     out[c]    = sum_r softmax * V[r]
 //
-// The last block may have `remainder` valid frames; positions beyond it
-// are computed but their values are unused by the caller (residuals
-// write out of bounds against zeroed tail data).
-//
-//   Q / K / V : (n_heads * hd, T) row-major
-//   rpe       : (ctx_size, ctx_size, hd) precomputed lookup, or nullptr
-//               (granite-nle's per-layer table may be empty if the
-//               layer's attn_rel_pos_w had an unsupported quant type)
-static inline void shaw_block_attention_cpu(float* out, const float* Q_data, const float* K_data, const float* V_data,
-                                            const float* rpe, int T, int n_heads, int hd, int ctx_size, float scale,
-                                            int remainder) {
+// Check if sequential baseline conformer attention is requested.
+static inline bool crispasr_conformer_serial() {
+    const char* e = std::getenv("CRISPASR_CONFORMER_SERIAL");
+    return (e && *e && std::strcmp(e, "0") != 0);
+}
+
+static inline void shaw_block_attention_cpu_baseline(float* out, const float* Q_data, const float* K_data,
+                                                     const float* V_data, const float* rpe, int T, int n_heads, int hd,
+                                                     int ctx_size, float scale, int remainder) {
     const int d = n_heads * hd;
     const int n_blocks = (T + ctx_size - 1) / ctx_size;
 
@@ -276,6 +277,89 @@ static inline void shaw_block_attention_cpu(float* out, const float* Q_data, con
                 }
             }
         }
+    }
+}
+
+static inline void shaw_block_attention_cpu_accelerated(float* out, const float* Q_data, const float* K_data,
+                                                        const float* V_data, const float* rpe, int T, int n_heads,
+                                                        int hd, int ctx_size, float scale, int remainder,
+                                                        int n_threads = 0) {
+    const int d = n_heads * hd;
+    const int n_blocks = (T + ctx_size - 1) / ctx_size;
+    const int total_items = n_blocks * n_heads;
+
+    core_parallel::for_each_chunk(total_items, n_threads, [&](int begin_idx, int end_idx) {
+        std::vector<float> scores((size_t)ctx_size * ctx_size);
+        for (int idx = begin_idx; idx < end_idx; idx++) {
+            const int blk = idx / n_heads;
+            const int h = idx % n_heads;
+            const int blk_start = blk * ctx_size;
+            const int blk_len = (blk == n_blocks - 1 && remainder > 0) ? remainder : ctx_size;
+
+            for (int c = 0; c < blk_len; c++) {
+                const float* q = Q_data + (blk_start + c) * d + h * hd;
+                for (int r = 0; r < blk_len; r++) {
+                    const float* k = K_data + (blk_start + r) * d + h * hd;
+                    const float* p = rpe ? (rpe + ((size_t)(c * ctx_size + r) * hd)) : nullptr;
+                    float qk = 0.0f;
+                    float pos = 0.0f;
+                    for (int dd = 0; dd < hd; dd++) {
+                        float q_val = q[dd];
+                        qk += q_val * k[dd];
+                        if (p)
+                            pos += q_val * p[dd];
+                    }
+                    scores[c * blk_len + r] = (qk + pos) * scale;
+                }
+            }
+
+            for (int c = 0; c < blk_len; c++) {
+                float max_val = -1e30f;
+                for (int r = 0; r < blk_len; r++) {
+                    if (scores[c * blk_len + r] > max_val)
+                        max_val = scores[c * blk_len + r];
+                }
+                float sum = 0.0f;
+                for (int r = 0; r < blk_len; r++) {
+                    scores[c * blk_len + r] = std::exp(scores[c * blk_len + r] - max_val);
+                    sum += scores[c * blk_len + r];
+                }
+                float inv_sum = 1.0f / (sum + 1e-10f);
+                for (int r = 0; r < blk_len; r++)
+                    scores[c * blk_len + r] *= inv_sum;
+            }
+
+            for (int c = 0; c < blk_len; c++) {
+                float* out_row = out + (blk_start + c) * d + h * hd;
+                std::fill_n(out_row, hd, 0.0f);
+                for (int r = 0; r < blk_len; r++) {
+                    const float s = scores[c * blk_len + r];
+                    const float* v_row = V_data + (blk_start + r) * d + h * hd;
+                    for (int dd = 0; dd < hd; dd++) {
+                        out_row[dd] += s * v_row[dd];
+                    }
+                }
+            }
+        }
+    });
+}
+
+// The last block may have `remainder` valid frames; positions beyond it
+// are computed but their values are unused by the caller (residuals
+// write out of bounds against zeroed tail data).
+//
+//   Q / K / V : (n_heads * hd, T) row-major
+//   rpe       : (ctx_size, ctx_size, hd) precomputed lookup, or nullptr
+//               (granite-nle's per-layer table may be empty if the
+//               layer's attn_rel_pos_w had an unsupported quant type)
+static inline void shaw_block_attention_cpu(float* out, const float* Q_data, const float* K_data, const float* V_data,
+                                            const float* rpe, int T, int n_heads, int hd, int ctx_size, float scale,
+                                            int remainder, int n_threads = 0) {
+    if (crispasr_conformer_serial()) {
+        shaw_block_attention_cpu_baseline(out, Q_data, K_data, V_data, rpe, T, n_heads, hd, ctx_size, scale, remainder);
+    } else {
+        shaw_block_attention_cpu_accelerated(out, Q_data, K_data, V_data, rpe, T, n_heads, hd, ctx_size, scale,
+                                             remainder, n_threads);
     }
 }
 

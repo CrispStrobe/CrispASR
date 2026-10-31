@@ -1927,16 +1927,34 @@ std::vector<float> wav2vec2_compute_logits(const wav2vec2_model& m, const float*
         // same treatment as firered_asr (#229). Q/K/V are [T, H] row-major; for
         // head h the values live at column offset h*head_dim with row stride H.
         std::fill(attn_out.begin(), attn_out.end(), 0.f);
+        const char* w2v_serial_env = std::getenv("CRISPASR_WAV2VEC2_SERIAL");
+        const bool force_w2v_serial = (w2v_serial_env != nullptr && std::strcmp(w2v_serial_env, "0") != 0);
+        if (force_w2v_serial) {
 #pragma omp parallel for collapse(2) schedule(static)
-        for (int h = 0; h < n_heads; h++) {
-            for (int tq = 0; tq < T; tq++) {
-                const int off = h * head_dim;
-                const float* q = Q_buf.data() + tq * H + off;
-                crispasr::cpu_attn::cpu_online_softmax_accumulate(
-                    T, head_dim, V_buf.data() + off, H, attn_out.data() + tq * H + off, [&](int tk) {
-                        return crispasr::cpu_attn::cpu_dot(q, K_buf.data() + tk * H + off, head_dim) * scale;
-                    });
+            for (int h = 0; h < n_heads; h++) {
+                for (int tq = 0; tq < T; tq++) {
+                    const int off = h * head_dim;
+                    const float* q = Q_buf.data() + tq * H + off;
+                    crispasr::cpu_attn::cpu_online_softmax_accumulate(
+                        T, head_dim, V_buf.data() + off, H, attn_out.data() + tq * H + off, [&](int tk) {
+                            return crispasr::cpu_attn::cpu_dot(q, K_buf.data() + tk * H + off, head_dim) * scale;
+                        });
+                }
             }
+        } else {
+            const int total_queries = n_heads * T;
+            core_parallel::for_each_chunk(total_queries, n_threads, [&](int begin_idx, int end_idx) {
+                for (int idx = begin_idx; idx < end_idx; idx++) {
+                    const int h = idx / T;
+                    const int tq = idx % T;
+                    const int off = h * head_dim;
+                    const float* q = Q_buf.data() + tq * H + off;
+                    crispasr::cpu_attn::cpu_online_softmax_accumulate(
+                        T, head_dim, V_buf.data() + off, H, attn_out.data() + tq * H + off, [&](int tk) {
+                            return crispasr::cpu_attn::cpu_dot(q, K_buf.data() + tk * H + off, head_dim) * scale;
+                        });
+                }
+            });
         }
 
         ggml_linear_f32(scratch, e.o_w, tensor_data_f32(m, e.o_b), attn_out.data(), normed.data(), H, H, T, n_threads,

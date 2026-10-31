@@ -4808,6 +4808,21 @@ catch_discover_tests(test-align-ab-bench
     PROPERTIES LABELS "bench;align"
 )
 
+# ─── test-conformer-ab-bench — conformer_ibm.h paired A/B speed and parity bench ────
+add_executable(test-conformer-ab-bench test-conformer-ab-bench.cpp)
+target_include_directories(test-conformer-ab-bench PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-conformer-ab-bench PRIVATE
+    Catch2::Catch2WithMain
+    Threads::Threads
+    ggml
+)
+catch_discover_tests(test-conformer-ab-bench
+    TEST_SPEC "[conformer][ab-bench]"
+    PROPERTIES LABELS "bench;conformer"
+)
+
 # ─── test-core-cross-attn — core/cross_attn.h manual path (ggml graph) ────────
 # Computes the header's cross-attention graph and compares to a plain-C++ MHA
 # reference (verifies the bug-fixed V-transpose + unscaled T5 contract).
