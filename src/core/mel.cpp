@@ -15,6 +15,13 @@
 #include <thread>
 #include <vector>
 
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+#include <arm_neon.h>
+#endif
+#if defined(__AVX__) || defined(__AVX2__)
+#include <immintrin.h>
+#endif
+
 #if defined(HAVE_BLAS)
 #if defined(__APPLE__)
 #include <Accelerate/Accelerate.h>
@@ -42,26 +49,26 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
     //     zero pad) — see NeMo FilterbankFeatures.forward.
     // -----------------------------------------------------------------
     std::vector<float> preemph_in;
-    const float* base_ptr = samples;
-    if (p.preemph != 0.0f && n_samples > 0) {
-        preemph_in.resize((size_t)n_samples);
-        preemph_in[0] = samples[0];
-        const float a = p.preemph;
-        for (int i = 1; i < n_samples; i++)
-            preemph_in[i] = samples[i] - a * samples[i - 1];
-        base_ptr = preemph_in.data();
-    }
+    std::vector<float> padded_in;
+    const float* in_ptr;
+    int in_len;
 
     // -----------------------------------------------------------------
     // 1b. Optional center-pad of the input by n_fft/2 on each side.
     // -----------------------------------------------------------------
-    std::vector<float> padded_in;
-    const float* in_ptr;
-    int in_len;
     if (p.center_pad) {
         const int pad = n_fft / 2;
         padded_in.assign((size_t)(pad + n_samples + pad), 0.0f);
-        std::memcpy(padded_in.data() + pad, base_ptr, (size_t)n_samples * sizeof(float));
+        float* dst = padded_in.data() + pad;
+        if (p.preemph != 0.0f && n_samples > 0) {
+            dst[0] = samples[0];
+            const float a = p.preemph;
+            for (int i = 1; i < n_samples; i++)
+                dst[i] = samples[i] - a * samples[i - 1];
+        } else if (n_samples > 0) {
+            std::memcpy(dst, samples, (size_t)n_samples * sizeof(float));
+        }
+        const float* base_ptr = dst;
         if (p.center_pad_reflect) {
             // Reflect-pad matching PyTorch's torch.nn.functional.pad(x, (pad, pad), "reflect").
             // Left: padded[pad-1-i] = base_ptr[i+1] for i in [0, pad)
@@ -79,6 +86,15 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
         in_ptr = padded_in.data();
         in_len = (int)padded_in.size();
     } else {
+        const float* base_ptr = samples;
+        if (p.preemph != 0.0f && n_samples > 0) {
+            preemph_in.resize((size_t)n_samples);
+            preemph_in[0] = samples[0];
+            const float a = p.preemph;
+            for (int i = 1; i < n_samples; i++)
+                preemph_in[i] = samples[i] - a * samples[i - 1];
+            base_ptr = preemph_in.data();
+        }
         in_ptr = base_ptr;
         in_len = n_samples;
     }
@@ -141,7 +157,21 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
         const bool use_magnitude = (p.spec_kind == SpecKind::Magnitude);
         auto compute_frame = [&](int t, float* fft_in, float* fft_out) {
             const float* frame = in_ptr + (size_t)(t + t_start) * hop;
-            for (int n = 0; n < n_fft; n++)
+            int n = 0;
+#if defined(__ARM_NEON) || defined(__ARM_NEON__)
+            for (; n + 3 < n_fft; n += 4) {
+                float32x4_t vf = vld1q_f32(frame + n);
+                float32x4_t vw = vld1q_f32(window.data() + n);
+                vst1q_f32(fft_in + n, vmulq_f32(vf, vw));
+            }
+#elif defined(__AVX__)
+            for (; n + 7 < n_fft; n += 8) {
+                __m256 vf = _mm256_loadu_ps(frame + n);
+                __m256 vw = _mm256_loadu_ps(window.data() + n);
+                _mm256_storeu_ps(fft_in + n, _mm256_mul_ps(vf, vw));
+            }
+#endif
+            for (; n < n_fft; n++)
                 fft_in[n] = frame[n] * window[n];
             fft(fft_in, n_fft, fft_out);
             for (int k = 0; k < n_freqs; k++) {
@@ -248,6 +278,31 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
             }
             return;
         }
+#else
+        if (T >= 64) {
+            const unsigned hw = std::thread::hardware_concurrency();
+            const int cap = p.n_threads > 0 ? p.n_threads : (int)((hw == 0) ? 1u : std::min(hw, 8u));
+            projection_threads = std::min(cap, T);
+            core_parallel::for_each_chunk(T, cap, [&](int t0, int t1) {
+                for (int t = t0; t < t1; t++) {
+                    const float* pp = power.data() + (size_t)t * n_freqs;
+                    float* mp = mel_tn.data() + (size_t)t * nmels;
+                    for (int m = 0; m < nmels; m++) {
+                        Acc s = 0;
+                        if (p.fb_layout == FbLayout::MelsFreqs) {
+                            const float* fb = mel_fb + (size_t)m * n_freqs;
+                            for (int k = 0; k < n_freqs; k++)
+                                s += static_cast<Acc>(pp[k]) * static_cast<Acc>(fb[k]);
+                        } else {
+                            for (int k = 0; k < n_freqs; k++)
+                                s += static_cast<Acc>(pp[k]) * static_cast<Acc>(mel_fb[(size_t)k * nmels + m]);
+                        }
+                        mp[m] = (float)s;
+                    }
+                }
+            });
+            return;
+        }
 #endif
         for (int t = 0; t < T; t++) {
             const float* pp = power.data() + (size_t)t * n_freqs;
@@ -313,8 +368,19 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
         }
     };
     if (p.log_base != LogBase::None) {
-        for (size_t i = 0; i < mel_tn.size(); i++) {
-            mel_tn[i] = apply_log(mel_tn[i]);
+        const size_t total_elements = mel_tn.size();
+        if (total_elements >= 2048) {
+            const unsigned hw = std::thread::hardware_concurrency();
+            const int cap = p.n_threads > 0 ? p.n_threads : (int)((hw == 0) ? 1u : std::min(hw, 8u));
+            core_parallel::for_each_chunk((int)total_elements, cap, [&](int i0, int i1) {
+                for (int i = i0; i < i1; i++) {
+                    mel_tn[(size_t)i] = apply_log(mel_tn[(size_t)i]);
+                }
+            });
+        } else {
+            for (size_t i = 0; i < total_elements; i++) {
+                mel_tn[i] = apply_log(mel_tn[i]);
+            }
         }
     }
 
@@ -357,24 +423,28 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
         // shift downstream encoder activations enough to cause TDT token
         // deletions on conversational JA audio (issue #37).
         const int denom = (T_final > 1) ? (T_final - 1) : 1;
-        for (int m = 0; m < nmels; m++) {
-            double sum = 0.0, sq = 0.0;
-            for (int t = 0; t < T_final; t++)
-                sum += mel_tn[(size_t)t * nmels + m];
-            const double mean = sum / T_final;
-            for (int t = 0; t < T_final; t++) {
-                const double d = mel_tn[(size_t)t * nmels + m] - mean;
-                sq += d * d;
+        const unsigned hw = std::thread::hardware_concurrency();
+        const int cap = p.n_threads > 0 ? p.n_threads : (int)((hw == 0) ? 1u : std::min(hw, 8u));
+        core_parallel::for_each_chunk(nmels, cap, [&](int m0, int m1) {
+            for (int m = m0; m < m1; m++) {
+                double sum = 0.0, sq = 0.0;
+                for (int t = 0; t < T_final; t++)
+                    sum += mel_tn[(size_t)t * nmels + m];
+                const double mean = sum / T_final;
+                for (int t = 0; t < T_final; t++) {
+                    const double d = mel_tn[(size_t)t * nmels + m] - mean;
+                    sq += d * d;
+                }
+                float std_val = std::sqrt((float)(sq / denom));
+                if (!(std_val == std_val))
+                    std_val = 0.0f;
+                std_val += 1e-5f;
+                const float inv_std = 1.0f / std_val;
+                for (int t = 0; t < T_final; t++) {
+                    mel_tn[(size_t)t * nmels + m] = (float)(mel_tn[(size_t)t * nmels + m] - mean) * inv_std;
+                }
             }
-            float std_val = std::sqrt((float)(sq / denom));
-            if (!(std_val == std_val))
-                std_val = 0.0f;
-            std_val += 1e-5f;
-            const float inv_std = 1.0f / std_val;
-            for (int t = 0; t < T_final; t++) {
-                mel_tn[(size_t)t * nmels + m] = (float)(mel_tn[(size_t)t * nmels + m] - mean) * inv_std;
-            }
-        }
+        });
         break;
     }
     case Normalization::GlobalClipMax: {
@@ -434,9 +504,21 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
 
     // Transpose to (n_mels, T_final) row-major.
     std::vector<float> out((size_t)nmels * T_final, 0.0f);
-    for (int t = 0; t < T_final; t++) {
-        for (int m = 0; m < nmels; m++) {
-            out[(size_t)m * T_final + t] = mel_tn[(size_t)t * nmels + m];
+    if ((size_t)nmels * T_final >= 2048) {
+        const unsigned hw = std::thread::hardware_concurrency();
+        const int cap = p.n_threads > 0 ? p.n_threads : (int)((hw == 0) ? 1u : std::min(hw, 8u));
+        core_parallel::for_each_chunk(nmels, cap, [&](int m0, int m1) {
+            for (int m = m0; m < m1; m++) {
+                for (int t = 0; t < T_final; t++) {
+                    out[(size_t)m * T_final + t] = mel_tn[(size_t)t * nmels + m];
+                }
+            }
+        });
+    } else {
+        for (int t = 0; t < T_final; t++) {
+            for (int m = 0; m < nmels; m++) {
+                out[(size_t)m * T_final + t] = mel_tn[(size_t)t * nmels + m];
+            }
         }
     }
     return out;

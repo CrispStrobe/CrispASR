@@ -4766,6 +4766,20 @@ catch_discover_tests(test-core-mel-parallel
     PROPERTIES LABELS "unit;mel"
 )
 
+# ─── test-core-mel-features — core/mel.cpp multi-configuration parity ──────────
+add_executable(test-core-mel-features test-core-mel-features.cpp)
+target_include_directories(test-core-mel-features PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-core-mel-features PRIVATE
+    Catch2::Catch2WithMain
+    crispasr-core
+)
+catch_discover_tests(test-core-mel-features
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit;mel"
+)
+
 # ─── test-core-cross-attn — core/cross_attn.h manual path (ggml graph) ────────
 # Computes the header's cross-attention graph and compares to a plain-C++ MHA
 # reference (verifies the bug-fixed V-transpose + unscaled T5 contract).
