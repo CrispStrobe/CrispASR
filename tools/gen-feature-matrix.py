@@ -125,6 +125,29 @@ def load_backend_data(crispasr: Path) -> tuple[list[dict], list[tuple[str, str]]
         sys.exit(1)
     raw = json.loads(r.stdout)
     backends = raw.get("backends", [])
+
+    # If the binary was built without optional ONNX runtime, preserve the known
+    # ONNX backends (defined in src/core/backend_caps_table.h and registered in
+    # examples/cli/crispasr_backend.cpp when CRISPASR_HAS_ONNX=1) so feature matrix
+    # regeneration on standard CPU builds does not strip them (#407, #515).
+    backend_names = {b.get("name") for b in backends}
+    if "moonshine-onnx" not in backend_names:
+        onnx_entries = [
+            {"name": "moonshine-onnx", "caps_bitmask": 270336, "caps": ["auto-download", "punctuation-native"]},
+            {"name": "moonshine-streaming-small-de-onnx", "caps_bitmask": 270336, "caps": ["auto-download", "punctuation-native"]},
+            {"name": "moonshine-streaming-tiny-de-onnx", "caps_bitmask": 270336, "caps": ["auto-download", "punctuation-native"]},
+            {"name": "moonshine-tiny-de-phreak87-onnx", "caps_bitmask": 270336, "caps": ["auto-download", "punctuation-native"]},
+        ]
+        idx = -1
+        for i, b in enumerate(backends):
+            if b.get("name") == "moonshine-streaming":
+                idx = i + 1
+                break
+        if idx != -1:
+            for offset, entry in enumerate(onnx_entries):
+                backends.insert(idx + offset, entry)
+        else:
+            backends.extend(onnx_entries)
     # All caps that appear anywhere, in CAP_LABELS order, then fallback.
     seen: set[str] = set()
     for b in backends:
