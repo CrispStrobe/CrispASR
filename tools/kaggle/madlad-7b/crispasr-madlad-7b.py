@@ -131,12 +131,13 @@ def validate(model_path, label, force_cpu=False):
     return passed, rows
 
 
-def upload_file(path, repo, msg):
-    step("upload.begin", file=Path(path).name, gb=gb(path), repo=repo)
-    with kh.build_heartbeat(f"upload.{Path(path).name}", 30):
-        HfApi().upload_file(path_or_fileobj=str(path), path_in_repo=Path(path).name,
+def upload_file(path, repo, msg, path_in_repo=None):
+    dst_name = path_in_repo or Path(path).name
+    step("upload.begin", file=dst_name, gb=gb(path), repo=repo)
+    with kh.build_heartbeat(f"upload.{dst_name}", 30):
+        HfApi().upload_file(path_or_fileobj=str(path), path_in_repo=dst_name,
                             repo_id=repo, repo_type="model", token=TOKEN, commit_message=msg)
-    step("upload.done", file=Path(path).name, repo=repo)
+    step("upload.done", file=dst_name, repo=repo)
 
 
 def process_variant(variant_name: str, src_repo: str, dst_repo: str):
@@ -328,7 +329,7 @@ Apache-2.0 (matching upstream Google MADLAD-400 checkpoint).
 """
     readme_path = TEMP / f"README-{variant_name}.md"
     readme_path.write_text(readme_content, encoding="utf-8")
-    upload_file(readme_path, dst_repo, "update model card README.md")
+    upload_file(readme_path, dst_repo, "update model card README.md", path_in_repo="README.md")
 
     # Cleanup models before next variant to preserve disk
     shutil.rmtree(MODELS, ignore_errors=True)
