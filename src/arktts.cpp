@@ -381,6 +381,13 @@ float* arktts_run_slow_transformer(struct arktts_context* ctx, const float* embe
     ggml_tensor* emb_w = get_tensor(ctx, "embeddings.weight");
     ggml_tensor* logits = ggml_mul_mat(gctx, emb_w, last_hidden);
 
+    ggml_set_output(logits);
+    ggml_set_output(last_hidden);
+    for (int l = 0; l < (int)ctx->hp.n_layer; l++) {
+        ggml_set_output(k_saved[l]);
+        ggml_set_output(v_saved[l]);
+    }
+
     ggml_cgraph* gf = ggml_new_graph(gctx);
     ggml_build_forward_expand(gf, logits);
     ggml_build_forward_expand(gf, last_hidden);
@@ -585,6 +592,13 @@ static float* arktts_step_slow_transformer(struct arktts_context* ctx, const flo
     ggml_tensor* last_hidden = cur;
     ggml_tensor* emb_w = get_tensor(ctx, "embeddings.weight");
     ggml_tensor* logits = ggml_mul_mat(gctx, emb_w, last_hidden);
+
+    ggml_set_output(logits);
+    ggml_set_output(last_hidden);
+    for (int l = 0; l < (int)ctx->hp.n_layer; l++) {
+        ggml_set_output(k_step_saved[l]);
+        ggml_set_output(v_step_saved[l]);
+    }
 
     ggml_cgraph* gf = ggml_new_graph(gctx);
     ggml_build_forward_expand(gf, logits);

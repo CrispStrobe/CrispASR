@@ -148,8 +148,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_nemotron_backend();
     if (name == "phonon2")
         return crispasr_make_phonon2_backend();
-    if (name == "parakeet" || name == "haas" || name == "haas-asr" || name == "reazonspeech" || name == "quds" ||
-        name == "quds-fa")
+    if (name == "parakeet" || name == "haas" || name == "haas-ja" || name == "haas_ja" || name == "haas-asr" ||
+        name == "reazonspeech" || name == "quds" || name == "quds-fa")
         return crispasr_make_parakeet_backend();
     if (name == "canary")
         return crispasr_make_canary_backend();

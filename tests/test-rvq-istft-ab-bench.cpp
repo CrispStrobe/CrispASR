@@ -142,6 +142,28 @@ TEST_CASE("RVQ encode_euclidean paired A/B benchmark", "[perf][rvq][ab-bench]") 
     printf("Speedup:                   %.2fx (%.2f ms saved per RVQ pass)\n", speedup,
            stats_a.median_ms - stats_b.median_ms);
     printf("Numerical parity:          mismatches = %d (100%% exact bit-identical)\n", mismatches);
+
+    // Also verify encode_euclidean_per_stage (tests internal norm computation + encoding)
+    std::vector<const float*> raw_embeds(n_stages);
+    std::vector<int> raw_sizes(n_stages, K);
+    for (int s = 0; s < n_stages; s++) {
+        raw_embeds[s] = embeds[s].data();
+    }
+    std::vector<std::vector<int32_t>> stage_codes_a, stage_codes_b;
+    set_env_var("CRISPASR_RVQ_SERIAL", "1");
+    core_rvq::encode_euclidean_per_stage(features.data(), T, dim, raw_embeds.data(), raw_sizes.data(), n_stages, stage_codes_a);
+    unset_env_var("CRISPASR_RVQ_SERIAL");
+    core_rvq::encode_euclidean_per_stage(features.data(), T, dim, raw_embeds.data(), raw_sizes.data(), n_stages, stage_codes_b);
+    int stage_mismatches = 0;
+    for (int s = 0; s < n_stages; s++) {
+        for (int t = 0; t < T; t++) {
+            if (stage_codes_a[s][t] != stage_codes_b[s][t]) {
+                stage_mismatches++;
+            }
+        }
+    }
+    CHECK(stage_mismatches == 0);
+    printf("RVQ encode_euclidean_per_stage parity: mismatches = %d (100%% exact bit-identical)\n", stage_mismatches);
 }
 
 TEST_CASE("iSTFT paired A/B benchmark", "[perf][istft][ab-bench]") {

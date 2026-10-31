@@ -118,10 +118,7 @@ bool encode_euclidean_per_stage(const float* features, int T, int dim, const flo
                 for (int k = k_start; k < k_end; k++) {
                     const float* e = embeds[s] + (size_t)k * dim;
                     float n = 0.0f;
-                    int j = 0;
-                    for (; j + 3 < dim; j += 4)
-                        n += e[j] * e[j] + e[j + 1] * e[j + 1] + e[j + 2] * e[j + 2] + e[j + 3] * e[j + 3];
-                    for (; j < dim; j++)
+                    for (int j = 0; j < dim; j++)
                         n += e[j] * e[j];
                     norms[s][k] = n;
                 }

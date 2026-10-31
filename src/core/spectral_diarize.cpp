@@ -163,16 +163,33 @@ std::vector<double> top_eigenvectors(const std::vector<double>& m, int n, int k,
     };
     orthonormalize();
 
+    const char* env_serial = std::getenv("CRISPASR_DIARIZE_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+
     std::vector<double> z((size_t)n * k);
     std::vector<double> prev;
     for (int it = 0; it < 300; it++) {
-        for (int i = 0; i < n; i++) {
-            for (int c = 0; c < k; c++) {
-                double acc = shift * q[(size_t)i * k + c];
-                for (int j = 0; j < n; j++)
-                    acc += m[(size_t)i * n + j] * q[(size_t)j * k + c];
-                z[(size_t)i * k + c] = acc;
+        if (force_serial || n < 32) {
+            for (int i = 0; i < n; i++) {
+                for (int c = 0; c < k; c++) {
+                    double acc = shift * q[(size_t)i * k + c];
+                    for (int j = 0; j < n; j++)
+                        acc += m[(size_t)i * n + j] * q[(size_t)j * k + c];
+                    z[(size_t)i * k + c] = acc;
+                }
             }
+        } else {
+            core_parallel::for_each_chunk(n, 0, [&](int i0, int i1) {
+                for (int i = i0; i < i1; i++) {
+                    const double* m_row = m.data() + (size_t)i * n;
+                    for (int c = 0; c < k; c++) {
+                        double acc = shift * q[(size_t)i * k + c];
+                        for (int j = 0; j < n; j++)
+                            acc += m_row[j] * q[(size_t)j * k + c];
+                        z[(size_t)i * k + c] = acc;
+                    }
+                }
+            });
         }
         q.swap(z);
         orthonormalize();
@@ -336,10 +353,7 @@ std::vector<float> cosine_similarity(const float* x, int n, int d) {
             for (int i = i_start; i < i_end; i++) {
                 const float* row_i = norm.data() + (size_t)i * d;
                 float* out_row = out.data() + (size_t)i * n;
-                out_row[i] = 1.0f;
-                for (int j = 0; j < n; j++) {
-                    if (j == i)
-                        continue;
+                for (int j = i; j < n; j++) {
                     const float* row_j = norm.data() + (size_t)j * d;
                     double dot = 0.0;
                     for (int t = 0; t < d; t++)
@@ -348,6 +362,11 @@ std::vector<float> cosine_similarity(const float* x, int n, int d) {
                 }
             }
         });
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < i; j++) {
+                out[(size_t)i * n + j] = out[(size_t)j * n + i];
+            }
+        }
     }
     return out;
 }
@@ -591,14 +610,33 @@ std::vector<float> refine_affinity_rows(const float* affinity, int n, float keep
     std::vector<float> a((size_t)n * n);
     std::copy(affinity, affinity + (size_t)n * n, a.begin());
     const int keep = std::max(1, (int)std::lround(keep_fraction * n));
-    std::vector<float> row((size_t)n);
-    for (int i = 0; i < n; i++) {
-        std::copy(a.begin() + (size_t)i * n, a.begin() + (size_t)(i + 1) * n, row.begin());
-        std::nth_element(row.begin(), row.begin() + (n - keep), row.end());
-        const float thresh = row[(size_t)(n - keep)];
-        for (int j = 0; j < n; j++)
-            if (a[(size_t)i * n + j] < thresh)
-                a[(size_t)i * n + j] *= attenuate;
+    const char* env_serial = std::getenv("CRISPASR_DIARIZE_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+
+    if (force_serial || n < 32) {
+        std::vector<float> row((size_t)n);
+        for (int i = 0; i < n; i++) {
+            std::copy(a.begin() + (size_t)i * n, a.begin() + (size_t)(i + 1) * n, row.begin());
+            std::nth_element(row.begin(), row.begin() + (n - keep), row.end());
+            const float thresh = row[(size_t)(n - keep)];
+            for (int j = 0; j < n; j++)
+                if (a[(size_t)i * n + j] < thresh)
+                    a[(size_t)i * n + j] *= attenuate;
+        }
+    } else {
+        core_parallel::for_each_chunk(n, 0, [&](int i0, int i1) {
+            std::vector<float> row((size_t)n);
+            for (int i = i0; i < i1; i++) {
+                std::copy(a.begin() + (size_t)i * n, a.begin() + (size_t)(i + 1) * n, row.begin());
+                std::nth_element(row.begin(), row.begin() + (n - keep), row.end());
+                const float thresh = row[(size_t)(n - keep)];
+                float* a_row = a.data() + (size_t)i * n;
+                for (int j = 0; j < n; j++) {
+                    if (a_row[j] < thresh)
+                        a_row[j] *= attenuate;
+                }
+            }
+        });
     }
     // Row thresholding breaks symmetry; restore it with the elementwise max
     // so a strong link surviving in either direction survives in both.
@@ -849,31 +887,69 @@ float silhouette_precomputed(const float* distance, int n, const std::vector<int
         count[(size_t)v]++;
 
     double total = 0.0;
-    std::vector<double> sum((size_t)k);
-    for (int i = 0; i < n; i++) {
-        std::fill(sum.begin(), sum.end(), 0.0);
-        for (int j = 0; j < n; j++) {
-            if (j == i)
+    const char* env_serial = std::getenv("CRISPASR_DIARIZE_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+
+    if (force_serial || n < 32) {
+        std::vector<double> sum((size_t)k);
+        for (int i = 0; i < n; i++) {
+            std::fill(sum.begin(), sum.end(), 0.0);
+            for (int j = 0; j < n; j++) {
+                if (j == i)
+                    continue;
+                sum[(size_t)labels[(size_t)j]] += distance[(size_t)i * n + j];
+            }
+            const int own = labels[(size_t)i];
+            if (count[(size_t)own] <= 1) {
+                // A singleton cluster contributes 0 by convention.
                 continue;
-            sum[(size_t)labels[(size_t)j]] += distance[(size_t)i * n + j];
-        }
-        const int own = labels[(size_t)i];
-        if (count[(size_t)own] <= 1) {
-            // A singleton cluster contributes 0 by convention.
-            continue;
-        }
-        const double a = sum[(size_t)own] / (count[(size_t)own] - 1);
-        double b = std::numeric_limits<double>::infinity();
-        for (int c = 0; c < k; c++) {
-            if (c == own || count[(size_t)c] == 0)
+            }
+            const double a = sum[(size_t)own] / (count[(size_t)own] - 1);
+            double b = std::numeric_limits<double>::infinity();
+            for (int c = 0; c < k; c++) {
+                if (c == own || count[(size_t)c] == 0)
+                    continue;
+                b = std::min(b, sum[(size_t)c] / count[(size_t)c]);
+            }
+            if (!std::isfinite(b))
                 continue;
-            b = std::min(b, sum[(size_t)c] / count[(size_t)c]);
+            const double denom = std::max(a, b);
+            if (denom > kTiny)
+                total += (b - a) / denom;
         }
-        if (!std::isfinite(b))
-            continue;
-        const double denom = std::max(a, b);
-        if (denom > kTiny)
-            total += (b - a) / denom;
+    } else {
+        std::vector<double> s_contrib((size_t)n, 0.0);
+        core_parallel::for_each_chunk(n, 0, [&](int i0, int i1) {
+            std::vector<double> sum((size_t)k);
+            for (int i = i0; i < i1; i++) {
+                std::fill(sum.begin(), sum.end(), 0.0);
+                const float* dist_row = distance + (size_t)i * n;
+                for (int j = 0; j < n; j++) {
+                    if (j == i)
+                        continue;
+                    sum[(size_t)labels[(size_t)j]] += dist_row[j];
+                }
+                const int own = labels[(size_t)i];
+                if (count[(size_t)own] <= 1) {
+                    continue;
+                }
+                const double a = sum[(size_t)own] / (count[(size_t)own] - 1);
+                double b = std::numeric_limits<double>::infinity();
+                for (int c = 0; c < k; c++) {
+                    if (c == own || count[(size_t)c] == 0)
+                        continue;
+                    b = std::min(b, sum[(size_t)c] / count[(size_t)c]);
+                }
+                if (!std::isfinite(b))
+                    continue;
+                const double denom = std::max(a, b);
+                if (denom > kTiny)
+                    s_contrib[(size_t)i] = (b - a) / denom;
+            }
+        });
+        for (int i = 0; i < n; i++) {
+            total += s_contrib[(size_t)i];
+        }
     }
     return (float)(total / n);
 }

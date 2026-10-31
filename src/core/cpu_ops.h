@@ -106,7 +106,13 @@ static inline void layernorm_baseline(float* out, const float* x, const float* w
 
 static inline void layernorm_accelerated(float* out, const float* x, const float* w, const float* b, int d, int T,
                                          float eps, int n_threads = 0) {
-    core_parallel::for_each_chunk(T, n_threads, [&](int t_start, int t_end) {
+    int effective_threads = n_threads;
+    // For small workloads, thread creation overhead dominates useful compute.
+    // Run single-threaded using the fast 4-way unrolled arithmetic.
+    if (effective_threads <= 0 && ((int64_t)T * d < 65536 || T < 64)) {
+        effective_threads = 1;
+    }
+    core_parallel::for_each_chunk(T, effective_threads, [&](int t_start, int t_end) {
         for (int t = t_start; t < t_end; t++) {
             const float* xt = x + (size_t)t * d;
             float* ot = out + (size_t)t * d;

@@ -4834,7 +4834,7 @@ target_link_libraries(test-cpu-ops-ab-bench PRIVATE
     ggml
 )
 catch_discover_tests(test-cpu-ops-ab-bench
-    TEST_SPEC "[cpu_ops][convt][ab-bench]"
+    TEST_SPEC "[ab-bench]"
     PROPERTIES LABELS "bench;cpu_ops"
 )
 
@@ -4849,7 +4849,7 @@ target_link_libraries(test-firered-ab-bench PRIVATE
     ggml
 )
 catch_discover_tests(test-firered-ab-bench
-    TEST_SPEC "[firered][f5_tts][ab-bench]"
+    TEST_SPEC "[ab-bench]"
     PROPERTIES LABELS "bench;firered"
 )
 
@@ -4868,7 +4868,7 @@ target_link_libraries(test-voxcpm2-ab-bench PRIVATE
     ggml
 )
 catch_discover_tests(test-voxcpm2-ab-bench
-    TEST_SPEC "[voxcpm2][roformer][ab-bench]"
+    TEST_SPEC "[ab-bench]"
     PROPERTIES LABELS "bench;voxcpm2"
 )
 
@@ -4887,7 +4887,7 @@ target_link_libraries(test-kokoro-diarize-ab-bench PRIVATE
     ggml
 )
 catch_discover_tests(test-kokoro-diarize-ab-bench
-    TEST_SPEC "[diarize][kokoro][ab-bench]"
+    TEST_SPEC "[ab-bench]"
     PROPERTIES LABELS "bench;kokoro;diarize"
 )
 
@@ -4905,7 +4905,7 @@ target_link_libraries(test-cqt-diarize-ab-bench PRIVATE
     ggml
 )
 catch_discover_tests(test-cqt-diarize-ab-bench
-    TEST_SPEC "[cqt][cqt2010][diarize_smooth][ab-bench]"
+    TEST_SPEC "[ab-bench]"
     PROPERTIES LABELS "bench;cqt;diarize"
 )
 
@@ -4923,7 +4923,7 @@ target_link_libraries(test-rvq-istft-ab-bench PRIVATE
     ggml
 )
 catch_discover_tests(test-rvq-istft-ab-bench
-    TEST_SPEC "[rvq][istft][ab-bench]"
+    TEST_SPEC "[ab-bench]"
     PROPERTIES LABELS "bench;rvq;istft"
 )
 
@@ -6592,7 +6592,7 @@ target_link_libraries(test-kaldi-fbank PRIVATE
     Catch2::Catch2WithMain
 )
 catch_discover_tests(test-kaldi-fbank
-    TEST_SPEC "[kaldi_fbank]"
+    TEST_SPEC "[kaldi_fbank],[lfr]"
     PROPERTIES LABELS "unit"
 )
 
@@ -6615,7 +6615,7 @@ catch_discover_tests(test-torchaudio-resample
 add_executable(test-ctc-stitch test-ctc-stitch.cpp)
 target_include_directories(test-ctc-stitch PRIVATE ${PROJECT_SOURCE_DIR}/examples/cli ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-ctc-stitch PRIVATE Catch2::Catch2WithMain)
-catch_discover_tests(test-ctc-stitch TEST_SPEC "[ctc-stitch]" PROPERTIES LABELS "unit;omniasr")
+catch_discover_tests(test-ctc-stitch TEST_SPEC "[ctc-stitch],[ctc]" PROPERTIES LABELS "unit;omniasr")
 
 # Phonon-2 reuses Parakeet; exercise its model alias and metadata through real surfaces.
 # examples/cli is added after tests, so its target does not exist yet here.

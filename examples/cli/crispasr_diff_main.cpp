@@ -5598,7 +5598,8 @@ int main(int argc, char** argv) {
         }
 
         wespeaker_free(ctx);
-    } else if (backend_name == "parakeet" || backend_name == "haas" || backend_name == "phonon2") {
+    } else if (backend_name == "parakeet" || backend_name == "haas" || backend_name == "haas-ja" ||
+               backend_name == "haas_ja" || backend_name == "haas-asr" || backend_name == "phonon2") {
         auto cp = parakeet_context_default_params();
         cp.n_threads = 4;
         if (const char* threads = std::getenv("CRISPASR_PARAKEET_DIFF_THREADS")) {

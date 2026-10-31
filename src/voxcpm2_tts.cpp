@@ -3693,27 +3693,28 @@ static void causal_conv1d(const float* weight, const float* bias, const float* x
             }
         }
     } else {
-        core_parallel::for_each_chunk(out_ch, 0, [&](int oc_start, int oc_end) {
-            for (int oc_abs = oc_start; oc_abs < oc_end; oc_abs++) {
-                for (int ot = 0; ot < T_out; ot++) {
-                    int g = oc_abs / out_per_grp;
-                    float acc = bias ? bias[oc_abs] : 0.0f;
-                    int it_center = ot * stride;
-                    for (int k = 0; k < ksize; k++) {
-                        int it = it_center - pad + k * dilation;
-                        if (it < 0 || it >= T_in) {
-                            continue;
-                        }
-                        const float* x_row = x_tic.data() + (size_t)it * in_ch + (size_t)g * in_per_grp;
-                        const float* w_row = w_kio.data() + ((size_t)k * out_ch + oc_abs) * in_per_grp;
-                        float dot = 0.0f;
-                        for (int ic = 0; ic < in_per_grp; ic++) {
-                            dot += x_row[ic] * w_row[ic];
-                        }
-                        acc += dot;
+        const int64_t total_work = (int64_t)out_ch * T_out;
+        core_parallel::for_each_chunk((int)std::min<int64_t>(total_work, INT_MAX), 0, [&](int w_start, int w_end) {
+            for (int w = w_start; w < w_end; w++) {
+                const int oc_abs = w / T_out;
+                const int ot = w % T_out;
+                int g = oc_abs / out_per_grp;
+                float acc = bias ? bias[oc_abs] : 0.0f;
+                int it_center = ot * stride;
+                for (int k = 0; k < ksize; k++) {
+                    int it = it_center - pad + k * dilation;
+                    if (it < 0 || it >= T_in) {
+                        continue;
                     }
-                    x_out[(size_t)oc_abs * T_out + ot] = acc;
+                    const float* x_row = x_tic.data() + (size_t)it * in_ch + (size_t)g * in_per_grp;
+                    const float* w_row = w_kio.data() + ((size_t)k * out_ch + oc_abs) * in_per_grp;
+                    float dot = 0.0f;
+                    for (int ic = 0; ic < in_per_grp; ic++) {
+                        dot += x_row[ic] * w_row[ic];
+                    }
+                    acc += dot;
                 }
+                x_out[(size_t)oc_abs * T_out + ot] = acc;
             }
         });
     }

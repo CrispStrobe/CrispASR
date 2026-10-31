@@ -214,10 +214,18 @@ TEST_CASE("CQT2010v2 octave_complex & decimate_by_2 paired A/B benchmark", "[per
     float max_diff_re = 0.0f;
     for (size_t i = 0; i < re_a.size(); i++) {
         float diff = std::abs(re_a[i] - re_b[i]);
-        if (diff > max_diff_re)
+        if (std::isnan(diff) || diff > max_diff_re)
             max_diff_re = diff;
     }
     CHECK(max_diff_re == 0.0f);
+
+    float max_diff_im = 0.0f;
+    for (size_t i = 0; i < im_a.size(); i++) {
+        float diff = std::abs(im_a[i] - im_b[i]);
+        if (std::isnan(diff) || diff > max_diff_im)
+            max_diff_im = diff;
+    }
+    CHECK(max_diff_im == 0.0f);
 
     const BenchStats stats_a = compute_stats(times_a);
     const BenchStats stats_b = compute_stats(times_b);

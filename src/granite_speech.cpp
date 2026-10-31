@@ -1812,7 +1812,7 @@ extern "C" float* granite_speech_run_encoder(struct granite_speech_context* ctx,
             if (b.post_norm_b)
                 ggml_backend_tensor_get(b.post_norm_b, nb.data(), 0, d * sizeof(float));
             core_cpu::layernorm(hidden.data(), hidden.data(), b.post_norm_w ? nw.data() : nullptr,
-                                b.post_norm_b ? nb.data() : nullptr, d, T, 1e-5f);
+                                b.post_norm_b ? nb.data() : nullptr, d, T, 1e-5f, ctx->params.n_threads);
         }
 
         // PLUS: snapshot the post-norm hidden state at any cat_layer index.

@@ -222,3 +222,133 @@ TEST_CASE("Kokoro test_f0_upsample paired A/B benchmark", "[perf][kokoro][ab-ben
     CHECK(max_diff == 0.0f);
     printf("Kokoro f0_upsample parity: max_diff = %.8e (100%% exact bit-identical)\n", max_diff);
 }
+
+TEST_CASE("Diarization silhouette_precomputed paired A/B benchmark", "[perf][diarize][ab-bench]") {
+    const int n = 600;
+    const int k = 6;
+    std::vector<int> labels((size_t)n);
+    for (int i = 0; i < n; i++) {
+        labels[(size_t)i] = i % k;
+    }
+
+    std::vector<float> dist((size_t)n * n);
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            if (i == j) {
+                dist[(size_t)i * n + j] = 0.0f;
+            } else if (labels[(size_t)i] == labels[(size_t)j]) {
+                dist[(size_t)i * n + j] = 0.1f + 0.05f * std::sin((float)(i + j) * 0.1f);
+            } else {
+                dist[(size_t)i * n + j] = 0.8f + 0.1f * std::cos((float)(i * j) * 0.05f);
+            }
+        }
+    }
+
+    // Arm A: Serial baseline
+    set_env_var("CRISPASR_DIARIZE_SERIAL", "1");
+    float sil_a = core_spectral::silhouette_precomputed(dist.data(), n, labels);
+
+    const int iters = 10;
+    std::vector<double> times_a(iters);
+    for (int i = 0; i < iters; i++) {
+        const auto t0 = std::chrono::steady_clock::now();
+        sil_a = core_spectral::silhouette_precomputed(dist.data(), n, labels);
+        const auto t1 = std::chrono::steady_clock::now();
+        times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    }
+
+    // Arm B: Parallel accelerated
+    unset_env_var("CRISPASR_DIARIZE_SERIAL");
+    float sil_b = core_spectral::silhouette_precomputed(dist.data(), n, labels);
+
+    std::vector<double> times_b(iters);
+    for (int i = 0; i < iters; i++) {
+        const auto t0 = std::chrono::steady_clock::now();
+        sil_b = core_spectral::silhouette_precomputed(dist.data(), n, labels);
+        const auto t1 = std::chrono::steady_clock::now();
+        times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    }
+
+    // Parity verification
+    const float diff = std::abs(sil_a - sil_b);
+    CHECK(diff == 0.0f);
+
+    const BenchStats stats_a = compute_stats(times_a);
+    const BenchStats stats_b = compute_stats(times_b);
+    const double speedup = stats_a.median_ms / std::max(1e-6, stats_b.median_ms);
+
+    printf("\n=== [A/B Bench] Diarization silhouette_precomputed (n=%d, k=%d, %d matrix entries) ===\n", n, k, n * n);
+    printf("Arm A (Serial Baseline):   median = %.2f ms, mean = %.2f ms (± %.2f ms), min = %.2f ms, max = %.2f ms\n",
+           stats_a.median_ms, stats_a.mean_ms, stats_a.stddev_ms, stats_a.min_ms, stats_a.max_ms);
+    printf("Arm B (Parallel Chunks):   median = %.2f ms, mean = %.2f ms (± %.2f ms), min = %.2f ms, max = %.2f ms\n",
+           stats_b.median_ms, stats_b.mean_ms, stats_b.stddev_ms, stats_b.min_ms, stats_b.max_ms);
+    printf("Speedup:                   %.2fx (%.2f ms saved per silhouette evaluation)\n", speedup,
+           stats_a.median_ms - stats_b.median_ms);
+    printf("Numerical parity:          diff = %.8e (100%% exact bit-identical)\n", diff);
+}
+
+TEST_CASE("Diarization spectral_labels paired A/B benchmark", "[perf][diarize][ab-bench]") {
+    const int n = 512;
+    const int k = 6;
+    std::vector<float> aff((size_t)n * n);
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
+            if (i == j) {
+                aff[(size_t)i * n + j] = 1.0f;
+            } else if ((i % k) == (j % k)) {
+                aff[(size_t)i * n + j] = 0.85f + 0.1f * std::sin((float)(i + j) * 0.05f);
+            } else {
+                aff[(size_t)i * n + j] = 0.1f + 0.05f * std::cos((float)(i * j) * 0.03f);
+            }
+        }
+    }
+
+    // Arm A: Serial baseline
+    set_env_var("CRISPASR_DIARIZE_SERIAL", "1");
+    auto lab_a = core_spectral::spectral_labels(aff.data(), n, k, 42);
+
+    const int iters = 10;
+    std::vector<double> times_a(iters);
+    for (int i = 0; i < iters; i++) {
+        const auto t0 = std::chrono::steady_clock::now();
+        lab_a = core_spectral::spectral_labels(aff.data(), n, k, 42);
+        const auto t1 = std::chrono::steady_clock::now();
+        times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    }
+
+    // Arm B: Parallel accelerated
+    unset_env_var("CRISPASR_DIARIZE_SERIAL");
+    auto lab_b = core_spectral::spectral_labels(aff.data(), n, k, 42);
+
+    std::vector<double> times_b(iters);
+    for (int i = 0; i < iters; i++) {
+        const auto t0 = std::chrono::steady_clock::now();
+        lab_b = core_spectral::spectral_labels(aff.data(), n, k, 42);
+        const auto t1 = std::chrono::steady_clock::now();
+        times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+    }
+
+    // Parity verification: exact label match
+    REQUIRE(lab_a.size() == (size_t)n);
+    REQUIRE(lab_b.size() == (size_t)n);
+    int mismatches = 0;
+    for (size_t i = 0; i < (size_t)n; i++) {
+        if (lab_a[i] != lab_b[i]) {
+            mismatches++;
+        }
+    }
+    CHECK(mismatches == 0);
+
+    const BenchStats stats_a = compute_stats(times_a);
+    const BenchStats stats_b = compute_stats(times_b);
+    const double speedup = stats_a.median_ms / std::max(1e-6, stats_b.median_ms);
+
+    printf("\n=== [A/B Bench] Diarization spectral_labels (n=%d, k=%d, subspace iteration + k-means) ===\n", n, k);
+    printf("Arm A (Serial Baseline):   median = %.2f ms, mean = %.2f ms (± %.2f ms), min = %.2f ms, max = %.2f ms\n",
+           stats_a.median_ms, stats_a.mean_ms, stats_a.stddev_ms, stats_a.min_ms, stats_a.max_ms);
+    printf("Arm B (Parallel Chunks):   median = %.2f ms, mean = %.2f ms (± %.2f ms), min = %.2f ms, max = %.2f ms\n",
+           stats_b.median_ms, stats_b.mean_ms, stats_b.stddev_ms, stats_b.min_ms, stats_b.max_ms);
+    printf("Speedup:                   %.2fx (%.2f ms saved per spectral clustering)\n", speedup,
+           stats_a.median_ms - stats_b.median_ms);
+    printf("Label Parity:              %d mismatches out of %d (100%% exact match)\n", mismatches, n);
+}

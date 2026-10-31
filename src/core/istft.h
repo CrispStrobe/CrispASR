@@ -256,13 +256,13 @@ static inline std::vector<float> istft(const float* mag, const float* phase, int
     } else
 #endif
     {
-        std::vector<float> all_frames((size_t)T_frames * n_fft, 0.0f);
         const char* env_serial = std::getenv("CRISPASR_ISTFT_SERIAL");
         const bool force_serial = (env_serial && env_serial[0] == '1');
 
         if (force_serial || T_frames <= 4) {
             std::vector<float> frame_re(n_freq);
             std::vector<float> frame_im(n_freq);
+            std::vector<float> frame_out(n_fft);
             for (int t = 0; t < T_frames; t++) {
                 const float* m_row = mag + (size_t)t * n_freq;
                 const float* p_row = phase + (size_t)t * n_freq;
@@ -270,33 +270,46 @@ static inline std::vector<float> istft(const float* mag, const float* phase, int
                     frame_re[f] = m_row[f] * std::cos(p_row[f]);
                     frame_im[f] = m_row[f] * std::sin(p_row[f]);
                 }
-                float* f_out = all_frames.data() + (size_t)t * n_fft;
-                irfft_hermitian(frame_re.data(), frame_im.data(), n_fft, f_out);
+                irfft_hermitian(frame_re.data(), frame_im.data(), n_fft, frame_out.data());
+                int offset = t * hop;
+                for (int i = 0; i < n_fft && (offset + i) < ola_len; i++) {
+                    float w = window[i];
+                    output[offset + i] += frame_out[i] * w;
+                    win_sum[offset + i] += w * w;
+                }
             }
         } else {
-            core_parallel::for_each_chunk(T_frames, 0, [&](int t_start, int t_end) {
-                std::vector<float> frame_re(n_freq);
-                std::vector<float> frame_im(n_freq);
-                for (int t = t_start; t < t_end; t++) {
-                    const float* m_row = mag + (size_t)t * n_freq;
-                    const float* p_row = phase + (size_t)t * n_freq;
-                    for (int f = 0; f < n_freq; f++) {
-                        frame_re[f] = m_row[f] * std::cos(p_row[f]);
-                        frame_im[f] = m_row[f] * std::sin(p_row[f]);
+            // Bounded tile processing to preserve low memory footprint
+            const int tile_size = 64;
+            std::vector<float> tile_frames((size_t)tile_size * n_fft);
+            for (int t_base = 0; t_base < T_frames; t_base += tile_size) {
+                const int n_tile = std::min(tile_size, T_frames - t_base);
+                core_parallel::for_each_chunk(n_tile, 0, [&](int t_start, int t_end) {
+                    std::vector<float> frame_re(n_freq);
+                    std::vector<float> frame_im(n_freq);
+                    for (int sub = t_start; sub < t_end; sub++) {
+                        const int t = t_base + sub;
+                        const float* m_row = mag + (size_t)t * n_freq;
+                        const float* p_row = phase + (size_t)t * n_freq;
+                        for (int f = 0; f < n_freq; f++) {
+                            frame_re[f] = m_row[f] * std::cos(p_row[f]);
+                            frame_im[f] = m_row[f] * std::sin(p_row[f]);
+                        }
+                        float* f_out = tile_frames.data() + (size_t)sub * n_fft;
+                        irfft_hermitian(frame_re.data(), frame_im.data(), n_fft, f_out);
                     }
-                    float* f_out = all_frames.data() + (size_t)t * n_fft;
-                    irfft_hermitian(frame_re.data(), frame_im.data(), n_fft, f_out);
-                }
-            });
-        }
+                });
 
-        for (int t = 0; t < T_frames; t++) {
-            const float* f_out = all_frames.data() + (size_t)t * n_fft;
-            int offset = t * hop;
-            for (int i = 0; i < n_fft && (offset + i) < ola_len; i++) {
-                float w = window[i];
-                output[offset + i] += f_out[i] * w;
-                win_sum[offset + i] += w * w;
+                for (int sub = 0; sub < n_tile; sub++) {
+                    const int t = t_base + sub;
+                    const float* f_out = tile_frames.data() + (size_t)sub * n_fft;
+                    int offset = t * hop;
+                    for (int i = 0; i < n_fft && (offset + i) < ola_len; i++) {
+                        float w = window[i];
+                        output[offset + i] += f_out[i] * w;
+                        win_sum[offset + i] += w * w;
+                    }
+                }
             }
         }
     }
