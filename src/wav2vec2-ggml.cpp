@@ -26,6 +26,7 @@
 #include "core/gguf_loader.h"
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/crispasr_env.h"
+#include "core/parallel_for.h"
 
 #include <unordered_map>
 
@@ -296,20 +297,22 @@ static const float* tensor_data_f32(const wav2vec2_model& m, const ggml_tensor* 
 
 // LayerNorm over last dim: x[T, C] → y[T, C] (in-place OK)
 static void layer_norm(const float* x, float* y, const float* w, const float* b, int T, int C, float eps) {
-    for (int t = 0; t < T; t++) {
-        const float* xt = x + t * C;
-        float* yt = y + t * C;
-        double sum = 0.0, sq = 0.0;
-        for (int c = 0; c < C; c++) {
-            sum += xt[c];
-            sq += (double)xt[c] * xt[c];
+    core_parallel::for_each_chunk(T, 0, [&](int t0, int t1) {
+        for (int t = t0; t < t1; t++) {
+            const float* xt = x + t * C;
+            float* yt = y + t * C;
+            double sum = 0.0, sq = 0.0;
+            for (int c = 0; c < C; c++) {
+                sum += xt[c];
+                sq += (double)xt[c] * xt[c];
+            }
+            float mean = (float)(sum / C);
+            float var = (float)(sq / C) - mean * mean;
+            float inv = 1.f / sqrtf(var + eps);
+            for (int c = 0; c < C; c++)
+                yt[c] = (xt[c] - mean) * inv * w[c] + b[c];
         }
-        float mean = (float)(sum / C);
-        float var = (float)(sq / C) - mean * mean;
-        float inv = 1.f / sqrtf(var + eps);
-        for (int c = 0; c < C; c++)
-            yt[c] = (xt[c] - mean) * inv * w[c] + b[c];
-    }
+    });
 }
 
 // GELU (exact tanh approximation)
@@ -320,38 +323,42 @@ static inline float gelu(float x) {
 // InstanceNorm (GroupNorm with num_groups=C) on channel-first data [C, L].
 // Used by feat_extract_norm="group", layer 0.
 static void instance_norm_1d(const float* x, float* y, const float* w, const float* b, int C, int L, float eps) {
-    for (int c = 0; c < C; c++) {
-        const float* xc = x + c * L;
-        float* yc = y + c * L;
-        double sum = 0.0, sq = 0.0;
-        for (int l = 0; l < L; l++) {
-            sum += xc[l];
-            sq += (double)xc[l] * xc[l];
+    core_parallel::for_each_chunk(C, 0, [&](int c0, int c1) {
+        for (int c = c0; c < c1; c++) {
+            const float* xc = x + c * L;
+            float* yc = y + c * L;
+            double sum = 0.0, sq = 0.0;
+            for (int l = 0; l < L; l++) {
+                sum += xc[l];
+                sq += (double)xc[l] * xc[l];
+            }
+            float mean = (float)(sum / L);
+            float var = (float)(sq / L) - mean * mean;
+            float inv = 1.f / sqrtf(var + eps);
+            for (int l = 0; l < L; l++)
+                yc[l] = (xc[l] - mean) * inv * w[c] + b[c];
         }
-        float mean = (float)(sum / L);
-        float var = (float)(sq / L) - mean * mean;
-        float inv = 1.f / sqrtf(var + eps);
-        for (int l = 0; l < L; l++)
-            yc[l] = (xc[l] - mean) * inv * w[c] + b[c];
-    }
+    });
 }
 
 // LayerNorm on channel-first [C, L] (norm across C at each L).
 // Used by feat_extract_norm="layer", all CNN layers.
 static void layer_norm_cf(const float* x, float* y, const float* w, const float* b, int C, int L, float eps) {
-    for (int l = 0; l < L; l++) {
-        double sum = 0.0, sq = 0.0;
-        for (int c = 0; c < C; c++) {
-            float v = x[c * L + l];
-            sum += v;
-            sq += (double)v * v;
+    core_parallel::for_each_chunk(L, 0, [&](int l0, int l1) {
+        for (int l = l0; l < l1; l++) {
+            double sum = 0.0, sq = 0.0;
+            for (int c = 0; c < C; c++) {
+                float v = x[c * L + l];
+                sum += v;
+                sq += (double)v * v;
+            }
+            float mean = (float)(sum / C);
+            float var = (float)(sq / C) - mean * mean;
+            float inv = 1.f / sqrtf(var + eps);
+            for (int c = 0; c < C; c++)
+                y[c * L + l] = (x[c * L + l] - mean) * inv * w[c] + b[c];
         }
-        float mean = (float)(sum / C);
-        float var = (float)(sq / C) - mean * mean;
-        float inv = 1.f / sqrtf(var + eps);
-        for (int c = 0; c < C; c++)
-            y[c * L + l] = (x[c * L + l] - mean) * inv * w[c] + b[c];
-    }
+    });
 }
 
 // Conv1d (dilation=1), left_pad zero-pads on the left.
@@ -365,20 +372,21 @@ static void conv1d(const float* x, const float* w, const float* b, float* y, int
     for (int c = 0; c < Cin; c++)
         std::memcpy(padded.data() + c * L_pad + left_pad, x + c * L_in, L_in * sizeof(float));
 
-    for (int oc = 0; oc < Cout; oc++) {
-        float bv = b ? b[oc] : 0.f;
-        for (int t = 0; t < L_out; t++) {
-            float sum = bv;
-            int t0 = t * stride;
-            for (int ic = 0; ic < Cin; ic++) {
-                const float* wrow = w + (oc * Cin + ic) * K;
-                const float* xrow = padded.data() + ic * L_pad + t0;
-                for (int k = 0; k < K; k++)
-                    sum += wrow[k] * xrow[k];
+    core_parallel::for_each_chunk(Cout, 0, [&](int oc0, int oc1) {
+        for (int oc = oc0; oc < oc1; oc++) {
+            float bv = b ? b[oc] : 0.f;
+            for (int t = 0; t < L_out; t++) {
+                float sum = bv;
+                int t0 = t * stride;
+                for (int ic = 0; ic < Cin; ic++) {
+                    const float* wrow = w + (oc * Cin + ic) * K;
+                    const float* xrow = padded.data() + ic * L_pad + t0;
+                    sum += crispasr::cpu_attn::cpu_dot(wrow, xrow, K);
+                }
+                y[oc * L_out + t] = sum;
             }
-            y[oc * L_out + t] = sum;
         }
-    }
+    });
 }
 
 // Grouped Conv1d with symmetric padding so output_len == input_len.
@@ -404,9 +412,10 @@ static void grouped_conv1d_same(const float* x, const float* w, const float* b, 
     for (int c = 0; c < C_in; c++)
         std::memcpy(padded.data() + c * L_pad + pad_l, x + c * L, L * sizeof(float));
 
-#pragma omp parallel for schedule(static) collapse(2)
-    for (int g = 0; g < groups; g++) {
-        for (int oc = 0; oc < cout_pg; oc++) {
+    core_parallel::for_each_chunk(groups * cout_pg, 0, [&](int idx0, int idx1) {
+        for (int idx = idx0; idx < idx1; idx++) {
+            int g = idx / cout_pg;
+            int oc = idx % cout_pg;
             int ic0 = g * cin_pg, oc0 = g * cout_pg;
             int og = oc0 + oc;
             float bv = b ? b[og] : 0.f;
@@ -415,13 +424,12 @@ static void grouped_conv1d_same(const float* x, const float* w, const float* b, 
                 for (int ic = 0; ic < cin_pg; ic++) {
                     const float* wrow = w + (og * cin_pg + ic) * K;
                     const float* xrow = padded.data() + (ic0 + ic) * L_pad + t;
-                    for (int k = 0; k < K; k++)
-                        sum += wrow[k] * xrow[k];
+                    sum += crispasr::cpu_attn::cpu_dot(wrow, xrow, K);
                 }
                 y[og * L + t] = sum;
             }
         }
-    }
+    });
 }
 
 // ggml-graph grouped conv1d with "same" padding.
