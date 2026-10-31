@@ -4823,6 +4823,21 @@ catch_discover_tests(test-conformer-ab-bench
     PROPERTIES LABELS "bench;conformer"
 )
 
+# ─── test-cpu-ops-ab-bench — cpu_ops.h & conv.h paired A/B speed and parity bench ────
+add_executable(test-cpu-ops-ab-bench test-cpu-ops-ab-bench.cpp)
+target_include_directories(test-cpu-ops-ab-bench PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-cpu-ops-ab-bench PRIVATE
+    Catch2::Catch2WithMain
+    Threads::Threads
+    ggml
+)
+catch_discover_tests(test-cpu-ops-ab-bench
+    TEST_SPEC "[cpu_ops][convt][ab-bench]"
+    PROPERTIES LABELS "bench;cpu_ops"
+)
+
 # ─── test-core-cross-attn — core/cross_attn.h manual path (ggml graph) ────────
 # Computes the header's cross-attention graph and compares to a plain-C++ MHA
 # reference (verifies the bug-fixed V-transpose + unscaled T5 contract).

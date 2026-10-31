@@ -28,8 +28,11 @@
 #include <cmath>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
+#include <cstring>
 #include <vector>
 
+#include "parallel_for.h"
 #include "ggml.h"
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
@@ -72,11 +75,17 @@ static inline std::vector<float> to_f32(const ggml_tensor* t) {
     return out;
 }
 
-// CPU LayerNorm in (d, T) layout: out = (x - mean) / sqrt(var + eps) * w + b.
-// Parallel over time frames. Supports in-place (out == x) because each
-// iteration reads and writes disjoint rows. `w` and `b` may be null.
-static inline void layernorm(float* out, const float* x, const float* w, const float* b, int d, int T, float eps) {
+// Check if sequential baseline CPU ops is requested.
+static inline bool crispasr_cpu_ops_serial() {
+    const char* e = std::getenv("CRISPASR_CPU_OPS_SERIAL");
+    return (e && *e && std::strcmp(e, "0") != 0);
+}
+
+static inline void layernorm_baseline(float* out, const float* x, const float* w, const float* b, int d, int T,
+                                      float eps) {
+#if defined(_OPENMP)
 #pragma omp parallel for schedule(static)
+#endif
     for (int t = 0; t < T; t++) {
         const float* xt = x + (size_t)t * d;
         float* ot = out + (size_t)t * d;
@@ -92,6 +101,105 @@ static inline void layernorm(float* out, const float* x, const float* w, const f
         float inv = 1.0f / std::sqrt(var + eps);
         for (int i = 0; i < d; i++)
             ot[i] = (xt[i] - mean) * inv * (w ? w[i] : 1.0f) + (b ? b[i] : 0.0f);
+    }
+}
+
+static inline void layernorm_accelerated(float* out, const float* x, const float* w, const float* b, int d, int T,
+                                         float eps, int n_threads = 0) {
+    core_parallel::for_each_chunk(T, n_threads, [&](int t_start, int t_end) {
+        for (int t = t_start; t < t_end; t++) {
+            const float* xt = x + (size_t)t * d;
+            float* ot = out + (size_t)t * d;
+
+            float s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
+            int i = 0;
+            for (; i + 4 <= d; i += 4) {
+                s0 += xt[i + 0];
+                s1 += xt[i + 1];
+                s2 += xt[i + 2];
+                s3 += xt[i + 3];
+            }
+            float sum = (s0 + s1) + (s2 + s3);
+            for (; i < d; i++) {
+                sum += xt[i];
+            }
+            const float mean = sum / (float)d;
+
+            float v0 = 0.0f, v1 = 0.0f, v2 = 0.0f, v3 = 0.0f;
+            i = 0;
+            for (; i + 4 <= d; i += 4) {
+                float d0 = xt[i + 0] - mean;
+                float d1 = xt[i + 1] - mean;
+                float d2 = xt[i + 2] - mean;
+                float d3 = xt[i + 3] - mean;
+                v0 += d0 * d0;
+                v1 += d1 * d1;
+                v2 += d2 * d2;
+                v3 += d3 * d3;
+            }
+            float var_sum = (v0 + v1) + (v2 + v3);
+            for (; i < d; i++) {
+                float di = xt[i] - mean;
+                var_sum += di * di;
+            }
+            const float var = var_sum / (float)d;
+            const float inv = 1.0f / std::sqrt(var + eps);
+
+            i = 0;
+            if (w && b) {
+                for (; i + 4 <= d; i += 4) {
+                    ot[i + 0] = (xt[i + 0] - mean) * inv * w[i + 0] + b[i + 0];
+                    ot[i + 1] = (xt[i + 1] - mean) * inv * w[i + 1] + b[i + 1];
+                    ot[i + 2] = (xt[i + 2] - mean) * inv * w[i + 2] + b[i + 2];
+                    ot[i + 3] = (xt[i + 3] - mean) * inv * w[i + 3] + b[i + 3];
+                }
+                for (; i < d; i++) {
+                    ot[i] = (xt[i] - mean) * inv * w[i] + b[i];
+                }
+            } else if (w) {
+                for (; i + 4 <= d; i += 4) {
+                    ot[i + 0] = (xt[i + 0] - mean) * inv * w[i + 0];
+                    ot[i + 1] = (xt[i + 1] - mean) * inv * w[i + 1];
+                    ot[i + 2] = (xt[i + 2] - mean) * inv * w[i + 2];
+                    ot[i + 3] = (xt[i + 3] - mean) * inv * w[i + 3];
+                }
+                for (; i < d; i++) {
+                    ot[i] = (xt[i] - mean) * inv * w[i];
+                }
+            } else if (b) {
+                for (; i + 4 <= d; i += 4) {
+                    ot[i + 0] = (xt[i + 0] - mean) * inv + b[i + 0];
+                    ot[i + 1] = (xt[i + 1] - mean) * inv + b[i + 1];
+                    ot[i + 2] = (xt[i + 2] - mean) * inv + b[i + 2];
+                    ot[i + 3] = (xt[i + 3] - mean) * inv + b[i + 3];
+                }
+                for (; i < d; i++) {
+                    ot[i] = (xt[i] - mean) * inv + b[i];
+                }
+            } else {
+                for (; i + 4 <= d; i += 4) {
+                    ot[i + 0] = (xt[i + 0] - mean) * inv;
+                    ot[i + 1] = (xt[i + 1] - mean) * inv;
+                    ot[i + 2] = (xt[i + 2] - mean) * inv;
+                    ot[i + 3] = (xt[i + 3] - mean) * inv;
+                }
+                for (; i < d; i++) {
+                    ot[i] = (xt[i] - mean) * inv;
+                }
+            }
+        }
+    });
+}
+
+// CPU LayerNorm in (d, T) layout: out = (x - mean) / sqrt(var + eps) * w + b.
+// Parallel over time frames. Supports in-place (out == x) because each
+// iteration reads and writes disjoint rows. `w` and `b` may be null.
+static inline void layernorm(float* out, const float* x, const float* w, const float* b, int d, int T, float eps,
+                             int n_threads = 0) {
+    if (crispasr_cpu_ops_serial() || T <= 1) {
+        layernorm_baseline(out, x, w, b, d, T, eps);
+    } else {
+        layernorm_accelerated(out, x, w, b, d, T, eps, n_threads);
     }
 }
 

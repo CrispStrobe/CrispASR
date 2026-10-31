@@ -21,7 +21,10 @@
 
 #include "ggml.h"
 #include "ggml-backend.h"
+#include "parallel_for.h"
 
+#include <cstdlib>
+#include <cstring>
 #include <memory>
 #include <vector>
 
@@ -228,14 +231,13 @@ static inline ggml_tensor* convt1d_decomp_tf(ggml_context* ctx, ggml_tensor* x, 
 //   ggml_tensor* dst = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, IC, K*OC);
 //   ggml_backend_tensor_set(dst, buf.get(), 0, ggml_nbytes(dst));
 
-// Host-side core of the permutation: a plain 2-D transpose of
-// src[ic][j] (IC rows, J = OC*K cols) into dst[j][ic], where `load(s)` reads
-// source element s as float. 32x32 tiles: the naive loop's stores stride by
-// IC floats, and for the voxcpm2 VAE (41M elements) it took ~1.1 s of every
-// process start (#461). Tile rows are split across OpenMP threads when the
-// including target has it; every dst element is written exactly once from
-// the same source value, so the result is byte-identical either way.
-template <typename Load> static inline void permute_convt1d_host(Load load, float* dp, int K, int OC, int IC) {
+// Check if sequential baseline conv permutation is requested.
+static inline bool crispasr_conv_serial() {
+    const char* e = std::getenv("CRISPASR_CONV_SERIAL");
+    return (e && *e && std::strcmp(e, "0") != 0);
+}
+
+template <typename Load> static inline void permute_convt1d_host_baseline(Load load, float* dp, int K, int OC, int IC) {
     const size_t J = (size_t)OC * K;
     const int B = 32;
     const int n_blk = (IC + B - 1) / B;
@@ -251,6 +253,42 @@ template <typename Load> static inline void permute_convt1d_host(Load load, floa
                 for (int i = i0; i < i1; i++)
                     dp[j * IC + i] = load((size_t)i * J + j);
         }
+    }
+}
+
+template <typename Load>
+static inline void permute_convt1d_host_accelerated(Load load, float* dp, int K, int OC, int IC, int n_threads = 0) {
+    const size_t J = (size_t)OC * K;
+    const int B = 32;
+    const int n_blk = (IC + B - 1) / B;
+
+    core_parallel::for_each_chunk(n_blk, n_threads, [&](int b_start, int b_end) {
+        for (int bi = b_start; bi < b_end; bi++) {
+            const int i0 = bi * B;
+            const int i1 = i0 + B < IC ? i0 + B : IC;
+            for (size_t j0 = 0; j0 < J; j0 += B) {
+                const size_t j1 = j0 + B < J ? j0 + B : J;
+                for (size_t j = j0; j < j1; j++)
+                    for (int i = i0; i < i1; i++)
+                        dp[j * IC + i] = load((size_t)i * J + j);
+            }
+        }
+    });
+}
+
+// Host-side core of the permutation: a plain 2-D transpose of
+// src[ic][j] (IC rows, J = OC*K cols) into dst[j][ic], where `load(s)` reads
+// source element s as float. 32x32 tiles: the naive loop's stores stride by
+// IC floats, and for the voxcpm2 VAE (41M elements) it took ~1.1 s of every
+// process start (#461). Tile rows are split across OpenMP threads when the
+// including target has it; every dst element is written exactly once from
+// the same source value, so the result is byte-identical either way.
+template <typename Load>
+static inline void permute_convt1d_host(Load load, float* dp, int K, int OC, int IC, int n_threads = 0) {
+    if (crispasr_conv_serial() || (size_t)IC * (size_t)OC * K <= (size_t)1 << 16) {
+        permute_convt1d_host_baseline(load, dp, K, OC, IC);
+    } else {
+        permute_convt1d_host_accelerated(load, dp, K, OC, IC, n_threads);
     }
 }
 
