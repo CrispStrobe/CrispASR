@@ -20,6 +20,7 @@
 #pragma once
 
 #include <cstddef>
+#include <cstring>
 #include <vector>
 
 namespace core_lfr {
