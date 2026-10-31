@@ -3,9 +3,12 @@
 // chunking; the old path concatenated window TEXT and printed overlap words
 // twice). Synthetic grids, no model.
 #include "crispasr_ctc_stitch.h"
+#include "core/ctc.h"
 
 #include <catch2/catch_test_macros.hpp>
 
+#include <chrono>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -97,4 +100,55 @@ TEST_CASE("three windows, single window, and empty input", "[ctc-stitch]") {
     g = crispasr_ctc_stitch::stitch({}, V, 0, &n);
     CHECK(n == 0);
     CHECK(g.empty());
+}
+
+TEST_CASE("prefix_beam_search: basic emissions and repeat collapsing", "[ctc][unit]") {
+    // Frames: [token 1, token 1, blank 0, token 1, token 2]
+    // Expected CTC collapse: [1, 1, 2]
+    const int vocab = 4;
+    const int blank = 0;
+    const int T = 5;
+    std::vector<float> logprobs(T * vocab, -100.0f);
+    // Frame 0: token 1 (prob ~ 1.0)
+    logprobs[0 * vocab + 1] = 0.0f;
+    // Frame 1: token 1 (prob ~ 1.0)
+    logprobs[1 * vocab + 1] = 0.0f;
+    // Frame 2: blank 0 (prob ~ 1.0)
+    logprobs[2 * vocab + 0] = 0.0f;
+    // Frame 3: token 1 (prob ~ 1.0)
+    logprobs[3 * vocab + 1] = 0.0f;
+    // Frame 4: token 2 (prob ~ 1.0)
+    logprobs[4 * vocab + 2] = 0.0f;
+
+    auto res = core_ctc::prefix_beam_search(logprobs.data(), T, vocab, blank, /*shift=*/0, /*beam_size=*/4);
+    REQUIRE(res.tokens.size() == 3);
+    CHECK(res.tokens[0] == 1);
+    CHECK(res.tokens[1] == 1);
+    CHECK(res.tokens[2] == 2);
+}
+
+TEST_CASE("prefix_beam_search: performance benchmark on large vocabulary", "[ctc][perf]") {
+    const int vocab = 1000;
+    const int blank = 0;
+    const int T = 40;
+    std::vector<float> logprobs(T * vocab, -20.0f);
+
+    for (int t = 0; t < T; t++) {
+        logprobs[t * vocab + blank] = -0.1f; // mostly blank
+        if (t % 5 == 2) {
+            int token = (t * 17) % (vocab - 1) + 1;
+            logprobs[t * vocab + token] = 0.0f;
+            logprobs[t * vocab + blank] = -5.0f;
+        }
+    }
+
+    auto t0 = std::chrono::steady_clock::now();
+    for (int it = 0; it < 5; it++) {
+        auto res = core_ctc::prefix_beam_search(logprobs.data(), T, vocab, blank, /*shift=*/0, /*beam_size=*/4);
+        CHECK(!res.tokens.empty());
+    }
+    auto t1 = std::chrono::steady_clock::now();
+    double ms = std::chrono::duration<double, std::milli>(t1 - t0).count() / 5.0;
+    INFO("prefix_beam_search on T=" << T << ", V=" << vocab << " took " << ms << " ms");
+    CHECK(ms < 50.0); // comfortably fast with O(1) hash map
 }

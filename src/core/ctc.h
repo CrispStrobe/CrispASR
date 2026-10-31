@@ -28,6 +28,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <unordered_map>
 #include <vector>
 
 namespace core_ctc {
@@ -197,11 +198,25 @@ static inline BeamResult prefix_beam_search(const float* logprobs, int T, int V,
         std::vector<NewHyp> next;
         next.reserve(beam.size() * 2); // rough estimate
 
+        struct VectorHash {
+            size_t operator()(const std::vector<int32_t>& v) const {
+                size_t seed = v.size();
+                for (int32_t x : v) {
+                    seed ^= (size_t)x + 0x9e3779b9 + (seed << 6) + (seed >> 2);
+                }
+                return seed;
+            }
+        };
+        std::unordered_map<std::vector<int32_t>, size_t, VectorHash> map;
+        map.reserve(beam.size() * 4);
+
         auto find_or_insert = [&](const std::vector<int32_t>& pfx) -> NewHyp& {
-            for (auto& h : next)
-                if (h.prefix == pfx)
-                    return h;
+            auto it = map.find(pfx);
+            if (it != map.end())
+                return next[it->second];
+            size_t idx = next.size();
             next.push_back({pfx, NEG_INF, NEG_INF});
+            map.emplace(pfx, idx);
             return next.back();
         };
 
