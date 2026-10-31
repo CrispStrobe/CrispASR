@@ -4780,6 +4780,20 @@ catch_discover_tests(test-core-mel-features
     PROPERTIES LABELS "unit;mel"
 )
 
+# ─── test-mel-ab-bench — core/mel.cpp paired A/B speed and quality bench ───────
+add_executable(test-mel-ab-bench test-mel-ab-bench.cpp)
+target_include_directories(test-mel-ab-bench PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-mel-ab-bench PRIVATE
+    Catch2::Catch2WithMain
+    crispasr-core
+)
+catch_discover_tests(test-mel-ab-bench
+    TEST_SPEC "[bench]"
+    PROPERTIES LABELS "bench;mel"
+)
+
 # ─── test-core-cross-attn — core/cross_attn.h manual path (ggml graph) ────────
 # Computes the header's cross-attention graph and compares to a plain-C++ MHA
 # reference (verifies the bug-fixed V-transpose + unscaled T5 contract).

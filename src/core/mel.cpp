@@ -279,7 +279,7 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
             return;
         }
 #else
-        if (T >= 64) {
+        if (mel_parallel && T >= 64) {
             const unsigned hw = std::thread::hardware_concurrency();
             const int cap = p.n_threads > 0 ? p.n_threads : (int)((hw == 0) ? 1u : std::min(hw, 8u));
             projection_threads = std::min(cap, T);
@@ -369,7 +369,7 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
     };
     if (p.log_base != LogBase::None) {
         const size_t total_elements = mel_tn.size();
-        if (total_elements >= 2048) {
+        if (mel_parallel && total_elements >= 2048) {
             const unsigned hw = std::thread::hardware_concurrency();
             const int cap = p.n_threads > 0 ? p.n_threads : (int)((hw == 0) ? 1u : std::min(hw, 8u));
             core_parallel::for_each_chunk((int)total_elements, cap, [&](int i0, int i1) {
@@ -423,10 +423,31 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
         // shift downstream encoder activations enough to cause TDT token
         // deletions on conversational JA audio (issue #37).
         const int denom = (T_final > 1) ? (T_final - 1) : 1;
-        const unsigned hw = std::thread::hardware_concurrency();
-        const int cap = p.n_threads > 0 ? p.n_threads : (int)((hw == 0) ? 1u : std::min(hw, 8u));
-        core_parallel::for_each_chunk(nmels, cap, [&](int m0, int m1) {
-            for (int m = m0; m < m1; m++) {
+        if (mel_parallel) {
+            const unsigned hw = std::thread::hardware_concurrency();
+            const int cap = p.n_threads > 0 ? p.n_threads : (int)((hw == 0) ? 1u : std::min(hw, 8u));
+            core_parallel::for_each_chunk(nmels, cap, [&](int m0, int m1) {
+                for (int m = m0; m < m1; m++) {
+                    double sum = 0.0, sq = 0.0;
+                    for (int t = 0; t < T_final; t++)
+                        sum += mel_tn[(size_t)t * nmels + m];
+                    const double mean = sum / T_final;
+                    for (int t = 0; t < T_final; t++) {
+                        const double d = mel_tn[(size_t)t * nmels + m] - mean;
+                        sq += d * d;
+                    }
+                    float std_val = std::sqrt((float)(sq / denom));
+                    if (!(std_val == std_val))
+                        std_val = 0.0f;
+                    std_val += 1e-5f;
+                    const float inv_std = 1.0f / std_val;
+                    for (int t = 0; t < T_final; t++) {
+                        mel_tn[(size_t)t * nmels + m] = (float)(mel_tn[(size_t)t * nmels + m] - mean) * inv_std;
+                    }
+                }
+            });
+        } else {
+            for (int m = 0; m < nmels; m++) {
                 double sum = 0.0, sq = 0.0;
                 for (int t = 0; t < T_final; t++)
                     sum += mel_tn[(size_t)t * nmels + m];
@@ -444,7 +465,7 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
                     mel_tn[(size_t)t * nmels + m] = (float)(mel_tn[(size_t)t * nmels + m] - mean) * inv_std;
                 }
             }
-        });
+        }
         break;
     }
     case Normalization::GlobalClipMax: {
@@ -504,7 +525,7 @@ std::vector<float> compute(const float* samples, int n_samples, const float* win
 
     // Transpose to (n_mels, T_final) row-major.
     std::vector<float> out((size_t)nmels * T_final, 0.0f);
-    if ((size_t)nmels * T_final >= 2048) {
+    if (mel_parallel && (size_t)nmels * T_final >= 2048) {
         const unsigned hw = std::thread::hardware_concurrency();
         const int cap = p.n_threads > 0 ? p.n_threads : (int)((hw == 0) ? 1u : std::min(hw, 8u));
         core_parallel::for_each_chunk(nmels, cap, [&](int m0, int m1) {
