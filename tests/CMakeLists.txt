@@ -4794,6 +4794,20 @@ catch_discover_tests(test-mel-ab-bench
     PROPERTIES LABELS "bench;mel"
 )
 
+# ─── test-align-ab-bench — src/align.cpp paired A/B speed and quality bench ────
+add_executable(test-align-ab-bench test-align-ab-bench.cpp ${PROJECT_SOURCE_DIR}/src/align.cpp)
+target_include_directories(test-align-ab-bench PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-align-ab-bench PRIVATE
+    Catch2::Catch2WithMain
+    Threads::Threads
+)
+catch_discover_tests(test-align-ab-bench
+    TEST_SPEC "[align][ab-bench]"
+    PROPERTIES LABELS "bench;align"
+)
+
 # ─── test-core-cross-attn — core/cross_attn.h manual path (ggml graph) ────────
 # Computes the header's cross-attention graph and compares to a plain-C++ MHA
 # reference (verifies the bug-fixed V-transpose + unscaled T5 contract).
@@ -6509,6 +6523,7 @@ catch_discover_tests(test-moonshine-tokenizer TEST_SPEC "[unit]" PROPERTIES LABE
 # Exact CTC label spans, repeated Unicode letters and JSON; no models needed.
 add_executable(test-align-characters test-align-characters.cpp ${PROJECT_SOURCE_DIR}/src/align.cpp)
 target_include_directories(test-align-characters PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-align-characters PRIVATE Threads::Threads)
 if(MSVC)
     target_compile_options(test-align-characters PRIVATE /utf-8)
 endif()

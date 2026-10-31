@@ -1363,21 +1363,31 @@ static int canary_ctc_align_words_compact(struct canary_ctc_context* ctx, const 
     for (int j = 0; j < S; j++)
         seq[j] = (j % 2 == 0) ? blank_id : chars[j / 2];
 
-    // Keep the original vocabulary-wide max/sum order and F32 stores, but
-    // consume each normalized row immediately instead of retaining T_enc * V.
+    // Keep the original vocabulary-wide max/sum order and F32 arithmetic, but
+    // compute log-probabilities only for the unique tokens present in the target sequence.
+    std::vector<int> uniq_tokens;
+    std::vector<uint8_t> token_seen(V, 0);
+    uniq_tokens.reserve((size_t)S);
+    for (int j = 0; j < S; j++) {
+        int tok = seq[j];
+        if (!token_seen[tok]) {
+            token_seen[tok] = 1;
+            uniq_tokens.push_back(tok);
+        }
+    }
+
     std::vector<float> lp(V);
     auto normalize_frame = [&](int t) {
         const float* src = logits + (size_t)t * V;
-        float* dst = lp.data();
         float mx = *std::max_element(src, src + V);
         float s = 0.f;
         for (int i = 0; i < V; i++) {
-            dst[i] = src[i] - mx;
-            s += expf(dst[i]);
+            s += expf(src[i] - mx);
         }
         float ls = logf(std::max(s, 1e-30f));
-        for (int i = 0; i < V; i++)
-            dst[i] -= ls;
+        for (int tok : uniq_tokens) {
+            lp[tok] = src[tok] - mx - ls;
+        }
     };
 
     // ----- 4. Viterbi DP -----
@@ -1394,12 +1404,20 @@ static int canary_ctc_align_words_compact(struct canary_ctc_context* ctx, const 
             alpha[1] = lp0[seq[1]];
     }
 
+    std::vector<uint8_t> can_skip(S, 0);
+    for (int j = 2; j < S; j++) {
+        if (seq[j] != blank_id && seq[j] != seq[j - 2]) {
+            can_skip[j] = 1;
+        }
+    }
+
     for (int t = 1; t < T_enc; t++) {
         normalize_frame(t);
         const float* lpt = lp.data();
         std::fill(alpha_next.begin(), alpha_next.end(), NEG_INF);
+        const int j_max = std::min(S, 2 * t + 2);
 
-        for (int j = 0; j < S; j++) {
+        for (int j = 0; j < j_max; j++) {
             int tok = seq[j];
             float best = alpha[j];
             int8_t bsrc = 0;
@@ -1407,7 +1425,7 @@ static int canary_ctc_align_words_compact(struct canary_ctc_context* ctx, const 
                 best = alpha[j - 1];
                 bsrc = 1;
             }
-            if (j >= 2 && tok != blank_id && seq[j] != seq[j - 2] && alpha[j - 2] > best) {
+            if (can_skip[j] && alpha[j - 2] > best) {
                 best = alpha[j - 2];
                 bsrc = 2;
             }
@@ -1442,19 +1460,27 @@ static int canary_ctc_align_words_compact(struct canary_ctc_context* ctx, const 
         }
     }
 
-    // ----- 6. Map path → per-word t0/t1 -----
+    // ----- 6. Map path → per-word t0/t1 in a single linear pass over frames -----
+    std::vector<int> state_t0(S, -1), state_t1(S, -1);
+    for (int t = 0; t < T_enc; t++) {
+        int j = path[t];
+        if (state_t0[j] < 0)
+            state_t0[j] = t;
+        state_t1[j] = t;
+    }
+
     for (int wi = 0; wi < n_words; wi++) {
         if (wranges[wi].cs < 0)
             continue;
         int es0 = 2 * wranges[wi].cs + 1;
         int es1 = 2 * wranges[wi].ce + 1;
         int t0_frame = -1, t1_frame = -1;
-        for (int t = 0; t < T_enc; t++) {
-            int j = path[t];
-            if (j >= es0 && j <= es1) {
-                if (t0_frame < 0)
-                    t0_frame = t;
-                t1_frame = t;
+        for (int j = es0; j <= es1; j++) {
+            if (state_t0[j] >= 0) {
+                if (t0_frame < 0 || state_t0[j] < t0_frame)
+                    t0_frame = state_t0[j];
+                if (t1_frame < 0 || state_t1[j] > t1_frame)
+                    t1_frame = state_t1[j];
             }
         }
         if (t0_frame >= 0) {

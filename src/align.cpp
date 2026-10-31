@@ -37,6 +37,7 @@
  */
 
 #include "align.h"
+#include "core/parallel_for.h"
 
 #include <algorithm>
 #include <cctype>
@@ -445,26 +446,35 @@ static std::vector<ctc_word_stamp> ctc_forced_align_optimized(const float* logit
     }
     int U = (int)uniq_ids.size();
     std::vector<float> emit;
+    const char* serial_env = std::getenv("CRISPASR_CTC_ALIGN_SERIAL");
+    const bool force_serial = serial_env && serial_env[0] == '1' && serial_env[1] == '\0';
     {
         size_t total = (size_t)T * (size_t)U;
         if (U != 0 && total / (size_t)U != (size_t)T)
             return {};
         emit.resize(total);
-        for (int t = 0; t < T; t++) {
-            const float* src = logits + (size_t)t * (size_t)V;
-            float mx = *std::max_element(src, src + V);
-            float s = 0.f;
-            for (int i = 0; i < V; i++) {
-                float d = src[i] - mx;
-                s += expf(d);
+        auto compute_emit_chunk = [&](int t_start, int t_end) {
+            for (int t = t_start; t < t_end; t++) {
+                const float* src = logits + (size_t)t * (size_t)V;
+                float mx = *std::max_element(src, src + V);
+                float s = 0.f;
+                for (int i = 0; i < V; i++) {
+                    float d = src[i] - mx;
+                    s += expf(d);
+                }
+                float ls = logf(std::max(s, 1e-30f));
+                float* dst = emit.data() + (size_t)t * (size_t)U;
+                for (int k = 0; k < U; ++k) {
+                    float v = src[uniq_ids[k]] - mx;
+                    v -= ls;
+                    dst[k] = v;
+                }
             }
-            float ls = logf(std::max(s, 1e-30f));
-            float* dst = emit.data() + (size_t)t * (size_t)U;
-            for (int k = 0; k < U; ++k) {
-                float v = src[uniq_ids[k]] - mx;
-                v -= ls;
-                dst[k] = v;
-            }
+        };
+        if (force_serial || T < 16) {
+            compute_emit_chunk(0, T);
+        } else {
+            core_parallel::for_each_chunk(T, 0, compute_emit_chunk);
         }
     }
 
@@ -487,33 +497,70 @@ static std::vector<ctc_word_stamp> ctc_forced_align_optimized(const float* logit
             alpha[1] = e0[state_to_col[1]];
     }
 
-    for (int t = 1; t < T; t++) {
-        const float* erow = emit.data() + (size_t)t * (size_t)U;
-        std::fill(alpha_next.begin(), alpha_next.end(), NEG_INF);
-        size_t base = (size_t)t * (size_t)S;
+    if (force_serial) {
+        for (int t = 1; t < T; t++) {
+            const float* erow = emit.data() + (size_t)t * (size_t)U;
+            std::fill(alpha_next.begin(), alpha_next.end(), NEG_INF);
+            size_t base = (size_t)t * (size_t)S;
 
-        for (int j = 0; j < S; j++) {
-            int tok = seq[j];
+            for (int j = 0; j < S; j++) {
+                int tok = seq[j];
 
-            float best = alpha[j];
-            int8_t bsrc = 0;
+                float best = alpha[j];
+                int8_t bsrc = 0;
 
-            if (j >= 1 && alpha[j - 1] > best) {
-                best = alpha[j - 1];
-                bsrc = 1;
+                if (j >= 1 && alpha[j - 1] > best) {
+                    best = alpha[j - 1];
+                    bsrc = 1;
+                }
+
+                if (j >= 2 && tok != blank_id && seq[j] != seq[j - 2] && alpha[j - 2] > best) {
+                    best = alpha[j - 2];
+                    bsrc = 2;
+                }
+
+                if (best > NEG_INF) {
+                    alpha_next[j] = best + erow[state_to_col[j]];
+                    back[base + (size_t)j] = bsrc;
+                }
             }
-
-            if (j >= 2 && tok != blank_id && seq[j] != seq[j - 2] && alpha[j - 2] > best) {
-                best = alpha[j - 2];
-                bsrc = 2;
-            }
-
-            if (best > NEG_INF) {
-                alpha_next[j] = best + erow[state_to_col[j]];
-                back[base + (size_t)j] = bsrc;
+            alpha.swap(alpha_next);
+        }
+    } else {
+        std::vector<uint8_t> can_skip(S, 0);
+        for (int j = 2; j < S; j++) {
+            if (seq[j] != blank_id && seq[j] != seq[j - 2]) {
+                can_skip[j] = 1;
             }
         }
-        alpha.swap(alpha_next);
+
+        for (int t = 1; t < T; t++) {
+            const float* erow = emit.data() + (size_t)t * (size_t)U;
+            std::fill(alpha_next.begin(), alpha_next.end(), NEG_INF);
+            size_t base = (size_t)t * (size_t)S;
+            const int j_max = std::min(S, 2 * t + 2);
+
+            for (int j = 0; j < j_max; j++) {
+                float best = alpha[j];
+                int8_t bsrc = 0;
+
+                if (j >= 1 && alpha[j - 1] > best) {
+                    best = alpha[j - 1];
+                    bsrc = 1;
+                }
+
+                if (can_skip[j] && alpha[j - 2] > best) {
+                    best = alpha[j - 2];
+                    bsrc = 2;
+                }
+
+                if (best > NEG_INF) {
+                    alpha_next[j] = best + erow[state_to_col[j]];
+                    back[base + (size_t)j] = bsrc;
+                }
+            }
+            alpha.swap(alpha_next);
+        }
     }
 
     // 6. Traceback
