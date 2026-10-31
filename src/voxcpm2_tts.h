@@ -84,4 +84,11 @@ float* voxcpm2_extract_stage(struct voxcpm2_context* ctx, const char* text, cons
 
 #ifdef __cplusplus
 }
+
+#include <vector>
+
+namespace voxcpm2_test {
+std::vector<float> test_wn_reconstruct(const float* weight_g, const float* weight_v, int out_ch, int in_ch, int ksize);
+void test_snake1d(const float* alpha, const float* x_in, float* x_out, int C, int T);
+} // namespace voxcpm2_test
 #endif

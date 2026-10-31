@@ -93,4 +93,8 @@ int mel_band_roformer_parity(const char* model_gguf, const char* audio_wav, int 
 
 #ifdef __cplusplus
 }
+
+namespace mel_band_roformer_test {
+void test_rope_head(float* qh, int T, int dim_head);
+}
 #endif

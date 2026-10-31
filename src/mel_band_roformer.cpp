@@ -31,6 +31,7 @@
 #include "core/gguf_loader.h"      // core_gguf::{open_metadata,kv_u32,load_weights}
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (Change 176, htdemucs pattern)
 #include "core/istft.h"            // core_istft::istft (torch center=True match)
+#include "core/parallel_for.h"     // core_parallel::for_each_chunk
 #include "core/wav_reader.h"       // crispasr::core::read_wav_mono_pcm16 (Change 176 parity)
 
 // BLAS for the linear() SGEMM. #296: the forward is ~264 GFLOP of matmul; without
@@ -917,11 +918,14 @@ void rms_rows(std::vector<float>& x, int T, int dim, const std::vector<float>& g
 // theta^-(2i/dim_head); pair (2i,2i+1) rotated by angle m*inv_freq[i].
 void rope_head(float* qh, int T, int dim_head) {
     const int half = dim_head / 2;
+    std::vector<double> inv_freq((size_t)half);
+    for (int i = 0; i < half; i++) {
+        inv_freq[i] = std::pow(10000.0, -(double)(2 * i) / (double)dim_head);
+    }
     for (int m = 0; m < T; m++) {
         float* row = qh + (size_t)m * dim_head;
         for (int i = 0; i < half; i++) {
-            const double inv = std::pow(10000.0, -(double)(2 * i) / (double)dim_head);
-            const double ang = (double)m * inv;
+            const double ang = (double)m * inv_freq[i];
             const double c = std::cos(ang), s = std::sin(ang);
             const float a = row[2 * i], b = row[2 * i + 1];
             row[2 * i] = (float)(a * c - b * s);
@@ -1092,24 +1096,44 @@ bool run_time(core_gguf::WeightLoad& mw, int L, std::vector<float>& x, int T, in
     // write disjoint b-strides of x, and roformer_block reads only the shared
     // (const) bw, so the band loop is embarrassingly parallel. seq is thread-local.
     std::atomic<bool> ok{true};
-#ifdef _OPENMP
-#pragma omp parallel for schedule(dynamic)
-#endif
-    for (int b = 0; b < nb; b++) {
-        if (!ok.load(std::memory_order_relaxed))
-            continue;
-        std::vector<float> seq((size_t)T * dim);
-        for (int t = 0; t < T; t++)
-            for (int d = 0; d < dim; d++)
-                seq[(size_t)t * dim + d] = x[((size_t)t * nb + b) * dim + d];
-        if (!roformer_block(bw, seq, T, dim, heads, dim_head)) {
-            ok.store(false, std::memory_order_relaxed);
-            continue;
+    const char* env_serial = std::getenv("CRISPASR_MEL_BAND_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+    if (force_serial) {
+        for (int b = 0; b < nb; b++) {
+            if (!ok.load(std::memory_order_relaxed))
+                continue;
+            std::vector<float> seq((size_t)T * dim);
+            for (int t = 0; t < T; t++)
+                for (int d = 0; d < dim; d++)
+                    seq[(size_t)t * dim + d] = x[((size_t)t * nb + b) * dim + d];
+            if (!roformer_block(bw, seq, T, dim, heads, dim_head)) {
+                ok.store(false, std::memory_order_relaxed);
+                continue;
+            }
+            rms_rows(seq, T, dim, fg);
+            for (int t = 0; t < T; t++)
+                for (int d = 0; d < dim; d++)
+                    x[((size_t)t * nb + b) * dim + d] = seq[(size_t)t * dim + d];
         }
-        rms_rows(seq, T, dim, fg);
-        for (int t = 0; t < T; t++)
-            for (int d = 0; d < dim; d++)
-                x[((size_t)t * nb + b) * dim + d] = seq[(size_t)t * dim + d];
+    } else {
+        core_parallel::for_each_chunk(nb, 0, [&](int b_start, int b_end) {
+            for (int b = b_start; b < b_end; b++) {
+                if (!ok.load(std::memory_order_relaxed))
+                    continue;
+                std::vector<float> seq((size_t)T * dim);
+                for (int t = 0; t < T; t++)
+                    for (int d = 0; d < dim; d++)
+                        seq[(size_t)t * dim + d] = x[((size_t)t * nb + b) * dim + d];
+                if (!roformer_block(bw, seq, T, dim, heads, dim_head)) {
+                    ok.store(false, std::memory_order_relaxed);
+                    continue;
+                }
+                rms_rows(seq, T, dim, fg);
+                for (int t = 0; t < T; t++)
+                    for (int d = 0; d < dim; d++)
+                        x[((size_t)t * nb + b) * dim + d] = seq[(size_t)t * dim + d];
+            }
+        });
     }
     return ok.load();
 }
@@ -1128,20 +1152,36 @@ bool run_freq(core_gguf::WeightLoad& mw, int L, std::vector<float>& x, int T, in
     // Each time step is an independent Transformer over the band-axis: distinct
     // t write disjoint nb*dim slabs of x. Parallel over T (see run_time note).
     std::atomic<bool> ok{true};
-#ifdef _OPENMP
-#pragma omp parallel for schedule(dynamic)
-#endif
-    for (int t = 0; t < T; t++) {
-        if (!ok.load(std::memory_order_relaxed))
-            continue;
-        std::vector<float> seq((size_t)nb * dim);
-        std::memcpy(seq.data(), x.data() + (size_t)t * nb * dim, (size_t)nb * dim * sizeof(float));
-        if (!roformer_block(bw, seq, nb, dim, heads, dim_head)) {
-            ok.store(false, std::memory_order_relaxed);
-            continue;
+    const char* env_serial = std::getenv("CRISPASR_MEL_BAND_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+    if (force_serial) {
+        for (int t = 0; t < T; t++) {
+            if (!ok.load(std::memory_order_relaxed))
+                continue;
+            std::vector<float> seq((size_t)nb * dim);
+            std::memcpy(seq.data(), x.data() + (size_t)t * nb * dim, (size_t)nb * dim * sizeof(float));
+            if (!roformer_block(bw, seq, nb, dim, heads, dim_head)) {
+                ok.store(false, std::memory_order_relaxed);
+                continue;
+            }
+            rms_rows(seq, nb, dim, fg);
+            std::memcpy(x.data() + (size_t)t * nb * dim, seq.data(), (size_t)nb * dim * sizeof(float));
         }
-        rms_rows(seq, nb, dim, fg);
-        std::memcpy(x.data() + (size_t)t * nb * dim, seq.data(), (size_t)nb * dim * sizeof(float));
+    } else {
+        core_parallel::for_each_chunk(T, 0, [&](int t_start, int t_end) {
+            for (int t = t_start; t < t_end; t++) {
+                if (!ok.load(std::memory_order_relaxed))
+                    continue;
+                std::vector<float> seq((size_t)nb * dim);
+                std::memcpy(seq.data(), x.data() + (size_t)t * nb * dim, (size_t)nb * dim * sizeof(float));
+                if (!roformer_block(bw, seq, nb, dim, heads, dim_head)) {
+                    ok.store(false, std::memory_order_relaxed);
+                    continue;
+                }
+                rms_rows(seq, nb, dim, fg);
+                std::memcpy(x.data() + (size_t)t * nb * dim, seq.data(), (size_t)nb * dim * sizeof(float));
+            }
+        });
     }
     return ok.load();
 }
@@ -2276,3 +2316,9 @@ int mel_band_roformer_diff(const char* model_gguf, const char* ref_gguf, const c
     fprintf(stderr, "mel_band_roformer diff: %d front-end stage(s) FAILED.\n", n_fail);
     return n_fail == 0 ? 0 : 1;
 }
+
+namespace mel_band_roformer_test {
+void test_rope_head(float* qh, int T, int dim_head) {
+    rope_head(qh, T, dim_head);
+}
+} // namespace mel_band_roformer_test
