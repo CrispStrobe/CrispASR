@@ -9,6 +9,7 @@
 // 3. Fallback gate verification via CRISPASR_VOXCPM2_SERIAL=1 and CRISPASR_MEL_BAND_SERIAL=1.
 
 #include <catch2/catch_test_macros.hpp>
+#include "ab_bench_helpers.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -63,7 +64,7 @@ static BenchStats compute_stats(std::vector<double>& samples) {
     return {min_v, max_v, median_v, mean_v, stddev_v};
 }
 
-TEST_CASE("VoxCPM2 wn_reconstruct paired A/B benchmark", "[perf][voxcpm2][ab-bench]") {
+TEST_CASE("VoxCPM2 wn_reconstruct paired A/B benchmark", "[unit][voxcpm2][ab-bench]") {
     const int out_ch = 512;
     const int in_ch = 256;
     const int ksize = 7;
@@ -83,7 +84,7 @@ TEST_CASE("VoxCPM2 wn_reconstruct paired A/B benchmark", "[perf][voxcpm2][ab-ben
     auto warm_a = voxcpm2_test::test_wn_reconstruct(weight_g.data(), weight_v.data(), out_ch, in_ch, ksize);
     (void)warm_a;
 
-    const int iters = 10;
+    const int iters = benchmark_timing_enabled() ? 10 : 1;
     std::vector<double> times_a(iters);
     std::vector<float> out_a;
     for (int i = 0; i < iters; i++) {
@@ -112,12 +113,17 @@ TEST_CASE("VoxCPM2 wn_reconstruct paired A/B benchmark", "[perf][voxcpm2][ab-ben
     REQUIRE(out_b.size() == total_w);
     float max_diff = 0.0f;
     for (size_t i = 0; i < total_w; i++) {
+        REQUIRE(std::isfinite(out_a[i]));
+        REQUIRE(std::isfinite(out_b[i]));
         const float diff = std::abs(out_a[i] - out_b[i]);
         if (diff > max_diff) {
             max_diff = diff;
         }
     }
     CHECK(max_diff <= 1e-7f);
+
+    if (!benchmark_timing_enabled())
+        return;
 
     const BenchStats stats_a = compute_stats(times_a);
     const BenchStats stats_b = compute_stats(times_b);
@@ -131,10 +137,10 @@ TEST_CASE("VoxCPM2 wn_reconstruct paired A/B benchmark", "[perf][voxcpm2][ab-ben
            stats_b.median_ms, stats_b.mean_ms, stats_b.stddev_ms, stats_b.min_ms, stats_b.max_ms);
     printf("Speedup:                   %.2fx (%.2f ms saved per VAE weight reconstruct)\n", speedup,
            stats_a.median_ms - stats_b.median_ms);
-    printf("Numerical parity:          max_diff = %.8e (100%% exact bit-identical)\n", max_diff);
+    printf("Numerical parity:          max_diff = %.8e\n", max_diff);
 }
 
-TEST_CASE("VoxCPM2 snake1d paired A/B benchmark", "[perf][voxcpm2][ab-bench]") {
+TEST_CASE("VoxCPM2 snake1d paired A/B benchmark", "[unit][voxcpm2][ab-bench]") {
     const int C = 512;
     const int T = 2000;
     const size_t total = (size_t)C * T; // 1,024,000 floats
@@ -153,7 +159,7 @@ TEST_CASE("VoxCPM2 snake1d paired A/B benchmark", "[perf][voxcpm2][ab-bench]") {
     std::vector<float> out_a(total);
     voxcpm2_test::test_snake1d(alpha.data(), x_in.data(), out_a.data(), C, T); // warmup
 
-    const int iters = 10;
+    const int iters = benchmark_timing_enabled() ? 10 : 1;
     std::vector<double> times_a(iters);
     for (int i = 0; i < iters; i++) {
         const auto t0 = std::chrono::steady_clock::now();
@@ -178,12 +184,17 @@ TEST_CASE("VoxCPM2 snake1d paired A/B benchmark", "[perf][voxcpm2][ab-bench]") {
     // Parity verification
     float max_diff = 0.0f;
     for (size_t i = 0; i < total; i++) {
+        REQUIRE(std::isfinite(out_a[i]));
+        REQUIRE(std::isfinite(out_b[i]));
         const float diff = std::abs(out_a[i] - out_b[i]);
         if (diff > max_diff) {
             max_diff = diff;
         }
     }
     CHECK(max_diff == 0.0f);
+
+    if (!benchmark_timing_enabled())
+        return;
 
     const BenchStats stats_a = compute_stats(times_a);
     const BenchStats stats_b = compute_stats(times_b);
@@ -196,10 +207,10 @@ TEST_CASE("VoxCPM2 snake1d paired A/B benchmark", "[perf][voxcpm2][ab-bench]") {
            stats_b.median_ms, stats_b.mean_ms, stats_b.stddev_ms, stats_b.min_ms, stats_b.max_ms);
     printf("Speedup:                   %.2fx (%.2f ms saved per snake1d activation)\n", speedup,
            stats_a.median_ms - stats_b.median_ms);
-    printf("Numerical parity:          max_diff = %.8e (100%% exact bit-identical)\n", max_diff);
+    printf("Numerical parity:          max_diff = %.8e\n", max_diff);
 }
 
-TEST_CASE("Mel-Band RoFormer rope_head precalculated inv_freq paired A/B benchmark", "[perf][roformer][ab-bench]") {
+TEST_CASE("Mel-Band RoFormer rope_head precalculated inv_freq paired A/B benchmark", "[unit][roformer][ab-bench]") {
     const int T = 2048;
     const int dim_head = 64;
     const size_t total = (size_t)T * dim_head;
@@ -229,7 +240,7 @@ TEST_CASE("Mel-Band RoFormer rope_head precalculated inv_freq paired A/B benchma
     std::vector<float> out_a = init_data;
     naive_rope(out_a.data(), T, dim_head); // warmup
 
-    const int iters = 10;
+    const int iters = benchmark_timing_enabled() ? 10 : 1;
     std::vector<double> times_a(iters);
     for (int i = 0; i < iters; i++) {
         out_a = init_data;
@@ -255,12 +266,17 @@ TEST_CASE("Mel-Band RoFormer rope_head precalculated inv_freq paired A/B benchma
     // Parity verification
     float max_diff = 0.0f;
     for (size_t i = 0; i < total; i++) {
+        REQUIRE(std::isfinite(out_a[i]));
+        REQUIRE(std::isfinite(out_b[i]));
         const float diff = std::abs(out_a[i] - out_b[i]);
         if (diff > max_diff) {
             max_diff = diff;
         }
     }
     CHECK(max_diff == 0.0f);
+
+    if (!benchmark_timing_enabled())
+        return;
 
     const BenchStats stats_a = compute_stats(times_a);
     const BenchStats stats_b = compute_stats(times_b);
@@ -273,5 +289,5 @@ TEST_CASE("Mel-Band RoFormer rope_head precalculated inv_freq paired A/B benchma
            stats_b.median_ms, stats_b.mean_ms, stats_b.stddev_ms, stats_b.min_ms, stats_b.max_ms);
     printf("Speedup:                   %.2fx (%.2f ms saved per RoPE head call)\n", speedup,
            stats_a.median_ms - stats_b.median_ms);
-    printf("Numerical parity:          max_diff = %.8e (100%% exact bit-identical)\n\n", max_diff);
+    printf("Numerical parity:          max_diff = %.8e\n\n", max_diff);
 }

@@ -6,6 +6,7 @@
 #include "moonshine_onnx.h"
 #endif
 #include "core/arch_backend_map.h" // #335: general.architecture → backend table, SHARED with the C ABI
+#include "core/backend_aliases.h"
 #include "core/parakeet_gguf.h"
 
 // Forward declarations of per-backend constructors. Each is implemented in
@@ -130,7 +131,8 @@ std::unique_ptr<CrispasrBackend> crispasr_make_meanvc2_backend();
 // Factory
 // ---------------------------------------------------------------------------
 
-std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name) {
+std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& requested_name) {
+    const std::string name = core_backend::canonical_runtime_name(requested_name);
     // "tiron" (#295) is a Whisper large-v3 checkpoint with inline <|speakerN|>
     // markers — it runs on the whisper backend, which auto-detects the speaker
     // vocab and enables the tiron constrained-decoding grammar. The alias only
@@ -148,8 +150,7 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& name
         return crispasr_make_nemotron_backend();
     if (name == "phonon2")
         return crispasr_make_phonon2_backend();
-    if (name == "parakeet" || name == "haas" || name == "haas-ja" || name == "haas_ja" || name == "haas-asr" ||
-        name == "reazonspeech" || name == "quds" || name == "quds-fa")
+    if (name == "parakeet" || name == "reazonspeech" || name == "quds" || name == "quds-fa")
         return crispasr_make_parakeet_backend();
     if (name == "canary")
         return crispasr_make_canary_backend();

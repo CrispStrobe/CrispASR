@@ -223,11 +223,17 @@ static inline bool crispasr_conformer_serial() {
 
 static inline void shaw_block_attention_cpu_baseline(float* out, const float* Q_data, const float* K_data,
                                                      const float* V_data, const float* rpe, int T, int n_heads, int hd,
-                                                     int ctx_size, float scale, int remainder) {
+                                                     int ctx_size, float scale, int remainder, int n_threads = 0) {
     const int d = n_heads * hd;
     const int n_blocks = (T + ctx_size - 1) / ctx_size;
 
-#pragma omp parallel for collapse(2) schedule(static)
+#if defined(_OPENMP)
+    const int nt = core_parallel::resolve_threads_for_work(
+        n_blocks * n_heads, n_threads, (uint64_t)std::min(T, ctx_size) * std::min(T, ctx_size) * hd, 65536);
+#pragma omp parallel for collapse(2) schedule(static) num_threads(nt) if (nt > 1)
+#else
+    (void)n_threads;
+#endif
     for (int blk = 0; blk < n_blocks; blk++) {
         for (int h = 0; h < n_heads; h++) {
             const int blk_start = blk * ctx_size;
@@ -287,8 +293,13 @@ static inline void shaw_block_attention_cpu_accelerated(float* out, const float*
     const int d = n_heads * hd;
     const int n_blocks = (T + ctx_size - 1) / ctx_size;
     const int total_items = n_blocks * n_heads;
-
-    core_parallel::for_each_chunk(total_items, n_threads, [&](int begin_idx, int end_idx) {
+    const uint64_t work_per_item = (uint64_t)std::min(T, ctx_size) * std::min(T, ctx_size) * hd;
+#if defined(_OPENMP)
+    constexpr uint64_t grain = 65536;
+#else
+    constexpr uint64_t grain = 262144;
+#endif
+    core_parallel::for_each_chunk_work(total_items, n_threads, work_per_item, grain, [&](int begin_idx, int end_idx) {
         std::vector<float> scores((size_t)ctx_size * ctx_size);
         for (int idx = begin_idx; idx < end_idx; idx++) {
             const int blk = idx / n_heads;
@@ -356,7 +367,8 @@ static inline void shaw_block_attention_cpu(float* out, const float* Q_data, con
                                             const float* rpe, int T, int n_heads, int hd, int ctx_size, float scale,
                                             int remainder, int n_threads = 0) {
     if (crispasr_conformer_serial()) {
-        shaw_block_attention_cpu_baseline(out, Q_data, K_data, V_data, rpe, T, n_heads, hd, ctx_size, scale, remainder);
+        shaw_block_attention_cpu_baseline(out, Q_data, K_data, V_data, rpe, T, n_heads, hd, ctx_size, scale, remainder,
+                                          1);
     } else {
         shaw_block_attention_cpu_accelerated(out, Q_data, K_data, V_data, rpe, T, n_heads, hd, ctx_size, scale,
                                              remainder, n_threads);

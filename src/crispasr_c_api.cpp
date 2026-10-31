@@ -15,6 +15,7 @@
 #include "crispasr_session.h"
 #include "core/win_compat.h"
 #include "core/arch_backend_map.h" // #335: general.architecture → backend table, SHARED with the CLI
+#include "core/backend_aliases.h"
 #include "core/parakeet_gguf.h"
 #include "core/bpe.h"
 #include "core/utf8.h"
@@ -2848,7 +2849,7 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
 
     auto* s = new crispasr_session();
     s->model_path = model_path;
-    s->backend = backend_name;
+    s->backend = core_backend::canonical_runtime_name(backend_name);
 #ifdef CRISPASR_HAS_ONNX
     if (s->backend.find("moonshine-") == 0 && s->backend.find("-onnx") != std::string::npos)
         s->backend = "moonshine-onnx";
@@ -9230,9 +9231,10 @@ CA_EXPORT int crispasr_registry_list_backends_abi(char* out_csv, int32_t out_cap
 CA_EXPORT int crispasr_backend_caps_abi(const char* backend, char* out_csv, int32_t out_cap) {
     if (!backend || !out_csv || out_cap <= 0)
         return -1;
+    const std::string runtime = core_backend::canonical_runtime_name(backend);
     for (int i = 0; i < core_backend_caps::k_backend_caps_count; ++i) {
         const auto& e = core_backend_caps::k_backend_caps[i];
-        if (std::strcmp(e.name, backend) != 0)
+        if (runtime != e.name)
             continue;
         const size_t n = std::strlen(e.caps_csv);
         if ((int)n + 1 > out_cap)

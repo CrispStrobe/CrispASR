@@ -18,9 +18,11 @@
 #include <catch2/catch_approx.hpp>
 
 #include "core/istft.h"
+#include "scoped_test_env.h"
 
 #include <cmath>
 #include <complex>
+#include <limits>
 #include <vector>
 
 using core_istft::istft;
@@ -40,8 +42,8 @@ std::vector<float> hann(int N) {
 // Independent reference iSTFT: full complex IFFT (naive DFT over all N bins,
 // reconstructing the upper half by Hermitian symmetry) + explicit OLA.
 // Deliberately NOT the header's half-spectrum formula.
-std::vector<float> ref_istft(const std::vector<float>& mag, const std::vector<float>& phase, int n_fft, int hop,
-                             int T, const std::vector<float>& window, core_istft::TrimMode trim) {
+std::vector<float> ref_istft(const std::vector<float>& mag, const std::vector<float>& phase, int n_fft, int hop, int T,
+                             const std::vector<float>& window, core_istft::TrimMode trim) {
     const int n_freq = n_fft / 2 + 1;
     const int ola_len = (T - 1) * hop + n_fft;
     std::vector<double> out(ola_len, 0.0), wsum(ola_len, 0.0);
@@ -89,7 +91,12 @@ std::vector<float> ref_istft(const std::vector<float>& mag, const std::vector<fl
 struct Rng {
     uint64_t s;
     explicit Rng(uint64_t seed) : s(seed) {}
-    uint32_t nx() { s ^= s << 13; s ^= s >> 7; s ^= s << 17; return (uint32_t)(s >> 11); }
+    uint32_t nx() {
+        s ^= s << 13;
+        s ^= s >> 7;
+        s ^= s << 17;
+        return (uint32_t)(s >> 11);
+    }
     double uni() { return (nx() % 100000) / 100000.0; }
 };
 
@@ -97,8 +104,12 @@ struct Rng {
 
 TEST_CASE("core_istft: matches independent full-DFT reference (fuzz)", "[unit][core-istft]") {
     Rng rng(0xBEEF1234ULL);
-    struct Cfg { int n_fft, hop; };
-    const Cfg cfgs[] = {{16, 4}, {16, 8}, {32, 8}, {20, 5}};
+    struct Cfg {
+        int n_fft, hop;
+    };
+    // Odd FFTs have a conjugate partner for the highest stored frequency;
+    // omitting it was a pre-existing scalar/CBLAS bug, independent of tiling.
+    const Cfg cfgs[] = {{16, 4}, {16, 8}, {32, 8}, {20, 5}, {3, 1}, {5, 1}, {21, 5}};
 
     for (auto c : cfgs) {
         const int n_freq = c.n_fft / 2 + 1;
@@ -107,7 +118,7 @@ TEST_CASE("core_istft: matches independent full-DFT reference (fuzz)", "[unit][c
             int T = 3 + (int)(rng.nx() % 18);
             std::vector<float> mag((size_t)T * n_freq), ph((size_t)T * n_freq);
             for (size_t i = 0; i < mag.size(); i++) {
-                mag[i] = (float)(rng.uni() * 4.0);            // [0,4)
+                mag[i] = (float)(rng.uni() * 4.0);               // [0,4)
                 ph[i] = (float)((rng.uni() * 2.0 - 1.0) * M_PI); // [-pi,pi)
             }
             auto got = istft(mag.data(), ph.data(), c.n_fft, c.hop, T, w.data(), TRIM_CENTER, 0.0f);
@@ -115,8 +126,11 @@ TEST_CASE("core_istft: matches independent full-DFT reference (fuzz)", "[unit][c
 
             REQUIRE(got.size() == ref.size());
             float max_abs = 0.0f;
-            for (size_t i = 0; i < got.size(); i++)
+            for (size_t i = 0; i < got.size(); i++) {
+                REQUIRE(std::isfinite(got[i]));
+                REQUIRE(std::isfinite(ref[i]));
                 max_abs = std::max(max_abs, std::fabs(got[i] - ref[i]));
+            }
             INFO("n_fft=" << c.n_fft << " hop=" << c.hop << " T=" << T << " max|Δ|=" << max_abs);
             REQUIRE(max_abs < 1e-4f);
         }
@@ -180,7 +194,7 @@ TEST_CASE("core_istft: zero_below_eps zeroes edge samples (kokoro vs outetts)", 
     auto outetts = istft(mag.data(), ph.data(), n_fft, hop, T, w.data(), TRIM_NONE, 0.0f,
                          /*win_eps=*/1e-8f, /*zero_below_eps=*/false);
     auto kokoro = istft(mag.data(), ph.data(), n_fft, hop, T, w.data(), TRIM_NONE, 0.0f,
-                       /*win_eps=*/1e-8f, /*zero_below_eps=*/true);
+                        /*win_eps=*/1e-8f, /*zero_below_eps=*/true);
 
     REQUIRE(outetts.size() == kokoro.size());
     // Sample 0: window w[0]=0 → win_sum=0 ≤ eps. kokoro forces 0; outetts
@@ -189,4 +203,53 @@ TEST_CASE("core_istft: zero_below_eps zeroes edge samples (kokoro vs outetts)", 
     REQUIRE(kokoro[0] == 0.0f);
     // Interior sample must be identical between the two (above eps).
     REQUIRE(outetts[n_fft / 2] == Catch::Approx(kokoro[n_fft / 2]).margin(1e-6));
+}
+
+
+TEST_CASE("core_istft: tiled overlap-add preserves serial results and trim boundaries", "[unit][core-istft]") {
+    ScopedTestEnv serial("CRISPASR_ISTFT_SERIAL");
+    struct Shape {
+        int fft, frames;
+    };
+    // N=64/T=1100 crosses scalar and CBLAS tile boundaries; the N=20 case
+    // exercises the small-transform path that must avoid worker startup.
+    for (const auto shape : {Shape{20, 16}, Shape{64, 1100}, Shape{640, 41}, Shape{20, 1}}) {
+        const int n_freq = shape.fft / 2 + 1;
+        std::vector<float> mag((size_t)shape.frames * n_freq), phase(mag.size());
+        for (size_t i = 0; i < mag.size(); i++) {
+            mag[i] = 0.8f + 0.3f * std::sin((float)i * 0.013f);
+            phase[i] = 2.0f * std::cos((float)i * 0.019f);
+        }
+        for (const auto trim : {TRIM_CENTER, core_istft::TRIM_SAME, TRIM_NONE}) {
+            CAPTURE(shape.fft, shape.frames, trim);
+            serial.set("1");
+            const auto one = istft(mag.data(), phase.data(), shape.fft, shape.fft / 4, shape.frames, nullptr, trim,
+                                   0.0f, 1e-8f, false, 1);
+            serial.set(nullptr);
+            const auto many = istft(mag.data(), phase.data(), shape.fft, shape.fft / 4, shape.frames, nullptr, trim,
+                                    0.0f, 1e-8f, false, 4);
+            REQUIRE(one.size() == many.size());
+            for (size_t i = 0; i < one.size(); i++) {
+                REQUIRE(std::isfinite(one[i]));
+                REQUIRE(std::isfinite(many[i]));
+#if defined(HAVE_ACCELERATE) || defined(CRISPASR_HAVE_BLAS)
+                // BLAS may use a different dot-product kernel for one row vs
+                // a tile. Allow its F32 rounding, never nonfinite values.
+                REQUIRE(many[i] == Catch::Approx(one[i]).margin(2e-5).epsilon(2e-6));
+#else
+                REQUIRE(many[i] == one[i]);
+#endif
+            }
+        }
+    }
+}
+
+TEST_CASE("core_istft: empty and invalid dimensions return no PCM", "[unit][core-istft]") {
+    const float v = 0.0f;
+    CHECK(istft(&v, &v, 20, 5, 0).empty());
+    CHECK(istft(&v, &v, 0, 5, 1).empty());
+    CHECK(istft(&v, &v, 20, 0, 1).empty());
+    CHECK(istft(nullptr, &v, 20, 5, 1).empty());
+    CHECK(istft(&v, &v, 20, 5, std::numeric_limits<int>::max()).empty());
+    CHECK(istft(&v, &v, 20, 21, 1, nullptr, core_istft::TRIM_SAME).empty());
 }

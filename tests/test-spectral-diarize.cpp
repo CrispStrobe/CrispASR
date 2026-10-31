@@ -26,6 +26,7 @@
 #include <set>
 #include <vector>
 #include "portable_env.h"
+#include "scoped_test_env.h"
 
 using namespace core_spectral;
 
@@ -494,5 +495,35 @@ TEST_CASE("cluster_speakers: labels are independent of the thread count", "[unit
         INFO("n_threads = " << nt << " (0 means hardware_concurrency)");
         CHECK(got == serial);
         CHECK(est.best_k == est1.best_k);
+    }
+}
+
+
+TEST_CASE("cosine_similarity: zero and tiny self-dots survive parallel scheduling", "[unit][spectral]") {
+    ScopedTestEnv serial("CRISPASR_DIARIZE_SERIAL");
+    for (const int n : {5, 129}) {
+        const int d = 256;
+        std::vector<float> x((size_t)n * d, 0.0f);
+        x[d] = 1e-13f; // below normalization's threshold, yet its square is representable
+        for (int i = 2; i < n; i++) {
+            x[(size_t)i * d + i % d] = 3.0f;
+            x[(size_t)i * d + (i + 1) % d] = 4.0f;
+        }
+        serial.set("1");
+        const auto one = cosine_similarity(x.data(), n, d, 1);
+        serial.set(nullptr);
+        const auto many = cosine_similarity(x.data(), n, d, 4);
+        REQUIRE(one.size() == (size_t)n * n);
+        REQUIRE(many.size() == one.size());
+        REQUIRE(many[0] == 0.0f);
+        REQUIRE(many[(size_t)n + 1] == (float)((double)x[d] * x[d]));
+        REQUIRE(many[(size_t)n + 1] > 0.0f);
+        for (int i = 0; i < n; i++) {
+            for (int j = 0; j < n; j++) {
+                REQUIRE(std::isfinite(many[(size_t)i * n + j]));
+                REQUIRE(many[(size_t)i * n + j] == one[(size_t)i * n + j]);
+                REQUIRE(many[(size_t)i * n + j] == many[(size_t)j * n + i]);
+            }
+        }
     }
 }

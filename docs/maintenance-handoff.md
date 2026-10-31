@@ -13,7 +13,33 @@ PR, job-queue and ownership claims are not current instructions. Do not resume
 them automatically. Public path aliases describe roles; actual bindings stay
 in ignored local notes.
 
-## Continuation snapshot — 2026-10-30 18:05 UTC
+## Audit repair continuation — 2026-10-31
+
+This bounded update supersedes the older completeness claims below for the
+audited post-v0.8.49 optimization changes. Starting from `26945b34`, local branch
+`fix/post-v0849-audit` repairs confirmed ArkTTS cache lifetime, worker scheduling,
+VoxCPM2 mono convolution, iSTFT memory, RVQ near ties, cosine diagonals, Haas
+aliases, MeanVC2 conditioning/interpolation, and test-discovery failures.
+Implementation and test sources are in `1b5a16c40118a3b15d53c7dd6bbc66c7458bc203`.
+See [the repair report](post-release-audit-repairs.md) and
+[external qualification instructions](post-release-audit-validation.md).
+
+The final Linux CPU shared library and actual CLI build pass, as do 131 selected
+CTest cases, the 47-case discovery guard, actual Haas CLI/C ABI dispatch, all 73
+registry cases, and 738 exact release-to-candidate core comparisons. The
+downloadable source/patch bundle retains the raw receipts. Nothing was pushed
+upstream and no external workflow was dispatched.
+
+MeanVC2's reference-audio speaker encoder is **not implemented**. The native API
+requires an explicitly supplied finite 256-float embedding; the unsupported
+audio setter now returns `-2` instead of substituting a unit vector. The generic
+Session still has no MeanVC2 embedding setter. Earlier stage-parity and
+intelligibility claims therefore do not establish complete conditioned voice
+conversion or speaker identity. Actual model/GPU/platform qualification needs
+reviewed fixtures and capture adapters; the provided manifest is deliberately
+unqualified. No blanket regression-free or end-to-end speed claim is accepted.
+
+## Historical continuation snapshot — 2026-10-30 18:05 UTC
 
 Updated 2026-10-30 18:05 UTC: this snapshot supersedes older status and owner prose.
 - **Haas-ja-v1.0 Japanese ASR Port COMPLETE (Issue #561)**:

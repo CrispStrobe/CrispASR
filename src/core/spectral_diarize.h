@@ -73,15 +73,15 @@ struct SpeakerEstimate {
 
 // Scale each row of `x` (n rows of `d`) to unit L2 norm, in place. Rows that
 // are already zero are left alone rather than producing NaN.
-void l2_normalize_rows(float* x, int n, int d);
+void l2_normalize_rows(float* x, int n, int d, int n_threads = 0);
 
 // Pairwise cosine similarity of the rows of `x`, as a dense (n, n) row-major
 // matrix. `x` need not be normalised.
-std::vector<float> cosine_similarity(const float* x, int n, int d);
+std::vector<float> cosine_similarity(const float* x, int n, int d, int n_threads = 0);
 
 // The affinity the spectral step consumes: cosine rescaled from [-1, 1] to
 // [0, 1], diagonal forced to 1, negatives clamped away.
-std::vector<float> cosine_affinity(const float* x, int n, int d);
+std::vector<float> cosine_affinity(const float* x, int n, int d, int n_threads = 0);
 
 // Project `x` (n, d) onto its top `k` principal components -> (n, k)
 // row-major. Mean-centres first, exactly like sklearn's PCA. `k` is clamped to
@@ -109,7 +109,8 @@ float silhouette_precomputed(const float* distance, int n, const std::vector<int
 // the spectral assignment. Operates on L2-normalised copies of `x`; stops
 // early on convergence or if a cluster would empty (which would silently
 // change k). Returns relabelled, densely-numbered labels.
-std::vector<int> refine_spherical(const float* x, int n, int d, const std::vector<int>& labels, int max_iter = 8);
+std::vector<int> refine_spherical(const float* x, int n, int d, const std::vector<int>& labels, int max_iter = 8,
+                                  int n_threads = 0);
 
 // Estimate the speaker count from the EIGENGAP of the normalised Laplacian:
 // build L_sym = D^-1/2 A D^-1/2, take its leading eigenvalues in descending

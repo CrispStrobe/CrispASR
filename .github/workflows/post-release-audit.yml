@@ -1,0 +1,210 @@
+name: Post-release optimization qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_models:
+        description: Run pinned model fixtures on the dedicated CUDA worker
+        type: boolean
+        default: false
+      fixture_manifest:
+        description: Absolute path to the reviewed manifest on the CUDA worker (required for models)
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: post-release-audit-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  model-gate-controls:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install pinned numerical comparison dependency
+        run: python -m pip install numpy==2.2.6
+      - name: Reject false-success model receipts
+        run: python tests/test_post_release_model_gate.py -v
+
+  numerical-platforms:
+    name: ${{ matrix.profile }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - profile: linux-scalar
+            os: ubuntu-22.04
+            blas: 'OFF'
+            openmp: 'OFF'
+          - profile: linux-cblas-openmp
+            os: ubuntu-22.04
+            blas: 'ON'
+            openmp: 'ON'
+          - profile: macos-accelerate
+            os: macos-14
+            blas: 'ON'
+            openmp: 'OFF'
+          - profile: windows-msvc-openmp
+            os: windows-2022
+            blas: 'OFF'
+            openmp: 'ON'
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    env:
+      AUDIT_BLAS: ${{ matrix.blas }}
+      AUDIT_OPENMP: ${{ matrix.openmp }}
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '1'
+      MKL_NUM_THREADS: '1'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install Python gate dependency
+        run: python -m pip install numpy==2.2.6
+      - name: Linux build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          bash tools/ci-apt.sh update
+          bash tools/ci-apt.sh install -y cmake ninja-build g++ libopenblas-dev
+      - name: Configure numerical tests
+        shell: python
+        run: |
+          import os, subprocess, sys
+          args = ['cmake', '-S', '.', '-B', 'build-audit',
+                  '-DCMAKE_BUILD_TYPE=Release', '-DBUILD_SHARED_LIBS=OFF',
+                  '-DPython3_EXECUTABLE=' + sys.executable,
+                  '-DCRISPASR_BUILD_TESTS=ON', '-DCRISPASR_BUILD_SERVER=OFF',
+                  '-DGGML_NATIVE=OFF', '-DGGML_CUDA=OFF', '-DGGML_METAL=OFF',
+                  '-DGGML_BLAS=OFF', '-DGGML_OPENMP=' + os.environ['AUDIT_OPENMP'],
+                  '-DCRISPASR_MEL_BLAS=' + os.environ['AUDIT_BLAS'],
+                  '-DCRISPASR_CPU_BLAS=' + os.environ['AUDIT_BLAS']]
+          if os.environ['AUDIT_OPENMP'] == 'OFF':
+              args += ['-DCMAKE_DISABLE_FIND_PACKAGE_OpenMP=TRUE']
+          if os.name == 'nt':
+              args += ['-G', 'Visual Studio 17 2022', '-A', 'x64']
+          subprocess.run(args, check=True)
+      - name: Build production regressions and numerical oracles
+        shell: python
+        run: |
+          import os, subprocess
+          targets = [
+              'test-arktts-cache', 'test-meanvc2-conditioning', 'test-meanvc2-convert',
+              'test-voxcpm2-cpu-conv', 'test-core-istft', 'test-core-istft-memory',
+              'test-core-rvq', 'test-core-cqt', 'test-spectral-diarize',
+              'test-diarize-smooth', 'test-parallel-for', 'test-kaldi-fbank',
+              'test-ctc-stitch', 'test-align-ab-bench', 'test-conformer-ab-bench',
+              'test-cpu-ops-ab-bench', 'test-firered-ab-bench', 'test-voxcpm2-ab-bench',
+              'test-kokoro-diarize-ab-bench', 'test-cqt-diarize-ab-bench',
+              'test-rvq-istft-ab-bench']
+          if os.environ['AUDIT_BLAS'] == 'ON':
+              targets += ['test-core-istft-blas', 'test-core-istft-memory-blas']
+          if os.environ['AUDIT_OPENMP'] == 'ON':
+              targets += ['test-parallel-for-openmp']
+          subprocess.run(['cmake', '--build', 'build-audit', '--config', 'Release',
+                          '--parallel', '2', '--target', *targets], check=True)
+      - name: Require actual CTest discovery, including optional implementations
+        shell: python
+        run: |
+          import os, subprocess, sys
+          args = [sys.executable, 'tools/check_performance_test_discovery.py',
+                  '--build-dir', 'build-audit', '--config', 'Release']
+          if os.environ['AUDIT_BLAS'] == 'ON':
+              args += ['--require-blas']
+          if os.environ['AUDIT_OPENMP'] == 'ON':
+              args += ['--require-openmp']
+          result = subprocess.run(args, check=True, text=True, encoding='utf-8', stdout=subprocess.PIPE)
+          print(result.stdout)
+          from pathlib import Path
+          Path('build-audit/performance-discovery.json').write_text(result.stdout, encoding='utf-8')
+      - name: Run deterministic correctness gates
+        run: ctest --test-dir build-audit -C Release -L performance-parity --output-on-failure --timeout 300 --no-tests=error
+      - name: Keep platform receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-release-${{ matrix.profile }}-${{ github.sha }}
+          path: |
+            build-audit/CMakeCache.txt
+            build-audit/performance-discovery.json
+            build-audit/Testing/Temporary/LastTest.log
+            build-audit/Testing/Temporary/LastTestsFailed.log
+          if-no-files-found: error
+
+  haas-entrypoints:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Build dependencies
+        run: |
+          bash tools/ci-apt.sh update
+          bash tools/ci-apt.sh install -y cmake ninja-build g++ libopenblas-dev
+      - name: Configure shared library and CLI
+        run: >
+          cmake -S . -B build-entrypoints -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DBUILD_SHARED_LIBS=ON -DGGML_NATIVE=OFF -DGGML_METAL=OFF
+          -DCRISPASR_BUILD_TESTS=ON -DCRISPASR_BUILD_SERVER=OFF
+      - name: Build public entrypoints
+        run: cmake --build build-entrypoints --target crispasr-cli crispasr-lib --parallel 2
+      - name: Verify CLI and C ABI aliases reach the actual loader
+        run: ctest --test-dir build-entrypoints -R '^haas-dispatch-entrypoints$' --output-on-failure --no-tests=error
+      - name: Keep dispatch receipt
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-release-haas-entrypoints-${{ github.sha }}
+          path: build-entrypoints/Testing/Temporary/LastTest.log
+          if-no-files-found: error
+
+  pinned-models:
+    if: inputs.run_models
+    needs: [model-gate-controls, numerical-platforms, haas-entrypoints]
+    # Deliberate opt-in: provision this label only on a worker with CUDA, nsys,
+    # enough model memory, and the reviewed local fixture bundle described in
+    # docs/post-release-audit-validation.md. No downloads or fixture rebakes.
+    runs-on: [self-hosted, Linux, X64, crispasr-audit-gpu]
+    timeout-minutes: 180
+    env:
+      AUDIT_MANIFEST: ${{ inputs.fixture_manifest }}
+      OPENBLAS_NUM_THREADS: '1'
+      OMP_NUM_THREADS: '4'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Validate all immutable inputs before building
+        run: python3 tools/ci-heavy/post_release_model_gate.py --manifest "$AUDIT_MANIFEST" --preflight-only --out model-audit
+      - name: Require the provisioned numerical and CUDA tools
+        run: |
+          python3 -c 'import numpy; print("NumPy", numpy.__version__)'
+          nsys --version
+          nvidia-smi
+      - name: Build the requested source with CUDA
+        run: |
+          cmake -S . -B build-model-audit -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DGGML_NATIVE=OFF -DGGML_CUDA=ON -DCRISPASR_BUILD_TESTS=ON -DCRISPASR_BUILD_SERVER=OFF
+          cmake --build build-model-audit --target crispasr-cli crispasr-lib crispasr-diff test-meanvc2-convert --parallel 2
+      - name: Run stage and complete-pipeline gates
+        run: python3 tools/ci-heavy/post_release_model_gate.py --manifest "$AUDIT_MANIFEST" --build-dir build-model-audit --out model-audit
+      - name: Keep model gate receipts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: post-release-models-${{ github.sha }}
+          path: |
+            model-audit/receipt.json
+            model-audit/**/*.log
+            model-audit/**/*-cuda-kernels.csv
+          if-no-files-found: error

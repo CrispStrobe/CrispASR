@@ -39,9 +39,11 @@ struct Codebook {
 //   stages   : pointer to Codebook[n_stages]. All codebooks must share
 //              the same `dim`, which must equal the feature dim.
 //   codes    : output, sized T * n_stages, row-major (T, n_stages).
+//   n_threads: worker budget (0 uses the runtime default).
 //
 // Returns true on success, false if any codebook is malformed.
-bool encode_euclidean(const float* features, int T, int dim, const Codebook* stages, int n_stages, int32_t* codes_out);
+bool encode_euclidean(const float* features, int T, int dim, const Codebook* stages, int n_stages, int32_t* codes_out,
+                      int n_threads = 0);
 
 // Convenience wrapper for callers that hold per-stage codebooks as flat F32
 // (size[s], dim) row-major arrays (e.g. kyutai_stt / mimo, extracted from GGUF)
@@ -50,6 +52,6 @@ bool encode_euclidean(const float* features, int T, int dim, const Codebook* sta
 // result into out_codes. All stages must share `dim`. Returns false on
 // malformed input. Unit-tested in test-core-rvq.
 bool encode_euclidean_per_stage(const float* features, int T, int dim, const float* const* embeds, const int* sizes,
-                                int n_stages, std::vector<std::vector<int32_t>>& out_codes);
+                                int n_stages, std::vector<std::vector<int32_t>>& out_codes, int n_threads = 0);
 
 } // namespace core_rvq

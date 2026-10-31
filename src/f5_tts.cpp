@@ -32,6 +32,7 @@
 #include "core/utf8.h"
 #include "core/gguf_loader.h"
 #include "core/parallel_for.h"
+#include "core/cpu_model_kernels.h"
 #include "core/hifigan.h"          // #387 perf: shared GPU-capable HiFi-GAN vocoder
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/crispasr_env.h"
@@ -1592,7 +1593,7 @@ static inline bool crispasr_f5_serial() {
 // ── CPU Conv1d helper (standard or depthwise) ──────────────────────
 // input/output: (C, T) row-major. weight: (C_out, C_in_per_group, K).
 static void cpu_conv1d(const float* input, int C_in, int T, const float* weight, const float* bias, int C_out, int K,
-                       int pad, int groups, float* output) {
+                       int pad, int groups, float* output, int n_threads) {
     int ch_per_group_in = C_in / groups;
     int ch_per_group_out = C_out / groups;
     if (crispasr_f5_serial()) {
@@ -1619,68 +1620,34 @@ static void cpu_conv1d(const float* input, int C_in, int T, const float* weight,
         return;
     }
 
-    core_parallel::for_each_chunk(C_out, 0, [&](int oc_start_chunk, int oc_end_chunk) {
-        for (int oc = oc_start_chunk; oc < oc_end_chunk; oc++) {
-            int g = oc / ch_per_group_out;
-            int ic_start = g * ch_per_group_in;
-            for (int t = 0; t < T; t++) {
-                float sum = bias ? bias[oc] : 0.0f;
-                for (int ic_local = 0; ic_local < ch_per_group_in; ic_local++) {
-                    int ic = ic_start + ic_local;
-                    for (int k = 0; k < K; k++) {
-                        int ti = t + k - pad;
-                        if (ti >= 0 && ti < T) {
-                            int w_idx = oc * ch_per_group_in * K + ic_local * K + k;
-                            sum += input[ic * T + ti] * weight[w_idx];
-                        }
-                    }
-                }
-                output[oc * T + t] = sum;
-            }
-        }
-    });
+    core_parallel::for_each_chunk_work(C_out, n_threads, (uint64_t)T * ch_per_group_in * K, 65536,
+                                       [&](int oc_start_chunk, int oc_end_chunk) {
+                                           for (int oc = oc_start_chunk; oc < oc_end_chunk; oc++) {
+                                               int g = oc / ch_per_group_out;
+                                               int ic_start = g * ch_per_group_in;
+                                               for (int t = 0; t < T; t++) {
+                                                   float sum = bias ? bias[oc] : 0.0f;
+                                                   for (int ic_local = 0; ic_local < ch_per_group_in; ic_local++) {
+                                                       int ic = ic_start + ic_local;
+                                                       for (int k = 0; k < K; k++) {
+                                                           int ti = t + k - pad;
+                                                           if (ti >= 0 && ti < T) {
+                                                               int w_idx = oc * ch_per_group_in * K + ic_local * K + k;
+                                                               sum += input[ic * T + ti] * weight[w_idx];
+                                                           }
+                                                       }
+                                                   }
+                                                   output[oc * T + t] = sum;
+                                               }
+                                           }
+                                       });
 }
 
 // Dilated 1-D conv (groups=1), same-padding. #387 HiFi-GAN resblocks.
 static void cpu_conv1d_dil(const float* input, int C_in, int T, const float* weight, const float* bias, int C_out,
-                           int K, int dilation, float* output) {
-    const int pad = dilation * (K - 1) / 2; // "same" for odd K
-    if (crispasr_f5_serial()) {
-        for (int oc = 0; oc < C_out; oc++) {
-            for (int t = 0; t < T; t++) {
-                float sum = bias ? bias[oc] : 0.0f;
-                for (int ic = 0; ic < C_in; ic++) {
-                    const float* in = input + (size_t)ic * T;
-                    const float* w = weight + ((size_t)oc * C_in + ic) * K;
-                    for (int k = 0; k < K; k++) {
-                        int ti = t + k * dilation - pad;
-                        if (ti >= 0 && ti < T)
-                            sum += in[ti] * w[k];
-                    }
-                }
-                output[(size_t)oc * T + t] = sum;
-            }
-        }
-        return;
-    }
-
-    core_parallel::for_each_chunk(C_out, 0, [&](int oc_start, int oc_end) {
-        for (int oc = oc_start; oc < oc_end; oc++) {
-            for (int t = 0; t < T; t++) {
-                float sum = bias ? bias[oc] : 0.0f;
-                for (int ic = 0; ic < C_in; ic++) {
-                    const float* in = input + (size_t)ic * T;
-                    const float* w = weight + ((size_t)oc * C_in + ic) * K;
-                    for (int k = 0; k < K; k++) {
-                        int ti = t + k * dilation - pad;
-                        if (ti >= 0 && ti < T)
-                            sum += in[ti] * w[k];
-                    }
-                }
-                output[(size_t)oc * T + t] = sum;
-            }
-        }
-    });
+                           int K, int dilation, float* output, int n_threads) {
+    core_cpu_kernels::conv1d_dil(input, C_in, T, weight, bias, C_out, K, dilation, output,
+                                 crispasr_f5_serial() ? 1 : n_threads);
 }
 
 static inline void cpu_leaky_relu(std::vector<float>& x, float slope) {
@@ -1753,7 +1720,7 @@ static std::vector<float> hifigan_decode(f5_tts_context* ctx, const float* mel_d
     {
         std::vector<float> out((size_t)init_ch * T, 0.0f);
         cpu_conv1d(x.data(), C, T, get("voc.conv_pre.weight").data(), get("voc.conv_pre.bias").data(), init_ch, 7, 3, 1,
-                   out.data());
+                   out.data(), ctx->n_threads);
         x = std::move(out);
         C = init_ch;
     }
@@ -1794,28 +1761,29 @@ static std::vector<float> hifigan_decode(f5_tts_context* ctx, const float* mel_d
                 }
             }
         } else {
-            core_parallel::for_each_chunk(out_ch, 0, [&](int oc_start, int oc_end) {
-                for (int oc = oc_start; oc < oc_end; oc++) {
-                    float* orow = up.data() + (size_t)oc * T_out;
-                    for (int to = 0; to < T_out; to++) {
-                        float acc = ub[oc];
-                        for (int kk = 0; kk < k; kk++) {
-                            int num = to + pad - kk;
-                            if (num < 0 || (num % stride) != 0)
-                                continue;
-                            int ti = num / stride;
-                            if (ti < 0 || ti >= T)
-                                continue;
-                            for (int ic = 0; ic < ch; ic++) {
-                                float v = x[(size_t)ic * T + ti];
-                                float w = uw[(((size_t)ic * out_ch) + oc) * k + kk];
-                                acc += v * w;
-                            }
-                        }
-                        orow[to] = acc;
-                    }
-                }
-            });
+            core_parallel::for_each_chunk_work(out_ch, ctx->n_threads, (uint64_t)T_out * ch * k, 65536,
+                                               [&](int oc_start, int oc_end) {
+                                                   for (int oc = oc_start; oc < oc_end; oc++) {
+                                                       float* orow = up.data() + (size_t)oc * T_out;
+                                                       for (int to = 0; to < T_out; to++) {
+                                                           float acc = ub[oc];
+                                                           for (int kk = 0; kk < k; kk++) {
+                                                               int num = to + pad - kk;
+                                                               if (num < 0 || (num % stride) != 0)
+                                                                   continue;
+                                                               int ti = num / stride;
+                                                               if (ti < 0 || ti >= T)
+                                                                   continue;
+                                                               for (int ic = 0; ic < ch; ic++) {
+                                                                   float v = x[(size_t)ic * T + ti];
+                                                                   float w = uw[(((size_t)ic * out_ch) + oc) * k + kk];
+                                                                   acc += v * w;
+                                                               }
+                                                           }
+                                                           orow[to] = acc;
+                                                       }
+                                                   }
+                                               });
         }
         x = std::move(up);
         ch = out_ch;
@@ -1833,12 +1801,12 @@ static std::vector<float> hifigan_decode(f5_tts_context* ctx, const float* mel_d
                 std::vector<float> b1((size_t)ch * T, 0.0f);
                 const std::string p1 = "voc.resblocks." + std::to_string(rb) + ".convs1." + std::to_string(d);
                 cpu_conv1d_dil(a.data(), ch, T, get(p1 + ".weight").data(), get(p1 + ".bias").data(), ch, rb_kernels[j],
-                               rb_dils[d], b1.data());
+                               rb_dils[d], b1.data(), ctx->n_threads);
                 cpu_leaky_relu(b1, slope);
                 std::vector<float> b2((size_t)ch * T, 0.0f);
                 const std::string p2 = "voc.resblocks." + std::to_string(rb) + ".convs2." + std::to_string(d);
                 cpu_conv1d_dil(b1.data(), ch, T, get(p2 + ".weight").data(), get(p2 + ".bias").data(), ch,
-                               rb_kernels[j], 1, b2.data());
+                               rb_kernels[j], 1, b2.data(), ctx->n_threads);
                 for (size_t i = 0; i < h.size(); i++)
                     h[i] += b2[i]; // residual
             }
@@ -1854,7 +1822,7 @@ static std::vector<float> hifigan_decode(f5_tts_context* ctx, const float* mel_d
     cpu_leaky_relu(x, slope);
     std::vector<float> out((size_t)1 * T, 0.0f);
     cpu_conv1d(x.data(), ch, T, get("voc.conv_post.weight").data(), get("voc.conv_post.bias").data(), 1, 7, 3, 1,
-               out.data());
+               out.data(), ctx->n_threads);
     for (float& v : out)
         v = tanhf(v);
 
@@ -1934,7 +1902,8 @@ static std::vector<float> vocos_decode(f5_tts_context* ctx, const float* mel_dat
     // ── Embed: Conv1d(100, 512, k=7, pad=3) ──
     {
         std::vector<float> out(D * T, 0.0f);
-        cpu_conv1d(x_ct.data(), mel_dim, T, vc.embed_w.data(), vc.embed_b.data(), D, 7, 3, 1, out.data());
+        cpu_conv1d(x_ct.data(), mel_dim, T, vc.embed_w.data(), vc.embed_b.data(), D, 7, 3, 1, out.data(),
+                   ctx->n_threads);
         x_ct = std::move(out);
     }
 
@@ -1954,7 +1923,7 @@ static std::vector<float> vocos_decode(f5_tts_context* ctx, const float* mel_dat
         // 1. Depthwise Conv1d(512, 512, k=7, pad=3, groups=512)
         {
             std::vector<float> out(D * T, 0.0f);
-            cpu_conv1d(x_ct.data(), D, T, bc.dw_w.data(), bc.dw_b.data(), D, 7, 3, D, out.data());
+            cpu_conv1d(x_ct.data(), D, T, bc.dw_w.data(), bc.dw_b.data(), D, 7, 3, D, out.data(), ctx->n_threads);
             x_ct = std::move(out);
         }
 

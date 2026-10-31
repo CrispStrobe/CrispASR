@@ -308,7 +308,7 @@ int run_model(tabcnn_context* ctx, const float* pcm, int n_samples, int sample_r
     p.hop_length = ctx->fe.hop_length;
 
     std::vector<float> mag;
-    const int T = core_cqt::magnitude(p, ctx->cqt_kernels, audio.data(), (int)audio.size(), mag);
+    const int T = core_cqt::magnitude(p, ctx->cqt_kernels, audio.data(), (int)audio.size(), mag, ctx->n_threads);
     if (T <= 0)
         return 0;
     to_feature(mag, ctx->fe.db_floor);

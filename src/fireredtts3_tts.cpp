@@ -1086,7 +1086,7 @@ static bool frt_redae_decode(fireredtts3_tts_context* ctx, const float* latents,
     // window envelope unconditionally after asserting > 1e-11.
     pcm = core_istft::istft(mag.data(), phase.data(), n_fft, ctx->ae_patch, T50,
                             ctx->istft_window.empty() ? nullptr : ctx->istft_window.data(), core_istft::TRIM_SAME, 0.0f,
-                            1e-11f, false);
+                            1e-11f, false, ctx->params.n_threads > 0 ? ctx->params.n_threads : 4);
     return true;
 }
 

@@ -954,7 +954,7 @@ static std::vector<int32_t> rvq_encode(mimo_tokenizer_context* ctx, const float*
     }
 
     std::vector<int32_t> codes((size_t)T * n_stages, 0);
-    if (!core_rvq::encode_euclidean(features, T, d, stages.data(), n_stages, codes.data()))
+    if (!core_rvq::encode_euclidean(features, T, d, stages.data(), n_stages, codes.data(), ctx->n_threads))
         return {};
     return codes;
 }

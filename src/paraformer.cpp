@@ -359,7 +359,7 @@ static std::vector<float> paraformer_compute_features(paraformer_context* ctx, c
             }
         };
         if (T_lfr >= 16) {
-            core_parallel::for_each_chunk(T_lfr, 0, apply_cmvn);
+            core_parallel::for_each_chunk_work(T_lfr, ctx->n_threads, (uint64_t)D_lfr * 2, 65536, apply_cmvn);
         } else {
             apply_cmvn(0, T_lfr);
         }
@@ -452,7 +452,7 @@ static void cif_predict(paraformer_context* ctx, const float* enc_out, int T, in
         }
     };
     if (T >= 8) {
-        core_parallel::for_each_chunk(T, 0, run_conv_chunk);
+        core_parallel::for_each_chunk_work(T, ctx->n_threads, (uint64_t)D * D * 3, 65536, run_conv_chunk);
     } else {
         run_conv_chunk(0, T);
     }
@@ -471,7 +471,7 @@ static void cif_predict(paraformer_context* ctx, const float* enc_out, int T, in
         }
     };
     if (T >= 16) {
-        core_parallel::for_each_chunk(T, 0, run_linear_chunk);
+        core_parallel::for_each_chunk_work(T, ctx->n_threads, D, 65536, run_linear_chunk);
     } else {
         run_linear_chunk(0, T);
     }
@@ -790,7 +790,7 @@ static std::string paraformer_transcribe_impl(paraformer_context* ctx, const flo
             }
         };
         if (T_lfr >= 16) {
-            core_parallel::for_each_chunk(T_lfr, 0, compute_pe);
+            core_parallel::for_each_chunk_work(T_lfr, ctx->n_threads, (uint64_t)Dp * 4, 65536, compute_pe);
         } else {
             compute_pe(0, T_lfr);
         }

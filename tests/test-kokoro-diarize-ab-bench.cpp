@@ -3,11 +3,13 @@
 //
 // Verifies:
 // 1. Bit-for-bit exact parity between serial baseline and chunk-parallel implementations.
-// 2. Strict paired latency benchmark across 10 warm iterations (1 warmup discarded):
-//    reports min, max, median, mean, stddev, and speedup factor.
+// 2. Optional alternating latency benchmark across 10 warm iterations:
+//    enable with CRISPASR_RUN_PERF=1; timing never gates unit correctness.
 // 3. Fallback gate verification via CRISPASR_KOKORO_SERIAL=1 and CRISPASR_DIARIZE_SERIAL=1.
 
 #include <catch2/catch_test_macros.hpp>
+#include "ab_bench_helpers.h"
+#include "scoped_test_env.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -62,7 +64,8 @@ static BenchStats compute_stats(std::vector<double>& samples) {
     return {min_v, max_v, median_v, mean_v, stddev_v};
 }
 
-TEST_CASE("Diarization cosine_similarity paired A/B benchmark", "[perf][diarize][ab-bench]") {
+TEST_CASE("Diarization cosine_similarity paired A/B benchmark", "[unit][diarize][ab-bench]") {
+    ScopedTestEnv restore_env("CRISPASR_DIARIZE_SERIAL");
     const int n = 512;
     const int d = 256;
     const size_t total_x = (size_t)n * d;
@@ -78,13 +81,7 @@ TEST_CASE("Diarization cosine_similarity paired A/B benchmark", "[perf][diarize]
 
     const int iters = 10;
     std::vector<double> times_a(iters);
-    std::vector<float> out_a;
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        out_a = core_spectral::cosine_similarity(x.data(), n, d);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
+    std::vector<float> out_a = warm_a;
 
     // Arm B: Parallel accelerated
     unset_env_var("CRISPASR_DIARIZE_SERIAL");
@@ -92,17 +89,13 @@ TEST_CASE("Diarization cosine_similarity paired A/B benchmark", "[perf][diarize]
     (void)warm_b;
 
     std::vector<double> times_b(iters);
-    std::vector<float> out_b;
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        out_b = core_spectral::cosine_similarity(x.data(), n, d);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
+    std::vector<float> out_b = warm_b;
 
     // Parity verification
     REQUIRE(out_a.size() == (size_t)n * n);
     REQUIRE(out_b.size() == (size_t)n * n);
+    REQUIRE(std::all_of(out_a.begin(), out_a.end(), [](float x) { return std::isfinite(x); }));
+    REQUIRE(std::all_of(out_b.begin(), out_b.end(), [](float x) { return std::isfinite(x); }));
     float max_diff = 0.0f;
     for (size_t i = 0; i < (size_t)n * n; i++) {
         const float diff = std::abs(out_a[i] - out_b[i]);
@@ -111,6 +104,27 @@ TEST_CASE("Diarization cosine_similarity paired A/B benchmark", "[perf][diarize]
         }
     }
     CHECK(max_diff <= 1e-6f);
+
+    if (!benchmark_timing_enabled())
+        return;
+
+    // Alternate arms on each repetition to reduce drift from a blocked A/B run.
+    for (int i = 0; i < iters; i++) {
+        set_env_var("CRISPASR_DIARIZE_SERIAL", "1");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            out_a = core_spectral::cosine_similarity(x.data(), n, d);
+            const auto t1 = std::chrono::steady_clock::now();
+            times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+        unset_env_var("CRISPASR_DIARIZE_SERIAL");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            out_b = core_spectral::cosine_similarity(x.data(), n, d);
+            const auto t1 = std::chrono::steady_clock::now();
+            times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+    }
 
     const BenchStats stats_a = compute_stats(times_a);
     const BenchStats stats_b = compute_stats(times_b);
@@ -126,7 +140,8 @@ TEST_CASE("Diarization cosine_similarity paired A/B benchmark", "[perf][diarize]
     printf("Numerical parity:          max_diff = %.8e\n", max_diff);
 }
 
-TEST_CASE("Kokoro test_make_har_dft paired A/B benchmark", "[perf][kokoro][ab-bench]") {
+TEST_CASE("Kokoro test_make_har_dft paired A/B benchmark", "[unit][kokoro][ab-bench]") {
+    ScopedTestEnv restore_env("CRISPASR_KOKORO_SERIAL");
     const int hop = 5;
     const int n_fft = 20;
     const int n_bins = 11;
@@ -147,26 +162,16 @@ TEST_CASE("Kokoro test_make_har_dft paired A/B benchmark", "[perf][kokoro][ab-be
 
     const int iters = 10;
     std::vector<double> times_a(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        kokoro_test::test_make_har_dft(padded.data(), hop, n_fft, n_bins, har_a.data(), T_har);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
 
     // Arm B: Parallel accelerated
     unset_env_var("CRISPASR_KOKORO_SERIAL");
     kokoro_test::test_make_har_dft(padded.data(), hop, n_fft, n_bins, har_b.data(), T_har);
 
     std::vector<double> times_b(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        kokoro_test::test_make_har_dft(padded.data(), hop, n_fft, n_bins, har_b.data(), T_har);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
 
     // Parity verification
+    REQUIRE(std::all_of(har_a.begin(), har_a.end(), [](float x) { return std::isfinite(x); }));
+    REQUIRE(std::all_of(har_b.begin(), har_b.end(), [](float x) { return std::isfinite(x); }));
     float max_diff = 0.0f;
     for (size_t i = 0; i < (size_t)22 * T_har; i++) {
         const float diff = std::abs(har_a[i] - har_b[i]);
@@ -175,6 +180,27 @@ TEST_CASE("Kokoro test_make_har_dft paired A/B benchmark", "[perf][kokoro][ab-be
         }
     }
     CHECK(max_diff == 0.0f);
+
+    if (!benchmark_timing_enabled())
+        return;
+
+    // Alternate arms on each repetition to reduce drift from a blocked A/B run.
+    for (int i = 0; i < iters; i++) {
+        set_env_var("CRISPASR_KOKORO_SERIAL", "1");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            kokoro_test::test_make_har_dft(padded.data(), hop, n_fft, n_bins, har_a.data(), T_har);
+            const auto t1 = std::chrono::steady_clock::now();
+            times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+        unset_env_var("CRISPASR_KOKORO_SERIAL");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            kokoro_test::test_make_har_dft(padded.data(), hop, n_fft, n_bins, har_b.data(), T_har);
+            const auto t1 = std::chrono::steady_clock::now();
+            times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+    }
 
     const BenchStats stats_a = compute_stats(times_a);
     const BenchStats stats_b = compute_stats(times_b);
@@ -190,7 +216,8 @@ TEST_CASE("Kokoro test_make_har_dft paired A/B benchmark", "[perf][kokoro][ab-be
     printf("Numerical parity:          max_diff = %.8e (100%% exact bit-identical)\n", max_diff);
 }
 
-TEST_CASE("Kokoro test_f0_upsample paired A/B benchmark", "[perf][kokoro][ab-bench]") {
+TEST_CASE("Kokoro test_f0_upsample paired A/B benchmark", "[unit][kokoro][ab-bench]") {
+    ScopedTestEnv restore_env("CRISPASR_KOKORO_SERIAL");
     const int L_low = 1000;
     const int upsample_scale = 300;
     const int L_high = L_low * upsample_scale;
@@ -212,6 +239,8 @@ TEST_CASE("Kokoro test_f0_upsample paired A/B benchmark", "[perf][kokoro][ab-ben
     kokoro_test::test_f0_upsample(f0_curve.data(), L_low, upsample_scale, f0_up_b.data());
 
     // Parity verification
+    REQUIRE(std::all_of(f0_up_a.begin(), f0_up_a.end(), [](float x) { return std::isfinite(x); }));
+    REQUIRE(std::all_of(f0_up_b.begin(), f0_up_b.end(), [](float x) { return std::isfinite(x); }));
     float max_diff = 0.0f;
     for (size_t i = 0; i < (size_t)L_high; i++) {
         const float diff = std::abs(f0_up_a[i] - f0_up_b[i]);
@@ -221,134 +250,4 @@ TEST_CASE("Kokoro test_f0_upsample paired A/B benchmark", "[perf][kokoro][ab-ben
     }
     CHECK(max_diff == 0.0f);
     printf("Kokoro f0_upsample parity: max_diff = %.8e (100%% exact bit-identical)\n", max_diff);
-}
-
-TEST_CASE("Diarization silhouette_precomputed paired A/B benchmark", "[perf][diarize][ab-bench]") {
-    const int n = 600;
-    const int k = 6;
-    std::vector<int> labels((size_t)n);
-    for (int i = 0; i < n; i++) {
-        labels[(size_t)i] = i % k;
-    }
-
-    std::vector<float> dist((size_t)n * n);
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++) {
-            if (i == j) {
-                dist[(size_t)i * n + j] = 0.0f;
-            } else if (labels[(size_t)i] == labels[(size_t)j]) {
-                dist[(size_t)i * n + j] = 0.1f + 0.05f * std::sin((float)(i + j) * 0.1f);
-            } else {
-                dist[(size_t)i * n + j] = 0.8f + 0.1f * std::cos((float)(i * j) * 0.05f);
-            }
-        }
-    }
-
-    // Arm A: Serial baseline
-    set_env_var("CRISPASR_DIARIZE_SERIAL", "1");
-    float sil_a = core_spectral::silhouette_precomputed(dist.data(), n, labels);
-
-    const int iters = 10;
-    std::vector<double> times_a(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        sil_a = core_spectral::silhouette_precomputed(dist.data(), n, labels);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
-
-    // Arm B: Parallel accelerated
-    unset_env_var("CRISPASR_DIARIZE_SERIAL");
-    float sil_b = core_spectral::silhouette_precomputed(dist.data(), n, labels);
-
-    std::vector<double> times_b(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        sil_b = core_spectral::silhouette_precomputed(dist.data(), n, labels);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
-
-    // Parity verification
-    const float diff = std::abs(sil_a - sil_b);
-    CHECK(diff == 0.0f);
-
-    const BenchStats stats_a = compute_stats(times_a);
-    const BenchStats stats_b = compute_stats(times_b);
-    const double speedup = stats_a.median_ms / std::max(1e-6, stats_b.median_ms);
-
-    printf("\n=== [A/B Bench] Diarization silhouette_precomputed (n=%d, k=%d, %d matrix entries) ===\n", n, k, n * n);
-    printf("Arm A (Serial Baseline):   median = %.2f ms, mean = %.2f ms (± %.2f ms), min = %.2f ms, max = %.2f ms\n",
-           stats_a.median_ms, stats_a.mean_ms, stats_a.stddev_ms, stats_a.min_ms, stats_a.max_ms);
-    printf("Arm B (Parallel Chunks):   median = %.2f ms, mean = %.2f ms (± %.2f ms), min = %.2f ms, max = %.2f ms\n",
-           stats_b.median_ms, stats_b.mean_ms, stats_b.stddev_ms, stats_b.min_ms, stats_b.max_ms);
-    printf("Speedup:                   %.2fx (%.2f ms saved per silhouette evaluation)\n", speedup,
-           stats_a.median_ms - stats_b.median_ms);
-    printf("Numerical parity:          diff = %.8e (100%% exact bit-identical)\n", diff);
-}
-
-TEST_CASE("Diarization spectral_labels paired A/B benchmark", "[perf][diarize][ab-bench]") {
-    const int n = 512;
-    const int k = 6;
-    std::vector<float> aff((size_t)n * n);
-    for (int i = 0; i < n; i++) {
-        for (int j = 0; j < n; j++) {
-            if (i == j) {
-                aff[(size_t)i * n + j] = 1.0f;
-            } else if ((i % k) == (j % k)) {
-                aff[(size_t)i * n + j] = 0.85f + 0.1f * std::sin((float)(i + j) * 0.05f);
-            } else {
-                aff[(size_t)i * n + j] = 0.1f + 0.05f * std::cos((float)(i * j) * 0.03f);
-            }
-        }
-    }
-
-    // Arm A: Serial baseline
-    set_env_var("CRISPASR_DIARIZE_SERIAL", "1");
-    auto lab_a = core_spectral::spectral_labels(aff.data(), n, k, 42);
-
-    const int iters = 10;
-    std::vector<double> times_a(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        lab_a = core_spectral::spectral_labels(aff.data(), n, k, 42);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
-
-    // Arm B: Parallel accelerated
-    unset_env_var("CRISPASR_DIARIZE_SERIAL");
-    auto lab_b = core_spectral::spectral_labels(aff.data(), n, k, 42);
-
-    std::vector<double> times_b(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        lab_b = core_spectral::spectral_labels(aff.data(), n, k, 42);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
-
-    // Parity verification: exact label match
-    REQUIRE(lab_a.size() == (size_t)n);
-    REQUIRE(lab_b.size() == (size_t)n);
-    int mismatches = 0;
-    for (size_t i = 0; i < (size_t)n; i++) {
-        if (lab_a[i] != lab_b[i]) {
-            mismatches++;
-        }
-    }
-    CHECK(mismatches == 0);
-
-    const BenchStats stats_a = compute_stats(times_a);
-    const BenchStats stats_b = compute_stats(times_b);
-    const double speedup = stats_a.median_ms / std::max(1e-6, stats_b.median_ms);
-
-    printf("\n=== [A/B Bench] Diarization spectral_labels (n=%d, k=%d, subspace iteration + k-means) ===\n", n, k);
-    printf("Arm A (Serial Baseline):   median = %.2f ms, mean = %.2f ms (± %.2f ms), min = %.2f ms, max = %.2f ms\n",
-           stats_a.median_ms, stats_a.mean_ms, stats_a.stddev_ms, stats_a.min_ms, stats_a.max_ms);
-    printf("Arm B (Parallel Chunks):   median = %.2f ms, mean = %.2f ms (± %.2f ms), min = %.2f ms, max = %.2f ms\n",
-           stats_b.median_ms, stats_b.mean_ms, stats_b.stddev_ms, stats_b.min_ms, stats_b.max_ms);
-    printf("Speedup:                   %.2fx (%.2f ms saved per spectral clustering)\n", speedup,
-           stats_a.median_ms - stats_b.median_ms);
-    printf("Label Parity:              %d mismatches out of %d (100%% exact match)\n", mismatches, n);
 }

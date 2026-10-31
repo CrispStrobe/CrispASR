@@ -1083,8 +1083,8 @@ bool roformer_block(const RoformerBlockW& w, std::vector<float>& x, int T, int d
 
 // Run a Transformer (one roformer_block + final RMSNorm) over the TIME axis:
 // x is (T, nb, dim); each band's (T, dim) sequence is transformed independently.
-bool run_time(core_gguf::WeightLoad& mw, int L, std::vector<float>& x, int T, int nb, int dim, int heads,
-              int dim_head) {
+bool run_time(core_gguf::WeightLoad& mw, int L, std::vector<float>& x, int T, int nb, int dim, int heads, int dim_head,
+              int n_threads) {
     const std::string pre = "layers." + std::to_string(L) + ".0.";
     std::vector<float> fg;
     if (!read_f32(mw, pre + "norm.gamma", fg))
@@ -1116,7 +1116,7 @@ bool run_time(core_gguf::WeightLoad& mw, int L, std::vector<float>& x, int T, in
                     x[((size_t)t * nb + b) * dim + d] = seq[(size_t)t * dim + d];
         }
     } else {
-        core_parallel::for_each_chunk(nb, 0, [&](int b_start, int b_end) {
+        core_parallel::for_each_chunk_work(nb, n_threads, (uint64_t)T * dim * dim, 65536, [&](int b_start, int b_end) {
             for (int b = b_start; b < b_end; b++) {
                 if (!ok.load(std::memory_order_relaxed))
                     continue;
@@ -1140,8 +1140,8 @@ bool run_time(core_gguf::WeightLoad& mw, int L, std::vector<float>& x, int T, in
 
 // Run a Transformer over the FREQ (band) axis: x is (T, nb, dim); each time
 // step's (nb, dim) band sequence is transformed independently.
-bool run_freq(core_gguf::WeightLoad& mw, int L, std::vector<float>& x, int T, int nb, int dim, int heads,
-              int dim_head) {
+bool run_freq(core_gguf::WeightLoad& mw, int L, std::vector<float>& x, int T, int nb, int dim, int heads, int dim_head,
+              int n_threads) {
     const std::string pre = "layers." + std::to_string(L) + ".1.";
     std::vector<float> fg;
     if (!read_f32(mw, pre + "norm.gamma", fg))
@@ -1168,7 +1168,7 @@ bool run_freq(core_gguf::WeightLoad& mw, int L, std::vector<float>& x, int T, in
             std::memcpy(x.data() + (size_t)t * nb * dim, seq.data(), (size_t)nb * dim * sizeof(float));
         }
     } else {
-        core_parallel::for_each_chunk(T, 0, [&](int t_start, int t_end) {
+        core_parallel::for_each_chunk_work(T, n_threads, (uint64_t)nb * dim * dim, 65536, [&](int t_start, int t_end) {
             for (int t = t_start; t < t_end; t++) {
                 if (!ok.load(std::memory_order_relaxed))
                     continue;
@@ -1317,9 +1317,10 @@ void synthesize(mel_band_roformer_context* ctx, const std::vector<float>& packed
                 phase[(size_t)t * n_freqs + f] = std::atan2(im, re);
             }
         const bool pow2 = ctx->hp.n_fft > 0 && (ctx->hp.n_fft & (ctx->hp.n_fft - 1)) == 0;
-        std::vector<float> wav = pow2 ? istft_fft(mag.data(), phase.data(), ctx->hp.n_fft, ctx->hp.hop, T, win.data())
-                                      : core_istft::istft(mag.data(), phase.data(), ctx->hp.n_fft, ctx->hp.hop, T,
-                                                          win.data(), core_istft::TRIM_CENTER);
+        std::vector<float> wav =
+            pow2 ? istft_fft(mag.data(), phase.data(), ctx->hp.n_fft, ctx->hp.hop, T, win.data())
+                 : core_istft::istft(mag.data(), phase.data(), ctx->hp.n_fft, ctx->hp.hop, T, win.data(),
+                                     core_istft::TRIM_CENTER, 0.0f, 1e-8f, false, ctx->params.n_threads);
         for (int i = 0; i < T_samp && i < (int)wav.size(); i++)
             out[(size_t)s * T_samp + i] = wav[i];
     }
@@ -1607,7 +1608,7 @@ bool run_forward(mel_band_roformer_context* ctx, const std::vector<std::vector<f
                 ok_t = mbr_layer_graph(ctx, L, true, x, T, nb, dim, hp.heads, hp.dim_head);
                 lap("run_time(graph)");
             } else {
-                ok_t = run_time(ctx->weights, L, x, T, nb, dim, hp.heads, hp.dim_head);
+                ok_t = run_time(ctx->weights, L, x, T, nb, dim, hp.heads, hp.dim_head, ctx->params.n_threads);
                 lap("run_time");
             }
             if (!ok_t)
@@ -1618,7 +1619,7 @@ bool run_forward(mel_band_roformer_context* ctx, const std::vector<std::vector<f
                 ok_f = mbr_layer_graph(ctx, L, false, x, T, nb, dim, hp.heads, hp.dim_head);
                 lap("run_freq(graph)");
             } else {
-                ok_f = run_freq(ctx->weights, L, x, T, nb, dim, hp.heads, hp.dim_head);
+                ok_f = run_freq(ctx->weights, L, x, T, nb, dim, hp.heads, hp.dim_head, ctx->params.n_threads);
                 lap("run_freq");
             }
             if (!ok_f)
@@ -1940,13 +1941,13 @@ int mel_band_roformer_parity(const char* model_gguf, const char* audio_wav, int 
 
     {
         std::vector<float> cpu_x = cpu_out, graph_x = cpu_out;
-        if (run_time(ctx->weights, 0, cpu_x, T, nb, dim, heads, dim_head) &&
+        if (run_time(ctx->weights, 0, cpu_x, T, nb, dim, heads, dim_head, ctx->params.n_threads) &&
             mbr_layer_graph(ctx, 0, true, graph_x, T, nb, dim, heads, dim_head))
             report("layer0_time_graph", cpu_x, graph_x);
         else
             fprintf(stderr, "  layer0_time_graph: SKIP (run failed)\n");
         // freq chained off the layer-0-time outputs (diff-harness semantics).
-        if (run_freq(ctx->weights, 0, cpu_x, T, nb, dim, heads, dim_head) &&
+        if (run_freq(ctx->weights, 0, cpu_x, T, nb, dim, heads, dim_head, ctx->params.n_threads) &&
             mbr_layer_graph(ctx, 0, false, graph_x, T, nb, dim, heads, dim_head))
             report("layer0_freq_graph", cpu_x, graph_x);
         else
@@ -1966,8 +1967,8 @@ int mel_band_roformer_parity(const char* model_gguf, const char* audio_wav, int 
         {
             std::vector<float> x = cpu_out;
             for (int L = 0; L < hp.depth && cpu_chain_ok; L++)
-                cpu_chain_ok = run_time(ctx->weights, L, x, T, nb, dim, heads, dim_head) &&
-                               run_freq(ctx->weights, L, x, T, nb, dim, heads, dim_head);
+                cpu_chain_ok = run_time(ctx->weights, L, x, T, nb, dim, heads, dim_head, ctx->params.n_threads) &&
+                               run_freq(ctx->weights, L, x, T, nb, dim, heads, dim_head, ctx->params.n_threads);
             cpu_chain_ok = cpu_chain_ok && mask_estimator(ctx->weights, x, T, nb, dim, ctx->band_width, cpu_mask);
         }
         const bool fused_ok = mbr_fused_graph(ctx, gathered, T, fused_mask);
@@ -2216,8 +2217,8 @@ int mel_band_roformer_diff(const char* model_gguf, const char* ref_gguf, const c
             const int nb = hp.num_bands, dim = hp.dim;
             bool ok = true;
             for (int L = 0; L < hp.depth && ok; L++) {
-                ok = run_time(ctx->weights, L, x, T, nb, dim, hp.heads, hp.dim_head) &&
-                     run_freq(ctx->weights, L, x, T, nb, dim, hp.heads, hp.dim_head);
+                ok = run_time(ctx->weights, L, x, T, nb, dim, hp.heads, hp.dim_head, ctx->params.n_threads) &&
+                     run_freq(ctx->weights, L, x, T, nb, dim, hp.heads, hp.dim_head, ctx->params.n_threads);
             }
             std::vector<float> mr;
             if (ok && mask_estimator(ctx->weights, x, T, nb, dim, ctx->band_width, mr))
@@ -2274,8 +2275,9 @@ int mel_band_roformer_diff(const char* model_gguf, const char* ref_gguf, const c
                         mag[(size_t)t * n_freqs + f] = std::sqrt(re * re + im * im);
                         phase[(size_t)t * n_freqs + f] = std::atan2(im, re);
                     }
-                std::vector<float> wav = core_istft::istft(mag.data(), phase.data(), hp.n_fft, hp.hop, T, win.data(),
-                                                           core_istft::TRIM_CENTER);
+                std::vector<float> wav =
+                    core_istft::istft(mag.data(), phase.data(), hp.n_fft, hp.hop, T, win.data(),
+                                      core_istft::TRIM_CENTER, 0.0f, 1e-8f, false, ctx->params.n_threads);
                 for (int i = 0; i < T_samp && i < (int)wav.size(); i++)
                     out[(size_t)s * T_samp + i] = wav[i];
             }

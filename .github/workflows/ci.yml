@@ -175,6 +175,11 @@ jobs:
       - name: Build
         run: cmake --build build -j $(nproc)
 
+      - name: Verify optimization regression discovery and tier separation
+        run: >
+          python3 tools/check_performance_test_discovery.py --build-dir build
+          --require-blas --require-openmp
+
       # Compare real compiled artifacts; missing CLI/shared library is a failure.
       - name: Check generated capability table and C ABI
         run: |

@@ -39,6 +39,14 @@
 
 namespace core_cpu {
 
+// OpenMP keeps workers alive between these frequently repeated encoder calls.
+// Portable std::thread launches need a larger batch to amortize construction.
+#if defined(_OPENMP)
+constexpr uint64_t layernorm_min_work_per_thread = 8192;
+#else
+constexpr uint64_t layernorm_min_work_per_thread = 65536;
+#endif
+
 // FP16/quantized → F32 dequantization (GPU-safe). Reads a whole tensor to a
 // host F32 buffer via ggml_backend_tensor_get() (works whether the weight lives
 // in a CPU or GPU buffer). Correct for F32, F16, AND any block-quantized type —
@@ -82,9 +90,13 @@ static inline bool crispasr_cpu_ops_serial() {
 }
 
 static inline void layernorm_baseline(float* out, const float* x, const float* w, const float* b, int d, int T,
-                                      float eps) {
+                                      float eps, int n_threads = 0) {
 #if defined(_OPENMP)
-#pragma omp parallel for schedule(static)
+    const int nt =
+        core_parallel::resolve_threads_for_work(T, n_threads, (uint64_t)std::max(0, d), layernorm_min_work_per_thread);
+#pragma omp parallel for schedule(static) num_threads(nt) if (nt > 1)
+#else
+    (void)n_threads;
 #endif
     for (int t = 0; t < T; t++) {
         const float* xt = x + (size_t)t * d;
@@ -106,95 +118,90 @@ static inline void layernorm_baseline(float* out, const float* x, const float* w
 
 static inline void layernorm_accelerated(float* out, const float* x, const float* w, const float* b, int d, int T,
                                          float eps, int n_threads = 0) {
-    int effective_threads = n_threads;
-    // For small workloads, thread creation overhead dominates useful compute.
-    // Run single-threaded using the fast 4-way unrolled arithmetic.
-    if (effective_threads <= 0 && ((int64_t)T * d < 65536 || T < 64)) {
-        effective_threads = 1;
-    }
-    core_parallel::for_each_chunk(T, effective_threads, [&](int t_start, int t_end) {
-        for (int t = t_start; t < t_end; t++) {
-            const float* xt = x + (size_t)t * d;
-            float* ot = out + (size_t)t * d;
+    core_parallel::for_each_chunk_work(T, n_threads, (uint64_t)std::max(0, d), layernorm_min_work_per_thread,
+                                       [&](int t_start, int t_end) {
+                                           for (int t = t_start; t < t_end; t++) {
+                                               const float* xt = x + (size_t)t * d;
+                                               float* ot = out + (size_t)t * d;
 
-            float s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
-            int i = 0;
-            for (; i + 4 <= d; i += 4) {
-                s0 += xt[i + 0];
-                s1 += xt[i + 1];
-                s2 += xt[i + 2];
-                s3 += xt[i + 3];
-            }
-            float sum = (s0 + s1) + (s2 + s3);
-            for (; i < d; i++) {
-                sum += xt[i];
-            }
-            const float mean = sum / (float)d;
+                                               float s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
+                                               int i = 0;
+                                               for (; i + 4 <= d; i += 4) {
+                                                   s0 += xt[i + 0];
+                                                   s1 += xt[i + 1];
+                                                   s2 += xt[i + 2];
+                                                   s3 += xt[i + 3];
+                                               }
+                                               float sum = (s0 + s1) + (s2 + s3);
+                                               for (; i < d; i++) {
+                                                   sum += xt[i];
+                                               }
+                                               const float mean = sum / (float)d;
 
-            float v0 = 0.0f, v1 = 0.0f, v2 = 0.0f, v3 = 0.0f;
-            i = 0;
-            for (; i + 4 <= d; i += 4) {
-                float d0 = xt[i + 0] - mean;
-                float d1 = xt[i + 1] - mean;
-                float d2 = xt[i + 2] - mean;
-                float d3 = xt[i + 3] - mean;
-                v0 += d0 * d0;
-                v1 += d1 * d1;
-                v2 += d2 * d2;
-                v3 += d3 * d3;
-            }
-            float var_sum = (v0 + v1) + (v2 + v3);
-            for (; i < d; i++) {
-                float di = xt[i] - mean;
-                var_sum += di * di;
-            }
-            const float var = var_sum / (float)d;
-            const float inv = 1.0f / std::sqrt(var + eps);
+                                               float v0 = 0.0f, v1 = 0.0f, v2 = 0.0f, v3 = 0.0f;
+                                               i = 0;
+                                               for (; i + 4 <= d; i += 4) {
+                                                   float d0 = xt[i + 0] - mean;
+                                                   float d1 = xt[i + 1] - mean;
+                                                   float d2 = xt[i + 2] - mean;
+                                                   float d3 = xt[i + 3] - mean;
+                                                   v0 += d0 * d0;
+                                                   v1 += d1 * d1;
+                                                   v2 += d2 * d2;
+                                                   v3 += d3 * d3;
+                                               }
+                                               float var_sum = (v0 + v1) + (v2 + v3);
+                                               for (; i < d; i++) {
+                                                   float di = xt[i] - mean;
+                                                   var_sum += di * di;
+                                               }
+                                               const float var = var_sum / (float)d;
+                                               const float inv = 1.0f / std::sqrt(var + eps);
 
-            i = 0;
-            if (w && b) {
-                for (; i + 4 <= d; i += 4) {
-                    ot[i + 0] = (xt[i + 0] - mean) * inv * w[i + 0] + b[i + 0];
-                    ot[i + 1] = (xt[i + 1] - mean) * inv * w[i + 1] + b[i + 1];
-                    ot[i + 2] = (xt[i + 2] - mean) * inv * w[i + 2] + b[i + 2];
-                    ot[i + 3] = (xt[i + 3] - mean) * inv * w[i + 3] + b[i + 3];
-                }
-                for (; i < d; i++) {
-                    ot[i] = (xt[i] - mean) * inv * w[i] + b[i];
-                }
-            } else if (w) {
-                for (; i + 4 <= d; i += 4) {
-                    ot[i + 0] = (xt[i + 0] - mean) * inv * w[i + 0];
-                    ot[i + 1] = (xt[i + 1] - mean) * inv * w[i + 1];
-                    ot[i + 2] = (xt[i + 2] - mean) * inv * w[i + 2];
-                    ot[i + 3] = (xt[i + 3] - mean) * inv * w[i + 3];
-                }
-                for (; i < d; i++) {
-                    ot[i] = (xt[i] - mean) * inv * w[i];
-                }
-            } else if (b) {
-                for (; i + 4 <= d; i += 4) {
-                    ot[i + 0] = (xt[i + 0] - mean) * inv + b[i + 0];
-                    ot[i + 1] = (xt[i + 1] - mean) * inv + b[i + 1];
-                    ot[i + 2] = (xt[i + 2] - mean) * inv + b[i + 2];
-                    ot[i + 3] = (xt[i + 3] - mean) * inv + b[i + 3];
-                }
-                for (; i < d; i++) {
-                    ot[i] = (xt[i] - mean) * inv + b[i];
-                }
-            } else {
-                for (; i + 4 <= d; i += 4) {
-                    ot[i + 0] = (xt[i + 0] - mean) * inv;
-                    ot[i + 1] = (xt[i + 1] - mean) * inv;
-                    ot[i + 2] = (xt[i + 2] - mean) * inv;
-                    ot[i + 3] = (xt[i + 3] - mean) * inv;
-                }
-                for (; i < d; i++) {
-                    ot[i] = (xt[i] - mean) * inv;
-                }
-            }
-        }
-    });
+                                               i = 0;
+                                               if (w && b) {
+                                                   for (; i + 4 <= d; i += 4) {
+                                                       ot[i + 0] = (xt[i + 0] - mean) * inv * w[i + 0] + b[i + 0];
+                                                       ot[i + 1] = (xt[i + 1] - mean) * inv * w[i + 1] + b[i + 1];
+                                                       ot[i + 2] = (xt[i + 2] - mean) * inv * w[i + 2] + b[i + 2];
+                                                       ot[i + 3] = (xt[i + 3] - mean) * inv * w[i + 3] + b[i + 3];
+                                                   }
+                                                   for (; i < d; i++) {
+                                                       ot[i] = (xt[i] - mean) * inv * w[i] + b[i];
+                                                   }
+                                               } else if (w) {
+                                                   for (; i + 4 <= d; i += 4) {
+                                                       ot[i + 0] = (xt[i + 0] - mean) * inv * w[i + 0];
+                                                       ot[i + 1] = (xt[i + 1] - mean) * inv * w[i + 1];
+                                                       ot[i + 2] = (xt[i + 2] - mean) * inv * w[i + 2];
+                                                       ot[i + 3] = (xt[i + 3] - mean) * inv * w[i + 3];
+                                                   }
+                                                   for (; i < d; i++) {
+                                                       ot[i] = (xt[i] - mean) * inv * w[i];
+                                                   }
+                                               } else if (b) {
+                                                   for (; i + 4 <= d; i += 4) {
+                                                       ot[i + 0] = (xt[i + 0] - mean) * inv + b[i + 0];
+                                                       ot[i + 1] = (xt[i + 1] - mean) * inv + b[i + 1];
+                                                       ot[i + 2] = (xt[i + 2] - mean) * inv + b[i + 2];
+                                                       ot[i + 3] = (xt[i + 3] - mean) * inv + b[i + 3];
+                                                   }
+                                                   for (; i < d; i++) {
+                                                       ot[i] = (xt[i] - mean) * inv + b[i];
+                                                   }
+                                               } else {
+                                                   for (; i + 4 <= d; i += 4) {
+                                                       ot[i + 0] = (xt[i + 0] - mean) * inv;
+                                                       ot[i + 1] = (xt[i + 1] - mean) * inv;
+                                                       ot[i + 2] = (xt[i + 2] - mean) * inv;
+                                                       ot[i + 3] = (xt[i + 3] - mean) * inv;
+                                                   }
+                                                   for (; i < d; i++) {
+                                                       ot[i] = (xt[i] - mean) * inv;
+                                                   }
+                                               }
+                                           }
+                                       });
 }
 
 // CPU LayerNorm in (d, T) layout: out = (x - mean) / sqrt(var + eps) * w + b.
@@ -203,7 +210,7 @@ static inline void layernorm_accelerated(float* out, const float* x, const float
 static inline void layernorm(float* out, const float* x, const float* w, const float* b, int d, int T, float eps,
                              int n_threads = 0) {
     if (crispasr_cpu_ops_serial() || T <= 1) {
-        layernorm_baseline(out, x, w, b, d, T, eps);
+        layernorm_baseline(out, x, w, b, d, T, eps, 1);
     } else {
         layernorm_accelerated(out, x, w, b, d, T, eps, n_threads);
     }

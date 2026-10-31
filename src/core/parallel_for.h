@@ -45,8 +45,15 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdint>
+#include <limits>
 #include <thread>
+#include <utility>
 #include <vector>
+
+#if defined(_OPENMP)
+#include <omp.h>
+#endif
 
 namespace core_parallel {
 
@@ -62,6 +69,34 @@ inline int resolve_threads(int n_items, int n_threads) {
     return std::max(1, std::min(n_threads, n_items));
 }
 
+// A thread budget is a ceiling, not a reason to create a worker for a tiny
+// loop. Callers estimate independent work in their own units (e.g. float
+// elements or multiply-adds), and require this much work per worker. Keep
+// the estimate separate from n_items: one FFT frame can cost much more than
+// one output sample. This helper is also usable before allocating scratch.
+inline int resolve_threads_for_work(int n_items, int n_threads, uint64_t work_per_item, uint64_t min_work_per_thread) {
+    if (n_items <= 1 || work_per_item == 0 || n_threads == 1)
+        return 1;
+    const uint64_t count = (uint64_t)n_items;
+    const uint64_t total = work_per_item > std::numeric_limits<uint64_t>::max() / count
+                               ? std::numeric_limits<uint64_t>::max()
+                               : count * work_per_item;
+    const uint64_t useful =
+        min_work_per_thread == 0 ? (uint64_t)n_items : std::max<uint64_t>(1, total / min_work_per_thread);
+    // Avoid even querying the runtime/hardware for cheap loops.
+    if (useful == 1)
+        return 1;
+#if defined(_OPENMP)
+    // Do not create nested teams under an existing parallel operation.
+    if (omp_in_parallel())
+        return 1;
+    if (n_threads <= 0)
+        n_threads = omp_get_max_threads();
+#endif
+    const int budget = resolve_threads(n_items, n_threads);
+    return (int)std::min<uint64_t>((uint64_t)budget, useful);
+}
+
 // fn(begin, end) over contiguous blocks partitioning [0, n_items).
 template <typename F> void for_each_chunk(int n_items, int n_threads, F&& fn) {
     if (n_items <= 0)
@@ -71,18 +106,45 @@ template <typename F> void for_each_chunk(int n_items, int n_threads, F&& fn) {
         fn(0, n_items);
         return;
     }
-    const int chunk = (n_items + nt - 1) / nt;
+    const int chunk = n_items / nt + (n_items % nt != 0);
     std::vector<std::thread> pool;
     pool.reserve((size_t)nt - 1);
     for (int t = 1; t < nt; t++) {
-        const int a = t * chunk, b = std::min(n_items, a + chunk);
-        if (a >= b)
+        const int64_t start = (int64_t)t * chunk;
+        if (start >= n_items)
             break;
+        const int a = (int)start;
+        const int b = (int)std::min<int64_t>(n_items, start + chunk);
         pool.emplace_back([&fn, a, b]() { fn(a, b); });
     }
     fn(0, std::min(n_items, chunk)); // calling thread takes the first block
     for (auto& t : pool)
         t.join();
+}
+
+// Work-aware variant for CPU kernels. Reuse an OpenMP team when available;
+// repeatedly constructing std::threads regressed kernels on OpenMP builds.
+// With no OpenMP runtime, retain the portable contiguous-chunk implementation.
+template <typename F>
+void for_each_chunk_work(int n_items, int n_threads, uint64_t work_per_item, uint64_t min_work_per_thread, F&& fn) {
+    if (n_items <= 0)
+        return;
+    const int nt = resolve_threads_for_work(n_items, n_threads, work_per_item, min_work_per_thread);
+    if (nt == 1) {
+        fn(0, n_items);
+        return;
+    }
+#if defined(_OPENMP)
+    // Divide with int64_t intermediates so large ranges cannot overflow.
+#pragma omp parallel for schedule(static) num_threads(nt)
+    for (int t = 0; t < nt; ++t) {
+        const int begin = (int)((int64_t)n_items * t / nt);
+        const int end = (int)((int64_t)n_items * (t + 1) / nt);
+        fn(begin, end);
+    }
+#else
+    for_each_chunk(n_items, nt, std::forward<F>(fn));
+#endif
 }
 
 // fn(task_index, slot) for every task in [0, n_tasks), pulled from an atomic

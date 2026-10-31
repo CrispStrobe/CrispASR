@@ -15,6 +15,25 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(Catch2)
 list(APPEND CMAKE_MODULE_PATH "${catch2_SOURCE_DIR}/extras")
 include(Catch)
+find_package(OpenMP QUIET)
+get_target_property(CRISPASR_CPU_BLAS_AVAILABLE crispasr-cpu-blas CRISPASR_CPU_BLAS_AVAILABLE)
+
+# Keep numerical checks in ordinary CI and repeated timings in the bench tier.
+# Adjacent Catch tags are an intersection; heterogeneous suites must not use
+# impossible filters such as [rvq][istft]. Both registrations share production
+# checks; CRISPASR_RUN_PERF controls only the repeated timing phase.
+function(crispasr_discover_ab_tests target labels)
+    catch_discover_tests(${target}
+        TEST_SPEC "[unit]"
+        TEST_PREFIX "unit::"
+        TEST_LIST ${target}_UNIT_TESTS
+        PROPERTIES LABELS "unit" ENVIRONMENT "CRISPASR_RUN_PERF=0")
+    catch_discover_tests(${target}
+        TEST_SPEC "[ab-bench]"
+        TEST_PREFIX "perf::"
+        TEST_LIST ${target}_BENCH_TESTS
+        PROPERTIES LABELS "bench" ENVIRONMENT "CRISPASR_RUN_PERF=1")
+endfunction()
 
 add_executable(test-realtime-turn-buffer test-realtime-turn-buffer.cpp)
 target_include_directories(test-realtime-turn-buffer PRIVATE ${PROJECT_SOURCE_DIR}/src)
@@ -2350,7 +2369,7 @@ target_link_libraries(test-diarize-smooth PRIVATE
 )
 catch_discover_tests(test-diarize-smooth
     TEST_SPEC "[unit]"
-    PROPERTIES LABELS "unit;diarize_smooth"
+    PROPERTIES LABELS "unit"
 )
 
 # ─── test-parallel-for — hermetic unit tests for the shared fan-out helpers
@@ -2363,11 +2382,11 @@ target_include_directories(test-parallel-for PRIVATE
 )
 target_link_libraries(test-parallel-for PRIVATE
     Catch2::Catch2WithMain
-    crispasr-core
+    Threads::Threads
 )
 catch_discover_tests(test-parallel-for
     TEST_SPEC "[parallel]"
-    PROPERTIES LABELS "unit;parallel"
+    PROPERTIES LABELS "unit"
 )
 
 # ─── test-spectral-diarize — hermetic unit tests for the speaker-clustering
@@ -2384,7 +2403,7 @@ target_link_libraries(test-spectral-diarize PRIVATE
 )
 catch_discover_tests(test-spectral-diarize
     TEST_SPEC "[unit]"
-    PROPERTIES LABELS "unit;spectral"
+    PROPERTIES LABELS "unit"
 )
 
 # ─── test-wespeaker-params — Catch2 unit tests for wespeaker_context_params
@@ -4719,7 +4738,7 @@ target_include_directories(test-core-cqt PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-core-cqt PRIVATE Catch2::Catch2)
 catch_discover_tests(test-core-cqt
     TEST_PREFIX "core-cqt: "
-    PROPERTIES LABELS "unit;core"
+    PROPERTIES LABELS "unit"
 )
 
 # ─── test-core-midi-writer — core/midi_writer.h Standard MIDI File output ─────
@@ -4803,10 +4822,7 @@ target_link_libraries(test-align-ab-bench PRIVATE
     Catch2::Catch2WithMain
     Threads::Threads
 )
-catch_discover_tests(test-align-ab-bench
-    TEST_SPEC "[align][ab-bench]"
-    PROPERTIES LABELS "bench;align"
-)
+crispasr_discover_ab_tests(test-align-ab-bench "align")
 
 # ─── test-conformer-ab-bench — conformer_ibm.h paired A/B speed and parity bench ────
 add_executable(test-conformer-ab-bench test-conformer-ab-bench.cpp)
@@ -4818,10 +4834,7 @@ target_link_libraries(test-conformer-ab-bench PRIVATE
     Threads::Threads
     ggml
 )
-catch_discover_tests(test-conformer-ab-bench
-    TEST_SPEC "[conformer][ab-bench]"
-    PROPERTIES LABELS "bench;conformer"
-)
+crispasr_discover_ab_tests(test-conformer-ab-bench "conformer")
 
 # ─── test-cpu-ops-ab-bench — cpu_ops.h & conv.h paired A/B speed and parity bench ────
 add_executable(test-cpu-ops-ab-bench test-cpu-ops-ab-bench.cpp)
@@ -4833,10 +4846,7 @@ target_link_libraries(test-cpu-ops-ab-bench PRIVATE
     Threads::Threads
     ggml
 )
-catch_discover_tests(test-cpu-ops-ab-bench
-    TEST_SPEC "[ab-bench]"
-    PROPERTIES LABELS "bench;cpu_ops"
-)
+crispasr_discover_ab_tests(test-cpu-ops-ab-bench "cpu_ops;convt")
 
 # ─── test-firered-ab-bench — firered_asr & f5_tts paired A/B speed and parity bench ────
 add_executable(test-firered-ab-bench test-firered-ab-bench.cpp)
@@ -4848,10 +4858,7 @@ target_link_libraries(test-firered-ab-bench PRIVATE
     Threads::Threads
     ggml
 )
-catch_discover_tests(test-firered-ab-bench
-    TEST_SPEC "[ab-bench]"
-    PROPERTIES LABELS "bench;firered"
-)
+crispasr_discover_ab_tests(test-firered-ab-bench "firered;f5_tts")
 
 # ─── test-voxcpm2-ab-bench — voxcpm2 & mel-band-roformer paired A/B speed and parity bench ────
 add_executable(test-voxcpm2-ab-bench test-voxcpm2-ab-bench.cpp)
@@ -4867,10 +4874,7 @@ target_link_libraries(test-voxcpm2-ab-bench PRIVATE
     Threads::Threads
     ggml
 )
-catch_discover_tests(test-voxcpm2-ab-bench
-    TEST_SPEC "[ab-bench]"
-    PROPERTIES LABELS "bench;voxcpm2"
-)
+crispasr_discover_ab_tests(test-voxcpm2-ab-bench "voxcpm2;roformer")
 
 # ─── test-kokoro-diarize-ab-bench — kokoro & diarize paired A/B speed and parity bench ────
 add_executable(test-kokoro-diarize-ab-bench test-kokoro-diarize-ab-bench.cpp)
@@ -4886,10 +4890,7 @@ target_link_libraries(test-kokoro-diarize-ab-bench PRIVATE
     Threads::Threads
     ggml
 )
-catch_discover_tests(test-kokoro-diarize-ab-bench
-    TEST_SPEC "[ab-bench]"
-    PROPERTIES LABELS "bench;kokoro;diarize"
-)
+crispasr_discover_ab_tests(test-kokoro-diarize-ab-bench "kokoro;diarize")
 
 # ─── test-cqt-diarize-ab-bench — cqt, cqt2010v2 & diarize_smooth paired A/B speed and parity bench ────
 add_executable(test-cqt-diarize-ab-bench test-cqt-diarize-ab-bench.cpp)
@@ -4904,10 +4905,7 @@ target_link_libraries(test-cqt-diarize-ab-bench PRIVATE
     Threads::Threads
     ggml
 )
-catch_discover_tests(test-cqt-diarize-ab-bench
-    TEST_SPEC "[ab-bench]"
-    PROPERTIES LABELS "bench;cqt;diarize"
-)
+crispasr_discover_ab_tests(test-cqt-diarize-ab-bench "cqt;diarize")
 
 # ─── test-rvq-istft-ab-bench — rvq & istft paired A/B speed and parity bench ────
 add_executable(test-rvq-istft-ab-bench test-rvq-istft-ab-bench.cpp)
@@ -4922,10 +4920,7 @@ target_link_libraries(test-rvq-istft-ab-bench PRIVATE
     Threads::Threads
     ggml
 )
-catch_discover_tests(test-rvq-istft-ab-bench
-    TEST_SPEC "[ab-bench]"
-    PROPERTIES LABELS "bench;rvq;istft"
-)
+crispasr_discover_ab_tests(test-rvq-istft-ab-bench "rvq;istft")
 
 # ─── test-core-cross-attn — core/cross_attn.h manual path (ggml graph) ────────
 # Computes the header's cross-attention graph and compares to a plain-C++ MHA
@@ -6615,7 +6610,8 @@ catch_discover_tests(test-torchaudio-resample
 add_executable(test-ctc-stitch test-ctc-stitch.cpp)
 target_include_directories(test-ctc-stitch PRIVATE ${PROJECT_SOURCE_DIR}/examples/cli ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-ctc-stitch PRIVATE Catch2::Catch2WithMain)
-catch_discover_tests(test-ctc-stitch TEST_SPEC "[ctc-stitch],[ctc]" PROPERTIES LABELS "unit;omniasr")
+catch_discover_tests(test-ctc-stitch TEST_SPEC "[ctc-stitch],[ctc][unit]" TEST_LIST CTC_UNIT_TESTS PROPERTIES LABELS "unit")
+catch_discover_tests(test-ctc-stitch TEST_SPEC "[ctc][perf]" TEST_PREFIX "perf::" TEST_LIST CTC_BENCH_TESTS PROPERTIES LABELS "bench")
 
 # Phonon-2 reuses Parakeet; exercise its model alias and metadata through real surfaces.
 # examples/cli is added after tests, so its target does not exist yet here.
@@ -6665,3 +6661,77 @@ if(Python3_Interpreter_FOUND AND UNIX)
     add_test(NAME cann-nz-cache-lifecycle COMMAND ${Python3_EXECUTABLE} ${PROJECT_SOURCE_DIR}/tests/test_cann_nz_lifecycle.py -v)
     set_tests_properties(cann-nz-cache-lifecycle PROPERTIES LABELS "unit;cann" TIMEOUT 60)
 endif()
+
+# Stateful production-runtime regressions for the post-v0.8.49 audit.
+# These sources include the runtime TU to access its internal graph builders;
+# they deliberately do not link a second copy of the corresponding backend.
+foreach(_runtime IN ITEMS arktts-cache meanvc2-conditioning)
+    add_executable(test-${_runtime} test-${_runtime}.cpp)
+    target_include_directories(test-${_runtime} PRIVATE ${PROJECT_SOURCE_DIR}/src)
+    target_link_libraries(test-${_runtime} PRIVATE Catch2::Catch2WithMain
+        crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+    catch_discover_tests(test-${_runtime} TEST_SPEC "[unit]"
+        PROPERTIES LABELS "unit")
+endforeach()
+target_link_libraries(test-meanvc2-conditioning PRIVATE crispasr-cpu-blas)
+
+if(Python3_Interpreter_FOUND)
+    add_test(NAME benchmark-mel-ab-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_bench_mel_ab.py)
+    set_tests_properties(benchmark-mel-ab-controls PROPERTIES LABELS "unit;performance-parity;benchmark")
+    add_test(NAME post-release-model-gate-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_post_release_model_gate.py)
+    set_tests_properties(post-release-model-gate-controls PROPERTIES LABELS "unit;performance-parity;model-gates")
+endif()
+
+if(Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES AND BUILD_SHARED_LIBS)
+    add_test(NAME haas-dispatch-entrypoints
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_haas_dispatch.py
+            --cli $<TARGET_FILE:crispasr-cli> --library $<TARGET_FILE:crispasr-lib>)
+    set_tests_properties(haas-dispatch-entrypoints PROPERTIES LABELS "unit;performance-parity;haas")
+endif()
+
+add_executable(test-core-istft-memory test-core-istft-memory.cpp)
+target_include_directories(test-core-istft-memory PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-core-istft-memory PRIVATE Threads::Threads)
+add_test(NAME istft-bounded-memory COMMAND test-core-istft-memory)
+set_tests_properties(istft-bounded-memory PROPERTIES LABELS "unit;performance-parity;istft")
+
+add_executable(test-voxcpm2-cpu-conv test-voxcpm2-cpu-conv.cpp)
+target_include_directories(test-voxcpm2-cpu-conv PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-voxcpm2-cpu-conv PRIVATE Catch2::Catch2WithMain Threads::Threads)
+catch_discover_tests(test-voxcpm2-cpu-conv TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit")
+
+# Compile and run the same independent iSTFT oracles with the actual CBLAS
+# feature target. A scalar-only pass cannot qualify the BLAS branch.
+if(CRISPASR_CPU_BLAS_AVAILABLE)
+    add_executable(test-core-istft-memory-blas test-core-istft-memory.cpp)
+    target_include_directories(test-core-istft-memory-blas PRIVATE ${PROJECT_SOURCE_DIR}/src)
+    target_link_libraries(test-core-istft-memory-blas PRIVATE Threads::Threads crispasr-cpu-blas)
+    add_test(NAME istft-bounded-memory-blas COMMAND test-core-istft-memory-blas)
+    set_tests_properties(istft-bounded-memory-blas PROPERTIES LABELS "unit;performance-parity;istft;blas")
+    add_executable(test-core-istft-blas test-core-istft.cpp)
+    target_include_directories(test-core-istft-blas PRIVATE ${PROJECT_SOURCE_DIR}/src)
+    target_link_libraries(test-core-istft-blas PRIVATE Catch2::Catch2WithMain
+        Threads::Threads crispasr-cpu-blas)
+    catch_discover_tests(test-core-istft-blas TEST_SPEC "[unit]"
+        TEST_PREFIX "blas::" PROPERTIES LABELS "unit")
+endif()
+
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(test-voxcpm2-cpu-conv PRIVATE OpenMP::OpenMP_CXX)
+    add_executable(test-parallel-for-openmp test-parallel-for.cpp)
+    target_include_directories(test-parallel-for-openmp PRIVATE ${PROJECT_SOURCE_DIR}/src)
+    target_link_libraries(test-parallel-for-openmp PRIVATE Catch2::Catch2WithMain
+        Threads::Threads OpenMP::OpenMP_CXX)
+    catch_discover_tests(test-parallel-for-openmp TEST_SPEC "[parallel]"
+        TEST_PREFIX "openmp::" PROPERTIES LABELS "unit")
+    target_link_libraries(test-cpu-ops-ab-bench PRIVATE OpenMP::OpenMP_CXX)
+    target_link_libraries(test-conformer-ab-bench PRIVATE OpenMP::OpenMP_CXX)
+endif()
+
+# Catch2 3.7 flattens semicolons in PROPERTIES during generated-script argument
+# forwarding. Set list-valued properties only once the actual cases exist.
+set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
+    "${CMAKE_CURRENT_SOURCE_DIR}/performance-test-properties.cmake")

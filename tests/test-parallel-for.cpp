@@ -10,6 +10,7 @@
 #include "core/parallel_for.h"
 
 #include <atomic>
+#include <climits>
 #include <mutex>
 #include <numeric>
 #include <set>
@@ -125,6 +126,77 @@ TEST_CASE("empty and degenerate inputs are no-ops", "[parallel]") {
     for_each_chunk(-1, 4, [&](int, int) { calls++; });
     for_each_task(-5, 4, [&](int, int) { calls++; });
     CHECK(calls == 0);
-    CHECK(resolve_threads(1, 8) == 1);  // one item never spawns
+    CHECK(resolve_threads(1, 8) == 1);   // one item never spawns
     CHECK(resolve_threads(4, 100) == 4); // never more threads than items
 }
+
+TEST_CASE("work-aware chunks honor work and caller budgets", "[parallel][unit]") {
+    CHECK(resolve_threads_for_work(16, 8, 1024, 65536) == 1);
+    CHECK(resolve_threads_for_work(512, 8, 1024, 65536) == 8);
+    CHECK(resolve_threads_for_work(512, 2, 1024, 65536) == 2);
+    CHECK(resolve_threads_for_work(512, 1, 1024, 65536) == 1);
+    CHECK(resolve_threads_for_work(2, 8, 1000000, 1) == 2);
+    CHECK(resolve_threads_for_work(512, 8, 0, 1) == 1);
+    CHECK(resolve_threads_for_work(512, 8, UINT64_MAX, 1) == 8);
+    CHECK(resolve_threads_for_work(0, 8, 1024, 1) == 1);
+
+    const auto caller = std::this_thread::get_id();
+    int calls = 0;
+    for_each_chunk_work(16, 8, 1024, 65536, [&](int begin, int end) {
+        CHECK(std::this_thread::get_id() == caller);
+        CHECK(begin == 0);
+        CHECK(end == 16);
+        ++calls;
+    });
+    CHECK(calls == 1);
+
+    std::vector<int> visits(1003, 0);
+    std::mutex mutex;
+    std::set<std::thread::id> workers;
+    for_each_chunk_work(1003, 3, 10000, 1, [&](int begin, int end) {
+        for (int i = begin; i < end; ++i)
+            ++visits[(size_t)i];
+        std::lock_guard<std::mutex> lock(mutex);
+        workers.insert(std::this_thread::get_id());
+    });
+    CHECK(workers.size() <= 3);
+    for (int visits_to_item : visits)
+        CHECK(visits_to_item == 1);
+
+    for_each_chunk_work(0, 8, 100000, 1, [&](int, int) { ++calls; });
+    CHECK(calls == 1);
+}
+
+TEST_CASE("work-aware chunks cover large integer ranges without overflow", "[parallel][unit]") {
+    std::mutex mutex;
+    std::vector<std::pair<int, int>> ranges;
+    for_each_chunk_work(INT_MAX, 3, 1, 1, [&](int begin, int end) {
+        std::lock_guard<std::mutex> lock(mutex);
+        ranges.emplace_back(begin, end);
+    });
+    std::sort(ranges.begin(), ranges.end());
+    int next = 0;
+    for (const auto& range : ranges) {
+        CHECK(range.first == next);
+        CHECK(range.second > range.first);
+        next = range.second;
+    }
+    CHECK(next == INT_MAX);
+}
+
+#if defined(_OPENMP)
+TEST_CASE("work-aware chunks do not create nested OpenMP teams", "[parallel][unit]") {
+    std::atomic<int> unexpected{0};
+#pragma omp parallel num_threads(2)
+    {
+        if (core_parallel::resolve_threads_for_work(100, 8, 100000, 1) != 1)
+            ++unexpected;
+        const auto caller = std::this_thread::get_id();
+        core_parallel::for_each_chunk_work(100, 8, 100000, 1, [&](int begin, int end) {
+            if (std::this_thread::get_id() != caller || begin != 0 || end != 100)
+                ++unexpected;
+        });
+    }
+    CHECK(unexpected == 0);
+}
+#endif

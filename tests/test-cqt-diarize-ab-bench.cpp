@@ -3,12 +3,14 @@
 //
 // Verifies:
 // 1. Bit-for-bit exact parity between serial baseline and chunk-parallel / precalculated implementations.
-// 2. Strict paired latency benchmark across 10 warm iterations (1 warmup discarded):
-//    reports min, max, median, mean, stddev, and speedup factor.
+// 2. Optional alternating latency benchmark across 10 warm iterations:
+//    enable with CRISPASR_RUN_PERF=1; timing never gates unit correctness.
 // 3. Fallback gate verification via CRISPASR_CQT_SERIAL=1, CRISPASR_CQT2010_SERIAL=1,
 //    and CRISPASR_DIARIZE_SMOOTH_SERIAL=1.
 
 #include <catch2/catch_test_macros.hpp>
+#include "ab_bench_helpers.h"
+#include "scoped_test_env.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -64,7 +66,8 @@ static BenchStats compute_stats(std::vector<double>& samples) {
     return {min_v, max_v, median_v, mean_v, stddev_v};
 }
 
-TEST_CASE("CQT magnitude paired A/B benchmark", "[perf][cqt][ab-bench]") {
+TEST_CASE("CQT magnitude paired A/B benchmark", "[unit][cqt][ab-bench]") {
+    ScopedTestEnv restore_env("CRISPASR_CQT_SERIAL");
     core_cqt::Params p;
     p.sample_rate = 22050;
     p.fmin = 32.703195662574829f; // C1
@@ -87,28 +90,18 @@ TEST_CASE("CQT magnitude paired A/B benchmark", "[perf][cqt][ab-bench]") {
 
     const int iters = 10;
     std::vector<double> times_a(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        core_cqt::magnitude(p, kernels, x.data(), n_samples, out_a);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
 
     // Arm B: Parallel accelerated
     unset_env_var("CRISPASR_CQT_SERIAL");
     core_cqt::magnitude(p, kernels, x.data(), n_samples, out_b);
 
     std::vector<double> times_b(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        core_cqt::magnitude(p, kernels, x.data(), n_samples, out_b);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
 
     REQUIRE(out_a.size() == out_b.size());
     REQUIRE(!out_a.empty());
 
+    REQUIRE(std::all_of(out_a.begin(), out_a.end(), [](float x) { return std::isfinite(x); }));
+    REQUIRE(std::all_of(out_b.begin(), out_b.end(), [](float x) { return std::isfinite(x); }));
     float max_diff = 0.0f;
     for (size_t i = 0; i < out_a.size(); i++) {
         const float diff = std::abs(out_a[i] - out_b[i]);
@@ -117,6 +110,27 @@ TEST_CASE("CQT magnitude paired A/B benchmark", "[perf][cqt][ab-bench]") {
         }
     }
     CHECK(max_diff == 0.0f);
+
+    if (!benchmark_timing_enabled())
+        return;
+
+    // Alternate arms on each repetition to reduce drift from a blocked A/B run.
+    for (int i = 0; i < iters; i++) {
+        set_env_var("CRISPASR_CQT_SERIAL", "1");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            core_cqt::magnitude(p, kernels, x.data(), n_samples, out_a);
+            const auto t1 = std::chrono::steady_clock::now();
+            times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+        unset_env_var("CRISPASR_CQT_SERIAL");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            core_cqt::magnitude(p, kernels, x.data(), n_samples, out_b);
+            const auto t1 = std::chrono::steady_clock::now();
+            times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+    }
 
     const BenchStats stats_a = compute_stats(times_a);
     const BenchStats stats_b = compute_stats(times_b);
@@ -133,7 +147,8 @@ TEST_CASE("CQT magnitude paired A/B benchmark", "[perf][cqt][ab-bench]") {
     printf("Numerical parity:          max_diff = %.8e (100%% exact bit-identical)\n", max_diff);
 }
 
-TEST_CASE("CQT2010v2 octave_complex & decimate_by_2 paired A/B benchmark", "[perf][cqt2010][ab-bench]") {
+TEST_CASE("CQT2010v2 octave_complex & decimate_by_2 paired A/B benchmark", "[unit][cqt2010][ab-bench]") {
+    ScopedTestEnv restore_env("CRISPASR_CQT2010_SERIAL");
     core_cqt2010v2::Params p;
     p.n_bins = 309;
     p.bins_per_octave = 36;
@@ -175,6 +190,8 @@ TEST_CASE("CQT2010v2 octave_complex & decimate_by_2 paired A/B benchmark", "[per
     core_cqt2010v2::decimate_by_2(x.data(), n_samples, fir.data(), 256, dec_b);
 
     REQUIRE(dec_a.size() == dec_b.size());
+    REQUIRE(std::all_of(dec_a.begin(), dec_a.end(), [](float x) { return std::isfinite(x); }));
+    REQUIRE(std::all_of(dec_b.begin(), dec_b.end(), [](float x) { return std::isfinite(x); }));
     float max_diff_dec = 0.0f;
     for (size_t i = 0; i < dec_a.size(); i++) {
         float diff = std::abs(dec_a[i] - dec_b[i]);
@@ -190,42 +207,48 @@ TEST_CASE("CQT2010v2 octave_complex & decimate_by_2 paired A/B benchmark", "[per
 
     const int iters = 10;
     std::vector<double> times_a(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        core_cqt2010v2::octave_complex(p, kern, x.data(), n_samples, p.hop_length, re_a, im_a);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
 
     unset_env_var("CRISPASR_CQT2010_SERIAL");
     core_cqt2010v2::octave_complex(p, kern, x.data(), n_samples, p.hop_length, re_b, im_b);
 
     std::vector<double> times_b(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        core_cqt2010v2::octave_complex(p, kern, x.data(), n_samples, p.hop_length, re_b, im_b);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
 
     REQUIRE(re_a.size() == re_b.size());
     REQUIRE(im_a.size() == im_b.size());
 
+    REQUIRE(std::all_of(re_a.begin(), re_a.end(), [](float x) { return std::isfinite(x); }));
+    REQUIRE(std::all_of(re_b.begin(), re_b.end(), [](float x) { return std::isfinite(x); }));
     float max_diff_re = 0.0f;
     for (size_t i = 0; i < re_a.size(); i++) {
         float diff = std::abs(re_a[i] - re_b[i]);
-        if (std::isnan(diff) || diff > max_diff_re)
+        if (diff > max_diff_re)
             max_diff_re = diff;
     }
     CHECK(max_diff_re == 0.0f);
+    REQUIRE(std::all_of(im_a.begin(), im_a.end(), [](float x) { return std::isfinite(x); }));
+    REQUIRE(std::all_of(im_b.begin(), im_b.end(), [](float x) { return std::isfinite(x); }));
+    CHECK(im_a == im_b);
 
-    float max_diff_im = 0.0f;
-    for (size_t i = 0; i < im_a.size(); i++) {
-        float diff = std::abs(im_a[i] - im_b[i]);
-        if (std::isnan(diff) || diff > max_diff_im)
-            max_diff_im = diff;
+    if (!benchmark_timing_enabled())
+        return;
+
+    // Alternate arms on each repetition to reduce drift from a blocked A/B run.
+    for (int i = 0; i < iters; i++) {
+        set_env_var("CRISPASR_CQT2010_SERIAL", "1");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            core_cqt2010v2::octave_complex(p, kern, x.data(), n_samples, p.hop_length, re_a, im_a);
+            const auto t1 = std::chrono::steady_clock::now();
+            times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+        unset_env_var("CRISPASR_CQT2010_SERIAL");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            core_cqt2010v2::octave_complex(p, kern, x.data(), n_samples, p.hop_length, re_b, im_b);
+            const auto t1 = std::chrono::steady_clock::now();
+            times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
     }
-    CHECK(max_diff_im == 0.0f);
 
     const BenchStats stats_a = compute_stats(times_a);
     const BenchStats stats_b = compute_stats(times_b);
@@ -242,7 +265,8 @@ TEST_CASE("CQT2010v2 octave_complex & decimate_by_2 paired A/B benchmark", "[per
     printf("Numerical parity:          max_diff = %.8e (100%% exact bit-identical)\n", max_diff_re);
 }
 
-TEST_CASE("Diarization speaker_centroids paired A/B benchmark", "[perf][diarize_smooth][ab-bench]") {
+TEST_CASE("Diarization speaker_centroids paired A/B benchmark", "[unit][diarize_smooth][ab-bench]") {
+    ScopedTestEnv restore_env("CRISPASR_DIARIZE_SMOOTH_SERIAL");
     const int n = 1000;
     const int d = 256;
     const int k_speakers = 8;
@@ -266,28 +290,18 @@ TEST_CASE("Diarization speaker_centroids paired A/B benchmark", "[perf][diarize_
 
     const int iters = 10;
     std::vector<double> times_a(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        cent_a = core_diarize_smooth::speaker_centroids(embeddings.data(), n, d, labels, &vals_a);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
 
     // Arm B: Precomputed norms accelerated
     unset_env_var("CRISPASR_DIARIZE_SMOOTH_SERIAL");
     cent_b = core_diarize_smooth::speaker_centroids(embeddings.data(), n, d, labels, &vals_b);
 
     std::vector<double> times_b(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        cent_b = core_diarize_smooth::speaker_centroids(embeddings.data(), n, d, labels, &vals_b);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
 
     REQUIRE(vals_a == vals_b);
     REQUIRE(cent_a.size() == cent_b.size());
 
+    REQUIRE(std::all_of(cent_a.begin(), cent_a.end(), [](float x) { return std::isfinite(x); }));
+    REQUIRE(std::all_of(cent_b.begin(), cent_b.end(), [](float x) { return std::isfinite(x); }));
     float max_diff = 0.0f;
     for (size_t i = 0; i < cent_a.size(); i++) {
         float diff = std::abs(cent_a[i] - cent_b[i]);
@@ -295,6 +309,27 @@ TEST_CASE("Diarization speaker_centroids paired A/B benchmark", "[perf][diarize_
             max_diff = diff;
     }
     CHECK(max_diff <= 1e-6f);
+
+    if (!benchmark_timing_enabled())
+        return;
+
+    // Alternate arms on each repetition to reduce drift from a blocked A/B run.
+    for (int i = 0; i < iters; i++) {
+        set_env_var("CRISPASR_DIARIZE_SMOOTH_SERIAL", "1");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            cent_a = core_diarize_smooth::speaker_centroids(embeddings.data(), n, d, labels, &vals_a);
+            const auto t1 = std::chrono::steady_clock::now();
+            times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+        unset_env_var("CRISPASR_DIARIZE_SMOOTH_SERIAL");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            cent_b = core_diarize_smooth::speaker_centroids(embeddings.data(), n, d, labels, &vals_b);
+            const auto t1 = std::chrono::steady_clock::now();
+            times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+    }
 
     const BenchStats stats_a = compute_stats(times_a);
     const BenchStats stats_b = compute_stats(times_b);

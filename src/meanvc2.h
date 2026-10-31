@@ -7,7 +7,8 @@
 //   1. Pretrained Streaming ASR (Fast-U2++ WeNet Conformer, 160ms/80ms):
 //      Extracts 256-dim bottleneck features (BNFs) from 16 kHz input speech.
 //   2. Speaker Embedding (WavLM Large + ECAPA-TDNN):
-//      Extracts 256-dim speaker identity vector from reference voice.
+//      Requires an externally computed 256-dim speaker identity vector.
+//      Reference-audio speaker extraction is not implemented in this runtime.
 //   3. Universal Timbre Token Encoder (UTTE):
 //      - GlobalTimbreMemory (GTM): 32-slot memory bank with learnable priors.
 //      - TemporalTimbreEncoder (TVT): frame-level cross-attention (BNF query x GTM KV).
@@ -41,12 +42,17 @@ struct meanvc2_context_params meanvc2_context_default_params(void);
 struct meanvc2_context* meanvc2_init_from_file(const char* path_model, struct meanvc2_context_params params);
 
 // Set reference speaker voice from 16 kHz mono float PCM.
+// Currently unsupported: returns -2 for valid arguments, -1 for invalid ones.
+// Leaves any previously supplied speaker embedding unchanged.
 int meanvc2_set_speaker_audio(struct meanvc2_context* ctx, const float* audio_16k, int n_samples);
 
-// Set 256-dim precomputed speaker embedding.
+// Set 256-dim precomputed speaker embedding. Returns 0 on success; -1 for a null
+// argument or non-finite component, preserving the previous embedding on error.
 int meanvc2_set_speaker_embedding(struct meanvc2_context* ctx, const float* spk_emb_256);
 
 // Convert source speech to target speaker voice. Returns 16 kHz mono float PCM. Caller frees with meanvc2_free_audio.
+// Requires a speaker embedding set with meanvc2_set_speaker_embedding. Returns
+// nullptr and sets out_n_samples to zero on invalid input or missing conditioning.
 float* meanvc2_convert(struct meanvc2_context* ctx, const float* source_16k, int n_source_samples, int* out_n_samples);
 
 // Diagnostic stage APIs for crispasr-diff harness

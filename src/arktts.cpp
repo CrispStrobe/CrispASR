@@ -343,6 +343,10 @@ float* arktts_run_slow_transformer(struct arktts_context* ctx, const float* embe
         k = ggml_rope_ext(gctx, k, pos_ids, nullptr, head_dim, GGML_ROPE_TYPE_NORMAL, 0, ctx->hp.rope_theta, 1.0f, 0.0f,
                           1.0f, 0.0f, 0.0f);
 
+        // These tensors are read back after the complete graph has run. Merely
+        // expanding them into the graph does not extend their allocator lifetime.
+        ggml_set_output(k);
+        ggml_set_output(v);
         k_saved[l] = k;
         v_saved[l] = v;
 
@@ -378,15 +382,9 @@ float* arktts_run_slow_transformer(struct arktts_context* ctx, const float* embe
         cur = ggml_mul(gctx, cur, norm_w);
 
     ggml_tensor* last_hidden = ggml_view_1d(gctx, cur, dim, (size_t)(n_tokens - 1) * dim * sizeof(float));
+    ggml_set_output(last_hidden);
     ggml_tensor* emb_w = get_tensor(ctx, "embeddings.weight");
     ggml_tensor* logits = ggml_mul_mat(gctx, emb_w, last_hidden);
-
-    ggml_set_output(logits);
-    ggml_set_output(last_hidden);
-    for (int l = 0; l < (int)ctx->hp.n_layer; l++) {
-        ggml_set_output(k_saved[l]);
-        ggml_set_output(v_saved[l]);
-    }
 
     ggml_cgraph* gf = ggml_new_graph(gctx);
     ggml_build_forward_expand(gf, logits);
@@ -540,6 +538,9 @@ static float* arktts_step_slow_transformer(struct arktts_context* ctx, const flo
         k_new = ggml_rope_ext(gctx, k_new, pos_ids, nullptr, head_dim, GGML_ROPE_TYPE_NORMAL, 0, ctx->hp.rope_theta,
                               1.0f, 0.0f, 1.0f, 0.0f, 0.0f);
 
+        // Keep the new cache entries live through the post-compute readback.
+        ggml_set_output(k_new);
+        ggml_set_output(v_new);
         k_step_saved[l] = k_new;
         v_step_saved[l] = v_new;
 
@@ -590,15 +591,9 @@ static float* arktts_step_slow_transformer(struct arktts_context* ctx, const flo
         cur = ggml_mul(gctx, cur, norm_w);
 
     ggml_tensor* last_hidden = cur;
+    ggml_set_output(last_hidden);
     ggml_tensor* emb_w = get_tensor(ctx, "embeddings.weight");
     ggml_tensor* logits = ggml_mul_mat(gctx, emb_w, last_hidden);
-
-    ggml_set_output(logits);
-    ggml_set_output(last_hidden);
-    for (int l = 0; l < (int)ctx->hp.n_layer; l++) {
-        ggml_set_output(k_step_saved[l]);
-        ggml_set_output(v_step_saved[l]);
-    }
 
     ggml_cgraph* gf = ggml_new_graph(gctx);
     ggml_build_forward_expand(gf, logits);

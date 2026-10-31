@@ -1,0 +1,399 @@
+{
+  "_status": "UNQUALIFIED TEMPLATE: supply reviewed adapters, independently captured references, immutable pins, and acceptance bounds before running.",
+  "version": 1,
+  "source_sha": "REPLACE_WITH_CANDIDATE_40_HEX_COMMIT",
+  "fixture_root": "fixtures",
+  "files": {
+    "arktts-model": {
+      "path": "arktts/model.gguf",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "arktts-reference": {
+      "path": "arktts/reference.gguf",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "arktts-audio": {
+      "path": "arktts/input.wav",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "arktts-adapter": {
+      "path": "arktts/capture.py",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "arktts-reference_lock": {
+      "path": "arktts/reference-requirements.lock",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "arktts-expected-decode_k": {
+      "path": "arktts/reference/decode_k.npy",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "arktts-expected-decode_logits": {
+      "path": "arktts/reference/decode_logits.npy",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "arktts-expected-decode_v": {
+      "path": "arktts/reference/decode_v.npy",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "arktts-expected-prefill_k": {
+      "path": "arktts/reference/prefill_k.npy",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "arktts-expected-prefill_v": {
+      "path": "arktts/reference/prefill_v.npy",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "arktts-expected-waveform": {
+      "path": "arktts/reference/waveform.wav",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "arktts-expected-synthesized_text": {
+      "path": "arktts/reference/synthesized_text.txt",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-model": {
+      "path": "haas/model.gguf",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-reference": {
+      "path": "haas/reference.gguf",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-audio": {
+      "path": "haas/input.wav",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-adapter": {
+      "path": "haas/capture.py",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-reference_lock": {
+      "path": "haas/reference-requirements.lock",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-expected-decoder_steps": {
+      "path": "haas/reference/decoder_steps.npy",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-expected-joint_steps": {
+      "path": "haas/reference/joint_steps.npy",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-expected-cabi_auto": {
+      "path": "haas/reference/cabi_auto.txt",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-expected-cabi_haas": {
+      "path": "haas/reference/cabi_haas.txt",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-expected-cabi_haas_asr": {
+      "path": "haas/reference/cabi_haas_asr.txt",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-expected-cabi_haas_ja": {
+      "path": "haas/reference/cabi_haas_ja.txt",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-expected-cli_haas": {
+      "path": "haas/reference/cli_haas.txt",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-expected-cli_haas_asr": {
+      "path": "haas/reference/cli_haas_asr.txt",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "haas-expected-cli_haas_ja": {
+      "path": "haas/reference/cli_haas_ja.txt",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "meanvc2-model": {
+      "path": "meanvc2/model.gguf",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "meanvc2-reference": {
+      "path": "meanvc2/reference.gguf",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "meanvc2-audio": {
+      "path": "meanvc2/input.wav",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "meanvc2-adapter": {
+      "path": "meanvc2/capture.py",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "meanvc2-reference_lock": {
+      "path": "meanvc2/reference-requirements.lock",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "meanvc2-conditioning": {
+      "path": "meanvc2/speaker-embedding.f32le",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "meanvc2-expected-asr_bn": {
+      "path": "meanvc2/reference/asr_bn.npy",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "meanvc2-expected-asr_bn_interp": {
+      "path": "meanvc2/reference/asr_bn_interp.npy",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "meanvc2-expected-dit_mel": {
+      "path": "meanvc2/reference/dit_mel.npy",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "meanvc2-expected-speaker_embedding": {
+      "path": "meanvc2/reference/speaker_embedding.npy",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "meanvc2-expected-waveform": {
+      "path": "meanvc2/reference/waveform.wav",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    },
+    "meanvc2-expected-converted_text": {
+      "path": "meanvc2/reference/converted_text.txt",
+      "sha256": "REPLACE_WITH_SHA256_OF_EXACT_FILE"
+    }
+  },
+  "cases": [
+    {
+      "id": "arktts-f16-short",
+      "backend": "arktts",
+      "model_revision": "REPLACE_WITH_MODEL_40_HEX_REVISION",
+      "reference_revision": "REPLACE_WITH_REFERENCE_40_HEX_REVISION",
+      "original_code_revision": "REPLACE_WITH_ORIGINAL_40_HEX_REVISION",
+      "model": "arktts-model",
+      "reference": "arktts-reference",
+      "audio": "arktts-audio",
+      "adapter": "arktts-adapter",
+      "reference_lock": "arktts-reference_lock",
+      "argv": [
+        "{python}",
+        "{file:arktts-adapter}",
+        "--model",
+        "{file:arktts-model}",
+        "--audio",
+        "{file:arktts-audio}",
+        "--cli",
+        "{bin:crispasr}",
+        "--library",
+        "{library}",
+        "--out",
+        "{out}"
+      ],
+      "arrays": {
+        "decode_k": {
+          "actual": "decode_k.npy",
+          "reference": "arktts-expected-decode_k",
+          "comparison": "numeric",
+          "max_abs": "REPLACE_WITH_APPROVED_MAX",
+          "relative_l2_max": "REPLACE_WITH_APPROVED_MAX",
+          "cosine_min": "REPLACE_WITH_APPROVED_MIN"
+        },
+        "decode_logits": {
+          "actual": "decode_logits.npy",
+          "reference": "arktts-expected-decode_logits",
+          "comparison": "numeric",
+          "max_abs": "REPLACE_WITH_APPROVED_MAX",
+          "relative_l2_max": "REPLACE_WITH_APPROVED_MAX",
+          "cosine_min": "REPLACE_WITH_APPROVED_MIN"
+        },
+        "decode_v": {
+          "actual": "decode_v.npy",
+          "reference": "arktts-expected-decode_v",
+          "comparison": "numeric",
+          "max_abs": "REPLACE_WITH_APPROVED_MAX",
+          "relative_l2_max": "REPLACE_WITH_APPROVED_MAX",
+          "cosine_min": "REPLACE_WITH_APPROVED_MIN"
+        },
+        "prefill_k": {
+          "actual": "prefill_k.npy",
+          "reference": "arktts-expected-prefill_k",
+          "comparison": "numeric",
+          "max_abs": "REPLACE_WITH_APPROVED_MAX",
+          "relative_l2_max": "REPLACE_WITH_APPROVED_MAX",
+          "cosine_min": "REPLACE_WITH_APPROVED_MIN"
+        },
+        "prefill_v": {
+          "actual": "prefill_v.npy",
+          "reference": "arktts-expected-prefill_v",
+          "comparison": "numeric",
+          "max_abs": "REPLACE_WITH_APPROVED_MAX",
+          "relative_l2_max": "REPLACE_WITH_APPROVED_MAX",
+          "cosine_min": "REPLACE_WITH_APPROVED_MIN"
+        },
+        "waveform": {
+          "actual": "waveform.wav",
+          "reference": "arktts-expected-waveform",
+          "comparison": "waveform",
+          "duration_ratio_min": "REPLACE_WITH_APPROVED_MIN",
+          "duration_ratio_max": "REPLACE_WITH_APPROVED_MAX",
+          "rms_ratio_min": "REPLACE_WITH_APPROVED_MIN",
+          "rms_ratio_max": "REPLACE_WITH_APPROVED_MAX",
+          "peak_abs_max": "REPLACE_WITH_APPROVED_MAX"
+        }
+      },
+      "texts": {
+        "synthesized_text": {
+          "actual": "synthesized_text.txt",
+          "reference": "arktts-expected-synthesized_text"
+        }
+      }
+    },
+    {
+      "id": "haas-f16-short",
+      "backend": "haas",
+      "model_revision": "REPLACE_WITH_MODEL_40_HEX_REVISION",
+      "reference_revision": "REPLACE_WITH_REFERENCE_40_HEX_REVISION",
+      "original_code_revision": "REPLACE_WITH_ORIGINAL_40_HEX_REVISION",
+      "model": "haas-model",
+      "reference": "haas-reference",
+      "audio": "haas-audio",
+      "adapter": "haas-adapter",
+      "reference_lock": "haas-reference_lock",
+      "argv": [
+        "{python}",
+        "{file:haas-adapter}",
+        "--model",
+        "{file:haas-model}",
+        "--audio",
+        "{file:haas-audio}",
+        "--cli",
+        "{bin:crispasr}",
+        "--library",
+        "{library}",
+        "--out",
+        "{out}"
+      ],
+      "arrays": {
+        "decoder_steps": {
+          "actual": "decoder_steps.npy",
+          "reference": "haas-expected-decoder_steps",
+          "comparison": "numeric",
+          "max_abs": "REPLACE_WITH_APPROVED_MAX",
+          "relative_l2_max": "REPLACE_WITH_APPROVED_MAX",
+          "cosine_min": "REPLACE_WITH_APPROVED_MIN"
+        },
+        "joint_steps": {
+          "actual": "joint_steps.npy",
+          "reference": "haas-expected-joint_steps",
+          "comparison": "numeric",
+          "max_abs": "REPLACE_WITH_APPROVED_MAX",
+          "relative_l2_max": "REPLACE_WITH_APPROVED_MAX",
+          "cosine_min": "REPLACE_WITH_APPROVED_MIN"
+        }
+      },
+      "texts": {
+        "cabi_auto": {
+          "actual": "cabi_auto.txt",
+          "reference": "haas-expected-cabi_auto"
+        },
+        "cabi_haas": {
+          "actual": "cabi_haas.txt",
+          "reference": "haas-expected-cabi_haas"
+        },
+        "cabi_haas_asr": {
+          "actual": "cabi_haas_asr.txt",
+          "reference": "haas-expected-cabi_haas_asr"
+        },
+        "cabi_haas_ja": {
+          "actual": "cabi_haas_ja.txt",
+          "reference": "haas-expected-cabi_haas_ja"
+        },
+        "cli_haas": {
+          "actual": "cli_haas.txt",
+          "reference": "haas-expected-cli_haas"
+        },
+        "cli_haas_asr": {
+          "actual": "cli_haas_asr.txt",
+          "reference": "haas-expected-cli_haas_asr"
+        },
+        "cli_haas_ja": {
+          "actual": "cli_haas_ja.txt",
+          "reference": "haas-expected-cli_haas_ja"
+        }
+      }
+    },
+    {
+      "id": "meanvc2-f16-short",
+      "backend": "meanvc2",
+      "model_revision": "REPLACE_WITH_MODEL_40_HEX_REVISION",
+      "reference_revision": "REPLACE_WITH_REFERENCE_40_HEX_REVISION",
+      "original_code_revision": "REPLACE_WITH_ORIGINAL_40_HEX_REVISION",
+      "model": "meanvc2-model",
+      "reference": "meanvc2-reference",
+      "audio": "meanvc2-audio",
+      "adapter": "meanvc2-adapter",
+      "reference_lock": "meanvc2-reference_lock",
+      "argv": [
+        "{python}",
+        "{file:meanvc2-adapter}",
+        "--model",
+        "{file:meanvc2-model}",
+        "--audio",
+        "{file:meanvc2-audio}",
+        "--cli",
+        "{bin:crispasr}",
+        "--library",
+        "{library}",
+        "--out",
+        "{out}",
+        "--embedding",
+        "{file:meanvc2-conditioning}",
+        "--convert-harness",
+        "{bin:test-meanvc2-convert}"
+      ],
+      "speaker_embedding": "meanvc2-conditioning",
+      "arrays": {
+        "asr_bn": {
+          "actual": "asr_bn.npy",
+          "reference": "meanvc2-expected-asr_bn",
+          "comparison": "numeric",
+          "max_abs": "REPLACE_WITH_APPROVED_MAX",
+          "relative_l2_max": "REPLACE_WITH_APPROVED_MAX",
+          "cosine_min": "REPLACE_WITH_APPROVED_MIN"
+        },
+        "asr_bn_interp": {
+          "actual": "asr_bn_interp.npy",
+          "reference": "meanvc2-expected-asr_bn_interp",
+          "comparison": "numeric",
+          "max_abs": "REPLACE_WITH_APPROVED_MAX",
+          "relative_l2_max": "REPLACE_WITH_APPROVED_MAX",
+          "cosine_min": "REPLACE_WITH_APPROVED_MIN"
+        },
+        "dit_mel": {
+          "actual": "dit_mel.npy",
+          "reference": "meanvc2-expected-dit_mel",
+          "comparison": "numeric",
+          "max_abs": "REPLACE_WITH_APPROVED_MAX",
+          "relative_l2_max": "REPLACE_WITH_APPROVED_MAX",
+          "cosine_min": "REPLACE_WITH_APPROVED_MIN"
+        },
+        "speaker_embedding": {
+          "actual": "speaker_embedding.npy",
+          "reference": "meanvc2-expected-speaker_embedding",
+          "comparison": "cosine",
+          "cosine_min": "REPLACE_WITH_APPROVED_MIN"
+        },
+        "waveform": {
+          "actual": "waveform.wav",
+          "reference": "meanvc2-expected-waveform",
+          "comparison": "waveform",
+          "duration_ratio_min": "REPLACE_WITH_APPROVED_MIN",
+          "duration_ratio_max": "REPLACE_WITH_APPROVED_MAX",
+          "rms_ratio_min": "REPLACE_WITH_APPROVED_MIN",
+          "rms_ratio_max": "REPLACE_WITH_APPROVED_MAX",
+          "peak_abs_max": "REPLACE_WITH_APPROVED_MAX"
+        }
+      },
+      "texts": {
+        "converted_text": {
+          "actual": "converted_text.txt",
+          "reference": "meanvc2-expected-converted_text"
+        }
+      }
+    }
+  ]
+}

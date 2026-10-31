@@ -24,11 +24,14 @@ public:
     uint32_t capabilities() const override { return CAP_S2S | CAP_AUTO_DOWNLOAD | CAP_INTERNAL_CHUNKING; }
 
     bool init(const whisper_params&) override {
-        fprintf(stderr, "crispasr: meanvc2 is a ZERO-SHOT VOICE CONVERSION model.\n"
-                        "  It converts 16 kHz speech audio to a target voice timbre.\n"
-                        "  Use the C ABI surface in meanvc2.h (meanvc2_convert) or the\n"
-                        "  standalone test-meanvc2-convert harness:\n"
-                        "    test-meanvc2-convert <meanvc2.gguf> <input.wav> [output.wav]\n");
+        fprintf(
+            stderr,
+            "crispasr: meanvc2 is a ZERO-SHOT VOICE CONVERSION model.\n"
+            "  It converts 16 kHz speech audio to a target voice timbre.\n"
+            "  Use the C ABI surface in meanvc2.h (meanvc2_convert) or the\n"
+            "  standalone test-meanvc2-convert harness:\n"
+            "    test-meanvc2-convert <meanvc2.gguf> <speaker-embedding.f32le> <input.wav> [output.wav]\n"
+            "  Reference-audio speaker extraction is not implemented; provide a precomputed 256-float embedding.\n");
         return false;
     }
 

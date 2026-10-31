@@ -1561,8 +1561,8 @@ static std::vector<float> run_vocos_decode(meanvc2_context* ctx, const float* me
     }
 
     // 6. Inverse STFT with Hann window, overlap-add and center padding trim
-    std::vector<float> trimmed =
-        core_istft::istft(mag.data(), phase.data(), n_fft, hop, T, nullptr, core_istft::TRIM_CENTER);
+    std::vector<float> trimmed = core_istft::istft(mag.data(), phase.data(), n_fft, hop, T, nullptr,
+                                                   core_istft::TRIM_CENTER, 0.0f, 1e-8f, false, ctx->params.n_threads);
 
     if (out_samples)
         *out_samples = (int)trimmed.size();
@@ -1590,7 +1590,7 @@ struct meanvc2_context* meanvc2_init_from_file(const char* path_model, struct me
     }
 
     if (!core_gguf::load_weights(path_model, c->backend, "meanvc2", c->wl)) {
-        delete c;
+        meanvc2_free(c);
         return nullptr;
     }
     c->tensors = std::move(c->wl.tensors);
@@ -1607,26 +1607,54 @@ struct meanvc2_context* meanvc2_init_from_file(const char* path_model, struct me
 int meanvc2_set_speaker_audio(struct meanvc2_context* ctx, const float* audio_16k, int n_samples) {
     if (!ctx || !audio_16k || n_samples <= 0)
         return -1;
-    // When speaker model is present in GGUF, compute embedding; otherwise placeholder
-    ctx->speaker_emb.assign(256, 0.0f);
-    ctx->speaker_emb[0] = 1.0f;
-    return 0;
+    // The WavLM/ECAPA speaker encoder is not implemented by this runtime yet.
+    // Preserve any explicitly supplied embedding when this operation fails.
+    return -2;
 }
 
 int meanvc2_set_speaker_embedding(struct meanvc2_context* ctx, const float* spk_emb_256) {
     if (!ctx || !spk_emb_256)
         return -1;
+    for (int i = 0; i < 256; ++i) {
+        if (!std::isfinite(spk_emb_256[i]))
+            return -1;
+    }
     ctx->speaker_emb.assign(spk_emb_256, spk_emb_256 + 256);
     return 0;
 }
 
+// Match torch.interpolate(..., size=4*T, mode="linear", align_corners=True).
+// Interpolate time-major BNFs and retain both endpoints, including T == 1.
+static std::vector<float> interpolate_bnf_4x(const float* bns, int n_frames, int dim) {
+    if (!bns || n_frames <= 0 || dim <= 0)
+        return {};
+    const size_t out_frames = (size_t)n_frames * 4;
+    std::vector<float> out(out_frames * dim);
+    const float scale = (float)(n_frames - 1) / (float)(out_frames - 1);
+    for (size_t t = 0; t < out_frames; ++t) {
+        const float pos = std::min((float)t * scale, (float)(n_frames - 1));
+        const int left = (int)pos;
+        const int right = std::min(left + 1, n_frames - 1);
+        const float alpha = pos - (float)left;
+        for (int d = 0; d < dim; ++d) {
+            const float a = bns[(size_t)left * dim + d];
+            const float b = bns[(size_t)right * dim + d];
+            out[t * dim + d] = a * (1.0f - alpha) + b * alpha;
+        }
+    }
+    return out;
+}
+
 float* meanvc2_convert(struct meanvc2_context* ctx, const float* source_16k, int n_source_samples, int* out_n_samples) {
+    if (out_n_samples)
+        *out_n_samples = 0;
     if (!ctx || !source_16k || n_source_samples <= 0)
         return nullptr;
 
     if (ctx->speaker_emb.empty()) {
-        ctx->speaker_emb.assign(256, 0.0f);
-        ctx->speaker_emb[0] = 1.0f; // Default unit vector
+        if (ctx->params.verbosity >= 1)
+            fprintf(stderr, "meanvc2: supply a precomputed speaker embedding before conversion\n");
+        return nullptr;
     }
 
     auto t_start = std::chrono::high_resolution_clock::now();
@@ -1636,20 +1664,9 @@ float* meanvc2_convert(struct meanvc2_context* ctx, const float* source_16k, int
         return nullptr;
     auto t_asr = std::chrono::high_resolution_clock::now();
 
-    // 4x linear interpolation of BNF
+    // 4x linear interpolation of BNF with the reference's aligned endpoints.
     int T_mel = bn_frames * 4;
-    std::vector<float> bn_interp(T_mel * bn_dim);
-    for (int d = 0; d < bn_dim; d++) {
-        for (int t = 0; t < T_mel; t++) {
-            float orig_pos = (float)t / 4.0f;
-            int idx0 = (int)orig_pos;
-            int idx1 = std::min(idx0 + 1, bn_frames - 1);
-            float alpha = orig_pos - (float)idx0;
-            float val0 = bns[idx0 * bn_dim + d];
-            float val1 = bns[idx1 * bn_dim + d];
-            bn_interp[t * bn_dim + d] = val0 * (1.0f - alpha) + val1 * alpha;
-        }
-    }
+    std::vector<float> bn_interp = interpolate_bnf_4x(bns.data(), bn_frames, bn_dim);
 
     // Deterministic flow noise
     std::vector<float> noise(T_mel * 80);
@@ -1732,6 +1749,7 @@ void meanvc2_free_audio(float* pcm) {
 void meanvc2_free(struct meanvc2_context* ctx) {
     if (!ctx)
         return;
+    core_gguf::free_weights(ctx->wl);
     if (ctx->backend && ctx->backend != ctx->backend_cpu) {
         ggml_backend_free(ctx->backend);
     }

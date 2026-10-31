@@ -1772,7 +1772,7 @@ extern "C" float* granite_speech_run_encoder(struct granite_speech_context* ctx,
         // Shaw block attention on CPU
         core_conformer_ibm::shaw_block_attention_cpu(attn_out.data(), Q.data(), K.data(), V.data(),
                                                      rpe_per_layer[il].empty() ? nullptr : rpe_per_layer[il].data(), T,
-                                                     n_heads, hd, ctx_size, attn_scale, remainder);
+                                                     n_heads, hd, ctx_size, attn_scale, remainder, ctx->n_threads);
 
         if (ctx->params.verbosity >= 2 && il == 0) {
             fprintf(stderr, "  L0 after attn[0][:4] = %.4f %.4f %.4f %.4f\n", attn_out[0], attn_out[1], attn_out[2],
@@ -1812,7 +1812,7 @@ extern "C" float* granite_speech_run_encoder(struct granite_speech_context* ctx,
             if (b.post_norm_b)
                 ggml_backend_tensor_get(b.post_norm_b, nb.data(), 0, d * sizeof(float));
             core_cpu::layernorm(hidden.data(), hidden.data(), b.post_norm_w ? nw.data() : nullptr,
-                                b.post_norm_b ? nb.data() : nullptr, d, T, 1e-5f, ctx->params.n_threads);
+                                b.post_norm_b ? nb.data() : nullptr, d, T, 1e-5f, ctx->n_threads);
         }
 
         // PLUS: snapshot the post-norm hidden state at any cat_layer index.

@@ -2397,7 +2397,8 @@ static float* lfm2_detokenize(lfm2_audio_context* ctx, const std::vector<std::ve
             phase[t * nq + f] = od[t * d.output_size + nq + f];
         }
     ggml_free(c0);
-    auto pcm_v = core_istft::istft(mag.data(), phase.data(), 1280, 320, Tu, nullptr, core_istft::TRIM_SAME);
+    auto pcm_v = core_istft::istft(mag.data(), phase.data(), 1280, 320, Tu, nullptr, core_istft::TRIM_SAME, 0.0f, 1e-8f,
+                                   false, ctx->n_threads);
     for (float& s : pcm_v)
         s = std::max(-1.0f, std::min(1.0f, s));
     float* pcm = (float*)malloc(pcm_v.size() * sizeof(float));

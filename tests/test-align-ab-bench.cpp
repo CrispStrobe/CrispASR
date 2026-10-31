@@ -14,6 +14,8 @@
 #include <catch2/matchers/catch_matchers_floating_point.hpp>
 
 #include "align.h"
+#include "ab_bench_helpers.h"
+#include "portable_env.h"
 
 #include <algorithm>
 #include <chrono>
@@ -75,7 +77,7 @@ std::vector<float> generate_deterministic_logits(int T, int V) {
 
 } // namespace
 
-TEST_CASE("CTC forced alignment paired A/B benchmark (Serial vs Accelerated)", "[align][ab-bench]") {
+TEST_CASE("CTC forced alignment paired A/B benchmark (Serial vs Accelerated)", "[unit][align][ab-bench]") {
     // 1. Setup realistic ASR CTC vocabulary and word transcript
     const int T = 1500;  // 30s audio at 50 fps (or 15s at 100 fps)
     const int V = 16384; // Typical Canary/Conformer subword CTC vocabulary
@@ -110,7 +112,7 @@ TEST_CASE("CTC forced alignment paired A/B benchmark (Serial vs Accelerated)", "
     REQUIRE(warmup_a.size() == words.size());
     REQUIRE(warmup_b.size() == words.size());
 
-    constexpr int N_RUNS = 10;
+    const int N_RUNS = benchmark_timing_enabled() ? 10 : 1;
 
     // 2. Measure Arm A: Serial Baseline (CRISPASR_CTC_ALIGN_SERIAL=1)
     setenv("CRISPASR_CTC_ALIGN_SERIAL", "1", 1);
@@ -154,6 +156,9 @@ TEST_CASE("CTC forced alignment paired A/B benchmark (Serial vs Accelerated)", "
         }
     }
 
+    if (!benchmark_timing_enabled())
+        return;
+
     // 5. Statistics & Report
     const auto stats_a = compute_stats(times_serial);
     const auto stats_b = compute_stats(times_parallel);
@@ -171,5 +176,5 @@ TEST_CASE("CTC forced alignment paired A/B benchmark (Serial vs Accelerated)", "
            stats_a.median_ms - stats_b.median_ms);
     printf("======================================================================\n");
 
-    CHECK(speedup >= 1.5);
+    // Speed depends on the worker; numerical parity above is the unit gate.
 }

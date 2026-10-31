@@ -22,7 +22,7 @@
 #include <vector>
 #include "core/ggml_cpu_backend.h"
 
-#if defined(__APPLE__)
+#if defined(HAVE_ACCELERATE)
 #include <Accelerate/Accelerate.h>
 #define CRISPASR_MIOCODEC_BLAS 1
 #elif defined(HAVE_BLAS)
@@ -172,6 +172,7 @@ struct miocodec_context {
     ggml_backend_sched_t sched = nullptr; // scheduler for graph compute
 
     int verbosity = 0;
+    int n_threads = 4;
 
     // Pre-cached dequantized weights for fast CPU paths
     std::vector<float> fsq_proj_out_w_cached;
@@ -198,6 +199,7 @@ static std::vector<float> miocodec_dequant_tensor(ggml_tensor* t);
 struct miocodec_context* miocodec_init_from_file(const char* path, struct miocodec_params params) {
     auto* ctx = new miocodec_context();
     ctx->verbosity = params.verbosity;
+    ctx->n_threads = params.n_threads > 0 ? params.n_threads : 4;
 
     // Pass 1: read metadata (hyperparameters)
     gguf_context* gctx = core_gguf::open_metadata(path);
@@ -1249,7 +1251,7 @@ float* miocodec_extract_stage(struct miocodec_context* ctx, const int32_t* token
 
             // ISTFT with "same" padding → trim pad from each side
             auto pcm = core_istft::istft(mag_arr.data(), phase_arr.data(), n_fft_val, hop_val, T_is, nullptr,
-                                         core_istft::TRIM_SAME);
+                                         core_istft::TRIM_SAME, 0.0f, 1e-8f, false, ctx->n_threads);
 
             float* wav = (float*)malloc(sizeof(float) * pcm.size());
             memcpy(wav, pcm.data(), sizeof(float) * pcm.size());

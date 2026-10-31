@@ -163,33 +163,16 @@ std::vector<double> top_eigenvectors(const std::vector<double>& m, int n, int k,
     };
     orthonormalize();
 
-    const char* env_serial = std::getenv("CRISPASR_DIARIZE_SERIAL");
-    const bool force_serial = (env_serial && env_serial[0] == '1');
-
     std::vector<double> z((size_t)n * k);
     std::vector<double> prev;
     for (int it = 0; it < 300; it++) {
-        if (force_serial || n < 32) {
-            for (int i = 0; i < n; i++) {
-                for (int c = 0; c < k; c++) {
-                    double acc = shift * q[(size_t)i * k + c];
-                    for (int j = 0; j < n; j++)
-                        acc += m[(size_t)i * n + j] * q[(size_t)j * k + c];
-                    z[(size_t)i * k + c] = acc;
-                }
+        for (int i = 0; i < n; i++) {
+            for (int c = 0; c < k; c++) {
+                double acc = shift * q[(size_t)i * k + c];
+                for (int j = 0; j < n; j++)
+                    acc += m[(size_t)i * n + j] * q[(size_t)j * k + c];
+                z[(size_t)i * k + c] = acc;
             }
-        } else {
-            core_parallel::for_each_chunk(n, 0, [&](int i0, int i1) {
-                for (int i = i0; i < i1; i++) {
-                    const double* m_row = m.data() + (size_t)i * n;
-                    for (int c = 0; c < k; c++) {
-                        double acc = shift * q[(size_t)i * k + c];
-                        for (int j = 0; j < n; j++)
-                            acc += m_row[j] * q[(size_t)j * k + c];
-                        z[(size_t)i * k + c] = acc;
-                    }
-                }
-            });
         }
         q.swap(z);
         orthonormalize();
@@ -301,78 +284,62 @@ std::vector<int> kmeans(const std::vector<double>& x, int n, int d, int k, unsig
 
 // ===========================================================================
 
-void l2_normalize_rows(float* x, int n, int d) {
+void l2_normalize_rows(float* x, int n, int d, int n_threads) {
     const char* env_serial = std::getenv("CRISPASR_DIARIZE_SERIAL");
     const bool force_serial = (env_serial && env_serial[0] == '1');
-    if (force_serial || n <= 4) {
-        for (int i = 0; i < n; i++) {
-            double nrm = 0.0;
-            for (int j = 0; j < d; j++)
-                nrm += (double)x[(size_t)i * d + j] * x[(size_t)i * d + j];
-            nrm = std::sqrt(nrm);
-            if (nrm <= kTiny)
-                continue; // leave an all-zero row alone rather than emit NaN
-            for (int j = 0; j < d; j++)
-                x[(size_t)i * d + j] = (float)(x[(size_t)i * d + j] / nrm);
-        }
-    } else {
-        core_parallel::for_each_chunk(n, 0, [&](int i_start, int i_end) {
-            for (int i = i_start; i < i_end; i++) {
-                double nrm = 0.0;
-                for (int j = 0; j < d; j++)
-                    nrm += (double)x[(size_t)i * d + j] * x[(size_t)i * d + j];
-                nrm = std::sqrt(nrm);
-                if (nrm <= kTiny)
-                    continue; // leave an all-zero row alone rather than emit NaN
-                for (int j = 0; j < d; j++)
-                    x[(size_t)i * d + j] = (float)(x[(size_t)i * d + j] / nrm);
-            }
-        });
-    }
+    core_parallel::for_each_chunk_work(n, force_serial ? 1 : n_threads, (uint64_t)d * 2, 65536,
+                                       [&](int begin, int end) {
+                                           for (int i = begin; i < end; i++) {
+                                               double nrm = 0.0;
+                                               for (int j = 0; j < d; j++)
+                                                   nrm += (double)x[(size_t)i * d + j] * x[(size_t)i * d + j];
+                                               nrm = std::sqrt(nrm);
+                                               if (nrm <= kTiny)
+                                                   continue; // preserve zero/tiny rows rather than emit NaN
+                                               for (int j = 0; j < d; j++)
+                                                   x[(size_t)i * d + j] = (float)(x[(size_t)i * d + j] / nrm);
+                                           }
+                                       });
 }
 
-std::vector<float> cosine_similarity(const float* x, int n, int d) {
+std::vector<float> cosine_similarity(const float* x, int n, int d, int n_threads) {
     std::vector<float> norm((size_t)n * d);
     std::copy(x, x + (size_t)n * d, norm.begin());
-    l2_normalize_rows(norm.data(), n, d);
+    l2_normalize_rows(norm.data(), n, d, n_threads);
 
     std::vector<float> out((size_t)n * n, 0.0f);
     const char* env_serial = std::getenv("CRISPASR_DIARIZE_SERIAL");
     const bool force_serial = (env_serial && env_serial[0] == '1');
-    if (force_serial || n <= 4) {
-        for (int i = 0; i < n; i++) {
-            for (int j = i; j < n; j++) {
-                double dot = 0.0;
-                for (int t = 0; t < d; t++)
-                    dot += (double)norm[(size_t)i * d + t] * norm[(size_t)j * d + t];
-                out[(size_t)i * n + j] = out[(size_t)j * n + i] = (float)dot;
-            }
-        }
-    } else {
-        core_parallel::for_each_chunk(n, 0, [&](int i_start, int i_end) {
-            for (int i = i_start; i < i_end; i++) {
-                const float* row_i = norm.data() + (size_t)i * d;
-                float* out_row = out.data() + (size_t)i * n;
-                for (int j = i; j < n; j++) {
-                    const float* row_j = norm.data() + (size_t)j * d;
-                    double dot = 0.0;
-                    for (int t = 0; t < d; t++)
-                        dot += (double)row_i[t] * row_j[t];
-                    out_row[j] = (float)dot;
-                }
-            }
-        });
-        for (int i = 0; i < n; i++) {
-            for (int j = 0; j < i; j++) {
-                out[(size_t)i * n + j] = out[(size_t)j * n + i];
-            }
-        }
-    }
+    // Compute each upper-triangle dot product once, then mirror it. Pair an
+    // early (long) row with a late (short) row to balance each worker's work.
+    // Every output element has exactly one owner, including the diagonal.
+    const int row_pairs = n / 2 + n % 2;
+    core_parallel::for_each_chunk_work(row_pairs, force_serial ? 1 : n_threads, ((uint64_t)n + 1) * d, 65536,
+                                       [&](int begin, int end) {
+                                           auto row = [&](int i) {
+                                               const float* row_i = norm.data() + (size_t)i * d;
+                                               for (int j = i; j < n; j++) {
+                                                   const float* row_j = norm.data() + (size_t)j * d;
+                                                   double dot = 0.0;
+                                                   for (int t = 0; t < d; t++)
+                                                       dot += (double)row_i[t] * row_j[t];
+                                                   // A zero row has self-similarity zero; tiny preserved rows
+                                                   // retain their actual self-dot. Neither has a unit diagonal.
+                                                   out[(size_t)i * n + j] = out[(size_t)j * n + i] = (float)dot;
+                                               }
+                                           };
+                                           for (int pair = begin; pair < end; pair++) {
+                                               row(pair);
+                                               const int other = n - 1 - pair;
+                                               if (other != pair)
+                                                   row(other);
+                                           }
+                                       });
     return out;
 }
 
-std::vector<float> cosine_affinity(const float* x, int n, int d) {
-    std::vector<float> a = cosine_similarity(x, n, d);
+std::vector<float> cosine_affinity(const float* x, int n, int d, int n_threads) {
+    std::vector<float> a = cosine_similarity(x, n, d, n_threads);
     for (int i = 0; i < n; i++)
         for (int j = 0; j < n; j++) {
             float v = (a[(size_t)i * n + j] + 1.0f) * 0.5f;
@@ -610,33 +577,14 @@ std::vector<float> refine_affinity_rows(const float* affinity, int n, float keep
     std::vector<float> a((size_t)n * n);
     std::copy(affinity, affinity + (size_t)n * n, a.begin());
     const int keep = std::max(1, (int)std::lround(keep_fraction * n));
-    const char* env_serial = std::getenv("CRISPASR_DIARIZE_SERIAL");
-    const bool force_serial = (env_serial && env_serial[0] == '1');
-
-    if (force_serial || n < 32) {
-        std::vector<float> row((size_t)n);
-        for (int i = 0; i < n; i++) {
-            std::copy(a.begin() + (size_t)i * n, a.begin() + (size_t)(i + 1) * n, row.begin());
-            std::nth_element(row.begin(), row.begin() + (n - keep), row.end());
-            const float thresh = row[(size_t)(n - keep)];
-            for (int j = 0; j < n; j++)
-                if (a[(size_t)i * n + j] < thresh)
-                    a[(size_t)i * n + j] *= attenuate;
-        }
-    } else {
-        core_parallel::for_each_chunk(n, 0, [&](int i0, int i1) {
-            std::vector<float> row((size_t)n);
-            for (int i = i0; i < i1; i++) {
-                std::copy(a.begin() + (size_t)i * n, a.begin() + (size_t)(i + 1) * n, row.begin());
-                std::nth_element(row.begin(), row.begin() + (n - keep), row.end());
-                const float thresh = row[(size_t)(n - keep)];
-                float* a_row = a.data() + (size_t)i * n;
-                for (int j = 0; j < n; j++) {
-                    if (a_row[j] < thresh)
-                        a_row[j] *= attenuate;
-                }
-            }
-        });
+    std::vector<float> row((size_t)n);
+    for (int i = 0; i < n; i++) {
+        std::copy(a.begin() + (size_t)i * n, a.begin() + (size_t)(i + 1) * n, row.begin());
+        std::nth_element(row.begin(), row.begin() + (n - keep), row.end());
+        const float thresh = row[(size_t)(n - keep)];
+        for (int j = 0; j < n; j++)
+            if (a[(size_t)i * n + j] < thresh)
+                a[(size_t)i * n + j] *= attenuate;
     }
     // Row thresholding breaks symmetry; restore it with the elementwise max
     // so a strong link surviving in either direction survives in both.
@@ -887,74 +835,37 @@ float silhouette_precomputed(const float* distance, int n, const std::vector<int
         count[(size_t)v]++;
 
     double total = 0.0;
-    const char* env_serial = std::getenv("CRISPASR_DIARIZE_SERIAL");
-    const bool force_serial = (env_serial && env_serial[0] == '1');
-
-    if (force_serial || n < 32) {
-        std::vector<double> sum((size_t)k);
-        for (int i = 0; i < n; i++) {
-            std::fill(sum.begin(), sum.end(), 0.0);
-            for (int j = 0; j < n; j++) {
-                if (j == i)
-                    continue;
-                sum[(size_t)labels[(size_t)j]] += distance[(size_t)i * n + j];
-            }
-            const int own = labels[(size_t)i];
-            if (count[(size_t)own] <= 1) {
-                // A singleton cluster contributes 0 by convention.
+    std::vector<double> sum((size_t)k);
+    for (int i = 0; i < n; i++) {
+        std::fill(sum.begin(), sum.end(), 0.0);
+        for (int j = 0; j < n; j++) {
+            if (j == i)
                 continue;
-            }
-            const double a = sum[(size_t)own] / (count[(size_t)own] - 1);
-            double b = std::numeric_limits<double>::infinity();
-            for (int c = 0; c < k; c++) {
-                if (c == own || count[(size_t)c] == 0)
-                    continue;
-                b = std::min(b, sum[(size_t)c] / count[(size_t)c]);
-            }
-            if (!std::isfinite(b))
+            sum[(size_t)labels[(size_t)j]] += distance[(size_t)i * n + j];
+        }
+        const int own = labels[(size_t)i];
+        if (count[(size_t)own] <= 1) {
+            // A singleton cluster contributes 0 by convention.
+            continue;
+        }
+        const double a = sum[(size_t)own] / (count[(size_t)own] - 1);
+        double b = std::numeric_limits<double>::infinity();
+        for (int c = 0; c < k; c++) {
+            if (c == own || count[(size_t)c] == 0)
                 continue;
-            const double denom = std::max(a, b);
-            if (denom > kTiny)
-                total += (b - a) / denom;
+            b = std::min(b, sum[(size_t)c] / count[(size_t)c]);
         }
-    } else {
-        std::vector<double> s_contrib((size_t)n, 0.0);
-        core_parallel::for_each_chunk(n, 0, [&](int i0, int i1) {
-            std::vector<double> sum((size_t)k);
-            for (int i = i0; i < i1; i++) {
-                std::fill(sum.begin(), sum.end(), 0.0);
-                const float* dist_row = distance + (size_t)i * n;
-                for (int j = 0; j < n; j++) {
-                    if (j == i)
-                        continue;
-                    sum[(size_t)labels[(size_t)j]] += dist_row[j];
-                }
-                const int own = labels[(size_t)i];
-                if (count[(size_t)own] <= 1) {
-                    continue;
-                }
-                const double a = sum[(size_t)own] / (count[(size_t)own] - 1);
-                double b = std::numeric_limits<double>::infinity();
-                for (int c = 0; c < k; c++) {
-                    if (c == own || count[(size_t)c] == 0)
-                        continue;
-                    b = std::min(b, sum[(size_t)c] / count[(size_t)c]);
-                }
-                if (!std::isfinite(b))
-                    continue;
-                const double denom = std::max(a, b);
-                if (denom > kTiny)
-                    s_contrib[(size_t)i] = (b - a) / denom;
-            }
-        });
-        for (int i = 0; i < n; i++) {
-            total += s_contrib[(size_t)i];
-        }
+        if (!std::isfinite(b))
+            continue;
+        const double denom = std::max(a, b);
+        if (denom > kTiny)
+            total += (b - a) / denom;
     }
     return (float)(total / n);
 }
 
-std::vector<int> refine_spherical(const float* x, int n, int d, const std::vector<int>& labels, int max_iter) {
+std::vector<int> refine_spherical(const float* x, int n, int d, const std::vector<int>& labels, int max_iter,
+                                  int n_threads) {
     if (n <= 0)
         return {};
     std::vector<int> uniq(labels);
@@ -970,7 +881,7 @@ std::vector<int> refine_spherical(const float* x, int n, int d, const std::vecto
 
     std::vector<float> emb((size_t)n * d);
     std::copy(x, x + (size_t)n * d, emb.begin());
-    l2_normalize_rows(emb.data(), n, d);
+    l2_normalize_rows(emb.data(), n, d, n_threads);
 
     for (int it = 0; it < max_iter; it++) {
         std::vector<double> cent((size_t)k * d, 0.0);
@@ -1049,7 +960,7 @@ static SpeakerEstimate estimate_speakers_impl(const float* x, int n, int d, int 
     {
         std::vector<float> sim_local;
         if (!sim_precomputed) {
-            sim_local = cosine_similarity(x, n, d);
+            sim_local = cosine_similarity(x, n, d, n_threads);
             sim_precomputed = sim_local.data();
         }
         const float* sim = sim_precomputed;
@@ -1161,7 +1072,7 @@ std::vector<int> cluster_speakers(const float* x, int n, int d, int min_speakers
     // the affinity every spectral run clusters on, the p10 single-speaker veto
     // inside the estimator, and the silhouette's distance matrix — is a cheap
     // transform of this one matrix; it used to be recomputed per spectral run.
-    std::vector<float> sim = cosine_similarity(x, n, d);
+    std::vector<float> sim = cosine_similarity(x, n, d, n_threads);
     std::vector<float> aff = sim;
     for (int i = 0; i < n; i++)
         for (int j = 0; j < n; j++) {
@@ -1173,7 +1084,7 @@ std::vector<int> cluster_speakers(const float* x, int n, int d, int min_speakers
 
     auto run = [&](int k) {
         std::vector<int> lab = spectral_labels(aff.data(), n, k, seed);
-        return refine_spherical(x, n, d, lab);
+        return refine_spherical(x, n, d, lab, 8, n_threads);
     };
 
     if (num_speakers > 0) {
@@ -1269,7 +1180,9 @@ std::vector<int> cluster_speakers(const float* x, int n, int d, int min_speakers
     std::vector<float> cand_sil((size_t)n_cand, 0.0f);
     core_parallel::for_each_task(n_cand, n_threads, [&](int i, int) {
         const int c = lower + i;
-        cand_labels[(size_t)i] = refine_spherical(x, n, d, spectral_labels(aff.data(), n, c, seed));
+        // The k-sweep already owns the worker budget; normalization inside
+        // each candidate must not create another team (including std::thread).
+        cand_labels[(size_t)i] = refine_spherical(x, n, d, spectral_labels(aff.data(), n, c, seed), 8, 1);
         cand_sil[(size_t)i] = silhouette_precomputed(dist.data(), n, cand_labels[(size_t)i]);
     });
 

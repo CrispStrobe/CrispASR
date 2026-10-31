@@ -2926,7 +2926,7 @@ static void higgs_cos(const float* a, const float* b, int T, int C, float& cos_m
 }
 
 static bool higgs_rvq_encode(ov_higgs_tokenizer& tok, const std::vector<float>& emb, int T,
-                             std::vector<int32_t>& out_codes) {
+                             std::vector<int32_t>& out_codes, int n_threads) {
     const int H = tok.hidden_size;   // 1024
     const int D = tok.codebook_dim;  // 64
     const int S = tok.codebook_size; // 1024
@@ -2983,7 +2983,7 @@ static bool higgs_rvq_encode(ov_higgs_tokenizer& tok, const std::vector<float>& 
         }
         core_rvq::Codebook cbk{cb.data(), norm_sq.data(), S, D};
         std::vector<int32_t> idx(T);
-        if (!core_rvq::encode_euclidean(P.data(), T, D, &cbk, 1, idx.data()))
+        if (!core_rvq::encode_euclidean(P.data(), T, D, &cbk, 1, idx.data(), n_threads))
             return false;
 
         // Store codes + subtract project_out(centroid) from the residual.
@@ -3717,7 +3717,7 @@ static std::vector<int32_t> higgs_encode_impl(omnivoice_context* ctx, const floa
     std::vector<float> emb;
     higgs_linear(fc_w, fc_b, cat.data(), T, Hh, Hh, emb);
     std::vector<int32_t> codes;
-    if (!higgs_rvq_encode(tok, emb, T, codes))
+    if (!higgs_rvq_encode(tok, emb, T, codes, ctx->n_threads))
         return {};
     *out_T = T;
     return codes; // (n_q, T)
@@ -3974,7 +3974,7 @@ static int run_encode_diff(omnivoice_context* ctx, const char* ref_path) {
         std::vector<float> emb((size_t)T * H);
         std::memcpy(emb.data(), r_emb->data, emb.size() * sizeof(float));
         std::vector<int32_t> mine;
-        if (higgs_rvq_encode(tok, emb, T, mine)) {
+        if (higgs_rvq_encode(tok, emb, T, mine, ctx->n_threads)) {
             // ref codes stored (NQ, T) row-major as float/int32.
             int NQ = tok.n_quantizers;
             std::vector<int32_t> refc((size_t)NQ * T);

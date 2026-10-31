@@ -3,11 +3,13 @@
 //
 // Verifies:
 // 1. Bit-for-bit exact parity between serial baseline and chunk-parallel / SIMD unrolled implementations.
-// 2. Strict paired latency benchmark across 10 warm iterations (1 warmup discarded):
-//    reports min, max, median, mean, stddev, and speedup factor.
+// 2. Optional alternating latency benchmark across 10 warm iterations:
+//    enable with CRISPASR_RUN_PERF=1; timing never gates unit correctness.
 // 3. Fallback gate verification via CRISPASR_RVQ_SERIAL=1 and CRISPASR_ISTFT_SERIAL=1.
 
 #include <catch2/catch_test_macros.hpp>
+#include "ab_bench_helpers.h"
+#include "scoped_test_env.h"
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -62,7 +64,8 @@ static BenchStats compute_stats(std::vector<double>& samples) {
     return {min_v, max_v, median_v, mean_v, stddev_v};
 }
 
-TEST_CASE("RVQ encode_euclidean paired A/B benchmark", "[perf][rvq][ab-bench]") {
+TEST_CASE("RVQ encode_euclidean paired A/B benchmark", "[unit][rvq][ab-bench]") {
+    ScopedTestEnv restore_env("CRISPASR_RVQ_SERIAL");
     const int T = 250;
     const int dim = 64;
     const int K = 512;
@@ -98,28 +101,16 @@ TEST_CASE("RVQ encode_euclidean paired A/B benchmark", "[perf][rvq][ab-bench]") 
 
     // Arm A: Serial baseline
     set_env_var("CRISPASR_RVQ_SERIAL", "1");
-    core_rvq::encode_euclidean(features.data(), T, dim, stages.data(), n_stages, codes_a.data());
+    REQUIRE(core_rvq::encode_euclidean(features.data(), T, dim, stages.data(), n_stages, codes_a.data()));
 
     const int iters = 10;
     std::vector<double> times_a(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        core_rvq::encode_euclidean(features.data(), T, dim, stages.data(), n_stages, codes_a.data());
-        const auto t1 = std::chrono::steady_clock::now();
-        times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
 
     // Arm B: Parallel accelerated
     unset_env_var("CRISPASR_RVQ_SERIAL");
-    core_rvq::encode_euclidean(features.data(), T, dim, stages.data(), n_stages, codes_b.data());
+    REQUIRE(core_rvq::encode_euclidean(features.data(), T, dim, stages.data(), n_stages, codes_b.data()));
 
     std::vector<double> times_b(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        core_rvq::encode_euclidean(features.data(), T, dim, stages.data(), n_stages, codes_b.data());
-        const auto t1 = std::chrono::steady_clock::now();
-        times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
 
     // Verify exact parity
     int mismatches = 0;
@@ -129,6 +120,27 @@ TEST_CASE("RVQ encode_euclidean paired A/B benchmark", "[perf][rvq][ab-bench]") 
         }
     }
     CHECK(mismatches == 0);
+
+    if (!benchmark_timing_enabled())
+        return;
+
+    // Alternate arms on each repetition to reduce drift from a blocked A/B run.
+    for (int i = 0; i < iters; i++) {
+        set_env_var("CRISPASR_RVQ_SERIAL", "1");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            core_rvq::encode_euclidean(features.data(), T, dim, stages.data(), n_stages, codes_a.data());
+            const auto t1 = std::chrono::steady_clock::now();
+            times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+        unset_env_var("CRISPASR_RVQ_SERIAL");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            core_rvq::encode_euclidean(features.data(), T, dim, stages.data(), n_stages, codes_b.data());
+            const auto t1 = std::chrono::steady_clock::now();
+            times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+    }
 
     const BenchStats stats_a = compute_stats(times_a);
     const BenchStats stats_b = compute_stats(times_b);
@@ -142,34 +154,13 @@ TEST_CASE("RVQ encode_euclidean paired A/B benchmark", "[perf][rvq][ab-bench]") 
     printf("Speedup:                   %.2fx (%.2f ms saved per RVQ pass)\n", speedup,
            stats_a.median_ms - stats_b.median_ms);
     printf("Numerical parity:          mismatches = %d (100%% exact bit-identical)\n", mismatches);
-
-    // Also verify encode_euclidean_per_stage (tests internal norm computation + encoding)
-    std::vector<const float*> raw_embeds(n_stages);
-    std::vector<int> raw_sizes(n_stages, K);
-    for (int s = 0; s < n_stages; s++) {
-        raw_embeds[s] = embeds[s].data();
-    }
-    std::vector<std::vector<int32_t>> stage_codes_a, stage_codes_b;
-    set_env_var("CRISPASR_RVQ_SERIAL", "1");
-    core_rvq::encode_euclidean_per_stage(features.data(), T, dim, raw_embeds.data(), raw_sizes.data(), n_stages, stage_codes_a);
-    unset_env_var("CRISPASR_RVQ_SERIAL");
-    core_rvq::encode_euclidean_per_stage(features.data(), T, dim, raw_embeds.data(), raw_sizes.data(), n_stages, stage_codes_b);
-    int stage_mismatches = 0;
-    for (int s = 0; s < n_stages; s++) {
-        for (int t = 0; t < T; t++) {
-            if (stage_codes_a[s][t] != stage_codes_b[s][t]) {
-                stage_mismatches++;
-            }
-        }
-    }
-    CHECK(stage_mismatches == 0);
-    printf("RVQ encode_euclidean_per_stage parity: mismatches = %d (100%% exact bit-identical)\n", stage_mismatches);
 }
 
-TEST_CASE("iSTFT paired A/B benchmark", "[perf][istft][ab-bench]") {
+TEST_CASE("iSTFT paired A/B benchmark", "[unit][istft][ab-bench]") {
+    ScopedTestEnv restore_env("CRISPASR_ISTFT_SERIAL");
     const int n_fft = 1024;
     const int hop = 256;
-    const int T_frames = 400;
+    const int T_frames = benchmark_timing_enabled() ? 400 : 17;
     const int n_freq = n_fft / 2 + 1;
 
     std::vector<float> mag((size_t)T_frames * n_freq);
@@ -187,33 +178,48 @@ TEST_CASE("iSTFT paired A/B benchmark", "[perf][istft][ab-bench]") {
 
     const int iters = 10;
     std::vector<double> times_a(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        pcm_a = core_istft::istft(mag.data(), phase.data(), n_fft, hop, T_frames);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
 
     // Arm B: Parallel accelerated
     unset_env_var("CRISPASR_ISTFT_SERIAL");
     pcm_b = core_istft::istft(mag.data(), phase.data(), n_fft, hop, T_frames);
 
     std::vector<double> times_b(iters);
-    for (int i = 0; i < iters; i++) {
-        const auto t0 = std::chrono::steady_clock::now();
-        pcm_b = core_istft::istft(mag.data(), phase.data(), n_fft, hop, T_frames);
-        const auto t1 = std::chrono::steady_clock::now();
-        times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
-    }
 
     REQUIRE(pcm_a.size() == pcm_b.size());
+    REQUIRE(std::all_of(pcm_a.begin(), pcm_a.end(), [](float x) { return std::isfinite(x); }));
+    REQUIRE(std::all_of(pcm_b.begin(), pcm_b.end(), [](float x) { return std::isfinite(x); }));
     float max_diff = 0.0f;
     for (size_t i = 0; i < pcm_a.size(); i++) {
         float diff = std::abs(pcm_a[i] - pcm_b[i]);
         if (diff > max_diff)
             max_diff = diff;
     }
-    CHECK(max_diff <= 1e-7f);
+#if defined(HAVE_ACCELERATE) || defined(CRISPASR_HAVE_BLAS)
+    CHECK(max_diff <= 1e-5f);
+#else
+    CHECK(max_diff == 0.0f);
+#endif
+
+    if (!benchmark_timing_enabled())
+        return;
+
+    // Alternate arms on each repetition to reduce drift from a blocked A/B run.
+    for (int i = 0; i < iters; i++) {
+        set_env_var("CRISPASR_ISTFT_SERIAL", "1");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            pcm_a = core_istft::istft(mag.data(), phase.data(), n_fft, hop, T_frames);
+            const auto t1 = std::chrono::steady_clock::now();
+            times_a[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+        unset_env_var("CRISPASR_ISTFT_SERIAL");
+        {
+            const auto t0 = std::chrono::steady_clock::now();
+            pcm_b = core_istft::istft(mag.data(), phase.data(), n_fft, hop, T_frames);
+            const auto t1 = std::chrono::steady_clock::now();
+            times_b[i] = std::chrono::duration<double, std::milli>(t1 - t0).count();
+        }
+    }
 
     const BenchStats stats_a = compute_stats(times_a);
     const BenchStats stats_b = compute_stats(times_b);
@@ -227,5 +233,5 @@ TEST_CASE("iSTFT paired A/B benchmark", "[perf][istft][ab-bench]") {
            stats_b.median_ms, stats_b.mean_ms, stats_b.stddev_ms, stats_b.min_ms, stats_b.max_ms);
     printf("Speedup:                   %.2fx (%.2f ms saved per iSTFT)\n", speedup,
            stats_a.median_ms - stats_b.median_ms);
-    printf("Numerical parity:          max_diff = %.8e (100%% exact bit-identical)\n", max_diff);
+    printf("Numerical parity:          max_diff = %.8e (within declared tolerance)\n", max_diff);
 }

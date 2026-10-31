@@ -348,7 +348,7 @@ static std::vector<float> sensevoice_compute_features(sensevoice_context* ctx, c
             }
         };
         if (T_lfr >= 16) {
-            core_parallel::for_each_chunk(T_lfr, 0, apply_cmvn);
+            core_parallel::for_each_chunk_work(T_lfr, ctx->n_threads, D * 2, 65536, apply_cmvn);
         } else {
             apply_cmvn(0, T_lfr);
         }
@@ -685,7 +685,7 @@ static std::string sensevoice_transcribe_impl(sensevoice_context* ctx, const flo
             }
         };
         if (T_total >= 4) {
-            core_parallel::for_each_chunk(T_total, 0, compute_logprobs);
+            core_parallel::for_each_chunk_work(T_total, ctx->n_threads, (uint64_t)V * 4, 65536, compute_logprobs);
         } else {
             compute_logprobs(0, T_total);
         }

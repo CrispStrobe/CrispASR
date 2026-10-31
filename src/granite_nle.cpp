@@ -1363,7 +1363,7 @@ extern "C" float* granite_nle_run_encoder(struct granite_nle_context* ctx, const
         core_conformer_ibm::shaw_block_attention_cpu(attn_out.data(), Q.data(), K.data(), V.data(),
                                                      ctx->rpe_per_layer[il].empty() ? nullptr
                                                                                     : ctx->rpe_per_layer[il].data(),
-                                                     T, n_heads, hd, ctx_size, attn_scale, remainder);
+                                                     T, n_heads, hd, ctx_size, attn_scale, remainder, ctx->n_threads);
 
         nle_run_matmul(ctx, proj_out.data(), attn_out.data(), d, T, b.attn_out_w, b.attn_out_b, d);
         for (size_t i = 0; i < (size_t)d * T; i++)
@@ -1390,7 +1390,7 @@ extern "C" float* granite_nle_run_encoder(struct granite_nle_context* ctx, const
             if (b.post_norm_b)
                 ggml_backend_tensor_get(b.post_norm_b, nb.data(), 0, d * sizeof(float));
             core_cpu::layernorm(hidden.data(), hidden.data(), b.post_norm_w ? nw.data() : nullptr,
-                                b.post_norm_b ? nb.data() : nullptr, d, T, 1e-5f);
+                                b.post_norm_b ? nb.data() : nullptr, d, T, 1e-5f, ctx->n_threads);
         }
 
         // Self-conditioning residual: HF runs `out(hidden) → softmax → out_mid()`

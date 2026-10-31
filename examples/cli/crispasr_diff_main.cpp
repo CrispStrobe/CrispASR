@@ -34,6 +34,7 @@
 #include <cmath>
 
 #include "crispasr_diff.h"
+#include "core/backend_aliases.h"
 #include "crispasr_dia_diff.h"
 #include "crispasr_openvoice_diff.h"
 #include "core/backend_validation.h"
@@ -1809,7 +1810,7 @@ int main(int argc, char** argv) {
                 argv[0]);
         return 1;
     }
-    const std::string backend_name = argv[1];
+    const std::string backend_name = core_backend::canonical_runtime_name(argv[1]);
     const std::string model_path = argv[2];
     const std::string ref_path = argv[3];
     const std::string audio_path = argv[4];
@@ -5598,8 +5599,7 @@ int main(int argc, char** argv) {
         }
 
         wespeaker_free(ctx);
-    } else if (backend_name == "parakeet" || backend_name == "haas" || backend_name == "haas-ja" ||
-               backend_name == "haas_ja" || backend_name == "haas-asr" || backend_name == "phonon2") {
+    } else if (backend_name == "parakeet" || backend_name == "haas" || backend_name == "phonon2") {
         auto cp = parakeet_context_default_params();
         cp.n_threads = 4;
         if (const char* threads = std::getenv("CRISPASR_PARAKEET_DIFF_THREADS")) {

@@ -534,18 +534,18 @@ btc_chords_result* btc_chords_recognize(btc_chords_context* ctx, const float* pc
         int cur = 0;
         std::vector<float> part;
         while (n > cur + chunk) {
-            const int got = core_cqt::magnitude(cp, kernels, src + cur, chunk, part);
+            const int got = core_cqt::magnitude(cp, kernels, src + cur, chunk, part, ctx->params.n_threads);
             mag.insert(mag.end(), part.begin(), part.end());
             n_frames += got;
             cur += chunk;
         }
         // Trailing partial chunk -- the reference always emits this final call,
         // even when the remainder is empty.
-        const int got = core_cqt::magnitude(cp, kernels, src + cur, n - cur, part);
+        const int got = core_cqt::magnitude(cp, kernels, src + cur, n - cur, part, ctx->params.n_threads);
         mag.insert(mag.end(), part.begin(), part.end());
         n_frames += got;
     } else {
-        n_frames = core_cqt::magnitude(cp, kernels, src, n, mag);
+        n_frames = core_cqt::magnitude(cp, kernels, src, n, mag, ctx->params.n_threads);
     }
     if (n_frames <= 0)
         return nullptr;

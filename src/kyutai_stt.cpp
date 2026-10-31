@@ -841,7 +841,7 @@ static void rvq_encode_group(kyutai_stt_context* sctx, ggml_tensor* x_projected,
             sizes[q] = num_codes;
         }
         if (uniform && core_rvq::encode_euclidean_per_stage(residual.data(), T, cdim, embeds.data(), sizes.data(),
-                                                            n_codebooks, out_codes)) {
+                                                            n_codebooks, out_codes, sctx->n_threads)) {
             return;
         }
         out_codes.clear(); // partial fill on fallthrough — scalar path repopulates

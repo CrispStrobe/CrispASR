@@ -1770,7 +1770,7 @@ float* miotts_codec_decode(miotts_context* ctx, const float* prenet_out, int T_p
 
     // CPU iSTFT using core_istft (Hann window, "same" padding trim)
     auto pcm = core_istft::istft(mag.data(), phase.data(), n_fft, hop, T_stft,
-                                 /*window=*/nullptr, core_istft::TRIM_SAME);
+                                 /*window=*/nullptr, core_istft::TRIM_SAME, 0.0f, 1e-8f, false, ctx->params.n_threads);
 
     if (out_n)
         *out_n = (int)pcm.size();

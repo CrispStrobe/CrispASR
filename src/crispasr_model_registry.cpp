@@ -2,6 +2,7 @@
 
 #include "crispasr_model_registry.h"
 #include "crispasr_cache.h"
+#include "core/backend_aliases.h"
 
 #include <algorithm>
 #include <cctype>
@@ -1975,6 +1976,10 @@ const Entry* find_by_backend(const std::string& backend) {
     for (const auto& e : k_registry)
         if (backend == e.backend)
             return &e;
+    // Preserve exact registry identities, while allowing all runtime aliases
+    // to select the Haas checkpoint rather than Parakeet's default model.
+    if (core_backend::is_haas_alias(backend) && backend != "haas")
+        return find_by_backend("haas");
     // Fallback: the CLI passes the raw `--backend` alias (e.g. the short
     // `cosyvoice3` / `voxcpm2`) while the registry keys the canonical
     // `cosyvoice3-tts` / `voxcpm2-tts`. When the exact alias has no entry,

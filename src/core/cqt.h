@@ -159,7 +159,7 @@ inline int n_frames(const Params& p, int n_samples) {
 // if a consumer needs reflect padding, add it as a Params flag rather than
 // changing this default.
 inline int magnitude(const Params& p, const std::vector<Kernel>& kernels, const float* x, int n_samples,
-                     std::vector<float>& out) {
+                     std::vector<float>& out, int n_threads = 0) {
     const int T = n_frames(p, n_samples);
     if (T <= 0 || !x)
         return 0;
@@ -192,7 +192,10 @@ inline int magnitude(const Params& p, const std::vector<Kernel>& kernels, const 
             }
         }
     } else {
-        core_parallel::for_each_chunk(T, 0, [&](int t_start, int t_end) {
+        uint64_t work_per_frame = 0;
+        for (int k = 0; k < p.n_bins; k++)
+            work_per_frame += (uint64_t)std::max(0, std::min(kernels[(size_t)k].length, n_samples)) * 2;
+        core_parallel::for_each_chunk_work(T, n_threads, work_per_frame, 65536, [&](int t_start, int t_end) {
             for (int t = t_start; t < t_end; t++) {
                 const long centre = (long)t * (long)p.hop_length;
                 float* out_frame = out.data() + (size_t)t * (size_t)p.n_bins;
@@ -227,8 +230,8 @@ inline int magnitude(const Params& p, const std::vector<Kernel>& kernels, const 
 // Convenience: build kernels and transform in one call. Prefer the two-step
 // form when transforming several signals — the kernels are the expensive part
 // and are signal-independent.
-inline int magnitude(const Params& p, const float* x, int n_samples, std::vector<float>& out) {
-    return magnitude(p, build_kernels(p), x, n_samples, out);
+inline int magnitude(const Params& p, const float* x, int n_samples, std::vector<float>& out, int n_threads = 0) {
+    return magnitude(p, build_kernels(p), x, n_samples, out, n_threads);
 }
 
 } // namespace core_cqt

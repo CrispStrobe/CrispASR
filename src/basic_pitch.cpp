@@ -201,7 +201,7 @@ static bool bp_forward_window(const basic_pitch_ctx* ctx, const float* window, i
     ck.lowpass_len = (int)w.cqt_lowpass.size();
     ck.sqrt_lengths = w.sqrt_lengths.data();
 
-    const int T = core_cqt2010v2::magnitude(cp, ck, window, n, out.cqt);
+    const int T = core_cqt2010v2::magnitude(cp, ck, window, n, out.cqt, nth);
     if (T <= 0) {
         fprintf(stderr, "basic-pitch: CQT failed (n=%d)\n", n);
         return false;
@@ -212,7 +212,7 @@ static bool bp_forward_window(const basic_pitch_ctx* ctx, const float* window, i
         lap(ms_cqt);
 
     out.normlog = out.cqt;
-    core_cqt2010v2::normalized_log(out.normlog.data(), out.normlog.size(), hp.norm_log_eps);
+    core_cqt2010v2::normalized_log(out.normlog.data(), out.normlog.size(), hp.norm_log_eps, nth);
 
     // The single-channel BatchNorm after the CQT, folded to scale/shift by the
     // ONNX export.

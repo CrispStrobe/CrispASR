@@ -18,6 +18,7 @@
 
 #include "core/cpu_attention.h" // cpu_dot + cpu_online_softmax_accumulate (shared)
 #include "core/parallel_for.h"
+#include "core/cpu_model_kernels.h"
 #include "core/fastconformer.h" // core_conformer::rel_shift (ggml rel-pos attention)
 #include "core/gguf_loader.h"
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
@@ -838,37 +839,8 @@ static inline bool crispasr_firered_serial() {
 
 // CPU matmul: C = A @ B^T where A is [M,K], B is [N,K] → C is [M,N]
 // (B stored as [N,K] row-major, like ggml weight [K,N] with ne[0]=K)
-static void cpu_matmul_bt(const float* A, const float* B, float* C, int M, int K, int N) {
-    if (crispasr_firered_serial() || (size_t)M * N < 64) {
-        if (M == 1) {
-            for (int n = 0; n < N; n++)
-                C[n] = cpu_dot(A, B + (size_t)n * K, K);
-        } else {
-            for (int m = 0; m < M; m++) {
-                const float* arow = A + (size_t)m * K;
-                for (int n = 0; n < N; n++)
-                    C[(size_t)m * N + n] = cpu_dot(arow, B + (size_t)n * K, K);
-            }
-        }
-        return;
-    }
-
-    if (M == 1) {
-        // Single-vector × matrix: parallelize over output dimension N.
-        // This is the decoder hot path (one token per step).
-        core_parallel::for_each_chunk(N, 0, [&](int n_start, int n_end) {
-            for (int n = n_start; n < n_end; n++)
-                C[n] = cpu_dot(A, B + (size_t)n * K, K);
-        });
-    } else {
-        core_parallel::for_each_chunk(M, 0, [&](int m_start, int m_end) {
-            for (int m = m_start; m < m_end; m++) {
-                const float* arow = A + (size_t)m * K;
-                for (int n = 0; n < N; n++)
-                    C[(size_t)m * N + n] = cpu_dot(arow, B + (size_t)n * K, K);
-            }
-        });
-    }
+static void cpu_matmul_bt(const float* A, const float* B, float* C, int M, int K, int N, int n_threads = 1) {
+    core_cpu_kernels::matmul_bt(A, B, C, M, K, N, crispasr_firered_serial() ? 1 : n_threads);
 }
 
 // ggml vector-matrix multiply using quantized weight tensor directly.
@@ -1560,17 +1532,10 @@ static void hybrid_encoder(const float* subsampled, int T, int flat_dim, firered
                 float scale = 1.0f / sqrtf((float)hd);
 
                 if (crispasr_firered_serial()) {
-#pragma omp parallel
                     {
                         std::vector<float> qbu(hd);
                         std::vector<float> qbv(hd);
 
-                        // NOTE: the two collapsed loops must be *perfectly* nested (no statements
-                        // between the `h` and `tq` headers), otherwise GCC/Clang reject the
-                        // `collapse(2)` clause. The per-head bias/query pointers are therefore
-                        // derived inside the inner loop — they are pure pointer arithmetic and cost
-                        // nothing.
-#pragma omp for collapse(2) schedule(static)
                         for (int h = 0; h < nh; h++) {
                             for (int tq = 0; tq < T; tq++) {
                                 const float* __restrict buh = biases[li].bu.data() + h * hd;
@@ -1614,33 +1579,34 @@ static void hybrid_encoder(const float* subsampled, int T, int flat_dim, firered
                     }
                 } else {
                     const int total_queries = nh * T;
-                    core_parallel::for_each_chunk(total_queries, 0, [&](int q_start, int q_end) {
-                        std::vector<float> qbu(hd);
-                        std::vector<float> qbv(hd);
-                        for (int q_idx = q_start; q_idx < q_end; q_idx++) {
-                            const int h = q_idx / T;
-                            const int tq = q_idx % T;
-                            const float* __restrict buh = biases[li].bu.data() + h * hd;
-                            const float* __restrict bvh = biases[li].bv.data() + h * hd;
-                            const float* __restrict q = Q_buf.data() + h * hd + tq * d;
-                            for (int dd = 0; dd < hd; dd++) {
-                                qbu[dd] = q[dd] + buh[dd];
-                                qbv[dd] = q[dd] + bvh[dd];
-                            }
+                    core_parallel::for_each_chunk_work(
+                        total_queries, sctx->n_threads, (uint64_t)T * hd * 3, 65536, [&](int q_start, int q_end) {
+                            std::vector<float> qbu(hd);
+                            std::vector<float> qbv(hd);
+                            for (int q_idx = q_start; q_idx < q_end; q_idx++) {
+                                const int h = q_idx / T;
+                                const int tq = q_idx % T;
+                                const float* __restrict buh = biases[li].bu.data() + h * hd;
+                                const float* __restrict bvh = biases[li].bv.data() + h * hd;
+                                const float* __restrict q = Q_buf.data() + h * hd + tq * d;
+                                for (int dd = 0; dd < hd; dd++) {
+                                    qbu[dd] = q[dd] + buh[dd];
+                                    qbv[dd] = q[dd] + bvh[dd];
+                                }
 
-                            cpu_online_softmax_accumulate(
-                                T, hd, V_buf.data() + h * hd, d, attn_out.data() + tq * d + h * hd,
-                                [&](int tk) -> float {
-                                    float content = cpu_dot(qbu.data(), K_buf.data() + h * hd + tk * d, hd);
-                                    float position = 0.0f;
-                                    int pos_idx = T - 1 - tq + tk;
-                                    if ((unsigned)pos_idx < (unsigned)T_pe) {
-                                        position = cpu_dot(qbv.data(), P_buf.data() + h * hd + pos_idx * d, hd);
-                                    }
-                                    return (content + position) * scale;
-                                });
-                        }
-                    });
+                                cpu_online_softmax_accumulate(
+                                    T, hd, V_buf.data() + h * hd, d, attn_out.data() + tq * d + h * hd,
+                                    [&](int tk) -> float {
+                                        float content = cpu_dot(qbu.data(), K_buf.data() + h * hd + tk * d, hd);
+                                        float position = 0.0f;
+                                        int pos_idx = T - 1 - tq + tk;
+                                        if ((unsigned)pos_idx < (unsigned)T_pe) {
+                                            position = cpu_dot(qbv.data(), P_buf.data() + h * hd + pos_idx * d, hd);
+                                        }
+                                        return (content + position) * scale;
+                                    });
+                            }
+                        });
                 }
             } // end if (!ggml_attn) — CPU reference attention
 
@@ -2588,7 +2554,7 @@ static char* firered_asr_transcribe_impl(struct firered_asr_context* ctx, const 
                     fr_matmat(ctx, w, b, in, out, n_active, K, N);
                     return;
                 }
-                cpu_matmul_bt(in, w_f32.data(), out, n_active, K, N);
+                cpu_matmul_bt(in, w_f32.data(), out, n_active, K, N, ctx->n_threads);
                 if (!b_f32.empty())
                     for (int a = 0; a < n_active; a++)
                         for (int i = 0; i < N; i++)
@@ -2662,7 +2628,6 @@ static char* firered_asr_transcribe_impl(struct firered_asr_context* ctx, const 
 
                 // Per-beam cross-attention scoring (shared K_enc/V_enc)
                 if (crispasr_firered_serial() || n_active * nh_dec <= 1) {
-#pragma omp parallel for collapse(2) schedule(static)
                     for (int a = 0; a < n_active; ++a) {
                         for (int h = 0; h < nh_dec; ++h) {
                             cpu_online_softmax_accumulate(
@@ -2676,19 +2641,20 @@ static char* firered_asr_transcribe_impl(struct firered_asr_context* ctx, const 
                     }
                 } else {
                     const int total_cross = n_active * nh_dec;
-                    core_parallel::for_each_chunk(total_cross, 0, [&](int c_start, int c_end) {
-                        for (int c_idx = c_start; c_idx < c_end; c_idx++) {
-                            const int a = c_idx / nh_dec;
-                            const int h = c_idx % nh_dec;
-                            cpu_online_softmax_accumulate(
-                                T_sub, hd_dec, V_enc[li].data() + h * hd_dec, d,
-                                xattn_out_batch.data() + a * d + h * hd_dec, [&](int t) -> float {
-                                    return cpu_dot(Qx_batch.data() + a * d + h * hd_dec,
-                                                   K_enc[li].data() + t * d + h * hd_dec, hd_dec) *
-                                           inv_sqrt_hd_dec;
-                                });
-                        }
-                    });
+                    core_parallel::for_each_chunk_work(
+                        total_cross, ctx->n_threads, (uint64_t)T_sub * hd_dec * 2, 65536, [&](int c_start, int c_end) {
+                            for (int c_idx = c_start; c_idx < c_end; c_idx++) {
+                                const int a = c_idx / nh_dec;
+                                const int h = c_idx % nh_dec;
+                                cpu_online_softmax_accumulate(
+                                    T_sub, hd_dec, V_enc[li].data() + h * hd_dec, d,
+                                    xattn_out_batch.data() + a * d + h * hd_dec, [&](int t) -> float {
+                                        return cpu_dot(Qx_batch.data() + a * d + h * hd_dec,
+                                                       K_enc[li].data() + t * d + h * hd_dec, hd_dec) *
+                                               inv_sqrt_hd_dec;
+                                    });
+                            }
+                        });
                 }
 
                 // Batched cross-attention FC + residual (bias applied in proj_batch)

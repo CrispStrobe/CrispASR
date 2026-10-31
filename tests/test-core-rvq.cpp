@@ -11,6 +11,7 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "core/rvq.h"
+#include "scoped_test_env.h"
 
 #include <cmath>
 #include <random>
@@ -237,4 +238,52 @@ TEST_CASE("core_rvq::encode_euclidean rejects malformed input", "[unit][rvq]") {
 
     core_rvq::Codebook null_norm{emb.data(), nullptr, 2, 4};
     REQUIRE_FALSE(core_rvq::encode_euclidean(feat.data(), 1, 4, &null_norm, 1, codes.data()));
+}
+
+TEST_CASE("core_rvq: per-stage norms preserve first-wins rounding near a tie", "[unit][rvq]") {
+    ScopedTestEnv serial("CRISPASR_RVQ_SERIAL");
+    // Adding four 2^-24 squares separately to 1 rounds to 1 each time;
+    // grouping them first gives 1 + 2^-22. The latter silently changes argmin.
+    for (const int dim : {8, 9, 12, 64, 65}) {
+        for (const int K : {17, 16385}) {
+            CAPTURE(dim, K);
+            std::vector<float> embed((size_t)K * dim, 2.0f);
+            std::fill(embed.begin(), embed.begin() + 2 * dim, 0.0f);
+            embed[0] = 1.0f;
+            for (int j = 4; j < 8; j++)
+                embed[j] = std::ldexp(1.0f, -12);
+            embed[dim + 1] = 1.0f;
+            const float* books[] = {embed.data()};
+            const int sizes[] = {K};
+            std::vector<float> features((size_t)3 * dim, 0.0f);
+            std::vector<std::vector<int32_t>> one, many;
+            REQUIRE(core_rvq::encode_euclidean_per_stage(features.data(), 3, dim, books, sizes, 1, one, 1));
+            REQUIRE(core_rvq::encode_euclidean_per_stage(features.data(), 3, dim, books, sizes, 1, many, 4));
+            REQUIRE((one == std::vector<std::vector<int32_t>>{{0, 0, 0}}));
+            REQUIRE(many == one);
+        }
+    }
+}
+
+TEST_CASE("core_rvq: multistage codes are independent of worker budget", "[unit][rvq]") {
+    ScopedTestEnv serial("CRISPASR_RVQ_SERIAL");
+    const int T = 33, dim = 32, K = 257, S = 4;
+    std::vector<float> features((size_t)T * dim);
+    for (size_t i = 0; i < features.size(); i++)
+        features[i] = std::sin((float)i * 0.017f);
+    std::vector<std::vector<float>> embeds(S, std::vector<float>((size_t)K * dim));
+    std::vector<const float*> books(S);
+    std::vector<int> sizes(S, K);
+    for (int s = 0; s < S; s++) {
+        for (size_t i = 0; i < embeds[s].size(); i++)
+            embeds[s][i] = std::cos((float)(i + s * 103) * 0.013f) / (s + 1);
+        books[s] = embeds[s].data();
+    }
+    std::vector<std::vector<int32_t>> one, many;
+    REQUIRE(core_rvq::encode_euclidean_per_stage(features.data(), T, dim, books.data(), sizes.data(), S, one, 1));
+    for (const int workers : {2, 4}) {
+        REQUIRE(core_rvq::encode_euclidean_per_stage(features.data(), T, dim, books.data(), sizes.data(), S, many,
+                                                     workers));
+        REQUIRE(many == one);
+    }
 }

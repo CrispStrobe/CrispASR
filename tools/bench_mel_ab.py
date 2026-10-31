@@ -1,191 +1,200 @@
 #!/usr/bin/env python3
-"""
-tools/bench_mel_ab.py — Paired A/B benchmark for core_mel optimization.
+"""Paired process A/B benchmark with required transcript gates on every run.
 
-Follows crispasr-crispembed-dev.md Rule 4/4a/5:
-  1. Checks system load (sysctl vm.loadavg).
-  2. Measures Arm A (CRISPASR_MEL_SERIAL=1, serial baseline)
-     vs Arm B (optimized parallel SIMD path).
-  3. Executes 1 cold warmup + 3 measured warm runs per arm in separate processes.
-  4. Asserts proof of work (non-empty transcript, non-zero return code).
-  5. Computes exact decoded transcript match (WER/CER diff between A and B).
-  6. Reports exact milliseconds, RTF, speedup ratio, and verbatim transcripts.
+Each invocation starts a fresh process and includes startup/model loading.
+Discarded runs prime filesystem caches; they are not in-process warm inference.
+Supply an explicit JSON case list; missing models or empty suites are errors.
 """
 
-import os
-import sys
+import argparse
+import hashlib
 import json
-import time
-import subprocess
-import statistics
+import os
+from pathlib import Path
+import platform
 import re
+import statistics
+import subprocess
+import time
 
-def get_load():
-    try:
-        out = subprocess.check_output(["sysctl", "-n", "vm.loadavg"], text=True).strip()
-        return out
-    except Exception:
-        return "unknown"
 
-def run_decode(bin_path, model_path, audio_path, lang, env_vars):
-    env = os.environ.copy()
-    env.update(env_vars)
-    cmd = [
-        bin_path,
-        "-m", model_path,
-        "-f", audio_path,
-        "-l", lang,
-        "-t", "8",
-    ]
-    t0 = time.perf_counter()
-    res = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, env=env)
-    t1 = time.perf_counter()
-    elapsed_ms = (t1 - t0) * 1000.0
+def sha256(path):
+    digest = hashlib.sha256()
+    with Path(path).open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
-    if res.returncode != 0:
-        raise RuntimeError(f"Command failed (exit {res.returncode}):\nSTDERR:\n{res.stderr}\nSTDOUT:\n{res.stdout}")
 
-    # Extract transcription: last non-empty line of stdout
-    lines = [line.strip() for line in res.stdout.splitlines() if line.strip()]
-    transcript = ""
-    for line in reversed(lines):
-        if not line.startswith("crispasr:") and not line.startswith("===") and not line.startswith("ggml_"):
-            transcript = line
-            break
+def normalize_transcript(text):
+    """Ignore line wrapping/whitespace only; retain every word and punctuation."""
+    return " ".join(text.split())
 
-    # Extract reported realtime speed if printed
-    match = re.search(r"transcribed ([\d\.]+)s audio in ([\d\.]+)s \(([\d\.]+)x realtime\)", res.stdout)
-    reported_audio_s = float(match.group(1)) if match else 0.0
-    reported_time_s = float(match.group(2)) if match else 0.0
-    reported_rtf = float(match.group(3)) if match else 0.0
 
+def validate_cases(cases, base_dir):
+    if not isinstance(cases, list) or not cases:
+        raise ValueError("The case manifest must contain a nonempty JSON list")
+    validated = []
+    seen = set()
+    for index, source in enumerate(cases):
+        if not isinstance(source, dict):
+            raise ValueError(f"Case {index} must be an object")
+        case = dict(source)
+        name = case.get("name", f"case-{index}")
+        if not isinstance(name, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", name) or name in seen:
+            raise ValueError("Case names must be unique, nonempty filename-safe identifiers")
+        seen.add(name)
+        case["name"] = name
+        for key in ("model", "audio"):
+            value = case.get(key)
+            if not isinstance(value, str) or not value:
+                raise ValueError(f"{name}: {key} is required")
+            path = Path(value)
+            if not path.is_absolute():
+                path = Path(base_dir) / path
+            if not path.is_file():
+                raise FileNotFoundError(f"{name}: required {key} not found: {path}")
+            case[key] = str(path.resolve())
+            case[f"{key}_sha256"] = sha256(path)
+        expected = case.get("expected_transcript")
+        if not isinstance(expected, str) or not normalize_transcript(expected):
+            raise ValueError(f"{name}: nonempty expected_transcript is required")
+        case["expected_transcript"] = normalize_transcript(expected)
+        args = case.get("extra_args", [])
+        if not isinstance(args, list) or not all(isinstance(arg, str) for arg in args):
+            raise ValueError(f"{name}: extra_args must be a list of strings")
+        reserved = {"-m", "--model", "-f", "--file", "-t", "--threads", "-of", "--output-file", "-otxt", "--output-txt",
+                    "--hf-repo", "-hfr", "--hf-file", "-hff"}
+        if any(arg.split("=", 1)[0] in reserved for arg in args):
+            raise ValueError(f"{name}: extra_args cannot override benchmark inputs, threads, or output")
+        case["extra_args"] = args
+        validated.append(case)
+    return validated
+
+
+def run_decode(binary, case, env, output_prefix, threads, timeout, runner=subprocess.run):
+    command = [str(binary), "-m", case["model"], "-f", case["audio"],
+               "-l", case.get("language", "auto"), "-t", str(threads),
+               "-otxt", "-of", str(output_prefix)] + case["extra_args"]
+    # A real transcript file, never the last logging line on stdout, is proof
+    # of work. Each process receives a fresh path so stale output cannot pass.
+    transcript_path = Path(str(output_prefix) + ".txt")
+    transcript_path.unlink(missing_ok=True)
+    started = time.perf_counter()
+    result = runner(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                    text=True, env=env, timeout=timeout, check=False)
+    elapsed_ms = (time.perf_counter() - started) * 1000
+    Path(str(output_prefix) + ".stdout.log").write_text(result.stdout, encoding="utf-8")
+    Path(str(output_prefix) + ".stderr.log").write_text(result.stderr, encoding="utf-8")
+    transcript = normalize_transcript(transcript_path.read_text(encoding="utf-8")) if transcript_path.is_file() else ""
+    match = re.search(r"transcribed ([\d.]+)s audio in ([\d.]+)s \(([\d.]+)x realtime\)", result.stdout + "\n" + result.stderr)
     return {
-        "wall_ms": elapsed_ms,
-        "reported_time_s": reported_time_s,
-        "reported_audio_s": reported_audio_s,
-        "reported_rtf": reported_rtf,
+        "process_ms": elapsed_ms,
+        "returncode": result.returncode,
         "transcript": transcript,
-        "stdout": res.stdout,
-        "stderr": res.stderr
+        "transcript_sha256": hashlib.sha256(transcript.encode("utf-8")).hexdigest(),
+        "quality_pass": result.returncode == 0 and bool(transcript) and transcript == case["expected_transcript"],
+        "reported_audio_s": float(match.group(1)) if match else None,
+        "reported_inference_s": float(match.group(2)) if match else None,
+        "reported_speed_x": float(match.group(3)) if match else None,
     }
 
-def run_ab_suite(bin_path, model_path, audio_path, lang, audio_dur_s, ground_truth):
-    print(f"\n=======================================================")
-    print(f"Benchmarking: {os.path.basename(model_path)} on {os.path.basename(audio_path)} ({audio_dur_s:.1f}s)")
-    print(f"Initial load: {get_load()}")
-    print(f"=======================================================")
 
-    # 1. Warmup runs (discarded)
-    print("Running cold warmup for Arm A (Serial)...")
-    _ = run_decode(bin_path, model_path, audio_path, lang, {"CRISPASR_MEL_SERIAL": "1"})
-    print("Running cold warmup for Arm B (Optimized Parallel)...")
-    _ = run_decode(bin_path, model_path, audio_path, lang, {})
+def collect(binary, cases, output, *, base_dir=".", threads=4, warmups=1,
+            runs=3, timeout=600, serial_env="CRISPASR_MEL_SERIAL", runner=subprocess.run):
+    output = Path(output)
+    # Separate runs must not silently replace a previous accepted receipt.
+    output.mkdir(parents=True, exist_ok=False)
+    receipt = {"schema_version": 1, "complete": False, "quality_pass": False,
+               "timing_scope": "fresh-process wall time including startup and model load",
+               "warmup_scope": "discarded fresh processes; filesystem-cache priming only",
+               "transcript_comparison": "exact after whitespace normalization",
+               "platform": platform.platform(), "cpu_count": os.cpu_count(),
+               "threads": threads, "serial_env": serial_env, "cases": []}
 
-    # 2. Measured alternating runs (3 per arm)
-    a_runs = []
-    b_runs = []
+    def save():
+        (output / "receipt.json").write_text(json.dumps(receipt, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
-    for run_idx in range(1, 4):
-        print(f"\n--- Measured Iteration {run_idx}/3 ---")
-        # Run A
-        res_a = run_decode(bin_path, model_path, audio_path, lang, {"CRISPASR_MEL_SERIAL": "1"})
-        a_runs.append(res_a)
-        print(f"  Arm A (Serial):    {res_a['wall_ms']:.1f} ms (backend time {res_a['reported_time_s']:.2f}s, {res_a['reported_rtf']:.1f}x RT)")
+    save()
+    try:
+        if not isinstance(threads, int) or threads < 1 or not isinstance(runs, int) or runs < 1 or not isinstance(warmups, int) or warmups < 0 or timeout <= 0:
+            raise ValueError("Require positive threads/runs/timeout and nonnegative warmups")
+        if not re.fullmatch(r"CRISPASR_[A-Z0-9_]+_SERIAL", serial_env):
+            raise ValueError("serial_env must name a CRISPASR_*_SERIAL control")
+        binary = Path(binary).resolve()
+        if not binary.is_file():
+            raise FileNotFoundError(f"Required binary not found: {binary}")
+        receipt["binary_sha256"] = sha256(binary)
+        cases = validate_cases(cases, base_dir)
+        for case in cases:
+            record = {key: value for key, value in case.items() if key not in ("model", "audio")}
+            record["model_file"] = Path(case["model"]).name
+            record["audio_file"] = Path(case["audio"]).name
+            record["events"] = []
+            receipt["cases"].append(record)
+            for phase, count in (("discarded", warmups), ("measured", runs)):
+                for index in range(count):
+                    order = ("A", "B") if index % 2 == 0 else ("B", "A")
+                    for arm in order:
+                        env = os.environ.copy()
+                        # Some production controls (including MEL_SERIAL) test
+                        # presence, not the value. "0" would still select the
+                        # serial path. Explicitly clear an inherited control in
+                        # B so both presence-only and value-based flags work.
+                        if arm == "A":
+                            env[serial_env] = "1"
+                        else:
+                            env.pop(serial_env, None)
+                        label = f"{case['name']}-{phase}-{index}-{arm}"
+                        event = {"phase": phase, "round": index, "arm": arm,
+                                 "control": "1" if arm == "A" else "unset", "log_prefix": label}
+                        record["events"].append(event)
+                        save()
+                        event.update(run_decode(binary, case, env, output / label, threads, timeout, runner))
+                        save()
+                        if not event["quality_pass"]:
+                            raise RuntimeError(f"{label}: command/transcript quality gate failed; see retained logs and receipt")
+            by_arm = {arm: [e["process_ms"] for e in record["events"] if e["phase"] == "measured" and e["arm"] == arm] for arm in ("A", "B")}
+            record["median_process_ms"] = {arm: statistics.median(values) for arm, values in by_arm.items()}
+            record["process_speedup_A_over_B"] = record["median_process_ms"]["A"] / record["median_process_ms"]["B"]
+            # Report CLI instrumentation separately. Its boundary is defined by
+            # the backend and is not labelled as warm/steady-state inference.
+            record["median_reported_inference_s"] = {}
+            for arm in ("A", "B"):
+                events = [e for e in record["events"] if e["phase"] == "measured" and e["arm"] == arm]
+                values = [e["reported_inference_s"] for e in events]
+                record["median_reported_inference_s"][arm] = statistics.median(values) if all(v is not None for v in values) else None
+            record["quality_pass"] = True
+        receipt["complete"] = True
+        receipt["quality_pass"] = True
+        save()
+        return receipt
+    except Exception as exc:
+        receipt["error"] = f"{type(exc).__name__}: {exc}"
+        save()
+        raise
 
-        # Run B
-        res_b = run_decode(bin_path, model_path, audio_path, lang, {})
-        b_runs.append(res_b)
-        print(f"  Arm B (Parallel):  {res_b['wall_ms']:.1f} ms (backend time {res_b['reported_time_s']:.2f}s, {res_b['reported_rtf']:.1f}x RT)")
-
-    a_times = [r["wall_ms"] for r in a_runs]
-    b_times = [r["wall_ms"] for r in b_runs]
-    a_reported = [r["reported_time_s"] for r in a_runs]
-    b_reported = [r["reported_time_s"] for r in b_runs]
-
-    med_a_wall = statistics.median(a_times)
-    med_b_wall = statistics.median(b_times)
-    med_a_rep = statistics.median(a_reported)
-    med_b_rep = statistics.median(b_reported)
-
-    speedup_wall = med_a_wall / med_b_wall
-    speedup_backend = med_a_rep / med_b_rep if med_b_rep > 0 else 1.0
-
-    transcript_a = a_runs[0]["transcript"]
-    transcript_b = b_runs[0]["transcript"]
-    transcript_exact_match = (transcript_a == transcript_b)
-    matches_ground_truth = (transcript_b == ground_truth)
-
-    print("\n--- Summary ---")
-    print(f"Transcript A: '{transcript_a}'")
-    print(f"Transcript B: '{transcript_b}'")
-    print(f"Transcripts Exact Match (A == B): {transcript_exact_match}")
-    print(f"Matches Ground Truth:            {matches_ground_truth}")
-    print(f"Arm A Wall Median:               {med_a_wall:.1f} ms (reported backend {med_a_rep*1000:.1f} ms)")
-    print(f"Arm B Wall Median:               {med_b_wall:.1f} ms (reported backend {med_b_rep*1000:.1f} ms)")
-    print(f"End-to-End Speedup:              {speedup_wall:.3f}x")
-    print(f"Backend Core Speedup:            {speedup_backend:.3f}x")
-
-    return {
-        "model": os.path.basename(model_path),
-        "audio": os.path.basename(audio_path),
-        "audio_dur_s": audio_dur_s,
-        "transcript_a": transcript_a,
-        "transcript_b": transcript_b,
-        "exact_parity": transcript_exact_match,
-        "ground_truth_parity": matches_ground_truth,
-        "arm_a_wall_ms": a_times,
-        "arm_b_wall_ms": b_times,
-        "med_a_wall_ms": med_a_wall,
-        "med_b_wall_ms": med_b_wall,
-        "med_a_backend_s": med_a_rep,
-        "med_b_backend_s": med_b_rep,
-        "speedup_wall": speedup_wall,
-        "speedup_backend": speedup_backend,
-    }
 
 def main():
-    bin_path = "./build/bin/crispasr"
-    if not os.path.exists(bin_path):
-        print(f"Binary not found: {bin_path}")
-        sys.exit(1)
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--binary", type=Path, default=Path("build/bin/crispasr"))
+    parser.add_argument("--cases", required=True, type=Path, help="JSON list; model/audio paths relative to this manifest")
+    parser.add_argument("--output", required=True, type=Path, help="New directory for every run and its receipt")
+    parser.add_argument("--threads", type=int, default=4)
+    parser.add_argument("--warmups", type=int, default=1)
+    parser.add_argument("--runs", type=int, default=3)
+    parser.add_argument("--timeout", type=float, default=600)
+    parser.add_argument("--serial-env", default="CRISPASR_MEL_SERIAL")
+    args = parser.parse_args()
+    try:
+        cases = json.loads(args.cases.read_text(encoding="utf-8"))
+        receipt = collect(args.binary, cases, args.output, base_dir=args.cases.parent,
+                          threads=args.threads, warmups=args.warmups, runs=args.runs,
+                          timeout=args.timeout, serial_env=args.serial_env)
+    except (OSError, ValueError, RuntimeError, subprocess.SubprocessError) as exc:
+        parser.exit(1, f"Benchmark failed: {exc}\n")
+    print(f"All {len(receipt['cases'])} cases passed every transcript gate; receipt: {args.output / 'receipt.json'}")
 
-    models_dir = "/Volumes/backups/ai/crispasr-gguf"
-    
-    benchmarks = [
-        {
-            "model": os.path.join(models_dir, "parakeet-tdt-0.6b-v3-q4_k.gguf"),
-            "audio": "samples/jfk.wav",
-            "lang": "en",
-            "dur": 11.0,
-            "ground_truth": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
-        },
-        {
-            "model": os.path.join(models_dir, "parakeet-tdt-0.6b-ja-q4_k.gguf"),
-            "audio": "samples/ja_test.wav",
-            "lang": "ja",
-            "dur": 4.6,
-            "ground_truth": "こんにちは、本日はお日これまでもよく、すばらしい天気です、もう"
-        },
-        {
-            "model": os.path.join(models_dir, "sensevoice-small-q4_k.gguf"),
-            "audio": "samples/jfk.wav",
-            "lang": "en",
-            "dur": 11.0,
-            "ground_truth": "And so my fellow Americans ask not what your country can do for you, ask what you can do for your country."
-        }
-    ]
-
-    results = []
-    for b in benchmarks:
-        if os.path.exists(b["model"]):
-            res = run_ab_suite(bin_path, b["model"], b["audio"], b["lang"], b["dur"], b["ground_truth"])
-            results.append(res)
-        else:
-            print(f"Skipping {b['model']}, not found.")
-
-    with open("build/ab_benchmark_receipt.json", "w") as f:
-        json.dump(results, f, indent=2)
-    print("\nBenchmark receipt saved to build/ab_benchmark_receipt.json")
 
 if __name__ == "__main__":
     main()

@@ -6,16 +6,39 @@
 #include <cstring>
 #include <vector>
 #include <chrono>
+#include <fstream>
 
 int main(int argc, char** argv) {
-    if (argc < 2) {
-        fprintf(stderr, "Usage: %s <meanvc2.gguf> [input.wav] [out.wav]\n", argv[0]);
+    if (argc < 3) {
+        fprintf(stderr, "Usage: %s <meanvc2.gguf> <speaker-embedding.f32le> [input.wav] [out.wav]\n", argv[0]);
+        fprintf(stderr, "The speaker embedding must contain exactly 256 little-endian float32 values from the "
+                        "reference speaker encoder.\n");
         return 1;
     }
 
     const char* model_path = argv[1];
-    const char* src_path = (argc >= 3) ? argv[2] : "samples/jfk.wav";
-    const char* out_path = (argc >= 4) ? argv[3] : "/tmp/meanvc2-output.wav";
+    const char* src_path = (argc >= 4) ? argv[3] : "samples/jfk.wav";
+    const char* out_path = (argc >= 5) ? argv[4] : "meanvc2-output.wav";
+
+    // Read explicitly supplied conditioning before loading the model. Do not
+    // silently substitute a fixed vector for an unavailable speaker encoder.
+    std::ifstream embedding_file(argv[2], std::ios::binary);
+    uint8_t embedding_bytes[256 * sizeof(float)];
+    if (!embedding_file.read(reinterpret_cast<char*>(embedding_bytes), sizeof(embedding_bytes)) ||
+        embedding_file.peek() != std::char_traits<char>::eof()) {
+        fprintf(stderr, "Speaker embedding must be exactly 1024 bytes: '%s'\n", argv[2]);
+        return 1;
+    }
+    std::vector<float> speaker_embedding(256);
+    for (size_t i = 0; i < speaker_embedding.size(); ++i) {
+        const uint8_t* p = embedding_bytes + i * 4;
+        const uint32_t bits = (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
+        std::memcpy(&speaker_embedding[i], &bits, sizeof(bits));
+        if (!std::isfinite(speaker_embedding[i])) {
+            fprintf(stderr, "Speaker embedding contains a non-finite value\n");
+            return 1;
+        }
+    }
 
     auto cp = meanvc2_context_default_params();
     cp.verbosity = 1;
@@ -23,6 +46,11 @@ int main(int argc, char** argv) {
     auto* ctx = meanvc2_init_from_file(model_path, cp);
     if (!ctx) {
         fprintf(stderr, "Failed to load model '%s'\n", model_path);
+        return 1;
+    }
+    if (meanvc2_set_speaker_embedding(ctx, speaker_embedding.data()) != 0) {
+        fprintf(stderr, "Failed to set speaker embedding\n");
+        meanvc2_free(ctx);
         return 1;
     }
 
@@ -67,9 +95,7 @@ int main(int argc, char** argv) {
     fprintf(stderr, "Loaded source: %zu samples @ %d Hz from %s\n", pcm.size(), sr, src_path);
 
     // Process full audio if requested, else default to 25600 samples (1.6s) for quick test
-    int test_samples = (getenv("CRISPASR_MEANVC2_ALL") != nullptr)
-        ? (int)pcm.size()
-        : std::min((int)pcm.size(), 25600);
+    int test_samples = (getenv("CRISPASR_MEANVC2_ALL") != nullptr) ? (int)pcm.size() : std::min((int)pcm.size(), 25600);
 
     int out_samples = 0;
     auto t0 = std::chrono::high_resolution_clock::now();
@@ -79,8 +105,8 @@ int main(int argc, char** argv) {
     double audio_sec = (double)test_samples / 16000.0;
     double rtf = (elapsed_ms / 1000.0) / audio_sec;
 
-    fprintf(stderr, "Conversion time: %.2f ms for %.2f s audio (RTF: %.4f, %.2fx realtime)\n",
-            elapsed_ms, audio_sec, rtf, 1.0 / rtf);
+    fprintf(stderr, "Conversion time: %.2f ms for %.2f s audio (RTF: %.4f, %.2fx realtime)\n", elapsed_ms, audio_sec,
+            rtf, 1.0 / rtf);
 
     if (!out || out_samples <= 0) {
         fprintf(stderr, "FAIL: meanvc2_convert returned null or 0 samples\n");
@@ -91,11 +117,14 @@ int main(int argc, char** argv) {
     float mn = out[0], mx = out[0];
     double sum = 0.0;
     for (int i = 0; i < out_samples; i++) {
-        if (out[i] < mn) mn = out[i];
-        if (out[i] > mx) mx = out[i];
+        if (out[i] < mn)
+            mn = out[i];
+        if (out[i] > mx)
+            mx = out[i];
         sum += out[i];
     }
-    fprintf(stderr, "Output: %d samples, min=%.6f, max=%.6f, mean=%.6f\n", out_samples, mn, mx, (float)(sum / out_samples));
+    fprintf(stderr, "Output: %d samples, min=%.6f, max=%.6f, mean=%.6f\n", out_samples, mn, mx,
+            (float)(sum / out_samples));
 
     if (mx <= 0.01f && mn >= -0.01f) {
         fprintf(stderr, "FAIL: output is near-silent\n");
@@ -110,8 +139,10 @@ int main(int argc, char** argv) {
         std::vector<int16_t> pcm16(out_samples);
         for (int i = 0; i < out_samples; i++) {
             float v = out[i] * 32767.0f;
-            if (v > 32767.0f) v = 32767.0f;
-            if (v < -32768.0f) v = -32768.0f;
+            if (v > 32767.0f)
+                v = 32767.0f;
+            if (v < -32768.0f)
+                v = -32768.0f;
             pcm16[i] = (int16_t)v;
         }
         uint32_t data_size = out_samples * 2;
