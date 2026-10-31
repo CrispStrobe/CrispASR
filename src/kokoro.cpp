@@ -37,6 +37,7 @@
 #include "core/dac_decoder.h" // core_dac::fastconv_cache (FASTCONV kernel bake)
 #include "core/gguf_loader.h"
 #include "core/lstm.h"
+#include "core/parallel_for.h"
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/crispasr_env.h"
 #include "core/phoneme_dialect.h" // #316: one G2P, several phoneme conventions
@@ -1988,6 +1989,98 @@ static inline ggml_tensor* kokoro_conv1d_ks(ggml_context* ctx, ggml_tensor* in, 
 
 static const float kKokoroTwoPi = 6.283185307179586f;
 
+} // namespace
+
+// ---- Test hooks for Kokoro CPU parallelization (#Rule 4 & A/B) ----
+namespace kokoro_test {
+
+void test_f0_upsample(const float* f0_curve, int L_low, int upsample_scale, float* f0_up) {
+    const char* env_serial = std::getenv("CRISPASR_KOKORO_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+    if (force_serial || L_low <= 4) {
+        for (int i = 0; i < L_low; i++) {
+            const float v = f0_curve[i];
+            for (int j = 0; j < upsample_scale; j++)
+                f0_up[(size_t)i * upsample_scale + j] = v;
+        }
+    } else {
+        core_parallel::for_each_chunk(L_low, 0, [&](int i_start, int i_end) {
+            for (int i = i_start; i < i_end; i++) {
+                const float v = f0_curve[i];
+                for (int j = 0; j < upsample_scale; j++)
+                    f0_up[(size_t)i * upsample_scale + j] = v;
+            }
+        });
+    }
+}
+
+void test_make_har_dft(const float* padded, int hop, int n_fft, int n_bins, float* har, int T_har) {
+    // Hann periodic: w[n] = 0.5 - 0.5 cos(2π n / N).
+    std::vector<float> hann((size_t)n_fft);
+    for (int n = 0; n < n_fft; n++)
+        hann[n] = 0.5f - 0.5f * std::cos(kKokoroTwoPi * (float)n / (float)n_fft);
+
+    // Direct DFT (n_fft=20 makes 20² = 400 ops/frame trivial).
+    // Pre-compute twiddles cos/sin for k in 0..n_bins-1, n in 0..n_fft-1.
+    std::vector<float> tw_cos((size_t)n_bins * n_fft);
+    std::vector<float> tw_sin((size_t)n_bins * n_fft);
+    for (int k = 0; k < n_bins; k++) {
+        for (int n = 0; n < n_fft; n++) {
+            float ang = -kKokoroTwoPi * (float)k * (float)n / (float)n_fft;
+            tw_cos[(size_t)k * n_fft + n] = std::cos(ang);
+            tw_sin[(size_t)k * n_fft + n] = std::sin(ang);
+        }
+    }
+
+    const char* env_serial = std::getenv("CRISPASR_KOKORO_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+
+    if (force_serial || T_har <= 16) {
+        for (int frame = 0; frame < T_har; frame++) {
+            const int t0 = frame * hop;
+            for (int k = 0; k < n_bins; k++) {
+                float re = 0.0f, im = 0.0f;
+                const float* tc = &tw_cos[(size_t)k * n_fft];
+                const float* ts = &tw_sin[(size_t)k * n_fft];
+                for (int n = 0; n < n_fft; n++) {
+                    const float xn = padded[t0 + n] * hann[n];
+                    re += xn * tc[n];
+                    im += xn * ts[n];
+                }
+                const float mag = std::sqrt(re * re + im * im);
+                const float ph = std::atan2(im, re);
+                // (22, T_har) channel-major: element (c, t) at offset c + t*22.
+                har[(size_t)frame * 22 + k] = mag;
+                har[(size_t)frame * 22 + n_bins + k] = ph;
+            }
+        }
+    } else {
+        core_parallel::for_each_chunk(T_har, 0, [&](int f_start, int f_end) {
+            for (int frame = f_start; frame < f_end; frame++) {
+                const int t0 = frame * hop;
+                for (int k = 0; k < n_bins; k++) {
+                    float re = 0.0f, im = 0.0f;
+                    const float* tc = &tw_cos[(size_t)k * n_fft];
+                    const float* ts = &tw_sin[(size_t)k * n_fft];
+                    for (int n = 0; n < n_fft; n++) {
+                        const float xn = padded[t0 + n] * hann[n];
+                        re += xn * tc[n];
+                        im += xn * ts[n];
+                    }
+                    const float mag = std::sqrt(re * re + im * im);
+                    const float ph = std::atan2(im, re);
+                    har[(size_t)frame * 22 + k] = mag;
+                    har[(size_t)frame * 22 + n_bins + k] = ph;
+                }
+            }
+        });
+    }
+}
+
+} // namespace kokoro_test
+
+namespace {
+
 static float* kokoro_make_har(const kokoro_context* c, const float* f0_curve, int T_frames, int* out_T_har,
                               std::mt19937& rng) {
     const int upsample_scale = 300; // prod(upsample_rates) * hop
@@ -2006,12 +2099,11 @@ static float* kokoro_make_har(const kokoro_context* c, const float* f0_curve, in
 
     // ---- f0_upsamp: nn.Upsample(scale_factor=300) → default mode='nearest'.
     // Each f0 sample is repeated upsample_scale times.
+    const char* env_serial = std::getenv("CRISPASR_KOKORO_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+
     std::vector<float> f0_up((size_t)L_high);
-    for (int i = 0; i < L_low; i++) {
-        const float v = f0_curve[i];
-        for (int j = 0; j < upsample_scale; j++)
-            f0_up[(size_t)i * upsample_scale + j] = v;
-    }
+    kokoro_test::test_f0_upsample(f0_curve, L_low, upsample_scale, f0_up.data());
 
     // ---- SineGen._f02sine ----
     // 1. fn[t, k] = f0[t] * (k+1)
@@ -2022,14 +2114,28 @@ static float* kokoro_make_har(const kokoro_context* c, const float* f0_curve, in
     // 6. Upsample phase_low * upsample_scale by upsample_scale (linear)
     // 7. sin(phase) * sine_amp = sines
     std::vector<float> rad((size_t)L_high * dim);
-    for (int t = 0; t < L_high; t++) {
-        const float fv = f0_up[t];
-        for (int k = 0; k < dim; k++) {
-            float fn = fv * (float)(k + 1);
-            float r = fn / (float)sample_rate;
-            r = r - std::floor(r);
-            rad[(size_t)t * dim + k] = r;
+    if (force_serial || L_high <= 256) {
+        for (int t = 0; t < L_high; t++) {
+            const float fv = f0_up[t];
+            for (int k = 0; k < dim; k++) {
+                float fn = fv * (float)(k + 1);
+                float r = fn / (float)sample_rate;
+                r = r - std::floor(r);
+                rad[(size_t)t * dim + k] = r;
+            }
         }
+    } else {
+        core_parallel::for_each_chunk(L_high, 0, [&](int t_start, int t_end) {
+            for (int t = t_start; t < t_end; t++) {
+                const float fv = f0_up[t];
+                for (int k = 0; k < dim; k++) {
+                    float fn = fv * (float)(k + 1);
+                    float r = fn / (float)sample_rate;
+                    r = r - std::floor(r);
+                    rad[(size_t)t * dim + k] = r;
+                }
+            }
+        });
     }
     // rand_ini: per-(B, dim) noise, B=1; entry at [0] zeroed; only first time step gets noise.
     std::uniform_real_distribution<float> uni01(0.0f, 1.0f);
@@ -2065,18 +2171,36 @@ static float* kokoro_make_har(const kokoro_context* c, const float* f0_curve, in
     }
     // Upsample phase_low * upsample_scale (L_low → L_high), linear interp.
     std::vector<float> sines((size_t)L_high * dim);
-    for (int t = 0; t < L_high; t++) {
-        float src_idx = ((float)t + 0.5f) / (float)upsample_scale - 0.5f;
-        float clamped = std::max(0.0f, std::min((float)(L_low - 1), src_idx));
-        int i0 = (int)std::floor(clamped);
-        int i1 = std::min(i0 + 1, L_low - 1);
-        float frac = clamped - (float)i0;
-        for (int k = 0; k < dim; k++) {
-            float v0 = phase_low[(size_t)i0 * dim + k] * (float)upsample_scale;
-            float v1 = phase_low[(size_t)i1 * dim + k] * (float)upsample_scale;
-            float ph = v0 * (1.0f - frac) + v1 * frac;
-            sines[(size_t)t * dim + k] = std::sin(ph) * sine_amp;
+    if (force_serial || L_high <= 256) {
+        for (int t = 0; t < L_high; t++) {
+            float src_idx = ((float)t + 0.5f) / (float)upsample_scale - 0.5f;
+            float clamped = std::max(0.0f, std::min((float)(L_low - 1), src_idx));
+            int i0 = (int)std::floor(clamped);
+            int i1 = std::min(i0 + 1, L_low - 1);
+            float frac = clamped - (float)i0;
+            for (int k = 0; k < dim; k++) {
+                float v0 = phase_low[(size_t)i0 * dim + k] * (float)upsample_scale;
+                float v1 = phase_low[(size_t)i1 * dim + k] * (float)upsample_scale;
+                float ph = v0 * (1.0f - frac) + v1 * frac;
+                sines[(size_t)t * dim + k] = std::sin(ph) * sine_amp;
+            }
         }
+    } else {
+        core_parallel::for_each_chunk(L_high, 0, [&](int t_start, int t_end) {
+            for (int t = t_start; t < t_end; t++) {
+                float src_idx = ((float)t + 0.5f) / (float)upsample_scale - 0.5f;
+                float clamped = std::max(0.0f, std::min((float)(L_low - 1), src_idx));
+                int i0 = (int)std::floor(clamped);
+                int i1 = std::min(i0 + 1, L_low - 1);
+                float frac = clamped - (float)i0;
+                for (int k = 0; k < dim; k++) {
+                    float v0 = phase_low[(size_t)i0 * dim + k] * (float)upsample_scale;
+                    float v1 = phase_low[(size_t)i1 * dim + k] * (float)upsample_scale;
+                    float ph = v0 * (1.0f - frac) + v1 * frac;
+                    sines[(size_t)t * dim + k] = std::sin(ph) * sine_amp;
+                }
+            }
+        });
     }
 
     // uv mask + noise + apply.
@@ -2105,11 +2229,22 @@ static float* kokoro_make_har(const kokoro_context* c, const float* f0_curve, in
     ggml_backend_tensor_get(lb, &bias_v, 0, sizeof(float));
 
     std::vector<float> har_source((size_t)L_high);
-    for (int t = 0; t < L_high; t++) {
-        float s = bias_v;
-        for (int k = 0; k < dim; k++)
-            s += sine_waves[(size_t)t * dim + k] * w_f32[k];
-        har_source[t] = std::tanh(s);
+    if (force_serial || L_high <= 256) {
+        for (int t = 0; t < L_high; t++) {
+            float s = bias_v;
+            for (int k = 0; k < dim; k++)
+                s += sine_waves[(size_t)t * dim + k] * w_f32[k];
+            har_source[t] = std::tanh(s);
+        }
+    } else {
+        core_parallel::for_each_chunk(L_high, 0, [&](int t_start, int t_end) {
+            for (int t = t_start; t < t_end; t++) {
+                float s = bias_v;
+                for (int k = 0; k < dim; k++)
+                    s += sine_waves[(size_t)t * dim + k] * w_f32[k];
+                har_source[t] = std::tanh(s);
+            }
+        });
     }
 
     // ---- STFT (n_fft=20, hop=5, hann periodic, center=True, pad_mode=reflect) ----
@@ -2127,45 +2262,12 @@ static float* kokoro_make_har(const kokoro_context* c, const float* f0_curve, in
         if (L_high - 2 - i >= 0)
             padded[pad_n + L_high + i] = har_source[L_high - 2 - i];
     }
-    // Hann periodic: w[n] = 0.5 - 0.5 cos(2π n / N).
-    std::vector<float> hann((size_t)n_fft);
-    for (int n = 0; n < n_fft; n++)
-        hann[n] = 0.5f - 0.5f * std::cos(kKokoroTwoPi * (float)n / (float)n_fft);
 
     const int T_har = L_high / hop + 1;
-    // Direct DFT (n_fft=20 makes 20² = 400 ops/frame trivial).
-    // Pre-compute twiddles cos/sin for k in 0..n_bins-1, n in 0..n_fft-1.
-    std::vector<float> tw_cos((size_t)n_bins * n_fft);
-    std::vector<float> tw_sin((size_t)n_bins * n_fft);
-    for (int k = 0; k < n_bins; k++) {
-        for (int n = 0; n < n_fft; n++) {
-            float ang = -kKokoroTwoPi * (float)k * (float)n / (float)n_fft;
-            tw_cos[(size_t)k * n_fft + n] = std::cos(ang);
-            tw_sin[(size_t)k * n_fft + n] = std::sin(ang);
-        }
-    }
-
     float* har = (float*)std::malloc((size_t)22 * T_har * sizeof(float));
     if (!har)
         return nullptr;
-    for (int frame = 0; frame < T_har; frame++) {
-        const int t0 = frame * hop;
-        for (int k = 0; k < n_bins; k++) {
-            float re = 0.0f, im = 0.0f;
-            const float* tc = &tw_cos[(size_t)k * n_fft];
-            const float* ts = &tw_sin[(size_t)k * n_fft];
-            for (int n = 0; n < n_fft; n++) {
-                const float xn = padded[t0 + n] * hann[n];
-                re += xn * tc[n];
-                im += xn * ts[n];
-            }
-            const float mag = std::sqrt(re * re + im * im);
-            const float ph = std::atan2(im, re);
-            // (22, T_har) channel-major: element (c, t) at offset c + t*22.
-            har[(size_t)frame * 22 + k] = mag;
-            har[(size_t)frame * 22 + n_bins + k] = ph;
-        }
-    }
+    kokoro_test::test_make_har_dft(padded.data(), hop, n_fft, n_bins, har, T_har);
     if (out_T_har)
         *out_T_har = T_har;
     return har;

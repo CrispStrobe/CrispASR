@@ -4872,6 +4872,25 @@ catch_discover_tests(test-voxcpm2-ab-bench
     PROPERTIES LABELS "bench;voxcpm2"
 )
 
+# ─── test-kokoro-diarize-ab-bench — kokoro & diarize paired A/B speed and parity bench ────
+add_executable(test-kokoro-diarize-ab-bench test-kokoro-diarize-ab-bench.cpp)
+target_include_directories(test-kokoro-diarize-ab-bench PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/ggml/include
+    ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test-kokoro-diarize-ab-bench PRIVATE
+    Catch2::Catch2WithMain
+    kokoro
+    crispasr-core
+    Threads::Threads
+    ggml
+)
+catch_discover_tests(test-kokoro-diarize-ab-bench
+    TEST_SPEC "[diarize][kokoro][ab-bench]"
+    PROPERTIES LABELS "bench;kokoro;diarize"
+)
+
 # ─── test-core-cross-attn — core/cross_attn.h manual path (ggml graph) ────────
 # Computes the header's cross-attention graph and compares to a plain-C++ MHA
 # reference (verifies the bug-fixed V-transpose + unscaled T5 contract).

@@ -285,15 +285,32 @@ std::vector<int> kmeans(const std::vector<double>& x, int n, int d, int k, unsig
 // ===========================================================================
 
 void l2_normalize_rows(float* x, int n, int d) {
-    for (int i = 0; i < n; i++) {
-        double nrm = 0.0;
-        for (int j = 0; j < d; j++)
-            nrm += (double)x[(size_t)i * d + j] * x[(size_t)i * d + j];
-        nrm = std::sqrt(nrm);
-        if (nrm <= kTiny)
-            continue; // leave an all-zero row alone rather than emit NaN
-        for (int j = 0; j < d; j++)
-            x[(size_t)i * d + j] = (float)(x[(size_t)i * d + j] / nrm);
+    const char* env_serial = std::getenv("CRISPASR_DIARIZE_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+    if (force_serial || n <= 4) {
+        for (int i = 0; i < n; i++) {
+            double nrm = 0.0;
+            for (int j = 0; j < d; j++)
+                nrm += (double)x[(size_t)i * d + j] * x[(size_t)i * d + j];
+            nrm = std::sqrt(nrm);
+            if (nrm <= kTiny)
+                continue; // leave an all-zero row alone rather than emit NaN
+            for (int j = 0; j < d; j++)
+                x[(size_t)i * d + j] = (float)(x[(size_t)i * d + j] / nrm);
+        }
+    } else {
+        core_parallel::for_each_chunk(n, 0, [&](int i_start, int i_end) {
+            for (int i = i_start; i < i_end; i++) {
+                double nrm = 0.0;
+                for (int j = 0; j < d; j++)
+                    nrm += (double)x[(size_t)i * d + j] * x[(size_t)i * d + j];
+                nrm = std::sqrt(nrm);
+                if (nrm <= kTiny)
+                    continue; // leave an all-zero row alone rather than emit NaN
+                for (int j = 0; j < d; j++)
+                    x[(size_t)i * d + j] = (float)(x[(size_t)i * d + j] / nrm);
+            }
+        });
     }
 }
 
@@ -303,13 +320,34 @@ std::vector<float> cosine_similarity(const float* x, int n, int d) {
     l2_normalize_rows(norm.data(), n, d);
 
     std::vector<float> out((size_t)n * n, 0.0f);
-    for (int i = 0; i < n; i++) {
-        for (int j = i; j < n; j++) {
-            double dot = 0.0;
-            for (int t = 0; t < d; t++)
-                dot += (double)norm[(size_t)i * d + t] * norm[(size_t)j * d + t];
-            out[(size_t)i * n + j] = out[(size_t)j * n + i] = (float)dot;
+    const char* env_serial = std::getenv("CRISPASR_DIARIZE_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+    if (force_serial || n <= 4) {
+        for (int i = 0; i < n; i++) {
+            for (int j = i; j < n; j++) {
+                double dot = 0.0;
+                for (int t = 0; t < d; t++)
+                    dot += (double)norm[(size_t)i * d + t] * norm[(size_t)j * d + t];
+                out[(size_t)i * n + j] = out[(size_t)j * n + i] = (float)dot;
+            }
         }
+    } else {
+        core_parallel::for_each_chunk(n, 0, [&](int i_start, int i_end) {
+            for (int i = i_start; i < i_end; i++) {
+                const float* row_i = norm.data() + (size_t)i * d;
+                float* out_row = out.data() + (size_t)i * n;
+                out_row[i] = 1.0f;
+                for (int j = 0; j < n; j++) {
+                    if (j == i)
+                        continue;
+                    const float* row_j = norm.data() + (size_t)j * d;
+                    double dot = 0.0;
+                    for (int t = 0; t < d; t++)
+                        dot += (double)row_i[t] * row_j[t];
+                    out_row[j] = (float)dot;
+                }
+            }
+        });
     }
     return out;
 }

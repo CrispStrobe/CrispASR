@@ -193,4 +193,9 @@ int crispasr_kokoro_resolve_fallback_voice(const char* model_path, const char* l
 
 #ifdef __cplusplus
 }
+
+namespace kokoro_test {
+void test_make_har_dft(const float* padded, int hop, int n_fft, int n_bins, float* har, int T_har);
+void test_f0_upsample(const float* f0_curve, int L_low, int upsample_scale, float* f0_up);
+} // namespace kokoro_test
 #endif
