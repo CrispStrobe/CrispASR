@@ -1,5 +1,6 @@
 // Model-free checks of the actual runtime, following the internal-context
 // pattern used by test-qwen3tts-voice-pack.
+#include "core/ggml_cpu_backend.h"
 #include "../src/meanvc2.cpp"
 #include "../ggml/src/ggml-backend-impl.h"
 

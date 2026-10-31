@@ -191,10 +191,10 @@ int main() {
             higgs_linear(read_tensor_f32(t.fc_w), read_tensor_f32(t.fc_b), x.data(), T, 32, 32, emb);
             std::vector<int32_t> old;
             gate("CACHE", false);
-            assert(higgs_rvq_encode(t, emb, T, old));
+            assert(higgs_rvq_encode(t, emb, T, old, 1));
             std::vector<int32_t> cache;
             gate("CACHE", true);
-            assert(higgs_rvq_encode(t, emb, T, cache));
+            assert(higgs_rvq_encode(t, emb, T, cache, 1));
             assert(old == cache);
             auto graph = higgs_projection_graph(t, x.data(), T);
             assert(graph == old);
@@ -210,7 +210,7 @@ int main() {
         std::vector<float> bias_free(32 * 3, .3f), embedding;
         higgs_linear(read_tensor_f32(t.fc_w), {}, bias_free.data(), 3, 32, 32, embedding);
         std::vector<int32_t> expected;
-        assert(higgs_rvq_encode(t, embedding, 3, expected));
+        assert(higgs_rvq_encode(t, embedding, 3, expected, 1));
         assert(higgs_projection_graph(t, bias_free.data(), 3) == expected);
         t.fc_b = saved_bias;
         // Equal centroids must retain the first index, including later residual stages.

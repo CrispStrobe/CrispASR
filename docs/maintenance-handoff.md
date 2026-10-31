@@ -13,6 +13,19 @@ PR, job-queue and ownership claims are not current instructions. Do not resume
 them automatically. Public path aliases describe roles; actual bindings stay
 in ignored local notes.
 
+## Main integration follow-up — 2026-10-31
+
+GitHub main `d71788aa` contains the exact delivered repair tree. The bounded
+follow-up fixes two omissions in that original batch: three Omnivoice test
+calls lacked the required thread budget, and two tests lacked an explicit
+CPU-backend header include. The complete configured Linux CPU build now passes,
+as do 133 performance-parity CTests and the expanded 49-case discovery guard.
+The broader unit run is limited by local OS facilities. A separate hosted
+Moonshine gate already failed before integration and still needs its inner
+failure artifact. See [the integration report](post-release-audit-integration.md)
+for exact evidence, scope and next actions. The follow-up is delivered as a
+patch/source bundle; no upstream publication or external dispatch is included.
+
 ## Audit repair continuation — 2026-10-31
 
 This bounded update supersedes the older completeness claims below for the

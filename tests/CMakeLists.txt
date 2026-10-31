@@ -157,7 +157,7 @@ add_executable(test-omnivoice-encoder test-omnivoice-encoder.cpp)
 target_include_directories(test-omnivoice-encoder PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/ggml/src)
 target_link_libraries(test-omnivoice-encoder PRIVATE crispasr-core ggml ggml-base crispasr_link_ggml_cpu Threads::Threads)
 add_test(NAME omnivoice-encoder-parity COMMAND test-omnivoice-encoder)
-set_tests_properties(omnivoice-encoder-parity PROPERTIES LABELS "unit;tts;omnivoice")
+set_tests_properties(omnivoice-encoder-parity PROPERTIES LABELS "unit;performance-parity;tts;omnivoice")
 
 add_executable(test-omnivoice-codec test-omnivoice-codec.cpp)
 target_include_directories(test-omnivoice-codec PRIVATE ${PROJECT_SOURCE_DIR}/src ${PROJECT_SOURCE_DIR}/ggml/src)
@@ -6682,6 +6682,9 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME post-release-model-gate-controls
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_post_release_model_gate.py)
     set_tests_properties(post-release-model-gate-controls PROPERTIES LABELS "unit;performance-parity;model-gates")
+    add_test(NAME performance-test-discovery-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_performance_test_discovery.py)
+    set_tests_properties(performance-test-discovery-controls PROPERTIES LABELS "unit;performance-parity;discovery")
 endif()
 
 if(Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES AND BUILD_SHARED_LIBS)

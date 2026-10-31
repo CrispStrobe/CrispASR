@@ -32,6 +32,8 @@ jobs:
         run: python -m pip install numpy==2.2.6
       - name: Reject false-success model receipts
         run: python tests/test_post_release_model_gate.py -v
+      - name: Reject incomplete standalone test discovery
+        run: python tests/test_performance_test_discovery.py -v
 
   numerical-platforms:
     name: ${{ matrix.profile }}
@@ -101,7 +103,7 @@ jobs:
           targets = [
               'test-arktts-cache', 'test-meanvc2-conditioning', 'test-meanvc2-convert',
               'test-voxcpm2-cpu-conv', 'test-core-istft', 'test-core-istft-memory',
-              'test-core-rvq', 'test-core-cqt', 'test-spectral-diarize',
+              'test-core-rvq', 'test-omnivoice-encoder', 'test-core-cqt', 'test-spectral-diarize',
               'test-diarize-smooth', 'test-parallel-for', 'test-kaldi-fbank',
               'test-ctc-stitch', 'test-align-ab-bench', 'test-conformer-ab-bench',
               'test-cpu-ops-ab-bench', 'test-firered-ab-bench', 'test-voxcpm2-ab-bench',

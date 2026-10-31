@@ -43,7 +43,8 @@ avoiding the pinned Catch 3.7.1 helper's semicolon forwarding problem.
 
 The [discovery guard](../tools/check_performance_test_discovery.py) compares
 Catch's executable inventories with actual CTest selections. It requires all
-eight A/B executables, the newly added runtime tests, LFR/CTC cases, and optional
+eight A/B executables, the newly added runtime tests, LFR/CTC cases, the
+standalone OmniVoice encoder parity executable and registration, and optional
 CBLAS/OpenMP cases when requested. A matching executable name or empty CTest
 selection is insufficient. Numerical tests explicitly reject nonfinite output;
 the CQT checks include both real and imaginary results. FireRed/F5 tests now
@@ -161,7 +162,7 @@ cmake -S . -B build-audit -DCMAKE_BUILD_TYPE=Release \
 cmake --build build-audit --config Release --parallel 2 --target \
   test-arktts-cache test-meanvc2-conditioning test-meanvc2-convert \
   test-voxcpm2-cpu-conv test-core-istft test-core-istft-memory \
-  test-core-rvq test-core-cqt test-spectral-diarize test-diarize-smooth \
+  test-core-rvq test-omnivoice-encoder test-core-cqt test-spectral-diarize test-diarize-smooth \
   test-parallel-for test-kaldi-fbank test-ctc-stitch \
   test-align-ab-bench test-conformer-ab-bench test-cpu-ops-ab-bench \
   test-firered-ab-bench test-voxcpm2-ab-bench test-kokoro-diarize-ab-bench \

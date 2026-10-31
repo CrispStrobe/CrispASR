@@ -1,6 +1,7 @@
 // Exercise the production prefill and incremental graph builders with tiny
 // deterministic weights. Full-prefix recomputation is the independent oracle
 // for the state carried between decoding calls; no model download is required.
+#include "core/ggml_cpu_backend.h"
 #include "../src/arktts.cpp"
 
 #include <catch2/catch_test_macros.hpp>

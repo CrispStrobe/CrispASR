@@ -21,15 +21,18 @@ not download model weights.
 | Windows MSVC/OpenMP | MSVC compilation, portable environment controls, and OpenMP numerical behavior |
 | Linux shared CLI/C ABI | Haas aliases through the real CLI and public C ABI into the intended model loader, using a model-free fixture |
 
-The numerical jobs build the changed runtime tests, RVQ, iSTFT, CQT,
-diarization, worker-budget, LFR/CTC tests, eight A/B suites, and the allocation
-probes. CBLAS/OpenMP jobs explicitly build their extra executables, so a missing
+The numerical jobs build the changed runtime tests, RVQ, the standalone
+OmniVoice encoder parity test, iSTFT, CQT, diarization, worker-budget, LFR/CTC
+tests, eight A/B suites, and the allocation probes. CBLAS/OpenMP jobs explicitly
+build their extra executables, so a missing
 optional feature cannot silently qualify as a scalar-only success.
 
 `tools/check_performance_test_discovery.py` compares the executable inventories
 with actual CTest registrations. It requires the previously omitted LFR/CTC
-cases and the heterogeneous A/B suites. The `performance-parity` label runs
-numerical checks; the optional repeated timing tier remains separate. There is
+cases, the heterogeneous A/B suites, and the built OmniVoice encoder executable
+with its standalone CTest command and unit/parity labels. The
+`performance-parity` label runs numerical checks; the optional repeated timing
+tier remains separate. There is
 no machine-independent minimum-speedup assertion in the correctness gate.
 
 Run the workflow on a reviewed branch containing the repair commits, for example:

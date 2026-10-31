@@ -12,6 +12,15 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-30)
 
+### Main integration follow-up — 2026-10-31
+
+- Owner: audit repair team; source `d71788aa769334940d12096b549f5edd2f7770e7`.
+- Evidence: current main's complete tree equals the delivered repair tree `1695e0835a492e5e2018bfafffe4ff6ded3ea0ea`; all 79 changed files are present and identical. The 131-case local parity rerun passes.
+- Missing behavior: repair the actual `linux-unit` build failure in CI run `41196253916` and explicit CPU-backend-header lint failure in run `41196253931`; retain all numerical gates.
+- Completed locally: reproduced and repaired three Omnivoice test calls missing the new thread argument and two missing direct CPU-backend header includes. The complete configured CPU/CBLAS/OpenMP build passes; 133 performance-parity CTests pass; the strengthened discovery guard checks 49 required cases across 14 executables; all 129 header-lint files pass. See [integration follow-up](docs/post-release-audit-integration.md).
+- Broader unit result: 2,164 pass, six skip, and three fail at demonstrated unavailable OS facilities; nine additional OS-dependent cases were excluded and remain unqualified. These results do not establish a complete unit-tier pass.
+- Next action: apply the follow-up patch, then rerun CI/Lint on its exact source. The separate hosted Moonshine acceptance failure predates this integration but remains internally undiagnosed; obtain the `heavy-41196253946` artifact and failing inner log before proposing a repair. No upstream publication is included.
+
 ### Post-v0.8.49 audit repairs — 2026-10-31
 
 - Owner: audit repair team; starting source `26945b343b855dda9b0bce5e653cd5832c60bf7a`.

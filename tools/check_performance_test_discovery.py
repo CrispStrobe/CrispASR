@@ -4,6 +4,7 @@
 Run after building the named executables. Compare Catch's own case inventory
 with CTest's selected names; merely finding an executable/CTest placeholder
 does not establish that its TEST_SPEC matched any tests.
+Standalone tests must have a built executable and the expected CTest command.
 """
 
 import argparse
@@ -22,6 +23,8 @@ AB_TARGETS = {
     "test-cqt-diarize-ab-bench": 3,
     "test-rvq-istft-ab-bench": 2,
 }
+
+STANDALONE_TESTS = {"test-omnivoice-encoder": "omnivoice-encoder-parity"}
 
 
 def find_binary(build_dir, target, config):
@@ -56,8 +59,14 @@ def check(build_dir, ctest="ctest", config="Release", require_blas=False, requir
         "prefix_beam_search: basic emissions and repeat collapsing",
         "istft-bounded-memory",
         "benchmark-mel-ab-controls",
+        "performance-test-discovery-controls",
     }
     checked = {}
+    standalone_binaries = {}
+    for target, name in STANDALONE_TESTS.items():
+        standalone_binaries[name] = find_binary(build_dir, target, config)
+        required.add(name)
+        checked[target] = 1
     for target, minimum in AB_TARGETS.items():
         binary = find_binary(build_dir, target, config)
         names = catch_names(binary, "[unit]")
@@ -95,8 +104,13 @@ def check(build_dir, ctest="ctest", config="Release", require_blas=False, requir
         raise RuntimeError("Optional repeated timings unexpectedly selected by the unit tier")
     result = subprocess.run([ctest, "--test-dir", str(build_dir), "-C", config, "--show-only=json-v1"],
                             text=True, encoding="utf-8", capture_output=True, check=True)
+    tests = {test["name"]: test for test in json.loads(result.stdout)["tests"]}
+    for name, binary in standalone_binaries.items():
+        command = tests.get(name, {}).get("command", [])
+        if not command or Path(command[0]).resolve() != binary.resolve():
+            raise RuntimeError(f"{name}: CTest does not invoke required standalone executable: {binary.name}")
     ab_names = {name for name in required if name.startswith("unit::")}
-    for test in json.loads(result.stdout)["tests"]:
+    for test in tests.values():
         name = test["name"]
         unit_equivalent = "unit::" + name.removeprefix("perf::") if name.startswith("perf::") else name
         if unit_equivalent in ab_names:
