@@ -414,7 +414,138 @@ render();
 </body>
 </html>
 """
-    out.write_text(html)
+    out.write_text(html, encoding="utf-8")
+
+
+def sync_markdown_counts(backends: list[dict], check: bool = False) -> bool:
+    """Synchronize backend counts across README.md and documentation files.
+
+    If check=True, returns False if any file is out of date without modifying it.
+    If check=False, writes the updated content and returns True.
+    """
+    import re
+    total = len(backends)
+    tts = sum(1 for b in backends if "tts" in b.get("caps", []))
+    asr = sum(
+        1 for b in backends
+        if "tts" not in b.get("caps", [])
+        and "separate" not in b.get("caps", [])
+        and "s2s" not in b.get("caps", [])
+        and not any(k in b.get("caps", []) for k in ["beats", "chords", "piano", "pitch", "tab"])
+    )
+
+    targets = [
+        (
+            REPO_ROOT / "README.md",
+            [
+                (
+                    r"(\*\*One C\+\+ binary, )\d+( backends — )\d+( of them TTS engines —)",
+                    rf"\g<1>{total}\g<2>{tts}\g<3>",
+                ),
+                (
+                    r"(\|\s*\*\*\[CrispASR\]\([^\)]+\)\*\*\s*\|\s*This repo — C\+\+ speech engine\.\s*)\d+(\s*backends\s*\()\d+(\s*TTS\))",
+                    rf"\g<1>{total}\g<2>{tts}\g<3>",
+                ),
+                (
+                    r"(CrispASR ships \*\*)\d+(\s*backends\*\*)",
+                    rf"\g<1>{total}\g<2>",
+                ),
+                (
+                    r"(\*\*)\d+(\s*TTS engines\*\* for synthesis)",
+                    rf"\g<1>{tts}\g<2>",
+                ),
+            ],
+        ),
+        (
+            DOCS_DIR / "getting-started.md",
+            [
+                (
+                    r"(reference catalogue — )\d+( backends\.)",
+                    rf"\g<1>{total}\g<2>",
+                ),
+            ],
+        ),
+        (
+            REPO_ROOT / "flutter" / "crispasr" / "README.md",
+            [
+                (
+                    r"(The native project currently ships )\d+(?: ASR)?( backends, )\d+( TTS engines)",
+                    rf"\g<1>{total}\g<2>{tts}\g<3>",
+                ),
+            ],
+        ),
+        (
+            DOCS_DIR / "eu-ai-act.md",
+            [
+                (
+                    r"(\|\s*ASR transcription \()\d+(\s*backends\)\s*\|)",
+                    rf"\g<1>{asr}\g<2>",
+                ),
+                (
+                    r"(\|\s*TTS synthesis \()\d+(\s*engines\)\s*\|)",
+                    rf"\g<1>{tts}\g<2>",
+                ),
+            ],
+        ),
+        (
+            REPO_ROOT / "COMPARISON.md",
+            [
+                (
+                    r"(\*\*CrispASR:\s*)(?:\d+\+?|\~\d+)(?: ASR)?(\s*backend(?:s| families)\*\* \(all native, single GGUF per model;\s*plus\s*)(?:\d+\+?|\~\d+)(\s*TTS backends)",
+                    rf"\g<1>{asr} ASR\g<2>{tts}\g<3>",
+                ),
+            ],
+        ),
+    ]
+
+    all_in_sync = True
+    for path, subs in targets:
+        if not path.is_file():
+            continue
+        original = path.read_text(encoding="utf-8")
+        current = original
+        for pattern, replacement in subs:
+            current = re.sub(pattern, replacement, current)
+        if current != original:
+            all_in_sync = False
+            if check:
+                print(f"gen-feature-matrix: {path.relative_to(REPO_ROOT)} counts are STALE. "
+                      f"Run `python tools/gen-feature-matrix.py`.", file=sys.stderr)
+            else:
+                path.write_text(current, encoding="utf-8")
+                print(f"synced backend counts in {path.relative_to(REPO_ROOT)} "
+                      f"({total} backends, {tts} TTS, {asr} ASR)")
+
+    return all_in_sync
+
+
+def load_backends_from_matrix(md_path: Path) -> list[dict]:
+    """Reconstruct backend capability dicts from docs/feature-matrix.md without needing the binary."""
+    if not md_path.is_file():
+        return []
+    import re
+    text = md_path.read_text(encoding="utf-8")
+    lines = text.splitlines()
+    header_lines = [l for l in lines if l.startswith("| Backend |")]
+    if not header_lines:
+        return []
+    headers = [c.strip() for c in header_lines[0].split("|")[1:-1]]
+    label_to_slug = {label: slug for slug, label, _ in CAP_LABELS}
+
+    backends = []
+    for line in lines:
+        if not line.startswith("| `"):
+            continue
+        cols = [c.strip() for c in line.split("|")[1:-1]]
+        name = cols[0].strip("`")
+        caps = []
+        for i, col in enumerate(cols[1:], 1):
+            if col == "✓" and i < len(headers):
+                h = headers[i]
+                slug = label_to_slug.get(h, h.lower().replace(" ", "-"))
+                caps.append(slug)
+        backends.append({"name": name, "caps": caps})
+    return backends
 
 
 def main() -> int:
@@ -425,16 +556,40 @@ def main() -> int:
                     help="Path to the crispasr binary (default: first of "
                          "build-ninja-compile/bin, build/bin, build-test/bin "
                          "under the repo root)")
+    ap.add_argument("--check", action="store_true",
+                    help="Check whether feature matrix or documentation counts are stale")
     args = ap.parse_args()
     crispasr = args.crispasr or find_crispasr()
+
+    DOCS_DIR.mkdir(parents=True, exist_ok=True)
+    md = DOCS_DIR / "feature-matrix.md"
+    html = DOCS_DIR / "feature-matrix.html"
+
+    if args.check:
+        if not crispasr or not crispasr.is_file():
+            # In check mode without a binary, verify documentation counts match the existing feature matrix
+            backends = load_backends_from_matrix(md)
+            if not backends:
+                print("gen-feature-matrix: crispasr binary not found and feature-matrix.md empty",
+                      file=sys.stderr)
+                return 1
+            if not sync_markdown_counts(backends, check=True):
+                return 1
+            print(f"feature matrix and documentation counts up to date ({len(backends)} backends)")
+            return 0
+
+        backends, caps = load_backend_data(crispasr)
+        if not sync_markdown_counts(backends, check=True):
+            return 1
+        print(f"feature matrix and documentation counts up to date ({len(backends)} backends)")
+        return 0
+
     if not crispasr or not crispasr.is_file():
         print("error: crispasr binary not found. Build first or pass --crispasr.",
               file=sys.stderr)
         return 1
+
     backends, caps = load_backend_data(crispasr)
-    DOCS_DIR.mkdir(parents=True, exist_ok=True)
-    md = DOCS_DIR / "feature-matrix.md"
-    html = DOCS_DIR / "feature-matrix.html"
     write_markdown(backends, caps, md)
     write_html(backends, caps, html)
     # Absolute paths: the files land in <repo>/docs/ regardless of cwd,
@@ -442,6 +597,7 @@ def main() -> int:
     print(f"wrote {md.resolve()}  ({md.stat().st_size:,} bytes)")
     print(f"wrote {html.resolve()} ({html.stat().st_size:,} bytes)")
     print(f"  {len(backends)} backends · {len(caps)} caps")
+    sync_markdown_counts(backends, check=False)
     return 0
 
 

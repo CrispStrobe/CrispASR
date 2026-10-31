@@ -52,6 +52,7 @@ Two habits that repeatedly cost time here:
 - `docs/LEARNINGS-INDEX.md` → `python tools/gen-learnings-index.py` (CI gates it
   with `--check`; adding a `##` section to `LEARNINGS.md` shifts every line
   number it cites).
+- Feature matrix (`docs/feature-matrix.md`, `docs/feature-matrix.html`) and documentation backend counts (`README.md`, `docs/getting-started.md`, etc.) → `python tools/gen-feature-matrix.py` (CI gates it with `--check`).
 - `bindings/go/whisper.go` cgo `LDFLAGS` → `python tools/sync_go_cgo_ldflags.py`.
 
 - Ruby Session/Stream/Chat context guard declarations and registrations →

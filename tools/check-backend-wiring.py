@@ -535,6 +535,16 @@ def main():
     if not go_ok and not is_macos:
         print("   run: python tools/sync_go_cgo_ldflags.py   (see docs/contributing.md)")
 
+    fmatrix_rows = re.findall(r"^\| `([^`]+)` \|", fmatrix, re.M)
+    fmatrix_count = len(fmatrix_rows)
+    readme_match = re.search(r"One C\+\+ binary, (\d+) backends", readme)
+    readme_count = int(readme_match.group(1)) if readme_match else None
+    counts_ok = (readme_count == fmatrix_count)
+    counts_label = f"✅ in sync ({fmatrix_count} backends)" if counts_ok else f"❌ OUT OF SYNC (README: {readme_count}, feature matrix: {fmatrix_count})"
+    print(f"Documentation backend counts check: {counts_label}")
+    if not counts_ok:
+        print("   run: python tools/gen-feature-matrix.py")
+
     # Name the ACTUAL cause. This used to print "FAIL (required gap)" for all
     # four conditions, so a run whose only problem was Go LDFLAGS drift reported
     # a required *wiring* gap two lines below "✅ REQUIRED wiring: ..." — the
@@ -609,6 +619,8 @@ def main():
         causes.append("orphan runtime")
     if not go_ok and not is_macos:
         causes.append("Go cgo LDFLAGS drift")
+    if not counts_ok:
+        causes.append("documentation backend counts out-of-sync")
     print()
     print("RESULT:", f"FAIL ({'; '.join(causes)})" if causes else "PASS")
     return 1 if causes else 0

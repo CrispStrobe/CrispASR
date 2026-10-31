@@ -898,11 +898,11 @@ original providers, not with a downstream requantizer. Model cards in
 
 | Feature | Classification | Enforcement |
 |---|---|---|
-| ASR transcription (54 backends) | Minimal risk; Art. 50(2) assistive exemption | — |
+| ASR transcription (60 backends) | Minimal risk; Art. 50(2) assistive exemption | — |
 | Text translation | Minimal risk; semantics-preserving | — |
 | Language identification | Not biometric categorisation | — |
 | Denoise / source separation | Art. 50(2) assistive exemption | — |
-| TTS synthesis (55 engines) | **Art. 50(2)** — marked | watermark + C2PA, default-on, watertight floor on CLI, server *and* Wyoming |
+| TTS synthesis (69 engines) | **Art. 50(2)** — marked | watermark + C2PA, default-on, watertight floor on CLI, server *and* Wyoming |
 | Wyoming TTS (`--wyoming-port`) | **Art. 50(2) + 50(4)** | watermark always forced; clones disclaimed, and refused without operator `--i-have-rights` |
 | Voice cloning (`.wav` ref, inline bake, stamped pack, **or bank entry**) | **Art. 50(2) + 50(4)** | + spoken disclaimer + `--i-have-rights`; `test-voice-clone-policy` |
 | **Preset voice that is a real person** | **Art. 50(2) + 50(4)** — a deep fake without being a clone | `speaker_identity=real_person` → spoken disclaimer, **no** consent gate; `test-speaker-identity` (§6.2a) |

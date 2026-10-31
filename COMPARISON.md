@@ -26,8 +26,8 @@ Last reviewed: 2026-07-11.
 | Qwen2.5/3 Omni | — | ✔ via mtmd | ✔ |
 | LFM2-Audio | ✔ native (ASR + TTS) | ✔ via mtmd | — |
 
-**CrispASR: 30+ ASR backend families** (all native, single GGUF per model;
-plus ~25 TTS backends, translation, punctuation, LID — see the README
+**CrispASR: 60 ASR backend families** (all native, single GGUF per model;
+plus 69 TTS backends, translation, punctuation, LID — see the README
 model table for the full list incl. canary-qwen, MOSS/Qwen3-Omni-based,
 SenseVoice, Paraformer, OmniASR, mega-asr, higgs-stt, mimo-asr)
 **llama.cpp: 7 audio models** (via libmtmd, mmproj-style split GGUF)

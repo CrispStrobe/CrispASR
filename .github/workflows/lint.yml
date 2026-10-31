@@ -464,6 +464,9 @@ jobs:
       - name: Check LEARNINGS.md index is current
         run: python tools/gen-learnings-index.py --check
 
+      - name: Check feature matrix and documentation counts are current
+        run: python tools/gen-feature-matrix.py --check
+
       # Also hermetic, also before the network step. release.yml is the least
       # exercised code here — a tag push is its first execution — so its static
       # shell errors have to be caught somewhere that runs on every commit.

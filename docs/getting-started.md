@@ -4,7 +4,7 @@ A first walkthrough for someone who has never run CrispASR. Download one file,
 make it speak, transcribe the result back, then run it as a server. No repo
 clone, no Python, no model hunting.
 
-The rest of the documentation is a reference catalogue — 117 backends. Ignore it
+The rest of the documentation is a reference catalogue — 143 backends. Ignore it
 until this page works.
 
 - [1. Download the binary](#1-download-the-binary)
