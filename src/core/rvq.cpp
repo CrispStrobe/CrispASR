@@ -1,8 +1,10 @@
 // src/core/rvq.cpp — Euclidean RVQ encode (CPU). See core/rvq.h.
 
 #include "rvq.h"
+#include "core/parallel_for.h"
 
 #include <cstdio>
+#include <cstdlib>
 
 namespace core_rvq {
 
@@ -21,32 +23,67 @@ bool encode_euclidean(const float* features, int T, int dim, const Codebook* sta
     // Working residual: copy of features, mutated stage-by-stage.
     std::vector<float> residual(features, features + (size_t)T * dim);
 
-    for (int s = 0; s < n_stages; s++) {
-        const auto& cb = stages[s];
-        const int K = cb.codebook_size;
-        const float* E = cb.embed;
-        const float* En = cb.embed_norm_sq;
+    const char* env_serial = std::getenv("CRISPASR_RVQ_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
 
-        for (int t = 0; t < T; t++) {
-            float* x = residual.data() + (size_t)t * dim;
-            // argmin_k ||x - E[k]||^2 = argmax_k (2 x·E[k] - ||E[k]||^2)
-            int best = 0;
-            float best_score = -1e30f;
-            for (int k = 0; k < K; k++) {
-                const float* e = E + (size_t)k * dim;
-                float dot = 0.0f;
-                for (int j = 0; j < dim; j++)
-                    dot += x[j] * e[j];
-                float score = 2.0f * dot - En[k];
-                if (score > best_score) {
-                    best_score = score;
-                    best = k;
+    if (force_serial || T <= 2) {
+        for (int s = 0; s < n_stages; s++) {
+            const auto& cb = stages[s];
+            const int K = cb.codebook_size;
+            const float* E = cb.embed;
+            const float* En = cb.embed_norm_sq;
+
+            for (int t = 0; t < T; t++) {
+                float* x = residual.data() + (size_t)t * dim;
+                // argmin_k ||x - E[k]||^2 = argmax_k (2 x·E[k] - ||E[k]||^2)
+                int best = 0;
+                float best_score = -1e30f;
+                for (int k = 0; k < K; k++) {
+                    const float* e = E + (size_t)k * dim;
+                    float dot = 0.0f;
+                    for (int j = 0; j < dim; j++)
+                        dot += x[j] * e[j];
+                    float score = 2.0f * dot - En[k];
+                    if (score > best_score) {
+                        best_score = score;
+                        best = k;
+                    }
                 }
+                codes_out[(size_t)t * n_stages + s] = best;
+                const float* e = E + (size_t)best * dim;
+                for (int j = 0; j < dim; j++)
+                    x[j] -= e[j];
             }
-            codes_out[(size_t)t * n_stages + s] = best;
-            const float* e = E + (size_t)best * dim;
-            for (int j = 0; j < dim; j++)
-                x[j] -= e[j];
+        }
+    } else {
+        for (int s = 0; s < n_stages; s++) {
+            const auto& cb = stages[s];
+            const int K = cb.codebook_size;
+            const float* E = cb.embed;
+            const float* En = cb.embed_norm_sq;
+
+            core_parallel::for_each_chunk(T, 0, [&](int t_start, int t_end) {
+                for (int t = t_start; t < t_end; t++) {
+                    float* x = residual.data() + (size_t)t * dim;
+                    int best = 0;
+                    float best_score = -1e30f;
+                    for (int k = 0; k < K; k++) {
+                        const float* e = E + (size_t)k * dim;
+                        float dot = 0.0f;
+                        for (int j = 0; j < dim; j++)
+                            dot += x[j] * e[j];
+                        float score = 2.0f * dot - En[k];
+                        if (score > best_score) {
+                            best_score = score;
+                            best = k;
+                        }
+                    }
+                    codes_out[(size_t)t * n_stages + s] = best;
+                    const float* e = E + (size_t)best * dim;
+                    for (int j = 0; j < dim; j++)
+                        x[j] -= e[j];
+                }
+            });
         }
     }
     return true;
@@ -57,19 +94,38 @@ bool encode_euclidean_per_stage(const float* features, int T, int dim, const flo
     if (!features || !embeds || !sizes || T <= 0 || dim <= 0 || n_stages <= 0)
         return false;
 
+    const char* env_serial = std::getenv("CRISPASR_RVQ_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+
     // Precompute ‖E[k]‖² per stage + build Codebook views.
     std::vector<std::vector<float>> norms(n_stages);
     std::vector<Codebook> stages(n_stages);
     for (int s = 0; s < n_stages; s++) {
         if (!embeds[s] || sizes[s] <= 0)
             return false;
-        norms[s].resize((size_t)sizes[s]);
-        for (int k = 0; k < sizes[s]; k++) {
-            const float* e = embeds[s] + (size_t)k * dim;
-            float n = 0.0f;
-            for (int j = 0; j < dim; j++)
-                n += e[j] * e[j];
-            norms[s][k] = n;
+        const int K = sizes[s];
+        norms[s].resize((size_t)K);
+        if (force_serial || K <= 16) {
+            for (int k = 0; k < K; k++) {
+                const float* e = embeds[s] + (size_t)k * dim;
+                float n = 0.0f;
+                for (int j = 0; j < dim; j++)
+                    n += e[j] * e[j];
+                norms[s][k] = n;
+            }
+        } else {
+            core_parallel::for_each_chunk(K, 0, [&](int k_start, int k_end) {
+                for (int k = k_start; k < k_end; k++) {
+                    const float* e = embeds[s] + (size_t)k * dim;
+                    float n = 0.0f;
+                    int j = 0;
+                    for (; j + 3 < dim; j += 4)
+                        n += e[j] * e[j] + e[j + 1] * e[j + 1] + e[j + 2] * e[j + 2] + e[j + 3] * e[j + 3];
+                    for (; j < dim; j++)
+                        n += e[j] * e[j];
+                    norms[s][k] = n;
+                }
+            });
         }
         stages[s] = {embeds[s], norms[s].data(), sizes[s], dim};
     }

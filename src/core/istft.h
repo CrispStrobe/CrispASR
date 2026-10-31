@@ -38,6 +38,8 @@
 
 #pragma once
 
+#include "core/parallel_for.h"
+
 #if defined(HAVE_ACCELERATE)
 #include <Accelerate/Accelerate.h>
 #elif defined(CRISPASR_HAVE_BLAS)
@@ -185,22 +187,50 @@ static inline std::vector<float> istft(const float* mag, const float* phase, int
 
         std::vector<float> spec_re(T_frames * K);
         std::vector<float> spec_im(T_frames * K);
-        for (int t = 0; t < T_frames; t++) {
-            const float* m_row = mag + (size_t)t * n_freq;
-            const float* p_row = phase + (size_t)t * n_freq;
-            for (int k = 1; k < n_freq - 1; k++) {
-                float s, c;
+
+        const char* env_serial = std::getenv("CRISPASR_ISTFT_SERIAL");
+        const bool force_serial = (env_serial && env_serial[0] == '1');
+
+        if (force_serial || T_frames <= 4) {
+            for (int t = 0; t < T_frames; t++) {
+                const float* m_row = mag + (size_t)t * n_freq;
+                const float* p_row = phase + (size_t)t * n_freq;
+                for (int k = 1; k < n_freq - 1; k++) {
+                    float s, c;
 #if defined(__APPLE__)
-                __sincosf(p_row[k], &s, &c);
+                    __sincosf(p_row[k], &s, &c);
 #elif defined(_GNU_SOURCE)
-                sincosf(p_row[k], &s, &c);
+                    sincosf(p_row[k], &s, &c);
 #else
-                s = std::sin(p_row[k]);
-                c = std::cos(p_row[k]);
+                    s = std::sin(p_row[k]);
+                    c = std::cos(p_row[k]);
 #endif
-                spec_re[t * K + (k - 1)] = m_row[k] * c;
-                spec_im[t * K + (k - 1)] = m_row[k] * s;
+                    spec_re[t * K + (k - 1)] = m_row[k] * c;
+                    spec_im[t * K + (k - 1)] = m_row[k] * s;
+                }
             }
+        } else {
+            core_parallel::for_each_chunk(T_frames, 0, [&](int t_start, int t_end) {
+                for (int t = t_start; t < t_end; t++) {
+                    const float* m_row = mag + (size_t)t * n_freq;
+                    const float* p_row = phase + (size_t)t * n_freq;
+                    float* re_row = spec_re.data() + (size_t)t * K;
+                    float* im_row = spec_im.data() + (size_t)t * K;
+                    for (int k = 1; k < n_freq - 1; k++) {
+                        float s, c;
+#if defined(__APPLE__)
+                        __sincosf(p_row[k], &s, &c);
+#elif defined(_GNU_SOURCE)
+                        sincosf(p_row[k], &s, &c);
+#else
+                        s = std::sin(p_row[k]);
+                        c = std::cos(p_row[k]);
+#endif
+                        re_row[k - 1] = m_row[k] * c;
+                        im_row[k - 1] = m_row[k] * s;
+                    }
+                }
+            });
         }
 
         std::vector<float> all_frames(T_frames * n_fft, 0.0f);
@@ -226,28 +256,46 @@ static inline std::vector<float> istft(const float* mag, const float* phase, int
     } else
 #endif
     {
-        // Per-frame scratch.
-        std::vector<float> frame_re(n_freq);
-        std::vector<float> frame_im(n_freq);
-        std::vector<float> frame_out(n_fft);
+        std::vector<float> all_frames((size_t)T_frames * n_fft, 0.0f);
+        const char* env_serial = std::getenv("CRISPASR_ISTFT_SERIAL");
+        const bool force_serial = (env_serial && env_serial[0] == '1');
+
+        if (force_serial || T_frames <= 4) {
+            std::vector<float> frame_re(n_freq);
+            std::vector<float> frame_im(n_freq);
+            for (int t = 0; t < T_frames; t++) {
+                const float* m_row = mag + (size_t)t * n_freq;
+                const float* p_row = phase + (size_t)t * n_freq;
+                for (int f = 0; f < n_freq; f++) {
+                    frame_re[f] = m_row[f] * std::cos(p_row[f]);
+                    frame_im[f] = m_row[f] * std::sin(p_row[f]);
+                }
+                float* f_out = all_frames.data() + (size_t)t * n_fft;
+                irfft_hermitian(frame_re.data(), frame_im.data(), n_fft, f_out);
+            }
+        } else {
+            core_parallel::for_each_chunk(T_frames, 0, [&](int t_start, int t_end) {
+                std::vector<float> frame_re(n_freq);
+                std::vector<float> frame_im(n_freq);
+                for (int t = t_start; t < t_end; t++) {
+                    const float* m_row = mag + (size_t)t * n_freq;
+                    const float* p_row = phase + (size_t)t * n_freq;
+                    for (int f = 0; f < n_freq; f++) {
+                        frame_re[f] = m_row[f] * std::cos(p_row[f]);
+                        frame_im[f] = m_row[f] * std::sin(p_row[f]);
+                    }
+                    float* f_out = all_frames.data() + (size_t)t * n_fft;
+                    irfft_hermitian(frame_re.data(), frame_im.data(), n_fft, f_out);
+                }
+            });
+        }
 
         for (int t = 0; t < T_frames; t++) {
-            // Build complex spectrum from magnitude + phase.
-            const float* m_row = mag + (size_t)t * n_freq;
-            const float* p_row = phase + (size_t)t * n_freq;
-            for (int f = 0; f < n_freq; f++) {
-                frame_re[f] = m_row[f] * std::cos(p_row[f]);
-                frame_im[f] = m_row[f] * std::sin(p_row[f]);
-            }
-
-            // Inverse RFFT.
-            irfft_hermitian(frame_re.data(), frame_im.data(), n_fft, frame_out.data());
-
-            // Overlap-add with window.
+            const float* f_out = all_frames.data() + (size_t)t * n_fft;
             int offset = t * hop;
             for (int i = 0; i < n_fft && (offset + i) < ola_len; i++) {
                 float w = window[i];
-                output[offset + i] += frame_out[i] * w;
+                output[offset + i] += f_out[i] * w;
                 win_sum[offset + i] += w * w;
             }
         }
