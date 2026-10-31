@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstdlib>
 #include <limits>
 #include <map>
 #include <set>
@@ -58,43 +59,91 @@ std::vector<float> speaker_centroids(const float* embeddings, int n, int d, cons
     if (n <= 0 || d <= 0 || (int)labels.size() != n)
         return {};
 
+    const char* env_serial = std::getenv("CRISPASR_DIARIZE_SMOOTH_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+
     std::set<int> uniq(labels.begin(), labels.end());
     std::vector<float> out;
     out.reserve(uniq.size() * (size_t)d);
 
-    for (int label : uniq) {
-        std::vector<double> acc((size_t)d, 0.0);
-        int members = 0;
-        for (int i = 0; i < n; i++) {
-            if (labels[(size_t)i] != label)
+    if (force_serial) {
+        for (int label : uniq) {
+            std::vector<double> acc((size_t)d, 0.0);
+            int members = 0;
+            for (int i = 0; i < n; i++) {
+                if (labels[(size_t)i] != label)
+                    continue;
+                // Mean of the NORMALISED members, not of the raw vectors: raw
+                // magnitude varies with window energy and would let a loud window
+                // dominate its speaker's centroid.
+                double nrm = 0.0;
+                for (int j = 0; j < d; j++)
+                    nrm += (double)embeddings[(size_t)i * d + j] * embeddings[(size_t)i * d + j];
+                nrm = std::sqrt(nrm);
+                if (nrm <= kTiny)
+                    continue;
+                for (int j = 0; j < d; j++)
+                    acc[(size_t)j] += embeddings[(size_t)i * d + j] / nrm;
+                members++;
+            }
+            if (members == 0)
                 continue;
-            // Mean of the NORMALISED members, not of the raw vectors: raw
-            // magnitude varies with window energy and would let a loud window
-            // dominate its speaker's centroid.
             double nrm = 0.0;
-            for (int j = 0; j < d; j++)
-                nrm += (double)embeddings[(size_t)i * d + j] * embeddings[(size_t)i * d + j];
+            for (int j = 0; j < d; j++) {
+                acc[(size_t)j] /= members;
+                nrm += acc[(size_t)j] * acc[(size_t)j];
+            }
             nrm = std::sqrt(nrm);
             if (nrm <= kTiny)
-                continue;
+                continue; // members cancelled out; no usable direction
             for (int j = 0; j < d; j++)
-                acc[(size_t)j] += embeddings[(size_t)i * d + j] / nrm;
-            members++;
+                out.push_back((float)(acc[(size_t)j] / nrm));
+            if (out_label_values)
+                out_label_values->push_back(label);
         }
-        if (members == 0)
-            continue;
-        double nrm = 0.0;
-        for (int j = 0; j < d; j++) {
-            acc[(size_t)j] /= members;
-            nrm += acc[(size_t)j] * acc[(size_t)j];
+    } else {
+        // Pre-compute inverse row norms once for all n vectors instead of recomputing
+        // an L2 norm for each vector under each unique speaker label.
+        std::vector<double> row_inv_norms((size_t)n, 0.0);
+        for (int i = 0; i < n; i++) {
+            double nrm = 0.0;
+            const float* row = embeddings + (size_t)i * d;
+            for (int j = 0; j < d; j++)
+                nrm += (double)row[j] * row[j];
+            nrm = std::sqrt(nrm);
+            if (nrm > kTiny)
+                row_inv_norms[(size_t)i] = 1.0 / nrm;
         }
-        nrm = std::sqrt(nrm);
-        if (nrm <= kTiny)
-            continue; // members cancelled out; no usable direction
-        for (int j = 0; j < d; j++)
-            out.push_back((float)(acc[(size_t)j] / nrm));
-        if (out_label_values)
-            out_label_values->push_back(label);
+
+        for (int label : uniq) {
+            std::vector<double> acc((size_t)d, 0.0);
+            int members = 0;
+            for (int i = 0; i < n; i++) {
+                if (labels[(size_t)i] != label)
+                    continue;
+                const double inv_nrm = row_inv_norms[(size_t)i];
+                if (inv_nrm <= 0.0)
+                    continue;
+                const float* row = embeddings + (size_t)i * d;
+                for (int j = 0; j < d; j++)
+                    acc[(size_t)j] += (double)row[j] * inv_nrm;
+                members++;
+            }
+            if (members == 0)
+                continue;
+            double nrm = 0.0;
+            for (int j = 0; j < d; j++) {
+                acc[(size_t)j] /= members;
+                nrm += acc[(size_t)j] * acc[(size_t)j];
+            }
+            nrm = std::sqrt(nrm);
+            if (nrm <= kTiny)
+                continue; // members cancelled out; no usable direction
+            for (int j = 0; j < d; j++)
+                out.push_back((float)(acc[(size_t)j] / nrm));
+            if (out_label_values)
+                out_label_values->push_back(label);
+        }
     }
     return out;
 }

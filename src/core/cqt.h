@@ -46,8 +46,12 @@
 
 #pragma once
 
+#include "core/parallel_for.h"
+
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <vector>
 
 namespace core_cqt {
@@ -161,27 +165,61 @@ inline int magnitude(const Params& p, const std::vector<Kernel>& kernels, const 
         return 0;
     out.assign((size_t)T * (size_t)p.n_bins, 0.0f);
 
-    for (int t = 0; t < T; t++) {
-        const long centre = (long)t * (long)p.hop_length;
-        for (int k = 0; k < p.n_bins; k++) {
-            const Kernel& kern = kernels[(size_t)k];
-            const int N = kern.length;
-            if (N <= 0)
-                continue;
-            // Correlate: conj(kernel) . signal, so the phase convention matches
-            // exp(-i w n) even though the kernel stores exp(+i w n).
-            const long start = p.center ? (centre - (long)N / 2) : centre;
-            double acc_re = 0.0, acc_im = 0.0;
-            for (int n = 0; n < N; n++) {
-                const long s = start + (long)n;
-                if (s < 0 || s >= (long)n_samples)
+    const char* env_serial = std::getenv("CRISPASR_CQT_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+
+    if (force_serial || T <= 1) {
+        for (int t = 0; t < T; t++) {
+            const long centre = (long)t * (long)p.hop_length;
+            for (int k = 0; k < p.n_bins; k++) {
+                const Kernel& kern = kernels[(size_t)k];
+                const int N = kern.length;
+                if (N <= 0)
                     continue;
-                const double v = (double)x[(size_t)s];
-                acc_re += v * (double)kern.re[(size_t)n];
-                acc_im -= v * (double)kern.im[(size_t)n];
+                // Correlate: conj(kernel) . signal, so the phase convention matches
+                // exp(-i w n) even though the kernel stores exp(+i w n).
+                const long start = p.center ? (centre - (long)N / 2) : centre;
+                double acc_re = 0.0, acc_im = 0.0;
+                for (int n = 0; n < N; n++) {
+                    const long s = start + (long)n;
+                    if (s < 0 || s >= (long)n_samples)
+                        continue;
+                    const double v = (double)x[(size_t)s];
+                    acc_re += v * (double)kern.re[(size_t)n];
+                    acc_im -= v * (double)kern.im[(size_t)n];
+                }
+                out[(size_t)t * (size_t)p.n_bins + (size_t)k] = (float)std::sqrt(acc_re * acc_re + acc_im * acc_im);
             }
-            out[(size_t)t * (size_t)p.n_bins + (size_t)k] = (float)std::sqrt(acc_re * acc_re + acc_im * acc_im);
         }
+    } else {
+        core_parallel::for_each_chunk(T, 0, [&](int t_start, int t_end) {
+            for (int t = t_start; t < t_end; t++) {
+                const long centre = (long)t * (long)p.hop_length;
+                float* out_frame = out.data() + (size_t)t * (size_t)p.n_bins;
+                for (int k = 0; k < p.n_bins; k++) {
+                    const Kernel& kern = kernels[(size_t)k];
+                    const int N = kern.length;
+                    if (N <= 0)
+                        continue;
+                    const long start = p.center ? (centre - (long)N / 2) : centre;
+                    const long n_begin = std::max(0L, -start);
+                    const long n_end = std::min((long)N, (long)n_samples - start);
+                    double acc_re = 0.0, acc_im = 0.0;
+                    if (n_begin < n_end) {
+                        const float* xs = x + (start + n_begin);
+                        const float* kre = kern.re.data() + n_begin;
+                        const float* kim = kern.im.data() + n_begin;
+                        const long count = n_end - n_begin;
+                        for (long n = 0; n < count; n++) {
+                            const double v = (double)xs[n];
+                            acc_re += v * (double)kre[n];
+                            acc_im -= v * (double)kim[n];
+                        }
+                    }
+                    out_frame[k] = (float)std::sqrt(acc_re * acc_re + acc_im * acc_im);
+                }
+            }
+        });
     }
     return T;
 }

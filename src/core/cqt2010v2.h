@@ -32,8 +32,11 @@
 
 #pragma once
 
+#include "core/parallel_for.h"
+
 #include <cmath>
 #include <cstddef>
+#include <cstdlib>
 #include <vector>
 
 namespace core_cqt2010v2 {
@@ -79,17 +82,38 @@ inline void decimate_by_2(const float* x, int n, const float* fir, int L, std::v
     }
     const int T = (padded - L) / 2 + 1;
     out.assign((size_t)T, 0.0f);
-    for (int t = 0; t < T; t++) {
-        const int base = 2 * t - pad; // index into x of tap 0
-        double acc = 0.0;
-        int k0 = 0, k1 = L;
-        if (base < 0)
-            k0 = -base;
-        if (base + L > n)
-            k1 = n - base;
-        for (int k = k0; k < k1; k++)
-            acc += (double)x[base + k] * (double)fir[k];
-        out[(size_t)t] = (float)acc;
+
+    const char* env_serial = std::getenv("CRISPASR_CQT2010_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+
+    if (force_serial || T <= 16) {
+        for (int t = 0; t < T; t++) {
+            const int base = 2 * t - pad; // index into x of tap 0
+            double acc = 0.0;
+            int k0 = 0, k1 = L;
+            if (base < 0)
+                k0 = -base;
+            if (base + L > n)
+                k1 = n - base;
+            for (int k = k0; k < k1; k++)
+                acc += (double)x[base + k] * (double)fir[k];
+            out[(size_t)t] = (float)acc;
+        }
+    } else {
+        core_parallel::for_each_chunk(T, 0, [&](int t_start, int t_end) {
+            for (int t = t_start; t < t_end; t++) {
+                const int base = 2 * t - pad;
+                double acc = 0.0;
+                int k0 = 0, k1 = L;
+                if (base < 0)
+                    k0 = -base;
+                if (base + L > n)
+                    k1 = n - base;
+                for (int k = k0; k < k1; k++)
+                    acc += (double)x[base + k] * (double)fir[k];
+                out[(size_t)t] = (float)acc;
+            }
+        });
     }
 }
 
@@ -107,20 +131,46 @@ inline int octave_complex(const Params& p, const Kernels& kern, const float* x, 
     const int T = (padded - p.n_fft) / hop + 1;
     re.assign((size_t)p.n_filters * (size_t)T, 0.0f);
     im.assign((size_t)p.n_filters * (size_t)T, 0.0f);
-    for (int k = 0; k < p.n_filters; k++) {
-        const float* kr = kern.real + (size_t)k * (size_t)p.n_fft;
-        const float* ki = kern.imag + (size_t)k * (size_t)p.n_fft;
-        for (int t = 0; t < T; t++) {
-            const float* seg = xp.data() + (size_t)t * (size_t)hop;
-            double ar = 0.0, ai = 0.0;
-            for (int nn = 0; nn < p.n_fft; nn++) {
-                const double v = (double)seg[nn];
-                ar += v * (double)kr[nn];
-                ai += v * (double)ki[nn];
+
+    const char* env_serial = std::getenv("CRISPASR_CQT2010_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+
+    if (force_serial || p.n_filters <= 2) {
+        for (int k = 0; k < p.n_filters; k++) {
+            const float* kr = kern.real + (size_t)k * (size_t)p.n_fft;
+            const float* ki = kern.imag + (size_t)k * (size_t)p.n_fft;
+            for (int t = 0; t < T; t++) {
+                const float* seg = xp.data() + (size_t)t * (size_t)hop;
+                double ar = 0.0, ai = 0.0;
+                for (int nn = 0; nn < p.n_fft; nn++) {
+                    const double v = (double)seg[nn];
+                    ar += v * (double)kr[nn];
+                    ai += v * (double)ki[nn];
+                }
+                re[(size_t)k * (size_t)T + (size_t)t] = (float)ar;
+                im[(size_t)k * (size_t)T + (size_t)t] = (float)ai;
             }
-            re[(size_t)k * (size_t)T + (size_t)t] = (float)ar;
-            im[(size_t)k * (size_t)T + (size_t)t] = (float)ai;
         }
+    } else {
+        core_parallel::for_each_chunk(p.n_filters, 0, [&](int k_start, int k_end) {
+            for (int k = k_start; k < k_end; k++) {
+                const float* kr = kern.real + (size_t)k * (size_t)p.n_fft;
+                const float* ki = kern.imag + (size_t)k * (size_t)p.n_fft;
+                float* re_k = re.data() + (size_t)k * (size_t)T;
+                float* im_k = im.data() + (size_t)k * (size_t)T;
+                for (int t = 0; t < T; t++) {
+                    const float* seg = xp.data() + (size_t)t * (size_t)hop;
+                    double ar = 0.0, ai = 0.0;
+                    for (int nn = 0; nn < p.n_fft; nn++) {
+                        const double v = (double)seg[nn];
+                        ar += v * (double)kr[nn];
+                        ai += v * (double)ki[nn];
+                    }
+                    re_k[t] = (float)ar;
+                    im_k[t] = (float)ai;
+                }
+            }
+        });
     }
     return T;
 }
@@ -179,21 +229,44 @@ inline int magnitude(const Params& p, const Kernels& kern, const float* x, int n
         return 0;
 
     out.assign((size_t)T * (size_t)p.n_bins, 0.0f);
-    for (int b = 0; b < total; b++) {
-        const int f = b - drop;
-        if (f < 0)
-            continue;
-        const int block = b / p.n_filters; // 0 = lowest octave
-        const int k = b % p.n_filters;
-        const int L = p.n_octaves - 1 - block;
-        const float* rp = re_lv[(size_t)L].data() + (size_t)k * (size_t)T;
-        const float* ip = im_lv[(size_t)L].data() + (size_t)k * (size_t)T;
-        const double s = (double)kern.sqrt_lengths[f];
-        for (int t = 0; t < T; t++) {
-            const double r = (double)rp[t] * s;
-            const double i = (double)ip[t] * s;
-            out[(size_t)t * (size_t)p.n_bins + (size_t)f] = (float)std::sqrt(r * r + i * i);
+    const char* env_serial = std::getenv("CRISPASR_CQT2010_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+    if (force_serial || total <= 4) {
+        for (int b = 0; b < total; b++) {
+            const int f = b - drop;
+            if (f < 0)
+                continue;
+            const int block = b / p.n_filters; // 0 = lowest octave
+            const int k = b % p.n_filters;
+            const int L = p.n_octaves - 1 - block;
+            const float* rp = re_lv[(size_t)L].data() + (size_t)k * (size_t)T;
+            const float* ip = im_lv[(size_t)L].data() + (size_t)k * (size_t)T;
+            const double s = (double)kern.sqrt_lengths[f];
+            for (int t = 0; t < T; t++) {
+                const double r = (double)rp[t] * s;
+                const double i = (double)ip[t] * s;
+                out[(size_t)t * (size_t)p.n_bins + (size_t)f] = (float)std::sqrt(r * r + i * i);
+            }
         }
+    } else {
+        core_parallel::for_each_chunk(total, 0, [&](int b_start, int b_end) {
+            for (int b = b_start; b < b_end; b++) {
+                const int f = b - drop;
+                if (f < 0)
+                    continue;
+                const int block = b / p.n_filters; // 0 = lowest octave
+                const int k = b % p.n_filters;
+                const int L = p.n_octaves - 1 - block;
+                const float* rp = re_lv[(size_t)L].data() + (size_t)k * (size_t)T;
+                const float* ip = im_lv[(size_t)L].data() + (size_t)k * (size_t)T;
+                const double s = (double)kern.sqrt_lengths[f];
+                for (int t = 0; t < T; t++) {
+                    const double r = (double)rp[t] * s;
+                    const double i = (double)ip[t] * s;
+                    out[(size_t)t * (size_t)p.n_bins + (size_t)f] = (float)std::sqrt(r * r + i * i);
+                }
+            }
+        });
     }
     return T;
 }
@@ -223,8 +296,18 @@ inline void normalized_log(float* v, size_t n, float eps = 1e-10f) {
             v[i] = 0.0f;
         return;
     }
-    for (size_t i = 0; i < n; i++)
-        v[i] = (float)(((double)v[i] - lo) / hi);
+
+    const char* env_serial = std::getenv("CRISPASR_CQT2010_SERIAL");
+    const bool force_serial = (env_serial && env_serial[0] == '1');
+    if (force_serial || n <= 1024) {
+        for (size_t i = 0; i < n; i++)
+            v[i] = (float)(((double)v[i] - lo) / hi);
+    } else {
+        core_parallel::for_each_chunk((int)n, 0, [&](int i_start, int i_end) {
+            for (int i = i_start; i < i_end; i++)
+                v[i] = (float)(((double)v[i] - lo) / hi);
+        });
+    }
 }
 
 } // namespace core_cqt2010v2

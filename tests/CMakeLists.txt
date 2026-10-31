@@ -4891,6 +4891,24 @@ catch_discover_tests(test-kokoro-diarize-ab-bench
     PROPERTIES LABELS "bench;kokoro;diarize"
 )
 
+# ─── test-cqt-diarize-ab-bench — cqt, cqt2010v2 & diarize_smooth paired A/B speed and parity bench ────
+add_executable(test-cqt-diarize-ab-bench test-cqt-diarize-ab-bench.cpp)
+target_include_directories(test-cqt-diarize-ab-bench PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/ggml/include
+    ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test-cqt-diarize-ab-bench PRIVATE
+    Catch2::Catch2WithMain
+    crispasr-core
+    Threads::Threads
+    ggml
+)
+catch_discover_tests(test-cqt-diarize-ab-bench
+    TEST_SPEC "[cqt][cqt2010][diarize_smooth][ab-bench]"
+    PROPERTIES LABELS "bench;cqt;diarize"
+)
+
 # ─── test-core-cross-attn — core/cross_attn.h manual path (ggml graph) ────────
 # Computes the header's cross-attention graph and compares to a plain-C++ MHA
 # reference (verifies the bug-fixed V-transpose + unscaled T5 contract).
