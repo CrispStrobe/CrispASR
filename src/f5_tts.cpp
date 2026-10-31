@@ -31,6 +31,7 @@
 
 #include "core/utf8.h"
 #include "core/gguf_loader.h"
+#include "core/parallel_for.h"
 #include "core/hifigan.h"          // #387 perf: shared GPU-capable HiFi-GAN vocoder
 #include "core/gpu_backend_pref.h" // crispasr_init_gpu_backend (#214)
 #include "core/crispasr_env.h"
@@ -1582,19 +1583,46 @@ static std::vector<float> dit_forward(f5_tts_context* ctx, const float* x_data, 
 
 // ── Vocos vocoder ────────────────────────────────────────────────
 
+// Check if sequential baseline F5-TTS is requested.
+static inline bool crispasr_f5_serial() {
+    const char* e = std::getenv("CRISPASR_F5_SERIAL");
+    return (e && *e && std::strcmp(e, "0") != 0);
+}
+
 // ── CPU Conv1d helper (standard or depthwise) ──────────────────────
 // input/output: (C, T) row-major. weight: (C_out, C_in_per_group, K).
 static void cpu_conv1d(const float* input, int C_in, int T, const float* weight, const float* bias, int C_out, int K,
                        int pad, int groups, float* output) {
     int ch_per_group_in = C_in / groups;
     int ch_per_group_out = C_out / groups;
-    for (int g = 0; g < groups; g++) {
-        int oc_start = g * ch_per_group_out;
-        int ic_start = g * ch_per_group_in;
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static)
-#endif
-        for (int oc = oc_start; oc < oc_start + ch_per_group_out; oc++) {
+    if (crispasr_f5_serial()) {
+        for (int g = 0; g < groups; g++) {
+            int oc_start = g * ch_per_group_out;
+            int ic_start = g * ch_per_group_in;
+            for (int oc = oc_start; oc < oc_start + ch_per_group_out; oc++) {
+                for (int t = 0; t < T; t++) {
+                    float sum = bias ? bias[oc] : 0.0f;
+                    for (int ic_local = 0; ic_local < ch_per_group_in; ic_local++) {
+                        int ic = ic_start + ic_local;
+                        for (int k = 0; k < K; k++) {
+                            int ti = t + k - pad;
+                            if (ti >= 0 && ti < T) {
+                                int w_idx = oc * ch_per_group_in * K + ic_local * K + k;
+                                sum += input[ic * T + ti] * weight[w_idx];
+                            }
+                        }
+                    }
+                    output[oc * T + t] = sum;
+                }
+            }
+        }
+        return;
+    }
+
+    core_parallel::for_each_chunk(C_out, 0, [&](int oc_start_chunk, int oc_end_chunk) {
+        for (int oc = oc_start_chunk; oc < oc_end_chunk; oc++) {
+            int g = oc / ch_per_group_out;
+            int ic_start = g * ch_per_group_in;
             for (int t = 0; t < T; t++) {
                 float sum = bias ? bias[oc] : 0.0f;
                 for (int ic_local = 0; ic_local < ch_per_group_in; ic_local++) {
@@ -1610,31 +1638,49 @@ static void cpu_conv1d(const float* input, int C_in, int T, const float* weight,
                 output[oc * T + t] = sum;
             }
         }
-    }
+    });
 }
 
 // Dilated 1-D conv (groups=1), same-padding. #387 HiFi-GAN resblocks.
 static void cpu_conv1d_dil(const float* input, int C_in, int T, const float* weight, const float* bias, int C_out,
                            int K, int dilation, float* output) {
     const int pad = dilation * (K - 1) / 2; // "same" for odd K
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static)
-#endif
-    for (int oc = 0; oc < C_out; oc++) {
-        for (int t = 0; t < T; t++) {
-            float sum = bias ? bias[oc] : 0.0f;
-            for (int ic = 0; ic < C_in; ic++) {
-                const float* in = input + (size_t)ic * T;
-                const float* w = weight + ((size_t)oc * C_in + ic) * K;
-                for (int k = 0; k < K; k++) {
-                    int ti = t + k * dilation - pad;
-                    if (ti >= 0 && ti < T)
-                        sum += in[ti] * w[k];
+    if (crispasr_f5_serial()) {
+        for (int oc = 0; oc < C_out; oc++) {
+            for (int t = 0; t < T; t++) {
+                float sum = bias ? bias[oc] : 0.0f;
+                for (int ic = 0; ic < C_in; ic++) {
+                    const float* in = input + (size_t)ic * T;
+                    const float* w = weight + ((size_t)oc * C_in + ic) * K;
+                    for (int k = 0; k < K; k++) {
+                        int ti = t + k * dilation - pad;
+                        if (ti >= 0 && ti < T)
+                            sum += in[ti] * w[k];
+                    }
                 }
+                output[(size_t)oc * T + t] = sum;
             }
-            output[(size_t)oc * T + t] = sum;
         }
+        return;
     }
+
+    core_parallel::for_each_chunk(C_out, 0, [&](int oc_start, int oc_end) {
+        for (int oc = oc_start; oc < oc_end; oc++) {
+            for (int t = 0; t < T; t++) {
+                float sum = bias ? bias[oc] : 0.0f;
+                for (int ic = 0; ic < C_in; ic++) {
+                    const float* in = input + (size_t)ic * T;
+                    const float* w = weight + ((size_t)oc * C_in + ic) * K;
+                    for (int k = 0; k < K; k++) {
+                        int ti = t + k * dilation - pad;
+                        if (ti >= 0 && ti < T)
+                            sum += in[ti] * w[k];
+                    }
+                }
+                output[(size_t)oc * T + t] = sum;
+            }
+        }
+    });
 }
 
 static inline void cpu_leaky_relu(std::vector<float>& x, float slope) {
@@ -1726,28 +1772,50 @@ static std::vector<float> hifigan_decode(f5_tts_context* ctx, const float* mel_d
         // Gather per output channel (parallel-safe: each oc writes its own row).
         // For each output position `to`, sum over the input taps that scatter
         // into it: to = ti*stride + kk - pad  ⇒  ti = (to + pad - kk)/stride.
-#ifdef _OPENMP
-#pragma omp parallel for schedule(static)
-#endif
-        for (int oc = 0; oc < out_ch; oc++) {
-            float* orow = up.data() + (size_t)oc * T_out;
-            for (int to = 0; to < T_out; to++) {
-                float acc = ub[oc];
-                for (int kk = 0; kk < k; kk++) {
-                    int num = to + pad - kk;
-                    if (num < 0 || (num % stride) != 0)
-                        continue;
-                    int ti = num / stride;
-                    if (ti < 0 || ti >= T)
-                        continue;
-                    for (int ic = 0; ic < ch; ic++) {
-                        float v = x[(size_t)ic * T + ti];
-                        float w = uw[(((size_t)ic * out_ch) + oc) * k + kk];
-                        acc += v * w;
+        if (crispasr_f5_serial()) {
+            for (int oc = 0; oc < out_ch; oc++) {
+                float* orow = up.data() + (size_t)oc * T_out;
+                for (int to = 0; to < T_out; to++) {
+                    float acc = ub[oc];
+                    for (int kk = 0; kk < k; kk++) {
+                        int num = to + pad - kk;
+                        if (num < 0 || (num % stride) != 0)
+                            continue;
+                        int ti = num / stride;
+                        if (ti < 0 || ti >= T)
+                            continue;
+                        for (int ic = 0; ic < ch; ic++) {
+                            float v = x[(size_t)ic * T + ti];
+                            float w = uw[(((size_t)ic * out_ch) + oc) * k + kk];
+                            acc += v * w;
+                        }
+                    }
+                    orow[to] = acc;
+                }
+            }
+        } else {
+            core_parallel::for_each_chunk(out_ch, 0, [&](int oc_start, int oc_end) {
+                for (int oc = oc_start; oc < oc_end; oc++) {
+                    float* orow = up.data() + (size_t)oc * T_out;
+                    for (int to = 0; to < T_out; to++) {
+                        float acc = ub[oc];
+                        for (int kk = 0; kk < k; kk++) {
+                            int num = to + pad - kk;
+                            if (num < 0 || (num % stride) != 0)
+                                continue;
+                            int ti = num / stride;
+                            if (ti < 0 || ti >= T)
+                                continue;
+                            for (int ic = 0; ic < ch; ic++) {
+                                float v = x[(size_t)ic * T + ti];
+                                float w = uw[(((size_t)ic * out_ch) + oc) * k + kk];
+                                acc += v * w;
+                            }
+                        }
+                        orow[to] = acc;
                     }
                 }
-                orow[to] = acc;
-            }
+            });
         }
         x = std::move(up);
         ch = out_ch;

@@ -4838,6 +4838,21 @@ catch_discover_tests(test-cpu-ops-ab-bench
     PROPERTIES LABELS "bench;cpu_ops"
 )
 
+# ─── test-firered-ab-bench — firered_asr & f5_tts paired A/B speed and parity bench ────
+add_executable(test-firered-ab-bench test-firered-ab-bench.cpp)
+target_include_directories(test-firered-ab-bench PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(test-firered-ab-bench PRIVATE
+    Catch2::Catch2WithMain
+    Threads::Threads
+    ggml
+)
+catch_discover_tests(test-firered-ab-bench
+    TEST_SPEC "[firered][f5_tts][ab-bench]"
+    PROPERTIES LABELS "bench;firered"
+)
+
 # ─── test-core-cross-attn — core/cross_attn.h manual path (ggml graph) ────────
 # Computes the header's cross-attention graph and compares to a plain-C++ MHA
 # reference (verifies the bug-fixed V-transpose + unscaled T5 contract).
