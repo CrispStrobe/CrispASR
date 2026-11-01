@@ -196,7 +196,7 @@ jobs:
       # downloading. --timeout: a hung unit test must not eat the runner.
       - name: Breeze guided acceptance deletion controls
         run: |
-          python3 -m pip install numpy pytest
+          python3 -m pip install numpy pytest gguf
           python3 tests/test_breeze_guided_validation.py -v
 
       - name: Run the unit tier

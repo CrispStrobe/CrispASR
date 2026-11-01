@@ -48,11 +48,12 @@
 #include "crispasr_phonemes_policy.h"    // #316
 #include "crispasr_punctuation_policy.h" // crispasr_should_auto_enable_punctuation()
 
-#include "common-crispasr.h"           // read_audio_data
-#include "core/separation_io.h"        // §381: separation result view + stem-to-WAV
-#include "core/gguf_loader.h"          // §381: arch detection for --separate-model
-#include "htdemucs.h"                  // §381: htdemucs separation backend
-#include "mel_band_roformer.h"         // §381: mel-band-roformer separation backend
+#include "common-crispasr.h"    // read_audio_data
+#include "core/separation_io.h" // §381: separation result view + stem-to-WAV
+#include "core/gguf_loader.h"   // §381: arch detection for --separate-model
+#include "htdemucs.h"           // §381: htdemucs separation backend
+#include "mel_band_roformer.h"  // §381: mel-band-roformer separation backend
+#include "mini_bs_roformer.h"
 #include "crispasr_chat.h"             // /v1/chat/completions
 #include "../server/ws_stream.h"       // real-time WebSocket ASR streaming (--ws-port)
 #include "../server/realtime_server.h" // vLLM Realtime API
@@ -1601,11 +1602,12 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     // mel-band-roformer), and holds it resident. A std::mutex serialises
     // concurrent requests. Mirrors the --chat-model precedent.
     // -----------------------------------------------------------------------
-    enum class SepArch { NONE, HTDEMUCS, MEL_BAND_ROFORMER };
+    enum class SepArch { NONE, HTDEMUCS, MEL_BAND_ROFORMER, MINI_BS_ROFORMER };
     struct SepCtx {
         SepArch arch = SepArch::NONE;
         htdemucs_context* htd_ctx = nullptr;
         mel_band_roformer_context* mbr_ctx = nullptr;
+        mini_bs_roformer_context* mini_bsr_ctx = nullptr;
         std::mutex mtx;
         int sample_rate = 0;
 
@@ -1614,6 +1616,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 return htdemucs_n_sources(htd_ctx);
             if (arch == SepArch::MEL_BAND_ROFORMER && mbr_ctx)
                 return mel_band_roformer_n_sources(mbr_ctx);
+            if (arch == SepArch::MINI_BS_ROFORMER && mini_bsr_ctx)
+                return mini_bs_roformer_n_sources(mini_bsr_ctx);
             return 0;
         }
         const char* source_name(int i) const {
@@ -1621,6 +1625,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 return htdemucs_source_name(htd_ctx, i);
             if (arch == SepArch::MEL_BAND_ROFORMER && mbr_ctx)
                 return mel_band_roformer_source_name(mbr_ctx, i);
+            if (arch == SepArch::MINI_BS_ROFORMER && mini_bsr_ctx)
+                return mini_bs_roformer_source_name(mini_bsr_ctx, i);
             return "";
         }
     };
@@ -1669,10 +1675,24 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             sep_ctx->sample_rate = mel_band_roformer_sample_rate(sep_ctx->mbr_ctx);
             fprintf(stderr, "crispasr-server: separation model loaded — mel-band-roformer (%d Hz, %d stems)\n",
                     sep_ctx->sample_rate, sep_ctx->n_sources());
+        } else if (sep_arch == "mini-bs-roformer") {
+            auto mp = mini_bs_roformer_default_params();
+            mp.use_gpu = params.use_gpu;
+            mp.n_threads = params.n_threads;
+            mp.gpu_device = params.gpu_device;
+            sep_ctx->mini_bsr_ctx = mini_bs_roformer_init_from_file(sep_resolved.c_str(), mp);
+            if (!sep_ctx->mini_bsr_ctx) {
+                fprintf(stderr, "crispasr-server: failed to load mini-bs-roformer from '%s'\n", sep_resolved.c_str());
+                return 1;
+            }
+            sep_ctx->arch = SepArch::MINI_BS_ROFORMER;
+            sep_ctx->sample_rate = mini_bs_roformer_sample_rate(sep_ctx->mini_bsr_ctx);
+            fprintf(stderr, "crispasr-server: separation model loaded — mini-bs-roformer (%d Hz, %d stems)\n",
+                    sep_ctx->sample_rate, sep_ctx->n_sources());
         } else {
             fprintf(stderr,
                     "crispasr-server: --separate-model: unsupported arch '%s' "
-                    "(expected htdemucs or mel-band-roformer)\n",
+                    "(expected htdemucs, mel-band-roformer or mini-bs-roformer)\n",
                     sep_arch.c_str());
             return 1;
         }
@@ -1761,6 +1781,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         crispasr_separation_view view{};
         htdemucs_result* htd_r = nullptr;
         mel_band_roformer_result* mbr_r = nullptr;
+        mini_bs_roformer_result* mini_bsr_r = nullptr;
         {
             std::lock_guard<std::mutex> lock(sep_ctx->mtx);
             if (sep_ctx->arch == SepArch::HTDEMUCS) {
@@ -1775,7 +1796,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 view.sample_rate = htd_r->sample_rate;
                 view.sources = htd_r->sources;
                 view.source_names = htd_r->source_names;
-            } else {
+            } else if (sep_ctx->arch == SepArch::MEL_BAND_ROFORMER) {
                 mbr_r = mel_band_roformer_separate(sep_ctx->mbr_ctx, pcm.data(), n_frames, n_channels);
                 if (!mbr_r) {
                     json_error(res, 500, "separation failed");
@@ -1787,6 +1808,18 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 view.sample_rate = mbr_r->sample_rate;
                 view.sources = mbr_r->sources;
                 view.source_names = mbr_r->source_names;
+            } else if (sep_ctx->arch == SepArch::MINI_BS_ROFORMER) {
+                mini_bsr_r = mini_bs_roformer_separate(sep_ctx->mini_bsr_ctx, pcm.data(), n_frames, n_channels);
+                if (!mini_bsr_r) {
+                    json_error(res, 500, "separation failed");
+                    return;
+                }
+                view.n_sources = mini_bsr_r->n_sources;
+                view.n_channels = mini_bsr_r->n_channels;
+                view.n_frames = mini_bsr_r->n_samples;
+                view.sample_rate = mini_bsr_r->sample_rate;
+                view.sources = mini_bsr_r->sources;
+                view.source_names = mini_bsr_r->source_names;
             }
         }
 
@@ -1816,6 +1849,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             htdemucs_result_free(htd_r);
         if (mbr_r)
             mel_band_roformer_result_free(mbr_r);
+        if (mini_bsr_r)
+            mini_bs_roformer_result_free(mini_bsr_r);
 
         if (n_parts == 0) {
             json_error(res, 400, "no stems matched the selection");
@@ -3976,7 +4011,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         fprintf(stderr, "  POST /v1/chat/completions        — text-LLM chat (model '%s')\n", params.chat_model.c_str());
     }
     if (sep_ctx) {
-        const char* arch_name = sep_ctx->arch == SepArch::HTDEMUCS ? "htdemucs" : "mel-band-roformer";
+        const char* arch_name = sep_ctx->arch == SepArch::HTDEMUCS           ? "htdemucs"
+                                : sep_ctx->arch == SepArch::MINI_BS_ROFORMER ? "mini-bs-roformer"
+                                                                             : "mel-band-roformer";
         fprintf(stderr, "  POST /v1/audio/separation         — source separation (%s, %d stems)\n", arch_name,
                 sep_ctx->n_sources());
     }
@@ -4043,6 +4080,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             htdemucs_free(sep_ctx->htd_ctx);
         if (sep_ctx->mbr_ctx)
             mel_band_roformer_free(sep_ctx->mbr_ctx);
+        if (sep_ctx->mini_bsr_ctx)
+            mini_bs_roformer_free(sep_ctx->mini_bsr_ctx);
         sep_ctx.reset();
     }
 

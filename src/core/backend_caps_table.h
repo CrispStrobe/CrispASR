@@ -117,6 +117,7 @@ static const BackendCaps k_backend_caps[] = {
     {"mimo-asr", 272218u,
      "timestamps-ctc,token-confidence,language-detect,diarize,temperature,beam-search,flash-attn,punctuation-native,"
      "auto-download"},
+    {"mini-bs-roformer", 5242880u, "separate"},
     {"mini-omni2", 2171136u, "temperature,auto-download,tts,s2s"},
     {"miotts", 73984u, "temperature,auto-download,tts"},
     {"moonshine", 12106u,

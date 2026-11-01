@@ -1,6 +1,6 @@
 # CrispASR — Current work plan
 
-Updated 2026-10-31. Start with [the maintainer handoff](docs/maintenance-handoff.md).
+Updated 2026-11-01. Start with [the maintainer handoff](docs/maintenance-handoff.md).
 It contains the completed work, exact evidence, bounded next actions and blockers
 needed by a fresh agent; no earlier chat is required. Follow `AGENTS.md` and its
 mandatory maintainer-guide instructions before implementation.
@@ -11,6 +11,17 @@ before starting. The full scope of each task (exact runs, inputs, commands and
 acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-tasks--fully-scoped).
 
 ## NOW — release verification and nightly diagnosis (2026-10-30)
+
+### Mini-BS-RoFormer V2.5 — CPU qualification complete, 2026-11-01
+
+- Owner: model-port team (native graph, blueprint/converter/reference, integration, quantization/validation); starting source `1dd0bf6fb9e7a8bf5849cb7a14605b2234e6ee93`.
+- Delivered behavior: native support for `HiDolen/Mini-BS-RoFormer-V2.5-46.2M` with four stereo stems, original chunking, F16/Q8_0/Q4_K weights, and optimized ggml inference.
+- Acceptance: pinned original Python stages and complete stems; strict Q8 cosine >0.98 and Q4_K >0.94, shape/finite/amplitude checks; same-input warm performance at least matching the Python blueprint on each qualified device; CLI/C ABI and separation wiring tests. Preserve sensitive tensors at sufficient precision based on measured errors.
+- Implemented: pinned converter/original-reference capture, native cached ggml graphs, precision policy, full 144-backend production build, generated catalogues, and CLI/server/Session integration. Final F16/Q8_0/Q4_K Session/CLI checks pass cold/warm and changed-input reuse, fresh-session agreement, owned results, neutral-filename detection, getter bounds, and selected-stem WAV agreement.
+- CPU optimization: supported Linux x86 AVX512 BF16 hosts select packed BF16 matrix operands with F32 accumulation and other neural operations; the portable CPU path stays F32. Shared conversion nodes, 96-row matrix blocks, exact-size frequency attention, and common affine decoder projections reduce runtime. The selected production library is `f862d6bd1079bb787695f44d0c5fad281488bb4c6f391bfe09b3e80e4e60608d` (SHA256), with all acceleration overrides unset.
+- Quality: all three variants pass all 25 required stages against the pinned original F32 blueprint with the genuine CrispEmbed comparator. Minimum whole-tensor cosine is F16 `0.999978781`, Q8_0 `0.999848187`, Q4_K `0.985801816`; the F16 gated-row minimum is `0.999764860`. Genuine CrispEmbed and CrispASR quantizers produce byte-identical Q8_0/Q4_K artifacts. All three no-BLAS waveform fallback checks also pass.
+- Performance: on the recorded AMD EPYC 9V74 CPU at two threads, all three variants beat the original published BF16 loader's `separate(batch_size=4)` medians across three alternating pairs. Eight-second speedups are F16 `1.014222x`, Q8_0 `1.215138x`, Q4_K `1.142296x`; twelve-second speedups are `1.178146x`, `1.169934x`, `1.071020x`. The twelve-second run's memory-limit interruption, seven retained pairs, two resumed Q4_K pairs, and separate untimed metric checks are explicit in the evidence. No completed timing was replaced.
+- Publication and scope: [PR #563](https://github.com/CrispStrobe/CrispASR/pull/563) carries the implementation and exact-head hosted checks. See [the qualification report](docs/mini-bs-roformer-validation.md) and [portable evidence](docs/historical/mini-bs-roformer-v25-cpu-validation-2026-11-01.json) for hashes, retained failed experiments, and recovery details. These measurements qualify the recorded CPU profile on one implementation-parity fixture; GPU speed/parity, other hosts, and held-out source-separation quality remain unmeasured.
 
 ### Main integration follow-up — 2026-10-31
 

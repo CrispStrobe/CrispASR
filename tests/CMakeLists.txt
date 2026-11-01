@@ -5403,6 +5403,14 @@ target_include_directories(test-mel-band-roformer-smoke PRIVATE
 )
 target_link_libraries(test-mel-band-roformer-smoke PRIVATE mel-band-roformer)
 
+add_executable(test-mini-bs-roformer test-mini-bs-roformer.cpp)
+target_include_directories(test-mini-bs-roformer PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-mini-bs-roformer PRIVATE Catch2::Catch2WithMain mini-bs-roformer)
+add_test(NAME mini-bs-roformer-runtime
+    COMMAND test-mini-bs-roformer "[mini-bs-roformer]")
+set_tests_properties(mini-bs-roformer-runtime PROPERTIES
+    LABELS "unit;mini-bs-roformer" TIMEOUT 60)
+
 # --- test-f5-tts --- standalone F5-TTS DiT+Vocos smoke test
 add_executable(test-f5-tts test-f5-tts.cpp)
 target_include_directories(test-f5-tts PRIVATE
@@ -5666,6 +5674,37 @@ set_tests_properties(test-package-lib-bundle PROPERTIES
 # Discover Python before constructing commands or guarding their registration.
 # A later find_package leaves clean builds without the guarded unit tests.
 find_package(Python3 COMPONENTS Interpreter QUIET)
+
+if (Python3_Interpreter_FOUND)
+    add_test(NAME mini-bs-roformer-converter
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-mini-bs-converter.py -v)
+    set_tests_properties(mini-bs-roformer-converter PROPERTIES LABELS "unit;mini-bs-roformer" TIMEOUT 60)
+    add_test(NAME mini-bs-roformer-validation-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_mini_bs_validation.py -v)
+    set_tests_properties(mini-bs-roformer-validation-controls PROPERTIES LABELS "unit;mini-bs-roformer" TIMEOUT 60)
+    add_test(NAME mini-bs-roformer-reference-streaming
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-mini-bs-reference-streaming.py -v)
+    set_tests_properties(mini-bs-roformer-reference-streaming PROPERTIES LABELS "unit;mini-bs-roformer" TIMEOUT 60)
+endif()
+
+if (CRISPASR_BUILD_EXAMPLES AND Python3_Interpreter_FOUND)
+    add_test(NAME mini-bs-roformer-quant-policy
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-mini-bs-quant-policy.py
+            $<TARGET_FILE:crispasr-quantize>)
+    set_tests_properties(mini-bs-roformer-quant-policy PROPERTIES LABELS "unit;mini-bs-roformer" TIMEOUT 120)
+endif()
+
+# Mini BS RoFormer V2.5: actual shared Session/Python + CLI integration.
+# The model is explicit and environment-gated; absent weights skip, never pass.
+if (CRISPASR_BUILD_EXAMPLES AND BUILD_SHARED_LIBS AND Python3_Interpreter_FOUND)
+    add_test(NAME mini-bs-roformer-surface
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-mini-bs-roformer-surface.py
+            --crispasr $<TARGET_FILE:crispasr-cli>
+            --library $<TARGET_FILE:crispasr-lib>)
+    set_tests_properties(mini-bs-roformer-surface PROPERTIES
+        LABELS "integration;mini-bs-roformer" SKIP_RETURN_CODE 77 TIMEOUT 1800)
+endif()
+
 if(Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES)
     add_test(NAME granite-quant-policy
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-granite-quant-policy.py

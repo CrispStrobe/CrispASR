@@ -5179,7 +5179,7 @@ class CrispasrSession {
 
   /// Split audio into source stems (e.g. drums / bass / other / vocals).
   ///
-  /// Requires a separation-capable backend (`htdemucs`).
+  /// Requires `htdemucs`, `mel-band-roformer` or `mini-bs-roformer`.
   ///
   /// [pcmStereo] is **interleaved stereo** float32 — `L,R,L,R,…` — at the
   /// model's native rate (44100 Hz for htdemucs; query
@@ -5249,8 +5249,8 @@ class CrispasrSession {
       inPtr.asTypedList(pcmStereo.length).setAll(0, pcmStereo);
       final nStems = sepFn(_handle, inPtr, framesPerChannel);
       if (nStems <= 0) {
-        throw Exception('separate failed for backend $_backend — the model '
-            'is probably not separation-capable (expected `htdemucs`)');
+        throw Exception(
+            'separate failed for backend $_backend: no stems produced');
       }
       final out = <Stem>[];
       for (var i = 0; i < nStems; i++) {

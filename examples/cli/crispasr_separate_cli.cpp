@@ -10,6 +10,7 @@
 #include "core/separation_io.h" // crispasr_separation_view + stem output
 #include "htdemucs.h"
 #include "mel_band_roformer.h"
+#include "mini_bs_roformer.h"
 
 #include <cstdio>
 #include <fstream>
@@ -93,7 +94,45 @@ int crispasr_run_separate(const whisper_params& params) {
         std::vector<float> mono;
         std::vector<std::vector<float>> stereo;
 
-        if (arch == "mel-band-roformer") {
+        if (arch == "mini-bs-roformer") {
+            auto mp = mini_bs_roformer_default_params();
+            mp.use_gpu = params.use_gpu;
+            mp.n_threads = params.n_threads;
+            mp.gpu_device = params.gpu_device;
+            auto* ctx = mini_bs_roformer_init_from_file(model.c_str(), mp);
+            if (!ctx) {
+                rc = 2;
+                break;
+            }
+            const int sr = mini_bs_roformer_sample_rate(ctx);
+            if (!read_audio_data(fname, mono, stereo, /*stereo=*/true, /*target_rate=*/sr)) {
+                fprintf(stderr, "crispasr: error: cannot read '%s'\n", fname.c_str());
+                mini_bs_roformer_free(ctx);
+                rc = 20;
+                continue;
+            }
+            std::vector<float> pcm;
+            const int n = interleave(mono, stereo, 2, pcm);
+            auto* r = mini_bs_roformer_separate(ctx, pcm.data(), n, 2);
+            if (!r) {
+                fprintf(stderr, "crispasr: --separate failed on '%s'\n", fname.c_str());
+                mini_bs_roformer_free(ctx);
+                rc = 1;
+                continue;
+            }
+            crispasr_separation_view v;
+            v.n_sources = r->n_sources;
+            v.n_channels = r->n_channels;
+            v.n_frames = r->n_samples;
+            v.sample_rate = r->sample_rate;
+            v.sources = r->sources;
+            v.source_names = r->source_names;
+            if (write_stems(v, fname, params) == 0)
+                rc = 1;
+            mini_bs_roformer_result_free(r);
+            mini_bs_roformer_free(ctx);
+
+        } else if (arch == "mel-band-roformer") {
             // #414: forward the CLI's GPU intent — zero-initialized default
             // params carry use_gpu=false, which silently pinned separation to
             // CPU even on GPU builds (the moonshine "encoder gap" trap).
@@ -178,7 +217,7 @@ int crispasr_run_separate(const whisper_params& params) {
         } else {
             fprintf(stderr,
                     "crispasr: --separate: '%s' is not a separation model (arch='%s'). "
-                    "Expected mel-band-roformer or htdemucs.\n",
+                    "Expected mini-bs-roformer, mel-band-roformer or htdemucs.\n",
                     model.c_str(), arch.c_str());
             return 2;
         }
