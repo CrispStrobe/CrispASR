@@ -112,6 +112,27 @@ TEST_CASE("registry: Phonon-2 selects Q8 and resolves alternate GGUF quants", "[
     REQUIRE(e.backend == "phonon2");
 }
 
+TEST_CASE("registry: mini-bs-roformer defaults to Q8_0 and resolves qualified quants", "[unit][registry]") {
+    CrispasrRegistryEntry e;
+    REQUIRE(crispasr_registry_lookup("mini-bs-roformer", e));
+    REQUIRE(e.filename == "mini-bs-roformer-q8_0.gguf");
+    REQUIRE(e.approx_size == "~50 MB");
+    REQUIRE(e.license == "MIT");
+    REQUIRE(crispasr_registry_lookup("mini-bs-roformer", e, "q4_k"));
+    REQUIRE(e.filename == "mini-bs-roformer-q4_k.gguf");
+    REQUIRE(e.approx_size == "~37 MB");
+    REQUIRE(crispasr_registry_lookup("mini-bs-roformer", e, "f16"));
+    REQUIRE(e.filename == "mini-bs-roformer-f16.gguf");
+    REQUIRE(e.approx_size == "~88 MB");
+    REQUIRE_FALSE(crispasr_registry_lookup("mini-bs-roformer", e, "q5_0"));
+    REQUIRE(crispasr_registry_lookup_by_filename("mini-bs-roformer-q8_0.gguf", e));
+    REQUIRE(e.backend == "mini-bs-roformer");
+    REQUIRE(crispasr_registry_lookup_by_filename("mini-bs-roformer-q4_k.gguf", e));
+    REQUIRE(e.backend == "mini-bs-roformer");
+    REQUIRE(crispasr_registry_lookup_by_filename("mini-bs-roformer-f16.gguf", e));
+    REQUIRE(e.backend == "mini-bs-roformer");
+}
+
 TEST_CASE("registry: default bundle reports the exact canonical artifacts", "[unit][registry]") {
     CrispasrRegistryBundle bundle;
     REQUIRE(crispasr_registry_default_bundle("omnivoice", bundle));

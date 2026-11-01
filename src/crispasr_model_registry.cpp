@@ -72,6 +72,18 @@ constexpr Entry k_registry[] = {
     {"mel-band-roformer", "mel-band-roformer-vocals-f16.gguf",
      "https://huggingface.co/cstr/mel-band-roformer-vocals-GGUF/resolve/main/mel-band-roformer-vocals-f16.gguf",
      "~436 MB", nullptr, nullptr},
+    // HiDolen Mini-BS-RoFormer V2.5 source separation (--separate). 4-stem
+    // (bass, drums, other, vocals) at 44.1 kHz; MIT license. Q8_0 is the default
+    // balanced download; Q4_K and F16 are also qualified.
+    {"mini-bs-roformer", "mini-bs-roformer-q8_0.gguf",
+     "https://huggingface.co/cstr/mini-bs-roformer-GGUF/resolve/main/mini-bs-roformer-q8_0.gguf",
+     "~50 MB", nullptr, nullptr, nullptr, "MIT", ",f16,q8_0,q4_k,"},
+    {"mini-bs-roformer", "mini-bs-roformer-q4_k.gguf",
+     "https://huggingface.co/cstr/mini-bs-roformer-GGUF/resolve/main/mini-bs-roformer-q4_k.gguf",
+     "~37 MB", nullptr, nullptr, nullptr, "MIT", ",f16,q8_0,q4_k,"},
+    {"mini-bs-roformer", "mini-bs-roformer-f16.gguf",
+     "https://huggingface.co/cstr/mini-bs-roformer-GGUF/resolve/main/mini-bs-roformer-f16.gguf",
+     "~88 MB", nullptr, nullptr, nullptr, "MIT", ",f16,q8_0,q4_k,"},
     // Sidon v0.1 (SaruLab) speech restoration (--s2s). w2v-BERT predictor +
     // continuous DAC decoder; MIT. Q8_0 is the best-fidelity practical quant
     // (predictor cos 0.998 vs the upstream F32; ASR round-trip identical). #283.

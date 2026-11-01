@@ -10,7 +10,7 @@ namespace {
 class MiniBsRoformerBackend : public CrispasrBackend {
 public:
     const char* name() const override { return "mini-bs-roformer"; }
-    uint32_t capabilities() const override { return CAP_SEPARATE | CAP_INTERNAL_CHUNKING; }
+    uint32_t capabilities() const override { return CAP_SEPARATE | CAP_AUTO_DOWNLOAD | CAP_INTERNAL_CHUNKING; }
 
     bool init(const whisper_params&) override {
         fprintf(stderr, "crispasr: mini-bs-roformer is a source-separation model; run it with --separate\n"
