@@ -5406,9 +5406,10 @@ target_link_libraries(test-mel-band-roformer-smoke PRIVATE mel-band-roformer)
 add_executable(test-mini-bs-roformer test-mini-bs-roformer.cpp)
 target_include_directories(test-mini-bs-roformer PRIVATE ${PROJECT_SOURCE_DIR}/src)
 target_link_libraries(test-mini-bs-roformer PRIVATE Catch2::Catch2WithMain mini-bs-roformer)
-catch_discover_tests(test-mini-bs-roformer
-    TEST_SPEC "[mini-bs-roformer]"
-    PROPERTIES LABELS "unit;mini-bs-roformer")
+add_test(NAME mini-bs-roformer-runtime
+    COMMAND test-mini-bs-roformer "[mini-bs-roformer]")
+set_tests_properties(mini-bs-roformer-runtime PROPERTIES
+    LABELS "unit;mini-bs-roformer" TIMEOUT 60)
 
 # --- test-f5-tts --- standalone F5-TTS DiT+Vocos smoke test
 add_executable(test-f5-tts test-f5-tts.cpp)

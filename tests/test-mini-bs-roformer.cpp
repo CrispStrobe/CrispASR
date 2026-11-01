@@ -1,15 +1,21 @@
 // Model-free failure and artifact guards for Mini BS RoFormer V2.5.
 #include <catch2/catch_test_macros.hpp>
 
+#include "core/ggml_cpu_backend.h"
 #include "mini_bs_roformer.h"
+#include "mini_bs_roformer_bf16.h"
 #include "mini_bs_roformer_fft.h"
 #include "gguf.h"
 
 #include <algorithm>
+#include <array>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <filesystem>
+#include <limits>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -89,4 +95,65 @@ TEST_CASE("Mini BS RoFormer FFT preserves quiet-band phase accuracy", "[unit][mi
     CHECK_THROWS_AS(mini_bs_fft::Plan(2), std::invalid_argument);
     CHECK_THROWS_AS(mini_bs_fft::Plan(4095), std::invalid_argument);
     CHECK_THROWS_AS(mini_bs_fft::Plan(8192), std::invalid_argument);
+}
+
+TEST_CASE("Mini BS RoFormer BF16 packed graph matches independent dot products", "[unit][mini-bs-roformer]") {
+    CHECK_FALSE(mini_bs_bf16::supported(nullptr));
+    std::unique_ptr<ggml_backend, decltype(&ggml_backend_free)> cpu(core_cpu_backend::init(), ggml_backend_free);
+    REQUIRE(cpu != nullptr);
+    // Exercise both small-M dispatches, a final 16-feature panel, and tails
+    // owned by multiple workers. M205 also spans three 96-row blocks, with
+    // a partial final block and an eight-row microkernel tail.
+    for (const auto shape : {std::array<int, 2>{18, 13}, {514, 13}, {514, 205}}) {
+        constexpr int n = 80;
+        const int k = shape[0], m = shape[1];
+        INFO("K=" << k << ", M=" << m);
+        std::unique_ptr<ggml_context, decltype(&ggml_free)> ctx(ggml_init({2 * 1024 * 1024, nullptr, false}),
+                                                                ggml_free);
+        REQUIRE(ctx != nullptr);
+        auto* w = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_BF16, k, n);
+        auto* x = ggml_new_tensor_2d(ctx.get(), GGML_TYPE_BF16, k, m);
+        CHECK(mini_bs_bf16::pack(ctx.get(), ggml_new_tensor_2d(ctx.get(), GGML_TYPE_BF16, 17, n)) == nullptr);
+        CHECK(mini_bs_bf16::pack(ctx.get(), ggml_new_tensor_2d(ctx.get(), GGML_TYPE_BF16, k, 30)) == nullptr);
+        CHECK(mini_bs_bf16::pack(ctx.get(), ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, k, n)) == nullptr);
+        auto* packed = mini_bs_bf16::pack(ctx.get(), w);
+        if (!mini_bs_bf16::hardware_supported()) {
+            CHECK_FALSE(mini_bs_bf16::supported(cpu.get()));
+            CHECK(packed == nullptr);
+            CHECK(mini_bs_bf16::graph(ctx.get(), packed, x, n) == nullptr);
+            continue;
+        }
+        REQUIRE(mini_bs_bf16::supported(cpu.get()));
+        REQUIRE(packed);
+        CHECK(mini_bs_bf16::graph(ctx.get(), packed, x, n + 16) == nullptr);
+        CHECK(mini_bs_bf16::graph(ctx.get(), packed, ggml_new_tensor_2d(ctx.get(), GGML_TYPE_F32, k, m), n) == nullptr);
+        auto* output = mini_bs_bf16::graph(ctx.get(), packed, x, n);
+        REQUIRE(output);
+        auto* graph = ggml_new_graph_custom(ctx.get(), 64, false);
+        ggml_build_forward_expand(graph, output);
+        auto* weights = static_cast<ggml_bf16_t*>(w->data);
+        auto* values = static_cast<ggml_bf16_t*>(x->data);
+        for (int col = 0; col < n; ++col)
+            for (int j = 0; j < k; ++j)
+                weights[col * k + j] = ggml_fp32_to_bf16(((col * 17 + j * 5) % 37 - 18) / 31.0f + col * 0.003f);
+        for (int row = 0; row < m; ++row)
+            for (int j = 0; j < k; ++j)
+                values[row * k + j] = ggml_fp32_to_bf16(((row * 7 + j * 11) % 41 - 20) / 29.0f - row * 0.009f);
+        auto* actual = static_cast<float*>(output->data);
+        std::fill(actual, actual + n * m, std::numeric_limits<float>::quiet_NaN());
+        REQUIRE(core_cpu_backend::compute(ctx.get(), graph, 1) == GGML_STATUS_SUCCESS);
+        std::vector<float> one_worker(actual, actual + n * m);
+        std::fill(actual, actual + n * m, std::numeric_limits<float>::quiet_NaN());
+        REQUIRE(core_cpu_backend::compute(ctx.get(), graph, 2) == GGML_STATUS_SUCCESS);
+        CHECK(std::memcmp(actual, one_worker.data(), one_worker.size() * sizeof(float)) == 0);
+        for (int row = 0; row < m; ++row)
+            for (int col = 0; col < n; ++col) {
+                double expected = 0;
+                for (int j = 0; j < k; ++j)
+                    expected +=
+                        (double)ggml_bf16_to_fp32(weights[col * k + j]) * ggml_bf16_to_fp32(values[row * k + j]);
+                CHECK(std::isfinite(actual[row * n + col]));
+                CHECK(std::abs(actual[row * n + col] - expected) <= 2e-5 * (1 + std::abs(expected)));
+            }
+    }
 }

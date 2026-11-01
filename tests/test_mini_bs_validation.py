@@ -3,7 +3,9 @@
 import importlib.util
 import json
 from pathlib import Path
+import tempfile
 import unittest
+from unittest import mock
 
 import numpy as np
 
@@ -15,6 +17,65 @@ SPEC.loader.exec_module(VALIDATION)
 
 
 class ValidationControls(unittest.TestCase):
+    def test_atomic_checkpoint_replaces_stale_state_without_temp_collision(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "progress.json"
+            sentinel = Path(directory) / "progress.json.tmp"
+            target.write_text('{"run_id":"old","acceptance":true}')
+            sentinel.write_text("another writer")
+            current = {"run_id": "new", "complete": False, "acceptance": False, "status": "initializing"}
+            VALIDATION.atomic_json_write(target, current)
+            self.assertEqual(json.loads(target.read_text()), current)
+            self.assertEqual(sentinel.read_text(), "another writer")
+            self.assertEqual({p.name for p in Path(directory).iterdir()}, {target.name, sentinel.name})
+
+    def test_atomic_checkpoint_rejects_nan_without_losing_prior_data(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "progress.json"
+            target.write_text('{"complete":false}')
+            with self.assertRaises(ValueError):
+                VALIDATION.atomic_json_write(target, {"score": float("nan")})
+            self.assertEqual(json.loads(target.read_text()), {"complete": False})
+            self.assertEqual(list(Path(directory).iterdir()), [target])
+
+    def test_atomic_checkpoint_cleans_up_when_publication_fails(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "progress.json"
+            target.write_text('{"run_id":"prior"}')
+            with mock.patch.object(VALIDATION.os, "replace", side_effect=OSError("publication failed")):
+                with self.assertRaises(OSError):
+                    VALIDATION.atomic_json_write(target, {"run_id": "new"})
+            self.assertEqual(json.loads(target.read_text()), {"run_id": "prior"})
+            self.assertEqual(list(Path(directory).iterdir()), [target])
+
+    def test_existing_quant_reuse_requires_identical_tool_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original, generated = (Path(directory) / name for name in ("existing.gguf", "generated.gguf"))
+            original.write_bytes(b"quantized artifact")
+            generated.write_bytes(original.read_bytes())
+            self.assertEqual(VALIDATION.verify_existing_quant(generated, original), VALIDATION.sha256(original))
+            self.assertEqual(original.read_bytes(), b"quantized artifact")
+            # The caller records this hash before deleting the temporary file.
+            self.assertTrue(generated.exists())
+
+    def test_existing_quant_mismatch_retains_both_artifacts(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original, generated = (Path(directory) / name for name in ("existing.gguf", "generated.gguf"))
+            original.write_bytes(b"accepted artifact")
+            generated.write_bytes(b"different tool output")
+            with self.assertRaises(ValueError):
+                VALIDATION.verify_existing_quant(generated, original)
+            self.assertEqual(original.read_bytes(), b"accepted artifact")
+            self.assertEqual(generated.read_bytes(), b"different tool output")
+
+    def test_existing_quant_cannot_alias_temporary_output(self):
+        with tempfile.TemporaryDirectory() as directory:
+            original = Path(directory) / "existing.gguf"
+            original.write_bytes(b"accepted artifact")
+            with self.assertRaises(ValueError):
+                VALIDATION.verify_existing_quant(original, original)
+            self.assertEqual(original.read_bytes(), b"accepted artifact")
+
     def log(self, score=1.0, row=1.0):
         return "\n".join(f"[PASS] {stage} cos_global={score} cos_min={row} norm_ratio=1 n_nonfinite=0"
                          for stage in VALIDATION.REQUIRED_STAGES)

@@ -3,6 +3,7 @@
 // SwiGLU temporal grouping, probe pooling and the shared complex-mask decoder.
 // Cached radix-2 transforms and overlap-add require no Python runtime.
 #include "mini_bs_roformer.h"
+#include "mini_bs_roformer_bf16.h"
 #include "mini_bs_roformer_fft.h"
 #include "core/ggml_cpu_backend.h"
 #include "core/gguf_loader.h"
@@ -117,13 +118,20 @@ bool read_hparams(gguf_context* meta, HParams& h) {
 }
 
 struct Graph {
+    struct WeightOperand {
+        ggml_tensor* values = nullptr;
+        ggml_tensor* packed = nullptr;
+    };
     ggml_context* ctx = nullptr;
     ggml_backend_sched_t sched = nullptr;
     ggml_cgraph* graph = nullptr;
     ggml_tensor *input = nullptr, *positions_t = nullptr, *positions_f = nullptr;
     ggml_tensor *hidden = nullptr, *embeddings = nullptr, *stem = nullptr, *mask = nullptr;
     std::array<ggml_tensor*, 4> stem_views{};
+    std::array<ggml_tensor*, 4> stem_masks{};
     std::map<std::string, ggml_tensor*> captures;
+    std::map<ggml_tensor*, ggml_tensor*> bf16_inputs;
+    std::map<ggml_tensor*, WeightOperand> bf16_weights;
     int frames = 0;
     bool capture = false;
     ~Graph() { clear(); }
@@ -135,7 +143,13 @@ struct Graph {
         sched = nullptr;
         ctx = nullptr;
         graph = nullptr;
+        input = positions_t = positions_f = nullptr;
+        hidden = embeddings = stem = mask = nullptr;
+        stem_views.fill(nullptr);
+        stem_masks.fill(nullptr);
         captures.clear();
+        bf16_inputs.clear();
+        bf16_weights.clear();
         frames = 0;
     }
 };
@@ -166,7 +180,10 @@ struct mini_bs_roformer_context {
     std::unique_ptr<mini_bs_fft::Plan> fft_in, fft_out;
     bool quant_q4 = false, quant_q8 = false;
     bool flash = true;
+    bool dense_frequency_attention = false;
     bool cpu_bf16 = false;
+    bool cpu_packed_bf16 = false;
+    bool shared_decoder = false;
 };
 
 namespace {
@@ -243,18 +260,17 @@ void validate_weights(mini_bs_roformer_context& m) {
     }
 }
 
-void init_graph(mini_bs_roformer_context& m, Graph& g, bool capture) {
+void init_graph(mini_bs_roformer_context& m, Graph& g, bool capture, size_t capacity = GRAPH_SIZE) {
     g.clear();
-    ggml_init_params ip{ggml_tensor_overhead() * GRAPH_SIZE + ggml_graph_overhead_custom(GRAPH_SIZE, false), nullptr,
-                        true};
+    ggml_init_params ip{ggml_tensor_overhead() * capacity + ggml_graph_overhead_custom(capacity, false), nullptr, true};
     g.ctx = ggml_init(ip);
     if (!g.ctx)
         throw std::runtime_error("cannot allocate graph metadata");
     ggml_backend_t backends[] = {m.blas ? m.blas : m.backend, m.cpu};
-    g.sched = ggml_backend_sched_new(backends, nullptr, m.backend == m.cpu && !m.blas ? 1 : 2, GRAPH_SIZE, false, true);
+    g.sched = ggml_backend_sched_new(backends, nullptr, m.backend == m.cpu && !m.blas ? 1 : 2, capacity, false, true);
     if (!g.sched)
         throw std::runtime_error("cannot create graph scheduler");
-    g.graph = ggml_new_graph_custom(g.ctx, GRAPH_SIZE, false);
+    g.graph = ggml_new_graph_custom(g.ctx, capacity, false);
     // Publish the cache key only after allocation and input setup succeed.
     // A failed build must be retryable, never mistaken for a complete graph.
     g.frames = 0;
@@ -265,20 +281,44 @@ ggml_tensor* linear(mini_bs_roformer_context& m, ggml_context* c, ggml_tensor* x
     // A single 2-D GEMM over all tokens enables efficient CPU/GPU kernels
     // instead of one matmul per band/head/frame.
     ggml_tensor* w = weight(m, n + ".weight");
+    ggml_tensor* original_x = x;
     const int64_t d1 = x->ne[1], d2 = x->ne[2], d3 = x->ne[3];
     if (!ggml_is_contiguous(x))
         x = ggml_cont(c, x);
     x = ggml_reshape_2d(c, x, x->ne[0], d1 * d2 * d3);
-    ggml_tensor* y;
+    ggml_tensor* y = nullptr;
     if (m.cpu_bf16) {
         // BF16 operands reach ggml's native CPU GEMM (including AVX512BF16)
         // while its output and accumulator remain F32. Casting both operands
         // also prevents BLAS from widening weights into an F32 GEMM instead.
         // Norms, residuals, nonlinearities and attention remain F32.
-        // CPU quantized DUP targets F32; use that supported conversion before
-        // packing the operand into BF16. Both buffers are reusable graph scratch.
-        ggml_tensor* unpacked = ggml_is_quantized(w->type) ? ggml_cast(c, w, GGML_TYPE_F32) : w;
-        y = ggml_mul_mat(c, ggml_cast(c, unpacked, GGML_TYPE_BF16), ggml_cast(c, x, GGML_TYPE_BF16));
+        auto& g = c == m.encoder.ctx ? m.encoder : m.decoder;
+        // Q/K/V projections and each SwiGLU gate/up pair share an activation.
+        // Reuse its conversion node so a forward rounds and reads it only once.
+        auto input = g.bf16_inputs.find(original_x);
+        ggml_tensor* bx = input == g.bf16_inputs.end() ? ggml_cast(c, x, GGML_TYPE_BF16) : input->second;
+        g.bf16_inputs.emplace(original_x, bx);
+        auto operand = g.bf16_weights.find(w);
+        if (operand == g.bf16_weights.end()) {
+            // CPU quantized DUP targets F32. Convert through that supported
+            // representation, then share the BF16/packed nodes among uses of
+            // the same immutable weight within this graph. The scheduler keeps
+            // their scratch alive through the last stem that reads it.
+            ggml_tensor* unpacked = ggml_is_quantized(w->type) ? ggml_cast(c, w, GGML_TYPE_F32) : w;
+            Graph::WeightOperand value;
+            value.values = ggml_cast(c, unpacked, GGML_TYPE_BF16);
+            if (m.cpu_packed_bf16)
+                value.packed = mini_bs_bf16::pack(c, value.values);
+            operand = g.bf16_weights.emplace(w, value).first;
+        }
+        if (operand->second.packed) {
+            // The private CPU kernel is a scheduled ggml node. Its packed
+            // weight layout reuses each pair across multiple audio positions;
+            // unsupported shapes retain ggml's portable BF16 matrix multiply.
+            y = mini_bs_bf16::graph(c, operand->second.packed, bx, w->ne[1]);
+        }
+        if (!y)
+            y = ggml_mul_mat(c, operand->second.values, bx);
     } else {
         y = ggml_mul_mat(c, w, x);
     }
@@ -330,7 +370,12 @@ ggml_tensor* attention(mini_bs_roformer_context& m, ggml_context* c, ggml_tensor
         q = ggml_repeat_4d(c, q, h.head_dim, nq, h.heads, batch);
     ggml_tensor* a = nullptr;
     const float scale = 1.0f / std::sqrt((float)h.head_dim);
-    if (m.flash) {
+    // The short 84-position frequency grid is faster as exact-size BLAS
+    // GEMMs plus ggml softmax on the packed CPU path. Keep temporal and
+    // pooling attention fused, and honor an explicit FLASH override.
+    const bool dense_frequency =
+        m.dense_frequency_attention && positions && nq == (int64_t)h.bands.size() + h.registers && nk == nq;
+    if (m.flash && !dense_frequency) {
         // Native GQA broadcasting repeats each KV head contiguously. Explicit
         // head expansion would double KV storage and defeat fused kernels.
         ggml_tensor* fk = core_cpu_backend::is_cpu(m.backend) ? k : ggml_cast(c, k, GGML_TYPE_F16);
@@ -464,23 +509,9 @@ void build_encoder(mini_bs_roformer_context& m, int frames, bool want_capture) {
     g.frames = frames;
 }
 
-void build_decoder(mini_bs_roformer_context& m, int frames) {
-    auto& g = m.decoder;
-    if (g.frames == frames)
-        return;
-    init_graph(m, g, false);
-    auto* c = g.ctx;
+ggml_tensor* decoder_mask(mini_bs_roformer_context& m, ggml_context* c, ggml_tensor* x, int frames) {
     const auto& h = m.hp;
     const int bands = (int)h.bands.size(), tc = (frames + h.group - 1) / h.group;
-    g.input = ggml_new_tensor_3d(c, GGML_TYPE_F32, h.hidden, bands, tc);
-    g.stem = ggml_new_tensor_1d(c, GGML_TYPE_F32, h.hidden);
-    ggml_set_input(g.input);
-    // The same hidden state is consumed by all four decoder invocations.
-    // INPUT alone permits gallocr to reuse its storage after its final read;
-    // OUTPUT pins that storage so a subsequent stem cannot see scratch data.
-    ggml_set_output(g.input);
-    ggml_set_input(g.stem);
-    ggml_tensor* x = mlp(m, c, ggml_add(c, g.input, g.stem), MODEL + "time_deconv");
     x = ggml_reshape_4d(c, x, h.group, h.band_dim, bands, tc);
     x = ggml_cont(c, ggml_permute(c, x, 2, 0, 1, 3)); // [D,F,tc,Tc]
     x = ggml_reshape_3d(c, x, h.band_dim, bands, tc * h.group);
@@ -497,9 +528,58 @@ void build_decoder(mini_bs_roformer_context& m, int frames) {
         gate = ggml_reshape_2d(c, gate, h.bands_out[b] * 4, frames);
         masks.push_back(ggml_mul(c, mask, gate));
     }
-    g.mask = concat_tree(c, std::move(masks), 0);
-    ggml_set_output(g.mask);
-    ggml_build_forward_expand(g.graph, g.mask);
+    return concat_tree(c, std::move(masks), 0);
+}
+
+void build_decoder(mini_bs_roformer_context& m, int frames) {
+    auto& g = m.decoder;
+    if (g.frames == frames)
+        return;
+    init_graph(m, g, false, m.shared_decoder ? GRAPH_SIZE * 2 : GRAPH_SIZE);
+    auto* c = g.ctx;
+    const auto& h = m.hp;
+    const int bands = (int)h.bands.size(), tc = (frames + h.group - 1) / h.group;
+    g.input = ggml_new_tensor_3d(c, GGML_TYPE_F32, h.hidden, bands, tc);
+    ggml_set_input(g.input);
+    // The same hidden state is consumed by all four decoder invocations in
+    // the original path. OUTPUT protects it from scratch reuse between stems.
+    // Keep this input protection on both paths and refresh it for each chunk.
+    ggml_set_output(g.input);
+    const std::string p = MODEL + "time_deconv";
+    if (m.shared_decoder) {
+        g.stem = ggml_new_tensor_2d(c, GGML_TYPE_F32, h.hidden, h.stems);
+        ggml_set_input(g.stem);
+        // There is no normalization between H + stem and the first two
+        // affine projections. Share W*H across the four stems, and project
+        // their embeddings as a tiny four-column matrix. BF16 rounds the two
+        // operands separately here, so this path must pass the same
+        // numerical gates as the original sum-before-projection path.
+        auto* gate_base = linear(m, c, g.input, p + ".gate_proj");
+        auto* up_base = linear(m, c, g.input, p + ".up_proj");
+        auto* stem_gate = linear(m, c, g.stem, p + ".gate_proj");
+        auto* stem_up = linear(m, c, g.stem, p + ".up_proj");
+        const int mid = h.hidden * h.group;
+        for (int s = 0; s < h.stems; ++s) {
+            auto* gate_bias = ggml_view_1d(c, stem_gate, mid, (size_t)s * stem_gate->nb[1]);
+            auto* up_bias = ggml_view_1d(c, stem_up, mid, (size_t)s * stem_up->nb[1]);
+            auto* gate = ggml_add(c, gate_base, gate_bias);
+            auto* up = ggml_add(c, up_base, up_bias);
+            auto* x = linear(m, c, ggml_swiglu_split(c, gate, up), p + ".down_proj");
+            g.stem_masks[s] = decoder_mask(m, c, x, frames);
+            ggml_set_output(g.stem_masks[s]);
+            // Expand each complete branch in stem order. The scheduler can
+            // reuse its temporary activations after the mask is produced;
+            // only shared inputs/projections and the four masks stay live.
+            ggml_build_forward_expand(g.graph, g.stem_masks[s]);
+        }
+    } else {
+        g.stem = ggml_new_tensor_1d(c, GGML_TYPE_F32, h.hidden);
+        ggml_set_input(g.stem);
+        auto* x = mlp(m, c, ggml_add(c, g.input, g.stem), p);
+        g.mask = decoder_mask(m, c, x, frames);
+        ggml_set_output(g.mask);
+        ggml_build_forward_expand(g.graph, g.mask);
+    }
     if (!ggml_backend_sched_alloc_graph(g.sched, g.graph))
         throw std::runtime_error("decoder graph allocation failed");
     g.frames = frames;
@@ -626,13 +706,22 @@ std::array<std::vector<float>, 4> forward(mini_bs_roformer_context& m, const flo
     if (captures)
         for (const auto& item : m.encoder.captures)
             (*captures)[item.first] = tensor_f32(item.second);
-    // Keep hidden states on the selected backend between encoder and the
-    // reused one-stem decoder; avoid a 4x decoder activation/memory blow-up.
+    // Keep hidden states on the selected backend. The accelerated CPU graph
+    // computes all four masks in one call; the original graph is reused once
+    // per stem. Both preserve the same mask order and reconstruction path.
     ggml_backend_tensor_copy(m.encoder.hidden, m.decoder.input);
+    if (m.shared_decoder) {
+        StageTimer timer("shared_stem_decoder");
+        ggml_backend_tensor_copy(m.encoder.embeddings, m.decoder.stem);
+        if (ggml_backend_sched_graph_compute(m.decoder.sched, m.decoder.graph) != GGML_STATUS_SUCCESS)
+            throw std::runtime_error("shared decoder execution failed");
+    }
     std::array<std::vector<float>, 4> result;
     for (int s = 0; s < m.hp.stems; ++s) {
         std::vector<float> mask;
-        {
+        if (m.shared_decoder) {
+            mask = tensor_f32(m.decoder.stem_masks[s]);
+        } else {
             StageTimer timer("stem_decoder");
             ggml_backend_tensor_copy(m.encoder.stem_views[s], m.decoder.stem);
             if (ggml_backend_sched_graph_compute(m.decoder.sched, m.decoder.graph) != GGML_STATUS_SUCCESS)
@@ -691,9 +780,13 @@ mini_bs_roformer_context* mini_bs_roformer_init_from_file(const char* path, mini
         }
         if (!m->backend)
             m->backend = m->cpu;
-        // Opt-in until the complete model's fidelity and published-default
-        // Python performance gates have been established on the target CPU.
-        m->cpu_bf16 = m->backend == m->cpu && env_flag("CRISPASR_MINI_BS_CPU_BF16", false);
+        // Select the native packed path only where its compiler and runtime
+        // ISA guards succeed. Explicit controls retain the F32 and portable
+        // BF16 paths for independent comparisons on the same model artifact.
+        const bool packed_cpu = m->backend == m->cpu && mini_bs_bf16::supported(m->cpu);
+        m->cpu_bf16 = m->backend == m->cpu && env_flag("CRISPASR_MINI_BS_CPU_BF16", packed_cpu);
+        m->cpu_packed_bf16 = m->cpu_bf16 && packed_cpu && env_flag("CRISPASR_MINI_BS_PACKED_BF16", true);
+        m->shared_decoder = m->cpu_packed_bf16 && env_flag("CRISPASR_MINI_BS_SHARED_DECODER", true);
         // Use the native ggml BLAS accelerator for large CPU GEMMs when it is
         // registered. Unlike the quantized dot kernels it preserves F32
         // activations. Registry lookup also works with GGML_BACKEND_DL builds.
@@ -718,12 +811,18 @@ mini_bs_roformer_context* mini_bs_roformer_init_from_file(const char* path, mini
             throw std::runtime_error("weight load failed");
         validate_weights(*m);
         m->flash = env_flag("CRISPASR_MINI_BS_FLASH", true);
-        std::fprintf(stderr, "mini_bs_roformer: backend=%s%s threads=%d precision=%s compute=%s attention=%s\n",
+        m->dense_frequency_attention = m->cpu_packed_bf16 && m->blas && !std::getenv("CRISPASR_MINI_BS_FLASH");
+        std::fprintf(stderr,
+                     "mini_bs_roformer: backend=%s%s threads=%d precision=%s compute=%s attention=%s decoder=%s\n",
                      ggml_backend_name(m->backend), m->blas ? "+BLAS" : "", params.n_threads,
                      m->quant_q4   ? "Q4_K mixed"
                      : m->quant_q8 ? "Q8_0 mixed"
                                    : "F16/F32",
-                     m->cpu_bf16 ? "BF16-GEMM/F32-accum-ops" : "F32", m->flash ? "flash-GQA" : "graph-softmax-GQA");
+                     mini_bs_roformer_compute_precision(m.get()),
+                     !m->flash                      ? "graph-softmax-GQA"
+                     : m->dense_frequency_attention ? "flash-time/dense-frequency-GQA"
+                                                    : "flash-GQA",
+                     m->shared_decoder ? "shared-affine" : "per-stem");
         return m.release();
     } catch (const std::exception& e) {
         std::fprintf(stderr, "mini_bs_roformer: %s\n", e.what());
@@ -844,7 +943,11 @@ const char* mini_bs_roformer_backend_name(const mini_bs_roformer_context* ctx) {
     return ctx && ctx->backend ? (ctx->blas ? "CPU+BLAS" : ggml_backend_name(ctx->backend)) : nullptr;
 }
 const char* mini_bs_roformer_compute_precision(const mini_bs_roformer_context* ctx) {
-    return ctx ? (ctx->cpu_bf16 ? "BF16-GEMM/F32-accum-ops" : "F32") : nullptr;
+    if (!ctx)
+        return nullptr;
+    if (ctx->backend != ctx->cpu)
+        return "GPU-ggml/F32-accum-ops";
+    return ctx->cpu_packed_bf16 ? "packed-BF16-GEMM/F32-accum-ops" : ctx->cpu_bf16 ? "BF16-GEMM/F32-accum-ops" : "F32";
 }
 
 int mini_bs_roformer_diff(const char* model_gguf, const char* ref_gguf, const char* audio_wav, int verbosity) {

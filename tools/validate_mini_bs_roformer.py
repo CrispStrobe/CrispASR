@@ -22,7 +22,9 @@ import statistics
 import struct
 import subprocess
 import sys
+import tempfile
 import time
+import uuid
 
 import numpy as np
 
@@ -56,10 +58,39 @@ def sha256(path):
     return digest.hexdigest()
 
 
+def atomic_json_write(path, value):
+    """Publish complete JSON without colliding with another writer's temporary file."""
+    path = Path(path)
+    encoded = json.dumps(value, indent=2, allow_nan=False) + "\n"
+    descriptor, temporary = tempfile.mkstemp(prefix=path.name + ".", suffix=".tmp", dir=path.parent)
+    try:
+        with os.fdopen(descriptor, "w") as stream:
+            stream.write(encoded)
+        os.replace(temporary, path)
+    finally:
+        Path(temporary).unlink(missing_ok=True)
+
+
+def verify_existing_quant(regenerated, existing):
+    """Reuse only byte-identical real-tool output; never remove the source model."""
+    regenerated, existing = Path(regenerated), Path(existing)
+    if regenerated.samefile(existing):
+        raise ValueError("temporary quantizer output aliases the existing model")
+    actual, expected = sha256(regenerated), sha256(existing)
+    if actual != expected:
+        raise ValueError(f"regenerated quant differs from existing artifact: {actual} vs {expected}")
+    return actual
+
+
 def runtime_provenance(library):
     """Record the observed host and adjacent build metadata, without guessing."""
     result = {"platform": platform.platform(), "machine": platform.machine(),
               "logical_cpus": os.cpu_count(), "library_sha256": sha256(library)}
+    result["runtime_environment"] = {name: os.environ.get(name) for name in (
+        "CRISPASR_MINI_BS_CPU_BF16", "CRISPASR_MINI_BS_PACKED_BF16", "CRISPASR_MINI_BS_SHARED_DECODER",
+        "CRISPASR_MINI_BS_BLAS",
+        "CRISPASR_MINI_BS_FLASH", "CRISPASR_MINI_BS_THREADS", "CRISPASR_MINI_BS_GPU",
+        "OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS")}
     for name, path in (("cpu_quota", "/sys/fs/cgroup/cpu.max"),
                        ("cpuset", "/sys/fs/cgroup/cpuset.cpus.effective"),
                        ("memory_limit_bytes", "/sys/fs/cgroup/memory.max")):
@@ -90,7 +121,8 @@ def runtime_provenance(library):
         if source:
             result["source_files_sha256"] = {
                 str(path.relative_to(source)): sha256(path)
-                for name in ("mini_bs_roformer.cpp", "mini_bs_roformer.h", "mini_bs_roformer_fft.h")
+                for name in ("mini_bs_roformer.cpp", "mini_bs_roformer.h", "mini_bs_roformer_fft.h",
+                             "mini_bs_roformer_bf16.h")
                 if (path := Path(source) / "src" / name).is_file()
             }
             git = subprocess.run(["git", "-C", str(Path(source) / "ggml"), "rev-parse", "HEAD"],
@@ -333,7 +365,15 @@ class NativeModel:
             self.ctx = None
 
 
-def benchmark(args, models, expected_model_hashes=None):
+def benchmark(args, models, expected_model_hashes=None, checkpoint_path=None):
+    run_id = uuid.uuid4().hex
+    if checkpoint_path is not None:
+        atomic_json_write(checkpoint_path, {
+            "run_id": run_id, "complete": False, "acceptance": False, "status": "initializing",
+            "requested_models": {precision: str(path) for precision, path in models.items()},
+            "expected_model_sha256": expected_model_hashes, "audio": str(args.audio),
+            "library": str(args.library),
+        })
     import gc
     import soundfile
     import torch
@@ -399,7 +439,7 @@ def benchmark(args, models, expected_model_hashes=None):
         synchronize()
         return output, (time.perf_counter() - start) * 1000.0
 
-    result = {"mode": args.mode, "sample_rate": rate, "channels": 2, "samples": len(audio),
+    result = {"run_id": run_id, "mode": args.mode, "sample_rate": rate, "channels": 2, "samples": len(audio),
               "duration_seconds": len(audio) / rate, "threads": args.threads,
               "python_dtype": actual_python_dtype, "python_loader": loader_description,
               "quality_reference_dtype": "float32", "quality_reference": "untimed original on identical input and mode",
@@ -448,6 +488,14 @@ def benchmark(args, models, expected_model_hashes=None):
                       f"native={native_ms:.3f} ms python={python_ms:.3f} ms "
                       f"quality={'PASS' if all(m['acceptance'] for m in metrics.values()) else 'FAIL'}",
                       file=sys.stderr, flush=True)
+                if checkpoint_path is not None:
+                    # Persist outside the timing boundary. A memory-limit kill
+                    # must not erase earlier complete pairs or model profiles.
+                    progress = {**result, "complete": False, "acceptance": False,
+                                "active_precision": precision, "active_model_sha256": model_hashes[precision],
+                                "active_native_backend": native.actual_backend,
+                                "active_compute_precision": native.compute_precision, "active_runs": rows}
+                    atomic_json_write(checkpoint_path, progress)
             if hashlib.sha256(audio.tobytes()).hexdigest() != audio_digest:
                 raise ValueError("native inference modified the input waveform")
             if not np.array_equal(waveform.float().cpu().numpy(), audio.T):
@@ -495,6 +543,8 @@ def main():
     parser.add_argument("--audio", required=True, type=Path)
     parser.add_argument("--quantizer", required=True, type=Path)
     parser.add_argument("--quantizer-kind", choices=("crispasr", "crispembed"), default="crispasr")
+    parser.add_argument("--verify-existing-quants", type=Path,
+                        help="reuse Q8/Q4 files in this directory only after byte-identical regeneration with the real quantizer")
     parser.add_argument("--imatrix", type=Path,
                         help="original-input column-energy calibration GGUF for weighted Q4_K")
     parser.add_argument("--diff", required=True, type=Path)
@@ -522,11 +572,15 @@ def main():
     if not args.stages_only and not args.library:
         parser.error("--library is required for the warm in-process benchmark")
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    for key in ("model_dir", "f16", "reference", "full_reference", "audio", "quantizer", "imatrix", "diff", "crispembed_diff", "output_dir", "library"):
+    for key in ("model_dir", "f16", "reference", "full_reference", "audio", "quantizer", "imatrix", "diff", "crispembed_diff", "output_dir", "library", "verify_existing_quants"):
         path = getattr(args, key)
         if path is not None:
             setattr(args, key, path.resolve())
-    receipt = {"schema": 1, "acceptance": False, "complete": False,
+    receipt_path = args.output_dir / "validation.json"
+    run_id = uuid.uuid4().hex
+    atomic_json_write(receipt_path, {"run_id": run_id, "acceptance": False, "complete": False,
+                                    "status": "initializing"})
+    receipt = {"schema": 1, "run_id": run_id, "acceptance": False, "complete": False,
                "platform": platform.platform(), "thresholds_strict_gt": THRESHOLDS,
                "norm_ratio_bounds": NORM_RATIO_BOUNDS,
                "amplitude_contract": "native original 20% guard; earlier exploratory external 10% checks retained in logs",
@@ -534,6 +588,7 @@ def main():
                "required_performance_profile": {"python_dtype": "bfloat16", "mode": "separate", "batch_size": 4,
                                                 "loader": "published from_pretrained without a dtype override"},
                "genuine_crispembed_profile": args.quantizer_kind == "crispembed" and args.crispembed_diff is not None,
+               "existing_quants_verified_by_regeneration": {},
                "reference_sha256": sha256(args.reference), "audio_sha256": sha256(args.audio),
                "quantizer_kind": args.quantizer_kind, "quantizer_sha256": sha256(args.quantizer),
                "diff_sha256": sha256(args.diff), "models": {}, "commands": []}
@@ -552,7 +607,6 @@ def main():
     if importance_inventory:
         receipt["imatrix"] = {"sha256": importance_inventory["sha256"],
                               "tensor_count": len(importance_inventory["tensors"])}
-    receipt_path = args.output_dir / "validation.json"
 
     def command(argv, log_name, env=None):
         receipt["commands"].append(argv)
@@ -567,14 +621,27 @@ def main():
         if not args.stages_only and not receipt["reference_geometry_acceptance"]:
             raise ValueError("qualification requires all 25 stages for one complete 352800-frame stereo chunk; "
                              "use --stages-only for short raw-forward diagnostics")
-        models = {"f16": args.f16, **{q: args.output_dir / f"mini-bs-roformer-{q}.gguf"
+        quant_directory = args.verify_existing_quants or args.output_dir
+        models = {"f16": args.f16, **{q: quant_directory / f"mini-bs-roformer-{q}.gguf"
                                     for q in ("q8_0", "q4_k")}}
         source_hash = sha256(args.f16)
         reference_hash = sha256(args.reference)
         for precision, path in models.items():
             if precision != "f16":
-                argv = quantizer_command(args.quantizer, args.quantizer_kind, args.f16, path, precision, args.imatrix)
+                destination = path
+                if args.verify_existing_quants:
+                    if not path.is_file():
+                        raise ValueError(f"existing quantized artifact is missing: {path}")
+                    descriptor, temporary = tempfile.mkstemp(prefix=f"regenerated-{precision}-", suffix=".gguf",
+                                                              dir=args.output_dir)
+                    os.close(descriptor)
+                    destination = Path(temporary)
+                argv = quantizer_command(args.quantizer, args.quantizer_kind, args.f16, destination, precision, args.imatrix)
                 command(argv, f"quantize-{precision}.log")
+                if args.verify_existing_quants:
+                    receipt["existing_quants_verified_by_regeneration"][precision] = verify_existing_quant(destination, path)
+                    atomic_json_write(receipt_path, receipt)
+                    destination.unlink()
             inventory = gguf_inventory(path)
             check_inventory(inventory, precision)
             if importance_inventory and precision == "q4_k":
@@ -637,7 +704,8 @@ def main():
         else:
             receipt["library_sha256"] = sha256(args.library)
             receipt["benchmark"] = benchmark(args, models,
-                {precision: receipt["models"][precision]["sha256"] for precision in models})
+                {precision: receipt["models"][precision]["sha256"] for precision in models},
+                checkpoint_path=args.output_dir / "benchmark-progress.json")
         receipt["complete"] = not args.stages_only
         receipt["profile_acceptance"] = receipt["numerical_acceptance"] and receipt["benchmark"].get("profile_acceptance", False)
         receipt["acceptance"] = (receipt["numerical_acceptance"] and receipt["benchmark"]["acceptance"] and
@@ -646,7 +714,7 @@ def main():
         receipt["error"] = f"{type(error).__name__}: {error}"
         print(receipt["error"], file=sys.stderr)
     finally:
-        receipt_path.write_text(json.dumps(receipt, indent=2, allow_nan=False) + "\n")
+        atomic_json_write(receipt_path, receipt)
         print(receipt_path)
     return 0 if receipt["acceptance"] else 1
 

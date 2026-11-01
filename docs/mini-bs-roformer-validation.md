@@ -108,6 +108,73 @@ the Q4_K artifact SHA256 is
 This establishes quantizer equivalence; the numerical gates still execute the
 model and compare it with the original blueprint.
 
+### Qualified CPU profile
+
+The [dated CPU validation receipt](historical/mini-bs-roformer-v25-cpu-validation-2026-11-01.json)
+records passing final numerical and paired performance gates for all three
+artifacts. The final production library SHA256 is
+`f862d6bd1079bb787695f44d0c5fad281488bb4c6f391bfe09b3e80e4e60608d`.
+The native implementation and the genuine CrispEmbed comparator both passed
+all 25 stages against the pinned original F32 blueprint on a complete trained
+eight-second chunk:
+
+| Artifact | Lowest whole-tensor stage cosine | Lowest separated-stem cosine | Required stage cosine |
+|---|---:|---:|---:|
+| F16 | 0.999978781 | 0.999995410 | > 0.999 |
+| Q8_0 | 0.999848187 | 0.999976456 | > 0.98 |
+| Q4_K | 0.985801816 | 0.997874796 | > 0.94 |
+
+`freq_pooled` was the lowest whole-tensor stage in each case. F16's lowest
+gated feature-row cosine was 0.999764860, also above its unchanged 0.999 gate.
+Exact shapes, finite values and the independent amplitude bounds passed.
+The genuine quantizer regenerated both quants byte-for-byte, including the
+precision floors in the storage table above; no importance matrix was needed.
+
+The paired measurements used an AMD EPYC 9V74 host with two inference threads
+per engine, an eight-CPU cgroup quota, a Release build with native instructions,
+and OpenBLAS 0.3.26. The original model ran through its faithful published
+BF16 loading path with PyTorch 2.14.1+cpu, Transformers 5.18.0 and the method's
+default `separate(batch_size=4)`. Each model/session had one warmup, with three
+retained alternating timing pairs per variant. Native BF16, packing, shared-decoder, attention and
+BLAS overrides were all unset: the verified automatic path used packed BF16
+matrix operands, F32 accumulation and operations, hybrid attention and the
+shared affine decoder.
+
+| Input duration | Artifact | Native median seconds | Published BF16 Python median seconds | Speedup |
+|---|---|---:|---:|---:|
+| 8 seconds | F16 | 6.922809 | 7.021266 | 1.014222 |
+| 8 seconds | Q8_0 | 6.186667 | 7.517654 | 1.215138 |
+| 8 seconds | Q4_K | 6.310678 | 7.208663 | 1.142296 |
+| 12 seconds | F16 | 11.533396 | 13.588022 | 1.178146 |
+| 12 seconds | Q8_0 | 11.897727 | 13.919557 | 1.169934 |
+| 12 seconds | Q4_K | 12.636810 | 13.534278 | 1.071020 |
+
+Every completed timing pair passed the native-versus-F32 waveform gate. The
+eight-second F16 speed advantage is only 1.4%; the raw runs remain available
+in the receipt so that margin and the observed variation stay visible.
+
+The twelve-second run hit the 8 GiB memory limit after all three F16 pairs,
+all three Q8_0 pairs and the first Q4_K pair. Those seven completed timings
+and their logged waveform-PASS results were retained. A fresh process used
+the same library, model bytes, Python dtype, batch size and alternating order
+to finish only the two missing Q4_K pairs, after one recovery warmup. No
+completed timing was repeated or discarded. The retained stdout timings have
+0.001 ms precision; their unretained per-stem numeric details and extra
+Python-parity metrics are explicitly unknown, not reconstructed. Separate
+untimed twelve-second checks supplied new exact F16 and Q8_0 waveform metrics
+(worst cosines 0.999994953 and 0.999977306). The two newly retained Q4_K pairs
+had worst stem cosine 0.998153231. The receipt includes the bounded recovery
+source, provenance and the distinction between retained and newly measured
+evidence.
+
+All three artifacts also passed a separate five-stage waveform compatibility
+check with BLAS disabled. That check makes no speed claim. Earlier failed
+warm-cache, FFT precision, raw half-second diagnostic and slower performance
+profiles remain in the history; their gates were not relaxed. These are CPU
+implementation-parity measurements on fixed music excerpts, not held-out
+source-separation quality results or proof for other hardware. GPU parity and
+performance remain unmeasured.
+
 For the actual CrispEmbed diff implementation, compile this repository's
 small capture adapter against an external pinned CrispEmbed checkout:
 
@@ -199,6 +266,13 @@ uses its explicit `--outputs-only` option. Each refuses a missing stem.
 For constrained storage, `--discard-native-captures` removes each native
 archive after its hash and actual external comparison results are recorded.
 It does not skip or reduce any comparison.
+`--verify-existing-quants /path/to/artifacts` additionally reuses existing
+`mini-bs-roformer-q8_0.gguf` and `mini-bs-roformer-q4_k.gguf` files only after
+running the real quantizer into one temporary file at a time and verifying
+whole-file SHA256 identity. The receipt records each command and regenerated
+hash before the temporary file is removed. A mismatch stops qualification and
+preserves both files; tensor inventories and all numerical comparisons still
+run against the verified artifacts.
 
 ```sh
 python tools/validate_mini_bs_roformer.py \
@@ -271,6 +345,14 @@ benchmark, threshold boundary score, or slower native median cannot produce
 overall acceptance. `--stages-only` intentionally leaves performance and
 overall acceptance false.
 
+The runner writes a fresh incomplete run marker before expensive inference
+and atomically checkpoints every complete timing pair to
+`benchmark-progress.json`. Unique temporary files prevent partial JSON from
+replacing a valid checkpoint. Partial progress always carries
+`acceptance=false`; it does not authorize automatic acceptance or trust an
+arbitrary prior JSON file as a resume input. This preserves completed evidence
+if a process is interrupted without silently combining unrelated runs.
+
 An implementation-parity fixture is not a source-separation quality dataset.
 Claims about held-out music quality or other hardware require their own
 inputs and measurements; no model or speed claim follows from a successful
@@ -283,6 +365,18 @@ The CLI, HTTP separation endpoint and Session C ABI share the new runtime.
 The public source order is `bass`, `drums`, `other`, `vocals`; audio is
 interleaved stereo at 44,100 Hz, with exactly the input number of frames.
 Architecture detection must also work after renaming the model file.
+
+The final production Session/CLI regression passed for F16, Q8_0 and Q4_K
+on the same qualified library and unchanged model bytes. It used a deterministic
+12,347-frame asymmetric stereo fixture through the standard separation API,
+with two threads and all Mini BS environment overrides removed. It verified
+renamed-file metadata detection, all four finite stems and exact geometry,
+invalid getter bounds, cold A → warm A → B → A plus an independent fresh B,
+owned result copies, and bass/vocals-only CLI WAV output matching Session
+samples within PCM16 serialization tolerance. Logs confirmed the automatic
+packed BF16, hybrid-attention and shared-affine path. The complete surface
+receipt and raw log evidence are included in the dated historical JSON above.
+Hosted build and binding CI remain separate PR checks.
 
 For quick development, the optional targets below link the production runtime
 without the unrelated speech backends. The validation shared library exposes
@@ -297,7 +391,7 @@ cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
   -DCRISPASR_BUILD_MINI_BSR_PROBE=ON -DCRISPASR_BUILD_TESTS=ON
 cmake --build build --parallel 2 --target \
   mini-bs-roformer-probe mini-bs-roformer-validation test-mini-bs-roformer
-ctest --test-dir build --output-on-failure -R '^Mini BS RoFormer '
+ctest --test-dir build --output-on-failure -R '^mini-bs-roformer-runtime$'
 ```
 
 `mini-bs-roformer-probe mini-bs-roformer MODEL REFERENCE [AUDIO]` accepts the

@@ -172,14 +172,112 @@ Several details are necessary for original parity:
 - **One gate covers a complex pair.** Repeat each gate value twice, in Re/Im
   order; do not duplicate the complete gate vector.
 - **The decoder is shared by all stems.** Stem-specific conditioning comes
-  from the pooling probes. The native runtime reuses a one-stem decoder graph
-  to bound activation memory, while preserving all four original outputs.
+  from the pooling probes. The packed CPU path shares the initial affine
+  projections across stems; the portable and GPU paths reuse a one-stem
+  decoder graph. Both preserve all four original outputs and their order.
 
 Learned operations remain in ggml graphs, including band projections,
 normalization, grouped attention, pooling, temporal SwiGLUs and mask/gate
 projections. The backend's cached radix-2 FFT and overlap/add operate in F32. Reused
 graphs avoid rebuilding the model for every chunk; reusable inputs must
 remain protected from allocator aliasing across stems and calls.
+
+## CPU execution and diagnostic controls
+
+Storage precision and compute precision are separate. For a CPU session, the
+runtime automatically selects its private packed BF16 matrix multiplication
+when both the compiler and CPU checks succeed. The kernel is compiled only
+on Linux x86-64 with GCC 10 or newer, or Clang 12 or newer. Its functions have
+local `avx512f,avx512bf16` target attributes, and execution additionally requires
+both instruction sets at runtime. Other builds and CPUs default to the F32
+CPU path. These guards apply to this backend's private kernel; the
+`GGML_NATIVE=ON` build above still targets the build machine.
+
+The packed path uses **BF16 operands with F32 accumulation and outputs** for
+linear layers. Quantized matrices are first dequantized into F32 graph scratch,
+then converted to BF16 using ggml's supported conversions. Normalization,
+residual additions, RoPE, softmax, SwiGLU and mask-gate nonlinearities retain
+F32 activations. The F16/Q8_0/Q4_K artifact names continue to describe stored
+weights, not a uniform arithmetic type for every operation.
+
+Each linear layer flattens its token dimensions into one matrix multiplication.
+In GGML dimension order, its weights are `[K,N]`, activations `[K,M]`, and
+result `[N,M]`. The weight operand is rearranged into
+`[2,16,K/2,N/16]`, grouping two BF16 values for each of sixteen output features.
+This rearrangement introduces no further rounding. The private kernel is a
+scheduled ggml custom node; odd `K`, output widths not divisible by sixteen,
+or other unsupported layouts use the ordinary ggml BF16 matrix multiplication.
+Query/key/value projections and each SwiGLU gate/up pair share their input
+conversion node. Repeated uses of the same immutable weight also share its
+BF16 conversion and packing nodes, including across decoder branches. These
+caches belong to the graph and are cleared when it is rebuilt; they do not
+retain activation values between audio inputs.
+
+For `M >= 96 × worker_count`, workers own disjoint blocks of 96 activation
+rows and visit every output panel within each block. An 8-row × 32-feature
+microkernel reuses the activation block across panels; separate tail kernels
+handle incomplete rows and the final sixteen-feature panel. Smaller matrices
+retain feature-parallel six-row kernels, with sixteen output features for
+`K <= 512` and thirty-two otherwise. Both traversals keep the same per-output
+BF16-pair accumulation order. The encoder graph is reused for matching frame
+count and capture mode; the decoder graph is reused for matching frame count.
+Persistent RoPE positions and the shared decoder input are pinned against
+allocator reuse across calls and stems.
+
+The packed CPU path enables the shared decoder by default. For encoder
+features `H` and stem embedding `e_s`, each initial gate/up affine projection
+uses `W(H + e_s) = WH + We_s`: the two `WH` projections are computed once,
+and the four embeddings are projected together as small matrices. Their F32
+sums feed the existing SwiGLU, down projection and mask heads. There is no
+normalization between stem addition and these affine projections. BF16 rounds
+`H` and `e_s` separately in the shared form, so the floating-point result can
+differ from projecting their rounded sum. Qualification uses the unchanged
+original-reference gates documented in the
+[qualification guide](mini-bs-roformer-validation.md).
+
+All four stem branches execute sequentially within one ggml graph. The four
+mask outputs are pinned, shared projections and weight operands remain live
+through their last use, and the scheduler can reuse each branch's temporary
+activations. For the trained eight-second chunk, the two common F32 projection
+tensors each have GGML shape `[2048,80,173]` and together occupy **216.25 MiB**.
+The graph's peak memory also depends on other live tensors, output buffers
+and allocator reuse. `CRISPASR_MINI_BS_SHARED_DECODER=0` selects the original
+one-stem graph, executed four times, for numerical and memory comparisons.
+The F32 CPU, ordinary ggml BF16 and GPU paths use that one-stem design.
+
+Attention has a separate dispatch. With the packed CPU path, a registered
+BLAS backend, and `CRISPASR_MINI_BS_FLASH` **unset**, the 84-position axial
+self-attention uses F32 matrix multiplications and ggml softmax. For the
+trained eight-second geometry this is the frequency axis; the 177-position
+time axis and both pooling operations use fused ggml grouped-query attention.
+Each key/value head serves its consecutive pair of query heads without an
+explicit duplicated key/value tensor. If the selected backend does not support
+the fused operation, the runtime uses the graph's matrix-multiply/softmax
+fallback.
+
+The F32 CPU path uses BLAS where available and supported, with ordinary ggml
+CPU operations otherwise. GPU sessions use the existing ggml backend and
+scheduler instead of the private CPU kernel, with F32 accumulation requested
+for matrix multiplication and attention. CPU qualification does not establish
+GPU numerical or performance results.
+
+Set diagnostic environment variables **before opening the model**:
+
+| Setting | Effect |
+|---|---|
+| `CRISPASR_MINI_BS_CPU_BF16=0` | Select the F32 CPU path, including when the packed kernel is available. |
+| `CRISPASR_MINI_BS_PACKED_BF16=0` | Disable the private kernel while retaining BF16 operands if that compute path was selected; pair with `CRISPASR_MINI_BS_CPU_BF16=1` to request the ordinary ggml BF16 path explicitly. |
+| `CRISPASR_MINI_BS_SHARED_DECODER=0` | Disable shared affine projections and reuse the original one-stem decoder graph four times; the packed matrix kernel remains available. |
+| `CRISPASR_MINI_BS_FLASH=1` | Request fused attention for every attention block, including frequency attention; unsupported operations still use the graph fallback. |
+| `CRISPASR_MINI_BS_FLASH=0` | Use matrix multiplication and softmax graphs for every attention block. |
+
+Leave these variables unset for automatic selection. The initialization log
+reports the selected backend, compute precision, attention policy and decoder.
+The
+[runtime](../src/mini_bs_roformer.cpp) and
+[packed kernel](../src/mini_bs_roformer_bf16.h) define the exact dispatch;
+measured fidelity, speed and their scope are recorded in the
+[qualification guide](mini-bs-roformer-validation.md).
 
 ## STFT, reconstruction and recording boundaries
 
