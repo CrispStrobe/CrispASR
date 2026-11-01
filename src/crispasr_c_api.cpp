@@ -396,6 +396,10 @@
 #include "mel_band_roformer.h"
 #define CA_HAVE_MEL_BAND_ROFORMER 1
 #endif
+#if __has_include("mini_bs_roformer.h")
+#include "mini_bs_roformer.h"
+#define CA_HAVE_MINI_BS_ROFORMER 1
+#endif
 #if __has_include("htdemucs.h")
 #include "htdemucs.h"
 #define CA_HAVE_HTDEMUCS 1
@@ -2303,6 +2307,10 @@ struct crispasr_session {
     mel_band_roformer_context* mbr_ctx = nullptr;
     mel_band_roformer_result* mbr_last_result = nullptr;
 #endif
+#ifdef CA_HAVE_MINI_BS_ROFORMER
+    mini_bs_roformer_context* mini_bsr_ctx = nullptr;
+    mini_bs_roformer_result* mini_bsr_last_result = nullptr;
+#endif
 #ifdef CA_HAVE_HTDEMUCS
     htdemucs_context* htdemucs_ctx = nullptr;
     htdemucs_result* htdemucs_last_result = nullptr;
@@ -3478,6 +3486,22 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         mp.use_gpu = g_open_use_gpu_tls;
         s->mbr_ctx = mel_band_roformer_init_from_file(model_path, mp);
         if (!s->mbr_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_MINI_BS_ROFORMER
+    if (s->backend == "mini-bs-roformer" || s->backend == "mini_bs_roformer" || s->backend == "mini-bs-roformer-v2.5") {
+        auto mp = mini_bs_roformer_default_params();
+        mp.n_threads = s->n_threads;
+        mp.use_gpu = g_open_use_gpu_tls;
+        // Session has no per-open device field; retain the configured process
+        // preference instead of letting the runtime default reset it to GPU 0.
+        mp.gpu_device = crispasr_gpu_device_pref_storage();
+        s->mini_bsr_ctx = mini_bs_roformer_init_from_file(model_path, mp);
+        if (!s->mini_bsr_ctx) {
             delete s;
             return nullptr;
         }
@@ -5241,6 +5265,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_MEL_BAND_ROFORMER
     list += ",mel-band-roformer";
+#endif
+#ifdef CA_HAVE_MINI_BS_ROFORMER
+    list += ",mini-bs-roformer";
 #endif
 #ifdef CA_HAVE_CREPE
     list += ",crepe";
@@ -11946,6 +11973,16 @@ CA_EXPORT int crispasr_session_separate(crispasr_session* s, const float* pcm_st
         return s->mbr_last_result ? s->mbr_last_result->n_sources : -1;
     }
 #endif
+#ifdef CA_HAVE_MINI_BS_ROFORMER
+    if (s->mini_bsr_ctx) {
+        if (s->mini_bsr_last_result) {
+            mini_bs_roformer_result_free(s->mini_bsr_last_result);
+            s->mini_bsr_last_result = nullptr;
+        }
+        s->mini_bsr_last_result = mini_bs_roformer_separate(s->mini_bsr_ctx, pcm_stereo, n_samples, /*in_channels=*/2);
+        return s->mini_bsr_last_result ? s->mini_bsr_last_result->n_sources : -1;
+    }
+#endif
     return -1;
 }
 
@@ -11960,6 +11997,10 @@ CA_EXPORT int crispasr_session_separate_n_stems(crispasr_session* s) {
     if (s->mbr_last_result)
         return s->mbr_last_result->n_sources;
 #endif
+#ifdef CA_HAVE_MINI_BS_ROFORMER
+    if (s->mini_bsr_last_result)
+        return s->mini_bsr_last_result->n_sources;
+#endif
     return 0;
 }
 
@@ -11973,6 +12014,10 @@ CA_EXPORT const char* crispasr_session_separate_stem_name(crispasr_session* s, i
 #ifdef CA_HAVE_MEL_BAND_ROFORMER
     if (s->mbr_last_result && stem_idx >= 0 && stem_idx < s->mbr_last_result->n_sources)
         return s->mbr_last_result->source_names[stem_idx];
+#endif
+#ifdef CA_HAVE_MINI_BS_ROFORMER
+    if (s->mini_bsr_last_result && stem_idx >= 0 && stem_idx < s->mini_bsr_last_result->n_sources)
+        return s->mini_bsr_last_result->source_names[stem_idx];
 #endif
     return nullptr;
 }
@@ -11994,6 +12039,13 @@ CA_EXPORT const float* crispasr_session_separate_stem(crispasr_session* s, int s
         return s->mbr_last_result->sources[stem_idx];
     }
 #endif
+#ifdef CA_HAVE_MINI_BS_ROFORMER
+    if (s->mini_bsr_last_result && stem_idx >= 0 && stem_idx < s->mini_bsr_last_result->n_sources) {
+        if (out_n_samples)
+            *out_n_samples = s->mini_bsr_last_result->n_samples;
+        return s->mini_bsr_last_result->sources[stem_idx];
+    }
+#endif
     if (out_n_samples)
         *out_n_samples = 0;
     return nullptr;
@@ -12009,6 +12061,10 @@ CA_EXPORT int crispasr_session_separate_sample_rate(crispasr_session* s) {
 #ifdef CA_HAVE_MEL_BAND_ROFORMER
     if (s->mbr_ctx)
         return mel_band_roformer_sample_rate(s->mbr_ctx);
+#endif
+#ifdef CA_HAVE_MINI_BS_ROFORMER
+    if (s->mini_bsr_ctx)
+        return mini_bs_roformer_sample_rate(s->mini_bsr_ctx);
 #endif
     return 0;
 }
@@ -12885,6 +12941,12 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
         mel_band_roformer_result_free(s->mbr_last_result);
     if (s->mbr_ctx)
         mel_band_roformer_free(s->mbr_ctx);
+#endif
+#ifdef CA_HAVE_MINI_BS_ROFORMER
+    if (s->mini_bsr_last_result)
+        mini_bs_roformer_result_free(s->mini_bsr_last_result);
+    if (s->mini_bsr_ctx)
+        mini_bs_roformer_free(s->mini_bsr_ctx);
 #endif
 #ifdef CA_HAVE_RVC_SVC
     if (s->rvc_last)

@@ -271,7 +271,7 @@ constructed, and its own capability bit (used for detection and help text,
 never for routing). `docs/source-separation-surface.md` settled this design;
 everything below follows it.
 
-- **Source separation** (`htdemucs`, `mel-band-roformer`) — one mixed input
+- **Source separation** (`htdemucs`, `mel-band-roformer`, `mini-bs-roformer`) — one mixed input
   → N named stems of the *user's own* audio. `CAP_SEPARATE` (bit 22),
   `--separate`, `src/core/separation_io.h`, `crispasr_separate_cli.{h,cpp}`.
   Output is one WAV per stem at the model's native rate, with **no
@@ -1077,6 +1077,26 @@ Qwen3 talker LM + 12 Hz RVQ speech tokenizer. Three variants:
 - `qwen3-tts-0.6b-base` — 0.6B talker, baked voice pack or WAV + `--ref-text`
 - `qwen3-tts-1.7b-base` — 1.7B talker, higher quality
 - `qwen3-tts-1.7b-voicedesign` — natural-language voice description via `--instruct`
+
+### mini-bs-roformer
+
+`HiDolen/Mini-BS-RoFormer-V2.5-46.2M` (MIT) separates 44.1-kHz stereo into
+`bass`, `drums`, `other`, and `vocals`. The GGUF architecture and backend name
+are both `mini-bs-roformer`.
+
+The graph projects 80 spectral bands, groups four time frames, and applies
+six axial transformer layers with grouped-query attention, split-half RoPE,
+DeltaRMSNorm and register tokens. Learned frequency and time attention pools
+produce the stem conditioning for one shared complex-mask decoder. The
+native runtime reuses the encoder and single-stem decoder graphs; neural
+operations use ggml, while F32 FFT and weighted overlap/add preserve the
+original eight-second chunk and four-second stride behavior.
+
+The CLI `--separate` route, HTTP separation endpoint and Session C ABI use
+the same runtime. F16 conversion, Q8_0/Q4_K precision policy, exact blueprint
+layouts and numerical/performance qualification are documented in
+[the model guide](mini-bs-roformer.md) and
+[the qualification guide](mini-bs-roformer-validation.md).
 
 ### piano-transcription
 

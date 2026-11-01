@@ -118,6 +118,7 @@ static const std::vector<std::pair<std::string, std::string>>& converter_archs()
         {"t5", "madlad"},
         {"htdemucs", "htdemucs"},
         {"mel-band-roformer", "mel-band-roformer"},
+        {"mini-bs-roformer", "mini-bs-roformer"},
         {"crepe", "crepe"},
         {"btc", "btc-chords"},
         {"tabcnn", "tabcnn"},
@@ -157,6 +158,9 @@ TEST_CASE("unknown / empty architectures resolve to the empty string", "[unit][a
     CHECK(core_arch::backend_for_arch("crispasr.reference") == std::string(""));
     CHECK(core_arch::backend_for_arch("kokoro-voice") == std::string(""));
     CHECK(core_arch::backend_for_arch("cosyvoice3-s3tok") == std::string(""));
+    // Backend-name aliases are not additional checkpoint architecture profiles.
+    CHECK(core_arch::backend_for_arch("mini_bs_roformer") == std::string(""));
+    CHECK(core_arch::backend_for_arch("mini-bs-roformer-v2.5") == std::string(""));
     CHECK(core_arch::backend_for_arch("not-a-real-architecture") == std::string(""));
 }
 
@@ -262,6 +266,7 @@ TEST_CASE("every emitted backend name is a name a surface can open", "[unit][arc
         "madlad",
         "htdemucs",
         "mel-band-roformer",
+        "mini-bs-roformer",
         "crepe",
         "btc-chords",
         "tabcnn",
@@ -363,6 +368,9 @@ TEST_CASE("crispasr_detect_backend_from_gguf reads the shared table", "[unit][ar
         {"dolphin", "dolphin"},        // #540: full model passed diff, automatic bindings failed
         {"qwen3tts", "qwen3-tts"},     // ditto
         {"whisper", "whisper"},        // was already shared — must not regress
+        {"mini-bs-roformer", "mini-bs-roformer"},
+        {"mini_bs_roformer", ""},
+        {"mini-bs-roformer-v2.5", ""},
         {"not-a-real-architecture", ""},
     };
     for (const auto& p : probes) {

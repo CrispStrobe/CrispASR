@@ -1,0 +1,12 @@
+# Original checkpoint's declared Python blueprint versions.
+# Select the appropriate official PyTorch CPU/CUDA wheel index for the device.
+torch==2.14.1
+transformers==5.18.0
+einops>=0.8,<0.9
+numpy>=2.0
+safetensors>=0.6
+huggingface-hub>=0.34
+soundfile>=0.13
+gguf>=0.17
+# Required only by the shared 16-kHz-mono reference adapter.
+scipy>=1.14

@@ -308,6 +308,7 @@ inline const entry* table(size_t* n_out) {
         // ── Music / audio analysis ─────────────────────────────────────────
         {"htdemucs",                  "htdemucs"},
         {"demucs",                    "htdemucs"},
+        {"mini-bs-roformer",          "mini-bs-roformer"},
         {"mel-band-roformer",         "mel-band-roformer"},
         {"mel_band_roformer",         "mel-band-roformer"},
         {"crepe",                     "crepe"},

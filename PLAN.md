@@ -1,6 +1,6 @@
 # CrispASR — Current work plan
 
-Updated 2026-10-31. Start with [the maintainer handoff](docs/maintenance-handoff.md).
+Updated 2026-11-01. Start with [the maintainer handoff](docs/maintenance-handoff.md).
 It contains the completed work, exact evidence, bounded next actions and blockers
 needed by a fresh agent; no earlier chat is required. Follow `AGENTS.md` and its
 mandatory maintainer-guide instructions before implementation.
@@ -11,6 +11,15 @@ before starting. The full scope of each task (exact runs, inputs, commands and
 acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-tasks--fully-scoped).
 
 ## NOW — release verification and nightly diagnosis (2026-10-30)
+
+### Mini-BS-RoFormer V2.5 — 2026-11-01
+
+- Owner: model-port team (native graph, blueprint/converter/reference, integration, quantization/validation); starting source `1dd0bf6fb9e7a8bf5849cb7a14605b2234e6ee93`.
+- Missing behavior: native support for `HiDolen/Mini-BS-RoFormer-V2.5-46.2M` with four stereo stems, original chunking, F16/Q8_0/Q4_K weights, and optimized ggml inference.
+- Acceptance: pinned original Python stages and complete stems; strict Q8 cosine >0.98 and Q4_K >0.94, shape/finite/amplitude checks; same-input warm performance at least matching the Python blueprint on each qualified device; CLI/C ABI and separation wiring tests. Preserve sensitive tensors at sufficient precision based on measured errors.
+- Implemented: pinned converter/original-reference capture, native cached ggml graphs, precision policy, CLI/server/Session integration and model-backed validation. Initial complete eight-second checks pass all 25 Q8/Q4_K stages with the genuine CrispEmbed comparator; full production qualification remains pending.
+- Remaining performance gate: the published Python loader defaults to BF16. Its measured eight-second CPU runtime is about 7.55 s versus the current native F32 path's 11.67 s; the earlier native 1.16x advantage over Python F32 does not establish published-default acceptance. A native BF16 GEMM candidate retains F32 accumulation and other neural operations and must pass the unchanged fidelity gates before promotion.
+- Next action: finish the full production build, generated catalogues and actual Session/CLI checks; qualify the cached FFT and CPU compute policy at all stages, then run paired eight-second and overlapping-chunk timings against the published default. Keep the PR in draft until those gates pass.
 
 ### Main integration follow-up — 2026-10-31
 

@@ -8,8 +8,8 @@ package whisper_test
 // verb a Go caller could find was SpeechToSpeech, which is not what these
 // models do and which fails with "no audio produced".
 //
-// Gated on SEPARATE_MODEL, a path to a separation GGUF (mel-band-roformer or
-// htdemucs). Without it these skip, so a checkout with no model stays green.
+// Gated on SEPARATE_MODEL, a path to a separation GGUF (mel-band-roformer,
+// mini-bs-roformer or htdemucs). Without it these skip on a model-free checkout.
 
 import (
 	"math"

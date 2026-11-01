@@ -2908,6 +2908,26 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# mini-bs-roformer — HiDolen Mini-BS-RoFormer V2.5 source separation
+# Neural operations execute as portable ggml graphs, including quantized GEMMs.
+add_library(mini-bs-roformer STATIC mini_bs_roformer.h mini_bs_roformer.cpp)
+set_target_properties(mini-bs-roformer PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(mini-bs-roformer PUBLIC .)
+target_compile_features(mini-bs-roformer PUBLIC cxx_std_17)
+target_link_libraries(mini-bs-roformer PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+if (NOT MSVC)
+    target_compile_options(mini-bs-roformer PRIVATE -O3)
+endif()
+
+option(CRISPASR_BUILD_MINI_BSR_PROBE "Build isolated Mini BS RoFormer parity/benchmark tools" OFF)
+if (CRISPASR_BUILD_MINI_BSR_PROBE)
+    add_executable(mini-bs-roformer-probe ${PROJECT_SOURCE_DIR}/tools/mini_bs_roformer_probe.cpp)
+    target_link_libraries(mini-bs-roformer-probe PRIVATE mini-bs-roformer)
+    add_library(mini-bs-roformer-validation SHARED ${PROJECT_SOURCE_DIR}/tools/mini_bs_roformer_exports.cpp)
+    target_link_libraries(mini-bs-roformer-validation PRIVATE mini-bs-roformer)
+    set_target_properties(mini-bs-roformer-validation PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
+
 # mel-band-roformer — Mel-Band RoFormer source separation (§248)
 # ---------------------------------------------------------------------------
 add_library(mel-band-roformer STATIC mel_band_roformer.h mel_band_roformer.cpp)
@@ -3384,6 +3404,9 @@ endif()
 # (examples/cli/crispasr_separate_cli.cpp), arch auto-detected from the GGUF.
 if (TARGET mel-band-roformer)
     target_link_libraries(crispasr-lib PUBLIC mel-band-roformer)
+endif()
+if (TARGET mini-bs-roformer)
+    target_link_libraries(crispasr-lib PUBLIC mini-bs-roformer)
 endif()
 if (TARGET htdemucs)
     target_link_libraries(crispasr-lib PUBLIC htdemucs)

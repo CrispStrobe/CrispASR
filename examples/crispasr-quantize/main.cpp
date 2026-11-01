@@ -257,6 +257,15 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     const bool is_crepe = (arch == "crepe");
     const bool is_tabcnn = (arch == "tabcnn");
 
+    // Mini BS RoFormer V2.5 shares one complex-mask decoder across all four
+    // stems. Keep its spectral input projections and mask/gate heads at source
+    // precision; quantization error there directly changes the complex mask.
+    // The axial encoder is the bulk Q4_K path. Pooling and temporal grouping /
+    // ungrouping get a Q8_0 floor below, preserving the stem-conditioning and
+    // reconstruction bottlenecks. Explicit --tensor-type rules still win for
+    // measured calibration sweeps; this policy itself is not a quality claim.
+    const bool is_mini_bs_roformer = (arch == "mini-bs-roformer");
+
     // BTC chords: a 12 MB model whose weight matrices are all 128x128 or
     // 128x256 — small enough that quantisation buys little, and the FFN convs
     // are (3, 128, 128) whose K=3 does not tile a Q4_K 32-element block any
@@ -929,6 +938,8 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
         bool should_quantize =
             ggml_is_quantized(qtype) && src_ok && ok_dims && is_weight && (sname.find("norm") == std::string::npos) &&
             (granite_quant_all || sname.find("proj.") != 0) &&
+            !(is_mini_bs_roformer && (sname.find("freq_domain_model.mask_model.band_split.") == 0 ||
+                                      sname.find("freq_domain_model.mask_model.mask_estimator.") == 0)) &&
             // CREPE: allow-list, not a deny-list — only the conv kernels and the
             // dense classifier matrix. conv*.bias / conv*_BN.scale / .offset /
             // classifier.bias stay F32 (per-channel affines; see is_crepe note).
@@ -1074,9 +1085,9 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                            sname.find("feature_projection.projection.") != std::string::npos)) &&
             !(is_higgs && (sname == "token_embd.weight" || sname == "output.weight")) &&
             !(is_miotts && sname.find("codec.") == 0) &&
-            !(is_arktts && (sname.find("codec.") == 0 || sname == "embeddings.weight" ||
-                            sname.find("codebook_embeddings") == 0 || sname.find("fast_embeddings") == 0 ||
-                            sname.find("fast_output") == 0)) &&
+            !(is_arktts &&
+              (sname.find("codec.") == 0 || sname == "embeddings.weight" || sname.find("codebook_embeddings") == 0 ||
+               sname.find("fast_embeddings") == 0 || sname.find("fast_output") == 0)) &&
             !(is_parakeet && parakeet_is_rnnt && !parakeet_quant_all &&
               (sname.find("joint.") == 0 || sname.find("decoder.embed") == 0)) &&
             // encoder.pre.* stays unquantized for the same reason it is F32 in the
@@ -1173,6 +1184,20 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             target_types[i] = GGML_TYPE_F16;
         } else {
             target_types[i] = t->type;
+        }
+
+        // Unlike the axial transformer, these projections carry a compressed
+        // temporal representation or select a stem. Keep them at least Q8_0
+        // when producing a lower-bit artifact; norms/probes/registers and
+        // unsupported row widths retain their original unquantized storage.
+        const bool mini_bs_q8_floor =
+            is_mini_bs_roformer &&
+            (sname.find("freq_domain_model.freq_pooling.") == 0 || sname.find("freq_domain_model.time_pooling.") == 0 ||
+             sname.find("freq_domain_model.mask_model.time_conv.") == 0 ||
+             sname.find("freq_domain_model.mask_model.time_deconv.") == 0);
+        if (mini_bs_q8_floor && should_quantize && ggml_is_quantized(target_types[i]) &&
+            target_types[i] != GGML_TYPE_Q8_0) {
+            target_types[i] = (ncols % ggml_blck_size(GGML_TYPE_Q8_0) == 0) ? GGML_TYPE_Q8_0 : t->type;
         }
 
         // Qwen3-ASR audio-tower Q8_0 floor (see is_qwen3_asr note above).

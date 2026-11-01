@@ -134,6 +134,63 @@ class GPUBackendSelectionTest(unittest.TestCase):
                 self.assertEqual(result.returncode, 0, result.stderr)
 
 
+    def test_mini_bs_session_preserves_process_device_preference(self):
+        source = (ROOT / "src/crispasr_c_api.cpp").read_text()
+        begin = source.index('    if (s->backend == "mini-bs-roformer"')
+        end = source.index("#endif", begin)
+        dispatch = source[begin:end]
+        header = (ROOT / "src/core/gpu_backend_pref.h").read_text()
+        production = header[header.index('namespace crispasr_gpu_pref {'):
+                            header.index('// ── Can this backend actually run')]
+        model = r'''
+#include "mini_bs_roformer.h"
+struct mini_bs_roformer_context {};
+mini_bs_roformer_context model_context;
+mini_bs_roformer_params observed;
+mini_bs_roformer_params mini_bs_roformer_default_params() { return {0, true, 0, 0, false}; }
+mini_bs_roformer_context* mini_bs_roformer_init_from_file(const char*, mini_bs_roformer_params params) {
+    observed = params; return &model_context;
+}
+struct crispasr_session {
+    std::string backend;
+    int n_threads = 3;
+    mini_bs_roformer_context* mini_bsr_ctx = nullptr;
+};
+bool g_open_use_gpu_tls = true;
+crispasr_session* dispatch_open(crispasr_session* s, const char* model_path) {
+'''
+        control = r'''
+return nullptr;
+}
+int main() {
+    for (const char* alias : {"mini-bs-roformer", "mini_bs_roformer", "mini-bs-roformer-v2.5"}) {
+        for (int device : {0, 1, 7}) {
+            for (bool enabled : {false, true}) {
+                crispasr_session session;
+                session.backend = alias;
+                crispasr_set_gpu_device_pref(device);
+                g_open_use_gpu_tls = enabled;
+                if (dispatch_open(&session, "fixture.gguf") != &session) return 1;
+                if (observed.gpu_device != device || observed.n_threads != 3 || observed.use_gpu != enabled) return 2;
+                if (session.mini_bsr_ctx != &model_context) return 3;
+            }
+        }
+    }
+    return 0;
+}
+'''
+        directory = Path(self.temp.name)
+        fixture = directory / "mini-session.cpp"
+        executable = directory / "mini-session"
+        fixture.write_text(MOCK + production + model + dispatch + control)
+        built = subprocess.run(["g++", "-std=c++17", "-Wall", "-Wextra", "-Werror",
+                                "-I", str(ROOT / "src"), str(fixture), "-o", str(executable)],
+                               capture_output=True, text=True, timeout=60)
+        self.assertEqual(built.returncode, 0, built.stderr)
+        result = subprocess.run([str(executable)], capture_output=True, text=True, timeout=10)
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(add_help=False)
     parser.add_argument('--header', type=Path)
