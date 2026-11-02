@@ -31,7 +31,13 @@ inline int sample(const float* logits, int vocab, const Params& p, std::mt19937_
         return -1;
     const float inv_t = 1.0f / (p.temperature > 0.0f ? p.temperature : 1.0f);
     // Highest logit first; ties broken by token id so results are reproducible.
-    auto by_logit = [logits](int a, int b) { return logits[a] > logits[b] || (logits[a] == logits[b] && a < b); };
+    auto by_logit = [logits](int a, int b) {
+        const float la = logits[a];
+        const float lb = logits[b];
+        if (la != lb)
+            return la > lb;
+        return a < b;
+    };
     size_t keep = ids.size();
     if (p.top_k > 0 && (size_t)p.top_k < keep) {
         std::partial_sort(ids.begin(), ids.begin() + p.top_k, ids.end(), by_logit);

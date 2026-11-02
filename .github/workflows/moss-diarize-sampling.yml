@@ -4,8 +4,6 @@ name: MOSS-Diarize beam and sampling acceptance (#564)
 # forwarding. Not part of the default PR matrix.
 on:
   workflow_dispatch:
-  push:
-    branches: [fix/lintdeep-moss-20261102] # TEMPORARY: remove before merging to main
 
 permissions:
   contents: read
