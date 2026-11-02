@@ -9,15 +9,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 import re
 import shutil
 import subprocess
 import tempfile
+import uuid
 
 from scnet_qualify import (
     MUSIC_URL, RECORDED_CHECKPOINT_SHA256, RECORDED_LARGE_CONFIG_SHA256,
-    RECORDED_MUSIC_SHA256, ROOT, SOURCE_FILES, resolve_binary, resolve_library,
+    RECORDED_MUSIC_SHA256, ROOT, SOURCE_FILES, compare_runtime_linkage, resolve_qualification_binaries,
+    snapshot_runtime_linkage, verify_runtime_linkage_receipt,
 )
 from reference_backends.scnet import (
     CHECKPOINT_URLS, LICENSE_URL, SOURCE_HASHES, SOURCE_REVISION, SOURCE_URL,
@@ -59,6 +62,7 @@ def stages_pass(row, label):
 def verify_receipts(qualification, validation, variant, source_commit):
     accepted(qualification, "qualification receipt")
     accepted(validation, "validation receipt")
+    verify_runtime_linkage_receipt(qualification.get("runtime_linkage"), qualification.get("binaries"))
     for label, receipt in (("qualification", qualification), ("validation", validation)):
         require(receipt.get("variant") == variant and receipt.get("source_revision") == SOURCE_REVISION,
                 f"{label} source/variant differs from the requested release")
@@ -119,6 +123,21 @@ def verify_receipts(qualification, validation, variant, source_commit):
                     f"{precision} measured waveform quality is incomplete")
 
 
+def verify_packaging_linkage(qualification, binaries, build_dir, log_dir):
+    previous = verify_runtime_linkage_receipt(qualification.get("runtime_linkage"), qualification.get("binaries"))
+    for epoch in ("before", "after"):
+        for record in qualification["runtime_linkage"][epoch]["resolver_logs"].values():
+            for stream in ("stdout", "stderr"):
+                output = record[stream]
+                require(sha256(Path(log_dir) / output["file"]) == output["sha256"],
+                        "qualified runtime linkage resolver log changed")
+    current = snapshot_runtime_linkage(binaries, build_dir, dict(os.environ), log_dir,
+                                       "package-" + uuid.uuid4().hex)
+    comparison = compare_runtime_linkage(previous, current)
+    verify_runtime_linkage_receipt(comparison, qualification["binaries"])
+    return current
+
+
 def prepare(args):
     directory = args.qualification_dir
     qualification = read_json(directory / "qualification.json")
@@ -138,15 +157,14 @@ def prepare(args):
             require(sha256(ROOT / relative.removeprefix("CrispASR/")) == digest, f"qualification source changed: {relative}")
         else:
             require(digest == SOURCE_HASHES[relative.removeprefix("SCNet/")], f"original source changed: {relative}")
-    binaries = {name: resolve_binary(args.build_dir, name) for name in ("crispasr", "crispasr-quantize", "scnet-probe")}
-    binaries.update(production_library=resolve_library(args.build_dir, "crispasr"),
-                    validation_library=resolve_library(args.build_dir, "scnet-validation"))
+    binaries = resolve_qualification_binaries(args.build_dir)
     require(set(qualification.get("binaries", {})) == set(binaries), "qualified binary inventory differs")
     for name, path in binaries.items():
         require(sha256(path) == qualification["binaries"][name].get("sha256"), f"qualified binary changed: {name}")
     require(validation.get("diff_sha256") == qualification["binaries"]["scnet-probe"]["sha256"] and
             validation.get("library_sha256") == qualification["binaries"]["validation_library"]["sha256"],
             "validator binary identity differs from the qualification")
+    packaging_linkage = verify_packaging_linkage(qualification, binaries, args.build_dir, directory / "logs")
     commands = {event["name"]: event for event in qualification["commands"]}
     require(len(commands) == len(qualification["commands"]), "duplicate qualification command names")
     for precision in ("q8_0", "q4_k"):
@@ -222,6 +240,8 @@ def prepare(args):
             "reconstruction_f16_tensors": list(RECONSTRUCTION_F16)},
         "qualification": {"scope": qualification["qualification_scope"], "device": "cpu", "threads": 2,
             "profile": validation["profile"], "runtime": validation["benchmark"]["runtime"],
+            "runtime_linkage": {"qualified_before_after_verified": True, "packaging_recheck_verified": True,
+                "qualified_receipt_field": "qualification.json:runtime_linkage", "packaging_snapshot": packaging_linkage},
             "fixture": qualification["fixture"], "gpu_qualified": False, "held_out_quality_qualified": False,
             "other_variant_qualified_by_this_bundle": False},
         "excluded": ["music/audio", "author checkpoint", "reference/native activation captures",
@@ -273,6 +293,10 @@ records the exact quantization policy, file sizes/hashes, and source identities.
 `F16-CONVERSION.json` describes the F16 conversion; the manifest additionally
 binds the two quantized derivatives. `qualification.json` and `validation.json`
 retain the stage, waveform, production-surface, and paired timing evidence.
+The qualification also binds all five native entrypoints and their resolved
+ggml, OpenBLAS, and transitive runtime libraries before and after execution.
+The manifest records a fresh identity check before packaging. Runtime binaries
+are not included; resolver logs belong to the accompanying evidence artifact.
 
 Weights and original source are MIT licensed by the SCNet authors; preserve
 the included original `LICENSE`. Permission for converted checkpoints is linked

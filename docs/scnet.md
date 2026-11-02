@@ -326,11 +326,23 @@ hashes, logs, and incremental JSON receipts. Failed runs remain failed;
 diagnostic or stages-only runs cannot report full acceptance. The fixture is
 an implementation-parity control, not a held-out quality benchmark.
 
+The Linux qualification also binds all five native entrypoints and every
+file-backed library resolved by the loader, including ggml, OpenBLAS, and
+transitive runtime dependencies. It records and compares their bytes and
+resolution before model execution and after every production-surface check.
+Direct backend linkage (`GGML_BACKEND_DL=OFF`) is required. Changed or missing
+libraries, changed entrypoints, incomplete proof, or changed loader settings
+prevent acceptance. The [linkage controls](historical/scnet-linkage-controls-2026-11-02.json)
+include a genuine five-entrypoint, 16-library check and rejection cases;
+they do not constitute model or performance qualification.
+
 After a model size passes every gate, its workflow retains a separate
 `qualified-<variant>-GGUF-<commit>` artifact containing the three tested GGUFs,
 the original MIT notice, conversion and quantizer provenance, exact hashes,
 and accepted numerical/performance receipts. Packaging rechecks their source,
 binary, model, and receipt identities before copying the explicit model files.
+It also verifies the retained loader logs and performs a fresh dependency
+snapshot; older receipts without the before/after proof cannot be packaged.
 These bundles use concrete local model paths; registry publication is optional.
 Music, author checkpoints, raw activation captures, and diagnostic F32 models
 are excluded from the model bundle.

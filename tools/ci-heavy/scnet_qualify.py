@@ -24,10 +24,12 @@ from __future__ import annotations
 import argparse
 import contextlib
 import datetime
+import hashlib
 import json
 import os
 from pathlib import Path
 import platform
+import re
 import shutil
 import subprocess
 import sys
@@ -71,6 +73,7 @@ SOURCE_FILES = (
     "tests/test-scnet-im2col.py", "tests/test-scnet-tensor.cpp", "tests/test-scnet-fft.py", "tests/test-scnet-real-fft.py",
     "tests/test-scnet-blas-threads.cpp", "ggml/src/ggml-blas/ggml-blas.cpp",
     "tests/test_scnet_validation.py", "tests/test-scnet-surface.py", "examples/cli/crispasr_backend_scnet.cpp",
+    "tests/test_scnet_linkage.py",
     "examples/crispasr-quantize/main.cpp",
     "src/CMakeLists.txt", "CMakeLists.txt", ".github/workflows/scnet-qualification.yml",
 )
@@ -237,6 +240,212 @@ def resolve_library(build, name):
     raise FileNotFoundError(f"required shared library not found in bounded src/lib/root paths: {name}")
 
 
+LINKAGE_ENTRYPOINTS = frozenset(("crispasr", "crispasr-quantize", "scnet-probe",
+                               "production_library", "validation_library"))
+LINKAGE_GGML = frozenset(("libggml.so.0", "libggml-base.so.0", "libggml-cpu.so.0", "libggml-blas.so.0"))
+LINKAGE_ENVIRONMENT = ("LD_LIBRARY_PATH", "LD_PRELOAD", "LD_AUDIT")
+LINKAGE_METHOD = "linux-ldd-direct-backends-v1"
+
+
+def resolve_qualification_binaries(build):
+    binaries = {name: resolve_binary(build, name) for name in ("crispasr", "crispasr-quantize", "scnet-probe")}
+    binaries.update(production_library=resolve_library(build, "crispasr"),
+                    validation_library=resolve_library(build, "scnet-validation"))
+    return binaries
+
+
+def linkage_path(path, build):
+    """Readable portable name; the full resolved path is separately fingerprinted."""
+    path = Path(path)
+    for root, alias in ((Path(build).resolve(), "{build}"), (ROOT, "{repo}")):
+        if path.is_relative_to(root):
+            return alias + "/" + path.relative_to(root).as_posix()
+    return "{runtime}/" + path.name
+
+
+def linkage_file(path, build):
+    original = Path(path)
+    try:
+        path = original.resolve(strict=True)
+        if not path.is_file():
+            raise ValueError("not a regular file")
+        return {"path": linkage_path(path, build), "sha256": sha256(path), "bytes": path.stat().st_size,
+                "resolved_path_sha256": hashlib.sha256(os.fsencode(path)).hexdigest()}
+    except (OSError, ValueError) as error:
+        raise ValueError(f"runtime linkage file is missing/unreadable: {linkage_path(original, build)}") from error
+
+
+def parse_ldd(text):
+    """Parse file-backed dependencies, rejecting unresolved or ambiguous output."""
+    result = {}
+    for line in text.splitlines():
+        if "not found" in line:
+            raise ValueError("runtime linkage contains an unresolved dependency")
+        match = re.fullmatch(r"\s*(\S+)\s+=>\s+(/\S+)\s+\(0x[0-9a-fA-F]+\)\s*", line)
+        if match:
+            soname, filename = match.groups()
+        else:
+            match = re.fullmatch(r"\s*(/\S+)\s+\(0x[0-9a-fA-F]+\)\s*", line)
+            if not match:
+                if re.fullmatch(r"\s*linux-(?:vdso|gate)\.so\.\d+\s+\(0x[0-9a-fA-F]+\)\s*", line):
+                    continue  # Kernel-provided virtual DSO, no on-disk bytes.
+                raise ValueError("runtime linkage resolver returned an unrecognized dependency line")
+            filename = match.group(1)
+            soname = Path(filename).name
+        if soname in result:
+            raise ValueError("runtime linkage resolver duplicated a dependency name")
+        result[soname] = Path(filename)
+    if not result:
+        raise ValueError("runtime linkage resolver returned no file-backed dependencies")
+    return result
+
+
+def validate_linkage_snapshot(snapshot):
+    """Validate receipt structure without trusting its success flags."""
+    def require(condition, message):
+        if not condition:
+            raise ValueError("runtime linkage " + message)
+
+    def valid_file(record):
+        return (isinstance(record, dict) and isinstance(record.get("path"), str) and
+                record["path"].startswith(("{build}/", "{repo}/", "{runtime}/")) and
+                type(record.get("bytes")) is int and record["bytes"] > 0 and
+                all(isinstance(record.get(key), str) and re.fullmatch(r"[0-9a-f]{64}", record[key])
+                    for key in ("sha256", "resolved_path_sha256")))
+
+    require(isinstance(snapshot, dict) and snapshot.get("schema") == 1 and
+            snapshot.get("method") == LINKAGE_METHOD and snapshot.get("backend_dl") is False,
+            "snapshot is missing or incompatible")
+    entrypoints, dependencies, resolutions = (snapshot.get(key, {}) for key in
+                                              ("entrypoints", "dependencies", "resolutions"))
+    require(isinstance(entrypoints, dict) and set(entrypoints) == LINKAGE_ENTRYPOINTS and
+            all(valid_file(record) for record in entrypoints.values()), "entrypoint inventory is incomplete")
+    require(isinstance(dependencies, dict) and bool(dependencies) and
+            all(valid_file(record) and key == record["resolved_path_sha256"]
+                for key, record in dependencies.items()), "dependency inventory is incomplete")
+    require(isinstance(resolutions, dict) and set(resolutions) == LINKAGE_ENTRYPOINTS,
+            "dependency resolution is incomplete")
+    names, owners = {}, {}
+    for entrypoint, records in resolutions.items():
+        require(isinstance(records, dict) and bool(records) and all(isinstance(name, str) and name and
+                isinstance(identity, str) and identity in dependencies for name, identity in records.items()),
+                "dependency resolution is malformed")
+        for name, identity in records.items():
+            names.setdefault(identity, set()).add(name)
+            owners.setdefault(identity, set()).add(entrypoint)
+    require(set(names) == set(dependencies), "contains an unreferenced dependency")
+    for identity, record in dependencies.items():
+        require(record.get("sonames") == sorted(names[identity]) and
+                record.get("required_by") == sorted(owners[identity]), "dependency ownership is inconsistent")
+    all_names = {name for record in names.values() for name in record}
+    require(LINKAGE_GGML <= all_names and any("openblas" in name.lower() for name in all_names),
+            "must bind all four ggml libraries and the OpenBLAS provider")
+    environment = snapshot.get("loader_environment_sha256", {})
+    require(isinstance(environment, dict) and set(environment) == set(LINKAGE_ENVIRONMENT) and
+            all(value is None or isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+                for value in environment.values()), "loader environment is incomplete")
+    logs = snapshot.get("resolver_logs", {})
+    require(isinstance(logs, dict) and set(logs) == LINKAGE_ENTRYPOINTS,
+            "resolver logs are incomplete")
+    for name, record in logs.items():
+        require(isinstance(record, dict) and record.get("returncode") == 0,
+                "resolver did not complete successfully")
+        for stream in ("stdout", "stderr"):
+            output = record.get(stream, {})
+            require(isinstance(output, dict) and isinstance(output.get("file"), str) and
+                    re.fullmatch(r"linkage-[a-z0-9-]+-" + re.escape(name) + r"\." + stream + r"\.log", output["file"]) and
+                    isinstance(output.get("sha256"), str) and re.fullmatch(r"[0-9a-f]{64}", output["sha256"]),
+                    "resolver log identity is missing or malformed")
+    return snapshot
+
+
+def snapshot_runtime_linkage(binaries, build, environment, log_dir, epoch):
+    """Bind the Linux loader's direct/transitive DSO tree under the actual run environment.
+
+    Dynamic backend loading is excluded explicitly. Hashing resolved paths as
+    well as file bytes detects same-name/same-content resolution changes while
+    keeping private machine paths out of public JSON and logs.
+    """
+    if platform.system() != "Linux":
+        raise ValueError("runtime linkage qualification currently requires Linux")
+    cache = (Path(build) / "CMakeCache.txt").read_text(encoding="utf-8")
+    if not re.search(r"^GGML_BACKEND_DL:BOOL=OFF$", cache, re.M):
+        raise ValueError("runtime linkage qualification requires GGML_BACKEND_DL=OFF")
+    if set(binaries) != LINKAGE_ENTRYPOINTS or not re.fullmatch(r"[a-z0-9-]+", epoch):
+        raise ValueError("runtime linkage needs all five entrypoints and a bounded log label")
+    log_dir = Path(log_dir)
+    log_dir.mkdir(parents=True, exist_ok=True)
+    snapshot = {"schema": 1, "method": LINKAGE_METHOD, "backend_dl": False,
+                "entrypoints": {}, "dependencies": {}, "resolutions": {}, "resolver_logs": {},
+                "loader_environment_sha256": {name: hashlib.sha256(os.fsencode(environment[name])).hexdigest()
+                    if name in environment else None for name in LINKAGE_ENVIRONMENT}}
+    dependencies = snapshot["dependencies"]
+
+    def portable_log(text):
+        for prefix, alias in ((str(Path(build).resolve()), "{build}"), (str(ROOT), "{repo}")):
+            text = text.replace(prefix, alias)
+        return re.sub(r"(?<![\w}])(/[^\s()]+)", lambda match: "{runtime}/" + Path(match.group(1)).name, text)
+
+    for name, binary in sorted(binaries.items()):
+        snapshot["entrypoints"][name] = linkage_file(binary, build)
+        stdout_path = log_dir / f"linkage-{epoch}-{name}.stdout.log"
+        stderr_path = log_dir / f"linkage-{epoch}-{name}.stderr.log"
+        # Reserve both logs before running, so retries cannot replace evidence.
+        with stdout_path.open("x", encoding="utf-8") as stdout, stderr_path.open("x", encoding="utf-8") as stderr:
+            try:
+                process = subprocess.run(["ldd", str(binary)], env={**environment, "LC_ALL": "C"},
+                                         capture_output=True, text=True, timeout=30, check=False)
+            except subprocess.TimeoutExpired as error:
+                for handle, partial in ((stdout, error.stdout), (stderr, error.stderr)):
+                    if isinstance(partial, bytes):
+                        partial = partial.decode("utf-8", errors="replace")
+                    handle.write(portable_log(partial or ""))
+                raise ValueError(f"runtime linkage resolution timed out for {name}; see retained resolver logs") from error
+            stdout.write(portable_log(process.stdout))
+            stderr.write(portable_log(process.stderr))
+        snapshot["resolver_logs"][name] = {
+            "stdout": {"file": stdout_path.name, "sha256": sha256(stdout_path)},
+            "stderr": {"file": stderr_path.name, "sha256": sha256(stderr_path)}, "returncode": process.returncode}
+        if process.returncode != 0:
+            raise ValueError(f"runtime linkage resolution failed for {name}; see retained resolver logs")
+        resolution = snapshot["resolutions"][name] = {}
+        for soname, path in sorted(parse_ldd(process.stdout).items()):
+            record = linkage_file(path, build)
+            identity = record["resolved_path_sha256"]
+            previous = dependencies.setdefault(identity, {**record, "sonames": [], "required_by": []})
+            if any(previous[key] != value for key, value in record.items()):
+                raise ValueError("runtime dependency changed while resolving the entrypoints")
+            previous["sonames"] = sorted(set(previous["sonames"]) | {soname})
+            previous["required_by"] = sorted(set(previous["required_by"]) | {name})
+            resolution[soname] = identity
+    return validate_linkage_snapshot(snapshot)
+
+
+def compare_runtime_linkage(before, after):
+    before, after = validate_linkage_snapshot(before), validate_linkage_snapshot(after)
+    return {"schema": 1, "method": LINKAGE_METHOD, "complete": True, "before": before, "after": after,
+            "entrypoints_unchanged": before["entrypoints"] == after["entrypoints"],
+            "dependencies_unchanged": before["dependencies"] == after["dependencies"],
+            "resolution_unchanged": before["resolutions"] == after["resolutions"] and
+                before["loader_environment_sha256"] == after["loader_environment_sha256"]}
+
+
+def verify_runtime_linkage_receipt(linkage, binaries):
+    if not isinstance(linkage, dict) or linkage.get("schema") != 1 or linkage.get("method") != LINKAGE_METHOD or \
+            any(linkage.get(key) is not True for key in ("complete", "entrypoints_unchanged",
+                                                       "dependencies_unchanged", "resolution_unchanged")):
+        raise ValueError("runtime linkage before/after verification is missing, incomplete, or failed")
+    recomputed = compare_runtime_linkage(linkage.get("before"), linkage.get("after"))
+    if any(recomputed[key] is not True for key in ("entrypoints_unchanged", "dependencies_unchanged", "resolution_unchanged")):
+        raise ValueError("runtime linkage bytes or resolution changed despite recorded success flags")
+    if not isinstance(binaries, dict) or set(binaries) != LINKAGE_ENTRYPOINTS or any(
+            not isinstance(binaries[name], dict) or any(
+                binaries[name].get(key) != recomputed["before"]["entrypoints"][name][key] for key in ("path", "sha256"))
+            for name in LINKAGE_ENTRYPOINTS):
+        raise ValueError("runtime linkage entrypoints differ from the qualification binaries")
+    return recomputed["after"]
+
+
 def snapshot_sources(run, source):
     destination = run.output / "source-snapshot"
     manifest = {}
@@ -325,12 +534,14 @@ def qualify(run):
     args.assets_dir.mkdir(parents=True, exist_ok=True)
     run.step("verify-original-source", lambda: verify_source_files(source))
     run.step("snapshot-sources", lambda: snapshot_sources(run, source))
-    binaries = {name: resolve_binary(args.build_dir, name) for name in ("crispasr", "crispasr-quantize", "scnet-probe")}
-    production_library = resolve_library(args.build_dir, "crispasr")
-    validation_library = resolve_library(args.build_dir, "scnet-validation")
-    run.receipt["binaries"] = {name: {"path": run.portable(path), "sha256": sha256(path)}
-                               for name, path in dict(binaries, production_library=production_library,
-                                                     validation_library=validation_library).items()}
+    binaries = resolve_qualification_binaries(args.build_dir)
+    production_library, validation_library = binaries["production_library"], binaries["validation_library"]
+    linkage = run.receipt["runtime_linkage"] = {"schema": 1, "method": LINKAGE_METHOD, "complete": False,
+        "entrypoints_unchanged": False, "dependencies_unchanged": False, "resolution_unchanged": False}
+    linkage["before"] = run.step("snapshot-runtime-linkage-before", lambda: snapshot_runtime_linkage(
+        binaries, args.build_dir, run.environment, run.output / "logs", "before"))
+    run.receipt["binaries"] = {name: {key: record[key] for key in ("path", "sha256")}
+                               for name, record in linkage["before"]["entrypoints"].items()}
     run.save()
     run.run("converter-controls", [sys.executable, ROOT / "tests/test-scnet-converter.py", "-v"])
     run.run("original-observer-controls", [sys.executable, ROOT / "tests/test-scnet-reference.py", "-v"])
@@ -451,6 +662,11 @@ def qualify(run):
     for precision, path in models.items():
         if sha256(path) != run.receipt["models"][precision]["sha256"]:
             raise ValueError(f"converted model changed during qualification: {precision}")
+    linkage["after"] = run.step("snapshot-runtime-linkage-after", lambda: snapshot_runtime_linkage(
+        binaries, args.build_dir, run.environment, run.output / "logs", "after"))
+    linkage.update(compare_runtime_linkage(linkage["before"], linkage["after"]))
+    run.save()  # Preserve mismatched identities before rejecting a changed runtime.
+    verify_runtime_linkage_receipt(linkage, run.receipt["binaries"])
     run.receipt["complete"] = bool(all(row["returncode"] is not None for row in raw_smokes.values())
                                    and validation.get("complete", False)
                                    and all(row["returncode"] is not None for row in surfaces.values()))

@@ -116,6 +116,12 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   exclusive FFT worker ownership and the unchanged numerical gates. The
   component FFT receipt retains its extreme unequal-amplitude conditioning
   limit; these short diagnostics make no full-pipeline or speed claim.
+- Full qualification now binds the five native entrypoints and their complete
+  resolved shared-library dependencies before and after execution. Packaging
+  requires this proof and a fresh dependency check. The [controls](docs/historical/scnet-linkage-controls-2026-11-02.json)
+  include 13 rejection-control groups and genuine five-entrypoint/16-library
+  snapshots, independently repeated. These are tooling controls, not a model
+  qualification result.
 - Next action: repeat the bounded F16 profile under the same two-thread budget.
   A separate optional
   fresh-process passive-wait diagnostic applies identical settings to both
