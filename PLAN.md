@@ -12,6 +12,14 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-30)
 
+### ClearerVoice-Studio models + selectable denoise pipeline — IN PROGRESS, 2026-11-02
+
+- Owner: current agent, branch `claude/clearervoice-crispasr-models-xgejqr`, starting source `830ca6024ece6477da959236ee4f825a4d085300`.
+- Missing behavior: (1) RNNoise is C-ABI-only; the CLI cannot denoise, and the transcribe pipeline (CLI, Session C ABI, every wrapper) has no on/off/method switch for a denoise pre-pass. (2) No native port of the five ClearerVoice-Studio inference checkpoints, in this order: `MossFormer2_SS_16K` (2-speaker separation), `MossFormerGAN_SE_16K`, `FRCRN_SE_16K`, `MossFormer2_SE_48K` (enhancement), `MossFormer2_SR_48K` (super-resolution). `AV_MossFormer2_TSE_16K` is out of scope (needs video).
+- Model cards (checked 2026-11-02, Hugging Face `alibabasglab/*`): all five declare `license: apache-2.0` (code repo also Apache-2.0); cards state training on open-source plus private data and add no use restriction. Pinned revisions: SS_16K `407cb030`, MossFormerGAN_SE_16K `dcb1b20e`, FRCRN_SE_16K `3766e6a6`, SE_48K `eff8c979`, SR_48K `39eb1f25`; upstream code `modelscope/ClearerVoice-Studio@6b3774dc`.
+- Acceptance: denoise selectable as none/rnnoise/model in CLI (`--enhance`), Session C ABI setter and every wrapper; default stays off. Per model: pinned converter, Python reference stage dump, native ggml graph with F32/F16 whole-output cosine >0.999 against the original, CLI + C ABI wiring and registry entry.
+- Next action: enhance pipeline plumbing, then the ports in the listed order.
+
 ### Mini-BS-RoFormer V2.5 — CPU qualification complete, 2026-11-01
 
 - Owner: model-port team (native graph, blueprint/converter/reference, integration, quantization/validation); starting source `1dd0bf6fb9e7a8bf5849cb7a14605b2234e6ee93`.
