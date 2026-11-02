@@ -221,7 +221,7 @@ before enabling it.
 | SPEC | Method |
 |---|---|
 | `none` (default) | no enhancement; `--no-enhance` forces this |
-| `rnnoise` (`--denoise`) | built-in RNNoise (tiny GRU, CPU, real-time; not in MSVC builds) |
+| `rnnoise` (`--denoise`) | built-in RNNoise (tiny GRU, CPU, real-time; not in MSVC builds). Vendored from xiph/rnnoise `6cbfd53` (classic model); at 48 kHz the output is bit-identical to upstream's `rnnoise_demo`, other rates go through the polyphase resampler (16 kHz: cos 0.99995 vs the original run on 48 kHz audio) |
 | registry name / `.gguf` path | a converted enhancement model, chosen by its GGUF architecture |
 
 Any input rate works; the method resamples to its native rate and back, so the

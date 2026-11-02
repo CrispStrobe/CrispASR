@@ -5,8 +5,10 @@
 //   * `CrispasrEnhanceMethod::Rnnoise` — RNNoise (xiph/rnnoise v0.1,
 //     classic GRU model, ~425 KB weights embedded in libcrispasr).
 //     16 kHz mono float32 input/output in [-1, 1]. Internally
-//     upsamples to 48 kHz, runs RNNoise's 480-sample / 10 ms frames,
-//     and downsamples back. State is allocated and freed per call —
+//     upsamples to 48 kHz (polyphase), runs RNNoise's 480-sample /
+//     10 ms frames, and downsamples back; output is time-aligned.
+//     Bit-exact with xiph/rnnoise 6cbfd53 at 48 kHz (see
+//     crispasr_enhance_rnnoise_48k). State is allocated and freed per call —
 //     callers can use this freely from worker isolates.
 //
 // Shared by the CLI shim and by the C-ABI
@@ -32,3 +34,7 @@ struct CrispasrEnhanceOptions {
 /// when `opts.verbose` is true, and `out` is left untouched.
 bool crispasr_enhance_audio(const float* in_samples, int n_samples, float* out_samples,
                             const CrispasrEnhanceOptions& opts);
+
+/// RNNoise directly on 48 kHz mono f32 in [-1, 1] (its native rate), no
+/// resampling. Writes exactly `n_samples` time-aligned floats into `out`.
+bool crispasr_enhance_rnnoise_48k(const float* in_samples, int n_samples, float* out_samples, bool verbose);

@@ -102,7 +102,7 @@ CrispasrEnhancer* crispasr_enhancer_create(const char* spec, int n_threads, bool
         }
         auto* e = new CrispasrEnhancer();
         e->name = "rnnoise";
-        e->native_rate = 16000; // the RNNoise wrapper takes 16 kHz and resamples to 48 kHz itself
+        e->native_rate = 48000; // RNNoise's own rate: inputs are resampled once, straight to 48 kHz
         e->is_rnnoise = true;
         e->verbose = verbose;
         return e;
@@ -170,10 +170,7 @@ bool crispasr_enhancer_process(CrispasrEnhancer* e, const float* in, int n_sampl
     if (e->is_rnnoise) {
 #if defined(CRISPASR_RNNOISE)
         enhanced.resize(n_src);
-        CrispasrEnhanceOptions opts;
-        opts.method = CrispasrEnhanceMethod::Rnnoise;
-        opts.verbose = e->verbose;
-        if (!crispasr_enhance_audio(src, n_src, enhanced.data(), opts))
+        if (!crispasr_enhance_rnnoise_48k(src, n_src, enhanced.data(), e->verbose))
             return false;
 #else
         return false;

@@ -10,6 +10,10 @@
 
 #include "crispasr_session.h"
 
+extern "C" {
+#include "rnnoise.h"
+}
+
 #include <cmath>
 #include <cstdio>
 #include <cstring>
@@ -40,12 +44,12 @@ TEST_CASE("enhance spec 'none' copies the input", "[unit][enhance]") {
     const auto x = tone_with_noise(1600, 16000);
     std::vector<float> y(x.size(), -9.0f);
     for (const char* spec : {"none", "off", "", "NONE"}) {
-        REQUIRE(crispasr_enhance_audio_spec(spec, x.data(), (int32_t)x.size(), 16000, 1, y.data(),
-                                            (int32_t)y.size()) == 0);
+        REQUIRE(crispasr_enhance_audio_spec(spec, x.data(), (int32_t)x.size(), 16000, 1, y.data(), (int32_t)y.size()) ==
+                0);
         REQUIRE(std::memcmp(x.data(), y.data(), x.size() * sizeof(float)) == 0);
     }
-    REQUIRE(crispasr_enhance_audio_spec(nullptr, x.data(), (int32_t)x.size(), 16000, 1, y.data(),
-                                        (int32_t)y.size()) == 0);
+    REQUIRE(crispasr_enhance_audio_spec(nullptr, x.data(), (int32_t)x.size(), 16000, 1, y.data(), (int32_t)y.size()) ==
+            0);
 }
 
 TEST_CASE("enhance rejects invalid arguments and unknown methods", "[unit][enhance]") {
@@ -100,4 +104,32 @@ TEST_CASE("rnnoise keeps length, rate and sample alignment", "[unit][enhance]") 
         INFO("sample rate " << sr << " best lag " << best_lag);
         REQUIRE(std::abs(best_lag) <= sr / 1000);
     }
+}
+
+TEST_CASE("rnnoise at 48 kHz is bit-identical to xiph's rnnoise_demo loop", "[unit][enhance]") {
+    if (!crispasr_enhance_has_rnnoise())
+        SKIP("RNNoise not compiled into this build");
+    // Reference: the frame loop of xiph/rnnoise examples/rnnoise_demo.c
+    // (6cbfd53 — the revision src/rnnoise vendors): short-range floats in,
+    // first output frame dropped. The library's 48 kHz path must reproduce it
+    // exactly; resampling only enters at other rates.
+    const int F = 480, n_frames = 200, n = F * n_frames;
+    const auto x = tone_with_noise(n, 48000);
+    std::vector<float> ref;
+    DenoiseState* st = rnnoise_create(nullptr);
+    REQUIRE(st != nullptr);
+    float frame[480];
+    for (int f = 0; f < n_frames; f++) {
+        for (int i = 0; i < F; i++)
+            frame[i] = x[f * F + i] * 32768.0f;
+        rnnoise_process_frame(st, frame, frame);
+        if (f > 0)
+            for (int i = 0; i < F; i++)
+                ref.push_back(frame[i] / 32768.0f);
+    }
+    rnnoise_destroy(st);
+    std::vector<float> y(n);
+    REQUIRE(crispasr_enhance_audio_spec("rnnoise", x.data(), n, 48000, 1, y.data(), n) == 0);
+    REQUIRE(ref.size() == (size_t)(n - F));
+    REQUIRE(std::memcmp(ref.data(), y.data(), ref.size() * sizeof(float)) == 0);
 }

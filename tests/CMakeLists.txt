@@ -6812,6 +6812,7 @@ set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
 # per-model live tests.
 add_executable(test-enhance-abi test-enhance-abi.cpp)
 target_compile_definitions(test-enhance-abi PRIVATE CRISPASR_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+target_include_directories(test-enhance-abi PRIVATE ${PROJECT_SOURCE_DIR}/src/rnnoise)
 target_link_libraries(test-enhance-abi PRIVATE
     Catch2::Catch2WithMain
     crispasr-lib
