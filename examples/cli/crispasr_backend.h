@@ -139,6 +139,10 @@ enum crispasr_capability : uint32_t {
                                         // decided tablature: the constrained Viterbi/DP that
                                         // picks a playable fingering belongs to the caller.
     CAP_TTS_SPEED = 1u << 29,           // backend handles tts_speed / duration scaling natively without pitch shift
+    CAP_ENHANCE = 1u << 30,             // speech enhancement / denoising (audio in -> cleaned audio
+                                        // out, same rate and length). Task marker like CAP_SEPARATE:
+                                        // routed through --enhance / crispasr_session_set_enhance
+                                        // (src/crispasr_enhancer.h), not transcribe().
 };
 
 // ---------------------------------------------------------------------------

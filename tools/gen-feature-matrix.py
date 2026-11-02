@@ -82,6 +82,8 @@ CAP_LABELS: list[tuple[str, str, str]] = [
      "Beat / downbeat tracking (--beats)."),
     ("chords", "Chords",
      "Chord-recognition timeline (--chords)."),
+    ("enhance", "Enhance",
+     "Speech enhancement / denoising pre-pass (--enhance)."),
     ("piano", "Piano",
      "Polyphonic piano-note transcription (--piano)."),
     ("pitch", "Pitch",
@@ -430,6 +432,7 @@ def sync_markdown_counts(backends: list[dict], check: bool = False) -> bool:
         1 for b in backends
         if "tts" not in b.get("caps", [])
         and "separate" not in b.get("caps", [])
+        and "enhance" not in b.get("caps", [])
         and "s2s" not in b.get("caps", [])
         and not any(k in b.get("caps", []) for k in ["beats", "chords", "piano", "pitch", "tab"])
     )
