@@ -57,9 +57,25 @@ def stage_metrics(log, stage, expected_status):
     matches = [line for line in log.splitlines() if line.startswith(f"[{expected_status}] {stage} ")]
     if len(matches) != 1:
         raise AssertionError(f"expected one numerical {expected_status} for {stage}, got {matches}")
-    values = {key: float(value) for key, value in re.findall(r"([a-z_][a-z_0-9]*)=([^\s]+)", matches[0])}
+    fields = dict(re.findall(r"([a-z_][a-z_0-9]*)=([^\s]+)", matches[0]))
+    assert fields.pop("row_policy") == "cosine_or_binary16_reference_floor_v1"
+    values = {key: float(value) for key, value in fields.items()}
     if not {"cos_global", "norm_ratio", "relative_l2", "max_abs", "nonfinite", "n", "cos_min"} <= values.keys():
         raise AssertionError(f"incomplete numerical stage log: {matches[0]}")
+    diagnostic_fields = {"rows", "row_width", "ne1", "ne2", "ne3", "row_cosine_gated", "rows_failing_cosine",
+                         "nonfinite_rows", "worst_row", "worst_i1", "worst_i2", "worst_i3",
+                         "worst_actual_norm", "worst_reference_norm", "worst_rms_error", "worst_max_abs"}
+    if not diagnostic_fields <= values.keys():
+        raise AssertionError(f"incomplete row diagnostics: {matches[0]}")
+    assert values["rows"] * values["row_width"] == values["n"]
+    assert values["rows"] == values["ne1"] * values["ne2"] * values["ne3"]
+    assert values["worst_row"] == ((values["worst_i3"] * values["ne2"] + values["worst_i2"]) *
+                                   values["ne1"] + values["worst_i1"])
+    assert values["row_floor_epsilon"] == 2**-10
+    assert values["row_cosine_threshold"] == .999
+    assert values["row_rescued_count"] + values["row_failed_count"] == values["rows_failing_cosine"]
+    np.testing.assert_allclose(values["row_rms_error_limit"], 2**-10 * values["reference_rms"], rtol=1e-15, atol=0)
+    np.testing.assert_allclose(values["row_max_abs_error_limit"], 2**-10 * values["reference_peak"], rtol=1e-15, atol=0)
     return values
 
 
@@ -178,9 +194,12 @@ def main():
                 continue
             rows = values.astype(np.float64).reshape(-1, shape[0])
             energy = np.einsum("ij,ij->i", rows, rows)
-            candidates = np.flatnonzero((energy > 0) & (energy < energy.sum() * .00025))
+            stage_rms = np.sqrt(energy.sum() / values.size)
+            candidates = np.flatnonzero((energy > (2**-10 * stage_rms) ** 2 * shape[0]) &
+                                         (energy < (.018 * stage_rms) ** 2 * shape[0]) &
+                                         (energy < energy.sum() * .00025))
             if len(candidates):
-                selected = name, shape[0], int(candidates[0])
+                selected = name, shape[0], int(candidates[-1])
                 break
         assert selected is not None, "model must expose a nonzero low-energy learned row"
         stage, width, row = selected
@@ -193,14 +212,75 @@ def main():
         metrics = stage_metrics(log, stage, "FAIL")
         assert metrics["cos_global"] > .999 and .99 <= metrics["norm_ratio"] <= 1.01
         assert metrics["relative_l2"] <= .05 and metrics["cos_min"] < -.999
+        assert metrics["worst_row"] == row and metrics["rows_failing_cosine"] == 1
+        assert metrics["row_failed_count"] == 1 and metrics["row_rescued_count"] == 0
+        assert metrics["row_cosine_gated"] == 1 and metrics["nonfinite_rows"] == 0
+        actual = tensors[indices[stage]][2][row * width:(row + 1) * width].astype(np.float64)
+        expected = -actual
+        np.testing.assert_allclose([metrics["worst_actual_norm"], metrics["worst_reference_norm"],
+                                    metrics["worst_rms_error"], metrics["worst_max_abs"]],
+                                   [np.linalg.norm(actual), np.linalg.norm(expected),
+                                    np.sqrt(np.mean((actual - expected) ** 2)), np.max(np.abs(actual - expected))],
+                                   rtol=1e-7, atol=0)
+        if width <= 32:
+            assert f"[ROW] {stage} worst_row={row} actual=[" in log
         report["controls"]["altered-learned-row"].update(stage=stage, row=row, metrics=metrics)
+
+        # The same quiet row receives a small orthogonal error that fails raw
+        # cosine but fits both reference-only error bounds. A larger error must
+        # still fail the RMS bound while global metrics and the peak bound pass.
+        stage_values = tensors[indices[stage]][2].astype(np.float64)
+        reference_rms = np.sqrt(np.mean(stage_values * stage_values))
+        orthogonal = np.where(np.arange(width) % 2, -1.0, 1.0)
+        orthogonal -= actual * (np.dot(orthogonal, actual) / np.dot(actual, actual))
+        orthogonal /= np.sqrt(np.mean(orthogonal * orthogonal))
+
+        def row_error(scale):
+            def apply(values):
+                values[row * width:(row + 1) * width] += (scale * 2**-10 * reference_rms * orthogonal).astype(np.float32)
+                return values
+            return apply
+
+        log = run("reference-floor-rescues-quiet-row", replaced(stage, row_error(.9)), expected=0)
+        metrics = stage_metrics(log, stage, "PASS")
+        assert metrics["cos_min"] <= .999 and metrics["rows_failing_cosine"] == 1
+        assert metrics["row_rescued_count"] == 1 and metrics["row_failed_count"] == 0
+        assert metrics["worst_rms_error"] <= metrics["row_rms_error_limit"]
+        assert metrics["worst_max_abs"] <= metrics["row_max_abs_error_limit"]
+        report["controls"]["reference-floor-rescues-quiet-row"]["metrics"] = metrics
+        log = run("reference-floor-rejects-excess-rms", replaced(stage, row_error(1.1)))
+        metrics = stage_metrics(log, stage, "FAIL")
+        assert metrics["cos_global"] > .999 and .99 <= metrics["norm_ratio"] <= 1.01
+        assert metrics["relative_l2"] <= .05 and metrics["cos_min"] <= .999
+        assert metrics["row_rescued_count"] == 0 and metrics["row_failed_count"] == 1
+        assert metrics["worst_rms_error"] > metrics["row_rms_error_limit"]
+        assert metrics["worst_max_abs"] <= metrics["row_max_abs_error_limit"]
+        report["controls"]["reference-floor-rejects-excess-rms"]["metrics"] = metrics
+
+        log = run("zero-reference-stage-rejects-error", replaced(stage, np.zeros_like))
+        metrics = stage_metrics(log, stage, "FAIL")
+        assert metrics["reference_rms"] == metrics["reference_peak"] == 0
+        assert metrics["row_rms_error_limit"] == metrics["row_max_abs_error_limit"] == 0
+        assert metrics["row_rescued_count"] == 0 and metrics["row_failed_count"] > 0
+        if inventory.metadata.get("test.synthetic"):
+            # The documented random fixture has zero biases: a raw all-zero
+            # mixture produces exactly zero learned stages. Zero reference
+            # stages therefore pass only their exact zero-error counterpart.
+            zeros = [(name, shape, values if name == "waveform_stats" else np.zeros_like(values))
+                     for name, shape, values in tensors]
+            log = run("zero-reference-stage-accepts-zero-error", zeros, expected=0)
+            metrics = stage_metrics(log, stage, "PASS")
+            assert metrics["reference_rms"] == metrics["reference_peak"] == 0
+            assert metrics["max_abs"] == metrics["worst_rms_error"] == 0
+            assert metrics["row_rescued_count"] == metrics["row_failed_count"] == 0
 
     def add_nan(values):
         values[0] = np.nan
         return values
 
     log = run("nonfinite-output", replaced("output_drums", add_nan))
-    assert stage_metrics(log, "output_drums", "FAIL")["nonfinite"] == 1
+    metrics = stage_metrics(log, "output_drums", "FAIL")
+    assert metrics["nonfinite"] == 1 and metrics["nonfinite_rows"] == 1
     wrong_shape = list(tensors)
     index = indices["output_drums"]
     name, shape, values = tensors[index]

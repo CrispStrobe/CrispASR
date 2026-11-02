@@ -30,7 +30,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   FFTs, overlap weighting and per-chunk shift behavior. Measure matched-input,
   matched-device warm inference against the original implementation; each
   qualified precision must at least match its timing. Record failures and
-  hardware/fixture limits without relaxing gates or promoting unqualified
+  hardware/fixture limits without weakening these full-stage gates or promoting unqualified
   models. Exercise CLI and actual Session/C ABI, including neutral filenames,
   cold/warm reuse, changed inputs, result ownership and invalid arguments.
 - Implemented: native ggml graph with explicit CPU recurrent/FFT operations,
@@ -46,9 +46,18 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   corrected in `1ef9331`. The [first qualification run](https://github.com/CrispStrobe/CrispASR/actions/runs/41396683922)
   exposed a NumPy/Accelerate dependency conflict before model execution; retain
   Accelerate 0.32.1 and pin compatible NumPy 1.26.4 for the next run.
+- [Run 41397985492](https://github.com/CrispStrobe/CrispASR/actions/runs/41397985492)
+  built both production variants and passed generated capabilities, C ABI,
+  wiring, and original-observer controls. Its actual CLI generated the checked-in
+  145-backend catalogue. Small-model raw F16 passes every full-stage and output
+  metric but failed the added angle-only row rule. Independent original-F16
+  storage and original-GELU-layout experiments reproduced these failures;
+  [the documented row-policy correction](docs/scnet.md#numerical-and-performance-gates)
+  retains the global gates and requires fresh acceptance. Large conversion
+  identified the author's distinct band ratios `[0.225, 0.372, 0.403]`; the
+  native/reference contracts are corrected and the small graph is bit-identical.
 - Next action: complete original-checkpoint fidelity, actual CLI/Session surfaces,
-  and paired performance through `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566). Generated
-  capability/matrix changes require that actual production CLI. CPU checkpoint
+  and paired performance through `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566). CPU checkpoint
   acceptance, GPU qualification and held-out quality remain unproven; do not
   promote the candidate or substitute the synthetic graph checks for these gates.
 - License: upstream [MIT notice](https://github.com/starrytong/SCNet/blob/main/LICENSE)

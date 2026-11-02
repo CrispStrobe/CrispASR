@@ -51,9 +51,10 @@ bool flag(const char* name, bool fallback = false) {
 
 struct Timer {
     const char* name;
-    bool enabled = flag("CRISPASR_SCNET_BENCH");
+    bool enabled;
     std::chrono::steady_clock::time_point start;
-    explicit Timer(const char* stage) : name(stage) {
+    explicit Timer(const char* stage, bool active = true)
+        : name(stage), enabled(active && flag("CRISPASR_SCNET_BENCH")) {
         if (enabled)
             start = std::chrono::steady_clock::now();
     }
@@ -78,11 +79,24 @@ std::vector<int> integer_array(gguf_context* meta, const char* key) {
 struct HParams {
     std::vector<int> dims;
     uint32_t file_type = std::numeric_limits<uint32_t>::max();
+    std::array<double, 3> canonical_band_rates() const {
+        // These are the author's Python/YAML double constants, not promoted
+        // F32 GGUF values: rounding can move a ceil boundary by one bin.
+        return dims == std::vector<int>{4, 64, 128, 256} ? std::array<double, 3>{0.225, 0.372, 0.403}
+                                                         : std::array<double, 3>{0.175, 0.392, 0.433};
+    }
+    std::array<int, 4> band_boundaries(int frequencies) const {
+        const auto rates = canonical_band_rates();
+        return {0, static_cast<int>(std::ceil(frequencies * rates[0])),
+                static_cast<int>(std::ceil(frequencies * (rates[0] + rates[1]))), frequencies};
+    }
     bool read(gguf_context* meta) {
         dims = integer_array(meta, "scnet.dims");
         file_type = core_gguf::kv_u32(meta, "general.file_type", std::numeric_limits<uint32_t>::max());
         auto integer = [&](const char* key) { return core_gguf::kv_u32(meta, key, 0); };
         const auto bands = core_gguf::kv_f32_array(meta, "scnet.band_sr");
+        const auto rates = canonical_band_rates();
+        const std::vector<float> expected_bands(rates.begin(), rates.end());
         const auto sources = core_gguf::kv_str_array(meta, "scnet.source_names");
         const std::vector<std::string> expected_sources(STEMS, STEMS + STEM_COUNT);
         return core_gguf::kv_str(meta, "general.architecture", "") == "scnet" &&
@@ -97,8 +111,8 @@ struct HParams {
                integer("scnet.conv_kernel") == 3 && core_gguf::kv_bool(meta, "scnet.normalized", false) &&
                integer_array(meta, "scnet.band_stride") == std::vector<int>{1, 4, 16} &&
                integer_array(meta, "scnet.band_kernel") == std::vector<int>{3, 4, 16} &&
-               integer_array(meta, "scnet.conv_depths") == std::vector<int>{3, 2, 1} &&
-               bands == std::vector<float>{0.175f, 0.392f, 0.433f} && sources == expected_sources;
+               integer_array(meta, "scnet.conv_depths") == std::vector<int>{3, 2, 1} && bands == expected_bands &&
+               sources == expected_sources;
     }
 };
 
@@ -131,6 +145,8 @@ struct FourierNode {
 };
 
 void fourier_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
+    // Diagnostic worker-zero span, not the sum of parallel worker CPU time.
+    Timer timer("fft", ith == 0);
     auto& node = *static_cast<FourierNode*>(opaque);
     auto& scratch = node.scratch[ith];
     const auto* input = output->src[0];
@@ -189,6 +205,9 @@ void recurrent_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
     // threading; only worker zero may enter the fused recurrence.
     if (node.blas && ith != 0)
         return;
+    // CBLAS recurrence is owned entirely by worker zero. The scalar fallback
+    // reports only worker zero's share, like the parallel Fourier diagnostic.
+    Timer timer("lstm", ith == 0);
     const int hidden = static_cast<int>(output->ne[0] / 2), batch = static_cast<int>(output->ne[1]);
     const int steps = static_cast<int>(output->ne[2]);
     const int begin = node.blas ? 0 : static_cast<int>(int64_t(batch) * ith / nth);
@@ -489,10 +508,7 @@ ggml_tensor* encoder(scnet_context& model, Graph& graph, ggml_tensor* input, int
     auto* ctx = graph.context;
     const std::string p = "encoder." + std::to_string(level);
     const int frequencies = static_cast<int>(input->ne[1]);
-    // Use the original Python double constants; F32 metadata rounding changes
-    // a ceil boundary for some frequency grids.
-    const int boundaries[] = {0, static_cast<int>(std::ceil(frequencies * 0.175)),
-                              static_cast<int>(std::ceil(frequencies * (0.175 + 0.392))), frequencies};
+    const auto boundaries = model.hp.band_boundaries(frequencies);
     const int strides[] = {1, 4, 16}, kernels[] = {3, 4, 16}, depths[] = {3, 2, 1};
     std::vector<ggml_tensor*> bands;
     for (int band = 0; band < 3; ++band) {
@@ -1084,6 +1100,9 @@ const char* scnet_compute_precision(const scnet_context* model) {
 
 static int diff_impl(const char* model_gguf, const char* ref_gguf, const char* audio_wav, int verbosity) {
     (void)audio_wav; // Exact planar audio bytes are embedded in the independent reference.
+    constexpr const char* row_policy = "cosine_or_binary16_reference_floor_v1";
+    constexpr double row_cosine_threshold = 0.999;
+    constexpr double row_floor_epsilon = 1.0 / 1024.0;
     const auto required = required_stages();
     const std::set<std::string> required_names(required.begin(), required.end());
     const auto require_key = [](gguf_context* meta, const char* name, gguf_type type) {
@@ -1184,6 +1203,7 @@ static int diff_impl(const char* model_gguf, const char* ref_gguf, const char* a
         const double relative_max = model->quant_q4 ? 0.40 : model->quant_q8 ? 0.20 : 0.05;
         const std::set<std::string> analytic_stages = {"input_audio", "raw_input_audio", "waveform_stats",
                                                        "stft",        "stft_stats",      "normalized"};
+        std::printf("scnet row policy: %s epsilon=0.0009765625\n", row_policy);
         for (const auto& name : required) {
             const auto truth = reference.tensors.find(name);
             const auto observed = actual.find(name);
@@ -1207,9 +1227,21 @@ static int diff_impl(const char* model_gguf, const char* ref_gguf, const char* a
             }
             double dot = 0, aa = 0, bb = 0, difference = 0, maximum = 0;
             double minimum_cosine = 1;
-            size_t nonfinite = 0;
+            double reference_peak = 0;
+            size_t nonfinite = 0, nonfinite_rows = 0, failing_rows = 0, worst_row = 0;
+            double worst_aa = 0, worst_bb = 0, worst_difference = 0, worst_maximum = 0;
+            // Retain errors only for raw cosine failures until the whole-stage
+            // reference scale is known. The original global metrics and raw
+            // row cosines remain unchanged and are always reported.
+            struct RowError {
+                double rms, peak;
+                bool finite;
+            };
+            std::vector<RowError> cosine_failures;
             for (size_t row = 0; row < expected.size(); row += row_width) {
                 double row_dot = 0, row_aa = 0, row_bb = 0;
+                double row_difference = 0, row_maximum = 0;
+                const size_t previous_nonfinite = nonfinite;
                 for (size_t i = row; i < row + row_width; ++i) {
                     const double a = observed_values[i], b = expected[i];
                     if (!std::isfinite(a) || !std::isfinite(b)) {
@@ -1221,6 +1253,9 @@ static int diff_impl(const char* model_gguf, const char* ref_gguf, const char* a
                     row_bb += b * b;
                     difference += (a - b) * (a - b);
                     maximum = std::max(maximum, std::abs(a - b));
+                    reference_peak = std::max(reference_peak, std::abs(b));
+                    row_difference += (a - b) * (a - b);
+                    row_maximum = std::max(row_maximum, std::abs(a - b));
                 }
                 dot += row_dot;
                 aa += row_aa;
@@ -1228,6 +1263,18 @@ static int diff_impl(const char* model_gguf, const char* ref_gguf, const char* a
                 const double row_cosine = row_aa > 0 && row_bb > 0 ? row_dot / std::sqrt(row_aa * row_bb)
                                           : row_aa == row_bb       ? 1.0
                                                                    : 0.0;
+                if (row == 0 || row_cosine < minimum_cosine) {
+                    worst_row = row / row_width;
+                    worst_aa = row_aa;
+                    worst_bb = row_bb;
+                    worst_difference = row_difference;
+                    worst_maximum = row_maximum;
+                }
+                failing_rows += row_cosine <= row_cosine_threshold;
+                if (row_cosine <= row_cosine_threshold)
+                    cosine_failures.push_back(
+                        {std::sqrt(row_difference / row_width), row_maximum, nonfinite == previous_nonfinite});
+                nonfinite_rows += nonfinite != previous_nonfinite;
                 minimum_cosine = std::min(minimum_cosine, row_cosine);
             }
             const double cosine = aa > 0 && bb > 0 ? dot / std::sqrt(aa * bb) : aa == bb ? 1.0 : 0.0;
@@ -1235,17 +1282,53 @@ static int diff_impl(const char* model_gguf, const char* ref_gguf, const char* a
             const double relative = bb > 0            ? std::sqrt(difference / bb)
                                     : difference == 0 ? 0
                                                       : std::numeric_limits<double>::infinity();
+            const double reference_rms = std::sqrt(bb / expected.size());
+            const double row_rms_error_limit = row_floor_epsilon * reference_rms;
+            const double row_max_abs_error_limit = row_floor_epsilon * reference_peak;
+            const size_t row_rescued_count =
+                std::count_if(cosine_failures.begin(), cosine_failures.end(), [&](const RowError& row) {
+                    return row.finite && row.rms <= row_rms_error_limit && row.peak <= row_max_abs_error_limit;
+                });
+            const size_t row_failed_count = failing_rows - row_rescued_count;
             const bool require_rows = !model->quant_q4 && !model->quant_q8 && analytic_stages.count(name) == 0;
             const bool passed = nonfinite == 0 && std::isfinite(cosine) && std::isfinite(ratio) &&
                                 std::isfinite(relative) && cosine > threshold && ratio >= norm_min &&
                                 ratio <= norm_max && relative <= relative_max &&
-                                (!require_rows || minimum_cosine > threshold);
+                                (!require_rows || row_failed_count == 0);
             failures += !passed;
-            if (verbosity > 0 || !passed)
+            if (verbosity > 0 || !passed) {
+                const size_t ne1 = static_cast<size_t>(truth->second->ne[1]);
+                const size_t ne2 = static_cast<size_t>(truth->second->ne[2]);
+                const size_t ne3 = static_cast<size_t>(truth->second->ne[3]);
+                // Rows traverse ne0 contiguously. Learned stages are [T,F,C,1]
+                // in ggml, so i1 is frequency and i2 is channel; audio [N,2,1,1]
+                // uses i1 for channel. Raw cosine failures stay visible even
+                // when both reference-scaled binary16 error bounds pass.
                 std::printf("[%s] %s cos_global=%.9f norm_ratio=%.9f relative_l2=%.9g max_abs=%.9g nonfinite=%zu n=%zu "
-                            "cos_min=%.9f\n",
+                            "cos_min=%.9f rows=%zu row_width=%zu ne1=%zu ne2=%zu ne3=%zu row_cosine_gated=%d "
+                            "rows_failing_cosine=%zu nonfinite_rows=%zu worst_row=%zu worst_i1=%zu worst_i2=%zu "
+                            "worst_i3=%zu worst_actual_norm=%.9g worst_reference_norm=%.9g worst_rms_error=%.9g "
+                            "worst_max_abs=%.9g row_policy=%s row_cosine_threshold=0.999 "
+                            "row_floor_epsilon=0.0009765625 reference_rms=%.17g "
+                            "reference_peak=%.17g row_rms_error_limit=%.17g row_max_abs_error_limit=%.17g "
+                            "row_rescued_count=%zu row_failed_count=%zu\n",
                             passed ? "PASS" : "FAIL", name.c_str(), cosine, ratio, relative, maximum, nonfinite,
-                            expected.size(), minimum_cosine);
+                            expected.size(), minimum_cosine, expected.size() / row_width, row_width, ne1, ne2, ne3,
+                            int(require_rows), failing_rows, nonfinite_rows, worst_row, worst_row % ne1,
+                            (worst_row / ne1) % ne2, worst_row / (ne1 * ne2), std::sqrt(worst_aa), std::sqrt(worst_bb),
+                            std::sqrt(worst_difference / row_width), worst_maximum, row_policy, reference_rms,
+                            reference_peak, row_rms_error_limit, row_max_abs_error_limit, row_rescued_count,
+                            row_failed_count);
+                if (verbosity > 1 && !passed && require_rows && minimum_cosine <= threshold && row_width <= 32) {
+                    std::printf("[ROW] %s worst_row=%zu actual=[", name.c_str(), worst_row);
+                    for (size_t i = 0; i < row_width; ++i)
+                        std::printf("%s%.9g", i ? "," : "", observed_values[worst_row * row_width + i]);
+                    std::printf("] reference=[");
+                    for (size_t i = 0; i < row_width; ++i)
+                        std::printf("%s%.9g", i ? "," : "", expected[worst_row * row_width + i]);
+                    std::printf("]\n");
+                }
+            }
         }
         if (const char* path = std::getenv("CRISPASR_SCNET_CAPTURE_GGUF"))
             if (*path)

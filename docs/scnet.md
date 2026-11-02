@@ -82,6 +82,22 @@ checkpoint linked in its README:
 | SCNet | [Official download](https://drive.google.com/file/d/1CdEIIqsoRfHn1SJ7rccPfyYioW3BlXcW/view) | Pinned `conf/config.yaml` |
 | SCNet-large | [Official download](https://drive.google.com/file/d/1s7QvQwn8ag9oVstGDBQ6KZvacJkvyK7t/view) | [Author's large configuration](https://drive.google.com/file/d/1qxK7SZx6-Gsp1s3wCrj98X7--UcI4O3K/view) |
 
+The variants also differ in frequency bands. SCNet uses
+`[0.175, 0.392, 0.433]`, with encoder frequency counts `2049 → 616 → 186 → 57`.
+The author's large configuration uses `[0.225, 0.372, 0.403]`, giving
+`2049 → 705 → 243 → 85`. The native loader validates these variant contracts
+and uses the original double-precision split calculation.
+
+The author-linked downloads observed in
+[run 41397985492](https://github.com/CrispStrobe/CrispASR/actions/runs/41397985492)
+have these SHA-256 digests:
+
+| Artifact | Recorded SHA-256 |
+|---|---|
+| SCNet checkpoint | `f8aff3bc8dd816aad392800d9d69519add719a2fbd22550af6f8cb2138d25ff5` |
+| SCNet-large checkpoint | `719e5abb8ed920305dad546ac3cd6fb0b1e9c3092d14ce21827bfc0423af3070` |
+| Large configuration | `629a4901184bf1d3a75b0b13904f35974785aa042cad3c010fd576248cdce3f0` |
+
 Record the SHA-256 of that download before conversion and supply it explicitly:
 
 ```bash
@@ -143,13 +159,35 @@ and decoder output; raw chunk stems; and complete assembled stems.
 
 `tools/validate_scnet.py` independently parses the native and original captures
 and requires exact shapes, complete stage sets, finite values, and amplitude
-agreement. The gates were fixed before the pretrained-model run:
+agreement. The full-tensor gates were fixed before the pretrained-model run:
 
 | Precision | Global cosine | Norm ratio | Relative L2 | F16 row gate |
 |---|---:|---:|---:|---|
-| F16 | >0.999 | 0.99–1.01 | ≤0.05 | Every learned-stage and waveform-channel row >0.999 |
+| F16 | >0.999 | 0.99–1.01 | ≤0.05 | Cosine >0.999 or the bounded numerical floor below |
 | Q8_0 | >0.98 | 0.95–1.05 | ≤0.20 | — |
 | Q4_K | >0.94 | 0.80–1.20 | ≤0.40 | — |
+
+For every learned/output F16 row that misses the angle threshold, both its RMS
+error and its maximum absolute error must be at most `2^-10` times the original
+whole stage's RMS and maximum magnitude, respectively. This uses binary16
+machine epsilon, approximately 0.0977%, as a declared engineering tolerance
+scaled exclusively from the original reference; it is not a bound on network
+roundoff error.
+An all-zero reference stage permits no added signal. Raw minimum row cosine,
+raw cosine-failure counts, rows accepted by the numerical floor, and remaining
+failures are all retained. The policy is
+`cosine_or_binary16_reference_floor_v1`.
+
+This additional row policy was corrected after the first checkpoint probe.
+The original PyTorch model with F16-rounded matrix weights reproduced all
+3,368 decoder-row failures from native F16, while native versus original with
+identically rounded weights passed every decoder row. Separately, the same
+original PyTorch GELU inputs in different tensor layouts differed by about
+`1.7e-7` near zero and failed the former angle-only rule even without F16
+storage. The [precision diagnosis](historical/scnet-precision-diagnosis-2026-11-02.json)
+is explicitly nonqualifying. The previous run remains failed under its
+previous policy; a fresh full run must satisfy the declared correction.
+The original F32 checkpoint remains the only qualification reference.
 
 Analytic STFT rows can have exactly zero imaginary values. Their row statistics
 are reported separately while complete-stage amplitude, relative error, shape,

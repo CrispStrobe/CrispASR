@@ -105,7 +105,8 @@ jobs:
           cmake --build build-scnet --parallel 2 --target crispasr-cli crispasr-lib
           python tools/gen-backend-caps-table.py --check --crispasr build-scnet/bin/crispasr
           python tests/test_backend_caps_abi.py --cli build-scnet/bin/crispasr --build-dir build-scnet
-          python tools/check-backend-wiring.py --crispasr build-scnet/bin/crispasr
+          python tools/check-backend-wiring.py --crispasr build-scnet/bin/crispasr \
+            --lib build-scnet/src/libcrispasr.so --require-lib
       - name: Original observer and rejection controls
         run: |
           python tests/test-scnet-math.py -v
@@ -114,7 +115,7 @@ jobs:
           python tests/test-scnet-converter.py -v
           python tests/test-scnet-reference.py -v
           python tests/test_scnet_validation.py -v
-      - name: Convert and qualify every precision against the original model
+      - name: Convert, qualify and preserve failed numerical diagnostics
         run: >
           python tools/ci-heavy/scnet_qualify.py --variant ${{ matrix.variant }}
           --build-dir build-scnet --assets-dir scnet-assets

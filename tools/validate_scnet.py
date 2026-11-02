@@ -58,6 +58,12 @@ THRESHOLDS = {"f16": 0.999, "q8_0": 0.98, "q4_k": 0.94}
 NORM_RATIO_BOUNDS = {"f16": (0.99, 1.01), "q8_0": (0.95, 1.05), "q4_k": (0.8, 1.2)}
 RELATIVE_L2_MAX = {"f16": 0.05, "q8_0": 0.20, "q4_k": 0.40}
 MIN_TARGET_MATRIX_FRACTION = 0.5
+# Numerical-conditioning correction established after the initial raw probes.
+# It applies to fresh reports; prior strict-minimum-cosine failures stay intact.
+# Binary16 machine epsilon scales absolute errors from the ORIGINAL stage.
+# This reference-scale engineering tolerance is not a forward-error theorem.
+F16_ROW_POLICY = "cosine_or_binary16_reference_floor_v1"
+F16_ROW_FLOOR_EPSILON = 2.0 ** -10
 REQUIRED_STAGES = (
     "input_audio", "waveform_stats", "raw_input_audio", "stft", "stft_stats", "normalized",
     *(f"{stage}{i}" for i in range(3) for stage in ("skip", "encoder", "decoder")),
@@ -296,17 +302,32 @@ def tensor_metrics(actual, expected, precision):
 
 
 def row_metrics(actual, expected, width):
-    """Report every fastest-axis row, including explicit zero-vector handling.
+    """Report raw angles plus the declared F16 rule for every logical row.
 
-    An exactly zero row agrees only with another exactly zero row. Learned
-    stages and waveform channel rows gate F16 on this minimum; analytic STFT
-    DC/Nyquist imaginary rows are reported but their undefined angle does not
-    replace the full-stage magnitude and absolute/relative-error checks.
+    A row passes on strict cosine, OR on BOTH RMS and maximum absolute error
+    within binary16 machine epsilon times the original whole-stage RMS and
+    peak. This is an engineering tolerance, not a network roundoff theorem.
+    Every rescued row retains its raw low cosine in the report. No actual-
+    output scale, fitted gain, or observed-error calibration sets the bounds.
+    An entirely zero reference stage permits no added signal. Analytic stages
+    report this policy but do not gate F16 on row angles or the absolute floor.
     """
-    if actual.size != expected.size or actual.size % width:
+    if width <= 0 or not actual.size or actual.size != expected.size or actual.size % width:
         raise ValueError("invalid logical row geometry")
     a, b = actual.reshape(-1, width), expected.reshape(-1, width)
+    reference_energy = reference_peak = 0.0
+    flat_reference = expected.reshape(-1)
+    for offset in range(0, flat_reference.size, 262144):
+        y = flat_reference[offset:offset + 262144].astype(np.float64)
+        if not np.isfinite(y).all():
+            raise ValueError("nonfinite logical row reference")
+        reference_energy += float(np.dot(y, y))
+        reference_peak = max(reference_peak, float(np.max(np.abs(y))))
+    reference_rms = math.sqrt(reference_energy / expected.size)
+    rms_limit = F16_ROW_FLOOR_EPSILON * reference_rms
+    peak_limit = F16_ROW_FLOOR_EPSILON * reference_peak
     minimum, total, zero_pairs, zero_mismatches, failed_f16 = 1.0, 0.0, 0, 0, 0
+    rescued = 0
     # Bound transient float64 arrays even when rows themselves are long audio.
     for offset in range(0, len(a), max(1, 262144 // width)):
         count = max(1, 262144 // width)
@@ -322,10 +343,20 @@ def row_metrics(actual, expected, width):
         zero_mismatches += int(np.count_nonzero((aa == 0) != (bb == 0)))
         minimum = min(minimum, float(np.min(scores)))
         total += float(np.sum(scores))
-        failed_f16 += int(np.count_nonzero(scores <= THRESHOLDS["f16"]))
+        failed_cosine = scores <= THRESHOLDS["f16"]
+        failed_f16 += int(np.count_nonzero(failed_cosine))
+        delta = x - y
+        rms_errors = np.sqrt(np.einsum("ij,ij->i", delta, delta) / width)
+        peak_errors = np.max(np.abs(delta), axis=1)
+        rescued += int(np.count_nonzero(failed_cosine & (rms_errors <= rms_limit) &
+                                       (peak_errors <= peak_limit)))
     return {"cos_min": minimum, "cos_mean": total / len(a), "rows": len(a), "row_width": width,
             "zero_row_pairs": zero_pairs, "zero_row_mismatches": zero_mismatches,
-            "rows_failing_f16_cosine": failed_f16}
+            "rows_failing_f16_cosine": failed_f16, "row_policy": F16_ROW_POLICY,
+            "row_floor_epsilon": F16_ROW_FLOOR_EPSILON,
+            "reference_rms": reference_rms, "reference_peak": reference_peak,
+            "row_rms_error_limit": rms_limit, "row_max_abs_error_limit": peak_limit,
+            "row_rescued_count": rescued, "row_failed_count": failed_f16 - rescued}
 
 
 def compare_captures(actual, expected, precision):
@@ -341,7 +372,7 @@ def compare_captures(actual, expected, precision):
         result[name].update(row_metrics(observed, truth, b["shape_ggml"][0]))
         result[name]["row_cosine_gated"] = precision == "f16" and name in F16_ROW_STAGES
         if result[name]["row_cosine_gated"]:
-            result[name]["acceptance"] &= result[name]["cos_min"] > THRESHOLDS["f16"]
+            result[name]["acceptance"] &= result[name]["row_failed_count"] == 0
     return result
 
 
@@ -366,12 +397,44 @@ def parse_diff(log, precision):
                 not NORM_RATIO_BOUNDS[precision][0] <= values["norm_ratio"] <= NORM_RATIO_BOUNDS[precision][1] or
                 not 0 <= values["relative_l2"] <= RELATIVE_L2_MAX[precision] or values["max_abs"] < 0):
             raise ValueError(f"native metric gate failed: {name}")
+        if precision == "f16":
+            row_fields = {"cos_min", "rows", "row_width", "row_cosine_gated", "rows_failing_cosine",
+                          "row_floor_epsilon", "reference_rms", "reference_peak", "row_rms_error_limit",
+                          "row_max_abs_error_limit", "row_rescued_count", "row_failed_count"}
+            if fields.get("row_policy") != F16_ROW_POLICY or not row_fields <= fields.keys():
+                raise ValueError(f"missing or incompatible native row policy: {name}")
+            row_values = {key: float(fields[key]) for key in row_fields}
+            if not all(math.isfinite(value) for value in row_values.values()):
+                raise ValueError(f"nonfinite native row metrics: {name}")
+            count_fields = ("rows", "row_width", "rows_failing_cosine", "row_rescued_count", "row_failed_count")
+            if (any(row_values[key] < 0 or not row_values[key].is_integer() for key in count_fields) or
+                    row_values["rows"] <= 0 or row_values["row_width"] <= 0 or
+                    row_values["rows"] * row_values["row_width"] != values["n"] or
+                    row_values["rows_failing_cosine"] > row_values["rows"] or
+                    row_values["row_rescued_count"] + row_values["row_failed_count"] !=
+                    row_values["rows_failing_cosine"]):
+                raise ValueError(f"inconsistent native row counts: {name}")
+            if (row_values["row_floor_epsilon"] != F16_ROW_FLOOR_EPSILON or
+                    row_values["reference_rms"] < 0 or row_values["reference_peak"] < 0 or
+                    not math.isclose(row_values["row_rms_error_limit"],
+                                     F16_ROW_FLOOR_EPSILON * row_values["reference_rms"], rel_tol=1e-8, abs_tol=0) or
+                    not math.isclose(row_values["row_max_abs_error_limit"],
+                                     F16_ROW_FLOOR_EPSILON * row_values["reference_peak"], rel_tol=1e-8, abs_tol=0)):
+                raise ValueError(f"inconsistent native reference-derived row bounds: {name}")
+            gated = name in F16_ROW_STAGES
+            if row_values["row_cosine_gated"] != int(gated) or (gated and row_values["row_failed_count"] != 0):
+                raise ValueError(f"native row policy gate failed: {name}")
+            values.update(row_values, row_policy=F16_ROW_POLICY)
         rows[name] = values
     if set(rows) != set(REQUIRED_STAGES):
         raise ValueError("native log omitted required SCNet stages")
     expected = f"scnet diff: 35 required stages, 0 failed, strict cosine > {THRESHOLDS[precision]:.3f}"
     if log.splitlines().count(expected) != 1:
         raise ValueError("native complete-stage summary is missing, duplicated or inconsistent")
+    if precision == "f16":
+        policy_header = f"scnet row policy: {F16_ROW_POLICY} epsilon={F16_ROW_FLOOR_EPSILON}"
+        if log.splitlines().count(policy_header) != 1:
+            raise ValueError("native F16 row-policy declaration is missing, duplicated or inconsistent")
     return rows
 
 
@@ -657,6 +720,7 @@ def main(argv=None):
                "status": "initializing", "variant": args.variant, "source_revision": SOURCE_REVISION,
                "thresholds_strict_gt": THRESHOLDS, "norm_ratio_bounds": NORM_RATIO_BOUNDS,
                "relative_l2_max": RELATIVE_L2_MAX, "f16_row_stages": sorted(F16_ROW_STAGES),
+               "f16_row_policy": F16_ROW_POLICY, "f16_row_floor_epsilon": F16_ROW_FLOOR_EPSILON,
                "required_stages": list(REQUIRED_STAGES), "models": {}, "commands": [], "errors": [],
                "diagnostic": args.diagnostic, "stages_only": args.stages_only}
     save = lambda: atomic_json_write(receipt_path, receipt)

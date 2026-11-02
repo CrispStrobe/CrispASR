@@ -85,6 +85,21 @@ std::vector<float> exercise(bool blas, int requested, int actual) {
 }
 
 int main() {
+    HParams small, large;
+    small.dims = {4,32,64,128};
+    large.dims = {4,64,128,256};
+    // Exact grids from the two author configurations and pinned SDlayer math.
+    // This calls the same production helper used by every encoder layer.
+    const std::array<std::array<int,4>,3> small_borders = {{{0,359,1162,2049},
+                                                         {0,108,350,616}, {0,33,106,186}}};
+    const std::array<std::array<int,4>,3> large_borders = {{{0,462,1224,2049},
+                                                         {0,159,421,705}, {0,55,146,243}}};
+    for (const auto& boundaries : small_borders)
+        assert(small.band_boundaries(boundaries[3]) == boundaries);
+    for (const auto& boundaries : large_borders)
+        assert(large.band_boundaries(boundaries[3]) == boundaries);
+    // Promoting rounded GGUF F32 fractions would incorrectly produce 598.
+    assert(large.band_boundaries(1000)[2] == 597);
     const auto expected = exercise(false, 1, 1);
     // The production CBLAS dispatch branch is tested without a BLAS dependency:
     // the header retains portable arithmetic, while the single scratch slot and

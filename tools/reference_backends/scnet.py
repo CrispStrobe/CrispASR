@@ -72,7 +72,10 @@ def model_config(variant: str = "scnet") -> dict:
         "sources": list(SOURCES), "audio_channels": 2,
         "dims": [4, 32, 64, 128] if variant == "scnet" else [4, 64, 128, 256],
         "nfft": 4096, "hop_size": 1024, "win_size": 4096, "normalized": True,
-        "band_SR": [0.175, 0.392, 0.433], "band_stride": [1, 4, 16],
+        # The separately published SCNet-large author configuration changes
+        # frequency-band proportions as well as channel widths.
+        "band_SR": [0.175, 0.392, 0.433] if variant == "scnet" else [0.225, 0.372, 0.403],
+        "band_stride": [1, 4, 16],
         "band_kernel": [3, 4, 16], "conv_depths": [3, 2, 1],
         "compress": 4, "conv_kernel": 3, "num_dplayer": 6, "expand": 1,
     }

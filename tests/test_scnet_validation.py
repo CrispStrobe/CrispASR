@@ -60,8 +60,19 @@ def captured_tensors(input_audio=None):
 
 class SCNetValidationControls(unittest.TestCase):
     def log(self, precision="f16", cosine=1.0):
-        rows = [f"[PASS] {name} cos_global={cosine} norm_ratio=1 relative_l2=0 max_abs=0 nonfinite=0 n=4"
-                for name in V.REQUIRED_STAGES]
+        rows = []
+        for name in V.REQUIRED_STAGES:
+            line = f"[PASS] {name} cos_global={cosine} norm_ratio=1 relative_l2=0 max_abs=0 nonfinite=0 n=4"
+            if precision == "f16":
+                line += (f" cos_min=1 rows=1 row_width=4 row_cosine_gated={int(name in V.F16_ROW_STAGES)}"
+                         f" rows_failing_cosine=0 row_policy={V.F16_ROW_POLICY}"
+                         f" row_floor_epsilon={V.F16_ROW_FLOOR_EPSILON} reference_rms=1 reference_peak=1"
+                         f" row_rms_error_limit={V.F16_ROW_FLOOR_EPSILON}"
+                         f" row_max_abs_error_limit={V.F16_ROW_FLOOR_EPSILON}"
+                         " row_rescued_count=0 row_failed_count=0")
+            rows.append(line)
+        if precision == "f16":
+            rows.append(f"scnet row policy: {V.F16_ROW_POLICY} epsilon={V.F16_ROW_FLOOR_EPSILON}")
         rows.append(f"scnet diff: 35 required stages, 0 failed, strict cosine > {V.THRESHOLDS[precision]:.3f}")
         return "\n".join(rows)
 
@@ -83,6 +94,39 @@ class SCNetValidationControls(unittest.TestCase):
                original.replace("norm_ratio=1", "norm_ratio=2", 1),
                original.replace("n=4", "n=0", 1),
                original.replace("max_abs=0", "other=0", 1)]
+        for log in bad:
+            with self.subTest(log=log[:90]), self.assertRaises(ValueError):
+                V.parse_diff(log, "f16")
+
+    def test_native_f16_policy_requires_consistent_declaration_bounds_and_counts(self):
+        original = self.log()
+        header = f"scnet row policy: {V.F16_ROW_POLICY} epsilon={V.F16_ROW_FLOOR_EPSILON}"
+
+        def change_stage(replacements):
+            lines = original.splitlines()
+            index = next(i for i, line in enumerate(lines) if line.startswith("[PASS] skip0 "))
+            for before, after in replacements:
+                lines[index] = lines[index].replace(before, after)
+            return "\n".join(lines)
+
+        rescued = [("cos_min=1", "cos_min=0"), ("rows_failing_cosine=0", "rows_failing_cosine=1"),
+                   ("row_rescued_count=0", "row_rescued_count=1")]
+        self.assertEqual(V.parse_diff(change_stage(rescued), "f16")["skip0"]["row_rescued_count"], 1)
+        bad = [original.replace(header, ""), original + "\n" + header,
+               original.replace("row_policy=" + V.F16_ROW_POLICY, "row_policy=obsolete", 1),
+               original.replace("reference_rms=1", "unreported_rms=1", 1),
+               original.replace("reference_peak=1", "reference_peak=nan", 1),
+               original.replace("row_floor_epsilon=" + str(V.F16_ROW_FLOOR_EPSILON), "row_floor_epsilon=1", 1),
+               change_stage([("row_rms_error_limit=" + str(V.F16_ROW_FLOOR_EPSILON), "row_rms_error_limit=1")]),
+               change_stage([("row_max_abs_error_limit=" + str(V.F16_ROW_FLOOR_EPSILON), "row_max_abs_error_limit=1")]),
+               change_stage([("reference_rms=1", "reference_rms=0")]),
+               change_stage([("row_rescued_count=0", "row_rescued_count=1")]),
+               change_stage([("row_rescued_count=0", "row_rescued_count=-1")]),
+               change_stage([("row_failed_count=0", "row_failed_count=0.5")]),
+               change_stage([("rows=1", "rows=2")]),
+               change_stage([("row_cosine_gated=1", "row_cosine_gated=0")]),
+               change_stage([("cos_min=1", "cos_min=0"), ("rows_failing_cosine=0", "rows_failing_cosine=1"),
+                             ("row_failed_count=0", "row_failed_count=1")])]
         for log in bad:
             with self.subTest(log=log[:90]), self.assertRaises(ValueError):
                 V.parse_diff(log, "f16")
@@ -144,14 +188,141 @@ class SCNetValidationControls(unittest.TestCase):
         self.assertGreater(global_report["cos_global"], .999)
         self.assertEqual(rows["rows_failing_f16_cosine"], 1)
         self.assertEqual(rows["cos_min"], 0)
+        self.assertEqual(rows["row_rescued_count"], 0)
+        self.assertEqual(rows["row_failed_count"], 1)
         zero = V.row_metrics(np.zeros((2, 8)), np.zeros((2, 8)), 8)
         self.assertEqual(zero["zero_row_pairs"], 2)
         self.assertEqual(zero["cos_min"], 1)
+        self.assertEqual(zero["row_failed_count"], 0)
+        self.assertEqual(zero["row_rms_error_limit"], 0)
+        self.assertEqual(zero["row_max_abs_error_limit"], 0)
         one_changed = np.zeros((2, 8))
         one_changed[0, 0] = 1e-30
         mismatch = V.row_metrics(one_changed, np.zeros((2, 8)), 8)
         self.assertEqual(mismatch["zero_row_mismatches"], 1)
         self.assertEqual(mismatch["cos_min"], 0)
+        self.assertEqual(mismatch["row_rescued_count"], 0)
+        self.assertEqual(mismatch["row_failed_count"], 1)
+
+    def test_f16_row_floor_rescues_only_bounded_near_zero_errors(self):
+        epsilon = V.F16_ROW_FLOOR_EPSILON
+        self.assertEqual(epsilon, float(np.finfo(np.float16).eps))
+        reference = np.ones((128, 8), dtype=np.float32)
+        reference[0] = 0
+        actual = reference.copy()
+        actual[0] = epsilon / 2
+        row = V.row_metrics(actual, reference, 8)
+        self.assertEqual(row["row_policy"], "cosine_or_binary16_reference_floor_v1")
+        self.assertEqual(row["cos_min"], 0)
+        self.assertEqual(row["rows_failing_f16_cosine"], 1)
+        self.assertEqual(row["row_rescued_count"], 1)
+        self.assertEqual(row["row_failed_count"], 0)
+        # A reversal below the declared resolution remains reported as -1;
+        # numerical noise and an equally tiny sign reversal are indistinguishable.
+        reference[0] = epsilon / 8
+        actual = reference.copy()
+        actual[0] *= -1
+        row = V.row_metrics(actual, reference, 8)
+        self.assertLess(row["cos_min"], -.999999)
+        self.assertEqual(row["row_rescued_count"], 1)
+        for values in (actual.copy(), reference.copy()):
+            values[0, 0] = np.nan
+            with self.assertRaises(ValueError):
+                V.row_metrics(values, reference, 8)
+            with self.assertRaises(ValueError):
+                V.row_metrics(actual, values, 8)
+
+    def test_f16_row_floor_requires_rms_and_peak_bounds_separately(self):
+        epsilon = V.F16_ROW_FLOOR_EPSILON
+        # High reference peak permits the pointwise error, but its RMS fails.
+        reference = np.zeros((64, 64), dtype=np.float32)
+        reference[0, 0] = 128
+        actual = reference.copy()
+        actual[1] = epsilon * 3
+        row = V.row_metrics(actual, reference, 64)
+        self.assertGreater(epsilon * 3, row["row_rms_error_limit"])
+        self.assertLess(epsilon * 3, row["row_max_abs_error_limit"])
+        self.assertEqual(row["row_failed_count"], 1)
+        self.assertEqual(row["row_rescued_count"], 0)
+        # A single error in a quiet long row has small RMS, but its peak fails.
+        reference = np.ones((128, 64), dtype=np.float32)
+        reference[0] = 0
+        actual = reference.copy()
+        actual[0, 0] = epsilon * 2
+        row = V.row_metrics(actual, reference, 64)
+        self.assertLess(epsilon * 2 / 8, row["row_rms_error_limit"])
+        self.assertGreater(epsilon * 2, row["row_max_abs_error_limit"])
+        self.assertEqual(row["row_failed_count"], 1)
+        self.assertEqual(row["row_rescued_count"], 0)
+
+    def test_f16_row_floor_boundaries_are_inclusive_and_reference_only(self):
+        epsilon = V.F16_ROW_FLOOR_EPSILON
+        reference = np.array([[0., 0.], [2., 0.]])  # whole-stage RMS=1 exactly
+        actual = reference.copy()
+        actual[0] = epsilon
+        at_rms = V.row_metrics(actual, reference, 2)
+        self.assertEqual(at_rms["row_rescued_count"], 1)
+        actual[0] = np.nextafter(epsilon, np.inf)
+        self.assertEqual(V.row_metrics(actual, reference, 2)["row_failed_count"], 1)
+        reference = np.array([[0., 0., 0., 0.], [2., 2., 2., 2.]])
+        actual = reference.copy()
+        actual[0, 0] = epsilon * 2
+        at_peak = V.row_metrics(actual, reference, 4)
+        self.assertEqual(at_peak["row_rescued_count"], 1)
+        actual[0, 0] = np.nextafter(epsilon * 2, np.inf)
+        self.assertEqual(V.row_metrics(actual, reference, 4)["row_failed_count"], 1)
+        # Inflating the candidate must never inflate either reference bound.
+        actual[1:] *= 1024
+        inflated = V.row_metrics(actual, reference, 4)
+        self.assertEqual(inflated["row_rms_error_limit"], at_peak["row_rms_error_limit"])
+        self.assertEqual(inflated["row_max_abs_error_limit"], at_peak["row_max_abs_error_limit"])
+        self.assertEqual(inflated["row_failed_count"], 1)
+
+    def test_quiet_reversal_still_fails_and_common_scaling_preserves_row_policy(self):
+        reference = np.ones((2000, 8), dtype=np.float32)
+        reference[0] = .015  # tiny whole-stage energy; reversal is ~31 floor budgets
+        actual = reference.copy()
+        actual[0] *= -1
+        self.assertTrue(V.tensor_metrics(actual, reference, "f16")["acceptance"])
+        row = V.row_metrics(actual, reference, 8)
+        self.assertLess(row["cos_min"], -.999999)
+        self.assertEqual(row["row_rescued_count"], 0)
+        self.assertEqual(row["row_failed_count"], 1)
+        self.assertGreater(.03 / row["row_rms_error_limit"], 30)
+        self.assertLess(.03 / row["row_rms_error_limit"], 32)
+        for scale in (2. ** -20, 2. ** 20):
+            scaled = V.row_metrics(actual * scale, reference * scale, 8)
+            for key in ("rows_failing_f16_cosine", "row_rescued_count", "row_failed_count"):
+                self.assertEqual(row[key], scaled[key])
+            self.assertEqual(scaled["row_rms_error_limit"], row["row_rms_error_limit"] * scale)
+            self.assertEqual(scaled["row_max_abs_error_limit"], row["row_max_abs_error_limit"] * scale)
+
+    def test_independent_capture_gate_uses_row_policy_without_gating_quants(self):
+        with tempfile.TemporaryDirectory() as directory:
+            work = Path(directory)
+            reference = np.ones((2000, 8), dtype="<f4")
+            reference[0] = 0
+
+            def capture(name, values):
+                tensors = captured_tensors()
+                index = next(i for i, tensor in enumerate(tensors) if tensor[0] == "skip1")
+                tensors[index] = ("skip1", [8, 2000], 0, values.tobytes())
+                return V.GGUFFile(write_gguf(work / name, tensors))
+
+            original = capture("original.gguf", reference)
+            actual = reference.copy()
+            actual[0] = V.F16_ROW_FLOOR_EPSILON / 2
+            candidate = capture("quiet.gguf", actual)
+            self.assertTrue(V.all_pass(V.compare_captures(candidate, original, "f16")))
+            actual = reference.copy()
+            actual[1, :4] *= -1
+            candidate = capture("altered-row.gguf", actual)
+            self.assertFalse(V.all_pass(V.compare_captures(candidate, original, "f16")))
+            for precision in ("q8_0", "q4_k"):
+                report = V.compare_captures(candidate, original, precision)
+                self.assertTrue(V.all_pass(report))
+                self.assertEqual(report["skip1"]["row_failed_count"], 1)
+                self.assertFalse(report["skip1"]["row_cosine_gated"])
 
     def model_metadata(self, precision):
         return {"general.architecture": "scnet", "general.file_type": V.FILE_TYPES[precision],

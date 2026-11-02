@@ -42,6 +42,14 @@ from reference_backends.scnet import (  # noqa: E402
 )
 
 MUSIC_URL = "https://download.pytorch.org/torchaudio/tutorial-assets/hdemucs_mix.wav"
+# First author-linked downloads, retained in run 41397985492. These identify
+# the tested release bytes; they are discovered hashes, not author attestations.
+RECORDED_CHECKPOINT_SHA256 = {
+    "scnet": "f8aff3bc8dd816aad392800d9d69519add719a2fbd22550af6f8cb2138d25ff5",
+    "scnet-large": "719e5abb8ed920305dad546ac3cd6fb0b1e9c3092d14ce21827bfc0423af3070",
+}
+RECORDED_LARGE_CONFIG_SHA256 = "629a4901184bf1d3a75b0b13904f35974785aa042cad3c010fd576248cdce3f0"
+RECORDED_MUSIC_SHA256 = "f2420feedcdee9591dd649442c81149e31a0c06ee8c6e655d93d8f8e742cf706"
 MUSIC_ATTRIBUTION = {
     "title": "A Classic Education - NightOwl", "license": "CC BY-NC-SA 4.0",
     "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
@@ -53,7 +61,8 @@ LARGE_CONFIG_URL = "https://drive.google.com/file/d/1qxK7SZx6-Gsp1s3wCrj98X7--Uc
 SOURCE_FILES = (
     "src/scnet.cpp", "src/scnet.h", "src/scnet_fft.h", "src/scnet_lstm.h", "src/scnet_shift.h",
     "tools/scnet_probe.cpp", "tools/scnet_exports.cpp", "tools/validate_scnet.py",
-    "tools/ci-heavy/scnet_qualify.py", "tools/dump_scnet_reference.py",
+    "tools/ci-heavy/scnet_qualify.py", "tools/ci-heavy/scnet_precision_diagnostics.py",
+    "tools/ci-heavy/scnet_runtime_profile.py", "tools/dump_scnet_reference.py",
     "tools/reference_backends/scnet.py", "tools/requirements-scnet.txt",
     "models/convert-scnet-to-gguf.py", "models/licenses/SCNet-MIT.txt",
     "tests/test-scnet-converter.py", "tests/test-scnet-reference.py", "tests/test-scnet-native-diff.py",
@@ -172,7 +181,7 @@ class Qualification:
             event.update(seconds=time.monotonic() - start, finished_at=utc_now())
             self.save()
 
-    def asset(self, name, path, url, google=False):
+    def asset(self, name, path, url, google=False, expected_sha256=None):
         provenance_path = path.with_name(path.name + ".provenance.json")
         if path.exists():
             if not provenance_path.is_file():
@@ -199,7 +208,12 @@ class Qualification:
             provenance = {"source_url": url, "sha256": sha256(path), "bytes": path.stat().st_size,
                           "discovered_at": utc_now(), "digest_status": "discovered on first public download; not author-attested"}
             write_json(provenance_path, provenance)
+        if expected_sha256 is not None:
+            provenance["recorded_release_sha256"] = expected_sha256
+            provenance["matches_recorded_release"] = provenance["sha256"] == expected_sha256
         write_json(self.output / f"{name}-provenance.json", provenance)
+        if expected_sha256 is not None and not provenance["matches_recorded_release"]:
+            raise ValueError(f"download differs from the recorded release bytes: {name}")
         return provenance
 
 
@@ -315,20 +329,22 @@ def qualify(run):
     run.run("converter-controls", [sys.executable, ROOT / "tests/test-scnet-converter.py", "-v"])
     run.run("original-observer-controls", [sys.executable, ROOT / "tests/test-scnet-reference.py", "-v"])
     checkpoint = args.assets_dir / f"{args.variant}-author.th"
-    checkpoint_provenance = run.asset("checkpoint", checkpoint, CHECKPOINT_URLS[args.variant], google=True)
+    checkpoint_provenance = run.asset("checkpoint", checkpoint, CHECKPOINT_URLS[args.variant], google=True,
+                                     expected_sha256=RECORDED_CHECKPOINT_SHA256[args.variant])
     checkpoint_digest = checkpoint_provenance["sha256"]
     run.receipt["checkpoint"] = checkpoint_provenance
     config = source / "conf/config.yaml"
     if args.variant == "scnet-large":
         config = args.assets_dir / "scnet-large-author-config.yaml"
-        run.receipt["config"] = run.asset("large-config", config, LARGE_CONFIG_URL, google=True)
+        run.receipt["config"] = run.asset("large-config", config, LARGE_CONFIG_URL, google=True,
+                                         expected_sha256=RECORDED_LARGE_CONFIG_SHA256)
     else:
         run.receipt["config"] = {"sha256": sha256(config), "source_revision": SOURCE_REVISION,
                                    "source_path": "conf/config.yaml"}
     shutil.copyfile(config, run.output / "source-snapshot/SCNet/author-config.yaml")
     run.save()
     music = args.assets_dir / "hdemucs_mix.wav"
-    run.asset("music", music, MUSIC_URL)
+    run.asset("music", music, MUSIC_URL, expected_sha256=RECORDED_MUSIC_SHA256)
     full_audio, smoke_audio = args.assets_dir / "music-first-24s.wav", args.assets_dir / "music-first-0.25s.wav"
     run.receipt["fixture"] = run.step("prepare-fixture", lambda: prepare_fixture(music, full_audio, smoke_audio))
     write_json(run.output / "fixture-provenance.json", run.receipt["fixture"])
@@ -349,9 +365,35 @@ def qualify(run):
     smoke_reference, full_reference = args.assets_dir / "reference-raw-smoke.gguf", args.assets_dir / "reference-full.gguf"
     reference_command = [sys.executable, ROOT / "tools/dump_scnet_reference.py", *common, "--device", "cpu", "--threads", args.threads]
     run.run("reference-raw-smoke", [*reference_command, "--audio", smoke_audio, "--raw", "--output", smoke_reference])
-    run.run("native-raw-smoke", [binaries["scnet-probe"], "scnet", models["f16"], smoke_reference, smoke_audio],
-            extra_env={"CRISPASR_SCNET_CAPTURE_GGUF": str(args.assets_dir / "native-raw-smoke.gguf")})
+    smoke_capture = args.assets_dir / "native-raw-smoke.gguf"
+    smoke_code = run.run("native-raw-smoke", [binaries["scnet-probe"], "scnet", models["f16"], smoke_reference, smoke_audio],
+            required=False, extra_env={"CRISPASR_SCNET_CAPTURE_GGUF": str(smoke_capture)})
+    run.receipt["raw_smoke"] = {"returncode": smoke_code, "acceptance": smoke_code == 0}
+    run.save()
     shutil.copyfile(smoke_reference.with_name(smoke_reference.name + ".json"), run.output / "reference-raw-smoke.json")
+    if smoke_code != 0:
+        # Keep the failed gate in errors/acceptance, but gather independent
+        # storage/arithmetic evidence and the complete default inference path.
+        # These diagnostic models/captures never replace the original oracle.
+        diagnostic_model = args.assets_dir / f"{args.variant}-diagnostic-f32.gguf"
+        diagnostic_capture = args.assets_dir / "native-raw-f32-diagnostic.gguf"
+        converted = run.run("diagnostic-convert-f32", [sys.executable, ROOT / "models/convert-scnet-to-gguf.py", *common,
+            "--config", config, "--output", diagnostic_model, "--dtype", "f32"], required=False)
+        if converted == 0:
+            run.run("diagnostic-native-f32", [binaries["scnet-probe"], "scnet", diagnostic_model, smoke_reference, smoke_audio],
+                required=False, extra_env={"CRISPASR_SCNET_CAPTURE_GGUF": str(diagnostic_capture)})
+        if smoke_capture.is_file():
+            diagnostic_command = [sys.executable, ROOT / "tools/ci-heavy/scnet_precision_diagnostics.py", *common,
+                "--reference-a", smoke_reference, "--native-capture", smoke_capture,
+                "--native-f16-model", models["f16"], "--threads", args.threads,
+                "--output-dir", run.output / "precision-diagnostics"]
+            if diagnostic_capture.is_file():
+                diagnostic_command += ["--native-f32-capture", diagnostic_capture, "--native-f32-model", diagnostic_model]
+            run.run("diagnostic-precision-isolation", diagnostic_command, required=False)
+        run.run("diagnostic-native-runtime", [sys.executable, ROOT / "tools/ci-heavy/scnet_runtime_profile.py",
+            "--library", validation_library, "--model", models["f16"], "--audio", full_audio,
+            "--threads", args.threads, "--calls", 3, "--output", run.output / "native-runtime-diagnostic.json"],
+            required=False)
     run.run("reference-full", [*reference_command, "--audio", full_audio, "--output", full_reference])
     shutil.copyfile(full_reference.with_name(full_reference.name + ".json"), run.output / "reference-full.json")
     validation_dir = run.output / "validation"
@@ -367,6 +409,11 @@ def qualify(run):
     run.receipt["validation"] = {"receipt": "validation/validation.json", "returncode": validation_code,
                                   "complete": validation.get("complete", False),
                                   "acceptance": validation.get("acceptance", False)}
+    if smoke_code == 0 and not validation.get("acceptance", False):
+        run.run("diagnostic-native-runtime", [sys.executable, ROOT / "tools/ci-heavy/scnet_runtime_profile.py",
+            "--library", validation_library, "--model", models["f16"], "--audio", full_audio,
+            "--threads", args.threads, "--calls", 3, "--output", run.output / "native-runtime-diagnostic.json"],
+            required=False)
     surfaces = run.receipt["surfaces"] = {}
     for precision, path in models.items():
         code = run.run("production-surface-" + precision, [sys.executable, ROOT / "tests/test-scnet-surface.py",
@@ -380,7 +427,8 @@ def qualify(run):
     for precision, path in models.items():
         if sha256(path) != run.receipt["models"][precision]["sha256"]:
             raise ValueError(f"converted model changed during qualification: {precision}")
-    run.receipt["complete"] = bool(validation.get("complete", False) and all(row["returncode"] is not None for row in surfaces.values()))
+    run.receipt["complete"] = bool(smoke_code is not None and validation.get("complete", False)
+                                   and all(row["returncode"] is not None for row in surfaces.values()))
     run.receipt["acceptance"] = bool(validation_code == 0 and validation.get("acceptance", False)
                                       and all(row["acceptance"] for row in surfaces.values()) and not run.receipt["errors"])
     run.receipt["status"] = "passed" if run.receipt["acceptance"] else "not_qualified"
