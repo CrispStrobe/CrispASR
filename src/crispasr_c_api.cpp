@@ -3511,6 +3511,17 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         return s;
     }
 #endif
+    // Speech-enhancement GGUFs (crispasr_enhancer's model table) are a pre-pass,
+    // not a transcription session: say how to run them instead of failing as an
+    // unknown backend.
+    if (s->backend == "mossformergan-se" || s->backend == "mossformergan_se") {
+        fprintf(stderr,
+                "crispasr_session_open: '%s' is a speech-enhancement model (%s); open an ASR model and call "
+                "crispasr_session_set_enhance(session, \"%s\"), or use crispasr_enhance_audio_spec()\n",
+                model_path, s->backend.c_str(), model_path);
+        delete s;
+        return nullptr;
+    }
 #ifdef CA_HAVE_MINI_BS_ROFORMER
     if (s->backend == "mini-bs-roformer" || s->backend == "mini_bs_roformer" || s->backend == "mini-bs-roformer-v2.5") {
         auto mp = mini_bs_roformer_default_params();
@@ -5305,6 +5316,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #ifdef CA_HAVE_MOSSFORMER2_SS
     list += ",mossformer2-ss";
 #endif
+    // Enhancement model GGUFs: runtime-ready through crispasr_session_set_enhance /
+    // crispasr_enhance_audio_spec (crispasr_enhance_model_archs()), not session_open.
+    list += ",mossformergan-se";
 #ifdef CA_HAVE_CREPE
     list += ",crepe";
 #endif

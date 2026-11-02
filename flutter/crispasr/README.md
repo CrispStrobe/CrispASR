@@ -2,7 +2,7 @@
 
 Dart / Flutter FFI bindings for [CrispASR](https://github.com/CrispStrobe/CrispASR) — lightweight on-device speech recognition and speech tooling via ggml.
 
-The native project currently ships 145 backends, 69 TTS engines, language detection, punctuation, diarization, translation and chat/text helpers. This package exposes the Dart FFI API and expects the native `libcrispasr` library to be installed or bundled by the application.
+The native project currently ships 146 backends, 69 TTS engines, language detection, punctuation, diarization, translation and chat/text helpers. This package exposes the Dart FFI API and expects the native `libcrispasr` library to be installed or bundled by the application.
 
 ## Install
 

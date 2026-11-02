@@ -9,6 +9,7 @@
 #endif
 
 #include "gguf.h"
+#include "mossformergan_se.h"
 
 #include <algorithm>
 #include <cctype>
@@ -20,8 +21,10 @@
 // <name>_enhance_ops()` and is listed here.
 // ---------------------------------------------------------------------------
 static const CrispasrEnhanceModelOps* const* enhance_model_table(int* n) {
-    static const CrispasrEnhanceModelOps* const table[] = {nullptr};
-    *n = 0;
+    static const CrispasrEnhanceModelOps* const table[] = {
+        mossformergan_se_enhance_ops(),
+    };
+    *n = (int)(sizeof(table) / sizeof(table[0]));
     return table;
 }
 

@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (339 lessons)
+## Index by topic (340 lessons)
 
 **Security & untrusted input** (2)
 
@@ -200,7 +200,7 @@ cross-reference when you already know which model you are touching.
 - L19665 — 2026-10-09 — Output flags do not invalidate a cached graph allocation plan (Nemotron layer diagnostics)
 - L19843 — MossFormer2 — `ggml_ssm_conv` as a depthwise Conv1d is a latent CUDA abort for most kernel widths
 
-**GPU portability — Metal / CUDA / Vulkan** (29)
+**GPU portability — Metal / CUDA / Vulkan** (30)
 
 - L174 — A GPU decoder can spend most of its time in one scalar CPU projection before the decode loop
 - L1871 — When the full system needs an unavailable resource (model / GPU), factor the risky logic into a pure helper and prove IT on synthetic data
@@ -231,6 +231,7 @@ cross-reference when you already know which model you are touching.
 - L19546 — 2026-10-06 — A carried patch in two files loses one half when upstream splits a file (ggml Metal `_hp` kernel)
 - L19594 — 2026-10-06 — Before blaming a dependency bump for a red GPU suite, check what the suite does not do, then run the baseline
 - L19743 — Granite5 quantization and actual CUDA work evidence
+- L19866 — MossFormerGAN-SE — depthwise sequence convs: CWHN conv_2d_dw_direct, not ssm_conv; per-tap convs beat im2col
 
 **Quantization** (11)
 

@@ -66,6 +66,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_htdemucs_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mel_band_roformer_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mini_bs_roformer_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mossformer2_ss_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_mossformergan_se_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_crepe_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_btc_chords_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_tabcnn_backend();
@@ -303,6 +304,9 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& requ
         return crispasr_make_mini_bs_roformer_backend();
     if (name == "mossformer2-ss" || name == "mossformer2_ss" || name == "mossformer2-ss-16k")
         return crispasr_make_mossformer2_ss_backend();
+    if (name == "mossformergan-se" || name == "mossformergan_se" || name == "mossformergan-se-16k" ||
+        name == "mossformergan")
+        return crispasr_make_mossformergan_se_backend();
     if (name == "mel-band-roformer" || name == "mel_band_roformer" || name == "melbandroformer" || name == "mbr")
         return crispasr_make_mel_band_roformer_backend();
     if (name == "crepe" || name == "crepe-tiny" || name == "crepe-full" || name == "pitch")
@@ -530,6 +534,7 @@ std::vector<std::string> crispasr_list_backends() {
         "mel-band-roformer",
         "mini-bs-roformer",
         "mossformer2-ss",
+        "mossformergan-se",
         "crepe",
         "btc-chords",
         "tabcnn",
@@ -745,6 +750,8 @@ static std::string detect_backend_unchecked(const std::string& model_path) {
         return "mini-bs-roformer";
     if (contains_ci("mossformer2-ss") || contains_ci("mossformer2_ss"))
         return "mossformer2-ss";
+    if (contains_ci("mossformergan"))
+        return "mossformergan-se";
     if (contains_ci("mel-band-roformer") || contains_ci("mel_band_roformer") || contains_ci("roformer"))
         return "mel-band-roformer";
     if (contains_ci("crepe"))
