@@ -63,6 +63,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_gemma4_e2b_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_omniasr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mimo_asr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_htdemucs_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_frcrn_se_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mel_band_roformer_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mini_bs_roformer_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mossformer2_ss_backend();
@@ -301,6 +302,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& requ
         return crispasr_make_glm_asr_backend();
     if (name == "htdemucs" || name == "demucs" || name == "htdemucs-ft")
         return crispasr_make_htdemucs_backend();
+    if (name == "frcrn-se" || name == "frcrn_se" || name == "frcrn")
+        return crispasr_make_frcrn_se_backend();
     if (name == "mini-bs-roformer" || name == "mini_bs_roformer" || name == "mini-bs-roformer-v2.5")
         return crispasr_make_mini_bs_roformer_backend();
     if (name == "mossformer2-ss" || name == "mossformer2_ss" || name == "mossformer2-ss-16k")
@@ -534,6 +537,7 @@ std::vector<std::string> crispasr_list_backends() {
         "omnivoice",
         "omnivoice-singing",
         "htdemucs",
+        "frcrn-se",
         "mel-band-roformer",
         "mini-bs-roformer",
         "mossformer2-ss",
@@ -750,6 +754,8 @@ static std::string detect_backend_unchecked(const std::string& model_path) {
 
     if (contains_ci("htdemucs") || contains_ci("demucs"))
         return "htdemucs";
+    if (contains_ci("frcrn"))
+        return "frcrn-se";
     if (contains_ci("mini-bs-roformer") || contains_ci("mini_bs_roformer"))
         return "mini-bs-roformer";
     if (contains_ci("mossformer2-ss") || contains_ci("mossformer2_ss"))

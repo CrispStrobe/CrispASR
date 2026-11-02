@@ -214,6 +214,10 @@ export CRISPASR_MODEL_BTC_CHORDS="${CRISPASR_MODEL_BTC_CHORDS:-$CRISPASR_MODELS_
 # TabCNN guitar tablature (--tab). CC BY 4.0 weights, cstr/tabcnn-GGUF.
 export CRISPASR_MODEL_TABCNN="${CRISPASR_MODEL_TABCNN:-$CRISPASR_MODELS_DIR/tabcnn-f16.gguf}"
 
+# FRCRN_SE_16K speech enhancement (--enhance), Apache-2.0. No published GGUF:
+# convert with models/convert-frcrn-se-to-gguf.py (docs/frcrn-se.md).
+export CRISPASR_MODEL_FRCRN_SE="${CRISPASR_MODEL_FRCRN_SE:-$CRISPASR_MODELS_DIR/frcrn-se-16k-f16.gguf}"
+
 echo "Live test env configured (CRISPASR_MODELS_DIR=$CRISPASR_MODELS_DIR)"
 
 # qwen3-tts live tests

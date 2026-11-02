@@ -90,6 +90,7 @@ add_executable(${TARGET}
     crispasr_backend_mossformer2_ss.cpp
     crispasr_backend_mossformergan_se.cpp
     crispasr_backend_mossformer2_se.cpp
+    crispasr_backend_frcrn_se.cpp
     crispasr_backend_kyutai_stt.cpp
     crispasr_backend_firered_asr.cpp
     crispasr_backend_moonshine.cpp
