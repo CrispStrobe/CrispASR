@@ -119,6 +119,7 @@ static const std::vector<std::pair<std::string, std::string>>& converter_archs()
         {"htdemucs", "htdemucs"},
         {"mel-band-roformer", "mel-band-roformer"},
         {"mini-bs-roformer", "mini-bs-roformer"},
+        {"mossformergan-se", "mossformergan-se"},
         {"crepe", "crepe"},
         {"btc", "btc-chords"},
         {"tabcnn", "tabcnn"},
@@ -267,6 +268,7 @@ TEST_CASE("every emitted backend name is a name a surface can open", "[unit][arc
         "htdemucs",
         "mel-band-roformer",
         "mini-bs-roformer",
+        "mossformergan-se",
         "crepe",
         "btc-chords",
         "tabcnn",
@@ -371,6 +373,8 @@ TEST_CASE("crispasr_detect_backend_from_gguf reads the shared table", "[unit][ar
         {"mini-bs-roformer", "mini-bs-roformer"},
         {"mini_bs_roformer", ""},
         {"mini-bs-roformer-v2.5", ""},
+        {"mossformergan-se", "mossformergan-se"},
+        {"mossformergan_se", ""},
         {"not-a-real-architecture", ""},
     };
     for (const auto& p : probes) {

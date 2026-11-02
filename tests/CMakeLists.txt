@@ -6793,3 +6793,9 @@ catch_discover_tests(test-enhance-abi
     TEST_SPEC "[unit]"
     PROPERTIES LABELS "unit"
 )
+
+# ---------------------------------------------------------------------------
+# MossFormerGAN_SE_16K speech enhancement (ClearerVoice-Studio)
+# Parity tool against tools/dump_mossformergan_se_reference.py dumps (manual).
+add_executable(mossformergan-se-parity mossformergan-se-parity.cpp)
+target_link_libraries(mossformergan-se-parity PRIVATE mossformergan-se)
