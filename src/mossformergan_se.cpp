@@ -157,7 +157,7 @@ bool profile_cb(ggml_tensor* t, bool ask, void* user) {
     p->count[key]++;
     return true;
 }
-constexpr size_t kChunkBytes = 256ull << 20;
+constexpr size_t kChunkBytes = 160ull << 20; // per T x T score chunk (two live per chunk)
 
 ggml_tensor* req(mfg_model& m, const std::string& name) {
     auto it = m.wl.tensors.find(name);
@@ -477,10 +477,9 @@ struct graph_builder {
             ggml_tensor* kc = ggml_view_3d(ctx, k, d, L, bc, k->nb[1], k->nb[2], b0 * k->nb[2]);
             ggml_tensor* vc = ggml_view_3d(ctx, vals, L, Dv, bc, vals->nb[1], vals->nb[2], b0 * vals->nb[2]);
             ggml_tensor* s = ggml_mul_mat(ctx, kc, qc); // [Lk, Lq, bc]
-            s = ggml_relu_inplace(ctx, s);
-            s = ggml_sqr_inplace(ctx, s);
             if (mask)
                 s = ggml_mul_inplace(ctx, s, mask);
+            s = ggml_reglu_split(ctx, s, s);           // relu(s) * s == relu(s)^2, one pass
             ggml_tensor* o = ggml_mul_mat(ctx, vc, s); // [Dv, Lq, bc]
             o = ggml_scale(ctx, o, scale);
             if (!permuted) {
