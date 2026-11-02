@@ -180,6 +180,13 @@ int main(int argc, char** argv) {
         std::printf("TIME_ENHANCE %.3f\n", dt);
     }
     mossformergan_se_free(ctx);
+    {
+        std::ifstream st("/proc/self/status"); // Linux: peak resident set size
+        std::string line;
+        while (std::getline(st, line))
+            if (line.rfind("VmHWM:", 0) == 0)
+                std::printf("peak RSS %s\n", line.c_str() + 6);
+    }
     std::printf("%s\n", fails ? "PARITY FAIL" : "PARITY OK");
     return fails ? 1 : 0;
 }
