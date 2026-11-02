@@ -1,3 +1,19 @@
+## 2026-11-02 — Lint Deep green, #564 MOSS-Diarize sampling, #567 parakeet-unified tokenizer
+
+Lint Deep (cppcheck 2.7) is green again after four fixes: the ArkTTS destructor no
+longer calls a virtual, the Mini-BS-RoFormer finiteness lambda became a function,
+the parakeet KDA null check was simplified, and the new sampler comparator was split.
+#564: MOSS-Transcribe-Diarize now honours the Session/CLI beam size and gains
+optional HF-order sampling (temperature → top-k → top-p, seeded) via the shared
+`src/core/logit_sampler.h`; greedy remains default and beam search takes precedence.
+Hosted CPU acceptance **41417217786** passed on JFK (CLI and Python Session).
+#567: `cstr/parakeet-unified-en-0.6b-GGUF` shipped parakeet-rnnt-0.6b's token list
+(same size, different order). The unified `.nemo` is a tar holding its own
+`tokenizer.model`; the converter now uses it and asserts the last piece is `¥`.
+Both published files were rewritten (weights unchanged) and decode JFK exactly; the
+card now names the correct base model, RNNT decoder and NVIDIA Open Model License.
+Replies posted on #562 (Mini-BS-RoFormer usage) and draft PR #566 (SCNet review).
+
 ## 2026-10-30 — v0.8.49 Audio8-TTS (ArkTTS 0.6B), standalone LID, and Qwen3 context
 
 Release v0.8.49 completes integration of the Audio8-TTS (ArkTTS 0.6B) dual-autoregressive
