@@ -38,6 +38,7 @@ SOURCES = (
     "src/scnet.cpp", "src/scnet.h", "src/scnet_fft.h", "src/scnet_lstm.h", "src/scnet_shift.h",
     "src/scnet_activation.h", "src/scnet_tensor.h", "src/scnet_im2col.h",
     "tests/test-scnet-math.py", "tests/test-scnet-tensor.cpp", "tests/test-scnet-im2col.py",
+    "tests/test-scnet-fft.py", "tests/test-scnet-blas-threads.cpp", "ggml/src/ggml-blas/ggml-blas.cpp",
     "src/CMakeLists.txt", "CMakeLists.txt", "tools/scnet_exports.cpp", "tools/validate_scnet.py",
     "models/convert-scnet-to-gguf.py", "tools/reference_backends/scnet.py", "tools/requirements-scnet.txt",
     "tools/ci-heavy/scnet_qualify.py", "tools/ci-heavy/scnet_profile.py", ".github/workflows/scnet-profile.yml",
@@ -254,7 +255,7 @@ def paired_worker(args):
                        original_provenance=blueprint._scnet_provenance)
         native = NativeModel(library, model, 2, PROFILE)
         receipt.update(native_backend=native.backend, native_compute_precision=native.compute_precision,
-                       native_blas_thread_queries=native.blas_thread_queries)
+                       native_blas_thread_queries=native.blas_thread_queries, runtime=runtime_provenance(library))
         save()
 
         def original():

@@ -37,10 +37,13 @@ struct LstmTiming {
 // Workers own disjoint batch rows; there are no cross-worker reductions.
 // The ordinary specialization contains no clock reads or timing branches in
 // either inner loop. Profiling is selected once per direction, by the caller.
+// When input_bias is present, projected contains the raw input projection.
+// Add its bias at consumption with the same grouping as a separate F32 add:
+// (recurrent_projection + recurrent_bias) + (projected + input_bias).
 template <bool Profile>
 inline void lstm_direction_impl(const float* projected, const float* recurrent_weight, const float* recurrent_bias,
                                 float* output, int hidden, int batch, int steps, bool reverse, int begin, int end,
-                                bool use_blas, LstmScratch& scratch, LstmTiming* timing) {
+                                bool use_blas, LstmScratch& scratch, LstmTiming* timing, const float* input_bias) {
     const auto gate_kernel = scnet_activation::selected_kernel();
     using Clock = std::chrono::steady_clock;
     Clock::time_point phase_start;
@@ -104,8 +107,13 @@ inline void lstm_direction_impl(const float* projected, const float* recurrent_w
             float* c = scratch.cell.data() + static_cast<size_t>(row) * hidden;
             float* out =
                 output + (static_cast<size_t>(time) * batch + begin + row) * 2 * hidden + (reverse ? hidden : 0);
-            for (int k = 0; k < gates; ++k)
-                ph[k] = (ph[k] + recurrent_bias[k]) + px[k];
+            if (input_bias) {
+                for (int k = 0; k < gates; ++k)
+                    ph[k] = (ph[k] + recurrent_bias[k]) + (px[k] + input_bias[k]);
+            } else {
+                for (int k = 0; k < gates; ++k)
+                    ph[k] = (ph[k] + recurrent_bias[k]) + px[k];
+            }
             gate_kernel.update(ph, c, h, out, hidden);
         }
         if constexpr (Profile) {
@@ -117,12 +125,13 @@ inline void lstm_direction_impl(const float* projected, const float* recurrent_w
 
 inline void lstm_direction(const float* projected, const float* recurrent_weight, const float* recurrent_bias,
                            float* output, int hidden, int batch, int steps, bool reverse, int begin, int end,
-                           bool use_blas, LstmScratch& scratch, LstmTiming* timing = nullptr) {
+                           bool use_blas, LstmScratch& scratch, LstmTiming* timing = nullptr,
+                           const float* input_bias = nullptr) {
     if (timing)
         lstm_direction_impl<true>(projected, recurrent_weight, recurrent_bias, output, hidden, batch, steps, reverse,
-                                  begin, end, use_blas, scratch, timing);
+                                  begin, end, use_blas, scratch, timing, input_bias);
     else
         lstm_direction_impl<false>(projected, recurrent_weight, recurrent_bias, output, hidden, batch, steps, reverse,
-                                   begin, end, use_blas, scratch, nullptr);
+                                   begin, end, use_blas, scratch, nullptr, input_bias);
 }
 } // namespace scnet_detail

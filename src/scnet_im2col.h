@@ -57,4 +57,27 @@ inline void im2col_rows(const float* source, float* destination, const Im2ColSha
     }
 }
 
+// The same values and kernel order as im2col_rows, transposed into contiguous
+// ggml [N=Tout*Fout,K=Kt*Kf*C]. Each kernel row contains complete time spans,
+// allowing memcpy from the original [T,F,C] input even for a cropped frequency
+// view. CPU BLAS OUT_PROD can consume this layout and write [N,Cout] directly.
+// Workers own complete kernel rows using the actual scheduler worker count.
+inline void im2col_columns(const float* source, float* destination, const Im2ColShape& shape, size_t frequency_stride,
+                           size_t channel_stride, int worker, int workers) {
+    const int kernel = shape.time_kernel * shape.frequency_kernel;
+    const int columns = shape.channels * kernel;
+    const size_t positions = size_t(shape.times) * shape.frequencies;
+    for (int column = worker; column < columns; column += workers) {
+        const int channel = column / kernel;
+        const int kf = (column % kernel) / shape.time_kernel;
+        const int kt = column % shape.time_kernel;
+        const float* input = source + size_t(channel) * channel_stride + size_t(kf) * frequency_stride + kt;
+        float* output = destination + size_t(column) * positions;
+        for (int frequency = 0; frequency < shape.frequencies; ++frequency)
+            std::memcpy(output + size_t(frequency) * shape.times,
+                        input + size_t(frequency) * shape.frequency_stride * frequency_stride,
+                        size_t(shape.times) * sizeof(float));
+    }
+}
+
 } // namespace scnet_detail

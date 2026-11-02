@@ -86,8 +86,24 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   fixture. Forced-scalar F16 runs reproduce all 35 earlier native tensor payloads
   exactly, isolating the layout changes from the activation approximation.
   See [optimization controls](docs/historical/scnet-runtime-optimization-controls-2026-11-02.json).
-- Next action: measure the runtime changes in the bounded hosted profile and
-  separate uninstrumented F16 paired smoke, then rerun all original-checkpoint,
+- The [optimized focused run](docs/historical/scnet-runtime-optimized-profile-2026-11-02.json)
+  at `4264d2e` passes all four final-waveform gates for small F16 in both warmups
+  and all three alternating timing pairs, but native median 21.761 seconds still
+  exceeds the same-host original median 16.406 seconds. The instrumented run
+  attributes 1.592 seconds to gates, 4.378 seconds to recurrent GEMMs, 6.942 seconds
+  to other BLAS operations, and 2.817 seconds to internal FFT nodes. This worker
+  uses EPYC 9V74 hardware; earlier cross-host timings are descriptive only.
+  This diagnostic checks no intermediate stages or quantized models, and its
+  overall acceptance and qualification remain false.
+- Exact SIMD FFT, convolution column layout and grouped recurrent bias fusion
+  now pass all 35 original-reference stages for both sizes and all three formats
+  in fresh genuine short probes. Actual OpenBLAS outer-product routing is
+  verified in every case. [The controls](docs/historical/scnet-fft-convolution-controls-2026-11-02.json)
+  retain component identities and numerical scope. Dependency [ggml PR #6](https://github.com/CrispStrobe/ggml/pull/6)
+  fixes the first outer product's thread budget; its exact source is pinned.
+- Next action: repeat the bounded F16 profile and paired smoke on the combined
+  runtime changes under the same two-thread budget. Once waveform and speed
+  gates pass, rerun all original-checkpoint,
   raw, full-pipeline, CLI/Session and paired
   performance gates through `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566).
   Complete CPU qualification, GPU qualification and held-out quality remain unproven; do not promote the

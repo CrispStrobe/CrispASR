@@ -71,6 +71,23 @@ separate those layout identity checks from SIMD numerical checks and retain the
 short-input limitation. Hosted full-pipeline timing and qualification remain
 required for the changed runtime.
 
+The [next focused run](https://github.com/CrispStrobe/CrispASR/actions/runs/41414623405)
+at `4264d2e` passes all four final-waveform gates, including both warmups and
+every call in three alternating timing pairs. Its native median is **21.761 s**
+versus **16.406 s** original on the same EPYC 9V74 host with two threads, so
+the speed target still fails. The [retained profile](historical/scnet-runtime-optimized-profile-2026-11-02.json)
+records 4.378 s in recurrent GEMMs, 6.942 s in other BLAS operations, and
+2.817 s in internal FFT nodes. This smoke does not capture all 35 full stages.
+Earlier profiles used a different CPU; their absolute runtimes are descriptive.
+
+The subsequent exact SIMD FFT, convolution column layout, and recurrent bias
+fusion pass all 35 original-reference stages for both sizes and all three
+formats on the genuine short fixture. The [control receipt](historical/scnet-fft-convolution-controls-2026-11-02.json)
+includes actual OpenBLAS graph routing, independent FFT checks, scalar/SIMD
+byte comparisons, and the unchanged numerical policy. These remain numerical
+diagnostics; fresh complete fidelity, surface and performance qualification
+is required for the new source.
+
 ## Inference behavior
 
 Default inference follows the published helper's 20-second segments, 50%
@@ -103,6 +120,19 @@ when available and otherwise use the scalar implementation. The reported
 compute description identifies the selected gate kernel. These changes retain
 F32 state and the same numerical gates; platform qualification remains limited
 to the hardware in the accepted receipts.
+
+CPU BLAS convolutions pack complete time rows and use ggml outer products to
+write the required channel layout directly. Pointwise convolutions reuse the
+whole contiguous input without packing or tile concatenation. The non-BLAS
+CPU and GPU paths retain ordinary ggml matrix operations. The pinned
+[ggml thread-budget fix](https://github.com/CrispStrobe/ggml/pull/6) applies the
+configured provider count when an outer product is the first BLAS operation.
+Provider thread settings retain ggml's existing process-wide semantics.
+Recurrent input biases are added within the gate loop using the original
+grouping, avoiding two full projection-buffer passes. FFT plans dispatch
+independent butterflies and Bluestein products to AVX2 or NEON with scalar
+fallbacks, preserving lengths, twiddles, scaling, and separate multiply/add
+rounding. The compute description also identifies the selected FFT kernel.
 
 ## Build
 

@@ -301,6 +301,13 @@ void im2col_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
                               input->nb[1] / sizeof(float), input->nb[2] / sizeof(float), ith, nth);
 }
 
+void im2col_columns_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
+    const auto& shape = *static_cast<const scnet_detail::Im2ColShape*>(opaque);
+    const auto* input = output->src[0];
+    scnet_detail::im2col_columns(static_cast<const float*>(input->data), static_cast<float*>(output->data), shape,
+                                 input->nb[1] / sizeof(float), input->nb[2] / sizeof(float), ith, nth);
+}
+
 void recurrent_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
     auto& node = *static_cast<RecurrentNode*>(opaque);
     // This ggml revision can invoke CUSTOM for every worker in the surrounding
@@ -323,12 +330,13 @@ void recurrent_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
     scnet_detail::LstmTiming timings;
     for (int direction = 0; direction < 2; ++direction)
         for (int first = begin; first < end; first += capacity)
-            scnet_detail::lstm_direction(static_cast<const float*>(output->src[direction]->data),
-                                         static_cast<const float*>(output->src[2 + direction]->data),
-                                         static_cast<const float*>(output->src[4 + direction]->data),
-                                         static_cast<float*>(output->data), hidden, batch, steps, direction != 0, first,
-                                         std::min(first + capacity, end), node.blas, scratch,
-                                         profiling ? &timings : nullptr);
+            scnet_detail::lstm_direction(
+                static_cast<const float*>(output->src[direction]->data),
+                static_cast<const float*>(output->src[2 + direction]->data),
+                static_cast<const float*>(output->src[4 + direction]->data), static_cast<float*>(output->data), hidden,
+                batch, steps, direction != 0, first, std::min(first + capacity, end), node.blas, scratch,
+                profiling ? &timings : nullptr,
+                output->src[6 + direction] ? static_cast<const float*>(output->src[6 + direction]->data) : nullptr);
     if (profiling)
         std::fprintf(stderr,
                      "scnet_bench_lstm: name=%s mode=%s scope=%s hidden=%d batch=%d steps=%d gemm_calls=%llu "
@@ -553,6 +561,20 @@ ggml_tensor* convolution(scnet_context& model, Graph& graph, ggml_tensor* input,
                                       0, graph.cpu_only);
     const int times = static_cast<int>(input->ne[0]) - time_kernel + 1;
     const int frequencies = (static_cast<int>(input->ne[1]) - frequency_kernel) / frequency_stride + 1;
+    // A column-oriented BLAS product writes [T,F,Cout] directly. Its input
+    // packing copies contiguous time rows instead of interleaving every kernel
+    // element, and its output needs no channel/time transpose. Keep the
+    // ordinary ggml path for GPU and CPU builds without the BLAS backend.
+    const bool column_product = model.backend == model.cpu && model.blas;
+    auto* column_weights = column_product ? ggml_transpose(ctx, as_f32(graph, weights)) : nullptr;
+    if (column_product && frequency_kernel == 1 && time_kernel == 1 && frequency_stride == 1) {
+        // A frequency tile retains the parent's channel stride. Use the whole
+        // contiguous input so a pointwise convolution needs neither im2col nor
+        // a chain of output-tile concatenations.
+        auto* columns = ggml_reshape_2d(ctx, contiguous(graph, input), int64_t(times) * frequencies, channels);
+        auto* output = ggml_out_prod(ctx, columns, column_weights);
+        return channel_bias(model, graph, ggml_reshape_3d(ctx, output, times, frequencies, out_channels), name);
+    }
     auto* shape = model.backend == model.cpu
                       ? nullptr
                       : ggml_new_tensor_4d(ctx, GGML_TYPE_F16, time_kernel, frequency_kernel, channels, out_channels);
@@ -569,17 +591,29 @@ ggml_tensor* convolution(scnet_context& model, Graph& graph, ggml_tensor* input,
             auto layout = std::make_unique<scnet_detail::Im2ColShape>();
             *layout = {times, count, static_cast<int>(channels), time_kernel, frequency_kernel, frequency_stride};
             ggml_tensor* sources[] = {band};
-            columns = ggml_custom_4d(ctx, GGML_TYPE_F32, weights->ne[0], times, count, 1, sources, 1, im2col_compute,
-                                     GGML_N_TASKS_MAX, layout.get());
-            ggml_set_name(columns, "scnet_cpu_im2col");
+            if (column_product) {
+                columns = ggml_custom_4d(ctx, GGML_TYPE_F32, int64_t(times) * count, weights->ne[0], 1, 1, sources, 1,
+                                         im2col_columns_compute, GGML_N_TASKS_MAX, layout.get());
+                ggml_set_name(columns, "scnet_cpu_im2col_columns");
+            } else {
+                columns = ggml_custom_4d(ctx, GGML_TYPE_F32, weights->ne[0], times, count, 1, sources, 1,
+                                         im2col_compute, GGML_N_TASKS_MAX, layout.get());
+                ggml_set_name(columns, "scnet_cpu_im2col");
+            }
             graph.convolution_inputs.push_back(std::move(layout));
         } else {
             columns = ggml_im2col(ctx, shape, band, 1, frequency_stride, 0, 0, 1, 1, true, GGML_TYPE_F32);
         }
-        auto* output =
-            multiply(model, graph, weights, ggml_reshape_2d(ctx, columns, weights->ne[0], int64_t(times) * count));
-        output = ggml_reshape_3d(ctx, output, out_channels, times, count);
-        output = contiguous(graph, ggml_permute(ctx, output, 2, 0, 1, 3));
+        ggml_tensor* output;
+        if (column_product) {
+            output = ggml_out_prod(ctx, columns, column_weights);
+            output = ggml_reshape_3d(ctx, output, times, count, out_channels);
+        } else {
+            output =
+                multiply(model, graph, weights, ggml_reshape_2d(ctx, columns, weights->ne[0], int64_t(times) * count));
+            output = ggml_reshape_3d(ctx, output, out_channels, times, count);
+            output = contiguous(graph, ggml_permute(ctx, output, 2, 0, 1, 3));
+        }
         tiles.push_back(output);
     }
     return channel_bias(model, graph, join(graph, std::move(tiles), 1), name);
@@ -683,17 +717,17 @@ ggml_tensor* encoder(scnet_context& model, Graph& graph, ggml_tensor* input, int
 ggml_tensor* recurrent(scnet_context& model, Graph& graph, ggml_tensor* input, const std::string& name) {
     auto* ctx = graph.context;
     const int hidden = static_cast<int>(input->ne[0]);
-    ggml_tensor* sources[6]{};
+    ggml_tensor* sources[8]{};
     for (int direction = 0; direction < 2; ++direction) {
         const std::string suffix = direction ? "_reverse" : "";
         sources[direction] = multiply(model, graph, weight(model, name + ".weight_ih_l0" + suffix), input);
-        sources[direction] = tensor_add(graph, sources[direction], weight(model, name + ".bias_ih_l0" + suffix));
         sources[2 + direction] = as_f32(graph, weight(model, name + ".weight_hh_l0" + suffix));
         sources[4 + direction] = weight(model, name + ".bias_hh_l0" + suffix);
+        sources[6 + direction] = weight(model, name + ".bias_ih_l0" + suffix);
     }
     auto node = std::make_unique<RecurrentNode>(static_cast<int>(input->ne[1]), hidden, model.params.n_threads,
                                                 model.recurrent_blas, name);
-    auto* result = ggml_custom_4d(ctx, GGML_TYPE_F32, 2 * hidden, input->ne[1], input->ne[2], 1, sources, 6,
+    auto* result = ggml_custom_4d(ctx, GGML_TYPE_F32, 2 * hidden, input->ne[1], input->ne[2], 1, sources, 8,
                                   recurrent_compute, model.recurrent_blas ? 1 : GGML_N_TASKS_MAX, node.get());
     ggml_set_name(result, "scnet_cpu_lstm");
     graph.recurrent_nodes.push_back(std::move(node));
@@ -1173,7 +1207,8 @@ scnet_context* scnet_init_from_file(const char* path, scnet_params params) {
         model->backend_description =
             std::string(ggml_backend_name(model->backend)) + (model->blas ? "+BLAS" : "") + "/CPU-LSTM-FFT";
         model->compute_description = std::string("F32 activations/accumulation; CPU recurrent/FFT; gates=") +
-                                     scnet_activation::selected_kernel().name;
+                                     scnet_activation::selected_kernel().name +
+                                     "; fft=" + model->stft_plan.kernel_name();
         std::fprintf(stderr, "scnet: backend=%s threads=%d precision=%s recurrence=%s\n",
                      model->backend_description.c_str(), params.n_threads,
                      model->quant_q4   ? "Q4_K mixed"

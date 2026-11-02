@@ -616,6 +616,21 @@ def runtime_provenance(library):
                   "CRISPASR_SCNET_GPU", "CRISPASR_SCNET_THREADS", "CRISPASR_SCNET_BENCH",
                   "CRISPASR_SCNET_CAPTURE_GGUF", "CRISPASR_SCNET_SCALAR_LSTM", "CRISPASR_SCNET_SCALAR_GATES",
                   "CRISPASR_SCNET_BLAS", "CRISPASR_CPU_GEMM")}}
+    native = ctypes.CDLL(str(Path(library).resolve()))
+    result["blas_runtime"] = {}
+    for name, kind in (("openblas_get_config", ctypes.c_char_p), ("openblas_get_corename", ctypes.c_char_p),
+                       ("openblas_get_parallel", ctypes.c_int), ("openblas_get_num_threads", ctypes.c_int)):
+        query = getattr(native, name, None)
+        if query is None:
+            continue
+        query.argtypes, query.restype = [], kind
+        value = query()
+        result["blas_runtime"][name] = value.decode("utf-8", errors="replace") if isinstance(value, bytes) else value
+    torch = sys.modules.get("torch")
+    if torch is not None:
+        result["torch_build_config"] = torch.__config__.show()
+        result["torch_parallel_info"] = torch.__config__.parallel_info()
+        result["torch_cpu_capability"] = torch.backends.cpu.get_cpu_capability()
     for key, filename in (("cpuinfo", "/proc/cpuinfo"), ("cpu_quota", "/sys/fs/cgroup/cpu.max"),
                           ("cpuset", "/sys/fs/cgroup/cpuset.cpus.effective"),
                           ("memory_limit_bytes", "/sys/fs/cgroup/memory.max")):

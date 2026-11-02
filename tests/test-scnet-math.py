@@ -112,6 +112,21 @@ void scnet_math_lstm(const float* pf, const float* pr, const float* wf, const fl
                                     true, begin, end, false, scratch);
     }
 }
+void scnet_math_lstm_bias(const float* pf, const float* pr, const float* wf, const float* wr,
+                          const float* bf, const float* br, const float* input_bf, const float* input_br,
+                          float* output, int hidden, int batch, int steps, int threads, int profile) {
+    for (int worker = 0; worker < threads; ++worker) {
+        const int begin = int(int64_t(batch) * worker / threads);
+        const int end = int(int64_t(batch) * (worker + 1) / threads);
+        if (begin == end) continue;
+        scnet_detail::LstmScratch scratch(end - begin, hidden);
+        scnet_detail::LstmTiming timing;
+        scnet_detail::lstm_direction(pf, wf, bf, output, hidden, batch, steps,
+                                    false, begin, end, false, scratch, profile ? &timing : nullptr, input_bf);
+        scnet_detail::lstm_direction(pr, wr, br, output, hidden, batch, steps,
+                                    true, begin, end, false, scratch, profile ? &timing : nullptr, input_br);
+    }
+}
 }
 """
 
@@ -121,13 +136,13 @@ DISPATCH_WRAPPER = r"""
 
 std::vector<float> exercise(bool blas, int requested, int actual) {
     constexpr int h = 3, b = 7, t = 5;
-    std::array<std::vector<float>, 6> inputs;
-    for (int i = 0; i < 6; ++i) {
+    std::array<std::vector<float>, 8> inputs;
+    for (int i = 0; i < 8; ++i) {
         const int n = i < 2 ? t*b*4*h : i < 4 ? 4*h*h : 4*h;
         inputs[i].resize(n);
-        for (int j = 0; j < n; ++j) inputs[i][j] = float((j*7+i*11)%23-11)/50;
+        for (int j = 0; j < n; ++j) inputs[i][j] = i >= 6 ? 0.0f : float((j*7+i*11)%23-11)/50;
     }
-    std::array<ggml_tensor, 6> source{};
+    std::array<ggml_tensor, 8> source{};
     ggml_tensor output{};
     std::vector<float> values(t*b*2*h, std::numeric_limits<float>::quiet_NaN());
     output.ne[0] = 2*h;
@@ -135,7 +150,7 @@ std::vector<float> exercise(bool blas, int requested, int actual) {
     output.ne[2] = t;
     output.ne[3] = 1;
     output.data = values.data();
-    for (int i = 0; i < 6; ++i) {
+    for (int i = 0; i < 8; ++i) {
         source[i].data = inputs[i].data();
         output.src[i] = &source[i];
     }
@@ -196,6 +211,7 @@ class SCNetMath(unittest.TestCase):
         cls.lib.scnet_math_fft.restype = ctypes.c_int
         cls.lib.scnet_math_rng.argtypes = [ctypes.c_uint64, ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
         cls.lib.scnet_math_lstm.argtypes = [POINTER] * 7 + [ctypes.c_int] * 4
+        cls.lib.scnet_math_lstm_bias.argtypes = [POINTER] * 9 + [ctypes.c_int] * 5
         cls.lib.scnet_math_gate_kernel.restype = ctypes.c_char_p
         cls.lib.scnet_math_activations.argtypes = [POINTER] * 5 + [ctypes.c_int]
         cls.lib.scnet_math_gate_update.argtypes = [POINTER] * 4 + [ctypes.c_int] * 2
@@ -328,6 +344,51 @@ class SCNetMath(unittest.TestCase):
         error = results[1].astype(np.float64)-results[0]
         self.assertLess(float(np.linalg.norm(error)/np.linalg.norm(results[0].astype(np.float64))), 2e-6)
         self.assertLess(float(np.max(np.abs(error))), 2e-6)
+
+    def test_input_bias_fusion_is_bit_exact_for_both_directions(self):
+        rng = np.random.default_rng(821)
+        previous = os.environ.get('CRISPASR_SCNET_SCALAR_GATES')
+        try:
+            for hidden in (7, 17, 128, 256, 512):
+                batch, steps = 3, 4
+                projections = [rng.normal(0, .3, (steps, batch, 4*hidden)).astype(np.float32)
+                               for _ in range(2)]
+                weights = [rng.normal(0, .025, (4*hidden, hidden)).astype(np.float32)
+                           for _ in range(2)]
+                biases = [rng.normal(0, .07, 4*hidden).astype(np.float32) for _ in range(2)]
+                input_biases = [rng.normal(0, .09, 4*hidden).astype(np.float32) for _ in range(2)]
+                for direction in range(2):
+                    # This cancellation would lose recurrent_bias if the two
+                    # biases were pre-summed or the three adds reassociated.
+                    projections[direction][:, :, 2*hidden] = np.float32(2**26)
+                    input_biases[direction][2*hidden] = np.float32(-2**26)
+                    biases[direction][2*hidden] = np.float32(.125)
+                preadded = [np.add(p, b, dtype=np.float32)
+                            for p, b in zip(projections, input_biases)]
+                for override in ('1', '0'):
+                    os.environ['CRISPASR_SCNET_SCALAR_GATES'] = override
+                    expected = np.full((steps, batch, 2*hidden), np.nan, np.float32)
+                    self.lib.scnet_math_lstm(
+                        *[a.ctypes.data_as(POINTER) for a in preadded+weights+biases],
+                        expected.ctypes.data_as(POINTER), hidden, batch, steps, 1,
+                    )
+                    self.assertTrue(np.isfinite(expected).all())
+                    for threads, profile in ((1, 0), (5, 0), (5, 1)):
+                        with self.subTest(hidden=hidden, scalar=override, threads=threads, profile=profile):
+                            guarded = np.full(expected.size+2, 12345.0, np.float32)
+                            actual = guarded[1:-1].reshape(expected.shape)
+                            self.lib.scnet_math_lstm_bias(
+                                *[a.ctypes.data_as(POINTER)
+                                  for a in projections+weights+biases+input_biases],
+                                actual.ctypes.data_as(POINTER), hidden, batch, steps, threads, profile,
+                            )
+                            np.testing.assert_array_equal(guarded[[0, -1]], [12345.0, 12345.0])
+                            np.testing.assert_array_equal(actual.view(np.uint32), expected.view(np.uint32))
+        finally:
+            if previous is None:
+                os.environ.pop('CRISPASR_SCNET_SCALAR_GATES', None)
+            else:
+                os.environ['CRISPASR_SCNET_SCALAR_GATES'] = previous
 
     def test_lstm_gate_order_reverse_and_partition(self):
         rng = np.random.default_rng(395)
