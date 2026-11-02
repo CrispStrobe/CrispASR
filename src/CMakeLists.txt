@@ -2983,6 +2983,19 @@ if (NOT MSVC)
     target_compile_options(frcrn-se PRIVATE -O3)
 endif()
 
+# mossformer2-sr — ClearerVoice-Studio MossFormer2_SR_48K speech super-resolution
+# (--enhance <gguf>; crispasr_enhancer.cpp model table), on mossformer2-blocks
+# (MaskNet) and mossformer2-se (shared segmented-decode plan).
+add_library(mossformer2-sr STATIC mossformer2_sr.h mossformer2_sr.cpp)
+set_target_properties(mossformer2-sr PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(mossformer2-sr PUBLIC .)
+target_compile_features(mossformer2-sr PUBLIC cxx_std_17)
+target_link_libraries(mossformer2-sr PUBLIC mossformer2-se mossformer2-blocks crispasr-core ggml ggml-base
+                      crispasr_link_ggml_cpu Threads::Threads)
+if (NOT MSVC)
+    target_compile_options(mossformer2-sr PRIVATE -O3)
+endif()
+
 # mel-band-roformer — Mel-Band RoFormer source separation (§248)
 # ---------------------------------------------------------------------------
 add_library(mel-band-roformer STATIC mel_band_roformer.h mel_band_roformer.cpp)
@@ -3467,7 +3480,7 @@ if (TARGET mossformer2-ss)
     target_link_libraries(crispasr-lib PUBLIC mossformer2-ss)
 endif()
 # Speech-enhancement model ports (crispasr_enhancer.cpp model table).
-target_link_libraries(crispasr-lib PUBLIC mossformergan-se mossformer2-se)
+target_link_libraries(crispasr-lib PUBLIC mossformergan-se mossformer2-se mossformer2-sr)
 if (TARGET frcrn-se)
     target_link_libraries(crispasr-lib PUBLIC frcrn-se)
 endif()

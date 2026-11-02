@@ -21,8 +21,9 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 - Done: enhance pipeline (`--enhance none|rnnoise|<gguf>`, `--denoise`, `--enhance-output`, `crispasr_session_set_enhance`, `crispasr_enhance_audio_spec`, every wrapper, server `enhance` field; default off). RNNoise matches xiph/rnnoise `6cbfd53` bit-exactly at 48 kHz; the 16 kHz path now resamples with the polyphase resampler (cos 0.99995 vs original, was 0.996). `MossFormer2_SS_16K` native (`docs/mossformer2-ss.md`; F32 cos 1.0, F16 0.99999998, Q8_0 0.99999 end-to-end). `MossFormerGAN_SE_16K` native enhancer (`docs/mossformergan-se.md`; F32 1.0, F16 0.99999999, Q8_0 0.99997; jfk white noise 9.05 -> 16.95 dB SNR).
 `MossFormer2_SE_48K` native enhancer (`docs/mossformer2-se.md`; F32 1.0, F16 1.0, Q8_0 0.9999996 end-to-end with 52 sensitive matrices kept F16 by `crispasr-quantize`; 48 kHz jfk+white 5 dB -> 17.08 dB, same as PyTorch).
 `FRCRN_SE_16K` native enhancer (`docs/frcrn-se.md`; F32/F16 end-to-end cos 1.0, min F16 stage 0.9996; jfk white noise 9.05 -> 17.27 dB; Q8_0 not offered: stages collapse to cos 0.3).
+`MossFormer2_SR_48K` native super-resolution (`docs/mossformer2-sr.md`; `--enhance <sr.gguf> --enhance-output` writes 48 kHz; F32/F16 every stage >= 0.999; Q8_0 generator 0.9985-0.9991, end-to-end >= 0.9999; LSD on 16 kHz VCTK 5.25 -> 1.21, PyTorch 1.24).
 - Open: MossFormer2_SS Q8_0 may want the same F16-keep rule (unchecked); registry URLs for the converted GGUFs (none uploaded yet); GPU runs untested for both ports; clean idle-machine CPU timing vs PyTorch.
-- Next action: `MossFormer2_SR_48K` port in progress.
+- Next action: FRCRN Q8_0 with encoder convs + FSMN projections kept at F16 (measured: min stage 0.99972, 23.9 MB); then GPU validation and published GGUFs.
 
 ### Mini-BS-RoFormer V2.5 — CPU qualification complete, 2026-11-01
 

@@ -123,6 +123,7 @@ static const std::vector<std::pair<std::string, std::string>>& converter_archs()
         {"mossformergan-se", "mossformergan-se"},
         {"mossformer2-se", "mossformer2-se"},
         {"frcrn-se", "frcrn-se"},
+        {"mossformer2-sr", "mossformer2-sr"},
         {"crepe", "crepe"},
         {"btc", "btc-chords"},
         {"tabcnn", "tabcnn"},
@@ -275,6 +276,7 @@ TEST_CASE("every emitted backend name is a name a surface can open", "[unit][arc
         "mossformergan-se",
         "mossformer2-se",
         "frcrn-se",
+        "mossformer2-sr",
         "crepe",
         "btc-chords",
         "tabcnn",
@@ -386,6 +388,8 @@ TEST_CASE("crispasr_detect_backend_from_gguf reads the shared table", "[unit][ar
         {"mossformer2-se", "mossformer2-se"},
         {"mossformer2_se", ""},
         {"frcrn-se", "frcrn-se"},
+        {"mossformer2-sr", "mossformer2-sr"},
+        {"mossformer2_sr", ""},
         {"not-a-real-architecture", ""},
     };
     for (const auto& p : probes) {

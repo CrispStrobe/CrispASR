@@ -10,6 +10,7 @@
 
 #include "gguf.h"
 #include "mossformer2_se.h"
+#include "mossformer2_sr.h"
 #include "mossformergan_se.h"
 
 #include <algorithm>
@@ -28,6 +29,7 @@ static const CrispasrEnhanceModelOps* const* enhance_model_table(int* n) {
         mossformergan_se_enhance_ops(),
         mossformer2_se_enhance_ops(),
         frcrn_se_enhance_ops(),
+        mossformer2_sr_enhance_ops(),
     };
     *n = (int)(sizeof(table) / sizeof(table[0]));
     return table;

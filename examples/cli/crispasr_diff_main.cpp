@@ -47,6 +47,7 @@
 #include "mini_bs_roformer.h"
 #include "mossformer2_ss.h"
 #include "mossformer2_se.h"
+#include "mossformer2_sr.h"
 #include "btc_chords.h"
 #include "tabcnn.h"
 #include "basic_pitch.h"
@@ -1918,6 +1919,13 @@ int main(int argc, char** argv) {
         // Input-aligned (the reference carries input_audio): native fbank/feats,
         // network stages from one forward, and the decode-pipeline e2e_wave.
         return mossformer2_se_diff(model_path.c_str(), ref_path.c_str(), audio_path.c_str(), /*verbosity=*/2);
+    }
+    if (backend_name == "mossformer2-sr" || backend_name == "mossformer2_sr") {
+        // ref_path = GGUF from tools/reference_backends/mossformer2_sr.py --gguf.
+        // Input-aligned (the reference carries input_audio): native log-mel,
+        // MaskNet / generator stages from one forward, and the decode-pipeline
+        // e2e_wave (incl. bandwidth_sub).
+        return mossformer2_sr_diff(model_path.c_str(), ref_path.c_str(), audio_path.c_str(), /*verbosity=*/2);
     }
     if (backend_name == "mel-band-roformer" || backend_name == "mbr") {
         // model_path = mel-band-roformer GGUF, ref_path = ref GGUF from

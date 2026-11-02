@@ -313,6 +313,7 @@ inline const entry* table(size_t* n_out) {
         {"mossformergan-se",          "mossformergan-se"},
         {"mossformer2-se",            "mossformer2-se"},
         {"frcrn-se",                  "frcrn-se"},
+        {"mossformer2-sr",            "mossformer2-sr"},
         {"mel-band-roformer",         "mel-band-roformer"},
         {"mel_band_roformer",         "mel-band-roformer"},
         {"crepe",                     "crepe"},

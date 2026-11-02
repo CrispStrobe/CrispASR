@@ -69,6 +69,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_mini_bs_roformer_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mossformer2_ss_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mossformergan_se_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mossformer2_se_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_mossformer2_sr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_crepe_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_btc_chords_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_tabcnn_backend();
@@ -313,6 +314,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& requ
         return crispasr_make_mossformergan_se_backend();
     if (name == "mossformer2-se" || name == "mossformer2_se" || name == "mossformer2-se-48k")
         return crispasr_make_mossformer2_se_backend();
+    if (name == "mossformer2-sr" || name == "mossformer2_sr" || name == "mossformer2-sr-48k")
+        return crispasr_make_mossformer2_sr_backend();
     if (name == "mel-band-roformer" || name == "mel_band_roformer" || name == "melbandroformer" || name == "mbr")
         return crispasr_make_mel_band_roformer_backend();
     if (name == "crepe" || name == "crepe-tiny" || name == "crepe-full" || name == "pitch")
@@ -543,6 +546,7 @@ std::vector<std::string> crispasr_list_backends() {
         "mossformer2-ss",
         "mossformergan-se",
         "mossformer2-se",
+        "mossformer2-sr",
         "crepe",
         "btc-chords",
         "tabcnn",
@@ -764,6 +768,8 @@ static std::string detect_backend_unchecked(const std::string& model_path) {
         return "mossformergan-se";
     if (contains_ci("mossformer2-se") || contains_ci("mossformer2_se"))
         return "mossformer2-se";
+    if (contains_ci("mossformer2-sr") || contains_ci("mossformer2_sr"))
+        return "mossformer2-sr";
     if (contains_ci("mel-band-roformer") || contains_ci("mel_band_roformer") || contains_ci("roformer"))
         return "mel-band-roformer";
     if (contains_ci("crepe"))

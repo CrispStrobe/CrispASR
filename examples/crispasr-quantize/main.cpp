@@ -276,6 +276,13 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     // matrices kept, every stage stays >= 0.9998 for +26 MB (64 -> 90 MB from
     // an F16 source).  See docs/mossformer2-se.md.
     const bool is_mossformer2_se = (arch == "mossformer2-se");
+    // MossFormer2_SR_48K: quantize only the HiFi-GAN generator (gen.*) and keep
+    // the whole MaskNet (mn.*, blk.*) at source precision. The generator
+    // amplifies MaskNet error ~1000x in its waveform: with the SE guard above
+    // the MaskNet output stays at cos 0.9999986 but the generated waveform
+    // drops to 0.9986; generator-only Q8_0 keeps every stage >= 0.999 for
+    // 169 MB (148 MB with the SE guard, 223 MB F16). See docs/mossformer2-sr.md.
+    const bool is_mossformer2_sr = (arch == "mossformer2-sr");
 
     // BTC chords: a 12 MB model whose weight matrices are all 128x128 or
     // 128x256 — small enough that quantisation buys little, and the FFN convs
@@ -970,6 +977,8 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             // `--q4_k` silently falls back to Q4_0. That fallback is why the q4
             // row costs so much -- it is Q4_0, not a k-quant.
             !(is_tabcnn && sname == "head.weight") &&
+            // MossFormer2-SR: generator only (see is_mossformer2_sr note).
+            !(is_mossformer2_sr && sname.rfind("gen.", 0) != 0) &&
             // MossFormer2-SE: precision-sensitive matmuls (see is_mossformer2_se note).
             !(is_mossformer2_se && (sname.rfind("mn.", 0) == 0 || ends_with(".flash.hidden.linear.weight") ||
                                     ends_with(".fsmn.to_u.linear.weight"))) &&
