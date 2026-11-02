@@ -429,6 +429,8 @@ VAD and transcription; `--enhance-output clean.wav` writes the enhanced audio
 instead of transcribing. Off by default, selectable per session in every
 binding (`set_enhance`) and per request on the server (`enhance`). See
 [`docs/cli.md`](docs/cli.md#speech-enhancement-denoise----enhance).
+Model methods: **MossFormerGAN-SE** (ClearerVoice-Studio `MossFormerGAN_SE_16K`,
+Apache-2.0, convert locally — [`docs/mossformergan-se.md`](docs/mossformergan-se.md)).
 
 ### Music & audio analysis
 
