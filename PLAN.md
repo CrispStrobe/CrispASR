@@ -12,6 +12,53 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — release verification and nightly diagnosis (2026-10-30)
 
+### SCNet / SCNet-large — native port recovery, 2026-11-02
+
+- Owner: SCNet recovery team (native graph, conversion/reference/validation,
+  CLI/Session integration); starting source
+  `04200fae791c8d5113fa47d5896ccd13f18f6bad`.
+- Recovery: no SCNet branch, commit, pull request, or source files were found in
+  the repository at resumption. Earlier chat progress is not validation evidence.
+  Rebuild against the current source and checkpoint reviewable work in Git.
+- Missing behavior: source-faithful native ggml inference for the author's SCNet
+  and SCNet-large checkpoints, GGUF conversion, F16/Q8_0/Q4_K precision policy,
+  four-stem stereo separation, CLI and Session/C ABI architecture detection.
+- Acceptance: pin the official source and checkpoint hashes; compare every
+  required original-Python stage and complete stems with shape, finite-value,
+  amplitude and error checks (F16 cosine >=0.999, Q8_0 >0.98, Q4_K >0.94).
+  Preserve the published normalization, normalized rectangular STFT, recurrent
+  FFTs, overlap weighting and per-chunk shift behavior. Measure matched-input,
+  matched-device warm inference against the original implementation; each
+  qualified precision must at least match its timing. Record failures and
+  hardware/fixture limits without relaxing gates or promoting unqualified
+  models. Exercise CLI and actual Session/C ABI, including neutral filenames,
+  cold/warm reuse, changed inputs, result ownership and invalid arguments.
+- Next action: reconstruct converter and original-reference capture, implement
+  and build the native graph, then run fidelity and paired performance gates on
+  a worker with sufficient storage. CPU and GPU qualification remain separate.
+- License: upstream [MIT notice](https://github.com/starrytong/SCNet/blob/main/LICENSE)
+  plus the [author's explicit checkpoint permission](https://github.com/starrytong/SCNet/issues/35)
+  cover the author's released SCNet/SCNet-large weights, including format-converted
+  redistribution with attribution. Retain the notice and exact weight provenance.
+
+### Separation and speech frontend candidates — license inventory, 2026-11-02
+
+These are research candidates; this inventory does not claim implemented or
+qualified native support. Keep code and checkpoint permission distinct.
+
+| Candidate | Source-code terms | Pretrained-weight evidence / next gate |
+|---|---|---|
+| SCNet / SCNet-large | [MIT](https://github.com/starrytong/SCNet/blob/main/LICENSE) | [Author confirms MIT and converted-checkpoint redistribution](https://github.com/starrytong/SCNet/issues/35); active port above. |
+| Mini-BS-RoFormer-18M | MIT declared in author's model repository | [MIT model card](https://huggingface.co/HiDolen/Mini-BS-RoFormer-18M/blob/main/README.md); separate architecture/checkpoint qualification from shipped V2.5. |
+| Mini-BS-RoFormer 8.83M | MIT declared in author's model repository | [MIT model card](https://huggingface.co/HiDolen/Mini-BS-RoFormer/blob/main/README.md); separate architecture/checkpoint qualification from shipped V2.5. |
+| MossFormer2_SS_16K | [Apache-2.0](https://github.com/modelscope/ClearerVoice-Studio/blob/main/LICENSE) | [Official weights declare Apache-2.0](https://huggingface.co/alibabasglab/MossFormer2_SS_16K/blob/main/README.md). |
+| GTCRN | [MIT](https://github.com/Xiaobin-Rong/gtcrn/blob/main/LICENSE) | Checkpoints are inside the official MIT repository; separate explicit weight-scope confirmation not located. |
+| UL-UNAS | [MIT](https://github.com/Xiaobin-Rong/ul-unas/blob/main/LICENSE) | Checkpoints are inside the official MIT repository; separate explicit weight-scope confirmation not located. |
+| DBS-TIGER-DnR | [Apache-2.0 with retained third-party MIT notices](https://github.com/JusperLee/Dynamic-Band-Splitting#license) | [Official model card declares Apache-2.0](https://huggingface.co/JusperLee/DBS-TIGER-DnR). |
+| ZipEnhancer | [Apache-2.0 in ModelScope](https://github.com/modelscope/modelscope/blob/master/LICENSE) | [Exact official weight listing](https://www.modelscope.cn/models/iic/speech_zipenhancer_ans_multiloss_16k_base) declares Apache-2.0. |
+| DeepFilterNet3 | [MIT or Apache-2.0 for code](https://github.com/Rikorose/DeepFilterNet#license) | Explicit checkpoint-redistribution scope remains unconfirmed; [issue #712](https://github.com/Rikorose/DeepFilterNet/issues/712) has no maintainer clarification. |
+| SAM Audio family | [Custom SAM License](https://github.com/facebookresearch/sam-audio/blob/main/LICENSE) | Same custom terms cover trained weights; [official checkpoint access is gated](https://huggingface.co/facebook/sam-audio-base). Requires a separate license review; not a permissive MIT/Apache candidate. |
+
 ### Mini-BS-RoFormer V2.5 — CPU qualification complete, 2026-11-01
 
 - Owner: model-port team (native graph, blueprint/converter/reference, integration, quantization/validation); starting source `1dd0bf6fb9e7a8bf5849cb7a14605b2234e6ee93`.
