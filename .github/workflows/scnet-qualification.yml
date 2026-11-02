@@ -9,7 +9,7 @@ on:
         options: [both, scnet, scnet-large]
         default: both
   push:
-    branches: [feat/scnet-native-20261102]
+    branches: [ci/scnet-qualification-20261102]
     paths:
       - '.github/workflows/scnet-qualification.yml'
 
@@ -24,6 +24,10 @@ jobs:
   cpu:
     name: ${{ matrix.variant }} CPU
     runs-on: ubuntu-22.04
+    defaults:
+      run:
+        # setup-python adds its library directory; remove it before shell/Python startup.
+        shell: env -u LD_LIBRARY_PATH bash --noprofile --norc -eo pipefail {0}
     timeout-minutes: 180
     strategy:
       fail-fast: false
@@ -47,6 +51,22 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: '3.11'
+      - name: Verify clean Python startup before installing dependencies
+        run: |
+          mkdir -p scnet-out
+          python - <<'PYTHON' 2>&1 | tee scnet-out/python-clean-start.log
+          import ctypes, json, os, ssl, sys
+          from pathlib import Path
+          loader_variables = ("LD_LIBRARY_PATH", "LD_PRELOAD", "LD_AUDIT")
+          if "LD_LIBRARY_PATH" in os.environ or any(os.environ.get(key) for key in loader_variables):
+              raise RuntimeError("Python must start without loader overrides")
+          if sys.version_info[:2] != (3, 11) or Path(sys.prefix).resolve() != Path(os.environ["pythonLocation"]).resolve():
+              raise RuntimeError("The clean interpreter differs from setup-python's selected installation")
+          print(json.dumps({"python": sys.executable, "version": sys.version,
+                            "prefix": sys.prefix, "ssl": ssl.OPENSSL_VERSION,
+                            "loader_environment": {key: os.environ.get(key) for key in loader_variables}}))
+          PYTHON
+          python -m pip --version 2>&1 | tee -a scnet-out/python-clean-start.log
       - name: Install native and original-reference dependencies
         run: |
           bash tools/ci-apt.sh update

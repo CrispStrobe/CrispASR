@@ -14,7 +14,7 @@ finite-output, geometry, repeated-call, changed-input, and result-lifetime
 checks. These controls establish execution and state handling. They do not
 establish checkpoint fidelity, source-separation quality, or speed.
 
-The hosted qualification checks the author's original checkpoints against
+The full qualification checks the author's original checkpoints against
 the original Python implementation. Until its recorded numerical, production
 surface, and performance gates pass, this backend remains a candidate. GPU
 qualification is separate from the CPU campaign. No unqualified checkpoint
@@ -136,6 +136,25 @@ outputs are byte-identical before and after allocator reuse. The single measured
 call has 81.38% fewer minor faults and 29.21% lower peak RSS, but is 3.07% slower;
 these observations do not establish comparative performance acceptance.
 
+The [fresh hosted campaign](https://github.com/CrispStrobe/CrispASR/actions/runs/41489721058)
+at `4c83d4e` stopped before compilation because `setup-python` exported a loader
+override rejected by the provider guard. Its [retained failure](historical/scnet-hosted-provider-prebuild-failures-2026-11-02.json)
+is an environment failure, with no model or timing result. The workflows now
+remove `LD_LIBRARY_PATH` before shell and Python startup and verify the selected
+interpreter before installing dependencies. The [startup controls](historical/scnet-python-clean-start-controls-2026-11-02.json)
+bind the official Python binary and its canonical embedded RUNPATH; provider,
+loaded-runtime and model guards remain unchanged.
+
+The [normal-runtime local diagnostic](historical/scnet-runtime-normal-access-profile-2026-11-02.json)
+at the same source uses ordinary Torch AVX512 dispatch and passes every F16
+warmup and measured waveform check. Across three alternating pairs, the native
+median is **17.124176 s**, versus **17.301418 s** original on the same two-thread
+EPYC 9V74 worker. This narrow pass checks neither all intermediate stages nor
+the other model/precision combinations and does not qualify a release.
+The later AVX512 gate extension has [bit-exact component controls](historical/scnet-avx512-gate-controls-2026-11-02.json)
+against the existing AVX2 path; integrated fidelity and performance still require
+the complete campaign.
+
 ## Inference behavior
 
 Default inference follows the published helper's 20-second segments, 50%
@@ -163,11 +182,14 @@ operations. A selected GPU does not imply that the entire model runs there.
 On CPU, layout nodes use row copies, blocked permutations, and disjoint
 convolution-column blocks. Already contiguous inputs are reused where an
 operation only requires layout; diagnostic captures still retain independent
-copies. Recurrent gate updates select an AVX2/FMA or AArch64 NEON F32 kernel
+copies. Recurrent gate updates select an AVX512/FMA, AVX2/FMA or AArch64 NEON F32 kernel
 when available and otherwise use the scalar implementation. The reported
 compute description identifies the selected gate kernel. These changes retain
 F32 state and the same numerical gates; platform qualification remains limited
 to the hardware in the accepted receipts.
+The AVX512 path requires AVX512F, AVX512DQ, AVX2 and FMA support. Its wider
+lanes retain the AVX2 equations and rounding groups, with AVX2 and scalar tails;
+it does not change model or activation precision.
 
 CPU BLAS convolutions pack complete time rows and use ggml outer products to
 write the required channel layout directly. Pointwise convolutions reuse the

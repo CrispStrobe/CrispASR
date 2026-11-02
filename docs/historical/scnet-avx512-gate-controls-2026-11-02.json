@@ -1,0 +1,341 @@
+{
+  "applied_to_live_source_at_capture": false,
+  "candidate": {
+    "cell_update": "Separate f*cell and i*g products followed by an unfused add; no global fast-math",
+    "equations": "Existing AVX2 F32 exponential, sigmoid and degree-17/exp-ratio tanh constants and FMA grouping widened to 16 lanes",
+    "file_changes": {
+      "src/scnet_activation.h": {
+        "base_bytes": 12943,
+        "base_sha256": "c239cad15ab8b9f04d104195c0156588afa8dcce76a5b2ec971e3edb5ad0e651",
+        "candidate_bytes": 18804,
+        "candidate_sha256": "6261431237d8d7fec44c1250791bb13c8fc7da8eae3ccd796414b8a4e71bc798"
+      },
+      "tests/test-scnet-math.py": {
+        "base_bytes": 28512,
+        "base_sha256": "ab21fb2b65c1c505d53f85453c97d4d9484463688caf5b978652ea080a5d557c",
+        "candidate_bytes": 37522,
+        "candidate_sha256": "877aa9eed84f756c97a00f861180b75fc9ed8e48518d5e7eea120a73df21b039"
+      }
+    },
+    "lanes": 16,
+    "patch": {
+      "file": "<candidate>/avx512-gates.patch",
+      "sha256": "c34ae13ab19c5e09ce1c17574c3025b750ea2b0a74c4dd4272c12e5b9659877f"
+    },
+    "unchanged": [
+      "LSTM GEMM",
+      "scheduler",
+      "BLAS provider and thread budget",
+      "stored model precision",
+      "qualification gates",
+      "scalar diagnostic override",
+      "NEON implementation"
+    ]
+  },
+  "date": "2026-11-02",
+  "executed_controls": {
+    "actual_dispatch": {
+      "avx2_fma_available": true,
+      "avx512f_dq_avx2_fma_available": true,
+      "selected_kernel": "avx512_fma"
+    },
+    "additional_counts_derived_from_executed_control_source": {
+      "cell_hidden_output_floats_compared": 3528,
+      "direct_function_input_scope": "Each of exp/sigmoid/tanh: exact non-NaN bits and matching NaN classification; this count includes NaN cases, not all bit comparisons.",
+      "direct_function_inputs_per_function_including_tail_and_mixed_cases": 382628,
+      "feedback_cell_and_hidden_floats_compared": 111616,
+      "gate_widths_count": 17,
+      "immutable_gate_input_floats": 4704,
+      "output_guard_floats_compared": 102,
+      "sum_gate_widths": 1176
+    },
+    "artifact_hashes": {
+      "execution/.scnet-math-_hs2kp2u/dispatch": {
+        "bytes": 48992,
+        "sha256": "88031da1ba6a4d18e6e2f4d7a4e7219a0630bab0d2cb3d6132ec2cb620f54777"
+      },
+      "execution/.scnet-math-_hs2kp2u/dispatch.cpp": {
+        "bytes": 3984,
+        "sha256": "7d9db8ab530fbef3b45e18d303dc4739c011f38542885e951c8935fefbbeadad"
+      },
+      "execution/.scnet-math-_hs2kp2u/probe.cpp": {
+        "bytes": 8007,
+        "sha256": "a22ceaa22139a9a120a7b8a296d1fa93b308aec7a037760f9c165174c5e1afd9"
+      },
+      "execution/.scnet-math-_hs2kp2u/probe.so": {
+        "bytes": 61904,
+        "sha256": "1c5902d5c5393a3c957089fb5247bad7bf08773f4029350034aca5a2e812e87e"
+      },
+      "execution/command-01.stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "execution/command-01.stdout.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "execution/command-02.stderr.log": {
+        "bytes": 746,
+        "sha256": "d4a4ec84b91122b008f6b74ca8da19fc437c66a16edc2a71f3dab8324bea2e8e"
+      },
+      "execution/command-02.stdout.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "execution/command-03.stderr.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "execution/command-03.stdout.log": {
+        "bytes": 0,
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "execution/math-controls.log": {
+        "bytes": 2012,
+        "sha256": "2af621d11c5ff82043c4200a094dc60483d6ce061fcfe09eb599a321f1feed86"
+      }
+    },
+    "build_scope": {
+      "include_translation_unit_dispatch_control_optimization": "-O1",
+      "math_probe_optimization": "-O2",
+      "production_O3_execution_covered": false
+    },
+    "commands": [
+      {
+        "argv": [
+          "/usr/bin/c++",
+          "-std=c++17",
+          "-O2",
+          "-fPIC",
+          "-shared",
+          "-I",
+          "<controls>/source/src",
+          "<controls>/execution/.scnet-math-_hs2kp2u/probe.cpp",
+          "-o",
+          "<controls>/execution/.scnet-math-_hs2kp2u/probe.so"
+        ],
+        "returncode": 0,
+        "stderr": {
+          "file": "command-01.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout": {
+          "file": "command-01.stdout.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      {
+        "argv": [
+          "/usr/bin/c++",
+          "-std=c++17",
+          "-O1",
+          "-ffunction-sections",
+          "-fdata-sections",
+          "-I",
+          "<controls>/source/src",
+          "-I",
+          "<controls>/source/ggml/include",
+          "<controls>/execution/.scnet-math-_hs2kp2u/dispatch.cpp",
+          "-Wl,--gc-sections",
+          "-o",
+          "<controls>/execution/.scnet-math-_hs2kp2u/dispatch"
+        ],
+        "returncode": 0,
+        "stderr": {
+          "file": "command-02.stderr.log",
+          "sha256": "d4a4ec84b91122b008f6b74ca8da19fc437c66a16edc2a71f3dab8324bea2e8e"
+        },
+        "stdout": {
+          "file": "command-02.stdout.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      },
+      {
+        "argv": [
+          "<controls>/execution/.scnet-math-_hs2kp2u/dispatch"
+        ],
+        "returncode": 0,
+        "stderr": {
+          "file": "command-03.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout": {
+          "file": "command-03.stdout.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        }
+      }
+    ],
+    "compiler": {
+      "path": "/usr/bin/x86_64-linux-gnu-g++-13",
+      "sha256": "52f1ddb33fe78b9441e0f42e9cd22c571f1101938e046c8a26582494e041cc73",
+      "version": "x86_64-linux-gnu-g++-13 (Ubuntu 13.3.0-6ubuntu2~24.04) 13.3.0\nCopyright (C) 2023 Free Software Foundation, Inc.\nThis is free software; see the source for copying conditions.  There is NO\nwarranty; not even for MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.\n\n"
+    },
+    "complete": true,
+    "failures": [],
+    "group_names": [
+      "candidate_scnet_math.SCNetMath.test_activation_accuracy_zero_threshold_saturation_and_nonfinite",
+      "candidate_scnet_math.SCNetMath.test_actual_callback_worker_ownership_and_effective_thread_count",
+      "candidate_scnet_math.SCNetMath.test_avx512_feedback_sequence_matches_avx2_bits",
+      "candidate_scnet_math.SCNetMath.test_avx512_functions_match_avx2_bits",
+      "candidate_scnet_math.SCNetMath.test_avx512_gate_updates_match_avx2_bits_and_guards",
+      "candidate_scnet_math.SCNetMath.test_exact_length_fft_against_numpy",
+      "candidate_scnet_math.SCNetMath.test_gate_state_update_tails_guards_and_scalar_override",
+      "candidate_scnet_math.SCNetMath.test_input_bias_fusion_is_bit_exact_for_both_directions",
+      "candidate_scnet_math.SCNetMath.test_joined_projection_views_are_bit_exact",
+      "candidate_scnet_math.SCNetMath.test_long_recurrence_simd_against_scalar_gates",
+      "candidate_scnet_math.SCNetMath.test_lstm_gate_order_reverse_and_partition",
+      "candidate_scnet_math.SCNetMath.test_python_integer_seed_and_randint_sequence"
+    ],
+    "mathematical_results": {
+      "avx2_avx512_direct_functions": {
+        "comparison": "Exact non-NaN bits, including signed zero and infinity; equal NaN classification, not payload or exception flags",
+        "functions": [
+          "exp",
+          "sigmoid",
+          "tanh"
+        ],
+        "mixed_exceptional_lane_cases": 80,
+        "prefix_lengths": [
+          0,
+          1,
+          2,
+          3,
+          4,
+          5,
+          6,
+          7,
+          8,
+          9,
+          10,
+          11,
+          12,
+          13,
+          14,
+          15,
+          16,
+          17,
+          18,
+          19,
+          20,
+          21,
+          22,
+          23,
+          24,
+          25,
+          26,
+          27,
+          28,
+          29,
+          30,
+          31,
+          32,
+          33
+        ],
+        "primary_input_count": 380787
+      },
+      "feedback": {
+        "cell_hidden_values_compared": 111616,
+        "comparison": "Exact AVX2/AVX512 cell and hidden history bits; output equals hidden at every step",
+        "steps": 872,
+        "width": 64
+      },
+      "gate_update_comparison": "Exact cell, hidden and output bits; unchanged input bits; output guard sentinels intact",
+      "gate_update_widths": [
+        0,
+        1,
+        7,
+        8,
+        9,
+        15,
+        16,
+        17,
+        23,
+        24,
+        31,
+        32,
+        33,
+        64,
+        128,
+        256,
+        512
+      ],
+      "other_existing_groups": "Scalar override, gate tails, long recurrent accuracy, projection bias and stride exactness, actual callback ownership, FFT and Python RNG all passed without altered assertions",
+      "passed": 12,
+      "promised_groups": 12,
+      "scalar_activation_accuracy": {
+        "inputs": 380787,
+        "max_absolute_error_gate": 2.5e-07,
+        "max_absolute_error_gate_passed": true,
+        "note": "The unchanged test logs maximum ULPs and asserts the absolute bound; it does not print a separate observed absolute maximum.",
+        "sigmoid_max_ulps_observed": 4,
+        "tanh_max_ulps_observed": 3
+      },
+      "selected_kernel": "avx512_fma",
+      "skipped": 0
+    },
+    "original_receipts": {
+      "<candidate>/preparation.json": "964ca9cb7473c2f3a2bd28f63d17173d6d5a5464ef700e69a971f653df44caec",
+      "<controls>/receipt.json": "4b7544e6ade0f74ba9244bda3d3fdf197e7439dba9b36872db2dba5bf90e5d01",
+      "<controls>/review.json": "38d60914500d1e318f3b8acc83a361983fc011c8f06d2ec5e185715c765fd604"
+    },
+    "passed_groups": 12,
+    "skipped_groups": 0,
+    "test_errors": []
+  },
+  "limits": [
+    "Executed with GCC 13.3.0 on this x86_64 host. The unchanged math probe uses O2; the include-TU dispatch control uses O1. No new production O3 binary was built.",
+    "No claim about NaN payload/sign or floating-point exception flags.",
+    "NEON and an actually AVX512-incapable host were not executed by this x86 control.",
+    "No model fidelity or performance qualification. Adoption remains contingent on the queued hosted result and would require separate integrated verification."
+  ],
+  "models_run": false,
+  "performance_measured": false,
+  "portable_aliases": {
+    "<candidate>": "retained avx512-gates-candidate-v1 scratch directory",
+    "<controls>": "retained avx512-gates-controls-v1 scratch directory",
+    "<provider>": "unchanged OpenBLAS0.3.34 installed prefix",
+    "<repository>": "CrispASR checkout"
+  },
+  "preservation": {
+    "candidate_source_unchanged": true,
+    "live_sources_unchanged": true,
+    "production_binaries_unchanged": true
+  },
+  "production_O3_review": {
+    "command_source": "<repository>/build-scnet-current-openblas034-profile/compile_commands.json",
+    "compile_portability_scope": "GCC13.3 scratch O2/O1 compilation/execution is proven. Production O3, Ubuntu22.04 GCC11 and other compiler/architecture builds have not been executed with this candidate. The new intrinsic families require only the explicitly guarded AVX512F/DQ plus existing AVX2/FMA features.",
+    "conclusion": "No source-level O3 blocker found. The narrow candidate is suitable for integrated compilation and unchanged model/performance qualification; this is a review judgment, not an executed O3 result.",
+    "dispatch": "Every AVX512 entry point is target-attributed with avx512f,avx512dq,avx2,fma. The generic dispatcher requires all four through the existing compiler runtime-feature mechanism before selecting avx512_fma. No global AVX512 compiler flag or unconditional wide entry was added.",
+    "executed_production_command_without_candidate": "/usr/bin/c++ -DCRISPASR_HAVE_BLAS=1 -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SHARED -DGGML_USE_BLAS -DGGML_USE_CPU -DHAVE_BLAS -I<repository>/src/. -I<repository>/src/../include -I<repository>/ggml/src/../include -I<provider>/include/openblas -O3 -DNDEBUG -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -O3 -fopenmp -o src/CMakeFiles/scnet.dir/scnet.cpp.o -c <repository>/src/scnet.cpp",
+    "fallbacks": "AVX2/FMA, AArch64 NEON and scalar selection remain. A residual eight-lane block reuses AVX2, and fewer than eight remaining values use scalar_range. The scalar diagnostic override is unchanged.",
+    "grouping": "The current production command enables O3 without fast-math. Explicit activation FMA intrinsics retain the existing grouping. GCC optimize(fp-contract=off) on the update and scalar functions, and the existing Clang fp contract(off) pragma, preserve separate state products/add; the candidate follows the existing AVX2 controls.",
+    "recommendation": "Apply only the narrow two-file AVX512 candidate after the current source/build hold is released, then let the unchanged integrated build and full qualification decide acceptance. Keep adaptive tiling unapplied.",
+    "remaining_material_risks": [
+      "Full production compilation and original-reference model gates have not run with this candidate.",
+      "AVX512 frequency and throughput effects depend on the actual CPU, so no speed benefit is established.",
+      "NaN payload/sign and floating-point exception flags are outside the exact-bit promise; NaN classification and signed-zero behavior are covered.",
+      "An actually AVX512-incapable host and AArch64 NEON were not executed in these x86 controls; their existing code paths remain."
+    ]
+  },
+  "production_candidate_built": false,
+  "qualification": false,
+  "read_only_review": {
+    "dispatch": "Target attributes and runtime checks both require AVX512F, AVX512DQ, AVX2 and FMA; existing AVX2, NEON and scalar fallbacks are retained.",
+    "finite_fma_grouping": "16-lane exceptional-exp participation changes an ordinary lane from FMA(j,k,k) to FMA(k,j,k); finite product/add rounding is equivalent and exact-bit controls passed.",
+    "no_blocker_found": true,
+    "reviewers": [
+      "scnet_native",
+      "independent scnet_validation read-only review"
+    ],
+    "tail": "One AVX2 block handles an 8..15-element remainder, followed by the unchanged scalar remainder; individual gate-plane bounds are preserved.",
+    "tanh_and_cell": "The polynomial coefficients, clamps, signed-zero and NaN restoration, plus separate state products/add are unchanged."
+  },
+  "reviewers": [
+    "scnet_native",
+    "independent scnet_validation read-only numerical/dispatch review"
+  ],
+  "schema": "scnet_avx512_gate_controls_historical_v1",
+  "scope": "Executed scratch-only mathematical controls and read-only production-compiler review of an unapplied AVX512 gate candidate. This receipt does not establish production/model fidelity or performance.",
+  "snapshot_ggml_commit": "1b972bb754aa5f83e2d872ccf37a335717f6658d",
+  "snapshot_parent_commit": "4c83d4e3652efafa07ee9ecd431643399b60c7ce"
+}

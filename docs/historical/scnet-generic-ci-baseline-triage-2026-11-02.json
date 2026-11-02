@@ -1,0 +1,184 @@
+{
+  "acceptance": false,
+  "audit_complete": true,
+  "baseline_commit": "e34660cdaa2d89d692d908c7532620aae2af008e",
+  "legacy_arm_harness": {
+    "additional_low_perf_log_observation": "After its test failure the legacy low-perf driver also attempts a missing build-ci-release/bin/crispasr-bench. No causal performance conclusion is drawn from that absent executable.",
+    "changes_made": false,
+    "ctest_failure_count": 18,
+    "jobs": [
+      {
+        "job_id": 125429864643,
+        "name": "ARM64 low-perf",
+        "run_id": 41489730778
+      },
+      {
+        "job_id": 125429864573,
+        "name": "ARM64 high-perf SVE",
+        "run_id": 41489730778
+      },
+      {
+        "job_id": 125429865011,
+        "name": "ARM64 high-perf",
+        "run_id": 41489730778
+      }
+    ],
+    "missing_numpy": {
+      "cause_scope": "The unchanged legacy ARM workflow installs native dependencies but not NumPy. New SCNet controls encounter the same missing dependency as existing Python tests; their numerical bodies were not exercised.",
+      "error": "ModuleNotFoundError: No module named 'numpy'",
+      "failed_tests": 17,
+      "new_scnet_tests": 4,
+      "new_scnet_tests_affected": [
+        "scnet-math",
+        "scnet-validation-controls",
+        "scnet-converter",
+        "scnet-reference"
+      ],
+      "pre_existing_tests": 13,
+      "tests_hidden_or_skipped_to_force_pass": false
+    },
+    "native_build": "completed before test failures",
+    "rust_contract": {
+      "cause": "Hard-coded i8 buffers/pointers disagree with ARM c_char=u8 in unchanged Rust wrapper source.",
+      "classification": "Pre-existing architecture-specific wrapper problem; no Rust or ABI source fix is included in this triage.",
+      "compiler_errors": 11,
+      "error": "E0308 mismatched types; expected *mut u8, found *mut i8",
+      "failed_ctest": "test-go-rust-wrapper-contract",
+      "first_error_location": "crispasr/src/lib.rs:634"
+    }
+  },
+  "limitations": [
+    "Other current-head jobs were still running or queued at this observation; their result is not predicted here.",
+    "Pre-existing source identity does not turn a failing job green. The Windows portability repair still needs a subsequent build, and the ARM baseline issues remain separately scoped.",
+    "Successful generic builds and unit checks do not establish SCNet model fidelity or performance qualification."
+  ],
+  "logs": {
+    "arm64-high-perf-job-125429865011.log": {
+      "bytes": 2188187,
+      "file": "{ci-evidence}/arm64-high-perf-job-125429865011.log",
+      "sha256": "155f3aeb15bd0a80d98acab0fc17ecff608f77bedffbf7e9192ce904e8c9c12f"
+    },
+    "arm64-low-perf-job-125429864643.log": {
+      "bytes": 2153231,
+      "file": "{ci-evidence}/arm64-low-perf-job-125429864643.log",
+      "sha256": "7b729099446a7aeea7f55e3a7029f77caaa2dc5428882c49dc4046e63cb2004e"
+    },
+    "arm64-sve-job-125429864573.log": {
+      "bytes": 2182001,
+      "file": "{ci-evidence}/arm64-sve-job-125429864573.log",
+      "sha256": "09ff9bcc52cc2742a93cb0312587ce03741f396b0181c9cc24752627420591b8"
+    },
+    "ci-windows-job-125429291436.log": {
+      "bytes": 121304,
+      "file": "{ci-evidence}/ci-windows-job-125429291436.log",
+      "sha256": "a9c72390bf53a005f4e786288043c54c54e98e8cf0921a98b0e61134be046cb9"
+    },
+    "cori-cli-server-job-125457779952.log": {
+      "bytes": 302980,
+      "file": "{ci-evidence}/cori-cli-server-job-125457779952.log",
+      "sha256": "660a9c916da2e1497fc1d03a5e877d69e59d1b3a129cd1bb45c99cdc2afce0ea"
+    },
+    "csharp-windows-job-125429276723.log": {
+      "bytes": 143338,
+      "file": "{ci-evidence}/csharp-windows-job-125429276723.log",
+      "sha256": "223c7d7379525315fb032a6d02fc11bab0262cb212bfcf04753b2aa79f51613b"
+    },
+    "windows-blas-win32-job-125429864440.log": {
+      "bytes": 588522,
+      "file": "{ci-evidence}/windows-blas-win32-job-125429864440.log",
+      "sha256": "15610e8d8d9393e1cf3537e1f565609d9448f6a1a8abbf2a6d1ce5c9a61f8a90"
+    },
+    "windows-msys2-job-125429864387.log": {
+      "bytes": 324721,
+      "file": "{ci-evidence}/windows-msys2-job-125429864387.log",
+      "sha256": "4775cc563a6dfa2481d207b7700191887c5f87bd4e3171a7a058eb00959ab9de"
+    }
+  },
+  "observed_at": "2026-11-02T18:51:52Z",
+  "performance_qualification": false,
+  "qualification": false,
+  "schema": "scnet_generic_ci_baseline_triage_v1",
+  "scope": "Bounded triage of observed generic CI failures on this head, not a final all-jobs CI report. No reruns, cancellations, unrelated fixes, or model qualification were performed by this review.",
+  "source_byte_identity": {
+    ".github/workflows/build.yml": {
+      "bytes_identical_to_baseline": true,
+      "sha256": "134fad15d4764cd2b5e7b977e56788369ac103da85df53b32b9ca63df623386f"
+    },
+    "ci/run.sh": {
+      "bytes_identical_to_baseline": true,
+      "sha256": "174d6dff9bad4351098f48d8430b8f131819d4225591f5de84c5b59f1df92a84"
+    },
+    "crispasr-sys/src/lib.rs": {
+      "bytes_identical_to_baseline": true,
+      "sha256": "a39adeaa94c3b112b8c9996c94eb21cf335127608ee0a71102dd402f4d33a227"
+    },
+    "crispasr/src/lib.rs": {
+      "bytes_identical_to_baseline": true,
+      "sha256": "98cf8bb5524139e08d740e914d96aa3cf94fdc0926a035f45d7792b7cc95a771"
+    },
+    "src/mini_bs_roformer.cpp": {
+      "bytes_identical_to_baseline": true,
+      "sha256": "088db8a8500d0bef0117d6ab5a0112f951e7f3dabe0be9b8c7682da08006f0f6"
+    },
+    "tests/test_go_rust_wrapper_contract.py": {
+      "bytes_identical_to_baseline": true,
+      "sha256": "96e3ddaf90ddbe2eea5184503d4561ff50bd74ea218e0690c3c01c4bcb0bb609"
+    }
+  },
+  "source_commit": "4c83d4e3652efafa07ee9ecd431643399b60c7ce",
+  "successful_observations_on_same_head": [
+    "main CI macOS",
+    "main CI Linux backend-DL",
+    "main CI Linux Vulkan",
+    "regression unit-tests",
+    "clang-tidy",
+    "Rust library/CLI build and symbol/audio ABI audits",
+    "Go build and generated link-flags drift",
+    "six language ABI jobs",
+    "main CI Linux unit-tests",
+    "default WASM build"
+  ],
+  "windows_compile_failure": {
+    "classification": "The unguarded POSIX setenv call is in Mini-BS source identical to the baseline; it is not introduced by the SCNet implementation.",
+    "error": "src/mini_bs_roformer.cpp(787,13): error C3861: 'setenv': identifier not found",
+    "fix_state": "Scratch patch prepared and locally checked; not applied to the failed source or claimed CI-validated in this receipt.",
+    "focused_controls": "The original extracted block fails a Windows-style syntax control; patched Windows/Linux controls pass; Apple preprocessed behavior is identical; a full Linux translation-unit syntax check passes. These are not a Windows/MSVC execution claim.",
+    "gnu_error": "src/mini_bs_roformer.cpp:787:13: error: 'setenv' was not declared in this scope",
+    "jobs": [
+      {
+        "job_id": 125429276723,
+        "name": "C# Windows",
+        "run_id": 41489730722
+      },
+      {
+        "job_id": 125429291436,
+        "name": "main CI Windows",
+        "run_id": 41489730720
+      },
+      {
+        "job_id": 125429864440,
+        "name": "Windows BLAS Win32",
+        "run_id": 41489730778
+      },
+      {
+        "job_id": 125429864387,
+        "name": "MSYS2 UCRT64 Release",
+        "run_id": 41489730778
+      },
+      {
+        "job_id": 125457779952,
+        "name": "Cori CLI and server (Windows)",
+        "run_id": 41489721100
+      }
+    ],
+    "related_matrix_status": {
+      "conclusion": "cancelled",
+      "failure_inferred": false,
+      "job_id": 125429864369,
+      "name": "Windows BLAS x64"
+    },
+    "scope_of_prepared_fix": "Guard only the Metal-specific setenv call with __APPLE__. Preserve overwrite=0, GPU initialization, and the Apple dynamic-Metal workaround.",
+    "scratch_control_receipt_sha256": "52e6f21f90fd25da57560ee94870404eeeb9b06fd7876ee68d0c21191579371a",
+    "scratch_patch_sha256": "267e98ebc545536167a7257e6340447bd59dc99535a6ef92d16a32a7520f38b7"
+  }
+}

@@ -35,6 +35,7 @@
 #include <immintrin.h>
 #define SCNET_ACT_X86 1
 #define SCNET_ACT_AVX2 __attribute__((target("avx2,fma")))
+#define SCNET_ACT_AVX512 __attribute__((target("avx512f,avx512dq,avx2,fma")))
 #else
 #define SCNET_ACT_X86 0
 #endif
@@ -164,6 +165,100 @@ SCNET_ACT_AVX2 SCNET_ACT_NO_CONTRACT inline void avx2_update(const float* gates,
     }
     scalar_range(gates, cell, hidden, output, width, k);
 }
+
+// A lane-width extension of the AVX2 equations above. Mask selection replaces
+// the corresponding bit-mask blends; all F32 constants and FMA groupings stay
+// unchanged. AVX512DQ is required for the floating-point bitwise intrinsics.
+SCNET_ACT_AVX512 inline __m512 exp_avx512(__m512 x) {
+    const __m512 r = _mm512_set1_ps(0x1.8p23f);
+    const __m512 z = _mm512_fmadd_ps(x, _mm512_set1_ps(0x1.715476p+0f), r);
+    const __m512 n = _mm512_sub_ps(z, r);
+    const __m512 b =
+        _mm512_fnmadd_ps(n, _mm512_set1_ps(0x1.7f7d1cp-20f), _mm512_fnmadd_ps(n, _mm512_set1_ps(0x1.62e4p-1f), x));
+    const __m512i e = _mm512_slli_epi32(_mm512_castps_si512(z), 23);
+    const __m512 k = _mm512_castsi512_ps(_mm512_add_epi32(e, _mm512_castps_si512(_mm512_set1_ps(1))));
+    const __mmask16 c = _mm512_cmp_ps_mask(_mm512_andnot_ps(_mm512_set1_ps(-0.f), n), _mm512_set1_ps(126), _CMP_GT_OQ);
+    const __m512 u = _mm512_mul_ps(b, b);
+    const __m512 j = _mm512_fmadd_ps(
+        _mm512_fmadd_ps(_mm512_fmadd_ps(_mm512_set1_ps(0x1.0e4020p-7f), b, _mm512_set1_ps(0x1.573e2ep-5f)), u,
+                        _mm512_fmadd_ps(_mm512_set1_ps(0x1.555e66p-3f), b, _mm512_set1_ps(0x1.fffdb6p-2f))),
+        u, _mm512_mul_ps(_mm512_set1_ps(0x1.ffffecp-1f), b));
+    if (!c)
+        return _mm512_fmadd_ps(j, k, k);
+    const __m512i g =
+        _mm512_maskz_mov_epi32(_mm512_cmp_ps_mask(n, _mm512_setzero_ps(), _CMP_LE_OQ), _mm512_set1_epi32(0x82000000u));
+    const __m512 s1 = _mm512_castsi512_ps(_mm512_add_epi32(g, _mm512_set1_epi32(0x7f000000u)));
+    const __m512 s2 = _mm512_castsi512_ps(_mm512_sub_epi32(e, g));
+    const __mmask16 d = _mm512_cmp_ps_mask(_mm512_andnot_ps(_mm512_set1_ps(-0.f), n), _mm512_set1_ps(192), _CMP_GT_OQ);
+    const __m512 expanded =
+        _mm512_mask_blend_ps(c, _mm512_fmadd_ps(k, j, k), _mm512_mul_ps(_mm512_fmadd_ps(s2, j, s2), s1));
+    return _mm512_mask_blend_ps(d, expanded, _mm512_mul_ps(s1, s1));
+}
+
+SCNET_ACT_AVX512 inline __m512 sigmoid_avx512(__m512 x) {
+    const __m512 one = _mm512_set1_ps(1.0f);
+    return _mm512_div_ps(one, _mm512_add_ps(one, exp_avx512(_mm512_sub_ps(_mm512_setzero_ps(), x))));
+}
+
+SCNET_ACT_AVX512 inline __m512 tanh_avx512(__m512 x) {
+    const __m512 one = _mm512_set1_ps(1.0f), sign = _mm512_set1_ps(-0.0f);
+    const __m512 magnitude = _mm512_andnot_ps(sign, x);
+    const __m512 polynomial_magnitude = _mm512_min_ps(magnitude, _mm512_set1_ps(0.5f));
+    const __m512 square = _mm512_mul_ps(polynomial_magnitude, polynomial_magnitude);
+    __m512 p = _mm512_set1_ps(6404582.0f / 10854718875.0f);
+    p = _mm512_fmadd_ps(p, square, _mm512_set1_ps(-929569.0f / 638512875.0f));
+    p = _mm512_fmadd_ps(p, square, _mm512_set1_ps(21844.0f / 6081075.0f));
+    p = _mm512_fmadd_ps(p, square, _mm512_set1_ps(-1382.0f / 155925.0f));
+    p = _mm512_fmadd_ps(p, square, _mm512_set1_ps(62.0f / 2835.0f));
+    p = _mm512_fmadd_ps(p, square, _mm512_set1_ps(-17.0f / 315.0f));
+    p = _mm512_fmadd_ps(p, square, _mm512_set1_ps(2.0f / 15.0f));
+    p = _mm512_fmadd_ps(p, square, _mm512_set1_ps(-1.0f / 3.0f));
+    const __m512 small = _mm512_mul_ps(x, _mm512_fmadd_ps(p, square, one));
+    const __m512 bounded = _mm512_min_ps(magnitude, _mm512_set1_ps(20.0f));
+    const __m512 e = exp_avx512(_mm512_mul_ps(_mm512_set1_ps(-2.0f), bounded));
+    const __m512 positive = _mm512_div_ps(_mm512_sub_ps(one, e), _mm512_add_ps(one, e));
+    const __m512 large = _mm512_xor_ps(positive, _mm512_and_ps(sign, x));
+    const __m512 result =
+        _mm512_mask_blend_ps(_mm512_cmp_ps_mask(magnitude, _mm512_set1_ps(0.5f), _CMP_LE_OQ), large, small);
+    return _mm512_mask_blend_ps(_mm512_cmp_ps_mask(x, x, _CMP_UNORD_Q), result, x);
+}
+
+SCNET_ACT_AVX512 SCNET_ACT_NO_CONTRACT inline void avx512_update(const float* gates, float* cell, float* hidden,
+                                                                 float* output, int width) {
+    SCNET_ACT_PRECISE
+    int k = 0;
+    for (; k + 15 < width; k += 16) {
+        const __m512 i = sigmoid_avx512(_mm512_loadu_ps(gates + k));
+        const __m512 f = sigmoid_avx512(_mm512_loadu_ps(gates + width + k));
+        const __m512 g = tanh_avx512(_mm512_loadu_ps(gates + 2 * width + k));
+        const __m512 o = sigmoid_avx512(_mm512_loadu_ps(gates + 3 * width + k));
+        const __m512 next_cell = _mm512_add_ps(_mm512_mul_ps(f, _mm512_loadu_ps(cell + k)), _mm512_mul_ps(i, g));
+        const __m512 next_hidden = _mm512_mul_ps(o, tanh_avx512(next_cell));
+        _mm512_storeu_ps(cell + k, next_cell);
+        _mm512_storeu_ps(hidden + k, next_hidden);
+        _mm512_storeu_ps(output + k, next_hidden);
+    }
+    // Preserve the existing AVX2/scalar split for every width, including 8..15.
+    // No vector load may cross the end of an individual gate plane.
+    if (k + 7 < width) {
+        const __m256 i = sigmoid_avx2(_mm256_loadu_ps(gates + k));
+        const __m256 f = sigmoid_avx2(_mm256_loadu_ps(gates + width + k));
+        const __m256 g = tanh_avx2(_mm256_loadu_ps(gates + 2 * width + k));
+        const __m256 o = sigmoid_avx2(_mm256_loadu_ps(gates + 3 * width + k));
+        const __m256 next_cell = _mm256_add_ps(_mm256_mul_ps(f, _mm256_loadu_ps(cell + k)), _mm256_mul_ps(i, g));
+        const __m256 next_hidden = _mm256_mul_ps(o, tanh_avx2(next_cell));
+        _mm256_storeu_ps(cell + k, next_cell);
+        _mm256_storeu_ps(hidden + k, next_hidden);
+        _mm256_storeu_ps(output + k, next_hidden);
+        k += 8;
+    }
+    scalar_range(gates, cell, hidden, output, width, k);
+}
+
+inline bool avx512_supported() {
+    return __builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx512dq") && __builtin_cpu_supports("avx2") &&
+           __builtin_cpu_supports("fma");
+}
 #endif
 
 #if SCNET_ACT_NEON
@@ -239,6 +334,8 @@ SCNET_ACT_NO_CONTRACT inline void neon_update(const float* gates, float* cell, f
 inline Kernel fastest_kernel() {
     static const Kernel selected = [] {
 #if SCNET_ACT_X86
+        if (avx512_supported())
+            return Kernel{avx512_update, "avx512_fma"};
         if (__builtin_cpu_supports("avx2") && __builtin_cpu_supports("fma"))
             return Kernel{avx2_update, "avx2_fma"};
 #endif

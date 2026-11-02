@@ -1,0 +1,147 @@
+{
+  "acceptance": false,
+  "audit_complete": true,
+  "ggml_commit": "1b972bb754aa5f83e2d872ccf37a335717f6658d",
+  "jobs": [
+    {
+      "completed_at": "2026-11-02T18:36:30Z",
+      "conclusion": "failure",
+      "failure_step": {
+        "completed_at": "2026-11-02T18:36:22Z",
+        "conclusion": "failure",
+        "name": "Build the pinned CPU BLAS provider",
+        "number": 7,
+        "started_at": "2026-11-02T18:36:22Z",
+        "status": "completed"
+      },
+      "job_id": 125429241991,
+      "job_log": {
+        "bytes": 66839,
+        "file": "{hosted-evidence}/small-job.log",
+        "sha256": "e742c0e8bb93eff419ffb81aea106bfad43e3a8168912515a597af71a85b0bd0"
+      },
+      "model_conversion_and_all_precision_qualification": "skipped",
+      "native_build": "skipped",
+      "original_reference_and_rejection_controls": "skipped",
+      "qualified_model_packaging": "skipped",
+      "started_at": "2026-11-02T18:35:30Z",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/41489721058/job/125429241991",
+      "variant": "scnet"
+    },
+    {
+      "completed_at": "2026-11-02T18:35:28Z",
+      "conclusion": "failure",
+      "failure_step": {
+        "completed_at": "2026-11-02T18:35:19Z",
+        "conclusion": "failure",
+        "name": "Build the pinned CPU BLAS provider",
+        "number": 7,
+        "started_at": "2026-11-02T18:35:19Z",
+        "status": "completed"
+      },
+      "job_id": 125429242325,
+      "job_log": {
+        "bytes": 66216,
+        "file": "{hosted-evidence}/large-job.log",
+        "sha256": "9748fc0d5ad7205997254e1b7f49ea1555b0e6efc75ce9763a30878c891ca628"
+      },
+      "model_conversion_and_all_precision_qualification": "skipped",
+      "native_build": "skipped",
+      "original_reference_and_rejection_controls": "skipped",
+      "qualified_model_packaging": "skipped",
+      "started_at": "2026-11-02T18:34:00Z",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/41489721058/job/125429242325",
+      "variant": "scnet-large"
+    }
+  ],
+  "large_archive_independent_audit": {
+    "bytes": 2956,
+    "file": "{hosted-evidence}/large-verification.json",
+    "sha256": "6afe47e0c53daeda203530db5be28e4d3965126a26836b8a19f97024f5d6d74b"
+  },
+  "large_evidence_archive": {
+    "advertised_digest_verified": true,
+    "all_payload_files_verified": true,
+    "artifact_id": 13168069301,
+    "bytes": 3414,
+    "generated_patch_empty": true,
+    "name": "scnet-scnet-large-qualification-4c83d4e3652efafa07ee9ecd431643399b60c7ce",
+    "payload_manifest_sha256": "99408f0ccaa8eecc9f6a0e8f67a9463eff0b6c57bd40b6f06af725e2adbcb3ac",
+    "payloads": [
+      {
+        "bytes": 3110,
+        "path": "cpu.txt",
+        "sha256": "e53f15cdc610dfe30bc7974d13558a96f7883beca79eecad3d0f1a98cb114a0c"
+      },
+      {
+        "bytes": 392,
+        "path": "disk.txt",
+        "sha256": "097d066f39577899c3221f2d2bdba9950754c081ca7fc6e5c00890132d90c877"
+      },
+      {
+        "bytes": 0,
+        "path": "generated.patch",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "bytes": 207,
+        "path": "memory.txt",
+        "sha256": "d2d85a85674863386a3bb52787fb2c4ac6d8075c9f83894172b91e7ab61369b5"
+      },
+      {
+        "bytes": 709,
+        "path": "python-packages.txt",
+        "sha256": "b0a5a68637e1db443a57d0699ae72744435a1b6e358ae5c3db96a9276d0c4736"
+      },
+      {
+        "bytes": 41,
+        "path": "source.txt",
+        "sha256": "e36096996561029a95e21c10c5770975cb2b40e1c1d278b4f9f7c4e6006ff269"
+      },
+      {
+        "bytes": 132,
+        "path": "submodules.txt",
+        "sha256": "b8ae1319f0763c6136c0f2ea809e2518b3a967701b44f2a064ca112ba4132e49"
+      }
+    ],
+    "sha256": "d203d5a3bdd5869b3effdb5c27fe24f5deaa9b852f0cf629927f2960f17b714f"
+  },
+  "limitations": [
+    "The retained preflight archive binds the requested commit and submodules, environment metadata and an empty generated patch. It contains no built runtime, model captures or qualification receipt.",
+    "The existing strict loader policy rejected the inherited setup environment; this summary does not relax that policy or claim a fix was tested.",
+    "The completed local F16 paired diagnostic is independent evidence and must not be presented as a successful result of this hosted run."
+  ],
+  "model_results": {
+    "actual_model_runtime_dso_proofs": false,
+    "full_stage_gates": false,
+    "model_conversions": false,
+    "native_binaries": false,
+    "qualified_gguf_packages": false,
+    "raw_stage_gates": false,
+    "timing_pairs": false,
+    "waveform_gates": false
+  },
+  "observed_cause": {
+    "environment_variable": "LD_LIBRARY_PATH",
+    "error": "provider controls require an environment without loader overrides",
+    "evidence": "The setup-python environment shown in both job logs contains this library directory; the subsequent provider step inherits it and exits at the explicit loader-override guard.",
+    "exit_code": 2,
+    "provider_compilation_started": false,
+    "setup_action": "actions/setup-python@v6",
+    "setup_python_version": "3.11.17",
+    "value": "{actions-python}/lib"
+  },
+  "performance_qualification": false,
+  "qualification": false,
+  "related_local_diagnostic": "docs/historical/scnet-runtime-normal-access-profile-2026-11-02.json",
+  "run_id": 41489721058,
+  "run_url": "https://github.com/CrispStrobe/CrispASR/actions/runs/41489721058",
+  "schema": "scnet_hosted_provider_prebuild_failures_v1",
+  "scope": "Preserved failed hosted attempt before provider compilation and all native/model work. These failures provide no numerical or speed result for SCNet.",
+  "small_evidence_scope": "Job metadata and the failed job log were retrieved and checked. No small archive is claimed in this summary.",
+  "source_commit": "4c83d4e3652efafa07ee9ecd431643399b60c7ce",
+  "source_sha256": {
+    ".github/workflows/scnet-qualification.yml": "91451fd23996b3f4ea197ae9888860322a4e5eaed7ef4f72fc3cc6306e58224c",
+    "tools/ci-heavy/scnet_build_openblas.py": "cd65e9c4bc5e7b0fdd95e46073d52251da614d6502f0446fb621a2e8b6ea8b81"
+  }
+}

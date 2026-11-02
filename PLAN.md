@@ -168,9 +168,39 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 - Main's newer Metal work is preserved with both SCNet dependency fixes in
   ggml `1b972bb754aa5f83e2d872ccf37a335717f6658d`; CPU SCNet and allocator
   source bytes are unchanged from the final local checks.
-- Next action: run both model sizes directly
+- The [fresh full hosted run](https://github.com/CrispStrobe/CrispASR/actions/runs/41489721058)
+  stopped before provider or native compilation: `setup-python` supplied
+  `LD_LIBRARY_PATH`, which the provider guard correctly rejected. The
+  [failure receipt](docs/historical/scnet-hosted-provider-prebuild-failures-2026-11-02.json)
+  contains no model result. Both qualification workflows now remove that
+  variable before shell/Python startup and verify the selected interpreter
+  before installation; [startup controls](docs/historical/scnet-python-clean-start-controls-2026-11-02.json)
+  bind the official Python artifact and its embedded RUNPATH. Provider and
+  loaded-runtime guards remain unchanged.
+- The [normal-runtime local F16 diagnostic](docs/historical/scnet-runtime-normal-access-profile-2026-11-02.json)
+  uses ordinary Torch AVX512 dispatch, with no ISA override. All warmup and
+  measured waveform checks pass. Native median **17.124176 seconds** narrowly
+  beats original **17.301418 seconds** across three alternating pairs on the
+  same EPYC 9V74 worker with two threads. This is not complete qualification.
+  The [native-only full-output replay](docs/historical/scnet-recurrent-weight-full-output-2026-11-02.json)
+  and [exact historical control sources](docs/historical/scnet-recurrent-weight-control-sources-2026-11-02/README.md)
+  preserve the earlier observations and their original compiled-source scope.
+- The AVX512 gate extension preserves the existing AVX2 equations, constants,
+  FMA grouping, tails and fallbacks. Its [component controls](docs/historical/scnet-avx512-gate-controls-2026-11-02.json)
+  pass all 12 groups, including bit-identical activation, gate-state and
+  recurrent-feedback comparisons. Production model and speed acceptance still
+  require the complete campaign. The unrelated adaptive-convolution candidate
+  is not part of this implementation.
+- Generic CI exposed an inherited Mini-BS Windows `setenv` build error; the
+  Metal-only setting is now guarded by `__APPLE__`, preserving dynamic Metal
+  behavior. [Baseline CI triage](docs/historical/scnet-generic-ci-baseline-triage-2026-11-02.json)
+  also retains unrelated ARM harness failures without treating them as SCNet
+  numerical results.
+- Next action: qualify both model sizes directly
   through all original-checkpoint, raw, full-pipeline, CLI/Session and paired
   performance gates in `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566).
+  The dedicated `ci/scnet-qualification-20261102` branch triggers the expensive
+  campaign on its exact commit; ordinary feature-PR checks remain in place.
   Complete CPU qualification, GPU qualification and held-out quality remain unproven; do not promote the
   candidate or substitute diagnostic runs for these gates.
 - License: upstream [MIT notice](https://github.com/starrytong/SCNet/blob/main/LICENSE)
