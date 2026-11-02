@@ -4,8 +4,10 @@
 Only the small author checkpoint is converted. One cold BENCH=1 call includes
 synchronizing graph-op callbacks. A separate BENCH=0 process warms both engines
 and runs three alternating original/native pairs with the validator's unchanged
-F16 waveform gates. It does not capture the 35 intermediate stages or test the
-quantized models, and every receipt keeps overall acceptance/qualification false.
+F16 waveform gates. Optional --compare-wait-policy repeats those paired calls in
+a fresh process with passive OpenMP waiting for both engines. The default pairs
+remain the primary result. It does not capture the 35 intermediate stages or test
+the quantized models, and every receipt keeps overall acceptance/qualification false.
 """
 from __future__ import annotations
 
@@ -29,22 +31,25 @@ from scnet_qualify import (
 )
 from reference_backends.scnet import CHECKPOINT_URLS, SOURCE_HASHES, SOURCE_REVISION, sha256, verify_source_files
 from validate_scnet import (
-    GGUFFile, NORM_RATIO_BOUNDS, RELATIVE_L2_MAX, THRESHOLDS, NativeModel, all_pass,
+    GGUFFile, NORM_RATIO_BOUNDS, RELATIVE_L2_MAX, STEMS, THREAD_VARIABLES, THRESHOLDS, NativeModel, all_pass,
     atomic_json_write, check_inventory, pcm_sha256, runtime_provenance, summarize_pairs, waveform_metrics,
 )
 
 PROFILE = {"mode": "pipeline", "segment_seconds": 20, "shifts": 1, "shift_seed": 0, "overlap": .5}
 SOURCES = (
     "src/scnet.cpp", "src/scnet.h", "src/scnet_fft.h", "src/scnet_lstm.h", "src/scnet_shift.h",
-    "src/scnet_activation.h", "src/scnet_tensor.h", "src/scnet_im2col.h",
+    "src/scnet_activation.h", "src/scnet_tensor.h", "src/scnet_im2col.h", "src/scnet_real_fft.h",
     "tests/test-scnet-math.py", "tests/test-scnet-tensor.cpp", "tests/test-scnet-im2col.py",
-    "tests/test-scnet-fft.py", "tests/test-scnet-blas-threads.cpp", "ggml/src/ggml-blas/ggml-blas.cpp",
+    "tests/test-scnet-fft.py", "tests/test-scnet-real-fft.py", "tests/test_scnet_profile.py",
+    "tests/test-scnet-blas-threads.cpp", "ggml/src/ggml-blas/ggml-blas.cpp",
     "src/CMakeLists.txt", "CMakeLists.txt", "tools/scnet_exports.cpp", "tools/validate_scnet.py",
     "models/convert-scnet-to-gguf.py", "tools/reference_backends/scnet.py", "tools/requirements-scnet.txt",
     "tools/ci-heavy/scnet_qualify.py", "tools/ci-heavy/scnet_profile.py", ".github/workflows/scnet-profile.yml",
 )
 CONTROLS = ("CRISPASR_SCNET_BENCH", "CRISPASR_SCNET_CAPTURE_GGUF", "CRISPASR_SCNET_SCALAR_LSTM",
             "CRISPASR_SCNET_SCALAR_GATES", "CRISPASR_SCNET_BLAS", "CRISPASR_CPU_GEMM", "CRISPASR_SCNET_GPU")
+WAIT_POLICY_VARIABLES = ("OMP_WAIT_POLICY", "GOMP_SPINCOUNT", "KMP_BLOCKTIME", "OPENBLAS_THREAD_TIMEOUT")
+PASSIVE_WAIT_POLICY = {"OMP_WAIT_POLICY": "PASSIVE", "GOMP_SPINCOUNT": "0"}
 
 
 def portable(value, args):
@@ -218,6 +223,7 @@ def paired_worker(args):
     receipt = {"schema": 1, "acceptance": False, "qualification": False, "complete": False,
         "scope": "F16 final-waveform and same-host timing smoke; no intermediate-stage or quantized qualification",
         "variant": "scnet", "precision": "f16", "required_stages_checked": 0,
+        "worker_process_id": os.getpid(),
         "source_commit": args.source_commit, "upstream_source_revision": SOURCE_REVISION,
         "upstream_source_hashes": SOURCE_HASHES, "profile": PROFILE, "threads": 2,
         "repetitions": 3, "warmups_per_implementation": 1, "warmups": [], "calls": [], "errors": [],
@@ -284,6 +290,82 @@ def paired_worker(args):
         save()
 
 
+def summarize_wait_policy_comparison(primary, passive):
+    """Check two complete diagnostic receipts without changing qualification gates."""
+    identities = ("source_commit", "upstream_source_revision", "upstream_source_hashes", "model_sha256",
+                  "checkpoint_sha256", "audio_sha256", "library_sha256", "input_pcm_interleaved_sha256",
+                  "input_pcm_planar_sha256", "original_provenance", "native_backend", "native_compute_precision",
+                  "torch_version", "original_dtype", "profile", "waveform_policy")
+    if any(key not in primary or primary[key] != passive.get(key) for key in identities):
+        raise ValueError("wait-policy comparison changed model, source, fixture, runtime or numeric policy")
+    process_ids = [row.get("worker_process_id") for row in (primary, passive)]
+    if any(type(pid) is not int or pid <= 0 for pid in process_ids) or process_ids[0] == process_ids[1]:
+        raise ValueError("wait-policy comparison requires separate fresh worker processes")
+    summaries, hashes = {}, {}
+    for label, row in (("default", primary), ("passive", passive)):
+        if row.get("complete") is not True or row.get("waveform_acceptance") is not True or \
+                row.get("acceptance") is not False or row.get("qualification") is not False or \
+                row.get("required_stages_checked") != 0 or row.get("profile") != PROFILE or \
+                row.get("threads") != 2 or row.get("torch_intraop_threads") != 2 or \
+                row.get("torch_interop_threads") != 1 or row.get("repetitions") != 3 or \
+                row.get("warmups_per_implementation") != 1 or row.get("errors"):
+            raise ValueError(f"{label} wait-policy receipt is incomplete or violates diagnostic scope")
+        runtime = row.get("runtime", {})
+        queries = row.get("native_blas_thread_queries", {})
+        if runtime.get("thread_environment") != dict.fromkeys(THREAD_VARIABLES, "2") or \
+                not queries or any(value != 2 for value in queries.values()):
+            raise ValueError(f"{label} wait-policy receipt does not verify both two-thread budgets")
+        controls = row.get("execution_controls", {})
+        if set(controls) != set(CONTROLS) or controls.get("CRISPASR_SCNET_BENCH") != "0" or \
+                controls.get("CRISPASR_SCNET_GPU") != "0" or \
+                any(controls.get(key) is not None for key in CONTROLS
+                    if key not in ("CRISPASR_SCNET_BENCH", "CRISPASR_SCNET_GPU")):
+            raise ValueError(f"{label} wait-policy smoke enabled instrumentation or an execution override")
+        warmups = row.get("warmups", [])
+        if [(call.get("iteration"), call.get("implementation")) for call in warmups] != \
+                [(0, "original"), (0, "native")]:
+            raise ValueError(f"{label} wait-policy smoke did not warm both engines")
+        summaries[label] = summarize_pairs(row.get("calls", []), 3)
+        if any(row.get(key) != value for key, value in summaries[label].items()):
+            raise ValueError(f"{label} wait-policy receipt disagrees with all retained timings")
+        measurements = warmups + row["calls"]
+        for call in measurements:
+            scores = call.get("stems", {})
+            if call.get("complete") is not True or call.get("quality_acceptance") is not True or \
+                    call.get("input_unchanged") is not True or set(scores) != set(STEMS) or not all_pass(scores) or \
+                    not isinstance(call.get("seconds"), (int, float)) or not math.isfinite(call["seconds"]) or \
+                    call["seconds"] <= 0:
+                raise ValueError(f"{label} wait-policy smoke has a failed or missing waveform/input check")
+        hashes[label] = {}
+        for implementation in ("original", "native"):
+            digests = {call.get("pcm_sha256") for call in measurements
+                       if call["implementation"] == implementation}
+            if len(digests) != 1 or not all(isinstance(value, str) and re.fullmatch("[0-9a-f]{64}", value)
+                                          for value in digests):
+                raise ValueError(f"{label} wait-policy smoke has unstable or missing PCM hashes")
+            hashes[label][implementation] = next(iter(digests))
+        if hashes[label]["original"] != row.get("reference_pcm_sha256"):
+            raise ValueError(f"{label} wait-policy reference hash differs from its original warmup")
+    if hashes["default"] != hashes["passive"]:
+        raise ValueError("wait-policy comparison changed an engine's output PCM")
+    default_environment = primary["runtime"].get("wait_policy_environment", {})
+    passive_environment = passive["runtime"].get("wait_policy_environment", {})
+    if set(default_environment) != set(WAIT_POLICY_VARIABLES) or \
+            passive_environment != {**default_environment, **PASSIVE_WAIT_POLICY}:
+        raise ValueError("passive waiting was not applied equally while preserving other wait controls")
+    return {"schema": 1, "complete": True, "acceptance": False, "qualification": False,
+        "scope": "Optional same-host waiting-policy diagnostic; the default paired smoke remains primary. "
+                 "Each policy has a fresh process, one warmup per engine and three alternating pairs. "
+                 "Default runs before passive; cross-policy timing differences are descriptive, not randomized.",
+        "default_receipt": "paired-smoke.json", "passive_receipt": "wait-policy-passive/paired-smoke.json",
+        "default_wait_policy_environment": default_environment, "passive_wait_policy_environment": passive_environment,
+        "default_results": summaries["default"], "passive_results": summaries["passive"],
+        "output_pcm_sha256": hashes["default"], "output_hashes_identical_across_policies": True,
+        "passive_minus_default_seconds": {name: summaries["passive"][name + "_median_seconds"] -
+            summaries["default"][name + "_median_seconds"] for name in ("original", "native")},
+        "passive_paired_smoke": passive}
+
+
 def profile(args):
     args.output_dir.mkdir(parents=True, exist_ok=False)
     receipt = {"schema": 1, "acceptance": False, "qualification": False, "complete": False,
@@ -291,18 +373,27 @@ def profile(args):
         "upstream_source_revision": SOURCE_REVISION, "upstream_source_hashes": SOURCE_HASHES,
         "profile": PROFILE, "calls": 1, "warmups": 0, "threads": 2, "commands": [], "errors": [],
         "scope": "One instrumented cold call plus separate uninstrumented F16 waveform/timing smoke; not a qualification",
-        "paired_smoke_repetitions": 3, "paired_smoke_warmups_per_implementation": 1}
+        "paired_smoke_repetitions": 3, "paired_smoke_warmups_per_implementation": 1,
+        "wait_policy_comparison_requested": args.compare_wait_policy}
     save = lambda: atomic_json_write(args.output_dir / "diagnostic.json", portable(receipt, args))
     save()
 
-    def run(label, command, timeout=600):
+    def run(label, command, timeout=600, environment=None, log_dir=None):
         event = {"name": label, "argv": [str(part) for part in command], "complete": False}
+        child_environment = None
+        if environment is not None:
+            child_environment = {**os.environ, **environment}
+            event["environment_overrides"] = dict(environment)
+        directory = log_dir or args.output_dir
+        if log_dir is not None:
+            event["log_directory"] = str(directory)
         receipt["commands"].append(event)
         save()
         try:
-            with (args.output_dir / (label + ".stdout.log")).open("w") as stdout, \
-                    (args.output_dir / (label + ".stderr.log")).open("w") as stderr:
-                result = subprocess.run(event["argv"], cwd=ROOT, stdout=stdout, stderr=stderr, timeout=timeout, check=False)
+            with (directory / (label + ".stdout.log")).open("w") as stdout, \
+                    (directory / (label + ".stderr.log")).open("w") as stderr:
+                result = subprocess.run(event["argv"], cwd=ROOT, stdout=stdout, stderr=stderr, timeout=timeout,
+                                        check=False, env=child_environment)
             event.update(complete=True, returncode=result.returncode)
             if result.returncode:
                 raise RuntimeError(f"{label} failed with exit {result.returncode}; retained logs identify the failure")
@@ -401,6 +492,24 @@ def profile(args):
                 paired.get("execution_controls", {}).get("CRISPASR_SCNET_BENCH") != "0":
             raise ValueError("paired waveform/timing smoke is incomplete or inconsistent")
         summarize_pairs(paired["calls"], 3)
+        if args.compare_wait_policy:
+            passive_dir = args.output_dir / "wait-policy-passive"
+            passive_dir.mkdir(exist_ok=False)
+            receipt["wait_policy_comparison"] = {"complete": False, "acceptance": False, "qualification": False,
+                "default_receipt": "paired-smoke.json", "passive_receipt": "wait-policy-passive/paired-smoke.json",
+                "environment_overrides": dict(PASSIVE_WAIT_POLICY)}
+            save()
+            run("paired-smoke-passive", [sys.executable, Path(__file__), "--paired-worker",
+                "--source-commit", args.source_commit, "--build-dir", args.build_dir,
+                "--assets-dir", args.assets_dir, "--output-dir", passive_dir], timeout=1200,
+                environment=PASSIVE_WAIT_POLICY, log_dir=passive_dir)
+            passive = json.loads((passive_dir / "paired-smoke.json").read_text())
+            receipt["wait_policy_comparison"]["passive_paired_smoke"] = passive
+            save()
+            if re.search(r"^scnet_bench(?:_|:)", (passive_dir / "paired-smoke-passive.stderr.log").read_text(), re.MULTILINE):
+                raise ValueError("passive-wait smoke emitted instrumentation despite requiring BENCH=0")
+            receipt["wait_policy_comparison"] = summarize_wait_policy_comparison(paired, passive)
+            atomic_json_write(args.output_dir / "wait-policy-comparison.json", portable(receipt["wait_policy_comparison"], args))
         receipt["complete"] = True
     except BaseException as error:
         receipt["errors"].append(f"{type(error).__name__}: {error}")
@@ -412,12 +521,16 @@ def profile(args):
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source-commit", required=True)
+    parser.add_argument("--compare-wait-policy", action="store_true",
+                        help="Also run a fresh same-environment passive-wait diagnostic for both engines")
     for name in ("build-dir", "assets-dir", "output-dir"):
         parser.add_argument("--" + name, required=True, type=Path)
     workers = parser.add_mutually_exclusive_group()
     workers.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
     workers.add_argument("--paired-worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
+    if args.compare_wait_policy and (args.worker or args.paired_worker):
+        parser.error("--compare-wait-policy belongs to the supervising diagnostic, not a worker")
     if not re.fullmatch("[0-9a-f]{40}", args.source_commit):
         parser.error("--source-commit must be the exact checkout revision")
     for name in ("build_dir", "assets_dir", "output_dir"):

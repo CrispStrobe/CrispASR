@@ -86,12 +86,14 @@ jobs:
           build-scnet-profile/bin/scnet-blas-thread-test 2>&1 | tee scnet-profile-out/blas-thread-controls.log
           python tests/test-scnet-im2col.py 2>&1 | tee scnet-profile-out/im2col-controls.log
           python tests/test-scnet-fft.py 2>&1 | tee scnet-profile-out/fft-controls.log
+          python tests/test-scnet-real-fft.py 2>&1 | tee scnet-profile-out/real-fft-controls.log
           python tests/test-scnet-math.py 2>&1 | tee scnet-profile-out/math-controls.log
-      - name: Profile small F16 and compare three uninstrumented original-native pairs
+          python tests/test_scnet_profile.py 2>&1 | tee scnet-profile-out/profile-controls.log
+      - name: Profile F16, primary timing pairs and the passive-wait diagnostic
         run: >
           python tools/ci-heavy/scnet_profile.py --source-commit ${{ github.sha }}
           --build-dir build-scnet-profile --assets-dir scnet-assets
-          --output-dir scnet-profile-out/diagnostic
+          --output-dir scnet-profile-out/diagnostic --compare-wait-policy
       - name: Retain diagnostic source, build options and hashes
         if: always()
         run: |

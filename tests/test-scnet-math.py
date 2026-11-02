@@ -127,6 +127,24 @@ void scnet_math_lstm_bias(const float* pf, const float* pr, const float* wf, con
                                     true, begin, end, false, scratch, profile ? &timing : nullptr, input_br);
     }
 }
+void scnet_math_lstm_strided(const float* pf, const float* pr, const float* wf, const float* wr,
+                             const float* bf, const float* br, const float* input_bf, const float* input_br,
+                             float* output, int hidden, int batch, int steps, int threads, int profile,
+                             size_t projection_row_stride) {
+    for (int worker = 0; worker < threads; ++worker) {
+        const int begin = int(int64_t(batch) * worker / threads);
+        const int end = int(int64_t(batch) * (worker + 1) / threads);
+        if (begin == end) continue;
+        scnet_detail::LstmScratch scratch(end - begin, hidden);
+        scnet_detail::LstmTiming timing;
+        scnet_detail::lstm_direction(pf, wf, bf, output, hidden, batch, steps,
+                                    false, begin, end, false, scratch, profile ? &timing : nullptr,
+                                    input_bf, projection_row_stride);
+        scnet_detail::lstm_direction(pr, wr, br, output, hidden, batch, steps,
+                                    true, begin, end, false, scratch, profile ? &timing : nullptr,
+                                    input_br, projection_row_stride);
+    }
+}
 }
 """
 
@@ -134,7 +152,7 @@ DISPATCH_WRAPPER = r"""
 #include "scnet.cpp"
 #include <cassert>
 
-std::vector<float> exercise(bool blas, int requested, int actual) {
+std::vector<float> exercise(bool blas, int requested, int actual, int projection_padding = -1) {
     constexpr int h = 3, b = 7, t = 5;
     std::array<std::vector<float>, 8> inputs;
     for (int i = 0; i < 8; ++i) {
@@ -153,6 +171,25 @@ std::vector<float> exercise(bool blas, int requested, int actual) {
     for (int i = 0; i < 8; ++i) {
         source[i].data = inputs[i].data();
         output.src[i] = &source[i];
+    }
+    for (int i = 0; i < 2; ++i) {
+        source[i].nb[0] = sizeof(float);
+        source[i].nb[1] = 4*h*sizeof(float);
+        source[i].nb[2] = b*source[i].nb[1];
+    }
+    std::vector<float> joined;
+    if (projection_padding >= 0) {
+        const int stride = 8*h + projection_padding;
+        joined.resize(t*b*stride, std::numeric_limits<float>::quiet_NaN());
+        for (int row = 0; row < t*b; ++row)
+            for (int direction = 0; direction < 2; ++direction)
+                std::copy_n(inputs[direction].data() + row*4*h, 4*h,
+                            joined.data() + row*stride + direction*4*h);
+        for (int direction = 0; direction < 2; ++direction) {
+            source[direction].data = joined.data() + direction*4*h;
+            source[direction].nb[1] = stride*sizeof(float);
+            source[direction].nb[2] = b*source[direction].nb[1];
+        }
     }
     RecurrentNode node(b, h, requested, blas);
     for (int ith = 0; ith < actual; ++ith) recurrent_compute(&output, ith, actual, &node);
@@ -186,6 +223,15 @@ int main() {
     assert(exercise(false, 8, 1) == expected);
     assert(exercise(false, 8, 2) == expected);
     assert(exercise(false, 8, 8) == expected);
+    // The same production callback must consume offset directional views,
+    // including extra poison padding, through their actual row strides.
+    for (int padding : {0, 3}) {
+        assert(exercise(true, 4, 1, padding) == expected);
+        assert(exercise(true, 4, 4, padding) == expected);
+        assert(exercise(false, 8, 1, padding) == expected);
+        assert(exercise(false, 8, 2, padding) == expected);
+        assert(exercise(false, 8, 8, padding) == expected);
+    }
 }
 """
 
@@ -212,6 +258,7 @@ class SCNetMath(unittest.TestCase):
         cls.lib.scnet_math_rng.argtypes = [ctypes.c_uint64, ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
         cls.lib.scnet_math_lstm.argtypes = [POINTER] * 7 + [ctypes.c_int] * 4
         cls.lib.scnet_math_lstm_bias.argtypes = [POINTER] * 9 + [ctypes.c_int] * 5
+        cls.lib.scnet_math_lstm_strided.argtypes = [POINTER] * 9 + [ctypes.c_int] * 5 + [ctypes.c_size_t]
         cls.lib.scnet_math_gate_kernel.restype = ctypes.c_char_p
         cls.lib.scnet_math_activations.argtypes = [POINTER] * 5 + [ctypes.c_int]
         cls.lib.scnet_math_gate_update.argtypes = [POINTER] * 4 + [ctypes.c_int] * 2
@@ -423,6 +470,68 @@ class SCNetMath(unittest.TestCase):
                     if reference_output is not None:
                         np.testing.assert_array_equal(actual, reference_output)
                     reference_output = actual
+
+    def test_joined_projection_views_are_bit_exact(self):
+        rng = np.random.default_rng(823)
+        previous = os.environ.get('CRISPASR_SCNET_SCALAR_GATES')
+        try:
+            for hidden in (7, 17, 128, 256, 512):
+                batch, steps = 3, 3
+                projections = [rng.normal(0, .3, (steps, batch, 4*hidden)).astype(np.float32)
+                               for _ in range(2)]
+                weights = [rng.normal(0, .025, (4*hidden, hidden)).astype(np.float32)
+                           for _ in range(2)]
+                biases = [rng.normal(0, .07, 4*hidden).astype(np.float32) for _ in range(2)]
+                input_biases = [rng.normal(0, .09, 4*hidden).astype(np.float32) for _ in range(2)]
+                for override in ('1', '0'):
+                    os.environ['CRISPASR_SCNET_SCALAR_GATES'] = override
+                    for fused_bias in (False, True):
+                        expected = np.full((steps, batch, 2*hidden), np.nan, np.float32)
+                        if fused_bias:
+                            self.lib.scnet_math_lstm_bias(
+                                *[a.ctypes.data_as(POINTER)
+                                  for a in projections+weights+biases+input_biases],
+                                expected.ctypes.data_as(POINTER), hidden, batch, steps, 1, 0,
+                            )
+                        else:
+                            self.lib.scnet_math_lstm(
+                                *[a.ctypes.data_as(POINTER) for a in projections+weights+biases],
+                                expected.ctypes.data_as(POINTER), hidden, batch, steps, 1,
+                            )
+                        self.assertTrue(np.isfinite(expected).all())
+                        for padding in (0, 3):
+                            # [T,B,8H] is the single projected tensor. Each
+                            # [T,B,4H] view retains its parent's row stride.
+                            # Extra NaNs make unintended contiguous reads fail.
+                            stride = 8*hidden + padding
+                            storage = np.full(steps*batch*stride+2, np.nan, np.float32)
+                            storage[[0, -1]] = 12345.0
+                            joined = storage[1:-1].reshape(steps, batch, stride)
+                            views = [joined[:, :, :4*hidden], joined[:, :, 4*hidden:8*hidden]]
+                            for view, original in zip(views, projections):
+                                view[:] = original
+                                np.testing.assert_array_equal(view.view(np.uint32), original.view(np.uint32))
+                            before = storage.view(np.uint32).copy()
+                            bias_pointers = ([a.ctypes.data_as(POINTER) for a in input_biases]
+                                             if fused_bias else [None, None])
+                            for threads, profile in ((1, 0), (5, 0), (5, 1)):
+                                with self.subTest(hidden=hidden, scalar=override, bias=fused_bias,
+                                                  padding=padding, threads=threads, profile=profile):
+                                    guarded = np.full(expected.size+2, 12345.0, np.float32)
+                                    actual = guarded[1:-1].reshape(expected.shape)
+                                    self.lib.scnet_math_lstm_strided(
+                                        *[a.ctypes.data_as(POINTER) for a in views+weights+biases],
+                                        *bias_pointers, actual.ctypes.data_as(POINTER),
+                                        hidden, batch, steps, threads, profile, stride,
+                                    )
+                                    np.testing.assert_array_equal(guarded[[0, -1]], [12345.0, 12345.0])
+                                    np.testing.assert_array_equal(actual.view(np.uint32), expected.view(np.uint32))
+                                    np.testing.assert_array_equal(storage.view(np.uint32), before)
+        finally:
+            if previous is None:
+                os.environ.pop('CRISPASR_SCNET_SCALAR_GATES', None)
+            else:
+                os.environ['CRISPASR_SCNET_SCALAR_GATES'] = previous
 
     def test_actual_callback_worker_ownership_and_effective_thread_count(self):
         subprocess.run([str(self.dispatch)], check=True, capture_output=True, text=True)

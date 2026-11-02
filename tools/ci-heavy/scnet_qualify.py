@@ -60,7 +60,7 @@ MUSIC_ATTRIBUTION = {
 LARGE_CONFIG_URL = "https://drive.google.com/file/d/1qxK7SZx6-Gsp1s3wCrj98X7--UcI4O3K/view"
 SOURCE_FILES = (
     "src/scnet.cpp", "src/scnet.h", "src/scnet_fft.h", "src/scnet_lstm.h", "src/scnet_shift.h",
-    "src/scnet_activation.h", "src/scnet_tensor.h", "src/scnet_im2col.h",
+    "src/scnet_activation.h", "src/scnet_tensor.h", "src/scnet_im2col.h", "src/scnet_real_fft.h",
     "tools/scnet_probe.cpp", "tools/scnet_exports.cpp", "tools/validate_scnet.py",
     "tools/ci-heavy/scnet_qualify.py", "tools/ci-heavy/scnet_precision_diagnostics.py",
     "tools/ci-heavy/scnet_runtime_profile.py", "tools/ci-heavy/scnet_package.py", "tools/dump_scnet_reference.py",
@@ -68,7 +68,7 @@ SOURCE_FILES = (
     "models/convert-scnet-to-gguf.py", "models/licenses/SCNet-MIT.txt",
     "tests/test-scnet-converter.py", "tests/test-scnet-reference.py", "tests/test-scnet-native-diff.py",
     "tests/test-scnet-math.py", "tests/test-scnet-session-routing.py", "tests/test-scnet-quant-policy.py",
-    "tests/test-scnet-im2col.py", "tests/test-scnet-tensor.cpp", "tests/test-scnet-fft.py",
+    "tests/test-scnet-im2col.py", "tests/test-scnet-tensor.cpp", "tests/test-scnet-fft.py", "tests/test-scnet-real-fft.py",
     "tests/test-scnet-blas-threads.cpp", "ggml/src/ggml-blas/ggml-blas.cpp",
     "tests/test_scnet_validation.py", "tests/test-scnet-surface.py", "examples/cli/crispasr_backend_scnet.cpp",
     "examples/crispasr-quantize/main.cpp",

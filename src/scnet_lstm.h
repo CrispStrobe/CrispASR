@@ -32,8 +32,11 @@ struct LstmTiming {
     uint64_t gemm_calls = 0, gate_steps = 0;
 };
 
-// All arrays use ordinary contiguous F32 storage. projected is [T,B,4H],
-// recurrent_weight [4H,H], bias [4H], output [T,B,2H] (one direction written).
+// All arrays use F32 storage. projected is [T,B,4H] with contiguous gate values
+// and projection_row_stride elements between batch/time rows. Other arrays
+// are contiguous: recurrent_weight [4H,H], bias [4H], output [T,B,2H]
+// (one direction written). A zero projection_row_stride selects ordinary 4H
+// rows; directional views of a joined input projection instead use 8H.
 // Workers own disjoint batch rows; there are no cross-worker reductions.
 // The ordinary specialization contains no clock reads or timing branches in
 // either inner loop. Profiling is selected once per direction, by the caller.
@@ -43,7 +46,8 @@ struct LstmTiming {
 template <bool Profile>
 inline void lstm_direction_impl(const float* projected, const float* recurrent_weight, const float* recurrent_bias,
                                 float* output, int hidden, int batch, int steps, bool reverse, int begin, int end,
-                                bool use_blas, LstmScratch& scratch, LstmTiming* timing, const float* input_bias) {
+                                bool use_blas, LstmScratch& scratch, LstmTiming* timing, const float* input_bias,
+                                size_t projection_row_stride) {
     const auto gate_kernel = scnet_activation::selected_kernel();
     using Clock = std::chrono::steady_clock;
     Clock::time_point phase_start;
@@ -101,7 +105,7 @@ inline void lstm_direction_impl(const float* projected, const float* recurrent_w
             phase_start = finished;
         }
         for (int row = 0; row < rows; ++row) {
-            const float* px = projected + (static_cast<size_t>(time) * batch + begin + row) * gates;
+            const float* px = projected + (static_cast<size_t>(time) * batch + begin + row) * projection_row_stride;
             float* ph = scratch.gates.data() + static_cast<size_t>(row) * gates;
             float* h = scratch.hidden.data() + static_cast<size_t>(row) * hidden;
             float* c = scratch.cell.data() + static_cast<size_t>(row) * hidden;
@@ -126,12 +130,14 @@ inline void lstm_direction_impl(const float* projected, const float* recurrent_w
 inline void lstm_direction(const float* projected, const float* recurrent_weight, const float* recurrent_bias,
                            float* output, int hidden, int batch, int steps, bool reverse, int begin, int end,
                            bool use_blas, LstmScratch& scratch, LstmTiming* timing = nullptr,
-                           const float* input_bias = nullptr) {
+                           const float* input_bias = nullptr, size_t projection_row_stride = 0) {
+    if (projection_row_stride == 0)
+        projection_row_stride = static_cast<size_t>(4) * hidden;
     if (timing)
         lstm_direction_impl<true>(projected, recurrent_weight, recurrent_bias, output, hidden, batch, steps, reverse,
-                                  begin, end, use_blas, scratch, timing, input_bias);
+                                  begin, end, use_blas, scratch, timing, input_bias, projection_row_stride);
     else
         lstm_direction_impl<false>(projected, recurrent_weight, recurrent_bias, output, hidden, batch, steps, reverse,
-                                   begin, end, use_blas, scratch, nullptr, input_bias);
+                                   begin, end, use_blas, scratch, nullptr, input_bias, projection_row_stride);
 }
 } // namespace scnet_detail

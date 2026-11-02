@@ -88,6 +88,28 @@ byte comparisons, and the unchanged numerical policy. These remain numerical
 diagnostics; fresh complete fidelity, surface and performance qualification
 is required for the new source.
 
+The [following focused run](https://github.com/CrispStrobe/CrispASR/actions/runs/41418326000)
+at `6a4c805` again passes every final-waveform check, including both warmups
+and all three alternating timing pairs. Native median is **18.604 s** versus
+**16.581 s** original on its two-thread EPYC 7763 worker, so performance still
+fails. The [retained receipt](historical/scnet-runtime-fft-convolution-profile-2026-11-02.json)
+records 5.402 s in recurrence (3.924 s GEMM and 1.472 s gates), 4.107 s in
+other matrix multiplications, 2.471 s in convolution outer products, and
+1.956 s in internal FFT nodes. It binds the actual OpenBLAS and PyTorch/MKL
+providers, compiled source, three timing pairs and output hashes. It checks
+no intermediate stages or quantized models, and qualification remains false.
+
+The next runtime changes join the two directional input projections into one
+matrix operation and pair adjacent real frequency rows within each channel
+for the internal FFTs. All 35 original-F32 reference stages pass for both sizes
+in F16, Q8_0 and Q4_K on the unchanged short fixture. The [controls](historical/scnet-real-fft-projection-controls-2026-11-02.json)
+retain model/source/binary identities, actual projection routing and independent
+FFT checks. Pairing changes floating-point operation order: an extreme
+2^20 amplitude ratio can produce about 15.5% relative error in the tiny companion
+row, while absolute error stays below 7.73e-7 in the retained stress test. The
+model gates remain unchanged. Complete fidelity and paired performance still
+require the hosted qualification.
+
 ## Inference behavior
 
 Default inference follows the published helper's 20-second segments, 50%

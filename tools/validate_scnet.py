@@ -612,6 +612,8 @@ class NativeModel:
 def runtime_provenance(library):
     result = {"platform": platform.platform(), "machine": platform.machine(), "logical_cpus": os.cpu_count(),
               "library_sha256": sha256(library), "thread_environment": {key: os.environ.get(key) for key in THREAD_VARIABLES},
+              "wait_policy_environment": {key: os.environ.get(key) for key in (
+                  "OMP_WAIT_POLICY", "GOMP_SPINCOUNT", "KMP_BLOCKTIME", "OPENBLAS_THREAD_TIMEOUT")},
               "compute_environment": {key: os.environ.get(key) for key in (
                   "CRISPASR_SCNET_GPU", "CRISPASR_SCNET_THREADS", "CRISPASR_SCNET_BENCH",
                   "CRISPASR_SCNET_CAPTURE_GGUF", "CRISPASR_SCNET_SCALAR_LSTM", "CRISPASR_SCNET_SCALAR_GATES",

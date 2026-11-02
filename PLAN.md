@@ -101,8 +101,25 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   verified in every case. [The controls](docs/historical/scnet-fft-convolution-controls-2026-11-02.json)
   retain component identities and numerical scope. Dependency [ggml PR #6](https://github.com/CrispStrobe/ggml/pull/6)
   fixes the first outer product's thread budget; its exact source is pinned.
-- Next action: repeat the bounded F16 profile and paired smoke on the combined
-  runtime changes under the same two-thread budget. Once waveform and speed
+- The [next focused profile](docs/historical/scnet-runtime-fft-convolution-profile-2026-11-02.json)
+  at `6a4c805` passes every final-waveform check but still fails speed: native
+  median **18.604 seconds** versus original **16.581 seconds** on the same
+  two-thread EPYC 7763 worker. Its instrumented call attributes 5.402 seconds
+  to recurrence (3.924 GEMM, 1.472 gates), 4.107 seconds to other matrix
+  multiplications, 2.471 seconds to convolution outer products, and 1.956
+  seconds to internal FFT nodes. The receipt retains all three timing pairs,
+  source snapshots, provider/thread identities and the failed performance gate.
+- Shared bidirectional input projections and paired real FFTs now pass all 35
+  native and independent original-F32 stage checks for both sizes in all three
+  formats on the genuine short fixture. The [new controls](docs/historical/scnet-real-fft-projection-controls-2026-11-02.json)
+  bind the unchanged model bytes, new binaries, actual fused projection routing,
+  exclusive FFT worker ownership and the unchanged numerical gates. The
+  component FFT receipt retains its extreme unequal-amplitude conditioning
+  limit; these short diagnostics make no full-pipeline or speed claim.
+- Next action: repeat the bounded F16 profile under the same two-thread budget.
+  A separate optional
+  fresh-process passive-wait diagnostic applies identical settings to both
+  engines and preserves the default result. Once waveform and speed
   gates pass, rerun all original-checkpoint,
   raw, full-pipeline, CLI/Session and paired
   performance gates through `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566).

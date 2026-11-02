@@ -4,6 +4,7 @@
 // Fourier transforms and the sequential LSTM are fused native CPU graph nodes.
 #include "scnet.h"
 #include "scnet_fft.h"
+#include "scnet_real_fft.h"
 #include "scnet_im2col.h"
 #include "scnet_lstm.h"
 #include "scnet_shift.h"
@@ -246,41 +247,10 @@ void fourier_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
     const auto* input = output->src[0];
     const float* src = static_cast<const float*>(input->data);
     float* dst = static_cast<float*>(output->data);
-    const int n = node.plan.size(), bins = n / 2 + 1;
     const int frequencies = static_cast<int>(input->ne[1]);
     const int channels = static_cast<int>(node.inverse ? input->ne[2] / 2 : input->ne[2]);
-    const float scale = 1.0f / std::sqrt(static_cast<float>(n));
-    for (int row = ith; row < frequencies * channels; row += nth) {
-        if (node.inverse) {
-            const float* real = src + static_cast<size_t>(row) * bins;
-            const float* imag = real + static_cast<size_t>(channels) * frequencies * bins;
-            for (int k = 0; k < bins; ++k) {
-                scratch.real[k] = real[k];
-                // Conjugate for an inverse transform. irfft ignores imaginary
-                // DC/Nyquist values, including learned values in those bins.
-                scratch.imag[k] = k == 0 || k == n / 2 ? 0.0f : -imag[k];
-            }
-            for (int k = bins; k < n; ++k) {
-                scratch.real[k] = scratch.real[n - k];
-                scratch.imag[k] = -scratch.imag[n - k];
-            }
-        } else {
-            std::copy_n(src + static_cast<size_t>(row) * n, n, scratch.real.data());
-            std::fill(scratch.imag.begin(), scratch.imag.end(), 0);
-        }
-        node.plan.transform(scratch.real.data(), scratch.imag.data(), scratch.transform);
-        if (node.inverse) {
-            for (int k = 0; k < n; ++k)
-                dst[static_cast<size_t>(row) * n + k] = scratch.real[k] * scale;
-        } else {
-            float* real = dst + static_cast<size_t>(row) * bins;
-            float* imag = real + static_cast<size_t>(channels) * frequencies * bins;
-            for (int k = 0; k < bins; ++k) {
-                real[k] = scratch.real[k] * scale;
-                imag[k] = scratch.imag[k] * scale;
-            }
-        }
-    }
+    scnet_fft::transform_real_rows(node.plan, node.inverse, src, dst, frequencies, channels, ith, nth,
+                                   scratch.real.data(), scratch.imag.data(), scratch.transform);
 }
 
 struct RecurrentNode {
@@ -336,7 +306,8 @@ void recurrent_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
                 static_cast<const float*>(output->src[4 + direction]->data), static_cast<float*>(output->data), hidden,
                 batch, steps, direction != 0, first, std::min(first + capacity, end), node.blas, scratch,
                 profiling ? &timings : nullptr,
-                output->src[6 + direction] ? static_cast<const float*>(output->src[6 + direction]->data) : nullptr);
+                output->src[6 + direction] ? static_cast<const float*>(output->src[6 + direction]->data) : nullptr,
+                output->src[direction]->nb[1] / sizeof(float));
     if (profiling)
         std::fprintf(stderr,
                      "scnet_bench_lstm: name=%s mode=%s scope=%s hidden=%d batch=%d steps=%d gemm_calls=%llu "
@@ -718,9 +689,24 @@ ggml_tensor* recurrent(scnet_context& model, Graph& graph, ggml_tensor* input, c
     auto* ctx = graph.context;
     const int hidden = static_cast<int>(input->ne[0]);
     ggml_tensor* sources[8]{};
+    if (graph.cpu_only) {
+        // Both directions consume the same input. Join output rows of the F32
+        // weights so one matrix operation projects them together. The views
+        // retain 8H row strides; the recurrent kernel consumes them directly,
+        // without copying either [4H,B,T] half into a separate buffer.
+        auto* forward = as_f32(graph, weight(model, name + ".weight_ih_l0"));
+        auto* reverse = as_f32(graph, weight(model, name + ".weight_ih_l0_reverse"));
+        auto* weights = scnet_tensor::concat(ctx, forward, reverse, 1, true);
+        auto* projected = multiply(model, graph, weights, input);
+        for (int direction = 0; direction < 2; ++direction)
+            sources[direction] =
+                ggml_view_3d(ctx, projected, 4 * hidden, input->ne[1], input->ne[2], projected->nb[1], projected->nb[2],
+                             static_cast<size_t>(direction) * 4 * hidden * sizeof(float));
+    }
     for (int direction = 0; direction < 2; ++direction) {
         const std::string suffix = direction ? "_reverse" : "";
-        sources[direction] = multiply(model, graph, weight(model, name + ".weight_ih_l0" + suffix), input);
+        if (!graph.cpu_only)
+            sources[direction] = multiply(model, graph, weight(model, name + ".weight_ih_l0" + suffix), input);
         sources[2 + direction] = as_f32(graph, weight(model, name + ".weight_hh_l0" + suffix));
         sources[4 + direction] = weight(model, name + ".bias_hh_l0" + suffix);
         sources[6 + direction] = weight(model, name + ".bias_ih_l0" + suffix);
