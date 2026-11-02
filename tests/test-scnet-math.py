@@ -254,7 +254,7 @@ std::vector<float> exercise(bool blas, int requested, int actual, int projection
             source[direction].nb[2] = b*source[direction].nb[1];
         }
     }
-    RecurrentNode node(b, h, requested, blas);
+    RecurrentNode node(b, h, requested, blas ? RecurrentMode::cblas : RecurrentMode::portable);
     for (int ith = 0; ith < actual; ++ith) recurrent_compute(&output, ith, actual, &node);
     for (float v : values) assert(std::isfinite(v));
     return values;

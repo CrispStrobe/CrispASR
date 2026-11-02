@@ -57,6 +57,7 @@ jobs:
       - name: Model-free production controls
         run: |
           python tests/test-scnet-math.py -v
+          python -B tests/test-scnet-recurrent-gemm.py -v
           python tests/test-scnet-session-routing.py -v
           python tests/test-scnet-quant-policy.py build-scnet/bin/crispasr-quantize
       - uses: actions/cache@v4

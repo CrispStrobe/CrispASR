@@ -59,6 +59,28 @@ def fixture():
 
 
 class SCNetProfileControls(unittest.TestCase):
+    def test_packed_recurrence_timers_retain_worker_zero_scope(self):
+        def telemetry(mode, scope="worker_zero"):
+            return (
+                f"scnet_bench_lstm: name=synthetic mode={mode} scope={scope} hidden=16 batch=2 "
+                "steps=3 gemm_calls=3 gate_steps=3 gemm_ms=1.0 gates_ms=2.0 reset_ms=0.1\n"
+                "scnet_bench_op: stage=synthetic op=scnet_cpu_lstm backend=CPU frames=3 calls=1 ms=4.0\n"
+                "scnet_bench_ops: scope=per_node_synchronized frames=3 nodes=1 groups=1 "
+                "unmapped_nodes=0 measured_ms=4.0 unmapped_ms=0.0\n"
+                "scnet_bench: separate 5.0 ms\n"
+            )
+
+        for mode in ("packed_avx512_fma", "packed_avx2_fma"):
+            with self.subTest(mode=mode):
+                parsed = P.parse_timers(telemetry(mode))
+                self.assertEqual(parsed["lstm"][0]["mode"], mode)
+                self.assertEqual(parsed["lstm"][0]["scope"], "worker_zero")
+                self.assertIn("not whole-node", parsed["interpretation"])
+                with self.assertRaisesRegex(ValueError, "timer scope"):
+                    P.parse_timers(telemetry(mode, "whole_node"))
+        with self.assertRaisesRegex(ValueError, "timer scope"):
+            P.parse_timers(telemetry("packed_unknown"))
+
     def test_loaded_runtime_proof_is_required_for_both_workers(self):
         for label in (0, 1):
             with self.subTest(worker=label):

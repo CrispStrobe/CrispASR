@@ -254,14 +254,22 @@ void fourier_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
                                    scratch.real.data(), scratch.imag.data(), scratch.transform);
 }
 
+enum class RecurrentMode { portable, cblas, packed };
+
 struct RecurrentNode {
-    bool blas = false;
+    RecurrentMode mode;
+    scnet_recurrent::Kernel kernel;
+    std::array<const scnet_recurrent::PackedWeight*, 2> packed{};
     std::string name;
     std::vector<scnet_detail::LstmScratch> scratch;
-    RecurrentNode(int batch, int hidden, int threads, bool accelerated, const std::string& label = "unnamed")
-        : blas(accelerated), name(label) {
+    RecurrentNode(int batch, int hidden, int threads, RecurrentMode execution, const std::string& label = "unnamed")
+        : mode(execution), name(label) {
+        const bool blas = mode == RecurrentMode::cblas;
         for (int i = 0; i < (blas ? 1 : threads); ++i)
             scratch.emplace_back(blas ? batch : (batch + threads - 1) / threads, hidden);
+    }
+    const char* mode_name() const {
+        return mode == RecurrentMode::packed ? kernel.name : mode == RecurrentMode::cblas ? "CBLAS" : "portable";
     }
 };
 
@@ -281,18 +289,21 @@ void im2col_columns_compute(ggml_tensor* output, int ith, int nth, void* opaque)
 
 void recurrent_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
     auto& node = *static_cast<RecurrentNode*>(opaque);
+    const bool blas = node.mode == RecurrentMode::cblas;
     // This ggml revision can invoke CUSTOM for every worker in the surrounding
     // CPU subgraph even when the node requests one task. BLAS owns its own
     // threading; only worker zero may enter the fused recurrence.
-    if (node.blas && ith != 0)
+    if (blas && ith != 0)
         return;
-    // CBLAS recurrence is owned entirely by worker zero. The scalar fallback
-    // reports only worker zero's share, like the parallel Fourier diagnostic.
+    // CBLAS is owned entirely by worker zero. Packed and portable paths own
+    // disjoint complete batch recurrences and need no per-step synchronization.
+    // Their timer reports worker zero only, not summed overlapping worker time;
+    // the separate graph-node timer measures the complete parallel operation.
     Timer timer("lstm", ith == 0);
     const int hidden = static_cast<int>(output->ne[0] / 2), batch = static_cast<int>(output->ne[1]);
     const int steps = static_cast<int>(output->ne[2]);
-    const int begin = node.blas ? 0 : static_cast<int>(int64_t(batch) * ith / nth);
-    const int end = node.blas ? batch : static_cast<int>(int64_t(batch) * (ith + 1) / nth);
+    const int begin = blas ? 0 : static_cast<int>(int64_t(batch) * ith / nth);
+    const int end = blas ? batch : static_cast<int>(int64_t(batch) * (ith + 1) / nth);
     if (begin == end)
         return;
     auto& scratch = node.scratch[ith];
@@ -305,16 +316,16 @@ void recurrent_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
                 static_cast<const float*>(output->src[direction]->data),
                 static_cast<const float*>(output->src[2 + direction]->data),
                 static_cast<const float*>(output->src[4 + direction]->data), static_cast<float*>(output->data), hidden,
-                batch, steps, direction != 0, first, std::min(first + capacity, end), node.blas, scratch,
+                batch, steps, direction != 0, first, std::min(first + capacity, end), blas, scratch,
                 profiling ? &timings : nullptr,
                 output->src[6 + direction] ? static_cast<const float*>(output->src[6 + direction]->data) : nullptr,
-                output->src[direction]->nb[1] / sizeof(float));
+                output->src[direction]->nb[1] / sizeof(float), node.packed[direction], node.kernel.product);
     if (profiling)
         std::fprintf(stderr,
                      "scnet_bench_lstm: name=%s mode=%s scope=%s hidden=%d batch=%d steps=%d gemm_calls=%llu "
                      "gate_steps=%llu gemm_ms=%.3f gates_ms=%.3f reset_ms=%.3f\n",
-                     node.name.c_str(), node.blas ? "CBLAS" : "portable", node.blas ? "whole_node" : "worker_zero",
-                     hidden, batch, steps, static_cast<unsigned long long>(timings.gemm_calls),
+                     node.name.c_str(), node.mode_name(), blas ? "whole_node" : "worker_zero", hidden, batch, steps,
+                     static_cast<unsigned long long>(timings.gemm_calls),
                      static_cast<unsigned long long>(timings.gate_steps), timings.gemm_ms, timings.gates_ms,
                      timings.reset_ms);
 }
@@ -382,6 +393,11 @@ struct scnet_context {
     // subgraph. Their F32 payload is 15 MiB for SCNet / 60 MiB for SCNet-large.
     // Original GGUF tensors and their quantization/provenance remain intact.
     core_gguf::WeightLoad recurrent_weights;
+    // Pure-permutation SIMD packs add 15/60 MiB. The original GGUF and exact
+    // F32 copies above remain available and retain their provenance/lifetime.
+    std::map<std::string, scnet_recurrent::PackedWeight> recurrent_packed_weights;
+    scnet_recurrent::Kernel recurrent_kernel;
+    RecurrentMode recurrent_mode = RecurrentMode::portable;
     ggml_backend_t backend = nullptr, cpu = nullptr, blas = nullptr;
     // CPU graph metadata is replaceable; one allocator retains its largest
     // compute buffer instead of keeping separate buffers for each geometry.
@@ -528,6 +544,13 @@ void materialize_recurrent_weights(scnet_context& model) {
             for (int64_t first = 0; first < source->ne[0]; first += block)
                 traits->to_float(from + (first / traits->blck_size) * traits->type_size, to + first, block);
         }
+    }
+    model.recurrent_kernel = scnet_recurrent::selected_kernel();
+    if (model.recurrent_kernel.product) {
+        for (const auto& entry : cache.tensors)
+            model.recurrent_packed_weights.try_emplace(entry.first, static_cast<const float*>(entry.second->data),
+                                                       static_cast<int>(entry.second->ne[0]));
+        model.recurrent_mode = RecurrentMode::packed;
     }
 }
 
@@ -808,9 +831,17 @@ ggml_tensor* recurrent(scnet_context& model, Graph& graph, ggml_tensor* input, c
         sources[6 + direction] = weight(model, name + ".bias_ih_l0" + suffix);
     }
     auto node = std::make_unique<RecurrentNode>(static_cast<int>(input->ne[1]), hidden, model.params.n_threads,
-                                                model.recurrent_blas, name);
-    auto* result = ggml_custom_4d(ctx, GGML_TYPE_F32, 2 * hidden, input->ne[1], input->ne[2], 1, sources, 8,
-                                  recurrent_compute, model.recurrent_blas ? 1 : GGML_N_TASKS_MAX, node.get());
+                                                model.recurrent_mode, name);
+    if (model.recurrent_mode == RecurrentMode::packed) {
+        node->kernel = model.recurrent_kernel;
+        for (int direction = 0; direction < 2; ++direction) {
+            const std::string suffix = direction ? "_reverse" : "";
+            node->packed[direction] = &model.recurrent_packed_weights.at(name + ".weight_hh_l0" + suffix);
+        }
+    }
+    auto* result =
+        ggml_custom_4d(ctx, GGML_TYPE_F32, 2 * hidden, input->ne[1], input->ne[2], 1, sources, 8, recurrent_compute,
+                       model.recurrent_mode == RecurrentMode::cblas ? 1 : GGML_N_TASKS_MAX, node.get());
     ggml_set_name(result, "scnet_cpu_lstm");
     graph.recurrent_nodes.push_back(std::move(node));
     return result;
@@ -1299,6 +1330,7 @@ scnet_context* scnet_init_from_file(const char* path, scnet_params params) {
         }
 #if defined(HAVE_ACCELERATE) || defined(HAVE_BLAS)
         model->recurrent_blas = !flag("CRISPASR_SCNET_SCALAR_LSTM");
+        model->recurrent_mode = model->recurrent_blas ? RecurrentMode::cblas : RecurrentMode::portable;
 #endif
         const bool loaded =
             model->backend == model->cpu
@@ -1312,13 +1344,18 @@ scnet_context* scnet_init_from_file(const char* path, scnet_params params) {
             std::string(ggml_backend_name(model->backend)) + (model->blas ? "+BLAS" : "") + "/CPU-LSTM-FFT";
         model->compute_description = std::string("F32 activations/accumulation; CPU recurrent/FFT; gates=") +
                                      scnet_activation::selected_kernel().name +
-                                     "; fft=" + model->stft_plan.kernel_name();
+                                     "; fft=" + model->stft_plan.kernel_name() + "; recurrent=" +
+                                     (model->recurrent_mode == RecurrentMode::packed  ? model->recurrent_kernel.name
+                                      : model->recurrent_mode == RecurrentMode::cblas ? "CBLAS"
+                                                                                      : "portable");
         std::fprintf(stderr, "scnet: backend=%s threads=%d precision=%s recurrence=%s\n",
                      model->backend_description.c_str(), params.n_threads,
                      model->quant_q4   ? "Q4_K mixed"
                      : model->quant_q8 ? "Q8_0 mixed"
                                        : "F16/F32",
-                     model->recurrent_blas ? "native-CBLAS" : "native-portable");
+                     model->recurrent_mode == RecurrentMode::packed  ? model->recurrent_kernel.name
+                     : model->recurrent_mode == RecurrentMode::cblas ? "native-CBLAS"
+                                                                     : "native-portable");
         return model.release();
     } catch (const std::exception& error) {
         std::fprintf(stderr, "scnet: %s\n", error.what());
@@ -1334,6 +1371,7 @@ void scnet_free(scnet_context* model) {
         ggml_backend_sched_free(model->cpu_scheduler);
     // Graphs and the shared scheduler must release their tensor references
     // before either the derived CPU leaves or original GGUF weights are freed.
+    model->recurrent_packed_weights.clear();
     core_gguf::free_weights(model->recurrent_weights);
     core_gguf::free_weights(model->weights);
     if (model->blas)

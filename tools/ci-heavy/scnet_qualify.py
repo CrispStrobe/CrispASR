@@ -64,6 +64,7 @@ LARGE_CONFIG_URL = "https://drive.google.com/file/d/1qxK7SZx6-Gsp1s3wCrj98X7--Uc
 SOURCE_FILES = (
     "src/scnet.cpp", "src/scnet.h", "src/scnet_fft.h", "src/scnet_lstm.h", "src/scnet_shift.h",
     "src/scnet_activation.h", "src/scnet_tensor.h", "src/scnet_im2col.h", "src/scnet_real_fft.h",
+    "src/scnet_recurrent_gemm.h",
     "tools/scnet_probe.cpp", "tools/scnet_exports.cpp", "tools/validate_scnet.py",
     "tools/scnet_runtime_identity.py", "tools/ci-heavy/scnet_build_openblas.py",
     "tools/ci-heavy/scnet_qualify.py", "tools/ci-heavy/scnet_precision_diagnostics.py",
@@ -72,6 +73,7 @@ SOURCE_FILES = (
     "models/convert-scnet-to-gguf.py", "models/licenses/SCNet-MIT.txt",
     "tests/test-scnet-converter.py", "tests/test-scnet-reference.py", "tests/test-scnet-native-diff.py",
     "tests/test-scnet-math.py", "tests/test-scnet-session-routing.py", "tests/test-scnet-quant-policy.py",
+    "tests/test-scnet-recurrent-gemm.py",
     "tests/test-scnet-im2col.py", "tests/test-scnet-tensor.cpp", "tests/test-scnet-fft.py", "tests/test-scnet-real-fft.py",
     "tests/test-scnet-blas-threads.cpp", "tests/test-scnet-allocator.cpp",
     "ggml/src/ggml-blas/ggml-blas.cpp", "ggml/src/ggml-alloc.c",

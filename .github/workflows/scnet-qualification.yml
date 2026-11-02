@@ -160,6 +160,7 @@ jobs:
           python tests/test-scnet-fft.py -v 2>&1 | tee scnet-out/fft-controls.log
           python tests/test-scnet-real-fft.py -v 2>&1 | tee scnet-out/real-fft-controls.log
           python tests/test-scnet-math.py -v 2>&1 | tee scnet-out/math-controls.log
+          python -B tests/test-scnet-recurrent-gemm.py -v 2>&1 | tee scnet-out/recurrent-gemm-controls.log
           python tests/test-scnet-session-routing.py -v 2>&1 | tee scnet-out/session-routing-controls.log
           python tests/test-scnet-quant-policy.py build-scnet/bin/crispasr-quantize 2>&1 | tee scnet-out/quant-policy-controls.log
           python tests/test-scnet-converter.py -v 2>&1 | tee scnet-out/converter-controls.log

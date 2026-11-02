@@ -6785,6 +6785,10 @@ if (Python3_Interpreter_FOUND AND NOT MSVC)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-scnet-math.py -v)
     set_tests_properties(scnet-math PROPERTIES
         LABELS "unit;scnet" TIMEOUT 120 ENVIRONMENT "CXX=${CMAKE_CXX_COMPILER}")
+    add_test(NAME scnet-recurrent-gemm
+        COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test-scnet-recurrent-gemm.py -v)
+    set_tests_properties(scnet-recurrent-gemm PROPERTIES
+        LABELS "unit;scnet" TIMEOUT 120 ENVIRONMENT "CXX=${CMAKE_CXX_COMPILER}")
     add_test(NAME scnet-session-routing
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-scnet-session-routing.py -v)
     set_tests_properties(scnet-session-routing PROPERTIES

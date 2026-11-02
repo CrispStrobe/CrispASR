@@ -118,6 +118,7 @@ jobs:
           python tests/test-scnet-fft.py 2>&1 | tee scnet-profile-out/fft-controls.log
           python tests/test-scnet-real-fft.py 2>&1 | tee scnet-profile-out/real-fft-controls.log
           python tests/test-scnet-math.py 2>&1 | tee scnet-profile-out/math-controls.log
+          python -B tests/test-scnet-recurrent-gemm.py -v 2>&1 | tee scnet-profile-out/recurrent-gemm-controls.log
           python tests/test_scnet_profile.py 2>&1 | tee scnet-profile-out/profile-controls.log
           python tests/test_scnet_runtime_identity.py -v 2>&1 | tee scnet-profile-out/runtime-identity-controls.log
       - name: Profile F16, primary timing pairs and the passive-wait diagnostic

@@ -172,6 +172,43 @@ are comparisons within each precision's worker, not measurements of isolated
 quantization speed differences. Both model sizes still require complete
 acceptance for the subsequent convolution-tiling change.
 
+The [hosted SCNet-large campaign at `a80cbbba`](historical/scnet-a80-large-qualification-2026-11-02.json)
+passes the complete numerical, production-surface, runtime-identity and speed
+gates for all three formats on its EPYC 7763/AVX2 worker:
+
+| Precision | Native median | Original median | Original/native ratio |
+|---|---:|---:|---:|
+| F16 | 64.442049 s | 73.001402 s | 1.132822× |
+| Q8_0 | 64.607757 s | 72.975983 s | 1.129524× |
+| Q4_K | 64.819255 s | 73.263762 s | 1.130278× |
+
+Its independent evidence audit verifies all stage/waveform decisions, source
+snapshots and runtime proofs. The actual AVX2 path is covered; three component
+controls requiring unavailable AVX512 were explicitly skipped. Hosted
+success-only packaging produced a retained bundle, whose separate ZIP bytes
+have not yet been independently downloaded/audited. This result qualifies the
+exact large-model CPU build and fixture at `a80cbbba`; it does not qualify the
+later tiling or packed-recurrence implementations.
+
+The [complete local small-model campaign for adaptive tiling](historical/scnet-c2-full-small-2026-11-02.json)
+at `9724c205` also passes all 210 raw/full stage decisions, all 96 warmup and
+timed stem decisions, every production surface and runtime-identity gate.
+Its first three alternating pairs still fail all three speed gates:
+
+| Precision | Native median | Original median |
+|---|---:|---:|
+| F16 | 16.782511 s | 14.785485 s |
+| Q8_0 | 16.493169 s | 16.185961 s |
+| Q4_K | 16.303297 s | 15.609759 s |
+
+Every timing and exact source/build identity is retained. The subsequent
+instrumented diagnostic attributes about 3.712 s to recurrent GEMMs and
+1.979 s to gate updates; these are attribution measurements, not replacement
+timings. This motivates a separate packed F32 recurrence implementation with
+independent worker batches. That candidate requires fresh component,
+original-reference and full paired qualification. No failed model bundle is
+promoted by either campaign.
+
 ## Inference behavior
 
 Default inference follows the published helper's 20-second segments, 50%
@@ -223,20 +260,45 @@ single large-model frequency column is 45.439 MiB, so a valid tile always
 fits. The checked selector rejects invalid or over-budget geometry before
 multiplying dimensions. This limit covers each packing tensor, not total graph
 or process memory. [Controls](historical/scnet-adaptive-tiling-controls-2026-11-02.json)
-cover actual packing/assembly and the changed tile shapes; full model and
-performance qualification remain required for this candidate.
+cover actual packing/assembly and the changed tile shapes. Its full small-model
+fidelity passes at `9724c205`; the retained performance failure above motivates
+the subsequent recurrent implementation.
 For CPU inference with both graph and recurrent BLAS available, model loading
 also prepares 24 immutable F32 recurrent-weight tensors. Their bytes match
 ggml's normal F16 and quantized conversions; the original GGUF tensors and
 storage provenance remain intact. This costs an additional 15 MiB for SCNet or
-60 MiB for SCNet-large. Removing these conversions from each recurrent graph
-split lets that split use one ggml worker while BLAS uses the configured two
-threads. The portable and GPU paths use the existing conversion path. The
+60 MiB for SCNet-large. The CBLAS fallback uses one ggml worker for recurrence
+while BLAS uses the configured provider threads. The portable and GPU paths
+use the existing conversion path. The historical
 [candidate controls](historical/scnet-recurrent-weight-controls-2026-11-02.json)
 across all six model/precision combinations verified all 144 conversions, all
 72 ordinary, unprofiled recurrent worker callbacks, and all 210 original-F32
 stage checks. Stage payloads are byte-identical to the preceding implementation;
 these short-input controls establish no speed qualification.
+
+On supported x86 CPUs, the next implementation also packs those immutable
+F32 coefficients into sixteen-gate panels. Packing only permutes their bytes;
+it adds another 15 MiB for SCNet or 60 MiB for SCNet-large, for total recurrent
+caches of 30/120 MiB. AVX512/FMA and AVX2/FMA products traverse independent
+batch rows, and each ggml worker owns complete recurrent sequences and their
+gate updates. No BLAS call, thread-setting change or barrier occurs inside a
+recurrent step. Unsupported CPUs, GPU configurations and explicit scalar
+diagnostics retain the existing paths. The compute description identifies the
+selected recurrent kernel separately from activation and FFT kernels.
+
+The packed matrix products accumulate in F32 with explicit FMA. Their reduction
+order differs from OpenBLAS; the original-reference gates, including amplitude
+and relative-L2 checks, remain unchanged.
+[Component and original-reference controls](historical/scnet-packed-recurrence-controls-2026-11-02.json)
+pass independent F64 dot products, bit-preserving packing, vector tails,
+bidirectional feedback and concurrent production callbacks, plus all 210 short
+model-stage comparisons across both sizes and all three formats. Complete
+waveform fidelity and paired speed still require qualification of this exact
+implementation. Instrumented
+recurrent part timers report worker zero's span; the separate graph-node timer
+measures the whole parallel operation. Overlapping worker spans are not added
+together as wall time.
+
 Recurrent input biases are added within the gate loop using the original
 grouping, avoiding two full projection-buffer passes. FFT plans dispatch
 independent butterflies and Bluestein products to AVX2 or NEON with scalar

@@ -40,7 +40,9 @@ PROFILE = {"mode": "pipeline", "segment_seconds": 20, "shifts": 1, "shift_seed":
 SOURCES = (
     "src/scnet.cpp", "src/scnet.h", "src/scnet_fft.h", "src/scnet_lstm.h", "src/scnet_shift.h",
     "src/scnet_activation.h", "src/scnet_tensor.h", "src/scnet_im2col.h", "src/scnet_real_fft.h",
+    "src/scnet_recurrent_gemm.h",
     "tests/test-scnet-math.py", "tests/test-scnet-tensor.cpp", "tests/test-scnet-im2col.py",
+    "tests/test-scnet-recurrent-gemm.py",
     "tests/test-scnet-fft.py", "tests/test-scnet-real-fft.py", "tests/test_scnet_profile.py",
     "tests/test_scnet_runtime_identity.py", "tools/scnet_runtime_identity.py",
     "tests/test-scnet-blas-threads.cpp", "tests/test-scnet-allocator.cpp",
@@ -102,7 +104,9 @@ def parse_timers(text):
             rows["coarse"].append({"stage": match[1], "ms": duration})
     if not all(rows.values()):
         raise ValueError("missing LSTM, graph-op, graph-summary or coarse BENCH telemetry")
-    if any(row["mode"] not in ("CBLAS", "portable") or row["scope"] not in ("whole_node", "worker_zero")
+    if any(row["mode"] not in ("CBLAS", "portable", "packed_avx512_fma", "packed_avx2_fma") or
+           row["scope"] not in ("whole_node", "worker_zero") or
+           (row["mode"].startswith("packed_") and row["scope"] != "worker_zero")
            for row in rows["lstm"]):
         raise ValueError("unrecognized LSTM timer scope")
     if any(row["scope"] != "per_node_synchronized" for row in rows["graph_summaries"]):
@@ -115,7 +119,7 @@ def parse_timers(text):
         "One instrumented cold full-pipeline call; no warm throughput or original comparison. "
         "Graph callbacks synchronize individual nodes and change scheduling granularity. "
         "LSTM parts and graph nodes are nested in coarse network/separate timers: do not add them together. "
-        "Portable recurrence and FFT worker-zero spans are not whole-node CPU-work totals."
+        "Portable/packed recurrence and FFT worker-zero spans are not whole-node CPU-work totals."
     )
     return rows
 

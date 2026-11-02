@@ -204,6 +204,14 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   **18.890005/17.151493 s** Q4_K. All calls and the automatic diagnostic are
   retained; no model was packaged. Peak child RSS was 3,573,896 KiB for this
   capture-heavy campaign, not a standalone production-memory measurement.
+- The [hosted large-model campaign at the same `a80cbbba` source](docs/historical/scnet-a80-large-qualification-2026-11-02.json)
+  passes all numerical, surface, runtime and speed gates in all three formats
+  on its EPYC 7763/AVX2 worker. Native/original medians are
+  **64.442049/73.001402 s** F16, **64.607757/72.975983 s** Q8_0 and
+  **64.819255/73.263762 s** Q4_K. It produced a success-only hosted bundle.
+  The independent evidence audit passes; the separate bundle bytes have not
+  yet been downloaded/audited. This qualifies that exact large-model CPU build
+  and fixture, not subsequent runtime changes or the small model.
 - CPU convolution packing now chooses frequency tiles from the actual time and
   kernel dimensions, with a strict **128 MiB per packing tensor** budget.
   Complete time rows, coefficient precision and frequency order are preserved.
@@ -211,8 +219,21 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   always have a fitting tile; invalid/overflowing geometry raises the existing
   recoverable error. Total graph and process memory are separate from this
   individual-buffer bound. [Component and short-reference controls](docs/historical/scnet-adaptive-tiling-controls-2026-11-02.json)
-  bind this candidate; complete fidelity and paired speed still require a fresh
-  campaign on its exact committed source.
+  bind this candidate. Its [complete local campaign](docs/historical/scnet-c2-full-small-2026-11-02.json)
+  at `9724c205` again passes all 210 stage decisions, all 96 warmup/timed stem
+  decisions, production surfaces and runtime identities, but fails all three
+  speed gates: native/original medians are **16.782511/14.785485 s** F16,
+  **16.493169/16.185961 s** Q8_0 and **16.303297/15.609759 s** Q4_K.
+  The exact binaries, source, first-attempt timings and diagnostic attribution
+  are retained; no model was packaged.
+- Current implementation work targets the recurrent matrix loop and gate
+  updates with immutable packed F32 weights and independent ggml worker batches.
+  This candidate must preserve the original bias/state equations, runtime
+  fallback paths, thread budget and all numerical/performance gates. Its new
+  accumulation order passes [component and original-reference controls](docs/historical/scnet-packed-recurrence-controls-2026-11-02.json):
+  all six component groups, twelve concurrent/clamped callback comparisons,
+  and all 210 short model-stage decisions pass. Complete waveform and speed
+  qualification remain pending on its exact committed source.
 - Next action: qualify both model sizes directly
   through all original-checkpoint, raw, full-pipeline, CLI/Session and paired
   performance gates in `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566).
@@ -220,9 +241,9 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   campaign on relevant source changes. Concurrency is keyed by commit so that
   distinct candidates retain independent runs; ordinary feature-PR checks
   remain in place. The preserved [a80 hosted run](https://github.com/CrispStrobe/CrispASR/actions/runs/41506291896)
-  has passed clean Python startup and native builds on both actual runners.
-  Its small-model campaign completed without qualification; its retained
-  results are under review while the large-model campaign continues.
+  has completed: the small-model campaign fails only performance, while the
+  large-model campaign passes as recorded above. The separate hosted
+  `9724c205` campaign remains attached to its exact source.
   Complete CPU qualification, GPU qualification and held-out quality remain unproven; do not promote the
   candidate or substitute diagnostic runs for these gates.
 - License: upstream [MIT notice](https://github.com/starrytong/SCNet/blob/main/LICENSE)

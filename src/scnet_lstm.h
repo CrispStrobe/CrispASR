@@ -5,6 +5,7 @@
 #pragma once
 
 #include "scnet_activation.h"
+#include "scnet_recurrent_gemm.h"
 
 #include <algorithm>
 #include <chrono>
@@ -47,7 +48,8 @@ template <bool Profile>
 inline void lstm_direction_impl(const float* projected, const float* recurrent_weight, const float* recurrent_bias,
                                 float* output, int hidden, int batch, int steps, bool reverse, int begin, int end,
                                 bool use_blas, LstmScratch& scratch, LstmTiming* timing, const float* input_bias,
-                                size_t projection_row_stride) {
+                                size_t projection_row_stride, const scnet_recurrent::PackedWeight* packed_weight,
+                                scnet_recurrent::Product packed_product) {
     const auto gate_kernel = scnet_activation::selected_kernel();
     using Clock = std::chrono::steady_clock;
     Clock::time_point phase_start;
@@ -64,6 +66,8 @@ inline void lstm_direction_impl(const float* projected, const float* recurrent_w
             phase_start = Clock::now();
         if (step == 0) {
             std::fill_n(scratch.gates.data(), static_cast<size_t>(rows) * gates, 0);
+        } else if (packed_weight) {
+            packed_product(scratch.hidden.data(), *packed_weight, scratch.gates.data(), rows);
         } else {
 #if defined(HAVE_ACCELERATE) || defined(HAVE_BLAS)
             if (use_blas) {
@@ -130,14 +134,20 @@ inline void lstm_direction_impl(const float* projected, const float* recurrent_w
 inline void lstm_direction(const float* projected, const float* recurrent_weight, const float* recurrent_bias,
                            float* output, int hidden, int batch, int steps, bool reverse, int begin, int end,
                            bool use_blas, LstmScratch& scratch, LstmTiming* timing = nullptr,
-                           const float* input_bias = nullptr, size_t projection_row_stride = 0) {
+                           const float* input_bias = nullptr, size_t projection_row_stride = 0,
+                           const scnet_recurrent::PackedWeight* packed_weight = nullptr,
+                           scnet_recurrent::Product packed_product = nullptr) {
+    if ((packed_weight == nullptr) != (packed_product == nullptr) || (packed_weight && packed_weight->hidden != hidden))
+        throw std::runtime_error("invalid SCNet packed recurrent matrix");
     if (projection_row_stride == 0)
         projection_row_stride = static_cast<size_t>(4) * hidden;
     if (timing)
         lstm_direction_impl<true>(projected, recurrent_weight, recurrent_bias, output, hidden, batch, steps, reverse,
-                                  begin, end, use_blas, scratch, timing, input_bias, projection_row_stride);
+                                  begin, end, use_blas, scratch, timing, input_bias, projection_row_stride,
+                                  packed_weight, packed_product);
     else
         lstm_direction_impl<false>(projected, recurrent_weight, recurrent_bias, output, hidden, batch, steps, reverse,
-                                   begin, end, use_blas, scratch, nullptr, input_bias, projection_row_stride);
+                                   begin, end, use_blas, scratch, nullptr, input_bias, projection_row_stride,
+                                   packed_weight, packed_product);
 }
 } // namespace scnet_detail
