@@ -1,0 +1,321 @@
+// Private source-bound numerical/scheduling control. Never a timing benchmark.
+#include "/workspace/scratch/310fec870d98/CrispASR/ggml/src/ggml-backend-impl.h"
+#include "/workspace/scratch/310fec870d98/CrispASR/ggml/src/ggml-impl.h"
+#include "/workspace/scratch/310fec870d98/CrispASR/src/scnet.cpp"
+#include "/workspace/scratch/310fec870d98/CrispASR/third_party/c2pa-audio/src/sha256.h"
+#include <atomic>
+#include <dlfcn.h>
+#include <fstream>
+#include <iomanip>
+#include <iostream>
+#include <link.h>
+
+namespace control {
+void require(bool value, const char* message) {
+    if (!value)
+        throw std::runtime_error(message);
+}
+
+std::string digest(const void* data, size_t bytes) {
+    const auto hash = crispasr::sha::sha256(static_cast<const uint8_t*>(data), bytes);
+    std::string result;
+    const char* hex = "0123456789abcdef";
+    for (uint8_t byte : hash) {
+        result += hex[byte >> 4];
+        result += hex[byte & 15];
+    }
+    return result;
+}
+
+void loaded(const char* phase) {
+    std::vector<std::string> paths;
+    dl_iterate_phdr(
+        [](dl_phdr_info* info, size_t, void* opaque) {
+            if (info->dlpi_name && *info->dlpi_name)
+                static_cast<std::vector<std::string>*>(opaque)->emplace_back(info->dlpi_name);
+            return 0;
+        },
+        &paths);
+    std::sort(paths.begin(), paths.end());
+    Dl_info symbol{};
+    require(dladdr(dlsym(RTLD_DEFAULT, "cblas_sgemm"), &symbol) && symbol.dli_fname,
+            "actual CBLAS provider is unavailable");
+    std::cout << "{\"event\":\"loaded\",\"phase\":" << std::quoted(phase)
+              << ",\"cblas_sgemm_owner\":" << std::quoted(symbol.dli_fname) << ",\"paths\":[";
+    for (size_t i = 0; i < paths.size(); ++i)
+        std::cout << (i ? "," : "") << std::quoted(paths[i]);
+    const auto threads = reinterpret_cast<int (*)()>(dlsym(RTLD_DEFAULT, "openblas_get_num_threads"));
+    const auto parallel = reinterpret_cast<int (*)()>(dlsym(RTLD_DEFAULT, "openblas_get_parallel"));
+    const auto config = reinterpret_cast<const char* (*)()>(dlsym(RTLD_DEFAULT, "openblas_get_config"));
+    const auto core = reinterpret_cast<const char* (*)()>(dlsym(RTLD_DEFAULT, "openblas_get_corename"));
+    require(threads && parallel && config && core && threads() == 2 && parallel() == 1,
+            "expected two-thread pthread OpenBLAS is unavailable");
+    std::cout << "],\"openblas_threads\":" << threads() << ",\"openblas_parallel\":" << parallel()
+              << ",\"openblas_config\":" << std::quoted(config()) << ",\"openblas_core\":" << std::quoted(core()) << "}"
+              << std::endl;
+}
+
+struct TemporaryCast {
+    ggml_context* ctx = nullptr;
+    ggml_backend_buffer_t buffer = nullptr;
+    ~TemporaryCast() {
+        ggml_backend_buffer_free(buffer);
+        ggml_free(ctx);
+    }
+};
+
+struct Original {
+    const ggml_tensor* tensor;
+    const void* data;
+    ggml_type type;
+    std::array<int64_t, 4> shape;
+    std::string source_hash, cache_hash;
+};
+
+std::map<std::string, Original> casts(scnet_context& model) {
+    require(model.recurrent_weights.tensors.size() == 24, "expected exactly 24 recurrent cache tensors");
+    std::map<std::string, Original> originals;
+    size_t total_bytes = 0, failures = 0;
+    for (const auto& item : model.recurrent_weights.tensors) {
+        auto* source = weight(model, item.first);
+        auto* cached = item.second;
+        require(cached != source && cached->op == GGML_OP_NONE && cached->type == GGML_TYPE_F32 &&
+                    cached->buffer == model.recurrent_weights.buf && ggml_are_same_shape(cached, source) &&
+                    ggml_is_contiguous(cached) && ggml_backend_buffer_is_host(cached->buffer) &&
+                    ggml_backend_buffer_get_usage(cached->buffer) == GGML_BACKEND_BUFFER_USAGE_WEIGHTS,
+                "cache tensor is not a distinct immutable-shaped F32 CPU leaf");
+        for (const auto* parent : cached->src)
+            require(parent == nullptr, "cache leaf has a graph parent");
+        const std::string source_hash = digest(source->data, ggml_nbytes(source));
+        TemporaryCast test;
+        test.ctx = ggml_init({8 * ggml_tensor_overhead() + ggml_graph_overhead_custom(8, false), nullptr, true});
+        require(test.ctx != nullptr, "cast metadata allocation failed");
+        auto* cast = ggml_cast(test.ctx, source, GGML_TYPE_F32);
+        auto* graph = ggml_new_graph_custom(test.ctx, 8, false);
+        ggml_build_forward_expand(graph, cast);
+        test.buffer = ggml_backend_alloc_ctx_tensors(test.ctx, model.cpu);
+        require(test.buffer != nullptr, "cast backing allocation failed");
+        require(ggml_backend_graph_compute(model.cpu, graph) == GGML_STATUS_SUCCESS, "actual ggml_cast failed");
+        const size_t bytes = ggml_nbytes(cached);
+        const auto* a = static_cast<const uint8_t*>(cached->data);
+        const auto* b = static_cast<const uint8_t*>(cast->data);
+        size_t mismatches = 0, first = bytes;
+        for (size_t i = 0; i < bytes; ++i) {
+            if (a[i] != b[i]) {
+                ++mismatches;
+                first = std::min(first, i);
+            }
+        }
+        const std::string cached_hash = digest(cached->data, bytes);
+        std::cout << "{\"event\":\"cast\",\"name\":" << std::quoted(item.first)
+                  << ",\"stored_type\":" << std::quoted(ggml_type_name(source->type)) << ",\"shape\":[" << source->ne[0]
+                  << ',' << source->ne[1] << "],\"bytes\":" << bytes << ",\"mismatched_bytes\":" << mismatches
+                  << ",\"first_mismatch\":" << (mismatches ? static_cast<int64_t>(first) : -1)
+                  << ",\"source_sha256\":" << std::quoted(source_hash)
+                  << ",\"cache_sha256\":" << std::quoted(cached_hash)
+                  << ",\"cast_sha256\":" << std::quoted(digest(cast->data, bytes)) << "}" << std::endl;
+        require(digest(source->data, ggml_nbytes(source)) == source_hash, "ggml_cast modified original weight bytes");
+        originals.emplace(item.first, Original{source,
+                                               source->data,
+                                               source->type,
+                                               {source->ne[0], source->ne[1], source->ne[2], source->ne[3]},
+                                               source_hash,
+                                               cached_hash});
+        total_bytes += bytes;
+        failures += mismatches != 0;
+    }
+    const size_t expected = model.hp.dims.back() == 128 ? 15728640 : 62914560;
+    require(total_bytes == expected && failures == 0, "cast/cache byte identity or memory size failed");
+    std::cout << "{\"event\":\"cache\",\"tensor_count\":24,\"payload_bytes\":" << total_bytes
+              << ",\"buffer_bytes\":" << ggml_backend_buffer_get_size(model.recurrent_weights.buf)
+              << ",\"all_cast_bytes_equal\":true}" << std::endl;
+    return originals;
+}
+
+struct SplitObserver {
+    using Compute = ggml_status (*)(ggml_backend_t, ggml_cgraph*);
+    struct Call {
+        ggml_tensor* tensor;
+        ggml_custom_op_params original{};
+        std::array<uint8_t, GGML_MAX_OP_PARAMS> saved{};
+        std::array<std::atomic<int>, 256> counts{};
+        std::array<std::atomic<int>, 256> thread_counts{};
+        std::atomic<bool> invalid{false};
+        std::string name;
+    };
+    scnet_context& model;
+    Compute original;
+    int splits = 0, callbacks = 0;
+    inline static SplitObserver* current = nullptr;
+    explicit SplitObserver(scnet_context& value) : model(value), original(value.cpu->iface.graph_compute) {
+        require(!current && original && !flag("CRISPASR_SCNET_BENCH"), "observer requires BENCH=0 and sole ownership");
+        current = this;
+        model.cpu->iface.graph_compute = forward;
+    }
+    ~SplitObserver() {
+        model.cpu->iface.graph_compute = original;
+        current = nullptr;
+    }
+    static void invoke(ggml_tensor* output, int ith, int nth, void* opaque) {
+        auto& call = *static_cast<Call*>(opaque);
+        if (ith < 0 || ith >= 256 || nth < 1 || nth > 256) {
+            call.invalid = true;
+        } else {
+            ++call.counts[ith];
+            const int old = call.thread_counts[ith].exchange(nth);
+            if (old && old != nth)
+                call.invalid = true;
+        }
+        call.original.fun(output, ith, nth, call.original.userdata);
+    }
+    static ggml_status forward(ggml_backend_t backend, ggml_cgraph* graph) {
+        auto& self = *current;
+        std::vector<std::unique_ptr<Call>> calls;
+        for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
+            auto* node = ggml_graph_node(graph, i);
+            if (node->op != GGML_OP_CUSTOM)
+                continue;
+            ggml_custom_op_params parameters;
+            std::memcpy(&parameters, node->op_params, sizeof(parameters));
+            if (parameters.fun != recurrent_compute)
+                continue;
+            auto call = std::make_unique<Call>();
+            call->tensor = node;
+            call->original = parameters;
+            std::memcpy(call->saved.data(), node->op_params, call->saved.size());
+            call->name = static_cast<RecurrentNode*>(parameters.userdata)->name;
+            require(parameters.n_tasks == 1, "recurrence task budget changed");
+            for (int direction = 0; direction < 2; ++direction) {
+                const auto name = call->name + ".weight_hh_l0" + (direction ? "_reverse" : "");
+                require(node->src[2 + direction] == self.model.recurrent_weights.tensors.at(name),
+                        "recurrence does not consume its model-owned F32 leaf");
+            }
+            calls.push_back(std::move(call));
+        }
+        if (calls.empty())
+            return self.original(backend, graph);
+        // This duplicates planning only for diagnostics; it neither changes the
+        // graph nor creates the per-node splits of a scheduler eval callback.
+        const auto plan = ggml_graph_plan(graph, self.model.params.n_threads, nullptr);
+        std::cout << "{\"event\":\"split\",\"index\":" << self.splits
+                  << ",\"requested_threads\":" << self.model.params.n_threads
+                  << ",\"planned_threads\":" << plan.n_threads << ",\"ops\":[";
+        bool has_copy = false;
+        for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
+            const auto op = ggml_graph_node(graph, i)->op;
+            std::cout << (i ? "," : "") << std::quoted(ggml_op_name(op));
+            has_copy |= op == GGML_OP_CPY;
+        }
+        std::cout << "]}" << std::endl;
+        struct Restore {
+            std::vector<std::unique_ptr<Call>>& calls;
+            ~Restore() {
+                for (auto& call : calls)
+                    std::memcpy(call->tensor->op_params, call->saved.data(), call->saved.size());
+            }
+        } restore{calls};
+        for (auto& call : calls) {
+            auto parameters = call->original;
+            parameters.fun = invoke;
+            parameters.userdata = call.get();
+            std::memcpy(call->tensor->op_params, &parameters, sizeof(parameters));
+        }
+        const auto status = self.original(backend, graph);
+        bool valid = plan.n_threads == 1 && !has_copy && status == GGML_STATUS_SUCCESS;
+        for (auto& call : calls) {
+            std::cout << "{\"event\":\"callback\",\"name\":" << std::quoted(call->name)
+                      << ",\"custom_tasks\":" << call->original.n_tasks << ",\"workers\":[";
+            bool comma = false;
+            int count = 0;
+            for (int worker = 0; worker < 256; ++worker) {
+                const int n = call->counts[worker].load();
+                if (!n)
+                    continue;
+                std::cout << (comma ? "," : "") << "{\"ith\":" << worker
+                          << ",\"nth\":" << call->thread_counts[worker].load() << ",\"calls\":" << n << '}';
+                comma = true;
+                count += n;
+                valid &= worker == 0 && n == 1 && call->thread_counts[worker] == 1;
+            }
+            std::cout << "]}" << std::endl;
+            valid &= count == 1 && !call->invalid;
+            ++self.callbacks;
+        }
+        ++self.splits;
+        require(valid, "actual recurrence CPU plan/callback did not use exactly one worker");
+        return status;
+    }
+};
+} // namespace control
+
+int main(int argc, char** argv) {
+    using namespace control;
+    try {
+        require(argc == 4, "usage: recurrent-cache-control model.gguf first-quarter-second.pcm-f32 output.pcm-f32");
+        require(digest("abc", 3) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad",
+                "SHA256 helper control failed");
+        require(!flag("CRISPASR_SCNET_BENCH") && !flag("CRISPASR_SCNET_SCALAR_LSTM") && !flag("CRISPASR_SCNET_GPU") &&
+                    !std::getenv("CRISPASR_SCNET_CAPTURE_GGUF"),
+                "control requires BENCH=0, CPU and no execution/capture overrides");
+        auto params = scnet_default_params();
+        params.use_gpu = false;
+        params.n_threads = 2;
+        params.no_segment = true;
+        std::unique_ptr<scnet_context, decltype(&scnet_free)> model(scnet_init_from_file(argv[1], params), scnet_free);
+        require(model && model->backend == model->cpu && model->blas && model->recurrent_blas,
+                "required CPU+BLAS route is absent");
+        loaded("before");
+        const auto originals = casts(*model);
+        std::ifstream file(argv[2], std::ios::binary | std::ios::ate);
+        require(file && file.tellg() == std::streamoff(11025 * 2 * sizeof(float)), "wrong raw fixture geometry");
+        file.seekg(0);
+        std::vector<float> input(11025 * 2);
+        file.read(reinterpret_cast<char*>(input.data()), input.size() * sizeof(float));
+        require(bool(file), "cannot read raw fixture");
+        const auto input_hash = digest(input.data(), input.size() * sizeof(float));
+        Sources expected = separate(*model, input);
+        require(digest(input.data(), input.size() * sizeof(float)) == input_hash, "ordinary call modified input bytes");
+        Sources actual;
+        int splits = 0, callbacks = 0;
+        {
+            SplitObserver observer(*model);
+            actual = separate(*model, input);
+            splits = observer.splits;
+            callbacks = observer.callbacks;
+        }
+        require(splits == 12 && callbacks == 12, "missing actual recurrent split/callback observations");
+        require(digest(input.data(), input.size() * sizeof(float)) == input_hash, "input bytes were modified");
+        std::ofstream output(argv[3], std::ios::binary);
+        require(bool(output), "cannot create PCM evidence");
+        for (int stem = 0; stem < 4; ++stem) {
+            require(actual[stem].size() == 2 * 11025 && actual[stem].size() == expected[stem].size() &&
+                        std::memcmp(actual[stem].data(), expected[stem].data(), actual[stem].size() * sizeof(float)) ==
+                            0,
+                    "observed versus ordinary output bytes differ");
+            for (float value : actual[stem])
+                require(std::isfinite(value), "output is not finite");
+            output.write(reinterpret_cast<const char*>(actual[stem].data()), actual[stem].size() * sizeof(float));
+        }
+        require(bool(output), "cannot write PCM evidence");
+        for (const auto& item : originals) {
+            const auto* original = weight(*model, item.first);
+            const auto* cached = model->recurrent_weights.tensors.at(item.first);
+            require(original == item.second.tensor && original->data == item.second.data &&
+                        original->type == item.second.type &&
+                        std::equal(item.second.shape.begin(), item.second.shape.end(), original->ne) &&
+                        digest(original->data, ggml_nbytes(original)) == item.second.source_hash &&
+                        digest(cached->data, ggml_nbytes(cached)) == item.second.cache_hash,
+                    "original or cached weights changed during inference");
+        }
+        loaded("after");
+        std::cout << "{\"event\":\"complete\",\"complete\":true,\"qualification\":false,"
+                     "\"performance_qualification\":false,\"casts\":24,\"observed_splits\":"
+                  << splits << ",\"observed_callbacks\":" << callbacks
+                  << ",\"bench\":0,\"observer_output_bytes_equal\":true,\"input_sha256\":" << std::quoted(input_hash)
+                  << ",\"weights_immutable\":true}" << std::endl;
+        return 0;
+    } catch (const std::exception& error) {
+        std::cerr << "recurrent-cache control failed: " << error.what() << std::endl;
+        return 1;
+    }
+}
