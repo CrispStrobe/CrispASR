@@ -1,6 +1,7 @@
 # Install a platform-appropriate torch==2.8.0 build separately (CPU/CUDA).
 # Original source pin: starrytong/SCNet@5d95bf96b19c3eede63248d171efeca8e3abb948.
-numpy==2.2.6
+# Accelerate 0.32.1 requires NumPy <2; retain the original helper dependency.
+numpy==1.26.4
 gguf==0.17.1
 accelerate==0.32.1
 julius==0.2.7

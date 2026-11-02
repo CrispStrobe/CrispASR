@@ -40,9 +40,14 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   cold/warm/changed-input reuse checks; mathematical, converter, routing and
   comparator rejection controls pass. See [backend documentation](docs/scnet.md)
   and [bounded local receipt](docs/historical/scnet-local-validation-2026-11-02.json).
-- Next action: collect [hosted preflight 41395094930](https://github.com/CrispStrobe/CrispASR/actions/runs/41395094930),
-  then run original-checkpoint fidelity, actual CLI/Session surfaces, and paired
-  performance on the prepared `scnet-qualification.yml` worker. Generated
+- Hosted progress: [preflight 41395094930](https://github.com/CrispStrobe/CrispASR/actions/runs/41395094930)
+  built the production native library/probe and quantizer with OpenBLAS; math and
+  routing controls passed. Its earlier quantizer-test filename collision is
+  corrected in `1ef9331`. The [first qualification run](https://github.com/CrispStrobe/CrispASR/actions/runs/41396683922)
+  exposed a NumPy/Accelerate dependency conflict before model execution; retain
+  Accelerate 0.32.1 and pin compatible NumPy 1.26.4 for the next run.
+- Next action: complete original-checkpoint fidelity, actual CLI/Session surfaces,
+  and paired performance through `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566). Generated
   capability/matrix changes require that actual production CLI. CPU checkpoint
   acceptance, GPU qualification and held-out quality remain unproven; do not
   promote the candidate or substitute the synthetic graph checks for these gates.

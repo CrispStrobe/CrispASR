@@ -667,5 +667,38 @@
         "control_count": 36
       }
     ]
-  }
+  },
+  "hosted_attempts": [
+    {
+      "run_id": 41395094930,
+      "job_id": 125114582867,
+      "source": "2b13d4339afc151cb91701d903543278cf4c12b9",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/41395094930",
+      "result": "failed in preflight controls; author downloads not reached",
+      "build": {
+        "scnet-probe": "pass",
+        "scnet-validation": "pass",
+        "crispasr-quantize": "pass",
+        "CBLAS": "OpenBLAS link check passed"
+      },
+      "native_math_tests_passed": 4,
+      "session_routing_tests_passed": 3,
+      "failure": "unrelated-architecture quantizer fixture accidentally reused its input path as output; fixed in 1ef9331 by other-source.gguf input",
+      "artifact_id": 13119439420,
+      "hardware": {
+        "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  4\nOn-line CPU(s) list:                     0-3\nVendor ID:                               AuthenticAMD\nModel name:                              AMD EPYC 7763 64-Core Processor\nCPU family:                              25\nModel:                                   1\nThread(s) per core:                      2\nCore(s) per socket:                      2\nSocket(s):                               1\nStepping:                                1\nBogoMIPS:                                4890.86\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl tsc_reliable nonstop_tsc cpuid extd_apicid aperfmperf tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves user_shstk clzero xsaveerptr rdpru arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold v_vmsave_vmload umip vaes vpclmulqdq rdpid fsrm\nVirtualization:                          AMD-V\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               64 KiB (2 instances)\nL1i cache:                               64 KiB (2 instances)\nL2 cache:                                1 MiB (2 instances)\nL3 cache:                                32 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-3\nVulnerability Gather data sampling:      Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Vulnerable: Safe RET, no microcode\nVulnerability Spec store bypass:         Vulnerable\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; STIBP disabled; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Vulnerable: Clear CPU buffers attempted, no microcode\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected\n",
+        "memory": "               total        used        free      shared  buff/cache   available\nMem:            15Gi       594Mi        12Gi        45Mi       2.8Gi        14Gi\nSwap:          3.0Gi          0B       3.0Gi\n",
+        "disk": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/root       146G   60G   86G  42% /\ntmpfs           7.9G  172K  7.9G   1% /dev/shm\ntmpfs           3.2G  1.0M  3.2G   1% /run\ntmpfs           5.0M     0  5.0M   0% /run/lock\nefivarfs        128M   34K  128M   1% /sys/firmware/efi/efivars\n/dev/sda15      105M  6.1M   99M   6% /boot/efi\ntmpfs           1.6G   12K  1.6G   1% /run/user/1001\n"
+      }
+    },
+    {
+      "run_id": 41396683922,
+      "job_id": 125119405470,
+      "source": "1ef9331ff9b4de971b9c920d2267041a8c5adbf2",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/41396683922",
+      "result": "failed installing reference requirements before model execution",
+      "failure": "accelerate==0.32.1 requires numpy<2, conflicting with numpy==2.2.6",
+      "resolution": "retain Accelerate 0.32.1; pin NumPy 1.26.4 and run pip check"
+    }
+  ]
 }
