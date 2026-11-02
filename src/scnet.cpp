@@ -29,6 +29,7 @@
 #include <set>
 #include <stdexcept>
 #include <string>
+#include <tuple>
 #include <vector>
 
 namespace {
@@ -62,6 +63,93 @@ struct Timer {
         if (enabled)
             std::fprintf(stderr, "scnet_bench: %s %.3f ms\n", name,
                          std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start).count());
+    }
+};
+
+// Diagnostic-only attribution. Asking the scheduler to observe every node
+// splits execution and synchronizes each observation. These measurements help
+// locate costs; they are not a normal-path throughput measurement. The callback
+// is never installed when CRISPASR_SCNET_BENCH is disabled.
+struct GraphProfile {
+    using Key = std::tuple<std::string, std::string, std::string>;
+    struct Sample {
+        double milliseconds = 0;
+        uint64_t calls = 0;
+    };
+    bool enabled = false;
+    std::map<const ggml_tensor*, std::string> labels;
+    std::map<Key, Sample> samples;
+    std::map<const ggml_tensor*, Sample*> nodes;
+    Sample unmapped;
+    Sample* active = nullptr;
+    std::chrono::steady_clock::time_point started;
+
+    void label(ggml_tensor* tensor, const std::string& stage) {
+        if (!enabled)
+            return;
+        std::vector<ggml_tensor*> pending{tensor};
+        while (!pending.empty()) {
+            auto* current = pending.back();
+            pending.pop_back();
+            if (!labels.emplace(current, stage).second)
+                continue;
+            for (auto* source : current->src)
+                if (source)
+                    pending.push_back(source);
+        }
+    }
+
+    void begin(ggml_cgraph* graph, ggml_backend_sched_t scheduler) {
+        samples.clear();
+        nodes.clear();
+        unmapped = {};
+        active = nullptr;
+        for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
+            auto* tensor = ggml_graph_node(graph, i);
+            const auto stage = labels.find(tensor);
+            const auto backend = ggml_backend_sched_get_tensor_backend(scheduler, tensor);
+            const Key key{stage == labels.end() ? "unattributed" : stage->second, ggml_op_desc(tensor),
+                          backend ? ggml_backend_name(backend) : "unassigned"};
+            nodes.emplace(tensor, &samples[key]);
+        }
+        ggml_backend_sched_set_eval_callback(scheduler, observe, this);
+    }
+
+    static bool observe(ggml_tensor* tensor, bool ask, void* opaque) {
+        auto& profile = *static_cast<GraphProfile*>(opaque);
+        if (ask) {
+            const auto found = profile.nodes.find(tensor);
+            profile.active = found == profile.nodes.end() ? &profile.unmapped : found->second;
+            profile.started = std::chrono::steady_clock::now();
+        } else if (profile.active) {
+            const auto finished = std::chrono::steady_clock::now();
+            profile.active->milliseconds +=
+                std::chrono::duration<double, std::milli>(finished - profile.started).count();
+            ++profile.active->calls;
+            profile.active = nullptr;
+        }
+        return true;
+    }
+
+    void report(int frames) const {
+        double milliseconds = unmapped.milliseconds;
+        uint64_t count = unmapped.calls, groups = 0;
+        for (const auto& entry : samples) {
+            if (!entry.second.calls)
+                continue;
+            ++groups;
+            count += entry.second.calls;
+            milliseconds += entry.second.milliseconds;
+            std::fprintf(stderr, "scnet_bench_op: frames=%d stage=%s op=%s backend=%s calls=%llu ms=%.3f\n", frames,
+                         std::get<0>(entry.first).c_str(), std::get<1>(entry.first).c_str(),
+                         std::get<2>(entry.first).c_str(), static_cast<unsigned long long>(entry.second.calls),
+                         entry.second.milliseconds);
+        }
+        std::fprintf(stderr,
+                     "scnet_bench_ops: frames=%d nodes=%llu groups=%llu measured_ms=%.3f unmapped_nodes=%llu "
+                     "unmapped_ms=%.3f scope=per_node_synchronized\n",
+                     frames, static_cast<unsigned long long>(count), static_cast<unsigned long long>(groups),
+                     milliseconds, static_cast<unsigned long long>(unmapped.calls), unmapped.milliseconds);
     }
 };
 
@@ -191,8 +279,10 @@ void fourier_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
 
 struct RecurrentNode {
     bool blas = false;
+    std::string name;
     std::vector<scnet_detail::LstmScratch> scratch;
-    RecurrentNode(int batch, int hidden, int threads, bool accelerated) : blas(accelerated) {
+    RecurrentNode(int batch, int hidden, int threads, bool accelerated, const std::string& label = "unnamed")
+        : blas(accelerated), name(label) {
         for (int i = 0; i < (blas ? 1 : threads); ++i)
             scratch.emplace_back(blas ? batch : (batch + threads - 1) / threads, hidden);
     }
@@ -216,13 +306,24 @@ void recurrent_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
         return;
     auto& scratch = node.scratch[ith];
     const int capacity = static_cast<int>(scratch.hidden.size() / hidden);
+    const bool profiling = ith == 0 && flag("CRISPASR_SCNET_BENCH");
+    scnet_detail::LstmTiming timings;
     for (int direction = 0; direction < 2; ++direction)
         for (int first = begin; first < end; first += capacity)
             scnet_detail::lstm_direction(static_cast<const float*>(output->src[direction]->data),
                                          static_cast<const float*>(output->src[2 + direction]->data),
                                          static_cast<const float*>(output->src[4 + direction]->data),
                                          static_cast<float*>(output->data), hidden, batch, steps, direction != 0, first,
-                                         std::min(first + capacity, end), node.blas, scratch);
+                                         std::min(first + capacity, end), node.blas, scratch,
+                                         profiling ? &timings : nullptr);
+    if (profiling)
+        std::fprintf(stderr,
+                     "scnet_bench_lstm: name=%s mode=%s scope=%s hidden=%d batch=%d steps=%d gemm_calls=%llu "
+                     "gate_steps=%llu gemm_ms=%.3f gates_ms=%.3f reset_ms=%.3f\n",
+                     node.name.c_str(), node.blas ? "CBLAS" : "portable", node.blas ? "whole_node" : "worker_zero",
+                     hidden, batch, steps, static_cast<unsigned long long>(timings.gemm_calls),
+                     static_cast<unsigned long long>(timings.gate_steps), timings.gemm_ms, timings.gates_ms,
+                     timings.reset_ms);
 }
 
 struct Graph {
@@ -236,6 +337,7 @@ struct Graph {
     std::map<ggml_tensor*, ggml_tensor*> f32;
     std::vector<std::unique_ptr<FourierNode>> fourier_nodes;
     std::vector<std::unique_ptr<RecurrentNode>> recurrent_nodes;
+    GraphProfile profile;
     ~Graph() {
         if (scheduler)
             ggml_backend_sched_free(scheduler);
@@ -385,9 +487,12 @@ ggml_tensor* join(ggml_context* ctx, std::vector<ggml_tensor*> tensors, int axis
 }
 
 void capture(Graph& graph, const std::string& name, ggml_tensor* tensor) {
-    if (!graph.capture)
+    if (!graph.capture) {
+        graph.profile.label(tensor, name);
         return;
+    }
     tensor = ggml_cont(graph.context, tensor);
+    graph.profile.label(tensor, name);
     ggml_set_name(tensor, name.c_str());
     ggml_set_output(tensor);
     ggml_build_forward_expand(graph.graph, tensor);
@@ -542,7 +647,7 @@ ggml_tensor* recurrent(scnet_context& model, Graph& graph, ggml_tensor* input, c
         sources[4 + direction] = weight(model, name + ".bias_hh_l0" + suffix);
     }
     auto node = std::make_unique<RecurrentNode>(static_cast<int>(input->ne[1]), hidden, model.params.n_threads,
-                                                model.recurrent_blas);
+                                                model.recurrent_blas, name);
     auto* result = ggml_custom_4d(ctx, GGML_TYPE_F32, 2 * hidden, input->ne[1], input->ne[2], 1, sources, 6,
                                   recurrent_compute, model.recurrent_blas ? 1 : GGML_N_TASKS_MAX, node.get());
     graph.recurrent_nodes.push_back(std::move(node));
@@ -626,8 +731,10 @@ ggml_tensor* decoder(scnet_context& model, Graph& graph, ggml_tensor* input, ggm
 }
 
 Graph& network_graph(scnet_context& model, int frames, bool want_capture) {
+    const bool want_profile = flag("CRISPASR_SCNET_BENCH");
     for (size_t i = 0; i < model.graphs.size(); ++i)
-        if (model.graphs[i]->frames == frames && model.graphs[i]->capture == want_capture) {
+        if (model.graphs[i]->frames == frames && model.graphs[i]->capture == want_capture &&
+            model.graphs[i]->profile.enabled == want_profile) {
             auto cached = std::move(model.graphs[i]);
             model.graphs.erase(model.graphs.begin() + static_cast<std::ptrdiff_t>(i));
             model.graphs.insert(model.graphs.begin(), std::move(cached));
@@ -636,6 +743,7 @@ Graph& network_graph(scnet_context& model, int frames, bool want_capture) {
     Timer timer("graph_build");
     auto graph = std::make_unique<Graph>();
     graph->capture = want_capture;
+    graph->profile.enabled = want_profile;
     ggml_init_params params{ggml_tensor_overhead() * GRAPH_CAPACITY + ggml_graph_overhead_custom(GRAPH_CAPACITY, false),
                             nullptr, true};
     graph->context = ggml_init(params);
@@ -659,6 +767,7 @@ Graph& network_graph(scnet_context& model, int frames, bool want_capture) {
     for (int i = 0; i < 3; ++i)
         x = decoder(model, *graph, x, skips[2 - i], lengths[2 - i], i);
     graph->output = ggml_cont(graph->context, x);
+    graph->profile.label(graph->output, "output");
     ggml_set_output(graph->output);
     ggml_build_forward_expand(graph->graph, graph->output);
     // Old buffers are released before allocating a new shape. Two graphs keep
@@ -737,12 +846,16 @@ Sources forward(scnet_context& model, const float* pcm, int samples, Captures* c
         put(captures, "normalized", {frames, bins, 4, 1}, spectrum);
     }
     Graph& graph = network_graph(model, frames, captures != nullptr);
+    if (graph.profile.enabled)
+        graph.profile.begin(graph.graph, graph.scheduler);
     {
         Timer timer("network");
         ggml_backend_tensor_set(graph.input, spectrum.data(), 0, spectrum.size() * sizeof(float));
         if (ggml_backend_sched_graph_compute(graph.scheduler, graph.graph) != GGML_STATUS_SUCCESS)
             throw std::runtime_error("SCNet graph computation failed");
     }
+    if (graph.profile.enabled)
+        graph.profile.report(frames);
     if (captures)
         for (const auto& item : graph.captures) {
             const auto* t = item.second;

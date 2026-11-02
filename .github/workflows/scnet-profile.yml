@@ -1,0 +1,104 @@
+name: SCNet bounded CPU diagnostic
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [feat/scnet-native-20261102]
+    paths:
+      - '.github/workflows/scnet-profile.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scnet-profile-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  profile:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 35
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      VECLIB_MAXIMUM_THREADS: '2'
+      BLIS_NUM_THREADS: '2'
+      ACCELERATE_USE_CPU: 'true'
+      CUDA_VISIBLE_DEVICES: ''
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install the CPU converter and profiling dependencies
+        run: |
+          bash tools/ci-apt.sh update
+          bash tools/ci-apt.sh install -y cmake ninja-build g++ libopenblas-dev
+          python -m pip install --no-cache-dir torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir -r tools/requirements-scnet.txt
+          python -m pip check
+      - uses: actions/cache@v4
+        with:
+          path: |
+            scnet-assets/SCNet
+            scnet-assets/*-author.th
+            scnet-assets/*-author.th.provenance.json
+            scnet-assets/*-author-config.yaml
+            scnet-assets/*-author-config.yaml.provenance.json
+            scnet-assets/hdemucs_mix.wav
+            scnet-assets/hdemucs_mix.wav.provenance.json
+          key: scnet-qualified-assets-scnet-5d95bf96-v1
+      - name: Pin the original source and record host identity
+        run: |
+          mkdir -p scnet-assets scnet-profile-out
+          if [ ! -d scnet-assets/SCNet/.git ]; then
+            git clone https://github.com/starrytong/SCNet.git scnet-assets/SCNet
+          fi
+          git -C scnet-assets/SCNet checkout --detach 5d95bf96b19c3eede63248d171efeca8e3abb948
+          git rev-parse HEAD > scnet-profile-out/source.txt
+          git submodule status > scnet-profile-out/submodules.txt
+          lscpu > scnet-profile-out/cpu.txt
+          free -h > scnet-profile-out/memory.txt
+          g++ --version > scnet-profile-out/compiler.txt
+          python -m pip freeze > scnet-profile-out/python-packages.txt
+      - name: Build only the native SCNet validation library
+        run: |
+          set -o pipefail
+          cmake -S . -B build-scnet-profile -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_SHARED_LIBS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCRISPASR_BUILD_SCNET_PROBE=ON -DCRISPASR_BUILD_TESTS=OFF \
+            -DCRISPASR_BUILD_SERVER=OFF -DGGML_NATIVE=ON -DGGML_CUDA=OFF \
+            -DGGML_METAL=OFF -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS \
+            -DCRISPASR_CPU_BLAS=ON -DCRISPASR_MEL_BLAS=ON \
+            2>&1 | tee scnet-profile-out/configure.log
+          cmake --build build-scnet-profile --parallel 2 --target scnet-validation \
+            2>&1 | tee scnet-profile-out/build.log
+      - name: Profile one genuine small F16 24-second native call
+        run: >
+          python tools/ci-heavy/scnet_profile.py --source-commit ${{ github.sha }}
+          --build-dir build-scnet-profile --assets-dir scnet-assets
+          --output-dir scnet-profile-out/diagnostic
+      - name: Retain diagnostic source, build options and hashes
+        if: always()
+        run: |
+          mkdir -p scnet-profile-out
+          cp build-scnet-profile/CMakeCache.txt scnet-profile-out/CMakeCache.txt 2>/dev/null || true
+          python - <<'PY'
+          import hashlib, json, pathlib
+          root = pathlib.Path('scnet-profile-out')
+          files = [{'path': str(p.relative_to(root)), 'bytes': p.stat().st_size,
+                    'sha256': hashlib.file_digest(p.open('rb'), 'sha256').hexdigest()}
+                   for p in sorted(root.rglob('*')) if p.is_file()]
+          (root / 'evidence-files.json').write_text(json.dumps(files, indent=2) + '\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scnet-small-F16-cpu-diagnostic-${{ github.sha }}
+          path: scnet-profile-out/
+          if-no-files-found: error

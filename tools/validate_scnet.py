@@ -104,6 +104,47 @@ def atomic_json_write(path, value):
         Path(temporary).unlink(missing_ok=True)
 
 
+def portable_receipt(value, args):
+    """Copy evidence for JSON output, replacing machine paths only.
+
+    The live receipt and subprocess arguments remain unchanged. More specific
+    file/directory prefixes take precedence over their containing directories.
+    """
+    prefixes = {str(Path(__file__).resolve().parents[1]): "{repo}",
+                str(args.output_dir): "{output}", str(args.source_dir): "{original-source}"}
+    for name in ("checkpoint", "f16", "q8_0", "q4_k", "reference", "audio", "fixture_source"):
+        path = getattr(args, name, None)
+        if path is not None:
+            path = Path(path)
+            if path.parent != Path(path.anchor):
+                prefixes.setdefault(str(path.parent), "{assets}")
+            prefixes[str(path)] = "{assets}/" + path.name
+    for name in ("diff", "library"):
+        path = getattr(args, name, None)
+        if path is not None:
+            path = Path(path)
+            build = path.parent.parent if path.parent.name in ("bin", "src", "lib") else path.parent
+            if build != Path(build.anchor):
+                prefixes.setdefault(str(build), "{build}")
+            prefixes[str(path)] = "{build}/" + path.relative_to(build).as_posix()
+    replacements = sorted(((prefix, alias) for prefix, alias in prefixes.items() if len(prefix) > 1),
+                          key=lambda item: len(item[0]), reverse=True)
+
+    def visit(item):
+        if isinstance(item, dict):
+            return {visit(key): visit(child) for key, child in item.items()}
+        if isinstance(item, (list, tuple)):
+            return [visit(child) for child in item]
+        if isinstance(item, (str, Path)):
+            text = str(item)
+            for prefix, alias in replacements:
+                text = text.replace(prefix, alias)
+            return text
+        return item
+
+    return visit(value)
+
+
 def shape4(shape):
     if not 1 <= len(shape) <= 4 or any(not isinstance(x, int) or x <= 0 for x in shape):
         raise ValueError(f"invalid tensor shape: {shape}")
@@ -723,7 +764,7 @@ def main(argv=None):
                "f16_row_policy": F16_ROW_POLICY, "f16_row_floor_epsilon": F16_ROW_FLOOR_EPSILON,
                "required_stages": list(REQUIRED_STAGES), "models": {}, "commands": [], "errors": [],
                "diagnostic": args.diagnostic, "stages_only": args.stages_only}
-    save = lambda: atomic_json_write(receipt_path, receipt)
+    save = lambda: atomic_json_write(receipt_path, portable_receipt(receipt, args))
     save()
     try:
         import soundfile
@@ -771,7 +812,7 @@ def main(argv=None):
                 inventory = model.inventory()
                 row.update(sha256=inventory["sha256"], file_bytes=inventory["file_bytes"],
                            elements_by_type=inventory["elements_by_type"])
-                atomic_json_write(args.output_dir / f"inventory-{precision}.json", inventory)
+                atomic_json_write(args.output_dir / f"inventory-{precision}.json", portable_receipt(inventory, args))
                 capture = args.output_dir / f"native-{precision}.gguf"
                 command = [str(args.diff), "scnet", str(path), str(args.reference), str(args.audio)]
                 environment = os.environ.copy()

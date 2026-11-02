@@ -28,6 +28,27 @@ before importing upstream code. The original `SCNet.forward` and
 capture. Hooks and a line observer collect actual intermediate tensors and
 normalization statistics; they do not substitute reference calculations.
 
+### Current measured baseline
+
+The small-model job in [run 41403856227](https://github.com/CrispStrobe/CrispASR/actions/runs/41403856227)
+at source `94ea189e4a95bbe966f9a3410a83c5a4e82f4c6b` passes all 35 complete-pipeline
+stages and every timed waveform check in each precision. It fails the required
+performance comparison on an AMD EPYC 7763 worker, with two threads for both
+implementations and the same 24-second overlapping-chunk fixture:
+
+| Precision | Native median | Original median | Original/native speed ratio |
+|---|---:|---:|---:|
+| F16 | 46.308 s | 16.427 s | 0.355× |
+| Q8_0 | 46.534 s | 16.154 s | 0.347× |
+| Q4_K | 46.640 s | 15.696 s | 0.337× |
+
+These are three alternating timing pairs after one warmup. The original F32
+checkpoint is the reference in each comparison. This source predates the four
+final-matrix quantization repair; the result does not qualify the current policy.
+The [retained baseline receipt](historical/scnet-runtime-baseline-2026-11-02.json)
+binds the source, models, fixture, metrics, artifact and diagnostic logs. Fresh
+full qualification is required after runtime changes.
+
 ## Inference behavior
 
 Default inference follows the published helper's 20-second segments, 50%
@@ -221,6 +242,15 @@ overlapping-chunk, timing, and production-surface gates. It retains source snaps
 hashes, logs, and incremental JSON receipts. Failed runs remain failed;
 diagnostic or stages-only runs cannot report full acceptance. The fixture is
 an implementation-parity control, not a held-out quality benchmark.
+
+After a model size passes every gate, its workflow retains a separate
+`qualified-<variant>-GGUF-<commit>` artifact containing the three tested GGUFs,
+the original MIT notice, conversion and quantizer provenance, exact hashes,
+and accepted numerical/performance receipts. Packaging rechecks their source,
+binary, model, and receipt identities before copying the explicit model files.
+These bundles use concrete local model paths; registry publication is optional.
+Music, author checkpoints, raw activation captures, and diagnostic F32 models
+are excluded from the model bundle.
 
 ## License
 

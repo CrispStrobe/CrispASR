@@ -64,10 +64,21 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   the failed defaults and [candidate evidence](docs/historical/scnet-quantization-diagnosis-2026-11-02.json);
   require fresh raw probes for all precisions plus full overlapping-audio fidelity
   and performance before promotion.
-- Next action: complete original-checkpoint fidelity, actual CLI/Session surfaces,
-  and paired performance through `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566). CPU checkpoint
-  acceptance, GPU qualification and held-out quality remain unproven; do not
-  promote the candidate or substitute the synthetic graph checks for these gates.
+- [Run 41403856227](https://github.com/CrispStrobe/CrispASR/actions/runs/41403856227)
+  at `94ea189` passes all 35 full-pipeline stages and timed-output fidelity for
+  small SCNet in F16/Q8_0/Q4_K, but fails performance: native medians are
+  46.31/46.53/46.64 seconds versus original 16.43/16.15/15.70 seconds.
+  This predates the four-matrix quantization repair and is retained as a
+  [failed runtime baseline](docs/historical/scnet-runtime-baseline-2026-11-02.json),
+  not current-policy qualification. Diagnostic LSTM spans account for about
+  22.6 seconds; approximately 20.7 seconds of other network time still needs
+  attribution. Graph creation costs only 0.07–0.10 seconds per complete call.
+- Next action: attribute and repair both recurrent and other network costs,
+  then rerun all original-checkpoint, raw, full-pipeline, CLI/Session and paired
+  performance gates through `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566).
+  Large baseline qualification is still running. Complete CPU qualification,
+  GPU qualification and held-out quality remain unproven; do not promote the
+  candidate or substitute diagnostic runs for these gates.
 - License: upstream [MIT notice](https://github.com/starrytong/SCNet/blob/main/LICENSE)
   plus the [author's explicit checkpoint permission](https://github.com/starrytong/SCNet/issues/35)
   cover the author's released SCNet/SCNet-large weights, including format-converted

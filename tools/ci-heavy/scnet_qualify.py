@@ -62,7 +62,7 @@ SOURCE_FILES = (
     "src/scnet.cpp", "src/scnet.h", "src/scnet_fft.h", "src/scnet_lstm.h", "src/scnet_shift.h",
     "tools/scnet_probe.cpp", "tools/scnet_exports.cpp", "tools/validate_scnet.py",
     "tools/ci-heavy/scnet_qualify.py", "tools/ci-heavy/scnet_precision_diagnostics.py",
-    "tools/ci-heavy/scnet_runtime_profile.py", "tools/dump_scnet_reference.py",
+    "tools/ci-heavy/scnet_runtime_profile.py", "tools/ci-heavy/scnet_package.py", "tools/dump_scnet_reference.py",
     "tools/reference_backends/scnet.py", "tools/requirements-scnet.txt",
     "models/convert-scnet-to-gguf.py", "models/licenses/SCNet-MIT.txt",
     "tests/test-scnet-converter.py", "tests/test-scnet-reference.py", "tests/test-scnet-native-diff.py",
@@ -104,7 +104,7 @@ class Qualification:
             "source_revision": SOURCE_REVISION, "commands": [], "steps": [], "errors": [],
             "threads": args.threads, "host": {"os": platform.system(), "machine": platform.machine()},
             "qualification_scope": "One 24-second contiguous music fixture and recorded CPU; GPU/held-out quality unqualified.",
-            "artifact_policy": "Upload JSON/logs/source/config/patch only; music, checkpoints, GGUFs and raw captures remain worker-local.",
+            "artifact_policy": "Evidence uploads contain JSON/logs/source/config/patch only. A separate success-only bundle retains exactly the three qualified model GGUFs, MIT notice and provenance. Music, author checkpoints, raw captures and diagnostic models remain worker-local.",
         }
         self.environment = os.environ.copy()
         for name in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS",
@@ -276,6 +276,8 @@ def snapshot_sources(run, source):
         "Default evidence artifacts omit the music/checkpoint/model files and raw reference/native GGUF\n"
         "captures. They are retained in the worker assets directory and validation directory during\n"
         "the run. Recreate them from the recorded source URLs, hashes, profile and commands above.\n"
+        "After every gate passes, the separate qualified-model artifact retains the three converted\n"
+        "GGUFs with their MIT notice, exact conversion/quantizer provenance and accepted receipts.\n"
         "Each command's stdout/stderr and failed exit code remain under logs/. Validation stores every\n"
         "completed timing call incrementally. Reuse neither an old output directory nor derived assets.\n",
         encoding="utf-8")

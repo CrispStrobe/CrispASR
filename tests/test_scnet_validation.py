@@ -1,10 +1,13 @@
 """Negative controls for the actual SCNet qualification/benchmark checker."""
 
+import copy
+import hashlib
 import importlib.util
 import json
 from pathlib import Path
 import struct
 import tempfile
+from types import SimpleNamespace
 import unittest
 
 import numpy as np
@@ -59,6 +62,64 @@ def captured_tensors(input_audio=None):
 
 
 class SCNetValidationControls(unittest.TestCase):
+    def portable_args(self):
+        repo = Path(V.__file__).resolve().parents[1]
+        assets = repo / "scnet-assets"
+        return SimpleNamespace(output_dir=repo / "scnet-out" / "validation", source_dir=assets / "SCNet",
+                               checkpoint=assets / "scnet-author.th", f16=assets / "scnet-f16.gguf",
+                               q8_0=assets / "scnet-q8_0.gguf", q4_k=assets / "scnet-q4_k.gguf",
+                               reference=assets / "reference.gguf", audio=assets / "music-first-24s.wav",
+                               fixture_source=assets / "hdemucs_mix.wav", diff=repo / "build-scnet" / "bin" / "scnet-probe",
+                               library=repo / "build-scnet" / "src" / "libscnet-validation.so")
+
+    def test_portable_json_copy_preserves_live_argv_numeric_evidence_and_hashes(self):
+        args = self.portable_args()
+        argv = [str(args.diff), "scnet", str(args.f16), str(args.reference), str(args.audio)]
+        evidence = {"seconds": 0.125, "cosine": .999123456789, "count": 35, "shift_seed": 2 ** 64 - 1,
+                    "acceptance": False, "optional": None, "sha256": "a1" * 32}
+        data = {"commands": [{"argv": argv, "evidence": evidence}], "path": args.f16,
+                "source": str(args.source_dir / "scnet" / "SCNet.py"),
+                "error": f"reading {args.output_dir}/native-f16.gguf from {args.library}",
+                "by_path": {str(args.q8_0): "b2" * 32},
+                "compiler_log": f"source={Path(V.__file__).resolve()}",
+                "url": "https://example.org/checkpoint.th"}
+        original = copy.deepcopy(data)
+        original_args = copy.deepcopy(vars(args))
+        normalized = V.portable_receipt(data, args)
+        self.assertEqual(data, original)
+        self.assertEqual(vars(args), original_args)
+        self.assertEqual(argv, original["commands"][0]["argv"])
+        self.assertEqual(normalized["commands"][0]["argv"],
+                         ["{build}/bin/scnet-probe", "scnet", "{assets}/scnet-f16.gguf",
+                          "{assets}/reference.gguf", "{assets}/music-first-24s.wav"])
+        self.assertEqual(normalized["source"], "{original-source}/scnet/SCNet.py")
+        self.assertEqual(normalized["error"], "reading {output}/native-f16.gguf from {build}/src/libscnet-validation.so")
+        self.assertEqual(normalized["path"], "{assets}/scnet-f16.gguf")
+        self.assertEqual(normalized["by_path"], {"{assets}/scnet-q8_0.gguf": "b2" * 32})
+        self.assertEqual(normalized["compiler_log"], "source={repo}/tools/validate_scnet.py")
+        self.assertEqual(normalized["url"], data["url"])
+        digest = lambda value: hashlib.sha256(json.dumps(value, sort_keys=True, allow_nan=False).encode()).hexdigest()
+        self.assertEqual(digest(evidence), digest(normalized["commands"][0]["evidence"]))
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "receipt.json"
+            V.atomic_json_write(path, normalized)
+            saved = json.loads(path.read_text())
+            self.assertEqual(saved["commands"][0]["evidence"], evidence)
+            self.assertNotIn(str(Path(V.__file__).resolve().parents[1]), path.read_text())
+
+    def test_portable_json_handles_separate_asset_roots_and_absent_optional_paths(self):
+        args = self.portable_args()
+        args.q8_0 = Path("/separate-model-store/q8_0.gguf")
+        args.diff = Path("/separate-build/bin/scnet-probe")
+        args.library = args.fixture_source = None
+        data = {"tuple": (str(args.q8_0), str(args.diff)),
+                "sidecar": str(args.q8_0) + ".provenance.json", "returncode": 0}
+        normalized = V.portable_receipt(data, args)
+        self.assertEqual(normalized["tuple"], ["{assets}/q8_0.gguf", "{build}/bin/scnet-probe"])
+        self.assertEqual(normalized["sidecar"], "{assets}/q8_0.gguf.provenance.json")
+        self.assertEqual(normalized["returncode"], 0)
+        self.assertEqual(data["tuple"], (str(args.q8_0), str(args.diff)))
+
     def log(self, precision="f16", cosine=1.0):
         rows = []
         for name in V.REQUIRED_STAGES:
