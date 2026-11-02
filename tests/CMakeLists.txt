@@ -578,6 +578,16 @@ catch_discover_tests(test-core-rvq
     PROPERTIES LABELS "unit"
 )
 
+# ─── test-core-logit-sampler — temperature/top-k/top-p sampler (#564) ─────────
+# Header-only, weight-free: the MOSS-Diarize session/CLI sampling path uses it.
+add_executable(test-core-logit-sampler test-core-logit-sampler.cpp)
+target_include_directories(test-core-logit-sampler PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-core-logit-sampler PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-core-logit-sampler
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
 # ─── test-pinyin-g2p — F5-TTS Chinese g2p parity vs pypinyin reference (#294) ──
 add_executable(test-pinyin-g2p
     test-pinyin-g2p.cpp

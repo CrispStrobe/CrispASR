@@ -2564,7 +2564,8 @@ class Session(SessionExtras):
 
     def set_temperature(self, temperature: float, seed: int = 0) -> None:
         """Set decoder temperature on backends that support runtime control
-        (canary, cohere, parakeet, nemotron, moonshine). Other backends silently no-op.
+        (canary, cohere, parakeet, nemotron, moonshine, moss-diarize). Other backends
+        silently no-op. For moss-diarize, temperature > 0 enables sampling (#564).
 
         ``seed`` is the RNG seed for sampling; pass 0 for time-based.
         Breeze (bt2-tts) forwards temperature and seed to its native sampler.
@@ -2649,7 +2650,7 @@ class Session(SessionExtras):
             raise RuntimeError(f"set_tts_num_candidates failed (rc={rc})")
 
     def set_top_p(self, top_p: float) -> None:
-        """Set the top-p nucleus threshold. Honoured by chatterbox, TADA and Dia."""
+        """Set the top-p nucleus threshold. Honoured by chatterbox, TADA, Dia and moss-diarize."""
         if not hasattr(self._lib, "crispasr_session_set_top_p"):
             return
         self._lib.crispasr_session_set_top_p.argtypes = [ctypes.c_void_p, ctypes.c_float]
@@ -2659,7 +2660,7 @@ class Session(SessionExtras):
             raise RuntimeError(f"set_top_p failed (rc={rc})")
 
     def set_top_k(self, top_k: int) -> None:
-        """Set the top-k sampling cutoff (0 = disabled). Honoured by TADA and Dia."""
+        """Set the top-k sampling cutoff (0 = disabled). Honoured by TADA, Dia and moss-diarize."""
         if not hasattr(self._lib, "crispasr_session_set_top_k"):
             return
         self._lib.crispasr_session_set_top_k.argtypes = [ctypes.c_void_p, ctypes.c_int]
@@ -2669,7 +2670,8 @@ class Session(SessionExtras):
             raise RuntimeError(f"set_top_k failed (rc={rc})")
 
     def set_do_sample(self, enable: bool) -> None:
-        """Enable/disable sampling (False = greedy). Honoured by TADA."""
+        """Enable/disable sampling (False = greedy). Honoured by TADA and moss-diarize
+        (True with no temperature set samples at temperature 1.0)."""
         if not hasattr(self._lib, "crispasr_session_set_do_sample"):
             return
         self._lib.crispasr_session_set_do_sample.argtypes = [ctypes.c_void_p, ctypes.c_int]

@@ -27,7 +27,8 @@ public:
     const char* name() const override { return "moss-diarize"; }
 
     uint32_t capabilities() const override {
-        return CAP_TIMESTAMPS_NATIVE | CAP_DIARIZE | CAP_AUTO_DOWNLOAD | CAP_PUNCTUATION_NATIVE | CAP_BEAM_SEARCH;
+        return CAP_TIMESTAMPS_NATIVE | CAP_DIARIZE | CAP_AUTO_DOWNLOAD | CAP_PUNCTUATION_NATIVE | CAP_BEAM_SEARCH |
+               CAP_TEMPERATURE;
     }
 
     bool init(const whisper_params& p) override {
@@ -50,6 +51,9 @@ public:
         if (!ctx_)
             return {};
         moss_diarize_set_beam_size(ctx_, params.beam_size > 0 ? params.beam_size : 1);
+        // #564: same resolution as the session path. --temperature > 0 samples;
+        // --top-k / --top-p filter; --seed fixes the draw. Greedy by default.
+        moss_diarize_set_sampling(ctx_, params.temperature, params.tts_top_k, params.tts_top_p, params.seed);
         // #292: forward --max-new-tokens only when the user set it explicitly;
         // 0 keeps the backend's 1024 default so the CLI's 512 default (too low
         // for diarize) never shrinks it.

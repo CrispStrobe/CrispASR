@@ -66,6 +66,15 @@ void moss_diarize_set_max_new_tokens(struct moss_diarize_context* ctx, int max_n
 // Beam search width. 1 = greedy (default); >1 = beam search.
 void moss_diarize_set_beam_size(struct moss_diarize_context* ctx, int beam_size);
 
+// Optional sampling for the greedy (beam_size == 1) decoder (#564). temperature
+// <= 0 keeps greedy argmax (the default). With temperature > 0 each step draws
+// from softmax(logits / temperature) after top_k (<= 0 disables) and top_p
+// (>= 1 disables) filtering, in HF generate() order. seed 0 = nondeterministic;
+// the RNG is re-seeded at the start of every transcribe call, so a fixed seed
+// reproduces a call. Beam search (beam_size > 1) takes precedence.
+void moss_diarize_set_sampling(struct moss_diarize_context* ctx, float temperature, int top_k, float top_p,
+                               uint64_t seed);
+
 // Override the system instruction. Pass NULL/"" to restore the default
 // diarization prompt. Persists until changed.
 void moss_diarize_set_ask(struct moss_diarize_context* ctx, const char* instruction);

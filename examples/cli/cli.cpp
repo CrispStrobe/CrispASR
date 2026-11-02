@@ -596,9 +596,10 @@ static bool whisper_params_parse_arg_backend_vad(int argc, char** argv, int& i, 
 static bool whisper_params_parse_arg_tts_sampling(int argc, char** argv, int& i, whisper_params& params) {
     std::string arg = argv[i];
 #define ARGV_NEXT (((i + 1) < argc) ? argv[++i] : requires_value_error(arg))
-    if (arg == "--tts-top-k") {
+    // --top-k/--top-p are generic aliases (#564: moss-diarize reads the same fields).
+    if (arg == "--tts-top-k" || arg == "--top-k") {
         params.tts_top_k = std::stoi(ARGV_NEXT);
-    } else if (arg == "--tts-top-p") {
+    } else if (arg == "--tts-top-p" || arg == "--top-p") {
         params.tts_top_p = std::stof(ARGV_NEXT);
     } else {
         return false;
@@ -1623,13 +1624,14 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             "12.5 Hz on the shipped models, so 80 ms each and N=25 floors at ~2 s. -1 = model default\n",
             params.tts_min_speech_tokens);
     fprintf(out,
-            "             --tts-top-k N            [%-7s] TTS top-k cutoff (dia/tada/chatterbox/moss-tts); "
+            "             --tts-top-k, --top-k N   [%-7s] top-k cutoff (dia/tada/chatterbox/moss-tts/moss-diarize); "
             "0 disables filtering\n",
             "default");
-    fprintf(out,
-            "             --tts-top-p X            [%-7s] TTS nucleus threshold (dia/tada/chatterbox/moss-tts); "
-            "1 disables filtering\n",
-            "default");
+    fprintf(
+        out,
+        "             --tts-top-p, --top-p X   [%-7s] nucleus threshold (dia/tada/chatterbox/moss-tts/moss-diarize); "
+        "1 disables filtering\n",
+        "default");
     fprintf(out,
             "             --tts-cfg-scale X        [%-7s] TTS CFG guidance scale "
             "(vibevoice/chatterbox/f5/tada/irodori/bt2-tts; "

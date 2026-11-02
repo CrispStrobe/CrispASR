@@ -12,6 +12,7 @@
 #include "core/win_compat.h"
 
 #include "core/beam_decode.h"
+#include "core/logit_sampler.h"
 
 #include "ggml-alloc.h"
 #include "ggml-backend.h"
@@ -217,6 +218,11 @@ struct moss_diarize_context {
     int n_threads = 4;
     std::string model_path;
     int beam_size = 1;
+    // #564 sampling for the beam_size == 1 path; temperature <= 0 = greedy.
+    float temperature = 0.0f;
+    int top_k = 0;
+    float top_p = 1.0f;
+    uint64_t seed = 0;
     // Decode cap. Diarize output is long (speaker tags + timestamps + text), so
     // the default is 1024 rather than the global 512 — a single-pass 300 s file
     // otherwise truncated (#292). The CLI/session forwards --max-new-tokens here
@@ -1401,6 +1407,8 @@ static char* moss_diarize_impl(struct moss_diarize_context* ctx, const float* sa
 
     // 7. Decode  (max_new computed above, honors --max-new-tokens, #292)
     std::vector<int32_t> generated;
+    if (ctx->beam_size > 1 && ctx->temperature > 0.0f && ctx->params.verbosity >= 1)
+        fprintf(stderr, "moss_diarize: beam search active; sampling settings ignored\n");
     if (ctx->beam_size > 1) {
         auto replay = [&vocab](moss_diarize_context* c, const int32_t* toks, int n, int prompt_len) -> float* {
             float* emb = moss_diarize_embed_tokens(c, toks, n);
@@ -1423,16 +1431,29 @@ static char* moss_diarize_impl(struct moss_diarize_context* ctx, const float* sa
         if (!generated.empty() && generated.back() == (int)hp.im_end_id)
             generated.pop_back();
     } else {
+        const bool sampling = ctx->temperature > 0.0f;
+        core_logit_sampler::Params sp;
+        sp.temperature = ctx->temperature;
+        sp.top_k = ctx->top_k;
+        sp.top_p = ctx->top_p;
+        std::mt19937_64 rng(ctx->seed != 0 ? ctx->seed : (uint64_t)std::random_device{}());
         for (int step = 0; step < max_new; step++) {
             // NaN-robust argmax (see canary_qwen note): seed -inf, skip non-finite,
-            // abort if the whole row is non-finite.
+            // abort if the whole row is non-finite. Sampling (#564) also skips
+            // non-finite logits and returns -1 for an all-non-finite row.
             int best_id = -1;
             float best_val = -std::numeric_limits<float>::infinity();
-            for (int i = 0; i < vocab; i++)
-                if (std::isfinite(logits[i]) && logits[i] > best_val) {
-                    best_val = logits[i];
-                    best_id = i;
-                }
+            if (sampling) {
+                best_id = core_logit_sampler::sample(logits, vocab, sp, rng);
+                if (best_id >= 0)
+                    best_val = logits[best_id];
+            } else {
+                for (int i = 0; i < vocab; i++)
+                    if (std::isfinite(logits[i]) && logits[i] > best_val) {
+                        best_val = logits[i];
+                        best_id = i;
+                    }
+            }
             if (best_id < 0) {
                 free(logits);
                 logits = nullptr;
@@ -1522,6 +1543,16 @@ extern "C" void moss_diarize_set_hotwords(struct moss_diarize_context* ctx, cons
 extern "C" void moss_diarize_set_beam_size(struct moss_diarize_context* ctx, int beam_size) {
     if (ctx)
         ctx->beam_size = beam_size > 0 ? beam_size : 1;
+}
+
+extern "C" void moss_diarize_set_sampling(struct moss_diarize_context* ctx, float temperature, int top_k, float top_p,
+                                          uint64_t seed) {
+    if (!ctx)
+        return;
+    ctx->temperature = std::isfinite(temperature) && temperature > 0.0f ? temperature : 0.0f;
+    ctx->top_k = top_k > 0 ? top_k : 0;
+    ctx->top_p = std::isfinite(top_p) && top_p > 0.0f && top_p < 1.0f ? top_p : 1.0f;
+    ctx->seed = seed;
 }
 
 // #292: forward the user's --max-new-tokens. Pass <= 0 to keep the 1024 default

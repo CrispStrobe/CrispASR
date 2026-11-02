@@ -2001,6 +2001,13 @@ struct crispasr_session {
     float frequency_penalty = 0.0f;
     float temperature = 0.0f; // 0 = greedy / backend default
     uint64_t seed = 0;        // 0 = time-based
+    // Session-level sampling knobs for decoders that read them at transcribe
+    // time (MOSS-Diarize, #564). -1 = unset. do_sample: 0 forces greedy, 1
+    // samples (temperature 1.0 when none was set), unset samples iff
+    // temperature > 0. top_k <= 0 / top_p outside (0,1) disable filtering.
+    int do_sample = -1;
+    int top_k = -1;
+    float top_p = -1.0f;
 
     // ── §90 session-level beam-search width ──────────────────────────────
     // beam_size > 1 activates beam search for backends that support it:
@@ -8556,6 +8563,16 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
             // #292: forward the session's max_new_tokens (crispasr_session_set_max_new_tokens).
             // <= 0 keeps the backend's 1024 default, matching the CLI adapter.
             moss_diarize_set_max_new_tokens(s->moss_diarize_ctx, s->max_new_tokens);
+            // #564: beam width and sampling, matching the CLI adapter.
+            moss_diarize_set_beam_size(s->moss_diarize_ctx, s->beam_size);
+            {
+                float t = s->temperature;
+                if (s->do_sample == 0)
+                    t = 0.0f;
+                else if (s->do_sample == 1 && !(t > 0.0f))
+                    t = 1.0f;
+                moss_diarize_set_sampling(s->moss_diarize_ctx, t, s->top_k, s->top_p, s->seed);
+            }
             // Language hint not auto-injected — model auto-detects language.
             // Only inject when explicitly set by the caller (not LID-resolved).
             text = moss_diarize_transcribe(s->moss_diarize_ctx, pcm, n_samples);
@@ -13728,6 +13745,10 @@ CA_EXPORT int crispasr_session_set_temperature(crispasr_session* s, float temper
         touched++;
     }
 #endif
+#ifdef CA_HAVE_MOSS_DIARIZE
+    if (s->moss_diarize_ctx)
+        touched++; // read at transcribe time (#564)
+#endif
     return touched > 0 ? 0 : -2;
 }
 
@@ -14054,11 +14075,16 @@ CA_EXPORT int crispasr_session_set_g2p_dict(crispasr_session* s, const char* sou
     return 0;
 }
 
-// Set the top-p nucleus-sampling threshold. Honoured by chatterbox, tada and dia.
+// Set the top-p nucleus-sampling threshold. Honoured by chatterbox, tada, dia and moss-diarize.
 CA_EXPORT int crispasr_session_set_top_p(crispasr_session* s, float top_p) {
     if (!s)
         return -1;
+    s->top_p = top_p;
     int touched = 0;
+#ifdef CA_HAVE_MOSS_DIARIZE
+    if (s->moss_diarize_ctx)
+        touched++; // read at transcribe time (#564)
+#endif
 #ifdef CA_HAVE_DIA
     if (s->dia_tts_ctx) {
         dia_tts_set_top_p(s->dia_tts_ctx, top_p);
@@ -14115,11 +14141,16 @@ CA_EXPORT int crispasr_session_set_repetition_penalty(crispasr_session* s, float
     return touched > 0 ? 0 : -2;
 }
 
-// Set the top-k sampling cutoff (0 = disabled). Honoured by tada and dia.
+// Set the top-k sampling cutoff (0 = disabled). Honoured by tada, dia and moss-diarize.
 CA_EXPORT int crispasr_session_set_top_k(crispasr_session* s, int top_k) {
     if (!s)
         return -1;
+    s->top_k = top_k;
     int touched = 0;
+#ifdef CA_HAVE_MOSS_DIARIZE
+    if (s->moss_diarize_ctx)
+        touched++; // read at transcribe time (#564)
+#endif
 #ifdef CA_HAVE_DIA
     if (s->dia_tts_ctx) {
         dia_tts_set_top_k(s->dia_tts_ctx, top_k);
@@ -14135,11 +14166,16 @@ CA_EXPORT int crispasr_session_set_top_k(crispasr_session* s, int top_k) {
     return touched > 0 ? 0 : -2;
 }
 
-// Enable/disable sampling (0 = greedy). Honoured by tada.
+// Enable/disable sampling (0 = greedy). Honoured by tada and moss-diarize.
 CA_EXPORT int crispasr_session_set_do_sample(crispasr_session* s, int enable) {
     if (!s)
         return -1;
+    s->do_sample = enable != 0 ? 1 : 0;
     int touched = 0;
+#ifdef CA_HAVE_MOSS_DIARIZE
+    if (s->moss_diarize_ctx)
+        touched++; // read at transcribe time (#564)
+#endif
 #ifdef CA_HAVE_TADA
     if (s->tada_ctx) {
         tada_set_do_sample(s->tada_ctx, enable != 0);
