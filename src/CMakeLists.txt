@@ -2908,6 +2908,28 @@ if(NOT MSVC)
 endif()
 
 # ---------------------------------------------------------------------------
+# scnet — SCNet / SCNet-large source separation
+# Neural operations execute as portable ggml graphs, including quantized GEMMs.
+add_library(scnet STATIC scnet.h scnet.cpp)
+set_target_properties(scnet PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(scnet PUBLIC .)
+target_compile_features(scnet PUBLIC cxx_std_17)
+target_link_libraries(scnet PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+# Header/symbol-checked CBLAS (Accelerate/OpenBLAS/MKL) with portable fallback.
+target_link_libraries(scnet PRIVATE crispasr-cpu-blas)
+if (NOT MSVC)
+    target_compile_options(scnet PRIVATE -O3)
+endif()
+
+option(CRISPASR_BUILD_SCNET_PROBE "Build isolated SCNet parity/benchmark tools" OFF)
+if (CRISPASR_BUILD_SCNET_PROBE)
+    add_executable(scnet-probe ${PROJECT_SOURCE_DIR}/tools/scnet_probe.cpp)
+    target_link_libraries(scnet-probe PRIVATE scnet)
+    add_library(scnet-validation SHARED ${PROJECT_SOURCE_DIR}/tools/scnet_exports.cpp)
+    target_link_libraries(scnet-validation PRIVATE scnet)
+    set_target_properties(scnet-validation PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
+endif()
+
 # mini-bs-roformer — HiDolen Mini-BS-RoFormer V2.5 source separation
 # Neural operations execute as portable ggml graphs, including quantized GEMMs.
 add_library(mini-bs-roformer STATIC mini_bs_roformer.h mini_bs_roformer.cpp)
@@ -3407,6 +3429,9 @@ if (TARGET mel-band-roformer)
 endif()
 if (TARGET mini-bs-roformer)
     target_link_libraries(crispasr-lib PUBLIC mini-bs-roformer)
+endif()
+if (TARGET scnet)
+    target_link_libraries(crispasr-lib PUBLIC scnet)
 endif()
 if (TARGET htdemucs)
     target_link_libraries(crispasr-lib PUBLIC htdemucs)

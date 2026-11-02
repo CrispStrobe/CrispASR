@@ -3342,7 +3342,7 @@ class Session(SessionExtras):
         stem names (``"drums"``, ``"bass"``, ``"other"``, ``"vocals"``)
         to stereo interleaved float32 numpy arrays.
 
-        Works with ``htdemucs``, ``mel-band-roformer`` and ``mini-bs-roformer``.
+        Works with ``htdemucs``, ``mel-band-roformer``, ``mini-bs-roformer`` and ``scnet``.
         Mini BS RoFormer returns ``bass``, ``drums``, ``other``, ``vocals`` in
         that order. Arrays own their storage and survive subsequent calls.
         """

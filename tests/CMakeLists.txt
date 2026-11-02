@@ -6777,3 +6777,33 @@ endif()
 # forwarding. Set list-valued properties only once the actual cases exist.
 set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/performance-test-properties.cmake")
+
+# These source-compiled controls use GCC/Clang flags. MSVC receives the full
+# production build and model surface test when weights are explicitly supplied.
+if (Python3_Interpreter_FOUND AND NOT MSVC)
+    add_test(NAME scnet-math
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-scnet-math.py -v)
+    set_tests_properties(scnet-math PROPERTIES
+        LABELS "unit;scnet" TIMEOUT 120 ENVIRONMENT "CXX=${CMAKE_CXX_COMPILER}")
+    add_test(NAME scnet-session-routing
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-scnet-session-routing.py -v)
+    set_tests_properties(scnet-session-routing PROPERTIES
+        LABELS "unit;scnet" TIMEOUT 120 ENVIRONMENT "CXX=${CMAKE_CXX_COMPILER}")
+endif()
+
+# SCNet routing and exact quantizer policy are model-free. Actual CLI/Session
+# inference requires explicitly supplied checkpoint bytes and skips if absent.
+if (Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES)
+    add_test(NAME scnet-quant-policy
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-scnet-quant-policy.py
+            $<TARGET_FILE:crispasr-quantize>)
+    set_tests_properties(scnet-quant-policy PROPERTIES LABELS "unit;scnet" TIMEOUT 120)
+endif()
+if (Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES AND BUILD_SHARED_LIBS)
+    add_test(NAME scnet-surface
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-scnet-surface.py
+            --crispasr $<TARGET_FILE:crispasr-cli>
+            --library $<TARGET_FILE:crispasr-lib>)
+    set_tests_properties(scnet-surface PROPERTIES
+        LABELS "integration;scnet" SKIP_RETURN_CODE 77 TIMEOUT 3600)
+endif()

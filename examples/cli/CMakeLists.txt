@@ -87,6 +87,7 @@ add_executable(${TARGET}
     crispasr_backend_beat_this.cpp
     crispasr_backend_mel_band_roformer.cpp
     crispasr_backend_mini_bs_roformer.cpp
+    crispasr_backend_scnet.cpp
     crispasr_backend_kyutai_stt.cpp
     crispasr_backend_firered_asr.cpp
     crispasr_backend_moonshine.cpp

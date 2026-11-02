@@ -266,6 +266,12 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     // measured calibration sweeps; this policy itself is not a quality claim.
     const bool is_mini_bs_roformer = (arch == "mini-bs-roformer");
 
+    // SCNet matrices include flattened convolution kernels and recurrent gates.
+    // Q4_K rows that cannot fit its 256-value blocks use Q8_0, never the
+    // unrelated legacy Q4_0 format. Sub-32-wide rows retain source precision.
+    // This is a storage policy; model/stage fidelity still requires validation.
+    const bool is_scnet = (arch == "scnet");
+
     // BTC chords: a 12 MB model whose weight matrices are all 128x128 or
     // 128x256 — small enough that quantisation buys little, and the FFN convs
     // are (3, 128, 128) whose K=3 does not tile a Q4_K 32-element block any
@@ -1164,6 +1170,8 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             default:
                 break;
             }
+            if (is_scnet && qtype == GGML_TYPE_Q4_K)
+                fallback = GGML_TYPE_Q8_0;
             if (fallback != GGML_TYPE_COUNT && ncols % ggml_blck_size(fallback) == 0) {
                 qt = fallback;
             } else {

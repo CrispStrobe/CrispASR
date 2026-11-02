@@ -11,6 +11,7 @@
 #include "htdemucs.h"
 #include "mel_band_roformer.h"
 #include "mini_bs_roformer.h"
+#include "scnet.h"
 
 #include <cstdio>
 #include <fstream>
@@ -94,7 +95,46 @@ int crispasr_run_separate(const whisper_params& params) {
         std::vector<float> mono;
         std::vector<std::vector<float>> stereo;
 
-        if (arch == "mini-bs-roformer") {
+        if (arch == "scnet") {
+            auto mp = scnet_default_params();
+            mp.use_gpu = params.use_gpu;
+            mp.n_threads = params.n_threads;
+            mp.gpu_device = params.gpu_device;
+            mp.shift_seed = params.seed;
+            auto* ctx = scnet_init_from_file(model.c_str(), mp);
+            if (!ctx) {
+                rc = 2;
+                break;
+            }
+            const int sr = scnet_sample_rate(ctx);
+            if (!read_audio_data(fname, mono, stereo, /*stereo=*/true, /*target_rate=*/sr)) {
+                fprintf(stderr, "crispasr: error: cannot read '%s'\n", fname.c_str());
+                scnet_free(ctx);
+                rc = 20;
+                continue;
+            }
+            std::vector<float> pcm;
+            const int n = interleave(mono, stereo, 2, pcm);
+            auto* r = scnet_separate(ctx, pcm.data(), n, 2);
+            if (!r) {
+                fprintf(stderr, "crispasr: --separate failed on '%s'\n", fname.c_str());
+                scnet_free(ctx);
+                rc = 1;
+                continue;
+            }
+            crispasr_separation_view v;
+            v.n_sources = r->n_sources;
+            v.n_channels = r->n_channels;
+            v.n_frames = r->n_samples;
+            v.sample_rate = r->sample_rate;
+            v.sources = r->sources;
+            v.source_names = r->source_names;
+            if (write_stems(v, fname, params) == 0)
+                rc = 1;
+            scnet_result_free(r);
+            scnet_free(ctx);
+
+        } else if (arch == "mini-bs-roformer") {
             auto mp = mini_bs_roformer_default_params();
             mp.use_gpu = params.use_gpu;
             mp.n_threads = params.n_threads;
@@ -217,7 +257,7 @@ int crispasr_run_separate(const whisper_params& params) {
         } else {
             fprintf(stderr,
                     "crispasr: --separate: '%s' is not a separation model (arch='%s'). "
-                    "Expected mini-bs-roformer, mel-band-roformer or htdemucs.\n",
+                    "Expected scnet, mini-bs-roformer, mel-band-roformer or htdemucs.\n",
                     model.c_str(), arch.c_str());
             return 2;
         }
