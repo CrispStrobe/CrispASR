@@ -792,7 +792,7 @@ frcrn_se_context* frcrn_se_init_from_file(const char* path, frcrn_se_params para
     }
     // Upstream decodes inputs up to 120 s in one pass (its SE layers pool over
     // the whole clip) and longer ones in 1 s windows. The one-pass graph needs
-    // roughly 1 MB of compute buffer per frame (20 ms); lower this to trade
+    // about 0.5 MB of compute buffer per frame (20 ms); lower this to trade
     // fidelity to upstream for memory.
     if (const char* v = std::getenv("CRISPASR_FRCRN_SE_ONE_PASS_S")) {
         const double s = std::atof(v);

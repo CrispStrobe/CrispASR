@@ -223,6 +223,7 @@ before enabling it.
 | `none` (default) | no enhancement; `--no-enhance` forces this |
 | `rnnoise` (`--denoise`) | built-in RNNoise (tiny GRU, CPU, real-time; not in MSVC builds) |
 | registry name / `.gguf` path | a converted enhancement model, chosen by its GGUF architecture |
+| `frcrn-se-16k-f16.gguf` (arch `frcrn-se`) | [FRCRN_SE_16K](frcrn-se.md) — ClearerVoice-Studio complex-UNet denoiser, 16 kHz, Apache-2.0; convert locally |
 
 Any input rate works; the method resamples to its native rate and back, so the
 output keeps the input length and timeline (RNNoise output is sample-aligned).
