@@ -47,7 +47,7 @@ def main() -> int:
                             capture_output=True, text=True)
     backends = {row["name"]: row for row in json.loads(roster.stdout)["backends"]}
     assert "separate" in backends["mini-bs-roformer"]["caps"]
-    assert "auto-download" not in backends["mini-bs-roformer"]["caps"]
+    assert "auto-download" in backends["mini-bs-roformer"]["caps"]
     assert "mini-bs-roformer" in Session.available_backends(lib_path=str(library))
 
     with tempfile.TemporaryDirectory(prefix="mini-bsr-surface-") as tmp:
