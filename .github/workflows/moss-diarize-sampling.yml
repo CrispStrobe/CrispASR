@@ -1,0 +1,20 @@
+name: MOSS-Diarize beam and sampling acceptance (#564)
+
+# Dispatch-only: real-model CPU acceptance of the session/CLI beam + sampling
+# forwarding. Not part of the default PR matrix.
+on:
+  workflow_dispatch:
+  push:
+    branches: [fix/lintdeep-moss-20261102] # TEMPORARY: remove before merging to main
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  cpu-acceptance:
+    uses: ./.github/workflows/heavy-cpu.yml
+    with:
+      script: tools/ci-heavy/moss_diarize_sampling_acceptance.py
+      pip: numpy huggingface_hub
+      timeout_minutes: '120'
