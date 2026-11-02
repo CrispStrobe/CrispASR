@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (338 lessons)
+## Index by topic (339 lessons)
 
 **Security & untrusted input** (2)
 
@@ -145,7 +145,7 @@ cross-reference when you already know which model you are touching.
 - L19458 — 314. Index-Echo 9B: preload functional child weights before trusting offloaded cache references
 - L19786 — 2026-10-25 — CSM CPU differences exposed dropped RoPE metadata; compare the original reference before changing sampling
 
-**ggml graphs, allocation & caching** (51)
+**ggml graphs, allocation & caching** (52)
 
 - L149 — A float `--tensor-type` override must not reach 1-D tensors (2026-09-29, #461)
 - L1326 — Reusing a cached scheduler graph across `sched_reset`/`alloc` cycles is CPU-safe but SIGSEGVs on GPU — the reused input tensor is bound to the prior cycle's freed buffer
@@ -198,6 +198,7 @@ cross-reference when you already know which model you are touching.
 - L19561 — 2026-10-06 — A cached ggml graph whose nodes write persistent state must not be resubmitted (nemotron stream cache)
 - L19638 — 2026-10-06 — A graph allocated twice keeps its first addresses (nemotron GPU graph reuse)
 - L19665 — 2026-10-09 — Output flags do not invalidate a cached graph allocation plan (Nemotron layer diagnostics)
+- L19843 — MossFormer2 — `ggml_ssm_conv` as a depthwise Conv1d is a latent CUDA abort for most kernel widths
 
 **GPU portability — Metal / CUDA / Vulkan** (29)
 

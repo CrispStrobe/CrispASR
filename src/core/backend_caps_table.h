@@ -135,6 +135,7 @@ static const BackendCaps k_backend_caps[] = {
     {"moss-transcribe", 270848u, "beam-search,punctuation-native,auto-download"},
     {"moss-tts", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
     {"moss-tts-local", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
+    {"mossformer2-ss", 5242880u, "separate"},
     {"mt3", 134225921u, "timestamps-native,auto-download,piano"},
     {"nemotron", 9185101u,
      "timestamps-native,word-timestamps,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-native,"

@@ -28,8 +28,8 @@ def main() -> int:
     parser.add_argument("--model", default=os.environ.get("CRISPASR_MOSSFORMER2_SS_MODEL", ""))
     parser.add_argument("--frames", type=int, default=20000, help="16-kHz input samples (> 32000 = segmented path)")
     args = parser.parse_args()
-    if not args.model:
-        print("SKIP: set CRISPASR_MOSSFORMER2_SS_MODEL for actual-model surface validation")
+    if not args.model or not Path(args.model).is_file():
+        print("SKIP: set CRISPASR_MOSSFORMER2_SS_MODEL to an existing converted GGUF for surface validation")
         return 77
     model = Path(args.model).resolve(strict=True)
     binary = args.crispasr.resolve(strict=True)

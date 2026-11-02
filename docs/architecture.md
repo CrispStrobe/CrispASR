@@ -271,7 +271,7 @@ constructed, and its own capability bit (used for detection and help text,
 never for routing). `docs/source-separation-surface.md` settled this design;
 everything below follows it.
 
-- **Source separation** (`htdemucs`, `mel-band-roformer`, `mini-bs-roformer`) — one mixed input
+- **Source separation** (`htdemucs`, `mel-band-roformer`, `mini-bs-roformer`, `mossformer2-ss`) — one mixed input
   → N named stems of the *user's own* audio. `CAP_SEPARATE` (bit 22),
   `--separate`, `src/core/separation_io.h`, `crispasr_separate_cli.{h,cpp}`.
   Output is one WAV per stem at the model's native rate, with **no
@@ -1097,6 +1097,25 @@ the same runtime. F16 conversion, Q8_0/Q4_K precision policy, exact blueprint
 layouts and numerical/performance qualification are documented in
 [the model guide](mini-bs-roformer.md) and
 [the qualification guide](mini-bs-roformer-validation.md).
+
+### mossformer2-ss
+
+ClearerVoice-Studio `MossFormer2_SS_16K` (Apache-2.0) separates a 16-kHz mono
+mixture of two talkers into `spk1` and `spk2`. The GGUF architecture and
+backend name are both `mossformer2-ss`.
+
+A Conv1d(k=16, s=8) encoder feeds a mask net: GroupNorm, a pointwise
+projection plus scaled sinusoidal positions, then 24 MossFormer2 layers, each a
+FLASH layer (token shift, shared quadratic-in-group plus linear attention over
+rotary query/keys, gated value/u branches) followed by a gated FSMN block with a
+dilated dense depthwise network. Per-speaker gated masks multiply the encoder
+output and a ConvTranspose1d decoder restores the waveform. The MossFormerM
+stack lives in `src/mossformer2_blocks.{h,cpp}` so the MossFormer2 SE/SR
+models can reuse it; `src/mossformer2_ss.cpp` adds the encoder, mask head,
+decoder and the upstream 2-s window / 0.75-stride segmentation with per-output
+RMS renormalisation. Depthwise convolutions run as a channel-vectorised CPU
+op, or as `ggml_ssm_conv` split into widths every GPU backend implements.
+See [the model guide](mossformer2-ss.md).
 
 ### piano-transcription
 

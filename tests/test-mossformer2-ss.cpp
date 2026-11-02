@@ -179,8 +179,8 @@ TEST_CASE("MossFormer2 SS rejects unavailable and incomplete models", "[unit][mo
 
 TEST_CASE("MossFormer2 SS live separation contract", "[live][mossformer2-ss]") {
     const char* model = std::getenv("CRISPASR_MOSSFORMER2_SS_MODEL");
-    if (!model || !*model)
-        SKIP("set CRISPASR_MOSSFORMER2_SS_MODEL to a converted MossFormer2_SS_16K GGUF");
+    if (!model || !*model || !std::filesystem::exists(model))
+        SKIP("set CRISPASR_MOSSFORMER2_SS_MODEL to an existing converted MossFormer2_SS_16K GGUF");
     auto params = mossformer2_ss_default_params();
     params.use_gpu = false;
     params.n_threads = 4;

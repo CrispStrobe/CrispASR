@@ -133,6 +133,11 @@ export CRISPASR_MODEL_ARK_ASR="${CRISPASR_MODEL_ARK_ASR:-$CRISPASR_MODELS_DIR/ar
 export CRISPASR_MODEL_MINI_OMNI2="${CRISPASR_MODEL_MINI_OMNI2:-$CRISPASR_MODELS_DIR/mini-omni2-q4_k.gguf}"
 export CRISPASR_MODEL_SNAC="${CRISPASR_MODEL_SNAC:-$CRISPASR_MODELS_DIR/snac-24khz.gguf}"
 
+# ── MossFormer2_SS_16K (ClearerVoice-Studio 2-speaker separation; local conversion,
+#    see docs/mossformer2-ss.md). Optional parity archive for the live C++ test:
+#    CRISPASR_MOSSFORMER2_SS_REF=<tools/dump_mossformer2_ss_reference.py --gguf output>
+export CRISPASR_MOSSFORMER2_SS_MODEL="${CRISPASR_MOSSFORMER2_SS_MODEL:-$CRISPASR_MODELS_DIR/mossformer2-ss-16k-f16.gguf}"
+
 # ── WeSpeaker ResNet34-LM (#324 foxnose diarization speaker embedder) ──
 export CRISPASR_MODEL_WESPEAKER="${CRISPASR_MODEL_WESPEAKER:-$CRISPASR_MODELS_DIR/wespeaker-resnet34-lm.gguf}"
 
