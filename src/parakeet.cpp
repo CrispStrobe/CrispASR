@@ -2117,7 +2117,7 @@ static bool parakeet_native_cpu_decode_default(const parakeet_context* ctx) {
 }
 
 static bool parakeet_ggml_decode_active(const parakeet_context* ctx) {
-    if (ctx && ctx->model.is_kda)
+    if (!ctx || ctx->model.is_kda)
         return false;
     bool ggml_dec = !core_cpu_backend::is_cpu(ctx->backend) || parakeet_native_cpu_decode_default(ctx);
     // ggml decode wins on CUDA/Vulkan (slow CPU BLAS: P100 5-12x) but LOSES on

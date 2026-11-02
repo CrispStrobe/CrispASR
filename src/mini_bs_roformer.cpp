@@ -29,6 +29,12 @@
 #include <string>
 #include <vector>
 
+// Named predicate rather than a lambda: cppcheck 2.7 misattributes a lambda's
+// bool return to the enclosing pointer-returning function.
+static bool is_finite_sample(float x) {
+    return std::isfinite(x);
+}
+
 namespace {
 constexpr size_t GRAPH_SIZE = 8192;
 const std::string MODEL = "freq_domain_model.mask_model.";
@@ -922,7 +928,7 @@ mini_bs_roformer_result* mini_bs_roformer_separate(mini_bs_roformer_context* ctx
         r->sources = new float* [h.stems] {};
         r->source_names = new const char* [h.stems] {};
         for (int s = 0; s < h.stems; ++s) {
-            if (!std::all_of(sources[s].begin(), sources[s].end(), [](float x) { return std::isfinite(x); }))
+            if (!std::all_of(sources[s].begin(), sources[s].end(), is_finite_sample))
                 throw std::runtime_error("nonfinite separated waveform");
             r->sources[s] = new float[sources[s].size()];
             std::copy(sources[s].begin(), sources[s].end(), r->sources[s]);
@@ -986,7 +992,7 @@ int mini_bs_roformer_diff(const char* model_gguf, const char* ref_gguf, const ch
             it->second->ne[3] != 1 || it->second->ne[0] <= m->hp.fft / 2 || it->second->ne[0] > m->hp.rate * 60)
             throw std::runtime_error("reference needs valid planar stereo input_audio, longer than half the input FFT");
         auto audio = tensor_f32(it->second);
-        if (!std::all_of(audio.begin(), audio.end(), [](float x) { return std::isfinite(x); }))
+        if (!std::all_of(audio.begin(), audio.end(), is_finite_sample))
             throw std::runtime_error("nonfinite reference waveform");
         const int n = (int)it->second->ne[0];
         std::vector<float> interleaved(audio.size());

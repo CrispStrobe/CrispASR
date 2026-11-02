@@ -28,19 +28,14 @@ public:
         if (!p.prompt.empty()) {
             std::vector<float> pcm;
             int sr = 0;
-            if (crispasr::core::read_wav_mono_pcm16(p.prompt.c_str(), pcm, sr) && sr > 0) {
+            if (crispasr::core::read_wav_mono_pcm16(p.prompt, pcm, sr) && sr > 0) {
                 arktts_set_reference(ctx_, pcm.data(), (int)pcm.size(), p.context.c_str());
             }
         }
         return true;
     }
 
-    void shutdown() override {
-        if (ctx_) {
-            arktts_free(ctx_);
-            ctx_ = nullptr;
-        }
-    }
+    void shutdown() override { release(); }
 
     const char* name() const override { return "arktts"; }
 
@@ -72,9 +67,17 @@ public:
         return result;
     }
 
-    ~ArkTtsBackend() override { shutdown(); }
+    // Non-virtual: a destructor must not dispatch through shutdown().
+    ~ArkTtsBackend() override { release(); }
 
 private:
+    void release() {
+        if (ctx_) {
+            arktts_free(ctx_);
+            ctx_ = nullptr;
+        }
+    }
+
     struct arktts_context* ctx_ = nullptr;
 };
 
