@@ -19858,7 +19858,7 @@ naive grouped Conv1d (`CRISPASR_MF2_PORTABLE_DWCONV=1` forces it). Check
 On CPU the same op is the wrong tool for wide-channel convs anyway: it needs
 two transposes plus a pad copy per conv and its inner loop is scalar.
 A `ggml_custom_4d` op on the native `[C, T]` layout (tap-major kernels prepared
-at load, loop vectorised over channels) cut the depthwise share of a 2-s
-MossFormer2 window from ~4 s (SSM_CONV + CONT + PAD) to ~0.6 s. Also: `ggml_cont`
+at load, loop vectorised over channels) cut SSM_CONV + CONT + PAD on a 2-s
+MossFormer2 window from ~4.0 s to ~1.4 s (the custom op itself ~0.6 s). Also: `ggml_cont`
 always emits a copy node, even for an already-contiguous tensor — guard it with
 `ggml_is_contiguous` on hot paths. [Port notes](docs/mossformer2-ss.md).
