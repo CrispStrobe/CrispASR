@@ -1,6 +1,6 @@
 # CrispASR
 
-**One C++ binary, 147 backends — 69 of them TTS engines — plus multilingual text translation, zero Python dependencies.**
+**One C++ binary, 148 backends — 69 of them TTS engines — plus multilingual text translation, zero Python dependencies.**
 
 CrispASR started as a fork of [whisper.cpp](https://github.com/ggml-org/whisper.cpp) and extends that base into a **unified speech engine** called `crispasr`, backed by full ggml C++ runtimes for major open-weights ASR *and* TTS architectures. One build, one binary, one consistent CLI — pick the backend at the command line or let CrispASR auto-detect it from your GGUF file. See [Text-to-Speech](#text-to-speech-models) for the TTS side.
 
@@ -25,7 +25,7 @@ live transcription + TTS + language detection, auto-deployed from `hf-space/`.
 
 | Project | What it does |
 |---|---|
-| **[CrispASR](https://github.com/CrispStrobe/CrispASR)** | This repo — C++ speech engine. 147 backends (69 TTS), CLI + HTTP server + C-ABI + Python/Rust/Dart/Go/Ruby/Java bindings. |
+| **[CrispASR](https://github.com/CrispStrobe/CrispASR)** | This repo — C++ speech engine. 148 backends (69 TTS), CLI + HTTP server + C-ABI + Python/Rust/Dart/Go/Ruby/Java bindings. |
 | **[CrisperWeaver](https://github.com/CrispStrobe/CrisperWeaver)** | Cross-platform Flutter transcription app built on CrispASR. Desktop + mobile,  model browser with download queue, mic capture, SRT/VTT/JSON export, diarization, batch processing. Fully offline. |
 | **[CrispEmbed](https://github.com/CrispStrobe/CrispEmbed)** | Text-related engine via ggml — same philosophy as CrispASR but for embeddings, retrieval, OCR and OMR, Math and Music Notation. Numerous architectures (XLM-R, Qwen3-Embed, Gemma3, ModernBERT, ...), dense + sparse + ColBERT + reranking. PP-OCR, Tesseract, EasyOCR, InternVL2, etc. Python/Rust/Dart bindings. |
 | **[Susurrus](https://github.com/CrispStrobe/Susurrus)** | Python ASR GUI with 9 backends (faster-whisper, mlx-whisper, voxtral, insanely-fast-whisper, ...). The Python counterpart to CrispASR's C++ approach. |
@@ -153,7 +153,7 @@ step. See **[docs/troubleshooting.md](docs/troubleshooting.md)**.
 
 ## Supported backends
 
-CrispASR ships **147 backends** (see the [generated feature matrix](docs/feature-matrix.md) for the authoritative, auto-counted list) — the majority for transcription/translation, and
+CrispASR ships **148 backends** (see the [generated feature matrix](docs/feature-matrix.md) for the authoritative, auto-counted list) — the majority for transcription/translation, and
 **69 TTS engines** for synthesis. It also ships audio-to-audio S2S backends,
 including Sidon restoration and the VoxCPM2 AudioVAE speech upscaler; see the [feature matrix](docs/feature-matrix.md)
 for the complete capability list.
@@ -432,7 +432,10 @@ binding (`set_enhance`) and per request on the server (`enhance`). See
 Model methods: **MossFormerGAN-SE** (ClearerVoice-Studio `MossFormerGAN_SE_16K`,
 Apache-2.0, convert locally — [`docs/mossformergan-se.md`](docs/mossformergan-se.md))
 and **MossFormer2-SE** (`MossFormer2_SE_48K`, 48 kHz full band, Apache-2.0, convert
-locally — [`docs/mossformer2-se.md`](docs/mossformer2-se.md)).
+locally — [`docs/mossformer2-se.md`](docs/mossformer2-se.md)). Through the same switch,
+**MossFormer2-SR** (`MossFormer2_SR_48K`, Apache-2.0, convert locally) does speech
+super-resolution: `--enhance mossformer2-sr-48k-f16.gguf --enhance-output out.wav`
+turns 8/16 kHz speech into 48 kHz — [`docs/mossformer2-sr.md`](docs/mossformer2-sr.md).
 
 ### Music & audio analysis
 

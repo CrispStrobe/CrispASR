@@ -409,6 +409,10 @@ REGISTERED_BACKENDS: Dict[str, str] = {
     # $CLEARVOICE_STUDIO_DIR. The module is also the standalone CLI (.npy / GGUF,
     # --e2e-only for the segmented > 20 s decode). Kaldi dither forced to 0.
     "mossformer2-se": "reference_backends.mossformer2_se",
+    # ClearerVoice-Studio MossFormer2_SR_48K super-resolution (48 kHz). model_dir =
+    # checkpoint directory (last_best_checkpoint + _m.pt / _g.pt); upstream checkout
+    # from $CLEARVOICE_STUDIO_DIR. 16 kHz harness audio is librosa-resampled to 48 kHz.
+    "mossformer2-sr": "reference_backends.mossformer2_sr",
     # MioCodec v2 (§249): neural audio codec. model_dir = HF repo ID
     # ("Aratako/MioCodec-25Hz-44.1kHz-v2") or local snapshot dir.
     # Audio arg = mono WAV at 44100 Hz. Captures decode path intermediates

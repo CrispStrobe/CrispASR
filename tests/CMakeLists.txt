@@ -6861,3 +6861,21 @@ if (Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-mossformer2-se-converter.py -v)
     set_tests_properties(mossformer2-se-converter PROPERTIES LABELS "unit;mossformer2-se" TIMEOUT 120)
 endif()
+
+# ---------------------------------------------------------------------------
+# MossFormer2_SR_48K speech super-resolution (ClearerVoice-Studio). Parity:
+# crispasr-diff mossformer2-sr <gguf> <ref.gguf> (tools/reference_backends/mossformer2_sr.py).
+# Model-free bandwidth_sub / log-mel / registration cases run in the unit suite;
+# the live cases need MOSSFORMER2_SR_MODEL=<gguf> and SKIP without it.
+add_executable(test-mossformer2-sr test-mossformer2-sr.cpp)
+target_compile_definitions(test-mossformer2-sr PRIVATE CRISPASR_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+target_link_libraries(test-mossformer2-sr PRIVATE Catch2::Catch2WithMain crispasr-lib ggml-base)
+add_test(NAME mossformer2-sr-unit COMMAND test-mossformer2-sr "[unit]")
+set_tests_properties(mossformer2-sr-unit PROPERTIES LABELS "unit;mossformer2-sr" TIMEOUT 60)
+add_test(NAME mossformer2-sr-live COMMAND test-mossformer2-sr "[live]")
+set_tests_properties(mossformer2-sr-live PROPERTIES LABELS "live;mossformer2-sr" SKIP_RETURN_CODE 4 TIMEOUT 1800)
+if (Python3_Interpreter_FOUND)
+    add_test(NAME mossformer2-sr-converter
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-mossformer2-sr-converter.py -v)
+    set_tests_properties(mossformer2-sr-converter PROPERTIES LABELS "unit;mossformer2-sr" TIMEOUT 120)
+endif()

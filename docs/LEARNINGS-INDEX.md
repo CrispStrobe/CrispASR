@@ -17,7 +17,7 @@ per-backend porting detail (Per-model port notes + the family cross-reference).
 Reach for the topic groups when you are stuck on a *technique*, and the
 cross-reference when you already know which model you are touching.
 
-## Index by topic (341 lessons)
+## Index by topic (342 lessons)
 
 **Security & untrusted input** (2)
 
@@ -233,7 +233,7 @@ cross-reference when you already know which model you are touching.
 - L19743 — Granite5 quantization and actual CUDA work evidence
 - L19866 — MossFormerGAN-SE — depthwise sequence convs: CWHN conv_2d_dw_direct, not ssm_conv; per-tap convs beat im2col
 
-**Quantization** (12)
+**Quantization** (13)
 
 - L251 — A quantized AED can EOS EARLY, and a chunk merge that trusts its overlap will silently swallow the gap
 - L2330 — Auditing CrispASR against CrispEmbed's bug classes: a weight reader with no quantized branch fails silently (2026-07)
@@ -247,6 +247,7 @@ cross-reference when you already know which model you are touching.
 - L14391 — Sub-8-bit quantization of an audio tower fails as BEHAVIORAL collapse (loops, empty output) — and there is no per-block cliff to bisect
 - L18027 — imatrix quant SHIPPED
 - L19890 — MossFormer2-SE — Q8_0 quantization error is activation rounding amplified by FLASH gating; Kaldi dither=0 makes zero padding out-of-distribution
+- L19913 — MossFormer2-SR — a vocoder amplifies feature-net quantization ~1000×, and a bandwidth-extension e2e cosine hides it
 
 **Perf measurement & A/B discipline** (11)
 

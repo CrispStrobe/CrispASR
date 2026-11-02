@@ -3515,7 +3515,7 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
     // not a transcription session: say how to run them instead of failing as an
     // unknown backend.
     if (s->backend == "mossformergan-se" || s->backend == "mossformergan_se" || s->backend == "mossformer2-se" ||
-        s->backend == "mossformer2_se") {
+        s->backend == "mossformer2_se" || s->backend == "mossformer2-sr" || s->backend == "mossformer2_sr") {
         fprintf(stderr,
                 "crispasr_session_open: '%s' is a speech-enhancement model (%s); open an ASR model and call "
                 "crispasr_session_set_enhance(session, \"%s\"), or use crispasr_enhance_audio_spec()\n",
@@ -5321,6 +5321,7 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
     // crispasr_enhance_audio_spec (crispasr_enhance_model_archs()), not session_open.
     list += ",mossformergan-se";
     list += ",mossformer2-se";
+    list += ",mossformer2-sr";
 #ifdef CA_HAVE_CREPE
     list += ",crepe";
 #endif

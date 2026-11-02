@@ -225,9 +225,17 @@ before enabling it.
 | registry name / `.gguf` path | a converted enhancement model, chosen by its GGUF architecture |
 | `mossformergan-se-16k-f16.gguf` | ClearerVoice-Studio MossFormerGAN_SE_16K (16 kHz, GAN-trained mask + complex refinement; convert locally, see [mossformergan-se](mossformergan-se.md)) |
 | `mossformer2-se-48k-f16.gguf` | ClearerVoice-Studio MossFormer2_SE_48K (48 kHz full band, MossFormer2 magnitude mask on a 1920-point STFT; convert locally, see [mossformer2-se](mossformer2-se.md)) |
+| `mossformer2-sr-48k-f16.gguf` | ClearerVoice-Studio MossFormer2_SR_48K **speech super-resolution** (bandwidth extension, not denoising): band-limited speech (e.g. 8/16 kHz audio) to 48 kHz; MossFormer2 on log-mel + HiFi-GAN-style generator, the input's own band kept. Use it with `--enhance-output` (written at 48 kHz); see [mossformer2-sr](mossformer2-sr.md) |
 
 Any input rate works; the method resamples to its native rate and back, so the
 output keeps the input length and timeline (RNNoise output is sample-aligned).
+`--enhance-output` is the exception: it decodes the input at the method's native
+rate and writes the result there (48 kHz for the 48 kHz models), which is what
+makes a super-resolution model useful — `crispasr --enhance
+mossformer2-sr-48k-f16.gguf --enhance-output out48k.wav -f call8k.wav` writes a
+48 kHz file. As an ASR pre-pass, or through `crispasr_enhance_audio_spec` at
+another rate, the result is resampled back to the input rate; pass 48 kHz audio
+to `crispasr_enhance_audio_spec` to get 48 kHz back.
 
 ```bash
 crispasr -m model.gguf -f noisy.wav --denoise                # denoise, then transcribe
