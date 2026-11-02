@@ -1208,6 +1208,17 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             target_types[i] = (ncols % ggml_blck_size(GGML_TYPE_Q8_0) == 0) ? GGML_TYPE_Q8_0 : t->type;
         }
 
+        // The final SCNet spectral reconstruction needs these four matrices
+        // at F16: quantizing them failed the original-checkpoint raw stem gates.
+        // Keep the earlier decoder quantized, and let explicit overrides below
+        // remain authoritative for separately measured experiments.
+        const bool scnet_reconstruction_f16 =
+            is_scnet && (qtype == GGML_TYPE_Q8_0 || qtype == GGML_TYPE_Q4_K) && ggml_n_dims(t) == 2 &&
+            (sname == "decoder.2.0.conv.weight" || sname == "decoder.2.1.convtrs.0.weight" ||
+             sname == "decoder.2.1.convtrs.1.weight" || sname == "decoder.2.1.convtrs.2.weight");
+        if (scnet_reconstruction_f16)
+            target_types[i] = GGML_TYPE_F16;
+
         // Qwen3-ASR audio-tower Q8_0 floor (see is_qwen3_asr note above).
         // Applies only when the chosen type is a sub-8-bit quant; Q8_0 and
         // unquantized targets pass through. Rows not 32-aligned keep source.

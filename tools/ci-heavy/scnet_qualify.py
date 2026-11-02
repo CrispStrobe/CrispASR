@@ -66,7 +66,8 @@ SOURCE_FILES = (
     "tools/reference_backends/scnet.py", "tools/requirements-scnet.txt",
     "models/convert-scnet-to-gguf.py", "models/licenses/SCNet-MIT.txt",
     "tests/test-scnet-converter.py", "tests/test-scnet-reference.py", "tests/test-scnet-native-diff.py",
-    "tests/test-scnet-surface.py", "examples/cli/crispasr_backend_scnet.cpp",
+    "tests/test-scnet-math.py", "tests/test-scnet-session-routing.py", "tests/test-scnet-quant-policy.py",
+    "tests/test_scnet_validation.py", "tests/test-scnet-surface.py", "examples/cli/crispasr_backend_scnet.cpp",
     "examples/crispasr-quantize/main.cpp",
     "src/CMakeLists.txt", "CMakeLists.txt", ".github/workflows/scnet-qualification.yml",
 )
@@ -365,11 +366,29 @@ def qualify(run):
     smoke_reference, full_reference = args.assets_dir / "reference-raw-smoke.gguf", args.assets_dir / "reference-full.gguf"
     reference_command = [sys.executable, ROOT / "tools/dump_scnet_reference.py", *common, "--device", "cpu", "--threads", args.threads]
     run.run("reference-raw-smoke", [*reference_command, "--audio", smoke_audio, "--raw", "--output", smoke_reference])
-    smoke_capture = args.assets_dir / "native-raw-smoke.gguf"
-    smoke_code = run.run("native-raw-smoke", [binaries["scnet-probe"], "scnet", models["f16"], smoke_reference, smoke_audio],
-            required=False, extra_env={"CRISPASR_SCNET_CAPTURE_GGUF": str(smoke_capture)})
-    run.receipt["raw_smoke"] = {"returncode": smoke_code, "acceptance": smoke_code == 0}
-    run.save()
+    from validate_scnet import GGUFFile, all_pass, compare_captures, parse_diff
+    raw_smokes = run.receipt["raw_smoke"] = {}
+    for precision, path in models.items():
+        name = "native-raw-smoke-" + precision
+        capture = args.assets_dir / (name + ".gguf")
+        code = run.run(name, [binaries["scnet-probe"], "scnet", path, smoke_reference, smoke_audio],
+            required=False, extra_env={"CRISPASR_SCNET_CAPTURE_GGUF": str(capture)})
+        row = raw_smokes[precision] = {"returncode": code, "acceptance": False}
+        try:
+            row["capture_sha256"] = sha256(capture)
+            row["stages"] = compare_captures(GGUFFile(capture), GGUFFile(smoke_reference), precision)
+            if code == 0:
+                row["native_log_metrics"] = parse_diff(
+                    (run.output / "logs" / (name + ".stdout.log")).read_text(encoding="utf-8"), precision)
+                if not all_pass(row["stages"]):
+                    raise ValueError("independent raw capture metrics disagree with native acceptance")
+                row["acceptance"] = True
+        except Exception as error:
+            row["error"] = f"{type(error).__name__}: {error}"
+            run.receipt["errors"].append({"raw_smoke": precision, "error": row["error"]})
+        run.save()
+    smoke_capture = args.assets_dir / "native-raw-smoke-f16.gguf"
+    smoke_code = raw_smokes["f16"]["returncode"]
     shutil.copyfile(smoke_reference.with_name(smoke_reference.name + ".json"), run.output / "reference-raw-smoke.json")
     if smoke_code != 0:
         # Keep the failed gate in errors/acceptance, but gather independent
@@ -427,9 +446,11 @@ def qualify(run):
     for precision, path in models.items():
         if sha256(path) != run.receipt["models"][precision]["sha256"]:
             raise ValueError(f"converted model changed during qualification: {precision}")
-    run.receipt["complete"] = bool(smoke_code is not None and validation.get("complete", False)
+    run.receipt["complete"] = bool(all(row["returncode"] is not None for row in raw_smokes.values())
+                                   and validation.get("complete", False)
                                    and all(row["returncode"] is not None for row in surfaces.values()))
-    run.receipt["acceptance"] = bool(validation_code == 0 and validation.get("acceptance", False)
+    run.receipt["acceptance"] = bool(all(row["acceptance"] for row in raw_smokes.values())
+                                      and validation_code == 0 and validation.get("acceptance", False)
                                       and all(row["acceptance"] for row in surfaces.values()) and not run.receipt["errors"])
     run.receipt["status"] = "passed" if run.receipt["acceptance"] else "not_qualified"
 

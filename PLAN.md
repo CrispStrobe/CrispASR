@@ -56,6 +56,14 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   retains the global gates and requires fresh acceptance. Large conversion
   identified the author's distinct band ratios `[0.225, 0.372, 0.403]`; the
   native/reference contracts are corrected and the small graph is bit-identical.
+- Quantization diagnosis: default Q8_0 and Q4_K failed the quiet bass stem in
+  the 0.25-second raw probe. Keeping the four final spectral reconstruction
+  matrices in F16 repairs all 35 stage gates for both formats, with every other
+  tensor byte-identical and only 45,600 extra bytes per small model. The default
+  policy retains 99.4469% Q8_0 and 76.5695% Q4_K matrix-element coverage. Preserve
+  the failed defaults and [candidate evidence](docs/historical/scnet-quantization-diagnosis-2026-11-02.json);
+  require fresh raw probes for all precisions plus full overlapping-audio fidelity
+  and performance before promotion.
 - Next action: complete original-checkpoint fidelity, actual CLI/Session surfaces,
   and paired performance through `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566). CPU checkpoint
   acceptance, GPU qualification and held-out quality remain unproven; do not

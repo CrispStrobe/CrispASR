@@ -125,6 +125,16 @@ projection-and-scatter layout. Layout version 1 is mandatory in the loader.
 
 Q4_K-ineligible rows use Q8_0 when their width permits it. Rows narrower than
 32 retain source precision. SCNet never silently substitutes Q4_0 for Q4_K.
+Both quantized formats retain the final spectral decoder's four matrices in
+F16: `decoder.2.0.conv.weight` and `decoder.2.1.convtrs.{0,1,2}.weight`.
+Quantizing these reconstruction matrices caused the quiet bass stem to fail
+the unchanged global gates in the initial short-input experiment. Restoring
+only these matrices passes all 35 stages for both formats while leaving every
+other tensor byte-identical. For small SCNet this preserves 48,640 parameters,
+adds 45,600 bytes, and retains target-type matrix coverage of 99.4469% Q8_0 and
+76.5695% Q4_K. See the [quantization diagnosis](historical/scnet-quantization-diagnosis-2026-11-02.json)
+for failed defaults and the bounded repair; full qualification remains a
+separate requirement.
 The validator reports actual tensor and element coverage; a filename alone
 does not establish a quantization type. Precision exceptions require measured
 fidelity evidence before qualification.
@@ -205,8 +215,9 @@ native median must be no slower than the original median.
 
 The hosted workflow `.github/workflows/scnet-qualification.yml` builds the
 actual CLI, Session library, probe, and quantizer, verifies generated capability
-data, runs original observer controls, and tests each precision through both
-numerical and production-surface gates. It retains source snapshots, commands,
+data, runs original observer controls, and requires all three precisions to
+pass an independently checked 0.25-second raw probe as well as the complete
+overlapping-chunk, timing, and production-surface gates. It retains source snapshots, commands,
 hashes, logs, and incremental JSON receipts. Failed runs remain failed;
 diagnostic or stages-only runs cannot report full acceptance. The fixture is
 an implementation-parity control, not a held-out quality benchmark.
