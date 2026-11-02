@@ -64,20 +64,33 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   the failed defaults and [candidate evidence](docs/historical/scnet-quantization-diagnosis-2026-11-02.json);
   require fresh raw probes for all precisions plus full overlapping-audio fidelity
   and performance before promotion.
+  The [genuine large raw probe](docs/historical/scnet-large-raw-2026-11-02.json)
+  also passes all 35 stages in all three formats under this default policy,
+  with 99.56995% Q8_0 and 97.65234% Q4_K matrix-element coverage.
 - [Run 41403856227](https://github.com/CrispStrobe/CrispASR/actions/runs/41403856227)
   at `94ea189` passes all 35 full-pipeline stages and timed-output fidelity for
   small SCNet in F16/Q8_0/Q4_K, but fails performance: native medians are
   46.31/46.53/46.64 seconds versus original 16.43/16.15/15.70 seconds.
   This predates the four-matrix quantization repair and is retained as a
   [failed runtime baseline](docs/historical/scnet-runtime-baseline-2026-11-02.json),
-  not current-policy qualification. Diagnostic LSTM spans account for about
-  22.6 seconds; approximately 20.7 seconds of other network time still needs
-  attribution. Graph creation costs only 0.07–0.10 seconds per complete call.
-- Next action: attribute and repair both recurrent and other network costs,
-  then rerun all original-checkpoint, raw, full-pipeline, CLI/Session and paired
+  not current-policy qualification. The [large job](docs/historical/scnet-large-runtime-baseline-2026-11-02.json)
+  likewise passes numerical and production-surface gates, but takes about
+  146.5–147.1 seconds versus 49.5–50.4 seconds original on its separate worker.
+  Graph creation costs only 0.07–0.16 seconds per complete call.
+- The [focused profile](docs/historical/scnet-runtime-profile-2026-11-02.json)
+  at `b51801b` reproduces the exact full small-model baseline waveform and
+  attributes 18.225 seconds to recurrent gates, 3.981 seconds to recurrent GEMMs,
+  6.288 seconds to other BLAS operations, and substantial copy/layout/broadcast
+  costs. SIMD gate and CPU layout changes pass all 35 native and independent
+  original-reference stages for both sizes and all three formats on the short
+  fixture. Forced-scalar F16 runs reproduce all 35 earlier native tensor payloads
+  exactly, isolating the layout changes from the activation approximation.
+  See [optimization controls](docs/historical/scnet-runtime-optimization-controls-2026-11-02.json).
+- Next action: measure the runtime changes in the bounded hosted profile and
+  separate uninstrumented F16 paired smoke, then rerun all original-checkpoint,
+  raw, full-pipeline, CLI/Session and paired
   performance gates through `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566).
-  Large baseline qualification is still running. Complete CPU qualification,
-  GPU qualification and held-out quality remain unproven; do not promote the
+  Complete CPU qualification, GPU qualification and held-out quality remain unproven; do not promote the
   candidate or substitute diagnostic runs for these gates.
 - License: upstream [MIT notice](https://github.com/starrytong/SCNet/blob/main/LICENSE)
   plus the [author's explicit checkpoint permission](https://github.com/starrytong/SCNet/issues/35)

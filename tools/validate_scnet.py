@@ -611,7 +611,11 @@ class NativeModel:
 
 def runtime_provenance(library):
     result = {"platform": platform.platform(), "machine": platform.machine(), "logical_cpus": os.cpu_count(),
-              "library_sha256": sha256(library), "thread_environment": {key: os.environ.get(key) for key in THREAD_VARIABLES}}
+              "library_sha256": sha256(library), "thread_environment": {key: os.environ.get(key) for key in THREAD_VARIABLES},
+              "compute_environment": {key: os.environ.get(key) for key in (
+                  "CRISPASR_SCNET_GPU", "CRISPASR_SCNET_THREADS", "CRISPASR_SCNET_BENCH",
+                  "CRISPASR_SCNET_CAPTURE_GGUF", "CRISPASR_SCNET_SCALAR_LSTM", "CRISPASR_SCNET_SCALAR_GATES",
+                  "CRISPASR_SCNET_BLAS", "CRISPASR_CPU_GEMM")}}
     for key, filename in (("cpuinfo", "/proc/cpuinfo"), ("cpu_quota", "/sys/fs/cgroup/cpu.max"),
                           ("cpuset", "/sys/fs/cgroup/cpuset.cpus.effective"),
                           ("memory_limit_bytes", "/sys/fs/cgroup/memory.max")):
@@ -775,6 +779,8 @@ def main(argv=None):
         os.environ["CRISPASR_SCNET_GPU"] = "0"
         os.environ["CRISPASR_SCNET_THREADS"] = str(args.threads)
         os.environ["CRISPASR_SCNET_BENCH"] = "0"
+        if not args.diagnostic:
+            os.environ.pop("CRISPASR_SCNET_SCALAR_GATES", None)
         os.environ["ACCELERATE_USE_CPU"] = "true"
         verify_source_files(args.source_dir)
         receipt["source_file_hashes"] = dict(SOURCE_HASHES)

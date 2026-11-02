@@ -66,7 +66,7 @@ jobs:
           free -h > scnet-profile-out/memory.txt
           g++ --version > scnet-profile-out/compiler.txt
           python -m pip freeze > scnet-profile-out/python-packages.txt
-      - name: Build only the native SCNet validation library
+      - name: Build the native SCNet validation library and tensor controls
         run: |
           set -o pipefail
           cmake -S . -B build-scnet-profile -G Ninja -DCMAKE_BUILD_TYPE=Release \
@@ -76,9 +76,15 @@ jobs:
             -DGGML_METAL=OFF -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS \
             -DCRISPASR_CPU_BLAS=ON -DCRISPASR_MEL_BLAS=ON \
             2>&1 | tee scnet-profile-out/configure.log
-          cmake --build build-scnet-profile --parallel 2 --target scnet-validation \
+          cmake --build build-scnet-profile --parallel 2 --target scnet-validation scnet-tensor-test \
             2>&1 | tee scnet-profile-out/build.log
-      - name: Profile one genuine small F16 24-second native call
+      - name: Check SCNet tensor, convolution and recurrent math helpers
+        run: |
+          set -o pipefail
+          build-scnet-profile/bin/scnet-tensor-test 2>&1 | tee scnet-profile-out/tensor-controls.log
+          python tests/test-scnet-im2col.py 2>&1 | tee scnet-profile-out/im2col-controls.log
+          python tests/test-scnet-math.py 2>&1 | tee scnet-profile-out/math-controls.log
+      - name: Profile small F16 and compare three uninstrumented original-native pairs
         run: >
           python tools/ci-heavy/scnet_profile.py --source-commit ${{ github.sha }}
           --build-dir build-scnet-profile --assets-dir scnet-assets
@@ -101,4 +107,5 @@ jobs:
         with:
           name: scnet-small-F16-cpu-diagnostic-${{ github.sha }}
           path: scnet-profile-out/
+          include-hidden-files: true
           if-no-files-found: error

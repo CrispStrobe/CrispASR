@@ -4,6 +4,8 @@
 // so a 20-second chunk does not create tens of thousands of tiny graph nodes.
 #pragma once
 
+#include "scnet_activation.h"
+
 #include <algorithm>
 #include <chrono>
 #include <cmath>
@@ -39,6 +41,7 @@ template <bool Profile>
 inline void lstm_direction_impl(const float* projected, const float* recurrent_weight, const float* recurrent_bias,
                                 float* output, int hidden, int batch, int steps, bool reverse, int begin, int end,
                                 bool use_blas, LstmScratch& scratch, LstmTiming* timing) {
+    const auto gate_kernel = scnet_activation::selected_kernel();
     using Clock = std::chrono::steady_clock;
     Clock::time_point phase_start;
     if constexpr (Profile)
@@ -103,15 +106,7 @@ inline void lstm_direction_impl(const float* projected, const float* recurrent_w
                 output + (static_cast<size_t>(time) * batch + begin + row) * 2 * hidden + (reverse ? hidden : 0);
             for (int k = 0; k < gates; ++k)
                 ph[k] = (ph[k] + recurrent_bias[k]) + px[k];
-            for (int k = 0; k < hidden; ++k) {
-                const float i = 1.0f / (1.0f + std::exp(-ph[k]));
-                const float f = 1.0f / (1.0f + std::exp(-ph[hidden + k]));
-                const float g = std::tanh(ph[2 * hidden + k]);
-                const float o = 1.0f / (1.0f + std::exp(-ph[3 * hidden + k]));
-                c[k] = f * c[k] + i * g;
-                h[k] = o * std::tanh(c[k]);
-                out[k] = h[k];
-            }
+            gate_kernel.update(ph, c, h, out, hidden);
         }
         if constexpr (Profile) {
             timing->gates_ms += std::chrono::duration<double, std::milli>(Clock::now() - phase_start).count();

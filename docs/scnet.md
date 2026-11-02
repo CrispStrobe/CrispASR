@@ -30,24 +30,46 @@ normalization statistics; they do not substitute reference calculations.
 
 ### Current measured baseline
 
-The small-model job in [run 41403856227](https://github.com/CrispStrobe/CrispASR/actions/runs/41403856227)
-at source `94ea189e4a95bbe966f9a3410a83c5a4e82f4c6b` passes all 35 complete-pipeline
-stages and every timed waveform check in each precision. It fails the required
-performance comparison on an AMD EPYC 7763 worker, with two threads for both
-implementations and the same 24-second overlapping-chunk fixture:
+Both model sizes in [run 41403856227](https://github.com/CrispStrobe/CrispASR/actions/runs/41403856227)
+at source `94ea189e4a95bbe966f9a3410a83c5a4e82f4c6b` pass all 35 complete-pipeline
+stages, every timed waveform check, and production-surface checks in each
+precision. Both fail performance, using two threads for each implementation
+and the same 24-second overlapping-chunk fixture. Small ran on AMD EPYC 7763;
+large ran on Intel Xeon Platinum 8370C, so comparisons are within each worker:
 
-| Precision | Native median | Original median | Original/native speed ratio |
-|---|---:|---:|---:|
-| F16 | 46.308 s | 16.427 s | 0.355× |
-| Q8_0 | 46.534 s | 16.154 s | 0.347× |
-| Q4_K | 46.640 s | 15.696 s | 0.337× |
+| Model | Precision | Native median | Original median | Original/native speed ratio |
+|---|---|---:|---:|---:|
+| SCNet | F16 | 46.308 s | 16.427 s | 0.355× |
+| SCNet | Q8_0 | 46.534 s | 16.154 s | 0.347× |
+| SCNet | Q4_K | 46.640 s | 15.696 s | 0.337× |
+| SCNet-large | F16 | 146.481 s | 49.519 s | 0.338× |
+| SCNet-large | Q8_0 | 146.895 s | 50.140 s | 0.341× |
+| SCNet-large | Q4_K | 147.120 s | 50.377 s | 0.342× |
 
 These are three alternating timing pairs after one warmup. The original F32
 checkpoint is the reference in each comparison. This source predates the four
 final-matrix quantization repair; the result does not qualify the current policy.
-The [retained baseline receipt](historical/scnet-runtime-baseline-2026-11-02.json)
-binds the source, models, fixture, metrics, artifact and diagnostic logs. Fresh
-full qualification is required after runtime changes.
+The [small baseline](historical/scnet-runtime-baseline-2026-11-02.json) and
+[large baseline](historical/scnet-large-runtime-baseline-2026-11-02.json) bind the
+source, models, fixture, metrics, artifact and diagnostic logs. Fresh full
+qualification is required after runtime changes.
+
+A [focused diagnostic](https://github.com/CrispStrobe/CrispASR/actions/runs/41411681073)
+at `b51801b` produces the exact same full F16 output PCM as the small baseline.
+It attributes 18.225 seconds to recurrent gates, 3.981 seconds to recurrent
+GEMMs, 6.288 seconds to other BLAS matrices, and substantial remaining time to
+copy/layout/broadcast operations. The [profile receipt](historical/scnet-runtime-profile-2026-11-02.json)
+retains nested timer scopes and build flags. It is a synchronized diagnostic,
+not a replacement throughput qualification.
+
+The subsequent SIMD and CPU layout changes pass all 35 stages against the
+unchanged original on the 0.25-second fixture for both sizes and all three
+formats. With scalar gate math selected, all 35 native F16 payloads also match
+the earlier captures byte-for-byte in both sizes. The
+[optimization controls](historical/scnet-runtime-optimization-controls-2026-11-02.json)
+separate those layout identity checks from SIMD numerical checks and retain the
+short-input limitation. Hosted full-pipeline timing and qualification remain
+required for the changed runtime.
 
 ## Inference behavior
 
@@ -72,6 +94,15 @@ use native CPU graph nodes. On a build with CBLAS, recurrent matrix operations
 use that provider; the portable implementation remains available. Backend
 reporting includes `CPU-LSTM-FFT`, including when an accelerator handles other
 operations. A selected GPU does not imply that the entire model runs there.
+
+On CPU, layout nodes use row copies, blocked permutations, and disjoint
+convolution-column blocks. Already contiguous inputs are reused where an
+operation only requires layout; diagnostic captures still retain independent
+copies. Recurrent gate updates select an AVX2/FMA or AArch64 NEON F32 kernel
+when available and otherwise use the scalar implementation. The reported
+compute description identifies the selected gate kernel. These changes retain
+F32 state and the same numerical gates; platform qualification remains limited
+to the hardware in the accepted receipts.
 
 ## Build
 

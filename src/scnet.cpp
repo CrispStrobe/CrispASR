@@ -4,8 +4,10 @@
 // Fourier transforms and the sequential LSTM are fused native CPU graph nodes.
 #include "scnet.h"
 #include "scnet_fft.h"
+#include "scnet_im2col.h"
 #include "scnet_lstm.h"
 #include "scnet_shift.h"
+#include "scnet_tensor.h"
 #include "core/ggml_cpu_backend.h"
 #include "core/gguf_loader.h"
 #include "core/gpu_backend_pref.h"
@@ -108,7 +110,11 @@ struct GraphProfile {
             auto* tensor = ggml_graph_node(graph, i);
             const auto stage = labels.find(tensor);
             const auto backend = ggml_backend_sched_get_tensor_backend(scheduler, tensor);
-            const Key key{stage == labels.end() ? "unattributed" : stage->second, ggml_op_desc(tensor),
+            const char* operation = ggml_op_desc(tensor);
+            const char* name = ggml_get_name(tensor);
+            if (tensor->op == GGML_OP_CUSTOM && std::strncmp(name, "scnet_cpu_", 10) == 0)
+                operation = name;
+            const Key key{stage == labels.end() ? "unattributed" : stage->second, operation,
                           backend ? ggml_backend_name(backend) : "unassigned"};
             nodes.emplace(tensor, &samples[key]);
         }
@@ -288,6 +294,13 @@ struct RecurrentNode {
     }
 };
 
+void im2col_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
+    const auto& shape = *static_cast<const scnet_detail::Im2ColShape*>(opaque);
+    const auto* input = output->src[0];
+    scnet_detail::im2col_rows(static_cast<const float*>(input->data), static_cast<float*>(output->data), shape,
+                              input->nb[1] / sizeof(float), input->nb[2] / sizeof(float), ith, nth);
+}
+
 void recurrent_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
     auto& node = *static_cast<RecurrentNode*>(opaque);
     // This ggml revision can invoke CUSTOM for every worker in the surrounding
@@ -333,10 +346,12 @@ struct Graph {
     ggml_tensor *input = nullptr, *output = nullptr;
     int frames = 0;
     bool capture = false;
+    bool cpu_only = false;
     std::map<std::string, ggml_tensor*> captures;
     std::map<ggml_tensor*, ggml_tensor*> f32;
     std::vector<std::unique_ptr<FourierNode>> fourier_nodes;
     std::vector<std::unique_ptr<RecurrentNode>> recurrent_nodes;
+    std::vector<std::unique_ptr<scnet_detail::Im2ColShape>> convolution_inputs;
     GraphProfile profile;
     ~Graph() {
         if (scheduler)
@@ -357,7 +372,7 @@ struct scnet_context {
     bool quant_q4 = false, quant_q8 = false;
     std::set<std::string> required_weights;
     bool recurrent_blas = false;
-    std::string backend_description;
+    std::string backend_description, compute_description;
 };
 
 namespace {
@@ -457,9 +472,23 @@ ggml_tensor* as_f32(Graph& graph, ggml_tensor* tensor) {
     return cast;
 }
 
+// These graph edges only require a contiguous view; they do not require a
+// second allocation. Captures still explicitly copy and retain their outputs.
+ggml_tensor* contiguous(Graph& graph, ggml_tensor* tensor) {
+    return ggml_is_contiguous(tensor) ? tensor : scnet_tensor::cont(graph.context, tensor, graph.cpu_only);
+}
+
+ggml_tensor* tensor_add(Graph& graph, ggml_tensor* a, ggml_tensor* b) {
+    return scnet_tensor::add(graph.context, a, b, graph.cpu_only);
+}
+
+ggml_tensor* tensor_mul(Graph& graph, ggml_tensor* a, ggml_tensor* b) {
+    return scnet_tensor::mul(graph.context, a, b, graph.cpu_only);
+}
+
 ggml_tensor* multiply(scnet_context& model, Graph& graph, ggml_tensor* weights, ggml_tensor* input) {
     auto* ctx = graph.context;
-    input = ggml_cont(ctx, input);
+    input = contiguous(graph, input);
     const int64_t n1 = input->ne[1], n2 = input->ne[2], n3 = input->ne[3];
     input = ggml_reshape_2d(ctx, input, input->ne[0], n1 * n2 * n3);
     ggml_tensor* result = ggml_mul_mat(ctx, weights, input);
@@ -471,16 +500,18 @@ ggml_tensor* multiply(scnet_context& model, Graph& graph, ggml_tensor* weights, 
 }
 
 ggml_tensor* affine(scnet_context& model, Graph& graph, ggml_tensor* input, const std::string& name) {
-    auto* ctx = graph.context;
     auto* result = multiply(model, graph, weight(model, name + ".weight"), input);
-    return ggml_add(ctx, result, weight(model, name + ".bias"));
+    return tensor_add(graph, result, weight(model, name + ".bias"));
 }
 
-ggml_tensor* join(ggml_context* ctx, std::vector<ggml_tensor*> tensors, int axis) {
+ggml_tensor* join(Graph& graph, std::vector<ggml_tensor*> tensors, int axis) {
+    auto* ctx = graph.context;
     while (tensors.size() > 1) {
         std::vector<ggml_tensor*> next;
         for (size_t i = 0; i < tensors.size(); i += 2)
-            next.push_back(i + 1 < tensors.size() ? ggml_concat(ctx, tensors[i], tensors[i + 1], axis) : tensors[i]);
+            next.push_back(i + 1 < tensors.size()
+                               ? scnet_tensor::concat(ctx, tensors[i], tensors[i + 1], axis, graph.cpu_only)
+                               : tensors[i]);
         tensors = std::move(next);
     }
     return tensors.at(0);
@@ -491,7 +522,7 @@ void capture(Graph& graph, const std::string& name, ggml_tensor* tensor) {
         graph.profile.label(tensor, name);
         return;
     }
-    tensor = ggml_cont(graph.context, tensor);
+    tensor = scnet_tensor::cont(graph.context, tensor, graph.cpu_only);
     graph.profile.label(tensor, name);
     ggml_set_name(tensor, name.c_str());
     ggml_set_output(tensor);
@@ -509,7 +540,7 @@ ggml_tensor* slice_frequency(ggml_context* ctx, ggml_tensor* input, int begin, i
 ggml_tensor* channel_bias(scnet_context& model, Graph& graph, ggml_tensor* input, const std::string& name) {
     auto* ctx = graph.context;
     auto* bias = weight(model, name + ".bias");
-    return ggml_add(ctx, input, ggml_reshape_3d(ctx, bias, 1, 1, bias->ne[0]));
+    return tensor_add(graph, input, ggml_reshape_3d(ctx, bias, 1, 1, bias->ne[0]));
 }
 
 ggml_tensor* convolution(scnet_context& model, Graph& graph, ggml_tensor* input, ggml_tensor* weights,
@@ -518,10 +549,13 @@ ggml_tensor* convolution(scnet_context& model, Graph& graph, ggml_tensor* input,
     auto* ctx = graph.context;
     const int64_t channels = input->ne[2], out_channels = weights->ne[1];
     if (left_frequency_pad || right_frequency_pad || time_pad)
-        input = ggml_pad_ext(ctx, input, time_pad, time_pad, left_frequency_pad, right_frequency_pad, 0, 0, 0, 0);
+        input = scnet_tensor::pad_ext(ctx, input, time_pad, time_pad, left_frequency_pad, right_frequency_pad, 0, 0, 0,
+                                      0, graph.cpu_only);
     const int times = static_cast<int>(input->ne[0]) - time_kernel + 1;
     const int frequencies = (static_cast<int>(input->ne[1]) - frequency_kernel) / frequency_stride + 1;
-    auto* shape = ggml_new_tensor_4d(ctx, GGML_TYPE_F16, time_kernel, frequency_kernel, channels, out_channels);
+    auto* shape = model.backend == model.cpu
+                      ? nullptr
+                      : ggml_new_tensor_4d(ctx, GGML_TYPE_F16, time_kernel, frequency_kernel, channels, out_channels);
     std::vector<ggml_tensor*> tiles;
     // Frequency tiles bound im2col scratch independently of full chunk length.
     // They retain complete time rows so the im2col stride contract is valid.
@@ -530,14 +564,25 @@ ggml_tensor* convolution(scnet_context& model, Graph& graph, ggml_tensor* input,
         const int count = std::min(TILE, frequencies - begin);
         auto* band =
             slice_frequency(ctx, input, begin * frequency_stride, (count - 1) * frequency_stride + frequency_kernel);
-        auto* columns = ggml_im2col(ctx, shape, band, 1, frequency_stride, 0, 0, 1, 1, true, GGML_TYPE_F32);
+        ggml_tensor* columns;
+        if (model.backend == model.cpu) {
+            auto layout = std::make_unique<scnet_detail::Im2ColShape>();
+            *layout = {times, count, static_cast<int>(channels), time_kernel, frequency_kernel, frequency_stride};
+            ggml_tensor* sources[] = {band};
+            columns = ggml_custom_4d(ctx, GGML_TYPE_F32, weights->ne[0], times, count, 1, sources, 1, im2col_compute,
+                                     GGML_N_TASKS_MAX, layout.get());
+            ggml_set_name(columns, "scnet_cpu_im2col");
+            graph.convolution_inputs.push_back(std::move(layout));
+        } else {
+            columns = ggml_im2col(ctx, shape, band, 1, frequency_stride, 0, 0, 1, 1, true, GGML_TYPE_F32);
+        }
         auto* output =
             multiply(model, graph, weights, ggml_reshape_2d(ctx, columns, weights->ne[0], int64_t(times) * count));
         output = ggml_reshape_3d(ctx, output, out_channels, times, count);
-        output = ggml_cont(ctx, ggml_permute(ctx, output, 2, 0, 1, 3));
+        output = contiguous(graph, ggml_permute(ctx, output, 2, 0, 1, 3));
         tiles.push_back(output);
     }
-    return channel_bias(model, graph, join(ctx, std::move(tiles), 1), name);
+    return channel_bias(model, graph, join(graph, std::move(tiles), 1), name);
 }
 
 ggml_tensor* convolution(scnet_context& model, Graph& graph, ggml_tensor* input, const std::string& name, int kf,
@@ -551,16 +596,16 @@ ggml_tensor* group_norm(scnet_context& model, Graph& graph, ggml_tensor* input, 
     const int64_t times = input->ne[0], frequencies = input->ne[1], channels = input->ne[2];
     ggml_tensor* normalized;
     if (per_frequency) {
-        auto* rows = ggml_cont(ctx, ggml_permute(ctx, input, 0, 2, 1, 3)); // [T,C,F]
+        auto* rows = contiguous(graph, ggml_permute(ctx, input, 0, 2, 1, 3)); // [T,C,F]
         rows = ggml_norm(ctx, ggml_reshape_2d(ctx, rows, times * channels, frequencies), 1e-5f);
         rows = ggml_reshape_3d(ctx, rows, times, channels, frequencies);
-        normalized = ggml_cont(ctx, ggml_permute(ctx, rows, 0, 2, 1, 3));
+        normalized = contiguous(graph, ggml_permute(ctx, rows, 0, 2, 1, 3));
     } else {
-        auto* values = ggml_reshape_1d(ctx, ggml_cont(ctx, input), times * frequencies * channels);
+        auto* values = ggml_reshape_1d(ctx, contiguous(graph, input), times * frequencies * channels);
         normalized = ggml_reshape_3d(ctx, ggml_norm(ctx, values, 1e-5f), times, frequencies, channels);
     }
     auto* scale = ggml_reshape_3d(ctx, weight(model, name + ".weight"), 1, 1, channels);
-    return channel_bias(model, graph, ggml_mul(ctx, normalized, scale), name);
+    return channel_bias(model, graph, tensor_mul(graph, normalized, scale), name);
 }
 
 ggml_tensor* glu(Graph& graph, ggml_tensor* input) {
@@ -569,22 +614,22 @@ ggml_tensor* glu(Graph& graph, ggml_tensor* input) {
     auto* a = ggml_view_3d(ctx, input, input->ne[0], input->ne[1], channels, input->nb[1], input->nb[2], 0);
     auto* b = ggml_view_3d(ctx, input, input->ne[0], input->ne[1], channels, input->nb[1], input->nb[2],
                            static_cast<size_t>(channels) * input->nb[2]);
-    return ggml_mul(ctx, a, ggml_sigmoid(ctx, b));
+    return tensor_mul(graph, a, ggml_sigmoid(ctx, b));
 }
 
 ggml_tensor* depthwise(scnet_context& model, Graph& graph, ggml_tensor* input, const std::string& name) {
     auto* ctx = graph.context;
     const int64_t times = input->ne[0], frequencies = input->ne[1], channels = input->ne[2];
-    auto* padded = ggml_pad_ext(ctx, input, 1, 1, 0, 0, 0, 0, 0, 0);
+    auto* padded = scnet_tensor::pad_ext(ctx, input, 1, 1, 0, 0, 0, 0, 0, 0, graph.cpu_only);
     auto* weights = as_f32(graph, weight(model, name + ".weight"));
     ggml_tensor* result = nullptr;
     for (int k = 0; k < 3; ++k) {
         auto* x =
             ggml_view_3d(ctx, padded, times, frequencies, channels, padded->nb[1], padded->nb[2], k * sizeof(float));
-        auto* w = ggml_cont(
-            ctx, ggml_view_3d(ctx, weights, 1, 1, channels, sizeof(float), 3 * sizeof(float), k * sizeof(float)));
-        auto* term = ggml_mul(ctx, x, w);
-        result = result ? ggml_add(ctx, result, term) : term;
+        auto* w = contiguous(
+            graph, ggml_view_3d(ctx, weights, 1, 1, channels, sizeof(float), 3 * sizeof(float), k * sizeof(float)));
+        auto* term = tensor_mul(graph, x, w);
+        result = result ? tensor_add(graph, result, term) : term;
     }
     return channel_bias(model, graph, result, name);
 }
@@ -599,7 +644,7 @@ ggml_tensor* convolution_module(scnet_context& model, Graph& graph, ggml_tensor*
         x = depthwise(model, graph, x, p + ".3");
         x = ggml_silu(ctx, group_norm(model, graph, x, p + ".4", true));
         x = convolution(model, graph, x, p + ".6", 1, 1);
-        input = ggml_add(ctx, input, x);
+        input = tensor_add(graph, input, x);
     }
     return ggml_gelu_erf(ctx, input);
 }
@@ -628,7 +673,7 @@ ggml_tensor* encoder(scnet_context& model, Graph& graph, ggml_tensor* input, int
         x = convolution_module(model, graph, x, p + ".conv_modules." + std::to_string(band), depths[band]);
         bands.push_back(x);
     }
-    skip = join(ctx, std::move(bands), 1);
+    skip = join(graph, std::move(bands), 1);
     capture(graph, "skip" + std::to_string(level), skip);
     auto* result = convolution(model, graph, skip, p + ".globalconv", 3, 3, 1, 1, 1, 1);
     capture(graph, "encoder" + std::to_string(level), result);
@@ -642,7 +687,7 @@ ggml_tensor* recurrent(scnet_context& model, Graph& graph, ggml_tensor* input, c
     for (int direction = 0; direction < 2; ++direction) {
         const std::string suffix = direction ? "_reverse" : "";
         sources[direction] = multiply(model, graph, weight(model, name + ".weight_ih_l0" + suffix), input);
-        sources[direction] = ggml_add(ctx, sources[direction], weight(model, name + ".bias_ih_l0" + suffix));
+        sources[direction] = tensor_add(graph, sources[direction], weight(model, name + ".bias_ih_l0" + suffix));
         sources[2 + direction] = as_f32(graph, weight(model, name + ".weight_hh_l0" + suffix));
         sources[4 + direction] = weight(model, name + ".bias_hh_l0" + suffix);
     }
@@ -650,6 +695,7 @@ ggml_tensor* recurrent(scnet_context& model, Graph& graph, ggml_tensor* input, c
                                                 model.recurrent_blas, name);
     auto* result = ggml_custom_4d(ctx, GGML_TYPE_F32, 2 * hidden, input->ne[1], input->ne[2], 1, sources, 6,
                                   recurrent_compute, model.recurrent_blas ? 1 : GGML_N_TASKS_MAX, node.get());
+    ggml_set_name(result, "scnet_cpu_lstm");
     graph.recurrent_nodes.push_back(std::move(node));
     return result;
 }
@@ -662,20 +708,21 @@ ggml_tensor* dual_path(scnet_context& model, Graph& graph, ggml_tensor* input, i
         auto* x = group_norm(model, graph, input, p + ".norm_layers." + q, false);
         // Frequency path [C,T,F]; time path [C,F,T]. ne1 is the batch
         // dimension and ne2 the sequential dimension in the recurrent node.
-        x = ggml_cont(ctx, axis == 0 ? ggml_permute(ctx, x, 1, 2, 0, 3) : ggml_permute(ctx, x, 2, 1, 0, 3));
+        x = contiguous(graph, axis == 0 ? ggml_permute(ctx, x, 1, 2, 0, 3) : ggml_permute(ctx, x, 2, 1, 0, 3));
         x = recurrent(model, graph, x, p + ".lstm_layers." + q);
         x = affine(model, graph, x, p + ".linear_layers." + q);
-        x = ggml_cont(ctx, axis == 0 ? ggml_permute(ctx, x, 2, 0, 1, 3) : ggml_permute(ctx, x, 2, 1, 0, 3));
-        input = ggml_add(ctx, input, x);
+        x = contiguous(graph, axis == 0 ? ggml_permute(ctx, x, 2, 0, 1, 3) : ggml_permute(ctx, x, 2, 1, 0, 3));
+        input = tensor_add(graph, input, x);
     }
     capture(graph, "dp" + std::to_string(layer), input);
     const bool inverse = layer % 2 != 0;
     const int size = static_cast<int>(inverse ? 2 * (input->ne[0] - 1) : input->ne[0]);
     auto node = std::make_unique<FourierNode>(size, inverse, model.params.n_threads);
-    ggml_tensor* sources[] = {ggml_cont(ctx, input)};
+    ggml_tensor* sources[] = {contiguous(graph, input)};
     auto* result = ggml_custom_4d(ctx, GGML_TYPE_F32, inverse ? size : size / 2 + 1, input->ne[1],
                                   inverse ? input->ne[2] / 2 : input->ne[2] * 2, 1, sources, 1, fourier_compute,
                                   GGML_N_TASKS_MAX, node.get());
+    ggml_set_name(result, "scnet_cpu_fft");
     graph.fourier_nodes.push_back(std::move(node));
     capture(graph, "feature" + std::to_string(layer), result);
     return result;
@@ -686,15 +733,15 @@ ggml_tensor* upsample(scnet_context& model, Graph& graph, ggml_tensor* input, co
     auto* ctx = graph.context;
     auto* weights = weight(model, name + ".weight");
     const int64_t times = input->ne[0], frequencies = input->ne[1], channels = weights->ne[1] / kernel;
-    auto* x = ggml_cont(ctx, ggml_permute(ctx, input, 1, 2, 0, 3)); // [C,T,F]
-    x = multiply(model, graph, weights, x);                         // [K*Cout,T,F]
+    auto* x = contiguous(graph, ggml_permute(ctx, input, 1, 2, 0, 3)); // [C,T,F]
+    x = multiply(model, graph, weights, x);                            // [K*Cout,T,F]
     x = ggml_reshape_4d(ctx, x, kernel, channels, times, frequencies);
-    x = ggml_cont(ctx, ggml_permute(ctx, x, 0, 2, 1, 3)); // [K,T,Cout,F]
+    x = contiguous(graph, ggml_permute(ctx, x, 0, 2, 1, 3)); // [K,T,Cout,F]
     x = ggml_reshape_2d(ctx, x, kernel * times * channels, frequencies);
     x = ggml_col2im_1d(ctx, x, stride, static_cast<int>(times * channels), 0);
     const int64_t produced = (frequencies - 1) * stride + kernel;
     x = ggml_reshape_3d(ctx, x, produced, times, channels);
-    x = ggml_cont(ctx, ggml_permute(ctx, x, 1, 0, 2, 3));
+    x = contiguous(graph, ggml_permute(ctx, x, 1, 0, 2, 3));
     const int crop = static_cast<int>(std::abs(produced - output_frequencies) / 2);
     if (produced < output_frequencies || crop + output_frequencies > produced)
         throw std::runtime_error("SCNet transposed convolution cannot recover the original band");
@@ -706,7 +753,7 @@ ggml_tensor* decoder(scnet_context& model, Graph& graph, ggml_tensor* input, ggm
                      const BandLengths& lengths, int level) {
     auto* ctx = graph.context;
     const std::string p = "decoder." + std::to_string(level);
-    input = ggml_add(ctx, input, skip);
+    input = tensor_add(graph, input, skip);
     // The original repeats its channels before a dense convolution. Adding
     // the corresponding kernel halves removes that redundant activation copy.
     auto* weights = as_f32(graph, weight(model, p + ".0.conv.weight"));
@@ -714,7 +761,7 @@ ggml_tensor* decoder(scnet_context& model, Graph& graph, ggml_tensor* input, ggm
     auto* a = ggml_view_2d(ctx, weights, half, weights->ne[1], weights->nb[1], 0);
     auto* b =
         ggml_view_2d(ctx, weights, half, weights->ne[1], weights->nb[1], static_cast<size_t>(half) * sizeof(float));
-    weights = ggml_add(ctx, a, b);
+    weights = tensor_add(graph, a, b);
     input = glu(graph, convolution(model, graph, input, weights, p + ".0.conv", 3, 3, 1, 1, 1, 1));
     const int kernels[] = {3, 4, 16}, strides[] = {1, 4, 16};
     std::vector<ggml_tensor*> bands;
@@ -725,7 +772,7 @@ ggml_tensor* decoder(scnet_context& model, Graph& graph, ggml_tensor* input, ggm
         bands.push_back(upsample(model, graph, x, p + ".1.convtrs." + std::to_string(band), kernels[band],
                                  strides[band], lengths.original[band]));
     }
-    auto* result = join(ctx, std::move(bands), 1);
+    auto* result = join(graph, std::move(bands), 1);
     capture(graph, "decoder" + std::to_string(level), result);
     return result;
 }
@@ -743,6 +790,7 @@ Graph& network_graph(scnet_context& model, int frames, bool want_capture) {
     Timer timer("graph_build");
     auto graph = std::make_unique<Graph>();
     graph->capture = want_capture;
+    graph->cpu_only = model.backend == model.cpu;
     graph->profile.enabled = want_profile;
     ggml_init_params params{ggml_tensor_overhead() * GRAPH_CAPACITY + ggml_graph_overhead_custom(GRAPH_CAPACITY, false),
                             nullptr, true};
@@ -766,7 +814,7 @@ Graph& network_graph(scnet_context& model, int frames, bool want_capture) {
         x = dual_path(model, *graph, x, i);
     for (int i = 0; i < 3; ++i)
         x = decoder(model, *graph, x, skips[2 - i], lengths[2 - i], i);
-    graph->output = ggml_cont(graph->context, x);
+    graph->output = contiguous(*graph, x);
     graph->profile.label(graph->output, "output");
     ggml_set_output(graph->output);
     ggml_build_forward_expand(graph->graph, graph->output);
@@ -1124,6 +1172,8 @@ scnet_context* scnet_init_from_file(const char* path, scnet_params params) {
         validate_weights(*model);
         model->backend_description =
             std::string(ggml_backend_name(model->backend)) + (model->blas ? "+BLAS" : "") + "/CPU-LSTM-FFT";
+        model->compute_description = std::string("F32 activations/accumulation; CPU recurrent/FFT; gates=") +
+                                     scnet_activation::selected_kernel().name;
         std::fprintf(stderr, "scnet: backend=%s threads=%d precision=%s recurrence=%s\n",
                      model->backend_description.c_str(), params.n_threads,
                      model->quant_q4   ? "Q4_K mixed"
@@ -1208,7 +1258,7 @@ const char* scnet_backend_name(const scnet_context* model) {
     return model ? model->backend_description.c_str() : nullptr;
 }
 const char* scnet_compute_precision(const scnet_context* model) {
-    return model ? "F32 activations/accumulation; CPU recurrent/FFT" : nullptr;
+    return model ? model->compute_description.c_str() : nullptr;
 }
 
 static int diff_impl(const char* model_gguf, const char* ref_gguf, const char* audio_wav, int verbosity) {

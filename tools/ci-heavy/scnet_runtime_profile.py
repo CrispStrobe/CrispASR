@@ -28,7 +28,7 @@ def main():
     for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
                 "BLIS_NUM_THREADS", "CRISPASR_SCNET_THREADS"):
         os.environ[key] = str(args.threads)
-    for key in ("CRISPASR_SCNET_CAPTURE_GGUF", "CRISPASR_SCNET_SCALAR_LSTM", "CRISPASR_SCNET_BLAS", "CRISPASR_CPU_GEMM"):
+    for key in ("CRISPASR_SCNET_CAPTURE_GGUF", "CRISPASR_SCNET_SCALAR_LSTM", "CRISPASR_SCNET_SCALAR_GATES", "CRISPASR_SCNET_BLAS", "CRISPASR_CPU_GEMM"):
         os.environ.pop(key, None)
     os.environ.update(CRISPASR_SCNET_GPU="0", CRISPASR_SCNET_BENCH="1")
     import numpy as np

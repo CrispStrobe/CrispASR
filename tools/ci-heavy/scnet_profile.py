@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Profile one real SCNet F16 CPU call; never a fidelity or speed qualification.
+"""Profile SCNet F16 and run a bounded same-host waveform/performance smoke.
 
-Only the small author checkpoint is converted. The original-model benchmark,
-quantized models and qualification matrix are intentionally not executed here.
-The single cold call uses BENCH=1, including synchronizing graph-op callbacks;
-its instrumented timing must not be substituted for accepted throughput data.
+Only the small author checkpoint is converted. One cold BENCH=1 call includes
+synchronizing graph-op callbacks. A separate BENCH=0 process warms both engines
+and runs three alternating original/native pairs with the validator's unchanged
+F16 waveform gates. It does not capture the 35 intermediate stages or test the
+quantized models, and every receipt keeps overall acceptance/qualification false.
 """
 from __future__ import annotations
 
 import argparse
+import contextlib
 import json
 import math
 import os
@@ -26,15 +28,22 @@ from scnet_qualify import (
     prepare_fixture, resolve_library, utc_now,
 )
 from reference_backends.scnet import CHECKPOINT_URLS, SOURCE_HASHES, SOURCE_REVISION, sha256, verify_source_files
-from validate_scnet import NativeModel, atomic_json_write, pcm_sha256, runtime_provenance
+from validate_scnet import (
+    GGUFFile, NORM_RATIO_BOUNDS, RELATIVE_L2_MAX, THRESHOLDS, NativeModel, all_pass,
+    atomic_json_write, check_inventory, pcm_sha256, runtime_provenance, summarize_pairs, waveform_metrics,
+)
 
 PROFILE = {"mode": "pipeline", "segment_seconds": 20, "shifts": 1, "shift_seed": 0, "overlap": .5}
 SOURCES = (
     "src/scnet.cpp", "src/scnet.h", "src/scnet_fft.h", "src/scnet_lstm.h", "src/scnet_shift.h",
+    "src/scnet_activation.h", "src/scnet_tensor.h", "src/scnet_im2col.h",
+    "tests/test-scnet-math.py", "tests/test-scnet-tensor.cpp", "tests/test-scnet-im2col.py",
     "src/CMakeLists.txt", "CMakeLists.txt", "tools/scnet_exports.cpp", "tools/validate_scnet.py",
     "models/convert-scnet-to-gguf.py", "tools/reference_backends/scnet.py", "tools/requirements-scnet.txt",
     "tools/ci-heavy/scnet_qualify.py", "tools/ci-heavy/scnet_profile.py", ".github/workflows/scnet-profile.yml",
 )
+CONTROLS = ("CRISPASR_SCNET_BENCH", "CRISPASR_SCNET_CAPTURE_GGUF", "CRISPASR_SCNET_SCALAR_LSTM",
+            "CRISPASR_SCNET_SCALAR_GATES", "CRISPASR_SCNET_BLAS", "CRISPASR_CPU_GEMM", "CRISPASR_SCNET_GPU")
 
 
 def portable(value, args):
@@ -101,22 +110,30 @@ def parse_timers(text):
     return rows
 
 
-def worker(args):
+def load_fixture(args):
     import numpy as np
     import soundfile as sf
 
-    model = args.assets_dir / "scnet-profile-f16.gguf"
     audio_path = args.assets_dir / "music-profile-24s.wav"
-    library = resolve_library(args.build_dir, "scnet-validation")
     audio, rate = sf.read(audio_path, dtype="float32", always_2d=True)
     audio = np.ascontiguousarray(audio)
     if rate != 44100 or audio.shape != (24 * 44100, 2) or not np.isfinite(audio).all():
         raise ValueError("diagnostic fixture is not finite 24-second 44100-Hz stereo")
+    return audio, audio_path
+
+
+def worker(args):
+    import numpy as np
+
+    model = args.assets_dir / "scnet-profile-f16.gguf"
+    library = resolve_library(args.build_dir, "scnet-validation")
+    audio, audio_path = load_fixture(args)
     receipt = {"schema": 1, "acceptance": False, "qualification": False, "complete": False,
         "scope": "One instrumented cold native call; no model-quality or comparative-performance qualification",
         "calls": 1, "warmups": 0, "threads": 2, "profile": PROFILE, "frames": len(audio),
         "model_sha256": sha256(model), "audio_sha256": sha256(audio_path), "library_sha256": sha256(library),
-        "input_pcm_sha256": pcm_sha256(audio), "runtime": runtime_provenance(library)}
+        "input_pcm_sha256": pcm_sha256(audio), "runtime": runtime_provenance(library),
+        "execution_controls": {key: os.environ.get(key) for key in CONTROLS}}
     save = lambda: atomic_json_write(args.output_dir / "native-profile.json", portable(receipt, args))
     save()
     native = NativeModel(library, model, 2, PROFILE)
@@ -140,12 +157,140 @@ def worker(args):
         save()
 
 
+def paired_calls(original, native, receipt, save, input_unchanged):
+    """Schedule this smoke; all numeric gates and pair summaries come from the validator."""
+    import numpy as np
+
+    expected = None
+
+    def call(name, function, collection, iteration):
+        nonlocal expected
+        measurement = {"iteration": iteration, "implementation": name, "complete": False,
+                       "quality_acceptance": False}
+        receipt[collection].append(measurement)
+        save()
+        started = time.perf_counter()
+        try:
+            output = function()
+        except BaseException as error:
+            measurement.update(elapsed_seconds_on_error=time.perf_counter() - started,
+                               error=f"{type(error).__name__}: {error}")
+            save()
+            raise
+        measurement.update(seconds=time.perf_counter() - started, complete=True)
+        # Persist completed durations before hashing or evaluating any outputs.
+        save()
+        if expected is None:
+            if collection != "warmups" or name != "original":
+                raise ValueError("the waveform oracle must come from the genuine original warmup")
+            expected = np.ascontiguousarray(output).copy()
+            receipt["reference_pcm_sha256"] = pcm_sha256(expected)
+        scores = waveform_metrics(output, expected, "f16")
+        measurement.update(stems=scores, quality_acceptance=all_pass(scores), pcm_sha256=pcm_sha256(output),
+                           input_unchanged=bool(input_unchanged()))
+        save()
+        if not measurement["quality_acceptance"] or not measurement["input_unchanged"]:
+            raise ValueError(f"{name} {collection} output failed waveform/input-identity checks")
+        print(f"paired smoke {collection} {iteration + 1}: {name} {measurement['seconds']:.6f}s quality=True",
+              file=sys.stderr, flush=True)
+
+    for name, function in (("original", original), ("native", native)):
+        call(name, function, "warmups", 0)
+    for iteration in range(3):
+        order = ("original", "native") if iteration % 2 == 0 else ("native", "original")
+        for name in order:
+            call(name, original if name == "original" else native, "calls", iteration)
+    receipt.update(summarize_pairs(receipt["calls"], 3), waveform_acceptance=True, complete=True)
+    save()
+
+
+def paired_worker(args):
+    import numpy as np
+    import torch
+    from reference_backends.scnet import load_original, separate_original
+
+    model = args.assets_dir / "scnet-profile-f16.gguf"
+    checkpoint = args.assets_dir / "scnet-author.th"
+    library = resolve_library(args.build_dir, "scnet-validation")
+    audio, audio_path = load_fixture(args)
+    planar = np.ascontiguousarray(audio.T)
+    receipt = {"schema": 1, "acceptance": False, "qualification": False, "complete": False,
+        "scope": "F16 final-waveform and same-host timing smoke; no intermediate-stage or quantized qualification",
+        "variant": "scnet", "precision": "f16", "required_stages_checked": 0,
+        "source_commit": args.source_commit, "upstream_source_revision": SOURCE_REVISION,
+        "upstream_source_hashes": SOURCE_HASHES, "profile": PROFILE, "threads": 2,
+        "repetitions": 3, "warmups_per_implementation": 1, "warmups": [], "calls": [], "errors": [],
+        "model_sha256": sha256(model), "checkpoint_sha256": sha256(checkpoint),
+        "audio_sha256": sha256(audio_path), "library_sha256": sha256(library),
+        "input_pcm_interleaved_sha256": pcm_sha256(audio), "input_pcm_planar_sha256": pcm_sha256(planar),
+        "runtime": runtime_provenance(library), "execution_controls": {key: os.environ.get(key) for key in CONTROLS},
+        "waveform_policy": {"strict_cosine_gt": THRESHOLDS["f16"], "norm_ratio_bounds": NORM_RATIO_BOUNDS["f16"],
+                            "relative_l2_max": RELATIVE_L2_MAX["f16"]},
+        "reference_origin": "Genuine unmodified original F32 CPU warmup output, retained in memory; no stage hooks",
+        "timing_boundary": "public separation call, normalization/chunking and owned CPU result conversion; includes original helper printing to a local log; excludes model/audio load and quality metrics"}
+    save = lambda: atomic_json_write(args.output_dir / "paired-smoke.json", portable(receipt, args))
+    save()
+    native = None
+    try:
+        if receipt["execution_controls"]["CRISPASR_SCNET_BENCH"] != "0" or any(
+                receipt["execution_controls"][key] is not None for key in CONTROLS
+                if key not in ("CRISPASR_SCNET_BENCH", "CRISPASR_SCNET_GPU")):
+            raise ValueError("paired smoke requires BENCH=0 and no capture or forced execution overrides")
+        if torch.__version__.split("+")[0] != "2.8.0":
+            raise ValueError("original smoke must use upstream-required torch==2.8.0")
+        if receipt["checkpoint_sha256"] != RECORDED_CHECKPOINT_SHA256["scnet"]:
+            raise ValueError("paired smoke checkpoint differs from the recorded author release")
+        source = verify_source_files(args.assets_dir / "SCNet")
+        receipt["model_inventory"] = check_inventory(GGUFFile(model), "f16", None,
+                                                     receipt["checkpoint_sha256"], SOURCE_HASHES)
+        torch.set_num_threads(2)
+        torch.set_num_interop_threads(1)
+        blueprint = load_original(source, checkpoint, "scnet", "cpu", expected_sha256=receipt["checkpoint_sha256"])
+        if any(parameter.device.type != "cpu" or parameter.dtype != torch.float32
+               for parameter in blueprint.parameters()):
+            raise ValueError("original smoke is not the published F32 CPU model")
+        receipt.update(torch_version=torch.__version__, torch_intraop_threads=torch.get_num_threads(),
+                       torch_interop_threads=torch.get_num_interop_threads(), original_dtype="float32",
+                       original_provenance=blueprint._scnet_provenance)
+        native = NativeModel(library, model, 2, PROFILE)
+        receipt.update(native_backend=native.backend, native_compute_precision=native.compute_precision,
+                       native_blas_thread_queries=native.blas_thread_queries)
+        save()
+
+        def original():
+            return separate_original(blueprint, planar, segment_seconds=PROFILE["segment_seconds"],
+                                     shifts=PROFILE["shifts"], shift_seed=PROFILE["shift_seed"], no_segment=False)
+
+        def unchanged():
+            return (pcm_sha256(audio) == receipt["input_pcm_interleaved_sha256"] and
+                    pcm_sha256(planar) == receipt["input_pcm_planar_sha256"])
+
+        with (args.output_dir / "paired-original-inference.log").open("w", encoding="utf-8") as original_log:
+            with contextlib.redirect_stdout(original_log):
+                paired_calls(original, lambda: native.run(audio), receipt, save, unchanged)
+        for key, path in (("model", model), ("checkpoint", checkpoint), ("audio", audio_path), ("library", library)):
+            if sha256(path) != receipt[key + "_sha256"]:
+                raise ValueError(f"{key} changed during the paired smoke")
+        verify_source_files(source)
+        receipt["process_max_rss_kib"] = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    except BaseException as error:
+        receipt["complete"] = False
+        receipt["errors"].append(f"{type(error).__name__}: {error}")
+        raise
+    finally:
+        if native is not None:
+            native.close()
+        save()
+
+
 def profile(args):
     args.output_dir.mkdir(parents=True, exist_ok=False)
     receipt = {"schema": 1, "acceptance": False, "qualification": False, "complete": False,
         "variant": "scnet", "precision": "f16", "source_commit": args.source_commit,
         "upstream_source_revision": SOURCE_REVISION, "upstream_source_hashes": SOURCE_HASHES,
-        "profile": PROFILE, "calls": 1, "warmups": 0, "threads": 2, "commands": [], "errors": []}
+        "profile": PROFILE, "calls": 1, "warmups": 0, "threads": 2, "commands": [], "errors": [],
+        "scope": "One instrumented cold call plus separate uninstrumented F16 waveform/timing smoke; not a qualification",
+        "paired_smoke_repetitions": 3, "paired_smoke_warmups_per_implementation": 1}
     save = lambda: atomic_json_write(args.output_dir / "diagnostic.json", portable(receipt, args))
     save()
 
@@ -241,6 +386,20 @@ def profile(args):
             raise ValueError("model or native binary changed during profiling")
         receipt["native_profile"] = native
         receipt["timer_counts"] = {key: len(value) for key, value in timers.items() if isinstance(value, list)}
+        run("paired-smoke", [sys.executable, Path(__file__), "--paired-worker", "--source-commit", args.source_commit,
+            "--build-dir", args.build_dir, "--assets-dir", args.assets_dir, "--output-dir", args.output_dir], timeout=1200)
+        paired = json.loads((args.output_dir / "paired-smoke.json").read_text())
+        receipt["paired_smoke"] = paired
+        if re.search(r"^scnet_bench(?:_|:)", (args.output_dir / "paired-smoke.stderr.log").read_text(), re.MULTILINE):
+            raise ValueError("paired smoke emitted instrumentation despite requiring BENCH=0")
+        if paired.get("complete") is not True or paired.get("acceptance") is not False or \
+                paired.get("qualification") is not False or paired.get("waveform_acceptance") is not True or \
+                paired.get("model_sha256") != receipt["model"]["sha256"] or \
+                paired.get("library_sha256") != receipt["library_sha256"] or \
+                paired.get("audio_sha256") != native.get("audio_sha256") or \
+                paired.get("execution_controls", {}).get("CRISPASR_SCNET_BENCH") != "0":
+            raise ValueError("paired waveform/timing smoke is incomplete or inconsistent")
+        summarize_pairs(paired["calls"], 3)
         receipt["complete"] = True
     except BaseException as error:
         receipt["errors"].append(f"{type(error).__name__}: {error}")
@@ -254,7 +413,9 @@ def main(argv=None):
     parser.add_argument("--source-commit", required=True)
     for name in ("build-dir", "assets-dir", "output-dir"):
         parser.add_argument("--" + name, required=True, type=Path)
-    parser.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
+    workers = parser.add_mutually_exclusive_group()
+    workers.add_argument("--worker", action="store_true", help=argparse.SUPPRESS)
+    workers.add_argument("--paired-worker", action="store_true", help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
     if not re.fullmatch("[0-9a-f]{40}", args.source_commit):
         parser.error("--source-commit must be the exact checkout revision")
@@ -263,14 +424,19 @@ def main(argv=None):
     for key in ("OMP_NUM_THREADS", "OPENBLAS_NUM_THREADS", "MKL_NUM_THREADS", "VECLIB_MAXIMUM_THREADS",
                 "BLIS_NUM_THREADS", "CRISPASR_SCNET_THREADS"):
         os.environ[key] = "2"
-    for key in ("CRISPASR_SCNET_CAPTURE_GGUF", "CRISPASR_SCNET_SCALAR_LSTM", "CRISPASR_SCNET_BLAS", "CRISPASR_CPU_GEMM"):
+    for key in ("CRISPASR_SCNET_CAPTURE_GGUF", "CRISPASR_SCNET_SCALAR_LSTM", "CRISPASR_SCNET_SCALAR_GATES",
+                "CRISPASR_SCNET_BLAS", "CRISPASR_CPU_GEMM"):
         os.environ.pop(key, None)
-    os.environ.update(CRISPASR_SCNET_GPU="0", CRISPASR_SCNET_BENCH="1", ACCELERATE_USE_CPU="true")
-    if args.worker:
+    os.environ.update(CRISPASR_SCNET_GPU="0", CRISPASR_SCNET_BENCH="0" if args.paired_worker else "1",
+                      ACCELERATE_USE_CPU="true")
+    if args.paired_worker:
+        paired_worker(args)
+    elif args.worker:
         worker(args)
     else:
         profile(args)
-    print(json.dumps({"complete": True, "acceptance": False, "qualification": False, "calls": 1}))
+    print(json.dumps({"complete": True, "acceptance": False, "qualification": False,
+                      "mode": "paired-smoke" if args.paired_worker else "native-profile" if args.worker else "diagnostic"}))
     return 0
 
 

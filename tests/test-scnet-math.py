@@ -6,6 +6,7 @@ random module. They require no checkpoint and do not establish model fidelity.
 """
 
 import ctypes
+import os
 import pathlib
 import random
 import shutil
@@ -24,7 +25,67 @@ WRAPPER = r"""
 #include "scnet_fft.h"
 #include "scnet_shift.h"
 #include "scnet_lstm.h"
+#include <limits>
+
+#if SCNET_ACT_X86
+SCNET_ACT_AVX2 void inspect_avx2(const float* x, float* sigmoid, float* tanh, int n) {
+    int k = 0;
+    for (; k + 7 < n; k += 8) {
+        const auto value = _mm256_loadu_ps(x + k);
+        _mm256_storeu_ps(sigmoid + k, scnet_activation::sigmoid_avx2(value));
+        _mm256_storeu_ps(tanh + k, scnet_activation::tanh_avx2(value));
+    }
+    for (; k < n; ++k) {
+        sigmoid[k] = 1.0f / (1.0f + std::exp(-x[k]));
+        tanh[k] = std::tanh(x[k]);
+    }
+}
+#endif
+#if SCNET_ACT_NEON
+void inspect_neon(const float* x, float* sigmoid, float* tanh, int n) {
+    int k = 0;
+    for (; k + 3 < n; k += 4) {
+        const auto value = vld1q_f32(x + k);
+        vst1q_f32(sigmoid + k, scnet_activation::sigmoid_neon(value));
+        vst1q_f32(tanh + k, scnet_activation::tanh_neon(value));
+    }
+    for (; k < n; ++k) {
+        sigmoid[k] = 1.0f / (1.0f + std::exp(-x[k]));
+        tanh[k] = std::tanh(x[k]);
+    }
+}
+#endif
 extern "C" {
+const char* scnet_math_gate_kernel() {
+    return scnet_activation::selected_kernel().name;
+}
+void scnet_math_activations(const float* x, float* sigmoid, float* tanh,
+                           float* scalar_sigmoid, float* scalar_tanh, int n) {
+    for (int k = 0; k < n; ++k) {
+        scalar_sigmoid[k] = 1.0f / (1.0f + std::exp(-x[k]));
+        scalar_tanh[k] = std::tanh(x[k]);
+    }
+    const auto kernel = scnet_activation::fastest_kernel();
+#if SCNET_ACT_X86
+    if (std::strcmp(kernel.name, "avx2_fma") == 0) {
+        inspect_avx2(x, sigmoid, tanh, n);
+        return;
+    }
+#endif
+#if SCNET_ACT_NEON
+    if (std::strcmp(kernel.name, "neon") == 0) {
+        inspect_neon(x, sigmoid, tanh, n);
+        return;
+    }
+#endif
+    std::copy_n(scalar_sigmoid, n, sigmoid);
+    std::copy_n(scalar_tanh, n, tanh);
+}
+void scnet_math_gate_update(const float* gates, float* cell, float* hidden,
+                            float* output, int width, int scalar) {
+    const auto apply = scalar ? scnet_activation::scalar_update : scnet_activation::fastest_kernel().update;
+    apply(gates, cell, hidden, output, width);
+}
 int scnet_math_fft(float* real, float* imag, int n) {
     try {
         scnet_fft::Plan plan(n);
@@ -135,6 +196,9 @@ class SCNetMath(unittest.TestCase):
         cls.lib.scnet_math_fft.restype = ctypes.c_int
         cls.lib.scnet_math_rng.argtypes = [ctypes.c_uint64, ctypes.c_int, ctypes.c_int, ctypes.POINTER(ctypes.c_int)]
         cls.lib.scnet_math_lstm.argtypes = [POINTER] * 7 + [ctypes.c_int] * 4
+        cls.lib.scnet_math_gate_kernel.restype = ctypes.c_char_p
+        cls.lib.scnet_math_activations.argtypes = [POINTER] * 5 + [ctypes.c_int]
+        cls.lib.scnet_math_gate_update.argtypes = [POINTER] * 4 + [ctypes.c_int] * 2
         dispatch_source = folder / "dispatch.cpp"
         dispatch_source.write_text(DISPATCH_WRAPPER)
         cls.dispatch = folder / "dispatch"
@@ -174,6 +238,96 @@ class SCNetMath(unittest.TestCase):
                     generator = random.Random(seed)
                     expected = [generator.randint(0, upper) for _ in actual]
                     self.assertEqual(list(actual), expected)
+
+    def test_activation_accuracy_zero_threshold_saturation_and_nonfinite(self):
+        rng = np.random.default_rng(519)
+        # Dense operating ranges plus arbitrary F32 bit patterns cover tiny
+        # values, both Taylor boundaries, saturation, extremes and NaNs.
+        bits = rng.integers(0, 2**32, 200_000, dtype=np.uint32).view(np.float32)
+        powers = np.exp2(np.arange(-149, 128, dtype=np.float64)).astype(np.float32)
+        values = np.concatenate([
+            np.linspace(-16, 16, 131_073, dtype=np.float32),
+            np.linspace(-.501, -.499, 16_385, dtype=np.float32),
+            np.linspace(.499, .501, 16_385, dtype=np.float32),
+            np.linspace(-90, -80, 16_385, dtype=np.float32),
+            powers, -powers, bits,
+            np.array([0., -0., np.inf, -np.inf, np.nan], dtype=np.float32),
+        ])
+        outputs = [np.empty_like(values) for _ in range(4)]
+        self.lib.scnet_math_activations(
+            values.ctypes.data_as(POINTER), *[v.ctypes.data_as(POINTER) for v in outputs], len(values),
+        )
+        for name, actual, expected in (('sigmoid', outputs[0], outputs[2]),
+                                       ('tanh', outputs[1], outputs[3])):
+            np.testing.assert_array_equal(np.isnan(actual), np.isnan(expected))
+            finite = np.isfinite(expected)
+            self.assertTrue(np.isfinite(actual[finite]).all())
+            a, b = actual[finite], expected[finite]
+            np.testing.assert_array_equal(np.signbit(a), np.signbit(b))
+            # Signed F32 integer distances measure ulps for equal-sign values.
+            ulps = np.abs(a.view(np.int32).astype(np.int64) - b.view(np.int32).astype(np.int64))
+            self.assertLessEqual(int(ulps.max(initial=0)), 4, name)
+            self.assertLessEqual(float(np.max(np.abs(a.astype(np.float64)-b))), 2.5e-7, name)
+            print(f'SCNet {self.lib.scnet_math_gate_kernel().decode()} {name}: '
+                  f'{len(values)} inputs, max {int(ulps.max(initial=0))} ulps', flush=True)
+
+    def test_gate_state_update_tails_guards_and_scalar_override(self):
+        rng = np.random.default_rng(902)
+        for width in (1, 3, 7, 8, 9, 16, 31, 32, 128, 256):
+            gates = rng.uniform(-12, 12, (4, width)).astype(np.float32)
+            initial = rng.uniform(-8, 8, width).astype(np.float32)
+            results = []
+            for scalar in (1, 0):
+                arrays = [np.full(width+2, 12345.0, np.float32) for _ in range(3)]
+                arrays[0][1:-1] = initial
+                self.lib.scnet_math_gate_update(
+                    gates.ctypes.data_as(POINTER),
+                    *[v[1:-1].ctypes.data_as(POINTER) for v in arrays], width, scalar,
+                )
+                for v in arrays:
+                    np.testing.assert_array_equal(v[[0, -1]], [12345.0, 12345.0])
+                np.testing.assert_array_equal(arrays[1], arrays[2])
+                results.append(arrays)
+            for actual, expected in zip(results[1], results[0]):
+                np.testing.assert_allclose(actual, expected, rtol=4e-6, atol=1e-6)
+        previous = os.environ.get('CRISPASR_SCNET_SCALAR_GATES')
+        try:
+            os.environ['CRISPASR_SCNET_SCALAR_GATES'] = '0'
+            fastest = self.lib.scnet_math_gate_kernel()
+            self.assertIn(fastest, (b'avx2_fma', b'neon', b'scalar'))
+            os.environ['CRISPASR_SCNET_SCALAR_GATES'] = '1'
+            self.assertEqual(self.lib.scnet_math_gate_kernel(), b'scalar')
+        finally:
+            if previous is None:
+                os.environ.pop('CRISPASR_SCNET_SCALAR_GATES', None)
+            else:
+                os.environ['CRISPASR_SCNET_SCALAR_GATES'] = previous
+
+    def test_long_recurrence_simd_against_scalar_gates(self):
+        rng = np.random.default_rng(202)
+        hidden, batch, steps = 16, 5, 872
+        projections = [rng.normal(0, .3, (steps, batch, 4*hidden)).astype(np.float32) for _ in range(2)]
+        weights = [rng.normal(0, .04, (4*hidden, hidden)).astype(np.float32) for _ in range(2)]
+        biases = [rng.normal(0, .07, 4*hidden).astype(np.float32) for _ in range(2)]
+        results = []
+        previous = os.environ.get('CRISPASR_SCNET_SCALAR_GATES')
+        try:
+            for override in ('1', '0'):
+                os.environ['CRISPASR_SCNET_SCALAR_GATES'] = override
+                output = np.empty((steps, batch, 2*hidden), dtype=np.float32)
+                self.lib.scnet_math_lstm(
+                    *[v.ctypes.data_as(POINTER) for v in projections+weights+biases],
+                    output.ctypes.data_as(POINTER), hidden, batch, steps, 2,
+                )
+                results.append(output)
+        finally:
+            if previous is None:
+                os.environ.pop('CRISPASR_SCNET_SCALAR_GATES', None)
+            else:
+                os.environ['CRISPASR_SCNET_SCALAR_GATES'] = previous
+        error = results[1].astype(np.float64)-results[0]
+        self.assertLess(float(np.linalg.norm(error)/np.linalg.norm(results[0].astype(np.float64))), 2e-6)
+        self.assertLess(float(np.max(np.abs(error))), 2e-6)
 
     def test_lstm_gate_order_reverse_and_partition(self):
         rng = np.random.default_rng(395)
