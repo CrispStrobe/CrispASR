@@ -19,9 +19,11 @@
 // Model-port registry. Each port exposes `const CrispasrEnhanceModelOps*
 // <name>_enhance_ops()` and is listed here.
 // ---------------------------------------------------------------------------
+const CrispasrEnhanceModelOps* frcrn_se_enhance_ops();
+
 static const CrispasrEnhanceModelOps* const* enhance_model_table(int* n) {
-    static const CrispasrEnhanceModelOps* const table[] = {nullptr};
-    *n = 0;
+    static const CrispasrEnhanceModelOps* const table[] = {frcrn_se_enhance_ops()};
+    *n = (int)(sizeof(table) / sizeof(table[0]));
     return table;
 }
 
