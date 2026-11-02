@@ -1,6 +1,6 @@
 # CrispASR — Current work plan
 
-Updated 2026-11-01. Start with [the maintainer handoff](docs/maintenance-handoff.md).
+Updated 2026-11-02. Start with [the maintainer handoff](docs/maintenance-handoff.md).
 It contains the completed work, exact evidence, bounded next actions and blockers
 needed by a fresh agent; no earlier chat is required. Follow `AGENTS.md` and its
 mandatory maintainer-guide instructions before implementation.
@@ -25,7 +25,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   four-stem stereo separation, CLI and Session/C ABI architecture detection.
 - Acceptance: pin the official source and checkpoint hashes; compare every
   required original-Python stage and complete stems with shape, finite-value,
-  amplitude and error checks (F16 cosine >=0.999, Q8_0 >0.98, Q4_K >0.94).
+  amplitude and error checks (F16 cosine >0.999, Q8_0 >0.98, Q4_K >0.94).
   Preserve the published normalization, normalized rectangular STFT, recurrent
   FFTs, overlap weighting and per-chunk shift behavior. Measure matched-input,
   matched-device warm inference against the original implementation; each
@@ -33,9 +33,19 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   hardware/fixture limits without relaxing gates or promoting unqualified
   models. Exercise CLI and actual Session/C ABI, including neutral filenames,
   cold/warm reuse, changed inputs, result ownership and invalid arguments.
-- Next action: reconstruct converter and original-reference capture, implement
-  and build the native graph, then run fidelity and paired performance gates on
-  a worker with sufficient storage. CPU and GPU qualification remain separate.
+- Implemented: native ggml graph with explicit CPU recurrent/FFT operations,
+  strict 372-tensor converter, original-method 35-stage capture, quantizer policy,
+  CLI/server/Session wiring, bounded graph caching, and complete validation tools.
+  Actual local F16/Q8_0/Q4_K synthetic-weight graphs pass finite-output, geometry,
+  cold/warm/changed-input reuse checks; mathematical, converter, routing and
+  comparator rejection controls pass. See [backend documentation](docs/scnet.md)
+  and [bounded local receipt](docs/historical/scnet-local-validation-2026-11-02.json).
+- Next action: collect [hosted preflight 41395094930](https://github.com/CrispStrobe/CrispASR/actions/runs/41395094930),
+  then run original-checkpoint fidelity, actual CLI/Session surfaces, and paired
+  performance on the prepared `scnet-qualification.yml` worker. Generated
+  capability/matrix changes require that actual production CLI. CPU checkpoint
+  acceptance, GPU qualification and held-out quality remain unproven; do not
+  promote the candidate or substitute the synthetic graph checks for these gates.
 - License: upstream [MIT notice](https://github.com/starrytong/SCNet/blob/main/LICENSE)
   plus the [author's explicit checkpoint permission](https://github.com/starrytong/SCNet/issues/35)
   cover the author's released SCNet/SCNet-large weights, including format-converted

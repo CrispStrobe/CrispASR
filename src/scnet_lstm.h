@@ -39,9 +39,8 @@ inline void lstm_direction(const float* projected, const float* recurrent_weight
         } else {
 #if defined(HAVE_ACCELERATE) || defined(HAVE_BLAS)
             if (use_blas) {
-                cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, rows, gates, hidden, 1.0f,
-                            scratch.hidden.data(), hidden, recurrent_weight, hidden, 0.0f, scratch.gates.data(),
-                            gates);
+                cblas_sgemm(CblasRowMajor, CblasNoTrans, CblasTrans, rows, gates, hidden, 1.0f, scratch.hidden.data(),
+                            hidden, recurrent_weight, hidden, 0.0f, scratch.gates.data(), gates);
             } else
 #else
             (void)use_blas;
@@ -71,8 +70,8 @@ inline void lstm_direction(const float* projected, const float* recurrent_weight
             float* ph = scratch.gates.data() + static_cast<size_t>(row) * gates;
             float* h = scratch.hidden.data() + static_cast<size_t>(row) * hidden;
             float* c = scratch.cell.data() + static_cast<size_t>(row) * hidden;
-            float* out = output + (static_cast<size_t>(time) * batch + begin + row) * 2 * hidden +
-                         (reverse ? hidden : 0);
+            float* out =
+                output + (static_cast<size_t>(time) * batch + begin + row) * 2 * hidden + (reverse ? hidden : 0);
             for (int k = 0; k < gates; ++k)
                 ph[k] = (ph[k] + recurrent_bias[k]) + px[k];
             for (int k = 0; k < hidden; ++k) {

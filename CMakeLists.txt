@@ -134,6 +134,14 @@ endif()
 option(CRISPASR_BUILD_TESTS    "crispasr: build tests"          ${CRISPASR_STANDALONE})
 option(CRISPASR_BUILD_EXAMPLES "crispasr: build examples"       ${CRISPASR_STANDALONE})
 option(CRISPASR_BUILD_SERVER   "crispasr: build server example" ${CRISPASR_STANDALONE})
+option(CRISPASR_BUILD_SCNET_PROBE "Build isolated SCNet parity/benchmark tools" OFF)
+# The opt-in probe includes a shared validation library even in static builds.
+# Enable PIC before creating ggml and backend targets so its static dependencies
+# can be linked into that library on ELF platforms.
+if (CRISPASR_BUILD_SCNET_PROBE)
+    set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
 
 # 3rd party libs
 option(CRISPASR_CURL "crispasr: use libcurl to download model from an URL" OFF)

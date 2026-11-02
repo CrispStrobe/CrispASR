@@ -434,6 +434,9 @@ for the per-task flags and output formats.
   (HiDolen V2.5, 46.2M parameters, stereo bass/drums/other/vocals at 44.1 kHz).
   `--stems vocals,drums` selects a subset; `--sep-output-dir` sets the output
   location. Mini BS RoFormer uses an explicitly converted local GGUF.
+  The [**SCNet / SCNet-large candidate backend**](docs/scnet.md) adds native
+  four-stem separation with local F16/Q8_0/Q4_K GGUFs; original-checkpoint
+  fidelity and paired performance remain qualification gates.
 - **Piano transcription** (`--backend piano-transcription`) — piano audio →
   note events (88 keys @ 100 fps, ByteDance/Kong CRNN; F16 GGUF ≈ 77 MB).
 - **Polyphonic note events** (`--backend basic-pitch`) — Spotify Basic Pitch,

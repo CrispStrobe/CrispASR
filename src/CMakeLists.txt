@@ -2921,7 +2921,6 @@ if (NOT MSVC)
     target_compile_options(scnet PRIVATE -O3)
 endif()
 
-option(CRISPASR_BUILD_SCNET_PROBE "Build isolated SCNet parity/benchmark tools" OFF)
 if (CRISPASR_BUILD_SCNET_PROBE)
     add_executable(scnet-probe ${PROJECT_SOURCE_DIR}/tools/scnet_probe.cpp)
     target_link_libraries(scnet-probe PRIVATE scnet)

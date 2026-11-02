@@ -6791,6 +6791,21 @@ if (Python3_Interpreter_FOUND AND NOT MSVC)
         LABELS "unit;scnet" TIMEOUT 120 ENVIRONMENT "CXX=${CMAKE_CXX_COMPILER}")
 endif()
 
+if (Python3_Interpreter_FOUND)
+    add_test(NAME scnet-validation-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_scnet_validation.py -v)
+    set_tests_properties(scnet-validation-controls PROPERTIES LABELS "unit;scnet" TIMEOUT 120)
+    # CI installs NumPy/gguf after configure. Keep these tests discoverable
+    # regardless of configure-time imports; the test environment supplies the
+    # numerical dependencies alongside the other Python unit controls.
+    add_test(NAME scnet-converter
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-scnet-converter.py -v)
+    set_tests_properties(scnet-converter PROPERTIES LABELS "unit;scnet" TIMEOUT 120)
+    add_test(NAME scnet-reference
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-scnet-reference.py -v)
+    set_tests_properties(scnet-reference PROPERTIES LABELS "unit;scnet" TIMEOUT 120)
+endif()
+
 # SCNet routing and exact quantizer policy are model-free. Actual CLI/Session
 # inference requires explicitly supplied checkpoint bytes and skips if absent.
 if (Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES)

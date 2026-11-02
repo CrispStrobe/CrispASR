@@ -93,9 +93,8 @@ struct HParams {
                integer("scnet.n_fft") == FFT && integer("scnet.hop_length") == HOP &&
                integer("scnet.win_length") == FFT && integer("scnet.sample_rate") == RATE &&
                integer("scnet.audio_channels") == 2 && integer("scnet.num_sources") == STEM_COUNT &&
-               integer("scnet.num_dplayer") == 6 && integer("scnet.expand") == 1 &&
-               integer("scnet.compress") == 4 && integer("scnet.conv_kernel") == 3 &&
-               core_gguf::kv_bool(meta, "scnet.normalized", false) &&
+               integer("scnet.num_dplayer") == 6 && integer("scnet.expand") == 1 && integer("scnet.compress") == 4 &&
+               integer("scnet.conv_kernel") == 3 && core_gguf::kv_bool(meta, "scnet.normalized", false) &&
                integer_array(meta, "scnet.band_stride") == std::vector<int>{1, 4, 16} &&
                integer_array(meta, "scnet.band_kernel") == std::vector<int>{3, 4, 16} &&
                integer_array(meta, "scnet.conv_depths") == std::vector<int>{3, 2, 1} &&
@@ -201,10 +200,10 @@ void recurrent_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
     for (int direction = 0; direction < 2; ++direction)
         for (int first = begin; first < end; first += capacity)
             scnet_detail::lstm_direction(static_cast<const float*>(output->src[direction]->data),
-                                    static_cast<const float*>(output->src[2 + direction]->data),
-                                    static_cast<const float*>(output->src[4 + direction]->data),
-                                    static_cast<float*>(output->data), hidden, batch, steps, direction != 0, first,
-                                    std::min(first + capacity, end), node.blas, scratch);
+                                         static_cast<const float*>(output->src[2 + direction]->data),
+                                         static_cast<const float*>(output->src[4 + direction]->data),
+                                         static_cast<float*>(output->data), hidden, batch, steps, direction != 0, first,
+                                         std::min(first + capacity, end), node.blas, scratch);
 }
 
 struct Graph {
@@ -253,8 +252,8 @@ void expect(scnet_context& model, const std::string& name, int64_t d0, int64_t d
     if (tensor->ne[0] != d0 || tensor->ne[1] != d1 || tensor->ne[2] != 1 || tensor->ne[3] != 1)
         throw std::runtime_error("incompatible SCNet tensor shape: " + name);
     if ((!matrix && tensor->type != GGML_TYPE_F32) ||
-        (matrix && tensor->type != GGML_TYPE_F32 && tensor->type != GGML_TYPE_F16 &&
-         tensor->type != GGML_TYPE_Q8_0 && tensor->type != GGML_TYPE_Q4_K))
+        (matrix && tensor->type != GGML_TYPE_F32 && tensor->type != GGML_TYPE_F16 && tensor->type != GGML_TYPE_Q8_0 &&
+         tensor->type != GGML_TYPE_Q4_K))
         throw std::runtime_error("unsupported SCNet tensor precision: " + name);
     model.required_weights.insert(name);
 }
@@ -276,8 +275,7 @@ void validate_weights(scnet_context& model) {
         for (int band = 0; band < 3; ++band) {
             conv(p + ".SDlayer.convs." + std::to_string(band), in, out, kernels[band]);
             for (int depth = 0; depth < depths[band]; ++depth) {
-                const std::string q = p + ".conv_modules." + std::to_string(band) + ".layers." +
-                                      std::to_string(depth);
+                const std::string q = p + ".conv_modules." + std::to_string(band) + ".layers." + std::to_string(depth);
                 norm(q + ".0", out);
                 conv(q + ".1", out, 2 * hidden, 3);
                 conv(q + ".3", 1, hidden, 3);
@@ -320,10 +318,8 @@ void validate_weights(scnet_context& model) {
         f16 |= entry.second->type == GGML_TYPE_F16;
     }
     const auto type = model.hp.file_type;
-    if ((type == GGML_FTYPE_ALL_F32 && (f16 || q4 || q8)) ||
-        (type == GGML_FTYPE_MOSTLY_F16 && (q4 || q8)) ||
-        (type == GGML_FTYPE_MOSTLY_Q8_0 && (q4 || !q8)) ||
-        (type == GGML_FTYPE_MOSTLY_Q4_K && !q4))
+    if ((type == GGML_FTYPE_ALL_F32 && (f16 || q4 || q8)) || (type == GGML_FTYPE_MOSTLY_F16 && (q4 || q8)) ||
+        (type == GGML_FTYPE_MOSTLY_Q8_0 && (q4 || !q8)) || (type == GGML_FTYPE_MOSTLY_Q4_K && !q4))
         throw std::runtime_error("SCNet declared precision does not match the required weight tensors");
     model.quant_q4 = type == GGML_FTYPE_MOSTLY_Q4_K;
     model.quant_q8 = type == GGML_FTYPE_MOSTLY_Q8_0;
@@ -408,11 +404,11 @@ ggml_tensor* convolution(scnet_context& model, Graph& graph, ggml_tensor* input,
     constexpr int TILE = 32;
     for (int begin = 0; begin < frequencies; begin += TILE) {
         const int count = std::min(TILE, frequencies - begin);
-        auto* band = slice_frequency(ctx, input, begin * frequency_stride,
-                                     (count - 1) * frequency_stride + frequency_kernel);
+        auto* band =
+            slice_frequency(ctx, input, begin * frequency_stride, (count - 1) * frequency_stride + frequency_kernel);
         auto* columns = ggml_im2col(ctx, shape, band, 1, frequency_stride, 0, 0, 1, 1, true, GGML_TYPE_F32);
-        auto* output = multiply(model, graph, weights,
-                                 ggml_reshape_2d(ctx, columns, weights->ne[0], int64_t(times) * count));
+        auto* output =
+            multiply(model, graph, weights, ggml_reshape_2d(ctx, columns, weights->ne[0], int64_t(times) * count));
         output = ggml_reshape_3d(ctx, output, out_channels, times, count);
         output = ggml_cont(ctx, ggml_permute(ctx, output, 2, 0, 1, 3));
         tiles.push_back(output);
@@ -420,8 +416,8 @@ ggml_tensor* convolution(scnet_context& model, Graph& graph, ggml_tensor* input,
     return channel_bias(model, graph, join(ctx, std::move(tiles), 1), name);
 }
 
-ggml_tensor* convolution(scnet_context& model, Graph& graph, ggml_tensor* input, const std::string& name,
-                         int kf, int kt, int sf = 1, int left = 0, int right = 0, int time_pad = 0) {
+ggml_tensor* convolution(scnet_context& model, Graph& graph, ggml_tensor* input, const std::string& name, int kf,
+                         int kt, int sf = 1, int left = 0, int right = 0, int time_pad = 0) {
     return convolution(model, graph, input, weight(model, name + ".weight"), name, kf, kt, sf, left, right, time_pad);
 }
 
@@ -459,8 +455,10 @@ ggml_tensor* depthwise(scnet_context& model, Graph& graph, ggml_tensor* input, c
     auto* weights = as_f32(graph, weight(model, name + ".weight"));
     ggml_tensor* result = nullptr;
     for (int k = 0; k < 3; ++k) {
-        auto* x = ggml_view_3d(ctx, padded, times, frequencies, channels, padded->nb[1], padded->nb[2], k * sizeof(float));
-        auto* w = ggml_cont(ctx, ggml_view_3d(ctx, weights, 1, 1, channels, sizeof(float), 3 * sizeof(float), k * sizeof(float)));
+        auto* x =
+            ggml_view_3d(ctx, padded, times, frequencies, channels, padded->nb[1], padded->nb[2], k * sizeof(float));
+        auto* w = ggml_cont(
+            ctx, ggml_view_3d(ctx, weights, 1, 1, channels, sizeof(float), 3 * sizeof(float), k * sizeof(float)));
         auto* term = ggml_mul(ctx, x, w);
         result = result ? ggml_add(ctx, result, term) : term;
     }
@@ -486,8 +484,8 @@ struct BandLengths {
     std::array<int, 3> original{}, compressed{};
 };
 
-ggml_tensor* encoder(scnet_context& model, Graph& graph, ggml_tensor* input, int level,
-                      ggml_tensor*& skip, BandLengths& lengths) {
+ggml_tensor* encoder(scnet_context& model, Graph& graph, ggml_tensor* input, int level, ggml_tensor*& skip,
+                     BandLengths& lengths) {
     auto* ctx = graph.context;
     const std::string p = "encoder." + std::to_string(level);
     const int frequencies = static_cast<int>(input->ne[1]);
@@ -499,10 +497,11 @@ ggml_tensor* encoder(scnet_context& model, Graph& graph, ggml_tensor* input, int
     std::vector<ggml_tensor*> bands;
     for (int band = 0; band < 3; ++band) {
         const int count = boundaries[band + 1] - boundaries[band];
-        const int pad = strides[band] == 1 ? kernels[band] - 1 : (strides[band] - count % strides[band]) % strides[band];
+        const int pad =
+            strides[band] == 1 ? kernels[band] - 1 : (strides[band] - count % strides[band]) % strides[band];
         auto* x = slice_frequency(ctx, input, boundaries[band], count);
-        x = convolution(model, graph, x, p + ".SDlayer.convs." + std::to_string(band), kernels[band], 1,
-                         strides[band], pad / 2, pad - pad / 2);
+        x = convolution(model, graph, x, p + ".SDlayer.convs." + std::to_string(band), kernels[band], 1, strides[band],
+                        pad / 2, pad - pad / 2);
         lengths.original[band] = count;
         lengths.compressed[band] = static_cast<int>(x->ne[1]);
         x = convolution_module(model, graph, x, p + ".conv_modules." + std::to_string(band), depths[band]);
@@ -527,9 +526,9 @@ ggml_tensor* recurrent(scnet_context& model, Graph& graph, ggml_tensor* input, c
         sources[4 + direction] = weight(model, name + ".bias_hh_l0" + suffix);
     }
     auto node = std::make_unique<RecurrentNode>(static_cast<int>(input->ne[1]), hidden, model.params.n_threads,
-                                               model.recurrent_blas);
+                                                model.recurrent_blas);
     auto* result = ggml_custom_4d(ctx, GGML_TYPE_F32, 2 * hidden, input->ne[1], input->ne[2], 1, sources, 6,
-                                   recurrent_compute, model.recurrent_blas ? 1 : GGML_N_TASKS_MAX, node.get());
+                                  recurrent_compute, model.recurrent_blas ? 1 : GGML_N_TASKS_MAX, node.get());
     graph.recurrent_nodes.push_back(std::move(node));
     return result;
 }
@@ -554,20 +553,20 @@ ggml_tensor* dual_path(scnet_context& model, Graph& graph, ggml_tensor* input, i
     auto node = std::make_unique<FourierNode>(size, inverse, model.params.n_threads);
     ggml_tensor* sources[] = {ggml_cont(ctx, input)};
     auto* result = ggml_custom_4d(ctx, GGML_TYPE_F32, inverse ? size : size / 2 + 1, input->ne[1],
-                                   inverse ? input->ne[2] / 2 : input->ne[2] * 2, 1, sources, 1, fourier_compute,
-                                   GGML_N_TASKS_MAX, node.get());
+                                  inverse ? input->ne[2] / 2 : input->ne[2] * 2, 1, sources, 1, fourier_compute,
+                                  GGML_N_TASKS_MAX, node.get());
     graph.fourier_nodes.push_back(std::move(node));
     capture(graph, "feature" + std::to_string(layer), result);
     return result;
 }
 
-ggml_tensor* upsample(scnet_context& model, Graph& graph, ggml_tensor* input, const std::string& name,
-                       int kernel, int stride, int output_frequencies) {
+ggml_tensor* upsample(scnet_context& model, Graph& graph, ggml_tensor* input, const std::string& name, int kernel,
+                      int stride, int output_frequencies) {
     auto* ctx = graph.context;
     auto* weights = weight(model, name + ".weight");
     const int64_t times = input->ne[0], frequencies = input->ne[1], channels = weights->ne[1] / kernel;
     auto* x = ggml_cont(ctx, ggml_permute(ctx, input, 1, 2, 0, 3)); // [C,T,F]
-    x = multiply(model, graph, weights, x);                      // [K*Cout,T,F]
+    x = multiply(model, graph, weights, x);                         // [K*Cout,T,F]
     x = ggml_reshape_4d(ctx, x, kernel, channels, times, frequencies);
     x = ggml_cont(ctx, ggml_permute(ctx, x, 0, 2, 1, 3)); // [K,T,Cout,F]
     x = ggml_reshape_2d(ctx, x, kernel * times * channels, frequencies);
@@ -583,7 +582,7 @@ ggml_tensor* upsample(scnet_context& model, Graph& graph, ggml_tensor* input, co
 }
 
 ggml_tensor* decoder(scnet_context& model, Graph& graph, ggml_tensor* input, ggml_tensor* skip,
-                      const BandLengths& lengths, int level) {
+                     const BandLengths& lengths, int level) {
     auto* ctx = graph.context;
     const std::string p = "decoder." + std::to_string(level);
     input = ggml_add(ctx, input, skip);
@@ -592,7 +591,8 @@ ggml_tensor* decoder(scnet_context& model, Graph& graph, ggml_tensor* input, ggm
     auto* weights = as_f32(graph, weight(model, p + ".0.conv.weight"));
     const int64_t half = weights->ne[0] / 2;
     auto* a = ggml_view_2d(ctx, weights, half, weights->ne[1], weights->nb[1], 0);
-    auto* b = ggml_view_2d(ctx, weights, half, weights->ne[1], weights->nb[1], static_cast<size_t>(half) * sizeof(float));
+    auto* b =
+        ggml_view_2d(ctx, weights, half, weights->ne[1], weights->nb[1], static_cast<size_t>(half) * sizeof(float));
     weights = ggml_add(ctx, a, b);
     input = glu(graph, convolution(model, graph, input, weights, p + ".0.conv", 3, 3, 1, 1, 1, 1));
     const int kernels[] = {3, 4, 16}, strides[] = {1, 4, 16};
@@ -626,9 +626,8 @@ Graph& network_graph(scnet_context& model, int frames, bool want_capture) {
     if (!graph->context)
         throw std::runtime_error("SCNet graph metadata allocation failed");
     ggml_backend_t backends[] = {model.blas ? model.blas : model.backend, model.cpu};
-    graph->scheduler = ggml_backend_sched_new(backends, nullptr,
-                                               model.backend == model.cpu && !model.blas ? 1 : 2,
-                                               GRAPH_CAPACITY, false, true);
+    graph->scheduler = ggml_backend_sched_new(backends, nullptr, model.backend == model.cpu && !model.blas ? 1 : 2,
+                                              GRAPH_CAPACITY, false, true);
     if (!graph->scheduler)
         throw std::runtime_error("SCNet graph scheduler allocation failed");
     graph->graph = ggml_new_graph_custom(graph->context, GRAPH_CAPACITY, false);
@@ -677,7 +676,8 @@ Sources forward(scnet_context& model, const float* pcm, int samples, Captures* c
     if (padded <= FFT / 2)
         throw std::runtime_error("SCNet raw input is too short for the original reflective STFT padding");
     if (captures)
-        put(captures, "raw_input_audio", {samples, 2, 1, 1}, planar(std::vector<float>(pcm, pcm + size_t(samples) * 2)));
+        put(captures, "raw_input_audio", {samples, 2, 1, 1},
+            planar(std::vector<float>(pcm, pcm + size_t(samples) * 2)));
     std::vector<float> spectrum(static_cast<size_t>(frames) * bins * 4);
     {
         Timer timer("stft");
@@ -698,8 +698,10 @@ Sources forward(scnet_context& model, const float* pcm, int samples, Captures* c
                 }
                 model.stft_plan.transform(real.data(), imag.data(), scratch);
                 for (int frequency = 0; frequency < bins; ++frequency) {
-                    spectrum[(static_cast<size_t>(channel * 2) * bins + frequency) * frames + frame] = real[frequency] * scale;
-                    spectrum[(static_cast<size_t>(channel * 2 + 1) * bins + frequency) * frames + frame] = imag[frequency] * scale;
+                    spectrum[(static_cast<size_t>(channel * 2) * bins + frequency) * frames + frame] =
+                        real[frequency] * scale;
+                    spectrum[(static_cast<size_t>(channel * 2 + 1) * bins + frequency) * frames + frame] =
+                        imag[frequency] * scale;
                 }
             }
         });
@@ -752,8 +754,11 @@ Sources forward(scnet_context& model, const float* pcm, int samples, Captures* c
                 for (int frame = 0; frame < frames; ++frame) {
                     for (int k = 0; k < bins; ++k) {
                         real[k] = output[(static_cast<size_t>(row * 2) * bins + k) * frames + frame] * stddev + mean;
-                        imag[k] = k == 0 || k == FFT / 2 ? 0.0f :
-                                  -(output[(static_cast<size_t>(row * 2 + 1) * bins + k) * frames + frame] * stddev + mean);
+                        imag[k] =
+                            k == 0 || k == FFT / 2
+                                ? 0.0f
+                                : -(output[(static_cast<size_t>(row * 2 + 1) * bins + k) * frames + frame] * stddev +
+                                    mean);
                     }
                     for (int k = bins; k < FFT; ++k) {
                         real[k] = real[FFT - k];
@@ -859,7 +864,8 @@ Sources separate(scnet_context& model, const std::vector<float>& input, Captures
         }
     }
     for (int source = 0; source < STEM_COUNT; ++source) {
-        if (!std::all_of(sources[source].begin(), sources[source].end(), [](float value) { return std::isfinite(value); }))
+        if (!std::all_of(sources[source].begin(), sources[source].end(),
+                         [](float value) { return std::isfinite(value); }))
             throw std::runtime_error("SCNet produced nonfinite separated audio");
         if (captures)
             put(captures, std::string("output_") + STEMS[source], {samples, 2, 1, 1}, planar(sources[source]));
@@ -868,7 +874,8 @@ Sources separate(scnet_context& model, const std::vector<float>& input, Captures
 }
 
 std::vector<std::string> required_stages() {
-    std::vector<std::string> names = {"input_audio", "waveform_stats", "raw_input_audio", "stft", "stft_stats", "normalized"};
+    std::vector<std::string> names = {"input_audio", "waveform_stats", "raw_input_audio",
+                                      "stft",        "stft_stats",     "normalized"};
     for (int i = 0; i < 3; ++i) {
         names.push_back("skip" + std::to_string(i));
         names.push_back("encoder" + std::to_string(i));
@@ -938,15 +945,16 @@ scnet_context* scnet_init_from_file(const char* path, scnet_params params) {
     std::unique_ptr<scnet_context, decltype(&scnet_free)> model(nullptr, scnet_free);
     try {
         model.reset(new scnet_context);
-        std::unique_ptr<gguf_context, decltype(&core_gguf::free_metadata)> meta(
-            core_gguf::open_metadata(path), core_gguf::free_metadata);
+        std::unique_ptr<gguf_context, decltype(&core_gguf::free_metadata)> meta(core_gguf::open_metadata(path),
+                                                                                core_gguf::free_metadata);
         if (!meta)
             throw std::runtime_error("cannot read SCNet metadata");
         const bool valid = model->hp.read(meta.get());
         meta.reset();
         if (!valid)
             throw std::runtime_error("unsupported SCNet architecture, tensor layout, or missing checkpoint metadata");
-        if (params.gpu_device < 0 || params.n_threads > 256 || params.segment_seconds > 119 || params.shifts < 0 || params.shifts > 16)
+        if (params.gpu_device < 0 || params.n_threads > 256 || params.segment_seconds > 119 || params.shifts < 0 ||
+            params.shifts > 16)
             throw std::runtime_error("invalid SCNet runtime parameters");
         params.n_threads = params.n_threads > 0 ? params.n_threads : std::min(8, core_parallel::resolve_threads(8, 0));
         model->params = params;
@@ -978,17 +986,20 @@ scnet_context* scnet_init_from_file(const char* path, scnet_params params) {
 #if defined(HAVE_ACCELERATE) || defined(HAVE_BLAS)
         model->recurrent_blas = !flag("CRISPASR_SCNET_SCALAR_LSTM");
 #endif
-        const bool loaded = model->backend == model->cpu
-                                ? core_gguf::load_weights(path, model->cpu, "scnet", model->weights)
-                                : core_gguf::load_weights_fit(path, model->backend, model->cpu, "scnet", model->weights);
+        const bool loaded =
+            model->backend == model->cpu
+                ? core_gguf::load_weights(path, model->cpu, "scnet", model->weights)
+                : core_gguf::load_weights_fit(path, model->backend, model->cpu, "scnet", model->weights);
         if (!loaded)
             throw std::runtime_error("SCNet weight loading failed");
         validate_weights(*model);
-        model->backend_description = std::string(ggml_backend_name(model->backend)) +
-                                     (model->blas ? "+BLAS" : "") + "/CPU-LSTM-FFT";
+        model->backend_description =
+            std::string(ggml_backend_name(model->backend)) + (model->blas ? "+BLAS" : "") + "/CPU-LSTM-FFT";
         std::fprintf(stderr, "scnet: backend=%s threads=%d precision=%s recurrence=%s\n",
                      model->backend_description.c_str(), params.n_threads,
-                     model->quant_q4 ? "Q4_K mixed" : model->quant_q8 ? "Q8_0 mixed" : "F16/F32",
+                     model->quant_q4   ? "Q4_K mixed"
+                     : model->quant_q8 ? "Q8_0 mixed"
+                                       : "F16/F32",
                      model->recurrent_blas ? "native-CBLAS" : "native-portable");
         return model.release();
     } catch (const std::exception& error) {
@@ -1030,8 +1041,8 @@ scnet_result* scnet_separate(scnet_context* model, const float* pcm, int n_sampl
         result->n_channels = 2;
         result->n_samples = n_samples;
         result->sample_rate = RATE;
-        result->sources = new float*[STEM_COUNT]{};
-        result->source_names = new const char*[STEM_COUNT]{};
+        result->sources = new float* [STEM_COUNT] {};
+        result->source_names = new const char* [STEM_COUNT] {};
         for (int source = 0; source < STEM_COUNT; ++source) {
             result->sources[source] = new float[sources[source].size()];
             std::copy(sources[source].begin(), sources[source].end(), result->sources[source]);
@@ -1055,8 +1066,12 @@ void scnet_result_free(scnet_result* result) {
     delete result;
 }
 
-int scnet_sample_rate(const scnet_context* model) { return model ? RATE : 0; }
-int scnet_n_sources(const scnet_context* model) { return model ? STEM_COUNT : 0; }
+int scnet_sample_rate(const scnet_context* model) {
+    return model ? RATE : 0;
+}
+int scnet_n_sources(const scnet_context* model) {
+    return model ? STEM_COUNT : 0;
+}
 const char* scnet_source_name(const scnet_context* model, int index) {
     return model && index >= 0 && index < STEM_COUNT ? STEMS[index] : nullptr;
 }
@@ -1069,31 +1084,73 @@ const char* scnet_compute_precision(const scnet_context* model) {
 
 static int diff_impl(const char* model_gguf, const char* ref_gguf, const char* audio_wav, int verbosity) {
     (void)audio_wav; // Exact planar audio bytes are embedded in the independent reference.
+    const auto required = required_stages();
+    const std::set<std::string> required_names(required.begin(), required.end());
+    const auto require_key = [](gguf_context* meta, const char* name, gguf_type type) {
+        const int64_t key = gguf_find_key(meta, name);
+        if (key < 0 || gguf_get_kv_type(meta, key) != type)
+            throw std::runtime_error(std::string("missing or invalid reference/model metadata: ") + name);
+        return key;
+    };
+    const auto require_string = [&](gguf_context* meta, const char* name) {
+        return std::string(gguf_get_val_str(meta, require_key(meta, name, GGUF_TYPE_STRING)));
+    };
+    const auto require_unsigned = [](gguf_context* meta, const char* name) -> uint64_t {
+        const int64_t key = gguf_find_key(meta, name);
+        if (key >= 0) {
+            if (gguf_get_kv_type(meta, key) == GGUF_TYPE_UINT32)
+                return gguf_get_val_u32(meta, key);
+            if (gguf_get_kv_type(meta, key) == GGUF_TYPE_UINT64)
+                return gguf_get_val_u64(meta, key);
+        }
+        throw std::runtime_error(std::string("missing or invalid reference metadata: ") + name);
+    };
+    const auto valid_sha256 = [](const std::string& value) {
+        return value.size() == 64 && std::all_of(value.begin(), value.end(), [](char c) {
+                   return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
+               });
+    };
     auto params = scnet_default_params();
     params.use_gpu = flag("CRISPASR_SCNET_GPU");
     if (const char* threads = std::getenv("CRISPASR_SCNET_THREADS"))
         params.n_threads = std::atoi(threads);
-    std::unique_ptr<gguf_context, decltype(&core_gguf::free_metadata)> metadata(
-        core_gguf::open_metadata(ref_gguf), core_gguf::free_metadata);
+    std::unique_ptr<gguf_context, decltype(&core_gguf::free_metadata)> metadata(core_gguf::open_metadata(ref_gguf),
+                                                                                core_gguf::free_metadata);
     gguf_context* meta = metadata.get();
     if (!meta)
         return 2;
-    const std::string revision = core_gguf::kv_str(meta, "scnet.reference.source_revision", "");
-    const std::string mode = core_gguf::kv_str(meta, "scnet.reference.mode", "");
+    const std::string revision = require_string(meta, "scnet.reference.source_revision");
+    const std::string checkpoint = require_string(meta, "scnet.reference.checkpoint_sha256");
+    const std::string mode = require_string(meta, "scnet.reference.mode");
+    const uint64_t segment = require_unsigned(meta, "scnet.reference.segment_seconds");
+    const uint64_t shifts = require_unsigned(meta, "scnet.reference.shifts");
+    const uint64_t seed = require_unsigned(meta, "scnet.reference.shift_seed");
+    const uint64_t sample_rate = require_unsigned(meta, "scnet.reference.sample_rate");
+    const uint64_t stage_count = require_unsigned(meta, "scnet.reference.required_stage_count");
+    const float overlap = gguf_get_val_f32(meta, require_key(meta, "scnet.reference.overlap", GGUF_TYPE_FLOAT32));
+    if (revision != REVISION || !valid_sha256(checkpoint) || (mode != "pipeline" && mode != "raw") || segment < 1 ||
+        segment > 119 || shifts > 16 || overlap != 0.5f || sample_rate != RATE || stage_count != 35 ||
+        required.size() != 35)
+        throw std::runtime_error("incompatible original-reference provenance/profile");
+    if (gguf_get_n_tensors(meta) != static_cast<int64_t>(required.size()))
+        throw std::runtime_error("reference must contain exactly all 35 required SCNet stages");
+    std::set<std::string> reference_names;
+    for (int64_t i = 0; i < gguf_get_n_tensors(meta); ++i)
+        reference_names.insert(gguf_get_tensor_name(meta, i));
+    if (reference_names != required_names)
+        throw std::runtime_error("reference must contain exactly all 35 required SCNet stages");
     params.no_segment = mode == "raw";
-    params.segment_seconds = core_gguf::kv_u32(meta, "scnet.reference.segment_seconds", 20);
-    params.shifts = core_gguf::kv_u32(meta, "scnet.reference.shifts", 1);
-    const int64_t seed_key = gguf_find_key(meta, "scnet.reference.shift_seed");
-    if (seed_key >= 0 && gguf_get_kv_type(meta, seed_key) == GGUF_TYPE_UINT64)
-        params.shift_seed = gguf_get_val_u64(meta, seed_key);
-    else
-        params.shift_seed = core_gguf::kv_u32(meta, "scnet.reference.shift_seed", 0);
-    const float overlap = core_gguf::kv_f32(meta, "scnet.reference.overlap", 0.5f);
+    params.segment_seconds = static_cast<int>(segment);
+    params.shifts = static_cast<int>(shifts);
+    params.shift_seed = seed;
     metadata.reset();
-    if (revision != REVISION || (mode != "pipeline" && mode != "raw") || overlap != 0.5f) {
-        std::fprintf(stderr, "scnet diff: missing or incompatible original-reference provenance/profile\n");
-        return 2;
-    }
+    metadata.reset(core_gguf::open_metadata(model_gguf));
+    if (!metadata)
+        throw std::runtime_error("cannot read model provenance metadata");
+    if (require_string(metadata.get(), "general.source.revision") != revision ||
+        require_string(metadata.get(), "scnet.checkpoint.sha256") != checkpoint)
+        throw std::runtime_error("reference source revision/checkpoint SHA256 does not match the model");
+    metadata.reset();
     std::unique_ptr<scnet_context, decltype(&scnet_free)> model(scnet_init_from_file(model_gguf, params), scnet_free);
     if (!model)
         return 2;
@@ -1117,8 +1174,16 @@ static int diff_impl(const char* model_gguf, const char* ref_gguf, const char* a
         }
         Captures actual;
         separate(*model, interleaved, &actual);
+        if (actual.size() != required.size() || !std::all_of(actual.begin(), actual.end(), [&](const auto& stage) {
+                return required_names.count(stage.first) == 1;
+            }))
+            throw std::runtime_error("native capture must contain exactly all 35 required SCNet stages");
         const double threshold = model->quant_q4 ? 0.94 : model->quant_q8 ? 0.98 : 0.999;
-        const auto required = required_stages();
+        const double norm_min = model->quant_q4 ? 0.8 : model->quant_q8 ? 0.95 : 0.99;
+        const double norm_max = model->quant_q4 ? 1.2 : model->quant_q8 ? 1.05 : 1.01;
+        const double relative_max = model->quant_q4 ? 0.40 : model->quant_q8 ? 0.20 : 0.05;
+        const std::set<std::string> analytic_stages = {"input_audio", "raw_input_audio", "waveform_stats",
+                                                       "stft",        "stft_stats",      "normalized"};
         for (const auto& name : required) {
             const auto truth = reference.tensors.find(name);
             const auto observed = actual.find(name);
@@ -1133,39 +1198,60 @@ static int diff_impl(const char* model_gguf, const char* ref_gguf, const char* a
             }
             const auto expected = read_tensor(truth->second);
             const auto& observed_values = observed->second.values;
-            if (expected.size() != observed_values.size()) {
+            const size_t row_width = static_cast<size_t>(truth->second->ne[0]);
+            if (expected.empty() || expected.size() != observed_values.size() || row_width == 0 ||
+                expected.size() % row_width != 0) {
                 std::printf("[FAIL] %s malformed capture size\n", name.c_str());
                 ++failures;
                 continue;
             }
             double dot = 0, aa = 0, bb = 0, difference = 0, maximum = 0;
+            double minimum_cosine = 1;
             size_t nonfinite = 0;
-            for (size_t i = 0; i < expected.size(); ++i) {
-                const double a = observed_values[i], b = expected[i];
-                if (!std::isfinite(a) || !std::isfinite(b)) {
-                    ++nonfinite;
-                    continue;
+            for (size_t row = 0; row < expected.size(); row += row_width) {
+                double row_dot = 0, row_aa = 0, row_bb = 0;
+                for (size_t i = row; i < row + row_width; ++i) {
+                    const double a = observed_values[i], b = expected[i];
+                    if (!std::isfinite(a) || !std::isfinite(b)) {
+                        ++nonfinite;
+                        continue;
+                    }
+                    row_dot += a * b;
+                    row_aa += a * a;
+                    row_bb += b * b;
+                    difference += (a - b) * (a - b);
+                    maximum = std::max(maximum, std::abs(a - b));
                 }
-                dot += a * b;
-                aa += a * a;
-                bb += b * b;
-                difference += (a - b) * (a - b);
-                maximum = std::max(maximum, std::abs(a - b));
+                dot += row_dot;
+                aa += row_aa;
+                bb += row_bb;
+                const double row_cosine = row_aa > 0 && row_bb > 0 ? row_dot / std::sqrt(row_aa * row_bb)
+                                          : row_aa == row_bb       ? 1.0
+                                                                   : 0.0;
+                minimum_cosine = std::min(minimum_cosine, row_cosine);
             }
             const double cosine = aa > 0 && bb > 0 ? dot / std::sqrt(aa * bb) : aa == bb ? 1.0 : 0.0;
             const double ratio = bb > 0 ? std::sqrt(aa / bb) : aa == 0 ? 1 : std::numeric_limits<double>::infinity();
-            const double relative = bb > 0 ? std::sqrt(difference / bb) : difference == 0 ? 0 : std::numeric_limits<double>::infinity();
-            const bool passed = nonfinite == 0 && cosine > threshold && ratio >= 0.8 && ratio <= 1.2;
+            const double relative = bb > 0            ? std::sqrt(difference / bb)
+                                    : difference == 0 ? 0
+                                                      : std::numeric_limits<double>::infinity();
+            const bool require_rows = !model->quant_q4 && !model->quant_q8 && analytic_stages.count(name) == 0;
+            const bool passed = nonfinite == 0 && std::isfinite(cosine) && std::isfinite(ratio) &&
+                                std::isfinite(relative) && cosine > threshold && ratio >= norm_min &&
+                                ratio <= norm_max && relative <= relative_max &&
+                                (!require_rows || minimum_cosine > threshold);
             failures += !passed;
             if (verbosity > 0 || !passed)
-                std::printf("[%s] %s cos_global=%.9f norm_ratio=%.9f relative_l2=%.9g max_abs=%.9g nonfinite=%zu n=%zu\n",
+                std::printf("[%s] %s cos_global=%.9f norm_ratio=%.9f relative_l2=%.9g max_abs=%.9g nonfinite=%zu n=%zu "
+                            "cos_min=%.9f\n",
                             passed ? "PASS" : "FAIL", name.c_str(), cosine, ratio, relative, maximum, nonfinite,
-                            expected.size());
+                            expected.size(), minimum_cosine);
         }
         if (const char* path = std::getenv("CRISPASR_SCNET_CAPTURE_GGUF"))
             if (*path)
                 save_captures(actual, path);
-        std::printf("scnet diff: %zu required stages, %d failed, strict cosine > %.3f\n", required.size(), failures, threshold);
+        std::printf("scnet diff: %zu required stages, %d failed, strict cosine > %.3f\n", required.size(), failures,
+                    threshold);
     } catch (const std::exception& error) {
         std::fprintf(stderr, "scnet diff: %s\n", error.what());
         ++failures;

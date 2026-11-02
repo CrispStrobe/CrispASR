@@ -1,0 +1,151 @@
+name: SCNet original-model qualification
+
+on:
+  workflow_dispatch:
+    inputs:
+      variant:
+        description: Author checkpoint to qualify
+        type: choice
+        options: [both, scnet, scnet-large]
+        default: both
+  push:
+    branches: [feat/scnet-native-20261102]
+    paths:
+      - '.github/workflows/scnet-qualification.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scnet-qualification-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cpu:
+    name: ${{ matrix.variant }} CPU
+    runs-on: ubuntu-22.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        variant: ${{ fromJSON(inputs.variant == 'scnet' && '["scnet"]' || inputs.variant == 'scnet-large' && '["scnet-large"]' || '["scnet","scnet-large"]') }}
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      VECLIB_MAXIMUM_THREADS: '2'
+      BLIS_NUM_THREADS: '2'
+      ACCELERATE_USE_CPU: 'true'
+      CUDA_VISIBLE_DEVICES: ''
+      SCNET_SOURCE_DIR: ${{ github.workspace }}/scnet-assets/SCNet
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Install native and original-reference dependencies
+        run: |
+          bash tools/ci-apt.sh update
+          bash tools/ci-apt.sh install -y cmake ninja-build g++ libopenblas-dev
+          python -m pip install --no-cache-dir torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir -r tools/requirements-scnet.txt clang-format==18.1.8
+          ln -s "$(command -v clang-format)" "$RUNNER_TEMP/clang-format-18"
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+      - uses: actions/cache@v4
+        with:
+          path: |
+            scnet-assets/SCNet
+            scnet-assets/*-author.th
+            scnet-assets/*-author.th.provenance.json
+            scnet-assets/*-author-config.yaml
+            scnet-assets/*-author-config.yaml.provenance.json
+            scnet-assets/hdemucs_mix.wav
+            scnet-assets/hdemucs_mix.wav.provenance.json
+          key: scnet-qualified-assets-${{ matrix.variant }}-5d95bf96-v1
+      - name: Pin original source and complete optional backend roster
+        run: |
+          mkdir -p scnet-assets scnet-out
+          if [ ! -d scnet-assets/SCNet/.git ]; then
+            git clone https://github.com/starrytong/SCNet.git scnet-assets/SCNet
+          fi
+          git -C scnet-assets/SCNet checkout --detach 5d95bf96b19c3eede63248d171efeca8e3abb948
+          bash scripts/fetch_onnxruntime.sh "$RUNNER_TEMP/onnxruntime-sdk"
+          git rev-parse HEAD > scnet-out/source.txt
+          git submodule status > scnet-out/submodules.txt
+          lscpu > scnet-out/cpu.txt
+          free -h > scnet-out/memory.txt
+          df -h > scnet-out/disk.txt
+          python -m pip freeze > scnet-out/python-packages.txt
+      - name: Build the actual CLI, Session library, quantizer and probe
+        run: |
+          set -o pipefail
+          cmake -S . -B build-scnet -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCRISPASR_BUILD_SCNET_PROBE=ON -DCRISPASR_BUILD_TESTS=OFF \
+            -DCRISPASR_BUILD_SERVER=OFF -DGGML_NATIVE=ON -DGGML_CUDA=OFF \
+            -DGGML_METAL=OFF -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS \
+            -DCRISPASR_CPU_BLAS=ON -DCRISPASR_MEL_BLAS=ON \
+            -DCRISPASR_ONNXRUNTIME_ROOT="$RUNNER_TEMP/onnxruntime-sdk" \
+            2>&1 | tee scnet-out/configure.log
+          cmake --build build-scnet --parallel 2 \
+            --target crispasr-cli crispasr-lib crispasr-quantize scnet-probe scnet-validation \
+            2>&1 | tee scnet-out/build.log
+      - name: Generate capabilities and documentation from the actual CLI
+        run: |
+          python tools/gen-backend-caps-table.py --crispasr build-scnet/bin/crispasr
+          python tools/gen-feature-matrix.py --crispasr build-scnet/bin/crispasr
+          python tools/sync_go_cgo_ldflags.py
+          git diff --binary > scnet-out/generated.patch
+          build-scnet/bin/crispasr --list-backends-json > scnet-out/backend-roster.json
+          cmake --build build-scnet --parallel 2 --target crispasr-cli crispasr-lib
+          python tools/gen-backend-caps-table.py --check --crispasr build-scnet/bin/crispasr
+          python tests/test_backend_caps_abi.py --cli build-scnet/bin/crispasr --build-dir build-scnet
+          python tools/check-backend-wiring.py --crispasr build-scnet/bin/crispasr
+      - name: Original observer and rejection controls
+        run: |
+          python tests/test-scnet-math.py -v
+          python tests/test-scnet-session-routing.py -v
+          python tests/test-scnet-quant-policy.py build-scnet/bin/crispasr-quantize
+          python tests/test-scnet-converter.py -v
+          python tests/test-scnet-reference.py -v
+          python tests/test_scnet_validation.py -v
+      - name: Convert and qualify every precision against the original model
+        run: >
+          python tools/ci-heavy/scnet_qualify.py --variant ${{ matrix.variant }}
+          --build-dir build-scnet --assets-dir scnet-assets
+          --output-dir scnet-out/qualification-${{ matrix.variant }}
+          --threads 2
+      - name: Preserve exact source, receipts and generated changes
+        if: always()
+        run: |
+          mkdir -p scnet-out
+          git diff --binary > scnet-out/generated.patch
+          git rev-parse HEAD > scnet-out/source.txt
+          cp build-scnet/CMakeCache.txt scnet-out/CMakeCache.txt 2>/dev/null || true
+          python - <<'PY'
+          import hashlib, json, pathlib
+          root = pathlib.Path('scnet-out')
+          names = []
+          for path in root.rglob('*'):
+              if path.is_file() and path.suffix in ('.json', '.log', '.txt', '.md', '.patch'):
+                  names.append({'path': str(path.relative_to(root)), 'bytes': path.stat().st_size,
+                                'sha256': hashlib.file_digest(path.open('rb'), 'sha256').hexdigest()})
+          (root / 'evidence-files.json').write_text(json.dumps(names, indent=2) + '\n')
+          print(json.dumps({'retained_receipts': len(names), 'source': pathlib.Path('scnet-out/source.txt').read_text().strip()}))
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scnet-${{ matrix.variant }}-qualification-${{ github.sha }}
+          path: |
+            scnet-out/**/*.json
+            scnet-out/**/*.log
+            scnet-out/**/*.txt
+            scnet-out/**/*.md
+            scnet-out/generated.patch
+            scnet-out/**/source-snapshot/**
+          if-no-files-found: error

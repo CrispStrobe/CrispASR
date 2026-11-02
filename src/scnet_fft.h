@@ -141,8 +141,8 @@ private:
         }
     }
 
-    void mixed(const float* re, const float* im, int stride, float* out_r, float* out_i, float* tmp_r,
-               float* tmp_i, int n) const {
+    void mixed(const float* re, const float* im, int stride, float* out_r, float* out_i, float* tmp_r, float* tmp_i,
+               int n) const {
         if (n == 1) {
             out_r[0] = re[0];
             out_i[0] = im[0];
@@ -153,8 +153,8 @@ private:
             ++radix;
         const int m = n / radix;
         for (int j = 0; j < radix; ++j)
-            mixed(re + j * stride, im + j * stride, stride * radix, out_r + j * m, out_i + j * m,
-                  tmp_r + j * m, tmp_i + j * m, m);
+            mixed(re + j * stride, im + j * stride, stride * radix, out_r + j * m, out_i + j * m, tmp_r + j * m,
+                  tmp_i + j * m, m);
         const int factor = size_ / n;
         for (int k = 0; k < m; ++k)
             for (int r = 0; r < radix; ++r) {

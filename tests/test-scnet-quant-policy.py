@@ -135,9 +135,10 @@ def main():
         # default alone prevents implicit fallback; deliberate experiments can
         # select another type and must be labelled and measured independently.
         narrow = "separation_net.dp_modules.0.intra_rnn.weight_hh_l0"
-        _, table = run("override", source, "q4_k", "--tensor-type", r"weight_hh_l0$=q4_0")
-        assert table[narrow]["type"] == 2
-        other = work / "other.gguf"
+        _, table = run("override", source, "q4_k", "--tensor-type", r"weight_hh_l0$=f16")
+        assert table[narrow]["type"] == 1
+        assert table[narrow]["bytes"] == original[narrow]
+        other = work / "other-source.gguf"
         fixture(other, "unrelated-architecture")
         _, table = run("other", other, "q4_k")
         assert table[narrow]["type"] == 2
