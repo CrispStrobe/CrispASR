@@ -63,7 +63,9 @@ struct crispasr_session {
     moss_diarize_context* moss_diarize_ctx = reinterpret_cast<moss_diarize_context*>(1);
     parakeet_context* parakeet_ctx = nullptr;
     int max_new_tokens = 512, beam_size = 1;
-    float frequency_penalty = 0;
+    float frequency_penalty = 0, temperature = 0, top_p = -1.0f;
+    int do_sample = -1, top_k = -1;
+    uint64_t seed = 0;
 };
 static void _fire_token_callbacks(crispasr_session*, const std::vector<ca_token_record>&) {}
 extern "C" void cohere_set_max_new_tokens(cohere_context*, int) {}
@@ -79,6 +81,8 @@ extern "C" cohere_result* cohere_transcribe_ex(cohere_context*, const float*, in
 extern "C" void cohere_result_free(cohere_result*) {}
 extern "C" void moss_diarize_set_ask(moss_diarize_context*, const char*) {}
 extern "C" void moss_diarize_set_max_new_tokens(moss_diarize_context*, int) {}
+extern "C" void moss_diarize_set_beam_size(moss_diarize_context*, int) {}
+extern "C" void moss_diarize_set_sampling(moss_diarize_context*, float, int, float, uint64_t) {}
 extern "C" char* moss_diarize_transcribe(moss_diarize_context*, const float*, int) { return strdup(transcript.c_str()); }
 static crispasr_session_result* cohere_package() {
     crispasr_session session; auto* s = &session;
