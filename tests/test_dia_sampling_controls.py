@@ -42,7 +42,8 @@ PREAMBLE = r'''
 #define CA_HAVE_DIA
 #endif
 struct dia_tts_context { dia_tts_context_params params; };
-struct crispasr_session { dia_tts_context* dia_tts_ctx=nullptr; };
+struct moss_diarize_context;
+struct crispasr_session { dia_tts_context* dia_tts_ctx=nullptr; moss_diarize_context* moss_diarize_ctx=nullptr; int top_k=-1, do_sample=-1; float top_p=-1.0f; };
 static dia_tts_context context;
 static dia_tts_context_params synthesized;
 extern "C" dia_tts_context* dia_tts_init_from_file(const char*, dia_tts_context_params p) {
