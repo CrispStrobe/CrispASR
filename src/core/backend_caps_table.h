@@ -131,7 +131,7 @@ static const BackendCaps k_backend_caps[] = {
      "timestamps-ctc,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,auto-download"},
     {"moonshine-tiny-de-phreak87-onnx", 270336u, "punctuation-native,auto-download"},
     {"moss-audio", 271104u, "temperature,beam-search,punctuation-native,auto-download"},
-    {"moss-diarize", 270913u, "timestamps-native,diarize,beam-search,punctuation-native,auto-download"},
+    {"moss-diarize", 271169u, "timestamps-native,diarize,temperature,beam-search,punctuation-native,auto-download"},
     {"moss-transcribe", 270848u, "beam-search,punctuation-native,auto-download"},
     {"moss-tts", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
     {"moss-tts-local", 206080u, "temperature,flash-attn,auto-download,tts,voice-cloning"},
