@@ -2874,6 +2874,15 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         s->backend = "moonshine";
     s->n_threads = n_threads > 0 ? n_threads : 4;
 
+    // Speech-enhancement GGUFs are selected with crispasr_session_set_enhance()
+    // on a transcription session; they are not transcription models.
+    if (s->backend == "frcrn-se") {
+        fprintf(stderr, "crispasr: '%s' is a frcrn-se speech-enhancement model; use crispasr_session_set_enhance()\n",
+                model_path);
+        delete s;
+        return nullptr;
+    }
+
     // Register the default segment callback so the Dart polling buffer
     // is populated out of the box. Users can override via
     // crispasr_session_set_segment_callback after open. ud is the session
@@ -5277,6 +5286,7 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #ifdef CA_HAVE_MINI_BS_ROFORMER
     list += ",mini-bs-roformer";
 #endif
+    list += ",frcrn-se"; // enhancer only: crispasr_session_set_enhance()
 #ifdef CA_HAVE_CREPE
     list += ",crepe";
 #endif

@@ -6793,3 +6793,24 @@ catch_discover_tests(test-enhance-abi
     TEST_SPEC "[unit]"
     PROPERTIES LABELS "unit"
 )
+
+# ─── frcrn-se — ClearerVoice-Studio FRCRN_SE_16K speech enhancement ────────
+# Live: CRISPASR_MODEL_FRCRN_SE=<frcrn-se GGUF> (SKIPs when unset); optional
+# CRISPASR_MODEL_WHISPER for the Session set_enhance case.
+add_executable(test-frcrn-se test_frcrn_se_live.cpp)
+target_compile_definitions(test-frcrn-se PRIVATE CRISPASR_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+target_include_directories(test-frcrn-se PRIVATE ${PROJECT_SOURCE_DIR}/include)
+target_link_libraries(test-frcrn-se PRIVATE Catch2::Catch2WithMain crispasr-lib)
+catch_discover_tests(test-frcrn-se
+    TEST_SPEC "[frcrn-se]"
+    PROPERTIES
+        LABELS live
+        SKIP_RETURN_CODE 4
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+if (Python3_Interpreter_FOUND)
+    # Model-free: STFT kernels, polyphase transposed conv, BN folding, GGUF layout.
+    add_test(NAME frcrn-se-converter
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-frcrn-se-converter.py -v)
+    set_tests_properties(frcrn-se-converter PROPERTIES LABELS "unit;frcrn-se" TIMEOUT 120)
+endif()

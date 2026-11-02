@@ -309,6 +309,7 @@ inline const entry* table(size_t* n_out) {
         {"htdemucs",                  "htdemucs"},
         {"demucs",                    "htdemucs"},
         {"mini-bs-roformer",          "mini-bs-roformer"},
+        {"frcrn-se",                  "frcrn-se"},
         {"mel-band-roformer",         "mel-band-roformer"},
         {"mel_band_roformer",         "mel-band-roformer"},
         {"crepe",                     "crepe"},
