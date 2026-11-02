@@ -231,11 +231,60 @@ closely, and F32 is the fastest file on CPU anyway (below).
 
 ## Quality
 
-QUALITY_TEXT
+Clean 48 kHz target: VCTK `p234_001…009` (48 kHz, from ClearerVoice-Studio's
+`train/data_generation` samples; VCTK is likely in the training data, so this
+checks the port, not generalisation). Input: the target down-sampled to 16 or
+8 kHz and back up to 48 kHz with `librosa.resample` (ClearVoice's loader).
+Native through the CLI (`--enhance-output`); log-spectral distance (2048-point
+Hann, 512 hop, silent frames skipped) over the whole band and above 8 kHz,
+waveform SNR, and cosine against the PyTorch output:
+
+| Clip | Output | LSD | LSD > 8 kHz | SNR (dB) | cos vs PyTorch |
+|---|---|---|---|---|---|
+| 13.2 s, 16 kHz band | input | 5.25 | 6.40 | 14.61 | 0.9871 |
+| | PyTorch | 1.24 | 1.49 | 12.24 | 1 |
+| | native F32 | 1.21 | 1.46 | 12.24 | 0.99999998 |
+| | native F16 | 1.21 | 1.46 | 12.24 | 0.99999997 |
+| | native Q8_0 | 0.94 | 1.11 | 12.22 | 0.99988677 |
+| 13.2 s, 8 kHz band | input | 5.94 | 6.40 | 11.14 | 0.9991 |
+| | PyTorch | 2.54 | 2.76 | 11.03 | 1 |
+| | native F32 | 2.47 | 2.67 | 11.03 | 0.99999997 |
+| | native Q8_0 | 1.45 | 1.53 | 11.02 | 0.99993996 |
+| 43.5 s, 16 kHz band (segmented) | input | 5.19 | 6.31 | 18.77 | 0.9938 |
+| | PyTorch | 1.30 | 1.56 | 15.88 | 1 |
+| | native F32 | 1.27 | 1.53 | 15.88 | 0.99999999 |
+| | native Q8_0 | 0.95 | 1.12 | 15.86 | 0.99994522 |
+
+The model fills the empty band (LSD 5.3 → 1.2); waveform SNR drops by 2–3 dB
+because the generated band is plausible but not phase-matched to the original
+— SNR is the wrong measure for bandwidth extension. The small native-vs-PyTorch
+LSD gap comes from the last < 256 samples (zero-filled natively, absent from
+the PyTorch output). Q8_0's *lower* LSD is not a quality claim: its generator
+error adds energy to the high band, which this energy-only metric happens to
+reward; listen before preferring it.
 
 ## Speed and memory
 
-SPEED_TEXT
+Shared 4-core Xeon @ 2.1 GHz (AVX-512), another port's jobs running alongside;
+2 threads each. Wall time of the whole decode (native: CLI, including model
+load and WAV I/O; PyTorch: `decode_one_audio_mossformer2_sr_48k` only):
+
+| Clip | PyTorch 2.15 | native F32 | native F16 | native Q8_0 |
+|---|---|---|---|---|
+| 11.0 s jfk (one forward) | 52.3 s | 66.6 s | — | 99.2 s |
+| 13.2 s VCTK (one forward) | 64.4 s | 78.8 s | 315 s | 122.6 s |
+| 43.5 s VCTK (segmented, 14 × 4 s) | 280.5 s | 352.9 s | — | 567.9 s |
+
+The generator dominates: ~2.5 T multiply-adds per 11 s (HiFi-GAN V1 layout at
+1024 channels, ×256), against ~1.4 s for MaskNet, mel and `bandwidth_sub`
+together on the 3 s clip (`CRISPASR_MF2SR_BENCH=1`: mel 14 ms, MaskNet 1.45 s,
+generator 17.3 s, `bandwidth_sub` 12 ms). Native F32 runs at ~1.25× PyTorch's
+time; F32 is the fastest file on CPU (ggml's F16 and Q8_0 matmuls convert the
+activations per call, as for MossFormer2-SE), so use F16 / Q8_0 for size or a
+GPU. Tried and rejected: `im2col` + one GEMM per conv (19.4 s vs 17.3 s per-tap
+for the 3 s generator, plus a `K·Cin·T` buffer). Peak RSS: 683 MB (F32,
+13 s), 477 MB (F16), 457 MB (Q8_0); the 320-frame generator chunks keep it flat
+in the input length.
 
 ## Tests
 
