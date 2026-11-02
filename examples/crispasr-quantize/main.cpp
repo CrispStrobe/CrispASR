@@ -266,6 +266,17 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     // measured calibration sweeps; this policy itself is not a quality claim.
     const bool is_mini_bs_roformer = (arch == "mini-bs-roformer");
 
+    // MossFormer2_SE_48K: keep the FLASH to_hidden projections, the Gated-FSMN
+    // to_u projections and the 4-matrix mask head (mn.*) at source precision.
+    // Not a weight-precision problem (weight-only Q8_0 of every matrix keeps
+    // stage cosines >= 0.99999 in torch): the Q8_0 x Q8_0 dot also rounds the
+    // ACTIVATIONS, and the FLASH gate att_u * v * sigmoid(att_v * u) amplifies
+    // the rounding of v/u (to_hidden cos 0.9999993 -> layer output 0.9991 ->
+    // layer-5 residual 0.9956; mask head: e2e 0.99997). With these 52 of 220
+    // matrices kept, every stage stays >= 0.9998 for +26 MB (64 -> 90 MB from
+    // an F16 source).  See docs/mossformer2-se.md.
+    const bool is_mossformer2_se = (arch == "mossformer2-se");
+
     // BTC chords: a 12 MB model whose weight matrices are all 128x128 or
     // 128x256 — small enough that quantisation buys little, and the FFN convs
     // are (3, 128, 128) whose K=3 does not tile a Q4_K 32-element block any
@@ -959,6 +970,9 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
             // `--q4_k` silently falls back to Q4_0. That fallback is why the q4
             // row costs so much -- it is Q4_0, not a k-quant.
             !(is_tabcnn && sname == "head.weight") &&
+            // MossFormer2-SE: precision-sensitive matmuls (see is_mossformer2_se note).
+            !(is_mossformer2_se && (sname.rfind("mn.", 0) == 0 || ends_with(".flash.hidden.linear.weight") ||
+                                    ends_with(".fsmn.to_u.linear.weight"))) &&
             // Supertonic-3: allow-list vf.*/voc.* (see is_supertonic note).
             !(is_supertonic && !(sname.rfind("vf.", 0) == 0 || sname.rfind("voc.", 0) == 0)) &&
             !(is_granite_family && !granite_quant_all && sname.find("enc.") == 0) &&

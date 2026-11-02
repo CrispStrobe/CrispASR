@@ -124,6 +124,14 @@ static std::vector<float> build_kaldi_mel_fb(int sr, int n_fft, int n_mels, floa
     return fb;
 }
 
+// splitmix64: per-frame dither stream seeds.
+static uint64_t splitmix64(uint64_t x) {
+    x += 0x9E3779B97F4A7C15ull;
+    x = (x ^ (x >> 30)) * 0xBF58476D1CE4E5B9ull;
+    x = (x ^ (x >> 27)) * 0x94D049BB133111EBull;
+    return x ^ (x >> 31);
+}
+
 // Povey window: hann(i, periodic=False)^0.85. Matches kaldi's
 // "povey" choice (the default `window_type` in torchaudio's kaldi
 // fbank). The hann here is the *symmetric* form (i / (N-1)) — kaldi's
@@ -240,8 +248,25 @@ std::vector<float> compute_fbank(const float* pcm, int n_samples, const FbankPar
                 s = pcm[j];
             }
             f_buf[(size_t)i] = s * scale;
-            dc += f_buf[(size_t)i];
         }
+        if (p.dither != 0.0f) {
+            // Box-Muller over a per-frame xorshift64* stream.
+            uint64_t st = splitmix64(p.dither_seed ^ splitmix64((uint64_t)t)) | 1u;
+            auto uni = [&st]() {
+                st ^= st >> 12;
+                st ^= st << 25;
+                st ^= st >> 27;
+                return ((double)((st * 0x2545F4914F6CDD1Dull) >> 11) + 0.5) / 9007199254740992.0;
+            };
+            for (int i = 0; i < win; i += 2) {
+                const double r = std::sqrt(-2.0 * std::log(uni())), a = 6.283185307179586 * uni();
+                f_buf[(size_t)i] += p.dither * (float)(r * std::cos(a));
+                if (i + 1 < win)
+                    f_buf[(size_t)i + 1] += p.dither * (float)(r * std::sin(a));
+            }
+        }
+        for (int i = 0; i < win; i++)
+            dc += f_buf[(size_t)i];
         if (p.remove_dc_offset) {
             dc /= (float)win;
             for (int i = 0; i < win; i++)

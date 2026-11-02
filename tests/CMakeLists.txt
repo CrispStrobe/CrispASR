@@ -6837,9 +6837,27 @@ target_link_libraries(test-mossformergan-se PRIVATE Catch2::Catch2WithMain crisp
 add_test(NAME mossformergan-se-unit COMMAND test-mossformergan-se "[unit]")
 set_tests_properties(mossformergan-se-unit PROPERTIES LABELS "unit;mossformergan-se" TIMEOUT 60)
 add_test(NAME mossformergan-se-live COMMAND test-mossformergan-se "[live]")
-set_tests_properties(mossformergan-se-live PROPERTIES LABELS "live;mossformergan-se" TIMEOUT 1800)
+set_tests_properties(mossformergan-se-live PROPERTIES LABELS "live;mossformergan-se" SKIP_RETURN_CODE 4 TIMEOUT 1800)
 if (Python3_Interpreter_FOUND)
     add_test(NAME mossformergan-se-converter
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-mossformergan-se-converter.py -v)
     set_tests_properties(mossformergan-se-converter PROPERTIES LABELS "unit;mossformergan-se" TIMEOUT 120)
+endif()
+
+# ---------------------------------------------------------------------------
+# MossFormer2_SE_48K speech enhancement (ClearerVoice-Studio). Parity:
+# crispasr-diff mossformer2-se <gguf> <ref.gguf> (tools/reference_backends/mossformer2_se.py).
+# Model-free front/back-end and registration cases run in the unit suite; the
+# live cases need MOSSFORMER2_SE_MODEL=<gguf> and SKIP without it.
+add_executable(test-mossformer2-se test-mossformer2-se.cpp)
+target_compile_definitions(test-mossformer2-se PRIVATE CRISPASR_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+target_link_libraries(test-mossformer2-se PRIVATE Catch2::Catch2WithMain crispasr-lib ggml-base)
+add_test(NAME mossformer2-se-unit COMMAND test-mossformer2-se "[unit]")
+set_tests_properties(mossformer2-se-unit PROPERTIES LABELS "unit;mossformer2-se" TIMEOUT 60)
+add_test(NAME mossformer2-se-live COMMAND test-mossformer2-se "[live]")
+set_tests_properties(mossformer2-se-live PROPERTIES LABELS "live;mossformer2-se" SKIP_RETURN_CODE 4 TIMEOUT 1800)
+if (Python3_Interpreter_FOUND)
+    add_test(NAME mossformer2-se-converter
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-mossformer2-se-converter.py -v)
+    set_tests_properties(mossformer2-se-converter PROPERTIES LABELS "unit;mossformer2-se" TIMEOUT 120)
 endif()

@@ -19,8 +19,9 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 - Model cards (checked 2026-11-02, Hugging Face `alibabasglab/*`): all five declare `license: apache-2.0` (code repo also Apache-2.0); cards state training on open-source plus private data and add no use restriction. Pinned revisions: SS_16K `407cb030`, MossFormerGAN_SE_16K `dcb1b20e`, FRCRN_SE_16K `3766e6a6`, SE_48K `eff8c979`, SR_48K `39eb1f25`; upstream code `modelscope/ClearerVoice-Studio@6b3774dc`.
 - Acceptance: denoise selectable as none/rnnoise/model in CLI (`--enhance`), Session C ABI setter and every wrapper; default stays off. Per model: pinned converter, Python reference stage dump, native ggml graph with F32/F16 whole-output cosine >0.999 against the original, CLI + C ABI wiring and registry entry.
 - Done: enhance pipeline (`--enhance none|rnnoise|<gguf>`, `--denoise`, `--enhance-output`, `crispasr_session_set_enhance`, `crispasr_enhance_audio_spec`, every wrapper, server `enhance` field; default off). RNNoise matches xiph/rnnoise `6cbfd53` bit-exactly at 48 kHz; the 16 kHz path now resamples with the polyphase resampler (cos 0.99995 vs original, was 0.996). `MossFormer2_SS_16K` native (`docs/mossformer2-ss.md`; F32 cos 1.0, F16 0.99999998, Q8_0 0.99999 end-to-end). `MossFormerGAN_SE_16K` native enhancer (`docs/mossformergan-se.md`; F32 1.0, F16 0.99999999, Q8_0 0.99997; jfk white noise 9.05 -> 16.95 dB SNR).
-- Open: registry URLs for the converted GGUFs (none uploaded yet); GPU runs untested for both ports; clean idle-machine CPU timing vs PyTorch.
-- Next action: `FRCRN_SE_16K` and `MossFormer2_SE_48K` ports in progress, then `MossFormer2_SR_48K`.
+`MossFormer2_SE_48K` native enhancer (`docs/mossformer2-se.md`; F32 1.0, F16 1.0, Q8_0 0.9999996 end-to-end with 52 sensitive matrices kept F16 by `crispasr-quantize`; 48 kHz jfk+white 5 dB -> 17.08 dB, same as PyTorch).
+- Open: MossFormer2_SS Q8_0 may want the same F16-keep rule (unchecked); registry URLs for the converted GGUFs (none uploaded yet); GPU runs untested for both ports; clean idle-machine CPU timing vs PyTorch.
+- Next action: `FRCRN_SE_16K` and `MossFormer2_SR_48K` ports in progress.
 
 ### Mini-BS-RoFormer V2.5 — CPU qualification complete, 2026-11-01
 

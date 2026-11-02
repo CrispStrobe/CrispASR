@@ -311,6 +311,7 @@ inline const entry* table(size_t* n_out) {
         {"mini-bs-roformer",          "mini-bs-roformer"},
         {"mossformer2-ss",            "mossformer2-ss"},
         {"mossformergan-se",          "mossformergan-se"},
+        {"mossformer2-se",            "mossformer2-se"},
         {"mel-band-roformer",         "mel-band-roformer"},
         {"mel_band_roformer",         "mel-band-roformer"},
         {"crepe",                     "crepe"},
