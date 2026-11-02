@@ -31,10 +31,34 @@ upstream code; it needs `torch`, `numpy`, `scipy` and `gguf`.
 | `frcrn-se-16k-f32.gguf` | 58.9 MB | everything F32 |
 | `frcrn-se-16k-f16.gguf` | 31.8 MB | conv and FSMN matrices F16; STFT kernels, folded BN, SE layers, biases, FSMN memory taps F32 (recommended) |
 
-There is no Q8_0. FRCRN's two cascaded UNets amplify weight error: with
-weight-only Q8_0 (quantised, then de-quantised to F32, so activations stay
-exact) the second UNet's output falls to cosine 0.23 against PyTorch and the
-mask to 0.47; ggml's Q8_0 path (which also quantises activations) gives 0.31.
+| `frcrn-se-16k-q8_0.gguf` | 23.9 MB | `crispasr-quantize frcrn-se-16k-f16.gguf frcrn-se-16k-q8_0.gguf q8_0`: decoder conv kernels and SE gates Q8_0, everything else as in F16 |
+
+**Q8_0 keeps the sensitive tensors at F16.** A plain Q8_0 is wrong inside:
+the default name rules quantize the Gated-FSMN `lin`/`proj` matrices, and with
+those in Q8_0 the second UNet's stages fall to cosine 0.25 against PyTorch
+(the mask to 0.50). The end-to-end waveform still reads 0.9999, because the
+broken bins carry little energy, but the network is not computing the right
+thing. `crispasr-quantize` therefore uses an allow-list for `frcrn-se`: only
+the decoder complex-conv kernels (`u*.dec.*.w_re/w_im[_skip]`) and the SE gate
+matrices are quantized; encoder conv kernels, FSMN projections and memory
+taps, STFT kernels and folded BatchNorm stay at source precision.
+
+Measured on the CPU, F16 source, against the original PyTorch path:
+
+| Variant | Size | Min stage cosine | End-to-end |
+|---|---:|---:|---:|
+| default name rules (FSMN + SE quantized) | 30.7 MB | 0.249 (`u2.out`) | 0.99989 |
+| FSMN `lin`/`proj` kept F16 | 31.5 MB | 0.99983 | 0.9999999 |
+| + all conv kernels Q8_0 | 20.6 MB | 0.99831 | 0.9999976 |
+| + decoder kernels kept F16 | 28.2 MB | 0.99908 | 0.9999996 |
+| + only u2 encoder kernels kept F16 | 22.2 MB | 0.99803 | 0.9999979 |
+| + encoder layers 4–6 kept F16 | 22.1 MB | 0.99783 | 0.9999971 |
+| **+ all encoder kernels kept F16 (shipped rule)** | **23.9 MB** | **0.99972** | **0.9999985** |
+
+The shipped rule also passes the windowed paths: 11 s forced windows min stage
+0.99971 (end-to-end 0.9999981), 3 s forced windows 0.99977, and the 132 s clip
+(176 windows) end-to-end 0.9999977. Denoising quality is unchanged: jfk_noisy
+9.05 → 17.27 dB SNR, the same as F16 and PyTorch.
 
 What the converter rewrites (all exact):
 

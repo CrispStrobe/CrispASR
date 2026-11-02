@@ -284,6 +284,22 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
     // 169 MB (148 MB with the SE guard, 223 MB F16). See docs/mossformer2-sr.md.
     const bool is_mossformer2_sr = (arch == "mossformer2-sr");
 
+    // FRCRN_SE_16K: an allow-list. The default name heuristic quantizes the
+    // Gated-FSMN lin/proj matrices and SE gates but none of the complex-conv
+    // kernels (`*.w_re` / `*.w_im`), and the FSMN matrices are exactly the
+    // precision-sensitive ones: with them in Q8_0 the second UNet's stages fall
+    // to cos 0.25 (end-to-end still 0.9999, but the intermediate tensors are
+    // wrong). The encoder convs are sensitive too (keeping only the decoder
+    // convs at source precision: min stage 0.9991; only u2's or only the deep
+    // encoder convs: 0.998). Quantize the DECODER complex-conv kernels and the
+    // SE gate matrices; keep encoder kernels, FSMN lin/proj, FSMN memory taps,
+    // STFT kernels and the folded BN affines at source precision. From the F16
+    // file: 31.8 -> 23.9 MB, min stage cos 0.99972 (3 s, one pass), 0.99971
+    // (11 s, windowed), end-to-end 0.9999985. See docs/frcrn-se.md.
+    const bool is_frcrn_se = (arch == "frcrn-se");
+    static const std::regex frcrn_se_q_re(
+        R"(^u[12]\.(dec\.[0-9]+\.w_(re|im)(_skip)?|se_(enc|dec)\.[0-9]+\.[ri][12]\.w)$)");
+
     // BTC chords: a 12 MB model whose weight matrices are all 128x128 or
     // 128x256 — small enough that quantisation buys little, and the FFN convs
     // are (3, 128, 128) whose K=3 does not tile a Q4_K 32-element block any
@@ -1158,6 +1174,8 @@ static bool crispasr_model_quantize(const std::string& fname_inp, const std::str
                 const bool in_tail = idx >= omniasr_tail_cutoff;
                 return !(in_head || in_tail);
             }());
+        if (is_frcrn_se) // allow-list (see is_frcrn_se note)
+            should_quantize = ggml_is_quantized(qtype) && src_ok && ok_dims && std::regex_match(sname, frcrn_se_q_re);
 
         // Determine actual quant type with row-size fallback
         ggml_type qt = qtype;
