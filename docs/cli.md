@@ -224,6 +224,7 @@ before enabling it.
 | `rnnoise` (`--denoise`) | built-in RNNoise (tiny GRU, CPU, real-time; not in MSVC builds). Vendored from xiph/rnnoise `6cbfd53` (classic model); at 48 kHz the output is bit-identical to upstream's `rnnoise_demo`, other rates go through the polyphase resampler (16 kHz: cos 0.99995 vs the original run on 48 kHz audio) |
 | registry name / `.gguf` path | a converted enhancement model, chosen by its GGUF architecture |
 | `mossformergan-se-16k-f16.gguf` | ClearerVoice-Studio MossFormerGAN_SE_16K (16 kHz, GAN-trained mask + complex refinement; convert locally, see [mossformergan-se](mossformergan-se.md)) |
+| `mossformer2-se-48k-f16.gguf` | ClearerVoice-Studio MossFormer2_SE_48K (48 kHz full band, MossFormer2 magnitude mask on a 1920-point STFT; convert locally, see [mossformer2-se](mossformer2-se.md)) |
 
 Any input rate works; the method resamples to its native rate and back, so the
 output keeps the input length and timeline (RNNoise output is sample-aligned).
