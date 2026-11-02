@@ -333,6 +333,27 @@ CRISPASR_SESSION_API int crispasr_detect_language_pcm(const float* samples, int3
                                                       int32_t out_lang_cap, float* out_confidence);
 CRISPASR_SESSION_API int crispasr_enhance_audio_rnnoise(const float* in_pcm, int32_t n_samples, float* out_pcm,
                                                         int32_t out_cap);
+
+// Selectable speech enhancement (denoise). `spec` is "none"/"off"/"" (disabled),
+// "rnnoise" (built-in; absent from MSVC builds), or a path to an enhancement
+// GGUF whose general.architecture is listed by crispasr_enhance_model_archs().
+//
+// crispasr_session_set_enhance: sticky pre-pass applied once by every
+// crispasr_session_transcribe* call, before VAD/chunking. Default off.
+// Returns 0 on success, -1 for a NULL session, -2 when the method/model could
+// not be loaded (the previous setting is kept). Streaming (crispasr_stream_*)
+// does not apply it.
+CRISPASR_SESSION_API int crispasr_session_set_enhance(crispasr_session* s, const char* spec);
+// Active method name: "none", "rnnoise", or the model's method name.
+CRISPASR_SESSION_API const char* crispasr_session_get_enhance(crispasr_session* s);
+// One-shot enhancement of mono PCM at any sample rate; writes exactly
+// n_samples floats at the same rate. A "none" spec copies the input.
+// Returns 0 on success, -1 on invalid arguments, -2 on load/processing failure.
+CRISPASR_SESSION_API int crispasr_enhance_audio_spec(const char* spec, const float* in_pcm, int32_t n_samples,
+                                                     int32_t sample_rate, int32_t n_threads, float* out_pcm,
+                                                     int32_t out_cap);
+CRISPASR_SESSION_API int crispasr_enhance_has_rnnoise(void);
+CRISPASR_SESSION_API const char* crispasr_enhance_model_archs(void);
 CRISPASR_SESSION_API int crispasr_text_detect_language(const char* text, const char* model_path, int32_t n_threads,
                                                        char* out_label_buf, int32_t out_label_cap,
                                                        float* out_confidence);

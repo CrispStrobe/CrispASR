@@ -635,6 +635,18 @@ int crispasr_session_set_punctuation(crispasr_session* s, int e) {
 int crispasr_session_set_punc_model(crispasr_session* s, const char* p) {
     return 0;
 }
+static char probe_enhance[64] = "none";
+int crispasr_session_set_enhance(crispasr_session* s, const char* spec) {
+    if (!s || !spec)
+        return -1;
+    if (strcmp(spec, "bogus") == 0)
+        return -2;
+    snprintf(probe_enhance, sizeof(probe_enhance), "%s", spec);
+    return 0;
+}
+const char* crispasr_session_get_enhance(crispasr_session* s) {
+    return probe_enhance;
+}
 int crispasr_session_set_hotwords(crispasr_session* s, const char* h, float b) {
     return 0;
 }
@@ -945,6 +957,20 @@ int crispasr_detect_language_pcm(const float* p, int n, int m, const char* path,
 }
 int crispasr_enhance_audio_rnnoise(const float* in, int n, float* out, int cap) {
     return 0;
+}
+int crispasr_enhance_audio_spec(const char* spec, const float* in, int32_t n, int32_t sr, int32_t nt, float* out,
+                                int32_t cap) {
+    if (!spec || !in || !out || n <= 0 || sr <= 0 || cap < n)
+        return -1;
+    for (int i = 0; i < n; i++)
+        out[i] = in[i] * 0.5f;
+    return 0;
+}
+int crispasr_enhance_has_rnnoise(void) {
+    return 1;
+}
+const char* crispasr_enhance_model_archs(void) {
+    return "";
 }
 int crispasr_text_detect_language(const char* t, const char* m, int nt, char* out, int cap, float* conf) {
     return 0;

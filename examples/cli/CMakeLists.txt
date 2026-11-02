@@ -118,6 +118,7 @@ add_executable(${TARGET}
     crispasr_aligner_cli.cpp
     crispasr_vad_cli.cpp
     crispasr_separate_cli.cpp
+    crispasr_enhance_cli.cpp
     crispasr_beats_cli.cpp
     crispasr_chords_cli.cpp
     crispasr_tab_cli.cpp

@@ -422,6 +422,14 @@ Shared codec modules used by TTS backends. Also available standalone for encode/
 
 All runtimes share ggml-based inference. The speech-LLM backends (**qwen3**, **voxtral**, **voxtral4b**, **granite**, **glm-asr**, **kyutai-stt**) inject audio encoder frames directly into an autoregressive language model's input embeddings, instead of using a dedicated CTC/transducer/seq2seq decoder. The **fastconformer-ctc** backend hosts the NeMo FastConformer-CTC standalone ASR family — `stt_en_fastconformer_ctc_{large,xlarge,xxlarge}` and the architecturally-identical `parakeet-ctc-{0.6b,1.1b}` (different training data + tokenizer, same encoder + head shape) — with greedy CTC decoding. Same C++ runtime as the canary-ctc aligner.
 
+### Speech enhancement (denoise)
+
+`--enhance SPEC` (or `--denoise` for built-in RNNoise) cleans the input before
+VAD and transcription; `--enhance-output clean.wav` writes the enhanced audio
+instead of transcribing. Off by default, selectable per session in every
+binding (`set_enhance`) and per request on the server (`enhance`). See
+[`docs/cli.md`](docs/cli.md#speech-enhancement-denoise----enhance).
+
 ### Music & audio analysis
 
 Beyond speech, CrispASR runs several music/audio analysis tasks — each a small

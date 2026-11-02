@@ -1063,6 +1063,46 @@ LidResult detectLanguagePcm({
   return LidResult(langCode: code, confidence: conf);
 }
 
+/// Selectable audio enhancement (denoise) on mono PCM at any sample rate.
+///
+/// [spec] is `'none'` (copy), `'rnnoise'` or a path to an enhancement GGUF.
+/// Returns a fresh [Float32List] with the same length and rate as [pcm].
+Float32List enhanceAudio(
+  Float32List pcm, {
+  String spec = 'rnnoise',
+  int sampleRate = 16000,
+  int nThreads = 4,
+  DynamicLibrary? lib,
+}) {
+  if (pcm.isEmpty) return Float32List(0);
+  lib ??= DynamicLibrary.open(CrispASR.defaultLibName());
+  if (!lib.providesSymbol('crispasr_enhance_audio_spec')) {
+    throw UnsupportedError(
+        'crispasr_enhance_audio_spec not present in this libcrispasr build');
+  }
+  final fn = lib.lookupFunction<
+      Int32 Function(Pointer<Utf8>, Pointer<Float>, Int32, Int32, Int32,
+          Pointer<Float>, Int32),
+      int Function(Pointer<Utf8>, Pointer<Float>, int, int, int, Pointer<Float>,
+          int)>('crispasr_enhance_audio_spec');
+  final specPtr = (spec.isEmpty ? 'none' : spec).toNativeUtf8();
+  final inBuf = calloc<Float>(pcm.length);
+  final outBuf = calloc<Float>(pcm.length);
+  try {
+    inBuf.asTypedList(pcm.length).setAll(0, pcm);
+    final rc = fn(
+        specPtr, inBuf, pcm.length, sampleRate, nThreads, outBuf, pcm.length);
+    if (rc != 0) {
+      throw StateError('crispasr_enhance_audio_spec failed (rc=$rc)');
+    }
+    return Float32List.fromList(outBuf.asTypedList(pcm.length));
+  } finally {
+    calloc.free(specPtr);
+    calloc.free(inBuf);
+    calloc.free(outBuf);
+  }
+}
+
 /// RNNoise-based audio enhancement (transcribe pre-step).
 ///
 /// Returns a fresh [Float32List] of the same length as [pcm] with the
@@ -3729,6 +3769,39 @@ class CrispasrSession {
     } finally {
       calloc.free(p);
     }
+  }
+
+  /// Select the speech-enhancement (denoise) pre-pass applied once by every
+  /// transcribe call, before VAD/chunking.
+  ///
+  /// [spec] is `'none'` / `''` (off, the default), `'rnnoise'` (built-in) or a
+  /// path to an enhancement GGUF — the same pre-pass as the CLI `--enhance`.
+  /// Throws on load failure; the previous setting is then kept.
+  void setEnhance(String spec) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_enhance')) {
+      throw UnsupportedError('enhance API not present in this libcrispasr build');
+    }
+    final fn = _lib.lookupFunction<
+        Int32 Function(Pointer<Void>, Pointer<Utf8>),
+        int Function(Pointer<Void>, Pointer<Utf8>)>('crispasr_session_set_enhance');
+    final p = (spec.isEmpty ? 'none' : spec).toNativeUtf8();
+    try {
+      final rc = fn(_handle, p);
+      if (rc != 0) throw Exception('setEnhance failed (rc=$rc)');
+    } finally {
+      calloc.free(p);
+    }
+  }
+
+  /// Active enhancement method name (`'none'` when off).
+  String get enhance {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_get_enhance')) return 'none';
+    final fn = _lib.lookupFunction<Pointer<Utf8> Function(Pointer<Void>),
+        Pointer<Utf8> Function(Pointer<Void>)>('crispasr_session_get_enhance');
+    final p = fn(_handle);
+    return p == nullptr ? 'none' : p.toDartString();
   }
 
   /// Select the G2P pronunciation dictionary for TTS phonemization

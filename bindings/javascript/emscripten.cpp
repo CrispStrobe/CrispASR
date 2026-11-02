@@ -270,6 +270,19 @@ EMSCRIPTEN_BINDINGS(whisper) {
                              binding_check_reentry();
                              return g_asr_session ? crispasr_session_set_punc_model(g_asr_session, m.c_str()) : -1;
                          }));
+    // Speech-enhancement (denoise) pre-pass for transcription: "none" (off),
+    // "rnnoise", or an enhancement GGUF path in the Emscripten FS.
+    emscripten::function("asrSetEnhance", emscripten::optional_override([](const std::string& spec) {
+                             binding_check_reentry();
+                             return g_asr_session ? crispasr_session_set_enhance(g_asr_session,
+                                                                                 spec.empty() ? "none" : spec.c_str())
+                                                  : -1;
+                         }));
+    emscripten::function("asrGetEnhance", emscripten::optional_override([]() -> std::string {
+                             binding_check_reentry();
+                             return g_asr_session ? std::string(crispasr_session_get_enhance(g_asr_session))
+                                                  : std::string("none");
+                         }));
     emscripten::function("asrSetBeamSize", emscripten::optional_override([](int n) {
                              binding_check_reentry();
                              return g_asr_session ? crispasr_session_set_beam_size(g_asr_session, n) : -1;
@@ -1143,6 +1156,22 @@ EMSCRIPTEN_BINDINGS(whisper) {
     // the zero-cost provenance floor for the browser (ttsSynthesize returns raw
     // watermarked PCM; wrap it to also get a machine-readable, any-tool-readable
     // AI marker). Optionally feed the result to c2paSign() for a full manifest.
+    // One-shot denoise of a mono Float32Array at any sample rate. Returns a
+    // Float32Array of the same length, or an empty one on failure.
+    emscripten::function(
+        "enhanceAudio", emscripten::optional_override([](const emscripten::val& pcm, const std::string& spec,
+                                                         int sampleRate, int nThreads) -> emscripten::val {
+            binding_check_reentry();
+            std::vector<float> in = emscripten::vecFromJSArray<float>(pcm);
+            std::vector<float> out(in.size());
+            if (in.empty() ||
+                crispasr_enhance_audio_spec(spec.empty() ? "none" : spec.c_str(), in.data(), (int32_t)in.size(),
+                                            sampleRate, nThreads, out.data(), (int32_t)out.size()) != 0)
+                return emscripten::val::global("Float32Array").new_(0);
+            emscripten::val view(emscripten::typed_memory_view(out.size(), out.data()));
+            return emscripten::val::global("Float32Array").new_(view);
+        }));
+
     emscripten::function(
         "pcmToWav", emscripten::optional_override([](const emscripten::val& pcm, int sampleRate) -> emscripten::val {
             binding_check_reentry();

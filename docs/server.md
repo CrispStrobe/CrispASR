@@ -105,6 +105,7 @@ curl http://localhost:8080/v1/audio/transcriptions \
 | `source_lang` | Source language for AST backends (canary, cohere) |
 | `target_lang` | Target language for AST backends |
 | `punctuation` | `true`/`false` — enable/disable punctuation (default: `true`; `false` strips punctuation from output) |
+| `enhance` | speech-enhancement (denoise) pre-pass before VAD/transcription: `none`, `rnnoise`, a registry name or an enhancement GGUF path (default: the server's `--enhance`, otherwise `none`). An unloadable method fails the request |
 | `diarize` | `true`/`false` — enable speaker diarization |
 | `diarize_method` | `energy`, `xcorr`, `vad-turns`, `sherpa`, `pyannote`, `ecapa`, `foxnose`, `sortformer` (default: `energy`) |
 | `diarize_embedder` | Speaker-embedding model for cross-slice clustering (path or `auto`) |

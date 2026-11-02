@@ -453,6 +453,12 @@ struct whisper_params {
     std::string tts_output;
     bool s2s = false;       // speech-to-speech mode: audio in → audio out
     std::string s2s_output; // S2S output WAV path (default: s2s_output.wav)
+    // Speech-enhancement (denoise) pre-pass: "" = off (default), "rnnoise",
+    // a registry name (e.g. "frcrn-se") or an enhancement GGUF path. Applied to
+    // the decoded input before VAD/chunking/transcription. --enhance-output
+    // turns it into a standalone verb: write the enhanced audio and exit.
+    std::string enhance;
+    std::string enhance_output;
     std::string tts_voice;
     int tts_steps = 20;
     std::string tts_codec_model;

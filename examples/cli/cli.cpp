@@ -5,6 +5,7 @@
 #include "grammar-parser.h"
 #include "whisper_params.h"       // struct whisper_params (shared with crispasr_*)
 #include "crispasr_backend.h"     // crispasr_run_backend() dispatch entry point
+#include "crispasr_enhance_cli.h" // --enhance / --denoise pre-pass and --enhance-output verb
 #include "crispasr_cpu_isa.h"     // fail-fast on build-vs-host ISA mismatch (#380)
 #include "crispasr_diagnostics.h" // --version / --diagnostics + verbose banner (#31)
 #include "crispasr_consent_record.h"
@@ -622,6 +623,14 @@ static bool whisper_params_parse_arg_streaming_tts(int argc, char** argv, int& i
         params.s2s = true;
     } else if (arg == "--s2s-output") {
         params.s2s_output = ARGV_NEXT;
+    } else if (arg == "--enhance") {
+        params.enhance = ARGV_NEXT;
+    } else if (arg == "--denoise") {
+        params.enhance = "rnnoise";
+    } else if (arg == "--no-enhance" || arg == "--no-denoise") {
+        params.enhance = "none";
+    } else if (arg == "--enhance-output") {
+        params.enhance_output = ARGV_NEXT;
     } else if (arg == "--tts") {
         params.tts_text = ARGV_NEXT;
     } else if (arg == "--tts-output") {
@@ -1502,6 +1511,18 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             params.lcs_min_length);
     fprintf(out, "             -m auto                        download a default model for the chosen backend\n");
     // Text-To-Speech (TTS) parameters — vibevoice and qwen3-tts backends
+    fprintf(out, "\nSpeech enhancement (denoise) options:\n");
+    fprintf(out,
+            "             --enhance SPEC          [%-7s] denoise the input before VAD/transcription: none | rnnoise |\n"
+            "                                               a registry name (frcrn-se, mossformergan-se, "
+            "mossformer2-se-48k)\n"
+            "                                               | an enhancement GGUF path\n",
+            params.enhance.empty() ? "none" : params.enhance.c_str());
+    fprintf(out, "             --denoise                         shorthand for --enhance rnnoise\n");
+    fprintf(out,
+            "             --no-enhance                      disable enhancement (overrides an earlier --enhance)\n");
+    fprintf(out, "             --enhance-output FNAME            write the enhanced input to FNAME (.wav) and exit "
+                 "(no transcription)\n");
     fprintf(out, "\nSpeech-to-speech (S2S) options:\n");
     fprintf(out, "             --s2s                   [%-7s] speech-to-speech mode: audio input → audio output\n",
             params.s2s ? "true" : "false");
@@ -2782,6 +2803,12 @@ int main(int argc, char** argv) {
         return crispasr_run_backend(params);
     }
 
+    // --enhance-output is a standalone verb: denoise each input, write it, exit.
+    // No ASR model is involved, so route before backend detection.
+    if (!params.enhance_output.empty()) {
+        return crispasr_run_enhance(params);
+    }
+
     // §248: --separate is a standalone source-separation verb. Route straight to
     // the dispatcher (crispasr_run_separate) before any ASR backend detection —
     // the separation model is not a transcribe backend and must not be loaded as
@@ -3087,6 +3114,10 @@ int main(int argc, char** argv) {
             fprintf(stderr, "error: failed to read audio file '%s'\n", fname_inp.c_str());
             n_read_failures++;
             continue;
+        }
+        if (!crispasr_cli_apply_enhance(params, pcmf32, pcmf32s, CRISPASR_SAMPLE_RATE)) {
+            whisper_free(ctx);
+            return 2;
         }
 
         if (!whisper_is_multilingual(ctx)) {

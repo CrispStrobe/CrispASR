@@ -74,6 +74,7 @@
 #if defined(CRISPASR_RNNOISE)
 #include "crispasr_enhance.h" // RNNoise audio enhancement (shared with CLI)
 #endif
+#include "crispasr_enhancer.h"        // selectable enhancement pre-pass (none / rnnoise / model GGUF)
 #include "text_lid_dispatch.h"        // Text-LID backend-agnostic façade (CLD3 + fastText)
 #include "crispasr_aligner.h"         // CTC / forced-aligner word timings (shared with CLI)
 #include "crispasr_cache.h"           // HF download + filesystem cache (shared with CLI)
@@ -1982,6 +1983,13 @@ struct crispasr_session {
     // after transcription (gated on `punctuation`), mirroring the CLI/server.
     void* punc_ctx = nullptr; // fireredpunc_context*
     void* pcs_ctx = nullptr;  // pcs_context*
+    // Speech-enhancement (denoise) pre-pass, set via crispasr_session_set_enhance.
+    // nullptr = disabled (the default). Applied once per transcribe call before
+    // VAD/chunking; `enhance_bypass` stops nested transcribe calls (VAD slices)
+    // from enhancing twice.
+    CrispasrEnhancer* enhancer = nullptr;
+    std::string enhance_spec;
+    bool enhance_bypass = false;
     // Free-form audio Q&A prompt for instruct-tuned audio-LLM backends
     // (voxtral / voxtral4b / qwen3-asr). When non-empty, replaces the
     // standard "lang:<X>[TRANSCRIBE]" suffix with `[/INST]<prompt>`,
@@ -5923,12 +5931,44 @@ static bool session_language_satisfiable(const crispasr_session* s, const char* 
     return same;
 }
 
+// ---------------------------------------------------------------------------
+// Speech-enhancement pre-pass (crispasr_session_set_enhance). Returns the PCM
+// to transcribe: `pcm` itself when enhancement is off or already applied by an
+// outer call, otherwise `buf` filled with the enhanced copy. On enhancement
+// failure the original PCM is used and a warning printed — denoising is a
+// quality aid, not a reason to drop a transcription.
+// ---------------------------------------------------------------------------
+static const float* session_enhance_pcm(crispasr_session* s, const float* pcm, int n_samples, std::vector<float>& buf) {
+    if (!s || !s->enhancer || s->enhance_bypass)
+        return pcm;
+    const int sr = crispasr_session_input_sample_rate(s);
+    if (!crispasr_enhancer_process(s->enhancer, pcm, n_samples, sr > 0 ? sr : CRISPASR_SAMPLE_RATE, buf) ||
+        (int)buf.size() != n_samples) {
+        fprintf(stderr, "crispasr: warning: %s enhancement failed; transcribing the original audio\n",
+                crispasr_enhancer_name(s->enhancer));
+        return pcm;
+    }
+    return buf.data();
+}
+
+struct SessionEnhanceBypass {
+    crispasr_session* s;
+    bool prev;
+    explicit SessionEnhanceBypass(crispasr_session* sess) : s(sess), prev(sess->enhance_bypass) {
+        s->enhance_bypass = true;
+    }
+    ~SessionEnhanceBypass() { s->enhance_bypass = prev; }
+};
+
 CA_EXPORT crispasr_session_result* crispasr_session_transcribe_lang(crispasr_session* s, const float* pcm,
                                                                     int n_samples, const char* language) {
     if (!s || !pcm || n_samples <= 0)
         return nullptr;
     if (!session_language_satisfiable(s, language))
         return nullptr;
+    std::vector<float> enhanced_pcm;
+    pcm = session_enhance_pcm(s, pcm, n_samples, enhanced_pcm);
+    SessionEnhanceBypass enhance_guard(s);
 
     // Best-of-N: run N independent transcriptions and keep the one with the
     // highest average per-token confidence. Whisper handles best_of internally
@@ -8643,6 +8683,12 @@ CA_EXPORT crispasr_session_result* crispasr_session_transcribe_vad_lang(crispasr
             opts.n_threads = opts_or_null->n_threads;
     }
 
+    // Enhance once, before VAD, so the speech detector also sees the cleaned
+    // audio; the nested transcribe calls below then skip their own pre-pass.
+    std::vector<float> enhanced_pcm;
+    pcm = session_enhance_pcm(s, pcm, n_samples, enhanced_pcm);
+    SessionEnhanceBypass enhance_guard(s);
+
     // Compute speech slices. Empty slices ⇒ VAD model missing or no speech
     // detected — fall back to a plain transcribe so callers always get some
     // result when audio exists.
@@ -9001,6 +9047,86 @@ CA_EXPORT int crispasr_enhance_audio_rnnoise(const float* in_pcm, int32_t n_samp
     (void)out_cap;
     return -2; // RNNoise not compiled on this platform
 #endif
+}
+
+// ---------------------------------------------------------------------------
+// Selectable speech enhancement (denoise).
+//
+// `spec` is "none"/"off"/"" (disabled), "rnnoise" (built-in), or a path to an
+// enhancement GGUF whose general.architecture names a supported model (see
+// crispasr_enhance_model_archs()). See src/crispasr_enhancer.h.
+// ---------------------------------------------------------------------------
+
+// Sticky per-session pre-pass applied by every crispasr_session_transcribe*
+// call (once, before VAD/chunking). Default: off.
+//   0  — success (a "none" spec disables and frees any loaded enhancer)
+//   -1 — NULL session
+//   -2 — the method/model could not be loaded; the previous setting is kept
+CA_EXPORT int crispasr_session_set_enhance(crispasr_session* s, const char* spec) {
+    if (!s)
+        return -1;
+    if (crispasr_enhance_spec_is_none(spec)) {
+        crispasr_enhancer_free(s->enhancer);
+        s->enhancer = nullptr;
+        s->enhance_spec.clear();
+        return 0;
+    }
+    if (s->enhancer && s->enhance_spec == spec)
+        return 0;
+    std::string err;
+    CrispasrEnhancer* e = crispasr_enhancer_create(spec, s->n_threads, false, &err);
+    if (!e) {
+        fprintf(stderr, "crispasr_session_set_enhance: %s\n", err.c_str());
+        return -2;
+    }
+    crispasr_enhancer_free(s->enhancer);
+    s->enhancer = e;
+    s->enhance_spec = spec;
+    return 0;
+}
+
+// Name of the active enhancement method ("none", "rnnoise", "frcrn-se", ...).
+// The pointer stays valid until the next set_enhance / close.
+CA_EXPORT const char* crispasr_session_get_enhance(crispasr_session* s) {
+    if (!s || !s->enhancer)
+        return "none";
+    return crispasr_enhancer_name(s->enhancer);
+}
+
+// One-shot enhancement of a mono buffer at any sample rate. Writes exactly
+// n_samples floats (same rate) into out_pcm. A "none" spec copies the input.
+//   0 success, -1 invalid args, -2 load/processing failure.
+CA_EXPORT int crispasr_enhance_audio_spec(const char* spec, const float* in_pcm, int32_t n_samples, int32_t sample_rate,
+                                          int32_t n_threads, float* out_pcm, int32_t out_cap) {
+    if (!in_pcm || !out_pcm || n_samples <= 0 || sample_rate <= 0 || out_cap < n_samples)
+        return -1;
+    if (crispasr_enhance_spec_is_none(spec)) {
+        std::memmove(out_pcm, in_pcm, (size_t)n_samples * sizeof(float));
+        return 0;
+    }
+    std::string err;
+    CrispasrEnhancer* e = crispasr_enhancer_create(spec, n_threads, false, &err);
+    if (!e) {
+        fprintf(stderr, "crispasr_enhance_audio_spec: %s\n", err.c_str());
+        return -2;
+    }
+    std::vector<float> out;
+    const bool ok = crispasr_enhancer_process(e, in_pcm, n_samples, sample_rate, out);
+    crispasr_enhancer_free(e);
+    if (!ok || (int32_t)out.size() != n_samples)
+        return -2;
+    std::memcpy(out_pcm, out.data(), (size_t)n_samples * sizeof(float));
+    return 0;
+}
+
+// 1 when the built-in "rnnoise" method is available in this build.
+CA_EXPORT int crispasr_enhance_has_rnnoise(void) {
+    return crispasr_enhancer_has_rnnoise() ? 1 : 0;
+}
+
+// Comma-separated GGUF architectures accepted as enhancement models.
+CA_EXPORT const char* crispasr_enhance_model_archs(void) {
+    return crispasr_enhancer_model_archs();
 }
 
 // ---------------------------------------------------------------------------
@@ -12748,6 +12874,8 @@ CA_EXPORT int crispasr_session_piano_sample_rate(crispasr_session* s) {
 CA_EXPORT void crispasr_session_close(crispasr_session* s) {
     if (!s)
         return;
+    crispasr_enhancer_free(s->enhancer);
+    s->enhancer = nullptr;
     {
         // Unregister from the session-less polling API before teardown so a
         // concurrent drain can't touch a dying session (see g_stream_session).

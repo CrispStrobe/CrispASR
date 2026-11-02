@@ -2362,6 +2362,28 @@ impl Session {
         Ok(())
     }
 
+    /// Select the speech-enhancement (denoise) pre-pass applied once by every
+    /// transcribe call, before VAD/chunking: `"none"`/`""` (off, the default),
+    /// `"rnnoise"` (built-in) or an enhancement GGUF path. Same pre-pass as the
+    /// CLI `--enhance`. On error the previous setting is kept.
+    pub fn set_enhance(&self, spec: &str) -> Result<(), String> {
+        let c = CString::new(if spec.is_empty() { "none" } else { spec }).map_err(|e| e.to_string())?;
+        let rc = unsafe { crispasr_sys::crispasr_session_set_enhance(self.handle, c.as_ptr()) };
+        if rc != 0 {
+            return Err(format!("set_enhance failed (rc={})", rc));
+        }
+        Ok(())
+    }
+
+    /// Active enhancement method name (`"none"` when off).
+    pub fn enhance(&self) -> String {
+        let p = unsafe { crispasr_sys::crispasr_session_get_enhance(self.handle) };
+        if p.is_null() {
+            return "none".to_string();
+        }
+        unsafe { std::ffi::CStr::from_ptr(p) }.to_string_lossy().into_owned()
+    }
+
     /// Comma-separated hotwords for contextual biasing, boosted by `boost` per
     /// token match. Empty string clears.
     pub fn set_hotwords(&self, hotwords: &str, boost: f32) -> Result<(), String> {
@@ -4450,7 +4472,8 @@ pub fn vad_slices(
     Ok(spans)
 }
 
-/// RNNoise audio enhancement on 48 kHz mono PCM.
+/// RNNoise audio enhancement on 16 kHz mono PCM (resampled to RNNoise's
+/// internal 48 kHz and back by the library).
 pub fn enhance_audio_rnnoise(pcm: &[f32]) -> Result<Vec<f32>, String> {
     let mut out = vec![0f32; pcm.len()];
     let rc = unsafe {
@@ -4463,6 +4486,31 @@ pub fn enhance_audio_rnnoise(pcm: &[f32]) -> Result<Vec<f32>, String> {
     };
     if rc != 0 {
         return Err(format!("enhance_audio_rnnoise failed (rc={rc})"));
+    }
+    Ok(out)
+}
+
+/// Denoise mono PCM at any sample rate with a selectable method: `"none"`
+/// (copy), `"rnnoise"`, or an enhancement GGUF path. Same length and rate out.
+pub fn enhance_audio(pcm: &[f32], spec: &str, sample_rate: i32, n_threads: i32) -> Result<Vec<f32>, String> {
+    if pcm.is_empty() {
+        return Err("enhance_audio: empty input".to_string());
+    }
+    let c = CString::new(if spec.is_empty() { "none" } else { spec }).map_err(|e| e.to_string())?;
+    let mut out = vec![0f32; pcm.len()];
+    let rc = unsafe {
+        crispasr_sys::crispasr_enhance_audio_spec(
+            c.as_ptr(),
+            pcm.as_ptr(),
+            pcm.len() as i32,
+            sample_rate,
+            n_threads,
+            out.as_mut_ptr(),
+            out.len() as i32,
+        )
+    };
+    if rc != 0 {
+        return Err(format!("enhance_audio failed (rc={rc})"));
     }
     Ok(out)
 }

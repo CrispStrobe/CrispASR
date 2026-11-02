@@ -270,6 +270,28 @@ func (s *CrispasrSession) SetPuncModel(model string) error {
 	return nil
 }
 
+// SetEnhance selects the speech-enhancement (denoise) pre-pass applied once by
+// every transcribe call, before VAD/chunking. spec is "none" or "" (off, the
+// default), "rnnoise" (built-in) or an enhancement GGUF path — the same
+// pre-pass as the CLI --enhance. On error the previous setting is kept.
+func (s *CrispasrSession) SetEnhance(spec string) error {
+	if spec == "" {
+		spec = "none"
+	}
+	cs := C.CString(spec)
+	defer C.free(unsafe.Pointer(cs))
+	rc := C.crispasr_session_set_enhance(s.nativeHandle(), cs)
+	if rc != 0 {
+		return fmt.Errorf("crispasr_session_set_enhance failed (rc=%d)", int(rc))
+	}
+	return nil
+}
+
+// Enhance returns the active enhancement method name ("none" when off).
+func (s *CrispasrSession) Enhance() string {
+	return C.GoString(C.crispasr_session_get_enhance(s.nativeHandle()))
+}
+
 // SetHotwords sets comma-separated hotwords for contextual biasing, boosted by
 // `boost` log-prob per token match (parakeet CTC/TDT trie, LLM backends prompt
 // injection). Empty string clears.
@@ -2562,7 +2584,8 @@ func DetectBackendFromGGUF(path string) (string, error) {
 	return C.GoString(&out[0]), nil
 }
 
-// EnhanceAudioRnnoise applies RNNoise denoising to 48 kHz mono PCM.
+// EnhanceAudioRnnoise applies RNNoise denoising to 16 kHz mono PCM (the
+// library resamples to RNNoise's internal 48 kHz and back).
 func EnhanceAudioRnnoise(pcm []float32) ([]float32, error) {
 	out := make([]float32, len(pcm))
 	rc := C.crispasr_enhance_audio_rnnoise(
@@ -2570,6 +2593,28 @@ func EnhanceAudioRnnoise(pcm []float32) ([]float32, error) {
 		(*C.float)(unsafe.Pointer(&out[0])), C.int(len(out)))
 	if rc != 0 {
 		return nil, fmt.Errorf("enhance_audio_rnnoise failed (rc=%d)", int(rc))
+	}
+	return out, nil
+}
+
+// EnhanceAudio denoises mono PCM at any sample rate with a selectable method:
+// "none" (copy), "rnnoise", or an enhancement GGUF path. The result has the
+// same length and rate as the input.
+func EnhanceAudio(pcm []float32, spec string, sampleRate, nThreads int) ([]float32, error) {
+	if len(pcm) == 0 {
+		return nil, errors.New("EnhanceAudio: empty input")
+	}
+	if spec == "" {
+		spec = "none"
+	}
+	cs := C.CString(spec)
+	defer C.free(unsafe.Pointer(cs))
+	out := make([]float32, len(pcm))
+	rc := C.crispasr_enhance_audio_spec(cs,
+		(*C.float)(unsafe.Pointer(&pcm[0])), C.int32_t(len(pcm)), C.int32_t(sampleRate), C.int32_t(nThreads),
+		(*C.float)(unsafe.Pointer(&out[0])), C.int32_t(len(out)))
+	if rc != 0 {
+		return nil, fmt.Errorf("enhance_audio_spec failed (rc=%d)", int(rc))
 	}
 	return out, nil
 }

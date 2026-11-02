@@ -211,6 +211,30 @@ per-token `tokens[]` arrays when the backend populates them:
 `offsets` object for a unit that is consistent across every level of the
 document (issue #228).
 
+## Speech enhancement (denoise) — `--enhance`
+
+`--enhance SPEC` cleans the decoded input once, before VAD, chunking and
+transcription see it. It is **off by default**: modern ASR models are trained on
+noisy speech and a denoiser's artefacts can raise WER, so measure on your audio
+before enabling it.
+
+| SPEC | Method |
+|---|---|
+| `none` (default) | no enhancement; `--no-enhance` forces this |
+| `rnnoise` (`--denoise`) | built-in RNNoise (tiny GRU, CPU, real-time; not in MSVC builds) |
+| registry name / `.gguf` path | a converted enhancement model, chosen by its GGUF architecture |
+
+Any input rate works; the method resamples to its native rate and back, so the
+output keeps the input length and timeline (RNNoise output is sample-aligned).
+
+```bash
+crispasr -m model.gguf -f noisy.wav --denoise                # denoise, then transcribe
+crispasr --enhance rnnoise --enhance-output clean.wav -f noisy.wav   # write enhanced audio, no ASR
+```
+
+The same switch exists in every binding (`crispasr_session_set_enhance`, see
+[bindings](bindings.md)) and as the server's `enhance` form field.
+
 ## Segmentation / chunking
 
 | Flag | Meaning |

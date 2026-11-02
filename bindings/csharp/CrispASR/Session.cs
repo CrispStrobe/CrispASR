@@ -200,6 +200,20 @@ namespace CrispASR
         public void SetPuncModel(string puncModel)
             => Check(NativeMethods.crispasr_session_set_punc_model(Handle, puncModel), "set_punc_model", allowUnsupported: false);
 
+        /// <summary>
+        /// Select the speech-enhancement (denoise) pre-pass applied once by every
+        /// transcribe call, before VAD/chunking: "none"/"" (off, the default),
+        /// "rnnoise" (built-in) or an enhancement GGUF path — the same pre-pass as
+        /// the CLI --enhance. On failure the previous setting is kept.
+        /// </summary>
+        public void SetEnhance(string spec)
+            => Check(NativeMethods.crispasr_session_set_enhance(Handle, string.IsNullOrEmpty(spec) ? "none" : spec),
+                     "set_enhance", allowUnsupported: false);
+
+        /// <summary>Active enhancement method name ("none" when off).</summary>
+        public string Enhance
+            => Marshal.PtrToStringUTF8(NativeMethods.crispasr_session_get_enhance(Handle)) ?? "none";
+
         /// <summary>Comma-separated hotwords for contextual biasing.</summary>
         public void SetHotwords(string hotwords, float boost)
             => Check(NativeMethods.crispasr_session_set_hotwords(Handle, hotwords, boost), "set_hotwords");
@@ -912,7 +926,22 @@ namespace CrispASR
         // Audio enhancement (static)
         // ----------------------------------------------------------------
 
-        /// <summary>Enhance audio using RNNoise (48 kHz mono).</summary>
+        /// <summary>
+        /// Denoise mono PCM at any sample rate with a selectable method: "none" (copy),
+        /// "rnnoise", or an enhancement GGUF path. Same length and rate out.
+        /// </summary>
+        public static float[] EnhanceAudio(float[] pcm, string spec = "rnnoise", int sampleRate = 16000, int nThreads = 4)
+        {
+            if (pcm == null) throw new ArgumentNullException(nameof(pcm));
+            if (pcm.Length == 0) return Array.Empty<float>();
+            var outPcm = new float[pcm.Length];
+            int rc = NativeMethods.crispasr_enhance_audio_spec(string.IsNullOrEmpty(spec) ? "none" : spec,
+                                                               pcm, pcm.Length, sampleRate, nThreads, outPcm, outPcm.Length);
+            if (rc != 0) throw new InvalidOperationException($"enhance_audio_spec failed (rc={rc})");
+            return outPcm;
+        }
+
+        /// <summary>Enhance audio using RNNoise (16 kHz mono; resampled to RNNoise's internal 48 kHz and back).</summary>
         public static float[] EnhanceAudioRnnoise(float[] pcm)
         {
             var outPcm = new float[pcm.Length];

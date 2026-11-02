@@ -6777,3 +6777,19 @@ endif()
 # forwarding. Set list-valued properties only once the actual cases exist.
 set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
     "${CMAKE_CURRENT_SOURCE_DIR}/performance-test-properties.cmake")
+
+# ─── test-enhance-abi — selectable denoise pre-pass, model-free ─────────────
+# Spec grammar, same-length/same-rate output, error codes, NULL-session
+# contracts and RNNoise sample alignment (crispasr_enhance_audio_spec /
+# crispasr_session_set_enhance). Model GGUF methods are covered by their
+# per-model live tests.
+add_executable(test-enhance-abi test-enhance-abi.cpp)
+target_compile_definitions(test-enhance-abi PRIVATE CRISPASR_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+target_link_libraries(test-enhance-abi PRIVATE
+    Catch2::Catch2WithMain
+    crispasr-lib
+)
+catch_discover_tests(test-enhance-abi
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)

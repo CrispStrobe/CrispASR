@@ -70,6 +70,8 @@ public final class CrispasrSession extends CrispasrSessionTasks implements AutoC
         int     crispasr_session_set_speaker_name(Pointer session, String name);
         int     crispasr_session_set_speaker_id(Pointer session, int id);
         int     crispasr_session_set_punc_model(Pointer session, String puncModel);
+        int     crispasr_session_set_enhance(Pointer session, String spec);
+        String  crispasr_session_get_enhance(Pointer session);
         int     crispasr_session_set_hotwords(Pointer session, String hotwords, float boost);
         int     crispasr_session_set_sensitivity(Pointer session, String preset);
         int     crispasr_session_set_g2p_dict(Pointer session, String source);
@@ -346,6 +348,8 @@ public final class CrispasrSession extends CrispasrSessionTasks implements AutoC
 
         // RNNoise audio enhancement
         int crispasr_enhance_audio_rnnoise(float[] inPcm, int nSamples, float[] outPcm, int outCap);
+        int crispasr_enhance_audio_spec(String spec, float[] inPcm, int nSamples, int sampleRate, int nThreads,
+                                        float[] outPcm, int outCap);
 
         // Diarization
         int crispasr_diarize_segments_abi(float[] leftPcm, float[] rightPcm, int nSamples,
@@ -673,7 +677,21 @@ public final class CrispasrSession extends CrispasrSessionTasks implements AutoC
         return translateText(text, sourceLanguage, targetLanguage, 256);
     }
 
-    /** RNNoise denoising of 48 kHz mono PCM. Throws if RNNoise is unavailable in the native build. */
+    /**
+     * Denoise mono PCM at any sample rate with a selectable method: {@code "none"} (copy),
+     * {@code "rnnoise"}, or an enhancement GGUF path. Same length and rate out.
+     */
+    public static float[] enhanceAudio(float[] pcm, String spec, int sampleRate, int nThreads) {
+        java.util.Objects.requireNonNull(pcm, "pcm");
+        if (pcm.length == 0) return new float[0];
+        float[] out = new float[pcm.length];
+        String s = (spec == null || spec.isEmpty()) ? "none" : spec;
+        int rc = Lib.INSTANCE.crispasr_enhance_audio_spec(s, pcm, pcm.length, sampleRate, nThreads, out, out.length);
+        if (rc != 0) throw new IllegalStateException("enhance_audio_spec failed (rc=" + rc + ")");
+        return out;
+    }
+
+    /** RNNoise denoising of 16 kHz mono PCM (resampled to RNNoise's internal 48 kHz and back). Throws if RNNoise is unavailable in the native build. */
     public static float[] enhanceAudioRnnoise(float[] pcm) {
         java.util.Objects.requireNonNull(pcm, "pcm");
         if (pcm.length == 0) return new float[0];
@@ -736,6 +754,24 @@ public final class CrispasrSession extends CrispasrSessionTasks implements AutoC
     public void setPuncModel(String puncModel) {
         int rc = Lib.INSTANCE.crispasr_session_set_punc_model(nativeHandle(), puncModel);
         if (rc != 0) throw new IllegalStateException("set_punc_model failed (rc=" + rc + ")");
+    }
+
+    /**
+     * Select the speech-enhancement (denoise) pre-pass applied once by every transcribe call,
+     * before VAD/chunking: {@code "none"}/{@code ""} (off, the default), {@code "rnnoise"}
+     * (built-in) or an enhancement GGUF path — the same pre-pass as the CLI {@code --enhance}.
+     * On failure the previous setting is kept.
+     */
+    public void setEnhance(String spec) {
+        String s = (spec == null || spec.isEmpty()) ? "none" : spec;
+        int rc = Lib.INSTANCE.crispasr_session_set_enhance(nativeHandle(), s);
+        if (rc != 0) throw new IllegalStateException("set_enhance failed (rc=" + rc + ")");
+    }
+
+    /** Active enhancement method name ({@code "none"} when off). */
+    public String getEnhance() {
+        String v = Lib.INSTANCE.crispasr_session_get_enhance(nativeHandle());
+        return v == null ? "none" : v;
     }
 
     /** Comma-separated hotwords for contextual biasing, boosted by {@code boost} per token match. */

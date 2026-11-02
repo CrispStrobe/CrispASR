@@ -39,6 +39,8 @@ extern int crispasr_session_set_voice(struct CrispasrSession* s, const char* pat
 extern int crispasr_session_set_speaker_name(struct CrispasrSession* s, const char* name);
 extern int crispasr_session_set_speaker_id(struct CrispasrSession* s, int id);
 extern int crispasr_session_set_punc_model(struct CrispasrSession* s, const char* punc_model);
+extern int crispasr_session_set_enhance(struct CrispasrSession* s, const char* spec);
+extern const char* crispasr_session_get_enhance(struct CrispasrSession* s);
 extern int crispasr_session_set_hotwords(struct CrispasrSession* s, const char* hotwords, float boost);
 extern int crispasr_session_set_sensitivity(struct CrispasrSession* s, const char* preset);
 extern int crispasr_session_set_g2p_dict(struct CrispasrSession* s, const char* source);
@@ -298,6 +300,8 @@ extern int crispasr_detect_language_pcm(const float* samples, int32_t n_samples,
 
 // RNNoise audio enhancement
 extern int crispasr_enhance_audio_rnnoise(const float* in_pcm, int32_t n_samples, float* out_pcm, int32_t out_cap);
+extern int crispasr_enhance_audio_spec(const char* spec, const float* in_pcm, int32_t n_samples, int32_t sample_rate,
+                                       int32_t n_threads, float* out_pcm, int32_t out_cap);
 
 // Text-LID
 extern int crispasr_text_detect_language(const char* text, const char* model_path, int32_t n_threads, char* out_label,
@@ -828,6 +832,23 @@ static VALUE rb_session_set_punc_model(VALUE self, VALUE handle, VALUE punc_mode
     if (rc != 0)
         rb_raise(rb_eRuntimeError, "set_punc_model failed (rc=%d)", rc);
     return Qnil;
+}
+
+/* Speech-enhancement (denoise) pre-pass: nil/"none" (off), "rnnoise", or an
+   enhancement GGUF path. Applied once by every transcribe call. */
+static VALUE rb_session_set_enhance(VALUE self, VALUE handle, VALUE spec) {
+    struct CrispasrSession* s = rb_extra_handle(handle);
+    const char* c = NIL_P(spec) ? "none" : StringValueCStr(spec);
+    int rc = crispasr_session_set_enhance(s, (c && *c) ? c : "none");
+    if (rc != 0)
+        rb_raise(rb_eRuntimeError, "set_enhance failed (rc=%d)", rc);
+    return Qnil;
+}
+
+static VALUE rb_session_get_enhance(VALUE self, VALUE handle) {
+    struct CrispasrSession* s = rb_extra_handle(handle);
+    const char* v = crispasr_session_get_enhance(s);
+    return rb_utf8_str_new_cstr(v ? v : "none");
 }
 
 static VALUE rb_session_set_hotwords(VALUE self, VALUE handle, VALUE hotwords, VALUE boost) {
@@ -1545,6 +1566,30 @@ static VALUE rb_vad_slices(int argc, VALUE* argv, VALUE self) {
     return result;
 }
 
+/* One-shot enhancement of mono PCM at any rate: spec "none"/"rnnoise"/GGUF path. */
+static VALUE rb_enhance_audio(VALUE self, VALUE pcm_arr, VALUE spec, VALUE sample_rate, VALUE n_threads) {
+    long n = RARRAY_LEN(pcm_arr);
+    if (n <= 0)
+        return rb_ary_new();
+    const char* c = NIL_P(spec) ? "none" : StringValueCStr(spec);
+    float* in = (float*)calloc(n, sizeof(float));
+    float* out = (float*)calloc(n, sizeof(float));
+    for (long i = 0; i < n; i++)
+        in[i] = (float)NUM2DBL(rb_ary_entry(pcm_arr, i));
+    int rc = crispasr_enhance_audio_spec((c && *c) ? c : "none", in, (int32_t)n, NUM2INT(sample_rate),
+                                         NUM2INT(n_threads), out, (int32_t)n);
+    free(in);
+    if (rc != 0) {
+        free(out);
+        rb_raise(rb_eRuntimeError, "enhance_audio failed (rc=%d)", rc);
+    }
+    VALUE result = rb_ary_new_capa(n);
+    for (long i = 0; i < n; i++)
+        rb_ary_push(result, DBL2NUM(out[i]));
+    free(out);
+    return result;
+}
+
 static VALUE rb_enhance_audio_rnnoise(VALUE self, VALUE pcm_arr) {
     long n = RARRAY_LEN(pcm_arr);
     float* in = (float*)calloc(n > 0 ? n : 1, sizeof(float));
@@ -1821,6 +1866,8 @@ RB_CONTEXT_WRAPPER_VAR(rb_session_set_voice);
 RB_CONTEXT_WRAPPER_2(rb_session_set_speaker_name);
 RB_CONTEXT_WRAPPER_2(rb_session_set_speaker_id);
 RB_CONTEXT_WRAPPER_2(rb_session_set_punc_model);
+RB_CONTEXT_WRAPPER_2(rb_session_set_enhance);
+RB_CONTEXT_WRAPPER_1(rb_session_get_enhance);
 RB_CONTEXT_WRAPPER_3(rb_session_set_hotwords);
 RB_CONTEXT_WRAPPER_2(rb_session_set_sensitivity);
 RB_CONTEXT_WRAPPER_2(rb_session_set_g2p_dict);
@@ -1896,6 +1943,7 @@ RB_CONTEXT_WRAPPER_VAR(rb_session_open_with_options);
 RB_CONTEXT_WRAPPER_3(rb_session_open_explicit);
 RB_CONTEXT_WRAPPER_VAR(rb_vad_slices);
 RB_CONTEXT_WRAPPER_1(rb_enhance_audio_rnnoise);
+RB_CONTEXT_WRAPPER_4(rb_enhance_audio);
 RB_CONTEXT_WRAPPER_3(rb_text_detect_language);
 RB_CONTEXT_WRAPPER_0(rb_registry_list_backends);
 RB_CONTEXT_WRAPPER_2(rb_titanet_cosine_sim);
@@ -1943,6 +1991,8 @@ void init_ruby_crispasr_session(VALUE* mWhisper) {
     rb_define_singleton_method(mSession, "set_speaker_name", rb_context_guard_rb_session_set_speaker_name, 2);
     rb_define_singleton_method(mSession, "set_speaker_id", rb_context_guard_rb_session_set_speaker_id, 2);
     rb_define_singleton_method(mSession, "set_punc_model", rb_context_guard_rb_session_set_punc_model, 2);
+    rb_define_singleton_method(mSession, "set_enhance", rb_context_guard_rb_session_set_enhance, 2);
+    rb_define_singleton_method(mSession, "enhance", rb_context_guard_rb_session_get_enhance, 1);
     rb_define_singleton_method(mSession, "set_hotwords", rb_context_guard_rb_session_set_hotwords, 3);
     rb_define_singleton_method(mSession, "set_sensitivity", rb_context_guard_rb_session_set_sensitivity, 2);
     rb_define_singleton_method(mSession, "set_g2p_dict", rb_context_guard_rb_session_set_g2p_dict, 2);
@@ -2032,6 +2082,7 @@ void init_ruby_crispasr_session(VALUE* mWhisper) {
     rb_define_singleton_method(mSession, "open_explicit", rb_context_guard_rb_session_open_explicit, 3);
     rb_define_singleton_method(mSession, "vad_slices", rb_context_guard_rb_vad_slices, -1);
     rb_define_singleton_method(mSession, "enhance_audio_rnnoise", rb_context_guard_rb_enhance_audio_rnnoise, 1);
+    rb_define_singleton_method(mSession, "enhance_audio", rb_context_guard_rb_enhance_audio, 4);
     rb_define_singleton_method(mSession, "text_detect_language", rb_context_guard_rb_text_detect_language, 3);
     rb_define_singleton_method(mSession, "registry_list_backends", rb_context_guard_rb_registry_list_backends, 0);
     rb_define_singleton_method(mSession, "titanet_cosine_sim", rb_context_guard_rb_titanet_cosine_sim, 2);

@@ -77,6 +77,7 @@
 #include "crispasr_mp4_writer.h"  // AAC/Opus-in-MP4 muxer (C2PA-capable container)
 #include "crispasr_opus_writer.h" // Ogg Opus output via in-tree glint encoder
 #include "common-crispasr.h"      // read_audio_data
+#include "crispasr_enhance_cli.h" // --enhance pre-pass
 
 #include <algorithm>
 #include <regex>
@@ -1055,6 +1056,11 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
         setenv_safe("QWEN3_TTS_DEBUG", "1");
         setenv_safe("FIREREDPUNC_DEBUG", "1");
     }
+
+    // --enhance / --denoise: clean the decoded input before VAD, chunking and
+    // transcription see it (shared method with crispasr_session_set_enhance).
+    if (!crispasr_cli_apply_enhance(params, samples, stereo, native_rate))
+        return 2;
 
     crispasr_log_mem(params.verbose, "after audio decode");
     if (params.verbose) {

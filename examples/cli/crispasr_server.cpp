@@ -49,6 +49,7 @@
 #include "crispasr_punctuation_policy.h" // crispasr_should_auto_enable_punctuation()
 
 #include "common-crispasr.h"    // read_audio_data
+#include "crispasr_enhance_cli.h" // per-request `enhance` denoise pre-pass
 #include "core/separation_io.h" // §381: separation result view + stem-to-WAV
 #include "core/gguf_loader.h"   // §381: arch detection for --separate-model
 #include "htdemucs.h"           // §381: htdemucs separation backend
@@ -605,6 +606,13 @@ static transcription_result do_transcribe(const form_part& audio_file, CrispasrB
             for (auto& ch : pcmf32s)
                 core_audio_window::trim(ch, win);
         }
+    }
+
+    // Per-request `enhance` (none | rnnoise | registry name | GGUF path), the
+    // server's --enhance default otherwise: same pre-pass as the CLI.
+    if (!crispasr_cli_apply_enhance(rp, pcmf32, pcmf32s, 16000)) {
+        result.error = "enhancement method '" + rp.enhance + "' could not be loaded";
+        return result;
     }
 
     result.duration_s = (double)pcmf32.size() / 16000.0;
@@ -1892,6 +1900,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         rp.target_lang = form_string(req, "target_lang", rp.target_lang);
         rp.translate = form_bool(req, "translate", rp.translate);
         rp.punctuation = form_bool(req, "punctuation", rp.punctuation);
+        rp.enhance = form_string(req, "enhance", rp.enhance);
         rp.diarize = form_bool(req, "diarize", rp.diarize);
         if (rp.diarize && rp.diarize_method.empty())
             rp.diarize_method = form_string(req, "diarize_method", "energy");

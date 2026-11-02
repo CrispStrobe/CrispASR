@@ -766,6 +766,8 @@ extern "C" {
         s: *mut CrispasrSession,
         punc_model: *const c_char,
     ) -> c_int;
+    pub fn crispasr_session_set_enhance(s: *mut CrispasrSession, spec: *const c_char) -> c_int;
+    pub fn crispasr_session_get_enhance(s: *mut CrispasrSession) -> *const c_char;
     pub fn crispasr_session_set_hotwords(
         s: *mut CrispasrSession,
         hotwords: *const c_char,
@@ -1192,6 +1194,17 @@ extern "C" {
         out_pcm: *mut c_float,
         out_cap: i32,
     ) -> c_int;
+    pub fn crispasr_enhance_audio_spec(
+        spec: *const c_char,
+        in_pcm: *const c_float,
+        n_samples: i32,
+        sample_rate: i32,
+        n_threads: i32,
+        out_pcm: *mut c_float,
+        out_cap: i32,
+    ) -> c_int;
+    pub fn crispasr_enhance_has_rnnoise() -> c_int;
+    pub fn crispasr_enhance_model_archs() -> *const c_char;
 
     // --- Session open with params ---
     pub fn crispasr_session_open_with_params(

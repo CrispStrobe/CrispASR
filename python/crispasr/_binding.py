@@ -2524,6 +2524,34 @@ class Session(SessionExtras):
         if rc != 0:
             raise RuntimeError(f"set_punc_model failed (rc={rc})")
 
+    def set_enhance(self, spec: Optional[str]) -> None:
+        """Select the speech-enhancement (denoise) pre-pass for transcription.
+
+        ``spec`` is ``None`` / ``"none"`` (off, the default), ``"rnnoise"``
+        (built-in), or a path to an enhancement GGUF (e.g. FRCRN /
+        MossFormerGAN / MossFormer2-SE). Every ``transcribe*`` call then
+        denoises the audio once, before VAD and chunking — the same pre-pass
+        as the CLI ``--enhance``. Raises ``RuntimeError`` when the method
+        cannot be loaded (the previous setting is kept).
+        """
+        if not hasattr(self._lib, "crispasr_session_set_enhance"):
+            raise RuntimeError("enhance API not present in this libcrispasr build")
+        self._lib.crispasr_session_set_enhance.argtypes = [ctypes.c_void_p, ctypes.c_char_p]
+        self._lib.crispasr_session_set_enhance.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_enhance(self._handle, (spec or "none").encode("utf-8"))
+        if rc != 0:
+            raise RuntimeError(f"set_enhance failed (rc={rc})")
+
+    @property
+    def enhance(self) -> str:
+        """Active enhancement method name (``"none"`` when off)."""
+        if not hasattr(self._lib, "crispasr_session_get_enhance"):
+            return "none"
+        self._lib.crispasr_session_get_enhance.argtypes = [ctypes.c_void_p]
+        self._lib.crispasr_session_get_enhance.restype = ctypes.c_char_p
+        v = self._lib.crispasr_session_get_enhance(self._handle)
+        return v.decode("utf-8") if v else "none"
+
     def set_hotwords(self, hotwords: str, boost: float = 2.0) -> None:
         """Contextual biasing: comma-separated words/phrases to boost during
         decoding. Parakeet CTC/TDT use an Aho-Corasick trie; LLM backends inject
@@ -4125,11 +4153,11 @@ def enhance_audio_rnnoise(
     *,
     lib_path: Optional[str] = None,
 ) -> "np.ndarray":
-    """Apply RNNoise audio denoising to raw 48 kHz mono PCM.
+    """Apply RNNoise audio denoising to 16 kHz mono PCM.
 
-    Returns a float32 array of the same length with noise reduced.
-    Note: RNNoise operates at 48 kHz internally. If your audio is
-    16 kHz, resample to 48 kHz first, denoise, then resample back.
+    Returns a float32 array of the same length with noise reduced. The
+    library upsamples to RNNoise's internal 48 kHz and back itself. For other
+    rates or model-based methods use :func:`enhance_audio`.
     """
     lib = ctypes.CDLL(lib_path or _find_lib())
     fn = lib.crispasr_enhance_audio_rnnoise
@@ -4150,6 +4178,63 @@ def enhance_audio_rnnoise(
     if rc != 0:
         raise RuntimeError(f"enhance_audio_rnnoise failed (rc={rc})")
     return out
+
+
+def enhance_audio(
+    pcm: "np.ndarray",
+    spec: str = "rnnoise",
+    *,
+    sample_rate: int = 16000,
+    n_threads: int = 4,
+    lib_path: Optional[str] = None,
+) -> "np.ndarray":
+    """Denoise mono PCM with a selectable method.
+
+    ``spec`` is ``"none"`` (returns a copy), ``"rnnoise"`` or a path to an
+    enhancement GGUF. Works at any ``sample_rate``; the result has the same
+    length and rate as the input.
+    """
+    lib = ctypes.CDLL(lib_path or _find_lib())
+    fn = lib.crispasr_enhance_audio_spec
+    fn.argtypes = [
+        ctypes.c_char_p,
+        ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32, ctypes.c_int32,
+        ctypes.POINTER(ctypes.c_float), ctypes.c_int32,
+    ]
+    fn.restype = ctypes.c_int
+    pcm_arr = np.ascontiguousarray(pcm, dtype=np.float32)
+    out = np.zeros_like(pcm_arr)
+    rc = fn(
+        (spec or "none").encode("utf-8"),
+        pcm_arr.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        int(pcm_arr.size), int(sample_rate), int(n_threads),
+        out.ctypes.data_as(ctypes.POINTER(ctypes.c_float)),
+        int(out.size),
+    )
+    if rc != 0:
+        raise RuntimeError(f"enhance_audio failed (rc={rc})")
+    return out
+
+
+def enhance_has_rnnoise(*, lib_path: Optional[str] = None) -> bool:
+    """True when the built-in ``"rnnoise"`` method is compiled into this build."""
+    lib = ctypes.CDLL(lib_path or _find_lib())
+    if not hasattr(lib, "crispasr_enhance_has_rnnoise"):
+        return hasattr(lib, "crispasr_enhance_audio_rnnoise")
+    fn = lib.crispasr_enhance_has_rnnoise
+    fn.argtypes = []
+    fn.restype = ctypes.c_int
+    return bool(fn())
+
+
+def enhance_model_archs(*, lib_path: Optional[str] = None) -> List[str]:
+    """GGUF architectures accepted as enhancement models by this build."""
+    lib = ctypes.CDLL(lib_path or _find_lib())
+    fn = lib.crispasr_enhance_model_archs
+    fn.argtypes = []
+    fn.restype = ctypes.c_char_p
+    v = fn()
+    return [a for a in (v.decode("utf-8") if v else "").split(",") if a]
 
 
 def detect_backend_from_gguf(

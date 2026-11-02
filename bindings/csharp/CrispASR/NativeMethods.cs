@@ -103,6 +103,13 @@ namespace CrispASR
             IntPtr s, [MarshalAs(UnmanagedType.LPUTF8Str)] string puncModel);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int crispasr_session_set_enhance(
+            IntPtr s, [MarshalAs(UnmanagedType.LPUTF8Str)] string spec);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern IntPtr crispasr_session_get_enhance(IntPtr s);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int crispasr_session_set_hotwords(
             IntPtr s, [MarshalAs(UnmanagedType.LPUTF8Str)] string hotwords, float boost);
 
@@ -605,6 +612,11 @@ namespace CrispASR
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int crispasr_enhance_audio_rnnoise(
             float[] inPcm, int nSamples, float[] outPcm, int outCap);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int crispasr_enhance_audio_spec(
+            [MarshalAs(UnmanagedType.LPUTF8Str)] string spec,
+            float[] inPcm, int nSamples, int sampleRate, int nThreads, float[] outPcm, int outCap);
 
         // ---- Speaker embedding (TitaNet) ----
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

@@ -845,6 +845,25 @@ int crispasr_session_set_punc_model(crispasr_session* s, const char* m) {
     (void)m;
     return 0;
 }
+int crispasr_session_set_enhance(crispasr_session* s, const char* spec) {
+    (void)s;
+    return (spec && strcmp(spec, "bogus") == 0) ? -2 : 0;
+}
+const char* crispasr_session_get_enhance(crispasr_session* s) {
+    (void)s;
+    return "none";
+}
+int crispasr_enhance_audio_spec(const char* spec, const float* in, int32_t n, int32_t sr, int32_t nt, float* out,
+                                int32_t cap) {
+    (void)spec;
+    (void)sr;
+    (void)nt;
+    if (!in || !out || n <= 0 || cap < n)
+        return -1;
+    for (int i = 0; i < n; i++)
+        out[i] = in[i];
+    return 0;
+}
 int crispasr_session_set_translate(crispasr_session* s, int e) {
     (void)s;
     (void)e;
