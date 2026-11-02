@@ -112,8 +112,13 @@ def pad_like_upstream(inputs, window, stride):
 
 
 def decode(model, x, sampling_rate=16000, decode_window=1, one_time_decode_length=120, force_segment=False,
-           on_first=None):
-    """decode_one_audio_frcrn_se_16k, with an optional first-call callback."""
+           on_first=None, batch=1):
+    """decode_one_audio_frcrn_se_16k, with an optional first-call callback.
+
+    ``batch > 1`` runs the windows after the first through
+    ``model.inference_batch`` in groups (eval mode: every op is per item, so
+    this equals upstream's sequential loop up to float rounding). Speed only.
+    """
     import torch
 
     window = int(sampling_rate * decode_window)
@@ -136,14 +141,23 @@ def decode(model, x, sampling_rate=16000, decode_window=1, one_time_decode_lengt
         if do_segment:
             outputs = np.zeros(t)
             give_up = (window - stride) // 2
-            idx = 0
-            while idx + window <= t:
-                o = infer(inputs[:, idx : idx + window])
+            starts = list(range(0, t - window + 1, stride))
+            outs = {0: infer(inputs[:, :window])}
+            rest = starts[1:]
+            for b in range(0, len(rest), max(1, batch)):
+                group = rest[b : b + max(1, batch)]
+                if batch > 1:
+                    o = model.inference_batch(torch.cat([inputs[:, i : i + window] for i in group], 0))
+                    for k, i in enumerate(group):
+                        outs[i] = o[k].detach().cpu().numpy()
+                else:
+                    outs[group[0]] = infer(inputs[:, group[0] : group[0] + window])
+            for idx in starts:
+                o = outs[idx]
                 if idx == 0:
                     outputs[idx : idx + window - give_up] = o[:-give_up]
                 else:
                     outputs[idx + give_up : idx + window - give_up] = o[give_up:-give_up]
-                idx += stride
         else:
             outputs = infer(inputs)
     return outputs
@@ -166,6 +180,8 @@ def main():
     ap.add_argument("--force-segment", action="store_true",
                     help="use the >120 s segmented path regardless of length (for short parity clips)")
     ap.add_argument("--no-stages", action="store_true", help="only dump input/output")
+    ap.add_argument("--batch", type=int, default=1,
+                    help="segmented path only: run windows in batches (numerically equivalent, faster)")
     ap.add_argument("--threads", type=int, default=0)
     args = ap.parse_args()
 
@@ -239,7 +255,7 @@ def main():
     def on_first(seg):
         first_input["x"] = seg.numpy().reshape(-1).astype(np.float32)
 
-    out = decode(model, x, force_segment=args.force_segment, on_first=on_first)
+    out = decode(model, x, force_segment=args.force_segment, on_first=on_first, batch=args.batch)
     out = out.reshape(-1)[: x.shape[1]] * scalar
     for h in hooks:
         h.remove()

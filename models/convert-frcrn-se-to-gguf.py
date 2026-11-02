@@ -31,7 +31,10 @@ Layout decisions made here (all exact rewrites, no approximation):
   ``r*C_out + c`` holds frequency phase ``r`` (rows 2m+r), the time taps are
   flipped and the frequency taps re-indexed, with ``ceil(k_f/2)-1`` rows of
   zero padding on both frequency edges. The runtime interleaves the phases and
-  crops to ``2*(F_in-1)+k_f`` rows.
+  crops to ``2*(F_in-1)+k_f`` rows. Decoders 1-6 consume the channel concat
+  of the decoder path and an encoder skip; their kernels are split into
+  ``w_*`` (decoder-path channels) and ``w_*_skip`` (skip channels) so the
+  runtime sums two products instead of materialising the concat.
 * Conv bias and eval-mode BatchNorm are folded into a per-(part, channel)
   affine ``scale``/``shift`` of shape (2, C): row 0 = real, row 1 = imaginary.
   Complex conv bias contributes ``b_re - b_im`` to the real part and
@@ -181,7 +184,14 @@ def build_tensors(sd):
             src = f"{unet}.decoders.{i}"
             for part in ("re", "im"):
                 w = polyphase_tconv(sd[f"{src}.transconv.tconv_{part}.weight"])
-                add(f"{tag}.dec.{i}.w_{part}", w.reshape(w.shape[0], -1), "big")
+                if i == 0:
+                    add(f"{tag}.dec.{i}.w_{part}", w.reshape(w.shape[0], -1), "big")
+                else:
+                    # input = cat([decoder path, encoder skip]) on channels:
+                    # split so the runtime never materialises the concat.
+                    half = w.shape[1] // 2
+                    add(f"{tag}.dec.{i}.w_{part}", w[:, :half].reshape(w.shape[0], -1), "big")
+                    add(f"{tag}.dec.{i}.w_{part}_skip", w[:, half:].reshape(w.shape[0], -1), "big")
             scale, shift = fold_affine(sd, f"{src}.transconv.tconv", f"{src}.bn")
             add(f"{tag}.dec.{i}.scale", scale, "f32")
             add(f"{tag}.dec.{i}.shift", shift, "f32")

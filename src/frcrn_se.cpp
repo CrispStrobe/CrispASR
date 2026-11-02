@@ -71,6 +71,8 @@ struct SeLayer {
 struct ComplexConv {
     ggml_tensor* w_re = nullptr; // [K, Cout] (decoder: [K, 2*Cout])
     ggml_tensor* w_im = nullptr;
+    ggml_tensor* w_re_skip = nullptr; // decoders 1-6: kernels for the skip channels
+    ggml_tensor* w_im_skip = nullptr;
     ggml_tensor* scale = nullptr; // [C, 2]
     ggml_tensor* shift = nullptr;
     int kf = 0;
@@ -250,18 +252,30 @@ struct Builder {
         return (int64_t)std::max<size_t>(16, c);
     }
 
-    // Complex 2-D conv of xc [Tin, Fin, Cin, 2] (contiguous). Returns the
-    // real and imaginary products, each [Cw, OW, OH] channel-first.
-    std::pair<ggml_tensor*, ggml_tensor*> complex_mm(ggml_tensor* xc, const ComplexConv& c, int kh, int kw, int s1,
-                                                     int p1) {
+    // im2col of xc [Tin, Fin, Cin, 2] (contiguous) as [K, OW*OH*2].
+    ggml_tensor* cols(ggml_tensor* xc, int kh, int kw, int s1, int p1, int64_t* OW, int64_t* OH) {
         // im2col only reads the kernel's shape.
         ggml_tensor* shape = ggml_new_tensor_3d(ctx, GGML_TYPE_F16, kw, kh, xc->ne[2]);
         ggml_tensor* col = ggml_im2col(ctx, shape, xc, 1, s1, 0, p1, 1, 1, true, GGML_TYPE_F32);
-        // col: [K, OW, OH, 2]
-        const int64_t K = col->ne[0], OW = col->ne[1], OH = col->ne[2];
-        ggml_tensor* col2 = ggml_reshape_2d(ctx, col, K, OW * OH * 2);
-        ggml_tensor* A = ggml_mul_mat(ctx, c.w_re, col2); // [Cw, OW*OH*2]
-        ggml_tensor* B = ggml_mul_mat(ctx, c.w_im, col2);
+        *OW = col->ne[1];
+        *OH = col->ne[2];
+        return ggml_reshape_2d(ctx, col, col->ne[0], col->ne[1] * col->ne[2] * 2);
+    }
+
+    // Complex 2-D conv of xc (and, for decoders 1-6, of the skip input xs
+    // whose channels follow xc's in upstream's concat). Returns the real and
+    // imaginary products, each [Cw, OW, OH] channel-first.
+    std::pair<ggml_tensor*, ggml_tensor*> complex_mm(ggml_tensor* xc, ggml_tensor* xs, const ComplexConv& c, int kh,
+                                                     int kw, int s1, int p1) {
+        int64_t OW = 0, OH = 0;
+        ggml_tensor* col = cols(xc, kh, kw, s1, p1, &OW, &OH);
+        ggml_tensor* A = ggml_mul_mat(ctx, c.w_re, col); // [Cw, OW*OH*2]
+        ggml_tensor* B = ggml_mul_mat(ctx, c.w_im, col);
+        if (xs) {
+            ggml_tensor* col_s = cols(xs, kh, kw, s1, p1, &OW, &OH);
+            A = ggml_add(ctx, A, ggml_mul_mat(ctx, c.w_re_skip, col_s));
+            B = ggml_add(ctx, B, ggml_mul_mat(ctx, c.w_im_skip, col_s));
+        }
         const int64_t Cw = A->ne[0];
         A = ggml_reshape_4d(ctx, A, Cw, OW, OH, 2);
         B = ggml_reshape_4d(ctx, B, Cw, OW, OH, 2);
@@ -285,7 +299,7 @@ struct Builder {
         const size_t per_frame = (size_t)Cin * c.kf * 2 * Fout * 2 * sizeof(float) * 2;
         return chunked(Tout, Fout, c.cout, chunk_for(per_frame), [&](int64_t t0, int64_t n) {
             ggml_tensor* xc = frames(xp, t0, n + 1);
-            auto [re, im] = complex_mm(xc, c, c.kf, 2, 2, 0); // [Cout, n, Fout]
+            auto [re, im] = complex_mm(xc, nullptr, c, c.kf, 2, 2, 0); // [Cout, n, Fout]
             ggml_tensor* y = ggml_concat(ctx, ggml_reshape_4d(ctx, re, re->ne[0], re->ne[1], re->ne[2], 1),
                                          ggml_reshape_4d(ctx, im, im->ne[0], im->ne[1], im->ne[2], 1), 3);
             y = ggml_cont(ctx, ggml_permute(ctx, y, 2, 0, 1, 3)); // [n, Fout, Cout, 2]
@@ -294,9 +308,12 @@ struct Builder {
     }
 
     // Decoder: ConvTranspose2d k=(kf,2) stride (2,1) pad (0,1) as a polyphase
-    // stride-1 conv, + BN + LeakyReLU.
-    ggml_tensor* decoder(ggml_tensor* x, const ComplexConv& c) {
-        const int64_t T = x->ne[0], F = x->ne[1], Cin = x->ne[2];
+    // stride-1 conv, + BN + LeakyReLU. Its input is cat([x, skip], channels)
+    // upstream; the two halves are convolved separately and summed.
+    ggml_tensor* decoder(ggml_tensor* x, ggml_tensor* skip, const ComplexConv& c) {
+        const int64_t T = x->ne[0], F = x->ne[1], Cin = x->ne[2] + (skip ? skip->ne[2] : 0);
+        GGML_ASSERT(!skip || (skip->ne[0] == T && skip->ne[1] == F));
+        GGML_ASSERT(!skip == !c.w_re_skip);
         const int q = (c.kf + 1) / 2;
         const int64_t Tout = T - 1;
         const int64_t M = F + q - 1;
@@ -304,7 +321,8 @@ struct Builder {
         const size_t per_frame = (size_t)Cin * q * 2 * M * 2 * sizeof(float) * 2;
         return chunked(Tout, Fout, c.cout, chunk_for(per_frame), [&](int64_t t0, int64_t n) {
             ggml_tensor* xc = frames(x, t0, n + 1);
-            auto [re, im] = complex_mm(xc, c, q, 2, 1, q - 1); // [2*Cout, n, M]
+            ggml_tensor* xs = skip ? frames(skip, t0, n + 1) : nullptr;
+            auto [re, im] = complex_mm(xc, xs, c, q, 2, 1, q - 1); // [2*Cout, n, M]
             auto interleave = [&](ggml_tensor* t) {
                 t = ggml_reshape_4d(ctx, t, c.cout, 2, n, M);
                 t = ggml_cont(ctx, ggml_permute(ctx, t, 3, 1, 0, 2)); // [n, 2, M, Cout]
@@ -401,7 +419,7 @@ struct Builder {
         cur = fsmn_time(cur, u);
         stage(tag + "fsmn", cur);
         for (int i = 0; i < kLevels; i++) {
-            cur = decoder(cur, u.dec[i]);
+            cur = decoder(cur, i == 0 ? nullptr : skips[kLevels - i], u.dec[i]);
             stage(tag + "dec" + std::to_string(i), cur);
             if (i == kLevels - 1)
                 break;
@@ -411,7 +429,7 @@ struct Builder {
                 cur = se_layer(cur, u.se_dec[i]);
                 stage(tag + "se_dec" + std::to_string(i), cur);
             }
-            cur = ggml_concat(ctx, cur, skips[kLevels - 1 - i], 2);
+            // upstream: p = cat([p, xs_se[6 - i]], dim=1), consumed by decoder i+1
         }
         // Final ComplexConv2d(1, 1, 1): scalar complex affine.
         ggml_tensor* xr = part(cur, 0);
@@ -653,6 +671,10 @@ bool bind_weights(frcrn_se_context& m) {
         ComplexConv c;
         c.w_re = req(p + ".w_re");
         c.w_im = req(p + ".w_im");
+        if (T.count(p + ".w_re_skip")) {
+            c.w_re_skip = req(p + ".w_re_skip");
+            c.w_im_skip = req(p + ".w_im_skip");
+        }
         c.scale = req(p + ".scale");
         c.shift = req(p + ".shift");
         c.kf = kf;
@@ -693,7 +715,10 @@ bool bind_weights(frcrn_se_context& m) {
             if (e.w_re->ne[0] != (int64_t)e.cin * e.kf * 2 || e.w_re->ne[1] != e.cout)
                 return false;
             const ComplexConv& d = u.dec[i];
-            if (d.w_re->ne[0] != (int64_t)d.cin * ((d.kf + 1) / 2) * 2 || d.w_re->ne[1] != 2 * d.cout)
+            const int64_t k_half = (int64_t)C * ((d.kf + 1) / 2) * 2;
+            if (d.w_re->ne[0] != k_half || d.w_re->ne[1] != 2 * d.cout || (i == 0) != (d.w_re_skip == nullptr))
+                return false;
+            if (d.w_re_skip && (d.w_re_skip->ne[0] != k_half || d.w_im_skip->ne[1] != 2 * d.cout))
                 return false;
         }
     }
