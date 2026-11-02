@@ -116,19 +116,61 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   exclusive FFT worker ownership and the unchanged numerical gates. The
   component FFT receipt retains its extreme unequal-amplitude conditioning
   limit; these short diagnostics make no full-pipeline or speed claim.
-- Full qualification now binds the five native entrypoints and their complete
-  resolved shared-library dependencies before and after execution. Packaging
+- Full qualification binds the five native entrypoints and their complete
+  standalone loader resolutions before and after execution. Packaging
   requires this proof and a fresh dependency check. The [controls](docs/historical/scnet-linkage-controls-2026-11-02.json)
   include 13 rejection-control groups and genuine five-entrypoint/16-library
   snapshots, independently repeated. These are tooling controls, not a model
   qualification result.
-- Next action: repeat the bounded F16 profile under the same two-thread budget.
-  A separate optional
-  fresh-process passive-wait diagnostic applies identical settings to both
-  engines and preserves the default result. Once waveform and speed
-  gates pass, rerun all original-checkpoint,
-  raw, full-pipeline, CLI/Session and paired
-  performance gates through `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566).
+- [Run 41469961180](https://github.com/CrispStrobe/CrispASR/actions/runs/41469961180)
+  at `0b5639c` passes every final-waveform check but fails speed on its EPYC
+  9V45 runner: default native median **18.806 seconds** versus original
+  **6.395 seconds**; passive **19.229** versus **6.724 seconds**. All calls are
+  retained in the [receipt](docs/historical/scnet-runtime-real-fft-projection-profile-2026-11-02.json).
+  OpenBLAS 0.3.20 selects Barcelona kernels on this newer CPU while Torch uses
+  AVX512. Prior workers used different CPUs, so their absolute times are not
+  a controlled comparison with this run.
+- Dependency repair: CI now builds official OpenBLAS 0.3.34 at
+  `e0166008be8e466242aa76b2ff75ce3f0fbf574a`, with automatic CPU dispatch,
+  LP64 integers, pthreads, and two runtime threads. The tested helper, 12
+  independent matrix controls and six ggml thread controls pass. The local
+  SCNet archive is byte-identical to the preceding provider build. The
+  [provider controls and native-only baseline](docs/historical/scnet-openblas034-build-controls-2026-11-02.json)
+  establish the dependency and repeated-output identities, not model or speed
+  acceptance.
+- Allocation repair: CPU uses one persistent scheduler and
+  allocator with fresh metadata when geometry changes. The previous two-entry
+  cache misses all three recurring default-fixture shapes. The pool retains its
+  largest capacity until model destruction; GPU keeps its existing cache.
+  [Local diagnostics](docs/historical/scnet-local-runtime-allocation-diagnostic-2026-11-02.json)
+  preserve the failed timing checks and resource counters that prompted this
+  investigation. Minor-fault counts do not directly attribute allocation cost.
+  The [independently audited controls](docs/historical/scnet-cache-allocator-controls-2026-11-02.json)
+  pass all 210 short-stage comparisons and 11 cache lifecycle cases. Two ggml
+  allocation-failure bugs were reproduced and repaired; all 12 failure/retry
+  groups pass with address and undefined-behavior sanitizers. On the retained
+  native-only full fixture, output bytes match, minor faults fall 81.38% and
+  peak RSS falls 29.21%, but the single measured call is 3.07% slower. This
+  establishes no comparative speed qualification.
+- Actual mapped libraries now have independent
+  [runtime identity controls](docs/historical/scnet-loaded-runtime-controls-2026-11-02.json),
+  separate from standalone loader resolution. Torch's mapped OpenMP runtime
+  is retained, and all three precision proofs must pass again at packaging.
+- CPU BLAS now materializes 24 immutable recurrent matrices once at model load.
+  All 144 tensors across both sizes and three precisions exactly match actual
+  ggml casts. All 72 observed ordinary recurrent splits plan and execute one
+  ggml worker while OpenBLAS retains two threads. This adds 15 MiB for SCNet or
+  60 MiB for SCNet-large and leaves original GGUF tensors and storage types
+  intact. The [final candidate controls](docs/historical/scnet-recurrent-weight-controls-2026-11-02.json)
+  also pass all 210 original-F32 stage checks with byte-identical stage payloads
+  versus the preceding implementation. These controls establish scheduling,
+  conversion and short-input fidelity, not performance acceptance.
+- Main's newer Metal work is preserved with both SCNet dependency fixes in
+  ggml `1b972bb754aa5f83e2d872ccf37a335717f6658d`; CPU SCNet and allocator
+  source bytes are unchanged from the final local checks.
+- Next action: run both model sizes directly
+  through all original-checkpoint, raw, full-pipeline, CLI/Session and paired
+  performance gates in `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566).
   Complete CPU qualification, GPU qualification and held-out quality remain unproven; do not promote the
   candidate or substitute diagnostic runs for these gates.
 - License: upstream [MIT notice](https://github.com/starrytong/SCNet/blob/main/LICENSE)

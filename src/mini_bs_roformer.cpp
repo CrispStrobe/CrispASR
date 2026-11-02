@@ -375,13 +375,16 @@ ggml_tensor* attention(mini_bs_roformer_context& m, ggml_context* c, ggml_tensor
     // pooling attention fused, and honor an explicit FLASH override.
     const bool dense_frequency =
         m.dense_frequency_attention && positions && nq == (int64_t)h.bands.size() + h.registers && nk == nq;
-    if (m.flash && !dense_frequency) {
+    const bool allow_flash = positions != nullptr || core_cpu_backend::is_cpu(m.backend);
+    if (m.flash && !dense_frequency && allow_flash) {
         // Native GQA broadcasting repeats each KV head contiguously. Explicit
         // head expansion would double KV storage and defeat fused kernels.
         ggml_tensor* fk = core_cpu_backend::is_cpu(m.backend) ? k : ggml_cast(c, k, GGML_TYPE_F16);
         ggml_tensor* fv = core_cpu_backend::is_cpu(m.backend) ? v : ggml_cast(c, v, GGML_TYPE_F16);
         a = ggml_flash_attn_ext(c, q, fk, fv, nullptr, scale, 0.0f, 0.0f);
-        ggml_prec_set_acc(a, GGML_PREC_F32);
+        if (core_cpu_backend::is_cpu(m.backend)) {
+            ggml_prec_set_acc(a, GGML_PREC_F32);
+        }
         // An unsupported fused kernel must not quietly send every attention
         // block and its activations across the GPU/CPU boundary.
         if (!ggml_backend_supports_op(m.backend, a))
@@ -702,6 +705,8 @@ std::array<std::vector<float>, 4> forward(mini_bs_roformer_context& m, const flo
         ggml_backend_tensor_set(m.encoder.input, spectrum.data(), 0, spectrum.size() * sizeof(float));
         if (ggml_backend_sched_graph_compute(m.encoder.sched, m.encoder.graph) != GGML_STATUS_SUCCESS)
             throw std::runtime_error("encoder execution failed");
+        if (m.backend)
+            ggml_backend_synchronize(m.backend);
     }
     if (captures)
         for (const auto& item : m.encoder.captures)
@@ -709,12 +714,14 @@ std::array<std::vector<float>, 4> forward(mini_bs_roformer_context& m, const flo
     // Keep hidden states on the selected backend. The accelerated CPU graph
     // computes all four masks in one call; the original graph is reused once
     // per stem. Both preserve the same mask order and reconstruction path.
-    ggml_backend_tensor_copy(m.encoder.hidden, m.decoder.input);
     if (m.shared_decoder) {
         StageTimer timer("shared_stem_decoder");
+        ggml_backend_tensor_copy(m.encoder.hidden, m.decoder.input);
         ggml_backend_tensor_copy(m.encoder.embeddings, m.decoder.stem);
         if (ggml_backend_sched_graph_compute(m.decoder.sched, m.decoder.graph) != GGML_STATUS_SUCCESS)
             throw std::runtime_error("shared decoder execution failed");
+        if (m.backend)
+            ggml_backend_synchronize(m.backend);
     }
     std::array<std::vector<float>, 4> result;
     for (int s = 0; s < m.hp.stems; ++s) {
@@ -723,9 +730,12 @@ std::array<std::vector<float>, 4> forward(mini_bs_roformer_context& m, const flo
             mask = tensor_f32(m.decoder.stem_masks[s]);
         } else {
             StageTimer timer("stem_decoder");
+            ggml_backend_tensor_copy(m.encoder.hidden, m.decoder.input);
             ggml_backend_tensor_copy(m.encoder.stem_views[s], m.decoder.stem);
             if (ggml_backend_sched_graph_compute(m.decoder.sched, m.decoder.graph) != GGML_STATUS_SUCCESS)
                 throw std::runtime_error("decoder execution failed");
+            if (m.backend)
+                ggml_backend_synchronize(m.backend);
             mask = tensor_f32(m.decoder.mask);
         }
         if (captures) {
@@ -771,6 +781,10 @@ mini_bs_roformer_context* mini_bs_roformer_init_from_file(const char* path, mini
             throw std::runtime_error("CPU backend unavailable");
         core_cpu_backend::set_n_threads(m->cpu, params.n_threads);
         if (params.use_gpu) {
+            // Disable Metal graph optimize reordering for Mini-BS-RoFormer:
+            // the model's multi-dimensional view/permute graphs violate
+            // Metal's speculative concurrency reorder assumptions.
+            setenv("GGML_METAL_GRAPH_OPTIMIZE_DISABLE", "1", 0);
             crispasr_set_gpu_device_pref(params.gpu_device);
             m->backend = crispasr_init_gpu_backend();
             if (m->backend && core_cpu_backend::is_cpu(m->backend)) {
@@ -786,7 +800,9 @@ mini_bs_roformer_context* mini_bs_roformer_init_from_file(const char* path, mini
         const bool packed_cpu = m->backend == m->cpu && mini_bs_bf16::supported(m->cpu);
         m->cpu_bf16 = m->backend == m->cpu && env_flag("CRISPASR_MINI_BS_CPU_BF16", packed_cpu);
         m->cpu_packed_bf16 = m->cpu_bf16 && packed_cpu && env_flag("CRISPASR_MINI_BS_PACKED_BF16", true);
-        m->shared_decoder = m->cpu_packed_bf16 && env_flag("CRISPASR_MINI_BS_SHARED_DECODER", true);
+        // Compute shared W*H projection across all 4 stems in a single pass
+        // on both GPU and CPU backends, saving 75% of gate/up GEMMs in time_deconv.
+        m->shared_decoder = env_flag("CRISPASR_MINI_BS_SHARED_DECODER", true);
         // Use the native ggml BLAS accelerator for large CPU GEMMs when it is
         // registered. Unlike the quantized dot kernels it preserves F32
         // activations. Registry lookup also works with GGML_BACKEND_DL builds.

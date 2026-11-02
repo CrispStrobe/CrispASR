@@ -34,6 +34,7 @@ def main():
     import numpy as np
     import soundfile as sf
     from validate_scnet import NativeModel, atomic_json_write, pcm_sha256, sha256
+    from scnet_runtime_identity import capture_loaded_dsos, compare_snapshots
 
     audio, rate = sf.read(args.audio, dtype="float32", always_2d=True)
     audio = np.ascontiguousarray(audio)
@@ -54,6 +55,10 @@ def main():
                    native_blas_thread_queries=native.blas_thread_queries)
     save()
     try:
+        observation = receipt["loaded_dso_observation"] = {"complete": False,
+            "scope": "Instrumented native calls; first-use additions/removals are recorded, not a timed-pair proof",
+            "before": capture_loaded_dsos(args.library, require_torch=False)}
+        save()
         for index in range(args.calls):
             print(f"SCNet runtime diagnostic call {index}: begin", file=sys.stderr, flush=True)
             start = time.perf_counter()
@@ -70,6 +75,11 @@ def main():
             print(f"SCNet runtime diagnostic call {index}: {seconds:.6f}s", file=sys.stderr, flush=True)
             if not row["geometry_and_finite"]:
                 raise ValueError("native diagnostic output failed geometry/finite checks")
+        observation["after"] = capture_loaded_dsos(args.library, require_torch=False)
+        observation["transition"] = compare_snapshots(observation["before"], observation["after"])
+        if not observation["transition"]["common_file_bytes_unchanged"] or not observation["transition"]["configuration_unchanged"]:
+            raise ValueError("mapped runtime bytes/configuration changed during instrumented calls")
+        observation["complete"] = True
         receipt["repeated_output_hashes_identical"] = len({row["pcm_sha256"] for row in receipt["calls"]}) == 1
         if pcm_sha256(audio) != receipt["input_pcm_sha256"]:
             raise ValueError("native inference modified the input")

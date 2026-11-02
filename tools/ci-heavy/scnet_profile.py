@@ -34,6 +34,7 @@ from validate_scnet import (
     GGUFFile, NORM_RATIO_BOUNDS, RELATIVE_L2_MAX, STEMS, THREAD_VARIABLES, THRESHOLDS, NativeModel, all_pass,
     atomic_json_write, check_inventory, pcm_sha256, runtime_provenance, summarize_pairs, waveform_metrics,
 )
+from scnet_runtime_identity import LoadedDSOTracker, capture_loaded_dsos, compare_snapshots, verify_timed_identity
 
 PROFILE = {"mode": "pipeline", "segment_seconds": 20, "shifts": 1, "shift_seed": 0, "overlap": .5}
 SOURCES = (
@@ -41,10 +42,13 @@ SOURCES = (
     "src/scnet_activation.h", "src/scnet_tensor.h", "src/scnet_im2col.h", "src/scnet_real_fft.h",
     "tests/test-scnet-math.py", "tests/test-scnet-tensor.cpp", "tests/test-scnet-im2col.py",
     "tests/test-scnet-fft.py", "tests/test-scnet-real-fft.py", "tests/test_scnet_profile.py",
-    "tests/test-scnet-blas-threads.cpp", "ggml/src/ggml-blas/ggml-blas.cpp",
+    "tests/test_scnet_runtime_identity.py", "tools/scnet_runtime_identity.py",
+    "tests/test-scnet-blas-threads.cpp", "tests/test-scnet-allocator.cpp",
+    "ggml/src/ggml-blas/ggml-blas.cpp", "ggml/src/ggml-alloc.c",
     "src/CMakeLists.txt", "CMakeLists.txt", "tools/scnet_exports.cpp", "tools/validate_scnet.py",
     "models/convert-scnet-to-gguf.py", "tools/reference_backends/scnet.py", "tools/requirements-scnet.txt",
-    "tools/ci-heavy/scnet_qualify.py", "tools/ci-heavy/scnet_profile.py", ".github/workflows/scnet-profile.yml",
+    "tools/ci-heavy/scnet_qualify.py", "tools/ci-heavy/scnet_profile.py", "tools/ci-heavy/scnet_build_openblas.py",
+    ".github/workflows/scnet-profile.yml",
 )
 CONTROLS = ("CRISPASR_SCNET_BENCH", "CRISPASR_SCNET_CAPTURE_GGUF", "CRISPASR_SCNET_SCALAR_LSTM",
             "CRISPASR_SCNET_SCALAR_GATES", "CRISPASR_SCNET_BLAS", "CRISPASR_CPU_GEMM", "CRISPASR_SCNET_GPU")
@@ -147,10 +151,20 @@ def worker(args):
                    native_blas_thread_queries=native.blas_thread_queries)
     save()
     try:
+        observation = receipt["loaded_dso_observation"] = {"complete": False,
+            "scope": "One cold instrumented call; first-use additions/removals are recorded, not a stable timed-pair proof",
+            "before": capture_loaded_dsos(library, require_torch=False)}
+        receipt["runtime"]["loaded_dso_initialization"] = observation["before"]
+        save()
         start = time.perf_counter()
         output = native.run(audio)
         receipt["instrumented_seconds"] = time.perf_counter() - start
         save()
+        observation["after"] = capture_loaded_dsos(library, require_torch=False)
+        observation["transition"] = compare_snapshots(observation["before"], observation["after"])
+        if not observation["transition"]["common_file_bytes_unchanged"] or not observation["transition"]["configuration_unchanged"]:
+            raise ValueError("mapped runtime bytes/configuration changed during the instrumented call")
+        observation["complete"] = True
         receipt.update(output_shape=list(output.shape), output_pcm_sha256=pcm_sha256(output),
             geometry_and_finite=bool(output.shape == (4, 2, len(audio)) and np.isfinite(output).all()),
             input_unchanged=pcm_sha256(audio) == receipt["input_pcm_sha256"],
@@ -163,7 +177,7 @@ def worker(args):
         save()
 
 
-def paired_calls(original, native, receipt, save, input_unchanged):
+def paired_calls(original, native, receipt, save, input_unchanged, identity):
     """Schedule this smoke; all numeric gates and pair summaries come from the validator."""
     import numpy as np
 
@@ -202,10 +216,14 @@ def paired_calls(original, native, receipt, save, input_unchanged):
 
     for name, function in (("original", original), ("native", native)):
         call(name, function, "warmups", 0)
+    identity.before_timing()
+    save()
     for iteration in range(3):
         order = ("original", "native") if iteration % 2 == 0 else ("native", "original")
         for name in order:
             call(name, original if name == "original" else native, "calls", iteration)
+    identity.after_timing()
+    save()
     receipt.update(summarize_pairs(receipt["calls"], 3), waveform_acceptance=True, complete=True)
     save()
 
@@ -260,8 +278,11 @@ def paired_worker(args):
                        torch_interop_threads=torch.get_num_interop_threads(), original_dtype="float32",
                        original_provenance=blueprint._scnet_provenance)
         native = NativeModel(library, model, 2, PROFILE)
+        identity = LoadedDSOTracker(library)
+        receipt["loaded_dso_identity"] = identity.evidence
         receipt.update(native_backend=native.backend, native_compute_precision=native.compute_precision,
-                       native_blas_thread_queries=native.blas_thread_queries, runtime=runtime_provenance(library))
+                       native_blas_thread_queries=native.blas_thread_queries,
+                       runtime=runtime_provenance(library, identity.evidence["initialization"]))
         save()
 
         def original():
@@ -274,7 +295,7 @@ def paired_worker(args):
 
         with (args.output_dir / "paired-original-inference.log").open("w", encoding="utf-8") as original_log:
             with contextlib.redirect_stdout(original_log):
-                paired_calls(original, lambda: native.run(audio), receipt, save, unchanged)
+                paired_calls(original, lambda: native.run(audio), receipt, save, unchanged, identity)
         for key, path in (("model", model), ("checkpoint", checkpoint), ("audio", audio_path), ("library", library)):
             if sha256(path) != receipt[key + "_sha256"]:
                 raise ValueError(f"{key} changed during the paired smoke")
@@ -303,6 +324,9 @@ def summarize_wait_policy_comparison(primary, passive):
         raise ValueError("wait-policy comparison requires separate fresh worker processes")
     summaries, hashes = {}, {}
     for label, row in (("default", primary), ("passive", passive)):
+        loaded = verify_timed_identity(row.get("loaded_dso_identity"), native_sha256=row.get("library_sha256"))
+        if loaded["process_id"] != row.get("worker_process_id"):
+            raise ValueError(f"{label} loaded-runtime proof belongs to another worker")
         if row.get("complete") is not True or row.get("waveform_acceptance") is not True or \
                 row.get("acceptance") is not False or row.get("qualification") is not False or \
                 row.get("required_stages_checked") != 0 or row.get("profile") != PROFILE or \
@@ -348,6 +372,9 @@ def summarize_wait_policy_comparison(primary, passive):
             raise ValueError(f"{label} wait-policy reference hash differs from its original warmup")
     if hashes["default"] != hashes["passive"]:
         raise ValueError("wait-policy comparison changed an engine's output PCM")
+    first, second = (row["loaded_dso_identity"]["timed_before"] for row in (primary, passive))
+    if any(first[key] != second[key] for key in ("files", "roles", "cmake_cache_sha256")):
+        raise ValueError("wait-policy comparison changed its actual mapped runtime files")
     default_environment = primary["runtime"].get("wait_policy_environment", {})
     passive_environment = passive["runtime"].get("wait_policy_environment", {})
     if set(default_environment) != set(WAIT_POLICY_VARIABLES) or \

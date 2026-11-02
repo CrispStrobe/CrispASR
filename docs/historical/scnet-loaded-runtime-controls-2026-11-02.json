@@ -1,0 +1,1168 @@
+{
+  "acceptance": false,
+  "changed_validator_definitions": [
+    "runtime_provenance",
+    "benchmark"
+  ],
+  "checks_receipt": {
+    "bytes": 2122,
+    "file": "{evidence}/loaded-runtime-identity-v1/checks-final.json",
+    "sha256": "11592266ca887c279346cc04fee52bfe4bebfb16e5dfa2bee0b3d82b9f1bdffb"
+  },
+  "complete": true,
+  "control_groups": {
+    "profile": 8,
+    "runtime_identity": 13,
+    "standalone_linkage": 13,
+    "validation": 20
+  },
+  "control_log": {
+    "bytes": 2121,
+    "file": "{evidence}/loaded-runtime-identity-v1/controls.stderr.log",
+    "sha256": "5425f77945bba24921925317aca9c1cf8639803a8424ce4da3ae00d95dbbc44a"
+  },
+  "date_utc": "2026-11-02",
+  "genuine_load_only_observation": {
+    "acceptance": false,
+    "complete": true,
+    "identity_control": {
+      "collector": "linux-dl-iterate-phdr-v1",
+      "complete": true,
+      "initialization": {
+        "cmake_cache_sha256": "a161f04406abb1197cb70007e2513e1abe5c6bb894a6ae420bce3e1a5ed60f42",
+        "collector": "linux-dl-iterate-phdr-v1",
+        "files": {
+          "0686535a834a6215edd028ce6e7cda527f9a68a54466c4439dfe75c68709fb33": {
+            "bytes": 34231848,
+            "file": "{runtime}/libopenblas.so.0.3",
+            "mappings": 1,
+            "name": "libopenblas.so.0.3",
+            "resolved_path_sha256": "0686535a834a6215edd028ce6e7cda527f9a68a54466c4439dfe75c68709fb33",
+            "sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e"
+          },
+          "099df58243e4f75464a3aabd2944cc4b5f6cf19564a9c191d48a4205e014e20f": {
+            "bytes": 125040,
+            "file": "{runtime}/_pcg64.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_pcg64.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "099df58243e4f75464a3aabd2944cc4b5f6cf19564a9c191d48a4205e014e20f",
+            "sha256": "577c1468f4fb40bb23184343e2c1b645a17d1d493641ea92c052f286dc6eb556"
+          },
+          "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4": {
+            "bytes": 236616,
+            "file": "{runtime}/ld-linux-x86-64.so.2",
+            "mappings": 1,
+            "name": "ld-linux-x86-64.so.2",
+            "resolved_path_sha256": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+            "sha256": "6222a16be7f2d458d6870efe6e715fc0c8d45766fb79cf7dcc3125538d703e28"
+          },
+          "219613f999f80c553e014b8ad6774f32a720b29bbfd7a2c3ab9c7a72d2a7b800": {
+            "bytes": 7463681,
+            "file": "{runtime}/_multiarray_umath.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_multiarray_umath.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "219613f999f80c553e014b8ad6774f32a720b29bbfd7a2c3ab9c7a72d2a7b800",
+            "sha256": "6a650810a8735cbdb988f74729973740a337645dd1585fef696e73e2dbc65beb"
+          },
+          "272976c8aea84d04a8a168e9917fa4785477d6773b4c2f8f688062be041b7c99": {
+            "bytes": 97008,
+            "file": "{runtime}/_pocketfft_internal.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_pocketfft_internal.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "272976c8aea84d04a8a168e9917fa4785477d6773b4c2f8f688062be041b7c99",
+            "sha256": "38d22249f351b1d50e9269c596889ffc638639ebc150c1e75fc9f55a0f331ab5"
+          },
+          "2a431c264eb831f48bbd73a4464850f6603a5d835192f177ab518944b43944aa": {
+            "bytes": 119488,
+            "file": "{runtime}/_mt19937.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_mt19937.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "2a431c264eb831f48bbd73a4464850f6603a5d835192f177ab518944b43944aa",
+            "sha256": "3619f7f91b9ee7197c2902c0e197e69b2e5dd45fb11cd22e572e9b0b886514a9"
+          },
+          "39c27a6b6cc1fbca26be0723b378fac5f18b6a822c9fddf4d3359bff341ca782": {
+            "bytes": 8264,
+            "file": "{torch}/lib/libtorch_global_deps.so",
+            "mappings": 1,
+            "name": "libtorch_global_deps.so",
+            "resolved_path_sha256": "39c27a6b6cc1fbca26be0723b378fac5f18b6a822c9fddf4d3359bff341ca782",
+            "sha256": "2e5d497259a62960d95f4a7719abaeb24745429b49ffdf58e67672140205eb99"
+          },
+          "418789904c9ac400a295523dc125b45ee607eb16a347a9552db23d1094a68ce2": {
+            "bytes": 14624,
+            "file": "{runtime}/librt.so.1",
+            "mappings": 1,
+            "name": "librt.so.1",
+            "resolved_path_sha256": "418789904c9ac400a295523dc125b45ee607eb16a347a9552db23d1094a68ce2",
+            "sha256": "4b3a59575a0812a466235bc745814ca5b13825ef5f8ad5680637872ac64cc7ca"
+          },
+          "48e7f039b492b7fdccd6813072f8161028094b27cc24710830183fca9265b57f": {
+            "bytes": 106712,
+            "file": "{runtime}/_philox.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_philox.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "48e7f039b492b7fdccd6813072f8161028094b27cc24710830183fca9265b57f",
+            "sha256": "2c9b1fe53ef119e3ed2acb73c802cf2996502b0fd51d4926d4047576cea57514"
+          },
+          "4b03853f1294c5c12a55fa3862426942e8ea73e635f9be5eec9cc13e0e9f2079": {
+            "bytes": 25984376,
+            "file": "{torch}/lib/libtorch_python.so",
+            "mappings": 1,
+            "name": "libtorch_python.so",
+            "resolved_path_sha256": "4b03853f1294c5c12a55fa3862426942e8ea73e635f9be5eec9cc13e0e9f2079",
+            "sha256": "cd4e33c6822cbc72930a35f857029782e903b9d4a7977296153e9ce80c35c278"
+          },
+          "4d99d8319a59aba20252fe0e73737f9563d100135953a43d1bfefe31c557a0ae": {
+            "bytes": 427038688,
+            "file": "{torch}/lib/libtorch_cpu.so",
+            "mappings": 1,
+            "name": "libtorch_cpu.so",
+            "resolved_path_sha256": "4d99d8319a59aba20252fe0e73737f9563d100135953a43d1bfefe31c557a0ae",
+            "sha256": "629d28a5fb24e2c33df077e2d98d5da0c73d0b53e628bb826fd4ba36616b482b"
+          },
+          "4de66d5c88677f41b31b235351349c7717324a4eb9f8d30b36076ce50827c90f": {
+            "bytes": 175912,
+            "file": "{runtime}/_multiarray_tests.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_multiarray_tests.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "4de66d5c88677f41b31b235351349c7717324a4eb9f8d30b36076ce50827c90f",
+            "sha256": "0b2cbb7419ffc2f712987aabaf518a3b1d9de8406093f79dcb1d712a34ab6057"
+          },
+          "58a2c742568623571166fafa6ed359255e309a71fc111de2941db152eae733a1": {
+            "bytes": 1308712,
+            "file": "{torch}/lib/libc10.so",
+            "mappings": 1,
+            "name": "libc10.so",
+            "resolved_path_sha256": "58a2c742568623571166fafa6ed359255e309a71fc111de2941db152eae733a1",
+            "sha256": "bececfaaf6042b3b48a75e74eed9728e9139bcdfca5f2b30437886de4f25c1d9"
+          },
+          "60f85241f154b9c58f2bba2e99e0457c87ebd52b1cbeb0e0f3acf931c403a5cf": {
+            "bytes": 76224,
+            "file": "{runtime}/_sfc64.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_sfc64.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "60f85241f154b9c58f2bba2e99e0457c87ebd52b1cbeb0e0f3acf931c403a5cf",
+            "sha256": "5883302ce33afd54db6631adbf5e000297b8eb42c0ec894bbec318b5e6b14268"
+          },
+          "6173d42df1a760013c4588fc6f82b0861c3f71a6504d73f923316c6969689182": {
+            "bytes": 35123345,
+            "file": "{runtime}/libopenblas64_p-r0-0cf96a72.3.23.dev.so",
+            "mappings": 1,
+            "name": "libopenblas64_p-r0-0cf96a72.3.23.dev.so",
+            "resolved_path_sha256": "6173d42df1a760013c4588fc6f82b0861c3f71a6504d73f923316c6969689182",
+            "sha256": "9254d0854dd7615e11de28d771ae408878ca8123a7ac204f21e4cc7a376cc2e5"
+          },
+          "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49": {
+            "bytes": 952616,
+            "file": "{runtime}/libm.so.6",
+            "mappings": 1,
+            "name": "libm.so.6",
+            "resolved_path_sha256": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+            "sha256": "f06f2ce1f1833df5f41cf13b6447ff07bea993ad9b27297d3428c2f70ab3f0e7"
+          },
+          "76603a471707006a9bb997a95ab9a7d1f6bec42018e2ebb492426abb8902879c": {
+            "bytes": 247609,
+            "file": "{runtime}/libquadmath-96973f99.so.0.0.0",
+            "mappings": 1,
+            "name": "libquadmath-96973f99.so.0.0.0",
+            "resolved_path_sha256": "76603a471707006a9bb997a95ab9a7d1f6bec42018e2ebb492426abb8902879c",
+            "sha256": "934c22ded0e7d169c4d4678876c96051adf3d94545da962f60b41659b075da3b"
+          },
+          "79ea87cd6d0d35e4db3d057d06949c0127a5883f0117f3177f833621753f46c2": {
+            "bytes": 60360,
+            "file": "{build}/ggml/src/libggml.so.0.26.0",
+            "mappings": 1,
+            "name": "libggml.so.0.26.0",
+            "resolved_path_sha256": "79ea87cd6d0d35e4db3d057d06949c0127a5883f0117f3177f833621753f46c2",
+            "sha256": "a2182fc95077e4dd9e2a97b0dd958fc4f6dac221ba9221e88d727df9afb47cd4"
+          },
+          "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259": {
+            "bytes": 183024,
+            "file": "{runtime}/libgcc_s.so.1",
+            "mappings": 1,
+            "name": "libgcc_s.so.1",
+            "resolved_path_sha256": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+            "sha256": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb"
+          },
+          "87205ba813f2525a164329f817d7bd303c2ae9de6b7f54984a8deee2956ae59e": {
+            "bytes": 216793,
+            "file": "{runtime}/_umath_linalg.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_umath_linalg.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "87205ba813f2525a164329f817d7bd303c2ae9de6b7f54984a8deee2956ae59e",
+            "sha256": "8822e772d743d405983f1b9c6b34b704dd297780890dc245454f1081adf50a4c"
+          },
+          "a3390936e3b409c584c8ae1aa24b365a39938fe694cf800dfe895acff5c4bc6e": {
+            "bytes": 964048,
+            "file": "{build}/ggml/src/libggml-base.so.0.26.0",
+            "mappings": 1,
+            "name": "libggml-base.so.0.26.0",
+            "resolved_path_sha256": "a3390936e3b409c584c8ae1aa24b365a39938fe694cf800dfe895acff5c4bc6e",
+            "sha256": "0975bd28a70d8329532ac64afce0b55b24a8e581f2f28b2274b0aca5afa71078"
+          },
+          "a4211c9f39c9865fe910cc579d1905d5e16068158d3b408291d4488837f30c28": {
+            "bytes": 749040,
+            "file": "{runtime}/mtrand.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "mtrand.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "a4211c9f39c9865fe910cc579d1905d5e16068158d3b408291d4488837f30c28",
+            "sha256": "8d866b4b6107401ab9546044564208e0a5899c3903da09277d1c4875d98bcf0f"
+          },
+          "a52fa6eb5a98482aa6b15fabb63eb217edbde19c931f9e38cdd633285d18e8e8": {
+            "bytes": 2686065,
+            "file": "{runtime}/libgfortran-040039e1.so.5.0.0",
+            "mappings": 1,
+            "name": "libgfortran-040039e1.so.5.0.0",
+            "resolved_path_sha256": "a52fa6eb5a98482aa6b15fabb63eb217edbde19c931f9e38cdd633285d18e8e8",
+            "sha256": "14afb3129b1a8b50bc40a3b0820c7f1152ea9bc10121aab152943f7057472886"
+          },
+          "a7da7d0de189e8c599f92f9f512b80d3c82ad746d0ff082fe1693b91510c51de": {
+            "bytes": 113000,
+            "file": "{runtime}/libz.so.1.3",
+            "mappings": 1,
+            "name": "libz.so.1.3",
+            "resolved_path_sha256": "a7da7d0de189e8c599f92f9f512b80d3c82ad746d0ff082fe1693b91510c51de",
+            "sha256": "9b64150b28505a33d6bc3ecf709c279f6de97a1c184dbda65d06ee4537f6d286"
+          },
+          "a9cc690af57ad946e03bfaf4e1abb360e6426aef7ca99532be9d077f3ccb5336": {
+            "bytes": 348704,
+            "file": "{runtime}/_bounded_integers.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_bounded_integers.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "a9cc690af57ad946e03bfaf4e1abb360e6426aef7ca99532be9d077f3ccb5336",
+            "sha256": "b39f7e2b4ccfd6904ae60fe1517f6bda8be7835b5bf69d54dec0d693c5e8b793"
+          },
+          "b0f1fd023781fe49dfeb7d7f064f5565993ba3592978aef58d7ae08d62402d3e": {
+            "bytes": 253849,
+            "file": "{torch}/lib/libgomp.so.1",
+            "mappings": 1,
+            "name": "libgomp.so.1",
+            "resolved_path_sha256": "b0f1fd023781fe49dfeb7d7f064f5565993ba3592978aef58d7ae08d62402d3e",
+            "sha256": "e4b79735f816cbb906c8bf35b31847c5ce667cfbdbe76bd18aaf6e7baad2686e"
+          },
+          "b12e30f397cac88e4656dc60872f3e1245327b034f5284f5c8c22ee69e6feb0e": {
+            "bytes": 25137,
+            "file": "{torch}/_C.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_C.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "b12e30f397cac88e4656dc60872f3e1245327b034f5284f5c8c22ee69e6feb0e",
+            "sha256": "5dc8a93ddc69041dbd3f796794e0c2b3f72b47e0dc24ae2b46d9e7d0dc78953b"
+          },
+          "b239089341489cd3032361eed4f0c2a28e7704cf278eb1795e4800ff9d62fec5": {
+            "bytes": 36952,
+            "file": "{torch}/lib/libshm.so",
+            "mappings": 1,
+            "name": "libshm.so",
+            "resolved_path_sha256": "b239089341489cd3032361eed4f0c2a28e7704cf278eb1795e4800ff9d62fec5",
+            "sha256": "3bbcf1bef3729c92b16efc131505ee23773fdc566c7a3cc285c6cafbfced6dda"
+          },
+          "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a": {
+            "bytes": 2125328,
+            "file": "{runtime}/libc.so.6",
+            "mappings": 1,
+            "name": "libc.so.6",
+            "resolved_path_sha256": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+            "sha256": "511f825ee075610ac9c0f7f91e2c13de2000d0f7b859f6461137e809a0a009d0"
+          },
+          "b459ffb4a1447de519630d008ba9724bae3a82251dd1a4f9fc1b8d3ce3ce9dfe": {
+            "bytes": 946872,
+            "file": "{runtime}/_generator.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_generator.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "b459ffb4a1447de519630d008ba9724bae3a82251dd1a4f9fc1b8d3ce3ce9dfe",
+            "sha256": "5b3ef2ac8b78aa83bc869b70e30e2a70fbd3ab373c5253ed6eba9982a55fd7e2"
+          },
+          "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a": {
+            "bytes": 14408,
+            "file": "{runtime}/libpthread.so.0",
+            "mappings": 1,
+            "name": "libpthread.so.0",
+            "resolved_path_sha256": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+            "sha256": "4472cde19acc87a431ad1eefe9e86f8238dd1f26f8dac692cff7040474d9d085"
+          },
+          "b83122568acf8ea5db078a61af262a42c45fc07c6fcdd08d653c285ca35d7759": {
+            "bytes": 342000,
+            "file": "{build}/src/libscnet-validation.so",
+            "mappings": 1,
+            "name": "libscnet-validation.so",
+            "resolved_path_sha256": "b83122568acf8ea5db078a61af262a42c45fc07c6fcdd08d653c285ca35d7759",
+            "sha256": "615a93cc3ee045f041b78ea71c4e4445222e2fdfb799b35528969b384411d1c5"
+          },
+          "cc1aee8525ffa14e67b44270079ea9ea4bf038f13c4af9cf23cc756ab41540cf": {
+            "bytes": 8032,
+            "file": "{torch}/lib/libtorch.so",
+            "mappings": 1,
+            "name": "libtorch.so",
+            "resolved_path_sha256": "cc1aee8525ffa14e67b44270079ea9ea4bf038f13c4af9cf23cc756ab41540cf",
+            "sha256": "59a95807d56ca89993351a173839f160ca9c2c6ec6f6b89a5e691d8f1392d3ff"
+          },
+          "d5af512c934fbebf74d209e95e5bc46b1c7ed4b43152ff632982132813cd3d4b": {
+            "bytes": 14408,
+            "file": "{runtime}/libutil.so.1",
+            "mappings": 1,
+            "name": "libutil.so.1",
+            "resolved_path_sha256": "d5af512c934fbebf74d209e95e5bc46b1c7ed4b43152ff632982132813cd3d4b",
+            "sha256": "b88de5f440af504c5a7f7fa933ee7272c44e18e4613c44b2cc6b5ca40f99d6ba"
+          },
+          "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452": {
+            "bytes": 2592224,
+            "file": "{runtime}/libstdc++.so.6.0.33",
+            "mappings": 1,
+            "name": "libstdc++.so.6.0.33",
+            "resolved_path_sha256": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+            "sha256": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11"
+          },
+          "dc15779eb5417f204ee508314197925e46b3b97b53ead2e6cb83668ca2bef77d": {
+            "bytes": 64512,
+            "file": "{build}/ggml/src/ggml-blas/libggml-blas.so.0.26.0",
+            "mappings": 1,
+            "name": "libggml-blas.so.0.26.0",
+            "resolved_path_sha256": "dc15779eb5417f204ee508314197925e46b3b97b53ead2e6cb83668ca2bef77d",
+            "sha256": "a67f70dab7ee0910e68f3d2c04e2251316dbfe034f5c8ee63269cbaba5032b4f"
+          },
+          "dd71a1e38bf1fa80725adf6bdb2b6583a82746e3e6d4bc23caccdc1b5e3ff4d1": {
+            "bytes": 1687736,
+            "file": "{build}/ggml/src/libggml-cpu.so.0.26.0",
+            "mappings": 1,
+            "name": "libggml-cpu.so.0.26.0",
+            "resolved_path_sha256": "dd71a1e38bf1fa80725adf6bdb2b6583a82746e3e6d4bc23caccdc1b5e3ff4d1",
+            "sha256": "3dfe8bc6d991cec458e3d6da04ac98e52d10f11e6129021b1e0dc83054fc40be"
+          },
+          "efe23fbcb83eb8eb9bfaf4e0fd67daeef3cb3e971eb78832ff2855ae3a6bd20c": {
+            "bytes": 234016,
+            "file": "{runtime}/bit_generator.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "bit_generator.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "efe23fbcb83eb8eb9bfaf4e0fd67daeef3cb3e971eb78832ff2855ae3a6bd20c",
+            "sha256": "87c5c730887943c603b16c53cf213398336ee410ef46595518093977afd5b0cb"
+          },
+          "faabe1f9b95014f745fda2266e75bcb2548e607d7b67aa8a7244013db55616bf": {
+            "bytes": 14408,
+            "file": "{runtime}/libdl.so.2",
+            "mappings": 1,
+            "name": "libdl.so.2",
+            "resolved_path_sha256": "faabe1f9b95014f745fda2266e75bcb2548e607d7b67aa8a7244013db55616bf",
+            "sha256": "feee7549138dc862300b9ba9b2b02502059c838a6c0b92d2ea4c0a357e8e0b45"
+          },
+          "fd36ecc2771321a5d761642d5f981789ef420e6637fddd0dfabb4ea2a94ac125": {
+            "bytes": 258888,
+            "file": "{runtime}/_common.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_common.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "fd36ecc2771321a5d761642d5f981789ef420e6637fddd0dfabb4ea2a94ac125",
+            "sha256": "abd88ca8f447f22c4f51f226734d34732966bae61edd2aa25f74bfec954bee28"
+          }
+        },
+        "process_id": 3,
+        "require_torch": true,
+        "roles": {
+          "configured_openblas": "0686535a834a6215edd028ce6e7cda527f9a68a54466c4439dfe75c68709fb33",
+          "ggml": {
+            "ggml": "79ea87cd6d0d35e4db3d057d06949c0127a5883f0117f3177f833621753f46c2",
+            "ggml-base": "a3390936e3b409c584c8ae1aa24b365a39938fe694cf800dfe895acff5c4bc6e",
+            "ggml-blas": "dc15779eb5417f204ee508314197925e46b3b97b53ead2e6cb83668ca2bef77d",
+            "ggml-cpu": "dd71a1e38bf1fa80725adf6bdb2b6583a82746e3e6d4bc23caccdc1b5e3ff4d1"
+          },
+          "native_library": "b83122568acf8ea5db078a61af262a42c45fc07c6fcdd08d653c285ca35d7759",
+          "openmp_candidates": [
+            "b0f1fd023781fe49dfeb7d7f064f5565993ba3592978aef58d7ae08d62402d3e"
+          ],
+          "torch_cpu": "4d99d8319a59aba20252fe0e73737f9563d100135953a43d1bfefe31c557a0ae"
+        },
+        "schema": 1,
+        "scope": "Current process main ELF link map; file-backed DSO identities, not relocation-binding proof. The main executable and anonymous/JIT mappings are outside this inventory.",
+        "virtual_objects_without_file_bytes": [
+          "linux-vdso.so.1"
+        ]
+      },
+      "initialization_transition": {
+        "added_objects": [],
+        "common_file_bytes_unchanged": true,
+        "configuration_unchanged": true,
+        "mapping_set_unchanged": true,
+        "removed_objects": [],
+        "roles_unchanged": true
+      },
+      "schema": 1,
+      "scope": "after_warmups_through_all_timing_pairs",
+      "timed_after": {
+        "cmake_cache_sha256": "a161f04406abb1197cb70007e2513e1abe5c6bb894a6ae420bce3e1a5ed60f42",
+        "collector": "linux-dl-iterate-phdr-v1",
+        "files": {
+          "0686535a834a6215edd028ce6e7cda527f9a68a54466c4439dfe75c68709fb33": {
+            "bytes": 34231848,
+            "file": "{runtime}/libopenblas.so.0.3",
+            "mappings": 1,
+            "name": "libopenblas.so.0.3",
+            "resolved_path_sha256": "0686535a834a6215edd028ce6e7cda527f9a68a54466c4439dfe75c68709fb33",
+            "sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e"
+          },
+          "099df58243e4f75464a3aabd2944cc4b5f6cf19564a9c191d48a4205e014e20f": {
+            "bytes": 125040,
+            "file": "{runtime}/_pcg64.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_pcg64.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "099df58243e4f75464a3aabd2944cc4b5f6cf19564a9c191d48a4205e014e20f",
+            "sha256": "577c1468f4fb40bb23184343e2c1b645a17d1d493641ea92c052f286dc6eb556"
+          },
+          "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4": {
+            "bytes": 236616,
+            "file": "{runtime}/ld-linux-x86-64.so.2",
+            "mappings": 1,
+            "name": "ld-linux-x86-64.so.2",
+            "resolved_path_sha256": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+            "sha256": "6222a16be7f2d458d6870efe6e715fc0c8d45766fb79cf7dcc3125538d703e28"
+          },
+          "219613f999f80c553e014b8ad6774f32a720b29bbfd7a2c3ab9c7a72d2a7b800": {
+            "bytes": 7463681,
+            "file": "{runtime}/_multiarray_umath.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_multiarray_umath.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "219613f999f80c553e014b8ad6774f32a720b29bbfd7a2c3ab9c7a72d2a7b800",
+            "sha256": "6a650810a8735cbdb988f74729973740a337645dd1585fef696e73e2dbc65beb"
+          },
+          "272976c8aea84d04a8a168e9917fa4785477d6773b4c2f8f688062be041b7c99": {
+            "bytes": 97008,
+            "file": "{runtime}/_pocketfft_internal.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_pocketfft_internal.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "272976c8aea84d04a8a168e9917fa4785477d6773b4c2f8f688062be041b7c99",
+            "sha256": "38d22249f351b1d50e9269c596889ffc638639ebc150c1e75fc9f55a0f331ab5"
+          },
+          "2a431c264eb831f48bbd73a4464850f6603a5d835192f177ab518944b43944aa": {
+            "bytes": 119488,
+            "file": "{runtime}/_mt19937.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_mt19937.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "2a431c264eb831f48bbd73a4464850f6603a5d835192f177ab518944b43944aa",
+            "sha256": "3619f7f91b9ee7197c2902c0e197e69b2e5dd45fb11cd22e572e9b0b886514a9"
+          },
+          "39c27a6b6cc1fbca26be0723b378fac5f18b6a822c9fddf4d3359bff341ca782": {
+            "bytes": 8264,
+            "file": "{torch}/lib/libtorch_global_deps.so",
+            "mappings": 1,
+            "name": "libtorch_global_deps.so",
+            "resolved_path_sha256": "39c27a6b6cc1fbca26be0723b378fac5f18b6a822c9fddf4d3359bff341ca782",
+            "sha256": "2e5d497259a62960d95f4a7719abaeb24745429b49ffdf58e67672140205eb99"
+          },
+          "418789904c9ac400a295523dc125b45ee607eb16a347a9552db23d1094a68ce2": {
+            "bytes": 14624,
+            "file": "{runtime}/librt.so.1",
+            "mappings": 1,
+            "name": "librt.so.1",
+            "resolved_path_sha256": "418789904c9ac400a295523dc125b45ee607eb16a347a9552db23d1094a68ce2",
+            "sha256": "4b3a59575a0812a466235bc745814ca5b13825ef5f8ad5680637872ac64cc7ca"
+          },
+          "48e7f039b492b7fdccd6813072f8161028094b27cc24710830183fca9265b57f": {
+            "bytes": 106712,
+            "file": "{runtime}/_philox.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_philox.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "48e7f039b492b7fdccd6813072f8161028094b27cc24710830183fca9265b57f",
+            "sha256": "2c9b1fe53ef119e3ed2acb73c802cf2996502b0fd51d4926d4047576cea57514"
+          },
+          "4b03853f1294c5c12a55fa3862426942e8ea73e635f9be5eec9cc13e0e9f2079": {
+            "bytes": 25984376,
+            "file": "{torch}/lib/libtorch_python.so",
+            "mappings": 1,
+            "name": "libtorch_python.so",
+            "resolved_path_sha256": "4b03853f1294c5c12a55fa3862426942e8ea73e635f9be5eec9cc13e0e9f2079",
+            "sha256": "cd4e33c6822cbc72930a35f857029782e903b9d4a7977296153e9ce80c35c278"
+          },
+          "4d99d8319a59aba20252fe0e73737f9563d100135953a43d1bfefe31c557a0ae": {
+            "bytes": 427038688,
+            "file": "{torch}/lib/libtorch_cpu.so",
+            "mappings": 1,
+            "name": "libtorch_cpu.so",
+            "resolved_path_sha256": "4d99d8319a59aba20252fe0e73737f9563d100135953a43d1bfefe31c557a0ae",
+            "sha256": "629d28a5fb24e2c33df077e2d98d5da0c73d0b53e628bb826fd4ba36616b482b"
+          },
+          "4de66d5c88677f41b31b235351349c7717324a4eb9f8d30b36076ce50827c90f": {
+            "bytes": 175912,
+            "file": "{runtime}/_multiarray_tests.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_multiarray_tests.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "4de66d5c88677f41b31b235351349c7717324a4eb9f8d30b36076ce50827c90f",
+            "sha256": "0b2cbb7419ffc2f712987aabaf518a3b1d9de8406093f79dcb1d712a34ab6057"
+          },
+          "58a2c742568623571166fafa6ed359255e309a71fc111de2941db152eae733a1": {
+            "bytes": 1308712,
+            "file": "{torch}/lib/libc10.so",
+            "mappings": 1,
+            "name": "libc10.so",
+            "resolved_path_sha256": "58a2c742568623571166fafa6ed359255e309a71fc111de2941db152eae733a1",
+            "sha256": "bececfaaf6042b3b48a75e74eed9728e9139bcdfca5f2b30437886de4f25c1d9"
+          },
+          "60f85241f154b9c58f2bba2e99e0457c87ebd52b1cbeb0e0f3acf931c403a5cf": {
+            "bytes": 76224,
+            "file": "{runtime}/_sfc64.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_sfc64.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "60f85241f154b9c58f2bba2e99e0457c87ebd52b1cbeb0e0f3acf931c403a5cf",
+            "sha256": "5883302ce33afd54db6631adbf5e000297b8eb42c0ec894bbec318b5e6b14268"
+          },
+          "6173d42df1a760013c4588fc6f82b0861c3f71a6504d73f923316c6969689182": {
+            "bytes": 35123345,
+            "file": "{runtime}/libopenblas64_p-r0-0cf96a72.3.23.dev.so",
+            "mappings": 1,
+            "name": "libopenblas64_p-r0-0cf96a72.3.23.dev.so",
+            "resolved_path_sha256": "6173d42df1a760013c4588fc6f82b0861c3f71a6504d73f923316c6969689182",
+            "sha256": "9254d0854dd7615e11de28d771ae408878ca8123a7ac204f21e4cc7a376cc2e5"
+          },
+          "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49": {
+            "bytes": 952616,
+            "file": "{runtime}/libm.so.6",
+            "mappings": 1,
+            "name": "libm.so.6",
+            "resolved_path_sha256": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+            "sha256": "f06f2ce1f1833df5f41cf13b6447ff07bea993ad9b27297d3428c2f70ab3f0e7"
+          },
+          "76603a471707006a9bb997a95ab9a7d1f6bec42018e2ebb492426abb8902879c": {
+            "bytes": 247609,
+            "file": "{runtime}/libquadmath-96973f99.so.0.0.0",
+            "mappings": 1,
+            "name": "libquadmath-96973f99.so.0.0.0",
+            "resolved_path_sha256": "76603a471707006a9bb997a95ab9a7d1f6bec42018e2ebb492426abb8902879c",
+            "sha256": "934c22ded0e7d169c4d4678876c96051adf3d94545da962f60b41659b075da3b"
+          },
+          "79ea87cd6d0d35e4db3d057d06949c0127a5883f0117f3177f833621753f46c2": {
+            "bytes": 60360,
+            "file": "{build}/ggml/src/libggml.so.0.26.0",
+            "mappings": 1,
+            "name": "libggml.so.0.26.0",
+            "resolved_path_sha256": "79ea87cd6d0d35e4db3d057d06949c0127a5883f0117f3177f833621753f46c2",
+            "sha256": "a2182fc95077e4dd9e2a97b0dd958fc4f6dac221ba9221e88d727df9afb47cd4"
+          },
+          "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259": {
+            "bytes": 183024,
+            "file": "{runtime}/libgcc_s.so.1",
+            "mappings": 1,
+            "name": "libgcc_s.so.1",
+            "resolved_path_sha256": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+            "sha256": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb"
+          },
+          "87205ba813f2525a164329f817d7bd303c2ae9de6b7f54984a8deee2956ae59e": {
+            "bytes": 216793,
+            "file": "{runtime}/_umath_linalg.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_umath_linalg.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "87205ba813f2525a164329f817d7bd303c2ae9de6b7f54984a8deee2956ae59e",
+            "sha256": "8822e772d743d405983f1b9c6b34b704dd297780890dc245454f1081adf50a4c"
+          },
+          "a3390936e3b409c584c8ae1aa24b365a39938fe694cf800dfe895acff5c4bc6e": {
+            "bytes": 964048,
+            "file": "{build}/ggml/src/libggml-base.so.0.26.0",
+            "mappings": 1,
+            "name": "libggml-base.so.0.26.0",
+            "resolved_path_sha256": "a3390936e3b409c584c8ae1aa24b365a39938fe694cf800dfe895acff5c4bc6e",
+            "sha256": "0975bd28a70d8329532ac64afce0b55b24a8e581f2f28b2274b0aca5afa71078"
+          },
+          "a4211c9f39c9865fe910cc579d1905d5e16068158d3b408291d4488837f30c28": {
+            "bytes": 749040,
+            "file": "{runtime}/mtrand.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "mtrand.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "a4211c9f39c9865fe910cc579d1905d5e16068158d3b408291d4488837f30c28",
+            "sha256": "8d866b4b6107401ab9546044564208e0a5899c3903da09277d1c4875d98bcf0f"
+          },
+          "a52fa6eb5a98482aa6b15fabb63eb217edbde19c931f9e38cdd633285d18e8e8": {
+            "bytes": 2686065,
+            "file": "{runtime}/libgfortran-040039e1.so.5.0.0",
+            "mappings": 1,
+            "name": "libgfortran-040039e1.so.5.0.0",
+            "resolved_path_sha256": "a52fa6eb5a98482aa6b15fabb63eb217edbde19c931f9e38cdd633285d18e8e8",
+            "sha256": "14afb3129b1a8b50bc40a3b0820c7f1152ea9bc10121aab152943f7057472886"
+          },
+          "a7da7d0de189e8c599f92f9f512b80d3c82ad746d0ff082fe1693b91510c51de": {
+            "bytes": 113000,
+            "file": "{runtime}/libz.so.1.3",
+            "mappings": 1,
+            "name": "libz.so.1.3",
+            "resolved_path_sha256": "a7da7d0de189e8c599f92f9f512b80d3c82ad746d0ff082fe1693b91510c51de",
+            "sha256": "9b64150b28505a33d6bc3ecf709c279f6de97a1c184dbda65d06ee4537f6d286"
+          },
+          "a9cc690af57ad946e03bfaf4e1abb360e6426aef7ca99532be9d077f3ccb5336": {
+            "bytes": 348704,
+            "file": "{runtime}/_bounded_integers.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_bounded_integers.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "a9cc690af57ad946e03bfaf4e1abb360e6426aef7ca99532be9d077f3ccb5336",
+            "sha256": "b39f7e2b4ccfd6904ae60fe1517f6bda8be7835b5bf69d54dec0d693c5e8b793"
+          },
+          "b0f1fd023781fe49dfeb7d7f064f5565993ba3592978aef58d7ae08d62402d3e": {
+            "bytes": 253849,
+            "file": "{torch}/lib/libgomp.so.1",
+            "mappings": 1,
+            "name": "libgomp.so.1",
+            "resolved_path_sha256": "b0f1fd023781fe49dfeb7d7f064f5565993ba3592978aef58d7ae08d62402d3e",
+            "sha256": "e4b79735f816cbb906c8bf35b31847c5ce667cfbdbe76bd18aaf6e7baad2686e"
+          },
+          "b12e30f397cac88e4656dc60872f3e1245327b034f5284f5c8c22ee69e6feb0e": {
+            "bytes": 25137,
+            "file": "{torch}/_C.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_C.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "b12e30f397cac88e4656dc60872f3e1245327b034f5284f5c8c22ee69e6feb0e",
+            "sha256": "5dc8a93ddc69041dbd3f796794e0c2b3f72b47e0dc24ae2b46d9e7d0dc78953b"
+          },
+          "b239089341489cd3032361eed4f0c2a28e7704cf278eb1795e4800ff9d62fec5": {
+            "bytes": 36952,
+            "file": "{torch}/lib/libshm.so",
+            "mappings": 1,
+            "name": "libshm.so",
+            "resolved_path_sha256": "b239089341489cd3032361eed4f0c2a28e7704cf278eb1795e4800ff9d62fec5",
+            "sha256": "3bbcf1bef3729c92b16efc131505ee23773fdc566c7a3cc285c6cafbfced6dda"
+          },
+          "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a": {
+            "bytes": 2125328,
+            "file": "{runtime}/libc.so.6",
+            "mappings": 1,
+            "name": "libc.so.6",
+            "resolved_path_sha256": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+            "sha256": "511f825ee075610ac9c0f7f91e2c13de2000d0f7b859f6461137e809a0a009d0"
+          },
+          "b459ffb4a1447de519630d008ba9724bae3a82251dd1a4f9fc1b8d3ce3ce9dfe": {
+            "bytes": 946872,
+            "file": "{runtime}/_generator.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_generator.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "b459ffb4a1447de519630d008ba9724bae3a82251dd1a4f9fc1b8d3ce3ce9dfe",
+            "sha256": "5b3ef2ac8b78aa83bc869b70e30e2a70fbd3ab373c5253ed6eba9982a55fd7e2"
+          },
+          "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a": {
+            "bytes": 14408,
+            "file": "{runtime}/libpthread.so.0",
+            "mappings": 1,
+            "name": "libpthread.so.0",
+            "resolved_path_sha256": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+            "sha256": "4472cde19acc87a431ad1eefe9e86f8238dd1f26f8dac692cff7040474d9d085"
+          },
+          "b83122568acf8ea5db078a61af262a42c45fc07c6fcdd08d653c285ca35d7759": {
+            "bytes": 342000,
+            "file": "{build}/src/libscnet-validation.so",
+            "mappings": 1,
+            "name": "libscnet-validation.so",
+            "resolved_path_sha256": "b83122568acf8ea5db078a61af262a42c45fc07c6fcdd08d653c285ca35d7759",
+            "sha256": "615a93cc3ee045f041b78ea71c4e4445222e2fdfb799b35528969b384411d1c5"
+          },
+          "cc1aee8525ffa14e67b44270079ea9ea4bf038f13c4af9cf23cc756ab41540cf": {
+            "bytes": 8032,
+            "file": "{torch}/lib/libtorch.so",
+            "mappings": 1,
+            "name": "libtorch.so",
+            "resolved_path_sha256": "cc1aee8525ffa14e67b44270079ea9ea4bf038f13c4af9cf23cc756ab41540cf",
+            "sha256": "59a95807d56ca89993351a173839f160ca9c2c6ec6f6b89a5e691d8f1392d3ff"
+          },
+          "d5af512c934fbebf74d209e95e5bc46b1c7ed4b43152ff632982132813cd3d4b": {
+            "bytes": 14408,
+            "file": "{runtime}/libutil.so.1",
+            "mappings": 1,
+            "name": "libutil.so.1",
+            "resolved_path_sha256": "d5af512c934fbebf74d209e95e5bc46b1c7ed4b43152ff632982132813cd3d4b",
+            "sha256": "b88de5f440af504c5a7f7fa933ee7272c44e18e4613c44b2cc6b5ca40f99d6ba"
+          },
+          "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452": {
+            "bytes": 2592224,
+            "file": "{runtime}/libstdc++.so.6.0.33",
+            "mappings": 1,
+            "name": "libstdc++.so.6.0.33",
+            "resolved_path_sha256": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+            "sha256": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11"
+          },
+          "dc15779eb5417f204ee508314197925e46b3b97b53ead2e6cb83668ca2bef77d": {
+            "bytes": 64512,
+            "file": "{build}/ggml/src/ggml-blas/libggml-blas.so.0.26.0",
+            "mappings": 1,
+            "name": "libggml-blas.so.0.26.0",
+            "resolved_path_sha256": "dc15779eb5417f204ee508314197925e46b3b97b53ead2e6cb83668ca2bef77d",
+            "sha256": "a67f70dab7ee0910e68f3d2c04e2251316dbfe034f5c8ee63269cbaba5032b4f"
+          },
+          "dd71a1e38bf1fa80725adf6bdb2b6583a82746e3e6d4bc23caccdc1b5e3ff4d1": {
+            "bytes": 1687736,
+            "file": "{build}/ggml/src/libggml-cpu.so.0.26.0",
+            "mappings": 1,
+            "name": "libggml-cpu.so.0.26.0",
+            "resolved_path_sha256": "dd71a1e38bf1fa80725adf6bdb2b6583a82746e3e6d4bc23caccdc1b5e3ff4d1",
+            "sha256": "3dfe8bc6d991cec458e3d6da04ac98e52d10f11e6129021b1e0dc83054fc40be"
+          },
+          "efe23fbcb83eb8eb9bfaf4e0fd67daeef3cb3e971eb78832ff2855ae3a6bd20c": {
+            "bytes": 234016,
+            "file": "{runtime}/bit_generator.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "bit_generator.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "efe23fbcb83eb8eb9bfaf4e0fd67daeef3cb3e971eb78832ff2855ae3a6bd20c",
+            "sha256": "87c5c730887943c603b16c53cf213398336ee410ef46595518093977afd5b0cb"
+          },
+          "faabe1f9b95014f745fda2266e75bcb2548e607d7b67aa8a7244013db55616bf": {
+            "bytes": 14408,
+            "file": "{runtime}/libdl.so.2",
+            "mappings": 1,
+            "name": "libdl.so.2",
+            "resolved_path_sha256": "faabe1f9b95014f745fda2266e75bcb2548e607d7b67aa8a7244013db55616bf",
+            "sha256": "feee7549138dc862300b9ba9b2b02502059c838a6c0b92d2ea4c0a357e8e0b45"
+          },
+          "fd36ecc2771321a5d761642d5f981789ef420e6637fddd0dfabb4ea2a94ac125": {
+            "bytes": 258888,
+            "file": "{runtime}/_common.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_common.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "fd36ecc2771321a5d761642d5f981789ef420e6637fddd0dfabb4ea2a94ac125",
+            "sha256": "abd88ca8f447f22c4f51f226734d34732966bae61edd2aa25f74bfec954bee28"
+          }
+        },
+        "process_id": 3,
+        "require_torch": true,
+        "roles": {
+          "configured_openblas": "0686535a834a6215edd028ce6e7cda527f9a68a54466c4439dfe75c68709fb33",
+          "ggml": {
+            "ggml": "79ea87cd6d0d35e4db3d057d06949c0127a5883f0117f3177f833621753f46c2",
+            "ggml-base": "a3390936e3b409c584c8ae1aa24b365a39938fe694cf800dfe895acff5c4bc6e",
+            "ggml-blas": "dc15779eb5417f204ee508314197925e46b3b97b53ead2e6cb83668ca2bef77d",
+            "ggml-cpu": "dd71a1e38bf1fa80725adf6bdb2b6583a82746e3e6d4bc23caccdc1b5e3ff4d1"
+          },
+          "native_library": "b83122568acf8ea5db078a61af262a42c45fc07c6fcdd08d653c285ca35d7759",
+          "openmp_candidates": [
+            "b0f1fd023781fe49dfeb7d7f064f5565993ba3592978aef58d7ae08d62402d3e"
+          ],
+          "torch_cpu": "4d99d8319a59aba20252fe0e73737f9563d100135953a43d1bfefe31c557a0ae"
+        },
+        "schema": 1,
+        "scope": "Current process main ELF link map; file-backed DSO identities, not relocation-binding proof. The main executable and anonymous/JIT mappings are outside this inventory.",
+        "virtual_objects_without_file_bytes": [
+          "linux-vdso.so.1"
+        ]
+      },
+      "timed_before": {
+        "cmake_cache_sha256": "a161f04406abb1197cb70007e2513e1abe5c6bb894a6ae420bce3e1a5ed60f42",
+        "collector": "linux-dl-iterate-phdr-v1",
+        "files": {
+          "0686535a834a6215edd028ce6e7cda527f9a68a54466c4439dfe75c68709fb33": {
+            "bytes": 34231848,
+            "file": "{runtime}/libopenblas.so.0.3",
+            "mappings": 1,
+            "name": "libopenblas.so.0.3",
+            "resolved_path_sha256": "0686535a834a6215edd028ce6e7cda527f9a68a54466c4439dfe75c68709fb33",
+            "sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e"
+          },
+          "099df58243e4f75464a3aabd2944cc4b5f6cf19564a9c191d48a4205e014e20f": {
+            "bytes": 125040,
+            "file": "{runtime}/_pcg64.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_pcg64.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "099df58243e4f75464a3aabd2944cc4b5f6cf19564a9c191d48a4205e014e20f",
+            "sha256": "577c1468f4fb40bb23184343e2c1b645a17d1d493641ea92c052f286dc6eb556"
+          },
+          "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4": {
+            "bytes": 236616,
+            "file": "{runtime}/ld-linux-x86-64.so.2",
+            "mappings": 1,
+            "name": "ld-linux-x86-64.so.2",
+            "resolved_path_sha256": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+            "sha256": "6222a16be7f2d458d6870efe6e715fc0c8d45766fb79cf7dcc3125538d703e28"
+          },
+          "219613f999f80c553e014b8ad6774f32a720b29bbfd7a2c3ab9c7a72d2a7b800": {
+            "bytes": 7463681,
+            "file": "{runtime}/_multiarray_umath.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_multiarray_umath.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "219613f999f80c553e014b8ad6774f32a720b29bbfd7a2c3ab9c7a72d2a7b800",
+            "sha256": "6a650810a8735cbdb988f74729973740a337645dd1585fef696e73e2dbc65beb"
+          },
+          "272976c8aea84d04a8a168e9917fa4785477d6773b4c2f8f688062be041b7c99": {
+            "bytes": 97008,
+            "file": "{runtime}/_pocketfft_internal.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_pocketfft_internal.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "272976c8aea84d04a8a168e9917fa4785477d6773b4c2f8f688062be041b7c99",
+            "sha256": "38d22249f351b1d50e9269c596889ffc638639ebc150c1e75fc9f55a0f331ab5"
+          },
+          "2a431c264eb831f48bbd73a4464850f6603a5d835192f177ab518944b43944aa": {
+            "bytes": 119488,
+            "file": "{runtime}/_mt19937.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_mt19937.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "2a431c264eb831f48bbd73a4464850f6603a5d835192f177ab518944b43944aa",
+            "sha256": "3619f7f91b9ee7197c2902c0e197e69b2e5dd45fb11cd22e572e9b0b886514a9"
+          },
+          "39c27a6b6cc1fbca26be0723b378fac5f18b6a822c9fddf4d3359bff341ca782": {
+            "bytes": 8264,
+            "file": "{torch}/lib/libtorch_global_deps.so",
+            "mappings": 1,
+            "name": "libtorch_global_deps.so",
+            "resolved_path_sha256": "39c27a6b6cc1fbca26be0723b378fac5f18b6a822c9fddf4d3359bff341ca782",
+            "sha256": "2e5d497259a62960d95f4a7719abaeb24745429b49ffdf58e67672140205eb99"
+          },
+          "418789904c9ac400a295523dc125b45ee607eb16a347a9552db23d1094a68ce2": {
+            "bytes": 14624,
+            "file": "{runtime}/librt.so.1",
+            "mappings": 1,
+            "name": "librt.so.1",
+            "resolved_path_sha256": "418789904c9ac400a295523dc125b45ee607eb16a347a9552db23d1094a68ce2",
+            "sha256": "4b3a59575a0812a466235bc745814ca5b13825ef5f8ad5680637872ac64cc7ca"
+          },
+          "48e7f039b492b7fdccd6813072f8161028094b27cc24710830183fca9265b57f": {
+            "bytes": 106712,
+            "file": "{runtime}/_philox.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_philox.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "48e7f039b492b7fdccd6813072f8161028094b27cc24710830183fca9265b57f",
+            "sha256": "2c9b1fe53ef119e3ed2acb73c802cf2996502b0fd51d4926d4047576cea57514"
+          },
+          "4b03853f1294c5c12a55fa3862426942e8ea73e635f9be5eec9cc13e0e9f2079": {
+            "bytes": 25984376,
+            "file": "{torch}/lib/libtorch_python.so",
+            "mappings": 1,
+            "name": "libtorch_python.so",
+            "resolved_path_sha256": "4b03853f1294c5c12a55fa3862426942e8ea73e635f9be5eec9cc13e0e9f2079",
+            "sha256": "cd4e33c6822cbc72930a35f857029782e903b9d4a7977296153e9ce80c35c278"
+          },
+          "4d99d8319a59aba20252fe0e73737f9563d100135953a43d1bfefe31c557a0ae": {
+            "bytes": 427038688,
+            "file": "{torch}/lib/libtorch_cpu.so",
+            "mappings": 1,
+            "name": "libtorch_cpu.so",
+            "resolved_path_sha256": "4d99d8319a59aba20252fe0e73737f9563d100135953a43d1bfefe31c557a0ae",
+            "sha256": "629d28a5fb24e2c33df077e2d98d5da0c73d0b53e628bb826fd4ba36616b482b"
+          },
+          "4de66d5c88677f41b31b235351349c7717324a4eb9f8d30b36076ce50827c90f": {
+            "bytes": 175912,
+            "file": "{runtime}/_multiarray_tests.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_multiarray_tests.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "4de66d5c88677f41b31b235351349c7717324a4eb9f8d30b36076ce50827c90f",
+            "sha256": "0b2cbb7419ffc2f712987aabaf518a3b1d9de8406093f79dcb1d712a34ab6057"
+          },
+          "58a2c742568623571166fafa6ed359255e309a71fc111de2941db152eae733a1": {
+            "bytes": 1308712,
+            "file": "{torch}/lib/libc10.so",
+            "mappings": 1,
+            "name": "libc10.so",
+            "resolved_path_sha256": "58a2c742568623571166fafa6ed359255e309a71fc111de2941db152eae733a1",
+            "sha256": "bececfaaf6042b3b48a75e74eed9728e9139bcdfca5f2b30437886de4f25c1d9"
+          },
+          "60f85241f154b9c58f2bba2e99e0457c87ebd52b1cbeb0e0f3acf931c403a5cf": {
+            "bytes": 76224,
+            "file": "{runtime}/_sfc64.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_sfc64.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "60f85241f154b9c58f2bba2e99e0457c87ebd52b1cbeb0e0f3acf931c403a5cf",
+            "sha256": "5883302ce33afd54db6631adbf5e000297b8eb42c0ec894bbec318b5e6b14268"
+          },
+          "6173d42df1a760013c4588fc6f82b0861c3f71a6504d73f923316c6969689182": {
+            "bytes": 35123345,
+            "file": "{runtime}/libopenblas64_p-r0-0cf96a72.3.23.dev.so",
+            "mappings": 1,
+            "name": "libopenblas64_p-r0-0cf96a72.3.23.dev.so",
+            "resolved_path_sha256": "6173d42df1a760013c4588fc6f82b0861c3f71a6504d73f923316c6969689182",
+            "sha256": "9254d0854dd7615e11de28d771ae408878ca8123a7ac204f21e4cc7a376cc2e5"
+          },
+          "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49": {
+            "bytes": 952616,
+            "file": "{runtime}/libm.so.6",
+            "mappings": 1,
+            "name": "libm.so.6",
+            "resolved_path_sha256": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+            "sha256": "f06f2ce1f1833df5f41cf13b6447ff07bea993ad9b27297d3428c2f70ab3f0e7"
+          },
+          "76603a471707006a9bb997a95ab9a7d1f6bec42018e2ebb492426abb8902879c": {
+            "bytes": 247609,
+            "file": "{runtime}/libquadmath-96973f99.so.0.0.0",
+            "mappings": 1,
+            "name": "libquadmath-96973f99.so.0.0.0",
+            "resolved_path_sha256": "76603a471707006a9bb997a95ab9a7d1f6bec42018e2ebb492426abb8902879c",
+            "sha256": "934c22ded0e7d169c4d4678876c96051adf3d94545da962f60b41659b075da3b"
+          },
+          "79ea87cd6d0d35e4db3d057d06949c0127a5883f0117f3177f833621753f46c2": {
+            "bytes": 60360,
+            "file": "{build}/ggml/src/libggml.so.0.26.0",
+            "mappings": 1,
+            "name": "libggml.so.0.26.0",
+            "resolved_path_sha256": "79ea87cd6d0d35e4db3d057d06949c0127a5883f0117f3177f833621753f46c2",
+            "sha256": "a2182fc95077e4dd9e2a97b0dd958fc4f6dac221ba9221e88d727df9afb47cd4"
+          },
+          "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259": {
+            "bytes": 183024,
+            "file": "{runtime}/libgcc_s.so.1",
+            "mappings": 1,
+            "name": "libgcc_s.so.1",
+            "resolved_path_sha256": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+            "sha256": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb"
+          },
+          "87205ba813f2525a164329f817d7bd303c2ae9de6b7f54984a8deee2956ae59e": {
+            "bytes": 216793,
+            "file": "{runtime}/_umath_linalg.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_umath_linalg.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "87205ba813f2525a164329f817d7bd303c2ae9de6b7f54984a8deee2956ae59e",
+            "sha256": "8822e772d743d405983f1b9c6b34b704dd297780890dc245454f1081adf50a4c"
+          },
+          "a3390936e3b409c584c8ae1aa24b365a39938fe694cf800dfe895acff5c4bc6e": {
+            "bytes": 964048,
+            "file": "{build}/ggml/src/libggml-base.so.0.26.0",
+            "mappings": 1,
+            "name": "libggml-base.so.0.26.0",
+            "resolved_path_sha256": "a3390936e3b409c584c8ae1aa24b365a39938fe694cf800dfe895acff5c4bc6e",
+            "sha256": "0975bd28a70d8329532ac64afce0b55b24a8e581f2f28b2274b0aca5afa71078"
+          },
+          "a4211c9f39c9865fe910cc579d1905d5e16068158d3b408291d4488837f30c28": {
+            "bytes": 749040,
+            "file": "{runtime}/mtrand.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "mtrand.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "a4211c9f39c9865fe910cc579d1905d5e16068158d3b408291d4488837f30c28",
+            "sha256": "8d866b4b6107401ab9546044564208e0a5899c3903da09277d1c4875d98bcf0f"
+          },
+          "a52fa6eb5a98482aa6b15fabb63eb217edbde19c931f9e38cdd633285d18e8e8": {
+            "bytes": 2686065,
+            "file": "{runtime}/libgfortran-040039e1.so.5.0.0",
+            "mappings": 1,
+            "name": "libgfortran-040039e1.so.5.0.0",
+            "resolved_path_sha256": "a52fa6eb5a98482aa6b15fabb63eb217edbde19c931f9e38cdd633285d18e8e8",
+            "sha256": "14afb3129b1a8b50bc40a3b0820c7f1152ea9bc10121aab152943f7057472886"
+          },
+          "a7da7d0de189e8c599f92f9f512b80d3c82ad746d0ff082fe1693b91510c51de": {
+            "bytes": 113000,
+            "file": "{runtime}/libz.so.1.3",
+            "mappings": 1,
+            "name": "libz.so.1.3",
+            "resolved_path_sha256": "a7da7d0de189e8c599f92f9f512b80d3c82ad746d0ff082fe1693b91510c51de",
+            "sha256": "9b64150b28505a33d6bc3ecf709c279f6de97a1c184dbda65d06ee4537f6d286"
+          },
+          "a9cc690af57ad946e03bfaf4e1abb360e6426aef7ca99532be9d077f3ccb5336": {
+            "bytes": 348704,
+            "file": "{runtime}/_bounded_integers.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_bounded_integers.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "a9cc690af57ad946e03bfaf4e1abb360e6426aef7ca99532be9d077f3ccb5336",
+            "sha256": "b39f7e2b4ccfd6904ae60fe1517f6bda8be7835b5bf69d54dec0d693c5e8b793"
+          },
+          "b0f1fd023781fe49dfeb7d7f064f5565993ba3592978aef58d7ae08d62402d3e": {
+            "bytes": 253849,
+            "file": "{torch}/lib/libgomp.so.1",
+            "mappings": 1,
+            "name": "libgomp.so.1",
+            "resolved_path_sha256": "b0f1fd023781fe49dfeb7d7f064f5565993ba3592978aef58d7ae08d62402d3e",
+            "sha256": "e4b79735f816cbb906c8bf35b31847c5ce667cfbdbe76bd18aaf6e7baad2686e"
+          },
+          "b12e30f397cac88e4656dc60872f3e1245327b034f5284f5c8c22ee69e6feb0e": {
+            "bytes": 25137,
+            "file": "{torch}/_C.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_C.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "b12e30f397cac88e4656dc60872f3e1245327b034f5284f5c8c22ee69e6feb0e",
+            "sha256": "5dc8a93ddc69041dbd3f796794e0c2b3f72b47e0dc24ae2b46d9e7d0dc78953b"
+          },
+          "b239089341489cd3032361eed4f0c2a28e7704cf278eb1795e4800ff9d62fec5": {
+            "bytes": 36952,
+            "file": "{torch}/lib/libshm.so",
+            "mappings": 1,
+            "name": "libshm.so",
+            "resolved_path_sha256": "b239089341489cd3032361eed4f0c2a28e7704cf278eb1795e4800ff9d62fec5",
+            "sha256": "3bbcf1bef3729c92b16efc131505ee23773fdc566c7a3cc285c6cafbfced6dda"
+          },
+          "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a": {
+            "bytes": 2125328,
+            "file": "{runtime}/libc.so.6",
+            "mappings": 1,
+            "name": "libc.so.6",
+            "resolved_path_sha256": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+            "sha256": "511f825ee075610ac9c0f7f91e2c13de2000d0f7b859f6461137e809a0a009d0"
+          },
+          "b459ffb4a1447de519630d008ba9724bae3a82251dd1a4f9fc1b8d3ce3ce9dfe": {
+            "bytes": 946872,
+            "file": "{runtime}/_generator.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_generator.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "b459ffb4a1447de519630d008ba9724bae3a82251dd1a4f9fc1b8d3ce3ce9dfe",
+            "sha256": "5b3ef2ac8b78aa83bc869b70e30e2a70fbd3ab373c5253ed6eba9982a55fd7e2"
+          },
+          "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a": {
+            "bytes": 14408,
+            "file": "{runtime}/libpthread.so.0",
+            "mappings": 1,
+            "name": "libpthread.so.0",
+            "resolved_path_sha256": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+            "sha256": "4472cde19acc87a431ad1eefe9e86f8238dd1f26f8dac692cff7040474d9d085"
+          },
+          "b83122568acf8ea5db078a61af262a42c45fc07c6fcdd08d653c285ca35d7759": {
+            "bytes": 342000,
+            "file": "{build}/src/libscnet-validation.so",
+            "mappings": 1,
+            "name": "libscnet-validation.so",
+            "resolved_path_sha256": "b83122568acf8ea5db078a61af262a42c45fc07c6fcdd08d653c285ca35d7759",
+            "sha256": "615a93cc3ee045f041b78ea71c4e4445222e2fdfb799b35528969b384411d1c5"
+          },
+          "cc1aee8525ffa14e67b44270079ea9ea4bf038f13c4af9cf23cc756ab41540cf": {
+            "bytes": 8032,
+            "file": "{torch}/lib/libtorch.so",
+            "mappings": 1,
+            "name": "libtorch.so",
+            "resolved_path_sha256": "cc1aee8525ffa14e67b44270079ea9ea4bf038f13c4af9cf23cc756ab41540cf",
+            "sha256": "59a95807d56ca89993351a173839f160ca9c2c6ec6f6b89a5e691d8f1392d3ff"
+          },
+          "d5af512c934fbebf74d209e95e5bc46b1c7ed4b43152ff632982132813cd3d4b": {
+            "bytes": 14408,
+            "file": "{runtime}/libutil.so.1",
+            "mappings": 1,
+            "name": "libutil.so.1",
+            "resolved_path_sha256": "d5af512c934fbebf74d209e95e5bc46b1c7ed4b43152ff632982132813cd3d4b",
+            "sha256": "b88de5f440af504c5a7f7fa933ee7272c44e18e4613c44b2cc6b5ca40f99d6ba"
+          },
+          "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452": {
+            "bytes": 2592224,
+            "file": "{runtime}/libstdc++.so.6.0.33",
+            "mappings": 1,
+            "name": "libstdc++.so.6.0.33",
+            "resolved_path_sha256": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+            "sha256": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11"
+          },
+          "dc15779eb5417f204ee508314197925e46b3b97b53ead2e6cb83668ca2bef77d": {
+            "bytes": 64512,
+            "file": "{build}/ggml/src/ggml-blas/libggml-blas.so.0.26.0",
+            "mappings": 1,
+            "name": "libggml-blas.so.0.26.0",
+            "resolved_path_sha256": "dc15779eb5417f204ee508314197925e46b3b97b53ead2e6cb83668ca2bef77d",
+            "sha256": "a67f70dab7ee0910e68f3d2c04e2251316dbfe034f5c8ee63269cbaba5032b4f"
+          },
+          "dd71a1e38bf1fa80725adf6bdb2b6583a82746e3e6d4bc23caccdc1b5e3ff4d1": {
+            "bytes": 1687736,
+            "file": "{build}/ggml/src/libggml-cpu.so.0.26.0",
+            "mappings": 1,
+            "name": "libggml-cpu.so.0.26.0",
+            "resolved_path_sha256": "dd71a1e38bf1fa80725adf6bdb2b6583a82746e3e6d4bc23caccdc1b5e3ff4d1",
+            "sha256": "3dfe8bc6d991cec458e3d6da04ac98e52d10f11e6129021b1e0dc83054fc40be"
+          },
+          "efe23fbcb83eb8eb9bfaf4e0fd67daeef3cb3e971eb78832ff2855ae3a6bd20c": {
+            "bytes": 234016,
+            "file": "{runtime}/bit_generator.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "bit_generator.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "efe23fbcb83eb8eb9bfaf4e0fd67daeef3cb3e971eb78832ff2855ae3a6bd20c",
+            "sha256": "87c5c730887943c603b16c53cf213398336ee410ef46595518093977afd5b0cb"
+          },
+          "faabe1f9b95014f745fda2266e75bcb2548e607d7b67aa8a7244013db55616bf": {
+            "bytes": 14408,
+            "file": "{runtime}/libdl.so.2",
+            "mappings": 1,
+            "name": "libdl.so.2",
+            "resolved_path_sha256": "faabe1f9b95014f745fda2266e75bcb2548e607d7b67aa8a7244013db55616bf",
+            "sha256": "feee7549138dc862300b9ba9b2b02502059c838a6c0b92d2ea4c0a357e8e0b45"
+          },
+          "fd36ecc2771321a5d761642d5f981789ef420e6637fddd0dfabb4ea2a94ac125": {
+            "bytes": 258888,
+            "file": "{runtime}/_common.cpython-312-x86_64-linux-gnu.so",
+            "mappings": 1,
+            "name": "_common.cpython-312-x86_64-linux-gnu.so",
+            "resolved_path_sha256": "fd36ecc2771321a5d761642d5f981789ef420e6637fddd0dfabb4ea2a94ac125",
+            "sha256": "abd88ca8f447f22c4f51f226734d34732966bae61edd2aa25f74bfec954bee28"
+          }
+        },
+        "process_id": 3,
+        "require_torch": true,
+        "roles": {
+          "configured_openblas": "0686535a834a6215edd028ce6e7cda527f9a68a54466c4439dfe75c68709fb33",
+          "ggml": {
+            "ggml": "79ea87cd6d0d35e4db3d057d06949c0127a5883f0117f3177f833621753f46c2",
+            "ggml-base": "a3390936e3b409c584c8ae1aa24b365a39938fe694cf800dfe895acff5c4bc6e",
+            "ggml-blas": "dc15779eb5417f204ee508314197925e46b3b97b53ead2e6cb83668ca2bef77d",
+            "ggml-cpu": "dd71a1e38bf1fa80725adf6bdb2b6583a82746e3e6d4bc23caccdc1b5e3ff4d1"
+          },
+          "native_library": "b83122568acf8ea5db078a61af262a42c45fc07c6fcdd08d653c285ca35d7759",
+          "openmp_candidates": [
+            "b0f1fd023781fe49dfeb7d7f064f5565993ba3592978aef58d7ae08d62402d3e"
+          ],
+          "torch_cpu": "4d99d8319a59aba20252fe0e73737f9563d100135953a43d1bfefe31c557a0ae"
+        },
+        "schema": 1,
+        "scope": "Current process main ELF link map; file-backed DSO identities, not relocation-binding proof. The main executable and anonymous/JIT mappings are outside this inventory.",
+        "virtual_objects_without_file_bytes": [
+          "linux-vdso.so.1"
+        ]
+      },
+      "timed_transition": {
+        "added_objects": [],
+        "common_file_bytes_unchanged": true,
+        "configuration_unchanged": true,
+        "mapping_set_unchanged": true,
+        "removed_objects": [],
+        "roles_unchanged": true
+      }
+    },
+    "library_sha256": "615a93cc3ee045f041b78ea71c4e4445222e2fdfb799b35528969b384411d1c5",
+    "model_inference_performed": false,
+    "qualification": false,
+    "schema": 1,
+    "scope": "Genuine load-only identity control; no model initialization, inference or timings",
+    "torch_version": "2.8.0+cpu"
+  },
+  "limits": [
+    "The helper records endpoint file-backed mapped objects in the main ELF namespace, not symbol relocations or relocated memory.",
+    "An initialization snapshot may differ after legitimate first-use warmup loading; paired measurements require stable before/after identities after warmups.",
+    "The load-only control exercises the phase-checking machinery without warmups or model pairs. Its nested identity_control is not a model benchmark.",
+    "This earlier load-only native library is identified by its own hash and is not asserted to be the subsequently repaired allocator or later native candidate."
+  ],
+  "load_only_receipt": {
+    "bytes": 57511,
+    "file": "{evidence}/loaded-runtime-identity-v1/load-only.json",
+    "sha256": "2b7a9e00074bb9ee1f946ac7815d23f5123c1c58fa2db86edb34a5146bd4551b"
+  },
+  "mapped_openmp_files": [
+    {
+      "bytes": 253849,
+      "file": "{torch}/lib/libgomp.so.1",
+      "mappings": 1,
+      "name": "libgomp.so.1",
+      "resolved_path_sha256": "b0f1fd023781fe49dfeb7d7f064f5565993ba3592978aef58d7ae08d62402d3e",
+      "sha256": "e4b79735f816cbb906c8bf35b31847c5ce667cfbdbe76bd18aaf6e7baad2686e"
+    }
+  ],
+  "mapped_provider": {
+    "bytes": 34231848,
+    "file": "{runtime}/libopenblas.so.0.3",
+    "mappings": 1,
+    "name": "libopenblas.so.0.3",
+    "resolved_path_sha256": "0686535a834a6215edd028ce6e7cda527f9a68a54466c4439dfe75c68709fb33",
+    "sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e"
+  },
+  "numerical_constants_unchanged": true,
+  "performance_qualification": false,
+  "qualification": false,
+  "reason": "Standalone ldd can resolve system GOMP while a Python worker with Torch already imported maps Torch GOMP. Both scopes must be recorded honestly.",
+  "schema": "scnet-loaded-runtime-controls-summary-v1",
+  "scope": "Model-free rejection controls plus genuine Torch-first load-only enumeration; no native model initialization, inference, timing, or qualification.",
+  "source_hashes": {
+    "tests/test_scnet_profile.py": "7141e12d771876cade2d75e1ee99701aaff2972795e24be2b2ff60ef007968c1",
+    "tests/test_scnet_runtime_identity.py": "207a2502150adcef475b9e8efb29e90ae0f49a78248ad215adc86a95599c5bb8",
+    "tools/ci-heavy/scnet_package.py": "a74113dff59e177d524e64cd0fb2e1abeff8dbc035fcbaed49215486db5c0b90",
+    "tools/ci-heavy/scnet_profile.py": "d7d6d87b15676e76619ccaba24793b015c2c7d9490518df41a5835d2c905526f",
+    "tools/ci-heavy/scnet_qualify.py": "7899ab1348be531d4576b036fb2c2d32c23b3793970e2e9d251cc6dcf7c94001",
+    "tools/ci-heavy/scnet_runtime_profile.py": "eb0247c38b72d0b9a35d3d5723eac47ad67dba5c8c21e93ad553d52727a2da1c",
+    "tools/scnet_runtime_identity.py": "523a9336f5dc6626b61c4241a48b19aac8f3e7e574c1de0f99c3c88513a1d3c4",
+    "tools/validate_scnet.py": "b3069dc112619305772f69cdc8845df0e631932a318b4cb68c5690ab29b67831"
+  },
+  "unchanged_gate_definitions": [
+    "GGUFFile",
+    "NativeModel",
+    "all_pass",
+    "atomic_json_write",
+    "check_inventory",
+    "compare_captures",
+    "main",
+    "parse_diff",
+    "pcm_sha256",
+    "portable_receipt",
+    "row_metrics",
+    "sha256",
+    "shape4",
+    "summarize_pairs",
+    "tensor_metrics",
+    "validate_reference",
+    "waveform_metrics"
+  ],
+  "verification": {
+    "identity_control_log_rechecked": true,
+    "mapped_file_count": 40,
+    "native_model_calls_performed_by_this_audit": 0,
+    "retained_load_only_proof_recomputed": true
+  }
+}

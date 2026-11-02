@@ -14,6 +14,7 @@
 #include "core/gpu_backend_pref.h"
 #include "core/parallel_for.h"
 #include "ggml.h"
+#include "ggml-alloc.h"
 #include "ggml-backend.h"
 #include "ggml-cpu.h"
 #include "gguf.h"
@@ -321,6 +322,7 @@ void recurrent_compute(ggml_tensor* output, int ith, int nth, void* opaque) {
 struct Graph {
     ggml_context* context = nullptr;
     ggml_backend_sched_t scheduler = nullptr;
+    bool owns_scheduler = true;
     ggml_cgraph* graph = nullptr;
     ggml_tensor *input = nullptr, *output = nullptr;
     int frames = 0;
@@ -333,19 +335,57 @@ struct Graph {
     std::vector<std::unique_ptr<scnet_detail::Im2ColShape>> convolution_inputs;
     GraphProfile profile;
     ~Graph() {
-        if (scheduler)
-            ggml_backend_sched_free(scheduler);
+        if (scheduler) {
+            if (owns_scheduler) {
+                ggml_backend_sched_free(scheduler);
+            } else {
+                // The model owns the CPU allocator. Retire its references to
+                // this graph while the tensors and callback data are alive,
+                // including when allocation failed before the first compute.
+                ggml_backend_sched_synchronize(scheduler);
+                ggml_backend_sched_set_eval_callback(scheduler, nullptr, nullptr);
+                ggml_backend_sched_reset(scheduler);
+            }
+        }
         if (context)
             ggml_free(context);
     }
 };
+
+size_t graph_buffer_bytes(ggml_backend_sched_t scheduler) {
+    size_t bytes = 0;
+    for (int i = 0; i < ggml_backend_sched_get_n_backends(scheduler); ++i)
+        bytes += ggml_backend_sched_get_buffer_size(scheduler, ggml_backend_sched_get_backend(scheduler, i));
+    return bytes;
+}
+
+void profile_graph_allocator(const Graph& graph, bool metadata_hit, bool scheduler_created, size_t before_bytes) {
+    if (!graph.cpu_only || !graph.profile.enabled)
+        return;
+    const size_t after_bytes = graph_buffer_bytes(graph.scheduler);
+    void* buffer = graph.input && graph.input->buffer ? ggml_backend_buffer_get_base(graph.input->buffer) : nullptr;
+    // Capacity/base identity is reuse evidence, not a count of allocator calls.
+    std::fprintf(stderr,
+                 "scnet_bench_allocator: frames=%d capture=%d profile=%d shared_cpu=%d metadata_hit=%d "
+                 "scheduler=%p buffer=%p before_bytes=%zu after_bytes=%zu scheduler_created=%d\n",
+                 graph.frames, int(graph.capture), int(graph.profile.enabled), int(!graph.owns_scheduler),
+                 int(metadata_hit), static_cast<void*>(graph.scheduler), buffer, before_bytes, after_bytes,
+                 int(scheduler_created));
+}
 } // namespace
 
 struct scnet_context {
     HParams hp;
     scnet_params params{};
     core_gguf::WeightLoad weights;
+    // Immutable CPU+BLAS W_hh copies keep dequantization out of the LSTM
+    // subgraph. Their F32 payload is 15 MiB for SCNet / 60 MiB for SCNet-large.
+    // Original GGUF tensors and their quantization/provenance remain intact.
+    core_gguf::WeightLoad recurrent_weights;
     ggml_backend_t backend = nullptr, cpu = nullptr, blas = nullptr;
+    // CPU graph metadata is replaceable; one allocator retains its largest
+    // compute buffer instead of keeping separate buffers for each geometry.
+    ggml_backend_sched_t cpu_scheduler = nullptr;
     std::vector<std::unique_ptr<Graph>> graphs;
     scnet_fft::Plan stft_plan{FFT};
     bool quant_q4 = false, quant_q8 = false;
@@ -438,6 +478,57 @@ void validate_weights(scnet_context& model) {
         throw std::runtime_error("SCNet declared precision does not match the required weight tensors");
     model.quant_q4 = type == GGML_FTYPE_MOSTLY_Q4_K;
     model.quant_q8 = type == GGML_FTYPE_MOSTLY_Q8_0;
+}
+
+void materialize_recurrent_weights(scnet_context& model) {
+    if (model.backend != model.cpu || !model.blas || !model.recurrent_blas)
+        return;
+    auto& cache = model.recurrent_weights;
+    constexpr size_t count = 6 * 2 * 2;
+    const ggml_init_params params{count * ggml_tensor_overhead(), nullptr, true};
+    cache.ctx = ggml_init(params);
+    if (!cache.ctx)
+        throw std::runtime_error("SCNet recurrent weight metadata allocation failed");
+    for (int layer = 0; layer < 6; ++layer)
+        for (int axis = 0; axis < 2; ++axis)
+            for (const char* suffix : {"", "_reverse"}) {
+                const std::string name = "separation_net.dp_modules." + std::to_string(layer) + ".lstm_layers." +
+                                         std::to_string(axis) + ".weight_hh_l0" + suffix;
+                const auto* source = weight(model, name);
+                if (!ggml_is_contiguous(source) || !source->data || !source->buffer ||
+                    !ggml_backend_buffer_is_host(source->buffer))
+                    throw std::runtime_error("SCNet recurrent weight is not contiguous host storage: " + name);
+                auto* tensor = ggml_new_tensor_2d(cache.ctx, GGML_TYPE_F32, source->ne[0], source->ne[1]);
+                ggml_set_name(tensor, name.c_str());
+                // A new tensor is an op-NONE leaf, with no graph edge back to
+                // its original stored representation and no conversion node.
+                cache.tensors.emplace(name, tensor);
+            }
+    cache.buf = ggml_backend_alloc_ctx_tensors(cache.ctx, model.cpu);
+    if (!cache.buf)
+        throw std::runtime_error("SCNet recurrent F32 weight allocation failed");
+    ggml_backend_buffer_set_usage(cache.buf, GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
+    for (const auto& entry : cache.tensors) {
+        const auto* source = weight(model, entry.first);
+        auto* destination = entry.second;
+        if (source->type == GGML_TYPE_F32) {
+            std::memcpy(destination->data, source->data, ggml_nbytes(source));
+            continue;
+        }
+        const auto* traits = ggml_get_type_traits(source->type);
+        if (!traits->to_float)
+            throw std::runtime_error("SCNet recurrent weight has no F32 converter: " + entry.first);
+        // Quantized CPY uses this exact type-trait converter one block at a
+        // time. F16's canonical row converter preserves every finite half
+        // value exactly, like CPY's CPU half-to-float conversion.
+        const int64_t block = ggml_is_quantized(source->type) ? traits->blck_size : source->ne[0];
+        for (int64_t row = 0; row < source->ne[1]; ++row) {
+            const auto* from = static_cast<const char*>(source->data) + row * source->nb[1];
+            auto* to = reinterpret_cast<float*>(static_cast<char*>(destination->data) + row * destination->nb[1]);
+            for (int64_t first = 0; first < source->ne[0]; first += block)
+                traits->to_float(from + (first / traits->blck_size) * traits->type_size, to + first, block);
+        }
+    }
 }
 
 ggml_tensor* as_f32(Graph& graph, ggml_tensor* tensor) {
@@ -707,7 +798,9 @@ ggml_tensor* recurrent(scnet_context& model, Graph& graph, ggml_tensor* input, c
         const std::string suffix = direction ? "_reverse" : "";
         if (!graph.cpu_only)
             sources[direction] = multiply(model, graph, weight(model, name + ".weight_ih_l0" + suffix), input);
-        sources[2 + direction] = as_f32(graph, weight(model, name + ".weight_hh_l0" + suffix));
+        const std::string recurrent_name = name + ".weight_hh_l0" + suffix;
+        sources[2 + direction] = model.recurrent_weights.ctx ? model.recurrent_weights.tensors.at(recurrent_name)
+                                                             : as_f32(graph, weight(model, recurrent_name));
         sources[4 + direction] = weight(model, name + ".bias_hh_l0" + suffix);
         sources[6 + direction] = weight(model, name + ".bias_ih_l0" + suffix);
     }
@@ -799,18 +892,26 @@ ggml_tensor* decoder(scnet_context& model, Graph& graph, ggml_tensor* input, ggm
 
 Graph& network_graph(scnet_context& model, int frames, bool want_capture) {
     const bool want_profile = flag("CRISPASR_SCNET_BENCH");
+    const bool cpu_only = model.backend == model.cpu;
     for (size_t i = 0; i < model.graphs.size(); ++i)
         if (model.graphs[i]->frames == frames && model.graphs[i]->capture == want_capture &&
             model.graphs[i]->profile.enabled == want_profile) {
             auto cached = std::move(model.graphs[i]);
             model.graphs.erase(model.graphs.begin() + static_cast<std::ptrdiff_t>(i));
             model.graphs.insert(model.graphs.begin(), std::move(cached));
+            if (want_profile && cpu_only)
+                profile_graph_allocator(*model.graphs.front(), true, false,
+                                        graph_buffer_bytes(model.graphs.front()->scheduler));
             return *model.graphs.front();
         }
     Timer timer("graph_build");
+    // Reset before discarding the old tensor metadata: scheduler reset makes
+    // its tensor pointers invalid. Only this current CPU graph is retained.
+    if (cpu_only)
+        model.graphs.clear();
     auto graph = std::make_unique<Graph>();
     graph->capture = want_capture;
-    graph->cpu_only = model.backend == model.cpu;
+    graph->cpu_only = cpu_only;
     graph->profile.enabled = want_profile;
     ggml_init_params params{ggml_tensor_overhead() * GRAPH_CAPACITY + ggml_graph_overhead_custom(GRAPH_CAPACITY, false),
                             nullptr, true};
@@ -818,8 +919,18 @@ Graph& network_graph(scnet_context& model, int frames, bool want_capture) {
     if (!graph->context)
         throw std::runtime_error("SCNet graph metadata allocation failed");
     ggml_backend_t backends[] = {model.blas ? model.blas : model.backend, model.cpu};
-    graph->scheduler = ggml_backend_sched_new(backends, nullptr, model.backend == model.cpu && !model.blas ? 1 : 2,
-                                              GRAPH_CAPACITY, false, true);
+    bool scheduler_created = false;
+    if (cpu_only) {
+        if (!model.cpu_scheduler) {
+            model.cpu_scheduler =
+                ggml_backend_sched_new(backends, nullptr, model.blas ? 2 : 1, GRAPH_CAPACITY, false, true);
+            scheduler_created = true;
+        }
+        graph->scheduler = model.cpu_scheduler;
+        graph->owns_scheduler = false;
+    } else {
+        graph->scheduler = ggml_backend_sched_new(backends, nullptr, 2, GRAPH_CAPACITY, false, true);
+    }
     if (!graph->scheduler)
         throw std::runtime_error("SCNet graph scheduler allocation failed");
     graph->graph = ggml_new_graph_custom(graph->context, GRAPH_CAPACITY, false);
@@ -838,13 +949,16 @@ Graph& network_graph(scnet_context& model, int frames, bool want_capture) {
     graph->profile.label(graph->output, "output");
     ggml_set_output(graph->output);
     ggml_build_forward_expand(graph->graph, graph->output);
-    // Old buffers are released before allocating a new shape. Two graphs keep
-    // ordinary two-chunk warm runs reusable without unbounded shape caching.
-    if (model.graphs.size() == 2)
+    // Preserve the existing device cache policy. CPU shape changes reuse the
+    // model-owned allocator above and never retain stale allocated tensors.
+    if (!cpu_only && model.graphs.size() == 2)
         model.graphs.pop_back();
+    const size_t before_bytes = want_profile && cpu_only ? graph_buffer_bytes(graph->scheduler) : 0;
     if (!ggml_backend_sched_alloc_graph(graph->scheduler, graph->graph))
         throw std::runtime_error("SCNet graph buffer allocation failed");
     graph->frames = frames;
+    if (want_profile && cpu_only)
+        profile_graph_allocator(*graph, false, scheduler_created, before_bytes);
     model.graphs.insert(model.graphs.begin(), std::move(graph));
     return *model.graphs.front();
 }
@@ -1190,6 +1304,7 @@ scnet_context* scnet_init_from_file(const char* path, scnet_params params) {
         if (!loaded)
             throw std::runtime_error("SCNet weight loading failed");
         validate_weights(*model);
+        materialize_recurrent_weights(*model);
         model->backend_description =
             std::string(ggml_backend_name(model->backend)) + (model->blas ? "+BLAS" : "") + "/CPU-LSTM-FFT";
         model->compute_description = std::string("F32 activations/accumulation; CPU recurrent/FFT; gates=") +
@@ -1212,6 +1327,11 @@ void scnet_free(scnet_context* model) {
     if (!model)
         return;
     model->graphs.clear();
+    if (model->cpu_scheduler)
+        ggml_backend_sched_free(model->cpu_scheduler);
+    // Graphs and the shared scheduler must release their tensor references
+    // before either the derived CPU leaves or original GGUF weights are freed.
+    core_gguf::free_weights(model->recurrent_weights);
     core_gguf::free_weights(model->weights);
     if (model->blas)
         ggml_backend_free(model->blas);

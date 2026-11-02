@@ -8,6 +8,7 @@ import tempfile
 from types import SimpleNamespace
 import unittest
 from unittest import mock
+from test_scnet_runtime_identity import identity_fixture
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -35,6 +36,7 @@ def fixture():
     for key in ("model_sha256", "checkpoint_sha256", "audio_sha256", "library_sha256",
                 "input_pcm_interleaved_sha256", "input_pcm_planar_sha256"):
         row[key] = "4" * 64
+    row["loaded_dso_identity"] = identity_fixture(process_id=101)
 
     def call(iteration, name):
         return {"iteration": iteration, "implementation": name, "complete": True,
@@ -51,11 +53,43 @@ def fixture():
     row.update(P.summarize_pairs(row["calls"], 3))
     passive = copy.deepcopy(row)
     passive["worker_process_id"] = 102
+    passive["loaded_dso_identity"] = identity_fixture(process_id=102)
     passive["runtime"]["wait_policy_environment"].update(P.PASSIVE_WAIT_POLICY)
     return row, passive
 
 
 class SCNetProfileControls(unittest.TestCase):
+    def test_loaded_runtime_proof_is_required_for_both_workers(self):
+        for label in (0, 1):
+            with self.subTest(worker=label):
+                rows = list(fixture())
+                del rows[label]["loaded_dso_identity"]
+                with self.assertRaisesRegex(ValueError, "loaded-DSO"):
+                    P.summarize_wait_policy_comparison(*rows)
+        primary, passive = fixture()
+        passive["loaded_dso_identity"] = identity_fixture(process_id=999)
+        with self.assertRaisesRegex(ValueError, "another worker"):
+            P.summarize_wait_policy_comparison(primary, passive)
+
+    def test_identity_snapshots_enclose_only_the_existing_measured_pairs(self):
+        import numpy as np
+        events = []
+        output = np.arange(64, dtype=np.float32).reshape(4, 2, 8) / 64
+
+        def run(name):
+            events.append(name)
+            return output.copy()
+
+        identity = SimpleNamespace(before_timing=lambda: events.append("mapped-before"),
+                                   after_timing=lambda: events.append("mapped-after"))
+        receipt = {"warmups": [], "calls": []}
+        P.paired_calls(lambda: run("original"), lambda: run("native"), receipt, lambda: None,
+                       lambda: True, identity)
+        self.assertEqual(events, ["original", "native", "mapped-before", "original", "native",
+                                  "native", "original", "original", "native", "mapped-after"])
+        self.assertEqual(len(receipt["calls"]), 6)
+        self.assertTrue(receipt["waveform_acceptance"])
+
     def test_slower_passive_result_remains_complete_and_unqualified(self):
         primary, passive = fixture()
         for call in passive["calls"]:

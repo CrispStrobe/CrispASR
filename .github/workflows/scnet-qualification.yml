@@ -50,7 +50,7 @@ jobs:
       - name: Install native and original-reference dependencies
         run: |
           bash tools/ci-apt.sh update
-          bash tools/ci-apt.sh install -y cmake ninja-build g++ libopenblas-dev
+          bash tools/ci-apt.sh install -y cmake ninja-build g++
           python -m pip install --no-cache-dir torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --no-cache-dir -r tools/requirements-scnet.txt clang-format==18.1.8
           python -m pip check
@@ -81,6 +81,10 @@ jobs:
           free -h > scnet-out/memory.txt
           df -h > scnet-out/disk.txt
           python -m pip freeze > scnet-out/python-packages.txt
+      - name: Build the pinned CPU BLAS provider
+        run: >
+          python tools/ci-heavy/scnet_build_openblas.py --work-dir scnet-openblas
+          --output-dir scnet-out/provider --jobs 2
       - name: Build the actual CLI, Session library, quantizer and probe
         run: |
           set -o pipefail
@@ -90,12 +94,20 @@ jobs:
             -DCRISPASR_BUILD_SERVER=OFF -DGGML_NATIVE=ON -DGGML_CUDA=OFF \
             -DGGML_METAL=OFF -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS \
             -DGGML_BACKEND_DL=OFF \
+            -DCMAKE_PREFIX_PATH="$PWD/scnet-openblas/install" \
+            -DBLAS_openblas_LIBRARY="$PWD/scnet-openblas/install/lib/libopenblas.so" \
+            -DBLAS_INCLUDE_DIRS="$PWD/scnet-openblas/install/include/openblas" \
+            -DCBLAS_INCLUDE_DIR="$PWD/scnet-openblas/install/include/openblas" \
+            -DCRISPASR_CBLAS_INCLUDE_DIR="$PWD/scnet-openblas/install/include/openblas" \
+            -DCRISPASR_CPU_OPENBLAS="$PWD/scnet-openblas/install/lib/libopenblas.so" \
+            -DCRISPASR_CORE_OPENBLAS="$PWD/scnet-openblas/install/lib/libopenblas.so" \
+            -DCMAKE_BUILD_RPATH="$PWD/scnet-openblas/install/lib" \
             -DCRISPASR_CPU_BLAS=ON -DCRISPASR_MEL_BLAS=ON \
             -DCRISPASR_ONNXRUNTIME_ROOT="$RUNNER_TEMP/onnxruntime-sdk" \
             2>&1 | tee scnet-out/configure.log
           cmake --build build-scnet --parallel 2 \
             --target crispasr-cli crispasr-lib crispasr-quantize scnet-probe scnet-validation \
-            scnet-tensor-test scnet-blas-thread-test \
+            scnet-tensor-test scnet-allocator-test scnet-blas-thread-test \
             2>&1 | tee scnet-out/build.log
       - name: Generate capabilities and documentation from the actual CLI
         run: |
@@ -113,6 +125,7 @@ jobs:
         run: |
           set -o pipefail
           build-scnet/bin/scnet-tensor-test 2>&1 | tee scnet-out/tensor-controls.log
+          build-scnet/bin/scnet-allocator-test 2>&1 | tee scnet-out/allocator-controls.log
           build-scnet/bin/scnet-blas-thread-test 2>&1 | tee scnet-out/blas-thread-controls.log
           python tests/test-scnet-im2col.py -v 2>&1 | tee scnet-out/im2col-controls.log
           python tests/test-scnet-fft.py -v 2>&1 | tee scnet-out/fft-controls.log
@@ -123,6 +136,7 @@ jobs:
           python tests/test-scnet-converter.py -v 2>&1 | tee scnet-out/converter-controls.log
           python tests/test-scnet-reference.py -v 2>&1 | tee scnet-out/reference-controls.log
           python tests/test_scnet_validation.py -v 2>&1 | tee scnet-out/validation-controls.log
+          python tests/test_scnet_runtime_identity.py -v 2>&1 | tee scnet-out/runtime-identity-controls.log
           python tests/test_scnet_linkage.py -v --build-dir build-scnet \
             --output-dir scnet-out/linkage-controls 2>&1 | tee scnet-out/linkage-controls.log
       - name: Convert and qualify all three precisions against the original

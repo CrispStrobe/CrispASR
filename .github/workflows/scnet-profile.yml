@@ -2,10 +2,6 @@ name: SCNet bounded CPU diagnostic
 
 on:
   workflow_dispatch:
-  push:
-    branches: [feat/scnet-native-20261102]
-    paths:
-      - '.github/workflows/scnet-profile.yml'
 
 permissions:
   contents: read
@@ -17,7 +13,7 @@ concurrency:
 jobs:
   profile:
     runs-on: ubuntu-22.04
-    timeout-minutes: 35
+    timeout-minutes: 55
     env:
       OMP_NUM_THREADS: '2'
       OPENBLAS_NUM_THREADS: '2'
@@ -38,7 +34,7 @@ jobs:
       - name: Install the CPU converter and profiling dependencies
         run: |
           bash tools/ci-apt.sh update
-          bash tools/ci-apt.sh install -y cmake ninja-build g++ libopenblas-dev
+          bash tools/ci-apt.sh install -y cmake ninja-build g++
           python -m pip install --no-cache-dir torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
           python -m pip install --no-cache-dir -r tools/requirements-scnet.txt
           python -m pip check
@@ -66,6 +62,10 @@ jobs:
           free -h > scnet-profile-out/memory.txt
           g++ --version > scnet-profile-out/compiler.txt
           python -m pip freeze > scnet-profile-out/python-packages.txt
+      - name: Build the pinned CPU BLAS provider
+        run: >
+          python tools/ci-heavy/scnet_build_openblas.py --work-dir scnet-openblas
+          --output-dir scnet-profile-out/provider --jobs 2
       - name: Build the native SCNet validation library and tensor controls
         run: |
           set -o pipefail
@@ -74,21 +74,32 @@ jobs:
             -DCRISPASR_BUILD_SCNET_PROBE=ON -DCRISPASR_BUILD_TESTS=OFF \
             -DCRISPASR_BUILD_SERVER=OFF -DGGML_NATIVE=ON -DGGML_CUDA=OFF \
             -DGGML_METAL=OFF -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS \
+            -DGGML_BACKEND_DL=OFF \
+            -DCMAKE_PREFIX_PATH="$PWD/scnet-openblas/install" \
+            -DBLAS_openblas_LIBRARY="$PWD/scnet-openblas/install/lib/libopenblas.so" \
+            -DBLAS_INCLUDE_DIRS="$PWD/scnet-openblas/install/include/openblas" \
+            -DCBLAS_INCLUDE_DIR="$PWD/scnet-openblas/install/include/openblas" \
+            -DCRISPASR_CBLAS_INCLUDE_DIR="$PWD/scnet-openblas/install/include/openblas" \
+            -DCRISPASR_CPU_OPENBLAS="$PWD/scnet-openblas/install/lib/libopenblas.so" \
+            -DCRISPASR_CORE_OPENBLAS="$PWD/scnet-openblas/install/lib/libopenblas.so" \
+            -DCMAKE_BUILD_RPATH="$PWD/scnet-openblas/install/lib" \
             -DCRISPASR_CPU_BLAS=ON -DCRISPASR_MEL_BLAS=ON \
             2>&1 | tee scnet-profile-out/configure.log
           cmake --build build-scnet-profile --parallel 2 \
-            --target scnet-validation scnet-tensor-test scnet-blas-thread-test \
+            --target scnet-validation scnet-tensor-test scnet-allocator-test scnet-blas-thread-test \
             2>&1 | tee scnet-profile-out/build.log
       - name: Check SCNet tensor, convolution and recurrent math helpers
         run: |
           set -o pipefail
           build-scnet-profile/bin/scnet-tensor-test 2>&1 | tee scnet-profile-out/tensor-controls.log
+          build-scnet-profile/bin/scnet-allocator-test 2>&1 | tee scnet-profile-out/allocator-controls.log
           build-scnet-profile/bin/scnet-blas-thread-test 2>&1 | tee scnet-profile-out/blas-thread-controls.log
           python tests/test-scnet-im2col.py 2>&1 | tee scnet-profile-out/im2col-controls.log
           python tests/test-scnet-fft.py 2>&1 | tee scnet-profile-out/fft-controls.log
           python tests/test-scnet-real-fft.py 2>&1 | tee scnet-profile-out/real-fft-controls.log
           python tests/test-scnet-math.py 2>&1 | tee scnet-profile-out/math-controls.log
           python tests/test_scnet_profile.py 2>&1 | tee scnet-profile-out/profile-controls.log
+          python tests/test_scnet_runtime_identity.py -v 2>&1 | tee scnet-profile-out/runtime-identity-controls.log
       - name: Profile F16, primary timing pairs and the passive-wait diagnostic
         run: >
           python tools/ci-heavy/scnet_profile.py --source-commit ${{ github.sha }}

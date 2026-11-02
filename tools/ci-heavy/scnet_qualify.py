@@ -42,6 +42,7 @@ sys.path.insert(0, str(ROOT / "tools"))
 from reference_backends.scnet import (  # noqa: E402
     CHECKPOINT_URLS, SOURCE_HASHES, SOURCE_REVISION, sha256, verify_source_files,
 )
+from scnet_runtime_identity import verify_timed_identity  # noqa: E402
 
 MUSIC_URL = "https://download.pytorch.org/torchaudio/tutorial-assets/hdemucs_mix.wav"
 # First author-linked downloads, retained in run 41397985492. These identify
@@ -64,6 +65,7 @@ SOURCE_FILES = (
     "src/scnet.cpp", "src/scnet.h", "src/scnet_fft.h", "src/scnet_lstm.h", "src/scnet_shift.h",
     "src/scnet_activation.h", "src/scnet_tensor.h", "src/scnet_im2col.h", "src/scnet_real_fft.h",
     "tools/scnet_probe.cpp", "tools/scnet_exports.cpp", "tools/validate_scnet.py",
+    "tools/scnet_runtime_identity.py", "tools/ci-heavy/scnet_build_openblas.py",
     "tools/ci-heavy/scnet_qualify.py", "tools/ci-heavy/scnet_precision_diagnostics.py",
     "tools/ci-heavy/scnet_runtime_profile.py", "tools/ci-heavy/scnet_package.py", "tools/dump_scnet_reference.py",
     "tools/reference_backends/scnet.py", "tools/requirements-scnet.txt",
@@ -71,9 +73,10 @@ SOURCE_FILES = (
     "tests/test-scnet-converter.py", "tests/test-scnet-reference.py", "tests/test-scnet-native-diff.py",
     "tests/test-scnet-math.py", "tests/test-scnet-session-routing.py", "tests/test-scnet-quant-policy.py",
     "tests/test-scnet-im2col.py", "tests/test-scnet-tensor.cpp", "tests/test-scnet-fft.py", "tests/test-scnet-real-fft.py",
-    "tests/test-scnet-blas-threads.cpp", "ggml/src/ggml-blas/ggml-blas.cpp",
+    "tests/test-scnet-blas-threads.cpp", "tests/test-scnet-allocator.cpp",
+    "ggml/src/ggml-blas/ggml-blas.cpp", "ggml/src/ggml-alloc.c",
     "tests/test_scnet_validation.py", "tests/test-scnet-surface.py", "examples/cli/crispasr_backend_scnet.cpp",
-    "tests/test_scnet_linkage.py",
+    "tests/test_scnet_linkage.py", "tests/test_scnet_runtime_identity.py",
     "examples/crispasr-quantize/main.cpp",
     "src/CMakeLists.txt", "CMakeLists.txt", ".github/workflows/scnet-qualification.yml",
 )
@@ -360,7 +363,7 @@ def validate_linkage_snapshot(snapshot):
 
 
 def snapshot_runtime_linkage(binaries, build, environment, log_dir, epoch):
-    """Bind the Linux loader's direct/transitive DSO tree under the actual run environment.
+    """Bind standalone ldd resolution under the run environment, not a worker's link map.
 
     Dynamic backend loading is excluded explicitly. Hashing resolved paths as
     well as file bytes detects same-name/same-content resolution changes while
@@ -444,6 +447,38 @@ def verify_runtime_linkage_receipt(linkage, binaries):
             for name in LINKAGE_ENTRYPOINTS):
         raise ValueError("runtime linkage entrypoints differ from the qualification binaries")
     return recomputed["after"]
+
+
+def verify_validation_loaded_identities(validation, linkage_snapshot):
+    """Cross-bind actual timing-worker mappings to native artifacts; ldd's GOMP may differ."""
+    snapshot = validate_linkage_snapshot(linkage_snapshot)
+    expected_library = snapshot["entrypoints"]["validation_library"]["sha256"]
+    if validation.get("library_sha256") != expected_library:
+        raise ValueError("loaded-runtime validation library differs from the qualified entrypoint")
+    native_files = dict(snapshot["dependencies"])
+    native_files.update({record["resolved_path_sha256"]: record for record in snapshot["entrypoints"].values()})
+    benchmark = validation.get("benchmark", {})
+    models = benchmark.get("models", {})
+    precisions = ("f16", "q8_0", "q4_k")
+    if set(models) != set(precisions):
+        raise ValueError("loaded-runtime evidence must include all three precision timing phases")
+    checked, processes = {}, set()
+    for precision in precisions:
+        evidence = models[precision].get("loaded_dso_identity")
+        last = verify_timed_identity(evidence, native_sha256=expected_library, native_files=native_files)
+        if last["cmake_cache_sha256"] != benchmark.get("runtime", {}).get("cmake_cache_sha256"):
+            raise ValueError("loaded-runtime build configuration differs from benchmark provenance")
+        processes.add(last["process_id"])
+        checked[precision] = {"complete": True, "process_id": last["process_id"],
+            "receipt_field": "validation/validation.json:benchmark.models." + precision + ".loaded_dso_identity"}
+    if len(processes) != 1 or benchmark.get("runtime", {}).get("loaded_dso_initialization") != \
+            models["f16"]["loaded_dso_identity"]["initialization"]:
+        raise ValueError("loaded-runtime provenance does not identify the single actual benchmark worker")
+    return {"complete": True,
+        "scope": "Actual timing-worker mapped file identities after warmups and after all pairs; "
+                 "native export/ggml/configured OpenBLAS cross-bound to standalone artifacts. "
+                 "Torch/OpenMP mappings are recorded separately; this is not relocation-binding proof.",
+        "models": checked}
 
 
 def snapshot_sources(run, source):
@@ -667,6 +702,13 @@ def qualify(run):
     linkage.update(compare_runtime_linkage(linkage["before"], linkage["after"]))
     run.save()  # Preserve mismatched identities before rejecting a changed runtime.
     verify_runtime_linkage_receipt(linkage, run.receipt["binaries"])
+    try:
+        run.receipt["loaded_runtime_identities"] = verify_validation_loaded_identities(validation, linkage["after"])
+    except Exception as error:
+        message = f"{type(error).__name__}: {error}"
+        run.receipt["loaded_runtime_identities"] = {"complete": False, "error": message}
+        run.receipt["errors"].append(message)
+    run.save()
     run.receipt["complete"] = bool(all(row["returncode"] is not None for row in raw_smokes.values())
                                    and validation.get("complete", False)
                                    and all(row["returncode"] is not None for row in surfaces.values()))

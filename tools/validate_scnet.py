@@ -47,6 +47,8 @@ if __name__ == "__main__":
             os.environ[_thread_variable] = str(_thread_args.threads)
 
 import numpy as np
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from scnet_runtime_identity import LoadedDSOTracker, validate_snapshot
 
 
 SOURCE_REVISION = "5d95bf96b19c3eede63248d171efeca8e3abb948"
@@ -609,7 +611,7 @@ class NativeModel:
             self.ctx = None
 
 
-def runtime_provenance(library):
+def runtime_provenance(library, loaded_snapshot=None):
     result = {"platform": platform.platform(), "machine": platform.machine(), "logical_cpus": os.cpu_count(),
               "library_sha256": sha256(library), "thread_environment": {key: os.environ.get(key) for key in THREAD_VARIABLES},
               "wait_policy_environment": {key: os.environ.get(key) for key in (
@@ -646,6 +648,8 @@ def runtime_provenance(library):
         result["cmake_cache_sha256"] = sha256(cache)
         result["build_settings"] = [line for line in cache.read_text().splitlines()
                                      if re.match(r"(?:GGML_|CMAKE_BUILD_TYPE|CMAKE_CXX_COMPILER|BLAS_)[^=]*=", line)]
+    if loaded_snapshot is not None:
+        result["loaded_dso_initialization"] = validate_snapshot(loaded_snapshot)
     return result
 
 
@@ -709,6 +713,11 @@ def benchmark(args, models, reference, audio, profile, receipt, save):
                     "warmups": [], "calls": [], "complete": False, "acceptance": False}
                 save()
                 try:
+                    identity = LoadedDSOTracker(args.library)
+                    row["loaded_dso_identity"] = identity.evidence
+                    if "loaded_dso_initialization" not in details["runtime"]:
+                        details["runtime"]["loaded_dso_initialization"] = identity.evidence["initialization"]
+                    save()
                     for iteration in range(args.warmups):
                         for name, call in (("original", original), ("native", lambda: native.run(audio))):
                             output = call()
@@ -718,6 +727,10 @@ def benchmark(args, models, reference, audio, profile, receipt, save):
                             save()
                             if not all_pass(scores):
                                 raise ValueError(f"{precision} {name} warmup output failed quality")
+                    # First-use libraries may appear during warmups; the actual
+                    # timed process mapping must then remain stable for every pair.
+                    identity.before_timing()
+                    save()
                     for iteration in range(args.repetitions):
                         order = ("original", "native") if iteration % 2 == 0 else ("native", "original")
                         for name in order:
@@ -736,6 +749,8 @@ def benchmark(args, models, reference, audio, profile, receipt, save):
                                   file=sys.stderr, flush=True)
                             if not all_pass(scores):
                                 raise ValueError(f"{precision} {name} measured output failed quality")
+                    identity.after_timing()
+                    save()
                     row.update(summarize_pairs(row["calls"], args.repetitions))
                     row["complete"] = True
                     row["acceptance"] = row["performance_acceptance"]

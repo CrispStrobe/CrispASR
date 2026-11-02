@@ -20,7 +20,7 @@ import uuid
 from scnet_qualify import (
     MUSIC_URL, RECORDED_CHECKPOINT_SHA256, RECORDED_LARGE_CONFIG_SHA256,
     RECORDED_MUSIC_SHA256, ROOT, SOURCE_FILES, compare_runtime_linkage, resolve_qualification_binaries,
-    snapshot_runtime_linkage, verify_runtime_linkage_receipt,
+    snapshot_runtime_linkage, verify_runtime_linkage_receipt, verify_validation_loaded_identities,
 )
 from reference_backends.scnet import (
     CHECKPOINT_URLS, LICENSE_URL, SOURCE_HASHES, SOURCE_REVISION, SOURCE_URL,
@@ -62,7 +62,10 @@ def stages_pass(row, label):
 def verify_receipts(qualification, validation, variant, source_commit):
     accepted(qualification, "qualification receipt")
     accepted(validation, "validation receipt")
-    verify_runtime_linkage_receipt(qualification.get("runtime_linkage"), qualification.get("binaries"))
+    linkage = verify_runtime_linkage_receipt(qualification.get("runtime_linkage"), qualification.get("binaries"))
+    loaded = verify_validation_loaded_identities(validation, linkage)
+    require(qualification.get("loaded_runtime_identities") == loaded,
+            "qualification lacks the verified actual timing-worker runtime identities")
     for label, receipt in (("qualification", qualification), ("validation", validation)):
         require(receipt.get("variant") == variant and receipt.get("source_revision") == SOURCE_REVISION,
                 f"{label} source/variant differs from the requested release")
@@ -241,7 +244,9 @@ def prepare(args):
         "qualification": {"scope": qualification["qualification_scope"], "device": "cpu", "threads": 2,
             "profile": validation["profile"], "runtime": validation["benchmark"]["runtime"],
             "runtime_linkage": {"qualified_before_after_verified": True, "packaging_recheck_verified": True,
+                "scope": "Standalone ldd resolution; actual timing-worker mappings are separately recorded",
                 "qualified_receipt_field": "qualification.json:runtime_linkage", "packaging_snapshot": packaging_linkage},
+            "loaded_runtime_identities": qualification["loaded_runtime_identities"],
             "fixture": qualification["fixture"], "gpu_qualified": False, "held_out_quality_qualified": False,
             "other_variant_qualified_by_this_bundle": False},
         "excluded": ["music/audio", "author checkpoint", "reference/native activation captures",
