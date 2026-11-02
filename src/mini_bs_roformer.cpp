@@ -800,7 +800,9 @@ mini_bs_roformer_context* mini_bs_roformer_init_from_file(const char* path, mini
         const bool packed_cpu = m->backend == m->cpu && mini_bs_bf16::supported(m->cpu);
         m->cpu_bf16 = m->backend == m->cpu && env_flag("CRISPASR_MINI_BS_CPU_BF16", packed_cpu);
         m->cpu_packed_bf16 = m->cpu_bf16 && packed_cpu && env_flag("CRISPASR_MINI_BS_PACKED_BF16", true);
-        m->shared_decoder = m->cpu_packed_bf16 && env_flag("CRISPASR_MINI_BS_SHARED_DECODER", true);
+        // Compute shared W*H projection across all 4 stems in a single pass
+        // on both GPU and CPU backends, saving 75% of gate/up GEMMs in time_deconv.
+        m->shared_decoder = env_flag("CRISPASR_MINI_BS_SHARED_DECODER", true);
         // Use the native ggml BLAS accelerator for large CPU GEMMs when it is
         // registered. Unlike the quantized dot kernels it preserves F32
         // activations. Registry lookup also works with GGML_BACKEND_DL builds.
