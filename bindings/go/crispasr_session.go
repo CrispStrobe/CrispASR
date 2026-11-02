@@ -1349,7 +1349,8 @@ type Stem struct {
 
 // Separate splits stereo audio into its stems (#359).
 //
-// This is the verb for htdemucs, mel-band-roformer and mini-bs-roformer. They are not
+// This is the verb for htdemucs, mel-band-roformer, mini-bs-roformer and
+// mossformer2-ss (two-speaker speech: spk1/spk2, 16 kHz). They are not
 // speech-to-speech models, so SpeechToSpeech returns no audio for them — the C
 // ABI has always had a separate five-function surface, and it was not bound
 // here.

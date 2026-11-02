@@ -3,7 +3,7 @@
 // Source separation is its own task (audio out, N named stems), not a
 // transcribe backend. This dispatcher resolves the model, detects its
 // architecture from the GGUF, runs the matching separation backend
-// (mini-bs-roformer / mel-band-roformer / htdemucs), and writes one WAV per selected stem through
+// (mini-bs-roformer / mossformer2-ss / mel-band-roformer / htdemucs), and writes one WAV per selected stem through
 // the shared surface in src/core/separation_io.h. See
 // docs/source-separation-surface.md.
 

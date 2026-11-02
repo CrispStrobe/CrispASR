@@ -45,6 +45,7 @@
 #include "htdemucs.h"
 #include "mel_band_roformer.h"
 #include "mini_bs_roformer.h"
+#include "mossformer2_ss.h"
 #include "btc_chords.h"
 #include "tabcnn.h"
 #include "basic_pitch.h"
@@ -1904,6 +1905,12 @@ int main(int argc, char** argv) {
     if (backend_name == "mini-bs-roformer" || backend_name == "mini_bs_roformer" ||
         backend_name == "mini-bs-roformer-v2.5") {
         return mini_bs_roformer_diff(model_path.c_str(), ref_path.c_str(), audio_path.c_str(), /*verbosity=*/2);
+    }
+    if (backend_name == "mossformer2-ss" || backend_name == "mossformer2_ss") {
+        // ref_path = GGUF from tools/dump_mossformer2_ss_reference.py --gguf.
+        // Input-aligned (the reference carries input_audio); compares every
+        // stage present, including the decode-pipeline e2e_spk* outputs.
+        return mossformer2_ss_diff(model_path.c_str(), ref_path.c_str(), audio_path.c_str(), /*verbosity=*/2);
     }
     if (backend_name == "mel-band-roformer" || backend_name == "mbr") {
         // model_path = mel-band-roformer GGUF, ref_path = ref GGUF from

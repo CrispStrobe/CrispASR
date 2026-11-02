@@ -55,6 +55,7 @@
 #include "htdemucs.h"           // §381: htdemucs separation backend
 #include "mel_band_roformer.h"  // §381: mel-band-roformer separation backend
 #include "mini_bs_roformer.h"
+#include "mossformer2_ss.h"
 #include "crispasr_chat.h"             // /v1/chat/completions
 #include "../server/ws_stream.h"       // real-time WebSocket ASR streaming (--ws-port)
 #include "../server/realtime_server.h" // vLLM Realtime API
@@ -1610,12 +1611,13 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     // mel-band-roformer), and holds it resident. A std::mutex serialises
     // concurrent requests. Mirrors the --chat-model precedent.
     // -----------------------------------------------------------------------
-    enum class SepArch { NONE, HTDEMUCS, MEL_BAND_ROFORMER, MINI_BS_ROFORMER };
+    enum class SepArch { NONE, HTDEMUCS, MEL_BAND_ROFORMER, MINI_BS_ROFORMER, MOSSFORMER2_SS };
     struct SepCtx {
         SepArch arch = SepArch::NONE;
         htdemucs_context* htd_ctx = nullptr;
         mel_band_roformer_context* mbr_ctx = nullptr;
         mini_bs_roformer_context* mini_bsr_ctx = nullptr;
+        mossformer2_ss_context* mf2ss_ctx = nullptr;
         std::mutex mtx;
         int sample_rate = 0;
 
@@ -1626,6 +1628,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 return mel_band_roformer_n_sources(mbr_ctx);
             if (arch == SepArch::MINI_BS_ROFORMER && mini_bsr_ctx)
                 return mini_bs_roformer_n_sources(mini_bsr_ctx);
+            if (arch == SepArch::MOSSFORMER2_SS && mf2ss_ctx)
+                return mossformer2_ss_n_sources(mf2ss_ctx);
             return 0;
         }
         const char* source_name(int i) const {
@@ -1635,6 +1639,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 return mel_band_roformer_source_name(mbr_ctx, i);
             if (arch == SepArch::MINI_BS_ROFORMER && mini_bsr_ctx)
                 return mini_bs_roformer_source_name(mini_bsr_ctx, i);
+            if (arch == SepArch::MOSSFORMER2_SS && mf2ss_ctx)
+                return mossformer2_ss_source_name(mf2ss_ctx, i);
             return "";
         }
     };
@@ -1697,10 +1703,24 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             sep_ctx->sample_rate = mini_bs_roformer_sample_rate(sep_ctx->mini_bsr_ctx);
             fprintf(stderr, "crispasr-server: separation model loaded — mini-bs-roformer (%d Hz, %d stems)\n",
                     sep_ctx->sample_rate, sep_ctx->n_sources());
+        } else if (sep_arch == "mossformer2-ss") {
+            auto mp = mossformer2_ss_default_params();
+            mp.use_gpu = params.use_gpu;
+            mp.n_threads = params.n_threads;
+            mp.gpu_device = params.gpu_device;
+            sep_ctx->mf2ss_ctx = mossformer2_ss_init_from_file(sep_resolved.c_str(), mp);
+            if (!sep_ctx->mf2ss_ctx) {
+                fprintf(stderr, "crispasr-server: failed to load mossformer2-ss from '%s'\n", sep_resolved.c_str());
+                return 1;
+            }
+            sep_ctx->arch = SepArch::MOSSFORMER2_SS;
+            sep_ctx->sample_rate = mossformer2_ss_sample_rate(sep_ctx->mf2ss_ctx);
+            fprintf(stderr, "crispasr-server: separation model loaded — mossformer2-ss (%d Hz, %d speakers)\n",
+                    sep_ctx->sample_rate, sep_ctx->n_sources());
         } else {
             fprintf(stderr,
                     "crispasr-server: --separate-model: unsupported arch '%s' "
-                    "(expected htdemucs, mel-band-roformer or mini-bs-roformer)\n",
+                    "(expected htdemucs, mel-band-roformer, mini-bs-roformer or mossformer2-ss)\n",
                     sep_arch.c_str());
             return 1;
         }
@@ -1790,6 +1810,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         htdemucs_result* htd_r = nullptr;
         mel_band_roformer_result* mbr_r = nullptr;
         mini_bs_roformer_result* mini_bsr_r = nullptr;
+        mossformer2_ss_result* mf2ss_r = nullptr;
         {
             std::lock_guard<std::mutex> lock(sep_ctx->mtx);
             if (sep_ctx->arch == SepArch::HTDEMUCS) {
@@ -1828,6 +1849,19 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 view.sample_rate = mini_bsr_r->sample_rate;
                 view.sources = mini_bsr_r->sources;
                 view.source_names = mini_bsr_r->source_names;
+            } else if (sep_ctx->arch == SepArch::MOSSFORMER2_SS) {
+                // Mono speech model: stereo input is averaged; stems are mono WAVs.
+                mf2ss_r = mossformer2_ss_separate(sep_ctx->mf2ss_ctx, pcm.data(), n_frames, n_channels);
+                if (!mf2ss_r) {
+                    json_error(res, 500, "separation failed");
+                    return;
+                }
+                view.n_sources = mf2ss_r->n_sources;
+                view.n_channels = mf2ss_r->n_channels;
+                view.n_frames = mf2ss_r->n_samples;
+                view.sample_rate = mf2ss_r->sample_rate;
+                view.sources = mf2ss_r->sources;
+                view.source_names = mf2ss_r->source_names;
             }
         }
 
@@ -1859,6 +1893,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             mel_band_roformer_result_free(mbr_r);
         if (mini_bsr_r)
             mini_bs_roformer_result_free(mini_bsr_r);
+        if (mf2ss_r)
+            mossformer2_ss_result_free(mf2ss_r);
 
         if (n_parts == 0) {
             json_error(res, 400, "no stems matched the selection");
@@ -4022,6 +4058,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     if (sep_ctx) {
         const char* arch_name = sep_ctx->arch == SepArch::HTDEMUCS           ? "htdemucs"
                                 : sep_ctx->arch == SepArch::MINI_BS_ROFORMER ? "mini-bs-roformer"
+                                : sep_ctx->arch == SepArch::MOSSFORMER2_SS   ? "mossformer2-ss"
                                                                              : "mel-band-roformer";
         fprintf(stderr, "  POST /v1/audio/separation         — source separation (%s, %d stems)\n", arch_name,
                 sep_ctx->n_sources());
@@ -4091,6 +4128,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             mel_band_roformer_free(sep_ctx->mbr_ctx);
         if (sep_ctx->mini_bsr_ctx)
             mini_bs_roformer_free(sep_ctx->mini_bsr_ctx);
+        if (sep_ctx->mf2ss_ctx)
+            mossformer2_ss_free(sep_ctx->mf2ss_ctx);
         sep_ctx.reset();
     }
 

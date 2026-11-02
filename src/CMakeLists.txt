@@ -2930,6 +2930,25 @@ if (CRISPASR_BUILD_MINI_BSR_PROBE)
     set_target_properties(mini-bs-roformer-validation PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)
 endif()
 
+# ---------------------------------------------------------------------------
+# mossformer2 — ClearerVoice-Studio MossFormer2 family. The shared MossFormerM
+# blocks (FLASH attention + gated FSMN) are a separate library so the SE_48K /
+# SR_48K ports can reuse them; mossformer2-ss is the 2-speaker separator.
+add_library(mossformer2-blocks STATIC mossformer2_blocks.h mossformer2_blocks.cpp)
+set_target_properties(mossformer2-blocks PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(mossformer2-blocks PUBLIC .)
+target_compile_features(mossformer2-blocks PUBLIC cxx_std_17)
+target_link_libraries(mossformer2-blocks PUBLIC ggml ggml-base)
+add_library(mossformer2-ss STATIC mossformer2_ss.h mossformer2_ss.cpp)
+set_target_properties(mossformer2-ss PROPERTIES POSITION_INDEPENDENT_CODE ON)
+target_include_directories(mossformer2-ss PUBLIC .)
+target_compile_features(mossformer2-ss PUBLIC cxx_std_17)
+target_link_libraries(mossformer2-ss PUBLIC mossformer2-blocks crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
+if (NOT MSVC)
+    target_compile_options(mossformer2-blocks PRIVATE -O3)
+    target_compile_options(mossformer2-ss PRIVATE -O3)
+endif()
+
 # mel-band-roformer — Mel-Band RoFormer source separation (§248)
 # ---------------------------------------------------------------------------
 add_library(mel-band-roformer STATIC mel_band_roformer.h mel_band_roformer.cpp)
@@ -3409,6 +3428,9 @@ if (TARGET mel-band-roformer)
 endif()
 if (TARGET mini-bs-roformer)
     target_link_libraries(crispasr-lib PUBLIC mini-bs-roformer)
+endif()
+if (TARGET mossformer2-ss)
+    target_link_libraries(crispasr-lib PUBLIC mossformer2-ss)
 endif()
 if (TARGET htdemucs)
     target_link_libraries(crispasr-lib PUBLIC htdemucs)

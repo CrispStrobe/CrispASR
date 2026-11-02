@@ -5411,6 +5411,20 @@ add_test(NAME mini-bs-roformer-runtime
 set_tests_properties(mini-bs-roformer-runtime PROPERTIES
     LABELS "unit;mini-bs-roformer" TIMEOUT 60)
 
+# MossFormer2_SS_16K: model-free block/runtime guards; the [live] case skips
+# unless CRISPASR_MOSSFORMER2_SS_MODEL (and optionally _REF) is set.
+add_executable(test-mossformer2-ss test-mossformer2-ss.cpp)
+target_include_directories(test-mossformer2-ss PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(test-mossformer2-ss PRIVATE Catch2::Catch2WithMain mossformer2-ss)
+add_test(NAME mossformer2-ss-runtime
+    COMMAND test-mossformer2-ss "[unit][mossformer2-ss]")
+set_tests_properties(mossformer2-ss-runtime PROPERTIES
+    LABELS "unit;mossformer2-ss" TIMEOUT 60)
+add_test(NAME mossformer2-ss-live
+    COMMAND test-mossformer2-ss "[live][mossformer2-ss]")
+set_tests_properties(mossformer2-ss-live PROPERTIES
+    LABELS "integration;mossformer2-ss" SKIP_RETURN_CODE 4 TIMEOUT 1800)
+
 # --- test-f5-tts --- standalone F5-TTS DiT+Vocos smoke test
 add_executable(test-f5-tts test-f5-tts.cpp)
 target_include_directories(test-f5-tts PRIVATE
@@ -5676,6 +5690,9 @@ set_tests_properties(test-package-lib-bundle PROPERTIES
 find_package(Python3 COMPONENTS Interpreter QUIET)
 
 if (Python3_Interpreter_FOUND)
+    add_test(NAME mossformer2-ss-converter
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-mossformer2-ss-converter.py -v)
+    set_tests_properties(mossformer2-ss-converter PROPERTIES LABELS "unit;mossformer2-ss" TIMEOUT 60)
     add_test(NAME mini-bs-roformer-converter
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-mini-bs-converter.py -v)
     set_tests_properties(mini-bs-roformer-converter PROPERTIES LABELS "unit;mini-bs-roformer" TIMEOUT 60)
@@ -5703,6 +5720,16 @@ if (CRISPASR_BUILD_EXAMPLES AND BUILD_SHARED_LIBS AND Python3_Interpreter_FOUND)
             --library $<TARGET_FILE:crispasr-lib>)
     set_tests_properties(mini-bs-roformer-surface PROPERTIES
         LABELS "integration;mini-bs-roformer" SKIP_RETURN_CODE 77 TIMEOUT 1800)
+endif()
+
+# MossFormer2_SS_16K: CLI --separate + Python Session/C ABI, env-gated model.
+if (CRISPASR_BUILD_EXAMPLES AND BUILD_SHARED_LIBS AND Python3_Interpreter_FOUND)
+    add_test(NAME mossformer2-ss-surface
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-mossformer2-ss-surface.py
+            --crispasr $<TARGET_FILE:crispasr-cli>
+            --library $<TARGET_FILE:crispasr-lib>)
+    set_tests_properties(mossformer2-ss-surface PROPERTIES
+        LABELS "integration;mossformer2-ss" SKIP_RETURN_CODE 77 TIMEOUT 1800)
 endif()
 
 if(Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES)

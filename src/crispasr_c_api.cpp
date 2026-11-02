@@ -401,6 +401,10 @@
 #include "mini_bs_roformer.h"
 #define CA_HAVE_MINI_BS_ROFORMER 1
 #endif
+#if __has_include("mossformer2_ss.h")
+#include "mossformer2_ss.h"
+#define CA_HAVE_MOSSFORMER2_SS 1
+#endif
 #if __has_include("htdemucs.h")
 #include "htdemucs.h"
 #define CA_HAVE_HTDEMUCS 1
@@ -2319,6 +2323,13 @@ struct crispasr_session {
     mini_bs_roformer_context* mini_bsr_ctx = nullptr;
     mini_bs_roformer_result* mini_bsr_last_result = nullptr;
 #endif
+#ifdef CA_HAVE_MOSSFORMER2_SS
+    mossformer2_ss_context* mf2ss_ctx = nullptr;
+    // The separation ABI hands out interleaved stereo; the mono speakers are
+    // duplicated into both channels.
+    std::vector<std::vector<float>> mf2ss_stems;
+    int mf2ss_n_samples = 0;
+#endif
 #ifdef CA_HAVE_HTDEMUCS
     htdemucs_context* htdemucs_ctx = nullptr;
     htdemucs_result* htdemucs_last_result = nullptr;
@@ -3510,6 +3521,20 @@ CA_EXPORT crispasr_session* crispasr_session_open_explicit(const char* model_pat
         mp.gpu_device = crispasr_gpu_device_pref_storage();
         s->mini_bsr_ctx = mini_bs_roformer_init_from_file(model_path, mp);
         if (!s->mini_bsr_ctx) {
+            delete s;
+            return nullptr;
+        }
+        return s;
+    }
+#endif
+#ifdef CA_HAVE_MOSSFORMER2_SS
+    if (s->backend == "mossformer2-ss" || s->backend == "mossformer2_ss" || s->backend == "mossformer2-ss-16k") {
+        auto mp = mossformer2_ss_default_params();
+        mp.n_threads = s->n_threads;
+        mp.use_gpu = g_open_use_gpu_tls;
+        mp.gpu_device = crispasr_gpu_device_pref_storage();
+        s->mf2ss_ctx = mossformer2_ss_init_from_file(model_path, mp);
+        if (!s->mf2ss_ctx) {
             delete s;
             return nullptr;
         }
@@ -5276,6 +5301,9 @@ CA_EXPORT int crispasr_session_available_backends(char* out_csv, int out_cap) {
 #endif
 #ifdef CA_HAVE_MINI_BS_ROFORMER
     list += ",mini-bs-roformer";
+#endif
+#ifdef CA_HAVE_MOSSFORMER2_SS
+    list += ",mossformer2-ss";
 #endif
 #ifdef CA_HAVE_CREPE
     list += ",crepe";
@@ -12109,6 +12137,25 @@ CA_EXPORT int crispasr_session_separate(crispasr_session* s, const float* pcm_st
         return s->mini_bsr_last_result ? s->mini_bsr_last_result->n_sources : -1;
     }
 #endif
+#ifdef CA_HAVE_MOSSFORMER2_SS
+    if (s->mf2ss_ctx) {
+        s->mf2ss_stems.clear();
+        s->mf2ss_n_samples = 0;
+        // Mono model: the stereo input is averaged to mono.
+        mossformer2_ss_result* r = mossformer2_ss_separate(s->mf2ss_ctx, pcm_stereo, n_samples, /*in_channels=*/2);
+        if (!r)
+            return -1;
+        for (int k = 0; k < r->n_sources; ++k) {
+            std::vector<float> stereo((size_t)r->n_samples * 2);
+            for (int i = 0; i < r->n_samples; ++i)
+                stereo[2 * (size_t)i] = stereo[2 * (size_t)i + 1] = r->sources[k][i];
+            s->mf2ss_stems.push_back(std::move(stereo));
+        }
+        s->mf2ss_n_samples = r->n_samples;
+        mossformer2_ss_result_free(r);
+        return (int)s->mf2ss_stems.size();
+    }
+#endif
     return -1;
 }
 
@@ -12127,6 +12174,10 @@ CA_EXPORT int crispasr_session_separate_n_stems(crispasr_session* s) {
     if (s->mini_bsr_last_result)
         return s->mini_bsr_last_result->n_sources;
 #endif
+#ifdef CA_HAVE_MOSSFORMER2_SS
+    if (s->mf2ss_ctx)
+        return (int)s->mf2ss_stems.size();
+#endif
     return 0;
 }
 
@@ -12144,6 +12195,10 @@ CA_EXPORT const char* crispasr_session_separate_stem_name(crispasr_session* s, i
 #ifdef CA_HAVE_MINI_BS_ROFORMER
     if (s->mini_bsr_last_result && stem_idx >= 0 && stem_idx < s->mini_bsr_last_result->n_sources)
         return s->mini_bsr_last_result->source_names[stem_idx];
+#endif
+#ifdef CA_HAVE_MOSSFORMER2_SS
+    if (s->mf2ss_ctx && stem_idx >= 0 && stem_idx < (int)s->mf2ss_stems.size())
+        return mossformer2_ss_source_name(s->mf2ss_ctx, stem_idx);
 #endif
     return nullptr;
 }
@@ -12172,6 +12227,13 @@ CA_EXPORT const float* crispasr_session_separate_stem(crispasr_session* s, int s
         return s->mini_bsr_last_result->sources[stem_idx];
     }
 #endif
+#ifdef CA_HAVE_MOSSFORMER2_SS
+    if (s->mf2ss_ctx && stem_idx >= 0 && stem_idx < (int)s->mf2ss_stems.size()) {
+        if (out_n_samples)
+            *out_n_samples = s->mf2ss_n_samples;
+        return s->mf2ss_stems[stem_idx].data();
+    }
+#endif
     if (out_n_samples)
         *out_n_samples = 0;
     return nullptr;
@@ -12191,6 +12253,10 @@ CA_EXPORT int crispasr_session_separate_sample_rate(crispasr_session* s) {
 #ifdef CA_HAVE_MINI_BS_ROFORMER
     if (s->mini_bsr_ctx)
         return mini_bs_roformer_sample_rate(s->mini_bsr_ctx);
+#endif
+#ifdef CA_HAVE_MOSSFORMER2_SS
+    if (s->mf2ss_ctx)
+        return mossformer2_ss_sample_rate(s->mf2ss_ctx);
 #endif
     return 0;
 }
@@ -13075,6 +13141,10 @@ CA_EXPORT void crispasr_session_close(crispasr_session* s) {
         mini_bs_roformer_result_free(s->mini_bsr_last_result);
     if (s->mini_bsr_ctx)
         mini_bs_roformer_free(s->mini_bsr_ctx);
+#endif
+#ifdef CA_HAVE_MOSSFORMER2_SS
+    if (s->mf2ss_ctx)
+        mossformer2_ss_free(s->mf2ss_ctx);
 #endif
 #ifdef CA_HAVE_RVC_SVC
     if (s->rvc_last)

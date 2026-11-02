@@ -3366,13 +3366,17 @@ class Session(SessionExtras):
         """Source separation: split audio into named stems.
 
         Input is stereo interleaved float32 PCM at the model's native
-        sample rate (44100 Hz for the supported separation models). Returns a dict mapping
+        sample rate (44100 Hz for the music separation models, 16000 Hz for
+        ``mossformer2-ss``). Returns a dict mapping
         stem names (``"drums"``, ``"bass"``, ``"other"``, ``"vocals"``)
         to stereo interleaved float32 numpy arrays.
 
-        Works with ``htdemucs``, ``mel-band-roformer`` and ``mini-bs-roformer``.
-        Mini BS RoFormer returns ``bass``, ``drums``, ``other``, ``vocals`` in
-        that order. Arrays own their storage and survive subsequent calls.
+        Works with ``htdemucs``, ``mel-band-roformer``, ``mini-bs-roformer``
+        and ``mossformer2-ss``. Mini BS RoFormer returns ``bass``, ``drums``,
+        ``other``, ``vocals`` in that order. MossFormer2_SS_16K (two-speaker
+        speech) averages the input to mono and returns ``spk1``, ``spk2``
+        with the mono result duplicated into both channels. Arrays own their
+        storage and survive subsequent calls.
         """
         lib = self._lib
         lib.crispasr_session_separate.argtypes = [
