@@ -57,7 +57,7 @@ def lift_functions(src_path: Path, names: list[str], namespace: dict) -> None:
     if missing:
         raise SystemExit(f"{src_path}: missing functions {sorted(missing)}")
     module = ast.Module(body=wanted, type_ignores=[])
-    exec(compile(module, str(src_path), "exec"), namespace)
+    exec(compile(module, str(src_path), "exec"), namespace)  # noqa: S102 (upstream defs only, by design)
 
 
 def load_upstream(cvs_root: Path):
@@ -68,7 +68,7 @@ def load_upstream(cvs_root: Path):
     if not (models_dir / "mossformer_gan_se" / "generator.py").is_file():
         raise SystemExit(f"{models_dir}/mossformer_gan_se/generator.py not found")
     sys.path.insert(0, str(models_dir))
-    from mossformer_gan_se.generator import MossFormerGAN_SE_16K  # noqa: E402
+    from mossformer_gan_se.generator import MossFormerGAN_SE_16K
 
     ns: dict = {"torch": torch, "np": np}
     lift_functions(pkg_root / "utils" / "misc.py", ["power_compress", "power_uncompress", "stft", "istft"], ns)
@@ -99,7 +99,7 @@ def build_model(cls, checkpoint: Path, args):
 
     model = cls(args).model  # networks.py: CLS_MossFormerGAN_SE_16K uses .model (SyncANet)
     ckpt = torch.load(str(checkpoint), map_location="cpu", weights_only=True)
-    sd = ckpt["model"] if "model" in ckpt else ckpt
+    sd = ckpt.get("model", ckpt)
     # Mirror networks.py _load_model: copy matching keys (optionally 'module.'-prefixed).
     state = model.state_dict()
     missing = []

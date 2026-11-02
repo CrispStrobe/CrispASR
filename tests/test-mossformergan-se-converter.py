@@ -12,10 +12,10 @@ checkpoint. Also checks the reference dumper's verbatim function lifting.
 import importlib.util
 import os
 import shutil
-from pathlib import Path
 import sys
 import tempfile
 import unittest
+from pathlib import Path
 
 import numpy as np
 
@@ -33,8 +33,8 @@ CONV = load("mossformergan_se_converter", ROOT / "models" / "convert-mossformerg
 DUMP = load("mossformergan_se_dumper", ROOT / "tools" / "dump_mossformergan_se_reference.py")
 
 try:
-    import torch  # noqa: F401
     import gguf  # noqa: F401
+    import torch  # noqa: F401
 
     HAVE_TORCH_GGUF = True
 except ImportError:

@@ -155,7 +155,7 @@ def convert(checkpoint: Path, output: Path, outtype: str, verbose: bool = False)
             writer.add_tensor(name, a)
         counts[qtype.name] = counts.get(qtype.name, 0) + 1
         if verbose:
-            print(f"{name:70s} {str(tuple(t.shape)):20s} -> {str(a.shape):20s} {qtype.name}")
+            print(f"{name:70s} {tuple(t.shape)!s:20s} -> {a.shape!s:20s} {qtype.name}")
 
     writer.write_header_to_file()
     writer.write_kv_data_to_file()
