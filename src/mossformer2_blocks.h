@@ -3,10 +3,13 @@
 // MossFormer2_SS_16K (separation), MossFormer2_SE_48K (enhancement) and
 // MossFormer2_SR_48K (super-resolution) all run the same "MossFormerM" stack
 // from models/mossformer2_*/mossformer2_block.py (modelscope/ClearerVoice-Studio
-// @6b3774dc): N x [FLASH_ShareA_FFConvM -> Gated_FSMN_Block_Dilated] followed
-// by LayerNorm(eps 1e-6), wrapped by Computation_Block (GroupNorm(1, D) +
-// skip).  Only the encoder / mask head / decoder around that stack differ, so
-// those live in the per-model files (mossformer2_ss.cpp).
+// @6b3774dc): N x [FLASH_ShareA_FFConvM -> Gated-FSMN block] followed by
+// LayerNorm(eps 1e-6), wrapped by Computation_Block (GroupNorm(1, D) + skip).
+// The Gated-FSMN memory differs: SS uses Gated_FSMN_Block_Dilated
+// (UniDeepFsmn_dilated: a 2-layer DilatedDenseNet), SE/SR use Gated_FSMN_Block
+// (UniDeepFsmn: one k=2*lorder-1 depthwise conv with a residual); see
+// BlockHParams::fsmn_dilated.  The encoder / mask head / decoder around that
+// stack live in the per-model files (mossformer2_ss.cpp, mossformer2_se.cpp).
 //
 // Activation layout everywhere is ggml [C, T] (channels innermost), i.e. the
 // PyTorch [B=1, T, C] sequence layout.  Depthwise time convolutions (dwconv)
@@ -33,8 +36,11 @@ struct BlockHParams {
     int group = 256;     // FLASH group_size
     int rotary_dim = 32; // RotaryEmbedding(dim=min(32, query_key_dim))
     float rotary_theta = 10000.0f;
-    int fsmn_inner = 256; // Gated_FSMN_Block_Dilated inner_channels
-    int fsmn_lorder = 20; // UniDeepFsmn_dilated lorder (kernel 2*lorder-1)
+    int fsmn_inner = 256; // Gated_FSMN_Block(_Dilated) inner_channels
+    int fsmn_lorder = 20; // UniDeepFsmn(_dilated) lorder (kernel 2*lorder-1)
+    // true: UniDeepFsmn_dilated (DilatedDenseNet, tensors fsmn.ddn.*; SS).
+    // false: UniDeepFsmn (x + p + dwconv(p), tensor fsmn.mem.weight; SE/SR).
+    bool fsmn_dilated = true;
     int conv_kernel = 17; // ConvModule depthwise kernel
     int n_layers = 24;
 };
@@ -79,7 +85,8 @@ ggml_tensor* ffconvm(Ctx& c, ggml_tensor* x, const std::string& prefix, Norm nor
 // rotary qk, gated output) with residual.  prefix e.g. "blk.3.flash".
 ggml_tensor* flash_layer(Ctx& c, ggml_tensor* x, const std::string& prefix, const BlockHParams& hp,
                          const std::string& stage = "");
-// Gated_FSMN_Block_Dilated with residual.  prefix e.g. "blk.3.fsmn".
+// Gated_FSMN_Block(_Dilated) with residual.  prefix e.g. "blk.3.fsmn".
+// Captures "<stage>_fsmn_ddn" (dilated) or "<stage>_fsmn_uni" (UniDeepFsmn).
 ggml_tensor* gated_fsmn_block(Ctx& c, ggml_tensor* x, const std::string& prefix, const BlockHParams& hp,
                               const std::string& stage = "");
 // MossformerBlock_GFSMN + final LayerNorm(eps 1e-6): `blk.{i}.{flash,fsmn}`.

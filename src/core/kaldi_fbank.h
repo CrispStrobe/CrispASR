@@ -53,6 +53,13 @@ struct FbankParams {
     // and every Kaldi-fbank backend drifted from its reference by that much
     // (log-mel mean |d| ~2.6e-3). false keeps the Hz form for an explicit caller.
     bool mel_domain_triangles = true;
+    // Kaldi / torchaudio `dither`: add dither * N(0, 1) to every frame sample
+    // (after int16_scale, before DC removal). torchaudio draws from the global
+    // torch RNG; here each frame t gets its own deterministic stream seeded by
+    // (dither_seed, t), so results are reproducible and thread-count invariant.
+    // 0 (the default) disables it.
+    float dither = 0.0f;
+    uint64_t dither_seed = 0;
 };
 // high_freq: 0 = Nyquist, negative = Nyquist + high_freq (Kaldi's convention, e.g. -400).
 

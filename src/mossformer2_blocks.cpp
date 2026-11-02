@@ -1,5 +1,6 @@
 // See mossformer2_blocks.h.  Every function cites the upstream module it ports
-// (models/mossformer2_ss/*.py, ClearerVoice-Studio @6b3774dc).
+// (models/mossformer2_ss/*.py, identical in models/mossformer2_se/ apart from
+// the FSMN variant; ClearerVoice-Studio @6b3774dc).
 #include "mossformer2_blocks.h"
 
 #include <cfloat>
@@ -284,13 +285,23 @@ ggml_tensor* gated_fsmn_block(Ctx& c, ggml_tensor* x, const std::string& prefix,
     stage(c, st.empty() ? "" : st + "_fsmn_conv1", c1);
     ggml_tensor* n1 = layer_norm(c, c1, prefix + ".norm1", 1e-5f);
 
-    // Gated_FSMN_dilated: x_u = to_u(x), x_v = to_v(x), x_u = fsmn(x_u), x_v * x_u + x
+    // Gated_FSMN(_dilated): x_u = to_u(x), x_v = to_v(x), x_u = fsmn(x_u), x_v * x_u + x
     ggml_tensor* xu = ffconvm(c, n1, prefix + ".to_u", Norm::Layer, hp);
     ggml_tensor* xv = ffconvm(c, n1, prefix + ".to_v", Norm::Layer, hp);
-    // UniDeepFsmn_dilated: input + DilatedDenseNet(project(relu(linear(input))))
     ggml_tensor* p1 = ggml_relu(g, linear(c, xu, prefix + ".fsmn.linear"));
     p1 = linear(c, p1, prefix + ".fsmn.project", /*bias=*/false); // [C, T]
     const int lo = hp.fsmn_lorder;
+    if (!hp.fsmn_dilated) {
+        // UniDeepFsmn: input + (p1 + Conv2d([2*lorder-1, 1], groups=C)(pad(p1, lorder-1)))
+        ggml_tensor* mem = ggml_add(g, p1, dwconv(c, p1, prefix + ".mem.weight", 1, 1, lo - 1, lo - 1));
+        ggml_tensor* uni = ggml_add(g, xu, mem);
+        stage(c, st.empty() ? "" : st + "_fsmn_uni", uni);
+        ggml_tensor* gated = ggml_add(g, ggml_mul(g, xv, uni), n1);
+        stage(c, st.empty() ? "" : st + "_fsmn_gated", gated);
+        ggml_tensor* n2 = layer_norm(c, gated, prefix + ".norm2", 1e-5f);
+        return ggml_add(g, linear(c, n2, prefix + ".conv2"), x);
+    }
+    // UniDeepFsmn_dilated: input + DilatedDenseNet(project(relu(linear(input))))
     // DilatedDenseNet(depth=2): conv1 (k=2*lorder-1, dil 1) -> IN -> PReLU,
     // conv2 over cat([out1, x]) (groups=C, 2 inputs each, dil 2) -> IN -> PReLU.
     // InstanceNorm2d statistics run over time, so they use a time-major copy.
@@ -380,6 +391,10 @@ std::vector<DwKernel> dw_kernels(const BlockHParams& hp) {
         const std::string b = "blk." + std::to_string(i);
         for (const char* m : {".flash.hidden", ".flash.qk", ".flash.out", ".fsmn.to_u", ".fsmn.to_v"})
             out.push_back({b + m + ".dw.weight", 1, 1});
+        if (!hp.fsmn_dilated) {
+            out.push_back({b + ".fsmn.mem.weight", 1, 1});
+            continue;
+        }
         out.push_back({b + ".fsmn.ddn.conv1.weight", 1, 1});
         out.push_back({b + ".fsmn.ddn.conv2.weight", 2, 2});
     }
