@@ -10,6 +10,7 @@
 
 #include "mossformergan_se.h"
 
+#include <algorithm>
 #include <chrono>
 #include <cmath>
 #include <cstdio>
@@ -143,6 +144,25 @@ int main(int argc, char** argv) {
     }
     std::vector<float> wav, ref;
     std::vector<int64_t> s1, s2;
+    if (stages_on && read_npy(dir + "/input_wav.npy", wav, s1)) {
+        // STFT front end on the first decode window (what stage_input_spec was taken from)
+        std::vector<float> spec, rspec;
+        std::vector<int64_t> rs;
+        int T = 0;
+        const int n = std::min<int>((int)wav.size(), 160000);
+        if (read_npy(dir + "/stage_input_spec.npy", rspec, rs) &&
+            mossformergan_se_input_spec(ctx, wav.data(), n, spec, &T) && spec.size() == rspec.size()) {
+            double cos, mx, rms;
+            compare(spec.data(), rspec.data(), rspec.size(), cos, mx, rms);
+            const bool ok = cos >= min_cos;
+            fails += !ok;
+            std::printf("%-30s cos %.8f  max|d| %.3e  ref_rms %.3e %s\n", "stage_input_spec(stft)", cos, mx, rms,
+                        ok ? "" : "  <-- FAIL");
+        } else {
+            std::printf("stage_input_spec(stft)         could not compare\n");
+            fails++;
+        }
+    }
     if (read_npy(dir + "/input_wav.npy", wav, s1) && read_npy(dir + "/wave.npy", ref, s2)) {
         std::vector<float> out;
         auto t0 = std::chrono::steady_clock::now();

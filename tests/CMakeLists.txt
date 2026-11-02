@@ -6799,3 +6799,19 @@ catch_discover_tests(test-enhance-abi
 # Parity tool against tools/dump_mossformergan_se_reference.py dumps (manual).
 add_executable(mossformergan-se-parity mossformergan-se-parity.cpp)
 target_link_libraries(mossformergan-se-parity PRIVATE mossformergan-se)
+
+# Model-free registration/rejection cases run in the unit suite; the live
+# cases need MOSSFORMERGAN_SE_MODEL=<gguf> (models/convert-mossformergan-se-to-gguf.py)
+# and SKIP without it.
+add_executable(test-mossformergan-se test-mossformergan-se.cpp)
+target_compile_definitions(test-mossformergan-se PRIVATE CRISPASR_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+target_link_libraries(test-mossformergan-se PRIVATE Catch2::Catch2WithMain crispasr-lib ggml-base)
+add_test(NAME mossformergan-se-unit COMMAND test-mossformergan-se "[unit]")
+set_tests_properties(mossformergan-se-unit PROPERTIES LABELS "unit;mossformergan-se" TIMEOUT 60)
+add_test(NAME mossformergan-se-live COMMAND test-mossformergan-se "[live]")
+set_tests_properties(mossformergan-se-live PROPERTIES LABELS "live;mossformergan-se" TIMEOUT 1800)
+if (Python3_Interpreter_FOUND)
+    add_test(NAME mossformergan-se-converter
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-mossformergan-se-converter.py -v)
+    set_tests_properties(mossformergan-se-converter PROPERTIES LABELS "unit;mossformergan-se" TIMEOUT 120)
+endif()

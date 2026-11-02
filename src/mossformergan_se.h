@@ -33,5 +33,10 @@ struct mossformergan_se_stage {
 bool mossformergan_se_forward_stages(mossformergan_se_context* ctx, const float* spec, int n_frames,
                                      std::vector<mossformergan_se_stage>& stages);
 
+// Parity/debug: the power-compressed STFT [2, T, 201] that one decode window
+// of `n` samples feeds the network (RMS-normalised over those samples).
+bool mossformergan_se_input_spec(mossformergan_se_context* ctx, const float* in, int n, std::vector<float>& spec,
+                                 int* n_frames);
+
 // Registration for crispasr_enhancer (arch "mossformergan-se").
 const CrispasrEnhanceModelOps* mossformergan_se_enhance_ops();

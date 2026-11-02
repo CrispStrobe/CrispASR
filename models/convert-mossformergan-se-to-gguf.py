@@ -12,12 +12,10 @@ the ``.disc.pt`` discriminator is training-only and not needed).
 The checkpoint is read with ``torch.load(weights_only=True)`` (no pickle code
 execution). Tensor names keep the upstream SyncANet state-dict names; only the
 memory layout of some tensors is changed so the native graph can use them
-directly (``mossformergan_se.layout = 2``):
+directly (``mossformergan_se.layout = 3``):
 
 * ``Conv2d`` weights ``[Cout, Cin, KH, KW]`` -> per-tap matrices
-  ``[P*KH*KW, Cout, Cpart]`` (ggml ne ``[Cpart, Cout, taps]``). The
-  dilated-dense convs are split into P input parts of 64 channels so the
-  runtime never materialises the dense concatenation.
+  ``[KH*KW, Cout, Cin]`` (ggml ne ``[Cin, Cout, taps]``, tap = kh*KW + kw).
 * ``ConvTranspose1d`` ``[Cin, Cout, K]`` -> ``[K, Cout, Cin]``.
 * depthwise ``Conv1d``/``Conv2d`` ``[D, 1, K(, 1)]`` -> ``[K, D]`` (channels fastest, as
   ggml_conv_2d_dw_direct's CWHN path reads it; always F32).
@@ -61,7 +59,7 @@ HPARAMS_U32 = {
     "rotary_dim": 32,
     "decode_window_seconds": 10,
     "one_time_decode_seconds": 10,
-    "layout": 2,
+    "layout": 3,
 }
 HPARAMS_F32 = {
     "compress_factor": 0.3,
@@ -78,20 +76,15 @@ def sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-DENSE_CONV = re.compile(r"\.(dilated_dense|dense_block)\.conv(\d)\.weight$")
+DENSE_CONV = re.compile(r"\.(dilated_dense|dense_block)\.conv\d\.weight$")
 
 
 def transform(name: str, t: np.ndarray) -> tuple[np.ndarray, bool]:
     """Return (array in runtime layout, is_matmul_weight)."""
     if name.endswith("rotary_pos_emb.freqs"):
         return t, False
-    m = DENSE_CONV.search(name)
-    if m:  # [64, 64*P, 2, 3] -> [P*2*3, 64, 64]; part p covers input channels p*64..p*64+63
-        cout, cin, kh, kw = t.shape
-        parts = cin // 64
-        a = t.reshape(cout, parts, 64, kh, kw).transpose(1, 3, 4, 0, 2)  # [P, KH, KW, Cout, 64]
-        return a.reshape(parts * kh * kw, cout, 64), True
-    if re.search(r"(conv_1\.0|conv_2\.0|sub_pixel\.conv|mask_decoder\.conv_1|complex_decoder\.conv)\.weight$", name):
+    if DENSE_CONV.search(name) or re.search(
+            r"(conv_1\.0|conv_2\.0|sub_pixel\.conv|mask_decoder\.conv_1|complex_decoder\.conv)\.weight$", name):
         cout, cin, kh, kw = t.shape
         a = t.transpose(2, 3, 0, 1).reshape(kh * kw, cout, cin)
         return a, cin % 32 == 0

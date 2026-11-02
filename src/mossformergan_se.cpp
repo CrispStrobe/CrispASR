@@ -129,6 +129,7 @@ struct mossformergan_se_context {
     ggml_backend_sched_t sched = nullptr;
     int n_threads = 4;
     bool verbose = false;
+    bool fused_norm = false; // backend runs GGML_OP_NORM_AFFINE
     // STFT tables
     std::vector<float> window, cos_t, sin_t; // cos_t/sin_t: [F][n_fft]
 };
@@ -260,7 +261,7 @@ bool load_model(mfg_model& m, const char* path, ggml_backend_t backend) {
     hp.eps = f32("norm_eps", hp.eps);
     hp.theta = f32("rope_theta", hp.theta);
     core_gguf::free_metadata(g);
-    if (arch != "mossformergan-se" || layout != 2 || hp.C != 64 || hp.n_fft != hp.win || hp.F != hp.n_fft / 2 + 1 ||
+    if (arch != "mossformergan-se" || layout != 3 || hp.C != 64 || hp.n_fft != hp.win || hp.F != hp.n_fft / 2 + 1 ||
         hp.hop <= 0 || hp.n_layers <= 0 || hp.n_layers > 64 || hp.n_head <= 0 || hp.qk <= 0 || hp.hidden != 2 * hp.qk ||
         hp.rot <= 0 || hp.rot > hp.qk || hp.decode_window <= 0 || hp.compress <= 0.0f) {
         std::fprintf(stderr,
@@ -349,7 +350,11 @@ struct graph_builder {
         return b ? ggml_add(ctx, y, b) : y;
     }
 
+    bool fused_norm = false;
+
     ggml_tensor* layer_norm(ggml_tensor* x, ggml_tensor* w, ggml_tensor* b) {
+        if (fused_norm)
+            return ggml_norm_affine(ctx, x, w, b, hp.eps);
         return ggml_add(ctx, ggml_mul(ctx, ggml_norm(ctx, x, hp.eps), w), b);
     }
 
@@ -435,20 +440,17 @@ struct graph_builder {
         return ggml_add(ctx, ggml_cont(ctx, v), b);
     }
 
-    // DilatedDenseNet (depth 4) on x [64, F, T].
+    // DilatedDenseNet (depth 4) on x [64, F, T]. The dense input cat([out_{i-1}, ..., out_0, x])
+    // is kept zero-padded once (F 1/1, T 8 on top = the largest dilation) and grown by
+    // channel concatenation, so every layer is 6 tap mul_mats with K = 64 * (i + 1).
     ggml_tensor* dense_net(ggml_tensor* x, const dense_layer_w* L) {
         const int64_t C = x->ne[0], F = x->ne[1], T = x->ne[2];
-        constexpr int kTop = 8;           // largest dilation
-        std::vector<ggml_tensor*> hist_p; // padded [x, out0, out1, out2]
-        hist_p.push_back(pad_for_taps(x, 1, 1, kTop));
+        constexpr int kTop = 8;
+        ggml_tensor* cat = pad_for_taps(x, 1, 1, kTop);
         ggml_tensor* out = nullptr;
         for (int i = 0; i < 4; i++) {
             const int dil = 1 << i;
-            ggml_tensor* acc = nullptr;
-            for (int p = 0; p <= i; p++) {
-                // weight part p covers channels of hist[i - p] (cat([out_{i-1}, ..., out_0, x]))
-                acc = taps_part(acc, hist_p[i - p], L[i].conv_w, p * 6, 2, 3, kTop - dil, dil, (int)T);
-            }
+            ggml_tensor* acc = taps_part(nullptr, cat, L[i].conv_w, 0, 2, 3, kTop - dil, dil, (int)T);
             const int64_t Fp = F + 2;
             ggml_tensor* y = ggml_view_3d(ctx, acc, C, F, T, acc->nb[1], acc->nb[1] * Fp, 0);
             y = ggml_add(ctx, ggml_cont(ctx, y), L[i].conv_b);
@@ -456,7 +458,7 @@ struct graph_builder {
             y = prelu(y, L[i].prelu);
             out = fsmn(y, L[i].fsmn); // sequence along F (ne1), rows T
             if (i < 3)
-                hist_p.push_back(pad_for_taps(out, 1, 1, kTop));
+                cat = ggml_concat(ctx, pad_for_taps(out, 1, 1, kTop), cat, 0);
         }
         return out;
     }
@@ -718,6 +720,7 @@ void build_graph(mossformergan_se_context* c, graph_io& io, int T, bool debug) {
     ggml_set_input(io.offdiag_t);
 
     graph_builder g{ctx, hp};
+    g.fused_norm = c->fused_norm;
     g.pos_q = io.pos_q;
     g.pos_t = io.pos_t;
     g.offdiag_q = io.offdiag_q;
@@ -1044,6 +1047,14 @@ mossformergan_se_context* mossformergan_se_init(const char* path, int n_threads,
         return nullptr;
     }
     init_tables(c);
+    {
+        ggml_init_params ip = {ggml_tensor_overhead() * 8, nullptr, true};
+        ggml_context* tc = ggml_init(ip);
+        ggml_tensor* a = ggml_new_tensor_2d(tc, GGML_TYPE_F32, 64, 4);
+        ggml_tensor* w = ggml_new_tensor_1d(tc, GGML_TYPE_F32, 64);
+        c->fused_norm = ggml_backend_supports_op(c->backend, ggml_norm_affine(tc, a, w, w, 1e-5f));
+        ggml_free(tc);
+    }
     if (verbose)
         std::fprintf(stderr, "mossformergan_se: loaded %s (%zu tensors, backend %s, %d threads)\n", path,
                      c->m.wl.tensors.size(), ggml_backend_name(c->backend), c->n_threads);
@@ -1120,6 +1131,31 @@ bool mossformergan_se_enhance(mossformergan_se_context* c, const float* in, int 
             return false;
         std::copy(y.begin() + give_up, y.end(), out.begin() + cur);
     }
+    return true;
+}
+
+bool mossformergan_se_input_spec(mossformergan_se_context* c, const float* in, int n, std::vector<float>& spec,
+                                 int* n_frames) {
+    if (!c || !in || n <= c->m.hp.n_fft / 2)
+        return false;
+    double ss = 0.0;
+    for (int i = 0; i < n; i++)
+        ss += (double)in[i] * in[i];
+    if (!(ss > 0.0))
+        return false;
+    std::vector<float> inp, unused;
+    if (!decode_window(c, in, n, std::sqrt((double)n / ss), unused, &inp))
+        return false;
+    const int F = c->m.hp.F;
+    const int T = (int)(inp.size() / (3 * (size_t)F));
+    spec.resize((size_t)2 * T * F);
+    for (int t = 0; t < T; t++)
+        for (int k = 0; k < F; k++) {
+            const size_t ci = (size_t)t * F + k;
+            spec[ci] = inp[ci * 3 + 1];
+            spec[(size_t)T * F + ci] = inp[ci * 3 + 2];
+        }
+    *n_frames = T;
     return true;
 }
 
