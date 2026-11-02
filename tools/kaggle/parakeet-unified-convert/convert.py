@@ -3,7 +3,8 @@
 Parakeet-Unified-EN-0.6B → GGUF: direct NeMo 2.x zip extraction.
 
 Extracts weights from the NeMo 2.x zip format (no NeMo model instantiation),
-borrows the tokenizer from parakeet-rnnt-0.6b (same vocab 1025), and runs
+takes the tokenizer from the same .nemo tar (issue #567: never borrow it from
+another model; parakeet-rnnt-0.6b has the same size but a different order), and runs
 the existing convert-parakeet-to-gguf.py converter on a synthetic .nemo tar.
 """
 import json, os, subprocess, sys, time, traceback, shutil, zipfile, pickle, io, tarfile, tempfile
@@ -41,7 +42,7 @@ def main():
             break
 
     # Install deps
-    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "gguf", "pyyaml"], check=False)
+    subprocess.run([sys.executable, "-m", "pip", "install", "-q", "gguf", "pyyaml", "sentencepiece"], check=False)
 
     # Clone CrispASR
     cdir = Path("/tmp/CrispASR")
@@ -96,25 +97,32 @@ def main():
     results["n_keys"] = len(sd)
     save()
 
-    # Step 3: Download tokenizer from parakeet-rnnt-0.6b (same vocab 1025)
-    log("Downloading tokenizer from parakeet-rnnt-0.6b...")
-    rnnt_nemo = hf_hub_download("nvidia/parakeet-rnnt-0.6b",
-                                 "parakeet-rnnt-0.6b.nemo",
-                                 cache_dir="/tmp/.hf")
+    # Step 3: Tokenizer from the unified .nemo itself. The .nemo is a tar that
+    # holds the SentencePiece model next to the zip-format model_weights.ckpt.
+    # Issue #567: borrowing parakeet-rnnt-0.6b's tokenizer (same size, different
+    # order) produced nonsense text.
+    log("Extracting tokenizer from the unified .nemo...")
     spm_bytes = None
-    with tarfile.open(rnnt_nemo, "r") as tf:
+    with tarfile.open(nemo_path, "r:") as tf:
         for m in tf.getmembers():
-            if m.name.endswith("_tokenizer.model") or m.name.endswith("tokenizer.model"):
+            if m.name.endswith("tokenizer.model"):
                 spm_bytes = tf.extractfile(m).read()
-                log(f"  Tokenizer from rnnt: {m.name} ({len(spm_bytes)} bytes)")
+                log(f"  Tokenizer: {m.name} ({len(spm_bytes)} bytes)")
                 break
     if not spm_bytes:
-        log("  ERROR: no tokenizer in rnnt .nemo")
+        log("  ERROR: no tokenizer in the unified .nemo")
         results["error"] = "no tokenizer"
         save()
         return
-    # Free rnnt .nemo from disk cache
-    os.unlink(rnnt_nemo)
+    import sentencepiece as spm
+    sp = spm.SentencePieceProcessor(model_proto=spm_bytes)
+    last_piece = sp.id_to_piece(sp.get_piece_size() - 1)
+    results["tokenizer_last_piece"] = last_piece
+    if last_piece != "\u00a5":
+        log(f"  ERROR: tokenizer last piece {last_piece!r}, expected '\u00a5' (#567)")
+        results["error"] = "wrong tokenizer"
+        save()
+        return
 
     # Step 4: Build synthetic model_config.yaml from inferred hparams
     log("Building config...")
