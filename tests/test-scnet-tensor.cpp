@@ -2,6 +2,7 @@
 // Link with the repository's actual ggml CPU/base libraries. No model, Python
 // implementation, or substituted ggml kernel is used as the comparison oracle.
 #include "scnet_tensor.h"
+#include "scnet_im2col.h"
 #include "ggml-cpu.h"
 
 #include <algorithm>
@@ -9,12 +10,13 @@
 #include <cstdint>
 #include <cstring>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
 
 namespace {
-int comparisons = 0, partitions = 0;
+int comparisons = 0, partitions = 0, tiled_convolutions = 0, packing_bounds = 0;
 
 void require(bool condition, const char* message) {
     if (!condition)
@@ -23,7 +25,7 @@ void require(bool condition, const char* message) {
 
 struct Context {
     ggml_context* value;
-    Context() : value(ggml_init({8 * 1024 * 1024, nullptr, false})) {
+    explicit Context(bool no_alloc = false) : value(ggml_init({8 * 1024 * 1024, nullptr, no_alloc})) {
         require(value != nullptr, "ggml context allocation failed");
     }
     ~Context() { ggml_free(value); }
@@ -239,6 +241,107 @@ void fallback_tests() {
     require(asymmetric->op == GGML_OP_PAD, "uncentered pad must stay standard");
     compare(ctx, ggml_pad_ext(ctx, a, 2, 0, 0, 3, 0, 0, 0, 0), asymmetric);
 }
+
+void convolution_tiling_tests() {
+    // Widths come from valid model geometry, including both sides of 32 and
+    // the maximum supported raw duration. Inspect real tensor byte sizes
+    // without allocating the large packing buffers.
+    const std::array<std::array<int, 4>, 4> cases{
+        {{872, 85, 2304, 16}, {614, 85, 2304, 23}, {5170, 85, 2304, 2}, {390, 85, 2304, 37}}};
+    constexpr size_t budget = 128 * 1024 * 1024;
+    for (const auto& geometry : cases) {
+        const int tile = scnet_detail::im2col_column_tile_size(geometry[0], geometry[1], geometry[2]);
+        require(tile == geometry[3], "unexpected canonical packing width");
+        {
+            Context metadata(true);
+            auto* packed = ggml_new_tensor_2d(metadata, GGML_TYPE_F32, int64_t(geometry[0]) * tile, geometry[2]);
+            require(packed->data == nullptr && ggml_nbytes(packed) <= budget, "packing descriptor exceeds budget");
+            auto* larger = ggml_new_tensor_2d(metadata, GGML_TYPE_F32, int64_t(geometry[0]) * (tile + 1), geometry[2]);
+            require(ggml_nbytes(larger) > budget, "packing selector left another fitting frequency");
+            ++packing_bounds;
+        }
+        for (int workers : {1, 3}) {
+            Context ctx;
+            constexpr int times = 15, frequencies = 79, channels = 3, outputs = 5, kernel = 27;
+            auto* parent = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, 19, 167, channels);
+            auto* source = static_cast<float*>(parent->data);
+            for (int64_t i = 0; i < ggml_nelements(parent); ++i)
+                source[i] = float((i * 7) % 23 - 11) / 8.0f;
+            const std::vector<float> unchanged(source, source + ggml_nelements(parent));
+            auto* cropped = ggml_view_3d(ctx, parent, 17, 159, channels, parent->nb[1], parent->nb[2],
+                                         sizeof(float) + 4 * parent->nb[1]);
+            auto* weights = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, kernel, outputs);
+            auto* w = static_cast<float*>(weights->data);
+            for (int c = 0; c < outputs; ++c)
+                for (int k = 0; k < kernel; ++k)
+                    w[c * kernel + k] = float((c * 7 + k * 5) % 13 - 6) / 16.0f;
+            auto* column_weights = ggml_transpose(ctx, weights);
+            std::vector<ggml_tensor*> pieces;
+            for (int begin = 0; begin < frequencies; begin += tile) {
+                const int count = std::min(tile, frequencies - begin);
+                auto* band = ggml_view_3d(ctx, cropped, 17, (count - 1) * 2 + 3, channels, cropped->nb[1],
+                                          cropped->nb[2], size_t(begin * 2) * cropped->nb[1]);
+                auto* columns = ggml_new_tensor_2d(ctx, GGML_TYPE_F32, times * count, kernel);
+                std::memset(columns->data, 0xa5, ggml_nbytes(columns));
+                const scnet_detail::Im2ColShape shape{times, count, channels, 3, 3, 2};
+                for (int ith = workers - 1; ith >= 0; --ith)
+                    scnet_detail::im2col_columns(static_cast<const float*>(band->data),
+                                                 static_cast<float*>(columns->data), shape, band->nb[1] / sizeof(float),
+                                                 band->nb[2] / sizeof(float), ith, workers);
+                auto* product = ggml_out_prod(ctx, columns, column_weights);
+                pieces.push_back(ggml_reshape_3d(ctx, product, times, count, outputs));
+            }
+            // Execute the production assembly primitive, with partial tails
+            // and the same balanced concatenation order as the model graph.
+            while (pieces.size() > 1) {
+                std::vector<ggml_tensor*> joined;
+                for (size_t i = 0; i < pieces.size(); i += 2)
+                    joined.push_back(i + 1 == pieces.size()
+                                         ? pieces[i]
+                                         : scnet_tensor::concat(ctx, pieces[i], pieces[i + 1], 1, true));
+                pieces = std::move(joined);
+            }
+            auto* expected = ggml_new_tensor_3d(ctx, GGML_TYPE_F32, times, frequencies, outputs);
+            auto* reference = static_cast<float*>(expected->data);
+            // Independent direct convolution; dyadic inputs/weights make
+            // every product and sum exact in F32, including CPU OUT_PROD.
+            for (int c = 0; c < outputs; ++c)
+                for (int f = 0; f < frequencies; ++f)
+                    for (int t = 0; t < times; ++t) {
+                        double sum = 0;
+                        for (int ic = 0; ic < channels; ++ic)
+                            for (int kf = 0; kf < 3; ++kf)
+                                for (int kt = 0; kt < 3; ++kt) {
+                                    const int at = ic * 167 * 19 + (4 + 2 * f + kf) * 19 + 1 + t + kt;
+                                    sum += double(source[at]) * w[c * kernel + (ic * 3 + kf) * 3 + kt];
+                                }
+                        reference[(c * frequencies + f) * times + t] = static_cast<float>(sum);
+                    }
+            compute(ctx, pieces.front(), workers);
+            equal_bytes(expected, pieces.front());
+            require(std::memcmp(source, unchanged.data(), ggml_nbytes(parent)) == 0, "packing modified input");
+            ++tiled_convolutions;
+        }
+    }
+    for (const auto& invalid : std::array<std::array<int64_t, 3>, 7>{
+             {{0, 1, 1},
+              {-1, 1, 1},
+              {1, 0, 1},
+              {1, 1, 0},
+              {1, 1, -1},
+              {1, 2, int64_t(budget / sizeof(float)) + 1},
+              {std::numeric_limits<int>::max(), 2, std::numeric_limits<int64_t>::max()}}}) {
+        bool rejected = false;
+        try {
+            scnet_detail::im2col_column_tile_size(static_cast<int>(invalid[0]), static_cast<int>(invalid[1]),
+                                                  invalid[2]);
+        } catch (const std::runtime_error&) {
+            rejected = true;
+        }
+        require(rejected, "invalid or over-budget packing geometry was accepted");
+        ++packing_bounds;
+    }
+}
 } // namespace
 
 int main() {
@@ -248,8 +351,10 @@ int main() {
         pad_tests();
         binary_tests();
         fallback_tests();
+        convolution_tiling_tests();
         std::cout << "PASS: " << comparisons << " exact ggml comparisons; " << partitions
-                  << " disjoint worker partitions; GPU/type/layout fallbacks\n";
+                  << " disjoint worker partitions; " << tiled_convolutions << " tiled convolution assemblies; "
+                  << packing_bounds << " packing budget/rejection cases; GPU/type/layout fallbacks\n";
         return 0;
     } catch (const std::exception& error) {
         std::cerr << "FAIL: " << error.what() << '\n';

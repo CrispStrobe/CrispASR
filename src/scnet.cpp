@@ -641,11 +641,14 @@ ggml_tensor* convolution(scnet_context& model, Graph& graph, ggml_tensor* input,
                       ? nullptr
                       : ggml_new_tensor_4d(ctx, GGML_TYPE_F16, time_kernel, frequency_kernel, channels, out_channels);
     std::vector<ggml_tensor*> tiles;
-    // Frequency tiles bound im2col scratch independently of full chunk length.
-    // They retain complete time rows so the im2col stride contract is valid.
+    // Keep complete time rows, but grow CPU BLAS tiles to reduce output joins.
+    // Bound each packing tensor to 128 MiB; other paths retain 32 frequencies.
     constexpr int TILE = 32;
-    for (int begin = 0; begin < frequencies; begin += TILE) {
-        const int count = std::min(TILE, frequencies - begin);
+    int tile = TILE;
+    if (column_product)
+        tile = scnet_detail::im2col_column_tile_size(times, frequencies, weights->ne[0]);
+    for (int begin = 0; begin < frequencies; begin += tile) {
+        const int count = std::min(tile, frequencies - begin);
         auto* band =
             slice_frequency(ctx, input, begin * frequency_stride, (count - 1) * frequency_stride + frequency_kernel);
         ggml_tensor* columns;

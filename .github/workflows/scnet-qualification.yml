@@ -12,12 +12,21 @@ on:
     branches: [ci/scnet-qualification-20261102]
     paths:
       - '.github/workflows/scnet-qualification.yml'
+      - 'CMakeLists.txt'
+      - 'src/scnet*'
+      - 'src/CMakeLists.txt'
+      - 'tests/*scnet*'
+      - 'tools/**/*scnet*'
+      - 'models/*scnet*'
+      - 'examples/cli/crispasr_backend_scnet.cpp'
+      - 'examples/crispasr-quantize/main.cpp'
+      - 'ggml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: scnet-qualification-${{ github.ref }}
+  group: scnet-qualification-${{ github.sha }}
   cancel-in-progress: false
 
 jobs:

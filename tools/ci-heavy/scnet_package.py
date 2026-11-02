@@ -309,7 +309,7 @@ in the manifest. Checkpoint digests identify the first author-linked downloads;
 they are not independently author-published checksums. No fixture audio, author
 checkpoint, raw activation capture, or diagnostic F32 model is included.
 
-This is a retained GitHub Actions artifact, not a Hugging Face publication.
+This bundle retains the exact qualification provenance recorded in its receipts.
 """, encoding="utf-8")
         files["README.md"] = {"bytes": readme.stat().st_size, "sha256": sha256(readme)}
         manifest["files"] = files

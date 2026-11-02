@@ -7,6 +7,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <stdexcept>
 
 namespace scnet_detail {
 
@@ -14,6 +15,21 @@ struct Im2ColShape {
     int times = 0, frequencies = 0, channels = 0;
     int time_kernel = 0, frequency_kernel = 0, frequency_stride = 0;
 };
+
+// CPU BLAS consumes one F32 [T*tile,K] packing tensor per frequency tile.
+// Keep the budget strict even for long inputs, which can require tile < 32.
+inline int im2col_column_tile_size(int times, int frequencies, int64_t packed_width) {
+    constexpr uint64_t column_budget_bytes = 128ull * 1024 * 1024;
+    if (times <= 0 || frequencies <= 0 || packed_width <= 0)
+        throw std::runtime_error("invalid SCNet convolution packing geometry");
+    const uint64_t time_steps = static_cast<uint64_t>(times);
+    const uint64_t width = static_cast<uint64_t>(packed_width);
+    // Divide first so even an invalid shape cannot overflow the product.
+    if (width > column_budget_bytes / sizeof(float) / time_steps)
+        throw std::runtime_error("SCNet convolution packing exceeds the per-tile memory budget");
+    const uint64_t bytes_per_frequency = sizeof(float) * time_steps * width;
+    return static_cast<int>(std::min<uint64_t>(frequencies, column_budget_bytes / bytes_per_frequency));
+}
 
 // Source layout is [T,F,C], possibly a frequency view into a larger tensor.
 // Destination is contiguous [Kt*Kf*C,Tout,Fout], with the original kernel

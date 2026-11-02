@@ -196,11 +196,33 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   behavior. [Baseline CI triage](docs/historical/scnet-generic-ci-baseline-triage-2026-11-02.json)
   also retains unrelated ARM harness failures without treating them as SCNet
   numerical results.
+- The [first complete local small campaign](docs/historical/scnet-first-full-small-2026-11-02.json)
+  at `a80cbbba` passes all 210 short/full stage checks, all six warmups and 18
+  timed waveform checks, every production CLI/Session surface, and all runtime
+  identity checks. It fails all three speed gates: native/original medians are
+  **15.860326/14.749629 s** F16, **16.363169/16.271565 s** Q8_0, and
+  **18.890005/17.151493 s** Q4_K. All calls and the automatic diagnostic are
+  retained; no model was packaged. Peak child RSS was 3,573,896 KiB for this
+  capture-heavy campaign, not a standalone production-memory measurement.
+- CPU convolution packing now chooses frequency tiles from the actual time and
+  kernel dimensions, with a strict **128 MiB per packing tensor** budget.
+  Complete time rows, coefficient precision and frequency order are preserved.
+  The maximum supported single-frequency column is 45.439 MiB, so valid inputs
+  always have a fitting tile; invalid/overflowing geometry raises the existing
+  recoverable error. Total graph and process memory are separate from this
+  individual-buffer bound. [Component and short-reference controls](docs/historical/scnet-adaptive-tiling-controls-2026-11-02.json)
+  bind this candidate; complete fidelity and paired speed still require a fresh
+  campaign on its exact committed source.
 - Next action: qualify both model sizes directly
   through all original-checkpoint, raw, full-pipeline, CLI/Session and paired
   performance gates in `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566).
   The dedicated `ci/scnet-qualification-20261102` branch triggers the expensive
-  campaign on its exact commit; ordinary feature-PR checks remain in place.
+  campaign on relevant source changes. Concurrency is keyed by commit so that
+  distinct candidates retain independent runs; ordinary feature-PR checks
+  remain in place. The preserved [a80 hosted run](https://github.com/CrispStrobe/CrispASR/actions/runs/41506291896)
+  has passed clean Python startup and native builds on both actual runners.
+  Its small-model campaign completed without qualification; its retained
+  results are under review while the large-model campaign continues.
   Complete CPU qualification, GPU qualification and held-out quality remain unproven; do not promote the
   candidate or substitute diagnostic runs for these gates.
 - License: upstream [MIT notice](https://github.com/starrytong/SCNet/blob/main/LICENSE)

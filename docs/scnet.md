@@ -155,6 +155,23 @@ The later AVX512 gate extension has [bit-exact component controls](historical/sc
 against the existing AVX2 path; integrated fidelity and performance still require
 the complete campaign.
 
+The [first complete local small-model campaign](historical/scnet-first-full-small-2026-11-02.json)
+at `a80cbbba` passes all 35 short and all 35 full-pipeline stages in every
+precision, all warmup/timed waveform checks, actual CLI/Session surfaces and
+runtime identity checks. Its three alternating pairs fail the speed gate:
+
+| Precision | Native median | Original median |
+|---|---:|---:|
+| F16 | 15.860326 s | 14.749629 s |
+| Q8_0 | 16.363169 s | 16.271565 s |
+| Q4_K | 18.890005 s | 17.151493 s |
+
+The receipt retains all calls and the subsequent instrumented diagnostic; no
+failed timing was replaced and no qualified model bundle was produced. These
+are comparisons within each precision's worker, not measurements of isolated
+quantization speed differences. Both model sizes still require complete
+acceptance for the subsequent convolution-tiling change.
+
 ## Inference behavior
 
 Default inference follows the published helper's 20-second segments, 50%
@@ -198,6 +215,16 @@ CPU and GPU paths retain ordinary ggml matrix operations. The pinned
 [ggml thread-budget fix](https://github.com/CrispStrobe/ggml/pull/6) applies the
 configured provider count when an outer product is the first BLAS operation.
 Provider thread settings retain ggml's existing process-wide semantics.
+CPU BLAS packing chooses the largest frequency tile that fits a 128 MiB
+individual-tensor budget, including tiles smaller than 32 when necessary.
+This reduces joins between convolution outputs while retaining complete time
+rows and the same dot products. At the maximum supported raw duration, a
+single large-model frequency column is 45.439 MiB, so a valid tile always
+fits. The checked selector rejects invalid or over-budget geometry before
+multiplying dimensions. This limit covers each packing tensor, not total graph
+or process memory. [Controls](historical/scnet-adaptive-tiling-controls-2026-11-02.json)
+cover actual packing/assembly and the changed tile shapes; full model and
+performance qualification remain required for this candidate.
 For CPU inference with both graph and recurrent BLAS available, model loading
 also prepares 24 immutable F32 recurrent-weight tensors. Their bytes match
 ggml's normal F16 and quantized conversions; the original GGUF tensors and
