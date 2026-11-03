@@ -4,6 +4,7 @@
 // adds an output rate, an int16 option, and Opus surround (family 1).
 // MIT License - Clean-room implementation.
 
+#include <cstddef>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -55,6 +56,53 @@ Fmt detect(const uint8_t* d, size_t n) {
     return Fmt::Unknown;
 }
 
+// Every Layer III decoder adds a fixed 529-sample latency (synthesis
+// filterbank + IMDCT overlap). A LAME tag records only the ENCODER's delay,
+// so the whole head to drop is encoder delay + 529.
+constexpr int kMp3DecoderDelay = 529;
+
+// Gapless info from a Xing/Info frame's LAME (or Lavc/Lavf) extension, in
+// samples per channel; -1 when the tag carries none.
+struct Mp3Gapless {
+    int delay = -1;
+    int padding = -1;
+};
+
+// If the frame at d[0..frame_bytes) is a Xing/Info tag frame, parse its
+// gapless fields into *g and return true (the frame is metadata, not audio).
+// The tag sits right after the header (+2 CRC bytes when protected) and the
+// side info: 32/17 bytes for MPEG-1 stereo/mono, 17/9 for MPEG-2/2.5.
+bool mp3_tag_frame(const uint8_t* d, int frame_bytes,
+                   const glint::mp3::Mp3FrameInfo& fi, Mp3Gapless* g) {
+    const bool crc = (d[1] & 1) == 0;
+    const int side = fi.mpeg2 ? (fi.channels == 1 ? 9 : 17)
+                              : (fi.channels == 1 ? 17 : 32);
+    int p = 4 + (crc ? 2 : 0) + side;
+    if (p + 8 > frame_bytes) return false;
+    if (std::memcmp(d + p, "Xing", 4) && std::memcmp(d + p, "Info", 4))
+        return false;
+    p += 4;
+    const uint32_t flags = (uint32_t)d[p] << 24 | (uint32_t)d[p + 1] << 16 |
+                           (uint32_t)d[p + 2] << 8 | d[p + 3];
+    p += 4;
+    if (flags & 0x1) p += 4;    // frame count
+    if (flags & 0x2) p += 4;    // byte count
+    if (flags & 0x4) p += 100;  // seek TOC
+    if (flags & 0x8) p += 4;    // VBR quality
+    // p is at the 9-byte encoder string; the delays sit 21 bytes in, as 12
+    // bits of encoder delay then 12 bits of end padding.
+    const int q = p + 21;
+    if (q + 3 > frame_bytes) return true;  // a tag frame, but no LAME data
+    const int delay = d[q] << 4 | d[q + 1] >> 4;
+    const int padding = (d[q + 1] & 0x0F) << 8 | d[q + 2];
+    // Both zero says nothing: keep such a stream untrimmed.
+    if (delay || padding) {
+        g->delay = delay;
+        g->padding = padding;
+    }
+    return true;
+}
+
 bool decode_mp3(const uint8_t* d, size_t n, std::vector<float>& out,
                 int& sr, int& ch) {
     size_t off = 0;
@@ -65,6 +113,8 @@ bool decode_mp3(const uint8_t* d, size_t n, std::vector<float>& out,
     dec.init();
     float pcm[2 * 1152];
     glint::mp3::Mp3FrameInfo fi;
+    Mp3Gapless gap;
+    bool first = true;
     sr = ch = 0;
     while (off + 4 <= n) {
         if (glint::mp3::mp3_frame_info(d + off, (int)(n - off), &fi) < 0) {
@@ -72,6 +122,15 @@ bool decode_mp3(const uint8_t* d, size_t n, std::vector<float>& out,
             continue;
         }
         if (fi.frame_bytes <= 0 || off + (size_t)fi.frame_bytes > n) break;
+        // The first frame may be a Xing/Info tag: metadata, decoded by no
+        // standard decoder — it would otherwise add a frame of silence.
+        if (first) {
+            first = false;
+            if (mp3_tag_frame(d + off, fi.frame_bytes, fi, &gap)) {
+                off += fi.frame_bytes;
+                continue;
+            }
+        }
         int s = dec.decode_frame(d + off, (int)(n - off), pcm, &fi);
         if (s > 0) {
             sr = fi.sample_rate;
@@ -79,6 +138,23 @@ bool decode_mp3(const uint8_t* d, size_t n, std::vector<float>& out,
             out.insert(out.end(), pcm, pcm + (size_t)s * fi.channels);
         }
         off += fi.frame_bytes;
+    }
+    // Gapless: drop encoder delay + decoder latency from the head and the
+    // encoder's end padding (less the latency already shifted out) from the
+    // tail, so the PCM lines up sample-for-sample with what was encoded —
+    // as ffmpeg and Apple's decoder do. Only when a tag supplied the numbers.
+    if (ch > 0 && gap.delay >= 0) {
+        const size_t frames = out.size() / (size_t)ch;
+        const size_t head = (size_t)(gap.delay + kMp3DecoderDelay);
+        const size_t tail = gap.padding > kMp3DecoderDelay
+                                ? (size_t)(gap.padding - kMp3DecoderDelay)
+                                : 0;
+        if (head + tail >= frames) {
+            out.clear();  // degenerate or hostile tag
+        } else {
+            out.erase(out.end() - (std::ptrdiff_t)(tail * ch), out.end());
+            out.erase(out.begin(), out.begin() + (std::ptrdiff_t)(head * ch));
+        }
     }
     return ch > 0;
 }

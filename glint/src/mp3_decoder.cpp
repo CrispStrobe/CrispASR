@@ -158,30 +158,74 @@ const double kCi[8] = { -0.6,    -0.535,  -0.33,   -0.185,
 
 // ---------------------------------------------------------- transforms
 
+// The transforms below used to call std::cos/std::sin/std::pow inside their
+// inner loops — ~230k cos() per stereo frame, which made decode ~30x slower
+// than ffmpeg (80% of the time in libm). Every value is now taken from a table
+// built ONCE from the very same double expression, and the sums keep their
+// order, so the output is bit-identical to the direct formulas.
+struct DecodeTables {
+    double imdct36[36][18];
+    double imdct12[12][6];
+    double win_long[36];
+    double win_short[12];
+    double synth[64][32];
+    // |ix|^(4/3) for every value a Layer III stream can code (big_values
+    // 15 + linbits 13 -> 8206). Larger (malformed) values fall back to pow.
+    static constexpr int kPow43 = 8207;
+    double pow43[kPow43];
+
+    DecodeTables() {
+        for (int i = 0; i < 36; i++)
+            for (int k = 0; k < 18; k++)
+                imdct36[i][k] =
+                    std::cos(M_PI / 72.0 * (2 * i + 1 + 18) * (2 * k + 1));
+        for (int i = 0; i < 12; i++)
+            for (int k = 0; k < 6; k++)
+                imdct12[i][k] =
+                    std::cos(M_PI / 24.0 * (2 * i + 1 + 6) * (2 * k + 1));
+        for (int i = 0; i < 36; i++) win_long[i] = std::sin(M_PI / 36.0 * (i + 0.5));
+        for (int i = 0; i < 12; i++) win_short[i] = std::sin(M_PI / 12.0 * (i + 0.5));
+        for (int i = 0; i < 64; i++)
+            for (int k = 0; k < 32; k++)
+                synth[i][k] = std::cos((16 + i) * (2 * k + 1) * M_PI / 64.0);
+        for (int v = 0; v < kPow43; v++) pow43[v] = std::pow(double(v), 4.0 / 3.0);
+    }
+};
+
+const DecodeTables& tabs() {
+    static const DecodeTables t;  // thread-safe one-time init (C++11)
+    return t;
+}
+
+// |v|^(4/3), from the table when in range.
+inline double pow43(int v) {
+    int a = v < 0 ? -v : v;
+    return a < DecodeTables::kPow43 ? tabs().pow43[a]
+                                    : std::pow(double(a), 4.0 / 3.0);
+}
+
 // 36-point IMDCT: x[i] = sum_k X[k] cos(pi/72 (2i+1+18)(2k+1)).
 void imdct36(const double* X, double* x) {
+    const auto& t = tabs().imdct36;
     for (int i = 0; i < 36; i++) {
         double s = 0;
-        for (int k = 0; k < 18; k++)
-            s += X[k] * std::cos(M_PI / 72.0 * (2 * i + 1 + 18) *
-                                 (2 * k + 1));
+        for (int k = 0; k < 18; k++) s += X[k] * t[i][k];
         x[i] = s;
     }
 }
 
 // 12-point IMDCT for one short window.
 void imdct12(const double* X, double* x) {
+    const auto& t = tabs().imdct12;
     for (int i = 0; i < 12; i++) {
         double s = 0;
-        for (int k = 0; k < 6; k++)
-            s += X[k] * std::cos(M_PI / 24.0 * (2 * i + 1 + 6) *
-                                 (2 * k + 1));
+        for (int k = 0; k < 6; k++) s += X[k] * t[i][k];
         x[i] = s;
     }
 }
 
-double win_long(int i) { return std::sin(M_PI / 36.0 * (i + 0.5)); }
-double win_short(int i) { return std::sin(M_PI / 12.0 * (i + 0.5)); }
+double win_long(int i) { return tabs().win_long[i]; }
+double win_short(int i) { return tabs().win_short[i]; }
 
 }  // namespace
 
@@ -249,7 +293,7 @@ void Mp3Decoder::requantize(const GranuleInfo& g, int ch, int sr_unified) {
                                            ? tables::preemphasis[band]
                                            : 0)));
                 for (; i < end && i < 36; i++) {
-                    double v = std::pow(std::abs(ix_[ch][i]), 4.0 / 3.0);
+                    double v = pow43(ix_[ch][i]);
                     xr_[ch][i] = (ix_[ch][i] < 0 ? -v : v) * m;
                 }
                 band++;
@@ -266,7 +310,7 @@ void Mp3Decoder::requantize(const GranuleInfo& g, int ch, int sr_unified) {
                     std::exp2(-2.0 * g.subblock_gain[w] -
                               sf_mult * scalefac_s_[ch][band][w]);
                 for (int k = 0; k < width && i < 576; k++, i++) {
-                    double v = std::pow(std::abs(ix_[ch][i]), 4.0 / 3.0);
+                    double v = pow43(ix_[ch][i]);
                     xr_[ch][i] = (ix_[ch][i] < 0 ? -v : v) * m;
                 }
             }
@@ -298,7 +342,7 @@ void Mp3Decoder::requantize(const GranuleInfo& g, int ch, int sr_unified) {
             int pre =
                 (g.preflag && band < 21) ? tables::preemphasis[band] : 0;
             double m = global * std::exp2(-sf_mult * (sf + pre));
-            double v = std::pow(std::abs(ix_[ch][i]), 4.0 / 3.0);
+            double v = pow43(ix_[ch][i]);
             xr_[ch][i] = (ix_[ch][i] < 0 ? -v : v) * m;
         }
     }
@@ -485,10 +529,10 @@ void Mp3Decoder::synth_granule(int ch, int n_gran, float* pcm, int nch) {
 
         synth_off_[ch] = (synth_off_[ch] - 64) & 1023;
         double* v = synth_v_[ch];
+        const auto& cs = tabs().synth;
         for (int i = 0; i < 64; i++) {
             double sum = 0;
-            for (int k = 0; k < 32; k++)
-                sum += s[k] * std::cos((16 + i) * (2 * k + 1) * M_PI / 64.0);
+            for (int k = 0; k < 32; k++) sum += s[k] * cs[i][k];
             v[(synth_off_[ch] + i) & 1023] = sum;
         }
 

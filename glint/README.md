@@ -69,4 +69,4 @@ and rewrites *only* the marker line below — the prose above is
 maintained here by hand and does not auto-update, so a codec added
 upstream will not be described until this file is edited.
 
-Synced at upstream commit: `77738f3ed9b15f627196cc5bbd7f6406814ba2fb` (fix(aac): decode KBD windows + short-window TNS — foreign streams 17 -> 60+ dB).
+Synced at upstream commit: `7b458cff0fc9c397f671c422db4770c72fc22f5c` (perf(mp3): decode ~17x faster — tables instead of libm in the inner loops).
