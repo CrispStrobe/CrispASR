@@ -1154,6 +1154,16 @@ int process_one_input(CrispasrBackend& backend, const std::string& fname_inp, co
             fprintf(stderr, "crispasr: %s is %s-only — skipping language detection\n", backend.name(), sole_lang);
     }
 
+    // moss-audio reads the language only to build its default prompt; an
+    // explicit --prompt replaces that, so LID would run (and maybe download a
+    // model) for a result nobody uses (#570). --detect-language still runs it.
+    if (want_auto_lang && !params.detect_language && !params.prompt.empty() &&
+        std::strcmp(backend.name(), "moss-audio") == 0) {
+        want_auto_lang = false;
+        if (!params.no_prints)
+            fprintf(stderr, "crispasr: moss-audio with --prompt ignores the language — skipping language detection\n");
+    }
+
     // Some backends can identify the language with the model already loaded
     // (cohere probes its own supported set). Prefer that over an external
     // detector when the user did not name one explicitly: it downloads

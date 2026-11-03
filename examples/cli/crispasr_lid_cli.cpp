@@ -49,6 +49,31 @@ std::string expand_home(const std::string& p) {
     return std::string(home) + p.substr(1);
 }
 
+// LID models follow the same consent rule as the main model (#570): a cached
+// file is used as-is; a missing one downloads only with --auto-download or an
+// interactive "yes". Otherwise LID is skipped with a hint, never a silent fetch.
+std::string lid_fetch(const char* file, const char* url, const whisper_params& p, const char* tag) {
+    if (!crispasr_cache::probe_cached_file(file, p.cache_dir).empty() || p.auto_download)
+        return crispasr_cache::ensure_cached_file(file, url, p.no_prints, tag, p.cache_dir);
+#ifdef _WIN32
+    const bool tty = _isatty(_fileno(stdin)) != 0;
+#else
+    const bool tty = isatty(fileno(stdin)) != 0;
+#endif
+    if (tty) {
+        fprintf(stderr, "%s: language-ID model %s is not cached.\n  Download now? [Y/n] ", tag, file);
+        fflush(stderr);
+        char line[16] = {0};
+        if (fgets(line, sizeof(line), stdin) && (line[0] == '\n' || line[0] == 'y' || line[0] == 'Y'))
+            return crispasr_cache::ensure_cached_file(file, url, p.no_prints, tag, p.cache_dir);
+    }
+    fprintf(stderr,
+            "%s: language-ID model %s is not cached; skipping LID. Pass --auto-download to fetch it, "
+            "-l <code> to name the language, or --lid-backend off.\n",
+            tag, file);
+    return "";
+}
+
 // Default whisper LID model: multilingual tiny. 75 MB, fast.
 constexpr const char* kWhisperLidDefaultUrl = "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny.bin";
 constexpr const char* kWhisperLidDefaultFile = "ggml-tiny.bin";
@@ -77,29 +102,25 @@ std::string resolve_whisper_lid_model(const whisper_params& p) {
         p.lid_backend.empty() || p.lid_backend == "whisper" || p.lid_backend == "whisper-tiny";
     if (selected_whisper && !p.lid_model.empty() && p.lid_model != "auto")
         return expand_home(p.lid_model);
-    return crispasr_cache::ensure_cached_file(kWhisperLidDefaultFile, kWhisperLidDefaultUrl, p.no_prints,
-                                              "crispasr[lid]", p.cache_dir);
+    return lid_fetch(kWhisperLidDefaultFile, kWhisperLidDefaultUrl, p, "crispasr[lid]");
 }
 
 std::string resolve_silero_lid_model(const whisper_params& p) {
     if (!p.lid_model.empty() && p.lid_model != "auto")
         return expand_home(p.lid_model);
-    return crispasr_cache::ensure_cached_file(kSileroLidDefaultFile, kSileroLidDefaultUrl, p.no_prints,
-                                              "crispasr[lid-silero]", p.cache_dir);
+    return lid_fetch(kSileroLidDefaultFile, kSileroLidDefaultUrl, p, "crispasr[lid-silero]");
 }
 
 std::string resolve_firered_lid_model(const whisper_params& p) {
     if (!p.lid_model.empty() && p.lid_model != "auto")
         return expand_home(p.lid_model);
-    return crispasr_cache::ensure_cached_file(kFireredLidDefaultFile, kFireredLidDefaultUrl, p.no_prints,
-                                              "crispasr[lid-firered]", p.cache_dir);
+    return lid_fetch(kFireredLidDefaultFile, kFireredLidDefaultUrl, p, "crispasr[lid-firered]");
 }
 
 std::string resolve_ecapa_lid_model(const whisper_params& p) {
     if (!p.lid_model.empty() && p.lid_model != "auto")
         return expand_home(p.lid_model);
-    return crispasr_cache::ensure_cached_file(kEcapaLidDefaultFile, kEcapaLidDefaultUrl, p.no_prints,
-                                              "crispasr[lid-ecapa]", p.cache_dir);
+    return lid_fetch(kEcapaLidDefaultFile, kEcapaLidDefaultUrl, p, "crispasr[lid-ecapa]");
 }
 
 // Common English-name → ISO 639-1 mapping for the sherpa subprocess path.

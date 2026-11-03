@@ -1082,7 +1082,7 @@ a transcript or arbitrary UTF-8 string).
 |---|---|
 | `-l auto`, `--detect-language` | Auto-detect the input language. Backends without native lang-detect (cohere, canary, granite, voxtral, voxtral4b) get it via the LID pre-step |
 | `--lid-backend NAME` | Audio-LID provider: `whisper` (default), `silero` (95 langs, 16 MB), `ecapa` (107 or 45 langs, 40-43 MB), `firered` (120 langs, 544 MB), `probe` (ask the ASR model itself — cohere; no second model, and it can only return a language that model supports), or `off` / `none` |
-| `--lid-model FNAME` | Override the audio-LID model path (default: auto-downloads `ggml-tiny.bin` ~75 MB on first use) |
+| `--lid-model FNAME` | Override the audio-LID model path (default `ggml-tiny.bin`, ~75 MB; downloaded with `--auto-download` or after a TTY prompt, otherwise LID is skipped — #570) |
 
 **Silero evidence gate (#409).** On hard inputs — heavily compressed audio
 (MP3/OGG artifacts), very short or band-limited speech — the 16 MB
