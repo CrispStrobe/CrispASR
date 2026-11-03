@@ -6132,6 +6132,18 @@ if (CRISPASR_FUZZ)
     target_link_options(crispasr-fuzz-tokenizer PRIVATE -fsanitize=fuzzer)
 endif()
 
+# ─── test-core-env-gate — src/core/env_gate.h, the CrispEmbed-mirrored boolean
+# gate (hermetic, unit). Off spellings are 0/false/off/no, case-insensitive.
+add_executable(test-core-env-gate test-core-env-gate.cpp)
+target_include_directories(test-core-env-gate PRIVATE ${PROJECT_SOURCE_DIR}/src ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(test-core-env-gate PRIVATE Catch2::Catch2WithMain)
+catch_discover_tests(test-core-env-gate
+    TEST_SPEC "[env-gate]"
+    PROPERTIES
+        LABELS unit
+        WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
+)
+
 # ─── test-arch-backend-map — general.architecture → backend table (hermetic, unit)
 # Guards issue #335: the C ABI and the CLI each had their own copy of this map
 # and they drifted, so Session::open() could not open models the CLI could.
