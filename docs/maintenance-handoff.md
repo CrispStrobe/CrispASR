@@ -15,7 +15,7 @@ in ignored local notes.
 
 ## Current state — 2026-11-03 (read this first)
 
-**The live, fully scoped task list is [PLAN.md → "NOW — open lanes"](../PLAN.md#now--open-lanes-fully-scoped-2026-11-03).** Lanes R1–R3 finish the v0.8.50 release, M1 is the #568 Metal bug, S1 the SCNet review follow-ups, V1 optional hosted checks. Older sections below are evidence, not instructions.
+**The live, fully scoped task list is [PLAN.md → "NOW — open lanes"](../PLAN.md#now--open-lanes-fully-scoped-2026-11-03).** **v0.8.50 is published and both audits are accepted** (R1–R3 complete; receipts in `docs/historical/release-v0850-*`). The remaining lanes: M1 is the #568 Metal bug, S1 the SCNet review follow-ups, V1 optional hosted checks. Older sections below are evidence, not instructions.
 
 What happened 2026-11-02/03, so you don't redo it:
 
@@ -39,6 +39,7 @@ What happened 2026-11-02/03, so you don't redo it:
 
     A local cppcheck 2.17 does not reproduce every 2.7 finding.
   - **`src/core/backend_caps_table.h` is generated from the CLI's adapter caps.** Changing a backend's `capabilities()` needs the row updated, and CI's `gen-backend-caps-table.py --check` enforces it.
+  - **Wheel runs:** a Release rerun that turns a failed run green fires a second `Release Python wheels` run. PyPI keeps the first run's bytes, so audit with the run whose `publish-pypi` uploaded (see PLAN lane R2).
   - **Release queue:** a tag push starts about 15 workflows. Cancelling the non-release ones speeds up Release, but **do not cancel "Publish Docker image"**, which is part of the release. Poll `gh` at most every 5 min; a 2-min multi-run loop hit the 5000/h API limit.
 - **Private details** (local paths, backups, credentials, storage) are in the gitignored local notes, never in this file.
 

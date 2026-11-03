@@ -12,11 +12,14 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
-State at hand-off: **v0.8.50 is tagged** (`v0.8.50` → `5c96e5521c6ab40ab53b91eeec54ced9c30562b5`, annotated), and its publication is **in progress, not yet verified**. CI, Lint and Lint Deep passed for that exact tree (CI/Lint on `f40f45d6e`, the same tree; Lint Deep on `5c96e5521`). SCNet qualification **41615896059** passed both sizes on main at `b6ec24da2`. Main has since moved to `08089ed1b` (#573, CI job selection only); that is not in the tag and needs no release.
+**v0.8.50 is published and verified (2026-11-03).** Tag `v0.8.50` → `5c96e5521c6ab40ab53b91eeec54ced9c30562b5`. Lanes R1–R3 are COMPLETE (details below, kept as evidence). Open work: M1, S1, V1 and the holds. Main moved on after the tag (#573 CI job selection, docs); none of that needs a release.
 
 Each lane gives the start state, the exact steps, the acceptance and what to do on failure. Claim a lane by adding your owner name under it before starting. Never re-tag `v0.8.50`. Never re-upload under an existing PyPI version.
 
-### Lane R1 — finish v0.8.50 native publication
+### Lane R1 — COMPLETE: v0.8.50 native publication
+
+- **Done:** release run 41675510092 succeeded on attempt 2 (52 assets); wrappers 41675510012 and Docker 41675510045 succeeded.
+
 
 - **Start state:** release run **41675510092** (workflow `release.yml`, triggered by the tag push). Language wrappers **41675510012**; Docker publish **41675510045** (re-run after an accidental cancel). At hand-off all three were queued or in progress.
 - **Do:**
@@ -27,7 +30,15 @@ Each lane gives the start state, the exact steps, the acceptance and what to do 
 - **Accept:** all release jobs `success`; 52 assets; wrappers and Docker runs `success`.
 - **Then:** dispatch the native audit (lane R2, step 1).
 
-### Lane R2 — v0.8.50 publication audits
+### Lane R2 — COMPLETE: v0.8.50 publication audits
+
+- **Done:** native audit **41710437654** and wheel audit **41718388489**, both `complete: true, acceptance: true`. Receipts: [native](docs/historical/release-v0850-native-audit-2026-11-03.json), [wheel](docs/historical/release-v0850-wheel-audit-2026-11-03.json).
+- **Lesson — two wheel runs for one tag:** Release attempt 1 failing and attempt 2 succeeding fired `Release Python wheels` twice (`workflow_run`): 41706418193 (A) and 41710320363 (B).
+  - A published PyPI, then was cancelled by B's concurrency group during `publish-gpu-index`.
+  - B rebuilt different bytes, and PyPI kept A's files. The first wheel audit, against B, failed at the PyPI readback (`downloaded == record`).
+  - Fix: `gh run rerun 41706418193 --failed`, which completed A's GPU index publish, then audit with `wheel_run=<A>`.
+  - Next time: the audit's `wheel_run` must be the run whose `publish-pypi` actually uploaded. Check `upload_time` on PyPI against the runs.
+
 
 - **Depends on:** R1, and the automatic `Release Python wheels` run, which starts via `workflow_run` when Release completes. Find it with `gh run list -w release-python-wheels.yml -L3`. Pages must also deploy the wheel index commit.
 - **Do:**
@@ -36,7 +47,9 @@ Each lane gives the start state, the exact steps, the acceptance and what to do 
 - **Accept:** each run's `release-publication-<run>` artifact `receipt.json` has `complete: true, acceptance: true`. Commit the receipts under `docs/historical/release-v0850-{native,wheel}-audit-2026-11-0X.json`, following the v0.8.49 receipts.
 - **If it fails:** read the traceback. A real defect in a published file needs a new patch release (v0.8.51), never a re-upload. `REVIEWED_TAGS` in `tools/ci-heavy/release_publication_audit.py` already includes `v0.8.50`.
 
-### Lane R3 — close the shipped issues
+### Lane R3 — COMPLETE: #562, #564, #569, #570 closed with the release link
+
+<!-- original scope kept below -->
 
 - **Depends on:** R1 (the release page exists).
 - **Do:** comment with the release link and close **#562** (Mini-BS-RoFormer), **#564** (MOSS-Diarize beam/sampling), **#569** (moss-audio 30 s pad) and **#570** (LID download consent). Each already has a fix-explanation comment; just add "Released in v0.8.50 <link>". Keep **#568** open (lane M1).

@@ -1,0 +1,14 @@
+{
+  "tag": "v0.8.50",
+  "source": "5c96e5521c6ab40ab53b91eeec54ced9c30562b5",
+  "audit_source": "7f3f0a488ae6b4cc04882bbf8c03fbc720d2f817",
+  "complete": true,
+  "acceptance": true,
+  "native": {
+    "complete": true,
+    "release_run": 41675510092,
+    "assets": 52,
+    "all_full_anonymous_readbacks": true,
+    "asset_records": "native-assets.json"
+  }
+}
