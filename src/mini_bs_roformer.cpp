@@ -5,6 +5,7 @@
 #include "mini_bs_roformer.h"
 #include "mini_bs_roformer_bf16.h"
 #include "mini_bs_roformer_fft.h"
+#include "core/crispasr_env.h"
 #include "core/ggml_cpu_backend.h"
 #include "core/gguf_loader.h"
 #include "core/gpu_backend_pref.h"
@@ -796,6 +797,17 @@ mini_bs_roformer_context* mini_bs_roformer_init_from_file(const char* path, mini
             crispasr_set_gpu_device_pref(params.gpu_device);
             m->backend = crispasr_init_gpu_backend();
             if (m->backend && core_cpu_backend::is_cpu(m->backend)) {
+                ggml_backend_free(m->backend);
+                m->backend = nullptr;
+            }
+            // #568: on Metal the separated stems lose most of the signal
+            // (vocals RMS 0 vs 0.154 on CPU). Until the Metal path is fixed and
+            // qualified, run on CPU; CRISPASR_MINI_BS_ROFORMER_METAL=1 opts back
+            // in for debugging.
+            const char* bn = m->backend ? ggml_backend_name(m->backend) : nullptr;
+            const bool metal = bn && (std::strncmp(bn, "MTL", 3) == 0 || std::strncmp(bn, "Metal", 5) == 0);
+            if (metal && !crispasr_env::get("CRISPASR_MINI_BS_ROFORMER_METAL")) {
+                fprintf(stderr, "mini_bs_roformer: Metal output is not yet correct (#568); using CPU\n");
                 ggml_backend_free(m->backend);
                 m->backend = nullptr;
             }
