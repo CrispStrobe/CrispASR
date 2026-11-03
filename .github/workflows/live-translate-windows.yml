@@ -7,6 +7,16 @@ name: Live Translate Windows
 on:
   workflow_dispatch:
   push:
+    branches: [main]
+    paths:
+      - '.github/workflows/live-translate-windows.yml'
+      - 'tests/live-translate-smoke.py'
+      - 'examples/cli/crispasr_run.cpp'
+      - 'examples/cli/crispasr_live_translate.h'
+      - 'examples/cli/crispasr_live_translate_sink.h'
+      - 'src/m2m100.cpp'
+      - 'src/core/marian_tokenizer.h'
+  pull_request:
     paths:
       - '.github/workflows/live-translate-windows.yml'
       - 'tests/live-translate-smoke.py'
@@ -16,11 +26,11 @@ on:
       - 'src/m2m100.cpp'
       - 'src/core/marian_tokenizer.h'
 
-# One run per workflow per branch: a newer push cancels the older run. On
-# main nothing is cancelled (every main commit keeps its verdict).
+# PRs: a newer push to the same PR cancels the older run. main pushes and
+# manual runs get their own group (run_id), so they are never cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Cheap gate: on a branch push, run the heavy job only when the BRANCH ITSELF

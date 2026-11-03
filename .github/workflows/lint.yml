@@ -17,7 +17,7 @@ on:
   # not help — it re-runs the OLD commit.
   workflow_dispatch:
   push:
-    branches: [main, master, integrated_cli]
+    branches: [main]
     paths:
       - '**.cpp'
       - '**.h'
@@ -102,7 +102,7 @@ on:
       - 'src/core/ggml_cpu_backend.h'
       - 'docs/**.md'
   pull_request:
-    branches: [main, master]
+    branches: [main]
     paths:
       - '**.cpp'
       - '**.h'
@@ -196,19 +196,113 @@ on:
   schedule:
     - cron: '17 3 * * *'
 
-# Scoped by EVENT as well as ref: without that the nightly shares
-# `Lint-refs/heads/main` with ordinary pushes, so the next push would cancel
-# it and the floor above would not exist. Push runs still cancel each other,
-# which is where the savings are.
+# PRs: a newer push to the same PR cancels the older run. main pushes, the
+# nightly and manual runs each get their own group (run_id), so none of them
+# is ever cancelled -- the nightly floor above no longer needs a separate
+# event-scoped group to survive the next push.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Per-job path gate. The workflow-level filter above decides whether Lint
+  # starts; this decides which of its jobs a change can actually affect, so a
+  # docs-only push no longer runs the ~15 min clang-tidy build. Fail-open:
+  # schedule / dispatch / new or force-pushed base / any error -> all true.
+  # readme-langs is not gated: it carries the generated-file drift checks.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      cpp: ${{ steps.filter.outputs.cpp }}
+      kaggle: ${{ steps.filter.outputs.kaggle }}
+      docs: ${{ steps.filter.outputs.docs }}
+      workflows: ${{ steps.filter.outputs.workflows }}
+      chat: ${{ steps.filter.outputs.chat }}
+      registry: ${{ steps.filter.outputs.registry }}
+      version: ${{ steps.filter.outputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          FILTERS: |
+            cpp:
+              - '**.c'
+              - '**.cc'
+              - '**.cpp'
+              - '**.h'
+              - '**.hpp'
+              - '**.m'
+              - '**.mm'
+              - '.clang-format'
+              - '.clang-tidy'
+              - '**/CMakeLists.txt'
+              - 'CMakePresets.json'
+              - 'cmake/**'
+              - 'ggml'
+              - 'tools/check-cpu-backend-include.py'
+              - '.github/workflows/lint.yml'
+              - '.github/scripts/ci_changes.py'
+            kaggle:
+              - 'tools/kaggle/**'
+              - 'tools/check-kaggle-harness-sync.py'
+              - '.github/workflows/lint.yml'
+              - '.github/scripts/ci_changes.py'
+            docs:
+              - '**.md'
+              - 'tools/check-doc-anchors.py'
+              - '.github/workflows/lint.yml'
+              - '.github/scripts/ci_changes.py'
+            workflows:
+              - '.github/workflows/**'
+              - 'tools/check-cuda-split-packaging.py'
+              - '.github/scripts/ci_changes.py'
+            chat:
+              - 'include/**'
+              - 'src/**'
+              - 'python/crispasr/**'
+              - 'bindings/**'
+              - 'crispasr-sys/**'
+              - 'flutter/crispasr/**'
+              - 'tools/check-chat-binding-coverage.py'
+              - 'tools/check-python-api-coverage.py'
+              - '.github/workflows/lint.yml'
+              - '.github/scripts/ci_changes.py'
+            registry:
+              - 'src/crispasr_model_registry.cpp'
+              - 'tests/regression/manifest.json'
+              - 'tools/check-registry-urls.py'
+              - '.github/workflows/lint.yml'
+              - '.github/scripts/ci_changes.py'
+            version:
+              - 'VERSION'
+              - 'RELEASE_NOTES_*.md'
+              - 'scripts/sync-version.py'
+              - 'scripts/bump-version.sh'
+              - 'python/pyproject.toml'
+              - 'python/crispasr/__init__.py'
+              - 'flutter/crispasr/pubspec.yaml'
+              - 'flutter/crispasr/CHANGELOG.md'
+              - 'bindings/javascript/package.json'
+              - 'crispasr/Cargo.toml'
+              - 'crispasr-sys/Cargo.toml'
+              - '.github/workflows/lint.yml'
+              - '.github/scripts/ci_changes.py'
+        run: python3 .github/scripts/ci_changes.py >> "$GITHUB_OUTPUT"
+
   # ---------------------------------------------------------------------------
   # clang-format: style check (equivalent to black / ruff-format --check)
   # ---------------------------------------------------------------------------
   clang-format:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.cpp != 'false' }}
     name: clang-format (style)
     runs-on: ubuntu-latest
     steps:
@@ -260,6 +354,8 @@ jobs:
   # missing system headers or wrong C++ standard.
   # ---------------------------------------------------------------------------
   clang-tidy:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.cpp != 'false' }}
     name: clang-tidy (lint / types / security)
     runs-on: ubuntu-latest
     steps:
@@ -308,6 +404,8 @@ jobs:
   # until the one run that needs the fallback. Pure file hashing — no build.
   # ---------------------------------------------------------------------------
   kaggle-harness-sync:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.kaggle != 'false' }}
     name: kaggle_harness bundled-copy sync
     runs-on: ubuntu-latest
     steps:
@@ -326,6 +424,8 @@ jobs:
   # slug of a heading containing both an em-dash and a `--flag`. That last is why
   # this is a script and not a careful reader.
   doc-anchors:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.docs != 'false' }}
     name: doc anchors resolve
     runs-on: ubuntu-latest
     steps:
@@ -346,6 +446,8 @@ jobs:
   # reads the conditional nesting instead of evaluating it, so one run covers
   # every platform.
   cpu-backend-include:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.cpp != 'false' }}
     name: core_cpu_backend header reachable everywhere
     runs-on: ubuntu-latest
     steps:
@@ -367,6 +469,8 @@ jobs:
   # only executes on a tag push, so a packaging mistake first appears IN the
   # release; this runs at PR time instead.
   cuda-split-packaging:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.workflows != 'false' }}
     name: CUDA runtime ships split from every package
     runs-on: ubuntu-latest
     steps:
@@ -386,6 +490,8 @@ jobs:
   # point could land bound in Go and missing from the other four with every
   # required check green. Text-level drift check, no toolchain, runs in seconds.
   chat-binding-coverage:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.chat != 'false' }}
     name: chat ABI bound by every binding
     runs-on: ubuntu-latest
     steps:
@@ -407,7 +513,8 @@ jobs:
   registry-urls:
     name: model-registry URLs resolve
     runs-on: ubuntu-latest
-    if: github.event_name != 'pull_request'
+    needs: changes
+    if: ${{ !cancelled() && github.event_name != 'pull_request' && needs.changes.outputs.registry != 'false' }}
     # continue-on-error was REMOVED. It existed because the checker exited 1 on
     # any unreachable URL, including a transient HF connection reset — but it
     # also meant this job could never go red, so a genuinely deleted model would
@@ -430,6 +537,8 @@ jobs:
   # because the Flutter CHANGELOG lacked its version. Both are now a red check on
   # the commit that causes them. No network, no models — a few seconds.
   release-consistency:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.version != 'false' }}
     name: version files agree with VERSION
     runs-on: ubuntu-latest
     steps:

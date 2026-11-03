@@ -13,27 +13,59 @@ name: Lint Deep
 on:
   push:
     branches: [main]
+    # Exactly the trees cppcheck is pointed at below (src/, examples/cli/,
+    # crisp_audio/) plus the public headers they include. It used to fire on
+    # any .c/.cpp/.h anywhere -- tests/, glint/, tools/ -- none of which this
+    # ~90 min job reads.
     paths:
-      - '**.c'
-      - '**.cpp'
-      - '**.h'
-      - '**.hpp'
+      - 'src/**'
+      - 'examples/cli/**'
+      - 'crisp_audio/**'
+      - 'include/**'
       - '.github/workflows/lint-deep.yml'
   schedule:
     - cron: '20 2 * * *'
   workflow_dispatch:
 
+# Deliberately NOT the run_id-per-main-push convention the other workflows
+# use: cppcheck takes ~90 min, and main lands several C++ pushes a day, so
+# one group that never cancels a running job but keeps only the newest
+# pending one is what lets it finish at all (header above). The nightly
+# backstop covers whatever the coalescing skipped.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
+  # Nightly backstop only: skip when cppcheck already passed on this exact
+  # commit (a push run on the same main tip). The tree is identical, so a
+  # second ~90 min run cannot find anything new. Push and manual runs never
+  # skip; any lookup error runs it.
+  already-verified:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+    outputs:
+      skip: ${{ steps.check.outputs.skip }}
+    steps:
+      - id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh run list -R "$GITHUB_REPOSITORY" --workflow lint-deep.yml --commit "$GITHUB_SHA" \
+                --status success --limit 5 --json databaseId --jq 'length' 2>/dev/null || echo 0)
+          echo "successful cppcheck runs on $GITHUB_SHA: $n"
+          if [ "${n:-0}" -gt 0 ]; then echo skip=true >> "$GITHUB_OUTPUT"; else echo skip=false >> "$GITHUB_OUTPUT"; fi
 
   # cppcheck: fast additional static analysis (no compilation required)
   # Catches a complementary set of bugs vs clang-tidy.
 
   cppcheck:
     name: cppcheck (static analysis)
+    needs: already-verified
+    if: ${{ !cancelled() && needs.already-verified.outputs.skip != 'true' }}
     # Pin the runner image, not ubuntu-latest: cppcheck is apt-installed and its
     # version tracks the image, so `ubuntu-latest` flipping (e.g. 22.04 -> 24.04)
     # silently changes which findings fire and can turn Lint red with NO code

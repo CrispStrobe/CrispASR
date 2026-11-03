@@ -1,15 +1,52 @@
 name: Bindings Tests (Ruby)
 
+# The gem vendors and compiles the whole C/C++ tree (bindings/ruby/
+# extsources.rb), so the filter is the native tree plus the binding itself;
+# it used to run on every push and PR, docs included.
 on:
   push:
     branches:
       - main
+    paths:
+      - 'bindings/ruby/**'
+      - 'src/**'
+      - 'include/**'
+      - 'examples/**'
+      - 'ggml'
+      - 'ggml/**'
+      - '.gitmodules'
+      - 'glint/**'
+      - 'third_party/**'
+      - 'crisp_*/**'
+      - 'cmake/**'
+      - '**/CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'samples/**'
+      - 'tools/sync_ruby_context_guards.py'
+      - '.github/workflows/bindings-ruby.yml'
   pull_request:
     types: [opened, synchronize, reopened]
+    paths:
+      - 'bindings/ruby/**'
+      - 'src/**'
+      - 'include/**'
+      - 'examples/**'
+      - 'ggml'
+      - 'ggml/**'
+      - '.gitmodules'
+      - 'glint/**'
+      - 'third_party/**'
+      - 'crisp_*/**'
+      - 'cmake/**'
+      - '**/CMakeLists.txt'
+      - 'CMakePresets.json'
+      - 'samples/**'
+      - 'tools/sync_ruby_context_guards.py'
+      - '.github/workflows/bindings-ruby.yml'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   ubuntu-22:

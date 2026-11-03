@@ -25,6 +25,14 @@ name: Basic Pitch conv A/B
 on:
   workflow_dispatch:
   push:
+    branches: [main]
+    paths:
+      - .github/workflows/basic-pitch-conv-ab.yml
+      - src/core/basic_pitch_conv.h
+      - src/basic_pitch.cpp
+      - tests/basic-pitch-conv-ab.cpp
+      - tests/test-basic-pitch-conv.cpp
+  pull_request:
     paths:
       - .github/workflows/basic-pitch-conv-ab.yml
       - src/core/basic_pitch_conv.h
@@ -32,11 +40,11 @@ on:
       - tests/basic-pitch-conv-ab.cpp
       - tests/test-basic-pitch-conv.cpp
 
-# One run per workflow per branch: a newer push cancels the older run. On
-# main nothing is cancelled (every main commit keeps its verdict).
+# PRs: a newer push to the same PR cancels the older run. main pushes and
+# manual runs get their own group (run_id), so they are never cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Cheap gate: on a branch push, run the heavy job only when the BRANCH ITSELF

@@ -3,6 +3,18 @@ name: Piper Windows Live
 on:
   workflow_dispatch:
   push:
+    branches: [main]
+    paths:
+      - '.github/workflows/piper-windows-live.yml'
+      - 'examples/cli/crispasr_model_mgr_cli.cpp'
+      - 'src/crispasr_model_registry.cpp'
+      - 'src/crispasr_cache.cpp'
+      - 'src/crispasr_cache.h'
+      - 'src/CMakeLists.txt'
+      - 'src/piper_tts.cpp'
+      - 'src/piper_tts.h'
+      - 'tests/test-dry-run-resolve.sh'
+  pull_request:
     paths:
       - '.github/workflows/piper-windows-live.yml'
       - 'examples/cli/crispasr_model_mgr_cli.cpp'
@@ -14,11 +26,11 @@ on:
       - 'src/piper_tts.h'
       - 'tests/test-dry-run-resolve.sh'
 
-# One run per workflow per branch: a newer push cancels the older run. On
-# main nothing is cancelled (every main commit keeps its verdict).
+# PRs: a newer push to the same PR cancels the older run. main pushes and
+# manual runs get their own group (run_id), so they are never cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Cheap gate: on a branch push, run the heavy job only when the BRANCH ITSELF

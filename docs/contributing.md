@@ -963,6 +963,44 @@ the C ABI but unreachable from the CLI):
 python tools/check-backend-wiring.py --crispasr ./build/bin/crispasr
 ```
 
+## CI: what runs when
+
+All CrispStrobe repositories share one free-tier runner pool (about four
+concurrent jobs), so every workflow runs only for the changes it can be
+affected by. No test or check was removed; only the triggers were narrowed.
+
+| Change | What runs |
+|---|---|
+| Docs only (`*.md`, `docs/**` except JSON receipts, `hf_readmes/**`) | Secret scan; Lint's doc-anchor and generated-file checks when the Lint path filter matches (README, LEARNINGS, `docs/**.md`, release notes). No builds. |
+| Python, tools or Python tests only | CI's cheap Linux tier (`linux-x86_64` build plus `linux-unit`), plus any workflow whose path filter names the file (Regression, binding contracts and so on). |
+| Native code: C/C++/ObjC/CUDA/Metal/shaders, any CMake file, `src/`, `include/`, `examples/`, `ggml`, `glint/`, `third_party/`, `crisp_*/` | Everything above, plus CI's macOS, Windows, iOS, Android, Vulkan, `GGML_BACKEND_DL` and audio sanitizer/fuzz/FetchContent jobs, Lint's clang-format/clang-tidy, WASM and Ruby, and Lint Deep (cppcheck) for `src/`, `examples/cli/`, `crisp_audio/` and `include/`. |
+| `ggml` bump | All of the above plus `build.yml`, the Metal cache test and the Vulkan scheduler replay. |
+| Tag `v*` / release dispatch | The full release, Docker and wrapper-publishing workflows, unchanged. |
+| Nightly | Lint, Lint Deep and Regression on the main tip, unfiltered. Lint Deep skips its nightly run when cppcheck already passed on that exact commit. |
+
+Events and cancellation:
+
+- `push` runs on `main` only, and `pull_request` covers PRs, so a PR branch no
+  longer runs every workflow twice. Secret scan is the exception: it still
+  runs on every pushed branch, because a push to this public repository
+  publishes a token immediately. Its PR run is skipped unless the PR comes
+  from a fork.
+- On a feature branch without a PR, run what you need by hand:
+  `gh workflow run <file>.yml --ref <branch>`. Every push-triggered workflow
+  keeps `workflow_dispatch`, and a dispatch skips no jobs.
+- On a PR, a newer push cancels the older run. Pushes to `main` and manual
+  runs each get their own concurrency group (`run_id`), so they are never
+  cancelled. Lint Deep is the exception: its ~90-minute cppcheck keeps one
+  running and one pending run.
+- Jobs are gated by a `changes` job running `.github/scripts/ci_changes.py`.
+  It fails open: a dispatch, a schedule, a new or force-pushed base, or any
+  error runs everything. To change what counts as relevant, edit the
+  `FILTERS` block in that workflow. Always list the workflow file itself
+  there.
+- `main` has no required status checks, so a skipped job blocks nothing. If
+  checks become required, a path-filtered workflow needs a job that always
+  reports success.
+
 ## Running integration / live tests
 
 Unit tests (1063 of them) need no models and pass unconditionally. The
