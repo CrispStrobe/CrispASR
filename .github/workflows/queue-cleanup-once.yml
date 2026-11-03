@@ -1,0 +1,366 @@
+# One-time operational cleanup authorized as part of the CI audit.
+# Fixed reviewed run IDs only; expiry, identity, attempts, coverage and jobs are rechecked.
+# This branch is intentionally isolated from main and is not a reusable cancellation service.
+name: Queue cleanup (one-time reviewed batch)
+
+on:
+  push:
+    branches: ['maintenance/queue-cleanup-20261103']
+    paths: ['.github/workflows/queue-cleanup-once.yml']
+
+permissions: {}
+
+concurrency:
+  group: queue-cleanup-20261103-${{ github.repository }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    if: >-
+      github.repository == 'CrispStrobe/CrispASR' &&
+      github.ref == 'refs/heads/maintenance/queue-cleanup-20261103' &&
+      github.event_name == 'push'
+    runs-on: ubuntu-slim
+    timeout-minutes: 10
+    permissions:
+      actions: write
+      contents: read
+      pull-requests: read
+    steps:
+      - name: Recheck and cancel the fixed obsolete queue batch
+        uses: actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd # v8
+        with:
+          retries: 0
+          script: |
+            const cleanupModule = { exports: {} };
+            ((module) => {
+            'use strict';
+            
+            // One-shot maintenance core. No checkout, package imports, discovery, reruns,
+            // deletion, force cancellation, or executable source fetched from the API.
+            const EXPIRY = '2026-11-03T21:00:00Z';
+            const REF = 'refs/heads/maintenance/queue-cleanup-20261103';
+            const SHA = /^[0-9a-f]{40}$/;
+            const REPOSITORIES = {
+              'CrispStrobe/CrispEmbed': { id: 1210669686, workflows: {
+                262006165: 'build.yml', 403347627: 'inpaint-cli.yml',
+                369409940: 'secret-scan.yml', 325070317: 'rust-crates.yml',
+                292897227: 'build-wasm.yml', 293073967: 'build-wasm-embed.yml',
+              } },
+              'CrispStrobe/CrispASR': { id: 1195602794, workflows: {
+                369250728: 'secret-scan.yml', 378275889: 'metal-cache-test.yml',
+              } },
+            };
+            const FULL_LANES = ['native', 'native_tests', 'mobile', 'sibling', 'wasm_ocr',
+              'wasm_embed', 'rust', 'inpaint_python', 'inpaint_native', 'bundle'];
+            const REQUIRED_JOBS = {
+              'build.yml': ['Static guards', 'linux-x86_64', 'macos-arm64', 'windows-x86_64',
+                'ios-arm64', 'android-arm64-v8a', 'android-armeabi-v7a', 'android-x86_64',
+                'sibling-crispasr (shared libs)', 'Build result', 'Bundle Flutter plugin'],
+              'inpaint-cli.yml': ['Select necessary CI', 'contracts (ubuntu-24.04)',
+                'contracts (macos-14)', 'contracts (windows-2022)', 'Inpainting result'],
+              'rust-crates.yml': ['Select necessary CI', 'ARM64 wrapper C ABI types',
+                'package', 'Rust crates result'],
+              'build-wasm.yml': ['Select necessary CI', 'build-wasm', 'OCR WASM result'],
+              'build-wasm-embed.yml': ['Select necessary CI', 'build', 'Embedding WASM result'],
+              'secret-scan.yml': ['scan'],
+              'metal-cache-test.yml': ['compile-and-test (ON)', 'compile-and-test (OFF)'],
+            };
+            const TERMINAL = new Set(['success', 'failure', 'neutral', 'cancelled', 'skipped',
+              'timed_out', 'action_required', 'stale', 'startup_failure']);
+            class GuardError extends Error {
+              constructor(code) { super(code); this.name = 'GuardError'; this.code = code; }
+            }
+            function check(condition, code) { if (!condition) throw new GuardError(code); }
+            function integer(n) { return Number.isSafeInteger(n) && n > 0; }
+            function sameSet(a, b) {
+              return Array.isArray(a) && new Set(a).size === a.length &&
+                a.length === b.length && a.every(x => b.includes(x));
+            }
+            function validateManifest(m) {
+              check(m && m.schema_version === 1, 'invalid_schema');
+              check(Object.hasOwn(REPOSITORIES, m.repository), 'unapproved_repository');
+              const approved = REPOSITORIES[m.repository];
+              check(approved.id === m.repository_id, 'unapproved_repository');
+              check(m.expires_at === EXPIRY && m.maintenance_ref === REF, 'invalid_scope_or_expiry');
+              check(m.source_main && SHA.test(m.source_main.sha) && SHA.test(m.source_main.tree_sha), 'invalid_main_pin');
+              check(Array.isArray(m.candidates) && m.candidates.length > 0 && m.candidates.length <= 64, 'invalid_candidate_count');
+              check(Array.isArray(m.preserved_run_ids) && m.preserved_run_ids.every(integer), 'invalid_preserved_ids');
+              check(Array.isArray(m.allowed_workflows) && m.allowed_workflows.length > 0, 'invalid_workflow_allowlist');
+              const allowed = new Map();
+              for (const w of m.allowed_workflows) {
+                check(integer(w.id) && Object.hasOwn(approved.workflows, w.id) &&
+                  w.path === '.github/workflows/' + approved.workflows[w.id], 'unapproved_workflow');
+                check(!allowed.has(w.id), 'duplicate_workflow'); allowed.set(w.id, w.path);
+              }
+              function pin(p) {
+                check(p && integer(p.id) && integer(p.attempt) && SHA.test(p.sha), 'invalid_run_pin');
+                check(['push', 'pull_request'].includes(p.event) && typeof p.branch === 'string' && p.branch.length > 0, 'invalid_event_or_branch');
+                check(allowed.get(p.workflow_id) === p.path, 'workflow_not_allowlisted');
+              }
+              check(m.keepers && typeof m.keepers === 'object' && !Array.isArray(m.keepers), 'invalid_keepers');
+              const protectedIds = new Set(m.preserved_run_ids);
+              for (const [key, k] of Object.entries(m.keepers)) {
+                pin(k); check(String(k.id) === key, 'keeper_key_mismatch'); protectedIds.add(k.id);
+              }
+              const coverage = m.coverage;
+              check(coverage && coverage.reviewed === true && SHA.test(coverage.source_sha) &&
+                typeof coverage.reason === 'string' && coverage.reason.length > 20, 'unreviewed_coverage');
+              if (coverage.kind === 'reviewed_full_selection') {
+                // This exact source/proof was reviewed; do not generalize the fallback here.
+                check(m.repository === 'CrispStrobe/CrispEmbed' &&
+                  coverage.source_sha === 'a03da3deb2c62d48517520922ff29355a9b1a54e' &&
+                  coverage.source_sha === m.source_main.sha &&
+                  coverage.before_sha === 'b16126826f830d650ce52eabc83d2f4de0c474d4' &&
+                  sameSet(coverage.changed_paths, ['tests/check_registry_licenses.py']) &&
+                  coverage.selector_path === 'tools/ci_selection.py' &&
+                  coverage.selector_blob_sha === 'e1652060426befdded247fd06835ca2626c886a9' &&
+                  sameSet(coverage.selected_lanes, FULL_LANES), 'invalid_full_coverage_proof');
+              } else {
+                check(coverage.kind === 'identical_jobs' && m.repository === 'CrispStrobe/CrispASR' &&
+                  coverage.source_sha === '6939369999413ab130eb7a0ece5e23035f0b6a8b', 'invalid_duplicate_coverage');
+              }
+              const seen = new Set();
+              for (const c of m.candidates) {
+                pin(c); check(!seen.has(c.id), 'duplicate_candidate'); seen.add(c.id);
+                check(!protectedIds.has(c.id), 'protected_candidate');
+                const k = m.keepers[String(c.keeper_id)];
+                check(k && c.workflow_id === k.workflow_id && c.path === k.path && k.sha === coverage.source_sha, 'keeper_coverage_mismatch');
+                check(c.proof && typeof c.proof === 'object', 'missing_replacement_proof');
+                if (c.proof.kind === 'same_sha_duplicate') {
+                  check(coverage.kind === 'identical_jobs' && c.sha === k.sha && c.branch === k.branch &&
+                    c.event === 'push' && k.event === 'pull_request' && integer(c.proof.pr_number), 'invalid_duplicate_proof');
+                } else {
+                  check(coverage.kind === 'reviewed_full_selection' && k.event === 'push' && k.branch === 'main', 'missing_full_coverage');
+                  if (c.proof.kind === 'main_ancestor') {
+                    check(c.event === 'push' && c.branch === 'main', 'invalid_main_ancestor');
+                  } else {
+                    check(c.proof.kind === 'merged_pr' && c.event === 'pull_request' &&
+                      integer(c.proof.pr_number) && SHA.test(c.proof.merge_sha), 'invalid_merged_pr_proof');
+                  }
+                }
+              }
+              return m;
+            }
+            
+            async function runCleanup({ github, context, core, manifest,
+              maintenanceAttempt = process.env.GITHUB_RUN_ATTEMPT, now = () => new Date(),
+              sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) }) {
+              const report = { schema_version: 1, repository: manifest && manifest.repository,
+                maintenance_run_id: context && context.runId, expires_at: EXPIRY,
+                started_at: new Date(now()).toISOString(), planned: manifest?.candidates?.length || 0,
+                requests: 0, results: [], errors: [] };
+              let m;
+              let phase = 'initialization';
+              const time = () => new Date(now()).getTime();
+              const fresh = () => check(Number.isFinite(time()) && time() < Date.parse(EXPIRY), 'expired');
+              const safeError = e => ({ code: e instanceof GuardError ? e.code : 'api_error',
+                ...(integer(e && e.status) ? { http_status: e.status } : {}) });
+              try {
+                // Clone the reviewed data so caller-side mutation cannot change the write set.
+                m = validateManifest(JSON.parse(JSON.stringify(manifest)));
+                check(context && `${context.repo?.owner}/${context.repo?.repo}` === m.repository &&
+                  context.payload?.repository?.id === m.repository_id &&
+                  context.payload?.repository?.full_name === m.repository, 'context_repository_mismatch');
+                check(context.ref === m.maintenance_ref && context.eventName === 'push', 'context_trigger_mismatch');
+                check(integer(context.runId) && !m.candidates.some(c => c.id === context.runId), 'self_cancellation');
+                // @actions/github Context exposes runId, not runAttempt. The runner owns
+                // GITHUB_RUN_ATTEMPT; tests inject the same explicit value.
+                check(String(maintenanceAttempt) === '1', 'maintenance_rerun_not_allowed');
+                fresh();
+                const [owner, repo] = m.repository.split('/');
+                const request = async (route, args = {}) => {
+                  check(report.requests < 900, 'request_budget_exhausted'); report.requests++;
+                  return github.request(route, { owner, repo, ...args,
+                    request: { timeout: 15000, retries: 0 } });
+                };
+                const run = async p => (await request('GET /repos/{owner}/{repo}/actions/runs/{run_id}', { run_id: p.id })).data;
+                function identity(r, p) {
+                  check(r && r.repository?.id === m.repository_id && r.repository?.full_name === m.repository, 'run_repository_mismatch');
+                  check(r.id === p.id && r.run_attempt === p.attempt && r.head_sha === p.sha &&
+                    r.event === p.event && r.head_branch === p.branch && r.workflow_id === p.workflow_id &&
+                    typeof r.path === 'string' && r.path.split('@')[0] === p.path, 'run_identity_changed');
+                }
+                function queued(r, p) {
+                  identity(r, p); check(r.status === 'queued' && r.conclusion === null, 'candidate_not_queued');
+                }
+                function healthyRun(r, p) {
+                  identity(r, p);
+                  check((['queued', 'in_progress'].includes(r.status) && r.conclusion === null) ||
+                    (r.status === 'completed' && r.conclusion === 'success'), 'keeper_not_healthy');
+                }
+                async function jobs(p) {
+                  const found = []; const ids = new Set(); let total;
+                  for (let page = 1; page <= 20; page++) {
+                    const d = (await request('GET /repos/{owner}/{repo}/actions/runs/{run_id}/attempts/{attempt_number}/jobs',
+                      { run_id: p.id, attempt_number: p.attempt, per_page: 100, page })).data;
+                    check(d && Number.isSafeInteger(d.total_count) && d.total_count >= 0 &&
+                      d.total_count <= 2000 && Array.isArray(d.jobs) && d.jobs.length <= 100, 'invalid_job_page');
+                    check(total === undefined || total === d.total_count, 'job_list_changed'); total = d.total_count;
+                    for (const j of d.jobs) {
+                      check(integer(j.id) && !ids.has(j.id) && j.run_id === p.id &&
+                        (j.run_attempt === undefined || j.run_attempt === p.attempt) && typeof j.name === 'string', 'invalid_job_identity');
+                      ids.add(j.id); found.push(j);
+                    }
+                    check(found.length <= total, 'job_list_changed');
+                    if (found.length === total) return found;
+                    check(d.jobs.length === 100, 'incomplete_job_list');
+                  }
+                  throw new GuardError('job_page_limit');
+                }
+                function candidateJobs(js) {
+                  for (const j of js) {
+                    check(j.status !== 'in_progress', 'candidate_has_active_job');
+                    check((j.status === 'queued' && j.conclusion === null) ||
+                      (j.status === 'completed' && TERMINAL.has(j.conclusion)), 'candidate_job_uncertain');
+                  }
+                }
+                function keeperJobs(js, r, p) {
+                  check(js.length > 0, 'keeper_has_no_jobs');
+                  for (const j of js) {
+                    check((['queued', 'in_progress'].includes(j.status) && j.conclusion === null) ||
+                      (j.status === 'completed' && j.conclusion === 'success'), 'keeper_has_unusable_job');
+                  }
+                  if (r.status === 'completed') {
+                    const names = new Set(js.map(j => j.name));
+                    check(js.every(j => j.status === 'completed') &&
+                      REQUIRED_JOBS[p.path.split('/').at(-1)].every(n => names.has(n)), 'keeper_coverage_incomplete');
+                  }
+                }
+                const immutable = new Map();
+                async function once(key, fn) {
+                  if (!immutable.has(key)) immutable.set(key, await fn());
+                  return immutable.get(key);
+                }
+                async function ancestor(base, head) {
+                  if (base === head) return;
+                  await once(`compare:${base}:${head}`, async () => {
+                    const d = (await request('GET /repos/{owner}/{repo}/compare/{basehead}',
+                      { basehead: `${base}...${head}`, per_page: 1 })).data;
+                    check(d && d.status === 'ahead' && d.behind_by === 0 &&
+                      d.merge_base_commit?.sha === base && d.base_commit?.sha === base, 'source_not_ancestor');
+                    return true;
+                  });
+                }
+                async function coverageProof() {
+                  await once('coverage', async () => {
+                    if (m.coverage.kind === 'reviewed_full_selection') {
+                      const c = m.coverage;
+                      const d = (await request('GET /repos/{owner}/{repo}/commits/{ref}', { ref: c.source_sha, per_page: 100 })).data;
+                      check(d && d.sha === c.source_sha && d.commit?.tree?.sha === m.source_main.tree_sha &&
+                        d.parents?.length === 1 && d.parents[0].sha === c.before_sha &&
+                        Array.isArray(d.files) && sameSet(d.files.map(f => f.filename), c.changed_paths) &&
+                        d.files.every(f => !f.previous_filename), 'coverage_commit_changed');
+                      const blob = (await request('GET /repos/{owner}/{repo}/contents/{path}',
+                        { path: c.selector_path, ref: c.source_sha })).data;
+                      check(blob && !Array.isArray(blob) && blob.type === 'file' &&
+                        blob.path === c.selector_path && blob.sha === c.selector_blob_sha, 'selector_pin_changed');
+                    }
+                    return true;
+                  });
+                }
+                async function replacement(c, k) {
+                  await coverageProof();
+                  if (c.proof.kind === 'main_ancestor') return ancestor(c.sha, k.sha);
+                  // A merged PR is irreversible; cache only this immutable merge proof.
+                  const readPr = async () => {
+                    const p = (await request('GET /repos/{owner}/{repo}/pulls/{pull_number}',
+                      { pull_number: c.proof.pr_number })).data;
+                    check(p && p.number === c.proof.pr_number && p.head?.sha === c.sha &&
+                      p.head?.ref === c.branch && p.base?.repo?.id === m.repository_id, 'pull_request_identity_changed');
+                    return p;
+                  };
+                  if (c.proof.kind === 'merged_pr') {
+                    await once(`merged:${c.proof.pr_number}:${c.sha}`, async () => {
+                      const p = await readPr();
+                      check(p.merged === true && p.state === 'closed' && p.merge_commit_sha === c.proof.merge_sha,
+                        'pull_request_not_merged_as_reviewed'); return true;
+                    });
+                    await ancestor(c.proof.merge_sha, k.sha);
+                  } else {
+                    const p = await readPr();
+                    check(p.state === 'open' && p.merged === false, 'duplicate_pull_request_no_longer_open');
+                  }
+                }
+                async function readback(c, row, accepted) {
+                  // Two bounded readbacks only. A pending always() aggregate is NOT success.
+                  for (let n = 0; n < (accepted ? 2 : 1); n++) {
+                    if (n) await sleep(500);
+                    const r = await run(c);
+                    identity(r, c);
+                    row.observed_status = r.status; row.observed_conclusion = r.conclusion;
+                    if (r.status === 'completed') {
+                      row.outcome = r.conclusion === 'cancelled'
+                        ? (accepted ? 'cancelled' : 'already_cancelled') : 'completed_without_cancellation';
+                      return;
+                    }
+                  }
+                  row.outcome = accepted ? 'requested_unconfirmed' : 'conflict';
+                }
+                let stop = false;
+                for (const c of m.candidates) {
+                  const row = { candidate_id: c.id, candidate_attempt: c.attempt, keeper_id: c.keeper_id,
+                    outcome: 'skipped', cancellation_requested: false };
+                  report.results.push(row);
+                  if (stop) { row.reason = 'execution_stopped'; continue; }
+                  try {
+                    phase = 'candidate_initial'; fresh(); queued(await run(c), c);
+                    const k = m.keepers[String(c.keeper_id)];
+                    phase = 'replacement_proof'; await replacement(c, k);
+                    phase = 'keeper_initial'; healthyRun(await run(k), k);
+                    phase = 'keeper_jobs'; const kj = await jobs(k);
+                    phase = 'keeper_final'; const kr = await run(k); healthyRun(kr, k); keeperJobs(kj, kr, k);
+                    phase = 'candidate_jobs'; candidateJobs(await jobs(c));
+                    // Final identity/attempt/status reads follow pagination. The candidate
+                    // read is last to minimize the unavoidable GET-to-POST scheduling race.
+                    phase = 'keeper_final_identity';
+                    const finalKeeper = await run(k); healthyRun(finalKeeper, k); keeperJobs(kj, finalKeeper, k);
+                    phase = 'candidate_final'; queued(await run(c), c);
+                    fresh(); phase = 'cancel';
+                    let response;
+                    try {
+                      response = await request('POST /repos/{owner}/{repo}/actions/runs/{run_id}/cancel', { run_id: c.id });
+                    } catch (e) {
+                      if (e.status !== 409) throw e;
+                      row.http_status = 409; phase = 'conflict_readback'; await readback(c, row, false); continue;
+                    }
+                    row.http_status = response.status;
+                    check(response.status === 202, 'unexpected_cancel_response');
+                    row.cancellation_requested = true; row.outcome = 'requested_unconfirmed';
+                    phase = 'confirmation'; await readback(c, row, true);
+                  } catch (e) {
+                    row.reason = safeError(e).code; row.phase = phase;
+                    if (row.cancellation_requested) row.outcome = 'requested_unconfirmed';
+                    else if (!(e instanceof GuardError)) row.outcome = 'error';
+                    if (integer(e.status)) row.http_status = e.status;
+                    if (!(e instanceof GuardError) || row.cancellation_requested) report.errors.push({ candidate_id: c.id, phase, ...safeError(e) });
+                    if (['expired', 'request_budget_exhausted'].includes(e.code) || [401, 403, 429].includes(e.status)) stop = true;
+                  }
+                }
+              } catch (e) {
+                report.fatal = { phase, ...safeError(e) }; report.errors.push(report.fatal);
+              }
+              report.finished_at = new Date(now()).toISOString();
+              report.counts = {};
+              for (const r of report.results) report.counts[r.outcome] = (report.counts[r.outcome] || 0) + 1;
+              report.cancellation_requests_accepted = report.results.filter(r => r.cancellation_requested).length;
+              report.cancellations_confirmed = report.results.filter(r => r.outcome === 'cancelled').length;
+              core.info('QUEUE_CLEANUP_RESULT ' + JSON.stringify(report));
+              if (core.summary) {
+                try {
+                  await core.summary.addHeading('One-shot queue cleanup')
+                    .addRaw(`Repository: ${report.repository}\n\nPlanned: ${report.planned}; accepted requests: ${report.cancellation_requests_accepted}; confirmed cancellations: ${report.cancellations_confirmed}.\n\n`)
+                    .addTable([[{ data: 'Candidate', header: true }, { data: 'Keeper', header: true },
+                      { data: 'Outcome', header: true }, { data: 'Reason', header: true }],
+                    ...report.results.map(r => [String(r.candidate_id), String(r.keeper_id), r.outcome, r.reason || ''])]).write();
+                } catch (_) { core.warning('Could not write job summary; structured cleanup result is retained in the log.'); }
+              }
+              if (report.errors.length && core.setFailed) core.setFailed('Queue cleanup retained errors; inspect QUEUE_CLEANUP_RESULT.');
+              return report;
+            }
+            
+            module.exports = { runCleanup, validateManifest };
+            
+            })(cleanupModule);
+            const manifest = {"schema_version":1,"repository":"CrispStrobe/CrispASR","repository_id":1195602794,"maintenance_ref":"refs/heads/maintenance/queue-cleanup-20261103","expires_at":"2026-11-03T21:00:00Z","source_main":{"sha":"5c96e5521c6ab40ab53b91eeec54ced9c30562b5","tree_sha":"a4cda4cbf4992efc1a77335899dbafff41135398"},"allowed_workflows":[{"id":369250728,"path":".github/workflows/secret-scan.yml"},{"id":378275889,"path":".github/workflows/metal-cache-test.yml"}],"preserved_run_ids":[41657933834,41657933841,41657933904,41657933789,41657933942,41657933911,41657933994,41657933896,41657933488,41657933563,41657933745,41657933545,41657933428,41657933204,41657933042,41657933801,41657933647,41657933616,41657933482,41657933161,41657933506,41657933442,41657933526,41657933459,41657933471,41657933569,41657785478,41655379452,41655379471,41655379447,41655379769,41655379494,41655379510,41655379491,41655379460,41655379683,41652673955,41652671643],"keepers":{"41655379491":{"id":41655379491,"sha":"6939369999413ab130eb7a0ece5e23035f0b6a8b","event":"pull_request","workflow_id":369250728,"path":".github/workflows/secret-scan.yml","branch":"fix/env-gate-off-words","attempt":1},"41655379452":{"id":41655379452,"sha":"6939369999413ab130eb7a0ece5e23035f0b6a8b","event":"pull_request","workflow_id":378275889,"path":".github/workflows/metal-cache-test.yml","branch":"fix/env-gate-off-words","attempt":1}},"candidates":[{"id":41655358992,"sha":"6939369999413ab130eb7a0ece5e23035f0b6a8b","event":"push","workflow_id":369250728,"path":".github/workflows/secret-scan.yml","branch":"fix/env-gate-off-words","attempt":1,"keeper_id":41655379491,"proof":{"kind":"same_sha_duplicate","pr_number":572}},{"id":41655358997,"sha":"6939369999413ab130eb7a0ece5e23035f0b6a8b","event":"push","workflow_id":378275889,"path":".github/workflows/metal-cache-test.yml","branch":"fix/env-gate-off-words","attempt":1,"keeper_id":41655379452,"proof":{"kind":"same_sha_duplicate","pr_number":572}}],"coverage":{"kind":"identical_jobs","reviewed":true,"source_sha":"6939369999413ab130eb7a0ece5e23035f0b6a8b","reason":"At the exact same branch/head SHA, Secret scan push and PR run the same full-tree scan; Metal cache test push and PR run the same macos14 ON/OFF test matrix. Preserve PR572 check context and cancel only pinned push duplicates."}};
+            await cleanupModule.exports.runCleanup({ github, context, core, manifest });
