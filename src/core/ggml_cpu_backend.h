@@ -262,7 +262,8 @@ inline bool is_metal(ggml_backend_t b) {
     ggml_backend_dev_t dev = ggml_backend_get_device(b);
     ggml_backend_reg_t r = dev ? ggml_backend_dev_backend_reg(dev) : nullptr;
     const char* n = r ? ggml_backend_reg_name(r) : nullptr;
-    return n && std::strcmp(n, "Metal") == 0;
+    // ggml-metal registers as "MTL" (GGML_METAL_NAME); accept the older "Metal" too.
+    return n && (std::strcmp(n, "MTL") == 0 || std::strcmp(n, "Metal") == 0);
 }
 
 // Compute a graph on the CPU, through a backend instead of the unlinkable
