@@ -1,0 +1,123 @@
+name: SCNet source and build preflight
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scnet-preflight-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  preflight:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Build dependencies
+        run: |
+          bash tools/ci-apt.sh update
+          bash tools/ci-apt.sh install -y cmake ninja-build g++ libopenblas-dev
+          python -m pip install --no-cache-dir numpy==2.2.6 gdown==5.2.0 soundfile==0.13.1
+          python -m pip install --no-cache-dir torch==2.6.0 --index-url https://download.pytorch.org/whl/cpu
+      - name: Record exact source and host
+        run: |
+          mkdir -p scnet-out scnet-assets
+          git rev-parse HEAD > scnet-out/source.txt
+          git submodule status > scnet-out/submodules.txt
+          lscpu > scnet-out/cpu.txt
+          free -h > scnet-out/memory.txt
+          df -h > scnet-out/disk.txt
+      - name: Configure production native targets
+        run: >
+          cmake -S . -B build-scnet -G Ninja -DCMAKE_BUILD_TYPE=Release
+          -DCRISPASR_BUILD_SCNET_PROBE=ON -DCRISPASR_BUILD_TESTS=OFF
+          -DCRISPASR_BUILD_SERVER=OFF -DGGML_NATIVE=ON -DGGML_CUDA=OFF
+          -DGGML_METAL=OFF -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS
+          -DCRISPASR_CPU_BLAS=ON -DCRISPASR_MEL_BLAS=ON
+      - name: Build production native targets
+        run: cmake --build build-scnet --parallel 2 --target scnet-probe scnet-validation crispasr-quantize
+      - name: Model-free production controls
+        run: |
+          python tests/test-scnet-math.py -v
+          python -B tests/test-scnet-recurrent-gemm.py -v
+          python tests/test-scnet-session-routing.py -v
+          python tests/test-scnet-quant-policy.py build-scnet/bin/crispasr-quantize
+      - uses: actions/cache@v4
+        with:
+          path: scnet-assets
+          key: scnet-author-assets-5d95bf96-v1
+      - name: Download author checkpoint bytes and contiguous music
+        run: |
+          python - <<'PY'
+          import hashlib, json, pathlib, urllib.request
+          import gdown, soundfile as sf, torch
+          root = pathlib.Path('scnet-assets')
+          records = {}
+          for name, identifier in [('scnet', '1CdEIIqsoRfHn1SJ7rccPfyYioW3BlXcW'),
+                                   ('scnet-large', '1s7QvQwn8ag9oVstGDBQ6KZvacJkvyK7t'),
+                                   ('scnet-large-config', '1qxK7SZx6-Gsp1s3wCrj98X7--UcI4O3K')]:
+              path = root / (name + ('.yaml' if name.endswith('config') else '.th'))
+              if not path.exists():
+                  gdown.download(id=identifier, output=str(path), quiet=False)
+              if not path.is_file() or path.stat().st_size == 0:
+                  raise RuntimeError(f'author download missing: {name}')
+              digest = hashlib.file_digest(path.open('rb'), 'sha256').hexdigest()
+              record = {'path': path.name, 'bytes': path.stat().st_size, 'sha256': digest,
+                        'source': f'https://drive.google.com/file/d/{identifier}/view'}
+              if path.suffix == '.th':
+                  checkpoint = torch.load(path, map_location='cpu', weights_only=True)
+                  state = checkpoint['best_state']
+                  record['keys'] = list(checkpoint)
+                  record['tensors'] = {key: {'shape': list(value.shape), 'dtype': str(value.dtype)}
+                                       for key, value in state.items()}
+                  record['elements'] = sum(value.numel() for value in state.values())
+                  print(name, digest, record['elements'], len(state), flush=True)
+                  del checkpoint, state
+              records[name] = record
+              pathlib.Path('scnet-out/author-checkpoints.json').write_text(json.dumps(records, indent=2) + '\n')
+          path = root / 'hdemucs_mix.wav'
+          url = 'https://download.pytorch.org/torchaudio/tutorial-assets/hdemucs_mix.wav'
+          if not path.exists():
+              urllib.request.urlretrieve(url, path)
+          audio, rate = sf.read(path, dtype='float32', always_2d=True)
+          if rate != 44100 or audio.shape[1] != 2 or len(audio) < 24 * rate:
+              raise RuntimeError(f'need contiguous 24-second 44.1-kHz stereo music: {audio.shape}, {rate}')
+          fixture = root / 'music-24s.wav'
+          sf.write(fixture, audio[:24 * rate], rate, subtype='FLOAT')
+          records['fixture'] = {'url': url, 'title': 'A Classic Education - NightOwl',
+                                'license': 'CC BY-NC-SA 4.0',
+                                'attribution': 'https://docs.pytorch.org/audio/main/tutorials/hybrid_demucs_tutorial.html',
+                                'source_sha256': hashlib.file_digest(path.open('rb'), 'sha256').hexdigest(),
+                                'excerpt_sha256': hashlib.file_digest(fixture.open('rb'), 'sha256').hexdigest(),
+                                'frames': 24 * rate, 'sample_rate': rate, 'channels': 2}
+          pathlib.Path('scnet-out/author-checkpoints.json').write_text(json.dumps(records, indent=2) + '\n')
+          print(json.dumps(records['fixture'], indent=2))
+          PY
+      - name: Preserve preflight receipts and native build
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: scnet-preflight-${{ github.sha }}
+          path: |
+            scnet-out
+            build-scnet/CMakeCache.txt
+            build-scnet/bin/scnet-probe
+            build-scnet/bin/crispasr-quantize
+            build-scnet/libscnet-validation.so
+            build-scnet/src/libscnet-validation.so
+            scnet-assets/scnet-large-config.yaml
+          if-no-files-found: error

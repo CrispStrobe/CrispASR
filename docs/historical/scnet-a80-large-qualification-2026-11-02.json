@@ -1,0 +1,1782 @@
+{
+  "acceptance": true,
+  "artifact": 13177675024,
+  "artifact_bytes": 771414,
+  "artifact_provenance": {
+    "evidence": {
+      "all_payloads_verified": true,
+      "artifact_id": 13177675024,
+      "bytes": 771414,
+      "downloaded_archive_hash_verified": true,
+      "sha256": "3d28fa0c71431a0909f74c9380be949ba991d569c2b54410fa8f93c53a59ec95"
+    },
+    "job_id": 125486348514,
+    "qualified_model_bundle": {
+      "artifact_id": 13177110583,
+      "bundle_bytes_independently_audited": false,
+      "bytes": 155657330,
+      "github_declared_sha256": "e85ab9deab93b4561d03675a910a70307bbd509ee899c8efd3fea4fff9b4a72c",
+      "hosted_packager_reported_written": true,
+      "independently_downloaded": false
+    },
+    "workflow_url": "https://github.com/CrispStrobe/CrispASR/actions/runs/41506291896"
+  },
+  "artifact_sha256": "3d28fa0c71431a0909f74c9380be949ba991d569c2b54410fa8f93c53a59ec95",
+  "audit_scope": "Offline payload/source integrity, exact historical receipt-gate execution and recorded metric-decision recomputation. Six native logs reparsed; matching local model bytes checked for coverage/four F16 heads. No inference, tensor-metric recomputation, rebuilt binary comparison, remote DSO-file access or separate qualified-bundle download.",
+  "binaries": {
+    "crispasr": {
+      "path": "{build}/bin/crispasr",
+      "sha256": "c29c58412e11670c86f9139a8cf42fcaaa4839ec58d5d8f6d065020f4c7a52c6"
+    },
+    "crispasr-quantize": {
+      "path": "{build}/bin/crispasr-quantize",
+      "sha256": "41c9926ac02e288a7865921d1ffa511207af867bafba34eeb77723f12444a8c3"
+    },
+    "production_library": {
+      "path": "{build}/src/libcrispasr.so.0.8.49",
+      "sha256": "35bd18f068e955c05bc8eaf17d2d9d671c763de159a223591365291ccdc17ef2"
+    },
+    "scnet-probe": {
+      "path": "{build}/bin/scnet-probe",
+      "sha256": "7fcc0e084ec2b0b97d7721777ba6ab03ceac9f8dd2904a8e5bca7ab4273699c6"
+    },
+    "validation_library": {
+      "path": "{build}/src/libscnet-validation.so",
+      "sha256": "250147dc1124f3134a948edffa164bfbd36bab72b6d895c2ace623c9a3269ce7"
+    }
+  },
+  "checkpoint": {
+    "bytes": 168848417,
+    "digest_status": "discovered on first public download; not author-attested",
+    "discovered_at": "2026-11-02T19:48:17.818926+00:00",
+    "matches_recorded_release": true,
+    "recorded_release_sha256": "719e5abb8ed920305dad546ac3cd6fb0b1e9c3092d14ce21827bfc0423af3070",
+    "sha256": "719e5abb8ed920305dad546ac3cd6fb0b1e9c3092d14ce21827bfc0423af3070",
+    "source_url": "https://drive.google.com/file/d/1s7QvQwn8ag9oVstGDBQ6KZvacJkvyK7t/view"
+  },
+  "complete": true,
+  "component_control_execution_scope": {
+    "allocator-controls.log": {
+      "sha256": "90814cd1367538023dc21c70d0b97ca4afa28197a1842b4ab209697b63b25316",
+      "skipped_controls": []
+    },
+    "blas-thread-controls.log": {
+      "sha256": "c78f1654956fb68b664f004beb93207d3ec2e341ec05c0a5c06dab20f40b551a",
+      "skipped_controls": []
+    },
+    "converter-controls.log": {
+      "sha256": "a4d9d2612aee1dbcc8962db2bc75cab5ecc5e8d6cae17354669d9f4c54f7eddd",
+      "skipped_controls": []
+    },
+    "fft-controls.log": {
+      "sha256": "1dd726dfdb8088fbab3c51826bf88cfaab281ce72bce38db6e8d49e25c2dd4fa",
+      "skipped_controls": []
+    },
+    "im2col-controls.log": {
+      "sha256": "559e1547b7946680a1753b69862ec7fa67e43b86cbfd3dcf728da3aa6ecd371f",
+      "skipped_controls": []
+    },
+    "linkage-controls.log": {
+      "sha256": "ed2716e84242d032b4542053c17a2a0c67bebbd278d31229ab319b2f9e7f7d3e",
+      "skipped_controls": []
+    },
+    "math-controls.log": {
+      "sha256": "693075daa3aeeeff846ddd95e985f61b702394001c4541902043a9f40190ef2d",
+      "skipped_controls": [
+        [
+          "test_avx512_feedback_sequence_matches_avx2_bits (__main__.SCNetMath.test_avx512_feedback_sequence_matches_avx2_bits)",
+          "'CPU/OS lacks AVX512F, AVX512DQ, AVX2 or FMA; not execution-covered'"
+        ],
+        [
+          "test_avx512_functions_match_avx2_bits (__main__.SCNetMath.test_avx512_functions_match_avx2_bits)",
+          "'CPU/OS lacks AVX512F, AVX512DQ, AVX2 or FMA; not execution-covered'"
+        ],
+        [
+          "test_avx512_gate_updates_match_avx2_bits_and_guards (__main__.SCNetMath.test_avx512_gate_updates_match_avx2_bits_and_guards)",
+          "'CPU/OS lacks AVX512F, AVX512DQ, AVX2 or FMA; not execution-covered'"
+        ]
+      ]
+    },
+    "quant-policy-controls.log": {
+      "sha256": "739d81a92313863b5f65ca9abfa471922b2259079e6e898ef4e759e50e0c0ec6",
+      "skipped_controls": []
+    },
+    "real-fft-controls.log": {
+      "sha256": "ac4a098897efd6a700a9084be982b735076d6bd537b51d4b50daf0e0adaa6a7d",
+      "skipped_controls": []
+    },
+    "reference-controls.log": {
+      "sha256": "0a5e8816e9934a10a4f5bc154900c5353f75c3b9625dc08da1e8d7726fc3e8ce",
+      "skipped_controls": []
+    },
+    "runtime-identity-controls.log": {
+      "sha256": "6056f811b047c6fb2aed97721623df5f11552651080571cfd1093148fa735468",
+      "skipped_controls": []
+    },
+    "session-routing-controls.log": {
+      "sha256": "962ad97a81bc84661d1516a543995f816c5073bd3ad235ffea2e779048d14af4",
+      "skipped_controls": []
+    },
+    "tensor-controls.log": {
+      "sha256": "7483892ad624f74ea04290e37ea379e2325cd4ee16036baf41dafc75472ebaf9",
+      "skipped_controls": []
+    },
+    "validation-controls.log": {
+      "sha256": "91963155a1956bd5cca5f6da082cb12e4849cbe93ea899e9576176f3c3873aa3",
+      "skipped_controls": []
+    }
+  },
+  "component_control_limit": "The host lacks AVX512: exactly three AVX512-only math groups were explicitly skipped. The actual native AVX2 path, full model comparisons and all original-source controls executed and passed; this result makes no AVX512 execution claim.",
+  "date": "2026-11-02",
+  "fixture": {
+    "attribution_url": "https://docs.pytorch.org/audio/main/tutorials/hybrid_demucs_tutorial.html",
+    "audio_channels": 2,
+    "contiguous_exact_pcm": true,
+    "frames": 1058400,
+    "full_sha256": "7ba5fc4367d7cae8a862be773aaeb93d21c46c4d7c3d5b27c30219f541e79d5d",
+    "license": "CC BY-NC-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+    "looped": false,
+    "normalized": false,
+    "offset_samples": 0,
+    "resampled": false,
+    "sample_rate": 44100,
+    "smoke_sha256": "dc206e9208f9fcd458104c3c27db0ec29752785174cade0bbe2e60bb7ed81f48",
+    "source_sha256": "f2420feedcdee9591dd649442c81149e31a0c06ee8c6e655d93d8f8e742cf706",
+    "source_url": "https://download.pytorch.org/torchaudio/tutorial-assets/hdemucs_mix.wav",
+    "title": "A Classic Education - NightOwl",
+    "use": "Implementation-parity test only; not redistributed and not a held-out separation-quality evaluation."
+  },
+  "four_output_heads_f16": {
+    "f16": {
+      "decoder.2.0.conv.weight": {
+        "bytes": 294912,
+        "sha256": "7ee9237e8d68931e552a0d07f56e35b04405d20804b68d2ccd979082105f0929",
+        "shape_ggml": [
+          1152,
+          128
+        ]
+      },
+      "decoder.2.1.convtrs.0.weight": {
+        "bytes": 6144,
+        "sha256": "5a2f77f614491457531fb1bd536e0aea28e84e087c019aae1f773045dba2f44e",
+        "shape_ggml": [
+          64,
+          48
+        ]
+      },
+      "decoder.2.1.convtrs.1.weight": {
+        "bytes": 8192,
+        "sha256": "4e91bda9ecfe81fb9cb03510fd93dd7fef815be3e99a6780c83b33d60a3f775d",
+        "shape_ggml": [
+          64,
+          64
+        ]
+      },
+      "decoder.2.1.convtrs.2.weight": {
+        "bytes": 32768,
+        "sha256": "d5f1a1ac88fe73f1665b73b7be068c174d6151873dcbf0a9ddfa83bbb20de141",
+        "shape_ggml": [
+          64,
+          256
+        ]
+      }
+    },
+    "q4_k": {
+      "decoder.2.0.conv.weight": {
+        "bytes": 294912,
+        "sha256": "7ee9237e8d68931e552a0d07f56e35b04405d20804b68d2ccd979082105f0929",
+        "shape_ggml": [
+          1152,
+          128
+        ]
+      },
+      "decoder.2.1.convtrs.0.weight": {
+        "bytes": 6144,
+        "sha256": "5a2f77f614491457531fb1bd536e0aea28e84e087c019aae1f773045dba2f44e",
+        "shape_ggml": [
+          64,
+          48
+        ]
+      },
+      "decoder.2.1.convtrs.1.weight": {
+        "bytes": 8192,
+        "sha256": "4e91bda9ecfe81fb9cb03510fd93dd7fef815be3e99a6780c83b33d60a3f775d",
+        "shape_ggml": [
+          64,
+          64
+        ]
+      },
+      "decoder.2.1.convtrs.2.weight": {
+        "bytes": 32768,
+        "sha256": "d5f1a1ac88fe73f1665b73b7be068c174d6151873dcbf0a9ddfa83bbb20de141",
+        "shape_ggml": [
+          64,
+          256
+        ]
+      }
+    },
+    "q8_0": {
+      "decoder.2.0.conv.weight": {
+        "bytes": 294912,
+        "sha256": "7ee9237e8d68931e552a0d07f56e35b04405d20804b68d2ccd979082105f0929",
+        "shape_ggml": [
+          1152,
+          128
+        ]
+      },
+      "decoder.2.1.convtrs.0.weight": {
+        "bytes": 6144,
+        "sha256": "5a2f77f614491457531fb1bd536e0aea28e84e087c019aae1f773045dba2f44e",
+        "shape_ggml": [
+          64,
+          48
+        ]
+      },
+      "decoder.2.1.convtrs.1.weight": {
+        "bytes": 8192,
+        "sha256": "4e91bda9ecfe81fb9cb03510fd93dd7fef815be3e99a6780c83b33d60a3f775d",
+        "shape_ggml": [
+          64,
+          64
+        ]
+      },
+      "decoder.2.1.convtrs.2.weight": {
+        "bytes": 32768,
+        "sha256": "d5f1a1ac88fe73f1665b73b7be068c174d6151873dcbf0a9ddfa83bbb20de141",
+        "shape_ggml": [
+          64,
+          256
+        ]
+      }
+    }
+  },
+  "full_stage_checks": 105,
+  "gates": {
+    "f16_row_floor_epsilon": 0.0009765625,
+    "f16_row_policy": "cosine_or_binary16_reference_floor_v1",
+    "f16_row_stages": [
+      "decoder0",
+      "decoder1",
+      "decoder2",
+      "dp0",
+      "dp1",
+      "dp2",
+      "dp3",
+      "dp4",
+      "dp5",
+      "encoder0",
+      "encoder1",
+      "encoder2",
+      "feature0",
+      "feature1",
+      "feature2",
+      "feature3",
+      "feature4",
+      "feature5",
+      "output_bass",
+      "output_drums",
+      "output_other",
+      "output_vocals",
+      "raw_output_bass",
+      "raw_output_drums",
+      "raw_output_other",
+      "raw_output_vocals",
+      "skip0",
+      "skip1",
+      "skip2"
+    ],
+    "norm_ratio_bounds": {
+      "f16": [
+        0.99,
+        1.01
+      ],
+      "q4_k": [
+        0.8,
+        1.2
+      ],
+      "q8_0": [
+        0.95,
+        1.05
+      ]
+    },
+    "performance": "Median of all three complete native calls must be <= median of the three same-host original CPU calls after one warmup per engine; alternating order retained.",
+    "relative_l2_max": {
+      "f16": 0.05,
+      "q4_k": 0.4,
+      "q8_0": 0.2
+    },
+    "required_stages": [
+      "input_audio",
+      "waveform_stats",
+      "raw_input_audio",
+      "stft",
+      "stft_stats",
+      "normalized",
+      "skip0",
+      "encoder0",
+      "decoder0",
+      "skip1",
+      "encoder1",
+      "decoder1",
+      "skip2",
+      "encoder2",
+      "decoder2",
+      "dp0",
+      "feature0",
+      "dp1",
+      "feature1",
+      "dp2",
+      "feature2",
+      "dp3",
+      "feature3",
+      "dp4",
+      "feature4",
+      "dp5",
+      "feature5",
+      "raw_output_drums",
+      "output_drums",
+      "raw_output_bass",
+      "output_bass",
+      "raw_output_other",
+      "output_other",
+      "raw_output_vocals",
+      "output_vocals"
+    ],
+    "row_rule": "For gated F16 rows: cosine > 0.999 OR both RMS error <= 2^-10 * ORIGINAL whole-stage RMS and maximum absolute error <= 2^-10 * ORIGINAL stage peak; global cosine, norm and relative-L2 gates remain mandatory.",
+    "thresholds_strict_gt": {
+      "f16": 0.999,
+      "q4_k": 0.94,
+      "q8_0": 0.98
+    }
+  },
+  "ggml_commit": "1b972bb754aa5f83e2d872ccf37a335717f6658d",
+  "historical_packager_receipt_gate_passed": true,
+  "host": {
+    "blas_runtime": {
+      "openblas_get_config": "OpenBLAS 0.3.34 NO_LAPACK NO_LAPACKE DYNAMIC_ARCH NO_AFFINITY Zen MAX_THREADS=64",
+      "openblas_get_corename": "Zen",
+      "openblas_get_num_threads": 2,
+      "openblas_get_parallel": 1
+    },
+    "build_settings": [
+      "BLAS_INCLUDE_DIRS:UNINITIALIZED={repo}/scnet-openblas/install/include/openblas",
+      "BLAS_openblas_LIBRARY:FILEPATH={repo}/scnet-openblas/install/lib/libopenblas.so",
+      "CMAKE_BUILD_TYPE:STRING=Release",
+      "CMAKE_CXX_COMPILER:FILEPATH={system-bin}/c++",
+      "CMAKE_CXX_COMPILER_AR:FILEPATH={system-bin}/gcc-ar-11",
+      "CMAKE_CXX_COMPILER_RANLIB:FILEPATH={system-bin}/gcc-ranlib-11",
+      "GGML_ACCELERATE:BOOL=ON",
+      "GGML_ALL_WARNINGS_3RD_PARTY:BOOL=OFF",
+      "GGML_AMX_BF16:BOOL=OFF",
+      "GGML_AMX_INT8:BOOL=OFF",
+      "GGML_AMX_TILE:BOOL=OFF",
+      "GGML_AVX:BOOL=OFF",
+      "GGML_AVX2:BOOL=OFF",
+      "GGML_AVX512:BOOL=OFF",
+      "GGML_AVX512_BF16:BOOL=OFF",
+      "GGML_AVX512_VBMI:BOOL=OFF",
+      "GGML_AVX512_VNNI:BOOL=OFF",
+      "GGML_AVX_VNNI:BOOL=OFF",
+      "GGML_BACKEND_DIR:PATH=",
+      "GGML_BACKEND_DL:BOOL=OFF",
+      "GGML_BIN_INSTALL_DIR:PATH=bin",
+      "GGML_BLAS:BOOL=ON",
+      "GGML_BLAS_VENDOR:STRING=OpenBLAS",
+      "GGML_BMI2:BOOL=OFF",
+      "GGML_BUILD_EXAMPLES:BOOL=OFF",
+      "GGML_BUILD_TESTS:BOOL=OFF",
+      "GGML_CCACHE:BOOL=ON",
+      "GGML_CCACHE_FOUND:FILEPATH=GGML_CCACHE_FOUND-NOTFOUND",
+      "GGML_CPU:BOOL=ON",
+      "GGML_CPU_ALL_VARIANTS:BOOL=OFF",
+      "GGML_CPU_ARM_ARCH:STRING=",
+      "GGML_CPU_HBM:BOOL=OFF",
+      "GGML_CPU_KLEIDIAI:BOOL=OFF",
+      "GGML_CPU_POWERPC_CPUTYPE:STRING=",
+      "GGML_CPU_REPACK:BOOL=ON",
+      "GGML_CUDA:BOOL=OFF",
+      "GGML_CUDA_CCCL_VERSION:STRING=",
+      "GGML_CUDA_COMPRESSION_MODE:STRING=size",
+      "GGML_CUDA_CRISPASR_FA_PERHEAD_MASK:BOOL=OFF",
+      "GGML_CUDA_FA:BOOL=ON",
+      "GGML_CUDA_FA_ALL_QUANTS:BOOL=OFF",
+      "GGML_CUDA_FA_QUANTS:STRING=q4_0-q4_0;q8_0-q8_0;f16-f16;bf16-bf16",
+      "GGML_CUDA_FORCE_CUBLAS:BOOL=OFF",
+      "GGML_CUDA_FORCE_MMQ:BOOL=OFF",
+      "GGML_CUDA_GRAPHS:BOOL=ON",
+      "GGML_CUDA_NCCL:BOOL=ON",
+      "GGML_CUDA_NO_PEER_COPY:BOOL=OFF",
+      "GGML_CUDA_NO_VMM:BOOL=OFF",
+      "GGML_ET:BOOL=OFF",
+      "GGML_ET_SYSEMU:BOOL=OFF",
+      "GGML_F16C:BOOL=OFF",
+      "GGML_FMA:BOOL=OFF",
+      "GGML_GPROF:BOOL=OFF",
+      "GGML_HEXAGON:BOOL=OFF",
+      "GGML_HIP:BOOL=OFF",
+      "GGML_HIP_EXPORT_METRICS:BOOL=OFF",
+      "GGML_HIP_GRAPHS:BOOL=ON",
+      "GGML_HIP_MMQ_MFMA:BOOL=ON",
+      "GGML_HIP_NO_VMM:BOOL=ON",
+      "GGML_HIP_RCCL:BOOL=OFF",
+      "GGML_INCLUDE_INSTALL_DIR:PATH=include",
+      "GGML_LASX:BOOL=ON",
+      "GGML_LIB_INSTALL_DIR:PATH=lib",
+      "GGML_LLAMAFILE:BOOL=ON",
+      "GGML_LSX:BOOL=ON",
+      "GGML_LTO:BOOL=OFF",
+      "GGML_METAL:BOOL=OFF",
+      "GGML_METAL_EMBED_LIBRARY:BOOL=OFF",
+      "GGML_METAL_MACOSX_VERSION_MIN:STRING=",
+      "GGML_METAL_NDEBUG:BOOL=OFF",
+      "GGML_METAL_SHADER_DEBUG:BOOL=OFF",
+      "GGML_METAL_STD:STRING=",
+      "GGML_METAL_TARGET_OS:STRING=macos",
+      "GGML_MUSA:BOOL=OFF",
+      "GGML_MUSA_GRAPHS:BOOL=OFF",
+      "GGML_MUSA_MUDNN_COPY:BOOL=OFF",
+      "GGML_NATIVE:BOOL=ON",
+      "GGML_OPENCL:BOOL=OFF",
+      "GGML_OPENCL_EMBED_KERNELS:BOOL=ON",
+      "GGML_OPENCL_PROFILING:BOOL=OFF",
+      "GGML_OPENCL_TARGET_VERSION:STRING=300",
+      "GGML_OPENCL_USE_ADRENO_KERNELS:BOOL=ON",
+      "GGML_OPENMP:BOOL=ON",
+      "GGML_OPENMP_FETCH:BOOL=OFF",
+      "GGML_OPENVINO:BOOL=OFF",
+      "GGML_RPC:BOOL=OFF",
+      "GGML_RVV:BOOL=ON",
+      "GGML_RV_ZFH:BOOL=ON",
+      "GGML_RV_ZICBOP:BOOL=ON",
+      "GGML_RV_ZIHINTPAUSE:BOOL=ON",
+      "GGML_RV_ZVFBFWMA:BOOL=OFF",
+      "GGML_RV_ZVFH:BOOL=ON",
+      "GGML_SCCACHE_FOUND:FILEPATH=GGML_SCCACHE_FOUND-NOTFOUND",
+      "GGML_SCHED_MAX_COPIES:STRING=4",
+      "GGML_SCHED_NO_REALLOC:BOOL=OFF",
+      "GGML_SSE42:BOOL=OFF",
+      "GGML_STATIC:BOOL=OFF",
+      "GGML_SYCL:BOOL=OFF",
+      "GGML_SYCL_DEVICE_ARCH:STRING=",
+      "GGML_SYCL_DNN:BOOL=ON",
+      "GGML_SYCL_F16:BOOL=OFF",
+      "GGML_SYCL_GRAPH:BOOL=ON",
+      "GGML_SYCL_HOST_MEM_FALLBACK:BOOL=ON",
+      "GGML_SYCL_SUPPORT_LEVEL_ZERO_API:BOOL=ON",
+      "GGML_SYCL_TARGET:STRING=INTEL",
+      "GGML_VIRTGPU:BOOL=OFF",
+      "GGML_VIRTGPU_BACKEND:BOOL=OFF",
+      "GGML_VULKAN:BOOL=OFF",
+      "GGML_VULKAN_CHECK_RESULTS:BOOL=OFF",
+      "GGML_VULKAN_DEBUG:BOOL=OFF",
+      "GGML_VULKAN_MEMORY_DEBUG:BOOL=OFF",
+      "GGML_VULKAN_RUN_TESTS:BOOL=OFF",
+      "GGML_VULKAN_SHADERS_GEN_TOOLCHAIN:FILEPATH=",
+      "GGML_VULKAN_SHADER_DEBUG_INFO:BOOL=OFF",
+      "GGML_VULKAN_VALIDATE:BOOL=OFF",
+      "GGML_VXE:BOOL=ON",
+      "GGML_WEBGPU:BOOL=OFF",
+      "GGML_WEBGPU_CPU_PROFILE:BOOL=OFF",
+      "GGML_WEBGPU_DEBUG:BOOL=OFF",
+      "GGML_WEBGPU_GPU_PROFILE:BOOL=OFF",
+      "GGML_WEBGPU_JSPI:BOOL=ON",
+      "GGML_XTHEADVECTOR:BOOL=OFF",
+      "GGML_ZDNN:BOOL=OFF",
+      "GGML_ZENDNN:BOOL=OFF",
+      "BLAS_openblas_LIBRARY-ADVANCED:INTERNAL=1",
+      "BLAS_openblas_WORKS:INTERNAL=1",
+      "CMAKE_CXX_COMPILER-ADVANCED:INTERNAL=1",
+      "CMAKE_CXX_COMPILER_AR-ADVANCED:INTERNAL=1",
+      "CMAKE_CXX_COMPILER_RANLIB-ADVANCED:INTERNAL=1",
+      "GGML_AVAILABLE_BACKENDS:INTERNAL=ggml-cpu;ggml-blas",
+      "GGML_CUDA_COMPRESSION_MODE-STRINGS:INTERNAL=none;speed;balance;size",
+      "GGML_OPENMP_ENABLED:INTERNAL=ON"
+    ],
+    "cmake_cache_sha256": "25a196442a3f7a29981e3d01d36f967c73071273a22bee4477097abdad8308c3",
+    "compute_environment": {
+      "CRISPASR_CPU_GEMM": null,
+      "CRISPASR_SCNET_BENCH": "0",
+      "CRISPASR_SCNET_BLAS": null,
+      "CRISPASR_SCNET_CAPTURE_GGUF": null,
+      "CRISPASR_SCNET_GPU": "0",
+      "CRISPASR_SCNET_SCALAR_GATES": null,
+      "CRISPASR_SCNET_SCALAR_LSTM": null,
+      "CRISPASR_SCNET_THREADS": "2"
+    },
+    "cpuinfo": "processor\t: 0\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 1\nmodel name\t: AMD EPYC 7763 64-Core Processor\nstepping\t: 1\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 3241.932\ncache size\t: 512 KB\nphysical id\t: 0\nsiblings\t: 4\ncore id\t\t: 0\ncpu cores\t: 2\napicid\t\t: 0\ninitial apicid\t: 0\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 13\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl tsc_reliable nonstop_tsc cpuid extd_apicid aperfmperf tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves user_shstk clzero xsaveerptr rdpru arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold v_vmsave_vmload umip vaes vpclmulqdq rdpid fsrm\nbugs\t\t: sysret_ss_attrs null_seg spectre_v1 spectre_v2 spec_store_bypass srso tsa\nbogomips\t: 4890.86\nTLB size\t: 2560 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management:",
+    "cpuset": "0-3",
+    "library_sha256": "250147dc1124f3134a948edffa164bfbd36bab72b6d895c2ace623c9a3269ce7",
+    "logical_cpus": 4,
+    "machine": "x86_64",
+    "platform": "Linux-6.8.0-1070-azure-x86_64-with-glibc2.35",
+    "thread_environment": {
+      "BLIS_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2",
+      "OMP_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "VECLIB_MAXIMUM_THREADS": "2"
+    },
+    "torch_build_config": "PyTorch built with:\n  - GCC 13.3\n  - C++ Version: 201703\n  - Intel(R) oneAPI Math Kernel Library Version 2024.2-Product Build 20240605 for Intel(R) 64 architecture applications\n  - Intel(R) MKL-DNN v3.7.1 (Git Hash 8d263e693366ef8db40acc569cc7d8edf644556d)\n  - OpenMP 201511 (a.k.a. OpenMP 4.5)\n  - LAPACK is enabled (usually provided by MKL)\n  - NNPACK is enabled\n  - CPU capability usage: AVX2\n  - Build settings: BLAS_INFO=mkl, BUILD_TYPE=Release, COMMIT_SHA=a1cb3cc05d46d198467bebbb6e8fba50a325d4e7, CXX_COMPILER={torch-build-toolchain}{system-bin}/c++, CXX_FLAGS= -fvisibility-inlines-hidden -DUSE_PTHREADPOOL -DNDEBUG -DUSE_KINETO -DLIBKINETO_NOCUPTI -DLIBKINETO_NOROCTRACER -DLIBKINETO_NOXPUPTI=ON -DUSE_FBGEMM -DUSE_PYTORCH_QNNPACK -DUSE_XNNPACK -DSYMBOLICATE_MOBILE_DEBUG_HANDLE -O2 -fPIC -DC10_NODEPRECATED -Wall -Wextra -Werror=return-type -Werror=non-virtual-dtor -Werror=range-loop-construct -Werror=bool-operation -Wnarrowing -Wno-missing-field-initializers -Wno-unknown-pragmas -Wno-unused-parameter -Wno-strict-overflow -Wno-strict-aliasing -Wno-stringop-overflow -Wsuggest-override -Wno-psabi -Wno-error=old-style-cast -faligned-new -Wno-maybe-uninitialized -fno-math-errno -fno-trapping-math -Werror=format -Wno-dangling-reference -Wno-error=dangling-reference -Wno-stringop-overflow, LAPACK_INFO=mkl, PERF_WITH_AVX=1, PERF_WITH_AVX2=1, TORCH_VERSION=2.8.0, USE_CUDA=0, USE_CUDNN=OFF, USE_CUSPARSELT=OFF, USE_GFLAGS=OFF, USE_GLOG=OFF, USE_GLOO=ON, USE_MKL=ON, USE_MKLDNN=ON, USE_MPI=OFF, USE_NCCL=OFF, USE_NNPACK=ON, USE_OPENMP=ON, USE_ROCM=OFF, USE_ROCM_KERNEL_ASSERT=OFF, USE_XCCL=OFF, USE_XPU=OFF, \n",
+    "torch_cpu_capability": "AVX2",
+    "torch_parallel_info": "ATen/Parallel:\n\tat::get_num_threads() : 2\n\tat::get_num_interop_threads() : 1\nOpenMP 201511 (a.k.a. OpenMP 4.5)\n\tomp_get_max_threads() : 2\nIntel(R) oneAPI Math Kernel Library Version 2024.2-Product Build 20240605 for Intel(R) 64 architecture applications\n\tmkl_get_max_threads() : 2\nIntel(R) MKL-DNN v3.7.1 (Git Hash 8d263e693366ef8db40acc569cc7d8edf644556d)\nstd::thread::hardware_concurrency() : 4\nEnvironment variables:\n\tOMP_NUM_THREADS : 2\n\tMKL_NUM_THREADS : 2\nATen parallel backend: OpenMP\n",
+    "wait_policy_environment": {
+      "GOMP_SPINCOUNT": null,
+      "KMP_BLOCKTIME": null,
+      "OMP_WAIT_POLICY": null,
+      "OPENBLAS_THREAD_TIMEOUT": null
+    }
+  },
+  "independent_audit": {
+    "all_210_native_stage_log_blocks_reparsed": true,
+    "audit_script_sha256": "0c29798bbfdf9ca2d441f8d2ed3a1e0dfcedc89c8102bee1689861184c127bd5",
+    "matching_local_model_inventory_checked": true,
+    "scope": "Offline payload/source integrity, exact historical receipt-gate execution and recorded metric-decision recomputation. Six native logs reparsed; matching local model bytes checked for coverage/four F16 heads. No inference, tensor-metric recomputation, rebuilt binary comparison, remote DSO-file access or separate qualified-bundle download.",
+    "summary_sha256": "c77d4d2db9e0a3ae0bfa71830780086e1d3dcf8de4b6a2f2d380fe620e90e7d0",
+    "verification": {
+      "all96_waveform_metric_decisions_recomputed": true,
+      "all_global_and_f16_row_flags_consistent": true,
+      "all_pair_orders_and_medians_recomputed": true,
+      "artifact_sha256": "3d28fa0c71431a0909f74c9380be949ba991d569c2b54410fa8f93c53a59ec95",
+      "audit_source_sha256": "0c29798bbfdf9ca2d441f8d2ed3a1e0dfcedc89c8102bee1689861184c127bd5",
+      "complete": true,
+      "mapped_identity_proofs_cross_bound": true,
+      "no_inference_or_tensors_recomputed": true,
+      "payloads_verified": 218,
+      "source_commit": "a80cbbba7e98065bfa1241ff4829d62ab34bb5e4",
+      "sources_verified": 54,
+      "summary_sha256": "c77d4d2db9e0a3ae0bfa71830780086e1d3dcf8de4b6a2f2d380fe620e90e7d0"
+    },
+    "verification_sha256": "09f4708e80f0219dcf4aaa11e36128b2f39022489c4ad75738371e291a380fc3"
+  },
+  "job": 125486348514,
+  "loaded_runtime_scope": "Endpoint mapped file identities, cross-bound to standalone native/ggml/provider hashes. Not symbol-relocation proof or continuous observation.",
+  "model_inventory_method": "Rehashed the already-restored local GGUF copies and required whole-file identity with hosted receipts before independently checking tensor type coverage and reconstruction bytes. No separate model-bundle download was performed.",
+  "models": {
+    "f16": {
+      "all_35_full_stages_pass": true,
+      "calls": [
+        {
+          "implementation": "original",
+          "iteration": 0,
+          "pcm_sha256": "0e269f37f837b18bf4bd8ec1eaa20d6e139eef5154357d79a4ac0b4d1fdc1978",
+          "quality_acceptance": true,
+          "seconds": 72.6535939559999,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            }
+          }
+        },
+        {
+          "implementation": "native",
+          "iteration": 0,
+          "pcm_sha256": "6534cc69458f873ca679727913d5415fc0a161893f9a5cb7f66773c356b269a7",
+          "quality_acceptance": true,
+          "seconds": 64.44204850000006,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 0.9999999936836648,
+              "elements": 2116800,
+              "max_abs": 0.0001519620418548584,
+              "norm_ratio": 1.0001064780013853,
+              "relative_l2": 0.00015482752802987838,
+              "rms_error": 2.0440411744198274e-05
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 0.9999996831361135,
+              "elements": 2116800,
+              "max_abs": 0.00020862743258476257,
+              "norm_ratio": 1.000038843336634,
+              "relative_l2": 0.0007970327367304945,
+              "rms_error": 1.2758310803925396e-05
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 0.99999994858884,
+              "elements": 2116800,
+              "max_abs": 0.00016227364540100098,
+              "norm_ratio": 0.9999881235488174,
+              "relative_l2": 0.0003208771235580021,
+              "rms_error": 1.6142215489904772e-05
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 0.9999999777179378,
+              "elements": 2116800,
+              "max_abs": 0.00014679040759801865,
+              "norm_ratio": 1.0000713268690415,
+              "relative_l2": 0.00022283359906063964,
+              "rms_error": 8.603948792906526e-06
+            }
+          }
+        },
+        {
+          "implementation": "native",
+          "iteration": 1,
+          "pcm_sha256": "6534cc69458f873ca679727913d5415fc0a161893f9a5cb7f66773c356b269a7",
+          "quality_acceptance": true,
+          "seconds": 64.40014032599993,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 0.9999999936836648,
+              "elements": 2116800,
+              "max_abs": 0.0001519620418548584,
+              "norm_ratio": 1.0001064780013853,
+              "relative_l2": 0.00015482752802987838,
+              "rms_error": 2.0440411744198274e-05
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 0.9999996831361135,
+              "elements": 2116800,
+              "max_abs": 0.00020862743258476257,
+              "norm_ratio": 1.000038843336634,
+              "relative_l2": 0.0007970327367304945,
+              "rms_error": 1.2758310803925396e-05
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 0.99999994858884,
+              "elements": 2116800,
+              "max_abs": 0.00016227364540100098,
+              "norm_ratio": 0.9999881235488174,
+              "relative_l2": 0.0003208771235580021,
+              "rms_error": 1.6142215489904772e-05
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 0.9999999777179378,
+              "elements": 2116800,
+              "max_abs": 0.00014679040759801865,
+              "norm_ratio": 1.0000713268690415,
+              "relative_l2": 0.00022283359906063964,
+              "rms_error": 8.603948792906526e-06
+            }
+          }
+        },
+        {
+          "implementation": "original",
+          "iteration": 1,
+          "pcm_sha256": "0e269f37f837b18bf4bd8ec1eaa20d6e139eef5154357d79a4ac0b4d1fdc1978",
+          "quality_acceptance": true,
+          "seconds": 73.00140218699971,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            }
+          }
+        },
+        {
+          "implementation": "original",
+          "iteration": 2,
+          "pcm_sha256": "0e269f37f837b18bf4bd8ec1eaa20d6e139eef5154357d79a4ac0b4d1fdc1978",
+          "quality_acceptance": true,
+          "seconds": 73.49902403999977,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            }
+          }
+        },
+        {
+          "implementation": "native",
+          "iteration": 2,
+          "pcm_sha256": "6534cc69458f873ca679727913d5415fc0a161893f9a5cb7f66773c356b269a7",
+          "quality_acceptance": true,
+          "seconds": 64.91598650000014,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 0.9999999936836648,
+              "elements": 2116800,
+              "max_abs": 0.0001519620418548584,
+              "norm_ratio": 1.0001064780013853,
+              "relative_l2": 0.00015482752802987838,
+              "rms_error": 2.0440411744198274e-05
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 0.9999996831361135,
+              "elements": 2116800,
+              "max_abs": 0.00020862743258476257,
+              "norm_ratio": 1.000038843336634,
+              "relative_l2": 0.0007970327367304945,
+              "rms_error": 1.2758310803925396e-05
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 0.99999994858884,
+              "elements": 2116800,
+              "max_abs": 0.00016227364540100098,
+              "norm_ratio": 0.9999881235488174,
+              "relative_l2": 0.0003208771235580021,
+              "rms_error": 1.6142215489904772e-05
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 0.9999999777179378,
+              "elements": 2116800,
+              "max_abs": 0.00014679040759801865,
+              "norm_ratio": 1.0000713268690415,
+              "relative_l2": 0.00022283359906063964,
+              "rms_error": 8.603948792906526e-06
+            }
+          }
+        }
+      ],
+      "coverage": {
+        "matrix_elements": 42078944,
+        "minimum_fraction": 0.5,
+        "target_type_matrix_elements": 42078944,
+        "target_type_matrix_fraction": 1.0
+      },
+      "f16_row_rescued_total": 5343,
+      "file_bytes": 84600288,
+      "loaded_dso_count": 90,
+      "model_sha256": "4fde60e9eaaeb18c4712ca4907aa4d556b503817630dbe50699f4c51804506bb",
+      "native_backend": "CPU+BLAS/CPU-LSTM-FFT",
+      "native_compute_precision": "F32 activations/accumulation; CPU recurrent/FFT; gates=avx2_fma; fft=avx2",
+      "native_median_seconds": 64.44204850000006,
+      "original_median_seconds": 73.00140218699971,
+      "pcm_sha256": {
+        "native": [
+          "6534cc69458f873ca679727913d5415fc0a161893f9a5cb7f66773c356b269a7"
+        ],
+        "original": [
+          "0e269f37f837b18bf4bd8ec1eaa20d6e139eef5154357d79a4ac0b4d1fdc1978"
+        ]
+      },
+      "performance_acceptance": true,
+      "production_surfaces_pass": true,
+      "raw_smoke_pass": true,
+      "speedup": 1.1328224953463366,
+      "stage_global_cosine_min": 0.9999996695383669,
+      "stage_norm_ratio_range": [
+        0.99998654244895,
+        1.000109717106061
+      ],
+      "stage_relative_l2_max": 0.0008137988389434277,
+      "timed_mapped_files_unchanged": true,
+      "warmups": [
+        {
+          "implementation": "original",
+          "iteration": 0,
+          "quality_acceptance": true,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            }
+          }
+        },
+        {
+          "implementation": "native",
+          "iteration": 0,
+          "quality_acceptance": true,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 0.9999999936836648,
+              "elements": 2116800,
+              "max_abs": 0.0001519620418548584,
+              "norm_ratio": 1.0001064780013853,
+              "relative_l2": 0.00015482752802987838,
+              "rms_error": 2.0440411744198274e-05
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 0.9999996831361135,
+              "elements": 2116800,
+              "max_abs": 0.00020862743258476257,
+              "norm_ratio": 1.000038843336634,
+              "relative_l2": 0.0007970327367304945,
+              "rms_error": 1.2758310803925396e-05
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 0.99999994858884,
+              "elements": 2116800,
+              "max_abs": 0.00016227364540100098,
+              "norm_ratio": 0.9999881235488174,
+              "relative_l2": 0.0003208771235580021,
+              "rms_error": 1.6142215489904772e-05
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 0.9999999777179378,
+              "elements": 2116800,
+              "max_abs": 0.00014679040759801865,
+              "norm_ratio": 1.0000713268690415,
+              "relative_l2": 0.00022283359906063964,
+              "rms_error": 8.603948792906526e-06
+            }
+          }
+        }
+      ]
+    },
+    "q4_k": {
+      "all_35_full_stages_pass": true,
+      "calls": [
+        {
+          "implementation": "original",
+          "iteration": 0,
+          "pcm_sha256": "0e269f37f837b18bf4bd8ec1eaa20d6e139eef5154357d79a4ac0b4d1fdc1978",
+          "quality_acceptance": true,
+          "seconds": 72.72662842299997,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            }
+          }
+        },
+        {
+          "implementation": "native",
+          "iteration": 0,
+          "pcm_sha256": "8b62c936fcadbe06072bf4967a00a82eedaaab3f8fbe8f7653007b58e2289951",
+          "quality_acceptance": true,
+          "seconds": 64.81925490500043,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 0.9999576744083277,
+              "elements": 2116800,
+              "max_abs": 0.015109390020370483,
+              "norm_ratio": 0.9969928940874593,
+              "relative_l2": 0.009666401306743002,
+              "rms_error": 0.001276163388440546
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 0.9984781569488872,
+              "elements": 2116800,
+              "max_abs": 0.011986590921878815,
+              "norm_ratio": 0.9969808474212815,
+              "relative_l2": 0.055168940825108134,
+              "rms_error": 0.0008831036183750872
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 0.9997014681116269,
+              "elements": 2116800,
+              "max_abs": 0.01368490606546402,
+              "norm_ratio": 0.9979195431229652,
+              "relative_l2": 0.024497957304690662,
+              "rms_error": 0.001232407288777385
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 0.9995897535921809,
+              "elements": 2116800,
+              "max_abs": 0.009699597954750061,
+              "norm_ratio": 0.9986762978621874,
+              "relative_l2": 0.02865587051340536,
+              "rms_error": 0.0011064473380713346
+            }
+          }
+        },
+        {
+          "implementation": "native",
+          "iteration": 1,
+          "pcm_sha256": "8b62c936fcadbe06072bf4967a00a82eedaaab3f8fbe8f7653007b58e2289951",
+          "quality_acceptance": true,
+          "seconds": 64.42138005900006,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 0.9999576744083277,
+              "elements": 2116800,
+              "max_abs": 0.015109390020370483,
+              "norm_ratio": 0.9969928940874593,
+              "relative_l2": 0.009666401306743002,
+              "rms_error": 0.001276163388440546
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 0.9984781569488872,
+              "elements": 2116800,
+              "max_abs": 0.011986590921878815,
+              "norm_ratio": 0.9969808474212815,
+              "relative_l2": 0.055168940825108134,
+              "rms_error": 0.0008831036183750872
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 0.9997014681116269,
+              "elements": 2116800,
+              "max_abs": 0.01368490606546402,
+              "norm_ratio": 0.9979195431229652,
+              "relative_l2": 0.024497957304690662,
+              "rms_error": 0.001232407288777385
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 0.9995897535921809,
+              "elements": 2116800,
+              "max_abs": 0.009699597954750061,
+              "norm_ratio": 0.9986762978621874,
+              "relative_l2": 0.02865587051340536,
+              "rms_error": 0.0011064473380713346
+            }
+          }
+        },
+        {
+          "implementation": "original",
+          "iteration": 1,
+          "pcm_sha256": "0e269f37f837b18bf4bd8ec1eaa20d6e139eef5154357d79a4ac0b4d1fdc1978",
+          "quality_acceptance": true,
+          "seconds": 73.26376235099997,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            }
+          }
+        },
+        {
+          "implementation": "original",
+          "iteration": 2,
+          "pcm_sha256": "0e269f37f837b18bf4bd8ec1eaa20d6e139eef5154357d79a4ac0b4d1fdc1978",
+          "quality_acceptance": true,
+          "seconds": 73.3800220070002,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            }
+          }
+        },
+        {
+          "implementation": "native",
+          "iteration": 2,
+          "pcm_sha256": "8b62c936fcadbe06072bf4967a00a82eedaaab3f8fbe8f7653007b58e2289951",
+          "quality_acceptance": true,
+          "seconds": 64.81959940000024,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 0.9999576744083277,
+              "elements": 2116800,
+              "max_abs": 0.015109390020370483,
+              "norm_ratio": 0.9969928940874593,
+              "relative_l2": 0.009666401306743002,
+              "rms_error": 0.001276163388440546
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 0.9984781569488872,
+              "elements": 2116800,
+              "max_abs": 0.011986590921878815,
+              "norm_ratio": 0.9969808474212815,
+              "relative_l2": 0.055168940825108134,
+              "rms_error": 0.0008831036183750872
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 0.9997014681116269,
+              "elements": 2116800,
+              "max_abs": 0.01368490606546402,
+              "norm_ratio": 0.9979195431229652,
+              "relative_l2": 0.024497957304690662,
+              "rms_error": 0.001232407288777385
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 0.9995897535921809,
+              "elements": 2116800,
+              "max_abs": 0.009699597954750061,
+              "norm_ratio": 0.9986762978621874,
+              "relative_l2": 0.02865587051340536,
+              "rms_error": 0.0011064473380713346
+            }
+          }
+        }
+      ],
+      "coverage": {
+        "matrix_elements": 42078944,
+        "minimum_fraction": 0.5,
+        "target_type_matrix_elements": 41091072,
+        "target_type_matrix_fraction": 0.9765233652251349
+      },
+      "f16_row_rescued_total": null,
+      "file_bytes": 24775424,
+      "loaded_dso_count": 90,
+      "model_sha256": "4111a8ad4b662a43c3066b6270a72fcdc98f9f088005bfee47cfdf0dfa387088",
+      "native_backend": "CPU+BLAS/CPU-LSTM-FFT",
+      "native_compute_precision": "F32 activations/accumulation; CPU recurrent/FFT; gates=avx2_fma; fft=avx2",
+      "native_median_seconds": 64.81925490500043,
+      "original_median_seconds": 73.26376235099997,
+      "pcm_sha256": {
+        "native": [
+          "8b62c936fcadbe06072bf4967a00a82eedaaab3f8fbe8f7653007b58e2289951"
+        ],
+        "original": [
+          "0e269f37f837b18bf4bd8ec1eaa20d6e139eef5154357d79a4ac0b4d1fdc1978"
+        ]
+      },
+      "performance_acceptance": true,
+      "production_surfaces_pass": true,
+      "raw_smoke_pass": true,
+      "speedup": 1.1302777617295334,
+      "stage_global_cosine_min": 0.9919304716772748,
+      "stage_norm_ratio_range": [
+        0.9936457875268876,
+        1.0004534765906703
+      ],
+      "stage_relative_l2_max": 0.12693957867216463,
+      "timed_mapped_files_unchanged": true,
+      "warmups": [
+        {
+          "implementation": "original",
+          "iteration": 0,
+          "quality_acceptance": true,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            }
+          }
+        },
+        {
+          "implementation": "native",
+          "iteration": 0,
+          "quality_acceptance": true,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 0.9999576744083277,
+              "elements": 2116800,
+              "max_abs": 0.015109390020370483,
+              "norm_ratio": 0.9969928940874593,
+              "relative_l2": 0.009666401306743002,
+              "rms_error": 0.001276163388440546
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 0.9984781569488872,
+              "elements": 2116800,
+              "max_abs": 0.011986590921878815,
+              "norm_ratio": 0.9969808474212815,
+              "relative_l2": 0.055168940825108134,
+              "rms_error": 0.0008831036183750872
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 0.9997014681116269,
+              "elements": 2116800,
+              "max_abs": 0.01368490606546402,
+              "norm_ratio": 0.9979195431229652,
+              "relative_l2": 0.024497957304690662,
+              "rms_error": 0.001232407288777385
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 0.9995897535921809,
+              "elements": 2116800,
+              "max_abs": 0.009699597954750061,
+              "norm_ratio": 0.9986762978621874,
+              "relative_l2": 0.02865587051340536,
+              "rms_error": 0.0011064473380713346
+            }
+          }
+        }
+      ]
+    },
+    "q8_0": {
+      "all_35_full_stages_pass": true,
+      "calls": [
+        {
+          "implementation": "original",
+          "iteration": 0,
+          "pcm_sha256": "0e269f37f837b18bf4bd8ec1eaa20d6e139eef5154357d79a4ac0b4d1fdc1978",
+          "quality_acceptance": true,
+          "seconds": 72.02847066699997,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            }
+          }
+        },
+        {
+          "implementation": "native",
+          "iteration": 0,
+          "pcm_sha256": "a87087f964c80f6ee19b885ea44dfae33ddecbf4bce2b75d03d06c149b57ae04",
+          "quality_acceptance": true,
+          "seconds": 64.03893345000006,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 0.9999988505069751,
+              "elements": 2116800,
+              "max_abs": 0.0018756575882434845,
+              "norm_ratio": 0.9989572875234455,
+              "relative_l2": 0.0018395211771180307,
+              "rms_error": 0.00024285455403775952
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 0.9998962105677462,
+              "elements": 2116800,
+              "max_abs": 0.004788091406226158,
+              "norm_ratio": 0.9989196195568284,
+              "relative_l2": 0.014440284701277352,
+              "rms_error": 0.00023114940180727042
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 0.9999825346727315,
+              "elements": 2116800,
+              "max_abs": 0.005920497700572014,
+              "norm_ratio": 0.9994581772773441,
+              "relative_l2": 0.005933405443512484,
+              "rms_error": 0.0002984890546142019
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 0.9999916341101127,
+              "elements": 2116800,
+              "max_abs": 0.005330860614776611,
+              "norm_ratio": 1.0005709921160735,
+              "relative_l2": 0.004131266812120666,
+              "rms_error": 0.00015951458061603846
+            }
+          }
+        },
+        {
+          "implementation": "native",
+          "iteration": 1,
+          "pcm_sha256": "a87087f964c80f6ee19b885ea44dfae33ddecbf4bce2b75d03d06c149b57ae04",
+          "quality_acceptance": true,
+          "seconds": 64.60775717999968,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 0.9999988505069751,
+              "elements": 2116800,
+              "max_abs": 0.0018756575882434845,
+              "norm_ratio": 0.9989572875234455,
+              "relative_l2": 0.0018395211771180307,
+              "rms_error": 0.00024285455403775952
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 0.9998962105677462,
+              "elements": 2116800,
+              "max_abs": 0.004788091406226158,
+              "norm_ratio": 0.9989196195568284,
+              "relative_l2": 0.014440284701277352,
+              "rms_error": 0.00023114940180727042
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 0.9999825346727315,
+              "elements": 2116800,
+              "max_abs": 0.005920497700572014,
+              "norm_ratio": 0.9994581772773441,
+              "relative_l2": 0.005933405443512484,
+              "rms_error": 0.0002984890546142019
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 0.9999916341101127,
+              "elements": 2116800,
+              "max_abs": 0.005330860614776611,
+              "norm_ratio": 1.0005709921160735,
+              "relative_l2": 0.004131266812120666,
+              "rms_error": 0.00015951458061603846
+            }
+          }
+        },
+        {
+          "implementation": "original",
+          "iteration": 1,
+          "pcm_sha256": "0e269f37f837b18bf4bd8ec1eaa20d6e139eef5154357d79a4ac0b4d1fdc1978",
+          "quality_acceptance": true,
+          "seconds": 72.9759833449998,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            }
+          }
+        },
+        {
+          "implementation": "original",
+          "iteration": 2,
+          "pcm_sha256": "0e269f37f837b18bf4bd8ec1eaa20d6e139eef5154357d79a4ac0b4d1fdc1978",
+          "quality_acceptance": true,
+          "seconds": 72.9794231599999,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            }
+          }
+        },
+        {
+          "implementation": "native",
+          "iteration": 2,
+          "pcm_sha256": "a87087f964c80f6ee19b885ea44dfae33ddecbf4bce2b75d03d06c149b57ae04",
+          "quality_acceptance": true,
+          "seconds": 65.15964158799989,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 0.9999988505069751,
+              "elements": 2116800,
+              "max_abs": 0.0018756575882434845,
+              "norm_ratio": 0.9989572875234455,
+              "relative_l2": 0.0018395211771180307,
+              "rms_error": 0.00024285455403775952
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 0.9998962105677462,
+              "elements": 2116800,
+              "max_abs": 0.004788091406226158,
+              "norm_ratio": 0.9989196195568284,
+              "relative_l2": 0.014440284701277352,
+              "rms_error": 0.00023114940180727042
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 0.9999825346727315,
+              "elements": 2116800,
+              "max_abs": 0.005920497700572014,
+              "norm_ratio": 0.9994581772773441,
+              "relative_l2": 0.005933405443512484,
+              "rms_error": 0.0002984890546142019
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 0.9999916341101127,
+              "elements": 2116800,
+              "max_abs": 0.005330860614776611,
+              "norm_ratio": 1.0005709921160735,
+              "relative_l2": 0.004131266812120666,
+              "rms_error": 0.00015951458061603846
+            }
+          }
+        }
+      ],
+      "coverage": {
+        "matrix_elements": 42078944,
+        "minimum_fraction": 0.5,
+        "target_type_matrix_elements": 41897984,
+        "target_type_matrix_fraction": 0.9956995118508677
+      },
+      "f16_row_rescued_total": null,
+      "file_bytes": 45320960,
+      "loaded_dso_count": 90,
+      "model_sha256": "9a5f150261c9de4e876337df0d74ebd8271ffc368c7601c25d1bfdfe9d2a58e1",
+      "native_backend": "CPU+BLAS/CPU-LSTM-FFT",
+      "native_compute_precision": "F32 activations/accumulation; CPU recurrent/FFT; gates=avx2_fma; fft=avx2",
+      "native_median_seconds": 64.60775717999968,
+      "original_median_seconds": 72.9759833449998,
+      "pcm_sha256": {
+        "native": [
+          "a87087f964c80f6ee19b885ea44dfae33ddecbf4bce2b75d03d06c149b57ae04"
+        ],
+        "original": [
+          "0e269f37f837b18bf4bd8ec1eaa20d6e139eef5154357d79a4ac0b4d1fdc1978"
+        ]
+      },
+      "performance_acceptance": true,
+      "production_surfaces_pass": true,
+      "raw_smoke_pass": true,
+      "speedup": 1.1295235515092394,
+      "stage_global_cosine_min": 0.9998490052403011,
+      "stage_norm_ratio_range": [
+        0.9986473273012219,
+        1.0005709921160735
+      ],
+      "stage_relative_l2_max": 0.017387699835740834,
+      "timed_mapped_files_unchanged": true,
+      "warmups": [
+        {
+          "implementation": "original",
+          "iteration": 0,
+          "quality_acceptance": true,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 1.0,
+              "elements": 2116800,
+              "max_abs": 0.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.0,
+              "rms_error": 0.0
+            }
+          }
+        },
+        {
+          "implementation": "native",
+          "iteration": 0,
+          "quality_acceptance": true,
+          "stems": {
+            "bass": {
+              "acceptance": true,
+              "cos_global": 0.9999988505069751,
+              "elements": 2116800,
+              "max_abs": 0.0018756575882434845,
+              "norm_ratio": 0.9989572875234455,
+              "relative_l2": 0.0018395211771180307,
+              "rms_error": 0.00024285455403775952
+            },
+            "drums": {
+              "acceptance": true,
+              "cos_global": 0.9998962105677462,
+              "elements": 2116800,
+              "max_abs": 0.004788091406226158,
+              "norm_ratio": 0.9989196195568284,
+              "relative_l2": 0.014440284701277352,
+              "rms_error": 0.00023114940180727042
+            },
+            "other": {
+              "acceptance": true,
+              "cos_global": 0.9999825346727315,
+              "elements": 2116800,
+              "max_abs": 0.005920497700572014,
+              "norm_ratio": 0.9994581772773441,
+              "relative_l2": 0.005933405443512484,
+              "rms_error": 0.0002984890546142019
+            },
+            "vocals": {
+              "acceptance": true,
+              "cos_global": 0.9999916341101127,
+              "elements": 2116800,
+              "max_abs": 0.005330860614776611,
+              "norm_ratio": 1.0005709921160735,
+              "relative_l2": 0.004131266812120666,
+              "rms_error": 0.00015951458061603846
+            }
+          }
+        }
+      ]
+    }
+  },
+  "native_log_metric_blocks_reparsed": 210,
+  "numerical_acceptance": true,
+  "payload_manifest_files_verified": 218,
+  "profile": {
+    "full_profile": true,
+    "mode": "pipeline",
+    "overlap": 0.5,
+    "sample_rate": 44100,
+    "samples": 1058400,
+    "segment_seconds": 20,
+    "shift_seed": 0,
+    "shifts": 1
+  },
+  "provider_library_sha256": "2c7b7ce158eaaad1a3354382c4043bc859dc8ce79befdd7d8a7e7382573471b1",
+  "provider_receipt_sha256": "f3c2106f6ba8cb18b0de0a24c6e19468e099e7171a9cf65ad784c1d5fbe4b4a4",
+  "qualification_scope": "The exact a80 large CPU build passed all declared gates on this one contiguous 24-second fixture and recorded EPYC 7763 host. This does not qualify subsequent C2/C3 source, SCNet small, GPU execution, other CPUs or held-out separation quality.",
+  "qualified": true,
+  "raw_stage_checks": 105,
+  "receipts": {
+    "evidence/evidence-files.json": "7afdf48d052e24351dd6326bf8f862ffddbb60d2bd5d845aca663a1a13a65a76",
+    "evidence/qualification-scnet-large/qualification.json": "079b2aaf784a15b259845de1ddf06fe0d13a7fb62fb4cba69b6e51fe457d2023",
+    "evidence/qualification-scnet-large/validation/validation.json": "a6dd61941b54aa86e4fe1c08d9bde7a79a334bf477d85311da7dfef24585d555",
+    "job.log": "1b28bdd049a99b42d6f341a90a58bbc98cdfc7752f3d4004a40ab080df0c1583"
+  },
+  "required_controls_logs_checked": 14,
+  "result_scope": "The exact a80 large CPU implementation passed the declared original-F32 numerical, speed and production-surface gates on the recorded host/fixture",
+  "retention": "Full original receipts, all timings, logs and exact source snapshots are retained in the evidence artifact. This public summary contains no audio, checkpoints, activation captures or model payload.",
+  "schema": "scnet_a80_large_full_cpu_qualification_receipt_v1",
+  "scope": "CPU one contiguous24s fixture, default20s segments/0.5overlap/one seed0 shift, F16/Q8_0/Q4_K. A qualified model bundle was written by the hosted job; this evidence audit has not downloaded or verified that separate bundle. No GPU or held-out separation-quality claim.",
+  "source_commit": "a80cbbba7e98065bfa1241ff4829d62ab34bb5e4",
+  "source_manifest_sha256": "63b19e25017d9d71f55b94f092e8726a9226e33200ab7c4f34cb82545c356155",
+  "source_snapshot_files_verified": 54,
+  "source_snapshot_policy": "Exact retained payload hashes; CrispASR and ggml blobs verified against tested Git commits; original snapshots cross-bound to pinned reference hash set.",
+  "source_tree": "06d9aaffde43ad4b6471564d4bfe06439009da64",
+  "variant": "scnet-large",
+  "waveform_metric_gate_checks": 96,
+  "workflow_run": 41506291896
+}

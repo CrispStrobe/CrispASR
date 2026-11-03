@@ -45,6 +45,7 @@
 #include "htdemucs.h"
 #include "mel_band_roformer.h"
 #include "mini_bs_roformer.h"
+#include "scnet.h"
 #include "btc_chords.h"
 #include "tabcnn.h"
 #include "basic_pitch.h"
@@ -1900,6 +1901,9 @@ int main(int argc, char** argv) {
         // model_path = voxtral-tts GGUF (F16 for a clean structural diff), ref_path =
         // ref GGUF from tools/reference_backends/voxtral_tts.py. Per-layer frame-0 LLM cos.
         return voxtral_tts_llm_diff(model_path.c_str(), ref_path.c_str(), /*verbosity=*/2);
+    }
+    if (backend_name == "scnet" || backend_name == "scnet-large") {
+        return scnet_diff(model_path.c_str(), ref_path.c_str(), audio_path.c_str(), /*verbosity=*/2);
     }
     if (backend_name == "mini-bs-roformer" || backend_name == "mini_bs_roformer" ||
         backend_name == "mini-bs-roformer-v2.5") {

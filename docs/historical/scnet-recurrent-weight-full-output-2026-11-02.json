@@ -1,0 +1,610 @@
+{
+  "acceptance": false,
+  "calls": [
+    {
+      "complete": true,
+      "input_unchanged": true,
+      "matches_legacy_provider_pcm_descriptive_only": false,
+      "name": "warmup",
+      "output_finite": true,
+      "output_identity_pass": true,
+      "output_pcm_sha256": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+      "output_shape": [
+        4,
+        2,
+        1058400
+      ],
+      "resource_after": {
+        "major_faults": 0,
+        "max_rss_kib": 958104,
+        "minor_faults": 284044,
+        "system_cpu_seconds": 0.866988,
+        "user_cpu_seconds": 39.296107
+      },
+      "resource_before": {
+        "major_faults": 0,
+        "max_rss_kib": 92740,
+        "minor_faults": 45840,
+        "system_cpu_seconds": 0.466221,
+        "user_cpu_seconds": 0.520667
+      },
+      "resource_delta": {
+        "major_faults": 0,
+        "max_rss_kib": 865364,
+        "minor_faults": 238204,
+        "system_cpu_seconds": 0.400767,
+        "user_cpu_seconds": 38.775439999999996
+      },
+      "retained_output": {
+        "bytes": 33868928,
+        "file": "{output}/output-warmup-f32.npy",
+        "sha256": "3fcacf7a2f04ac90964411d759a3da94306e0278a133bc2be64b97c639d4fe8a"
+      },
+      "saved_cache_only_warmup_file_bitidentity": true,
+      "saved_modern_output_file_bitidentity": true,
+      "seconds": 16.673344187998737
+    },
+    {
+      "complete": true,
+      "input_unchanged": true,
+      "matches_legacy_provider_pcm_descriptive_only": false,
+      "name": "measured",
+      "output_finite": true,
+      "output_identity_pass": true,
+      "output_pcm_sha256": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+      "output_shape": [
+        4,
+        2,
+        1058400
+      ],
+      "resource_after": {
+        "major_faults": 0,
+        "max_rss_kib": 982040,
+        "minor_faults": 340045,
+        "system_cpu_seconds": 0.983429,
+        "user_cpu_seconds": 77.694341
+      },
+      "resource_before": {
+        "major_faults": 0,
+        "max_rss_kib": 958104,
+        "minor_faults": 284047,
+        "system_cpu_seconds": 0.890741,
+        "user_cpu_seconds": 39.400705
+      },
+      "resource_delta": {
+        "major_faults": 0,
+        "max_rss_kib": 23936,
+        "minor_faults": 55998,
+        "system_cpu_seconds": 0.09268799999999999,
+        "user_cpu_seconds": 38.29363599999999
+      },
+      "retained_output": {
+        "bytes": 33868928,
+        "file": "{output}/output-measured-f32.npy",
+        "sha256": "3fcacf7a2f04ac90964411d759a3da94306e0278a133bc2be64b97c639d4fe8a"
+      },
+      "saved_cache_only_warmup_file_bitidentity": true,
+      "saved_modern_output_file_bitidentity": true,
+      "seconds": 16.37461580300078
+    }
+  ],
+  "comparative_performance_claim": false,
+  "complete": true,
+  "date": "2026-11-02",
+  "evidence": {
+    "logs": {
+      "stderr.log": {
+        "bytes": 89,
+        "file": "stderr.log",
+        "sha256": "0df0e2898d4b4acd4e3cf472c8e6f1c8c1267fef698f15976d765b3bf8c633c6"
+      },
+      "stdout.log": {
+        "bytes": 653,
+        "file": "stdout.log",
+        "sha256": "dfea600a3833c52c9c7736b04bcb19a9ea04e54249d634e8ac3d68cd9ad7edfb"
+      }
+    },
+    "producer_summary": {
+      "alias": "{replay}/summary.json",
+      "sha256": "57124fa0b1f2166950b69b60c0e92da125046279c1b793fdce81ecf5d3fed9b9"
+    },
+    "protocol_source_sha256": "2cc203948eb744a1ca2398dc02a864ccbfe15b1ccc220f17284908d46025cfdd",
+    "raw_receipt": {
+      "alias": "{replay}/receipt.json",
+      "sha256": "d6db22a2c348d30c2dc6d04b5095e2cf48ef4d118515d4630147ff7241910654"
+    },
+    "related_cache_only_receipt": "scnet-cache-allocator-controls-2026-11-02.json",
+    "related_cast_worker_and_short_original_reference_receipt": "scnet-recurrent-weight-controls-2026-11-02.json",
+    "replay_driver_sha256": "b7a7260e800d5dd6a6eaf6d72eac0294eea30a2ec68312b87ca8d5043bcf22d1",
+    "saved_cache_only_receipt": {
+      "alias": "{saved-cache-only}/receipt.json",
+      "sha256": "ad5b4aaf28ec87ce5bfa33d5281baea6e5c3de8600a68c093eaf9e8165585f64"
+    }
+  },
+  "independent_audit": {
+    "all_input_and_helper_artifacts_rehashed": true,
+    "all_recorded_mapped_and_standalone_dependency_files_rehashed": true,
+    "all_recorded_source_object_and_native_binary_files_rehashed": true,
+    "audit_driver_sha256": "b163fd019372e92aa47b1f8e4c48c0186856daf5bb679065c84450514789cc82",
+    "new_model_calls": 0,
+    "new_scnet_library_loads": 0,
+    "new_timings": 0,
+    "recorded_phase_dictionaries_equal": true,
+    "stdout_calls_and_resource_deltas_recomputed": true
+  },
+  "inputs": {
+    "audio": {
+      "bytes": 8467288,
+      "file": "{assets}/music-profile-24s.wav",
+      "sha256": "6e76f63058868def553d293e5c0b1c540b67f8d07566b277fe3720ac28beeb6c"
+    },
+    "input_pcm_interleaved_sha256": "68fe8518a77a5f7f628da7455bce402c545d96bdd5d42ff6580bd82e2b73d1f7",
+    "input_shape": [
+      1058400,
+      2
+    ],
+    "model": {
+      "bytes": 21293184,
+      "file": "{assets}/scnet-profile-f16.gguf",
+      "sha256": "8441b23c2b6ba47e8357fd863d717af88a5568f1937a3ff328c921c7143bd059"
+    },
+    "sample_rate": 44100,
+    "stems": [
+      "drums",
+      "bass",
+      "other",
+      "vocals"
+    ]
+  },
+  "limitations": [
+    "Native-only process: no original model or Torch is loaded.",
+    "Minor faults are fault events, not unique allocated pages; these counters do not attribute faults specifically to graph allocation.",
+    "System CPU time covers all kernel work and is not a measurement of page-fault latency.",
+    "CPU quota, dedicated capacity and host contention are unknown.",
+    "A single warmed call cannot establish comparative performance or qualify the backend.",
+    "The observed 16.374615803-second measured call is a single unpaired native-only observation. The earlier cache-only run occurred in a separate process/window; no speedup or causal performance claim is inferred.",
+    "This replay checks output identity for small F16 only. It does not rerun the original F32 model, the 35 intermediate-stage gates, large or quantized models, the CLI/Session surfaces, or the required same-host alternating timing pairs.",
+    "All previous receipts and failed qualifications remain unchanged. The separately queued full qualification determines acceptance."
+  ],
+  "output_audit": {
+    "all_four_pcm_payloads_independently_hashed_and_finite": true,
+    "all_four_retained_files_independently_hashed": true,
+    "artifacts": [
+      {
+        "call": "warmup",
+        "epoch": "replay",
+        "finite": true,
+        "npy_bytes": 33868928,
+        "npy_sha256": "3fcacf7a2f04ac90964411d759a3da94306e0278a133bc2be64b97c639d4fe8a",
+        "pcm_sha256": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+        "shape": [
+          4,
+          2,
+          1058400
+        ]
+      },
+      {
+        "call": "measured",
+        "epoch": "replay",
+        "finite": true,
+        "npy_bytes": 33868928,
+        "npy_sha256": "3fcacf7a2f04ac90964411d759a3da94306e0278a133bc2be64b97c639d4fe8a",
+        "pcm_sha256": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+        "shape": [
+          4,
+          2,
+          1058400
+        ]
+      },
+      {
+        "call": "warmup",
+        "epoch": "saved-cache-only",
+        "finite": true,
+        "npy_bytes": 33868928,
+        "npy_sha256": "3fcacf7a2f04ac90964411d759a3da94306e0278a133bc2be64b97c639d4fe8a",
+        "pcm_sha256": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+        "shape": [
+          4,
+          2,
+          1058400
+        ]
+      },
+      {
+        "call": "measured",
+        "epoch": "saved-cache-only",
+        "finite": true,
+        "npy_bytes": 33868928,
+        "npy_sha256": "3fcacf7a2f04ac90964411d759a3da94306e0278a133bc2be64b97c639d4fe8a",
+        "pcm_sha256": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+        "shape": [
+          4,
+          2,
+          1058400
+        ]
+      }
+    ],
+    "both_replay_calls_equal_both_retained_cache_only_calls": true,
+    "pairwise_full_file_byte_comparisons": 4
+  },
+  "output_identity_acceptance": true,
+  "performance_qualification": false,
+  "protocol": {
+    "call_count": 2,
+    "counter_scope": "RUSAGE_SELF covers this process and its threads; no child work is included. Counters bracket perf_counter/run/perf_counter and are sampled outside the elapsed interval.",
+    "max_rss_semantics": "Linux KiB process high-water mark, not current resident bytes; its delta is only an increase in the high-water mark.",
+    "measured_count": 1,
+    "model_loading_inside_timing": false,
+    "profile": {
+      "mode": "pipeline",
+      "overlap": 0.5,
+      "segment_seconds": 20,
+      "shift_seed": 0,
+      "shifts": 1
+    },
+    "replay_driver_sha256": "b7a7260e800d5dd6a6eaf6d72eac0294eea30a2ec68312b87ca8d5043bcf22d1",
+    "source_sha256": "2cc203948eb744a1ca2398dc02a864ccbfe15b1ccc220f17284908d46025cfdd",
+    "threads": 2,
+    "timing_and_resource_block_byte_identical": true,
+    "timing_and_resource_block_sha256": "f16e5edc28597020ee8710292c66f79198e239bdf88c64f274e77107160457ec",
+    "timing_block_bytes": 760,
+    "timing_block_independently_verified_byte_identical": true,
+    "timing_boundary": "Unchanged NativeModel.run: public separation, chunking/normalization, owned CPU result conversion and native result release. Excludes loading, counters, hashes and receipt writes.",
+    "warmup_count": 1
+  },
+  "qualification": false,
+  "recorded_execution": {
+    "checkout_commit": "4c83d4e3652efafa07ee9ecd431643399b60c7ce",
+    "compiled_build_receipt_sha256": "7f752d1462171aac969f6133d4a8ed34b913429c3a08679f410666190da9a47b",
+    "compiled_ggml_commit": "2a7982f40c97b84fcc2c1f802ebeead0cccde7b3",
+    "compiled_parent_commit": "99588fb01986f1ebfb7dad27e072fd424ccdc967",
+    "compiled_source_inventory_files": 493,
+    "compiled_translation_units_and_objects": 46,
+    "current_ggml_commit_at_replay": "1b972bb754aa5f83e2d872ccf37a335717f6658d",
+    "ggml_revision_difference": {
+      "changed_files": {
+        "src/ggml-metal/ggml-metal-ops.cpp": {
+          "compiled_in_native_cpu_build": false,
+          "compiled_revision_sha256": "6a5d3e94d3a5f27f478ecd1e1694b31009476aacebc254e1fb2a4f8fc1711bbb",
+          "current_sha256": "b9d9aba19277bb09f46073edcc909fdef510a424d76948f55316e558eaa1e8b6"
+        },
+        "src/ggml-metal/kernels/mul_mv.metal": {
+          "compiled_in_native_cpu_build": false,
+          "compiled_revision_sha256": "8fead8d2bc076f241cb101b2fbeb7b4cc7203aba72ffd9f1b5e297b16cd45a7c",
+          "current_sha256": "91698d208a9cec301bbf349991bc6d845f7b486beb9d6c9c8f8f6f20b99e0093"
+        },
+        "src/ggml-metal/kernels/quantize.metal": {
+          "compiled_in_native_cpu_build": false,
+          "compiled_revision_sha256": "5ce7c2899a90c8377f4e8c9d64fbe64eb8ce4eb39ad68c1ac1a5d5aac9bd6f0b",
+          "current_sha256": "b30a6158bd22b50d988c0fe77ad4d97d075615414dedc6076cb8ac6ace0f3c0f"
+        }
+      },
+      "compiled": "2a7982f40c97b84fcc2c1f802ebeead0cccde7b3",
+      "current": "1b972bb754aa5f83e2d872ccf37a335717f6658d"
+    },
+    "identity_boundary": "The executed binaries retain their recorded 2a7982f CPU build identity. The checkout was 4c83d4e with ggml1b972bb; three changed Metal files and one unrelated Mini-BS-RoFormer file were not compiled into these native binaries. This is not a rebuild or whole-checkout qualification.",
+    "native_binaries": {
+      "bin/scnet-allocator-test": {
+        "bytes": 45864,
+        "sha256": "4dee1f65ff764219434f54668d3e0ad923410938680aac8ae8cf14244c5cadb8"
+      },
+      "bin/scnet-probe": {
+        "bytes": 336424,
+        "sha256": "e52b77f29de3174a26e001c727781a62bcf965f81f2b283e2de3870a9c68dbd8"
+      },
+      "ggml/src/ggml-blas/libggml-blas.so": {
+        "bytes": 64512,
+        "sha256": "a67f70dab7ee0910e68f3d2c04e2251316dbfe034f5c8ee63269cbaba5032b4f"
+      },
+      "ggml/src/libggml-base.so": {
+        "bytes": 964048,
+        "sha256": "fd60b4aaa717da488ac3ac04d2a8e455fd532b4ab3b1dc53ff7c4c87815aef43"
+      },
+      "ggml/src/libggml-cpu.so": {
+        "bytes": 1687736,
+        "sha256": "3dfe8bc6d991cec458e3d6da04ac98e52d10f11e6129021b1e0dc83054fc40be"
+      },
+      "ggml/src/libggml.so": {
+        "bytes": 60360,
+        "sha256": "a2182fc95077e4dd9e2a97b0dd958fc4f6dac221ba9221e88d727df9afb47cd4"
+      },
+      "src/libscnet-validation.so": {
+        "bytes": 346592,
+        "sha256": "2515b6fe51d922134c5496c264ab89b4830d9e7b40dc4304230cf08db6961125"
+      },
+      "src/libscnet.a": {
+        "bytes": 360614,
+        "sha256": "049323e23c8f509637c91cc213569e55cc28f509a07b7f44613fc95526f19c12"
+      }
+    },
+    "native_source_sha256": "eeb6e583d499b73e28d3fe2b1bb3f55f7be2a9edde8fe81140608b446661fc1c",
+    "unlinked_inventory_differences": [
+      {
+        "current_sha256": "088db8a8500d0bef0117d6ab5a0112f951e7f3dabe0be9b8c7682da08006f0f6",
+        "recorded_sha256": "b580771c7c44f2e07024310e9dde0144049883e8f654387135b04b641a417082",
+        "scope": "Broad source inventory only; absent from every compiled TU of this native build",
+        "source": "src/mini_bs_roformer.cpp"
+      }
+    ]
+  },
+  "runtime": {
+    "backend": "CPU+BLAS/CPU-LSTM-FFT",
+    "blas": {
+      "openblas_get_config": "OpenBLAS 0.3.34 NO_LAPACK NO_LAPACKE DYNAMIC_ARCH NO_AFFINITY Cooperlake MAX_THREADS=64",
+      "openblas_get_corename": "Cooperlake",
+      "openblas_get_num_threads": 2,
+      "openblas_get_parallel": 1
+    },
+    "compute_environment": {
+      "CRISPASR_CPU_GEMM": null,
+      "CRISPASR_SCNET_BENCH": "0",
+      "CRISPASR_SCNET_BLAS": null,
+      "CRISPASR_SCNET_CAPTURE_GGUF": null,
+      "CRISPASR_SCNET_GPU": "0",
+      "CRISPASR_SCNET_SCALAR_GATES": null,
+      "CRISPASR_SCNET_SCALAR_LSTM": null,
+      "CRISPASR_SCNET_THREADS": "2"
+    },
+    "compute_precision": "F32 activations/accumulation; CPU recurrent/FFT; gates=avx2_fma; fft=avx2",
+    "identity_scope": "Endpoint file inventories of file-backed DSOs in the main ELF namespace and native-handle dlsym/dladdr provider lookup owners; not continuous monitoring, relocated-memory hashes, anonymous/JIT code, or complete call-site relocation proof.",
+    "mapped_file_count": 36,
+    "mapped_file_identities_before_and_after_equal": true,
+    "mapped_files": [
+      {
+        "bytes": 2125328,
+        "file": "{runtime}/libc.so.6",
+        "resolved_path_sha256": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+        "sha256": "511f825ee075610ac9c0f7f91e2c13de2000d0f7b859f6461137e809a0a009d0"
+      },
+      {
+        "bytes": 14408,
+        "file": "{runtime}/libdl.so.2",
+        "resolved_path_sha256": "faabe1f9b95014f745fda2266e75bcb2548e607d7b67aa8a7244013db55616bf",
+        "sha256": "feee7549138dc862300b9ba9b2b02502059c838a6c0b92d2ea4c0a357e8e0b45"
+      },
+      {
+        "bytes": 183024,
+        "file": "{runtime}/libgcc_s.so.1",
+        "resolved_path_sha256": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+        "sha256": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb"
+      },
+      {
+        "bytes": 352304,
+        "file": "{runtime}/libgomp.so.1.0.0",
+        "resolved_path_sha256": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+        "sha256": "135f3c8f006d2fe5e68e51281c7974cb991a03de3bfb3593d68d174dfcf854d1"
+      },
+      {
+        "bytes": 952616,
+        "file": "{runtime}/libm.so.6",
+        "resolved_path_sha256": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+        "sha256": "f06f2ce1f1833df5f41cf13b6447ff07bea993ad9b27297d3428c2f70ab3f0e7"
+      },
+      {
+        "bytes": 1018144,
+        "file": "{runtime}/libmvec.so.1",
+        "resolved_path_sha256": "c098fefe694cb2538b891317f75e8097af0174290625b712dc563f859ac63476",
+        "sha256": "2f435206d0df590a958be1a0bb06457b8a284d27608280644b7a22238d300b45"
+      },
+      {
+        "bytes": 14408,
+        "file": "{runtime}/libpthread.so.0",
+        "resolved_path_sha256": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+        "sha256": "4472cde19acc87a431ad1eefe9e86f8238dd1f26f8dac692cff7040474d9d085"
+      },
+      {
+        "bytes": 14624,
+        "file": "{runtime}/librt.so.1",
+        "resolved_path_sha256": "418789904c9ac400a295523dc125b45ee607eb16a347a9552db23d1094a68ce2",
+        "sha256": "4b3a59575a0812a466235bc745814ca5b13825ef5f8ad5680637872ac64cc7ca"
+      },
+      {
+        "bytes": 2592224,
+        "file": "{runtime}/libstdc++.so.6.0.33",
+        "resolved_path_sha256": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+        "sha256": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11"
+      },
+      {
+        "bytes": 14408,
+        "file": "{runtime}/libutil.so.1",
+        "resolved_path_sha256": "d5af512c934fbebf74d209e95e5bc46b1c7ed4b43152ff632982132813cd3d4b",
+        "sha256": "b88de5f440af504c5a7f7fa933ee7272c44e18e4613c44b2cc6b5ca40f99d6ba"
+      },
+      {
+        "bytes": 113000,
+        "file": "{runtime}/libz.so.1.3",
+        "resolved_path_sha256": "a7da7d0de189e8c599f92f9f512b80d3c82ad746d0ff082fe1693b91510c51de",
+        "sha256": "9b64150b28505a33d6bc3ecf709c279f6de97a1c184dbda65d06ee4537f6d286"
+      },
+      {
+        "bytes": 236616,
+        "file": "{runtime}/ld-linux-x86-64.so.2",
+        "resolved_path_sha256": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+        "sha256": "6222a16be7f2d458d6870efe6e715fc0c8d45766fb79cf7dcc3125538d703e28"
+      },
+      {
+        "bytes": 64512,
+        "file": "{build}/ggml/src/ggml-blas/libggml-blas.so.0.26.0",
+        "resolved_path_sha256": "dc15779eb5417f204ee508314197925e46b3b97b53ead2e6cb83668ca2bef77d",
+        "sha256": "a67f70dab7ee0910e68f3d2c04e2251316dbfe034f5c8ee63269cbaba5032b4f"
+      },
+      {
+        "bytes": 964048,
+        "file": "{build}/ggml/src/libggml-base.so.0.26.0",
+        "resolved_path_sha256": "a3390936e3b409c584c8ae1aa24b365a39938fe694cf800dfe895acff5c4bc6e",
+        "sha256": "fd60b4aaa717da488ac3ac04d2a8e455fd532b4ab3b1dc53ff7c4c87815aef43"
+      },
+      {
+        "bytes": 1687736,
+        "file": "{build}/ggml/src/libggml-cpu.so.0.26.0",
+        "resolved_path_sha256": "dd71a1e38bf1fa80725adf6bdb2b6583a82746e3e6d4bc23caccdc1b5e3ff4d1",
+        "sha256": "3dfe8bc6d991cec458e3d6da04ac98e52d10f11e6129021b1e0dc83054fc40be"
+      },
+      {
+        "bytes": 60360,
+        "file": "{build}/ggml/src/libggml.so.0.26.0",
+        "resolved_path_sha256": "79ea87cd6d0d35e4db3d057d06949c0127a5883f0117f3177f833621753f46c2",
+        "sha256": "a2182fc95077e4dd9e2a97b0dd958fc4f6dac221ba9221e88d727df9afb47cd4"
+      },
+      {
+        "bytes": 346592,
+        "file": "{build}/src/libscnet-validation.so",
+        "resolved_path_sha256": "b83122568acf8ea5db078a61af262a42c45fc07c6fcdd08d653c285ca35d7759",
+        "sha256": "2515b6fe51d922134c5496c264ab89b4830d9e7b40dc4304230cf08db6961125"
+      },
+      {
+        "bytes": 34231848,
+        "file": "{environment}/install/lib/libopenblas.so.0.3",
+        "resolved_path_sha256": "0686535a834a6215edd028ce6e7cda527f9a68a54466c4439dfe75c68709fb33",
+        "sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e"
+      },
+      {
+        "bytes": 348856,
+        "file": "{python-deps}/_cffi_backend.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "24bef70c167a091c2594d19afed51d6db7d9c65cb4e95cfb17b2d1a0304f826b",
+        "sha256": "9bc1d08072255a5ec2db10fc75df1dd9e73097a75cd9150cfe875ebd6712f17c"
+      },
+      {
+        "bytes": 3607784,
+        "file": "{python-deps}/_soundfile_data/libsndfile_x86_64.so",
+        "resolved_path_sha256": "4bc5a00240daec3eebec0935b7619a855a0ca21442409ecf3b8c12ce22802338",
+        "sha256": "1c265077c2fff814919884222825d0d40cbea783d414796dea028e05ad811ed3"
+      },
+      {
+        "bytes": 2686065,
+        "file": "{python-deps}/numpy.libs/libgfortran-040039e1.so.5.0.0",
+        "resolved_path_sha256": "a52fa6eb5a98482aa6b15fabb63eb217edbde19c931f9e38cdd633285d18e8e8",
+        "sha256": "14afb3129b1a8b50bc40a3b0820c7f1152ea9bc10121aab152943f7057472886"
+      },
+      {
+        "bytes": 35123345,
+        "file": "{python-deps}/numpy.libs/libopenblas64_p-r0-0cf96a72.3.23.dev.so",
+        "resolved_path_sha256": "6173d42df1a760013c4588fc6f82b0861c3f71a6504d73f923316c6969689182",
+        "sha256": "9254d0854dd7615e11de28d771ae408878ca8123a7ac204f21e4cc7a376cc2e5"
+      },
+      {
+        "bytes": 247609,
+        "file": "{python-deps}/numpy.libs/libquadmath-96973f99.so.0.0.0",
+        "resolved_path_sha256": "76603a471707006a9bb997a95ab9a7d1f6bec42018e2ebb492426abb8902879c",
+        "sha256": "934c22ded0e7d169c4d4678876c96051adf3d94545da962f60b41659b075da3b"
+      },
+      {
+        "bytes": 175912,
+        "file": "{python-deps}/numpy/core/_multiarray_tests.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "4de66d5c88677f41b31b235351349c7717324a4eb9f8d30b36076ce50827c90f",
+        "sha256": "0b2cbb7419ffc2f712987aabaf518a3b1d9de8406093f79dcb1d712a34ab6057"
+      },
+      {
+        "bytes": 7463681,
+        "file": "{python-deps}/numpy/core/_multiarray_umath.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "219613f999f80c553e014b8ad6774f32a720b29bbfd7a2c3ab9c7a72d2a7b800",
+        "sha256": "6a650810a8735cbdb988f74729973740a337645dd1585fef696e73e2dbc65beb"
+      },
+      {
+        "bytes": 97008,
+        "file": "{python-deps}/numpy/fft/_pocketfft_internal.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "272976c8aea84d04a8a168e9917fa4785477d6773b4c2f8f688062be041b7c99",
+        "sha256": "38d22249f351b1d50e9269c596889ffc638639ebc150c1e75fc9f55a0f331ab5"
+      },
+      {
+        "bytes": 216793,
+        "file": "{python-deps}/numpy/linalg/_umath_linalg.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "87205ba813f2525a164329f817d7bd303c2ae9de6b7f54984a8deee2956ae59e",
+        "sha256": "8822e772d743d405983f1b9c6b34b704dd297780890dc245454f1081adf50a4c"
+      },
+      {
+        "bytes": 348704,
+        "file": "{python-deps}/numpy/random/_bounded_integers.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "a9cc690af57ad946e03bfaf4e1abb360e6426aef7ca99532be9d077f3ccb5336",
+        "sha256": "b39f7e2b4ccfd6904ae60fe1517f6bda8be7835b5bf69d54dec0d693c5e8b793"
+      },
+      {
+        "bytes": 258888,
+        "file": "{python-deps}/numpy/random/_common.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "fd36ecc2771321a5d761642d5f981789ef420e6637fddd0dfabb4ea2a94ac125",
+        "sha256": "abd88ca8f447f22c4f51f226734d34732966bae61edd2aa25f74bfec954bee28"
+      },
+      {
+        "bytes": 946872,
+        "file": "{python-deps}/numpy/random/_generator.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "b459ffb4a1447de519630d008ba9724bae3a82251dd1a4f9fc1b8d3ce3ce9dfe",
+        "sha256": "5b3ef2ac8b78aa83bc869b70e30e2a70fbd3ab373c5253ed6eba9982a55fd7e2"
+      },
+      {
+        "bytes": 119488,
+        "file": "{python-deps}/numpy/random/_mt19937.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "2a431c264eb831f48bbd73a4464850f6603a5d835192f177ab518944b43944aa",
+        "sha256": "3619f7f91b9ee7197c2902c0e197e69b2e5dd45fb11cd22e572e9b0b886514a9"
+      },
+      {
+        "bytes": 125040,
+        "file": "{python-deps}/numpy/random/_pcg64.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "099df58243e4f75464a3aabd2944cc4b5f6cf19564a9c191d48a4205e014e20f",
+        "sha256": "577c1468f4fb40bb23184343e2c1b645a17d1d493641ea92c052f286dc6eb556"
+      },
+      {
+        "bytes": 106712,
+        "file": "{python-deps}/numpy/random/_philox.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "48e7f039b492b7fdccd6813072f8161028094b27cc24710830183fca9265b57f",
+        "sha256": "2c9b1fe53ef119e3ed2acb73c802cf2996502b0fd51d4926d4047576cea57514"
+      },
+      {
+        "bytes": 76224,
+        "file": "{python-deps}/numpy/random/_sfc64.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "60f85241f154b9c58f2bba2e99e0457c87ebd52b1cbeb0e0f3acf931c403a5cf",
+        "sha256": "5883302ce33afd54db6631adbf5e000297b8eb42c0ec894bbec318b5e6b14268"
+      },
+      {
+        "bytes": 234016,
+        "file": "{python-deps}/numpy/random/bit_generator.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "efe23fbcb83eb8eb9bfaf4e0fd67daeef3cb3e971eb78832ff2855ae3a6bd20c",
+        "sha256": "87c5c730887943c603b16c53cf213398336ee410ef46595518093977afd5b0cb"
+      },
+      {
+        "bytes": 749040,
+        "file": "{python-deps}/numpy/random/mtrand.cpython-312-x86_64-linux-gnu.so",
+        "resolved_path_sha256": "a4211c9f39c9865fe910cc579d1905d5e16068158d3b408291d4488837f30c28",
+        "sha256": "8d866b4b6107401ab9546044564208e0a5899c3903da09277d1c4875d98bcf0f"
+      }
+    ],
+    "native_blas_thread_queries": {
+      "openblas_get_num_threads": 2
+    },
+    "original_model_loaded": false,
+    "provider_symbol_lookup_owners": {
+      "cblas_sgemm": {
+        "bytes": 34231848,
+        "file": "{environment}/install/lib/libopenblas.so.0.3",
+        "sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e"
+      },
+      "openblas_get_config": {
+        "bytes": 34231848,
+        "file": "{environment}/install/lib/libopenblas.so.0.3",
+        "sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e"
+      },
+      "openblas_get_corename": {
+        "bytes": 34231848,
+        "file": "{environment}/install/lib/libopenblas.so.0.3",
+        "sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e"
+      }
+    },
+    "standalone_ldd_before_and_after_equal": true,
+    "standalone_ldd_file_count": 11,
+    "thread_environment": {
+      "BLIS_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2",
+      "OMP_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "VECLIB_MAXIMUM_THREADS": "2"
+    },
+    "torch_loaded": false,
+    "unsupported_host_file_probes_omitted": true,
+    "wait_policy_environment": {
+      "GOMP_SPINCOUNT": null,
+      "KMP_BLOCKTIME": null,
+      "OMP_WAIT_POLICY": null,
+      "OPENBLAS_THREAD_TIMEOUT": null
+    }
+  },
+  "schema": "scnet_recurrent_weight_full_output_independent_audit_v1",
+  "scope": "Saved-file audit of exactly one warmup and one unpaired measured native-only full 24-second SCNet-small F16 call; no new inference, original-model execution or timing was performed by this audit."
+}

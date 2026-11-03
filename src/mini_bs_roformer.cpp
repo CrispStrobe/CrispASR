@@ -788,6 +788,7 @@ mini_bs_roformer_context* mini_bs_roformer_init_from_file(const char* path, mini
             throw std::runtime_error("CPU backend unavailable");
         core_cpu_backend::set_n_threads(m->cpu, params.n_threads);
         if (params.use_gpu) {
+#ifdef __APPLE__
             // Disable Metal graph optimize reordering for Mini-BS-RoFormer:
             // the model's multi-dimensional view/permute graphs violate
             // Metal's speculative concurrency reorder assumptions.

@@ -5,7 +5,8 @@ Music/voice **source separation** is a new task category, distinct from ASR
 returns **N named stems of the user's own audio**. The supported backends are
 `htdemucs` (4-stem: `drums`/`bass`/`other`/`vocals`), `mel-band-roformer`
 (2-stem: `vocals`/`other` for a 1-stem vocals model; `stem0…stemN` otherwise),
-and `mini-bs-roformer` (HiDolen V2.5: `bass`/`drums`/`other`/`vocals`).
+`mini-bs-roformer` (HiDolen V2.5: `bass`/`drums`/`other`/`vocals`),
+and `scnet` (SCNet / SCNet-large: `drums`/`bass`/`other`/`vocals`).
 
 This doc is the **single agreed surface** all separation backends route through,
 with shared CLI flags and output conventions. Authored by the M1/Metal
@@ -16,7 +17,7 @@ design the shared surface now. The htdemucs session should adopt it.
 
 Separation returns **audio, not `crispasr_segment`s**, so it is NOT a
 capability layered onto the ASR `transcribe()` path. It gets its own dispatch.
-A capability bit (`CAP_SEPARATE`, `1u << 22`, declared by all three backends)
+A capability bit (`CAP_SEPARATE`, `1u << 22`, declared by all separation backends)
 is only for detection/help text, not for
 routing through the transcription loop.
 
@@ -29,7 +30,7 @@ crispasr --separate -m <model.gguf> -f mix.flac [--stems vocals,drums] [--sep-ou
 - **`--separate`** enables the task (alias intent: `--task separate`). Routes to
   the separation dispatcher BEFORE the ASR backend is constructed.
 - Backend is auto-detected from the GGUF `general.architecture`
-  (`htdemucs` / `mel-band-roformer` / `mini-bs-roformer`) after the normal `-m` resolution, so a
+  (`htdemucs` / `mel-band-roformer` / `mini-bs-roformer` / `scnet`) after the normal `-m` resolution, so a
   concrete `-m <gguf>` never needs `--backend`. Only the auto-download path
   needs it, to pick which model to fetch (`--backend htdemucs|mel-band-roformer`;
   `mel-band-roformer` is the default resolution key when `--backend` is unset).
@@ -40,9 +41,14 @@ crispasr --separate -m <model.gguf> -f mix.flac [--stems vocals,drums] [--sep-ou
   Stereo, 16-bit PCM, at the model's native rate (44100). **No AI-provenance
   INFO chunk** — the audio is the user's, not AI-generated.
 
-Mini BS RoFormer currently requires a concrete converted GGUF path; it does
-not advertise auto-download. Its same four-stem API is available through
-`Session.separate()` in the bindings and through the HTTP endpoint below.
+SCNet requires a concrete converted GGUF path and does not advertise
+auto-download. Both SCNet checkpoints use `general.architecture=scnet`. Its
+four-stem API is available through `Session.separate()` in the bindings and
+through the HTTP endpoint below. Default inference follows the original
+20-second chunks, 50% overlap and one seeded random shift per chunk; `--seed`
+selects the repeatable shift sequence (default zero). A direct native
+`scnet_params.no_segment` diagnostic bypasses the outer chunk/shift/normalization
+wrapper and must not be presented as the default end-to-end inference path.
 
 ## Shared code (landed, additive)
 
@@ -72,6 +78,7 @@ int crispasr_run_separate(const whisper_params& params);
   3. arch == htdemucs         -> htdemucs_init_from_file + htdemucs_separate
      arch == mel-band-roformer-> mel_band_roformer_init_from_file + _separate
      arch == mini-bs-roformer -> mini_bs_roformer_init_from_file + _separate
+     arch == scnet            -> scnet_init_from_file + _separate
   4. wrap result in crispasr_separation_view
   5. for each source: if crispasr_stem_selected(--stems) -> write
      crispasr_stem_output_path(...) with crispasr_stem_to_wav(...)
@@ -99,7 +106,7 @@ crispasr --server -m asr.gguf --separate-model htdemucs-f16.gguf --port 8080
 ```
 
 - **`--separate-model PATH`** — loads a secondary GGUF at startup (auto-detected
-  `htdemucs`, `mel-band-roformer` or `mini-bs-roformer`, resolved via `crispasr_resolve_model_cli`).
+  `htdemucs`, `mel-band-roformer`, `mini-bs-roformer` or `scnet`, resolved via `crispasr_resolve_model_cli`).
   Persistent context, serialised by `std::mutex` (concurrent requests queue).
 - **`POST /v1/audio/separation`** — multipart `file` (audio upload, any supported
   container) + optional `stems` field (comma list, default all). Returns

@@ -1,6 +1,6 @@
 # CrispASR — Current work plan
 
-Updated 2026-11-01. Start with [the maintainer handoff](docs/maintenance-handoff.md).
+Updated 2026-11-02. Start with [the maintainer handoff](docs/maintenance-handoff.md).
 It contains the completed work, exact evidence, bounded next actions and blockers
 needed by a fresh agent; no earlier chat is required. Follow `AGENTS.md` and its
 mandatory maintainer-guide instructions before implementation.
@@ -11,6 +11,263 @@ before starting. The full scope of each task (exact runs, inputs, commands and
 acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-tasks--fully-scoped).
 
 ## NOW — release verification and nightly diagnosis (2026-10-30)
+
+### SCNet / SCNet-large — native port recovery, 2026-11-02
+
+- Owner: SCNet recovery team (native graph, conversion/reference/validation,
+  CLI/Session integration); starting source
+  `04200fae791c8d5113fa47d5896ccd13f18f6bad`.
+- Recovery: no SCNet branch, commit, pull request, or source files were found in
+  the repository at resumption. Earlier chat progress is not validation evidence.
+  Rebuild against the current source and checkpoint reviewable work in Git.
+- Missing behavior: source-faithful native ggml inference for the author's SCNet
+  and SCNet-large checkpoints, GGUF conversion, F16/Q8_0/Q4_K precision policy,
+  four-stem stereo separation, CLI and Session/C ABI architecture detection.
+- Acceptance: pin the official source and checkpoint hashes; compare every
+  required original-Python stage and complete stems with shape, finite-value,
+  amplitude and error checks (F16 cosine >0.999, Q8_0 >0.98, Q4_K >0.94).
+  Preserve the published normalization, normalized rectangular STFT, recurrent
+  FFTs, overlap weighting and per-chunk shift behavior. Measure matched-input,
+  matched-device warm inference against the original implementation; each
+  qualified precision must at least match its timing. Record failures and
+  hardware/fixture limits without weakening these full-stage gates or promoting unqualified
+  models. Exercise CLI and actual Session/C ABI, including neutral filenames,
+  cold/warm reuse, changed inputs, result ownership and invalid arguments.
+- Implemented: native ggml graph with explicit CPU recurrent/FFT operations,
+  strict 372-tensor converter, original-method 35-stage capture, quantizer policy,
+  CLI/server/Session wiring, bounded graph caching, and complete validation tools.
+  Actual local F16/Q8_0/Q4_K synthetic-weight graphs pass finite-output, geometry,
+  cold/warm/changed-input reuse checks; mathematical, converter, routing and
+  comparator rejection controls pass. See [backend documentation](docs/scnet.md)
+  and [bounded local receipt](docs/historical/scnet-local-validation-2026-11-02.json).
+- Hosted progress: [preflight 41395094930](https://github.com/CrispStrobe/CrispASR/actions/runs/41395094930)
+  built the production native library/probe and quantizer with OpenBLAS; math and
+  routing controls passed. Its earlier quantizer-test filename collision is
+  corrected in `1ef9331`. The [first qualification run](https://github.com/CrispStrobe/CrispASR/actions/runs/41396683922)
+  exposed a NumPy/Accelerate dependency conflict before model execution; retain
+  Accelerate 0.32.1 and pin compatible NumPy 1.26.4 for the next run.
+- [Run 41397985492](https://github.com/CrispStrobe/CrispASR/actions/runs/41397985492)
+  built both production variants and passed generated capabilities, C ABI,
+  wiring, and original-observer controls. Its actual CLI generated the checked-in
+  145-backend catalogue. Small-model raw F16 passes every full-stage and output
+  metric but failed the added angle-only row rule. Independent original-F16
+  storage and original-GELU-layout experiments reproduced these failures;
+  [the documented row-policy correction](docs/scnet.md#numerical-and-performance-gates)
+  retains the global gates and requires fresh acceptance. Large conversion
+  identified the author's distinct band ratios `[0.225, 0.372, 0.403]`; the
+  native/reference contracts are corrected and the small graph is bit-identical.
+- Quantization diagnosis: default Q8_0 and Q4_K failed the quiet bass stem in
+  the 0.25-second raw probe. Keeping the four final spectral reconstruction
+  matrices in F16 repairs all 35 stage gates for both formats, with every other
+  tensor byte-identical and only 45,600 extra bytes per small model. The default
+  policy retains 99.4469% Q8_0 and 76.5695% Q4_K matrix-element coverage. Preserve
+  the failed defaults and [candidate evidence](docs/historical/scnet-quantization-diagnosis-2026-11-02.json);
+  require fresh raw probes for all precisions plus full overlapping-audio fidelity
+  and performance before promotion.
+  The [genuine large raw probe](docs/historical/scnet-large-raw-2026-11-02.json)
+  also passes all 35 stages in all three formats under this default policy,
+  with 99.56995% Q8_0 and 97.65234% Q4_K matrix-element coverage.
+- [Run 41403856227](https://github.com/CrispStrobe/CrispASR/actions/runs/41403856227)
+  at `94ea189` passes all 35 full-pipeline stages and timed-output fidelity for
+  small SCNet in F16/Q8_0/Q4_K, but fails performance: native medians are
+  46.31/46.53/46.64 seconds versus original 16.43/16.15/15.70 seconds.
+  This predates the four-matrix quantization repair and is retained as a
+  [failed runtime baseline](docs/historical/scnet-runtime-baseline-2026-11-02.json),
+  not current-policy qualification. The [large job](docs/historical/scnet-large-runtime-baseline-2026-11-02.json)
+  likewise passes numerical and production-surface gates, but takes about
+  146.5–147.1 seconds versus 49.5–50.4 seconds original on its separate worker.
+  Graph creation costs only 0.07–0.16 seconds per complete call.
+- The [focused profile](docs/historical/scnet-runtime-profile-2026-11-02.json)
+  at `b51801b` reproduces the exact full small-model baseline waveform and
+  attributes 18.225 seconds to recurrent gates, 3.981 seconds to recurrent GEMMs,
+  6.288 seconds to other BLAS operations, and substantial copy/layout/broadcast
+  costs. SIMD gate and CPU layout changes pass all 35 native and independent
+  original-reference stages for both sizes and all three formats on the short
+  fixture. Forced-scalar F16 runs reproduce all 35 earlier native tensor payloads
+  exactly, isolating the layout changes from the activation approximation.
+  See [optimization controls](docs/historical/scnet-runtime-optimization-controls-2026-11-02.json).
+- The [optimized focused run](docs/historical/scnet-runtime-optimized-profile-2026-11-02.json)
+  at `4264d2e` passes all four final-waveform gates for small F16 in both warmups
+  and all three alternating timing pairs, but native median 21.761 seconds still
+  exceeds the same-host original median 16.406 seconds. The instrumented run
+  attributes 1.592 seconds to gates, 4.378 seconds to recurrent GEMMs, 6.942 seconds
+  to other BLAS operations, and 2.817 seconds to internal FFT nodes. This worker
+  uses EPYC 9V74 hardware; earlier cross-host timings are descriptive only.
+  This diagnostic checks no intermediate stages or quantized models, and its
+  overall acceptance and qualification remain false.
+- Exact SIMD FFT, convolution column layout and grouped recurrent bias fusion
+  now pass all 35 original-reference stages for both sizes and all three formats
+  in fresh genuine short probes. Actual OpenBLAS outer-product routing is
+  verified in every case. [The controls](docs/historical/scnet-fft-convolution-controls-2026-11-02.json)
+  retain component identities and numerical scope. Dependency [ggml PR #6](https://github.com/CrispStrobe/ggml/pull/6)
+  fixes the first outer product's thread budget; its exact source is pinned.
+- The [next focused profile](docs/historical/scnet-runtime-fft-convolution-profile-2026-11-02.json)
+  at `6a4c805` passes every final-waveform check but still fails speed: native
+  median **18.604 seconds** versus original **16.581 seconds** on the same
+  two-thread EPYC 7763 worker. Its instrumented call attributes 5.402 seconds
+  to recurrence (3.924 GEMM, 1.472 gates), 4.107 seconds to other matrix
+  multiplications, 2.471 seconds to convolution outer products, and 1.956
+  seconds to internal FFT nodes. The receipt retains all three timing pairs,
+  source snapshots, provider/thread identities and the failed performance gate.
+- Shared bidirectional input projections and paired real FFTs now pass all 35
+  native and independent original-F32 stage checks for both sizes in all three
+  formats on the genuine short fixture. The [new controls](docs/historical/scnet-real-fft-projection-controls-2026-11-02.json)
+  bind the unchanged model bytes, new binaries, actual fused projection routing,
+  exclusive FFT worker ownership and the unchanged numerical gates. The
+  component FFT receipt retains its extreme unequal-amplitude conditioning
+  limit; these short diagnostics make no full-pipeline or speed claim.
+- Full qualification binds the five native entrypoints and their complete
+  standalone loader resolutions before and after execution. Packaging
+  requires this proof and a fresh dependency check. The [controls](docs/historical/scnet-linkage-controls-2026-11-02.json)
+  include 13 rejection-control groups and genuine five-entrypoint/16-library
+  snapshots, independently repeated. These are tooling controls, not a model
+  qualification result.
+- [Run 41469961180](https://github.com/CrispStrobe/CrispASR/actions/runs/41469961180)
+  at `0b5639c` passes every final-waveform check but fails speed on its EPYC
+  9V45 runner: default native median **18.806 seconds** versus original
+  **6.395 seconds**; passive **19.229** versus **6.724 seconds**. All calls are
+  retained in the [receipt](docs/historical/scnet-runtime-real-fft-projection-profile-2026-11-02.json).
+  OpenBLAS 0.3.20 selects Barcelona kernels on this newer CPU while Torch uses
+  AVX512. Prior workers used different CPUs, so their absolute times are not
+  a controlled comparison with this run.
+- Dependency repair: CI now builds official OpenBLAS 0.3.34 at
+  `e0166008be8e466242aa76b2ff75ce3f0fbf574a`, with automatic CPU dispatch,
+  LP64 integers, pthreads, and two runtime threads. The tested helper, 12
+  independent matrix controls and six ggml thread controls pass. The local
+  SCNet archive is byte-identical to the preceding provider build. The
+  [provider controls and native-only baseline](docs/historical/scnet-openblas034-build-controls-2026-11-02.json)
+  establish the dependency and repeated-output identities, not model or speed
+  acceptance.
+- Allocation repair: CPU uses one persistent scheduler and
+  allocator with fresh metadata when geometry changes. The previous two-entry
+  cache misses all three recurring default-fixture shapes. The pool retains its
+  largest capacity until model destruction; GPU keeps its existing cache.
+  [Local diagnostics](docs/historical/scnet-local-runtime-allocation-diagnostic-2026-11-02.json)
+  preserve the failed timing checks and resource counters that prompted this
+  investigation. Minor-fault counts do not directly attribute allocation cost.
+  The [independently audited controls](docs/historical/scnet-cache-allocator-controls-2026-11-02.json)
+  pass all 210 short-stage comparisons and 11 cache lifecycle cases. Two ggml
+  allocation-failure bugs were reproduced and repaired; all 12 failure/retry
+  groups pass with address and undefined-behavior sanitizers. On the retained
+  native-only full fixture, output bytes match, minor faults fall 81.38% and
+  peak RSS falls 29.21%, but the single measured call is 3.07% slower. This
+  establishes no comparative speed qualification.
+- Actual mapped libraries now have independent
+  [runtime identity controls](docs/historical/scnet-loaded-runtime-controls-2026-11-02.json),
+  separate from standalone loader resolution. Torch's mapped OpenMP runtime
+  is retained, and all three precision proofs must pass again at packaging.
+- CPU BLAS now materializes 24 immutable recurrent matrices once at model load.
+  All 144 tensors across both sizes and three precisions exactly match actual
+  ggml casts. All 72 observed ordinary recurrent splits plan and execute one
+  ggml worker while OpenBLAS retains two threads. This adds 15 MiB for SCNet or
+  60 MiB for SCNet-large and leaves original GGUF tensors and storage types
+  intact. The [final candidate controls](docs/historical/scnet-recurrent-weight-controls-2026-11-02.json)
+  also pass all 210 original-F32 stage checks with byte-identical stage payloads
+  versus the preceding implementation. These controls establish scheduling,
+  conversion and short-input fidelity, not performance acceptance.
+- Main's newer Metal work is preserved with both SCNet dependency fixes in
+  ggml `1b972bb754aa5f83e2d872ccf37a335717f6658d`; CPU SCNet and allocator
+  source bytes are unchanged from the final local checks.
+- The [fresh full hosted run](https://github.com/CrispStrobe/CrispASR/actions/runs/41489721058)
+  stopped before provider or native compilation: `setup-python` supplied
+  `LD_LIBRARY_PATH`, which the provider guard correctly rejected. The
+  [failure receipt](docs/historical/scnet-hosted-provider-prebuild-failures-2026-11-02.json)
+  contains no model result. Both qualification workflows now remove that
+  variable before shell/Python startup and verify the selected interpreter
+  before installation; [startup controls](docs/historical/scnet-python-clean-start-controls-2026-11-02.json)
+  bind the official Python artifact and its embedded RUNPATH. Provider and
+  loaded-runtime guards remain unchanged.
+- The [normal-runtime local F16 diagnostic](docs/historical/scnet-runtime-normal-access-profile-2026-11-02.json)
+  uses ordinary Torch AVX512 dispatch, with no ISA override. All warmup and
+  measured waveform checks pass. Native median **17.124176 seconds** narrowly
+  beats original **17.301418 seconds** across three alternating pairs on the
+  same EPYC 9V74 worker with two threads. This is not complete qualification.
+  The [native-only full-output replay](docs/historical/scnet-recurrent-weight-full-output-2026-11-02.json)
+  and [exact historical control sources](docs/historical/scnet-recurrent-weight-control-sources-2026-11-02/README.md)
+  preserve the earlier observations and their original compiled-source scope.
+- The AVX512 gate extension preserves the existing AVX2 equations, constants,
+  FMA grouping, tails and fallbacks. Its [component controls](docs/historical/scnet-avx512-gate-controls-2026-11-02.json)
+  pass all 12 groups, including bit-identical activation, gate-state and
+  recurrent-feedback comparisons. Production model and speed acceptance still
+  require the complete campaign. The unrelated adaptive-convolution candidate
+  is not part of this implementation.
+- Generic CI exposed an inherited Mini-BS Windows `setenv` build error; the
+  Metal-only setting is now guarded by `__APPLE__`, preserving dynamic Metal
+  behavior. [Baseline CI triage](docs/historical/scnet-generic-ci-baseline-triage-2026-11-02.json)
+  also retains unrelated ARM harness failures without treating them as SCNet
+  numerical results.
+- The [first complete local small campaign](docs/historical/scnet-first-full-small-2026-11-02.json)
+  at `a80cbbba` passes all 210 short/full stage checks, all six warmups and 18
+  timed waveform checks, every production CLI/Session surface, and all runtime
+  identity checks. It fails all three speed gates: native/original medians are
+  **15.860326/14.749629 s** F16, **16.363169/16.271565 s** Q8_0, and
+  **18.890005/17.151493 s** Q4_K. All calls and the automatic diagnostic are
+  retained; no model was packaged. Peak child RSS was 3,573,896 KiB for this
+  capture-heavy campaign, not a standalone production-memory measurement.
+- The [hosted large-model campaign at the same `a80cbbba` source](docs/historical/scnet-a80-large-qualification-2026-11-02.json)
+  passes all numerical, surface, runtime and speed gates in all three formats
+  on its EPYC 7763/AVX2 worker. Native/original medians are
+  **64.442049/73.001402 s** F16, **64.607757/72.975983 s** Q8_0 and
+  **64.819255/73.263762 s** Q4_K. It produced a success-only hosted bundle.
+  The independent evidence audit passes; the separate bundle bytes have not
+  yet been downloaded/audited. This qualifies that exact large-model CPU build
+  and fixture, not subsequent runtime changes or the small model.
+- CPU convolution packing now chooses frequency tiles from the actual time and
+  kernel dimensions, with a strict **128 MiB per packing tensor** budget.
+  Complete time rows, coefficient precision and frequency order are preserved.
+  The maximum supported single-frequency column is 45.439 MiB, so valid inputs
+  always have a fitting tile; invalid/overflowing geometry raises the existing
+  recoverable error. Total graph and process memory are separate from this
+  individual-buffer bound. [Component and short-reference controls](docs/historical/scnet-adaptive-tiling-controls-2026-11-02.json)
+  bind this candidate. Its [complete local campaign](docs/historical/scnet-c2-full-small-2026-11-02.json)
+  at `9724c205` again passes all 210 stage decisions, all 96 warmup/timed stem
+  decisions, production surfaces and runtime identities, but fails all three
+  speed gates: native/original medians are **16.782511/14.785485 s** F16,
+  **16.493169/16.185961 s** Q8_0 and **16.303297/15.609759 s** Q4_K.
+  The exact binaries, source, first-attempt timings and diagnostic attribution
+  are retained; no model was packaged.
+- Current implementation work targets the recurrent matrix loop and gate
+  updates with immutable packed F32 weights and independent ggml worker batches.
+  This candidate must preserve the original bias/state equations, runtime
+  fallback paths, thread budget and all numerical/performance gates. Its new
+  accumulation order passes [component and original-reference controls](docs/historical/scnet-packed-recurrence-controls-2026-11-02.json):
+  all six component groups, twelve concurrent/clamped callback comparisons,
+  and all 210 short model-stage decisions pass. Complete waveform and speed
+  qualification remain pending on its exact committed source.
+- Next action: qualify both model sizes directly
+  through all original-checkpoint, raw, full-pipeline, CLI/Session and paired
+  performance gates in `scnet-qualification.yml` and [draft PR #566](https://github.com/CrispStrobe/CrispASR/pull/566).
+  The dedicated `ci/scnet-qualification-20261102` branch triggers the expensive
+  campaign on relevant source changes. Concurrency is keyed by commit so that
+  distinct candidates retain independent runs; ordinary feature-PR checks
+  remain in place. The preserved [a80 hosted run](https://github.com/CrispStrobe/CrispASR/actions/runs/41506291896)
+  has completed: the small-model campaign fails only performance, while the
+  large-model campaign passes as recorded above. The separate hosted
+  `9724c205` campaign remains attached to its exact source.
+  Complete CPU qualification, GPU qualification and held-out quality remain unproven; do not promote the
+  candidate or substitute diagnostic runs for these gates.
+- License: upstream [MIT notice](https://github.com/starrytong/SCNet/blob/main/LICENSE)
+  plus the [author's explicit checkpoint permission](https://github.com/starrytong/SCNet/issues/35)
+  cover the author's released SCNet/SCNet-large weights, including format-converted
+  redistribution with attribution. Retain the notice and exact weight provenance.
+
+### Separation and speech frontend candidates — license inventory, 2026-11-02
+
+These are research candidates; this inventory does not claim implemented or
+qualified native support. Keep code and checkpoint permission distinct.
+
+| Candidate | Source-code terms | Pretrained-weight evidence / next gate |
+|---|---|---|
+| SCNet / SCNet-large | [MIT](https://github.com/starrytong/SCNet/blob/main/LICENSE) | [Author confirms MIT and converted-checkpoint redistribution](https://github.com/starrytong/SCNet/issues/35); active port above. |
+| Mini-BS-RoFormer-18M | MIT declared in author's model repository | [MIT model card](https://huggingface.co/HiDolen/Mini-BS-RoFormer-18M/blob/main/README.md); separate architecture/checkpoint qualification from shipped V2.5. |
+| Mini-BS-RoFormer 8.83M | MIT declared in author's model repository | [MIT model card](https://huggingface.co/HiDolen/Mini-BS-RoFormer/blob/main/README.md); separate architecture/checkpoint qualification from shipped V2.5. |
+| MossFormer2_SS_16K | [Apache-2.0](https://github.com/modelscope/ClearerVoice-Studio/blob/main/LICENSE) | [Official weights declare Apache-2.0](https://huggingface.co/alibabasglab/MossFormer2_SS_16K/blob/main/README.md). |
+| GTCRN | [MIT](https://github.com/Xiaobin-Rong/gtcrn/blob/main/LICENSE) | Checkpoints are inside the official MIT repository; separate explicit weight-scope confirmation not located. |
+| UL-UNAS | [MIT](https://github.com/Xiaobin-Rong/ul-unas/blob/main/LICENSE) | Checkpoints are inside the official MIT repository; separate explicit weight-scope confirmation not located. |
+| DBS-TIGER-DnR | [Apache-2.0 with retained third-party MIT notices](https://github.com/JusperLee/Dynamic-Band-Splitting#license) | [Official model card declares Apache-2.0](https://huggingface.co/JusperLee/DBS-TIGER-DnR). |
+| ZipEnhancer | [Apache-2.0 in ModelScope](https://github.com/modelscope/modelscope/blob/master/LICENSE) | [Exact official weight listing](https://www.modelscope.cn/models/iic/speech_zipenhancer_ans_multiloss_16k_base) declares Apache-2.0. |
+| DeepFilterNet3 | [MIT or Apache-2.0 for code](https://github.com/Rikorose/DeepFilterNet#license) | Explicit checkpoint-redistribution scope remains unconfirmed; [issue #712](https://github.com/Rikorose/DeepFilterNet/issues/712) has no maintainer clarification. |
+| SAM Audio family | [Custom SAM License](https://github.com/facebookresearch/sam-audio/blob/main/LICENSE) | Same custom terms cover trained weights; [official checkpoint access is gated](https://huggingface.co/facebook/sam-audio-base). Requires a separate license review; not a permissive MIT/Apache candidate. |
 
 ### Mini-BS-RoFormer V2.5 — CPU qualification complete, 2026-11-01
 

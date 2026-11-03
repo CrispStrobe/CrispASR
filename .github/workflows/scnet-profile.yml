@@ -1,0 +1,148 @@
+name: SCNet bounded CPU diagnostic
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: scnet-profile-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  profile:
+    runs-on: ubuntu-22.04
+    defaults:
+      run:
+        # setup-python adds its library directory; remove it before shell/Python startup.
+        shell: env -u LD_LIBRARY_PATH bash --noprofile --norc -eo pipefail {0}
+    timeout-minutes: 55
+    env:
+      OMP_NUM_THREADS: '2'
+      OPENBLAS_NUM_THREADS: '2'
+      MKL_NUM_THREADS: '2'
+      VECLIB_MAXIMUM_THREADS: '2'
+      BLIS_NUM_THREADS: '2'
+      ACCELERATE_USE_CPU: 'true'
+      CUDA_VISIBLE_DEVICES: ''
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.sha }}
+          submodules: recursive
+          persist-credentials: false
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Verify clean Python startup before installing dependencies
+        run: |
+          mkdir -p scnet-profile-out
+          python - <<'PYTHON' 2>&1 | tee scnet-profile-out/python-clean-start.log
+          import ctypes, json, os, ssl, sys
+          from pathlib import Path
+          loader_variables = ("LD_LIBRARY_PATH", "LD_PRELOAD", "LD_AUDIT")
+          if "LD_LIBRARY_PATH" in os.environ or any(os.environ.get(key) for key in loader_variables):
+              raise RuntimeError("Python must start without loader overrides")
+          if sys.version_info[:2] != (3, 11) or Path(sys.prefix).resolve() != Path(os.environ["pythonLocation"]).resolve():
+              raise RuntimeError("The clean interpreter differs from setup-python's selected installation")
+          print(json.dumps({"python": sys.executable, "version": sys.version,
+                            "prefix": sys.prefix, "ssl": ssl.OPENSSL_VERSION,
+                            "loader_environment": {key: os.environ.get(key) for key in loader_variables}}))
+          PYTHON
+          python -m pip --version 2>&1 | tee -a scnet-profile-out/python-clean-start.log
+      - name: Install the CPU converter and profiling dependencies
+        run: |
+          bash tools/ci-apt.sh update
+          bash tools/ci-apt.sh install -y cmake ninja-build g++
+          python -m pip install --no-cache-dir torch==2.8.0 --index-url https://download.pytorch.org/whl/cpu
+          python -m pip install --no-cache-dir -r tools/requirements-scnet.txt
+          python -m pip check
+      - uses: actions/cache@v4
+        with:
+          path: |
+            scnet-assets/SCNet
+            scnet-assets/*-author.th
+            scnet-assets/*-author.th.provenance.json
+            scnet-assets/*-author-config.yaml
+            scnet-assets/*-author-config.yaml.provenance.json
+            scnet-assets/hdemucs_mix.wav
+            scnet-assets/hdemucs_mix.wav.provenance.json
+          key: scnet-qualified-assets-scnet-5d95bf96-v1
+      - name: Pin the original source and record host identity
+        run: |
+          mkdir -p scnet-assets scnet-profile-out
+          if [ ! -d scnet-assets/SCNet/.git ]; then
+            git clone https://github.com/starrytong/SCNet.git scnet-assets/SCNet
+          fi
+          git -C scnet-assets/SCNet checkout --detach 5d95bf96b19c3eede63248d171efeca8e3abb948
+          git rev-parse HEAD > scnet-profile-out/source.txt
+          git submodule status > scnet-profile-out/submodules.txt
+          lscpu > scnet-profile-out/cpu.txt
+          free -h > scnet-profile-out/memory.txt
+          g++ --version > scnet-profile-out/compiler.txt
+          python -m pip freeze > scnet-profile-out/python-packages.txt
+      - name: Build the pinned CPU BLAS provider
+        run: >
+          python tools/ci-heavy/scnet_build_openblas.py --work-dir scnet-openblas
+          --output-dir scnet-profile-out/provider --jobs 2
+      - name: Build the native SCNet validation library and tensor controls
+        run: |
+          set -o pipefail
+          cmake -S . -B build-scnet-profile -G Ninja -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON -DBUILD_SHARED_LIBS=ON -DCMAKE_POSITION_INDEPENDENT_CODE=ON \
+            -DCRISPASR_BUILD_SCNET_PROBE=ON -DCRISPASR_BUILD_TESTS=OFF \
+            -DCRISPASR_BUILD_SERVER=OFF -DGGML_NATIVE=ON -DGGML_CUDA=OFF \
+            -DGGML_METAL=OFF -DGGML_BLAS=ON -DGGML_BLAS_VENDOR=OpenBLAS \
+            -DGGML_BACKEND_DL=OFF \
+            -DCMAKE_PREFIX_PATH="$PWD/scnet-openblas/install" \
+            -DBLAS_openblas_LIBRARY="$PWD/scnet-openblas/install/lib/libopenblas.so" \
+            -DBLAS_INCLUDE_DIRS="$PWD/scnet-openblas/install/include/openblas" \
+            -DCBLAS_INCLUDE_DIR="$PWD/scnet-openblas/install/include/openblas" \
+            -DCRISPASR_CBLAS_INCLUDE_DIR="$PWD/scnet-openblas/install/include/openblas" \
+            -DCRISPASR_CPU_OPENBLAS="$PWD/scnet-openblas/install/lib/libopenblas.so" \
+            -DCRISPASR_CORE_OPENBLAS="$PWD/scnet-openblas/install/lib/libopenblas.so" \
+            -DCMAKE_BUILD_RPATH="$PWD/scnet-openblas/install/lib" \
+            -DCRISPASR_CPU_BLAS=ON -DCRISPASR_MEL_BLAS=ON \
+            2>&1 | tee scnet-profile-out/configure.log
+          cmake --build build-scnet-profile --parallel 2 \
+            --target scnet-validation scnet-tensor-test scnet-allocator-test scnet-blas-thread-test \
+            2>&1 | tee scnet-profile-out/build.log
+      - name: Check SCNet tensor, convolution and recurrent math helpers
+        run: |
+          set -o pipefail
+          build-scnet-profile/bin/scnet-tensor-test 2>&1 | tee scnet-profile-out/tensor-controls.log
+          build-scnet-profile/bin/scnet-allocator-test 2>&1 | tee scnet-profile-out/allocator-controls.log
+          build-scnet-profile/bin/scnet-blas-thread-test 2>&1 | tee scnet-profile-out/blas-thread-controls.log
+          python tests/test-scnet-im2col.py 2>&1 | tee scnet-profile-out/im2col-controls.log
+          python tests/test-scnet-fft.py 2>&1 | tee scnet-profile-out/fft-controls.log
+          python tests/test-scnet-real-fft.py 2>&1 | tee scnet-profile-out/real-fft-controls.log
+          python tests/test-scnet-math.py 2>&1 | tee scnet-profile-out/math-controls.log
+          python -B tests/test-scnet-recurrent-gemm.py -v 2>&1 | tee scnet-profile-out/recurrent-gemm-controls.log
+          python tests/test_scnet_profile.py 2>&1 | tee scnet-profile-out/profile-controls.log
+          python tests/test_scnet_runtime_identity.py -v 2>&1 | tee scnet-profile-out/runtime-identity-controls.log
+      - name: Profile F16, primary timing pairs and the passive-wait diagnostic
+        run: >
+          python tools/ci-heavy/scnet_profile.py --source-commit ${{ github.sha }}
+          --build-dir build-scnet-profile --assets-dir scnet-assets
+          --output-dir scnet-profile-out/diagnostic --compare-wait-policy
+      - name: Retain diagnostic source, build options and hashes
+        if: always()
+        run: |
+          mkdir -p scnet-profile-out
+          cp build-scnet-profile/CMakeCache.txt scnet-profile-out/CMakeCache.txt 2>/dev/null || true
+          python - <<'PY'
+          import hashlib, json, pathlib
+          root = pathlib.Path('scnet-profile-out')
+          files = [{'path': str(p.relative_to(root)), 'bytes': p.stat().st_size,
+                    'sha256': hashlib.file_digest(p.open('rb'), 'sha256').hexdigest()}
+                   for p in sorted(root.rglob('*')) if p.is_file()]
+          (root / 'evidence-files.json').write_text(json.dumps(files, indent=2) + '\n')
+          PY
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: scnet-small-F16-cpu-diagnostic-${{ github.sha }}
+          path: scnet-profile-out/
+          include-hidden-files: true
+          if-no-files-found: error

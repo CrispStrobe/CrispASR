@@ -1,0 +1,256 @@
+{
+  "acceptance": false,
+  "audit_complete": true,
+  "base_parent_commit": "4c83d4e3652efafa07ee9ecd431643399b60c7ce",
+  "elf_inspection": {
+    "bin/python3.11": {
+      "embedded_absolute_runpath": "{actions-python}/lib",
+      "needed_sonames": [
+        "libpython3.11.so.1.0",
+        "libc.so.6"
+      ],
+      "sha256": "0113d20d3ba001dcaff5f240badc32c1c10ba2ca01211c23c4263d5a9018ffcc"
+    },
+    "lib/libpython3.11.so.1.0": {
+      "embedded_absolute_runpath": "{actions-python}/lib",
+      "needed_sonames": [
+        "libm.so.6",
+        "libc.so.6"
+      ],
+      "sha256": "088abc4e60c7a68781d87e26c954f82cb2cb951cfcecb4c8671a71cd270c5c33"
+    },
+    "lib/python3.11/lib-dynload/_ctypes.cpython-311-x86_64-linux-gnu.so": {
+      "embedded_absolute_runpath": "{actions-python}/lib",
+      "needed_sonames": [
+        "libffi.so.8",
+        "libc.so.6"
+      ],
+      "sha256": "79c7dda007a606cfd01ee430b6364281a12f8a65fecd5882a5b6e5666f238cde"
+    },
+    "lib/python3.11/lib-dynload/_ctypes_test.cpython-311-x86_64-linux-gnu.so": {
+      "embedded_absolute_runpath": "{actions-python}/lib",
+      "needed_sonames": [
+        "libm.so.6",
+        "libc.so.6"
+      ],
+      "sha256": "84d49e2964dc11de4358cb1fced59bcf038d26ca9660c4cf221680a5d4d95414"
+    },
+    "lib/python3.11/lib-dynload/_ssl.cpython-311-x86_64-linux-gnu.so": {
+      "embedded_absolute_runpath": "{actions-python}/lib",
+      "needed_sonames": [
+        "libssl.so.3",
+        "libcrypto.so.3",
+        "libc.so.6"
+      ],
+      "sha256": "93871342f3c0d55518ae40455bb95ba6d36bbf59f9e1b12987de597ff38fdfad"
+    }
+  },
+  "evidence_sha256": {
+    "artifact-identity.json": "11bde5ebdb94bad12e4ea1052aa33e52affee9f589dff3d53769e1b1b5ecbb14",
+    "canonical-clean-pip.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "canonical-clean-pip.stdout.log": "f94e7c81bd518307c47b62f7c336f4db2f30a4dfb0f36652603d98d376920a98",
+    "canonical-clean-start.json": "716e1712b1943ce80f9f18fa49f6cc96e39733857e1a602b0f4048ff3e32c309",
+    "canonical-clean-startup.stderr.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "canonical-clean-startup.stdout.log": "cebf48ee549a49ebf68017d36afa30a2a684c0ded1afb5ef92c13922a59dd789",
+    "elf-and-relocated-startup.json": "4fce9f505ada4008fbc8ee850d071f887e4422218469c878f8895c49cf2235ba",
+    "independent-review.json": "e10c078ec5b81f2e392d8fe74b01d37ef9964200b557181b8cea215bef88d1bc",
+    "isolated-root-dependencies.json": "a2c8475f227f227f49170a4886be85e0599d0468511d674cdb6637d111fd27ee",
+    "receipt.json": "d2db6269601cf6d498ff00466ac103d84185087faa407711b38a6902e613c9f8",
+    "static-checks.json": "d5459f7e5c2d15adf6df295ee329f0ebace1a6516b5252f1695f07e15c14c594",
+    "workflow-files.json": "8ea6937b58ac1982d35ac7dc769cff14d8872232bbebfd7ae7d3eac5a414764a"
+  },
+  "independent_review": {
+    "complete": true,
+    "guard_source_hashes_verified_against_base_commit": true,
+    "native_receipt_sha256": "d2db6269601cf6d498ff00466ac103d84185087faa407711b38a6902e613c9f8",
+    "new_process_startup_or_model_calls": false,
+    "official_archive_and_github_digest_verified": true,
+    "patch_sha256": "164a6ea0fe9360a4ce96450d9f7af5594cb64e9804438c086816be608512e381",
+    "qualification": false,
+    "schema": "scnet_python_clean_start_independent_review_v1",
+    "scope": "Offline archive, ELF, patch, YAML, syntax and retained-control audit; existing canonical startup was performed by the native control author.",
+    "unmodified_tar_members_and_canonical_files_verified": [
+      "bin/python3.11",
+      "lib/libpython3.11.so.1.0",
+      "lib/python3.11/lib-dynload/_ctypes.cpython-311-x86_64-linux-gnu.so",
+      "lib/python3.11/lib-dynload/_ctypes_test.cpython-311-x86_64-linux-gnu.so",
+      "lib/python3.11/lib-dynload/_ssl.cpython-311-x86_64-linux-gnu.so"
+    ],
+    "workflow_checks": [
+      {
+        "all_previous_steps_and_triggers_identical": true,
+        "bash_and_embedded_python_syntax_pass": true,
+        "exact_candidate_hash_verified": true,
+        "no_step_shell_override": true,
+        "only_default_shell_and_startup_preflight_added": true,
+        "workflow": ".github/workflows/scnet-profile.yml"
+      },
+      {
+        "all_previous_steps_and_triggers_identical": true,
+        "bash_and_embedded_python_syntax_pass": true,
+        "exact_candidate_hash_verified": true,
+        "no_step_shell_override": true,
+        "only_default_shell_and_startup_preflight_added": true,
+        "workflow": ".github/workflows/scnet-qualification.yml"
+      }
+    ]
+  },
+  "limitations": [
+    "This uses the official Ubuntu22.04 Python artifact with local Ubuntu24.04 system ABI libraries in a scratch isolated root; it does not emulate a complete hosted Ubuntu22.04 runner.",
+    "No hosted success, dependency installation success, provider build, model fidelity or performance result is claimed by these controls.",
+    "The startup shell applies to run steps. JavaScript/composite uses-actions retain their own execution behavior.",
+    "Only LD_LIBRARY_PATH is removed by the proposed workflow shell. Nonempty LD_PRELOAD and LD_AUDIT remain rejected, and all provider/runtime/model guards are unchanged.",
+    "The scratch patch preserves all existing triggers. Any later dedicated qualification-branch trigger change is a separate reviewed workflow change.",
+    "Fresh execution must still pass the startup check and every unchanged downstream acceptance gate; the failed earlier run remains failed."
+  ],
+  "official_artifact": {
+    "archive_bytes": 93354427,
+    "archive_sha256": "9f7233ce8c4dacb2112c52842d6eb21be6e43907234f74c5a34f29bbba441eab",
+    "asset_id": 603458729,
+    "filename": "python-3.11.17-linux-22.04-x64.tar.gz",
+    "official_digest": "sha256:9f7233ce8c4dacb2112c52842d6eb21be6e43907234f74c5a34f29bbba441eab",
+    "official_digest_matches": true,
+    "source_commit": "eb7756b60e2add788a3f5c9dba83102f67e076bf",
+    "url": "https://github.com/actions/python-versions/releases/download/3.11.17-36876195594/python-3.11.17-linux-22.04-x64.tar.gz"
+  },
+  "official_sources": {
+    "custom_shell_syntax": "https://docs.github.com/en/actions/writing-workflows/workflow-syntax-for-github-actions#custom-shell",
+    "manifest": {
+      "file": {
+        "arch": "x64",
+        "download_url": "https://github.com/actions/python-versions/releases/download/3.11.17-36876195594/python-3.11.17-linux-22.04-x64.tar.gz",
+        "filename": "python-3.11.17-linux-22.04-x64.tar.gz",
+        "platform": "linux",
+        "platform_version": "22.04"
+      },
+      "manifest_commit": "160ca1e232997f36def6bb6e857f628222bef58a",
+      "release_url": "https://github.com/actions/python-versions/releases/tag/3.11.17-36876195594",
+      "version": "3.11.17"
+    },
+    "setup_python": {
+      "commit": "ece7cb06caefa5fff74198d8649806c4678c61a1",
+      "finding": "Linux setup exports installDir/lib as LD_LIBRARY_PATH and keeps the selected installation on PATH.",
+      "local_file": "setup-python-find-python.ts",
+      "sha256": "102695df9949e7d68acf9a4e0f2527b8ac56c2feb1b4ddc6feb0a19ccc05f511",
+      "url": "https://github.com/actions/setup-python/blob/ece7cb06caefa5fff74198d8649806c4678c61a1/src/find-python.ts"
+    },
+    "ubuntu_python_builder": {
+      "commit": "eb7756b60e2add788a3f5c9dba83102f67e076bf",
+      "finding": "The official shared Python build embeds an RPATH/RUNPATH for the complete canonical toolcache lib directory.",
+      "local_file": "builders-ubuntu-python-builder.psm1",
+      "sha256": "8a217f5d94a876bba1794906afab849c429d7a3dd23beffcd4d8068f10eeca1e",
+      "url": "https://github.com/actions/python-versions/blob/eb7756b60e2add788a3f5c9dba83102f67e076bf/builders/ubuntu-python-builder.psm1"
+    }
+  },
+  "patch": {
+    "default_run_shell": "env -u LD_LIBRARY_PATH bash --noprofile --norc -eo pipefail {0}",
+    "environment_boundary": "env removes LD_LIBRARY_PATH before each workflow run-step Bash and its child Python/native processes start. Python checks but never clears loader variables. JavaScript/composite uses-actions are not covered by defaults.run.shell.",
+    "file": "clean-start-workflows.patch",
+    "files": {
+      ".github/workflows/scnet-profile.yml": {
+        "before_sha256": "36776b45d1c1505d42109d6aade988b08acd4a019cfc99d21a3a5a3991dc4338",
+        "candidate_sha256": "913abd027ca1e867a43ca3d154b830a55979c5502ffcb9afb26322d4a19cf1cf"
+      },
+      ".github/workflows/scnet-qualification.yml": {
+        "before_sha256": "91451fd23996b3f4ea197ae9888860322a4e5eaed7ef4f72fc3cc6306e58224c",
+        "candidate_sha256": "f30eccb7992e5b480b98547dc85a27f3549bd8251276bedd99e47090088003e3"
+      }
+    },
+    "preserved": [
+      "All existing workflow triggers and steps",
+      "PATH and pythonLocation from setup-python",
+      "Strict provider and mapped-runtime loader guards",
+      "LD_PRELOAD and LD_AUDIT rejection",
+      "Numerical gates, reference implementation and native runtime"
+    ],
+    "sha256": "164a6ea0fe9360a4ce96450d9f7af5594cb64e9804438c086816be608512e381",
+    "startup_check": "Immediately after setup-python and before dependency installation, require no loader override, require Python3.11 and the selected pythonLocation prefix, import ctypes/SSL, record identity, and verify pip."
+  },
+  "path_aliases": {
+    "canonical_prefix_utf8_sha256": "952607e2801b1e9963e4c49bebf04f71d4b49d35098070c1ee063c46316346de",
+    "{actions-python}": "The official GitHub-hosted Python 3.11.17 x64 installation under its canonical toolcache prefix.",
+    "{scratch-root}": "A disposable isolated filesystem rooted in this task's scratch workspace."
+  },
+  "performance_qualification": false,
+  "problem": {
+    "cause": "actions/setup-python exports its toolcache lib directory as LD_LIBRARY_PATH; the provider helper rejects that inherited loader override before provider compilation",
+    "failed_run": 41489721058,
+    "failure_summary": "docs/historical/scnet-hosted-provider-prebuild-failures-2026-11-02.json",
+    "inherited_loader_variable": "LD_LIBRARY_PATH={actions-python}/lib"
+  },
+  "qualification": false,
+  "schema": "scnet_python_clean_start_controls_summary_v1",
+  "scope": "Reviewed workflow startup correction and exact official-interpreter controls, before any hosted execution of the candidate. No model or performance measurement.",
+  "startup_controls": {
+    "canonical_prefix_preserved_inside_scratch_root": true,
+    "child_exit": 0,
+    "child_loader_variables_absent": true,
+    "elf_patched": false,
+    "explicit_dynamic_loader_library_path_used": false,
+    "imports": [
+      "ctypes",
+      "ssl",
+      "sqlite3",
+      "zlib"
+    ],
+    "interpreter_unmodified": true,
+    "interpreter_version": "3.11.17 (main, Oct  1 2026, 14:34:26) [GCC 11.4.0]",
+    "parent_removed_before_exec": [
+      "LD_LIBRARY_PATH",
+      "LD_PRELOAD",
+      "LD_AUDIT",
+      "PYTHONHOME",
+      "PYTHONPATH"
+    ],
+    "pip_exit": 0,
+    "pip_version": "24.0",
+    "relocated_failure_preserved": {
+      "reason": "The absolute embedded toolcache RUNPATH cannot resolve libpython when the artifact is moved to an arbitrary scratch prefix. This is expected and distinct from canonical installation.",
+      "returncode": 127
+    },
+    "scope_limit": "Local system ABI dependencies came from Ubuntu24.04. This is exact official-interpreter/RUNPATH clean-start verification, not a complete Ubuntu22.04 hosted-runner emulation.",
+    "sqlite": "3.45.1",
+    "ssl": "OpenSSL 3.0.13 30 Jan 2024",
+    "startup_and_pip_stderr_empty": true,
+    "startup_exit": 0,
+    "zlib": "1.2.11"
+  },
+  "syntax_and_source_controls": {
+    "git_apply_check": {
+      "returncode": 0,
+      "stderr": "",
+      "stdout": ""
+    },
+    "live_workflows_unchanged": true,
+    "patch_sha256": "164a6ea0fe9360a4ce96450d9f7af5594cb64e9804438c086816be608512e381",
+    "unchanged_guard_and_runtime_files_sha256": {
+      "src/scnet.cpp": "eeb6e583d499b73e28d3fe2b1bb3f55f7be2a9edde8fe81140608b446661fc1c",
+      "src/scnet_activation.h": "c239cad15ab8b9f04d104195c0156588afa8dcce76a5b2ec971e3edb5ad0e651",
+      "tools/ci-heavy/scnet_build_openblas.py": "cd65e9c4bc5e7b0fdd95e46073d52251da614d6502f0446fb621a2e8b6ea8b81",
+      "tools/scnet_runtime_identity.py": "523a9336f5dc6626b61c4241a48b19aac8f3e7e574c1de0f99c3c88513a1d3c4",
+      "tools/validate_scnet.py": "b3069dc112619305772f69cdc8845df0e631932a318b4cb68c5690ab29b67831"
+    },
+    "workflows": [
+      {
+        "bash_syntax_returncode": 0,
+        "no_run_step_overrides_shell": true,
+        "only_default_shell_and_preflight_added": true,
+        "preflight_immediately_after_setup_python": true,
+        "python_syntax": true,
+        "triggers_unchanged": true,
+        "workflow": ".github/workflows/scnet-profile.yml",
+        "yaml_parse": true
+      },
+      {
+        "bash_syntax_returncode": 0,
+        "no_run_step_overrides_shell": true,
+        "only_default_shell_and_preflight_added": true,
+        "preflight_immediately_after_setup_python": true,
+        "python_syntax": true,
+        "triggers_unchanged": true,
+        "workflow": ".github/workflows/scnet-qualification.yml",
+        "yaml_parse": true
+      }
+    ]
+  }
+}

@@ -65,6 +65,7 @@ std::unique_ptr<CrispasrBackend> crispasr_make_mimo_asr_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_htdemucs_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mel_band_roformer_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_mini_bs_roformer_backend();
+std::unique_ptr<CrispasrBackend> crispasr_make_scnet_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_crepe_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_btc_chords_backend();
 std::unique_ptr<CrispasrBackend> crispasr_make_tabcnn_backend();
@@ -298,6 +299,8 @@ std::unique_ptr<CrispasrBackend> crispasr_create_backend(const std::string& requ
         return crispasr_make_glm_asr_backend();
     if (name == "htdemucs" || name == "demucs" || name == "htdemucs-ft")
         return crispasr_make_htdemucs_backend();
+    if (name == "scnet" || name == "scnet-large")
+        return crispasr_make_scnet_backend();
     if (name == "mini-bs-roformer" || name == "mini_bs_roformer" || name == "mini-bs-roformer-v2.5")
         return crispasr_make_mini_bs_roformer_backend();
     if (name == "mel-band-roformer" || name == "mel_band_roformer" || name == "melbandroformer" || name == "mbr")
@@ -526,6 +529,7 @@ std::vector<std::string> crispasr_list_backends() {
         "htdemucs",
         "mel-band-roformer",
         "mini-bs-roformer",
+        "scnet",
         "crepe",
         "btc-chords",
         "tabcnn",
@@ -735,6 +739,8 @@ static std::string detect_backend_unchecked(const std::string& model_path) {
 
     if (contains_ci("htdemucs") || contains_ci("demucs"))
         return "htdemucs";
+    if (contains_ci("scnet"))
+        return "scnet";
     if (contains_ci("mini-bs-roformer") || contains_ci("mini_bs_roformer"))
         return "mini-bs-roformer";
     if (contains_ci("mel-band-roformer") || contains_ci("mel_band_roformer") || contains_ci("roformer"))

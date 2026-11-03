@@ -1,0 +1,1373 @@
+{
+  "acceptance": false,
+  "binaries": {
+    "crispasr": {
+      "path": "{build}/bin/crispasr",
+      "sha256": "db9ccad5def85f8f6769a38dda9a56b0547ddb2064a26d056e87cf2bb424f5e2"
+    },
+    "crispasr-quantize": {
+      "path": "{build}/bin/crispasr-quantize",
+      "sha256": "d9f27c04528a73a1cdbaa82642fcc49dfd48f21c3f749f977c25864f6f3c105a"
+    },
+    "production_library": {
+      "path": "{build}/src/libcrispasr.so.0.8.49",
+      "sha256": "cd8590e950a9553f06f0083baf29a562589b69c339c2cc6d6ca012dd863db7ac"
+    },
+    "scnet-probe": {
+      "path": "{build}/bin/scnet-probe",
+      "sha256": "185cbb219d7a208f54d591603a0b7e7a4c7b95ab07f3385765a3e248b19a345b"
+    },
+    "validation_library": {
+      "path": "{build}/src/libscnet-validation.so",
+      "sha256": "9c68af2679a98ed2e4317a771e2c29c8af42b4ee75caf41ab2408b95a4105858"
+    }
+  },
+  "complete": true,
+  "control_pass": true,
+  "packaging_snapshot": {
+    "backend_dl": false,
+    "dependencies": {
+      "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f": {
+        "bytes": 352304,
+        "path": "{runtime}/libgomp.so.1.0.0",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+        "sha256": "135f3c8f006d2fe5e68e51281c7974cb991a03de3bfb3593d68d174dfcf854d1",
+        "sonames": [
+          "libgomp.so.1"
+        ]
+      },
+      "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4": {
+        "bytes": 236616,
+        "path": "{runtime}/ld-linux-x86-64.so.2",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+        "sha256": "6222a16be7f2d458d6870efe6e715fc0c8d45766fb79cf7dcc3125538d703e28",
+        "sonames": [
+          "ld-linux-x86-64.so.2"
+        ]
+      },
+      "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b": {
+        "bytes": 1431992,
+        "path": "{build}/ggml/src/libggml-cpu.so.0.26.0",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+        "sha256": "3ad27d42f631c3cf9398f6c0ed88ba48e525ab5a2b5e29f7d45ea36a254f5d86",
+        "sonames": [
+          "libggml-cpu.so.0"
+        ]
+      },
+      "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27": {
+        "bytes": 2686065,
+        "path": "{runtime}/libgfortran-040039e1.so.5.0.0",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+        "sha256": "14afb3129b1a8b50bc40a3b0820c7f1152ea9bc10121aab152943f7057472886",
+        "sonames": [
+          "libgfortran-040039e1.so.5.0.0"
+        ]
+      },
+      "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368": {
+        "bytes": 60360,
+        "path": "{build}/ggml/src/libggml.so.0.26.0",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+        "sha256": "1dc078bac4569957d8b1291fe654824df8abfe2ed94cb9a5071419410f7cf4d3",
+        "sonames": [
+          "libggml.so.0"
+        ]
+      },
+      "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49": {
+        "bytes": 952616,
+        "path": "{runtime}/libm.so.6",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+        "sha256": "f06f2ce1f1833df5f41cf13b6447ff07bea993ad9b27297d3428c2f70ab3f0e7",
+        "sonames": [
+          "libm.so.6"
+        ]
+      },
+      "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259": {
+        "bytes": 183024,
+        "path": "{runtime}/libgcc_s.so.1",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+        "sha256": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb",
+        "sonames": [
+          "libgcc_s.so.1"
+        ]
+      },
+      "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4": {
+        "bytes": 125688,
+        "path": "{runtime}/libz.so.1",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4",
+        "sha256": "fd81a9c456f61712d486ad3bb99698a95b80e36bbb669477984504844ce26265",
+        "sonames": [
+          "libz.so.1"
+        ]
+      },
+      "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c": {
+        "bytes": 247609,
+        "path": "{runtime}/libquadmath-96973f99.so.0.0.0",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+        "sha256": "934c22ded0e7d169c4d4678876c96051adf3d94545da962f60b41659b075da3b",
+        "sonames": [
+          "libquadmath-96973f99.so.0.0.0"
+        ]
+      },
+      "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a": {
+        "bytes": 2125328,
+        "path": "{runtime}/libc.so.6",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+        "sha256": "511f825ee075610ac9c0f7f91e2c13de2000d0f7b859f6461137e809a0a009d0",
+        "sonames": [
+          "libc.so.6"
+        ]
+      },
+      "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a": {
+        "bytes": 14408,
+        "path": "{runtime}/libpthread.so.0",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+        "sha256": "4472cde19acc87a431ad1eefe9e86f8238dd1f26f8dac692cff7040474d9d085",
+        "sonames": [
+          "libpthread.so.0"
+        ]
+      },
+      "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb": {
+        "bytes": 64512,
+        "path": "{build}/ggml/src/ggml-blas/libggml-blas.so.0.26.0",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+        "sha256": "7bf090b3d956cf7328dbac75c8f5a0a862fbb5e42bacc730c5130b4616fbc85c",
+        "sonames": [
+          "libggml-blas.so.0"
+        ]
+      },
+      "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4": {
+        "bytes": 26490888,
+        "path": "{build}/src/libcrispasr.so.0.8.49",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize"
+        ],
+        "resolved_path_sha256": "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4",
+        "sha256": "cd8590e950a9553f06f0083baf29a562589b69c339c2cc6d6ca012dd863db7ac",
+        "sonames": [
+          "libcrispasr.so.1"
+        ]
+      },
+      "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452": {
+        "bytes": 2592224,
+        "path": "{runtime}/libstdc++.so.6.0.33",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+        "sha256": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11",
+        "sonames": [
+          "libstdc++.so.6"
+        ]
+      },
+      "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5": {
+        "bytes": 16217497,
+        "path": "{runtime}/libcasadi-tp-openblas.so.0",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+        "sha256": "ed1f2f612a6be8cea404c3c18d6c1b1ad917014df73c71c2dcdb911fb6387e8d",
+        "sonames": [
+          "libcasadi-tp-openblas.so.0"
+        ]
+      },
+      "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e": {
+        "bytes": 964048,
+        "path": "{build}/ggml/src/libggml-base.so.0.26.0",
+        "required_by": [
+          "crispasr",
+          "crispasr-quantize",
+          "production_library",
+          "scnet-probe",
+          "validation_library"
+        ],
+        "resolved_path_sha256": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+        "sha256": "e67040c09c07bda613c9a86e3262bf510e256cd39e39a300c96adae6cd69471e",
+        "sonames": [
+          "libggml-base.so.0"
+        ]
+      }
+    },
+    "entrypoints": {
+      "crispasr": {
+        "bytes": 5479352,
+        "path": "{build}/bin/crispasr",
+        "resolved_path_sha256": "9cf5ca260043d714e1d0bd53174123500faa2f3aedfc9e9931c8f95501771b39",
+        "sha256": "db9ccad5def85f8f6769a38dda9a56b0547ddb2064a26d056e87cf2bb424f5e2"
+      },
+      "crispasr-quantize": {
+        "bytes": 1070160,
+        "path": "{build}/bin/crispasr-quantize",
+        "resolved_path_sha256": "c5ec1db236f636be0153d9a6562ce190b39561b234e782b24ae23e0a2fc4d8ac",
+        "sha256": "d9f27c04528a73a1cdbaa82642fcc49dfd48f21c3f749f977c25864f6f3c105a"
+      },
+      "production_library": {
+        "bytes": 26490888,
+        "path": "{build}/src/libcrispasr.so.0.8.49",
+        "resolved_path_sha256": "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4",
+        "sha256": "cd8590e950a9553f06f0083baf29a562589b69c339c2cc6d6ca012dd863db7ac"
+      },
+      "scnet-probe": {
+        "bytes": 323312,
+        "path": "{build}/bin/scnet-probe",
+        "resolved_path_sha256": "77c16b6113ae48052de2b1e6cb40036c0d3a623e88d36fc4cc407cb020baaba5",
+        "sha256": "185cbb219d7a208f54d591603a0b7e7a4c7b95ab07f3385765a3e248b19a345b"
+      },
+      "validation_library": {
+        "bytes": 341608,
+        "path": "{build}/src/libscnet-validation.so",
+        "resolved_path_sha256": "0c4fc364d359ed87dcdf8daff5c63ad01fa985bbeeef78edaf39e6146406ca33",
+        "sha256": "9c68af2679a98ed2e4317a771e2c29c8af42b4ee75caf41ab2408b95a4105858"
+      }
+    },
+    "loader_environment_sha256": {
+      "LD_AUDIT": null,
+      "LD_LIBRARY_PATH": null,
+      "LD_PRELOAD": null
+    },
+    "method": "linux-ldd-direct-backends-v1",
+    "resolutions": {
+      "crispasr": {
+        "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+        "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+        "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+        "libcrispasr.so.1": "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4",
+        "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+        "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+        "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+        "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+        "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+        "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+        "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+        "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+        "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+        "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+        "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+        "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+      },
+      "crispasr-quantize": {
+        "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+        "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+        "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+        "libcrispasr.so.1": "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4",
+        "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+        "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+        "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+        "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+        "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+        "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+        "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+        "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+        "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+        "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+        "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+        "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+      },
+      "production_library": {
+        "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+        "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+        "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+        "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+        "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+        "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+        "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+        "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+        "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+        "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+        "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+        "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+        "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+        "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+        "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+      },
+      "scnet-probe": {
+        "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+        "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+        "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+        "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+        "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+        "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+        "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+        "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+        "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+        "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+        "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+        "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+        "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+        "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+        "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+      },
+      "validation_library": {
+        "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+        "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+        "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+        "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+        "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+        "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+        "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+        "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+        "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+        "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+        "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+        "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+        "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+        "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+        "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+      }
+    },
+    "resolver_logs": {
+      "crispasr": {
+        "returncode": 0,
+        "stderr": {
+          "file": "linkage-package-d31701b153e64c3e99b9c2dbb5213a31-crispasr.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout": {
+          "file": "linkage-package-d31701b153e64c3e99b9c2dbb5213a31-crispasr.stdout.log",
+          "sha256": "5daf968f7df1384e0d3ef51dbafe9d017072208f526969cfabf6eb12d87cd58d"
+        }
+      },
+      "crispasr-quantize": {
+        "returncode": 0,
+        "stderr": {
+          "file": "linkage-package-d31701b153e64c3e99b9c2dbb5213a31-crispasr-quantize.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout": {
+          "file": "linkage-package-d31701b153e64c3e99b9c2dbb5213a31-crispasr-quantize.stdout.log",
+          "sha256": "84a24585b4cfb38dc9deb92cb9471272329ac2b56f612c8e770537541b3a2b6e"
+        }
+      },
+      "production_library": {
+        "returncode": 0,
+        "stderr": {
+          "file": "linkage-package-d31701b153e64c3e99b9c2dbb5213a31-production_library.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout": {
+          "file": "linkage-package-d31701b153e64c3e99b9c2dbb5213a31-production_library.stdout.log",
+          "sha256": "f3f422054cd1cd6e3ca5e545fa4d0e2301d30c8e858caeb64adf819cb2b4ad93"
+        }
+      },
+      "scnet-probe": {
+        "returncode": 0,
+        "stderr": {
+          "file": "linkage-package-d31701b153e64c3e99b9c2dbb5213a31-scnet-probe.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout": {
+          "file": "linkage-package-d31701b153e64c3e99b9c2dbb5213a31-scnet-probe.stdout.log",
+          "sha256": "f03ed01645c6d05e0c483a42172beb419ac30c4ed165dd71415318ccb68b787d"
+        }
+      },
+      "validation_library": {
+        "returncode": 0,
+        "stderr": {
+          "file": "linkage-package-d31701b153e64c3e99b9c2dbb5213a31-validation_library.stderr.log",
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout": {
+          "file": "linkage-package-d31701b153e64c3e99b9c2dbb5213a31-validation_library.stdout.log",
+          "sha256": "0b0b59fac05da40b4a2db11077619166fbb33b4f28d0841f7f126bf0f2ea61c8"
+        }
+      }
+    },
+    "schema": 1
+  },
+  "performance_qualification": false,
+  "qualification": false,
+  "runtime_linkage": {
+    "after": {
+      "backend_dl": false,
+      "dependencies": {
+        "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f": {
+          "bytes": 352304,
+          "path": "{runtime}/libgomp.so.1.0.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+          "sha256": "135f3c8f006d2fe5e68e51281c7974cb991a03de3bfb3593d68d174dfcf854d1",
+          "sonames": [
+            "libgomp.so.1"
+          ]
+        },
+        "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4": {
+          "bytes": 236616,
+          "path": "{runtime}/ld-linux-x86-64.so.2",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+          "sha256": "6222a16be7f2d458d6870efe6e715fc0c8d45766fb79cf7dcc3125538d703e28",
+          "sonames": [
+            "ld-linux-x86-64.so.2"
+          ]
+        },
+        "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b": {
+          "bytes": 1431992,
+          "path": "{build}/ggml/src/libggml-cpu.so.0.26.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+          "sha256": "3ad27d42f631c3cf9398f6c0ed88ba48e525ab5a2b5e29f7d45ea36a254f5d86",
+          "sonames": [
+            "libggml-cpu.so.0"
+          ]
+        },
+        "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27": {
+          "bytes": 2686065,
+          "path": "{runtime}/libgfortran-040039e1.so.5.0.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+          "sha256": "14afb3129b1a8b50bc40a3b0820c7f1152ea9bc10121aab152943f7057472886",
+          "sonames": [
+            "libgfortran-040039e1.so.5.0.0"
+          ]
+        },
+        "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368": {
+          "bytes": 60360,
+          "path": "{build}/ggml/src/libggml.so.0.26.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+          "sha256": "1dc078bac4569957d8b1291fe654824df8abfe2ed94cb9a5071419410f7cf4d3",
+          "sonames": [
+            "libggml.so.0"
+          ]
+        },
+        "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49": {
+          "bytes": 952616,
+          "path": "{runtime}/libm.so.6",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+          "sha256": "f06f2ce1f1833df5f41cf13b6447ff07bea993ad9b27297d3428c2f70ab3f0e7",
+          "sonames": [
+            "libm.so.6"
+          ]
+        },
+        "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259": {
+          "bytes": 183024,
+          "path": "{runtime}/libgcc_s.so.1",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+          "sha256": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb",
+          "sonames": [
+            "libgcc_s.so.1"
+          ]
+        },
+        "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4": {
+          "bytes": 125688,
+          "path": "{runtime}/libz.so.1",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4",
+          "sha256": "fd81a9c456f61712d486ad3bb99698a95b80e36bbb669477984504844ce26265",
+          "sonames": [
+            "libz.so.1"
+          ]
+        },
+        "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c": {
+          "bytes": 247609,
+          "path": "{runtime}/libquadmath-96973f99.so.0.0.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+          "sha256": "934c22ded0e7d169c4d4678876c96051adf3d94545da962f60b41659b075da3b",
+          "sonames": [
+            "libquadmath-96973f99.so.0.0.0"
+          ]
+        },
+        "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a": {
+          "bytes": 2125328,
+          "path": "{runtime}/libc.so.6",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+          "sha256": "511f825ee075610ac9c0f7f91e2c13de2000d0f7b859f6461137e809a0a009d0",
+          "sonames": [
+            "libc.so.6"
+          ]
+        },
+        "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a": {
+          "bytes": 14408,
+          "path": "{runtime}/libpthread.so.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+          "sha256": "4472cde19acc87a431ad1eefe9e86f8238dd1f26f8dac692cff7040474d9d085",
+          "sonames": [
+            "libpthread.so.0"
+          ]
+        },
+        "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb": {
+          "bytes": 64512,
+          "path": "{build}/ggml/src/ggml-blas/libggml-blas.so.0.26.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+          "sha256": "7bf090b3d956cf7328dbac75c8f5a0a862fbb5e42bacc730c5130b4616fbc85c",
+          "sonames": [
+            "libggml-blas.so.0"
+          ]
+        },
+        "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4": {
+          "bytes": 26490888,
+          "path": "{build}/src/libcrispasr.so.0.8.49",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize"
+          ],
+          "resolved_path_sha256": "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4",
+          "sha256": "cd8590e950a9553f06f0083baf29a562589b69c339c2cc6d6ca012dd863db7ac",
+          "sonames": [
+            "libcrispasr.so.1"
+          ]
+        },
+        "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452": {
+          "bytes": 2592224,
+          "path": "{runtime}/libstdc++.so.6.0.33",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+          "sha256": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11",
+          "sonames": [
+            "libstdc++.so.6"
+          ]
+        },
+        "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5": {
+          "bytes": 16217497,
+          "path": "{runtime}/libcasadi-tp-openblas.so.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+          "sha256": "ed1f2f612a6be8cea404c3c18d6c1b1ad917014df73c71c2dcdb911fb6387e8d",
+          "sonames": [
+            "libcasadi-tp-openblas.so.0"
+          ]
+        },
+        "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e": {
+          "bytes": 964048,
+          "path": "{build}/ggml/src/libggml-base.so.0.26.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+          "sha256": "e67040c09c07bda613c9a86e3262bf510e256cd39e39a300c96adae6cd69471e",
+          "sonames": [
+            "libggml-base.so.0"
+          ]
+        }
+      },
+      "entrypoints": {
+        "crispasr": {
+          "bytes": 5479352,
+          "path": "{build}/bin/crispasr",
+          "resolved_path_sha256": "9cf5ca260043d714e1d0bd53174123500faa2f3aedfc9e9931c8f95501771b39",
+          "sha256": "db9ccad5def85f8f6769a38dda9a56b0547ddb2064a26d056e87cf2bb424f5e2"
+        },
+        "crispasr-quantize": {
+          "bytes": 1070160,
+          "path": "{build}/bin/crispasr-quantize",
+          "resolved_path_sha256": "c5ec1db236f636be0153d9a6562ce190b39561b234e782b24ae23e0a2fc4d8ac",
+          "sha256": "d9f27c04528a73a1cdbaa82642fcc49dfd48f21c3f749f977c25864f6f3c105a"
+        },
+        "production_library": {
+          "bytes": 26490888,
+          "path": "{build}/src/libcrispasr.so.0.8.49",
+          "resolved_path_sha256": "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4",
+          "sha256": "cd8590e950a9553f06f0083baf29a562589b69c339c2cc6d6ca012dd863db7ac"
+        },
+        "scnet-probe": {
+          "bytes": 323312,
+          "path": "{build}/bin/scnet-probe",
+          "resolved_path_sha256": "77c16b6113ae48052de2b1e6cb40036c0d3a623e88d36fc4cc407cb020baaba5",
+          "sha256": "185cbb219d7a208f54d591603a0b7e7a4c7b95ab07f3385765a3e248b19a345b"
+        },
+        "validation_library": {
+          "bytes": 341608,
+          "path": "{build}/src/libscnet-validation.so",
+          "resolved_path_sha256": "0c4fc364d359ed87dcdf8daff5c63ad01fa985bbeeef78edaf39e6146406ca33",
+          "sha256": "9c68af2679a98ed2e4317a771e2c29c8af42b4ee75caf41ab2408b95a4105858"
+        }
+      },
+      "loader_environment_sha256": {
+        "LD_AUDIT": null,
+        "LD_LIBRARY_PATH": null,
+        "LD_PRELOAD": null
+      },
+      "method": "linux-ldd-direct-backends-v1",
+      "resolutions": {
+        "crispasr": {
+          "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+          "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+          "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+          "libcrispasr.so.1": "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4",
+          "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+          "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+          "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+          "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+          "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+          "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+          "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+          "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+          "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+          "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+          "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+          "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+        },
+        "crispasr-quantize": {
+          "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+          "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+          "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+          "libcrispasr.so.1": "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4",
+          "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+          "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+          "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+          "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+          "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+          "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+          "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+          "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+          "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+          "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+          "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+          "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+        },
+        "production_library": {
+          "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+          "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+          "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+          "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+          "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+          "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+          "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+          "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+          "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+          "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+          "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+          "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+          "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+          "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+          "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+        },
+        "scnet-probe": {
+          "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+          "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+          "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+          "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+          "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+          "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+          "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+          "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+          "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+          "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+          "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+          "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+          "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+          "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+          "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+        },
+        "validation_library": {
+          "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+          "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+          "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+          "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+          "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+          "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+          "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+          "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+          "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+          "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+          "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+          "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+          "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+          "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+          "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+        }
+      },
+      "resolver_logs": {
+        "crispasr": {
+          "returncode": 0,
+          "stderr": {
+            "file": "linkage-after-crispasr.stderr.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "stdout": {
+            "file": "linkage-after-crispasr.stdout.log",
+            "sha256": "787988a22144fa35a0e58e521a106f944891e766197856e98682521aff610bea"
+          }
+        },
+        "crispasr-quantize": {
+          "returncode": 0,
+          "stderr": {
+            "file": "linkage-after-crispasr-quantize.stderr.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "stdout": {
+            "file": "linkage-after-crispasr-quantize.stdout.log",
+            "sha256": "39ff9de775f32d89fb93bf1b4e6c9283c2bf8892ca96a21c1baa75ee7461a086"
+          }
+        },
+        "production_library": {
+          "returncode": 0,
+          "stderr": {
+            "file": "linkage-after-production_library.stderr.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "stdout": {
+            "file": "linkage-after-production_library.stdout.log",
+            "sha256": "fef55edb25d3005603b87a9d6cd4cf2af6644c474207fb9ec75dc869baf54e12"
+          }
+        },
+        "scnet-probe": {
+          "returncode": 0,
+          "stderr": {
+            "file": "linkage-after-scnet-probe.stderr.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "stdout": {
+            "file": "linkage-after-scnet-probe.stdout.log",
+            "sha256": "2fd91525b8e171c9c7efdb5d49fae4c03e4b069e0d4b0ede797438fd7148fa7d"
+          }
+        },
+        "validation_library": {
+          "returncode": 0,
+          "stderr": {
+            "file": "linkage-after-validation_library.stderr.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "stdout": {
+            "file": "linkage-after-validation_library.stdout.log",
+            "sha256": "cdc9c0d4395fc0f374773fa0f78084998607717dac37c92fc88f23a18a1ebe22"
+          }
+        }
+      },
+      "schema": 1
+    },
+    "before": {
+      "backend_dl": false,
+      "dependencies": {
+        "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f": {
+          "bytes": 352304,
+          "path": "{runtime}/libgomp.so.1.0.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+          "sha256": "135f3c8f006d2fe5e68e51281c7974cb991a03de3bfb3593d68d174dfcf854d1",
+          "sonames": [
+            "libgomp.so.1"
+          ]
+        },
+        "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4": {
+          "bytes": 236616,
+          "path": "{runtime}/ld-linux-x86-64.so.2",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+          "sha256": "6222a16be7f2d458d6870efe6e715fc0c8d45766fb79cf7dcc3125538d703e28",
+          "sonames": [
+            "ld-linux-x86-64.so.2"
+          ]
+        },
+        "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b": {
+          "bytes": 1431992,
+          "path": "{build}/ggml/src/libggml-cpu.so.0.26.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+          "sha256": "3ad27d42f631c3cf9398f6c0ed88ba48e525ab5a2b5e29f7d45ea36a254f5d86",
+          "sonames": [
+            "libggml-cpu.so.0"
+          ]
+        },
+        "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27": {
+          "bytes": 2686065,
+          "path": "{runtime}/libgfortran-040039e1.so.5.0.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+          "sha256": "14afb3129b1a8b50bc40a3b0820c7f1152ea9bc10121aab152943f7057472886",
+          "sonames": [
+            "libgfortran-040039e1.so.5.0.0"
+          ]
+        },
+        "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368": {
+          "bytes": 60360,
+          "path": "{build}/ggml/src/libggml.so.0.26.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+          "sha256": "1dc078bac4569957d8b1291fe654824df8abfe2ed94cb9a5071419410f7cf4d3",
+          "sonames": [
+            "libggml.so.0"
+          ]
+        },
+        "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49": {
+          "bytes": 952616,
+          "path": "{runtime}/libm.so.6",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+          "sha256": "f06f2ce1f1833df5f41cf13b6447ff07bea993ad9b27297d3428c2f70ab3f0e7",
+          "sonames": [
+            "libm.so.6"
+          ]
+        },
+        "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259": {
+          "bytes": 183024,
+          "path": "{runtime}/libgcc_s.so.1",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+          "sha256": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb",
+          "sonames": [
+            "libgcc_s.so.1"
+          ]
+        },
+        "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4": {
+          "bytes": 125688,
+          "path": "{runtime}/libz.so.1",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4",
+          "sha256": "fd81a9c456f61712d486ad3bb99698a95b80e36bbb669477984504844ce26265",
+          "sonames": [
+            "libz.so.1"
+          ]
+        },
+        "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c": {
+          "bytes": 247609,
+          "path": "{runtime}/libquadmath-96973f99.so.0.0.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+          "sha256": "934c22ded0e7d169c4d4678876c96051adf3d94545da962f60b41659b075da3b",
+          "sonames": [
+            "libquadmath-96973f99.so.0.0.0"
+          ]
+        },
+        "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a": {
+          "bytes": 2125328,
+          "path": "{runtime}/libc.so.6",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+          "sha256": "511f825ee075610ac9c0f7f91e2c13de2000d0f7b859f6461137e809a0a009d0",
+          "sonames": [
+            "libc.so.6"
+          ]
+        },
+        "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a": {
+          "bytes": 14408,
+          "path": "{runtime}/libpthread.so.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+          "sha256": "4472cde19acc87a431ad1eefe9e86f8238dd1f26f8dac692cff7040474d9d085",
+          "sonames": [
+            "libpthread.so.0"
+          ]
+        },
+        "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb": {
+          "bytes": 64512,
+          "path": "{build}/ggml/src/ggml-blas/libggml-blas.so.0.26.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+          "sha256": "7bf090b3d956cf7328dbac75c8f5a0a862fbb5e42bacc730c5130b4616fbc85c",
+          "sonames": [
+            "libggml-blas.so.0"
+          ]
+        },
+        "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4": {
+          "bytes": 26490888,
+          "path": "{build}/src/libcrispasr.so.0.8.49",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize"
+          ],
+          "resolved_path_sha256": "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4",
+          "sha256": "cd8590e950a9553f06f0083baf29a562589b69c339c2cc6d6ca012dd863db7ac",
+          "sonames": [
+            "libcrispasr.so.1"
+          ]
+        },
+        "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452": {
+          "bytes": 2592224,
+          "path": "{runtime}/libstdc++.so.6.0.33",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+          "sha256": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11",
+          "sonames": [
+            "libstdc++.so.6"
+          ]
+        },
+        "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5": {
+          "bytes": 16217497,
+          "path": "{runtime}/libcasadi-tp-openblas.so.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+          "sha256": "ed1f2f612a6be8cea404c3c18d6c1b1ad917014df73c71c2dcdb911fb6387e8d",
+          "sonames": [
+            "libcasadi-tp-openblas.so.0"
+          ]
+        },
+        "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e": {
+          "bytes": 964048,
+          "path": "{build}/ggml/src/libggml-base.so.0.26.0",
+          "required_by": [
+            "crispasr",
+            "crispasr-quantize",
+            "production_library",
+            "scnet-probe",
+            "validation_library"
+          ],
+          "resolved_path_sha256": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+          "sha256": "e67040c09c07bda613c9a86e3262bf510e256cd39e39a300c96adae6cd69471e",
+          "sonames": [
+            "libggml-base.so.0"
+          ]
+        }
+      },
+      "entrypoints": {
+        "crispasr": {
+          "bytes": 5479352,
+          "path": "{build}/bin/crispasr",
+          "resolved_path_sha256": "9cf5ca260043d714e1d0bd53174123500faa2f3aedfc9e9931c8f95501771b39",
+          "sha256": "db9ccad5def85f8f6769a38dda9a56b0547ddb2064a26d056e87cf2bb424f5e2"
+        },
+        "crispasr-quantize": {
+          "bytes": 1070160,
+          "path": "{build}/bin/crispasr-quantize",
+          "resolved_path_sha256": "c5ec1db236f636be0153d9a6562ce190b39561b234e782b24ae23e0a2fc4d8ac",
+          "sha256": "d9f27c04528a73a1cdbaa82642fcc49dfd48f21c3f749f977c25864f6f3c105a"
+        },
+        "production_library": {
+          "bytes": 26490888,
+          "path": "{build}/src/libcrispasr.so.0.8.49",
+          "resolved_path_sha256": "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4",
+          "sha256": "cd8590e950a9553f06f0083baf29a562589b69c339c2cc6d6ca012dd863db7ac"
+        },
+        "scnet-probe": {
+          "bytes": 323312,
+          "path": "{build}/bin/scnet-probe",
+          "resolved_path_sha256": "77c16b6113ae48052de2b1e6cb40036c0d3a623e88d36fc4cc407cb020baaba5",
+          "sha256": "185cbb219d7a208f54d591603a0b7e7a4c7b95ab07f3385765a3e248b19a345b"
+        },
+        "validation_library": {
+          "bytes": 341608,
+          "path": "{build}/src/libscnet-validation.so",
+          "resolved_path_sha256": "0c4fc364d359ed87dcdf8daff5c63ad01fa985bbeeef78edaf39e6146406ca33",
+          "sha256": "9c68af2679a98ed2e4317a771e2c29c8af42b4ee75caf41ab2408b95a4105858"
+        }
+      },
+      "loader_environment_sha256": {
+        "LD_AUDIT": null,
+        "LD_LIBRARY_PATH": null,
+        "LD_PRELOAD": null
+      },
+      "method": "linux-ldd-direct-backends-v1",
+      "resolutions": {
+        "crispasr": {
+          "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+          "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+          "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+          "libcrispasr.so.1": "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4",
+          "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+          "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+          "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+          "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+          "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+          "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+          "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+          "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+          "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+          "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+          "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+          "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+        },
+        "crispasr-quantize": {
+          "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+          "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+          "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+          "libcrispasr.so.1": "ca4ef9e85f03c693b11fa3dc4fbaff70405c971dd1d63c69d25ded093eab34b4",
+          "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+          "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+          "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+          "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+          "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+          "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+          "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+          "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+          "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+          "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+          "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+          "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+        },
+        "production_library": {
+          "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+          "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+          "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+          "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+          "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+          "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+          "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+          "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+          "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+          "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+          "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+          "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+          "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+          "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+          "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+        },
+        "scnet-probe": {
+          "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+          "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+          "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+          "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+          "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+          "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+          "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+          "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+          "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+          "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+          "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+          "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+          "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+          "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+          "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+        },
+        "validation_library": {
+          "ld-linux-x86-64.so.2": "1195439cc03527ea587ac03c5db33a8ed61d81a07be3061aad52ea03b5c7c5d4",
+          "libc.so.6": "b34bc81d64a5100cdb5f72123fdcdb456adaee463c44d1c4ff35a0733be9cc4a",
+          "libcasadi-tp-openblas.so.0": "e1b47e857f95aed42169c37d90856d9599cc07c37a025b23ac2398e4d89416d5",
+          "libgcc_s.so.1": "7a5bffde914991bcbbe74d3a48cee8656d38d3a6bde91ad3eefb3e33194a5259",
+          "libgfortran-040039e1.so.5.0.0": "50fc84a1053d1e1f238e7832b56ee386aafbe7d714bc5cfd8152ba6fc2ffdf27",
+          "libggml-base.so.0": "f643268d8a69728bd493217597bf3c1c7f7fb3f9920b87431327e97a5696118e",
+          "libggml-blas.so.0": "b8be080874af422cc66f99a33c9133ddffdb68951e7c5e8b39b3b6ebd11bceeb",
+          "libggml-cpu.so.0": "1300fd07eb1ce02106e2887ed0b0571dc7a21947ba44249c2b77415c6238b54b",
+          "libggml.so.0": "5d62ff87394034cd2899a197ad8b9c37f984db5c470812bba17b64187bcf7368",
+          "libgomp.so.1": "06ae55a96212e11c0a2ebf2725f3693b315e611b0e1bb7a08b8b6a6866c6583f",
+          "libm.so.6": "6fa99cd4526094620ba30cfc807855bc4e56eb40ac132c2cd302af5b857a1b49",
+          "libpthread.so.0": "b75259c90ad158d6af43db8bb1438fff4c8f2255f1869da717e0281d3023d46a",
+          "libquadmath-96973f99.so.0.0.0": "8d5d068764d8b6075628f38ba1b1111fd7f39dedc9609530629acc6bf622375c",
+          "libstdc++.so.6": "d6b6c438c28202ba3628f03f3798b74d85133e12b7baaaaf1ed0c44d9f117452",
+          "libz.so.1": "827bf4357fcf676bb74786897fa0d82bbe087ee7a0757b95247d257cc51980e4"
+        }
+      },
+      "resolver_logs": {
+        "crispasr": {
+          "returncode": 0,
+          "stderr": {
+            "file": "linkage-before-crispasr.stderr.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "stdout": {
+            "file": "linkage-before-crispasr.stdout.log",
+            "sha256": "c440005cb7eed9b96f32a39d3b5dcb978350bcf988785b5fbd70eb13e44cf82a"
+          }
+        },
+        "crispasr-quantize": {
+          "returncode": 0,
+          "stderr": {
+            "file": "linkage-before-crispasr-quantize.stderr.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "stdout": {
+            "file": "linkage-before-crispasr-quantize.stdout.log",
+            "sha256": "e32f78d696d5c56ae7065aaa15d4bc30edda01e3b07547a8b5f58b652c9f5567"
+          }
+        },
+        "production_library": {
+          "returncode": 0,
+          "stderr": {
+            "file": "linkage-before-production_library.stderr.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "stdout": {
+            "file": "linkage-before-production_library.stdout.log",
+            "sha256": "8fd09a38e2dad4e99255500d1c27c838ef7dff8c2130c0b26339c33b939e5dc1"
+          }
+        },
+        "scnet-probe": {
+          "returncode": 0,
+          "stderr": {
+            "file": "linkage-before-scnet-probe.stderr.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "stdout": {
+            "file": "linkage-before-scnet-probe.stdout.log",
+            "sha256": "b4b61423c667ec3f83f12df25c2d7bf7a82b49d89d8eb87d5199b4496e61a168"
+          }
+        },
+        "validation_library": {
+          "returncode": 0,
+          "stderr": {
+            "file": "linkage-before-validation_library.stderr.log",
+            "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+          },
+          "stdout": {
+            "file": "linkage-before-validation_library.stdout.log",
+            "sha256": "961349f4f110d6ea116702cc8cde2b2344a7ff471206c4690445197e681d1f54"
+          }
+        }
+      },
+      "schema": 1
+    },
+    "complete": true,
+    "dependencies_unchanged": true,
+    "entrypoints_unchanged": true,
+    "method": "linux-ldd-direct-backends-v1",
+    "resolution_unchanged": true,
+    "schema": 1
+  },
+  "schema": "scnet-linkage-controls-v1",
+  "scope": "Actual Linux loader/byte identity control only; no model inference or accepted bundle.",
+  "source_sha256": {
+    "tests/test_scnet_linkage.py": "360326e3b2db4d701529d112ca7104f46c8145ce11c5195fb3717c26bfa16eb1",
+    "tools/ci-heavy/scnet_package.py": "17f2098bbc5e67dce54360b7c58591fea98eb22a0efb5228e82e698a6310c2d7",
+    "tools/ci-heavy/scnet_qualify.py": "41bbe2fc5eac94a1dca81eadc1167d32b685605d3c60cf0911a04c26f31b3640"
+  }
+}

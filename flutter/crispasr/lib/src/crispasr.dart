@@ -5179,7 +5179,7 @@ class CrispasrSession {
 
   /// Split audio into source stems (e.g. drums / bass / other / vocals).
   ///
-  /// Requires `htdemucs`, `mel-band-roformer` or `mini-bs-roformer`.
+  /// Requires `htdemucs`, `mel-band-roformer`, `mini-bs-roformer` or `scnet`.
   ///
   /// [pcmStereo] is **interleaved stereo** float32 — `L,R,L,R,…` — at the
   /// model's native rate (44100 Hz for htdemucs; query

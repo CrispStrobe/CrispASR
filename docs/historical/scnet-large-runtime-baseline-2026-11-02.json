@@ -1,0 +1,336 @@
+{
+  "schema": 1,
+  "run_id": 41403856227,
+  "job_id": 125141367731,
+  "variant": "scnet-large",
+  "tested_commit": "94ea189e4a95bbe966f9a3410a83c5a4e82f4c6b",
+  "policy_scope": "Baseline before final four decoder matrices were retained F16 and before raw-smoke coverage expanded to all three precisions; not current-policy qualification.",
+  "artifact_id": 13125188685,
+  "artifact_zip_sha256": "9cd21285226135aa8501d1c508eb908430ec74d1e90e8e8e1d70af5064129021",
+  "retained_payload_manifest_verified": true,
+  "original_zip_source_snapshot_complete": false,
+  "missing_source_snapshot_files": [
+    "CrispASR/.github/workflows/scnet-qualification.yml"
+  ],
+  "separate_immutable_git_source_recovery": {
+    "path": "recovered-source/scnet-qualification.yml",
+    "sha256": "5357c40c1b9b829750c7f5f85510b3415a03726f882e55dcf2c186a014962e86",
+    "matches_source_manifest": true,
+    "original_artifact_contains_file": false,
+    "recovered_from": "https://raw.githubusercontent.com/CrispStrobe/CrispASR/94ea189e4a95bbe966f9a3410a83c5a4e82f4c6b/.github/workflows/scnet-qualification.yml"
+  },
+  "qualification": false,
+  "complete": true,
+  "numerical_acceptance": true,
+  "performance_acceptance": false,
+  "failure_cause": "All three native medians exceed the original medians; no numerical or production-surface failure.",
+  "hardware": {
+    "cpu": "Intel(R) Xeon(R) Platinum 8370C CPU @ 2.80GHz",
+    "exposed_logical_cpus": 4,
+    "threads": 2,
+    "native_blas_thread_queries": {
+      "openblas_get_num_threads": 2
+    }
+  },
+  "fixture": {
+    "source_url": "https://download.pytorch.org/torchaudio/tutorial-assets/hdemucs_mix.wav",
+    "source_sha256": "f2420feedcdee9591dd649442c81149e31a0c06ee8c6e655d93d8f8e742cf706",
+    "offset_samples": 0,
+    "samples": 1058400,
+    "duration_seconds": 24.0,
+    "contiguous_exact_pcm": true
+  },
+  "profile": {
+    "mode": "pipeline",
+    "segment_seconds": 20,
+    "shifts": 1,
+    "shift_seed": 0,
+    "overlap": 0.5,
+    "samples": 1058400,
+    "sample_rate": 44100,
+    "full_profile": true
+  },
+  "raw_smoke_scope": "F16 only in this baseline source",
+  "raw_smoke": {
+    "acceptance": true,
+    "returncode": 0
+  },
+  "production_surfaces": {
+    "f16": {
+      "acceptance": true,
+      "returncode": 0,
+      "scope": "Actual production CLI and Python Session/C ABI; synthetic asymmetric stereo fixture."
+    },
+    "q4_k": {
+      "acceptance": true,
+      "returncode": 0,
+      "scope": "Actual production CLI and Python Session/C ABI; synthetic asymmetric stereo fixture."
+    },
+    "q8_0": {
+      "acceptance": true,
+      "returncode": 0,
+      "scope": "Actual production CLI and Python Session/C ABI; synthetic asymmetric stereo fixture."
+    }
+  },
+  "precision_results": {
+    "f16": {
+      "required_stage_count": 35,
+      "failed_stages": [],
+      "numerical_acceptance": true,
+      "matrix_target_fraction": 1.0,
+      "min_global_stage_cosine": 0.9999996695740693,
+      "max_stage_relative_l2": 0.0008137627034079995,
+      "output_stems": {
+        "drums": {
+          "cos_global": 0.9999996831776798,
+          "norm_ratio": 1.000039002068241,
+          "relative_l2": 0.0007969884001278749,
+          "acceptance": true
+        },
+        "bass": {
+          "cos_global": 0.9999999936839662,
+          "norm_ratio": 1.0001065892794574,
+          "relative_l2": 0.00015490216404600974,
+          "acceptance": true
+        },
+        "other": {
+          "cos_global": 0.9999999485922298,
+          "norm_ratio": 0.9999882695968884,
+          "relative_l2": 0.0003208612292351125,
+          "acceptance": true
+        },
+        "vocals": {
+          "cos_global": 0.9999999777207447,
+          "norm_ratio": 1.0000714687857732,
+          "relative_l2": 0.0002228665004499004,
+          "acceptance": true
+        }
+      },
+      "benchmark": {
+        "complete": true,
+        "acceptance": false,
+        "native_median_seconds": 146.48099235299992,
+        "original_median_seconds": 49.519208259999914,
+        "speedup": 0.338058934913993,
+        "performance_acceptance": false
+      },
+      "model_sha256": "4fde60e9eaaeb18c4712ca4907aa4d556b503817630dbe50699f4c51804506bb",
+      "model_bytes": 84600288,
+      "measured_calls": 6,
+      "warmup_calls": 2,
+      "all_measured_and_warmup_stems_pass": true
+    },
+    "q8_0": {
+      "required_stage_count": 35,
+      "failed_stages": [],
+      "numerical_acceptance": true,
+      "matrix_target_fraction": 0.9997634921636817,
+      "min_global_stage_cosine": 0.9995828869650512,
+      "max_stage_relative_l2": 0.0288830859367166,
+      "output_stems": {
+        "drums": {
+          "cos_global": 0.9996097507159697,
+          "norm_ratio": 0.9991581238086411,
+          "relative_l2": 0.027938329234505545,
+          "acceptance": true
+        },
+        "bass": {
+          "cos_global": 0.9999958203848257,
+          "norm_ratio": 0.998709278576185,
+          "relative_l2": 0.003164554107037199,
+          "acceptance": true
+        },
+        "other": {
+          "cos_global": 0.9999573641545598,
+          "norm_ratio": 0.9998201184473098,
+          "relative_l2": 0.009235188652162486,
+          "acceptance": true
+        },
+        "vocals": {
+          "cos_global": 0.9999636574496937,
+          "norm_ratio": 0.999778875552979,
+          "relative_l2": 0.00852748052916587,
+          "acceptance": true
+        }
+      },
+      "benchmark": {
+        "complete": true,
+        "acceptance": false,
+        "native_median_seconds": 146.89467532200024,
+        "original_median_seconds": 50.14038213699996,
+        "speedup": 0.34133559999428037,
+        "performance_acceptance": false
+      },
+      "model_sha256": "aeef153657834a4520d86aadf01f00704f6b2d91054a92b4585a176a8fd97ba5",
+      "model_bytes": 45160640,
+      "measured_calls": 6,
+      "warmup_calls": 2,
+      "all_measured_and_warmup_stems_pass": true
+    },
+    "q4_k": {
+      "required_stage_count": 35,
+      "failed_stages": [],
+      "numerical_acceptance": true,
+      "matrix_target_fraction": 0.9765233652251349,
+      "min_global_stage_cosine": 0.991930472105931,
+      "max_stage_relative_l2": 0.1269395734642314,
+      "output_stems": {
+        "drums": {
+          "cos_global": 0.9981362551414837,
+          "norm_ratio": 0.9972837893236284,
+          "relative_l2": 0.0610306715521007,
+          "acceptance": true
+        },
+        "bass": {
+          "cos_global": 0.9999544603443731,
+          "norm_ratio": 0.9967518373863339,
+          "relative_l2": 0.010066480576484758,
+          "acceptance": true
+        },
+        "other": {
+          "cos_global": 0.999679381219423,
+          "norm_ratio": 0.9982849615384328,
+          "relative_l2": 0.025359005717693478,
+          "acceptance": true
+        },
+        "vocals": {
+          "cos_global": 0.9995670395730233,
+          "norm_ratio": 0.9978959380981448,
+          "relative_l2": 0.029470764824749036,
+          "acceptance": true
+        }
+      },
+      "benchmark": {
+        "complete": true,
+        "acceptance": false,
+        "native_median_seconds": 147.11963616100002,
+        "original_median_seconds": 50.3774752180002,
+        "speedup": 0.3424252297828533,
+        "performance_acceptance": false
+      },
+      "model_sha256": "e9fde3767ec3c9a964bd40ffb553af7f2631d8a9fa12fd1a4d641c16dab847e9",
+      "model_bytes": 24615104,
+      "measured_calls": 6,
+      "warmup_calls": 2,
+      "all_measured_and_warmup_stems_pass": true
+    }
+  },
+  "diagnostic_profile": {
+    "scope": "F16 native-only diagnostic, coarse stage timers enabled, separate from formal paired benchmark",
+    "complete": true,
+    "calls": [
+      {
+        "index": 0,
+        "seconds": 147.61188497800003,
+        "geometry_and_finite": true,
+        "process_max_rss_kib": 3290096,
+        "shape": [
+          4,
+          2,
+          1058400
+        ],
+        "pcm_sha256": "957d49bd80db6edbe6e1fa203822ee550695b0b5acfa512f265c604401293954"
+      },
+      {
+        "index": 1,
+        "seconds": 147.1088069960001,
+        "geometry_and_finite": true,
+        "process_max_rss_kib": 3399604,
+        "shape": [
+          4,
+          2,
+          1058400
+        ],
+        "pcm_sha256": "957d49bd80db6edbe6e1fa203822ee550695b0b5acfa512f265c604401293954"
+      },
+      {
+        "index": 2,
+        "seconds": 147.94763541700013,
+        "geometry_and_finite": true,
+        "process_max_rss_kib": 3422856,
+        "shape": [
+          4,
+          2,
+          1058400
+        ],
+        "pcm_sha256": "957d49bd80db6edbe6e1fa203822ee550695b0b5acfa512f265c604401293954"
+      }
+    ],
+    "repeated_output_hashes_identical": true,
+    "parsed_stage_totals": [
+      {
+        "index": 0,
+        "stage_seconds": {
+          "stft": 0.15205800000000003,
+          "graph_build": 0.124241,
+          "lstm": 78.01819900000001,
+          "fft": 7.535931,
+          "network": 146.513216,
+          "istft": 0.530699,
+          "separate": 147.58803899999998
+        },
+        "stage_occurrences": {
+          "stft": 3,
+          "graph_build": 3,
+          "lstm": 36,
+          "fft": 18,
+          "network": 3,
+          "istft": 3,
+          "separate": 1
+        },
+        "network_less_lstm_and_fft_worker_zero_seconds": 60.95908599999999
+      },
+      {
+        "index": 1,
+        "stage_seconds": {
+          "stft": 0.130004,
+          "graph_build": 0.160503,
+          "lstm": 78.34372600000002,
+          "fft": 7.088431,
+          "network": 146.042021,
+          "istft": 0.535134,
+          "separate": 147.083188
+        },
+        "stage_occurrences": {
+          "stft": 3,
+          "graph_build": 3,
+          "lstm": 36,
+          "fft": 18,
+          "network": 3,
+          "istft": 3,
+          "separate": 1
+        },
+        "network_less_lstm_and_fft_worker_zero_seconds": 60.60986399999999
+      },
+      {
+        "index": 2,
+        "stage_seconds": {
+          "stft": 0.119513,
+          "graph_build": 0.157242,
+          "lstm": 78.11683900000003,
+          "fft": 7.080361,
+          "network": 146.900092,
+          "istft": 0.551104,
+          "separate": 147.92782300000002
+        },
+        "stage_occurrences": {
+          "stft": 3,
+          "graph_build": 3,
+          "lstm": 36,
+          "fft": 18,
+          "network": 3,
+          "istft": 3,
+          "separate": 1
+        },
+        "network_less_lstm_and_fft_worker_zero_seconds": 61.70289199999998
+      }
+    ],
+    "interpretation": "LSTM spans full CBLAS recurrence on worker zero; FFT is a worker-zero span. Residual is approximate, and nested timers must not be added to the network/separate totals."
+  },
+  "evidence": {
+    "qualification.json": "810c194d6fbe7ac730637c3de4c891526c1d50b681c2d7063388fea8504a5c65",
+    "validation/validation.json": "0b4e84d56bf5efa75b61f4547d9934cb80e051ef593aecec1bba28dc8482f040",
+    "native-runtime-diagnostic.json": "29b503cdd4c492d58551ae6768ec9abab2e5e53f6b4dd046e77ad64258dd3dba",
+    "logs/diagnostic-native-runtime.stderr.log": "2e937867c00e0117a2000fe03f2d82308de6299d74f07157866b159a06c8cd76"
+  }
+}

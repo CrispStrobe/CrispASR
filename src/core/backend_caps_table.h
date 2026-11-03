@@ -189,6 +189,7 @@ static const BackendCaps k_backend_caps[] = {
      "timestamps-native,word-timestamps,token-confidence,diarize,temperature,beam-search,flash-attn,punctuation-toggle,"
      "auto-download,parallel-processors"},
     {"rvc-svc", 8192u, "auto-download"},
+    {"scnet", 5242880u, "separate"},
     {"sensevoice", 11346u, "timestamps-ctc,language-detect,diarize,flash-attn,punctuation-toggle,auto-download"},
     {"sesame", 73984u, "temperature,auto-download,tts"},
     {"sidon", 2097152u, "s2s"},

@@ -1,0 +1,1787 @@
+{
+  "schema": 1,
+  "run_id": 41411681073,
+  "job_id": 125165916642,
+  "artifact_id": 13126360284,
+  "source_commit": "b51801b3d2dfc5b9503fc5bf3778a8b3420850fd",
+  "scope": "One instrumented cold native small-author F16 call. Per-node callbacks synchronize work; not a new fidelity or throughput qualification.",
+  "acceptance": false,
+  "qualification": false,
+  "complete": true,
+  "artifact_zip_sha256": "8631a6ff9e72edfd6fa826cb288ae70fa8e506e56a7824d991b52fd99b8d5a4c",
+  "original_zip_source_snapshot_complete": false,
+  "missing_source_snapshot_files": [
+    "CrispASR/.github/workflows/scnet-profile.yml"
+  ],
+  "separate_immutable_git_source_recovery": {
+    "path": "recovered-source/scnet-profile.yml",
+    "sha256": "a3c14b46e83e72e0fc441f85453b91d753e63a1e1a6e3677796b169608403de6",
+    "matches_source_manifest": true,
+    "original_artifact_contains_file": false,
+    "recovered_from": "https://raw.githubusercontent.com/CrispStrobe/CrispASR/b51801b3d2dfc5b9503fc5bf3778a8b3420850fd/.github/workflows/scnet-profile.yml"
+  },
+  "retained_payload_manifest_verified": true,
+  "original_payload_manifest_missing_files": [
+    "diagnostic/source-snapshot/CrispASR/.github/workflows/scnet-profile.yml"
+  ],
+  "hardware": {
+    "cpu_model": "AMD EPYC 7763 64-Core Processor",
+    "threads": 2,
+    "native_blas_thread_queries": {
+      "openblas_get_num_threads": 2
+    }
+  },
+  "profile": {
+    "mode": "pipeline",
+    "segment_seconds": 20,
+    "shifts": 1,
+    "shift_seed": 0,
+    "overlap": 0.5
+  },
+  "fixture": {
+    "title": "A Classic Education - NightOwl",
+    "license": "CC BY-NC-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+    "attribution_url": "https://docs.pytorch.org/audio/main/tutorials/hybrid_demucs_tutorial.html",
+    "source_url": "https://download.pytorch.org/torchaudio/tutorial-assets/hdemucs_mix.wav",
+    "use": "Implementation-parity test only; not redistributed and not a held-out separation-quality evaluation.",
+    "source_sha256": "f2420feedcdee9591dd649442c81149e31a0c06ee8c6e655d93d8f8e742cf706",
+    "full_sha256": "c6963f4286b63f9528cb254e428b1fa31d3936dc25f0b420aa50d0535d24f7a8",
+    "smoke_sha256": "a0e13cd4f6f4650120adb19739b9fc86f2faa03a52147af436a7c93ee5379621",
+    "offset_samples": 0,
+    "frames": 1058400,
+    "sample_rate": 44100,
+    "audio_channels": 2,
+    "resampled": false,
+    "looped": false,
+    "normalized": false,
+    "contiguous_exact_pcm": true
+  },
+  "checkpoint": {
+    "source_url": "https://drive.google.com/file/d/1CdEIIqsoRfHn1SJ7rccPfyYioW3BlXcW/view",
+    "bytes": 42434545,
+    "sha256": "f8aff3bc8dd816aad392800d9d69519add719a2fbd22550af6f8cb2138d25ff5",
+    "discovered_at": "2026-11-02T08:17:17.115186+00:00",
+    "digest_status": "First author-linked download identity; not an author-published checksum"
+  },
+  "model": {
+    "file": "scnet-profile-f16.gguf",
+    "sha256": "8441b23c2b6ba47e8357fd863d717af88a5568f1937a3ff328c921c7143bd059",
+    "bytes": 21293184
+  },
+  "library_sha256": "9f01ab1607f94e318cf6b61cf23f478091533ec43ae6db04bda5dd2361aa3845",
+  "ggml_library_sha256": {
+    "ggml/src/ggml-blas/libggml-blas.so.0.26.0": "7242dd4b89f35efbb32bea1abf9b43cc2984611d2b08106e3b7f46eaaf3f1799",
+    "ggml/src/libggml-base.so.0.26.0": "86ccefa778ef82f1ca822b53acbe781b29d716fdb4a6ea51ea21da2e14e8e457",
+    "ggml/src/libggml-cpu.so.0.26.0": "f9bc34668e96201ff2af01d8e08037ee45575812efd689020e1f485fd84ab0f9",
+    "ggml/src/libggml.so.0.26.0": "77343e8cdc9dfac201ff4b893c1a8d4d12a058046cf029751452cc75b1aa2fc5"
+  },
+  "instrumented_seconds": 46.370801047999976,
+  "coarse_ms": {
+    "stft": 118.75399999999999,
+    "graph_build": 70.007,
+    "lstm": 22211.028,
+    "fft": 2454.9699999999993,
+    "network": 45423.076,
+    "istft": 423.551,
+    "separate": 46353.691
+  },
+  "graph_operation_totals": [
+    {
+      "op": "CUSTOM",
+      "backend": "CPU",
+      "ms": 24982.825000000004,
+      "calls": 54
+    },
+    {
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 6287.778000000002,
+      "calls": 447
+    },
+    {
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 3257.915,
+      "calls": 2187
+    },
+    {
+      "op": "IM2COL",
+      "backend": "CPU",
+      "ms": 2779.885,
+      "calls": 732
+    },
+    {
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 2345.7930000000006,
+      "calls": 702
+    },
+    {
+      "op": "CONCAT",
+      "backend": "CPU",
+      "ms": 2022.4639999999997,
+      "calls": 615
+    },
+    {
+      "op": "PAD",
+      "backend": "CPU",
+      "ms": 1131.1000000000001,
+      "calls": 150
+    },
+    {
+      "op": "MUL",
+      "backend": "CPU",
+      "ms": 804.8509999999999,
+      "calls": 369
+    },
+    {
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 390.45799999999997,
+      "calls": 63
+    },
+    {
+      "op": "MUL_MAT",
+      "backend": "CPU",
+      "ms": 382.288,
+      "calls": 420
+    },
+    {
+      "op": "COL2IM_1D",
+      "backend": "CPU",
+      "ms": 368.996,
+      "calls": 27
+    },
+    {
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 349.60599999999994,
+      "calls": 144
+    },
+    {
+      "op": "GELU_ERF",
+      "backend": "CPU",
+      "ms": 238.37600000000003,
+      "calls": 27
+    },
+    {
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 13.478,
+      "calls": 195
+    },
+    {
+      "op": "SILU",
+      "backend": "CPU",
+      "ms": 11.122,
+      "calls": 54
+    },
+    {
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 3.8520000000000003,
+      "calls": 2781
+    },
+    {
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 1.9129999999999998,
+      "calls": 1281
+    },
+    {
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 1.368,
+      "calls": 1308
+    },
+    {
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.7290000000000001,
+      "calls": 762
+    },
+    {
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.05500000000000002,
+      "calls": 339
+    }
+  ],
+  "graph_stage_operation_totals": [
+    {
+      "stage": "dp5",
+      "op": "CUSTOM",
+      "backend": "CPU",
+      "ms": 3824.602,
+      "calls": 6
+    },
+    {
+      "stage": "dp0",
+      "op": "CUSTOM",
+      "backend": "CPU",
+      "ms": 3787.5539999999996,
+      "calls": 6
+    },
+    {
+      "stage": "dp2",
+      "op": "CUSTOM",
+      "backend": "CPU",
+      "ms": 3758.218,
+      "calls": 6
+    },
+    {
+      "stage": "dp3",
+      "op": "CUSTOM",
+      "backend": "CPU",
+      "ms": 3704.054,
+      "calls": 6
+    },
+    {
+      "stage": "dp4",
+      "op": "CUSTOM",
+      "backend": "CPU",
+      "ms": 3693.1569999999997,
+      "calls": 6
+    },
+    {
+      "stage": "dp1",
+      "op": "CUSTOM",
+      "backend": "CPU",
+      "ms": 3443.909,
+      "calls": 6
+    },
+    {
+      "stage": "dp1",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 763.178,
+      "calls": 18
+    },
+    {
+      "stage": "dp5",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 761.0870000000001,
+      "calls": 18
+    },
+    {
+      "stage": "dp3",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 756.005,
+      "calls": 18
+    },
+    {
+      "stage": "decoder2",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 537.342,
+      "calls": 69
+    },
+    {
+      "stage": "decoder2",
+      "op": "CONCAT",
+      "backend": "CPU",
+      "ms": 527.029,
+      "calls": 63
+    },
+    {
+      "stage": "skip0",
+      "op": "CONCAT",
+      "backend": "CPU",
+      "ms": 490.276,
+      "calls": 336
+    },
+    {
+      "stage": "decoder2",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 483.25,
+      "calls": 156
+    },
+    {
+      "stage": "feature5",
+      "op": "CUSTOM",
+      "backend": "CPU",
+      "ms": 474.673,
+      "calls": 3
+    },
+    {
+      "stage": "dp0",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 473.408,
+      "calls": 18
+    },
+    {
+      "stage": "feature1",
+      "op": "CUSTOM",
+      "backend": "CPU",
+      "ms": 467.18600000000004,
+      "calls": 3
+    },
+    {
+      "stage": "feature0",
+      "op": "CUSTOM",
+      "backend": "CPU",
+      "ms": 465.73400000000004,
+      "calls": 3
+    },
+    {
+      "stage": "feature3",
+      "op": "CUSTOM",
+      "backend": "CPU",
+      "ms": 456.881,
+      "calls": 3
+    },
+    {
+      "stage": "feature4",
+      "op": "CUSTOM",
+      "backend": "CPU",
+      "ms": 455.112,
+      "calls": 3
+    },
+    {
+      "stage": "dp4",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 454.855,
+      "calls": 18
+    },
+    {
+      "stage": "dp2",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 453.771,
+      "calls": 18
+    },
+    {
+      "stage": "feature2",
+      "op": "CUSTOM",
+      "backend": "CPU",
+      "ms": 451.745,
+      "calls": 3
+    },
+    {
+      "stage": "encoder0",
+      "op": "IM2COL",
+      "backend": "CPU",
+      "ms": 451.187,
+      "calls": 60
+    },
+    {
+      "stage": "decoder2",
+      "op": "IM2COL",
+      "backend": "CPU",
+      "ms": 451.072,
+      "calls": 60
+    },
+    {
+      "stage": "skip1",
+      "op": "IM2COL",
+      "backend": "CPU",
+      "ms": 429.468,
+      "calls": 123
+    },
+    {
+      "stage": "decoder0",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 403.419,
+      "calls": 15
+    },
+    {
+      "stage": "decoder1",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 378.48499999999996,
+      "calls": 27
+    },
+    {
+      "stage": "skip1",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 368.93700000000007,
+      "calls": 153
+    },
+    {
+      "stage": "skip0",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 354.471,
+      "calls": 876
+    },
+    {
+      "stage": "skip0",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 352.33700000000005,
+      "calls": 153
+    },
+    {
+      "stage": "skip0",
+      "op": "IM2COL",
+      "backend": "CPU",
+      "ms": 340.633,
+      "calls": 375
+    },
+    {
+      "stage": "decoder1",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 323.744,
+      "calls": 72
+    },
+    {
+      "stage": "encoder0",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 306.98,
+      "calls": 60
+    },
+    {
+      "stage": "skip1",
+      "op": "PAD",
+      "backend": "CPU",
+      "ms": 305.25200000000007,
+      "calls": 45
+    },
+    {
+      "stage": "skip0",
+      "op": "MUL_MAT",
+      "backend": "CPU",
+      "ms": 303.95599999999996,
+      "calls": 369
+    },
+    {
+      "stage": "skip1",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 296.80499999999995,
+      "calls": 372
+    },
+    {
+      "stage": "skip1",
+      "op": "CONCAT",
+      "backend": "CPU",
+      "ms": 276.78999999999996,
+      "calls": 84
+    },
+    {
+      "stage": "encoder1",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 274.41,
+      "calls": 18
+    },
+    {
+      "stage": "encoder1",
+      "op": "IM2COL",
+      "backend": "CPU",
+      "ms": 274.01800000000003,
+      "calls": 18
+    },
+    {
+      "stage": "skip2",
+      "op": "IM2COL",
+      "backend": "CPU",
+      "ms": 271.66700000000003,
+      "calls": 66
+    },
+    {
+      "stage": "decoder1",
+      "op": "IM2COL",
+      "backend": "CPU",
+      "ms": 268.956,
+      "calls": 18
+    },
+    {
+      "stage": "decoder2",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 263.431,
+      "calls": 18
+    },
+    {
+      "stage": "skip2",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 245.552,
+      "calls": 66
+    },
+    {
+      "stage": "skip1",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 242.56199999999998,
+      "calls": 72
+    },
+    {
+      "stage": "encoder0",
+      "op": "CONCAT",
+      "backend": "CPU",
+      "ms": 238.98600000000002,
+      "calls": 57
+    },
+    {
+      "stage": "skip2",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 232.03,
+      "calls": 153
+    },
+    {
+      "stage": "skip0",
+      "op": "PAD",
+      "backend": "CPU",
+      "ms": 231.38,
+      "calls": 45
+    },
+    {
+      "stage": "encoder2",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 228.02299999999997,
+      "calls": 6
+    },
+    {
+      "stage": "decoder1",
+      "op": "CONCAT",
+      "backend": "CPU",
+      "ms": 214.458,
+      "calls": 21
+    },
+    {
+      "stage": "skip1",
+      "op": "MUL",
+      "backend": "CPU",
+      "ms": 211.99099999999999,
+      "calls": 108
+    },
+    {
+      "stage": "decoder0",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 197.771,
+      "calls": 48
+    },
+    {
+      "stage": "encoder0",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 195.22400000000002,
+      "calls": 120
+    },
+    {
+      "stage": "skip2",
+      "op": "PAD",
+      "backend": "CPU",
+      "ms": 182.40099999999998,
+      "calls": 42
+    },
+    {
+      "stage": "skip2",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 178.48900000000003,
+      "calls": 258
+    },
+    {
+      "stage": "dp0",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 176.05,
+      "calls": 30
+    },
+    {
+      "stage": "skip0",
+      "op": "MUL",
+      "backend": "CPU",
+      "ms": 172.59300000000002,
+      "calls": 108
+    },
+    {
+      "stage": "dp0",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 172.171,
+      "calls": 36
+    },
+    {
+      "stage": "decoder2",
+      "op": "COL2IM_1D",
+      "backend": "CPU",
+      "ms": 169.81,
+      "calls": 9
+    },
+    {
+      "stage": "decoder1",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 164.82199999999997,
+      "calls": 18
+    },
+    {
+      "stage": "encoder2",
+      "op": "IM2COL",
+      "backend": "CPU",
+      "ms": 163.778,
+      "calls": 6
+    },
+    {
+      "stage": "dp2",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 162.19799999999998,
+      "calls": 36
+    },
+    {
+      "stage": "dp4",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 162.168,
+      "calls": 36
+    },
+    {
+      "stage": "dp1",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 160.251,
+      "calls": 36
+    },
+    {
+      "stage": "dp5",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 159.444,
+      "calls": 36
+    },
+    {
+      "stage": "dp3",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 155.86700000000002,
+      "calls": 36
+    },
+    {
+      "stage": "skip2",
+      "op": "MUL",
+      "backend": "CPU",
+      "ms": 140.428,
+      "calls": 108
+    },
+    {
+      "stage": "dp1",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 130.289,
+      "calls": 30
+    },
+    {
+      "stage": "decoder0",
+      "op": "IM2COL",
+      "backend": "CPU",
+      "ms": 129.106,
+      "calls": 6
+    },
+    {
+      "stage": "decoder1",
+      "op": "COL2IM_1D",
+      "backend": "CPU",
+      "ms": 125.226,
+      "calls": 9
+    },
+    {
+      "stage": "encoder2",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 120.654,
+      "calls": 12
+    },
+    {
+      "stage": "decoder2",
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 111.30799999999999,
+      "calls": 3
+    },
+    {
+      "stage": "dp5",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 110.36399999999999,
+      "calls": 30
+    },
+    {
+      "stage": "skip2",
+      "op": "CONCAT",
+      "backend": "CPU",
+      "ms": 108.861,
+      "calls": 27
+    },
+    {
+      "stage": "encoder1",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 108.535,
+      "calls": 36
+    },
+    {
+      "stage": "dp3",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 104.005,
+      "calls": 30
+    },
+    {
+      "stage": "dp2",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 103.338,
+      "calls": 30
+    },
+    {
+      "stage": "dp4",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 103.03500000000001,
+      "calls": 30
+    },
+    {
+      "stage": "decoder0",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 100.78599999999999,
+      "calls": 18
+    },
+    {
+      "stage": "decoder2",
+      "op": "PAD",
+      "backend": "CPU",
+      "ms": 100.433,
+      "calls": 3
+    },
+    {
+      "stage": "skip0",
+      "op": "GELU_ERF",
+      "backend": "CPU",
+      "ms": 97.447,
+      "calls": 9
+    },
+    {
+      "stage": "encoder0",
+      "op": "PAD",
+      "backend": "CPU",
+      "ms": 91.92800000000001,
+      "calls": 3
+    },
+    {
+      "stage": "skip1",
+      "op": "GELU_ERF",
+      "backend": "CPU",
+      "ms": 87.765,
+      "calls": 9
+    },
+    {
+      "stage": "skip1",
+      "op": "MUL_MAT",
+      "backend": "CPU",
+      "ms": 78.33200000000001,
+      "calls": 51
+    },
+    {
+      "stage": "skip0",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 75.963,
+      "calls": 36
+    },
+    {
+      "stage": "encoder1",
+      "op": "CONCAT",
+      "backend": "CPU",
+      "ms": 75.376,
+      "calls": 15
+    },
+    {
+      "stage": "encoder1",
+      "op": "PAD",
+      "backend": "CPU",
+      "ms": 74.494,
+      "calls": 3
+    },
+    {
+      "stage": "decoder0",
+      "op": "COL2IM_1D",
+      "backend": "CPU",
+      "ms": 73.96000000000001,
+      "calls": 9
+    },
+    {
+      "stage": "decoder0",
+      "op": "CONCAT",
+      "backend": "CPU",
+      "ms": 73.752,
+      "calls": 9
+    },
+    {
+      "stage": "decoder1",
+      "op": "PAD",
+      "backend": "CPU",
+      "ms": 73.11399999999999,
+      "calls": 3
+    },
+    {
+      "stage": "decoder1",
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 70.532,
+      "calls": 3
+    },
+    {
+      "stage": "encoder0",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 66.678,
+      "calls": 3
+    },
+    {
+      "stage": "skip0",
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 65.38799999999999,
+      "calls": 18
+    },
+    {
+      "stage": "skip1",
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 62.99,
+      "calls": 18
+    },
+    {
+      "stage": "dp0",
+      "op": "MUL",
+      "backend": "CPU",
+      "ms": 55.411,
+      "calls": 6
+    },
+    {
+      "stage": "skip2",
+      "op": "GELU_ERF",
+      "backend": "CPU",
+      "ms": 53.164,
+      "calls": 9
+    },
+    {
+      "stage": "decoder0",
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 46.067,
+      "calls": 3
+    },
+    {
+      "stage": "encoder2",
+      "op": "PAD",
+      "backend": "CPU",
+      "ms": 45.99,
+      "calls": 3
+    },
+    {
+      "stage": "encoder1",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 42.964,
+      "calls": 3
+    },
+    {
+      "stage": "dp3",
+      "op": "MUL",
+      "backend": "CPU",
+      "ms": 42.019999999999996,
+      "calls": 6
+    },
+    {
+      "stage": "dp1",
+      "op": "MUL",
+      "backend": "CPU",
+      "ms": 41.841,
+      "calls": 6
+    },
+    {
+      "stage": "dp5",
+      "op": "MUL",
+      "backend": "CPU",
+      "ms": 41.588,
+      "calls": 6
+    },
+    {
+      "stage": "dp2",
+      "op": "MUL",
+      "backend": "CPU",
+      "ms": 41.536,
+      "calls": 6
+    },
+    {
+      "stage": "dp4",
+      "op": "MUL",
+      "backend": "CPU",
+      "ms": 41.485,
+      "calls": 6
+    },
+    {
+      "stage": "skip1",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 41.046,
+      "calls": 36
+    },
+    {
+      "stage": "dp1",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 35.089,
+      "calls": 6
+    },
+    {
+      "stage": "dp0",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 35.086,
+      "calls": 6
+    },
+    {
+      "stage": "dp5",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 35.01,
+      "calls": 6
+    },
+    {
+      "stage": "dp3",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 34.369,
+      "calls": 6
+    },
+    {
+      "stage": "skip2",
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 34.173,
+      "calls": 18
+    },
+    {
+      "stage": "dp2",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 33.955,
+      "calls": 6
+    },
+    {
+      "stage": "dp4",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 33.854,
+      "calls": 6
+    },
+    {
+      "stage": "encoder2",
+      "op": "ADD",
+      "backend": "CPU",
+      "ms": 26.727,
+      "calls": 3
+    },
+    {
+      "stage": "decoder0",
+      "op": "PAD",
+      "backend": "CPU",
+      "ms": 26.108,
+      "calls": 3
+    },
+    {
+      "stage": "skip2",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 25.234,
+      "calls": 36
+    },
+    {
+      "stage": "encoder2",
+      "op": "CONCAT",
+      "backend": "CPU",
+      "ms": 16.936,
+      "calls": 3
+    },
+    {
+      "stage": "output",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 11.101000000000003,
+      "calls": 3
+    },
+    {
+      "stage": "skip0",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 8.701,
+      "calls": 6
+    },
+    {
+      "stage": "decoder2",
+      "op": "MUL",
+      "backend": "CPU",
+      "ms": 7.837000000000001,
+      "calls": 3
+    },
+    {
+      "stage": "decoder1",
+      "op": "MUL",
+      "backend": "CPU",
+      "ms": 5.047,
+      "calls": 3
+    },
+    {
+      "stage": "skip0",
+      "op": "SILU",
+      "backend": "CPU",
+      "ms": 4.673,
+      "calls": 18
+    },
+    {
+      "stage": "skip1",
+      "op": "SILU",
+      "backend": "CPU",
+      "ms": 4.038,
+      "calls": 18
+    },
+    {
+      "stage": "decoder0",
+      "op": "MUL",
+      "backend": "CPU",
+      "ms": 3.074,
+      "calls": 3
+    },
+    {
+      "stage": "feature5",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 2.802,
+      "calls": 3
+    },
+    {
+      "stage": "feature2",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 2.7399999999999998,
+      "calls": 3
+    },
+    {
+      "stage": "feature4",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 2.691,
+      "calls": 3
+    },
+    {
+      "stage": "decoder0",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 2.642,
+      "calls": 3
+    },
+    {
+      "stage": "feature1",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 2.564,
+      "calls": 3
+    },
+    {
+      "stage": "feature0",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 2.5,
+      "calls": 3
+    },
+    {
+      "stage": "feature3",
+      "op": "CONT",
+      "backend": "CPU",
+      "ms": 2.475,
+      "calls": 3
+    },
+    {
+      "stage": "skip2",
+      "op": "SILU",
+      "backend": "CPU",
+      "ms": 2.411,
+      "calls": 18
+    },
+    {
+      "stage": "dp1",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 2.225,
+      "calls": 12
+    },
+    {
+      "stage": "dp5",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 1.916,
+      "calls": 12
+    },
+    {
+      "stage": "dp3",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 1.885,
+      "calls": 12
+    },
+    {
+      "stage": "skip0",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 1.2029999999999998,
+      "calls": 1560
+    },
+    {
+      "stage": "decoder1",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.8059999999999999,
+      "calls": 3
+    },
+    {
+      "stage": "dp0",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.736,
+      "calls": 12
+    },
+    {
+      "stage": "dp2",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.6869999999999999,
+      "calls": 12
+    },
+    {
+      "stage": "dp4",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.6799999999999999,
+      "calls": 12
+    },
+    {
+      "stage": "skip1",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.6280000000000001,
+      "calls": 36
+    },
+    {
+      "stage": "skip1",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.5980000000000001,
+      "calls": 420
+    },
+    {
+      "stage": "skip0",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.54,
+      "calls": 528
+    },
+    {
+      "stage": "skip0",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.506,
+      "calls": 60
+    },
+    {
+      "stage": "decoder2",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.433,
+      "calls": 3
+    },
+    {
+      "stage": "skip1",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.428,
+      "calls": 276
+    },
+    {
+      "stage": "decoder2",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.40299999999999997,
+      "calls": 147
+    },
+    {
+      "stage": "encoder0",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.35500000000000004,
+      "calls": 120
+    },
+    {
+      "stage": "skip2",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.33399999999999996,
+      "calls": 18
+    },
+    {
+      "stage": "skip0",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.311,
+      "calls": 441
+    },
+    {
+      "stage": "skip2",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.304,
+      "calls": 204
+    },
+    {
+      "stage": "skip2",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.28500000000000003,
+      "calls": 219
+    },
+    {
+      "stage": "decoder2",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.274,
+      "calls": 150
+    },
+    {
+      "stage": "skip1",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.243,
+      "calls": 279
+    },
+    {
+      "stage": "decoder2",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.229,
+      "calls": 90
+    },
+    {
+      "stage": "decoder1",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.216,
+      "calls": 63
+    },
+    {
+      "stage": "skip2",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.21000000000000002,
+      "calls": 267
+    },
+    {
+      "stage": "skip0",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.18,
+      "calls": 147
+    },
+    {
+      "stage": "decoder1",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.14700000000000002,
+      "calls": 48
+    },
+    {
+      "stage": "encoder1",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.142,
+      "calls": 36
+    },
+    {
+      "stage": "decoder0",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.123,
+      "calls": 39
+    },
+    {
+      "stage": "encoder0",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.11599999999999999,
+      "calls": 60
+    },
+    {
+      "stage": "skip1",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.11299999999999999,
+      "calls": 123
+    },
+    {
+      "stage": "decoder0",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.095,
+      "calls": 36
+    },
+    {
+      "stage": "dp1",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.079,
+      "calls": 30
+    },
+    {
+      "stage": "dp5",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.078,
+      "calls": 30
+    },
+    {
+      "stage": "encoder0",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.078,
+      "calls": 123
+    },
+    {
+      "stage": "dp0",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.074,
+      "calls": 30
+    },
+    {
+      "stage": "dp3",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.07200000000000001,
+      "calls": 30
+    },
+    {
+      "stage": "skip2",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.07200000000000001,
+      "calls": 72
+    },
+    {
+      "stage": "encoder2",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.07100000000000001,
+      "calls": 12
+    },
+    {
+      "stage": "dp2",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.07,
+      "calls": 30
+    },
+    {
+      "stage": "dp4",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.064,
+      "calls": 30
+    },
+    {
+      "stage": "encoder1",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.05,
+      "calls": 18
+    },
+    {
+      "stage": "decoder1",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.046,
+      "calls": 66
+    },
+    {
+      "stage": "dp0",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.043000000000000003,
+      "calls": 30
+    },
+    {
+      "stage": "dp2",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.043000000000000003,
+      "calls": 30
+    },
+    {
+      "stage": "dp4",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.043000000000000003,
+      "calls": 30
+    },
+    {
+      "stage": "dp1",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.042,
+      "calls": 30
+    },
+    {
+      "stage": "dp3",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.041,
+      "calls": 30
+    },
+    {
+      "stage": "dp3",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.04,
+      "calls": 12
+    },
+    {
+      "stage": "dp5",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.04,
+      "calls": 30
+    },
+    {
+      "stage": "decoder0",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.037,
+      "calls": 42
+    },
+    {
+      "stage": "encoder1",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.032,
+      "calls": 39
+    },
+    {
+      "stage": "dp1",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.031,
+      "calls": 12
+    },
+    {
+      "stage": "dp2",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.028,
+      "calls": 12
+    },
+    {
+      "stage": "dp5",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.027999999999999997,
+      "calls": 12
+    },
+    {
+      "stage": "dp0",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.026999999999999996,
+      "calls": 12
+    },
+    {
+      "stage": "dp4",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.025,
+      "calls": 12
+    },
+    {
+      "stage": "encoder2",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.023,
+      "calls": 6
+    },
+    {
+      "stage": "decoder0",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.018000000000000002,
+      "calls": 18
+    },
+    {
+      "stage": "decoder1",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.018000000000000002,
+      "calls": 18
+    },
+    {
+      "stage": "decoder2",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.018000000000000002,
+      "calls": 18
+    },
+    {
+      "stage": "encoder2",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.016,
+      "calls": 15
+    },
+    {
+      "stage": "decoder2",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.012,
+      "calls": 69
+    },
+    {
+      "stage": "skip1",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.012,
+      "calls": 72
+    },
+    {
+      "stage": "encoder0",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.01,
+      "calls": 60
+    },
+    {
+      "stage": "skip2",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.01,
+      "calls": 66
+    },
+    {
+      "stage": "decoder1",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.004,
+      "calls": 27
+    },
+    {
+      "stage": "decoder0",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.003,
+      "calls": 15
+    },
+    {
+      "stage": "encoder1",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.003,
+      "calls": 18
+    },
+    {
+      "stage": "skip0",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.001,
+      "calls": 6
+    },
+    {
+      "stage": "encoder2",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.0,
+      "calls": 6
+    }
+  ],
+  "graph_summaries": [
+    {
+      "frames": 872,
+      "nodes": 4219,
+      "groups": 201,
+      "measured_ms": 22902.642,
+      "unmapped_nodes": 0,
+      "unmapped_ms": 0.0,
+      "scope": "per_node_synchronized"
+    },
+    {
+      "frames": 614,
+      "nodes": 4219,
+      "groups": 201,
+      "measured_ms": 16995.477,
+      "unmapped_nodes": 0,
+      "unmapped_ms": 0.0,
+      "scope": "per_node_synchronized"
+    },
+    {
+      "frames": 194,
+      "nodes": 4219,
+      "groups": 201,
+      "measured_ms": 5476.722,
+      "unmapped_nodes": 0,
+      "unmapped_ms": 0.0,
+      "scope": "per_node_synchronized"
+    }
+  ],
+  "all_graph_nodes_mapped": true,
+  "lstm_totals_ms": {
+    "gemm_ms": 3980.848,
+    "gates_ms": 18225.113,
+    "reset_ms": 2.869
+  },
+  "lstm_by_module": {
+    "separation_net.dp_modules.0.lstm_layers.0": {
+      "gemm_ms": 169.519,
+      "gates_ms": 1657.976,
+      "reset_ms": 0.426,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.0.lstm_layers.1": {
+      "gemm_ms": 294.65999999999997,
+      "gates_ms": 1664.455,
+      "reset_ms": 0.036000000000000004,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.1.lstm_layers.0": {
+      "gemm_ms": 327.78600000000006,
+      "gates_ms": 1226.7060000000001,
+      "reset_ms": 0.38899999999999996,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.1.lstm_layers.1": {
+      "gemm_ms": 539.455,
+      "gates_ms": 1349.052,
+      "reset_ms": 0.093,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.2.lstm_layers.0": {
+      "gemm_ms": 172.336,
+      "gates_ms": 1660.7050000000002,
+      "reset_ms": 0.421,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.2.lstm_layers.1": {
+      "gemm_ms": 293.937,
+      "gates_ms": 1630.3129999999999,
+      "reset_ms": 0.039999999999999994,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.3.lstm_layers.0": {
+      "gemm_ms": 324.03700000000003,
+      "gates_ms": 1366.228,
+      "reset_ms": 0.442,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.3.lstm_layers.1": {
+      "gemm_ms": 540.9860000000001,
+      "gates_ms": 1471.874,
+      "reset_ms": 0.08499999999999999,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.4.lstm_layers.0": {
+      "gemm_ms": 168.01,
+      "gates_ms": 1621.4940000000001,
+      "reset_ms": 0.429,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.4.lstm_layers.1": {
+      "gemm_ms": 291.31,
+      "gates_ms": 1611.3970000000002,
+      "reset_ms": 0.04,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.5.lstm_layers.0": {
+      "gemm_ms": 321.2289999999999,
+      "gates_ms": 1472.734,
+      "reset_ms": 0.39499999999999996,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.5.lstm_layers.1": {
+      "gemm_ms": 537.583,
+      "gates_ms": 1492.179,
+      "reset_ms": 0.07300000000000001,
+      "nodes": 3
+    }
+  },
+  "lstm_modes": [
+    [
+      "CBLAS",
+      "whole_node"
+    ]
+  ],
+  "compile_commands": [
+    {
+      "source": "{repo}/ggml/src/ggml-cpu/ggml-cpu.c",
+      "command": "/usr/bin/cc -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu11 -fPIC -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Werror=implicit-int -Werror=implicit-function-declaration -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wdouble-promotion -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.c.o -c {repo}/ggml/src/ggml-cpu/ggml-cpu.c",
+      "march_native": true,
+      "have_blas": false
+    },
+    {
+      "source": "{repo}/ggml/src/ggml-cpu/ggml-cpu.cpp",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.cpp.o -c {repo}/ggml/src/ggml-cpu/ggml-cpu.cpp",
+      "march_native": true,
+      "have_blas": false
+    },
+    {
+      "source": "{repo}/ggml/src/ggml-cpu/ops.cpp",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ops.cpp.o -c {repo}/ggml/src/ggml-cpu/ops.cpp",
+      "march_native": true,
+      "have_blas": false
+    },
+    {
+      "source": "{repo}/ggml/src/ggml-blas/ggml-blas.cpp",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_BLAS_USE_OPENBLAS -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_blas_EXPORTS -I{repo}/ggml/src/ggml-blas/.. -I{repo}/ggml/src/../include -isystem /usr/include/x86_64-linux-gnu/openblas-pthread -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -o ggml/src/ggml-blas/CMakeFiles/ggml-blas.dir/ggml-blas.cpp.o -c {repo}/ggml/src/ggml-blas/ggml-blas.cpp",
+      "march_native": false,
+      "have_blas": false
+    },
+    {
+      "source": "{repo}/src/scnet.cpp",
+      "command": "/usr/bin/c++ -DCRISPASR_HAVE_BLAS=1 -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SHARED -DGGML_USE_BLAS -DGGML_USE_CPU -DHAVE_BLAS -I{repo}/src/. -I{repo}/src/../include -I{repo}/ggml/src/../include -O3 -DNDEBUG -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -O3 -fopenmp -o src/CMakeFiles/scnet.dir/scnet.cpp.o -c {repo}/src/scnet.cpp",
+      "march_native": false,
+      "have_blas": true
+    }
+  ],
+  "compile_database_sha256": "f7582a0f142b9f5e80f001e42d7a42934b8bce08ea73d78f42ff5d9037fc96b1",
+  "cmake_cache_sha256": "9ac1a78fcceb85c3d538b08cbf8ab3dbda3517c8be79efcc8e1245f25e54ebc0",
+  "baseline_comparison": {
+    "baseline_source": "94ea189e4a95bbe966f9a3410a83c5a4e82f4c6b",
+    "same_cpu_model": true,
+    "same_model_sha256": true,
+    "output_pcm_sha256": "ed768a7427612ca0f8a15444aa5f5db4453a3bdc52e01caf8b9a8142a993165a",
+    "matches_all_three_prior_native_diagnostic_outputs": true,
+    "baseline_native_f16_median_seconds": 46.30829027200025,
+    "baseline_original_f16_median_seconds": 16.427338731999953,
+    "instrumented_single_call_is_not_a_paired_speed_result": true
+  },
+  "evidence": {
+    "diagnostic/diagnostic.json": "febb98052107697d6b9a59dd8458936be68f9373b5d1d549ca7925414f28bdcd",
+    "diagnostic/native-profile.json": "1af2f6b69f44e143ae64345dd286d391e587259971685287a4ed3d4e08f28c97",
+    "diagnostic/timers.json": "269555b5437c3aa7b7c9381e9016ed791c9a88977fe952a4599f4de93a7549ba",
+    "diagnostic/native-profile.stderr.log": "8ecd27b75f1e3ca3aafea8b2fd6a3f2917aa47fe234472c16dd2fd96abd496b8",
+    "diagnostic/compile-commands.json": "c056783d7d7b1317b7eca49256412e294e9538e01c1d5df02109e31d37c8fd6d",
+    "diagnostic/source-manifest.json": "88600983176749b24991255e80309d08f840a0f8d48a4fa3a15105494d2d614e"
+  }
+}

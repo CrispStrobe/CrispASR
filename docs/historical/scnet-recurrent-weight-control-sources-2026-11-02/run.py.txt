@@ -1,0 +1,151 @@
+from pathlib import Path
+import hashlib
+import json
+import os
+import re
+import subprocess
+
+WORK = Path(__file__).resolve().parent
+ROOT = WORK.parents[1] / 'CrispASR'
+BUILD = ROOT / 'build-scnet-openblas034-profile'
+MODELS = WORK.parent / 'current-models'
+PROVIDER = WORK.parent / 'local-profile-openblas034-v1/install/lib/libopenblas.so.0.3'
+
+
+def sha(path):
+    h = hashlib.sha256()
+    with Path(path).open('rb') as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b''):
+            h.update(block)
+    return h.hexdigest()
+
+
+def save(value):
+    temporary = WORK / 'receipt.partial.json'
+    temporary.write_text(json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + '\n')
+    temporary.replace(WORK / 'receipt.json')
+
+
+def source_hashes(binding):
+    return {name: sha(ROOT / name) for name in binding['source_sha256_after']}
+
+
+def main():
+    if (WORK / 'receipt.json').exists():
+        raise ValueError('refusing to overwrite prior model-control results')
+    environment = os.environ.copy()
+    for name in ('LD_LIBRARY_PATH', 'LD_PRELOAD', 'LD_AUDIT', 'OPENBLAS_CORETYPE'):
+        if environment.get(name):
+            raise ValueError('unexpected loader/provider override: ' + name)
+    for name in list(environment):
+        if name.startswith('CRISPASR_SCNET_') or name in ('CRISPASR_CPU_GEMM',):
+            environment.pop(name)
+    for name in ('OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS',
+                 'VECLIB_MAXIMUM_THREADS', 'BLIS_NUM_THREADS'):
+        environment[name] = '2'
+    environment.update(CRISPASR_SCNET_BENCH='0', CRISPASR_SCNET_GPU='0')
+    binding = json.loads((WORK / 'build.json').read_text())
+    control = json.loads((WORK / 'control-build-v2.json').read_text())
+    assert control['complete'] and binding['complete']
+    assert control['harness_binary_sha256'] == sha(WORK / 'control-v2')
+    assert binding['source_sha256_after'] == source_hashes(binding)
+    assert binding['provider_sha256'] == sha(PROVIDER)
+    fixture = WORK / 'music-first-0.25s-interleaved-f32.bin'
+    source_pcm = WORK.parent / 'cache-lifecycle-v2/input-first-2s-interleaved-f32.bin'
+    fixture.write_bytes(source_pcm.read_bytes()[:11025 * 2 * 4])
+    assert fixture.stat().st_size == 11025 * 2 * 4
+    ldd = subprocess.run(['ldd', str(WORK / 'control-v2')], env=environment,
+                         check=True, capture_output=True, text=True)
+    (WORK / 'ldd-before.log').write_text(ldd.stdout + ldd.stderr)
+    paths = sorted({Path(match).resolve() for match in re.findall(r'(/[^\s()]+)', ldd.stdout)})
+    dependencies_before = {str(path): {'sha256': sha(path), 'bytes': path.stat().st_size} for path in paths}
+    receipt = {'schema': 'scnet_recurrent_weight_cache_controls_v1', 'complete': False,
+               'controls_acceptance': False, 'qualification': False, 'performance_qualification': False,
+               'scope': '144 actual CPU ggml_cast byte comparisons and six short original/observed native calls; '
+                        'BENCH=0 natural scheduler split/worker observation, no original-PyTorch qualification or timings',
+               'native_build_receipt_sha256': sha(WORK / 'build.json'),
+               'control_build_receipt_sha256': sha(WORK / 'control-build-v2.json'),
+               'driver_sha256': sha(Path(__file__)), 'provider_sha256': sha(PROVIDER),
+               'fixture': {'file': fixture.name, 'sha256': sha(fixture), 'samples': 11025, 'channels': 2,
+                           'rate': 44100, 'parent_pcm_sha256': sha(source_pcm)},
+               'environment': {name: environment.get(name) for name in (
+                   'OMP_NUM_THREADS', 'OPENBLAS_NUM_THREADS', 'MKL_NUM_THREADS', 'VECLIB_MAXIMUM_THREADS',
+                   'BLIS_NUM_THREADS', 'CRISPASR_SCNET_BENCH', 'CRISPASR_SCNET_GPU', 'OPENBLAS_CORETYPE',
+                   'LD_LIBRARY_PATH', 'LD_PRELOAD', 'LD_AUDIT')},
+               'dependencies_before': dependencies_before, 'cases': {}, 'errors': []}
+    save(receipt)
+    expected_names = {f'separation_net.dp_modules.{layer}.lstm_layers.{axis}.weight_hh_l0{suffix}'
+                      for layer in range(6) for axis in range(2) for suffix in ('', '_reverse')}
+    for variant in ('scnet', 'scnet-large'):
+        for precision in ('f16', 'q8_0', 'q4_k'):
+            label = f'{variant}-{precision}'
+            folder = WORK / label
+            folder.mkdir()
+            model = MODELS / (label + '.gguf')
+            output = folder / 'output-f32.bin'
+            row = receipt['cases'][label] = {'model_sha256': sha(model), 'complete': False,
+                                            'controls_acceptance': False}
+            save(receipt)
+            with (folder / 'stdout.jsonl').open('w') as stdout, (folder / 'stderr.log').open('w') as stderr:
+                result = subprocess.run([str(WORK / 'control-v2'), str(model), str(fixture), str(output)],
+                                        cwd=ROOT, env=environment, stdout=stdout, stderr=stderr)
+            row['returncode'] = result.returncode
+            row['stdout_sha256'] = sha(folder / 'stdout.jsonl')
+            row['stderr_sha256'] = sha(folder / 'stderr.log')
+            try:
+                events = [json.loads(line) for line in (folder / 'stdout.jsonl').read_text().splitlines() if line]
+                row['events'] = events
+                cast = [e for e in events if e['event'] == 'cast']
+                splits = [e for e in events if e['event'] == 'split']
+                callbacks = [e for e in events if e['event'] == 'callback']
+                caches = [e for e in events if e['event'] == 'cache']
+                completed = [e for e in events if e['event'] == 'complete']
+                loaded = [e for e in events if e['event'] == 'loaded']
+                assert result.returncode == 0 and len(completed) == 1 and completed[0]['complete']
+                assert len(cast) == 24 and {e['name'] for e in cast} == expected_names
+                assert all(e['mismatched_bytes'] == 0 and e['first_mismatch'] == -1 and
+                           e['cache_sha256'] == e['cast_sha256'] for e in cast)
+                assert len(caches) == 1 and caches[0]['payload_bytes'] == (15728640 if variant == 'scnet' else 62914560)
+                assert len(splits) == len(callbacks) == 12
+                assert all(e['requested_threads'] == 2 and e['planned_threads'] == 1 and
+                           'CPY' not in e['ops'] for e in splits)
+                assert len({e['name'] for e in callbacks}) == 12
+                assert all(e['custom_tasks'] == 1 and e['workers'] == [{'ith': 0, 'nth': 1, 'calls': 1}]
+                           for e in callbacks)
+                assert len(loaded) == 2 and [e['phase'] for e in loaded] == ['before', 'after']
+                assert {k: v for k, v in loaded[0].items() if k != 'phase'} == {
+                    k: v for k, v in loaded[1].items() if k != 'phase'}
+                for event in loaded:
+                    assert Path(event['cblas_sgemm_owner']).resolve() == PROVIDER.resolve()
+                    assert event['openblas_threads'] == 2 and event['openblas_parallel'] == 1
+                    assert 'OpenBLAS 0.3.34 ' in event['openblas_config']
+                    for name in event['paths']:
+                        if name.startswith('linux-vdso.') or name.startswith('linux-gate.'):
+                            continue
+                        path = Path(name).resolve(strict=True)
+                        assert str(path) in dependencies_before, name
+                        assert sha(path) == dependencies_before[str(path)]['sha256']
+                assert row['model_sha256'] == sha(model)
+                row.update(complete=True, controls_acceptance=True, casts=24, recurrence_callbacks=12,
+                           observed_output_sha256=sha(output), payload_bytes=caches[0]['payload_bytes'])
+            except Exception as error:
+                row['error'] = f'{type(error).__name__}: {error}'
+                receipt['errors'].append(label + ': ' + row['error'])
+            save(receipt)
+            print(label, 'returncode', result.returncode, 'controls', row['controls_acceptance'], flush=True)
+    receipt['source_unchanged'] = binding['source_sha256_after'] == source_hashes(binding)
+    receipt['binaries_unchanged'] = all(sha(BUILD / name) == entry['sha256'] for name, entry in binding['binaries'].items())
+    receipt['dependencies_unchanged'] = all(sha(path) == entry['sha256'] for path, entry in dependencies_before.items())
+    receipt['control_binary_unchanged'] = control['harness_binary_sha256'] == sha(WORK / 'control-v2')
+    receipt['complete'] = len(receipt['cases']) == 6 and all(row['complete'] for row in receipt['cases'].values())
+    receipt['controls_acceptance'] = receipt['complete'] and not receipt['errors'] and all(
+        receipt[key] for key in ('source_unchanged', 'binaries_unchanged', 'dependencies_unchanged', 'control_binary_unchanged'))
+    receipt['cast_comparisons_passed'] = sum(row.get('casts', 0) for row in receipt['cases'].values())
+    receipt['recurrence_callbacks_observed'] = sum(row.get('recurrence_callbacks', 0) for row in receipt['cases'].values())
+    save(receipt)
+    print('receipt', sha(WORK / 'receipt.json'), 'acceptance', receipt['controls_acceptance'], flush=True)
+    return 0 if receipt['controls_acceptance'] else 1
+
+
+if __name__ == '__main__':
+    raise SystemExit(main())

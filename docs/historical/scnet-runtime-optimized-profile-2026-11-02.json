@@ -1,0 +1,2796 @@
+{
+  "schema": 1,
+  "run_id": 41414623405,
+  "job_id": 125175357123,
+  "artifact_id": 13127730615,
+  "source_commit": "4264d2ea76f3be0aa984ad088e931b5e6ba6c39f",
+  "scope": "One instrumented cold call plus separate uninstrumented F16 waveform/timing smoke; not a qualification",
+  "acceptance": false,
+  "qualification": false,
+  "complete": true,
+  "artifact_zip_sha256": "67f331a1f9e9e6aa3e4521d5730a627a65c6a09db1abfd9830f2acc5f7d85beb",
+  "original_zip_source_snapshot_complete": true,
+  "source_snapshot_files_verified": 29,
+  "retained_payload_manifest_verified": true,
+  "retained_payload_count_verified": 58,
+  "hardware": {
+    "platform": "Linux-6.8.0-1070-azure-x86_64-with-glibc2.35",
+    "machine": "x86_64",
+    "logical_cpus": 4,
+    "library_sha256": "8d6d918b101c632b7eb24479e8f522b3c331e487223a8fcdc01fc5d41749e282",
+    "thread_environment": {
+      "OMP_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2",
+      "VECLIB_MAXIMUM_THREADS": "2",
+      "BLIS_NUM_THREADS": "2"
+    },
+    "compute_environment": {
+      "CRISPASR_SCNET_GPU": "0",
+      "CRISPASR_SCNET_THREADS": "2",
+      "CRISPASR_SCNET_BENCH": "0",
+      "CRISPASR_SCNET_CAPTURE_GGUF": null,
+      "CRISPASR_SCNET_SCALAR_LSTM": null,
+      "CRISPASR_SCNET_SCALAR_GATES": null,
+      "CRISPASR_SCNET_BLAS": null,
+      "CRISPASR_CPU_GEMM": null
+    },
+    "cpuinfo": "processor\t: 0\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 17\nmodel name\t: AMD EPYC 9V74 80-Core Processor\nstepping\t: 1\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 2871.258\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 4\ncore id\t\t: 0\ncpu cores\t: 2\napicid\t\t: 0\ninitial apicid\t: 0\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl tsc_reliable nonstop_tsc cpuid extd_apicid aperfmperf tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves user_shstk clzero xsaveerptr rdpru arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold v_vmsave_vmload umip vaes vpclmulqdq rdpid fsrm\nbugs\t\t: sysret_ss_attrs null_seg spectre_v1 spectre_v2 spec_store_bypass srso tsa\nbogomips\t: 5192.26\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management:",
+    "cpuset": "0-3",
+    "cmake_cache_sha256": "9ac1a78fcceb85c3d538b08cbf8ab3dbda3517c8be79efcc8e1245f25e54ebc0",
+    "build_settings": [
+      "BLAS_openblas_LIBRARY:FILEPATH=/usr/lib/x86_64-linux-gnu/libopenblas.so",
+      "CMAKE_BUILD_TYPE:STRING=Release",
+      "CMAKE_CXX_COMPILER:FILEPATH=/usr/bin/c++",
+      "CMAKE_CXX_COMPILER_AR:FILEPATH=/usr/bin/gcc-ar-11",
+      "CMAKE_CXX_COMPILER_RANLIB:FILEPATH=/usr/bin/gcc-ranlib-11",
+      "GGML_ACCELERATE:BOOL=ON",
+      "GGML_ALL_WARNINGS_3RD_PARTY:BOOL=OFF",
+      "GGML_AMX_BF16:BOOL=OFF",
+      "GGML_AMX_INT8:BOOL=OFF",
+      "GGML_AMX_TILE:BOOL=OFF",
+      "GGML_AVX:BOOL=OFF",
+      "GGML_AVX2:BOOL=OFF",
+      "GGML_AVX512:BOOL=OFF",
+      "GGML_AVX512_BF16:BOOL=OFF",
+      "GGML_AVX512_VBMI:BOOL=OFF",
+      "GGML_AVX512_VNNI:BOOL=OFF",
+      "GGML_AVX_VNNI:BOOL=OFF",
+      "GGML_BACKEND_DIR:PATH=",
+      "GGML_BACKEND_DL:BOOL=OFF",
+      "GGML_BIN_INSTALL_DIR:PATH=bin",
+      "GGML_BLAS:BOOL=ON",
+      "GGML_BLAS_VENDOR:STRING=OpenBLAS",
+      "GGML_BMI2:BOOL=OFF",
+      "GGML_BUILD_EXAMPLES:BOOL=OFF",
+      "GGML_BUILD_TESTS:BOOL=OFF",
+      "GGML_CCACHE:BOOL=ON",
+      "GGML_CCACHE_FOUND:FILEPATH=GGML_CCACHE_FOUND-NOTFOUND",
+      "GGML_CPU:BOOL=ON",
+      "GGML_CPU_ALL_VARIANTS:BOOL=OFF",
+      "GGML_CPU_ARM_ARCH:STRING=",
+      "GGML_CPU_HBM:BOOL=OFF",
+      "GGML_CPU_KLEIDIAI:BOOL=OFF",
+      "GGML_CPU_POWERPC_CPUTYPE:STRING=",
+      "GGML_CPU_REPACK:BOOL=ON",
+      "GGML_CUDA:BOOL=OFF",
+      "GGML_CUDA_CCCL_VERSION:STRING=",
+      "GGML_CUDA_COMPRESSION_MODE:STRING=size",
+      "GGML_CUDA_CRISPASR_FA_PERHEAD_MASK:BOOL=OFF",
+      "GGML_CUDA_FA:BOOL=ON",
+      "GGML_CUDA_FA_ALL_QUANTS:BOOL=OFF",
+      "GGML_CUDA_FA_QUANTS:STRING=q4_0-q4_0;q8_0-q8_0;f16-f16;bf16-bf16",
+      "GGML_CUDA_FORCE_CUBLAS:BOOL=OFF",
+      "GGML_CUDA_FORCE_MMQ:BOOL=OFF",
+      "GGML_CUDA_GRAPHS:BOOL=ON",
+      "GGML_CUDA_NCCL:BOOL=ON",
+      "GGML_CUDA_NO_PEER_COPY:BOOL=OFF",
+      "GGML_CUDA_NO_VMM:BOOL=OFF",
+      "GGML_ET:BOOL=OFF",
+      "GGML_ET_SYSEMU:BOOL=OFF",
+      "GGML_F16C:BOOL=OFF",
+      "GGML_FMA:BOOL=OFF",
+      "GGML_GPROF:BOOL=OFF",
+      "GGML_HEXAGON:BOOL=OFF",
+      "GGML_HIP:BOOL=OFF",
+      "GGML_HIP_EXPORT_METRICS:BOOL=OFF",
+      "GGML_HIP_GRAPHS:BOOL=ON",
+      "GGML_HIP_MMQ_MFMA:BOOL=ON",
+      "GGML_HIP_NO_VMM:BOOL=ON",
+      "GGML_HIP_RCCL:BOOL=OFF",
+      "GGML_INCLUDE_INSTALL_DIR:PATH=include",
+      "GGML_LASX:BOOL=ON",
+      "GGML_LIB_INSTALL_DIR:PATH=lib",
+      "GGML_LLAMAFILE:BOOL=ON",
+      "GGML_LSX:BOOL=ON",
+      "GGML_LTO:BOOL=OFF",
+      "GGML_METAL:BOOL=OFF",
+      "GGML_METAL_EMBED_LIBRARY:BOOL=OFF",
+      "GGML_METAL_MACOSX_VERSION_MIN:STRING=",
+      "GGML_METAL_NDEBUG:BOOL=OFF",
+      "GGML_METAL_SHADER_DEBUG:BOOL=OFF",
+      "GGML_METAL_STD:STRING=",
+      "GGML_METAL_TARGET_OS:STRING=macos",
+      "GGML_MUSA:BOOL=OFF",
+      "GGML_MUSA_GRAPHS:BOOL=OFF",
+      "GGML_MUSA_MUDNN_COPY:BOOL=OFF",
+      "GGML_NATIVE:BOOL=ON",
+      "GGML_OPENCL:BOOL=OFF",
+      "GGML_OPENCL_EMBED_KERNELS:BOOL=ON",
+      "GGML_OPENCL_PROFILING:BOOL=OFF",
+      "GGML_OPENCL_TARGET_VERSION:STRING=300",
+      "GGML_OPENCL_USE_ADRENO_KERNELS:BOOL=ON",
+      "GGML_OPENMP:BOOL=ON",
+      "GGML_OPENMP_FETCH:BOOL=OFF",
+      "GGML_OPENVINO:BOOL=OFF",
+      "GGML_RPC:BOOL=OFF",
+      "GGML_RVV:BOOL=ON",
+      "GGML_RV_ZFH:BOOL=ON",
+      "GGML_RV_ZICBOP:BOOL=ON",
+      "GGML_RV_ZIHINTPAUSE:BOOL=ON",
+      "GGML_RV_ZVFBFWMA:BOOL=OFF",
+      "GGML_RV_ZVFH:BOOL=ON",
+      "GGML_SCCACHE_FOUND:FILEPATH=GGML_SCCACHE_FOUND-NOTFOUND",
+      "GGML_SCHED_MAX_COPIES:STRING=4",
+      "GGML_SCHED_NO_REALLOC:BOOL=OFF",
+      "GGML_SSE42:BOOL=OFF",
+      "GGML_STATIC:BOOL=OFF",
+      "GGML_SYCL:BOOL=OFF",
+      "GGML_SYCL_DEVICE_ARCH:STRING=",
+      "GGML_SYCL_DNN:BOOL=ON",
+      "GGML_SYCL_F16:BOOL=OFF",
+      "GGML_SYCL_GRAPH:BOOL=ON",
+      "GGML_SYCL_HOST_MEM_FALLBACK:BOOL=ON",
+      "GGML_SYCL_SUPPORT_LEVEL_ZERO_API:BOOL=ON",
+      "GGML_SYCL_TARGET:STRING=INTEL",
+      "GGML_VIRTGPU:BOOL=OFF",
+      "GGML_VIRTGPU_BACKEND:BOOL=OFF",
+      "GGML_VULKAN:BOOL=OFF",
+      "GGML_VULKAN_CHECK_RESULTS:BOOL=OFF",
+      "GGML_VULKAN_DEBUG:BOOL=OFF",
+      "GGML_VULKAN_MEMORY_DEBUG:BOOL=OFF",
+      "GGML_VULKAN_RUN_TESTS:BOOL=OFF",
+      "GGML_VULKAN_SHADERS_GEN_TOOLCHAIN:FILEPATH=",
+      "GGML_VULKAN_SHADER_DEBUG_INFO:BOOL=OFF",
+      "GGML_VULKAN_VALIDATE:BOOL=OFF",
+      "GGML_VXE:BOOL=ON",
+      "GGML_WEBGPU:BOOL=OFF",
+      "GGML_WEBGPU_CPU_PROFILE:BOOL=OFF",
+      "GGML_WEBGPU_DEBUG:BOOL=OFF",
+      "GGML_WEBGPU_GPU_PROFILE:BOOL=OFF",
+      "GGML_WEBGPU_JSPI:BOOL=ON",
+      "GGML_XTHEADVECTOR:BOOL=OFF",
+      "GGML_ZDNN:BOOL=OFF",
+      "GGML_ZENDNN:BOOL=OFF",
+      "BLAS_openblas_LIBRARY-ADVANCED:INTERNAL=1",
+      "BLAS_openblas_WORKS:INTERNAL=1",
+      "CMAKE_CXX_COMPILER-ADVANCED:INTERNAL=1",
+      "CMAKE_CXX_COMPILER_AR-ADVANCED:INTERNAL=1",
+      "CMAKE_CXX_COMPILER_RANLIB-ADVANCED:INTERNAL=1",
+      "GGML_AVAILABLE_BACKENDS:INTERNAL=ggml-cpu;ggml-blas",
+      "GGML_CUDA_COMPRESSION_MODE-STRINGS:INTERNAL=none;speed;balance;size",
+      "GGML_OPENMP_ENABLED:INTERNAL=ON"
+    ]
+  },
+  "profile": {
+    "mode": "pipeline",
+    "segment_seconds": 20,
+    "shifts": 1,
+    "shift_seed": 0,
+    "overlap": 0.5
+  },
+  "fixture": {
+    "title": "A Classic Education - NightOwl",
+    "license": "CC BY-NC-SA 4.0",
+    "license_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+    "attribution_url": "https://docs.pytorch.org/audio/main/tutorials/hybrid_demucs_tutorial.html",
+    "source_url": "https://download.pytorch.org/torchaudio/tutorial-assets/hdemucs_mix.wav",
+    "use": "Implementation-parity test only; not redistributed and not a held-out separation-quality evaluation.",
+    "source_sha256": "f2420feedcdee9591dd649442c81149e31a0c06ee8c6e655d93d8f8e742cf706",
+    "full_sha256": "afbc9ea29b214e4ae23af11fa0c4286be2181c4310566635b6f8761000cb202e",
+    "smoke_sha256": "9c21b7f14b9ec3f374c62efde0156049cd5eff5464529add4457c3d3850d0341",
+    "offset_samples": 0,
+    "frames": 1058400,
+    "sample_rate": 44100,
+    "audio_channels": 2,
+    "resampled": false,
+    "looped": false,
+    "normalized": false,
+    "contiguous_exact_pcm": true
+  },
+  "checkpoint": {
+    "source_url": "https://drive.google.com/file/d/1CdEIIqsoRfHn1SJ7rccPfyYioW3BlXcW/view",
+    "bytes": 42434545,
+    "sha256": "f8aff3bc8dd816aad392800d9d69519add719a2fbd22550af6f8cb2138d25ff5",
+    "discovered_at": "2026-11-02T08:17:17.115186+00:00",
+    "digest_status": "First author-linked download identity; not an author-published checksum"
+  },
+  "model": {
+    "file": "scnet-profile-f16.gguf",
+    "sha256": "8441b23c2b6ba47e8357fd863d717af88a5568f1937a3ff328c921c7143bd059",
+    "bytes": 21293184
+  },
+  "library_sha256": "8d6d918b101c632b7eb24479e8f522b3c331e487223a8fcdc01fc5d41749e282",
+  "ggml_library_sha256": {
+    "ggml/src/ggml-blas/libggml-blas.so.0.26.0": "7242dd4b89f35efbb32bea1abf9b43cc2984611d2b08106e3b7f46eaaf3f1799",
+    "ggml/src/libggml-base.so.0.26.0": "86ccefa778ef82f1ca822b53acbe781b29d716fdb4a6ea51ea21da2e14e8e457",
+    "ggml/src/libggml-cpu.so.0.26.0": "f9bc34668e96201ff2af01d8e08037ee45575812efd689020e1f485fd84ab0f9",
+    "ggml/src/libggml.so.0.26.0": "77343e8cdc9dfac201ff4b893c1a8d4d12a058046cf029751452cc75b1aa2fc5"
+  },
+  "instrumented_seconds": 22.174913393999987,
+  "coarse_ms": {
+    "stft": 115.728,
+    "graph_build": 73.786,
+    "lstm": 5973.545999999999,
+    "fft": 2199.286,
+    "network": 21206.423000000003,
+    "istft": 432.119,
+    "separate": 22159.395
+  },
+  "graph_operation_totals": [
+    {
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 6941.587,
+      "calls": 447
+    },
+    {
+      "op": "scnet_cpu_lstm",
+      "backend": "CPU",
+      "ms": 5974.0380000000005,
+      "calls": 36
+    },
+    {
+      "op": "scnet_cpu_fft",
+      "backend": "CPU",
+      "ms": 2816.889,
+      "calls": 18
+    },
+    {
+      "op": "scnet_cpu_im2col",
+      "backend": "CPU",
+      "ms": 1232.0450000000003,
+      "calls": 732
+    },
+    {
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 960.734,
+      "calls": 1263
+    },
+    {
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 773.6150000000001,
+      "calls": 702
+    },
+    {
+      "op": "scnet_cpu_concat",
+      "backend": "CPU",
+      "ms": 464.17500000000007,
+      "calls": 615
+    },
+    {
+      "op": "MUL_MAT",
+      "backend": "CPU",
+      "ms": 441.16099999999994,
+      "calls": 420
+    },
+    {
+      "op": "COL2IM_1D",
+      "backend": "CPU",
+      "ms": 386.438,
+      "calls": 27
+    },
+    {
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 357.0059999999999,
+      "calls": 144
+    },
+    {
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 353.501,
+      "calls": 63
+    },
+    {
+      "op": "GELU_ERF",
+      "backend": "CPU",
+      "ms": 250.03800000000004,
+      "calls": 27
+    },
+    {
+      "op": "scnet_cpu_mul",
+      "backend": "CPU",
+      "ms": 96.19399999999999,
+      "calls": 369
+    },
+    {
+      "op": "scnet_cpu_pad",
+      "backend": "CPU",
+      "ms": 86.88499999999998,
+      "calls": 150
+    },
+    {
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 12.575999999999997,
+      "calls": 195
+    },
+    {
+      "op": "SILU",
+      "backend": "CPU",
+      "ms": 11.032,
+      "calls": 54
+    },
+    {
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 3.899999999999999,
+      "calls": 2781
+    },
+    {
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 1.5049999999999997,
+      "calls": 1281
+    },
+    {
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 1.0130000000000003,
+      "calls": 1308
+    },
+    {
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.6690000000000002,
+      "calls": 762
+    },
+    {
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.061,
+      "calls": 339
+    }
+  ],
+  "graph_stage_operation_totals": [
+    {
+      "stage": "dp5",
+      "op": "scnet_cpu_lstm",
+      "backend": "CPU",
+      "ms": 1219.1260000000002,
+      "calls": 6
+    },
+    {
+      "stage": "dp3",
+      "op": "scnet_cpu_lstm",
+      "backend": "CPU",
+      "ms": 1217.8850000000002,
+      "calls": 6
+    },
+    {
+      "stage": "dp1",
+      "op": "scnet_cpu_lstm",
+      "backend": "CPU",
+      "ms": 1216.2069999999999,
+      "calls": 6
+    },
+    {
+      "stage": "dp3",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 883.3059999999999,
+      "calls": 18
+    },
+    {
+      "stage": "dp1",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 861.513,
+      "calls": 18
+    },
+    {
+      "stage": "dp5",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 850.77,
+      "calls": 18
+    },
+    {
+      "stage": "dp2",
+      "op": "scnet_cpu_lstm",
+      "backend": "CPU",
+      "ms": 785.099,
+      "calls": 6
+    },
+    {
+      "stage": "dp4",
+      "op": "scnet_cpu_lstm",
+      "backend": "CPU",
+      "ms": 770.017,
+      "calls": 6
+    },
+    {
+      "stage": "dp0",
+      "op": "scnet_cpu_lstm",
+      "backend": "CPU",
+      "ms": 765.704,
+      "calls": 6
+    },
+    {
+      "stage": "dp2",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 620.4430000000001,
+      "calls": 18
+    },
+    {
+      "stage": "dp0",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 541.782,
+      "calls": 18
+    },
+    {
+      "stage": "dp4",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 530.888,
+      "calls": 18
+    },
+    {
+      "stage": "decoder2",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 520.074,
+      "calls": 69
+    },
+    {
+      "stage": "feature3",
+      "op": "scnet_cpu_fft",
+      "backend": "CPU",
+      "ms": 482.51399999999995,
+      "calls": 3
+    },
+    {
+      "stage": "feature4",
+      "op": "scnet_cpu_fft",
+      "backend": "CPU",
+      "ms": 470.1580000000001,
+      "calls": 3
+    },
+    {
+      "stage": "feature5",
+      "op": "scnet_cpu_fft",
+      "backend": "CPU",
+      "ms": 469.588,
+      "calls": 3
+    },
+    {
+      "stage": "feature1",
+      "op": "scnet_cpu_fft",
+      "backend": "CPU",
+      "ms": 466.201,
+      "calls": 3
+    },
+    {
+      "stage": "feature2",
+      "op": "scnet_cpu_fft",
+      "backend": "CPU",
+      "ms": 466.012,
+      "calls": 3
+    },
+    {
+      "stage": "feature0",
+      "op": "scnet_cpu_fft",
+      "backend": "CPU",
+      "ms": 462.416,
+      "calls": 3
+    },
+    {
+      "stage": "decoder1",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 450.33400000000006,
+      "calls": 27
+    },
+    {
+      "stage": "decoder0",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 446.63,
+      "calls": 15
+    },
+    {
+      "stage": "skip0",
+      "op": "MUL_MAT",
+      "backend": "CPU",
+      "ms": 354.75,
+      "calls": 369
+    },
+    {
+      "stage": "encoder0",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 295.685,
+      "calls": 60
+    },
+    {
+      "stage": "encoder1",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 251.632,
+      "calls": 18
+    },
+    {
+      "stage": "encoder0",
+      "op": "scnet_cpu_im2col",
+      "backend": "CPU",
+      "ms": 245.388,
+      "calls": 60
+    },
+    {
+      "stage": "skip2",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 230.37500000000003,
+      "calls": 66
+    },
+    {
+      "stage": "encoder2",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 229.092,
+      "calls": 6
+    },
+    {
+      "stage": "decoder2",
+      "op": "scnet_cpu_im2col",
+      "backend": "CPU",
+      "ms": 226.059,
+      "calls": 60
+    },
+    {
+      "stage": "skip1",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 219.582,
+      "calls": 72
+    },
+    {
+      "stage": "decoder2",
+      "op": "COL2IM_1D",
+      "backend": "CPU",
+      "ms": 211.494,
+      "calls": 9
+    },
+    {
+      "stage": "dp0",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 198.347,
+      "calls": 30
+    },
+    {
+      "stage": "skip1",
+      "op": "scnet_cpu_im2col",
+      "backend": "CPU",
+      "ms": 197.504,
+      "calls": 123
+    },
+    {
+      "stage": "decoder2",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 195.10999999999999,
+      "calls": 87
+    },
+    {
+      "stage": "skip0",
+      "op": "scnet_cpu_concat",
+      "backend": "CPU",
+      "ms": 183.521,
+      "calls": 336
+    },
+    {
+      "stage": "skip0",
+      "op": "scnet_cpu_im2col",
+      "backend": "CPU",
+      "ms": 140.69199999999998,
+      "calls": 375
+    },
+    {
+      "stage": "decoder1",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 123.91799999999999,
+      "calls": 45
+    },
+    {
+      "stage": "decoder2",
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 110.38400000000001,
+      "calls": 3
+    },
+    {
+      "stage": "decoder1",
+      "op": "COL2IM_1D",
+      "backend": "CPU",
+      "ms": 110.11200000000001,
+      "calls": 9
+    },
+    {
+      "stage": "skip0",
+      "op": "GELU_ERF",
+      "backend": "CPU",
+      "ms": 102.029,
+      "calls": 9
+    },
+    {
+      "stage": "skip0",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 101.057,
+      "calls": 501
+    },
+    {
+      "stage": "skip1",
+      "op": "GELU_ERF",
+      "backend": "CPU",
+      "ms": 98.28800000000001,
+      "calls": 9
+    },
+    {
+      "stage": "skip2",
+      "op": "scnet_cpu_im2col",
+      "backend": "CPU",
+      "ms": 97.75,
+      "calls": 66
+    },
+    {
+      "stage": "decoder1",
+      "op": "scnet_cpu_im2col",
+      "backend": "CPU",
+      "ms": 94.82300000000001,
+      "calls": 18
+    },
+    {
+      "stage": "encoder1",
+      "op": "scnet_cpu_im2col",
+      "backend": "CPU",
+      "ms": 91.685,
+      "calls": 18
+    },
+    {
+      "stage": "encoder0",
+      "op": "scnet_cpu_concat",
+      "backend": "CPU",
+      "ms": 89.938,
+      "calls": 57
+    },
+    {
+      "stage": "skip1",
+      "op": "MUL_MAT",
+      "backend": "CPU",
+      "ms": 86.41099999999999,
+      "calls": 51
+    },
+    {
+      "stage": "skip1",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 85.589,
+      "calls": 249
+    },
+    {
+      "stage": "decoder2",
+      "op": "scnet_cpu_concat",
+      "backend": "CPU",
+      "ms": 83.616,
+      "calls": 63
+    },
+    {
+      "stage": "dp2",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 74.923,
+      "calls": 30
+    },
+    {
+      "stage": "decoder0",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 72.44,
+      "calls": 33
+    },
+    {
+      "stage": "skip0",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 72.11600000000001,
+      "calls": 36
+    },
+    {
+      "stage": "encoder2",
+      "op": "scnet_cpu_im2col",
+      "backend": "CPU",
+      "ms": 71.758,
+      "calls": 6
+    },
+    {
+      "stage": "skip0",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 71.32,
+      "calls": 153
+    },
+    {
+      "stage": "dp3",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 69.798,
+      "calls": 30
+    },
+    {
+      "stage": "decoder1",
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 69.098,
+      "calls": 3
+    },
+    {
+      "stage": "dp1",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 67.47,
+      "calls": 30
+    },
+    {
+      "stage": "dp5",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 66.432,
+      "calls": 30
+    },
+    {
+      "stage": "decoder0",
+      "op": "scnet_cpu_im2col",
+      "backend": "CPU",
+      "ms": 66.38600000000001,
+      "calls": 6
+    },
+    {
+      "stage": "skip0",
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 66.347,
+      "calls": 18
+    },
+    {
+      "stage": "decoder0",
+      "op": "COL2IM_1D",
+      "backend": "CPU",
+      "ms": 64.832,
+      "calls": 9
+    },
+    {
+      "stage": "dp4",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 63.367999999999995,
+      "calls": 30
+    },
+    {
+      "stage": "skip2",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 57.621,
+      "calls": 192
+    },
+    {
+      "stage": "dp2",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 50.005,
+      "calls": 12
+    },
+    {
+      "stage": "skip2",
+      "op": "GELU_ERF",
+      "backend": "CPU",
+      "ms": 49.721000000000004,
+      "calls": 9
+    },
+    {
+      "stage": "skip1",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 47.735,
+      "calls": 153
+    },
+    {
+      "stage": "skip1",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 45.013000000000005,
+      "calls": 36
+    },
+    {
+      "stage": "dp3",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 44.968,
+      "calls": 12
+    },
+    {
+      "stage": "dp0",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 43.992000000000004,
+      "calls": 12
+    },
+    {
+      "stage": "dp5",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 43.934,
+      "calls": 12
+    },
+    {
+      "stage": "dp1",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 42.65599999999999,
+      "calls": 12
+    },
+    {
+      "stage": "decoder0",
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 42.464999999999996,
+      "calls": 3
+    },
+    {
+      "stage": "dp4",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 42.424,
+      "calls": 12
+    },
+    {
+      "stage": "skip1",
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 40.04299999999999,
+      "calls": 18
+    },
+    {
+      "stage": "dp2",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 39.603,
+      "calls": 6
+    },
+    {
+      "stage": "decoder2",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 37.165000000000006,
+      "calls": 18
+    },
+    {
+      "stage": "skip1",
+      "op": "scnet_cpu_concat",
+      "backend": "CPU",
+      "ms": 35.894,
+      "calls": 84
+    },
+    {
+      "stage": "dp3",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 35.104,
+      "calls": 6
+    },
+    {
+      "stage": "dp5",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 34.717,
+      "calls": 6
+    },
+    {
+      "stage": "dp4",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 34.575,
+      "calls": 6
+    },
+    {
+      "stage": "dp1",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 34.477000000000004,
+      "calls": 6
+    },
+    {
+      "stage": "dp0",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 34.187999999999995,
+      "calls": 6
+    },
+    {
+      "stage": "decoder1",
+      "op": "scnet_cpu_concat",
+      "backend": "CPU",
+      "ms": 33.935,
+      "calls": 21
+    },
+    {
+      "stage": "skip0",
+      "op": "scnet_cpu_pad",
+      "backend": "CPU",
+      "ms": 32.202999999999996,
+      "calls": 45
+    },
+    {
+      "stage": "encoder0",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 28.131,
+      "calls": 60
+    },
+    {
+      "stage": "skip2",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 28.086,
+      "calls": 153
+    },
+    {
+      "stage": "skip2",
+      "op": "NORM",
+      "backend": "CPU",
+      "ms": 27.213,
+      "calls": 36
+    },
+    {
+      "stage": "skip2",
+      "op": "SIGMOID",
+      "backend": "CPU",
+      "ms": 25.163999999999998,
+      "calls": 18
+    },
+    {
+      "stage": "skip0",
+      "op": "scnet_cpu_mul",
+      "backend": "CPU",
+      "ms": 22.808,
+      "calls": 108
+    },
+    {
+      "stage": "decoder1",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 21.432000000000002,
+      "calls": 18
+    },
+    {
+      "stage": "encoder1",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 17.505000000000003,
+      "calls": 18
+    },
+    {
+      "stage": "skip1",
+      "op": "scnet_cpu_pad",
+      "backend": "CPU",
+      "ms": 16.117,
+      "calls": 45
+    },
+    {
+      "stage": "skip1",
+      "op": "scnet_cpu_mul",
+      "backend": "CPU",
+      "ms": 14.442000000000002,
+      "calls": 108
+    },
+    {
+      "stage": "decoder0",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 13.683,
+      "calls": 18
+    },
+    {
+      "stage": "decoder0",
+      "op": "scnet_cpu_concat",
+      "backend": "CPU",
+      "ms": 11.655000000000001,
+      "calls": 9
+    },
+    {
+      "stage": "encoder1",
+      "op": "scnet_cpu_concat",
+      "backend": "CPU",
+      "ms": 11.453,
+      "calls": 15
+    },
+    {
+      "stage": "encoder2",
+      "op": "scnet_cpu_cont",
+      "backend": "CPU",
+      "ms": 11.384,
+      "calls": 6
+    },
+    {
+      "stage": "decoder2",
+      "op": "scnet_cpu_mul",
+      "backend": "CPU",
+      "ms": 10.961,
+      "calls": 3
+    },
+    {
+      "stage": "skip2",
+      "op": "scnet_cpu_concat",
+      "backend": "CPU",
+      "ms": 10.708,
+      "calls": 27
+    },
+    {
+      "stage": "skip0",
+      "op": "MUL_MAT",
+      "backend": "BLAS",
+      "ms": 9.481,
+      "calls": 6
+    },
+    {
+      "stage": "encoder0",
+      "op": "scnet_cpu_pad",
+      "backend": "CPU",
+      "ms": 8.575,
+      "calls": 3
+    },
+    {
+      "stage": "skip2",
+      "op": "scnet_cpu_mul",
+      "backend": "CPU",
+      "ms": 8.458,
+      "calls": 108
+    },
+    {
+      "stage": "decoder2",
+      "op": "scnet_cpu_pad",
+      "backend": "CPU",
+      "ms": 8.302,
+      "calls": 3
+    },
+    {
+      "stage": "encoder0",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 7.33,
+      "calls": 3
+    },
+    {
+      "stage": "skip2",
+      "op": "scnet_cpu_pad",
+      "backend": "CPU",
+      "ms": 6.808,
+      "calls": 42
+    },
+    {
+      "stage": "dp2",
+      "op": "scnet_cpu_mul",
+      "backend": "CPU",
+      "ms": 6.373,
+      "calls": 6
+    },
+    {
+      "stage": "decoder1",
+      "op": "scnet_cpu_mul",
+      "backend": "CPU",
+      "ms": 6.1499999999999995,
+      "calls": 3
+    },
+    {
+      "stage": "encoder1",
+      "op": "scnet_cpu_pad",
+      "backend": "CPU",
+      "ms": 4.884,
+      "calls": 3
+    },
+    {
+      "stage": "dp5",
+      "op": "scnet_cpu_mul",
+      "backend": "CPU",
+      "ms": 4.862,
+      "calls": 6
+    },
+    {
+      "stage": "dp3",
+      "op": "scnet_cpu_mul",
+      "backend": "CPU",
+      "ms": 4.8420000000000005,
+      "calls": 6
+    },
+    {
+      "stage": "dp4",
+      "op": "scnet_cpu_mul",
+      "backend": "CPU",
+      "ms": 4.724,
+      "calls": 6
+    },
+    {
+      "stage": "skip0",
+      "op": "SILU",
+      "backend": "CPU",
+      "ms": 4.7090000000000005,
+      "calls": 18
+    },
+    {
+      "stage": "decoder1",
+      "op": "scnet_cpu_pad",
+      "backend": "CPU",
+      "ms": 4.685,
+      "calls": 3
+    },
+    {
+      "stage": "dp1",
+      "op": "scnet_cpu_mul",
+      "backend": "CPU",
+      "ms": 4.555000000000001,
+      "calls": 6
+    },
+    {
+      "stage": "dp0",
+      "op": "scnet_cpu_mul",
+      "backend": "CPU",
+      "ms": 4.394,
+      "calls": 6
+    },
+    {
+      "stage": "encoder1",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 4.144,
+      "calls": 3
+    },
+    {
+      "stage": "skip1",
+      "op": "SILU",
+      "backend": "CPU",
+      "ms": 3.8320000000000003,
+      "calls": 18
+    },
+    {
+      "stage": "decoder0",
+      "op": "scnet_cpu_mul",
+      "backend": "CPU",
+      "ms": 3.625,
+      "calls": 3
+    },
+    {
+      "stage": "encoder2",
+      "op": "scnet_cpu_concat",
+      "backend": "CPU",
+      "ms": 3.4549999999999996,
+      "calls": 3
+    },
+    {
+      "stage": "decoder0",
+      "op": "scnet_cpu_pad",
+      "backend": "CPU",
+      "ms": 2.665,
+      "calls": 3
+    },
+    {
+      "stage": "encoder2",
+      "op": "scnet_cpu_pad",
+      "backend": "CPU",
+      "ms": 2.646,
+      "calls": 3
+    },
+    {
+      "stage": "decoder0",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 2.524,
+      "calls": 3
+    },
+    {
+      "stage": "skip2",
+      "op": "SILU",
+      "backend": "CPU",
+      "ms": 2.491,
+      "calls": 18
+    },
+    {
+      "stage": "encoder2",
+      "op": "scnet_cpu_add",
+      "backend": "CPU",
+      "ms": 2.382,
+      "calls": 3
+    },
+    {
+      "stage": "dp5",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 1.974,
+      "calls": 12
+    },
+    {
+      "stage": "dp1",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 1.839,
+      "calls": 12
+    },
+    {
+      "stage": "dp3",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 1.805,
+      "calls": 12
+    },
+    {
+      "stage": "skip0",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 1.264,
+      "calls": 1560
+    },
+    {
+      "stage": "dp2",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.877,
+      "calls": 12
+    },
+    {
+      "stage": "dp0",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.71,
+      "calls": 12
+    },
+    {
+      "stage": "dp4",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.706,
+      "calls": 12
+    },
+    {
+      "stage": "decoder1",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.661,
+      "calls": 3
+    },
+    {
+      "stage": "skip0",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.509,
+      "calls": 60
+    },
+    {
+      "stage": "skip0",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.478,
+      "calls": 528
+    },
+    {
+      "stage": "decoder2",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.477,
+      "calls": 3
+    },
+    {
+      "stage": "skip1",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.45899999999999996,
+      "calls": 420
+    },
+    {
+      "stage": "skip1",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.373,
+      "calls": 36
+    },
+    {
+      "stage": "decoder2",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.359,
+      "calls": 147
+    },
+    {
+      "stage": "skip1",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.28600000000000003,
+      "calls": 276
+    },
+    {
+      "stage": "skip0",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.28500000000000003,
+      "calls": 441
+    },
+    {
+      "stage": "skip2",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.255,
+      "calls": 204
+    },
+    {
+      "stage": "encoder0",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.22399999999999998,
+      "calls": 120
+    },
+    {
+      "stage": "decoder2",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.212,
+      "calls": 90
+    },
+    {
+      "stage": "skip2",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.201,
+      "calls": 219
+    },
+    {
+      "stage": "dp4",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.188,
+      "calls": 30
+    },
+    {
+      "stage": "skip1",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.188,
+      "calls": 279
+    },
+    {
+      "stage": "decoder1",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.18300000000000002,
+      "calls": 63
+    },
+    {
+      "stage": "skip0",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.169,
+      "calls": 147
+    },
+    {
+      "stage": "skip2",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.166,
+      "calls": 267
+    },
+    {
+      "stage": "dp3",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.157,
+      "calls": 30
+    },
+    {
+      "stage": "dp2",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.152,
+      "calls": 30
+    },
+    {
+      "stage": "dp1",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.15,
+      "calls": 30
+    },
+    {
+      "stage": "dp5",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.148,
+      "calls": 30
+    },
+    {
+      "stage": "dp0",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.129,
+      "calls": 30
+    },
+    {
+      "stage": "skip2",
+      "op": "CPY",
+      "backend": "CPU",
+      "ms": 0.121,
+      "calls": 18
+    },
+    {
+      "stage": "decoder0",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.11099999999999999,
+      "calls": 39
+    },
+    {
+      "stage": "encoder0",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.10899999999999999,
+      "calls": 60
+    },
+    {
+      "stage": "decoder1",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.103,
+      "calls": 48
+    },
+    {
+      "stage": "skip1",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.088,
+      "calls": 123
+    },
+    {
+      "stage": "decoder2",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.08399999999999999,
+      "calls": 150
+    },
+    {
+      "stage": "encoder1",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.083,
+      "calls": 36
+    },
+    {
+      "stage": "decoder0",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.069,
+      "calls": 36
+    },
+    {
+      "stage": "skip2",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.056,
+      "calls": 72
+    },
+    {
+      "stage": "encoder0",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.049,
+      "calls": 123
+    },
+    {
+      "stage": "dp3",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.044,
+      "calls": 30
+    },
+    {
+      "stage": "decoder1",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.043,
+      "calls": 66
+    },
+    {
+      "stage": "dp2",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.043,
+      "calls": 30
+    },
+    {
+      "stage": "dp1",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.041,
+      "calls": 30
+    },
+    {
+      "stage": "dp5",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.040999999999999995,
+      "calls": 30
+    },
+    {
+      "stage": "dp4",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.038,
+      "calls": 30
+    },
+    {
+      "stage": "encoder2",
+      "op": "RESHAPE",
+      "backend": "CPU",
+      "ms": 0.038,
+      "calls": 12
+    },
+    {
+      "stage": "dp0",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.036000000000000004,
+      "calls": 30
+    },
+    {
+      "stage": "encoder1",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.034,
+      "calls": 18
+    },
+    {
+      "stage": "dp4",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.032,
+      "calls": 12
+    },
+    {
+      "stage": "dp5",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.032,
+      "calls": 12
+    },
+    {
+      "stage": "decoder0",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.031,
+      "calls": 42
+    },
+    {
+      "stage": "dp1",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.031,
+      "calls": 12
+    },
+    {
+      "stage": "dp3",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.03,
+      "calls": 12
+    },
+    {
+      "stage": "dp0",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.028999999999999998,
+      "calls": 12
+    },
+    {
+      "stage": "dp2",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.026999999999999996,
+      "calls": 12
+    },
+    {
+      "stage": "encoder1",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.025,
+      "calls": 39
+    },
+    {
+      "stage": "decoder2",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.022,
+      "calls": 18
+    },
+    {
+      "stage": "decoder1",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.019,
+      "calls": 18
+    },
+    {
+      "stage": "decoder0",
+      "op": "PERMUTE",
+      "backend": "CPU",
+      "ms": 0.018000000000000002,
+      "calls": 18
+    },
+    {
+      "stage": "encoder2",
+      "op": "RESHAPE",
+      "backend": "BLAS",
+      "ms": 0.015,
+      "calls": 15
+    },
+    {
+      "stage": "decoder2",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.013000000000000001,
+      "calls": 69
+    },
+    {
+      "stage": "encoder2",
+      "op": "VIEW",
+      "backend": "CPU",
+      "ms": 0.013000000000000001,
+      "calls": 6
+    },
+    {
+      "stage": "skip1",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.013000000000000001,
+      "calls": 72
+    },
+    {
+      "stage": "encoder0",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.012,
+      "calls": 60
+    },
+    {
+      "stage": "skip2",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.012,
+      "calls": 66
+    },
+    {
+      "stage": "decoder1",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.005,
+      "calls": 27
+    },
+    {
+      "stage": "decoder0",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.003,
+      "calls": 15
+    },
+    {
+      "stage": "encoder1",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.003,
+      "calls": 18
+    },
+    {
+      "stage": "encoder2",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.0,
+      "calls": 6
+    },
+    {
+      "stage": "skip0",
+      "op": "PERMUTE",
+      "backend": "BLAS",
+      "ms": 0.0,
+      "calls": 6
+    }
+  ],
+  "graph_summaries": [
+    {
+      "frames": 872,
+      "nodes": 3911,
+      "groups": 194,
+      "measured_ms": 10760.115,
+      "unmapped_nodes": 0,
+      "unmapped_ms": 0.0,
+      "scope": "per_node_synchronized"
+    },
+    {
+      "frames": 614,
+      "nodes": 3911,
+      "groups": 194,
+      "measured_ms": 7833.63,
+      "unmapped_nodes": 0,
+      "unmapped_ms": 0.0,
+      "scope": "per_node_synchronized"
+    },
+    {
+      "frames": 194,
+      "nodes": 3911,
+      "groups": 194,
+      "measured_ms": 2571.315,
+      "unmapped_nodes": 0,
+      "unmapped_ms": 0.0,
+      "scope": "per_node_synchronized"
+    }
+  ],
+  "all_graph_nodes_mapped": true,
+  "lstm_totals_ms": {
+    "gemm_ms": 4377.826,
+    "gates_ms": 1591.699,
+    "reset_ms": 1.662
+  },
+  "lstm_by_module": {
+    "separation_net.dp_modules.0.lstm_layers.0": {
+      "gemm_ms": 191.629,
+      "gates_ms": 127.11699999999999,
+      "reset_ms": 0.231,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.0.lstm_layers.1": {
+      "gemm_ms": 308.45500000000004,
+      "gates_ms": 137.751,
+      "reset_ms": 0.025,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.1.lstm_layers.0": {
+      "gemm_ms": 360.737,
+      "gates_ms": 124.99999999999999,
+      "reset_ms": 0.23600000000000002,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.1.lstm_layers.1": {
+      "gemm_ms": 592.344,
+      "gates_ms": 137.408,
+      "reset_ms": 0.05,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.2.lstm_layers.0": {
+      "gemm_ms": 201.96699999999998,
+      "gates_ms": 132.54,
+      "reset_ms": 0.25,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.2.lstm_layers.1": {
+      "gemm_ms": 309.78700000000003,
+      "gates_ms": 140.012,
+      "reset_ms": 0.026,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.3.lstm_layers.0": {
+      "gemm_ms": 366.415,
+      "gates_ms": 125.485,
+      "reset_ms": 0.247,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.3.lstm_layers.1": {
+      "gemm_ms": 590.5020000000001,
+      "gates_ms": 134.738,
+      "reset_ms": 0.06,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.4.lstm_layers.0": {
+      "gemm_ms": 193.169,
+      "gates_ms": 128.929,
+      "reset_ms": 0.233,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.4.lstm_layers.1": {
+      "gemm_ms": 308.73400000000004,
+      "gates_ms": 138.42,
+      "reset_ms": 0.026000000000000002,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.5.lstm_layers.0": {
+      "gemm_ms": 363.536,
+      "gates_ms": 127.158,
+      "reset_ms": 0.229,
+      "nodes": 3
+    },
+    "separation_net.dp_modules.5.lstm_layers.1": {
+      "gemm_ms": 590.5509999999999,
+      "gates_ms": 137.141,
+      "reset_ms": 0.049,
+      "nodes": 3
+    }
+  },
+  "lstm_modes": [
+    [
+      "CBLAS",
+      "whole_node"
+    ]
+  ],
+  "compile_commands": [
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/cc -DGGML_BUILD -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_base_EXPORTS -I{repo}/ggml/src/. -I{build}/ggml/src -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu11 -fPIC -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Werror=implicit-int -Werror=implicit-function-declaration -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wdouble-promotion -fopenmp -o ggml/src/CMakeFiles/ggml-base.dir/ggml.c.o -c {repo}/ggml/src/ggml.c",
+      "file": "{repo}/ggml/src/ggml.c",
+      "output": "ggml/src/CMakeFiles/ggml-base.dir/ggml.c.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BUILD -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_base_EXPORTS -I{repo}/ggml/src/. -I{build}/ggml/src -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -fopenmp -o ggml/src/CMakeFiles/ggml-base.dir/ggml.cpp.o -c {repo}/ggml/src/ggml.cpp",
+      "file": "{repo}/ggml/src/ggml.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-base.dir/ggml.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/cc -DGGML_BUILD -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_base_EXPORTS -I{repo}/ggml/src/. -I{build}/ggml/src -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu11 -fPIC -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Werror=implicit-int -Werror=implicit-function-declaration -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wdouble-promotion -fopenmp -o ggml/src/CMakeFiles/ggml-base.dir/ggml-alloc.c.o -c {repo}/ggml/src/ggml-alloc.c",
+      "file": "{repo}/ggml/src/ggml-alloc.c",
+      "output": "ggml/src/CMakeFiles/ggml-base.dir/ggml-alloc.c.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BUILD -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_base_EXPORTS -I{repo}/ggml/src/. -I{build}/ggml/src -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -fopenmp -o ggml/src/CMakeFiles/ggml-base.dir/ggml-backend.cpp.o -c {repo}/ggml/src/ggml-backend.cpp",
+      "file": "{repo}/ggml/src/ggml-backend.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-base.dir/ggml-backend.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BUILD -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_base_EXPORTS -I{repo}/ggml/src/. -I{build}/ggml/src -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -fopenmp -o ggml/src/CMakeFiles/ggml-base.dir/ggml-backend-meta.cpp.o -c {repo}/ggml/src/ggml-backend-meta.cpp",
+      "file": "{repo}/ggml/src/ggml-backend-meta.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-base.dir/ggml-backend-meta.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BUILD -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_base_EXPORTS -I{repo}/ggml/src/. -I{build}/ggml/src -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -fopenmp -o ggml/src/CMakeFiles/ggml-base.dir/ggml-opt.cpp.o -c {repo}/ggml/src/ggml-opt.cpp",
+      "file": "{repo}/ggml/src/ggml-opt.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-base.dir/ggml-opt.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BUILD -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_base_EXPORTS -I{repo}/ggml/src/. -I{build}/ggml/src -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -fopenmp -o ggml/src/CMakeFiles/ggml-base.dir/ggml-threading.cpp.o -c {repo}/ggml/src/ggml-threading.cpp",
+      "file": "{repo}/ggml/src/ggml-threading.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-base.dir/ggml-threading.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/cc -DGGML_BUILD -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_base_EXPORTS -I{repo}/ggml/src/. -I{build}/ggml/src -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu11 -fPIC -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Werror=implicit-int -Werror=implicit-function-declaration -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wdouble-promotion -fopenmp -o ggml/src/CMakeFiles/ggml-base.dir/ggml-quants.c.o -c {repo}/ggml/src/ggml-quants.c",
+      "file": "{repo}/ggml/src/ggml-quants.c",
+      "output": "ggml/src/CMakeFiles/ggml-base.dir/ggml-quants.c.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BUILD -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_base_EXPORTS -I{repo}/ggml/src/. -I{build}/ggml/src -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -fopenmp -o ggml/src/CMakeFiles/ggml-base.dir/gguf.cpp.o -c {repo}/ggml/src/gguf.cpp",
+      "file": "{repo}/ggml/src/gguf.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-base.dir/gguf.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_SHARED -DGGML_BUILD -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_BLAS -DGGML_USE_CPU -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_EXPORTS -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -o ggml/src/CMakeFiles/ggml.dir/ggml-backend-dl.cpp.o -c {repo}/ggml/src/ggml-backend-dl.cpp",
+      "file": "{repo}/ggml/src/ggml-backend-dl.cpp",
+      "output": "ggml/src/CMakeFiles/ggml.dir/ggml-backend-dl.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_SHARED -DGGML_BUILD -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_BLAS -DGGML_USE_CPU -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_EXPORTS -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -o ggml/src/CMakeFiles/ggml.dir/ggml-backend-reg.cpp.o -c {repo}/ggml/src/ggml-backend-reg.cpp",
+      "file": "{repo}/ggml/src/ggml-backend-reg.cpp",
+      "output": "ggml/src/CMakeFiles/ggml.dir/ggml-backend-reg.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/cc -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu11 -fPIC -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Werror=implicit-int -Werror=implicit-function-declaration -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wdouble-promotion -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.c.o -c {repo}/ggml/src/ggml-cpu/ggml-cpu.c",
+      "file": "{repo}/ggml/src/ggml-cpu/ggml-cpu.c",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.c.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.cpp.o -c {repo}/ggml/src/ggml-cpu/ggml-cpu.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/ggml-cpu.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/repack.cpp.o -c {repo}/ggml/src/ggml-cpu/repack.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/repack.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/repack.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/hbm.cpp.o -c {repo}/ggml/src/ggml-cpu/hbm.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/hbm.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/hbm.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/cc -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu11 -fPIC -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Werror=implicit-int -Werror=implicit-function-declaration -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wdouble-promotion -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/quants.c.o -c {repo}/ggml/src/ggml-cpu/quants.c",
+      "file": "{repo}/ggml/src/ggml-cpu/quants.c",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/quants.c.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/traits.cpp.o -c {repo}/ggml/src/ggml-cpu/traits.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/traits.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/traits.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/amx.cpp.o -c {repo}/ggml/src/ggml-cpu/amx/amx.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/amx/amx.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/amx.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/mmq.cpp.o -c {repo}/ggml/src/ggml-cpu/amx/mmq.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/amx/mmq.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/mmq.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/tiled/tiled.cpp.o -c {repo}/ggml/src/ggml-cpu/tiled/tiled.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/tiled/tiled.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/tiled/tiled.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/tiled/tiled-kernel.cpp.o -c {repo}/ggml/src/ggml-cpu/tiled/tiled-kernel.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/tiled/tiled-kernel.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/tiled/tiled-kernel.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/binary-ops.cpp.o -c {repo}/ggml/src/ggml-cpu/binary-ops.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/binary-ops.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/binary-ops.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/unary-ops.cpp.o -c {repo}/ggml/src/ggml-cpu/unary-ops.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/unary-ops.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/unary-ops.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/vec.cpp.o -c {repo}/ggml/src/ggml-cpu/vec.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/vec.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/vec.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ops.cpp.o -c {repo}/ggml/src/ggml-cpu/ops.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/ops.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ops.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/llamafile/sgemm.cpp.o -c {repo}/ggml/src/ggml-cpu/llamafile/sgemm.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/llamafile/sgemm.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/llamafile/sgemm.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/cc -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu11 -fPIC -Wshadow -Wstrict-prototypes -Wpointer-arith -Wmissing-prototypes -Werror=implicit-int -Werror=implicit-function-declaration -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wdouble-promotion -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/arch/x86/quants.c.o -c {repo}/ggml/src/ggml-cpu/arch/x86/quants.c",
+      "file": "{repo}/ggml/src/ggml-cpu/arch/x86/quants.c",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/arch/x86/quants.c.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -DGGML_USE_CPU_REPACK -DGGML_USE_LLAMAFILE -DGGML_USE_OPENMP -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_cpu_EXPORTS -I{repo}/ggml/src/.. -I{repo}/ggml/src/. -I{repo}/ggml/src/ggml-cpu -I{repo}/ggml/src/../include -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -march=native -fopenmp -o ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/arch/x86/repack.cpp.o -c {repo}/ggml/src/ggml-cpu/arch/x86/repack.cpp",
+      "file": "{repo}/ggml/src/ggml-cpu/arch/x86/repack.cpp",
+      "output": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/arch/x86/repack.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DGGML_BACKEND_BUILD -DGGML_BACKEND_SHARED -DGGML_BLAS_USE_OPENBLAS -DGGML_MAX_NAME=128 -DGGML_SCHED_MAX_COPIES=4 -DGGML_SHARED -D_GNU_SOURCE -D_XOPEN_SOURCE=600 -Dggml_blas_EXPORTS -I{repo}/ggml/src/ggml-blas/.. -I{repo}/ggml/src/../include -isystem /usr/include/x86_64-linux-gnu/openblas-pthread -O3 -DNDEBUG -std=gnu++17 -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -Wno-array-bounds -Wextra-semi -o ggml/src/ggml-blas/CMakeFiles/ggml-blas.dir/ggml-blas.cpp.o -c {repo}/ggml/src/ggml-blas/ggml-blas.cpp",
+      "file": "{repo}/ggml/src/ggml-blas/ggml-blas.cpp",
+      "output": "ggml/src/ggml-blas/CMakeFiles/ggml-blas.dir/ggml-blas.cpp.o"
+    },
+    {
+      "directory": "{build}",
+      "command": "/usr/bin/c++ -DCRISPASR_HAVE_BLAS=1 -DGGML_BACKEND_SHARED -DGGML_MAX_NAME=128 -DGGML_SHARED -DGGML_USE_BLAS -DGGML_USE_CPU -DHAVE_BLAS -I{repo}/src/. -I{repo}/src/../include -I{repo}/ggml/src/../include -O3 -DNDEBUG -fPIC -Wmissing-declarations -Wmissing-noreturn -Wall -Wextra -Wpedantic -Wcast-qual -Wno-unused-function -O3 -fopenmp -o src/CMakeFiles/scnet.dir/scnet.cpp.o -c {repo}/src/scnet.cpp",
+      "file": "{repo}/src/scnet.cpp",
+      "output": "src/CMakeFiles/scnet.dir/scnet.cpp.o"
+    }
+  ],
+  "compile_database_sha256": "35db65be9918ed1a980f64e0013bb321ef4a01d47f0a87b2aeb17e251e8d6d10",
+  "cmake_cache_sha256": "9ac1a78fcceb85c3d538b08cbf8ab3dbda3517c8be79efcc8e1245f25e54ebc0",
+  "paired_smoke": {
+    "schema": 1,
+    "acceptance": false,
+    "qualification": false,
+    "complete": true,
+    "scope": "F16 final-waveform and same-host timing smoke; no intermediate-stage or quantized qualification",
+    "variant": "scnet",
+    "precision": "f16",
+    "required_stages_checked": 0,
+    "source_commit": "4264d2ea76f3be0aa984ad088e931b5e6ba6c39f",
+    "upstream_source_revision": "5d95bf96b19c3eede63248d171efeca8e3abb948",
+    "upstream_source_hashes": {
+      "scnet/SCNet.py": "85a15ea5d28285a0cf0a24d6266a28d043c5a655d47aa41684ef256d84e7bc4a",
+      "scnet/separation.py": "43402dc6579436d3b5abb921990572684beed8fa10b377a112892b438f40713b",
+      "scnet/apply.py": "68b60535ad50b9b6cb0da4e4a0e7a269ff1349d345de30e666bdbda3d8fc8a31",
+      "scnet/inference.py": "06c5c8cf4aeb4b7a0edf7ac698d2f454ead0bd3b0411d0b519815a50068597b8",
+      "scnet/utils.py": "03a6311760dad60d7ccbd1a5416a3c10f613c8b9eb9f08691019589a2f692fdf",
+      "scnet/__init__.py": "21b5f8fae849055f3b428d2353de72b477a722cc44e87c6fa0d3b22ac5f36fa2",
+      "conf/config.yaml": "bc16895f69551cd8becbba384ae33e6e615a4792649b866036884f4a9a4bb4b0",
+      "LICENSE": "0bdf1b69335198118ab16cfc50d337b496b8c6d90e83beeaba4643781ab62513"
+    },
+    "profile": {
+      "mode": "pipeline",
+      "segment_seconds": 20,
+      "shifts": 1,
+      "shift_seed": 0,
+      "overlap": 0.5
+    },
+    "threads": 2,
+    "repetitions": 3,
+    "warmups_per_implementation": 1,
+    "warmups": [
+      {
+        "iteration": 0,
+        "implementation": "original",
+        "complete": true,
+        "quality_acceptance": true,
+        "seconds": 17.423630917999986,
+        "stems": {
+          "drums": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "bass": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "other": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "vocals": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          }
+        },
+        "pcm_sha256": "acc27df8b9a645fe37bdf79df8e6245c937fdead9825e03d1d071881f43da224",
+        "input_unchanged": true
+      },
+      {
+        "iteration": 0,
+        "implementation": "native",
+        "complete": true,
+        "quality_acceptance": true,
+        "seconds": 21.785394330000003,
+        "stems": {
+          "drums": {
+            "cos_global": 0.9999996778385575,
+            "norm_ratio": 0.9999046080675291,
+            "relative_l2": 0.0008083075106095772,
+            "max_abs": 0.0004081539809703827,
+            "rms_error": 1.2581881896566431e-05,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "bass": {
+            "cos_global": 0.9999999620777149,
+            "norm_ratio": 1.0000478166765838,
+            "relative_l2": 0.0002795256975777567,
+            "max_abs": 0.00022894889116287231,
+            "rms_error": 3.690143094086475e-05,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "other": {
+            "cos_global": 0.9999999592965599,
+            "norm_ratio": 1.0000436164492192,
+            "relative_l2": 0.0002886395745418587,
+            "max_abs": 0.00022212229669094086,
+            "rms_error": 1.4446748799951192e-05,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "vocals": {
+            "cos_global": 0.9999999579879263,
+            "norm_ratio": 0.9999859922578942,
+            "relative_l2": 0.00029020539927039336,
+            "max_abs": 0.00029514729976654053,
+            "rms_error": 1.1106807758907688e-05,
+            "elements": 2116800,
+            "acceptance": true
+          }
+        },
+        "pcm_sha256": "a67d7797a357582b764fbbaea6f0ed80575be7381b9a2c19de4fa629054e06ad",
+        "input_unchanged": true
+      }
+    ],
+    "calls": [
+      {
+        "iteration": 0,
+        "implementation": "original",
+        "complete": true,
+        "quality_acceptance": true,
+        "seconds": 16.406292061999977,
+        "stems": {
+          "drums": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "bass": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "other": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "vocals": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          }
+        },
+        "pcm_sha256": "acc27df8b9a645fe37bdf79df8e6245c937fdead9825e03d1d071881f43da224",
+        "input_unchanged": true
+      },
+      {
+        "iteration": 0,
+        "implementation": "native",
+        "complete": true,
+        "quality_acceptance": true,
+        "seconds": 21.867508267000005,
+        "stems": {
+          "drums": {
+            "cos_global": 0.9999996778385575,
+            "norm_ratio": 0.9999046080675291,
+            "relative_l2": 0.0008083075106095772,
+            "max_abs": 0.0004081539809703827,
+            "rms_error": 1.2581881896566431e-05,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "bass": {
+            "cos_global": 0.9999999620777149,
+            "norm_ratio": 1.0000478166765838,
+            "relative_l2": 0.0002795256975777567,
+            "max_abs": 0.00022894889116287231,
+            "rms_error": 3.690143094086475e-05,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "other": {
+            "cos_global": 0.9999999592965599,
+            "norm_ratio": 1.0000436164492192,
+            "relative_l2": 0.0002886395745418587,
+            "max_abs": 0.00022212229669094086,
+            "rms_error": 1.4446748799951192e-05,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "vocals": {
+            "cos_global": 0.9999999579879263,
+            "norm_ratio": 0.9999859922578942,
+            "relative_l2": 0.00029020539927039336,
+            "max_abs": 0.00029514729976654053,
+            "rms_error": 1.1106807758907688e-05,
+            "elements": 2116800,
+            "acceptance": true
+          }
+        },
+        "pcm_sha256": "a67d7797a357582b764fbbaea6f0ed80575be7381b9a2c19de4fa629054e06ad",
+        "input_unchanged": true
+      },
+      {
+        "iteration": 1,
+        "implementation": "native",
+        "complete": true,
+        "quality_acceptance": true,
+        "seconds": 21.733132688000012,
+        "stems": {
+          "drums": {
+            "cos_global": 0.9999996778385575,
+            "norm_ratio": 0.9999046080675291,
+            "relative_l2": 0.0008083075106095772,
+            "max_abs": 0.0004081539809703827,
+            "rms_error": 1.2581881896566431e-05,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "bass": {
+            "cos_global": 0.9999999620777149,
+            "norm_ratio": 1.0000478166765838,
+            "relative_l2": 0.0002795256975777567,
+            "max_abs": 0.00022894889116287231,
+            "rms_error": 3.690143094086475e-05,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "other": {
+            "cos_global": 0.9999999592965599,
+            "norm_ratio": 1.0000436164492192,
+            "relative_l2": 0.0002886395745418587,
+            "max_abs": 0.00022212229669094086,
+            "rms_error": 1.4446748799951192e-05,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "vocals": {
+            "cos_global": 0.9999999579879263,
+            "norm_ratio": 0.9999859922578942,
+            "relative_l2": 0.00029020539927039336,
+            "max_abs": 0.00029514729976654053,
+            "rms_error": 1.1106807758907688e-05,
+            "elements": 2116800,
+            "acceptance": true
+          }
+        },
+        "pcm_sha256": "a67d7797a357582b764fbbaea6f0ed80575be7381b9a2c19de4fa629054e06ad",
+        "input_unchanged": true
+      },
+      {
+        "iteration": 1,
+        "implementation": "original",
+        "complete": true,
+        "quality_acceptance": true,
+        "seconds": 16.419918334000016,
+        "stems": {
+          "drums": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "bass": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "other": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "vocals": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          }
+        },
+        "pcm_sha256": "acc27df8b9a645fe37bdf79df8e6245c937fdead9825e03d1d071881f43da224",
+        "input_unchanged": true
+      },
+      {
+        "iteration": 2,
+        "implementation": "original",
+        "complete": true,
+        "quality_acceptance": true,
+        "seconds": 16.301988041000016,
+        "stems": {
+          "drums": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "bass": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "other": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "vocals": {
+            "cos_global": 1.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "max_abs": 0.0,
+            "rms_error": 0.0,
+            "elements": 2116800,
+            "acceptance": true
+          }
+        },
+        "pcm_sha256": "acc27df8b9a645fe37bdf79df8e6245c937fdead9825e03d1d071881f43da224",
+        "input_unchanged": true
+      },
+      {
+        "iteration": 2,
+        "implementation": "native",
+        "complete": true,
+        "quality_acceptance": true,
+        "seconds": 21.761233970000035,
+        "stems": {
+          "drums": {
+            "cos_global": 0.9999996778385575,
+            "norm_ratio": 0.9999046080675291,
+            "relative_l2": 0.0008083075106095772,
+            "max_abs": 0.0004081539809703827,
+            "rms_error": 1.2581881896566431e-05,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "bass": {
+            "cos_global": 0.9999999620777149,
+            "norm_ratio": 1.0000478166765838,
+            "relative_l2": 0.0002795256975777567,
+            "max_abs": 0.00022894889116287231,
+            "rms_error": 3.690143094086475e-05,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "other": {
+            "cos_global": 0.9999999592965599,
+            "norm_ratio": 1.0000436164492192,
+            "relative_l2": 0.0002886395745418587,
+            "max_abs": 0.00022212229669094086,
+            "rms_error": 1.4446748799951192e-05,
+            "elements": 2116800,
+            "acceptance": true
+          },
+          "vocals": {
+            "cos_global": 0.9999999579879263,
+            "norm_ratio": 0.9999859922578942,
+            "relative_l2": 0.00029020539927039336,
+            "max_abs": 0.00029514729976654053,
+            "rms_error": 1.1106807758907688e-05,
+            "elements": 2116800,
+            "acceptance": true
+          }
+        },
+        "pcm_sha256": "a67d7797a357582b764fbbaea6f0ed80575be7381b9a2c19de4fa629054e06ad",
+        "input_unchanged": true
+      }
+    ],
+    "errors": [],
+    "model_sha256": "8441b23c2b6ba47e8357fd863d717af88a5568f1937a3ff328c921c7143bd059",
+    "checkpoint_sha256": "f8aff3bc8dd816aad392800d9d69519add719a2fbd22550af6f8cb2138d25ff5",
+    "audio_sha256": "afbc9ea29b214e4ae23af11fa0c4286be2181c4310566635b6f8761000cb202e",
+    "library_sha256": "8d6d918b101c632b7eb24479e8f522b3c331e487223a8fcdc01fc5d41749e282",
+    "input_pcm_interleaved_sha256": "68fe8518a77a5f7f628da7455bce402c545d96bdd5d42ff6580bd82e2b73d1f7",
+    "input_pcm_planar_sha256": "12800ce4d84ad94724a3aec293d115f3c33feb9b4bb8ccd1067ce130081763b2",
+    "runtime": {
+      "platform": "Linux-6.8.0-1070-azure-x86_64-with-glibc2.35",
+      "machine": "x86_64",
+      "logical_cpus": 4,
+      "library_sha256": "8d6d918b101c632b7eb24479e8f522b3c331e487223a8fcdc01fc5d41749e282",
+      "thread_environment": {
+        "OMP_NUM_THREADS": "2",
+        "OPENBLAS_NUM_THREADS": "2",
+        "MKL_NUM_THREADS": "2",
+        "VECLIB_MAXIMUM_THREADS": "2",
+        "BLIS_NUM_THREADS": "2"
+      },
+      "compute_environment": {
+        "CRISPASR_SCNET_GPU": "0",
+        "CRISPASR_SCNET_THREADS": "2",
+        "CRISPASR_SCNET_BENCH": "0",
+        "CRISPASR_SCNET_CAPTURE_GGUF": null,
+        "CRISPASR_SCNET_SCALAR_LSTM": null,
+        "CRISPASR_SCNET_SCALAR_GATES": null,
+        "CRISPASR_SCNET_BLAS": null,
+        "CRISPASR_CPU_GEMM": null
+      },
+      "cpuinfo": "processor\t: 0\nvendor_id\t: AuthenticAMD\ncpu family\t: 25\nmodel\t\t: 17\nmodel name\t: AMD EPYC 9V74 80-Core Processor\nstepping\t: 1\nmicrocode\t: 0xffffffff\ncpu MHz\t\t: 2871.258\ncache size\t: 1024 KB\nphysical id\t: 0\nsiblings\t: 4\ncore id\t\t: 0\ncpu cores\t: 2\napicid\t\t: 0\ninitial apicid\t: 0\nfpu\t\t: yes\nfpu_exception\t: yes\ncpuid level\t: 28\nwp\t\t: yes\nflags\t\t: fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl tsc_reliable nonstop_tsc cpuid extd_apicid aperfmperf tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves user_shstk clzero xsaveerptr rdpru arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold v_vmsave_vmload umip vaes vpclmulqdq rdpid fsrm\nbugs\t\t: sysret_ss_attrs null_seg spectre_v1 spectre_v2 spec_store_bypass srso tsa\nbogomips\t: 5192.26\nTLB size\t: 3584 4K pages\nclflush size\t: 64\ncache_alignment\t: 64\naddress sizes\t: 48 bits physical, 48 bits virtual\npower management:",
+      "cpuset": "0-3",
+      "cmake_cache_sha256": "9ac1a78fcceb85c3d538b08cbf8ab3dbda3517c8be79efcc8e1245f25e54ebc0",
+      "build_settings": [
+        "BLAS_openblas_LIBRARY:FILEPATH=/usr/lib/x86_64-linux-gnu/libopenblas.so",
+        "CMAKE_BUILD_TYPE:STRING=Release",
+        "CMAKE_CXX_COMPILER:FILEPATH=/usr/bin/c++",
+        "CMAKE_CXX_COMPILER_AR:FILEPATH=/usr/bin/gcc-ar-11",
+        "CMAKE_CXX_COMPILER_RANLIB:FILEPATH=/usr/bin/gcc-ranlib-11",
+        "GGML_ACCELERATE:BOOL=ON",
+        "GGML_ALL_WARNINGS_3RD_PARTY:BOOL=OFF",
+        "GGML_AMX_BF16:BOOL=OFF",
+        "GGML_AMX_INT8:BOOL=OFF",
+        "GGML_AMX_TILE:BOOL=OFF",
+        "GGML_AVX:BOOL=OFF",
+        "GGML_AVX2:BOOL=OFF",
+        "GGML_AVX512:BOOL=OFF",
+        "GGML_AVX512_BF16:BOOL=OFF",
+        "GGML_AVX512_VBMI:BOOL=OFF",
+        "GGML_AVX512_VNNI:BOOL=OFF",
+        "GGML_AVX_VNNI:BOOL=OFF",
+        "GGML_BACKEND_DIR:PATH=",
+        "GGML_BACKEND_DL:BOOL=OFF",
+        "GGML_BIN_INSTALL_DIR:PATH=bin",
+        "GGML_BLAS:BOOL=ON",
+        "GGML_BLAS_VENDOR:STRING=OpenBLAS",
+        "GGML_BMI2:BOOL=OFF",
+        "GGML_BUILD_EXAMPLES:BOOL=OFF",
+        "GGML_BUILD_TESTS:BOOL=OFF",
+        "GGML_CCACHE:BOOL=ON",
+        "GGML_CCACHE_FOUND:FILEPATH=GGML_CCACHE_FOUND-NOTFOUND",
+        "GGML_CPU:BOOL=ON",
+        "GGML_CPU_ALL_VARIANTS:BOOL=OFF",
+        "GGML_CPU_ARM_ARCH:STRING=",
+        "GGML_CPU_HBM:BOOL=OFF",
+        "GGML_CPU_KLEIDIAI:BOOL=OFF",
+        "GGML_CPU_POWERPC_CPUTYPE:STRING=",
+        "GGML_CPU_REPACK:BOOL=ON",
+        "GGML_CUDA:BOOL=OFF",
+        "GGML_CUDA_CCCL_VERSION:STRING=",
+        "GGML_CUDA_COMPRESSION_MODE:STRING=size",
+        "GGML_CUDA_CRISPASR_FA_PERHEAD_MASK:BOOL=OFF",
+        "GGML_CUDA_FA:BOOL=ON",
+        "GGML_CUDA_FA_ALL_QUANTS:BOOL=OFF",
+        "GGML_CUDA_FA_QUANTS:STRING=q4_0-q4_0;q8_0-q8_0;f16-f16;bf16-bf16",
+        "GGML_CUDA_FORCE_CUBLAS:BOOL=OFF",
+        "GGML_CUDA_FORCE_MMQ:BOOL=OFF",
+        "GGML_CUDA_GRAPHS:BOOL=ON",
+        "GGML_CUDA_NCCL:BOOL=ON",
+        "GGML_CUDA_NO_PEER_COPY:BOOL=OFF",
+        "GGML_CUDA_NO_VMM:BOOL=OFF",
+        "GGML_ET:BOOL=OFF",
+        "GGML_ET_SYSEMU:BOOL=OFF",
+        "GGML_F16C:BOOL=OFF",
+        "GGML_FMA:BOOL=OFF",
+        "GGML_GPROF:BOOL=OFF",
+        "GGML_HEXAGON:BOOL=OFF",
+        "GGML_HIP:BOOL=OFF",
+        "GGML_HIP_EXPORT_METRICS:BOOL=OFF",
+        "GGML_HIP_GRAPHS:BOOL=ON",
+        "GGML_HIP_MMQ_MFMA:BOOL=ON",
+        "GGML_HIP_NO_VMM:BOOL=ON",
+        "GGML_HIP_RCCL:BOOL=OFF",
+        "GGML_INCLUDE_INSTALL_DIR:PATH=include",
+        "GGML_LASX:BOOL=ON",
+        "GGML_LIB_INSTALL_DIR:PATH=lib",
+        "GGML_LLAMAFILE:BOOL=ON",
+        "GGML_LSX:BOOL=ON",
+        "GGML_LTO:BOOL=OFF",
+        "GGML_METAL:BOOL=OFF",
+        "GGML_METAL_EMBED_LIBRARY:BOOL=OFF",
+        "GGML_METAL_MACOSX_VERSION_MIN:STRING=",
+        "GGML_METAL_NDEBUG:BOOL=OFF",
+        "GGML_METAL_SHADER_DEBUG:BOOL=OFF",
+        "GGML_METAL_STD:STRING=",
+        "GGML_METAL_TARGET_OS:STRING=macos",
+        "GGML_MUSA:BOOL=OFF",
+        "GGML_MUSA_GRAPHS:BOOL=OFF",
+        "GGML_MUSA_MUDNN_COPY:BOOL=OFF",
+        "GGML_NATIVE:BOOL=ON",
+        "GGML_OPENCL:BOOL=OFF",
+        "GGML_OPENCL_EMBED_KERNELS:BOOL=ON",
+        "GGML_OPENCL_PROFILING:BOOL=OFF",
+        "GGML_OPENCL_TARGET_VERSION:STRING=300",
+        "GGML_OPENCL_USE_ADRENO_KERNELS:BOOL=ON",
+        "GGML_OPENMP:BOOL=ON",
+        "GGML_OPENMP_FETCH:BOOL=OFF",
+        "GGML_OPENVINO:BOOL=OFF",
+        "GGML_RPC:BOOL=OFF",
+        "GGML_RVV:BOOL=ON",
+        "GGML_RV_ZFH:BOOL=ON",
+        "GGML_RV_ZICBOP:BOOL=ON",
+        "GGML_RV_ZIHINTPAUSE:BOOL=ON",
+        "GGML_RV_ZVFBFWMA:BOOL=OFF",
+        "GGML_RV_ZVFH:BOOL=ON",
+        "GGML_SCCACHE_FOUND:FILEPATH=GGML_SCCACHE_FOUND-NOTFOUND",
+        "GGML_SCHED_MAX_COPIES:STRING=4",
+        "GGML_SCHED_NO_REALLOC:BOOL=OFF",
+        "GGML_SSE42:BOOL=OFF",
+        "GGML_STATIC:BOOL=OFF",
+        "GGML_SYCL:BOOL=OFF",
+        "GGML_SYCL_DEVICE_ARCH:STRING=",
+        "GGML_SYCL_DNN:BOOL=ON",
+        "GGML_SYCL_F16:BOOL=OFF",
+        "GGML_SYCL_GRAPH:BOOL=ON",
+        "GGML_SYCL_HOST_MEM_FALLBACK:BOOL=ON",
+        "GGML_SYCL_SUPPORT_LEVEL_ZERO_API:BOOL=ON",
+        "GGML_SYCL_TARGET:STRING=INTEL",
+        "GGML_VIRTGPU:BOOL=OFF",
+        "GGML_VIRTGPU_BACKEND:BOOL=OFF",
+        "GGML_VULKAN:BOOL=OFF",
+        "GGML_VULKAN_CHECK_RESULTS:BOOL=OFF",
+        "GGML_VULKAN_DEBUG:BOOL=OFF",
+        "GGML_VULKAN_MEMORY_DEBUG:BOOL=OFF",
+        "GGML_VULKAN_RUN_TESTS:BOOL=OFF",
+        "GGML_VULKAN_SHADERS_GEN_TOOLCHAIN:FILEPATH=",
+        "GGML_VULKAN_SHADER_DEBUG_INFO:BOOL=OFF",
+        "GGML_VULKAN_VALIDATE:BOOL=OFF",
+        "GGML_VXE:BOOL=ON",
+        "GGML_WEBGPU:BOOL=OFF",
+        "GGML_WEBGPU_CPU_PROFILE:BOOL=OFF",
+        "GGML_WEBGPU_DEBUG:BOOL=OFF",
+        "GGML_WEBGPU_GPU_PROFILE:BOOL=OFF",
+        "GGML_WEBGPU_JSPI:BOOL=ON",
+        "GGML_XTHEADVECTOR:BOOL=OFF",
+        "GGML_ZDNN:BOOL=OFF",
+        "GGML_ZENDNN:BOOL=OFF",
+        "BLAS_openblas_LIBRARY-ADVANCED:INTERNAL=1",
+        "BLAS_openblas_WORKS:INTERNAL=1",
+        "CMAKE_CXX_COMPILER-ADVANCED:INTERNAL=1",
+        "CMAKE_CXX_COMPILER_AR-ADVANCED:INTERNAL=1",
+        "CMAKE_CXX_COMPILER_RANLIB-ADVANCED:INTERNAL=1",
+        "GGML_AVAILABLE_BACKENDS:INTERNAL=ggml-cpu;ggml-blas",
+        "GGML_CUDA_COMPRESSION_MODE-STRINGS:INTERNAL=none;speed;balance;size",
+        "GGML_OPENMP_ENABLED:INTERNAL=ON"
+      ]
+    },
+    "execution_controls": {
+      "CRISPASR_SCNET_BENCH": "0",
+      "CRISPASR_SCNET_CAPTURE_GGUF": null,
+      "CRISPASR_SCNET_SCALAR_LSTM": null,
+      "CRISPASR_SCNET_SCALAR_GATES": null,
+      "CRISPASR_SCNET_BLAS": null,
+      "CRISPASR_CPU_GEMM": null,
+      "CRISPASR_SCNET_GPU": "0"
+    },
+    "waveform_policy": {
+      "strict_cosine_gt": 0.999,
+      "norm_ratio_bounds": [
+        0.99,
+        1.01
+      ],
+      "relative_l2_max": 0.05
+    },
+    "reference_origin": "Genuine unmodified original F32 CPU warmup output, retained in memory; no stage hooks",
+    "timing_boundary": "public separation call, normalization/chunking and owned CPU result conversion; includes original helper printing to a local log; excludes model/audio load and quality metrics",
+    "model_inventory": {
+      "matrix_elements": 10527600,
+      "target_type_matrix_elements": 10527600,
+      "target_type_matrix_fraction": 1.0,
+      "minimum_fraction": 0.5
+    },
+    "torch_version": "2.8.0+cpu",
+    "torch_intraop_threads": 2,
+    "torch_interop_threads": 1,
+    "original_dtype": "float32",
+    "original_provenance": {
+      "source_revision": "5d95bf96b19c3eede63248d171efeca8e3abb948",
+      "source_url": "https://github.com/starrytong/SCNet",
+      "source_hashes": {
+        "scnet/SCNet.py": "85a15ea5d28285a0cf0a24d6266a28d043c5a655d47aa41684ef256d84e7bc4a",
+        "scnet/separation.py": "43402dc6579436d3b5abb921990572684beed8fa10b377a112892b438f40713b",
+        "scnet/apply.py": "68b60535ad50b9b6cb0da4e4a0e7a269ff1349d345de30e666bdbda3d8fc8a31",
+        "scnet/inference.py": "06c5c8cf4aeb4b7a0edf7ac698d2f454ead0bd3b0411d0b519815a50068597b8",
+        "scnet/utils.py": "03a6311760dad60d7ccbd1a5416a3c10f613c8b9eb9f08691019589a2f692fdf",
+        "scnet/__init__.py": "21b5f8fae849055f3b428d2353de72b477a722cc44e87c6fa0d3b22ac5f36fa2",
+        "conf/config.yaml": "bc16895f69551cd8becbba384ae33e6e615a4792649b866036884f4a9a4bb4b0",
+        "LICENSE": "0bdf1b69335198118ab16cfc50d337b496b8c6d90e83beeaba4643781ab62513"
+      },
+      "checkpoint_sha256": "f8aff3bc8dd816aad392800d9d69519add719a2fbd22550af6f8cb2138d25ff5",
+      "checkpoint_url": "https://drive.google.com/file/d/1CdEIIqsoRfHn1SJ7rccPfyYioW3BlXcW/view",
+      "variant": "scnet",
+      "torch_version": "2.8.0+cpu"
+    },
+    "native_backend": "CPU+BLAS/CPU-LSTM-FFT",
+    "native_compute_precision": "F32 activations/accumulation; CPU recurrent/FFT; gates=avx2_fma",
+    "native_blas_thread_queries": {
+      "openblas_get_num_threads": 2
+    },
+    "reference_pcm_sha256": "acc27df8b9a645fe37bdf79df8e6245c937fdead9825e03d1d071881f43da224",
+    "native_median_seconds": 21.761233970000035,
+    "original_median_seconds": 16.406292061999977,
+    "speedup": 0.7539228742550922,
+    "performance_acceptance": false,
+    "waveform_acceptance": true,
+    "process_max_rss_kib": 2407312
+  },
+  "baseline_comparison": {
+    "baseline_source_commit": "b51801b3d2dfc5b9503fc5bf3778a8b3420850fd",
+    "same_host": false,
+    "interpretation": "Prior baseline uses AMD EPYC7763; optimized run uses EPYC9V74. Cross-run timing changes are descriptive, not a same-host speedup. The original/native paired smoke above is on one host.",
+    "baseline_instrumented_seconds": 46.370801047999976,
+    "baseline_lstm_totals_ms": {
+      "gemm_ms": 3980.848,
+      "gates_ms": 18225.113,
+      "reset_ms": 2.869
+    },
+    "baseline_graph_operation_totals": [
+      {
+        "op": "CUSTOM",
+        "backend": "CPU",
+        "ms": 24982.825000000004,
+        "calls": 54
+      },
+      {
+        "op": "MUL_MAT",
+        "backend": "BLAS",
+        "ms": 6287.778000000002,
+        "calls": 447
+      },
+      {
+        "op": "CONT",
+        "backend": "CPU",
+        "ms": 3257.915,
+        "calls": 2187
+      },
+      {
+        "op": "IM2COL",
+        "backend": "CPU",
+        "ms": 2779.885,
+        "calls": 732
+      },
+      {
+        "op": "ADD",
+        "backend": "CPU",
+        "ms": 2345.7930000000006,
+        "calls": 702
+      },
+      {
+        "op": "CONCAT",
+        "backend": "CPU",
+        "ms": 2022.4639999999997,
+        "calls": 615
+      },
+      {
+        "op": "PAD",
+        "backend": "CPU",
+        "ms": 1131.1000000000001,
+        "calls": 150
+      },
+      {
+        "op": "MUL",
+        "backend": "CPU",
+        "ms": 804.8509999999999,
+        "calls": 369
+      },
+      {
+        "op": "SIGMOID",
+        "backend": "CPU",
+        "ms": 390.45799999999997,
+        "calls": 63
+      },
+      {
+        "op": "MUL_MAT",
+        "backend": "CPU",
+        "ms": 382.288,
+        "calls": 420
+      },
+      {
+        "op": "COL2IM_1D",
+        "backend": "CPU",
+        "ms": 368.996,
+        "calls": 27
+      },
+      {
+        "op": "NORM",
+        "backend": "CPU",
+        "ms": 349.60599999999994,
+        "calls": 144
+      },
+      {
+        "op": "GELU_ERF",
+        "backend": "CPU",
+        "ms": 238.37600000000003,
+        "calls": 27
+      },
+      {
+        "op": "CPY",
+        "backend": "CPU",
+        "ms": 13.478,
+        "calls": 195
+      },
+      {
+        "op": "SILU",
+        "backend": "CPU",
+        "ms": 11.122,
+        "calls": 54
+      },
+      {
+        "op": "RESHAPE",
+        "backend": "CPU",
+        "ms": 3.8520000000000003,
+        "calls": 2781
+      },
+      {
+        "op": "VIEW",
+        "backend": "CPU",
+        "ms": 1.9129999999999998,
+        "calls": 1281
+      },
+      {
+        "op": "RESHAPE",
+        "backend": "BLAS",
+        "ms": 1.368,
+        "calls": 1308
+      },
+      {
+        "op": "PERMUTE",
+        "backend": "CPU",
+        "ms": 0.7290000000000001,
+        "calls": 762
+      },
+      {
+        "op": "PERMUTE",
+        "backend": "BLAS",
+        "ms": 0.05500000000000002,
+        "calls": 339
+      }
+    ]
+  },
+  "evidence": {
+    "diagnostic": "evidence/diagnostic/diagnostic.json",
+    "profile": "evidence/diagnostic/native-profile.json",
+    "timers": "evidence/diagnostic/timers.json",
+    "paired_smoke": "evidence/diagnostic/paired-smoke.json",
+    "source_manifest": "evidence/diagnostic/source-manifest.json",
+    "source_manifest_sha256": "a73e040d89869f05d22015ef3ab259f1e5d0c228db321d6916635b9326e02a5a",
+    "payload_manifest": "evidence/evidence-files.json"
+  }
+}

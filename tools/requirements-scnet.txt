@@ -1,0 +1,13 @@
+# Install a platform-appropriate torch==2.8.0 build separately (CPU/CUDA).
+# Original source pin: starrytong/SCNet@5d95bf96b19c3eede63248d171efeca8e3abb948.
+# Accelerate 0.32.1 requires NumPy <2; retain the original helper dependency.
+numpy==1.26.4
+gguf==0.17.1
+accelerate==0.32.1
+julius==0.2.7
+ml_collections==0.1.1
+PyYAML==6.0.2
+soundfile==0.12.1
+tqdm==4.67.1
+# Needed only by the explicit author-checkpoint download step, never by inference.
+gdown==5.2.0

@@ -1,0 +1,1594 @@
+{
+  "schema": 1,
+  "date": "2026-11-02",
+  "starting_source": "04200fae791c8d5113fa47d5896ccd13f18f6bad",
+  "scope": "Historical bounded local native execution before original-checkpoint qualification, with later hosted attempts retained separately. The initial local flags and counts are not current qualification claims. Hashes identify each tested source, not subsequent changes.",
+  "pretrained_model_qualification": false,
+  "gpu_qualification": false,
+  "full_cli_build": false,
+  "synthetic_execution": [
+    {
+      "status": "PASS",
+      "scope": "random-weight native graph execution; not checkpoint fidelity or performance",
+      "library": "{build}/src/libscnet-validation.so",
+      "library_sha256": "24b36e5cc53790e30c4c3b3d37b4fdccfc31304cf5380bdf82836cbe79d0472a",
+      "synthetic_gguf_sha256": "d73d6e14b7dd653fae8b493b3c36970af7c519526d2a4daaf1b2bfe5de9b8b55",
+      "frames": 5000,
+      "sample_rate": 44100,
+      "backend": "CPU/CPU-LSTM-FFT",
+      "threads": 2,
+      "no_segment": true,
+      "shape": [
+        4,
+        10000
+      ],
+      "names": [
+        "drums",
+        "bass",
+        "other",
+        "vocals"
+      ],
+      "artifact_variant": "f16",
+      "source_sha256": {
+        "src/scnet.cpp": "59ae5fa3b605cce5981f2decafe962a9a136ca0ba232dd9d228183b0ec8f93c3",
+        "src/scnet.h": "cdbb8d6eea4d63bae72d6fd3810cbd06229a4cc41fee20c0158454cc406a6b4a",
+        "src/scnet_fft.h": "bf0cb5a80fb765b4c5a16afbe9610bede401a99918ee22943c252c76ca9584ab",
+        "src/scnet_lstm.h": "d282cd43227c716d0bc916a51c26e5e2617a1b837369402620f7c1a99597dfee",
+        "src/scnet_shift.h": "816e594eb3973757c67d1e0f7bcabc0b9bb30d6f7b7d61d36ba6bfccb45fea05"
+      },
+      "finite": true,
+      "warm_identical": true,
+      "returned_identical": true,
+      "output_max_abs": 0.0059662931598722935,
+      "changed_input_difference_max_abs": 0.007742017507553101
+    },
+    {
+      "status": "PASS",
+      "scope": "random-weight native graph execution; not checkpoint fidelity or performance",
+      "library": "{build}/src/libscnet-validation.so",
+      "library_sha256": "24b36e5cc53790e30c4c3b3d37b4fdccfc31304cf5380bdf82836cbe79d0472a",
+      "synthetic_gguf_sha256": "e8fb62adb1bb5b09da765bde76f04808cceafb5f34c2c3733de12fc0c6f5c10b",
+      "frames": 5000,
+      "sample_rate": 44100,
+      "backend": "CPU/CPU-LSTM-FFT",
+      "threads": 2,
+      "no_segment": true,
+      "shape": [
+        4,
+        10000
+      ],
+      "names": [
+        "drums",
+        "bass",
+        "other",
+        "vocals"
+      ],
+      "artifact_variant": "q8_0",
+      "source_sha256": {
+        "src/scnet.cpp": "59ae5fa3b605cce5981f2decafe962a9a136ca0ba232dd9d228183b0ec8f93c3",
+        "src/scnet.h": "cdbb8d6eea4d63bae72d6fd3810cbd06229a4cc41fee20c0158454cc406a6b4a",
+        "src/scnet_fft.h": "bf0cb5a80fb765b4c5a16afbe9610bede401a99918ee22943c252c76ca9584ab",
+        "src/scnet_lstm.h": "d282cd43227c716d0bc916a51c26e5e2617a1b837369402620f7c1a99597dfee",
+        "src/scnet_shift.h": "816e594eb3973757c67d1e0f7bcabc0b9bb30d6f7b7d61d36ba6bfccb45fea05"
+      },
+      "finite": true,
+      "warm_identical": true,
+      "returned_identical": true,
+      "output_max_abs": 0.005966299679130316,
+      "changed_input_difference_max_abs": 0.0077421097084879875
+    },
+    {
+      "status": "PASS",
+      "scope": "random-weight native graph execution; not checkpoint fidelity or performance",
+      "library": "{build}/src/libscnet-validation.so",
+      "library_sha256": "24b36e5cc53790e30c4c3b3d37b4fdccfc31304cf5380bdf82836cbe79d0472a",
+      "synthetic_gguf_sha256": "11c073e0aedf0aea0e3f01492796893df2414125fb4f376cd4683d5b6fd889b4",
+      "frames": 5000,
+      "sample_rate": 44100,
+      "backend": "CPU/CPU-LSTM-FFT",
+      "threads": 2,
+      "no_segment": true,
+      "shape": [
+        4,
+        10000
+      ],
+      "names": [
+        "drums",
+        "bass",
+        "other",
+        "vocals"
+      ],
+      "artifact_variant": "q4_k",
+      "source_sha256": {
+        "src/scnet.cpp": "59ae5fa3b605cce5981f2decafe962a9a136ca0ba232dd9d228183b0ec8f93c3",
+        "src/scnet.h": "cdbb8d6eea4d63bae72d6fd3810cbd06229a4cc41fee20c0158454cc406a6b4a",
+        "src/scnet_fft.h": "bf0cb5a80fb765b4c5a16afbe9610bede401a99918ee22943c252c76ca9584ab",
+        "src/scnet_lstm.h": "d282cd43227c716d0bc916a51c26e5e2617a1b837369402620f7c1a99597dfee",
+        "src/scnet_shift.h": "816e594eb3973757c67d1e0f7bcabc0b9bb30d6f7b7d61d36ba6bfccb45fea05"
+      },
+      "finite": true,
+      "warm_identical": true,
+      "returned_identical": true,
+      "output_max_abs": 0.005966299679130316,
+      "changed_input_difference_max_abs": 0.0077421111054718494
+    }
+  ],
+  "model_free_tests": {
+    "native_math": 4,
+    "session_routing": 3,
+    "converter": 8,
+    "reference_archive_and_profile": 5,
+    "validator_controls": 12,
+    "actual_quantizer_policy": "pass",
+    "original_observer_tests": {
+      "passed": 0,
+      "skipped": 3,
+      "reason": "Torch unavailable locally"
+    }
+  },
+  "secret_scan": {
+    "passed": 4,
+    "skipped": 1,
+    "reason": "KAGGLE_ACCOUNT was unavailable; account-name-specific check skipped"
+  },
+  "build": "Production scnet-probe and scnet-validation targets; portable CPU recurrence; actual quantizer sources linked against same ggml",
+  "generated_go_flags": "Actual static CMake graph adds scnet without dropping libraries; generator --check passed",
+  "production_comparator_controls": {
+    "scope": "Actual hardened comparator executable, synthetic weights and native self-captures; not pretrained-model fidelity",
+    "source_sha256": {
+      "src/scnet.cpp": "5a6afbb78e844b67b8a0e495093db6e83c222406db65ac7c8a2f56a8fa3b0c25",
+      "tests/test-scnet-native-diff.py": "33e56022a28a8cdc37610b26998a7ec5700f53547a9931cda6108039501cefc5",
+      "tools/validate_scnet.py": "5bd1c893a1d8df121b6482af34403a0e66546539daf12effc47175fd2bf0b9ff"
+    },
+    "control_count": 108,
+    "reports": [
+      {
+        "scope": "Production comparator controls using native self-captures; not independent model fidelity",
+        "precision": "f16",
+        "probe": "{build}/bin/scnet-probe",
+        "probe_sha256": "b0da1ad624b304a35d19492d94b8d7aa98b02a74a8cc3f49115b067f5a7df3ff",
+        "model": "{synthetic-fixtures}/scnet-synthetic-f16.gguf",
+        "model_sha256": "d73d6e14b7dd653fae8b493b3c36970af7c519526d2a4daaf1b2bfe5de9b8b55",
+        "controls": {
+          "bootstrap-capture": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "valid-self-capture": {
+            "returncode": 0,
+            "acceptance": true
+          },
+          "altered-gain": {
+            "returncode": 1,
+            "acceptance": true,
+            "metrics": {
+              "cos_global": 1.0,
+              "norm_ratio": 0.980392183,
+              "relative_l2": 0.0196078169,
+              "max_abs": 0.000119026285,
+              "nonfinite": 0.0,
+              "n": 10000.0,
+              "cos_min": 1.0
+            }
+          },
+          "altered-learned-row": {
+            "returncode": 1,
+            "acceptance": true,
+            "stage": "skip0",
+            "row": 0,
+            "metrics": {
+              "cos_global": 0.999984606,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.00554862581,
+              "max_abs": 0.0417666771,
+              "nonfinite": 0.0,
+              "n": 118272.0,
+              "cos_min": -1.0
+            }
+          },
+          "nonfinite-output": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "wrong-stage-shape": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "missing-source_revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-checkpoint_sha256": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-mode": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-segment_seconds": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-shifts": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-shift_seed": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-sample_rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-required_stage_count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-segment-zero": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-segment-out-of-range": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-shifts-out-of-range": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-sample-rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-stage-count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-mode": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-source-revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-malformed-sha": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-segment_seconds": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-shifts": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-shift_seed": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-sample_rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-required_stage_count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "mismatched-checkpoint": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "extra-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "substituted-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "model-mismatch-revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "model-mismatch-sha256": {
+            "returncode": 2,
+            "acceptance": true
+          }
+        },
+        "acceptance": true,
+        "control_count": 36
+      },
+      {
+        "scope": "Production comparator controls using native self-captures; not independent model fidelity",
+        "precision": "q8_0",
+        "probe": "{build}/bin/scnet-probe",
+        "probe_sha256": "b0da1ad624b304a35d19492d94b8d7aa98b02a74a8cc3f49115b067f5a7df3ff",
+        "model": "{synthetic-fixtures}/scnet-synthetic-q8_0.gguf",
+        "model_sha256": "e8fb62adb1bb5b09da765bde76f04808cceafb5f34c2c3733de12fc0c6f5c10b",
+        "controls": {
+          "bootstrap-capture": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "valid-self-capture": {
+            "returncode": 0,
+            "acceptance": true
+          },
+          "altered-gain": {
+            "returncode": 1,
+            "acceptance": true,
+            "metrics": {
+              "cos_global": 1.0,
+              "norm_ratio": 0.943396286,
+              "relative_l2": 0.056603714,
+              "max_abs": 0.000357080251,
+              "nonfinite": 0.0,
+              "n": 10000.0,
+              "cos_min": 1.0
+            }
+          },
+          "excessive-relative-error": {
+            "returncode": 1,
+            "acceptance": true,
+            "metrics": {
+              "cos_global": 0.981,
+              "norm_ratio": 1.048999997,
+              "relative_l2": 0.205579667,
+              "max_abs": 0.00038801413,
+              "nonfinite": 0.0,
+              "n": 10000.0,
+              "cos_min": 0.980974087
+            }
+          },
+          "nonfinite-output": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "wrong-stage-shape": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "missing-source_revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-checkpoint_sha256": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-mode": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-segment_seconds": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-shifts": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-shift_seed": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-sample_rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-required_stage_count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-segment-zero": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-segment-out-of-range": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-shifts-out-of-range": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-sample-rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-stage-count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-mode": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-source-revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-malformed-sha": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-segment_seconds": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-shifts": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-shift_seed": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-sample_rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-required_stage_count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "mismatched-checkpoint": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "extra-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "substituted-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "model-mismatch-revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "model-mismatch-sha256": {
+            "returncode": 2,
+            "acceptance": true
+          }
+        },
+        "acceptance": true,
+        "control_count": 36
+      },
+      {
+        "scope": "Production comparator controls using native self-captures; not independent model fidelity",
+        "precision": "q4_k",
+        "probe": "{build}/bin/scnet-probe",
+        "probe_sha256": "b0da1ad624b304a35d19492d94b8d7aa98b02a74a8cc3f49115b067f5a7df3ff",
+        "model": "{synthetic-fixtures}/scnet-synthetic-q4_k.gguf",
+        "model_sha256": "11c073e0aedf0aea0e3f01492796893df2414125fb4f376cd4683d5b6fd889b4",
+        "controls": {
+          "bootstrap-capture": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "valid-self-capture": {
+            "returncode": 0,
+            "acceptance": true
+          },
+          "altered-gain": {
+            "returncode": 1,
+            "acceptance": true,
+            "metrics": {
+              "cos_global": 1.0,
+              "norm_ratio": 0.7692308,
+              "relative_l2": 0.2307692,
+              "max_abs": 0.00178540265,
+              "nonfinite": 0.0,
+              "n": 10000.0,
+              "cos_min": 1.0
+            }
+          },
+          "excessive-relative-error": {
+            "returncode": 1,
+            "acceptance": true,
+            "metrics": {
+              "cos_global": 0.941,
+              "norm_ratio": 1.199000002,
+              "relative_l2": 0.425538484,
+              "max_abs": 0.00128400372,
+              "nonfinite": 0.0,
+              "n": 10000.0,
+              "cos_min": 0.940924959
+            }
+          },
+          "nonfinite-output": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "wrong-stage-shape": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "missing-source_revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-checkpoint_sha256": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-mode": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-segment_seconds": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-shifts": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-shift_seed": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-sample_rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-required_stage_count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-segment-zero": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-segment-out-of-range": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-shifts-out-of-range": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-sample-rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-stage-count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-mode": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-source-revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-malformed-sha": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-segment_seconds": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-shifts": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-shift_seed": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-sample_rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-required_stage_count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "mismatched-checkpoint": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "extra-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "substituted-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "model-mismatch-revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "model-mismatch-sha256": {
+            "returncode": 2,
+            "acceptance": true
+          }
+        },
+        "acceptance": true,
+        "control_count": 36
+      }
+    ]
+  },
+  "hosted_attempts": [
+    {
+      "run_id": 41395094930,
+      "job_id": 125114582867,
+      "source": "2b13d4339afc151cb91701d903543278cf4c12b9",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/41395094930",
+      "result": "failed in preflight controls; author downloads not reached",
+      "build": {
+        "scnet-probe": "pass",
+        "scnet-validation": "pass",
+        "crispasr-quantize": "pass",
+        "CBLAS": "OpenBLAS link check passed"
+      },
+      "native_math_tests_passed": 4,
+      "session_routing_tests_passed": 3,
+      "failure": "unrelated-architecture quantizer fixture accidentally reused its input path as output; fixed in 1ef9331 by other-source.gguf input",
+      "artifact_id": 13119439420,
+      "hardware": {
+        "cpu": "Architecture:                            x86_64\nCPU op-mode(s):                          32-bit, 64-bit\nAddress sizes:                           48 bits physical, 48 bits virtual\nByte Order:                              Little Endian\nCPU(s):                                  4\nOn-line CPU(s) list:                     0-3\nVendor ID:                               AuthenticAMD\nModel name:                              AMD EPYC 7763 64-Core Processor\nCPU family:                              25\nModel:                                   1\nThread(s) per core:                      2\nCore(s) per socket:                      2\nSocket(s):                               1\nStepping:                                1\nBogoMIPS:                                4890.86\nFlags:                                   fpu vme de pse tsc msr pae mce cx8 apic sep mtrr pge mca cmov pat pse36 clflush mmx fxsr sse sse2 ht syscall nx mmxext fxsr_opt pdpe1gb rdtscp lm constant_tsc rep_good nopl tsc_reliable nonstop_tsc cpuid extd_apicid aperfmperf tsc_known_freq pni pclmulqdq ssse3 fma cx16 pcid sse4_1 sse4_2 movbe popcnt aes xsave avx f16c rdrand hypervisor lahf_lm cmp_legacy svm cr8_legacy abm sse4a misalignsse 3dnowprefetch osvw topoext vmmcall fsgsbase bmi1 avx2 smep bmi2 erms invpcid rdseed adx smap clflushopt clwb sha_ni xsaveopt xsavec xgetbv1 xsaves user_shstk clzero xsaveerptr rdpru arat npt nrip_save tsc_scale vmcb_clean flushbyasid decodeassists pausefilter pfthreshold v_vmsave_vmload umip vaes vpclmulqdq rdpid fsrm\nVirtualization:                          AMD-V\nHypervisor vendor:                       Microsoft\nVirtualization type:                     full\nL1d cache:                               64 KiB (2 instances)\nL1i cache:                               64 KiB (2 instances)\nL2 cache:                                1 MiB (2 instances)\nL3 cache:                                32 MiB (1 instance)\nNUMA node(s):                            1\nNUMA node0 CPU(s):                       0-3\nVulnerability Gather data sampling:      Not affected\nVulnerability Indirect target selection: Not affected\nVulnerability Itlb multihit:             Not affected\nVulnerability L1tf:                      Not affected\nVulnerability Mds:                       Not affected\nVulnerability Meltdown:                  Not affected\nVulnerability Mmio stale data:           Not affected\nVulnerability Reg file data sampling:    Not affected\nVulnerability Retbleed:                  Not affected\nVulnerability Spec rstack overflow:      Vulnerable: Safe RET, no microcode\nVulnerability Spec store bypass:         Vulnerable\nVulnerability Spectre v1:                Mitigation; usercopy/swapgs barriers and __user pointer sanitization\nVulnerability Spectre v2:                Mitigation; Retpolines; STIBP disabled; RSB filling; PBRSB-eIBRS Not affected; BHI Not affected\nVulnerability Srbds:                     Not affected\nVulnerability Tsa:                       Vulnerable: Clear CPU buffers attempted, no microcode\nVulnerability Tsx async abort:           Not affected\nVulnerability Vmscape:                   Not affected\n",
+        "memory": "               total        used        free      shared  buff/cache   available\nMem:            15Gi       594Mi        12Gi        45Mi       2.8Gi        14Gi\nSwap:          3.0Gi          0B       3.0Gi\n",
+        "disk": "Filesystem      Size  Used Avail Use% Mounted on\n/dev/root       146G   60G   86G  42% /\ntmpfs           7.9G  172K  7.9G   1% /dev/shm\ntmpfs           3.2G  1.0M  3.2G   1% /run\ntmpfs           5.0M     0  5.0M   0% /run/lock\nefivarfs        128M   34K  128M   1% /sys/firmware/efi/efivars\n/dev/sda15      105M  6.1M   99M   6% /boot/efi\ntmpfs           1.6G   12K  1.6G   1% /run/user/1001\n"
+      }
+    },
+    {
+      "run_id": 41396683922,
+      "job_id": 125119405470,
+      "source": "1ef9331ff9b4de971b9c920d2267041a8c5adbf2",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/41396683922",
+      "result": "failed installing reference requirements before model execution",
+      "failure": "accelerate==0.32.1 requires numpy<2, conflicting with numpy==2.2.6",
+      "resolution": "retain Accelerate 0.32.1; pin NumPy 1.26.4 and run pip check"
+    },
+    {
+      "run_id": 41397985492,
+      "source": "16e524e9c6d3bb3110a1ef6002fbe24daa831051",
+      "url": "https://github.com/CrispStrobe/CrispASR/actions/runs/41397985492",
+      "result": "failed; retained as originally evaluated",
+      "actual_full_build": {
+        "cli": "pass",
+        "Session_library": "pass",
+        "probe": "pass",
+        "validation_library": "pass",
+        "quantizer": "pass"
+      },
+      "actual_generated_capabilities": "pass; retained generator patch applied to tracked files; 145 backends",
+      "original_observer_controls": "pass with genuine pinned original PyTorch source",
+      "jobs": [
+        {
+          "variant": "scnet",
+          "job_id": 125123389638,
+          "artifact_id": 13121021538,
+          "evidence_zip_sha256": "78d7870741bb7d18e321bc39d931b7abe0a04041e6f9e18cb278e496125263a8",
+          "complete": false,
+          "acceptance": false,
+          "status": "error",
+          "errors": [
+            {
+              "command": "native-raw-smoke",
+              "error": "nonzero process exit",
+              "returncode": 1
+            },
+            {
+              "exception": "RuntimeError: native-raw-smoke failed with exit 1; see retained stdout/stderr and qualification.json"
+            }
+          ],
+          "commands": [
+            {
+              "name": "converter-controls",
+              "returncode": 0,
+              "seconds": 1.3674970469999153
+            },
+            {
+              "name": "original-observer-controls",
+              "returncode": 0,
+              "seconds": 4.625443153000106
+            },
+            {
+              "name": "download-checkpoint",
+              "returncode": 0,
+              "seconds": 3.1223559929999283
+            },
+            {
+              "name": "convert-f16",
+              "returncode": 0,
+              "seconds": 1.6680838560000666
+            },
+            {
+              "name": "quantize-q8_0",
+              "returncode": 0,
+              "seconds": 0.1143294359999345
+            },
+            {
+              "name": "quantize-q4_k",
+              "returncode": 0,
+              "seconds": 0.7156543329999749
+            },
+            {
+              "name": "reference-raw-smoke",
+              "returncode": 0,
+              "seconds": 1.9191413420001027
+            },
+            {
+              "name": "native-raw-smoke",
+              "returncode": 1,
+              "seconds": 0.565331722999872
+            }
+          ],
+          "failure_diagnosis": "All 35 raw full-tensor gates pass; angle-only row gate fails skip1/decoder2. Subsequent independent precision diagnosis identifies intrinsic F16 storage and ill-conditioned near-zero GELU rows; previous failure retained. See scnet-precision-diagnosis-2026-11-02.json."
+        },
+        {
+          "variant": "scnet-large",
+          "job_id": 125123389519,
+          "artifact_id": 13121146573,
+          "evidence_zip_sha256": "11619475bbe5c0554d08b437d90fa9fee3c22dc2120d7014d2594855355133f7",
+          "complete": false,
+          "acceptance": false,
+          "status": "error",
+          "errors": [
+            {
+              "command": "convert-f16",
+              "error": "nonzero process exit",
+              "returncode": 1
+            },
+            {
+              "exception": "RuntimeError: convert-f16 failed with exit 1; see retained stdout/stderr and qualification.json"
+            }
+          ],
+          "commands": [
+            {
+              "name": "converter-controls",
+              "returncode": 0,
+              "seconds": 1.3172296079999342
+            },
+            {
+              "name": "original-observer-controls",
+              "returncode": 0,
+              "seconds": 4.023732211000038
+            },
+            {
+              "name": "download-checkpoint",
+              "returncode": 0,
+              "seconds": 4.927288441000087
+            },
+            {
+              "name": "download-large-config",
+              "returncode": 0,
+              "seconds": 1.919148969000048
+            },
+            {
+              "name": "convert-f16",
+              "returncode": 1,
+              "seconds": 1.3170672109999941
+            }
+          ],
+          "failure_diagnosis": "Author large config uses band_SR [.225,.372,.403], not small [.175,.392,.433]. Strict converter rejection is valid; model variant metadata and native grids corrected for the next run."
+        }
+      ]
+    }
+  ],
+  "row_policy_controls": {
+    "policy": "cosine_or_binary16_reference_floor_v1",
+    "scope": "Actual production comparator controls using synthetic self-captures; not pretrained model fidelity or performance",
+    "control_count": 112,
+    "acceptance": true,
+    "source_sha256": {
+      "src/scnet.cpp": "846e60da49240ddf65f4cc1b8318ec5b0ec860335ebd8a015a00f09b482ae755",
+      "tests/test-scnet-native-diff.py": "3fe5da4e2d2baf57ee6cc1f75fb377c23bf0b6e745ef18c8289adbb4d90e4fec",
+      "tools/validate_scnet.py": "f073ea6c295da98eaeb5d14e657e223a8a42f350376790208f453b68455b9130",
+      "tests/test_scnet_validation.py": "0ab5d563d7aae33b25754c995eebf7497ff0ee91c30483a189404f70d61ac6fc"
+    },
+    "reports": [
+      {
+        "scope": "Production comparator controls using native self-captures; not independent model fidelity",
+        "precision": "f16",
+        "probe": "{build}/bin/scnet-probe",
+        "probe_sha256": "8b0f644826565b4589c0fc9e4ed865c9cf045a2014ea3c5b605060ff7282defc",
+        "model": "{validation}/scnet-synthetic-f16.gguf",
+        "model_sha256": "d73d6e14b7dd653fae8b493b3c36970af7c519526d2a4daaf1b2bfe5de9b8b55",
+        "controls": {
+          "bootstrap-capture": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "valid-self-capture": {
+            "returncode": 0,
+            "acceptance": true
+          },
+          "altered-gain": {
+            "returncode": 1,
+            "acceptance": true,
+            "metrics": {
+              "cos_global": 1.0,
+              "norm_ratio": 0.980392183,
+              "relative_l2": 0.0196078169,
+              "max_abs": 0.000119026285,
+              "nonfinite": 0.0,
+              "n": 10000.0,
+              "cos_min": 1.0,
+              "rows": 2.0,
+              "row_width": 5000.0,
+              "ne1": 2.0,
+              "ne2": 1.0,
+              "ne3": 1.0,
+              "row_cosine_gated": 1.0,
+              "rows_failing_cosine": 0.0,
+              "nonfinite_rows": 0.0,
+              "worst_row": 1.0,
+              "worst_i1": 1.0,
+              "worst_i2": 0.0,
+              "worst_i3": 0.0,
+              "worst_actual_norm": 0.0131689934,
+              "worst_reference_norm": 0.013432373,
+              "worst_rms_error": 3.72475e-06,
+              "worst_max_abs": 0.000119026285,
+              "row_cosine_threshold": 0.999,
+              "row_floor_epsilon": 0.0009765625,
+              "reference_rms": 0.00018982817353616708,
+              "reference_peak": 0.006070352625101805,
+              "row_rms_error_limit": 1.8537907571891317e-07,
+              "row_max_abs_error_limit": 5.928078735450981e-06,
+              "row_rescued_count": 0.0,
+              "row_failed_count": 0.0
+            }
+          },
+          "altered-learned-row": {
+            "returncode": 1,
+            "acceptance": true,
+            "stage": "skip0",
+            "row": 19711,
+            "metrics": {
+              "cos_global": 0.999999976,
+              "norm_ratio": 1.0,
+              "relative_l2": 0.000218117484,
+              "max_abs": 0.0017724405,
+              "nonfinite": 0.0,
+              "n": 118272.0,
+              "cos_min": -1.0,
+              "rows": 19712.0,
+              "row_width": 6.0,
+              "ne1": 616.0,
+              "ne2": 32.0,
+              "ne3": 1.0,
+              "row_cosine_gated": 1.0,
+              "rows_failing_cosine": 1.0,
+              "nonfinite_rows": 0.0,
+              "worst_row": 19711.0,
+              "worst_i1": 615.0,
+              "worst_i2": 31.0,
+              "worst_i3": 0.0,
+              "worst_actual_norm": 0.00124734067,
+              "worst_reference_norm": 0.00124734067,
+              "worst_rms_error": 0.0010184494,
+              "worst_max_abs": 0.0017724405,
+              "row_cosine_threshold": 0.999,
+              "row_floor_epsilon": 0.0009765625,
+              "reference_rms": 0.033257042906042214,
+              "reference_peak": 2.1371381282806396,
+              "row_rms_error_limit": 3.247758096293185e-05,
+              "row_max_abs_error_limit": 0.002087048953399062,
+              "row_rescued_count": 0.0,
+              "row_failed_count": 1.0
+            }
+          },
+          "reference-floor-rescues-quiet-row": {
+            "returncode": 0,
+            "acceptance": true,
+            "metrics": {
+              "cos_global": 1.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 6.26004253e-06,
+              "max_abs": 3.8685801e-05,
+              "nonfinite": 0.0,
+              "n": 118272.0,
+              "cos_min": 0.998356643,
+              "rows": 19712.0,
+              "row_width": 6.0,
+              "ne1": 616.0,
+              "ne2": 32.0,
+              "ne3": 1.0,
+              "row_cosine_gated": 1.0,
+              "rows_failing_cosine": 1.0,
+              "nonfinite_rows": 0.0,
+              "worst_row": 19711.0,
+              "worst_i1": 615.0,
+              "worst_i2": 31.0,
+              "worst_i3": 0.0,
+              "worst_actual_norm": 0.00124734067,
+              "worst_reference_norm": 0.00124939386,
+              "worst_rms_error": 2.9229828e-05,
+              "worst_max_abs": 3.8685801e-05,
+              "row_cosine_threshold": 0.999,
+              "row_floor_epsilon": 0.0009765625,
+              "reference_rms": 0.03325704290669385,
+              "reference_peak": 2.1371381282806396,
+              "row_rms_error_limit": 3.2477580963568215e-05,
+              "row_max_abs_error_limit": 0.002087048953399062,
+              "row_rescued_count": 1.0,
+              "row_failed_count": 0.0
+            }
+          },
+          "reference-floor-rejects-excess-rms": {
+            "returncode": 1,
+            "acceptance": true,
+            "metrics": {
+              "cos_global": 1.0,
+              "norm_ratio": 1.0,
+              "relative_l2": 7.65116071e-06,
+              "max_abs": 4.72826068e-05,
+              "nonfinite": 0.0,
+              "n": 118272.0,
+              "cos_min": 0.997548092,
+              "rows": 19712.0,
+              "row_width": 6.0,
+              "ne1": 616.0,
+              "ne2": 32.0,
+              "ne3": 1.0,
+              "row_cosine_gated": 1.0,
+              "rows_failing_cosine": 1.0,
+              "nonfinite_rows": 0.0,
+              "worst_row": 19711.0,
+              "worst_i1": 615.0,
+              "worst_i2": 31.0,
+              "worst_i3": 0.0,
+              "worst_actual_norm": 0.00124734067,
+              "worst_reference_norm": 0.00125040656,
+              "worst_rms_error": 3.57253342e-05,
+              "worst_max_abs": 4.72826068e-05,
+              "row_cosine_threshold": 0.999,
+              "row_floor_epsilon": 0.0009765625,
+              "reference_rms": 0.03325704290701565,
+              "reference_peak": 2.1371381282806396,
+              "row_rms_error_limit": 3.247758096388247e-05,
+              "row_max_abs_error_limit": 0.002087048953399062,
+              "row_rescued_count": 0.0,
+              "row_failed_count": 1.0
+            }
+          },
+          "zero-reference-stage-rejects-error": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "zero-reference-stage-accepts-zero-error": {
+            "returncode": 0,
+            "acceptance": true
+          },
+          "nonfinite-output": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "wrong-stage-shape": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "missing-source_revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-checkpoint_sha256": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-mode": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-segment_seconds": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-shifts": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-shift_seed": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-sample_rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-required_stage_count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-segment-zero": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-segment-out-of-range": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-shifts-out-of-range": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-sample-rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-stage-count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-mode": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-source-revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-malformed-sha": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-segment_seconds": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-shifts": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-shift_seed": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-sample_rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-required_stage_count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "mismatched-checkpoint": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "extra-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "substituted-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "model-mismatch-revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "model-mismatch-sha256": {
+            "returncode": 2,
+            "acceptance": true
+          }
+        },
+        "acceptance": true,
+        "control_count": 40
+      },
+      {
+        "scope": "Production comparator controls using native self-captures; not independent model fidelity",
+        "precision": "q8_0",
+        "probe": "{build}/bin/scnet-probe",
+        "probe_sha256": "8b0f644826565b4589c0fc9e4ed865c9cf045a2014ea3c5b605060ff7282defc",
+        "model": "{validation}/scnet-synthetic-q8_0.gguf",
+        "model_sha256": "e8fb62adb1bb5b09da765bde76f04808cceafb5f34c2c3733de12fc0c6f5c10b",
+        "controls": {
+          "bootstrap-capture": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "valid-self-capture": {
+            "returncode": 0,
+            "acceptance": true
+          },
+          "altered-gain": {
+            "returncode": 1,
+            "acceptance": true,
+            "metrics": {
+              "cos_global": 1.0,
+              "norm_ratio": 0.943396286,
+              "relative_l2": 0.056603714,
+              "max_abs": 0.000357080251,
+              "nonfinite": 0.0,
+              "n": 10000.0,
+              "cos_min": 1.0,
+              "rows": 2.0,
+              "row_width": 5000.0,
+              "ne1": 2.0,
+              "ne2": 1.0,
+              "ne3": 1.0,
+              "row_cosine_gated": 0.0,
+              "rows_failing_cosine": 0.0,
+              "nonfinite_rows": 0.0,
+              "worst_row": 0.0,
+              "worst_i1": 0.0,
+              "worst_i2": 0.0,
+              "worst_i3": 0.0,
+              "worst_actual_norm": 0.0131503648,
+              "worst_reference_norm": 0.0139393858,
+              "worst_rms_error": 1.11584417e-05,
+              "worst_max_abs": 0.000356464647,
+              "row_cosine_threshold": 0.999,
+              "row_floor_epsilon": 0.0009765625,
+              "reference_rms": 0.00019727240214767843,
+              "reference_peak": 0.006308422889560461,
+              "row_rms_error_limit": 1.9264883022234222e-07,
+              "row_max_abs_error_limit": 6.160569228086388e-06,
+              "row_rescued_count": 0.0,
+              "row_failed_count": 0.0
+            }
+          },
+          "excessive-relative-error": {
+            "returncode": 1,
+            "acceptance": true,
+            "metrics": {
+              "cos_global": 0.981,
+              "norm_ratio": 1.048999997,
+              "relative_l2": 0.205579667,
+              "max_abs": 0.00038801413,
+              "nonfinite": 0.0,
+              "n": 10000.0,
+              "cos_min": 0.980974087,
+              "rows": 2.0,
+              "row_width": 5000.0,
+              "ne1": 2.0,
+              "ne2": 1.0,
+              "ne3": 1.0,
+              "row_cosine_gated": 0.0,
+              "rows_failing_cosine": 2.0,
+              "nonfinite_rows": 0.0,
+              "worst_row": 0.0,
+              "worst_i1": 0.0,
+              "worst_i2": 0.0,
+              "worst_i3": 0.0,
+              "worst_actual_norm": 0.0131503648,
+              "worst_reference_norm": 0.0125365125,
+              "worst_rms_error": 3.64692419e-05,
+              "worst_max_abs": 0.000387286302,
+              "row_cosine_threshold": 0.999,
+              "row_floor_epsilon": 0.0009765625,
+              "reference_rms": 0.0001774128236624527,
+              "reference_peak": 0.005563328508287668,
+              "row_rms_error_limit": 1.7325471060786396e-07,
+              "row_max_abs_error_limit": 5.432937996374676e-06,
+              "row_rescued_count": 0.0,
+              "row_failed_count": 2.0
+            }
+          },
+          "nonfinite-output": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "wrong-stage-shape": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "missing-source_revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-checkpoint_sha256": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-mode": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-segment_seconds": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-shifts": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-shift_seed": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-sample_rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-required_stage_count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-segment-zero": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-segment-out-of-range": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-shifts-out-of-range": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-sample-rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-stage-count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-mode": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-source-revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-malformed-sha": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-segment_seconds": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-shifts": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-shift_seed": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-sample_rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-required_stage_count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "mismatched-checkpoint": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "extra-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "substituted-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "model-mismatch-revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "model-mismatch-sha256": {
+            "returncode": 2,
+            "acceptance": true
+          }
+        },
+        "acceptance": true,
+        "control_count": 36
+      },
+      {
+        "scope": "Production comparator controls using native self-captures; not independent model fidelity",
+        "precision": "q4_k",
+        "probe": "{build}/bin/scnet-probe",
+        "probe_sha256": "8b0f644826565b4589c0fc9e4ed865c9cf045a2014ea3c5b605060ff7282defc",
+        "model": "{validation}/scnet-synthetic-q4_k.gguf",
+        "model_sha256": "11c073e0aedf0aea0e3f01492796893df2414125fb4f376cd4683d5b6fd889b4",
+        "controls": {
+          "bootstrap-capture": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "valid-self-capture": {
+            "returncode": 0,
+            "acceptance": true
+          },
+          "altered-gain": {
+            "returncode": 1,
+            "acceptance": true,
+            "metrics": {
+              "cos_global": 1.0,
+              "norm_ratio": 0.7692308,
+              "relative_l2": 0.2307692,
+              "max_abs": 0.00178540265,
+              "nonfinite": 0.0,
+              "n": 10000.0,
+              "cos_min": 1.0,
+              "rows": 2.0,
+              "row_width": 5000.0,
+              "ne1": 2.0,
+              "ne2": 1.0,
+              "ne3": 1.0,
+              "row_cosine_gated": 0.0,
+              "rows_failing_cosine": 0.0,
+              "nonfinite_rows": 0.0,
+              "worst_row": 1.0,
+              "worst_i1": 1.0,
+              "worst_i2": 0.0,
+              "worst_i3": 0.0,
+              "worst_actual_norm": 0.0131690019,
+              "worst_reference_norm": 0.0171197017,
+              "worst_rms_error": 5.58713324e-05,
+              "worst_max_abs": 0.00178540265,
+              "row_cosine_threshold": 0.999,
+              "row_floor_epsilon": 0.0009765625,
+              "reference_rms": 0.0002419378761546369,
+              "reference_peak": 0.007736746221780777,
+              "row_rms_error_limit": 2.362674571822626e-07,
+              "row_max_abs_error_limit": 7.55541623220779e-06,
+              "row_rescued_count": 0.0,
+              "row_failed_count": 0.0
+            }
+          },
+          "excessive-relative-error": {
+            "returncode": 1,
+            "acceptance": true,
+            "metrics": {
+              "cos_global": 0.941,
+              "norm_ratio": 1.199000002,
+              "relative_l2": 0.425538484,
+              "max_abs": 0.00128400372,
+              "nonfinite": 0.0,
+              "n": 10000.0,
+              "cos_min": 0.940924959,
+              "rows": 2.0,
+              "row_width": 5000.0,
+              "ne1": 2.0,
+              "ne2": 1.0,
+              "ne3": 1.0,
+              "row_cosine_gated": 0.0,
+              "rows_failing_cosine": 2.0,
+              "nonfinite_rows": 0.0,
+              "worst_row": 0.0,
+              "worst_i1": 0.0,
+              "worst_i2": 0.0,
+              "worst_i3": 0.0,
+              "worst_actual_norm": 0.0131503638,
+              "worst_reference_norm": 0.0109687863,
+              "worst_rms_error": 6.60328178e-05,
+              "worst_max_abs": 0.0012817001,
+              "row_cosine_threshold": 0.999,
+              "row_floor_epsilon": 0.0009765625,
+              "reference_rms": 0.00015521773614737377,
+              "reference_peak": 0.004667339846491814,
+              "row_rms_error_limit": 1.515798204564197e-07,
+              "row_max_abs_error_limit": 4.557949068839662e-06,
+              "row_rescued_count": 0.0,
+              "row_failed_count": 2.0
+            }
+          },
+          "nonfinite-output": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "wrong-stage-shape": {
+            "returncode": 1,
+            "acceptance": true
+          },
+          "missing-source_revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-checkpoint_sha256": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-mode": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-segment_seconds": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-shifts": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-shift_seed": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-sample_rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-required_stage_count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-segment-zero": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-segment-out-of-range": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-shifts-out-of-range": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-sample-rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-stage-count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-mode": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-source-revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "invalid-malformed-sha": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-segment_seconds": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-shifts": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-shift_seed": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-sample_rate": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-required_stage_count": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "wrong-type-overlap": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "mismatched-checkpoint": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "missing-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "extra-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "substituted-stage": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "model-mismatch-revision": {
+            "returncode": 2,
+            "acceptance": true
+          },
+          "model-mismatch-sha256": {
+            "returncode": 2,
+            "acceptance": true
+          }
+        },
+        "acceptance": true,
+        "control_count": 36
+      }
+    ]
+  }
+}

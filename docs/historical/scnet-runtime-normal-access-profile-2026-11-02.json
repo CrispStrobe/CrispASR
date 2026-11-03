@@ -1,0 +1,843 @@
+{
+  "acceptance": false,
+  "build_readiness_sha256": "268a78e9c581879ce854752257140bc52efc4e5acad63c89069a1490dd0b814b",
+  "complete": true,
+  "evidence": [
+    {
+      "bytes": 66229,
+      "file": "{local-profile}/launch.json",
+      "sha256": "469eb3246b55ddfde42f8307496b889b26140dfd8b49ccf3e723fb001f756f53"
+    },
+    {
+      "bytes": 12780,
+      "file": "{local-profile}/launch.py",
+      "sha256": "2d9a18f21a8791b5ac9bc6b9d7f52507fd053544aa30cc21e28f04948463b1fc"
+    },
+    {
+      "bytes": 6202,
+      "file": "{local-profile}/preparation.json",
+      "sha256": "ebededbd90d0ad11e9620d0cf63295e7b4784104dcc26bdc8953368809a7c24a"
+    },
+    {
+      "bytes": 6062,
+      "file": "{local-profile}/verification.json",
+      "sha256": "8d3d4fb50553c153ddf03359adb03495034cf3fd147e47bd7aad6b37924a63f3"
+    },
+    {
+      "bytes": 14714,
+      "file": "{local-profile}/independent-integration-audit.json",
+      "sha256": "412f085975ae87745bebf6d952792e3801edf60f74e775e8bef1e557b3c8b96a"
+    },
+    {
+      "bytes": 110588,
+      "file": "{local-profile}/diagnostic/paired-smoke.json",
+      "sha256": "c71a256f9c950b852b090c8cbda3b2ed853d2ba03a86bd400c48435b9d20c12a"
+    },
+    {
+      "bytes": 196952,
+      "file": "{local-profile}/diagnostic/diagnostic.json",
+      "sha256": "f14514259cdf1d156007f61103fefcdbac1a3cb47eab9841c30c4ad49666c832"
+    },
+    {
+      "bytes": 73561,
+      "file": "{local-profile}/diagnostic/native-profile.json",
+      "sha256": "0e97d73bb36b58c9165608a7697472011d67231b06d4cf659ce318f7459097ee"
+    },
+    {
+      "bytes": 106021,
+      "file": "{local-profile}/diagnostic/timers.json",
+      "sha256": "5a0b0a015dd3f4c2ca5602e4bb1eb4cee45b5ddc6b46dd645e3734a8da929cff"
+    },
+    {
+      "bytes": 4211,
+      "file": "{local-profile}/diagnostic/source-manifest.json",
+      "sha256": "926f72f8cd34f961725d9beb9a1f90c713d8b3a9b747cebae11f079d66799e51"
+    }
+  ],
+  "fixture": {
+    "channels": 2,
+    "frames": 1058400,
+    "origin": "First contiguous 24 seconds of the pinned Torchaudio hdemucs_mix.wav excerpt; no looping, resampling or normalization before the original inference procedure.",
+    "original_asset_sha256": "f2420feedcdee9591dd649442c81149e31a0c06ee8c6e655d93d8f8e742cf706",
+    "pcm_interleaved_sha256": "68fe8518a77a5f7f628da7455bce402c545d96bdd5d42ff6580bd82e2b73d1f7",
+    "pcm_planar_sha256": "12800ce4d84ad94724a3aec293d115f3c33feb9b4bb8ccd1067ce130081763b2",
+    "sample_rate": 44100,
+    "seconds": 24,
+    "use": "Implementation comparison only; no audio is included in this public summary and this is not a held-out separation-quality evaluation.",
+    "wav_sha256": "d9891814e6a8010d292f73651620f3d840e9aae416af7818b9ccc7b637e8f6e0"
+  },
+  "identity_checks": {
+    "compiled_build_entries_verified": 226,
+    "initialization_mapped_files": 43,
+    "initialization_transition": {
+      "added_objects": [
+        "042c66dec39ffa933ac25f822a819acce2752fc5894efda8e98df4cd0eaf7d86",
+        "a62d2695a5d3c36e04e08b56423ab410fc84b9c8d6c189b2edb92d4d0993be79"
+      ],
+      "common_file_bytes_unchanged": true,
+      "configuration_unchanged": true,
+      "mapping_set_unchanged": false,
+      "removed_objects": [],
+      "roles_unchanged": true
+    },
+    "scope": "File-backed ELF mapping identities at phase endpoints, not complete relocation/symbol-binding proof, continuous monitoring, or JIT-code identity.",
+    "selected_actual_mapped_files": {
+      "configured_openblas": {
+        "bytes": 34231848,
+        "file": "{runtime}/libopenblas.so.0.3",
+        "mappings": 1,
+        "name": "libopenblas.so.0.3",
+        "resolved_path_sha256": "0686535a834a6215edd028ce6e7cda527f9a68a54466c4439dfe75c68709fb33",
+        "sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e"
+      },
+      "ggml": {
+        "bytes": 60360,
+        "file": "{build}/ggml/src/libggml.so.0.26.0",
+        "mappings": 1,
+        "name": "libggml.so.0.26.0",
+        "resolved_path_sha256": "9ccae23acd507697866f9e54440622a2b023c5665ab814d73dc49796541ba76e",
+        "sha256": "f7f53f1759a203a527c12b8530e2796c8efffe0ac09f42e3b2240ce7c6106aed"
+      },
+      "ggml-base": {
+        "bytes": 964048,
+        "file": "{build}/ggml/src/libggml-base.so.0.26.0",
+        "mappings": 1,
+        "name": "libggml-base.so.0.26.0",
+        "resolved_path_sha256": "ef1ce3eed2b486d667d3e74031848121ee9964cf5c651f1166a948fa93daa1de",
+        "sha256": "c951995c746e404969f74333d48956fbbca5765c6771d7b1d1fd952906be8be0"
+      },
+      "ggml-blas": {
+        "bytes": 64512,
+        "file": "{build}/ggml/src/ggml-blas/libggml-blas.so.0.26.0",
+        "mappings": 1,
+        "name": "libggml-blas.so.0.26.0",
+        "resolved_path_sha256": "e42355f758dd5a56a346b513c90d0df1f120bc2ddfe04bc09fc61978999a8ac1",
+        "sha256": "28a6d15a3ea3cec38dbd5fb4c62a313a16bf489afef88666f95e49841c4b4810"
+      },
+      "ggml-cpu": {
+        "bytes": 1687736,
+        "file": "{build}/ggml/src/libggml-cpu.so.0.26.0",
+        "mappings": 1,
+        "name": "libggml-cpu.so.0.26.0",
+        "resolved_path_sha256": "3c9cbe66b86f32a4b838ac10ccd82291af2be5f535f656cf746b7db0f52e453a",
+        "sha256": "8be1723db29fc9857d9094f1a00b79901fa717b03bb0f8b0aa4532b04249fbb4"
+      },
+      "native_library": {
+        "bytes": 346592,
+        "file": "{build}/src/libscnet-validation.so",
+        "mappings": 1,
+        "name": "libscnet-validation.so",
+        "resolved_path_sha256": "f4601fa74d3aa523149525706d03e5984b56612daaada57f643c3e6403cee0d7",
+        "sha256": "bc7cbd883d0df7152e7285350ac1b84f25ae41e36e80115cf58cef502b2aeb69"
+      },
+      "openmp_candidates": [
+        {
+          "bytes": 253849,
+          "file": "{torch}/lib/libgomp.so.1",
+          "mappings": 1,
+          "name": "libgomp.so.1",
+          "resolved_path_sha256": "b0f1fd023781fe49dfeb7d7f064f5565993ba3592978aef58d7ae08d62402d3e",
+          "sha256": "e4b79735f816cbb906c8bf35b31847c5ce667cfbdbe76bd18aaf6e7baad2686e"
+        }
+      ],
+      "torch_cpu": {
+        "bytes": 427038688,
+        "file": "{torch}/lib/libtorch_cpu.so",
+        "mappings": 1,
+        "name": "libtorch_cpu.so",
+        "resolved_path_sha256": "4d99d8319a59aba20252fe0e73737f9563d100135953a43d1bfefe31c557a0ae",
+        "sha256": "629d28a5fb24e2c33df077e2d98d5da0c73d0b53e628bb826fd4ba36616b482b"
+      }
+    },
+    "source_snapshots_verified": 40,
+    "timed_mapped_files_verified": 45,
+    "timed_transition": {
+      "added_objects": [],
+      "common_file_bytes_unchanged": true,
+      "configuration_unchanged": true,
+      "mapping_set_unchanged": true,
+      "removed_objects": [],
+      "roles_unchanged": true
+    }
+  },
+  "independent_review": {
+    "new_inference_or_timing_performed_by_reviewers": false,
+    "recorded_stem_metric_decisions_recomputed": 32,
+    "source_and_file_bytes_rehashed": true,
+    "timing_order_and_all_medians_recomputed": true,
+    "waveform_metrics_recomputed_from_output_tensors": false
+  },
+  "instrumented_cold_call": {
+    "all_graph_nodes_mapped": true,
+    "coarse_ms": {
+      "fft": 868.3289999999998,
+      "graph_build": 14.802,
+      "istft": 297.848,
+      "lstm": 6167.258,
+      "network": 17736.455,
+      "separate": 18612.906,
+      "stft": 69.504
+    },
+    "frames": 1058400,
+    "graph_operations_ms": [
+      {
+        "backend": "CPU",
+        "ms": 6168.67,
+        "op": "scnet_cpu_lstm"
+      },
+      {
+        "backend": "BLAS",
+        "ms": 4293.273999999999,
+        "op": "MUL_MAT"
+      },
+      {
+        "backend": "BLAS",
+        "ms": 2488.5199999999995,
+        "op": "OUT_PROD"
+      },
+      {
+        "backend": "CPU",
+        "ms": 951.6610000000001,
+        "op": "scnet_cpu_fft"
+      },
+      {
+        "backend": "CPU",
+        "ms": 799.9300000000001,
+        "op": "scnet_cpu_cont"
+      },
+      {
+        "backend": "CPU",
+        "ms": 509.90599999999995,
+        "op": "scnet_cpu_im2col_columns"
+      },
+      {
+        "backend": "CPU",
+        "ms": 421.94599999999997,
+        "op": "scnet_cpu_add"
+      },
+      {
+        "backend": "CPU",
+        "ms": 375.3989999999999,
+        "op": "scnet_cpu_concat"
+      },
+      {
+        "backend": "CPU",
+        "ms": 373.3870000000001,
+        "op": "NORM"
+      },
+      {
+        "backend": "CPU",
+        "ms": 371.23900000000003,
+        "op": "COL2IM_1D"
+      },
+      {
+        "backend": "CPU",
+        "ms": 358.62600000000003,
+        "op": "SIGMOID"
+      },
+      {
+        "backend": "CPU",
+        "ms": 308.317,
+        "op": "GELU_ERF"
+      },
+      {
+        "backend": "CPU",
+        "ms": 152.70600000000002,
+        "op": "scnet_cpu_mul"
+      },
+      {
+        "backend": "CPU",
+        "ms": 111.16199999999999,
+        "op": "scnet_cpu_pad"
+      },
+      {
+        "backend": "CPU",
+        "ms": 15.421999999999999,
+        "op": "CPY"
+      },
+      {
+        "backend": "CPU",
+        "ms": 7.148000000000001,
+        "op": "SILU"
+      },
+      {
+        "backend": "CPU",
+        "ms": 3.307999999999999,
+        "op": "RESHAPE"
+      },
+      {
+        "backend": "CPU",
+        "ms": 2.571,
+        "op": "VIEW"
+      },
+      {
+        "backend": "BLAS",
+        "ms": 1.8889999999999993,
+        "op": "RESHAPE"
+      },
+      {
+        "backend": "CPU",
+        "ms": 0.8850000000000005,
+        "op": "PERMUTE"
+      },
+      {
+        "backend": "CPU",
+        "ms": 0.137,
+        "op": "TRANSPOSE"
+      },
+      {
+        "backend": "BLAS",
+        "ms": 0.01800000000000001,
+        "op": "VIEW"
+      },
+      {
+        "backend": "BLAS",
+        "ms": 0.007,
+        "op": "PERMUTE"
+      }
+    ],
+    "interpretation": "One instrumented cold full-pipeline call; no warm throughput or original comparison. Graph callbacks synchronize individual nodes and change scheduling granularity. LSTM parts and graph nodes are nested in coarse network/separate timers: do not add them together. Portable recurrence and FFT worker-zero spans are not whole-node CPU-work totals.",
+    "lstm_parts_ms": {
+      "gates_ms": 2230.6,
+      "gemm_ms": 3932.049,
+      "reset_ms": 1.841
+    },
+    "lstm_records": 36,
+    "profile_chunks": 3,
+    "seconds": 18.626852394998423
+  },
+  "limitations": [
+    "The native median is only about 1.0 percent below the original in these three local pairs. This does not establish a broad or repeatable speed advantage.",
+    "This diagnostic covers only the small F16 model, full output waveforms, and this CPU/runtime. It does not qualify either model family size or any precision for release.",
+    "No 35-stage captures are produced here. Gate decisions were independently re-evaluated from recorded metrics, without pretending to reconstruct output tensors.",
+    "Cold instrumented timings synchronize graph nodes and are separate from the BENCH=0 paired medians. Nested timing categories must not be added together.",
+    "Current-source 4c83d4e/ggml1b binaries are used here; this result is distinct from the earlier native-only replay compiled against ggml2a."
+  ],
+  "model": {
+    "file_sha256": "8441b23c2b6ba47e8357fd863d717af88a5568f1937a3ff328c921c7143bd059",
+    "matrix_inventory": {
+      "matrix_elements": 10527600,
+      "minimum_fraction": 0.5,
+      "target_type_matrix_elements": 10527600,
+      "target_type_matrix_fraction": 1.0
+    },
+    "precision": "f16",
+    "variant": "scnet"
+  },
+  "original": {
+    "checkpoint_sha256": "f8aff3bc8dd816aad392800d9d69519add719a2fbd22550af6f8cb2138d25ff5",
+    "checkpoint_url": "https://drive.google.com/file/d/1CdEIIqsoRfHn1SJ7rccPfyYioW3BlXcW/view",
+    "source_hashes": {
+      "LICENSE": "0bdf1b69335198118ab16cfc50d337b496b8c6d90e83beeaba4643781ab62513",
+      "conf/config.yaml": "bc16895f69551cd8becbba384ae33e6e615a4792649b866036884f4a9a4bb4b0",
+      "scnet/SCNet.py": "85a15ea5d28285a0cf0a24d6266a28d043c5a655d47aa41684ef256d84e7bc4a",
+      "scnet/__init__.py": "21b5f8fae849055f3b428d2353de72b477a722cc44e87c6fa0d3b22ac5f36fa2",
+      "scnet/apply.py": "68b60535ad50b9b6cb0da4e4a0e7a269ff1349d345de30e666bdbda3d8fc8a31",
+      "scnet/inference.py": "06c5c8cf4aeb4b7a0edf7ac698d2f454ead0bd3b0411d0b519815a50068597b8",
+      "scnet/separation.py": "43402dc6579436d3b5abb921990572684beed8fa10b377a112892b438f40713b",
+      "scnet/utils.py": "03a6311760dad60d7ccbd1a5416a3c10f613c8b9eb9f08691019589a2f692fdf"
+    },
+    "source_revision": "5d95bf96b19c3eede63248d171efeca8e3abb948",
+    "source_url": "https://github.com/starrytong/SCNet",
+    "torch_version": "2.8.0+cpu",
+    "variant": "scnet"
+  },
+  "original_dtype": "float32",
+  "paired_result": {
+    "calls": [
+      {
+        "complete": true,
+        "implementation": "original",
+        "input_unchanged": true,
+        "iteration": 0,
+        "pcm_sha256": "50f96615b79c5f9abe6a433a627802df5cc11ca8ac96bdcb1cc4c43ebb9f5bea",
+        "quality_acceptance": true,
+        "seconds": 16.66048358000262,
+        "stems": {
+          "bass": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          },
+          "drums": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          },
+          "other": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          },
+          "vocals": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          }
+        }
+      },
+      {
+        "complete": true,
+        "implementation": "native",
+        "input_unchanged": true,
+        "iteration": 0,
+        "pcm_sha256": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+        "quality_acceptance": true,
+        "seconds": 17.41106213799867,
+        "stems": {
+          "bass": {
+            "acceptance": true,
+            "cos_global": 0.9999999620778863,
+            "elements": 2116800,
+            "max_abs": 0.0002290084958076477,
+            "norm_ratio": 1.0000478145225429,
+            "relative_l2": 0.00027952472917415743,
+            "rms_error": 3.6901303050224006e-05
+          },
+          "drums": {
+            "acceptance": true,
+            "cos_global": 0.9999996778509443,
+            "elements": 2116800,
+            "max_abs": 0.00040817540138959885,
+            "norm_ratio": 0.9999045697674525,
+            "relative_l2": 0.0008082966974417351,
+            "rms_error": 1.258171390598872e-05
+          },
+          "other": {
+            "acceptance": true,
+            "cos_global": 0.9999999592974512,
+            "elements": 2116800,
+            "max_abs": 0.00022212229669094086,
+            "norm_ratio": 1.0000436239087738,
+            "relative_l2": 0.0002886376382974115,
+            "rms_error": 1.4446651751648114e-05
+          },
+          "vocals": {
+            "acceptance": true,
+            "cos_global": 0.9999999579901405,
+            "elements": 2116800,
+            "max_abs": 0.0002951622009277344,
+            "norm_ratio": 0.9999859885391181,
+            "relative_l2": 0.0002901979623980883,
+            "rms_error": 1.1106523141584668e-05
+          }
+        }
+      },
+      {
+        "complete": true,
+        "implementation": "native",
+        "input_unchanged": true,
+        "iteration": 1,
+        "pcm_sha256": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+        "quality_acceptance": true,
+        "seconds": 17.12417553100022,
+        "stems": {
+          "bass": {
+            "acceptance": true,
+            "cos_global": 0.9999999620778863,
+            "elements": 2116800,
+            "max_abs": 0.0002290084958076477,
+            "norm_ratio": 1.0000478145225429,
+            "relative_l2": 0.00027952472917415743,
+            "rms_error": 3.6901303050224006e-05
+          },
+          "drums": {
+            "acceptance": true,
+            "cos_global": 0.9999996778509443,
+            "elements": 2116800,
+            "max_abs": 0.00040817540138959885,
+            "norm_ratio": 0.9999045697674525,
+            "relative_l2": 0.0008082966974417351,
+            "rms_error": 1.258171390598872e-05
+          },
+          "other": {
+            "acceptance": true,
+            "cos_global": 0.9999999592974512,
+            "elements": 2116800,
+            "max_abs": 0.00022212229669094086,
+            "norm_ratio": 1.0000436239087738,
+            "relative_l2": 0.0002886376382974115,
+            "rms_error": 1.4446651751648114e-05
+          },
+          "vocals": {
+            "acceptance": true,
+            "cos_global": 0.9999999579901405,
+            "elements": 2116800,
+            "max_abs": 0.0002951622009277344,
+            "norm_ratio": 0.9999859885391181,
+            "relative_l2": 0.0002901979623980883,
+            "rms_error": 1.1106523141584668e-05
+          }
+        }
+      },
+      {
+        "complete": true,
+        "implementation": "original",
+        "input_unchanged": true,
+        "iteration": 1,
+        "pcm_sha256": "50f96615b79c5f9abe6a433a627802df5cc11ca8ac96bdcb1cc4c43ebb9f5bea",
+        "quality_acceptance": true,
+        "seconds": 18.694736795998324,
+        "stems": {
+          "bass": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          },
+          "drums": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          },
+          "other": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          },
+          "vocals": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          }
+        }
+      },
+      {
+        "complete": true,
+        "implementation": "original",
+        "input_unchanged": true,
+        "iteration": 2,
+        "pcm_sha256": "50f96615b79c5f9abe6a433a627802df5cc11ca8ac96bdcb1cc4c43ebb9f5bea",
+        "quality_acceptance": true,
+        "seconds": 17.301418047998595,
+        "stems": {
+          "bass": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          },
+          "drums": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          },
+          "other": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          },
+          "vocals": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          }
+        }
+      },
+      {
+        "complete": true,
+        "implementation": "native",
+        "input_unchanged": true,
+        "iteration": 2,
+        "pcm_sha256": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+        "quality_acceptance": true,
+        "seconds": 17.11208437300229,
+        "stems": {
+          "bass": {
+            "acceptance": true,
+            "cos_global": 0.9999999620778863,
+            "elements": 2116800,
+            "max_abs": 0.0002290084958076477,
+            "norm_ratio": 1.0000478145225429,
+            "relative_l2": 0.00027952472917415743,
+            "rms_error": 3.6901303050224006e-05
+          },
+          "drums": {
+            "acceptance": true,
+            "cos_global": 0.9999996778509443,
+            "elements": 2116800,
+            "max_abs": 0.00040817540138959885,
+            "norm_ratio": 0.9999045697674525,
+            "relative_l2": 0.0008082966974417351,
+            "rms_error": 1.258171390598872e-05
+          },
+          "other": {
+            "acceptance": true,
+            "cos_global": 0.9999999592974512,
+            "elements": 2116800,
+            "max_abs": 0.00022212229669094086,
+            "norm_ratio": 1.0000436239087738,
+            "relative_l2": 0.0002886376382974115,
+            "rms_error": 1.4446651751648114e-05
+          },
+          "vocals": {
+            "acceptance": true,
+            "cos_global": 0.9999999579901405,
+            "elements": 2116800,
+            "max_abs": 0.0002951622009277344,
+            "norm_ratio": 0.9999859885391181,
+            "relative_l2": 0.0002901979623980883,
+            "rms_error": 1.1106523141584668e-05
+          }
+        }
+      }
+    ],
+    "complete": true,
+    "native_median_seconds": 17.12417553100022,
+    "native_pcm_hash_equal_in_instrumented_call_and_all_four_paired_calls": true,
+    "native_pcm_hash_equal_to_retained_prior_cache_native_output": true,
+    "original_median_seconds": 17.301418047998595,
+    "pcm_sha256": {
+      "native": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+      "original": "50f96615b79c5f9abe6a433a627802df5cc11ca8ac96bdcb1cc4c43ebb9f5bea"
+    },
+    "performance_smoke_acceptance": true,
+    "speedup": 1.0103504263126426,
+    "warmups": [
+      {
+        "complete": true,
+        "implementation": "original",
+        "input_unchanged": true,
+        "iteration": 0,
+        "pcm_sha256": "50f96615b79c5f9abe6a433a627802df5cc11ca8ac96bdcb1cc4c43ebb9f5bea",
+        "quality_acceptance": true,
+        "seconds": 15.967863915997441,
+        "stems": {
+          "bass": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          },
+          "drums": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          },
+          "other": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          },
+          "vocals": {
+            "acceptance": true,
+            "cos_global": 1.0,
+            "elements": 2116800,
+            "max_abs": 0.0,
+            "norm_ratio": 1.0,
+            "relative_l2": 0.0,
+            "rms_error": 0.0
+          }
+        }
+      },
+      {
+        "complete": true,
+        "implementation": "native",
+        "input_unchanged": true,
+        "iteration": 0,
+        "pcm_sha256": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+        "quality_acceptance": true,
+        "seconds": 17.133236137000495,
+        "stems": {
+          "bass": {
+            "acceptance": true,
+            "cos_global": 0.9999999620778863,
+            "elements": 2116800,
+            "max_abs": 0.0002290084958076477,
+            "norm_ratio": 1.0000478145225429,
+            "relative_l2": 0.00027952472917415743,
+            "rms_error": 3.6901303050224006e-05
+          },
+          "drums": {
+            "acceptance": true,
+            "cos_global": 0.9999996778509443,
+            "elements": 2116800,
+            "max_abs": 0.00040817540138959885,
+            "norm_ratio": 0.9999045697674525,
+            "relative_l2": 0.0008082966974417351,
+            "rms_error": 1.258171390598872e-05
+          },
+          "other": {
+            "acceptance": true,
+            "cos_global": 0.9999999592974512,
+            "elements": 2116800,
+            "max_abs": 0.00022212229669094086,
+            "norm_ratio": 1.0000436239087738,
+            "relative_l2": 0.0002886376382974115,
+            "rms_error": 1.4446651751648114e-05
+          },
+          "vocals": {
+            "acceptance": true,
+            "cos_global": 0.9999999579901405,
+            "elements": 2116800,
+            "max_abs": 0.0002951622009277344,
+            "norm_ratio": 0.9999859885391181,
+            "relative_l2": 0.0002901979623980883,
+            "rms_error": 1.1106523141584668e-05
+          }
+        }
+      }
+    ],
+    "waveform_acceptance": true,
+    "waveform_extrema": {
+      "maximum_norm_ratio": 1.0000478145225429,
+      "maximum_relative_l2": 0.0008082966974417351,
+      "minimum_cosine": 0.9999996778509443,
+      "minimum_norm_ratio": 0.9999045697674525
+    }
+  },
+  "performance_qualification": false,
+  "profile": {
+    "mode": "pipeline",
+    "overlap": 0.5,
+    "segment_seconds": 20,
+    "shift_seed": 0,
+    "shifts": 1
+  },
+  "protocol": {
+    "execution_controls": {
+      "CRISPASR_CPU_GEMM": null,
+      "CRISPASR_SCNET_BENCH": "0",
+      "CRISPASR_SCNET_BLAS": null,
+      "CRISPASR_SCNET_CAPTURE_GGUF": null,
+      "CRISPASR_SCNET_GPU": "0",
+      "CRISPASR_SCNET_SCALAR_GATES": null,
+      "CRISPASR_SCNET_SCALAR_LSTM": null
+    },
+    "instrumented_call_is_separate_from_paired_measurements": true,
+    "repetitions": 3,
+    "required_intermediate_stages_checked": 0,
+    "timing_boundary": "public separation call, normalization/chunking and owned CPU result conversion; includes original helper printing to a local log; excludes model/audio load and quality metrics",
+    "warmups_per_implementation": 1,
+    "waveform_policy": {
+      "norm_ratio_bounds": [
+        0.99,
+        1.01
+      ],
+      "relative_l2_max": 0.05,
+      "strict_cosine_gt": 0.999
+    }
+  },
+  "qualification": false,
+  "runtime": {
+    "blas_runtime": {
+      "openblas_get_config": "OpenBLAS 0.3.34 NO_LAPACK NO_LAPACKE DYNAMIC_ARCH NO_AFFINITY Cooperlake MAX_THREADS=64",
+      "openblas_get_corename": "Cooperlake",
+      "openblas_get_num_threads": 2,
+      "openblas_get_parallel": 1
+    },
+    "cpu_capability_overrides": {
+      "ATEN_CPU_CAPABILITY": null,
+      "DNNL_MAX_CPU_ISA": null,
+      "MKL_CBWR": null,
+      "MKL_DEBUG_CPU_TYPE": null,
+      "MKL_ENABLE_INSTRUCTIONS": null,
+      "ONEDNN_MAX_CPU_ISA": null,
+      "OPENBLAS_CORETYPE": null
+    },
+    "cpu_model": "AMD EPYC 9V74 80-Core Processor",
+    "cpu_quota": "800000 100000",
+    "cpuset": "0-8",
+    "dedicated_host_capacity_established": false,
+    "loader_overrides": {
+      "LD_AUDIT": null,
+      "LD_LIBRARY_PATH": null,
+      "LD_PRELOAD": null
+    },
+    "logical_cpus": 9,
+    "memory_limit_bytes": "8589934592",
+    "native_backend": "CPU+BLAS/CPU-LSTM-FFT",
+    "native_blas_thread_queries": {
+      "openblas_get_num_threads": 2
+    },
+    "native_compute_precision": "F32 activations/accumulation; CPU recurrent/FFT; gates=avx2_fma; fft=avx2",
+    "platform": "Linux-6.18.57-x86_64-with-glibc2.39",
+    "thread_environment": {
+      "BLIS_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2",
+      "OMP_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "VECLIB_MAXIMUM_THREADS": "2"
+    },
+    "torch_blas": "Intel oneAPI MKL 2024.2; oneDNN 3.7.1; default AVX512 dispatch observed",
+    "torch_cpu_capability": "AVX512",
+    "torch_interop_threads": 1,
+    "torch_intraop_threads": 2,
+    "torch_version": "2.8.0+cpu",
+    "wait_policy_overrides": {
+      "GOMP_SPINCOUNT": null,
+      "KMP_BLOCKTIME": null,
+      "OMP_WAIT_POLICY": null,
+      "OPENBLAS_THREAD_TIMEOUT": null
+    }
+  },
+  "schema": "scnet_local_normal_runtime_profile_summary_v1",
+  "scope": "Completed local small SCNet F16 diagnostic on an unchanged current-source build: one instrumented cold call, then a separate process with one original/native warmup each and three alternating original/native pairs. This is not full model qualification.",
+  "source": {
+    "all_protocol_sources_and_build_bindings_unchanged_before_after": true,
+    "commit": "4c83d4e3652efafa07ee9ecd431643399b60c7ce",
+    "ggml_commit": "1b972bb754aa5f83e2d872ccf37a335717f6658d",
+    "native_source_sha256": "eeb6e583d499b73e28d3fe2b1bb3f55f7be2a9edde8fe81140608b446661fc1c",
+    "profile_script_sha256": "d7d6d87b15676e76619ccaba24793b015c2c7d9490518df41a5835d2c905526f",
+    "repository": "https://github.com/CrispStrobe/CrispASR",
+    "runtime_identity_helper_sha256": "523a9336f5dc6626b61c4241a48b19aac8f3e7e574c1de0f99c3c88513a1d3c4",
+    "validator_sha256": "b3069dc112619305772f69cdc8845df0e631932a318b4cb68c5690ab29b67831"
+  }
+}

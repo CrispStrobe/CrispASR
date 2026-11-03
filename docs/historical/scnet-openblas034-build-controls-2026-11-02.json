@@ -1,0 +1,1831 @@
+{
+  "acceptance": false,
+  "ci_helper_controls": {
+    "acceptance": false,
+    "commands": [
+      {
+        "argv": [
+          "cmake",
+          "-S",
+          "{provider}/OpenBLAS-source",
+          "-B",
+          "{provider}/OpenBLAS-build",
+          "-G",
+          "Ninja",
+          "-DCMAKE_BUILD_TYPE=Release",
+          "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+          "-DCMAKE_INSTALL_PREFIX={provider}/install",
+          "-DBUILD_SHARED_LIBS=ON",
+          "-DBUILD_STATIC_LIBS=OFF",
+          "-DBUILD_WITHOUT_LAPACK=ON",
+          "-DBUILD_WITHOUT_LAPACKE=ON",
+          "-DBUILD_WITHOUT_CBLAS=OFF",
+          "-DBUILD_TESTING=OFF",
+          "-DBUILD_BENCHMARKS=OFF",
+          "-DDYNAMIC_ARCH=ON",
+          "-DDYNAMIC_OLDER=OFF",
+          "-DTARGET=CORE2",
+          "-DUSE_THREAD=ON",
+          "-DUSE_OPENMP=OFF",
+          "-DINTERFACE64=OFF",
+          "-DNUM_THREADS=64",
+          "-DNO_AFFINITY=ON",
+          "-DNO_WARMUP=ON"
+        ],
+        "exit_code": 0,
+        "label": "configure",
+        "log": "configure.log",
+        "sha256": "fff7832e39a3b447e5a6386045c8cc54b72a8597c0a59756eb2b34800de23266"
+      },
+      {
+        "argv": [
+          "cmake",
+          "--build",
+          "{provider}/OpenBLAS-build",
+          "--parallel",
+          "2",
+          "--target",
+          "openblas_shared"
+        ],
+        "exit_code": 0,
+        "label": "build",
+        "log": "build.log",
+        "sha256": "8c35b1682f73592d30612d7b0fabdb384fcfff35cb5a076cb48b85b1368aa794"
+      },
+      {
+        "argv": [
+          "cmake",
+          "--install",
+          "{provider}/OpenBLAS-build"
+        ],
+        "exit_code": 0,
+        "label": "install",
+        "log": "install.log",
+        "sha256": "254102778b880ea4bff703604d193bf43eb3d588b7d4d97f20f8be8955839732"
+      },
+      {
+        "argv": [
+          "cc",
+          "-std=c11",
+          "{provider}/ci-helper-check-v2/abi-control.c",
+          "-I{provider}/install/include/openblas",
+          "{provider}/install/lib/libopenblas.so",
+          "-Wl,-rpath,{provider}/install/lib",
+          "-o",
+          "{provider}/abi-control"
+        ],
+        "exit_code": 0,
+        "label": "abi-build",
+        "log": "abi-build.log",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "argv": [
+          "{provider}/abi-control"
+        ],
+        "exit_code": 0,
+        "label": "abi-run",
+        "log": "abi-run.log",
+        "sha256": "97242526ced7f41f24e879d2cf62c27084e2b5895cd90760d7c7e73880b22557"
+      }
+    ],
+    "complete": true,
+    "errors": [],
+    "installed_files": {
+      "include/openblas/cblas.h": {
+        "bytes": 63184,
+        "sha256": "3955158bd0971b1ce0b5a9324c301bdcf4ddeb18baf2e0ca5e1dbe1387c2d28f"
+      },
+      "include/openblas/openblas_config.h": {
+        "bytes": 5065,
+        "sha256": "ac5914e30db6e171f901cd276939d64d2bcd70ad1a8f90435c0f0e48dc6052b8"
+      },
+      "lib/cmake/OpenBLAS/OpenBLASConfig.cmake": {
+        "bytes": 3626,
+        "sha256": "9f56e7b353b4a36888bf1d2475f26d2bf950cc88638ac3ad8d3f8641fcfd3625"
+      },
+      "lib/cmake/OpenBLAS/OpenBLASConfigVersion.cmake": {
+        "bytes": 1862,
+        "sha256": "aafc66382ca41f8d4015692a6568e27c99148b1a95af45ddfd912f5ea437d8a9"
+      },
+      "lib/cmake/OpenBLAS/OpenBLASTargets-release.cmake": {
+        "bytes": 872,
+        "sha256": "5d6f95490ae9ff395aaf28943f72e5941d5d0e115282c26b968efc1d4df3066a"
+      },
+      "lib/cmake/OpenBLAS/OpenBLASTargets.cmake": {
+        "bytes": 4178,
+        "sha256": "a62939782e10b4f3e8fd6292a2998a962c113f4ab634ecd47c24250516d1f2d0"
+      },
+      "lib/libopenblas.so": {
+        "bytes": 34231848,
+        "sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e"
+      },
+      "lib/libopenblas.so.0": {
+        "bytes": 34231848,
+        "sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e"
+      },
+      "lib/libopenblas.so.0.3": {
+        "bytes": 34231848,
+        "sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e"
+      },
+      "lib/pkgconfig/openblas.pc": {
+        "bytes": 682,
+        "sha256": "b138134a188381f5add41543bc4ee465360f442572ec7845335e6cd592012350"
+      }
+    },
+    "license": "BSD-3-Clause",
+    "qualification": false,
+    "repository": "https://github.com/OpenMathLib/OpenBLAS.git",
+    "revision": "e0166008be8e466242aa76b2ff75ce3f0fbf574a",
+    "runtime": {
+      "openblas_get_config": "OpenBLAS 0.3.34 NO_LAPACK NO_LAPACKE DYNAMIC_ARCH NO_AFFINITY Cooperlake MAX_THREADS=64",
+      "openblas_get_corename": "Cooperlake",
+      "openblas_get_num_threads": 2,
+      "openblas_get_parallel": 1
+    },
+    "schema": 1,
+    "scope": "Pinned native BLAS dependency build and ABI control, not model qualification",
+    "source_hashes": {
+      "CMakeLists.txt": "131d9fd128ed74a26ca7ca6f2494da1a5d001f0ddad90cc2be13a9dc750d3702",
+      "LICENSE": "190b5a9c8d9723fe958ad33916bd7346d96fab3c5ea90832bb02d854f620fcff",
+      "README.md": "54ac8c2069cb15710e8b86121d854fe9b94c02c62270c8b056ba43a6b08b906f",
+      "cmake/system.cmake": "6543c6a2357e58d6ba18a21e7d0200597a6afe3ec0818de602120120f28e3594",
+      "cpuid_x86.c": "ddb7d11fd32a78eeed47245f98947f0bde973beaf7792cca71d623cf0b320e15",
+      "driver/others/dynamic.c": "e482b15d80e6d3defd75529fcf385e1c22e01f44e5dc3a9cefa52e8984a61a6f"
+    },
+    "source_unchanged": true,
+    "tree": "48a954159e77896d31a458369a8ebe198ad56ca7",
+    "version": "0.3.34"
+  },
+  "complete": true,
+  "interpretation": [
+    "Source pin, clean upstream tree, compiled-source identities, LP64 ABI, pthread mode and automatic runtime dispatch were checked before any model call.",
+    "Both baseline calls use the same 24-second input, two-thread configuration and exact unchanged SCNet compiled code as the previous provider build. The provider itself changes F32 rounding; output bytes are not assumed equal across providers.",
+    "The two new-provider outputs are identical to each other. They serve as the byte-comparison baseline for the separate allocator change.",
+    "No original model was loaded and no comparative speed or checkpoint-fidelity acceptance is claimed by these two calls.",
+    "Warmup and warmed resource/timing measurements are both retained. Minor faults count events; system CPU time is not a direct measurement of their latency."
+  ],
+  "performance_qualification": false,
+  "provider_math_controls": {
+    "cleared_environment": {
+      "LD_AUDIT": null,
+      "LD_LIBRARY_PATH": null,
+      "LD_PRELOAD": null,
+      "OPENBLAS_CORETYPE": null
+    },
+    "commands": [
+      {
+        "binary_sha256": "01b6aacbecef41cb4d1fdb1fb1f1a1111b3743f0ce59b46eebaa6021ee9341e1",
+        "compile_argv": [
+          "/usr/bin/c++",
+          "-std=c++17",
+          "-O2",
+          "-I{provider_diagnostic}/install/include/openblas",
+          "{provider_diagnostic}/provider_cpu_identity.cpp",
+          "-L{provider_diagnostic}/install/lib",
+          "-lopenblas",
+          "-Wl,-rpath,{provider_diagnostic}/install/lib",
+          "-o",
+          "{provider_diagnostic}/provider_cpu_identity"
+        ],
+        "exit_code": 0,
+        "name": "provider_cpu_identity",
+        "source_sha256": "d5d1aa53c55847e6de5e7368c378579d0284244af5b4c87ca835e4e178705ab8",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "875921fcfa535dbdaf61d6b896bcff0be813db41f7531863ee623e81ff2284d5"
+      },
+      {
+        "binary_sha256": "1e6090456608d82d4370878fd92e60bc69767703e59882c921fb470fd8dea8c4",
+        "compile_argv": [
+          "/usr/bin/c++",
+          "-std=c++17",
+          "-O2",
+          "-I{provider_diagnostic}/install/include/openblas",
+          "{provider_diagnostic}/provider_math_controls.cpp",
+          "-L{provider_diagnostic}/install/lib",
+          "-lopenblas",
+          "-Wl,-rpath,{provider_diagnostic}/install/lib",
+          "-o",
+          "{provider_diagnostic}/provider_math_controls"
+        ],
+        "exit_code": 0,
+        "name": "provider_math_controls",
+        "source_sha256": "fa777180b090b9753566b376f349fc8edfb1cb70d378a68c0060f9419e4b69a1",
+        "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "stdout_sha256": "b4728c3639664993dd8ce480b27171fa1acbd4efe710ee00b88d3754a24b5221"
+      }
+    ],
+    "math_controls": [
+      {
+        "input_buffers_unchanged": true,
+        "k": 13,
+        "m": 7,
+        "max_abs": 6.028970034321901e-08,
+        "max_bound_fraction": 0.09523555732051765,
+        "n": 11,
+        "output_padding_guards_unchanged": true,
+        "pass": true,
+        "relative_l2": 7.232825622916971e-08,
+        "right_transposed": false,
+        "threads": 1
+      },
+      {
+        "input_buffers_unchanged": true,
+        "k": 13,
+        "m": 7,
+        "max_abs": 6.028970034321901e-08,
+        "max_bound_fraction": 0.09523555732051765,
+        "n": 11,
+        "output_padding_guards_unchanged": true,
+        "pass": true,
+        "relative_l2": 7.232825622916971e-08,
+        "right_transposed": false,
+        "threads": 2
+      },
+      {
+        "input_buffers_unchanged": true,
+        "k": 13,
+        "m": 7,
+        "max_abs": 6.028970034321901e-08,
+        "max_bound_fraction": 0.09523555732051765,
+        "n": 11,
+        "output_padding_guards_unchanged": true,
+        "pass": true,
+        "relative_l2": 7.232825622916971e-08,
+        "right_transposed": true,
+        "threads": 1
+      },
+      {
+        "input_buffers_unchanged": true,
+        "k": 13,
+        "m": 7,
+        "max_abs": 6.028970034321901e-08,
+        "max_bound_fraction": 0.09523555732051765,
+        "n": 11,
+        "output_padding_guards_unchanged": true,
+        "pass": true,
+        "relative_l2": 7.232825622916971e-08,
+        "right_transposed": true,
+        "threads": 2
+      },
+      {
+        "input_buffers_unchanged": true,
+        "k": 128,
+        "m": 57,
+        "max_abs": 1.6370720494762736e-06,
+        "max_bound_fraction": 0.026742833647058612,
+        "n": 512,
+        "output_padding_guards_unchanged": true,
+        "pass": true,
+        "relative_l2": 2.0310449042150132e-07,
+        "right_transposed": false,
+        "threads": 1
+      },
+      {
+        "input_buffers_unchanged": true,
+        "k": 128,
+        "m": 57,
+        "max_abs": 1.6370720494762736e-06,
+        "max_bound_fraction": 0.026742833647058612,
+        "n": 512,
+        "output_padding_guards_unchanged": true,
+        "pass": true,
+        "relative_l2": 2.0310449042150132e-07,
+        "right_transposed": false,
+        "threads": 2
+      },
+      {
+        "input_buffers_unchanged": true,
+        "k": 128,
+        "m": 57,
+        "max_abs": 1.6370720494762736e-06,
+        "max_bound_fraction": 0.026742833647058612,
+        "n": 512,
+        "output_padding_guards_unchanged": true,
+        "pass": true,
+        "relative_l2": 2.0310449042150132e-07,
+        "right_transposed": true,
+        "threads": 1
+      },
+      {
+        "input_buffers_unchanged": true,
+        "k": 128,
+        "m": 57,
+        "max_abs": 1.6370720494762736e-06,
+        "max_bound_fraction": 0.026742833647058612,
+        "n": 512,
+        "output_padding_guards_unchanged": true,
+        "pass": true,
+        "relative_l2": 2.0310449042150132e-07,
+        "right_transposed": true,
+        "threads": 2
+      },
+      {
+        "input_buffers_unchanged": true,
+        "k": 256,
+        "m": 85,
+        "max_abs": 3.5931843562764243e-06,
+        "max_bound_fraction": 0.015033397577855894,
+        "n": 1024,
+        "output_padding_guards_unchanged": true,
+        "pass": true,
+        "relative_l2": 2.865642964395121e-07,
+        "right_transposed": false,
+        "threads": 1
+      },
+      {
+        "input_buffers_unchanged": true,
+        "k": 256,
+        "m": 85,
+        "max_abs": 3.5931843562764243e-06,
+        "max_bound_fraction": 0.015033397577855894,
+        "n": 1024,
+        "output_padding_guards_unchanged": true,
+        "pass": true,
+        "relative_l2": 2.865642964395121e-07,
+        "right_transposed": false,
+        "threads": 2
+      },
+      {
+        "input_buffers_unchanged": true,
+        "k": 256,
+        "m": 85,
+        "max_abs": 3.5931843562764243e-06,
+        "max_bound_fraction": 0.015033397577855894,
+        "n": 1024,
+        "output_padding_guards_unchanged": true,
+        "pass": true,
+        "relative_l2": 2.865642964395121e-07,
+        "right_transposed": true,
+        "threads": 1
+      },
+      {
+        "input_buffers_unchanged": true,
+        "k": 256,
+        "m": 85,
+        "max_abs": 3.5931843562764243e-06,
+        "max_bound_fraction": 0.015033397577855894,
+        "n": 1024,
+        "output_padding_guards_unchanged": true,
+        "pass": true,
+        "relative_l2": 2.865642964395121e-07,
+        "right_transposed": true,
+        "threads": 2
+      }
+    ],
+    "model_inference_performed": false,
+    "provider_cpu_identity": {
+      "cpuid": {
+        "avx2": true,
+        "avx512f": true,
+        "brand": "AMD EPYC 9V74 80-Core Processor                ",
+        "family": 25,
+        "fma": true,
+        "hypervisor": true,
+        "max_basic_leaf": 28,
+        "model": 17,
+        "sse42": true,
+        "stepping": 1,
+        "vendor": "AuthenticAMD"
+      },
+      "openblas": {
+        "blasint_bytes": 4,
+        "config": "OpenBLAS 0.3.34 NO_LAPACK NO_LAPACKE DYNAMIC_ARCH NO_AFFINITY Cooperlake MAX_THREADS=64",
+        "core": "Cooperlake",
+        "parallel": 1,
+        "sgemm_2x2_exact": true,
+        "threads": 2
+      }
+    },
+    "qualification": false,
+    "scope": "Provider ABI and independent F64 SGEMM controls only; no timing measurements."
+  },
+  "provider_preparation_snapshot": {
+    "acceptance": false,
+    "binaries": {
+      "build-scnet-openblas034-profile/bin/scnet-blas-thread-test": {
+        "bytes": 26984,
+        "sha256": "97c86078a4cd1a63f6bec156733f5c03e364646bc18f58bb5f0969ef96b009ed"
+      },
+      "build-scnet-openblas034-profile/bin/scnet-probe": {
+        "bytes": 323312,
+        "sha256": "5b488739e16478f4b68bef3c88409ad2d751fa8bc53204a1b521a7293e38dc03"
+      },
+      "build-scnet-openblas034-profile/src/libcrispasr-core.a": {
+        "bytes": 6795044,
+        "sha256": "9b7986337f11a3706001407ccfee02b14b1a34ce8cd7dd57570da3e84b865c12"
+      },
+      "build-scnet-openblas034-profile/src/libscnet-validation.so": {
+        "bytes": 341608,
+        "sha256": "ed25164316caa3a29314b745111aa3a9d1aa44d10621e161fda0e262a715bfc2"
+      },
+      "build-scnet-openblas034-profile/src/libscnet.a": {
+        "bytes": 349064,
+        "sha256": "dee391e7bbb083c730328b7d3e482ba28797ac3b1fd53c640370e303aae853ae"
+      }
+    },
+    "build": {
+      "argv": [
+        "{build_tools}/cmake/data/bin/cmake",
+        "--build",
+        "{repo}/build-scnet-openblas034-profile",
+        "--parallel",
+        "2",
+        "--target",
+        "scnet-validation",
+        "scnet-probe",
+        "scnet-blas-thread-test"
+      ],
+      "end_unix": 1793636407.305569,
+      "exit_code": 0,
+      "start_unix": 1793636352.1142101
+    },
+    "build_directory": "{repo}/build-scnet-openblas034-profile",
+    "cleared_environment": {
+      "LD_AUDIT": null,
+      "LD_LIBRARY_PATH": null,
+      "LD_PRELOAD": null,
+      "OPENBLAS_CORETYPE": null
+    },
+    "compiled_translation_units": {
+      "ggml/src/ggml-alloc.c": {
+        "object": "ggml/src/CMakeFiles/ggml-base.dir/ggml-alloc.c.o",
+        "object_sha256": "261c059518310a6541822489cf2a0d9bf0597c8bf076d7b030cd57f30c41405e",
+        "source_sha256": "a8e54a91afd2a45478a615bc53a581267bccbce4bf001bf45da592f394f4622b"
+      },
+      "ggml/src/ggml-backend-dl.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml.dir/ggml-backend-dl.cpp.o",
+        "object_sha256": "c524064cdb01a1d576a0b3758c0cd456933365981c09d3959fcd985b5d9ea537",
+        "source_sha256": "acd76df8b83bcdef6807bc7b0520f57b379d61b4ff1027c04aa4d140d16ad07f"
+      },
+      "ggml/src/ggml-backend-meta.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-base.dir/ggml-backend-meta.cpp.o",
+        "object_sha256": "e81d24e9c87d3ff8ed3986c34367c198154ad8947a6e32a6b1311e2c7c268433",
+        "source_sha256": "c6228f9abe274df86913a7ee648699c73bc13b9b417da13199174adfb11dc91f"
+      },
+      "ggml/src/ggml-backend-reg.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml.dir/ggml-backend-reg.cpp.o",
+        "object_sha256": "b51b2f0ca8726860efa58debf8e69143134ff1a450ac62f5d01a2f761b2c53c5",
+        "source_sha256": "0f63c69ad083e0744872f57d59d049b069283303f5bbc646222907d779afe4d1"
+      },
+      "ggml/src/ggml-backend.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-base.dir/ggml-backend.cpp.o",
+        "object_sha256": "7e9b93c3004af575bb146753be736d96da1b3dab55884082a323986ee46da907",
+        "source_sha256": "95f5276f5a043927169ae16c32fdd28d2fddac85c00f6b8058bd4a39cf795547"
+      },
+      "ggml/src/ggml-blas/ggml-blas.cpp": {
+        "object": "ggml/src/ggml-blas/CMakeFiles/ggml-blas.dir/ggml-blas.cpp.o",
+        "object_sha256": "1f75d525f77e61050c8a104d46d1985d559e37d8f4239d7ea4001f201bad0a70",
+        "source_sha256": "28fd0df50a7fd2aeec256fb7886e7e1efba9e2b2ec1ac892b34137398e792949"
+      },
+      "ggml/src/ggml-cpu/amx/amx.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/amx.cpp.o",
+        "object_sha256": "df8122cab1ecb04bfc6bf0867cd28ed2b9e89912585fa12d1eddb74df384372d",
+        "source_sha256": "0d1641ce16917e3f6260ff74523b158bb823599bbf76cbf9aedcc9d365de84d4"
+      },
+      "ggml/src/ggml-cpu/amx/mmq.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/amx/mmq.cpp.o",
+        "object_sha256": "69a29b84a91b9c74778e6dd21749a817145ac812b1dfa308cd712c45126bf53b",
+        "source_sha256": "0f95c80e0300eca3b3a3df07272042fee708425e19cd5f2c4cba7b253b26d226"
+      },
+      "ggml/src/ggml-cpu/arch/x86/quants.c": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/arch/x86/quants.c.o",
+        "object_sha256": "694eaff7c53a99f680b1c5f74bdbfe046fc4236381af1889cfd8d48a916b860c",
+        "source_sha256": "2909f2c8d2aca218244fa6a816061647f8073fb8d1b07759779cc40240be85a6"
+      },
+      "ggml/src/ggml-cpu/arch/x86/repack.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/arch/x86/repack.cpp.o",
+        "object_sha256": "5a36cc1a4110ff09bb47c4f676c261cb3734d967578eb4071fd9e75416f622ea",
+        "source_sha256": "c69735f83caf854172cac78eed2cbc022ef81c077e5f6aca55a49d3404a02331"
+      },
+      "ggml/src/ggml-cpu/binary-ops.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/binary-ops.cpp.o",
+        "object_sha256": "6d4f54dad1b948f1a4be6cfec20cc25cffc0ed21e4038660bcab8a73709f9c51",
+        "source_sha256": "2df261aadce36a20f5e3bf6961d4ca27b8c2d461afc41488361ee6ad09c1730d"
+      },
+      "ggml/src/ggml-cpu/ggml-cpu.c": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.c.o",
+        "object_sha256": "454d049708925b7e040eb0bd7d8b91d060106ed13a4eeb3718ee27adb7122046",
+        "source_sha256": "30f279dce88f5d150ab8df89017c3f94a0703e15270447f13d1390bbb2f690e3"
+      },
+      "ggml/src/ggml-cpu/ggml-cpu.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ggml-cpu.cpp.o",
+        "object_sha256": "f4b7833b5c5f9d0556f9760bdbb83e1ffbf72ab3ba30336053c0f5cbff69a708",
+        "source_sha256": "ccf382d3fbf126b5ddb5850a0a970656fb24e00587da4003419439277c91cd01"
+      },
+      "ggml/src/ggml-cpu/hbm.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/hbm.cpp.o",
+        "object_sha256": "61f538168aae927721750291f3e823586e97998baea9e80bd2efd9dc3c2cf111",
+        "source_sha256": "e5cf5c8327f99ccb58461d8416e27bc38da01d9bd450e48f3df69bd34a81a47c"
+      },
+      "ggml/src/ggml-cpu/llamafile/sgemm.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/llamafile/sgemm.cpp.o",
+        "object_sha256": "43624d4b0ed36d98937e9a56d17bd57db3c476607a3f9cb68aff3dacdd60eb48",
+        "source_sha256": "8413c9a0828ddea7289aee72a32c03bd56a23ee40179ec3600f9b0589a21e338"
+      },
+      "ggml/src/ggml-cpu/ops.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/ops.cpp.o",
+        "object_sha256": "ee7634ae2219cf5b9cb082a3b3a43f63d6be51ff0465a1ed00accb97a86a5a38",
+        "source_sha256": "b72e1301a521fdb30027498f9171e308772b095052f764c176d9bef317897e26"
+      },
+      "ggml/src/ggml-cpu/quants.c": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/quants.c.o",
+        "object_sha256": "49dca73bdad8f0f4ba82abe794f7a062402bb5884f5723a722b152fc5b4734ad",
+        "source_sha256": "a61f1011e49d05b5f99d352b158d5b8e36cf008294bb0db309f72bdd7f1d4e35"
+      },
+      "ggml/src/ggml-cpu/repack.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/repack.cpp.o",
+        "object_sha256": "5d69bbbabee167a6ef28aa77a5e29783553a23769730c1c1118d51143ee2f4c5",
+        "source_sha256": "5fa9f24cc2631609f40fa47a64078f77dccbe9f327711af91af671cd29b8b87d"
+      },
+      "ggml/src/ggml-cpu/tiled/tiled-kernel.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/tiled/tiled-kernel.cpp.o",
+        "object_sha256": "800f5822a34861eaf0b3feb469225fdaa5a7f428cdcebce5f4412d7aae32f166",
+        "source_sha256": "8f81a18b9a210fac732ecac020b048184edfe2c5e74a5cc95c4df89e60bc8f13"
+      },
+      "ggml/src/ggml-cpu/tiled/tiled.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/tiled/tiled.cpp.o",
+        "object_sha256": "1748810ae37bf53579e0b788e50f67c60e4bd3fbf51cc6bb7a7793ba5c78249b",
+        "source_sha256": "a5d92ce8f617696778e225de6658180649143fec3792c5cfef84170641f2d06e"
+      },
+      "ggml/src/ggml-cpu/traits.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/traits.cpp.o",
+        "object_sha256": "a3fc5d66cd6bbfac36ec498c98217b28a196907c4def0ebd3b4589ff1bf3d1b3",
+        "source_sha256": "a85bd3ff50c91cb67d14221988544664dfe5975db0811b330dc4a2f385239de4"
+      },
+      "ggml/src/ggml-cpu/unary-ops.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/unary-ops.cpp.o",
+        "object_sha256": "c74b12d894e8be7f4d6efc74b18c40b60b7a16538d1e4bad37f5b13dfaf82f41",
+        "source_sha256": "e63b382766f1b8c5ded1577be9704e85cb4e9cd24584f3e1474911a40146df33"
+      },
+      "ggml/src/ggml-cpu/vec.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-cpu.dir/ggml-cpu/vec.cpp.o",
+        "object_sha256": "4f83935239d39c2338ac7eb900481f2287eae4f266711362e5c5ec96b5da1ef2",
+        "source_sha256": "5c3cb1835ea490fb6e4676bf5accf49a73a590a5bb7cf2267daf4aa73a2955fb"
+      },
+      "ggml/src/ggml-opt.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-base.dir/ggml-opt.cpp.o",
+        "object_sha256": "b05ed6c95719754b24bfca43fcfe696bba9242dc0b34f5aa9a3496e0b44e7292",
+        "source_sha256": "e35fd27856e37f3611d3bc6f17ee963be51bfe92bec96fad0a9fa2c7ebbe9c46"
+      },
+      "ggml/src/ggml-quants.c": {
+        "object": "ggml/src/CMakeFiles/ggml-base.dir/ggml-quants.c.o",
+        "object_sha256": "04eedd819d1257a7ee64815235aeea6e20070ca0243a5f27a9ef50eb57b24049",
+        "source_sha256": "5574a2dccf7c07e75b143733e04a5412d3d8c819e7945f5217a7b83a2b2ff8ab"
+      },
+      "ggml/src/ggml-threading.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-base.dir/ggml-threading.cpp.o",
+        "object_sha256": "6cd243b473b753b7b4fc36792f6bd4860bc4af867d0ee36917f465cf848941f6",
+        "source_sha256": "13a18d885393722b7c9f42d4cf8575a4d41699926d656f78a867fa4fac9dad20"
+      },
+      "ggml/src/ggml.c": {
+        "object": "ggml/src/CMakeFiles/ggml-base.dir/ggml.c.o",
+        "object_sha256": "9bb8e50537e5a5b1ad0b7672331cdf6f68fb345b16c57d2eeb32ddc30c8edab3",
+        "source_sha256": "2cd065426fe542da4d7bb0eba5df210bf5c958cf014a111f1b3d67fdaacffb08"
+      },
+      "ggml/src/ggml.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-base.dir/ggml.cpp.o",
+        "object_sha256": "a3756a0c713192bae3f32e9d4047ba03e1b0769d4b4a860f21d8b3b29ac4b549",
+        "source_sha256": "64e6b5c8d716ae8697e45481a7153540be01f721be2dc7e753aa47b36a69c753"
+      },
+      "ggml/src/gguf.cpp": {
+        "object": "ggml/src/CMakeFiles/ggml-base.dir/gguf.cpp.o",
+        "object_sha256": "7bcbe04bc41d533e178648a26ed65fe321bc5f300663d232d144e5291372aaee",
+        "source_sha256": "7505d6a434dc740941a682fd3b476ef9bd9893ab76adf18c9969daa528bd5be5"
+      },
+      "src/core/audio_resample.cpp": {
+        "object": "src/CMakeFiles/crispasr-core.dir/core/audio_resample.cpp.o",
+        "object_sha256": "e478c302da65114bfc59b0aaa4d349705a2b38a94414ac25e64b5ba3c495a5d1",
+        "source_sha256": "fe1beb66770dc045c14ecf3466c6ab40cdf42eece79a829d72773a9c21fed687"
+      },
+      "src/core/diarize_smooth.cpp": {
+        "object": "src/CMakeFiles/crispasr-core.dir/core/diarize_smooth.cpp.o",
+        "object_sha256": "a88af6e0a418c40d7dc188040b377acd399141e6a3d85bb05a537f8fc36825bd",
+        "source_sha256": "a6b5d2d6a568fd3cdb54b60c063e13f436abdb999c6f5e66cf07c558587af642"
+      },
+      "src/core/foxnose_pipeline.cpp": {
+        "object": "src/CMakeFiles/crispasr-core.dir/core/foxnose_pipeline.cpp.o",
+        "object_sha256": "bcc55e520a89b069241a005d04f775fc1ee8fd88b6e2badd4d7196ff0eb0568b",
+        "source_sha256": "6c5172eceab66c612963fc2f4070ef887d94d573ee8b8a1a9a4c3d1e06f1f176"
+      },
+      "src/core/gguf_loader.cpp": {
+        "object": "src/CMakeFiles/crispasr-core.dir/core/gguf_loader.cpp.o",
+        "object_sha256": "85b622774a0629bb0f7527d06865841053ac7879fe7920fc7729a6a4620cd308",
+        "source_sha256": "8ab8e9ba5c29442c93bc5ba862e9906e2b925a382f9dea14102ba8566906160c"
+      },
+      "src/core/kaldi_fbank.cpp": {
+        "object": "src/CMakeFiles/crispasr-core.dir/core/kaldi_fbank.cpp.o",
+        "object_sha256": "7048bdafa41331efe3f15d7056143a3db2e1186aadfbf3470254ec63b26ded09",
+        "source_sha256": "890313023d6161cd1b3465e19a9869dafe9d5d74fa5108f230e55d66a5bbfb1c"
+      },
+      "src/core/mel.cpp": {
+        "object": "src/CMakeFiles/crispasr-core.dir/core/mel.cpp.o",
+        "object_sha256": "930fd0beba868cfa34fe0131ece199e3fd120b50930096724116c0e2d2aa338e",
+        "source_sha256": "2a80a77de1783e692a656d414047d0fec1d909778218a4bc0231ad280a0e28b0"
+      },
+      "src/core/pinyin_g2p.cpp": {
+        "object": "src/CMakeFiles/crispasr-core.dir/core/pinyin_g2p.cpp.o",
+        "object_sha256": "643b5300cf0cca23f915eddfcdf459afe1badf6eabf87e6bf7bd643aac508f63",
+        "source_sha256": "60fe07a1736d3e44d26c5c77158b489439806c310ae53776fbaef544350d8783"
+      },
+      "src/core/rvq.cpp": {
+        "object": "src/CMakeFiles/crispasr-core.dir/core/rvq.cpp.o",
+        "object_sha256": "8e57a8cf25b025141c9afbc2af57ce4b4abedebc117a68473603c1f5223fbfb2",
+        "source_sha256": "807fe43c698b45a33274b97a56752286a3f19ba137a57fc833338ad55eac9453"
+      },
+      "src/core/spectral_diarize.cpp": {
+        "object": "src/CMakeFiles/crispasr-core.dir/core/spectral_diarize.cpp.o",
+        "object_sha256": "ef8fc1a7130746dab21346d4e69474f6f86a197f060414c66212e406034b8928",
+        "source_sha256": "cee00f602dc3b7d82438293940d725eb80c3ceb8c4450b8a70dc769181a24622"
+      },
+      "src/crispasr_cache.cpp": {
+        "object": "src/CMakeFiles/crispasr-core.dir/crispasr_cache.cpp.o",
+        "object_sha256": "6380b9c70e64179043db45bd8e10add3909daf0b4505108a75bd0f185c7d79a2",
+        "source_sha256": "1f61a82c5daa25599df1877298edea1af32db7080db01b2f0dfc14ec3f32f0e5"
+      },
+      "src/crispasr_imatrix.cpp": {
+        "object": "src/CMakeFiles/crispasr-core.dir/crispasr_imatrix.cpp.o",
+        "object_sha256": "aaacb1936f400af631fe0f1e5df0453c4ee6eb005e648e10cff4d11ba2d20403",
+        "source_sha256": "d8504a422fae71560328d55aa8e685f427289d4fba227e0c6106befd15fe9c2f"
+      },
+      "src/phonemizer.cpp": {
+        "object": "src/CMakeFiles/crispasr-core.dir/phonemizer.cpp.o",
+        "object_sha256": "7ebc0d8139db6f9d5ae14d0fa4ab8fc672d838449f5e254d9442d69e3fbf716f",
+        "source_sha256": "c996937b8aa82982be26c824229b56c53579838d23e14f4c0a5a59852cb9f930"
+      },
+      "src/scnet.cpp": {
+        "object": "src/CMakeFiles/scnet.dir/scnet.cpp.o",
+        "object_sha256": "3b7c1b1771bbcbd680555a99825b75909741e1b2c3c2ae63413c08dcedff0e4f",
+        "source_sha256": "007292fa67f934d446613d775d42dde94cf15e9738a5b98f3017bacc4e67cb38"
+      },
+      "tests/test-scnet-blas-threads.cpp": {
+        "object": "src/CMakeFiles/scnet-blas-thread-test.dir/__/tests/test-scnet-blas-threads.cpp.o",
+        "object_sha256": "89d8118c2e95a8097902788e4fdec1f7069d15549b6d3f3500cbd32029c2f2f4",
+        "source_sha256": "a3c359bacd78391c3b7edcd491fbd3d619466942ba5b82fe8f3af3be20150f3a"
+      },
+      "tools/scnet_exports.cpp": {
+        "object": "src/CMakeFiles/scnet-validation.dir/__/tools/scnet_exports.cpp.o",
+        "object_sha256": "677ddecf7ce4dbec51394831a6460ed9954e0d9fbfa33f36b6795d6b429827a3",
+        "source_sha256": "caae683df3f618ed2f03925a942d9370cc9385b93077ac1aecb526a31ea895e6"
+      },
+      "tools/scnet_probe.cpp": {
+        "object": "src/CMakeFiles/scnet-probe.dir/__/tools/scnet_probe.cpp.o",
+        "object_sha256": "1f2961e93b71d7db90164102e3e96145d62966b964992606019ec082e515124f",
+        "source_sha256": "4453d5c510aba7120b585450e93335edd70019e2dd1111ec47fc1ee6a28b9da0"
+      }
+    },
+    "configuration": {
+      "argv": [
+        "{build_tools}/cmake/data/bin/cmake",
+        "-S",
+        "{repo}",
+        "-B",
+        "{repo}/build-scnet-openblas034-profile",
+        "-G",
+        "Ninja",
+        "-DCMAKE_MAKE_PROGRAM={build_tools}/bin/ninja",
+        "-DCMAKE_BUILD_TYPE=Release",
+        "-DCMAKE_EXPORT_COMPILE_COMMANDS=ON",
+        "-DBUILD_SHARED_LIBS=ON",
+        "-DCMAKE_POSITION_INDEPENDENT_CODE=ON",
+        "-DCRISPASR_BUILD_SCNET_PROBE=ON",
+        "-DCRISPASR_BUILD_TESTS=OFF",
+        "-DCRISPASR_BUILD_SERVER=OFF",
+        "-DCRISPASR_BUILD_EXAMPLES=OFF",
+        "-DGGML_NATIVE=ON",
+        "-DGGML_CPU=ON",
+        "-DGGML_CUDA=OFF",
+        "-DGGML_METAL=OFF",
+        "-DGGML_VULKAN=OFF",
+        "-DGGML_BLAS=ON",
+        "-DGGML_BLAS_VENDOR=OpenBLAS",
+        "-DGGML_OPENMP=ON",
+        "-DCRISPASR_CPU_BLAS=ON",
+        "-DCRISPASR_MEL_BLAS=ON",
+        "-DBLAS_openblas_LIBRARY={provider_diagnostic}/install/lib/libopenblas.so",
+        "-DBLAS_INCLUDE_DIRS={provider_diagnostic}/install/include/openblas",
+        "-DCBLAS_INCLUDE_DIR={provider_diagnostic}/install/include/openblas",
+        "-DCRISPASR_CBLAS_INCLUDE_DIR={provider_diagnostic}/install/include/openblas",
+        "-DCRISPASR_CPU_OPENBLAS={provider_diagnostic}/install/lib/libopenblas.so",
+        "-DCRISPASR_CORE_OPENBLAS={provider_diagnostic}/install/lib/libopenblas.so",
+        "-DCMAKE_BUILD_RPATH={provider_diagnostic}/install/lib"
+      ],
+      "end_unix": 1793636274.4512117,
+      "exit_code": 0,
+      "start_unix": 1793636273.0394645
+    },
+    "ggml_commit": "95f3a916329972eb9f705bdb8c98eb96515c59a2",
+    "limitations": [
+      "Provider/library load, ABI and math controls only; no model fidelity or model speed claim.",
+      "Runtime-selected OpenBLAS core is recorded from the actual loaded provider; no CPU-core override is used.",
+      "This local CPU, compiler, libc and scheduling environment differ from hosted workers; CPU quota and dedicated capacity are unknown.",
+      "LAPACK/LAPACKE are omitted; the LP64 BLAS/CBLAS interface used by SCNet is retained."
+    ],
+    "loaded_validation_dependency_query": {
+      "actual_loaded_dsos": [
+        {
+          "bytes": 2125328,
+          "path": "/lib/x86_64-linux-gnu/libc.so.6",
+          "realpath": "/lib/x86_64-linux-gnu/libc.so.6",
+          "sha256": "511f825ee075610ac9c0f7f91e2c13de2000d0f7b859f6461137e809a0a009d0"
+        },
+        {
+          "bytes": 14408,
+          "path": "/lib/x86_64-linux-gnu/libdl.so.2",
+          "realpath": "/lib/x86_64-linux-gnu/libdl.so.2",
+          "sha256": "feee7549138dc862300b9ba9b2b02502059c838a6c0b92d2ea4c0a357e8e0b45"
+        },
+        {
+          "bytes": 183024,
+          "path": "/lib/x86_64-linux-gnu/libgcc_s.so.1",
+          "realpath": "/lib/x86_64-linux-gnu/libgcc_s.so.1",
+          "sha256": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb"
+        },
+        {
+          "bytes": 352304,
+          "path": "/lib/x86_64-linux-gnu/libgomp.so.1",
+          "realpath": "/lib/x86_64-linux-gnu/libgomp.so.1.0.0",
+          "sha256": "135f3c8f006d2fe5e68e51281c7974cb991a03de3bfb3593d68d174dfcf854d1"
+        },
+        {
+          "bytes": 952616,
+          "path": "/lib/x86_64-linux-gnu/libm.so.6",
+          "realpath": "/lib/x86_64-linux-gnu/libm.so.6",
+          "sha256": "f06f2ce1f1833df5f41cf13b6447ff07bea993ad9b27297d3428c2f70ab3f0e7"
+        },
+        {
+          "bytes": 14408,
+          "path": "/lib/x86_64-linux-gnu/libpthread.so.0",
+          "realpath": "/lib/x86_64-linux-gnu/libpthread.so.0",
+          "sha256": "4472cde19acc87a431ad1eefe9e86f8238dd1f26f8dac692cff7040474d9d085"
+        },
+        {
+          "bytes": 14624,
+          "path": "/lib/x86_64-linux-gnu/librt.so.1",
+          "realpath": "/lib/x86_64-linux-gnu/librt.so.1",
+          "sha256": "4b3a59575a0812a466235bc745814ca5b13825ef5f8ad5680637872ac64cc7ca"
+        },
+        {
+          "bytes": 2592224,
+          "path": "/lib/x86_64-linux-gnu/libstdc++.so.6",
+          "realpath": "/lib/x86_64-linux-gnu/libstdc++.so.6.0.33",
+          "sha256": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11"
+        },
+        {
+          "bytes": 14408,
+          "path": "/lib/x86_64-linux-gnu/libutil.so.1",
+          "realpath": "/lib/x86_64-linux-gnu/libutil.so.1",
+          "sha256": "b88de5f440af504c5a7f7fa933ee7272c44e18e4613c44b2cc6b5ca40f99d6ba"
+        },
+        {
+          "bytes": 236616,
+          "path": "/lib64/ld-linux-x86-64.so.2",
+          "realpath": "/lib/x86_64-linux-gnu/ld-linux-x86-64.so.2",
+          "sha256": "6222a16be7f2d458d6870efe6e715fc0c8d45766fb79cf7dcc3125538d703e28"
+        },
+        {
+          "bytes": 64512,
+          "path": "{repo}/build-scnet-openblas034-profile/ggml/src/ggml-blas/libggml-blas.so.0",
+          "realpath": "{repo}/build-scnet-openblas034-profile/ggml/src/ggml-blas/libggml-blas.so.0.26.0",
+          "sha256": "a67f70dab7ee0910e68f3d2c04e2251316dbfe034f5c8ee63269cbaba5032b4f"
+        },
+        {
+          "bytes": 964048,
+          "path": "{repo}/build-scnet-openblas034-profile/ggml/src/libggml-base.so.0",
+          "realpath": "{repo}/build-scnet-openblas034-profile/ggml/src/libggml-base.so.0.26.0",
+          "sha256": "0975bd28a70d8329532ac64afce0b55b24a8e581f2f28b2274b0aca5afa71078"
+        },
+        {
+          "bytes": 1687736,
+          "path": "{repo}/build-scnet-openblas034-profile/ggml/src/libggml-cpu.so.0",
+          "realpath": "{repo}/build-scnet-openblas034-profile/ggml/src/libggml-cpu.so.0.26.0",
+          "sha256": "3dfe8bc6d991cec458e3d6da04ac98e52d10f11e6129021b1e0dc83054fc40be"
+        },
+        {
+          "bytes": 60360,
+          "path": "{repo}/build-scnet-openblas034-profile/ggml/src/libggml.so.0",
+          "realpath": "{repo}/build-scnet-openblas034-profile/ggml/src/libggml.so.0.26.0",
+          "sha256": "a2182fc95077e4dd9e2a97b0dd958fc4f6dac221ba9221e88d727df9afb47cd4"
+        },
+        {
+          "bytes": 341608,
+          "path": "{repo}/build-scnet-openblas034-profile/src/libscnet-validation.so",
+          "realpath": "{repo}/build-scnet-openblas034-profile/src/libscnet-validation.so",
+          "sha256": "ed25164316caa3a29314b745111aa3a9d1aa44d10621e161fda0e262a715bfc2"
+        },
+        {
+          "bytes": 34231848,
+          "path": "{provider_diagnostic}/install/lib/libopenblas.so.0",
+          "realpath": "{provider_diagnostic}/install/lib/libopenblas.so.0.3",
+          "sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e"
+        }
+      ],
+      "core_override": null,
+      "identity_method": "in-process dl_iterate_phdr after loading the exact native validation library and querying its provider symbols; hashes of the named DSO files",
+      "loader_overrides": {
+        "LD_AUDIT": null,
+        "LD_LIBRARY_PATH": null,
+        "LD_PRELOAD": null
+      },
+      "openblas_get_config": "OpenBLAS 0.3.34 NO_LAPACK NO_LAPACKE DYNAMIC_ARCH NO_AFFINITY Cooperlake MAX_THREADS=64",
+      "openblas_get_corename": "Cooperlake",
+      "openblas_get_num_threads": 2,
+      "openblas_get_parallel": 1,
+      "required_native_api_exports_present": true,
+      "scnet_validation_abi_version": 1
+    },
+    "loader_overrides_required": false,
+    "model_benchmark_performed": false,
+    "model_inference_performed": false,
+    "native_archive_matches_ubuntu020_baseline": true,
+    "native_blas_thread_controls": {
+      "cases": 6,
+      "pass": true,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_sha256": "c78f1654956fb68b664f004beb93207d3ec2e341ec05c0a5c06dab20f40b551a"
+    },
+    "native_source_freeze_verified": true,
+    "parent_commit": "99588fb01986f1ebfb7dad27e072fd424ccdc967",
+    "preservation": {
+      "build-scnet": {
+        "files_verified": 867,
+        "key_payload_hashes_unchanged": true,
+        "metadata_unchanged": true
+      },
+      "build-scnet-local-profile": {
+        "files_verified": 116,
+        "key_payload_hashes_unchanged": true,
+        "metadata_unchanged": true
+      }
+    },
+    "preserved_failed_helper_receipt": "ci-helper-check-failed-headers-v1/provider.json",
+    "probe": "{repo}/build-scnet-openblas034-profile/bin/scnet-probe",
+    "provider_build": {
+      "argv": [
+        "{build_tools}/cmake/data/bin/cmake",
+        "--build",
+        "{provider_diagnostic}/OpenBLAS-build",
+        "--parallel",
+        "2",
+        "--target",
+        "openblas_shared"
+      ],
+      "end_unix": 1793636171.5479386,
+      "exit_code": 0,
+      "start_unix": 1793635420.8354936
+    },
+    "provider_ci_complete": true,
+    "provider_ci_helper_sha256": "af770744ca6a4ce8c81dbbb168cc85cd45d31dc6a68725f7e20e859722a992e3",
+    "provider_ci_receipt_sha256": "d74e7e739a50bdbed1c22e44e13cae5ea2e3d002221d3b9dbba240aa65bdeec5",
+    "provider_controls": {
+      "cleared_environment": {
+        "LD_AUDIT": null,
+        "LD_LIBRARY_PATH": null,
+        "LD_PRELOAD": null,
+        "OPENBLAS_CORETYPE": null
+      },
+      "commands": [
+        {
+          "binary_sha256": "01b6aacbecef41cb4d1fdb1fb1f1a1111b3743f0ce59b46eebaa6021ee9341e1",
+          "compile_argv": [
+            "/usr/bin/c++",
+            "-std=c++17",
+            "-O2",
+            "-I{provider_diagnostic}/install/include/openblas",
+            "{provider_diagnostic}/provider_cpu_identity.cpp",
+            "-L{provider_diagnostic}/install/lib",
+            "-lopenblas",
+            "-Wl,-rpath,{provider_diagnostic}/install/lib",
+            "-o",
+            "{provider_diagnostic}/provider_cpu_identity"
+          ],
+          "exit_code": 0,
+          "name": "provider_cpu_identity",
+          "source_sha256": "d5d1aa53c55847e6de5e7368c378579d0284244af5b4c87ca835e4e178705ab8",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "875921fcfa535dbdaf61d6b896bcff0be813db41f7531863ee623e81ff2284d5"
+        },
+        {
+          "binary_sha256": "1e6090456608d82d4370878fd92e60bc69767703e59882c921fb470fd8dea8c4",
+          "compile_argv": [
+            "/usr/bin/c++",
+            "-std=c++17",
+            "-O2",
+            "-I{provider_diagnostic}/install/include/openblas",
+            "{provider_diagnostic}/provider_math_controls.cpp",
+            "-L{provider_diagnostic}/install/lib",
+            "-lopenblas",
+            "-Wl,-rpath,{provider_diagnostic}/install/lib",
+            "-o",
+            "{provider_diagnostic}/provider_math_controls"
+          ],
+          "exit_code": 0,
+          "name": "provider_math_controls",
+          "source_sha256": "fa777180b090b9753566b376f349fc8edfb1cb70d378a68c0060f9419e4b69a1",
+          "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "stdout_sha256": "b4728c3639664993dd8ce480b27171fa1acbd4efe710ee00b88d3754a24b5221"
+        }
+      ],
+      "math_controls": [
+        {
+          "input_buffers_unchanged": true,
+          "k": 13,
+          "m": 7,
+          "max_abs": 6.028970034321901e-08,
+          "max_bound_fraction": 0.09523555732051765,
+          "n": 11,
+          "output_padding_guards_unchanged": true,
+          "pass": true,
+          "relative_l2": 7.232825622916971e-08,
+          "right_transposed": false,
+          "threads": 1
+        },
+        {
+          "input_buffers_unchanged": true,
+          "k": 13,
+          "m": 7,
+          "max_abs": 6.028970034321901e-08,
+          "max_bound_fraction": 0.09523555732051765,
+          "n": 11,
+          "output_padding_guards_unchanged": true,
+          "pass": true,
+          "relative_l2": 7.232825622916971e-08,
+          "right_transposed": false,
+          "threads": 2
+        },
+        {
+          "input_buffers_unchanged": true,
+          "k": 13,
+          "m": 7,
+          "max_abs": 6.028970034321901e-08,
+          "max_bound_fraction": 0.09523555732051765,
+          "n": 11,
+          "output_padding_guards_unchanged": true,
+          "pass": true,
+          "relative_l2": 7.232825622916971e-08,
+          "right_transposed": true,
+          "threads": 1
+        },
+        {
+          "input_buffers_unchanged": true,
+          "k": 13,
+          "m": 7,
+          "max_abs": 6.028970034321901e-08,
+          "max_bound_fraction": 0.09523555732051765,
+          "n": 11,
+          "output_padding_guards_unchanged": true,
+          "pass": true,
+          "relative_l2": 7.232825622916971e-08,
+          "right_transposed": true,
+          "threads": 2
+        },
+        {
+          "input_buffers_unchanged": true,
+          "k": 128,
+          "m": 57,
+          "max_abs": 1.6370720494762736e-06,
+          "max_bound_fraction": 0.026742833647058612,
+          "n": 512,
+          "output_padding_guards_unchanged": true,
+          "pass": true,
+          "relative_l2": 2.0310449042150132e-07,
+          "right_transposed": false,
+          "threads": 1
+        },
+        {
+          "input_buffers_unchanged": true,
+          "k": 128,
+          "m": 57,
+          "max_abs": 1.6370720494762736e-06,
+          "max_bound_fraction": 0.026742833647058612,
+          "n": 512,
+          "output_padding_guards_unchanged": true,
+          "pass": true,
+          "relative_l2": 2.0310449042150132e-07,
+          "right_transposed": false,
+          "threads": 2
+        },
+        {
+          "input_buffers_unchanged": true,
+          "k": 128,
+          "m": 57,
+          "max_abs": 1.6370720494762736e-06,
+          "max_bound_fraction": 0.026742833647058612,
+          "n": 512,
+          "output_padding_guards_unchanged": true,
+          "pass": true,
+          "relative_l2": 2.0310449042150132e-07,
+          "right_transposed": true,
+          "threads": 1
+        },
+        {
+          "input_buffers_unchanged": true,
+          "k": 128,
+          "m": 57,
+          "max_abs": 1.6370720494762736e-06,
+          "max_bound_fraction": 0.026742833647058612,
+          "n": 512,
+          "output_padding_guards_unchanged": true,
+          "pass": true,
+          "relative_l2": 2.0310449042150132e-07,
+          "right_transposed": true,
+          "threads": 2
+        },
+        {
+          "input_buffers_unchanged": true,
+          "k": 256,
+          "m": 85,
+          "max_abs": 3.5931843562764243e-06,
+          "max_bound_fraction": 0.015033397577855894,
+          "n": 1024,
+          "output_padding_guards_unchanged": true,
+          "pass": true,
+          "relative_l2": 2.865642964395121e-07,
+          "right_transposed": false,
+          "threads": 1
+        },
+        {
+          "input_buffers_unchanged": true,
+          "k": 256,
+          "m": 85,
+          "max_abs": 3.5931843562764243e-06,
+          "max_bound_fraction": 0.015033397577855894,
+          "n": 1024,
+          "output_padding_guards_unchanged": true,
+          "pass": true,
+          "relative_l2": 2.865642964395121e-07,
+          "right_transposed": false,
+          "threads": 2
+        },
+        {
+          "input_buffers_unchanged": true,
+          "k": 256,
+          "m": 85,
+          "max_abs": 3.5931843562764243e-06,
+          "max_bound_fraction": 0.015033397577855894,
+          "n": 1024,
+          "output_padding_guards_unchanged": true,
+          "pass": true,
+          "relative_l2": 2.865642964395121e-07,
+          "right_transposed": true,
+          "threads": 1
+        },
+        {
+          "input_buffers_unchanged": true,
+          "k": 256,
+          "m": 85,
+          "max_abs": 3.5931843562764243e-06,
+          "max_bound_fraction": 0.015033397577855894,
+          "n": 1024,
+          "output_padding_guards_unchanged": true,
+          "pass": true,
+          "relative_l2": 2.865642964395121e-07,
+          "right_transposed": true,
+          "threads": 2
+        }
+      ],
+      "model_inference_performed": false,
+      "provider_cpu_identity": {
+        "cpuid": {
+          "avx2": true,
+          "avx512f": true,
+          "brand": "AMD EPYC 9V74 80-Core Processor                ",
+          "family": 25,
+          "fma": true,
+          "hypervisor": true,
+          "max_basic_leaf": 28,
+          "model": 17,
+          "sse42": true,
+          "stepping": 1,
+          "vendor": "AuthenticAMD"
+        },
+        "openblas": {
+          "blasint_bytes": 4,
+          "config": "OpenBLAS 0.3.34 NO_LAPACK NO_LAPACKE DYNAMIC_ARCH NO_AFFINITY Cooperlake MAX_THREADS=64",
+          "core": "Cooperlake",
+          "parallel": 1,
+          "sgemm_2x2_exact": true,
+          "threads": 2
+        }
+      },
+      "qualification": false,
+      "scope": "Provider ABI and independent F64 SGEMM controls only; no timing measurements."
+    },
+    "provider_realpath": "{provider_diagnostic}/install/lib/libopenblas.so.0.3",
+    "provider_release_archive": {
+      "archive_extracted": false,
+      "archive_prefix": "OpenBLAS-0.3.34",
+      "bytes": 25326686,
+      "different_tracked_files": [],
+      "digest_match": true,
+      "expected_official_release_sha256": "cd7e129868320cc2d033afa920e31202dfe0b8066a5b66661900ccc0f197dfed",
+      "extra_archive_files": [],
+      "matched_tracked_files": 12560,
+      "missing_tracked_files": [],
+      "sha256": "cd7e129868320cc2d033afa920e31202dfe0b8066a5b66661900ccc0f197dfed",
+      "source_commit": "e0166008be8e466242aa76b2ff75ce3f0fbf574a",
+      "tracked_files_total": 12560,
+      "url": "https://github.com/OpenMathLib/OpenBLAS/releases/download/v0.3.34/OpenBLAS-0.3.34.tar.gz"
+    },
+    "provider_sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e",
+    "provider_source": {
+      "commit": "e0166008be8e466242aa76b2ff75ce3f0fbf574a",
+      "expected_official_tag_commit": "e0166008be8e466242aa76b2ff75ce3f0fbf574a",
+      "files": {
+        "CMakeLists.txt": {
+          "bytes": 35814,
+          "sha256": "131d9fd128ed74a26ca7ca6f2494da1a5d001f0ddad90cc2be13a9dc750d3702"
+        },
+        "LICENSE": {
+          "bytes": 1548,
+          "sha256": "190b5a9c8d9723fe958ad33916bd7346d96fab3c5ea90832bb02d854f620fcff"
+        },
+        "README.md": {
+          "bytes": 21065,
+          "sha256": "54ac8c2069cb15710e8b86121d854fe9b94c02c62270c8b056ba43a6b08b906f"
+        },
+        "cmake/system.cmake": {
+          "bytes": 30995,
+          "sha256": "6543c6a2357e58d6ba18a21e7d0200597a6afe3ec0818de602120120f28e3594"
+        },
+        "cpuid_x86.c": {
+          "bytes": 73966,
+          "sha256": "ddb7d11fd32a78eeed47245f98947f0bde973beaf7792cca71d623cf0b320e15"
+        },
+        "driver/others/dynamic.c": {
+          "bytes": 35043,
+          "sha256": "e482b15d80e6d3defd75529fcf385e1c22e01f44e5dc3a9cefa52e8984a61a6f"
+        }
+      },
+      "license": "BSD-3-Clause",
+      "match": true,
+      "release_archive_expected_sha256": "cd7e129868320cc2d033afa920e31202dfe0b8066a5b66661900ccc0f197dfed",
+      "remote": "https://github.com/OpenMathLib/OpenBLAS.git",
+      "tag": "v0.3.34",
+      "tree": "48a954159e77896d31a458369a8ebe198ad56ca7"
+    },
+    "qualification": false,
+    "ready": true,
+    "runtime_thread_environment": {
+      "BLIS_NUM_THREADS": "2",
+      "MKL_NUM_THREADS": "2",
+      "OMP_NUM_THREADS": "2",
+      "OPENBLAS_NUM_THREADS": "2",
+      "VECLIB_MAXIMUM_THREADS": "2"
+    },
+    "schema": "scnet-openblas034-local-readiness-v1",
+    "source_hashes": {
+      "build-scnet-openblas034-profile/ggml/src/ggml-version.h": "a42faab65dbd6ad0cdfadd81028546ec1a97e4af5c0b060cd6a2092f8d907fe4",
+      "cmake/CrispASRCPUBlas.cmake": "10529f9f147cb985ee74df9d496ada5f5ab4707c4ca8a26a8d6979615f18a580",
+      "crisp_audio/src/audio_tower.cpp": "bec62fc6b261febbde1c886ebde636f52e01563af5bb7c2b7745faa0d27b03cf",
+      "crisp_lid/src/lid_cld3.cpp": "586133c1aa1432180b052f7aa2009965029b74f43dfc41d3b511b783ceb66acd",
+      "crisp_lid/src/lid_fasttext.cpp": "e5c5903b16d297426724388dac841731cd486c5239afdbe6604f710bb0c49295",
+      "crisp_lid/src/text_lid_dispatch.cpp": "e55dde425938a3fc430261bf6791aae5ceae8cd851bee03de169c76a87e2b175",
+      "crisp_punc/src/fireredpunc.cpp": "8b1d2518b0e8d9168b2ba8269eacff39ac70aafd8d28d02a7a8b4ed8307703cd",
+      "crisp_punc/src/pcs.cpp": "06104bdcf03636c933c1211805161b6f16f49125207f71bdc90c3c5a2d841265",
+      "crisp_truecase/src/truecaser.cpp": "2e1c94ca0c5715c1e8bf9f35b1f0703820add9807ac2dcbc24d162a30eb0aedc",
+      "crisp_truecase/src/truecaser_crf.cpp": "08c234124aa2ac3b8de98123dc952955899da5b6f3f70a75e80f6c91436a9ec6",
+      "crisp_truecase/src/truecaser_lstm.cpp": "cbd52c8a5680ac6db3d11209d4c2458a912762077c2755f5ce5363a0d7fb4e31",
+      "examples/common-crispasr.cpp": "c4dfb660c354411d878de1ef9f9195e699d23cc47e7fe4d71c0f1f0bd0fdcd9b",
+      "examples/common-ggml.cpp": "c08b0e4eb8c89146c24192460a9f283194191dd48aec582ee65bc4ec02ae685f",
+      "examples/common.cpp": "d7e72c9dc0019a4823973dafa7a1846487b2534626d818a9d6afc1da4e1e2b22",
+      "examples/talk-llama/llama-adapter.cpp": "b5ba6a9fcac55a6238cca71d39ce107fd4f4512dd12da3c8b5c59fed7193811c",
+      "examples/talk-llama/llama-arch.cpp": "dac8ef54245859dbe8d7ee5f206ed9e1b16145c39da7f899888ac87c628f8976",
+      "examples/talk-llama/llama-batch.cpp": "4738408016aecaacd975721b50a4bdbf0379c4c3a84194ac74d96faedf70a9e3",
+      "examples/talk-llama/llama-chat.cpp": "9754dae272b3fe681f4cf75bd127669bdaf7895c2ad5d45992eec94974ba3bc9",
+      "examples/talk-llama/llama-context.cpp": "d340b3689afaccc7ea809b752fc584f69bfef4c0f797abb27608f298cd3b3be7",
+      "examples/talk-llama/llama-cparams.cpp": "95ab4b7b72851eb381a3d2ff2e9f18731103ba5f9f5f216882a034319e709297",
+      "examples/talk-llama/llama-grammar.cpp": "fb665581f29b4d9c860c10bda53420c1a33050a55eda2869b002ac56d568f232",
+      "examples/talk-llama/llama-graph.cpp": "5b4dadd2a15d48e00a1db10403a1f3ddbd963a5c40ecde1ee2a43a792e84355e",
+      "examples/talk-llama/llama-hparams.cpp": "0c7e7644a7d9b6976cb21bf0af2c188f38e63b98538475639038e7278ba8abc7",
+      "examples/talk-llama/llama-impl.cpp": "f1564c4a2f3b31da890cadddeb2b3645f2a15d92fbc08a10ff09538bf43ae2e2",
+      "examples/talk-llama/llama-io.cpp": "980e2f3fa705c0670b2aa3fbdb9fe57c3fd553fedc4a02cedb756bf2bd59c8fa",
+      "examples/talk-llama/llama-kv-cache-iswa.cpp": "aafe4b0156aff9154b402530e6b463f88b52e461696588e3f4b51d8f7d1cc4fc",
+      "examples/talk-llama/llama-kv-cache.cpp": "bf7c29e218a113a8c2a09105b8275dbb133416e2bd887c6187c80beaec3bc41b",
+      "examples/talk-llama/llama-memory-hybrid-iswa.cpp": "014a6b591be5f99063be115635be20c2f282ced2d616e97df8108d92f56b37be",
+      "examples/talk-llama/llama-memory-hybrid.cpp": "e7fe0cefe8feb16f482e4e58f73f14d79676ac8425adeceef2f0eae283c4869b",
+      "examples/talk-llama/llama-memory-recurrent.cpp": "c74e82b742849a39dca2e140da3a4c2384e31427b5c9ef466499c7f65651be6b",
+      "examples/talk-llama/llama-memory.cpp": "5912fff996421b309b69155dad0d7dba3b6ac8deadef0e3015511281b36f1917",
+      "examples/talk-llama/llama-mmap.cpp": "27957e13d5da2c59e5f8071315c29de21ec910d54a956c86eed0b2ba45b1eb10",
+      "examples/talk-llama/llama-model-loader.cpp": "80b3084e51665702e94f55f3c7db67443edfc5543d2382ef6a8f5648510bf46e",
+      "examples/talk-llama/llama-model-saver.cpp": "a6a94601a653f34e1088902933b1f0fcdce6fa6d88bd078923faf276361b2259",
+      "examples/talk-llama/llama-model.cpp": "0fb53b17e34e903ec21ca88e020274233d862731ed9826701d01194a9cfc8ee7",
+      "examples/talk-llama/llama-quant.cpp": "b625f3932828bbd73b8914afd875f21ad8f813c37ef672ec4ef4f5df1631256b",
+      "examples/talk-llama/llama-sampler.cpp": "4e9b2b905437c911cafd90dc122d2953bf2a3dca839deb229bcf842f719731b5",
+      "examples/talk-llama/llama-vocab.cpp": "fdbba7591a36164512fb05eb9526cdae892cb605b437b7fc35f0f434fed6bb58",
+      "examples/talk-llama/llama.cpp": "6ac9895bedf96a480453e218501f48f023a2e436169c86849e74959d66492e40",
+      "examples/talk-llama/models/afmoe.cpp": "1978e468cb0e11149ec75275f2cb5f6018daec54b94d97b6a0d4cb68acadba2a",
+      "examples/talk-llama/models/apertus.cpp": "6484cd5f76ed5883bf5dddc04967027a4158a54f0d979dc820f309c640b0bf52",
+      "examples/talk-llama/models/arcee.cpp": "d7accf52df1a1608de7f2a5120d2670605a9cb8e7e305f1cc186aa7e28d60da9",
+      "examples/talk-llama/models/arctic.cpp": "369cf33cbcf4252f8995136d4c579ad97241aa456b80ea2c60029071208bcc9e",
+      "examples/talk-llama/models/arwkv7.cpp": "264beb417dda93d513df5d50a326c03e406bcbc07506aa6b0172eebcbad1bd6a",
+      "examples/talk-llama/models/baichuan.cpp": "048cdc14c64577292413dbfbea4dc765b534bc3defc5f4c2c2c6df7062b80b7c",
+      "examples/talk-llama/models/bailingmoe.cpp": "08e816934c193173da59e895043847c9d66a36d39c610c8ba5dbd484c1529a4a",
+      "examples/talk-llama/models/bailingmoe2.cpp": "087658129f65a96b5908b603aebb5a364822775b8a08799ccf60a01d0dc09a4c",
+      "examples/talk-llama/models/bert.cpp": "226197fd2969276c9d38985bf4f0a9f35f5b1e18083149457a9b1058f0a3e53e",
+      "examples/talk-llama/models/bitnet.cpp": "4c4eece82cb3244903886fc0fc4b87af5e3b9b50a0eeea80777d22a64a135081",
+      "examples/talk-llama/models/bloom.cpp": "aac745ab1bf118a992636a370c56453469292982119069eb8bf8e34ba213f70c",
+      "examples/talk-llama/models/chameleon.cpp": "b7923bf5c1847fd9a49531cf32590c36ab5b063a7149507a7e0da7cb6e8d6ad3",
+      "examples/talk-llama/models/chatglm.cpp": "d2e841af6650f3e68bf59fb95a529d2146a384f8a674ac9309180b22f5ead483",
+      "examples/talk-llama/models/codeshell.cpp": "95a15f5bc85a935753dd3c9205a3d40b72dd899f623eab8432f6d8b9032457c1",
+      "examples/talk-llama/models/cogvlm.cpp": "45b10056ebcbfb3f6528948b5fcae8e0824db29c5cdc0410992d94470bdcfd06",
+      "examples/talk-llama/models/cohere2-iswa.cpp": "0c8358d6e9afc0b9c360eeebd116f08ad07d01ebb0cd93cf0c731b8dffd32afd",
+      "examples/talk-llama/models/command-r.cpp": "3264980962683d6d87381be545478ca7db0bf7a8e14170e61fd307775d09fd13",
+      "examples/talk-llama/models/dbrx.cpp": "b22d34611b9e67852f29f5cd469e5dd38e158af9b6f559f5f44945627e49e911",
+      "examples/talk-llama/models/deci.cpp": "814c2c4b7d55bf01f2ee146fff5d220abb59606b6a17037f2b65dde6d10c692b",
+      "examples/talk-llama/models/deepseek.cpp": "62675eded06f96ca9f7ac491a115675f768b4ebd71c198954d4958179df54492",
+      "examples/talk-llama/models/deepseek2.cpp": "a5d73112ebd1dd50d9b575858af31a8af284578446bea7a0d1ae5c8ebcee748a",
+      "examples/talk-llama/models/delta-net-base.cpp": "afb4ed4cd7f5c42d79bb6b2adc80e1ed16f216112e70823fadad9b3215cbf8cc",
+      "examples/talk-llama/models/dots1.cpp": "a5d24cf861b1127787f31e71b82c971ed1e7488482a19529a290d086973b6471",
+      "examples/talk-llama/models/dream.cpp": "1bf4a27e13c5bc4f2c68744016fee13739f257ca387b6a533ea4e76048926169",
+      "examples/talk-llama/models/ernie4-5-moe.cpp": "d0a7e0712826088f251d1a0f653057bd16154333897b8022568c6d02fb0f45f2",
+      "examples/talk-llama/models/ernie4-5.cpp": "4c8d8bd9cfb93e83fb17a8b0b009293d399c97c3c94dbd55c6094b8d5992651c",
+      "examples/talk-llama/models/eurobert.cpp": "99a5eaa3c4a0fb2e0518438603d73064e52dfcca05f8c310d1f3bfb550b35042",
+      "examples/talk-llama/models/exaone-moe.cpp": "7106390bc0196859e1a4220d15fd5146a9f6a892a3dbb49484d19f103a9c508f",
+      "examples/talk-llama/models/exaone.cpp": "b8b2163d3e627ccdcb60a1eaef3f22f99f9bbeb7e246fcc83d261c819c163b5a",
+      "examples/talk-llama/models/exaone4.cpp": "b8e9392928f66283282377e4904778edb31bf2b9de1182bcb24f725b47233eb7",
+      "examples/talk-llama/models/falcon-h1.cpp": "8f11c6c8cc5e47b2e04002c1d1fa404f3772038307b3d4909b7c096a39986524",
+      "examples/talk-llama/models/falcon.cpp": "d0e8d09ec2901dbdb592826a36ecc0711f96e95142e5b7d1f9209023aabad61a",
+      "examples/talk-llama/models/gemma-embedding.cpp": "11047129fa96c6a30384434d3ea3b16807ce4ba64482a48fe06f3baaefe4a3c6",
+      "examples/talk-llama/models/gemma.cpp": "2c014a7d5c298f4d69017babedcd0bfe2e295eefd3503ec886afb0a428d38257",
+      "examples/talk-llama/models/gemma2-iswa.cpp": "c1f49c7eea6f3bde982b6a2bbb544a6bac0c9925c6d83a22ea6fada039d14739",
+      "examples/talk-llama/models/gemma3.cpp": "cfe74806985417a30a1fcdcf69fdefd792917320c556b6862dd29867db47370b",
+      "examples/talk-llama/models/gemma3n-iswa.cpp": "a5cc240c97c6b69a57105f3de01331638d69e3dd1cd75f254a5698012d451a77",
+      "examples/talk-llama/models/glm4-moe.cpp": "e16c370d33ce98059bb736f9f7f9faccd289eb9745fc8306e58b10146e4ca602",
+      "examples/talk-llama/models/glm4.cpp": "dba68ef22078efe7b3dc43308e222bf23ad0e10f31e0849c6835cfb48447fb89",
+      "examples/talk-llama/models/gpt2.cpp": "c460253171bb486955faffa0c40565890f3668255ba704196db2b29f38643f66",
+      "examples/talk-llama/models/gptneox.cpp": "28dfe8be90febffd20606505e0e25977351a4a5aeeeb05cad6360431d596fcce",
+      "examples/talk-llama/models/granite-hybrid.cpp": "5648a498399cdcb842f9e1ae13cdf88d184291ef532894f935bfd868bdce4394",
+      "examples/talk-llama/models/granite.cpp": "ba15136a09dea645cd8337a3e3580e4db28d947bccd9b765da7756d9a14cf894",
+      "examples/talk-llama/models/grok.cpp": "011922106cda8415eb91e19107e8a324f776baec91bf502a1ba07956f11b70cd",
+      "examples/talk-llama/models/grovemoe.cpp": "0de12a03ef0c28bfce2b231d728fe253b8a2759df835ca6ee56857d337cfd630",
+      "examples/talk-llama/models/hunyuan-dense.cpp": "71746b7128d7085bf16744ef632ad8f90832f375a2734c742814916708730e95",
+      "examples/talk-llama/models/hunyuan-moe.cpp": "ca12a5ca296ad447c54ce8a60ac5099b1761491bc770471753ff4d1fc1730b66",
+      "examples/talk-llama/models/internlm2.cpp": "542cd323e05d20dbc569feb29a5a51110b288fcce2ed391948be2d2aca7f1591",
+      "examples/talk-llama/models/jais.cpp": "801872162e4c3592458b20a4f1bfbaa0771b2adb3fa9bf593caf220aa36364c3",
+      "examples/talk-llama/models/jais2.cpp": "dd052bc8d3d1fa02d519e9f60a5e7286b944b786ed0bd8ca509ddb8a939ff6ff",
+      "examples/talk-llama/models/jamba.cpp": "001cf3a149d445b9dbbad73c19ea81881fdca71d1345ac349b0ca8c46808de60",
+      "examples/talk-llama/models/kimi-linear.cpp": "7916f4ac44de7a25b2a6e37fb04d34bee41e584812506f5752a51182811f3136",
+      "examples/talk-llama/models/lfm2.cpp": "67a9e76acb3dcd0acab18746a059e56df0d3b555b5c2c46db34000599f3bc1dd",
+      "examples/talk-llama/models/llada-moe.cpp": "13394447cf4e644fa4c4f4fc1a5eaf53b0a158f82f834cbbefe6e8468af7bc03",
+      "examples/talk-llama/models/llada.cpp": "1714b6400929c6532d8a60805527e0fd74dd0cfc124dd1c4564d41998a593623",
+      "examples/talk-llama/models/llama-iswa.cpp": "200432fc8b70e723a9efc684f8f698ab70cbaca2876b5c9e14814e6994ec4e2b",
+      "examples/talk-llama/models/llama.cpp": "f6ac3209f26f703f574324cf7f5a6cb3c716222d2f495ede7ff86e437b21ddad",
+      "examples/talk-llama/models/maincoder.cpp": "e6353f0f3955b740c488f60d6d6ca6748c3683c791e78075b49239ce1a52189a",
+      "examples/talk-llama/models/mamba-base.cpp": "4c18106e4da9fd7bf447803b2d75a8963029e1a762010274f99126695df2bd23",
+      "examples/talk-llama/models/mamba.cpp": "59a230b99d4ea2ca3362dbd6b72270c316a74d25a8cd9021f3a28006d55c59c7",
+      "examples/talk-llama/models/mimo2-iswa.cpp": "d88c5bbd5b0728c8c440ad75e4c89119c4909471ad33f0b72e84ae0cd42b496b",
+      "examples/talk-llama/models/minicpm3.cpp": "0b4e3d145f4c68e54bb9e876dc09fb0318d67fe758b2e44ca572ef656e77a989",
+      "examples/talk-llama/models/minimax-m2.cpp": "f8cc7477796f361c566c0b392dad33310f6b7547fcc1f6aecb18a8ec8cd6a26f",
+      "examples/talk-llama/models/mistral3.cpp": "58fab64529f51a9d9db4cbd3790dc33f6f50f9827fbade274103ec25092343dc",
+      "examples/talk-llama/models/modern-bert.cpp": "46a78047f844f4d97c50b7c469dd722279c5111757a42af5a7fcfe9e0d97d1ed",
+      "examples/talk-llama/models/mpt.cpp": "56e5bc3fdda5a3b9feee2b715e23ad635c0656c6eb42110ab66160fd5120d4ba",
+      "examples/talk-llama/models/nemotron-h.cpp": "e0166c85b75e36a1c70c98dc845f26a071b4c2e0c2a81f72643553e478b77591",
+      "examples/talk-llama/models/nemotron.cpp": "fec2e18c1c4ec6c7bb38e2debf104fcd4556b819c2f81badff1dce5224342092",
+      "examples/talk-llama/models/neo-bert.cpp": "b3b137f7da9417f6409e94a19cc435d72c5ec52fa115aece73ec04e2b93c9b73",
+      "examples/talk-llama/models/olmo.cpp": "c3686d4a3bce2c48d102cccf128b22b0bb8dc2b040625dbe95ea7237569b3416",
+      "examples/talk-llama/models/olmo2.cpp": "867cb9f5c89babef332a1aa5c146456ab4dc292c7c7888dbd015924d3ab6e1cc",
+      "examples/talk-llama/models/olmoe.cpp": "2092bf6d85d3f54b976a11a49d6079312a9331abf9ae6a31ba00b950cb0718a2",
+      "examples/talk-llama/models/openai-moe-iswa.cpp": "5d5a9d0c8c5fa0ac78e94bf90533a7edac54c49c38a6db32b41451f91ba73b1f",
+      "examples/talk-llama/models/openelm.cpp": "398db31c9954b273cb632bd8d68970af0c995ae5893a9dad7face6e262a43b35",
+      "examples/talk-llama/models/orion.cpp": "db9a77a0f57796c40db5a2dc64ac7778272355b4428df9c8b17f44fd810ea6dd",
+      "examples/talk-llama/models/paddleocr.cpp": "a9d1f8a7b0a7832d260c5f27081ed7ba04ab59531b0e9cd0f2a30b9cb8bf640b",
+      "examples/talk-llama/models/pangu-embedded.cpp": "4813b5ff2ddd44e5b72a8b9c1efb056843fa95baa1a973d2b7cbc640390c9a5b",
+      "examples/talk-llama/models/phi2.cpp": "3ca7a71fcc5794a7728604abf7c6f927b7288d35de2ff16f8fded76b72a11472",
+      "examples/talk-llama/models/phi3.cpp": "c99c86d1e483ba9b88a06d82cae198e76ce6f53d3265400c59a203d868da186a",
+      "examples/talk-llama/models/plamo.cpp": "c398947fa69718ff9d58a5ead4ca23ca512a55b32de26c984dd6c823a7615545",
+      "examples/talk-llama/models/plamo2.cpp": "0268f46af1a84fe8e8ba01a43b2368182fb47e0fe3a97021b11961bab6a36ff3",
+      "examples/talk-llama/models/plamo3.cpp": "566cc6ecd6bf469c0994418515076cfd7567010d4de3562e370dffb02d3102fd",
+      "examples/talk-llama/models/plm.cpp": "1e6d635233e8b7810da38bfb3826b7e82d69340c20214e6c04855a503e6d2cc3",
+      "examples/talk-llama/models/qwen.cpp": "7614f200178c299b932f7b919c3e91edb81d4e1c9d8db0b14d012c3dcb5b6172",
+      "examples/talk-llama/models/qwen2.cpp": "633857b35945e54cc75324ea25f1e46fd20ad360ed1aa351d4e6ea7106822cbe",
+      "examples/talk-llama/models/qwen2moe.cpp": "470ee180d5620fafe5bc505057c3b0c22f100bea77d7a9a2b6cb8dc90670eb66",
+      "examples/talk-llama/models/qwen2vl.cpp": "7ddf38c890cce560818f5de412d1ef03e3866c18849b11a009c0a195f33b7005",
+      "examples/talk-llama/models/qwen3.cpp": "87595c7873eba4d1d92e1ddde6c0d00a9f1d115e5a391a20a6b35f7d0e09de7c",
+      "examples/talk-llama/models/qwen35.cpp": "56e8cf6d68c7dacce445c65c17e4abec1defc7754ad46c54a73ee22ec77a858b",
+      "examples/talk-llama/models/qwen35moe.cpp": "59ea4b338888d56478c7a9483ca6968829647cfa8ac394bf39bf92df7dd9f6cd",
+      "examples/talk-llama/models/qwen3moe.cpp": "2129456fa110de8ff0c08c76721a46e34df3394f49c290e704edfebb2ee0952f",
+      "examples/talk-llama/models/qwen3next.cpp": "45357b6ea9ea5366cafad5ceb6cfb7c4186edace44ff097edef363be14fb7eb6",
+      "examples/talk-llama/models/qwen3vl-moe.cpp": "c05cd2106632aae61e2c59dc465c0cbbee98a5b96accfb5ffebf770291f0b071",
+      "examples/talk-llama/models/qwen3vl.cpp": "e440fc10a1d52e8bdcf8d80f0477978efa985b4d56255da7e3a5036095995b23",
+      "examples/talk-llama/models/refact.cpp": "3b5025d4a610c1a4b78caf2fcad8ea20a7c3764912ead16bab01f0e5f889d4ab",
+      "examples/talk-llama/models/rnd1.cpp": "f16afbab9aa700d7fc908ade5c6361fe950219f51be60ef5114a6b76617a30d3",
+      "examples/talk-llama/models/rwkv6-base.cpp": "3da7caf334d1ecb091312221c5dd5f39b953ac031a90cdd9ee7906f75720062b",
+      "examples/talk-llama/models/rwkv6.cpp": "4b3d06594ce6fec6ab3b445a116a6ba3a33e08038e0a1e2652466e45397eed55",
+      "examples/talk-llama/models/rwkv6qwen2.cpp": "3cd0eba91df0823298a18fc92e5efaa73f8c3acc31486266b962d72fb52e8516",
+      "examples/talk-llama/models/rwkv7-base.cpp": "dc45778113197a622d7bb497946ccb3638502bb261740e6ddaefdc97ccecbb63",
+      "examples/talk-llama/models/rwkv7.cpp": "1f333d1f5f0a8d784be7456326cc9bdc2df2f5c85dcba69c1027cae329ad9989",
+      "examples/talk-llama/models/seed-oss.cpp": "9ebd55cc0733aedf4fda24633c047b2cbbe6535462a2923e0232006e00d68cdc",
+      "examples/talk-llama/models/smallthinker.cpp": "7183085229e79b2d50955df3e24b40cd7fd424c3a34b857bc2c64a90b0c46fc7",
+      "examples/talk-llama/models/smollm3.cpp": "2a469fbc07db5e22047a8eff06aa163c5b3a00d98012b07edbf578f60d0bd1cd",
+      "examples/talk-llama/models/stablelm.cpp": "6e4e309a34c44b88ca1ede5d52cd023ec7907c6064db6210aacdc298fb315eaa",
+      "examples/talk-llama/models/starcoder.cpp": "7a2f077576b4ae85161f4f8196b1ef63290bd9ef32ce3db912443dc9046caad2",
+      "examples/talk-llama/models/starcoder2.cpp": "57707fa9c2083b00e510b8f8102321d7c597b0fcbceb7c17feb84325dce1995c",
+      "examples/talk-llama/models/step35-iswa.cpp": "927adfc68d5e3658a917cfec17146515d339c38b830c854a1354568ee72c4b55",
+      "examples/talk-llama/models/t5-dec.cpp": "42fae892eb3d474e5a60e6449d2b730669f58f0f2954f86d581d2594b679e7d4",
+      "examples/talk-llama/models/t5-enc.cpp": "4b9b43df09ec9b90f7ce49283049cf43dc32864730164ee066d0e6b4e8137681",
+      "examples/talk-llama/models/wavtokenizer-dec.cpp": "61fad7f08c552ee6930a74ce91accbd86d3558c8eb7d0c5906f6434a82a5a7fa",
+      "examples/talk-llama/models/xverse.cpp": "0ec1fa71ca68c3a3fbf7f5f8accae202eb119141faadc1d13b7f3bdd2b465787",
+      "examples/talk-llama/unicode-data.cpp": "0ac7091579e55ce992dced059308c8b7d39f9ad9433bf11d81a176d0ce705848",
+      "examples/talk-llama/unicode.cpp": "dcc1fd32dc9ef48a55be1a59d10d9a6867134ebacd38b7fb29a2f7e7a720bd90",
+      "ggml/include/ggml-alloc.h": "d114067f9099c4a0e2bbc0625c676d4894d9cf0ea27168ee072c7de0e71bb51d",
+      "ggml/include/ggml-backend.h": "5791edae1fb7622027621d15bc7a160198bd3b75ed8f96d06cb7b85e2b873756",
+      "ggml/include/ggml-blas.h": "e76cb8594dc9866d99e7d63191b9fff6ab8b50244b4a28ce3af0f962964a6b5b",
+      "ggml/include/ggml-cpp.h": "bc15ba002c68685df23faae42df0d2b3d58032011f88b649021ab92485862c72",
+      "ggml/include/ggml-cpu.h": "316279e004cdeb8e6ef78599acb602bf79a8abdf897fed9fd1914808c1518c6e",
+      "ggml/include/ggml-opt.h": "3586de1bc8a934b5c72339e2b6937b0641e8f149b512231e666f67de0736eea2",
+      "ggml/include/ggml.h": "aaaa78cbe07ca83d5d1f972161a8c4b24ecf0f441e0b2d211f1ee7484a26f478",
+      "ggml/include/gguf.h": "e56714aab702e5ce62ee587a409643c08f7e93e8fbb77f48ef7cc85075f96fa4",
+      "ggml/src/ggml-alloc.c": "a8e54a91afd2a45478a615bc53a581267bccbce4bf001bf45da592f394f4622b",
+      "ggml/src/ggml-backend-dl.cpp": "acd76df8b83bcdef6807bc7b0520f57b379d61b4ff1027c04aa4d140d16ad07f",
+      "ggml/src/ggml-backend-dl.h": "225bd83a197c4e8b5f985717176824d1144e2b74a79f04838f51b84115c14dc5",
+      "ggml/src/ggml-backend-impl.h": "4e861c8e23d3d7b0d99d8e0836e68564af58f8597d75d7bbb732857d7a632fa7",
+      "ggml/src/ggml-backend-meta.cpp": "c6228f9abe274df86913a7ee648699c73bc13b9b417da13199174adfb11dc91f",
+      "ggml/src/ggml-backend-reg.cpp": "0f63c69ad083e0744872f57d59d049b069283303f5bbc646222907d779afe4d1",
+      "ggml/src/ggml-backend.cpp": "95f5276f5a043927169ae16c32fdd28d2fddac85c00f6b8058bd4a39cf795547",
+      "ggml/src/ggml-blas/ggml-blas.cpp": "28fd0df50a7fd2aeec256fb7886e7e1efba9e2b2ec1ac892b34137398e792949",
+      "ggml/src/ggml-common.h": "0061131b615c5721fc88a78feeb22c1f8c450f1c2646a317d80796a653bf595c",
+      "ggml/src/ggml-cpu/amx/amx.cpp": "0d1641ce16917e3f6260ff74523b158bb823599bbf76cbf9aedcc9d365de84d4",
+      "ggml/src/ggml-cpu/amx/amx.h": "9d098ceee6a8114d4a660ff269064a27aa25b8a4f205d1e6984d17bec5104f0d",
+      "ggml/src/ggml-cpu/amx/common.h": "c694f6bb066a820b717f986914b0d112dca0d8d3a1e239e958fce30c864751c3",
+      "ggml/src/ggml-cpu/amx/mmq.cpp": "0f95c80e0300eca3b3a3df07272042fee708425e19cd5f2c4cba7b253b26d226",
+      "ggml/src/ggml-cpu/amx/mmq.h": "bd33d0713b12daf9eedea1619dd715619baaa36b98c44ec754d532909d80933a",
+      "ggml/src/ggml-cpu/arch-fallback.h": "021e6efbd5b67194b291303b42e847a6426296e1f244b88cf8f0ab2003c5e271",
+      "ggml/src/ggml-cpu/arch/x86/quants.c": "2909f2c8d2aca218244fa6a816061647f8073fb8d1b07759779cc40240be85a6",
+      "ggml/src/ggml-cpu/arch/x86/repack.cpp": "c69735f83caf854172cac78eed2cbc022ef81c077e5f6aca55a49d3404a02331",
+      "ggml/src/ggml-cpu/binary-ops.cpp": "2df261aadce36a20f5e3bf6961d4ca27b8c2d461afc41488361ee6ad09c1730d",
+      "ggml/src/ggml-cpu/binary-ops.h": "5915519c4e2227db28239b2a5d3b8a5f9022730cc0ddb7880b24748ee78cd1f9",
+      "ggml/src/ggml-cpu/common.h": "db7c19747a28c819d18922aa43b91b224df3730e424e6d8a4cf4fd16bfb1db14",
+      "ggml/src/ggml-cpu/ggml-cpu-impl.h": "785a19aac84bd35671d34b1986b920baadccdf61cd8b81e787028f6ac24cae60",
+      "ggml/src/ggml-cpu/ggml-cpu.c": "30f279dce88f5d150ab8df89017c3f94a0703e15270447f13d1390bbb2f690e3",
+      "ggml/src/ggml-cpu/ggml-cpu.cpp": "ccf382d3fbf126b5ddb5850a0a970656fb24e00587da4003419439277c91cd01",
+      "ggml/src/ggml-cpu/hbm.cpp": "e5cf5c8327f99ccb58461d8416e27bc38da01d9bd450e48f3df69bd34a81a47c",
+      "ggml/src/ggml-cpu/llamafile/sgemm.cpp": "8413c9a0828ddea7289aee72a32c03bd56a23ee40179ec3600f9b0589a21e338",
+      "ggml/src/ggml-cpu/llamafile/sgemm.h": "6ec12aa9244a8ffb13ae56b2e391f905b1d152ae25ff45da6a66e18daf650b3b",
+      "ggml/src/ggml-cpu/ops.cpp": "b72e1301a521fdb30027498f9171e308772b095052f764c176d9bef317897e26",
+      "ggml/src/ggml-cpu/ops.h": "8c481b035d41e14d0249c4170a92c8faa990ff3ce9e35d248f1a3b3eea1f314a",
+      "ggml/src/ggml-cpu/quants.c": "a61f1011e49d05b5f99d352b158d5b8e36cf008294bb0db309f72bdd7f1d4e35",
+      "ggml/src/ggml-cpu/quants.h": "918d6755b3e601ec7bb83c7dbf1d73304490651ccbb4072b0d31a2b45df751da",
+      "ggml/src/ggml-cpu/repack.cpp": "5fa9f24cc2631609f40fa47a64078f77dccbe9f327711af91af671cd29b8b87d",
+      "ggml/src/ggml-cpu/repack.h": "d392cb13586c8c9177f6a0f75a75936882d09b9a70e6d989cedb3dd79f3c752a",
+      "ggml/src/ggml-cpu/simd-gemm.h": "e82a07445059ec4a4c7d8dd75a2663d459025274d817be3f83c1f5989a79208d",
+      "ggml/src/ggml-cpu/simd-mappings.h": "8f3991c6d602ad2d5e8c309889ac9d5ac7630abd75484acffdebde7d33a1f788",
+      "ggml/src/ggml-cpu/tiled/tiled-kernel.cpp": "8f81a18b9a210fac732ecac020b048184edfe2c5e74a5cc95c4df89e60bc8f13",
+      "ggml/src/ggml-cpu/tiled/tiled-kernel.h": "0d729f5a6b4cd1584bd181fbc882e39f64fd41bf66ac1a9c009025d2b09ff23e",
+      "ggml/src/ggml-cpu/tiled/tiled.cpp": "a5d92ce8f617696778e225de6658180649143fec3792c5cfef84170641f2d06e",
+      "ggml/src/ggml-cpu/tiled/tiled.h": "684aaa5320e20eadfc799c8ce04c52bf7c0d32b323f395de59ce469bda254a72",
+      "ggml/src/ggml-cpu/traits.cpp": "a85bd3ff50c91cb67d14221988544664dfe5975db0811b330dc4a2f385239de4",
+      "ggml/src/ggml-cpu/traits.h": "26e1b41879091a663325848aa82a4023b459fd1e688b3b0e2a9bde3e72a3a764",
+      "ggml/src/ggml-cpu/unary-ops.cpp": "e63b382766f1b8c5ded1577be9704e85cb4e9cd24584f3e1474911a40146df33",
+      "ggml/src/ggml-cpu/unary-ops.h": "280b7979055079d43bdde7790a7290bf04f75640481c59abc2364c46d6ac6d8e",
+      "ggml/src/ggml-cpu/vec.cpp": "5c3cb1835ea490fb6e4676bf5accf49a73a590a5bb7cf2267daf4aa73a2955fb",
+      "ggml/src/ggml-cpu/vec.h": "fb44b98bd88d5441b08c73890c0e92943bcadd741057b378a946056de8434ecd",
+      "ggml/src/ggml-impl.h": "43564db0238aebb7ed68501e346c194866b5dac218d1d37b26baff9f458c00d3",
+      "ggml/src/ggml-opt.cpp": "e35fd27856e37f3611d3bc6f17ee963be51bfe92bec96fad0a9fa2c7ebbe9c46",
+      "ggml/src/ggml-quants.c": "5574a2dccf7c07e75b143733e04a5412d3d8c819e7945f5217a7b83a2b2ff8ab",
+      "ggml/src/ggml-quants.h": "28ae5fca1f3be636b36cd6c4fa2ca74fd42d229bfbd5352eaf66f3727bb8a6da",
+      "ggml/src/ggml-threading.cpp": "13a18d885393722b7c9f42d4cf8575a4d41699926d656f78a867fa4fac9dad20",
+      "ggml/src/ggml-threading.h": "9652729043ed91482392c1aa08af5d813190d0ace2e7982d2539d28240ab8d8b",
+      "ggml/src/ggml.c": "2cd065426fe542da4d7bb0eba5df210bf5c958cf014a111f1b3d67fdaacffb08",
+      "ggml/src/ggml.cpp": "64e6b5c8d716ae8697e45481a7153540be01f721be2dc7e753aa47b36a69c753",
+      "ggml/src/gguf.cpp": "7505d6a434dc740941a682fd3b476ef9bd9893ab76adf18c9969daa528bd5be5",
+      "glint/src/aac_coder.cpp": "ac27e5d7a6769118918710e8f9ae054be34ad2d16b16e146baadbfa76a457b07",
+      "glint/src/aac_decoder.cpp": "ad0062b6c58368fb9dd007ab4a9107070abba1abfd70e7e98a62d3aaa590a34e",
+      "glint/src/aac_encoder.cpp": "3a49e9a32808d37fa0f7d49b355ecbbe6600f52c5af0adf46cde9e7375c5c186",
+      "glint/src/aac_mdct.cpp": "6f4b7a7bfd5eee3e71bf905420a2fc8121f7974ec674b85b276117a9c96060e1",
+      "glint/src/aac_psy.cpp": "0f500e3810dfd30d8184b6baf3ef53f3c45bdf97dbe63d8f29583cad8727e081",
+      "glint/src/aac_tns.cpp": "0e8633f4f7f02563dd5eea54f0f9c853036cd821684c1106c12401807d698f33",
+      "glint/src/bitstream.cpp": "a6471ca2b60d29f0f1844f6922419483972a35538069c38272054fb2179bc981",
+      "glint/src/decode_audio_c_api.cpp": "4cd1faa96128c77a941f8edee08b26e6fc76da224382c6917b16faee93b3b54f",
+      "glint/src/decoder_c_api.cpp": "ff37a89c4391e7f04919e6cb53cbd2344a3222598c0bd5913107114b258624e0",
+      "glint/src/encode_audio_c_api.cpp": "f66d5c3ae32880d238103d436a9f016f9ef65c6a2c5a1b5ee649ba3a6943a856",
+      "glint/src/encoder.cpp": "b981ceb110ac9c0488234727d4b9461a10318b5afb46c3d4c9e34fdf450afd6d",
+      "glint/src/flac_decoder.cpp": "f576984802266db7c69de1f92f66c9e35334154d9676f81c4b488d8cdc28d978",
+      "glint/src/huffman.cpp": "b121e0016c05b26efd1d89f29be75e9e07b5be7be81e9e6d9414e97632d8f026",
+      "glint/src/mdct.cpp": "f58a1bb99219dd64332dd4ee7a124f1f8b16c132113e7a985b2915e4681a4066",
+      "glint/src/mp3_decoder.cpp": "9a88751ce4212ebf3c17cc8801151329c77e13b31d7175d0997c06304d8d3b0b",
+      "glint/src/opus_analysis.cpp": "d4d5c013b6937099644e3a2e1c4bf3d51ecff60bfee82d0d79afaec9bc041c57",
+      "glint/src/opus_c_api.cpp": "2e7870e4c6e1209556d3bbe2a0963cbbb91532fed8dc8abfe1b069a5526ad692",
+      "glint/src/opus_celt_bands.cpp": "aecff34d59ca5d1ed56ccf6bd8733c42f259df44cfe74a6175174fc65adad769",
+      "glint/src/opus_celt_decoder.cpp": "4ed3a82022025277e394805d43a890b6e4e65a8dbb166498e43908c02b6ee525",
+      "glint/src/opus_celt_enc_bands.cpp": "8995a12540acb363bf1a6dbed4b1416a1892ee6e392789f5b61dcf0dac43571d",
+      "glint/src/opus_celt_enc_energy.cpp": "6d3aa4358bce3366baf0c951241121078601e44cbdc0dee9df509b4982df7e95",
+      "glint/src/opus_celt_enc_vq.cpp": "88d13f6e0ffeda6cdc3a2fbc355ad37990e83ebedccc8b9d746462a4c0632016",
+      "glint/src/opus_celt_encoder.cpp": "c4370c70d1698612b358d02b16ce9d760fd12faef7a02c254c33a096448cad1b",
+      "glint/src/opus_celt_energy.cpp": "47493745900132dca0019454af1d791932c2d718b5d5ea6b1d912ad595e0c2dc",
+      "glint/src/opus_celt_pitch.cpp": "a6402dc5df6ed96123cfe4a7b8b48615e40bd888c486b2f576d53ba80e519b6e",
+      "glint/src/opus_celt_rate.cpp": "6d2048b3a3d2fc40a8a95c988ebb8949cc53f2e74e1b99ca692447a9011dea82",
+      "glint/src/opus_cwrs.cpp": "d388b53249949502684ccff94eaba48ee73e680e0475772623c52d1dfbec7242",
+      "glint/src/opus_decoder.cpp": "e192013ea08744946eff509180230370f7fd88dcde36f110a8a3eb345e226781",
+      "glint/src/opus_ec.cpp": "37dafec84a50019aae3189672fd7431c42d78afe73e9d5eddcb2bee811611659",
+      "glint/src/opus_laplace.cpp": "ee5c6ff6fbf8efe078f05204c2efa73aee1b30e5d35a35a61a863f10036ee0c4",
+      "glint/src/opus_mdct.cpp": "87dbb453eb3d18985130f5bca47c85277c503a60eb2e36df5c39e059e4557195",
+      "glint/src/opus_ms_decoder.cpp": "1ed16d2bdeafeb955b6d0a67a1f54ed5b8ef83646a01269c626722f8b39f6494",
+      "glint/src/opus_ogg.cpp": "40a9abcdb9f7322b67899dd6f7612a8668c235ffad392d28822358b8a939af1e",
+      "glint/src/opus_silk_decoder.cpp": "6a739fb845682df77694f027fc10b126fd94faa468940626c6003adb8b6203ac",
+      "glint/src/opus_silk_excitation.cpp": "3f17788c5d300d7e520d24c9c2ec10aca275b8dee1d374a80d4dcfd40a9b6aee",
+      "glint/src/opus_silk_frame.cpp": "1c386fcada6dd4916936a45e1d5c0da9981e9fc62bfa530c9116931a2093bf0b",
+      "glint/src/opus_silk_indices.cpp": "0069360a30fe766eb950d24cbbf0142e432d77aad7c68094d12ab43a2ff4d66a",
+      "glint/src/opus_silk_nlsf.cpp": "d1390a3d6c1539be0ed0fd35b951d2632966e03230c9ebad3ed042e291c4c091",
+      "glint/src/opus_silk_plc.cpp": "fc2740c40fd14966c43643a5001dfa42ee742d8cdd0e90875f5331034666c2c8",
+      "glint/src/opus_silk_resampler.cpp": "c2cc5e6f70a81b4b08ca3f4a0d92a82a7e2ddd86c3de4a37823da6c07e9ad071",
+      "glint/src/opus_silk_stereo.cpp": "cf8571397a7dd0b451bb6258b186aaa7e53a820d7396f326cf36b0c4feea4689",
+      "glint/src/psycho.cpp": "741893877bb79f7ebfb22294712ca661dfb5a467c39679fcbd7e6a805025500a",
+      "glint/src/quantize.cpp": "27baa8764b4571e561dde0e698e118d3b7a920167b99f852665aee33ce0ce2c4",
+      "glint/src/resample.cpp": "3641d2c6592f1cb0faa9267386ce2789b19c07a69b9839e2c94ccdd2832c77d0",
+      "glint/src/reservoir.cpp": "760da304b5bdd1d621b8af76db4ad46b4bc65d22be60f7497be76a76fe51735e",
+      "glint/src/subband.cpp": "ecaf9b39489cda5475e2fdba58ab70c8bbd80e7fe1893d310c109f4ada8a28b8",
+      "glint/src/vorbis_c_api.cpp": "257d019c6bc6491fa9fc118bf9f697fd70fd965716f2433f047aee1f47462c9a",
+      "glint/src/vorbis_decoder.cpp": "75851649b1dea5685ec2f21fc67069bc988d21b1a848f7fe10df5315d1936126",
+      "glint/src/wav_c_api.cpp": "16690f1223cea4a74144a6c8bca9c663a39046baafe4e3614d46625558c46042",
+      "glint/src/wav_io.cpp": "17640e0a0331179478e8215f8ae6f65f1266362847968ab57a82a1562f3a0025",
+      "src/CMakeLists.txt": "9839ae1c8b37c7df3ff5b00399722bdd75b86d70a7ea23251d8eda68e871f9e0",
+      "src/align.cpp": "b801890c516effe086f30578c51f0475873aa11dc6c86fc7a6cbb79e0ee75e2c",
+      "src/ark_asr.cpp": "d1220458a326f8112a74881acdae07aa48990086620441dc8058290476d698e1",
+      "src/arktts.cpp": "3c5ab8db8622f730cd40fb20520d85acfeca9b3de4030a8bdcbcf0fb68bee9db",
+      "src/audioseal.cpp": "f4d37b7bb436bc78d96da578d9e3ed15142b3599e7d4d43a20c0dece2ae39d17",
+      "src/bananamind_tts.cpp": "cebaeaaae574c3f8cfda494ae65ce291b23fe153e5183d99e81fdc0062ecf4a5",
+      "src/bark_tts.cpp": "8ad4f52aacd3c487050b39be7f4024e4c783a53de911476a42ed42d1f9cdef2d",
+      "src/basic_pitch.cpp": "64d49472421736b2b8927761907b736339d459fe31c0fe600fcd727a373e3c7b",
+      "src/beat_this.cpp": "c32a539752d776c39cac8b7eb950ab786b9282d7d35b70080c531c505e516bb6",
+      "src/beatrice_phone.cpp": "fd023eac0c7bd56d6a24409d6457631882728506c9f9e275e111c9d747ee47d7",
+      "src/beatrice_pitch.cpp": "5d5508bb8736ac53ddc775e438376f32533ad6600fbb029e959b83899ecf3f1e",
+      "src/bert_encoder.cpp": "b5fca7fe0999a30e1555cbb19f9ed0b6ecb05edcf092210a737fcda73a5dbdfc",
+      "src/breeze_tts_2.cpp": "0adf36b11b96b2913a1567bad4e2774128f9e595ba460d974f931ae44fa69535",
+      "src/btc_chords.cpp": "036b83de701ef52a16b5d214f3bc27a043cffe73874032a59f51c8db3599690d",
+      "src/canary.cpp": "6f82a735af43c4d2a40341b27fafc44cc2fc1e28d80228aa0beac606ec11765d",
+      "src/canary_ctc.cpp": "b873a275ece6bff7d2a01942d76f173bc7a2f9448fbca22919f840e41bbb6c9f",
+      "src/canary_qwen.cpp": "73fc56717fdf280ede728c5d48246fe7585745af54c2cb8245028ee3a0a51e58",
+      "src/chat.cpp": "dcc316be7b16951b993ab2f3f21e519da63580dd871d03bd0ecd6e04d19c3dbf",
+      "src/chatterbox.cpp": "94dd885e5671a888085ac1fbb9faecfd8561a4f087090bda4aab3ccb571ca0c4",
+      "src/chatterbox_campplus.cpp": "cb27660ef33962cf9d91560eff00b447ac1722345b49bffe032001e3fccf060a",
+      "src/chatterbox_s3gen.cpp": "b130124d80932505d77631f334d07cf06e4539a3234ed8f1354c196fe8e730ff",
+      "src/chatterbox_s3tok.cpp": "e5c31fce862826ab92ab4e312a0ae9bf3d0ccc6dc748ec5f64a52b2df1ef776b",
+      "src/chatterbox_ve.cpp": "7a85aa3d436d237969c3992eb69142b91b7251a738710853a216b61961af4c24",
+      "src/cohere.cpp": "fd36419420bb7381f1a6689653b31433cb495543b731a84d9f23b44d989ea431",
+      "src/confucius4_tts.cpp": "1d7372395e33eebc8560181871bd468db17b1fca1f0726810029bbd8b63901a4",
+      "src/core/audio_resample.cpp": "fe1beb66770dc045c14ecf3466c6ab40cdf42eece79a829d72773a9c21fed687",
+      "src/core/audio_resample.h": "0f2107e03118c3d471b3422d963e801b4476a9ff85aba3e526a77c23e3cca228",
+      "src/core/crispasr_env.h": "52f41e7d2c57d735e767d84bcd274b952be28454a2fad51c28fe041c43c4a838",
+      "src/core/currency_symbols.h": "05556b14b4178d1defdb7ef5809e08f8ad07c7387e074bc7dce163f635174007",
+      "src/core/diarize_smooth.cpp": "a6b5d2d6a568fd3cdb54b60c063e13f436abdb999c6f5e66cf07c558587af642",
+      "src/core/diarize_smooth.h": "900b5b5f99d2cd39f1605e427f1317692b513209eb845d739748da1fefe11044",
+      "src/core/foxnose_pipeline.cpp": "6c5172eceab66c612963fc2f4070ef887d94d573ee8b8a1a9a4c3d1e06f1f176",
+      "src/core/foxnose_pipeline.h": "f6fbe2dbaa6f5d12b29f1187d8937aaab0d226143046c2f3b457a7f508f0911f",
+      "src/core/g2p_alnum.h": "8bae399c086c8dd3d829aee3b10fc6f0f52bdedb0c14e661addbb69b17e264d1",
+      "src/core/g2p_ctxwords.h": "2aa52e9ca837fb70b598b1068b422d1c8c1e95ab8eba04418459f87f02eef0ab",
+      "src/core/g2p_de.h": "b65563e2f99132c8f9766a5f1366e577c8202307b744d2cda39da3aa5a368ea7",
+      "src/core/g2p_de_unstressed.h": "4c2714f571d3802956b9748be3a96a4304a6e272d9b8173f5fa48d2639132743",
+      "src/core/g2p_en.h": "7dc74c67d92d01bddee156086e849291c7abb593d070b231d3f0bf418443bbc7",
+      "src/core/g2p_es.h": "4234adfcb43efc1cc8972b73d72b6b040324cf41562dde682edb0aa712f92472",
+      "src/core/g2p_fr.h": "a204b517e81e6f15302c1ce898a9d91bb1db6cb40e6672684d6f30d8d853ac66",
+      "src/core/g2p_inflect.h": "172878000bcac05d5909b2fa44102163961bfdb4c4d9d7d015fa5cfc949d538a",
+      "src/core/g2p_ru.h": "64b46735857f6694ed93beb7b6e6bc980b13d57df69576bf2a12515fc6f9ef1c",
+      "src/core/ggml_cpu_backend.h": "aa2d261fac1414fad06829dcfbfc38627e9b55b5e07095b7b7abba5307b7e389",
+      "src/core/gguf_loader.cpp": "8ab8e9ba5c29442c93bc5ba862e9906e2b925a382f9dea14102ba8566906160c",
+      "src/core/gguf_loader.h": "c21207746a16338d551ff8179095033e0d4a7d898179221bc9f100ff84f079c3",
+      "src/core/gpu_backend_pref.h": "b1fd43cdabf3e74d0eca27215b4fd01dc1b227db5f0fd44c8433b9ed8c9bd792",
+      "src/core/kaldi_fbank.cpp": "890313023d6161cd1b3465e19a9869dafe9d5d74fa5108f230e55d66a5bbfb1c",
+      "src/core/kaldi_fbank.h": "62f6f6aba73348146645028dd43d2dd1787c6afbd98dfa415891f27298502a09",
+      "src/core/mel.cpp": "2a80a77de1783e692a656d414047d0fec1d909778218a4bc0231ad280a0e28b0",
+      "src/core/mel.h": "bf317ea3c417b793a9954bcf9d21d70372854f14a3abd36f2735b8b01161e0b8",
+      "src/core/metal_pipeline_cache_policy.h": "d9d1cb89131c659780ad143a1d83be42febf5dc457704ceac048d27bb5db3a0e",
+      "src/core/num2words_de.h": "1824ab7a5575ed4a9e1bed8b0c2adc9f3a66c116257b00dacca4b908ae47e824",
+      "src/core/num2words_en.h": "7cf9cc69ae8beec59e041511258f25ac0e24a7a04f7230abf31504a8c077d8ca",
+      "src/core/num2words_es.h": "deccd1cd4b7cf454d1656b933aef79a4101c79c8e80fca9919a80182ac50aa2a",
+      "src/core/num2words_fr.h": "68b773c660f93dc12d6dd76b32996509586d6a69b36e45b010084d0600877851",
+      "src/core/num2words_ru.h": "08dddd6f1d69f136116a872ab5a98a0e781e65b989536673c7409f9af3fd6003",
+      "src/core/parallel_for.h": "f56b0cd8759c0e983f1691684eb8469a5cc1a4383ebdea6f823565358defea6d",
+      "src/core/pinyin_data.inc": "0f621d5ba92e22a089053bbaa16161d6440edd88459674376b68f60c02896a8f",
+      "src/core/pinyin_g2p.cpp": "60fe07a1736d3e44d26c5c77158b489439806c310ae53776fbaef544350d8783",
+      "src/core/pinyin_g2p.h": "fbcf2315cea0bf01f9ffadaba3500ba4df88355d62c79690515f5b4e57e2d1b3",
+      "src/core/rvq.cpp": "807fe43c698b45a33274b97a56752286a3f19ba137a57fc833338ad55eac9453",
+      "src/core/rvq.h": "a43e312b8557bf008fcf938c9f7bb488864a5c9bd7f89ed1a2e540c70d6e2bf3",
+      "src/core/snac.cpp": "801d4737fa4c9840705dca8f1cae2015164d775564dc92f7b9176e6c4ba7e30f",
+      "src/core/spectral_diarize.cpp": "cee00f602dc3b7d82438293940d725eb80c3ceb8c4450b8a70dc769181a24622",
+      "src/core/spectral_diarize.h": "bc8d3d220eadc6849120a49527066c4b41e1b8f22bac748393436d09de413c30",
+      "src/cosyvoice3_tts.cpp": "f20d9a815fc1c83fca2bb7c72fe3f678f87cebc05b02bdefca68487a067fcae4",
+      "src/crepe.cpp": "fc479e330f27a3788cb4be068303f01cba14417d040e2079bdd31995aec6e973",
+      "src/crispasr.cpp": "d7f4a7fef5279a121fa118d304ae93e7bdd2aee67f523aad45bae24499bdc340",
+      "src/crispasr_aligner.cpp": "fe28fb85e2b728204c0eb4b37c45420537639dcbae769da9dde4d28ef226d0cb",
+      "src/crispasr_audio.cpp": "92c715a58e639ba40b7be0af972098585af1a4f205a4ebee0237aac9da3004f7",
+      "src/crispasr_audio_resample.cpp": "5f7ed7e21fadb7c2ac1bc21a3c44a76dcf0ff1f2629c47c2583ef4c8a00e8f3b",
+      "src/crispasr_c_api.cpp": "2fb8af285b818d0d300d4a95465327cc555717a25883866bcb7da38d80ecd093",
+      "src/crispasr_cache.cpp": "1f61a82c5daa25599df1877298edea1af32db7080db01b2f0dfc14ec3f32f0e5",
+      "src/crispasr_cache.h": "330e2e8efcbf384d689bacf8f6549bf785fbcdf8f3f2b8fda7d29f07ba88e113",
+      "src/crispasr_cpu_isa.cpp": "401177edb245a9007f15aa2553c2aac96e83fee8778acdcb2ef6626d089d0201",
+      "src/crispasr_diarize.cpp": "50f4bac58bd464c90a28bdf5565725db037f2ea734586f7b30b71ff5406f60d8",
+      "src/crispasr_enhance.cpp": "4ba1ea26fa29fbb5b00185f62410e97c63b22faf6778de6f5cfc9a6e1278ede8",
+      "src/crispasr_imatrix.cpp": "d8504a422fae71560328d55aa8e685f427289d4fba227e0c6106befd15fe9c2f",
+      "src/crispasr_imatrix.h": "50d50284d2aababa4c5194184cd4b193aacd562c22dbcdcb76ae38b7172037c7",
+      "src/crispasr_lid.cpp": "e2548aab050fce68b16f98d8751eddf985d9bf2f9e9ec1ff213ce5bbb6d66dda",
+      "src/crispasr_mic.cpp": "d184a7df43ef03623845376515294a7e590e6a1fa063a586af402e356e58b002",
+      "src/crispasr_model_registry.cpp": "313b0e8a5c2a06161f93b5cbcbf37fc19e0af8182447e8779fd8e6e5e14349dc",
+      "src/crispasr_speaker.cpp": "c06816e25239905bcd57d8204e37be531be8e65a1dde12e6b6878bd72fe29b60",
+      "src/crispasr_speaker_cluster.cpp": "565fb75ab17ba76e389c4971b0b91cfe7182492b84fb58449ddaf555947afbe9",
+      "src/crispasr_speaker_embedder.cpp": "b9fbe69b7becec50ceec8f05529c79f066f23ef478a0290c21b29936256bf76e",
+      "src/crispasr_vad.cpp": "777ced06e1d1b30e2dbe589c8486c4aae8633290dba7c624ca08098ba531aa7e",
+      "src/crispasr_vad_encdec.cpp": "3b34d2de735c1b627046ccbbadcc45c70984d40c4bef8295cc13a4e5f3634913",
+      "src/csm_tts.cpp": "783ccff627f012d740ff71002261fd9a2144ddbea3337eaed82887d4d93f8e77",
+      "src/dia_tts.cpp": "6ff3601633db6f1e023a10dc45565c38fa3cd18bc341c9fc5e800bd4bcd890f0",
+      "src/dolphin.cpp": "322685f3e25c7cff80ac6c8f9fac35ef4b3413dea46c13f05bc57f0d9018cb1f",
+      "src/dots_tts.cpp": "b5c426576b9475b150ae7ceba0e5e85f0f14ee061d21c1e3b8870e9ad3826243",
+      "src/ecapa_lid.cpp": "e1cdcbb50566c3e08760773c3daac7a7b575b481f4c0c5d2d64acbb3ec34d1fa",
+      "src/espeak_dlopen.h": "486d696ca7caa03908dbc4e91a76a61680b40a23ef055fbd25d318a5dc7b9161",
+      "src/f5_tts.cpp": "750597d291b43447fc2d551f3cf1ba13cf7d91b20a3ccd58c79819d72f989ab5",
+      "src/fastpitch_tts.cpp": "4c97f6ff215698719fae3f207b9cb499e18a15290c259f4b533953faff30604d",
+      "src/firered_asr.cpp": "af6d6a78a0a5da1f5ebf3506da4313ca8f19ac23f75aa436aa01f49ef4d554a4",
+      "src/firered_lid.cpp": "ebf9b500b4dc006d121aab3be384539dd607bc4ae89504efc6325d4ac518fbc0",
+      "src/firered_vad.cpp": "7442ba199dcf95298ef8b9f8f926f4fbc684ee51606bcde89bc60435e4f2408f",
+      "src/fireredtts3_tts.cpp": "c84db218a9567a88149d3438b0dff4d0fc425c5a0090118fedbef0c87b5e744b",
+      "src/funasr.cpp": "18eace728cd299d834979fa6160983421c43fe4ef5cad7fcb050dc636bcf834a",
+      "src/gemma4_e2b.cpp": "928af8dcef08654d48553e952b9d02d1bb05c2c9a433a5385d29d1829bd0a245",
+      "src/gigaam.cpp": "ebe51f3e36f45df810eabb19103833f2034e155bba97ecdadacce369a5503c5c",
+      "src/glm_asr.cpp": "f196d405f75093d0daced19dd531718cc8b43a38022ff9434c44ac9f37542f96",
+      "src/grammar-parser.cpp": "cb4ded715f89fcc9450715aa0d1b7eae7cc31aa0ae933efcf3e1cba90e429130",
+      "src/granite_nle.cpp": "0e2fe35395bf38638ac2312d000083fb89d6ee92efc5906881c15527862881b4",
+      "src/granite_speech.cpp": "fbfe922f17751401bfcb98a600b47f29b041842f59f8d8c97d24ce5a740cb5d6",
+      "src/hft_transformer.cpp": "e3274b5ba35b4d57515578d2d7249a96f4f2bc86595e28c06f175b9ee3f4e204",
+      "src/higgs_stt.cpp": "bee99b43272df8a72402c2d4d3a8af86dc2043e7a530adddb9f7818396ba757e",
+      "src/hikari.cpp": "0bc28cff6e71dac50992ba9c8484de600ce32510dc08292ed45b96b141fd07d7",
+      "src/hojo_asr.cpp": "a1e7b65b1c404874c65a1ed8ec7982cf762eaf308a338702ac45e6c6c6fe686d",
+      "src/htdemucs.cpp": "f3f158b88e85f656c13e6acf688bcd00b86956153f59d21b5ab25f37f51b22bb",
+      "src/index_echo.cpp": "68fdc68d8cf09765e24a6a93056835168f0a9c01419d62ed729ba2608ac6f3dd",
+      "src/indextts.cpp": "04fe175a49e53adb78586948cc4414add3504af78ee304e3ba2453cfacc976c7",
+      "src/indextts_voc.cpp": "684ae87667f76e2b42f6bb9d608e64dc15a8174e2e398a0be5d17b624ff73dc5",
+      "src/irodori_tts.cpp": "d8f555af1e09e475ef09f9b150e81524775005b7d19b2cd991d31b2396d03d26",
+      "src/kokoro.cpp": "7b182404e93d3a5a0252c484ba7a3b16b87aaf56d885b7c45b72fb4ef9cd5c66",
+      "src/kugelaudio.cpp": "fa971f6ee8bfd1cc299fb1602cb0da6a90569d2452175439ed5e5f560e928a19",
+      "src/kyutai_stt.cpp": "70d4f1469f32b75642cb36288e18ee885e1c59e79fdc741bbc98a4080ca34b31",
+      "src/lfm2_audio.cpp": "1d05a61c16573e644850e168dce06afde5f1cab310890a273b130725d7e116df",
+      "src/m2m100.cpp": "8f3cc261bba6f2eab6e7bcb1387d4cdfcb2a0097ae9d3861a4dffd9a0129f638",
+      "src/marblenet_vad.cpp": "a82ddb3e3547a7f4aa26dcb72607430b6c9595174c51f1072104c3910e7de9fc",
+      "src/meanvc2.cpp": "cd7efff52b962db39fd5077ce96164e916396d150c724f8fd0ddd1d1e10466c5",
+      "src/mel_band_roformer.cpp": "2b90c8eee6e2123d8ac6244c6f72a790e086aaf9b769b9b1691fb896584e60a9",
+      "src/melotts.cpp": "1de3266dd646055072c8e702b34919dec076748453d09fa0e62286898b3d7e3f",
+      "src/mimo_asr.cpp": "dcfa0fbb7e4ca1c1e962af2ccf968105c1fbc980bcd409f088684964f5d2f104",
+      "src/mimo_tokenizer.cpp": "2f2c6f5078cea649038c035de7200bab049a1619ac036a8bc6ae4e10d524cf91",
+      "src/mini_bs_roformer.cpp": "b580771c7c44f2e07024310e9dde0144049883e8f654387135b04b641a417082",
+      "src/mini_omni2.cpp": "b53349dd06ee0efe2166cf858362ca913197be37c54ffaa0188e6d05d65b1436",
+      "src/miocodec.cpp": "e061488c012123adf0b24ebc3d71d8845661616b6b45e49fa823f2f079ab4534",
+      "src/miotts.cpp": "a0ef2a5414bd2defdbce4847ca1f4c2c2361f7ee533303e2839463ed50679ac4",
+      "src/moonshine-tokenizer.cpp": "fffe6b9a20194b53b0f9e4942a2f7f36f0756abd77006615509982c8b175e375",
+      "src/moonshine.cpp": "39d3c146601443dcd1f99cbf0205f06c02a6ff6f2008881b6cf0447ff6a58d7d",
+      "src/moonshine_streaming.cpp": "0bbf0ed0132d99b64ccf20f7c8ece817506dd6c83109b96a3216e5970fb8d8e0",
+      "src/moss_audio.cpp": "997cb11eae8b6af66c1d26843b26f06c8a6b56eba0fde2d192d7f186e5be20ee",
+      "src/moss_transcribe.cpp": "775ad39c5c24dbba2c9645353aa3fc4ded8176afe7f48ff77574e96f4a88ef3c",
+      "src/moss_transcribe_diarize.cpp": "198aad0570edcddfb29097775b97ff5479c21a15fc1e04ce75b5183140b6829f",
+      "src/moss_tts.cpp": "48d079bedb72aa438c8e946e019a37140776ab5ee0cc919a2113c7dec2ea46e1",
+      "src/moss_tts_codec.cpp": "9ce20c53077157c6fed70dff4060082dc1bb408b6b25aa21b510794f1a594a13",
+      "src/moss_tts_local.cpp": "0e47fd1fbb236664ca6d9a0f0e1a177db9b1e05dfbf176f4e6032965b353237c",
+      "src/moss_tts_local_codec.cpp": "5756c66c52468023f9e8c63372092cb1c1ecf72a0bf2c12008b4aea6c9888c11",
+      "src/mt3.cpp": "1d4badc34e28e65152c78c512c256b14d260382c96f5debb43dbe1a5d0a9ee3d",
+      "src/nemotron.cpp": "dfe96582934fb9910cbdd41e4ec31356c22f54f48ead56f97cdf23d097e83ab8",
+      "src/nemotron3_diar.cpp": "5d310156b0726165af0e2fbbdb2fdc348f542b70955b4ce5f3ce2f9565270025",
+      "src/omniasr.cpp": "6a6d2b2cf62c44d80775d42e330d837ba3ce0f1657818e7581b4d20350dd150a",
+      "src/omnivoice.cpp": "c156e5a50fc668cfed115210e866a706d3bf224e9e3091ae249fdf3d9d4b8ac2",
+      "src/onsets_and_frames.cpp": "7ec3586b08647798111850d38319cb0a8aab7bd775eca4066bbc1f8604676ebf",
+      "src/openvoice2.cpp": "f658c40176fe1c67584cd9ab80ca9d954433cfe7973f6ba84b43a448d59b8c13",
+      "src/orpheus.cpp": "2691dd5d3b6009cc880ff8790f77d448398d9382459965a846f007373e09f37b",
+      "src/outetts.cpp": "f8f1fd070de220c1cdc058c4b8b03967101811f1cbb084ca0c520747fa20b0de",
+      "src/outetts_wavtok.cpp": "bd1972e5df77cc3097b6cd666e80a96a7a514cc942bd71d1fdb188353e56da59",
+      "src/paraformer.cpp": "54b2a4d4ba8449c16b878c546f6ea52310829ee7d4caa604b8779bbe111d505e",
+      "src/parakeet.cpp": "25e4dd64fd3c5e827a74da950c73676906f4c69ad38c55c4503918e4d20e1907",
+      "src/parakeet_orchestrate.cpp": "a095ed03f09bb438118a733f005a2945d58de41dc9f5e4aa9089fef498e4954d",
+      "src/parler_tts.cpp": "5ac358a26a54ee3a2670b1c46e41a79c942b24088092f7e4304b2e4070e9a3ff",
+      "src/phonemizer.cpp": "c996937b8aa82982be26c824229b56c53579838d23e14f4c0a5a59852cb9f930",
+      "src/phonemizer.h": "a785185d981fa2d52697fbd15e30b00af5e9c261ff0543c3a579c332b870b7e6",
+      "src/piano_transcription.cpp": "0568f19d81540fec921a25228ed59d80981b536138aa53ad6f67f8a22f531a56",
+      "src/piper_tts.cpp": "c179028b9a608757fd011a5dcead52d3cdde0b76973de805fdbba6ca5bf036f7",
+      "src/pocket_tts.cpp": "5414913d5d6a6771b44c11bd915a354243241af73675c42e552f6ce4f546085f",
+      "src/pyannote_seg.cpp": "c8bebba27230a2f64e55d3e0be79bbf784381a08c6aaf388b95766a06604e84a",
+      "src/qwen3_asr.cpp": "8a8694a22fc4e72e405d8bf0b26cec77b2ebe5a4ad39048d6f2ed40adaec0e10",
+      "src/qwen3_tts.cpp": "ff33981b5c642b7f7e68e5949092aafc3e330b4989e81eb9b949dedc665b7df5",
+      "src/rnnoise/celt_lpc.c": "a91618ea86e7704d7aef987a80e43bc825c8abd18554e12fe3d24bb904cb2627",
+      "src/rnnoise/denoise.c": "8dc062b550ee564483eef54ced81a0cca6e350b4e6cde161f123a285f4efbdd6",
+      "src/rnnoise/kiss_fft.c": "4a97117da9a5834e031a9aec989bbed012ee52e648dd16847bb26032bb03efb2",
+      "src/rnnoise/pitch.c": "2b54c1ccd1d4f50898fa38f68438f3b1e0c2af71a9eefab7575b4d26f08b0ca8",
+      "src/rnnoise/rnn.c": "54ab94919a83fb083286d7ed0fec995c39572770d76c61771c31f6e5b5927650",
+      "src/rnnoise/rnn_data.c": "9f8ee228a100d1eea404bf32c589814ece41f8eefd1404460202214ae8b5e3c7",
+      "src/rvc_svc.cpp": "2f5318c6d7c58fe211bcfa489988c344cd3bba5ef7272e06036886d871ceddcf",
+      "src/scnet.cpp": "007292fa67f934d446613d775d42dde94cf15e9738a5b98f3017bacc4e67cb38",
+      "src/scnet.h": "cdbb8d6eea4d63bae72d6fd3810cbd06229a4cc41fee20c0158454cc406a6b4a",
+      "src/scnet_activation.h": "c239cad15ab8b9f04d104195c0156588afa8dcce76a5b2ec971e3edb5ad0e651",
+      "src/scnet_fft.h": "3b5728b892b88dcdf34d3ae860272c15640b191754674e4e78d75060c3509318",
+      "src/scnet_im2col.h": "3f7725c1989448d5e70ab7c86e9de45bbcb9b4cb5cd5d99d82b656f88b0ff7ff",
+      "src/scnet_lstm.h": "cbc6fcae1ad48f46563587f693f67b496a471e5efd13effd5c5e0832bcce831f",
+      "src/scnet_real_fft.h": "253ff3fec4308afb523b7182e1252050ba0355a231f4b092ce413bf33c45fb0c",
+      "src/scnet_shift.h": "816e594eb3973757c67d1e0f7bcabc0b9bb30d6f7b7d61d36ba6bfccb45fea05",
+      "src/scnet_tensor.h": "fcc049aa7bc7c2162e7ccd01a71979cc38adc60670fdc1f9bbca455b40fadfa9",
+      "src/sensevoice.cpp": "c6817aec7a051b11770ef6e717deb5f9ac3e2a40024a3b26c4bfb841da58462b",
+      "src/sidon.cpp": "db6b55c2e8a526a402787e7534d40f0e218edf466b4c028a2f009f14bea7c697",
+      "src/silero_lid.cpp": "3ee8f6bf1668ac11fa0103a3542807f99d3c5f3546460422149bead9259ee810",
+      "src/speaker_db.cpp": "a5248a20da1128dd55b86a97494cfcb3ff02f15e6b2a4396736004cea7785136",
+      "src/speecht5_tts.cpp": "4423c6dcbf655b8dd3b47235c61f8e13d676f57bc4815a44feb2ed3f5d0ff238",
+      "src/supertonic_tts.cpp": "636943d172246f26ad4e72f1a072beae4a2856bee6547cd7b1407b301fee55d7",
+      "src/t5_translate.cpp": "f1762655cdfc78f086fb98da84a1c3713a89490e47018e8ffe1522af10f0bf7c",
+      "src/tabcnn.cpp": "6023726c48716aecd7ceb4e9dad047a480102b28242a2a5e2e306186584aacad",
+      "src/tada_codec.cpp": "0e2d747645ab9f778f11a2ce0ae8f62184d95377f7938946bfac2deca7353c2d",
+      "src/tada_encoder.cpp": "74b489ca19893c5b5c08fbcf27435b8867fdc4d9b51224ec9ceb31533b9c4841",
+      "src/tada_tts.cpp": "6a198c444e44f0d4941d8a6c61342a494adf7a2e2a6bbd7816aadc132a23f31d",
+      "src/tiron_link.cpp": "042ebfea243ceeee7edbab84bd9bcb6927d71c9bef42f0a7e8a2813b265eb26e",
+      "src/titanet.cpp": "508a5575a9ff1ef81eda2eabfe040ee96da28e6071aec9b5fb74d60cd93f60b7",
+      "src/vibevoice.cpp": "5352dd7772d3bf900ed205436fb8e958b871e6b018d939547c9b4bd33ac1108f",
+      "src/voxcpm2_tts.cpp": "d4be063fcaa87fc82ef021cf383361d04eda3a20ab439ab8fda32ec2c7813441",
+      "src/voxtral.cpp": "9f4525a5bd9a1310cc7275b93e49181f435e7fb7ce99ee20d8c1aaab2d575d45",
+      "src/voxtral4b.cpp": "1304167a1a8b6ce27d5db017f3de71188dcb4fabbb861b5a3a138876b8f312e7",
+      "src/voxtral_tts.cpp": "a3fe0d4297611aad6cad8a3297fd034cd58670dcc6af20734ef5f6b701ed9976",
+      "src/wav2vec2-ggml.cpp": "344f37ac12e2ca1d77da359886851c96e53bade14f976f4ddd0ab52853d613a4",
+      "src/webrtc_vad.cpp": "6fb05941f2f1c74fbeeea812c5bce4529eb58df083131aa52f083bf870a56589",
+      "src/wespeaker.cpp": "cf7a75ca1a24b12bf3486cd2da5119c74527125086bc37f5641858726cb9f08c",
+      "src/xasr.cpp": "7acbb691921a1f428da729d4fbec8a3493320761a4525b058baf41b83cd8a822",
+      "src/zonos_tts.cpp": "1b842d6684fd4b5cc2b1f23cbbefd20677461ac64d6b2e68aca22f05e3e7583a",
+      "tests/test-scnet-blas-threads.cpp": "a3c359bacd78391c3b7edcd491fbd3d619466942ba5b82fe8f3af3be20150f3a",
+      "tests/test-scnet-tensor.cpp": "9714dc74f629ffe87d618b41c4dde634f35d19fa6bc51cde60467bebb8ddb11f",
+      "third_party/c2pa-audio/src/c2pa_native.cpp": "b3b1bfbf2b02ab9bb7394d8887daced4be9034c97aba4f75d35227f95689605e",
+      "third_party/c2pa-audio/third_party/uecc/uECC.c": "e9db3217c2e8aacb2e1930004a9236b7502d4f0d44fd5796f45e3923f61eaeba",
+      "third_party/webrtc/common_audio/signal_processing/complex_bit_reverse.c": "a395a1116542798cff9ce23a21324a1a62a5566271c16fd5a70c5eb8b9332da7",
+      "third_party/webrtc/common_audio/signal_processing/complex_fft.c": "13fbb938219892d28590998c469a4bbbb681fc5d6f70943d099f6412229b6d55",
+      "third_party/webrtc/common_audio/signal_processing/cross_correlation.c": "9a52c9e7736933b4252ef64394ef1c7e58148d7a1370383e514b95f85f3bfd96",
+      "third_party/webrtc/common_audio/signal_processing/division_operations.c": "32998618519cfe152e32421a27886043d4707db9ebe0bcff1c45389e564f990c",
+      "third_party/webrtc/common_audio/signal_processing/downsample_fast.c": "01ebe96c159c93a31f9d66747daa1844ead4744c45850d97824b83e3fc5a35ae",
+      "third_party/webrtc/common_audio/signal_processing/energy.c": "9d397966daffc7fea32e078695e2de0d3f48beb5eba52d4591b27e128f226b3b",
+      "third_party/webrtc/common_audio/signal_processing/get_scaling_square.c": "9deb53ae5ca5f3e9f3cbab9d3afaa546cea31e49373d20ef0e5ebd189d3fdd46",
+      "third_party/webrtc/common_audio/signal_processing/min_max_operations.c": "59a5210a16b4696c18b3fc80a3470333db6bcca1a5f20f71261e3448d59f6184",
+      "third_party/webrtc/common_audio/signal_processing/resample_48khz.c": "070839683fa248efb3afa047555263d561a0c449154f6feacb5b9ce7fdc79114",
+      "third_party/webrtc/common_audio/signal_processing/resample_by_2_internal.c": "e3a4ac3b32428f2f6cc16c5fa3a6df033983d89cd54a778d9405c3b82b618736",
+      "third_party/webrtc/common_audio/signal_processing/resample_fractional.c": "61b4388968b9b3874308402d85e98ed60cfdb3e804e64945143d7fc2cda48ed1",
+      "third_party/webrtc/common_audio/signal_processing/spl_init.c": "f825c8b5cc2c3834022a1e062ef46c302b8ea71022fb27e6fd202b5cd75c369f",
+      "third_party/webrtc/common_audio/signal_processing/spl_inl.c": "68ac5198aa5c77884c760f8b8f1073b9120882fb1bd05b2d2c03ef8152609e1a",
+      "third_party/webrtc/common_audio/signal_processing/spl_sqrt.c": "fecd0d18251d1ecc888dd68d79edca9d085ba305b6d17db5c37f3719efd9a029",
+      "third_party/webrtc/common_audio/signal_processing/vector_scaling_operations.c": "9ea07abd1fa3203fb749c8029c3ac33ba14e14ee8c5e7dbd75b0539ec49bf64c",
+      "third_party/webrtc/common_audio/third_party/spl_sqrt_floor/spl_sqrt_floor.c": "acf7d66683e2f8aac817b76560589eecd2111c72b61f53b42a6844fbbc2703aa",
+      "third_party/webrtc/common_audio/vad/vad_core.c": "e73c0a7562225cb36eeca4a9d849cb445a932a8cb4bf948eb11135cfcfc81e57",
+      "third_party/webrtc/common_audio/vad/vad_filterbank.c": "df0e67fac5233382aea984713a118180c7e393e8938e13d3ca23d633f7871357",
+      "third_party/webrtc/common_audio/vad/vad_gmm.c": "daf4ebd4e19a7234e29f427c82efb66a8deff34cdc3dad4bc89a1edef234bbaf",
+      "third_party/webrtc/common_audio/vad/vad_sp.c": "b9db6bfd0fde3b518990c13d718f6e6e050022a479c2e073b2753bde1b0c9e03",
+      "third_party/webrtc/common_audio/vad/webrtc_vad.c": "88e90b68499dd6c732b1ecb8ba6a76dc5f77df48fd726d650ac1665f645ae57c",
+      "tools/scnet_exports.cpp": "caae683df3f618ed2f03925a942d9370cc9385b93077ac1aecb526a31ea895e6",
+      "tools/scnet_probe.cpp": "4453d5c510aba7120b585450e93335edd70019e2dd1111ec47fc1ee6a28b9da0"
+    },
+    "source_snapshot_directory": "{provider_diagnostic}/source-snapshot",
+    "source_snapshot_manifest_sha256": "0704a8ff7899e203c8619be0cd566b4d81d5f1005a662de8c0af59f00f7dd4f6",
+    "source_snapshot_scope": "Superset of CMake planned translation units and actual project-local dependency headers; see compiled_translation_units for exact compiled objects.",
+    "validation_library": "{repo}/build-scnet-openblas034-profile/src/libscnet-validation.so"
+  },
+  "provider_preparation_snapshot_note": "This immutable readiness snapshot was written before any model inference. Its model_inference_performed=false fields describe that preparation phase only. Subsequent baseline calls are recorded separately below.",
+  "qualification": false,
+  "raw_receipts": {
+    "ci-helper-v2": {
+      "bytes": 5157,
+      "sha256": "d74e7e739a50bdbed1c22e44e13cae5ea2e3d002221d3b9dbba240aa65bdeec5"
+    },
+    "native-baseline": {
+      "bytes": 107840,
+      "sha256": "cb4604835fd14139c7f15848c18314047ec7454a75c0610b045dc96468919476"
+    },
+    "provider-math-controls": {
+      "bytes": 7474,
+      "sha256": "830fa5a5a9c07c373f6768209cb2b489cb8ebea5b8f7c82a84f8da8d36a8ec40"
+    },
+    "provider-readiness": {
+      "bytes": 87336,
+      "sha256": "f84fa1a474b7bc1fff859a1e1e5b931731aad4aeb9cbe445ebc26c757c50304d"
+    },
+    "provider-source-snapshot": {
+      "bytes": 65505,
+      "sha256": "0704a8ff7899e203c8619be0cd566b4d81d5f1005a662de8c0af59f00f7dd4f6"
+    }
+  },
+  "schema": "scnet_openblas034_build_and_native_baseline_v1",
+  "scope": "Pinned provider build/ABI/math controls followed by native-only F16 resource and repeatability diagnostics; no original-model comparison or speed qualification.",
+  "subsequent_native_baseline": {
+    "actual_loaded_dependencies_unchanged": true,
+    "calls": [
+      {
+        "complete": true,
+        "input_unchanged": true,
+        "matches_legacy_provider_pcm_descriptive_only": false,
+        "name": "warmup",
+        "output_finite": true,
+        "output_identity_pass": true,
+        "output_pcm_sha256": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+        "output_shape": [
+          4,
+          2,
+          1058400
+        ],
+        "resource_after": {
+          "major_faults": 0,
+          "max_rss_kib": 1268340,
+          "minor_faults": 392389,
+          "system_cpu_seconds": 1.150472,
+          "user_cpu_seconds": 47.399788
+        },
+        "resource_before": {
+          "major_faults": 0,
+          "max_rss_kib": 66488,
+          "minor_faults": 25781,
+          "system_cpu_seconds": 0.42172099999999996,
+          "user_cpu_seconds": 0.504424
+        },
+        "resource_delta": {
+          "major_faults": 0,
+          "max_rss_kib": 1201852,
+          "minor_faults": 366608,
+          "system_cpu_seconds": 0.7287509999999999,
+          "user_cpu_seconds": 46.895364
+        },
+        "retained_output": {
+          "bytes": 33868928,
+          "file": "{output}/output-warmup-f32.npy",
+          "sha256": "3fcacf7a2f04ac90964411d759a3da94306e0278a133bc2be64b97c639d4fe8a"
+        },
+        "seconds": 20.083213953999802
+      },
+      {
+        "complete": true,
+        "input_unchanged": true,
+        "matches_legacy_provider_pcm_descriptive_only": false,
+        "name": "measured",
+        "output_finite": true,
+        "output_identity_pass": true,
+        "output_pcm_sha256": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+        "output_shape": [
+          4,
+          2,
+          1058400
+        ],
+        "resource_after": {
+          "major_faults": 0,
+          "max_rss_kib": 1363480,
+          "minor_faults": 692944,
+          "system_cpu_seconds": 1.678294,
+          "user_cpu_seconds": 94.174089
+        },
+        "resource_before": {
+          "major_faults": 0,
+          "max_rss_kib": 1268340,
+          "minor_faults": 392393,
+          "system_cpu_seconds": 1.157994,
+          "user_cpu_seconds": 47.489408
+        },
+        "resource_delta": {
+          "major_faults": 0,
+          "max_rss_kib": 95140,
+          "minor_faults": 300551,
+          "system_cpu_seconds": 0.5203,
+          "user_cpu_seconds": 46.684681
+        },
+        "retained_output": {
+          "bytes": 33868928,
+          "file": "{output}/output-measured-f32.npy",
+          "sha256": "3fcacf7a2f04ac90964411d759a3da94306e0278a133bc2be64b97c639d4fe8a"
+        },
+        "seconds": 19.925457150999137
+      }
+    ],
+    "compiled_source_unchanged": true,
+    "complete": true,
+    "counter_scope": "RUSAGE_SELF covers this process and its threads; no child work is included. Counters bracket perf_counter/run/perf_counter and are sampled outside the elapsed interval.",
+    "dependencies_unchanged": true,
+    "errors": [],
+    "identities_unchanged": true,
+    "input_pcm_interleaved_sha256": "68fe8518a77a5f7f628da7455bce402c545d96bdd5d42ff6580bd82e2b73d1f7",
+    "input_shape": [
+      1058400,
+      2
+    ],
+    "limitations": [
+      "Native-only process: no original model or Torch is loaded.",
+      "Minor faults are fault events, not unique allocated pages; these counters do not attribute faults specifically to graph allocation.",
+      "System CPU time covers all kernel work and is not a measurement of page-fault latency.",
+      "CPU quota, dedicated capacity and host contention are unknown.",
+      "A single warmed call cannot establish comparative performance or qualify the backend."
+    ],
+    "max_rss_semantics": "Linux KiB process high-water mark, not current resident bytes; its delta is only an increase in the high-water mark.",
+    "modern_baseline_output_pcm_sha256": "34505a7a695ed64569598cc3d252081b7b55897c0368964e3aa45c04c9ed4bbc",
+    "native_backend": "CPU+BLAS/CPU-LSTM-FFT",
+    "native_blas_thread_queries": {
+      "openblas_get_num_threads": 2
+    },
+    "native_compute_precision": "F32 activations/accumulation; CPU recurrent/FFT; gates=avx2_fma; fft=avx2",
+    "original_model_loaded": false,
+    "page_size_bytes": 4096,
+    "profile": {
+      "mode": "pipeline",
+      "overlap": 0.5,
+      "segment_seconds": 20,
+      "shift_seed": 0,
+      "shifts": 1
+    },
+    "provider_sha256": "f90baa4930522d4f716cce1b6704a99e35e88231306497c12f0258cbb114306e",
+    "readiness_sha256": "f84fa1a474b7bc1fff859a1e1e5b931731aad4aeb9cbe445ebc26c757c50304d",
+    "schema": "scnet_modern_provider_native_baseline_v1",
+    "scope": "Modern-provider pre-cache baseline: one native warmup then one native full-pipeline call; output PCM and allocation counters retained, no original comparison or speed claim.",
+    "source_commit": "99588fb01986f1ebfb7dad27e072fd424ccdc967",
+    "threads": 2,
+    "timing_boundary": "Unchanged NativeModel.run: public separation, chunking/normalization, owned CPU result conversion and native result release. Excludes loading, counters, hashes and receipt writes.",
+    "torch_loaded": false
+  }
+}

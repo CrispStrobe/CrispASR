@@ -1,0 +1,788 @@
+{
+  "schema": 1,
+  "kind": "scnet_large_raw_numerical_smoke_public_receipt",
+  "date": "2026-11-02",
+  "complete": true,
+  "acceptance": false,
+  "qualification": false,
+  "numerical_smoke_pass": true,
+  "scope": {
+    "variant": "scnet-large",
+    "mode": "raw",
+    "samples": 11025,
+    "sample_rate": 44100,
+    "duration_seconds": 0.25,
+    "full_pipeline_exercised": false
+  },
+  "limitations": [
+    "This is a 0.25-second raw-input numerical diagnostic, not a full qualification.",
+    "The 24-second default overlapping chunk/shift pipeline is not exercised by this receipt.",
+    "No same-thread warm paired performance measurements were collected.",
+    "Passing this receipt does not authorize model packaging or claim performance qualification."
+  ],
+  "performance": {
+    "status": "unqualified",
+    "benchmark_enabled": false,
+    "timing_pairs_measured": 0
+  },
+  "path_aliases": {
+    "{repo}": "CrispASR repository checkout",
+    "{build}": "{repo}/build-scnet",
+    "{output}": "Retained large-raw-policy-v1 evidence directory",
+    "{assets}": "Retained author-assets fixture directory, sibling of {output}",
+    "{original-source}": "Pinned original SCNet source checkout"
+  },
+  "derived_from": {
+    "file": "{output}/receipt.json",
+    "sha256": "9c5ea95bcbc12dfbb1473e03e67623b269ae0476c7c9f1ee1eaed6996d2956b7",
+    "original_receipt_preserved": true,
+    "full_stage_metrics_retained_in_source_receipt": true
+  },
+  "source": {
+    "checkout_head_at_large_run": "d406fa16283476aadb63d6e1472b2d0e0438010f",
+    "identity_rule": "Recorded component hashes identify the code used. The native probe was built earlier; the checkout head is not substituted for its recorded build-source identities.",
+    "original": {
+      "directory": "{original-source}",
+      "revision": "5d95bf96b19c3eede63248d171efeca8e3abb948",
+      "file_sha256": {
+        "{original-source}/scnet/SCNet.py": "85a15ea5d28285a0cf0a24d6266a28d043c5a655d47aa41684ef256d84e7bc4a",
+        "{original-source}/scnet/separation.py": "43402dc6579436d3b5abb921990572684beed8fa10b377a112892b438f40713b",
+        "{original-source}/scnet/apply.py": "68b60535ad50b9b6cb0da4e4a0e7a269ff1349d345de30e666bdbda3d8fc8a31",
+        "{original-source}/scnet/inference.py": "06c5c8cf4aeb4b7a0edf7ac698d2f454ead0bd3b0411d0b519815a50068597b8",
+        "{original-source}/scnet/utils.py": "03a6311760dad60d7ccbd1a5416a3c10f613c8b9eb9f08691019589a2f692fdf",
+        "{original-source}/scnet/__init__.py": "21b5f8fae849055f3b428d2353de72b477a722cc44e87c6fa0d3b22ac5f36fa2",
+        "{original-source}/conf/config.yaml": "bc16895f69551cd8becbba384ae33e6e615a4792649b866036884f4a9a4bb4b0",
+        "{original-source}/LICENSE": "0bdf1b69335198118ab16cfc50d337b496b8c6d90e83beeaba4643781ab62513"
+      }
+    },
+    "conversion_and_validation_file_sha256": {
+      "{repo}/models/convert-scnet-to-gguf.py": "312e4742f23f9cba4b880a2238ad2c7359a7cd0bf031ad87d8481b022d4b267a",
+      "{repo}/tools/reference_backends/scnet.py": "2f8b0af5cf5f647d8ba46a4f2002a29f3fdc71c2ee252799fd1db75de80d8ca8",
+      "{repo}/tools/dump_scnet_reference.py": "eaa1863e5e1316ef97af2db6c25cdc652b203866e793fc021c31c47814e13f79",
+      "{repo}/tools/validate_scnet.py": "81b4506a40ddf3e89f67eb3ca69f9eceb3984bb68133b16bb012c9dc0b823194",
+      "{output}/memfd_spool_runner.py": "ab302a94da4fb57fb61dbae5d7e4a0ec762316c11560f04177a2509040bac878"
+    },
+    "native_probe_build": {
+      "checkout_head_at_build": "16e524e9c6d3bb3110a1ef6002fbe24daa831051",
+      "had_uncommitted_source_changes": true,
+      "source_file_sha256": {
+        "{repo}/src/scnet.cpp": "846e60da49240ddf65f4cc1b8318ec5b0ec860335ebd8a015a00f09b482ae755",
+        "{repo}/src/scnet.h": "cdbb8d6eea4d63bae72d6fd3810cbd06229a4cc41fee20c0158454cc406a6b4a",
+        "{repo}/src/scnet_fft.h": "bf0cb5a80fb765b4c5a16afbe9610bede401a99918ee22943c252c76ca9584ab",
+        "{repo}/src/scnet_lstm.h": "d282cd43227c716d0bc916a51c26e5e2617a1b837369402620f7c1a99597dfee",
+        "{repo}/src/scnet_shift.h": "816e594eb3973757c67d1e0f7bcabc0b9bb30d6f7b7d61d36ba6bfccb45fea05",
+        "{repo}/tools/scnet_probe.cpp": "4453d5c510aba7120b585450e93335edd70019e2dd1111ec47fc1ee6a28b9da0",
+        "{repo}/tools/scnet_exports.cpp": "caae683df3f618ed2f03925a942d9370cc9385b93077ac1aecb526a31ea895e6",
+        "{repo}/CMakeLists.txt": "db9c5abd1f14d86a4619ecf32950ae79a6b89372f8461f06ad93834f7fec64fb",
+        "{repo}/src/CMakeLists.txt": "3c8d3e4499dd300915d361fe39499de913a3441ddd5a303dfa325a6ea008afa1"
+      },
+      "probe": {
+        "file": "{build}/bin/scnet-probe",
+        "sha256": "8b0f644826565b4589c0fc9e4ed865c9cf045a2014ea3c5b605060ff7282defc"
+      },
+      "companion_library": {
+        "file": "{build}/src/libscnet-validation.so",
+        "sha256": "eb38c9965a2c24ce8df99ae86872b41c3411184850c81d66f46c4380a3b8f2d2"
+      },
+      "evidence": {
+        "file": "{output}/../row-policy-v1-crosscheck.json",
+        "sha256": "33373c9e7a59055d5277bfe321a9555b9b829c7591b0f76368c05b0201cfa3fe"
+      }
+    },
+    "quantizer_build": {
+      "file": "{build}/bin/crispasr-quantize-local",
+      "sha256": "66cc100045ff97200a4a0eef6c1f70d6024457e838541516db622023a645f5ca",
+      "source_file": "{repo}/examples/quantize/quantize.cpp",
+      "source_sha256": "1fcc27e5d4c2f699b321b48acd2475bce9ec902a16cda4dc7e216a14a221c0c9",
+      "evidence": {
+        "file": "{output}/../actual-quant-default-final-decoder-v1/receipt.json",
+        "sha256": "e9707449682186c00d588b8284d101d15fbba1c75971b657602da39277942570"
+      }
+    }
+  },
+  "checkpoint": {
+    "file": "{output}/large-author-checkpoint-temporary.th",
+    "source_url": "https://drive.google.com/file/d/1s7QvQwn8ag9oVstGDBQ6KZvacJkvyK7t/view",
+    "sha256": "719e5abb8ed920305dad546ac3cd6fb0b1e9c3092d14ce21827bfc0423af3070",
+    "bytes": 168848417,
+    "downloaded_at": "2026-11-02T07:58:28.041922+00:00",
+    "temporary_owned_file": true,
+    "hash_origin": "Matches the exact author-linked release bytes recorded by hosted run41397985492; not an upstream-published checksum.",
+    "pre_post_conversion_reference_sha256": "719e5abb8ed920305dad546ac3cd6fb0b1e9c3092d14ce21827bfc0423af3070",
+    "conversion_and_original_reference_complete": true,
+    "removed_after_verified_conversion_and_reference": true
+  },
+  "author_config": {
+    "file": "{output}/author-config.yaml",
+    "sha256": "629a4901184bf1d3a75b0b13904f35974785aa042cad3c010fd576248cdce3f0",
+    "bytes": 1080,
+    "source": "{output}/../hosted-16e524e-large/evidence.zip:qualification-scnet-large/source-snapshot/SCNet/author-config.yaml"
+  },
+  "input": {
+    "file": "{assets}/music-first-0.25s.wav",
+    "sha256": "55d75af6799b8f134d197e1919362a7be9c69b5418135910cf61a504562ff45a",
+    "frames": 11025,
+    "sample_rate": 44100,
+    "channels": 2,
+    "bytes": 88288,
+    "input_pcm_interleaved_f32_sha256": "5825898d02202c173acc131991c70d31fbf411968625e766a358d2704dbcfea5",
+    "input_pcm_planar_f32_sha256": "7ba8a6f23738d8abfb0a6353ed707aa015a36188a2ec593b0d73a591567d2f18",
+    "provenance": {
+      "source_url": "https://download.pytorch.org/torchaudio/tutorial-assets/hdemucs_mix.wav",
+      "source_sha256": "f2420feedcdee9591dd649442c81149e31a0c06ee8c6e655d93d8f8e742cf706",
+      "offset_samples": 0,
+      "resampled": false,
+      "normalized": false,
+      "looped": false,
+      "contiguous_exact_pcm": true,
+      "title": "A Classic Education - NightOwl",
+      "license": "CC BY-NC-SA 4.0",
+      "attribution_url": "https://docs.pytorch.org/audio/main/tutorials/hybrid_demucs_tutorial.html"
+    },
+    "provenance_receipt": {
+      "file": "{assets}/music-first-0.25s.wav.provenance.json",
+      "sha256": "dda658aa76ee5288a3bb46ed6cd2e8c0d4612a4bbd7c59365dd7fe078679d2ec"
+    },
+    "scope_note": "The first 0.25 seconds of the source fixture. This public receipt contains hashes and metrics only; no audio samples or captures are redistributed."
+  },
+  "reference": {
+    "file": "{output}/reference-A-large-f32.gguf",
+    "sha256": "43ce2b35be04691ae580bf73107dcdbb63d278161fc8bf4452d39e5572f745d1",
+    "bytes": 29890464,
+    "profile": {
+      "mode": "raw",
+      "segment_seconds": 20,
+      "shifts": 1,
+      "shift_seed": 0,
+      "overlap": 0.5,
+      "samples": 11025,
+      "sample_rate": 44100,
+      "full_profile": false
+    },
+    "required_stage_count": 35,
+    "input_planar_f32_sha256": "7ba8a6f23738d8abfb0a6353ed707aa015a36188a2ec593b0d73a591567d2f18",
+    "torch_version": "2.8.0+cpu",
+    "arithmetic": "Original author model, F32 PyTorch CPU, raw forward capture; no rounded-model or native self-capture oracle.",
+    "cpu_threads": 2
+  },
+  "required_stages": [
+    "input_audio",
+    "waveform_stats",
+    "raw_input_audio",
+    "stft",
+    "stft_stats",
+    "normalized",
+    "skip0",
+    "encoder0",
+    "decoder0",
+    "skip1",
+    "encoder1",
+    "decoder1",
+    "skip2",
+    "encoder2",
+    "decoder2",
+    "dp0",
+    "feature0",
+    "dp1",
+    "feature1",
+    "dp2",
+    "feature2",
+    "dp3",
+    "feature3",
+    "dp4",
+    "feature4",
+    "dp5",
+    "feature5",
+    "raw_output_drums",
+    "output_drums",
+    "raw_output_bass",
+    "output_bass",
+    "raw_output_other",
+    "output_other",
+    "raw_output_vocals",
+    "output_vocals"
+  ],
+  "gates": {
+    "thresholds_strict_gt": {
+      "f16": 0.999,
+      "q8_0": 0.98,
+      "q4_k": 0.94
+    },
+    "norm_ratio_bounds": {
+      "f16": [
+        0.99,
+        1.01
+      ],
+      "q8_0": [
+        0.95,
+        1.05
+      ],
+      "q4_k": [
+        0.8,
+        1.2
+      ]
+    },
+    "relative_l2_max": {
+      "f16": 0.05,
+      "q8_0": 0.2,
+      "q4_k": 0.4
+    },
+    "f16_row_policy": "cosine_or_binary16_reference_floor_v1",
+    "minimum_target_matrix_fraction": 0.5,
+    "shape_and_finiteness": "Every required stage must exist with its exact expected shape and finite values.",
+    "f16_row_rule": {
+      "policy": "cosine_or_binary16_reference_floor_v1",
+      "epsilon": 0.0009765625,
+      "pass_condition": "row_cosine > 0.999 OR (row_RMS_error <= epsilon * original_whole_stage_RMS AND row_max_abs_error <= epsilon * original_whole_stage_peak)",
+      "scale_source": "Original F32 reference only.",
+      "interpretation": "Binary16 machine epsilon sets a reference-scale engineering tolerance, not a network roundoff theorem.",
+      "all_zero_reference_stage": "No added data allowed.",
+      "scope": "F16 learned stages and output rows. Analytic input stages and Q8_0/Q4_K retain their existing global gates."
+    }
+  },
+  "quantization_policy": {
+    "description": "Current SCNet Q8_0/Q4_K defaults retain the four final spectral-reconstruction matrices as F16. The commands supplied no tensor-type overrides.",
+    "policy_matrix_count": 4,
+    "policy_matrix_elements": 171008,
+    "policy_matrix_bytes": 342016,
+    "payload_comparison": "Exact byte hashes match the source F16 GGUF for both quantized files.",
+    "matrices": {
+      "decoder.2.0.conv.weight": {
+        "shape_ggml": [
+          1152,
+          128
+        ],
+        "type": "f16",
+        "elements": 147456,
+        "bytes": 294912,
+        "payload_sha256": "7ee9237e8d68931e552a0d07f56e35b04405d20804b68d2ccd979082105f0929",
+        "f16_q8_0_q4_k_payloads_identical": true
+      },
+      "decoder.2.1.convtrs.0.weight": {
+        "shape_ggml": [
+          64,
+          48
+        ],
+        "type": "f16",
+        "elements": 3072,
+        "bytes": 6144,
+        "payload_sha256": "5a2f77f614491457531fb1bd536e0aea28e84e087c019aae1f773045dba2f44e",
+        "f16_q8_0_q4_k_payloads_identical": true
+      },
+      "decoder.2.1.convtrs.1.weight": {
+        "shape_ggml": [
+          64,
+          64
+        ],
+        "type": "f16",
+        "elements": 4096,
+        "bytes": 8192,
+        "payload_sha256": "4e91bda9ecfe81fb9cb03510fd93dd7fef815be3e99a6780c83b33d60a3f775d",
+        "f16_q8_0_q4_k_payloads_identical": true
+      },
+      "decoder.2.1.convtrs.2.weight": {
+        "shape_ggml": [
+          64,
+          256
+        ],
+        "type": "f16",
+        "elements": 16384,
+        "bytes": 32768,
+        "payload_sha256": "d5f1a1ac88fe73f1665b73b7be068c174d6151873dcbf0a9ddfa83bbb20de141",
+        "f16_q8_0_q4_k_payloads_identical": true
+      }
+    },
+    "q4_small_row_fallback": "806912 matrix elements remain Q8_0; the Q4_K target fraction is measured independently from the real tensor inventory."
+  },
+  "models": {
+    "f16": {
+      "file": "{output}/scnet-large-f16.gguf",
+      "sha256": "4fde60e9eaaeb18c4712ca4907aa4d556b503817630dbe50699f4c51804506bb",
+      "bytes": 84600288,
+      "qualification": false,
+      "numerical_smoke_pass": true,
+      "native_stage_count": 35,
+      "independent_stage_count": 35,
+      "native_all_required_stages_pass": true,
+      "independent_all_required_stages_pass": true,
+      "all_shapes_and_finiteness_pass": true,
+      "coverage": {
+        "matrix_elements": 42078944,
+        "target_type_matrix_elements": 42078944,
+        "target_type_matrix_fraction": 1.0,
+        "minimum_fraction": 0.5
+      },
+      "elements_by_type": {
+        "f32": 102288,
+        "f16": 42078944
+      },
+      "whole_stage_global_extrema": {
+        "minimum_cos_global": {
+          "value": 0.9999610708847638,
+          "stages": [
+            "raw_output_bass",
+            "output_bass"
+          ]
+        },
+        "minimum_norm_ratio": {
+          "value": 0.9999872014803984,
+          "stages": [
+            "skip0"
+          ]
+        },
+        "maximum_norm_ratio": {
+          "value": 1.0006355899786263,
+          "stages": [
+            "raw_output_bass",
+            "output_bass"
+          ]
+        },
+        "maximum_relative_l2": {
+          "value": 0.008849389301271257,
+          "stages": [
+            "raw_output_bass",
+            "output_bass"
+          ]
+        }
+      },
+      "complete_supplied_short_stem_metrics": {
+        "drums": {
+          "cos_global": 0.9999998947830213,
+          "norm_ratio": 1.0001194077679876,
+          "relative_l2": 0.000474043563595896,
+          "max_abs": 6.123632192611694e-05,
+          "rms_error": 8.540134333957321e-06,
+          "elements": 22050
+        },
+        "bass": {
+          "cos_global": 0.9999610708847638,
+          "norm_ratio": 1.0006355899786263,
+          "relative_l2": 0.008849389301271257,
+          "max_abs": 2.307048998773098e-05,
+          "rms_error": 5.414136923764969e-06,
+          "elements": 22050
+        },
+        "other": {
+          "cos_global": 0.9999999814123014,
+          "norm_ratio": 1.0000452269189664,
+          "relative_l2": 0.00019804684854576174,
+          "max_abs": 7.743388414382935e-05,
+          "rms_error": 1.0101135034615954e-05,
+          "elements": 22050
+        },
+        "vocals": {
+          "cos_global": 0.9999999883538212,
+          "norm_ratio": 1.000082119376567,
+          "relative_l2": 0.00017331435061691608,
+          "max_abs": 5.270540714263916e-05,
+          "rms_error": 8.588549445191217e-06,
+          "elements": 22050
+        }
+      },
+      "capture": {
+        "file": "{output}/native-f16.gguf",
+        "sha256": "dcbbca97a4666dde6a463c6b26e13e57423fa51fd71090016b42ab7dc7ec5aef",
+        "bytes": 29888256
+      },
+      "inventory": {
+        "file": "{output}/inventory-f16.json",
+        "sha256": "d8d76cd6df64836510581fce5046ec214e2ba71d25f1bc6f8eacc8ba5374787a"
+      },
+      "commands": [
+        {
+          "name": "native-f16",
+          "argv": [
+            "{build}/bin/scnet-probe",
+            "scnet",
+            "{output}/scnet-large-f16.gguf",
+            "{output}/reference-A-large-f32.gguf",
+            "{assets}/music-first-0.25s.wav"
+          ],
+          "complete": true,
+          "log": "{output}/native-f16.log",
+          "returncode": 0,
+          "log_sha256": "f677d6d93e621e06183f8af9cd9c4dc0c82c95819a5954292378c0dcb3a06b4a"
+        }
+      ],
+      "row_check": {
+        "gated_stage_count": 29,
+        "raw_failing_cosine_rows": 1310,
+        "rescued_rows": 1310,
+        "failed_rows": 0,
+        "stages_with_raw_cosine_failures": {
+          "skip1": {
+            "cos_min": 0.9966414889663343,
+            "rows": 31104,
+            "row_width": 12,
+            "rows_failing_f16_cosine": 1,
+            "row_rescued_count": 1,
+            "row_failed_count": 0,
+            "reference_rms": 0.170780410237121,
+            "reference_peak": 3.214719772338867,
+            "row_rms_error_limit": 0.0001667777443721885,
+            "row_max_abs_error_limit": 0.003139374777674675
+          },
+          "decoder2": {
+            "cos_min": 0.9858305089847498,
+            "rows": 32784,
+            "row_width": 12,
+            "rows_failing_f16_cosine": 1309,
+            "row_rescued_count": 1309,
+            "row_failed_count": 0,
+            "reference_rms": 0.6075226802342522,
+            "reference_peak": 29.363855361938477,
+            "row_rms_error_limit": 0.0005932838674162619,
+            "row_max_abs_error_limit": 0.028675640001893044
+          }
+        }
+      }
+    },
+    "q8_0": {
+      "file": "{output}/scnet-large-q8_0.gguf",
+      "sha256": "9a5f150261c9de4e876337df0d74ebd8271ffc368c7601c25d1bfdfe9d2a58e1",
+      "bytes": 45320960,
+      "qualification": false,
+      "numerical_smoke_pass": true,
+      "native_stage_count": 35,
+      "independent_stage_count": 35,
+      "native_all_required_stages_pass": true,
+      "independent_all_required_stages_pass": true,
+      "all_shapes_and_finiteness_pass": true,
+      "coverage": {
+        "matrix_elements": 42078944,
+        "target_type_matrix_elements": 41897984,
+        "target_type_matrix_fraction": 0.9956995118508677,
+        "minimum_fraction": 0.5
+      },
+      "elements_by_type": {
+        "f32": 102288,
+        "q8_0": 41897984,
+        "f16": 180960
+      },
+      "whole_stage_global_extrema": {
+        "minimum_cos_global": {
+          "value": 0.9989967316740663,
+          "stages": [
+            "raw_output_bass",
+            "output_bass"
+          ]
+        },
+        "minimum_norm_ratio": {
+          "value": 0.9986978983179966,
+          "stages": [
+            "encoder2"
+          ]
+        },
+        "maximum_norm_ratio": {
+          "value": 1.01603066963959,
+          "stages": [
+            "raw_output_bass",
+            "output_bass"
+          ]
+        },
+        "maximum_relative_l2": {
+          "value": 0.04791330866416856,
+          "stages": [
+            "raw_output_bass",
+            "output_bass"
+          ]
+        }
+      },
+      "complete_supplied_short_stem_metrics": {
+        "drums": {
+          "cos_global": 0.9999749269273711,
+          "norm_ratio": 0.9996004865719771,
+          "relative_l2": 0.007091242639963332,
+          "max_abs": 0.001409144140779972,
+          "rms_error": 0.00012775231938724988,
+          "elements": 22050
+        },
+        "bass": {
+          "cos_global": 0.9989967316740663,
+          "norm_ratio": 1.01603066963959,
+          "relative_l2": 0.04791330866416856,
+          "max_abs": 0.00019884866196662188,
+          "rms_error": 2.9313798359075198e-05,
+          "elements": 22050
+        },
+        "other": {
+          "cos_global": 0.9999933580659678,
+          "norm_ratio": 0.9997768650156096,
+          "relative_l2": 0.0036511221825456523,
+          "max_abs": 0.002006128430366516,
+          "rms_error": 0.00018622097985696327,
+          "elements": 22050
+        },
+        "vocals": {
+          "cos_global": 0.9999956483755185,
+          "norm_ratio": 1.0000640929969113,
+          "relative_l2": 0.0029509176021732908,
+          "max_abs": 0.001209646463394165,
+          "rms_error": 0.0001462319862419791,
+          "elements": 22050
+        }
+      },
+      "capture": {
+        "file": "{output}/native-q8_0.gguf",
+        "sha256": "0547b5395e74eeafa85be8830fb52d2d0e22f96e3710dacaeaf5664aaff9cf0c",
+        "bytes": 29888256
+      },
+      "inventory": {
+        "file": "{output}/inventory-q8_0.json",
+        "sha256": "286821105809c9298dfbf21e8f9f0bb74c5b7d70bfede171eda53d0c2c6afee3"
+      },
+      "commands": [
+        {
+          "name": "quantize-q8_0",
+          "argv": [
+            "{build}/bin/crispasr-quantize-local",
+            "{output}/scnet-large-f16.gguf",
+            "{output}/scnet-large-q8_0.gguf",
+            "q8_0"
+          ],
+          "complete": true,
+          "log": "{output}/quantize-q8_0.log",
+          "returncode": 0,
+          "log_sha256": "5674f3c0fc8911b388d278af525699563944b358c056e4709d5ca5bbcd59b7a2"
+        },
+        {
+          "name": "native-q8_0",
+          "argv": [
+            "{build}/bin/scnet-probe",
+            "scnet",
+            "{output}/scnet-large-q8_0.gguf",
+            "{output}/reference-A-large-f32.gguf",
+            "{assets}/music-first-0.25s.wav"
+          ],
+          "complete": true,
+          "log": "{output}/native-q8_0.log",
+          "returncode": 0,
+          "log_sha256": "fdae0107b2e32e6b7ce615fd1fa7fefe9c886e1c50f72659b2504c68f2ec3041"
+        }
+      ]
+    },
+    "q4_k": {
+      "file": "{output}/scnet-large-q4_k.gguf",
+      "sha256": "4111a8ad4b662a43c3066b6270a72fcdc98f9f088005bfee47cfdf0dfa387088",
+      "bytes": 24775424,
+      "qualification": false,
+      "numerical_smoke_pass": true,
+      "native_stage_count": 35,
+      "independent_stage_count": 35,
+      "native_all_required_stages_pass": true,
+      "independent_all_required_stages_pass": true,
+      "all_shapes_and_finiteness_pass": true,
+      "coverage": {
+        "matrix_elements": 42078944,
+        "target_type_matrix_elements": 41091072,
+        "target_type_matrix_fraction": 0.9765233652251349,
+        "minimum_fraction": 0.5
+      },
+      "elements_by_type": {
+        "f32": 102288,
+        "q4_k": 41091072,
+        "q8_0": 806912,
+        "f16": 180960
+      },
+      "whole_stage_global_extrema": {
+        "minimum_cos_global": {
+          "value": 0.9815387506002008,
+          "stages": [
+            "raw_output_bass",
+            "output_bass"
+          ]
+        },
+        "minimum_norm_ratio": {
+          "value": 0.9792081127594702,
+          "stages": [
+            "raw_output_drums",
+            "output_drums"
+          ]
+        },
+        "maximum_norm_ratio": {
+          "value": 1.0760394300813239,
+          "stages": [
+            "raw_output_bass",
+            "output_bass"
+          ]
+        },
+        "maximum_relative_l2": {
+          "value": 0.21333555609085045,
+          "stages": [
+            "raw_output_bass",
+            "output_bass"
+          ]
+        }
+      },
+      "complete_supplied_short_stem_metrics": {
+        "drums": {
+          "cos_global": 0.9991739974933015,
+          "norm_ratio": 0.9792081127594702,
+          "relative_l2": 0.045276476082632744,
+          "max_abs": 0.006840109825134277,
+          "rms_error": 0.0008156785949814275,
+          "elements": 22050
+        },
+        "bass": {
+          "cos_global": 0.9815387506002008,
+          "norm_ratio": 1.0760394300813239,
+          "relative_l2": 0.21333555609085045,
+          "max_abs": 0.0007130661979317665,
+          "rms_error": 0.00013052063504737899,
+          "elements": 22050
+        },
+        "other": {
+          "cos_global": 0.9996191975075774,
+          "norm_ratio": 1.0043898119527384,
+          "relative_l2": 0.028003905736408017,
+          "max_abs": 0.010167166590690613,
+          "rms_error": 0.0014283046431549354,
+          "elements": 22050
+        },
+        "vocals": {
+          "cos_global": 0.9996383538580486,
+          "norm_ratio": 0.9897116315001,
+          "relative_l2": 0.02866533294319467,
+          "max_abs": 0.008538216352462769,
+          "rms_error": 0.0014205034289957218,
+          "elements": 22050
+        }
+      },
+      "capture": {
+        "file": "{output}/native-q4_k.gguf",
+        "sha256": "9318e4575268769654acba2b9de0839b0418c82f7f35b638c22d48bd97f81f05",
+        "bytes": 29888256
+      },
+      "inventory": {
+        "file": "{output}/inventory-q4_k.json",
+        "sha256": "87fe1ea9668ca1dc3831876095f9ced67aa546aa81ca9463ebc1753a36bf46b5"
+      },
+      "commands": [
+        {
+          "name": "quantize-q4_k",
+          "argv": [
+            "{build}/bin/crispasr-quantize-local",
+            "{output}/scnet-large-f16.gguf",
+            "{output}/scnet-large-q4_k.gguf",
+            "q4_k"
+          ],
+          "complete": true,
+          "log": "{output}/quantize-q4_k.log",
+          "returncode": 0,
+          "log_sha256": "ea01aed2828fa46639bc02d1b95950381b687f63cb00a2b3231d4f20592c5be1"
+        },
+        {
+          "name": "native-q4_k",
+          "argv": [
+            "{build}/bin/scnet-probe",
+            "scnet",
+            "{output}/scnet-large-q4_k.gguf",
+            "{output}/reference-A-large-f32.gguf",
+            "{assets}/music-first-0.25s.wav"
+          ],
+          "complete": true,
+          "log": "{output}/native-q4_k.log",
+          "returncode": 0,
+          "log_sha256": "7b1fe62eb28cad5dfca3af894dd5a34db43870043e30eee57c5abdcc17978c2f"
+        }
+      ]
+    }
+  },
+  "diagnostic_io": {
+    "kind": "process-local memfd-backed GGUF tensor spools",
+    "model_math_changed": false,
+    "converter_source_changed": false,
+    "original_source_changed": false,
+    "required_small_model_whole_file_identity": true,
+    "reason": "Avoid an extra on-disk GGUF tensor spool while retaining at least 100 MiB of root-usable filesystem space.",
+    "method": "A process-local wrapper replaced tempfile.SpooledTemporaryFile with anonymous RAM-backed memfd streams while executing the unchanged conversion/reference scripts. It restored the constructor and argv afterward.",
+    "small_model_identity_control": {
+      "complete": true,
+      "whole_gguf_identical": true,
+      "expected_sha256": "8441b23c2b6ba47e8357fd863d717af88a5568f1937a3ff328c921c7143bd059",
+      "actual_sha256": "8441b23c2b6ba47e8357fd863d717af88a5568f1937a3ff328c921c7143bd059",
+      "bytes": 21293184,
+      "checkpoint_pre_post_sha256": "f8aff3bc8dd816aad392800d9d69519add719a2fbd22550af6f8cb2138d25ff5",
+      "io_receipt": "{output}/small-conversion-io.json",
+      "spool_bytes": [
+        21259968
+      ]
+    },
+    "io_receipts": {
+      "small-conversion-io.json": {
+        "file": "{output}/small-conversion-io.json",
+        "sha256": "e6884d1cc13b505051607ab8ca0fd174b55e10f78238d4ad8a5852200525c041",
+        "spools": [
+          {
+            "kind": "anonymous RAM-backed memfd",
+            "closed": true,
+            "requested_disk_spool_threshold": 8388608,
+            "bytes": 21259968
+          }
+        ],
+        "source_unchanged": true,
+        "returncode": 0
+      },
+      "convert-large-f16-io.json": {
+        "file": "{output}/convert-large-f16-io.json",
+        "sha256": "a1e0a28f8530f54e9171929c621a9eb6e1b8d00c2894d43bc86c70d87b2693ea",
+        "spools": [
+          {
+            "kind": "anonymous RAM-backed memfd",
+            "closed": true,
+            "requested_disk_spool_threshold": 8388608,
+            "bytes": 84567040
+          }
+        ],
+        "source_unchanged": true,
+        "returncode": 0
+      },
+      "reference-large-raw-io.json": {
+        "file": "{output}/reference-large-raw-io.json",
+        "sha256": "514b54bbb9f81f929f32872fe9186b5d19b17644cc39ffb3d52fb942b059f75e",
+        "spools": [
+          {
+            "kind": "anonymous RAM-backed memfd",
+            "closed": true,
+            "requested_disk_spool_threshold": 8388608,
+            "bytes": 29886208
+          }
+        ],
+        "source_unchanged": true,
+        "returncode": 0
+      }
+    },
+    "disk": {
+      "effective_uid": 0,
+      "uses_root_f_bfree": true,
+      "minimum_free_bytes": 104857600,
+      "free_before_bytes": 414130176,
+      "after_small_identity_bytes": 414093312,
+      "after_download_bytes": 245338112,
+      "after_checkpoint_cleanup_bytes": 292823040,
+      "free_after_bytes": 138260480
+    },
+    "free_after_large_conversion_bytes": 153915392,
+    "free_after_original_reference_bytes": 123965440,
+    "filesystem_reserve_settings_changed": false,
+    "not_performance_evidence": true,
+    "cleanup": [
+      {
+        "file": "{output}/small-io-identity-f16.gguf",
+        "bytes": 21293184,
+        "sha256": "8441b23c2b6ba47e8357fd863d717af88a5568f1937a3ff328c921c7143bd059",
+        "removed": true,
+        "reason": "New duplicate identity-test GGUF only; original small checkpoint/model retained."
+      },
+      {
+        "file": "{output}/large-author-checkpoint-temporary.th",
+        "bytes": 168848417,
+        "sha256": "719e5abb8ed920305dad546ac3cd6fb0b1e9c3092d14ce21827bfc0423af3070",
+        "removed": true,
+        "reason": "New temporary Large author checkpoint only; conversion and original reference completed, pre/post SHA verified."
+      }
+    ],
+    "preserved": "Original small checkpoint/model and all prior failed evidence were retained. Only the newly created small duplicate and temporary Large checkpoint were removed after the recorded identity checks."
+  },
+  "errors": []
+}
