@@ -1895,7 +1895,7 @@ static char* moss_audio_process_impl(struct moss_audio_context* ctx, const float
                 (float)n_samples / (float)hp.sample_rate, prompt);
 
     // 1. Mel spectrogram (or load from file for debugging)
-    int n_mels = 0, T_mel = 0;
+    int n_mels = 0, T_mel = 0, T_mel_real = 0;
     float* mel = nullptr;
     const char* mel_override = crispasr_env::get("CRISPASR_MOSS_AUDIO_MEL_FILE");
     if (mel_override) {
@@ -1915,7 +1915,7 @@ static char* moss_audio_process_impl(struct moss_audio_context* ctx, const float
     }
     if (!mel) {
         moss_audio_bench_stage _b("mel");
-        mel = moss_audio_compute_mel(ctx, samples, n_samples, &n_mels, &T_mel);
+        mel = moss_audio_compute_mel_meta(ctx, samples, n_samples, &n_mels, &T_mel, &T_mel_real);
     }
     if (!mel) {
         fprintf(stderr, "moss_audio: mel failed\n");
@@ -1928,7 +1928,17 @@ static char* moss_audio_process_impl(struct moss_audio_context* ctx, const float
     float* encoder_out = nullptr;
     {
         moss_audio_bench_stage _b("encoder");
-        encoder_out = moss_audio_run_encoder(ctx, mel, n_mels, T_mel, &T_enc, &enc_d, &ds_tap_0, &ds_tap_1, &ds_tap_2);
+        // #569: the official MossAudioProcessor never pads to 30 s; it sizes the
+        // audio tokens (and the time markers built from them) from the real
+        // length. Encode only the real frames. CRISPASR_MOSS_AUDIO_PAD30=1
+        // restores the old 3000-frame behaviour for A/B comparisons.
+        const bool pad30 = crispasr_env::get("CRISPASR_MOSS_AUDIO_PAD30") != nullptr;
+        if (!pad30 && T_mel_real > 0 && T_mel_real < T_mel)
+            encoder_out = moss_audio_run_encoder_meta(ctx, mel, n_mels, T_mel, T_mel_real, &T_enc, &enc_d, nullptr,
+                                                      nullptr, nullptr, nullptr, &ds_tap_0, &ds_tap_1, &ds_tap_2);
+        else
+            encoder_out =
+                moss_audio_run_encoder(ctx, mel, n_mels, T_mel, &T_enc, &enc_d, &ds_tap_0, &ds_tap_1, &ds_tap_2);
     }
     free(mel);
     if (!encoder_out) {
