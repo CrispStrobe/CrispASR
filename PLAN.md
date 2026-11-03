@@ -1,18 +1,76 @@
 # CrispASR — Current work plan
 
-Updated 2026-11-02. Start with [the maintainer handoff](docs/maintenance-handoff.md).
+Updated 2026-11-03. Start with [the maintainer handoff](docs/maintenance-handoff.md).
 It contains the completed work, exact evidence, bounded next actions and blockers
 needed by a fresh agent; no earlier chat is required. Follow `AGENTS.md` and its
 mandatory maintainer-guide instructions before implementation.
 
-**v0.8.49 is tagged and pushed. ArkTTS (Audio8-TTS 0.6B) port, GGUFs, registry, and long-audio bounded vocoder are complete. #559 and #560 are integrated and shipped in v0.8.49. C is prepared for review; keep #557 open.** Claim work by adding owner,
+**v0.8.50 is tagged; its publication is in progress (lanes R1–R3 below). SCNet, Mini-BS-RoFormer, #564 and #567–#570 are on main and in the tag.** Claim work by adding owner,
 source SHA, missing behavior, acceptance gates and next action under "NOW"
 before starting. The full scope of each task (exact runs, inputs, commands and
 acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-tasks--fully-scoped).
 
-## NOW — release verification and nightly diagnosis (2026-10-30)
+## NOW — open lanes, fully scoped (2026-11-03)
 
-### SCNet / SCNet-large — native port recovery, 2026-11-02
+State at hand-off: **v0.8.50 is tagged** (`v0.8.50` → `5c96e5521c6ab40ab53b91eeec54ced9c30562b5`, annotated), and its publication is **in progress, not yet verified**. CI, Lint and Lint Deep passed for that exact tree (CI/Lint on `f40f45d6e`, the same tree; Lint Deep on `5c96e5521`). SCNet qualification **41615896059** passed both sizes on main at `b6ec24da2`. Main has since moved to `08089ed1b` (#573, CI job selection only); that is not in the tag and needs no release.
+
+Each lane gives the start state, the exact steps, the acceptance and what to do on failure. Claim a lane by adding your owner name under it before starting. Never re-tag `v0.8.50`. Never re-upload under an existing PyPI version.
+
+### Lane R1 — finish v0.8.50 native publication
+
+- **Start state:** release run **41675510092** (workflow `release.yml`, triggered by the tag push). Language wrappers **41675510012**; Docker publish **41675510045** (re-run after an accidental cancel). At hand-off all three were queued or in progress.
+- **Do:**
+  1. `gh run watch 41675510092 -R CrispStrobe/CrispASR`. Poll at most every 5 min; a bursty poll loop hit the API rate limit once.
+  2. If a job fails, read its log. For a transient runner or network failure, run `gh run rerun 41675510092 --failed`. Never redispatch the whole release: it rebuilds CPU bytes that then collide with immutable PyPI files.
+  3. When it succeeds, confirm the GitHub release `v0.8.50` has every v0.8.49 asset name with `0.8.50` substituted (52 names, same set as v0.8.47–v0.8.49).
+- **Accept:** all release jobs `success`; 52 assets; wrappers and Docker runs `success`.
+- **Then:** dispatch the native audit (lane R2, step 1).
+
+### Lane R2 — v0.8.50 publication audits
+
+- **Depends on:** R1, and the automatic `Release Python wheels` run, which starts via `workflow_run` when Release completes. Find it with `gh run list -w release-python-wheels.yml -L3`. Pages must also deploy the wheel index commit.
+- **Do:**
+  1. Native audit: `gh workflow run verify-release-publication.yml --ref main -f tag=v0.8.50 -f source=5c96e5521c6ab40ab53b91eeec54ced9c30562b5 -f release_run=41675510092 -f runner=ubuntu-latest`.
+  2. When the wheel run and Pages are green, run the wheel audit: the same command plus `-f wheel_run=<wheels run id> -f native_audit_run=<native audit run id>`.
+- **Accept:** each run's `release-publication-<run>` artifact `receipt.json` has `complete: true, acceptance: true`. Commit the receipts under `docs/historical/release-v0850-{native,wheel}-audit-2026-11-0X.json`, following the v0.8.49 receipts.
+- **If it fails:** read the traceback. A real defect in a published file needs a new patch release (v0.8.51), never a re-upload. `REVIEWED_TAGS` in `tools/ci-heavy/release_publication_audit.py` already includes `v0.8.50`.
+
+### Lane R3 — close the shipped issues
+
+- **Depends on:** R1 (the release page exists).
+- **Do:** comment with the release link and close **#562** (Mini-BS-RoFormer), **#564** (MOSS-Diarize beam/sampling), **#569** (moss-audio 30 s pad) and **#570** (LID download consent). Each already has a fix-explanation comment; just add "Released in v0.8.50 <link>". Keep **#568** open (lane M1).
+
+### Lane M1 — #568 Mini-BS-RoFormer Metal output (needs Apple hardware)
+
+- **State:** mitigated in v0.8.50. On Metal the backend falls back to CPU (`src/mini_bs_roformer.cpp`, search `#568`); `CRISPASR_MINI_BS_ROFORMER_METAL=1` opts back in. The root cause is unknown; the reporter suspects the per-stem decoder or mask application.
+- **Do, on an Apple Silicon Mac:**
+  1. Build with Metal. Run `crispasr --separate -m mini-bs-roformer -f <stereo 44.1 kHz speech>` with `CRISPASR_MINI_BS_ROFORMER_METAL=1`, and again with `--no-gpu`.
+  2. Bisect with the stage dump or diff tooling (`crispasr-diff` / `tools/` Mini-BS validators) to find the first diverging stage.
+  3. Fix it in ggml-metal or in the graph.
+- **Accept:** Metal stems match CPU (vocals RMS within 1 %; SDR on the reporter's synthetic band within 0.5 dB of CPU) for F16/Q8_0/Q4_K. Then remove the CPU fallback, keep the env var as a kill switch, and close #568.
+
+### Lane S1 — SCNet follow-ups (review findings, not blockers)
+
+SCNet is on main and in v0.8.50, as a squash of qualified candidate `7b6a88360` (hosted qualification 41520873570, plus the main re-run 41615896059). Docs: `docs/scnet.md`. Open review findings from PR #566, each needing its own small fix and test:
+1. The graph cache likely misses on almost every chunk, because the random per-chunk prefix changes the frame count. Measure the hit rate; if it is low, pad to a fixed frame count or key the cache by shape bucket.
+2. A very short input or tail block aborts the whole separation. Pad or skip short tails, and add a unit test with a 0.1 s input.
+3. The server returns 500 for more than two channels. Return 400 with a message, or downmix.
+4. `crispasr_set_gpu_device_pref` is process-wide. Scope it to the context, as the other backends do.
+5. The server has no input length cap. Add the same cap the other separation endpoints use.
+- **Accept per item:** a unit test or an actual CLI/server reproduction before and after; CI/Lint green. Do not touch the qualified numerics without re-running `scnet-qualification.yml` (dispatch-only, about 1 h, both sizes).
+
+### Lane V1 — optional hosted checks for #569 / #570
+
+- #569: run moss-audio on a short (8 s) clip with a beep and a hit, as in the issue. Check that the log shows about 100 enc tokens and that event times fall inside the clip. Locally verified only on JFK (138 tokens, was 375).
+- #570: check that `--backend moss-audio --prompt ...` prints `skipping language detection` and downloads nothing. This path is untested; the consent path itself was verified with an empty cache.
+
+### Holds (unchanged; do not schedule speculative repairs)
+
+#558 (waiting on reporter), #532 (needs a reproducible failing recording), #483 (GTX1660/MX150 hardware), #461 (Vulkan voxcpm2 hardware), #456 (feature request, unscheduled). Lane E (real-hardware `+vulkan`/`+hip`/aarch64 `+cuda` wheel qualification) still needs hardware.
+
+## Earlier NOW entries (historical, 2026-10-30 to 2026-11-02)
+
+### SCNet / SCNet-large — native port recovery, 2026-11-02 (INTEGRATED 2026-11-03 as `57fb8ff46`; see lane S1)
 
 - Owner: SCNet recovery team (native graph, conversion/reference/validation,
   CLI/Session integration); starting source
@@ -378,7 +436,7 @@ Updated 2026-10-30 18:05 UTC: Haas-ja-v1.0 Japanese ASR and MeanVC2 streaming ze
   Q4_K, CSM RoPE, OmniVoice processing, the MMQ archive and the binding fixes.
   See [HISTORY.md](HISTORY.md).
 
-## Open tasks — in order
+## Open tasks — in order (superseded 2026-11-03: the live list is "NOW — open lanes" at the top; rows below are kept for evidence)
 
 | # | Task | Depends on | Done when |
 |---|---|---|---|

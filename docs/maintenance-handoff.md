@@ -1,4 +1,4 @@
-# Fresh-agent maintainer handoff — 2026-10-29
+# Fresh-agent maintainer handoff — updated 2026-11-03
 
 This is the current handoff. No previous chat is needed to understand the work,
 what is complete, or what to do next. Read `AGENTS.md` and the full maintainer
@@ -12,6 +12,35 @@ The 2026-10-27 version of this file is in Git history. The prior [October 19 han
 PR, job-queue and ownership claims are not current instructions. Do not resume
 them automatically. Public path aliases describe roles; actual bindings stay
 in ignored local notes.
+
+## Current state — 2026-11-03 (read this first)
+
+**The live, fully scoped task list is [PLAN.md → "NOW — open lanes"](../PLAN.md#now--open-lanes-fully-scoped-2026-11-03).** Lanes R1–R3 finish the v0.8.50 release, M1 is the #568 Metal bug, S1 the SCNet review follow-ups, V1 optional hosted checks. Older sections below are evidence, not instructions.
+
+What happened 2026-11-02/03, so you don't redo it:
+
+- **Shipped to main, then tagged v0.8.50 (`5c96e5521`):**
+  - Lint Deep repairs.
+  - #564 MOSS-Diarize beam and sampling (`src/core/logit_sampler.h`, hosted acceptance 41417217786).
+  - #567 parakeet-unified tokenizer: the converter is fixed, and the HF GGUFs were rewritten in place and verified.
+  - #568 Metal→CPU fallback.
+  - #569 moss-audio real-length encoding.
+  - #570 LID download consent.
+  - SCNet (squash of qualified `7b6a88360`), with the #571 is_metal "MTL" restore.
+- **Integration lessons:**
+  - **Squash-merging a long branch onto main can silently combine two independent fixes of the same line.** It happened twice here: duplicated `setenv` guards in `src/mini_bs_roformer.cpp`, which broke every build, and a lost `"MTL"` match in `core_cpu_backend::is_metal` (#571). After any squash, grep the diff against both parents for touched preprocessor guards and name checks before pushing.
+  - **Several Python tests compile extracted C++ against their own stub structs:** `tests/test_session_metadata.py`, `test_dia_sampling_controls.py` and `test_issue560_lid_only.py` (more: `grep -l "struct crispasr_session {" tests/*.py`). If you add a session field, a setter dependency or a helper called from an extracted function, update those stubs. Run them with a local (non-CIFS) `TMPDIR`.
+  - **Lint Deep runs cppcheck 2.7.** Patterns it rejects here:
+    - a virtual call inside a destructor;
+    - a lambda returning bool through `std::isfinite`;
+    - a redundant null check after dereference;
+    - index-then-check comparators;
+    - `char*`→`float*` `reinterpret_cast` (route it through `const void*`).
+
+    A local cppcheck 2.17 does not reproduce every 2.7 finding.
+  - **`src/core/backend_caps_table.h` is generated from the CLI's adapter caps.** Changing a backend's `capabilities()` needs the row updated, and CI's `gen-backend-caps-table.py --check` enforces it.
+  - **Release queue:** a tag push starts about 15 workflows. Cancelling the non-release ones speeds up Release, but **do not cancel "Publish Docker image"**, which is part of the release. Poll `gh` at most every 5 min; a 2-min multi-run loop hit the 5000/h API limit.
+- **Private details** (local paths, backups, credentials, storage) are in the gitignored local notes, never in this file.
 
 ## Main integration follow-up — 2026-10-31
 
