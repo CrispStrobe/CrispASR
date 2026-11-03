@@ -204,6 +204,10 @@ std::string ensure_cached_file(const std::string& filename, const std::string&, 
     return "CACHE:" + filename;
 }
 }
+// #570 consent gate (crispasr_lid_cli.cpp): consented/cached path forwards to the cache.
+std::string lid_fetch(const char* file, const char* url, const whisper_params&, const char* tag) {
+    return crispasr_cache::ensure_cached_file(file, url, false, tag, "");
+}
 std::string resolve_silero_lid_model(const whisper_params& p) { return p.lid_model; }
 std::string resolve_firered_lid_model(const whisper_params& p) { return p.lid_model; }
 std::string resolve_ecapa_lid_model(const whisper_params& p) { return p.lid_model; }
