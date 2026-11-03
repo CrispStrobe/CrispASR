@@ -2,8 +2,7 @@ name: CANN composed graph preparation
 
 on:
   workflow_dispatch:
-  push:
-    branches-ignore: [main]
+  pull_request:
     paths:
       - tools/ci-heavy/cann-composed/**
       - .github/workflows/cann-composed.yml

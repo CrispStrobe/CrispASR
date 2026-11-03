@@ -111,11 +111,13 @@ on:
 permissions:
   contents: read
 
+# PRs: a newer push to the same PR cancels the older run. main pushes, the
+# nightly and manual runs each get their own group (run_id), so none of them
+# is cancelled (the nightly no longer needs an event-scoped group for that).
+# `select` still diffs a push against the newest SUCCESSFUL main push run.
 concurrency:
-  # event_name in the key: a push to main must never cancel the nightly run
-  # (same ref), and vice versa. Consecutive pushes still supersede each other.
-  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Tier 0: schema + parser smoke test. Runs in <2 seconds with no

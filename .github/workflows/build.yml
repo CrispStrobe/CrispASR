@@ -47,20 +47,14 @@ on:
           - full-ci
           - release-only
 
-# On main pushes the previous concurrency rule expanded to
-# `CI-${{ github.run_id }}` (run_id is unique per workflow run), so
-# every run landed in its own group → cancel-in-progress never fired
-# → queued runs stacked up faster than the GitHub-hosted pool could
-# service them. Use a literal file-specific prefix instead of
-# `${{ github.workflow }}` because BOTH this file and ci.yml carry
-# `name: CI`, so a `workflow + ref` group would have collided ci.yml
-# and build.yml runs into one bucket where each new push cancelled
-# the other's still-running job. The literal prefix keeps the two
-# workflows independent while still deduplicating to one in-flight
-# run of THIS workflow per ref.
+# Literal `build-yml` prefix, not `${{ github.workflow }}`: BOTH this file and
+# ci.yml carry `name: CI`, so a workflow-keyed group would put their PR runs in
+# one bucket and each would cancel the other. PRs: a newer push to the same PR
+# cancels the older run. main pushes (only ggml bumps reach this workflow) and
+# manual runs get their own group (run_id), so they are never cancelled.
 concurrency:
-  group: build-yml-${{ github.ref }}
-  cancel-in-progress: true
+  group: build-yml-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: write  # for creating release

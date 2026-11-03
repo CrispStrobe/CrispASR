@@ -34,8 +34,8 @@ on:
       - '.github/workflows/bindings-csharp.yml'
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   # moonshine-tiny is the smallest real ASR GGUF in the registry (~20 MB) and

@@ -16,6 +16,12 @@ on:
       - '.github/workflows/dia-proof-archives.yml'
   workflow_dispatch:
 
+# PRs: a newer push to the same PR cancels the older run. main pushes and
+# manual runs get their own group (run_id), so they are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 permissions:
   contents: read
 

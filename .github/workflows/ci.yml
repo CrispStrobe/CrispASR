@@ -1,19 +1,106 @@
 name: CI
 
+# What runs when (docs/contributing.md, "CI: what runs when"):
+#   - docs-only changes (*.md, docs/** except JSON receipts, hf_readmes/**)
+#     do not start this workflow at all;
+#   - every other change runs the `changes` job plus the cheap Linux tier:
+#     linux-x86_64 (CPU build + smoke) and linux-unit (the unit tier);
+#   - native changes (C/C++/ObjC/CUDA/Metal/shader sources, any CMake file,
+#     src/, include/, examples/, ggml, glint/, third_party/, crisp_*/,
+#     scripts/, samples/, this workflow) additionally run macOS, Windows,
+#     iOS, Android, Vulkan, GGML_BACKEND_DL and the audio sanitizer/fuzz/
+#     FetchContent legs. A Python-, tools- or docs-only change skips them.
+#   - workflow_dispatch runs everything, on any branch.
 on:
   # Manual runs on a feature branch: heavy builds and tests belong on CI, not
   # on the shared dev box (`gh workflow run ci.yml --ref <branch>`).
   workflow_dispatch:
   push:
-    branches: [main, master, integrated_cli]
+    branches: [main]
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - 'docs/**.json'        # receipts some unit tests read
+      - '!hf_readmes/**'
+      - '!LICENSE'
+      - '!AUTHORS'
   pull_request:
-    branches: [main, master]
+    branches: [main]
+    paths:
+      - '**'
+      - '!**.md'
+      - '!docs/**'
+      - 'docs/**.json'
+      - '!hf_readmes/**'
+      - '!LICENSE'
+      - '!AUTHORS'
 
+# PRs: a newer push to the same PR cancels the older run. main pushes and
+# manual runs get their own group (run_id), so they are never cancelled.
+# Literal `ci-yml` prefix: build.yml is also named "CI" (see its note).
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-yml-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Path gate for the expensive legs below. Fail-open: dispatch, a new or
+  # force-pushed base, or any error answers native=true.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      native: ${{ steps.filter.outputs.native }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - id: filter
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
+          HEAD: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.sha }}
+          FILTERS: |
+            native:
+              - '**.c'
+              - '**.cc'
+              - '**.cpp'
+              - '**.cxx'
+              - '**.h'
+              - '**.hpp'
+              - '**.inc'
+              - '**.m'
+              - '**.mm'
+              - '**.cu'
+              - '**.cuh'
+              - '**.metal'
+              - '**.comp'
+              - '**.glsl'
+              - '**.cmake'
+              - '**.in'
+              - '**/CMakeLists.txt'
+              - 'CMakePresets.json'
+              - 'cmake/**'
+              - 'ggml'
+              - 'ggml/**'
+              - '.gitmodules'
+              - 'src/**'
+              - 'include/**'
+              - 'examples/**'
+              - 'glint/**'
+              - 'third_party/**'
+              - 'crisp_*/**'
+              - 'scripts/**'
+              - 'samples/**'
+              - 'tests/fuzz/**'
+              - 'tools/ci-apt.sh'
+              - 'tools/test_vulkan_sdk_download.py'
+              - '.github/workflows/ci.yml'
+              - '.github/scripts/ci_changes.py'
+        run: python3 .github/scripts/ci_changes.py >> "$GITHUB_OUTPUT"
+
   # The configuration the shipped CUDA packages are built in — and, until
   # v0.8.30, the one configuration NOTHING compiled before release day.
   #
@@ -26,6 +113,8 @@ jobs:
   # live behind `#if CRISPASR_ISA_X86`, so an arm64 build compiles the whole
   # block out and links clean either way.
   linux-backend-dl:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.native != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -310,6 +399,8 @@ jobs:
   # came from (clang 21 on Termux). Both compilers default to C++17 here, so the
   # matrix is the whole guard.
   linux-amr-fetch:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.native != 'false' }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -356,6 +447,8 @@ jobs:
   # (Opus-in-WebM) through the static libs. Same false-green guard: the
   # configure step asserts the gate actually turned ON.
   linux-opus-fetch:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.native != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -394,6 +487,8 @@ jobs:
   # — the fuzzable surface — which keeps the job fast; broaden to the full unit
   # lane later if desired.)
   linux-asan-audio:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.native != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -430,6 +525,8 @@ jobs:
   # short, seeded smoke pass under ASan/UBSan — a new crash fails CI. This is a
   # regression gate, not a fuzzing campaign; run it longer out of band for depth.
   linux-fuzz-smoke:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.native != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -508,6 +605,8 @@ jobs:
   # Linux x86_64 + Vulkan
   # ====================================================================
   linux-vulkan:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.native != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -538,6 +637,8 @@ jobs:
   # macOS (Apple Silicon / x86_64)
   # ====================================================================
   macos:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.native != 'false' }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
@@ -557,6 +658,8 @@ jobs:
   # Windows (MSVC)
   # ====================================================================
   windows:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.native != 'false' }}
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v6
@@ -599,6 +702,8 @@ jobs:
   # iOS (cross-compile gate — no runtime test)
   # ====================================================================
   ios:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.native != 'false' }}
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v6
@@ -622,6 +727,8 @@ jobs:
   # Android (cross-compile gate — no runtime test)
   # ====================================================================
   android:
+    needs: changes
+    if: ${{ !cancelled() && needs.changes.outputs.native != 'false' }}
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

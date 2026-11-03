@@ -3,11 +3,24 @@ name: Scheduler replay Vulkan regression
 on:
   workflow_dispatch:
   push:
+    branches: [main]
     paths:
       - ggml
       - tests/test-ggml-scheduler-replay.cpp
       - tools/ci-heavy/scheduler-replay/**
       - .github/workflows/scheduler-replay-vulkan.yml
+  pull_request:
+    paths:
+      - ggml
+      - tests/test-ggml-scheduler-replay.cpp
+      - tools/ci-heavy/scheduler-replay/**
+      - .github/workflows/scheduler-replay-vulkan.yml
+
+# PRs: a newer push to the same PR cancels the older run. main pushes and
+# manual runs get their own group (run_id), so they are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

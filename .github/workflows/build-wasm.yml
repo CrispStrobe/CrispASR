@@ -1,19 +1,51 @@
 name: Build WASM
 
+# Five emscripten builds (~10 min each). Pull requests used to run them on
+# every change, docs included; both events now share one path list, widened
+# from the old push list with everything the CMake build can pull in (the
+# ggml gitlink, include/, glint/, third_party/, cmake/; examples are OFF).
 on:
   push:
     branches: [main]
     paths:
       - 'src/**'
+      - 'include/**'
+      - 'ggml'
       - 'ggml/**'
+      - '.gitmodules'
       - 'bindings/javascript/**'
-      - 'crisp_audio/**'
-      - 'CMakeLists.txt'
+      - 'crisp_*/**'
+      - 'glint/**'
+      - 'third_party/**'
+      - 'cmake/**'
+      - '**/CMakeLists.txt'
       - 'build-wasm.sh'
+      - 'tests/test-wasm-piano.cjs'
       - '.github/workflows/build-wasm.yml'
   pull_request:
     branches: [main]
+    paths:
+      - 'src/**'
+      - 'include/**'
+      - 'ggml'
+      - 'ggml/**'
+      - '.gitmodules'
+      - 'bindings/javascript/**'
+      - 'crisp_*/**'
+      - 'glint/**'
+      - 'third_party/**'
+      - 'cmake/**'
+      - '**/CMakeLists.txt'
+      - 'build-wasm.sh'
+      - 'tests/test-wasm-piano.cjs'
+      - '.github/workflows/build-wasm.yml'
   workflow_dispatch:
+
+# PRs: a newer push to the same PR cancels the older run. main pushes and
+# manual runs get their own group (run_id), so they are never cancelled.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-wasm:

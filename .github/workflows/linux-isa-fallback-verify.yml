@@ -23,6 +23,14 @@ name: Linux ISA Fallback Verify
 on:
   workflow_dispatch:
   push:
+    branches: [main]
+    paths:
+      - .github/workflows/linux-isa-fallback-verify.yml
+      - src/core/ggml_cpu_backend.h
+      - src/core/gguf_loader.cpp
+      - examples/cli/cli.cpp
+      - examples/cli/crispasr_server.cpp
+  pull_request:
     paths:
       - .github/workflows/linux-isa-fallback-verify.yml
       - src/core/ggml_cpu_backend.h
@@ -30,11 +38,11 @@ on:
       - examples/cli/cli.cpp
       - examples/cli/crispasr_server.cpp
 
-# One run per workflow per branch: a newer push cancels the older run. On
-# main nothing is cancelled (every main commit keeps its verdict).
+# PRs: a newer push to the same PR cancels the older run. main pushes and
+# manual runs get their own group (run_id), so they are never cancelled.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   # Cheap gate: on a branch push, run the heavy job only when the BRANCH ITSELF
