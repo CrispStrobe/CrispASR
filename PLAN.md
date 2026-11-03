@@ -23,6 +23,7 @@ Each lane gives the start state, the exact steps, the acceptance and what to do 
   1. `gh run watch 41675510092 -R CrispStrobe/CrispASR`. Poll at most every 5 min; a bursty poll loop hit the API rate limit once.
   2. If a job fails, read its log. For a transient runner or network failure, run `gh run rerun 41675510092 --failed`. Never redispatch the whole release: it rebuilds CPU bytes that then collide with immutable PyPI files.
   3. When it succeeds, confirm the GitHub release `v0.8.50` has every v0.8.49 asset name with `0.8.50` substituted (52 names, same set as v0.8.47–v0.8.49).
+- **Progress (2026-11-03 ~19:50 UTC):** wrappers 41675510012 and Docker 41675510045 **succeeded**. Release attempt 1 failed only because `build-macos` was cancelled after about 107 min with no log (likely macOS runner starvation; it took 6 min on v0.8.49). Every other job passed, and the failed job was rerun as attempt 2 of the same run. If `build-macos` is cancelled again, rerun `--failed` once more. If it really hangs (a log exists), inspect the macOS build step; SCNet added an OpenBLAS 0.3.34 source build, though only in its qualification workflow.
 - **Accept:** all release jobs `success`; 52 assets; wrappers and Docker runs `success`.
 - **Then:** dispatch the native audit (lane R2, step 1).
 
