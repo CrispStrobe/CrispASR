@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.8.50
+* **Separation:** native Mini-BS-RoFormer V2.5 (#562) and SCNet / SCNet-large
+  (#566) source separation through CLI, server and Session.
+* **Recognition:** MOSS-Transcribe-Diarize beam size and seeded sampling (#564);
+  moss-audio encodes only real audio (#569); Haas-ja-v1.0 (#561).
+* **LID:** no silent LID model downloads without consent (#570).
+* **Voice conversion:** MeanVC2 streaming zero-shot conversion.
+
 ## 0.8.49
 
 * **Native speech:** integrate Audio8-TTS (ArkTTS 0.6B) dual-autoregressive TTS

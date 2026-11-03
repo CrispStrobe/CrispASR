@@ -1,3 +1,14 @@
+## 2026-11-03 — v0.8.50 Mini-BS-RoFormer, SCNet, MeanVC2, and #564/#567–#570
+
+Release v0.8.50 ships native Mini-BS-RoFormer V2.5 (#562) and SCNet/SCNet-large (#566)
+separation. SCNet is a squash of the qualified candidate `7b6a88360`, from hosted run 41520873570.
+On Metal, Mini-BS-RoFormer falls back to the CPU until #568 is fixed.
+Also included: the #564 MOSS-Diarize beam/sampling, the #567 parakeet-unified tokenizer fix,
+#569 (moss-audio no longer pads to 30 s: 11 s JFK gives 138 tokens, was 375), #570 (LID downloads
+need consent, verified locally with an empty cache), Haas-ja (#561), MeanVC2 and broad CPU
+performance work. Integration fixes: the Windows `setenv` guard and the duplicated guard
+left by the SCNet squash (`b6ec24da2`).
+
 ## 2026-11-02 — Lint Deep green, #564 MOSS-Diarize sampling, #567 parakeet-unified tokenizer
 
 Lint Deep (cppcheck 2.7) is green again after four fixes: the ArkTTS destructor no
