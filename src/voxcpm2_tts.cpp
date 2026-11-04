@@ -4460,8 +4460,7 @@ static bool voxcpm2_backend_is_gpu_unlimited(ggml_backend_t backend) {
     if (std::strncmp(name, "CUDA", 4) == 0) {
         return true;
     }
-    if (core_cpu_backend::is_metal(backend) ||
-        std::strncmp(name, "MTL", 3) == 0 ||
+    if (core_cpu_backend::is_metal(backend) || std::strncmp(name, "MTL", 3) == 0 ||
         std::strstr(name, "Metal") != nullptr) {
         return true;
     }
@@ -4851,13 +4850,14 @@ static std::vector<float> vae_decode_chunked(voxcpm2_context* ctx, const std::ve
             if (xfade_start_out + xfade_len <= pcm_out.size()) {
                 for (size_t k = 0; k < xfade_len; ++k) {
                     const float w = (float)(k + 1) / (float)(xfade_len + 1);
-                    pcm_out[xfade_start_out + k] = (1.0f - w) * pcm_out[xfade_start_out + k] +
-                                                   w * pcm_chunk[xfade_start_chunk + k];
+                    pcm_out[xfade_start_out + k] =
+                        (1.0f - w) * pcm_out[xfade_start_out + k] + w * pcm_chunk[xfade_start_chunk + k];
                 }
                 pcm_out.resize(xfade_start_out + xfade_len);
                 pcm_out.insert(pcm_out.end(), pcm_chunk.begin() + xfade_end_chunk, pcm_chunk.end());
             } else {
-                pcm_out.insert(pcm_out.end(), pcm_chunk.begin() + (overlap_patches * samples_per_patch), pcm_chunk.end());
+                pcm_out.insert(pcm_out.end(), pcm_chunk.begin() + (overlap_patches * samples_per_patch),
+                               pcm_chunk.end());
             }
         }
 
