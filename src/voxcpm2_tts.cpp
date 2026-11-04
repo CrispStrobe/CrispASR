@@ -4446,6 +4446,30 @@ static bool vae_wn_init_ggml(voxcpm2_context* ctx) {
     return true;
 }
 
+// Check whether a GPU backend has virtually unlimited dispatch limits
+// (Metal on Apple Silicon and CUDA have >= 2^31 grid dims), meaning they
+// never hit Vulkan's 65535 workgroup count constraint (#164).
+static bool voxcpm2_backend_is_gpu_unlimited(ggml_backend_t backend) {
+    if (!backend || core_cpu_backend::is_cpu(backend)) {
+        return false;
+    }
+    const char* name = ggml_backend_name(backend);
+    if (!name) {
+        return false;
+    }
+    if (std::strncmp(name, "CUDA", 4) == 0) {
+        return true;
+    }
+    if (core_cpu_backend::is_metal(backend) ||
+        std::strncmp(name, "MTL", 3) == 0 ||
+        std::strstr(name, "Metal") != nullptr) {
+        return true;
+    }
+    return false;
+}
+
+static std::vector<float> vae_decode_chunked(voxcpm2_context* ctx, const std::vector<std::vector<float>>& patches);
+
 // ---------------------------------------------------------------------------
 // VOXCPM2_USE_GRAPH=1 entry point — full VAE decode as a single cgraph.
 //
@@ -4488,12 +4512,24 @@ static std::vector<float> vae_decode_graph(voxcpm2_context* ctx, const std::vect
     // operate on T_lat × 240..1920 frames. Vulkan mandates
     // maxComputeWorkGroupCount[0] >= 65535 and many GPUs (e.g. Arc B580) report
     // exactly that. When the temporal dimension exceeds ~500K samples the
-    // dispatch assertion in ggml-vulkan.cpp fires. Fall back to the CPU path
-    // which has no such limit — the VAE is <5% of total synthesis time anyway.
+    // dispatch assertion in ggml-vulkan.cpp fires.
+    //
+    // Metal (Apple Silicon) and CUDA have no 65535 limit (>= 2^31 dispatch grid)
+    // and process the full sequence in a single dispatch. For backends with limits
+    // (Vulkan), we chunk the VAE decode on GPU across overlapping windows (48 patches)
+    // with smooth crossfading, maintaining ~1-2s GPU synthesis instead of a 100s CPU fallback.
     const int64_t out_samples = (int64_t)T_lat * 1920;
-    const char* backend_name = ggml_backend_name(ctx->backend);
-    const bool is_cuda = backend_name && std::strncmp(backend_name, "CUDA", 4) == 0;
-    if (out_samples > 500000 && !core_cpu_backend::is_cpu(ctx->backend) && !is_cuda) {
+    const bool is_gpu_unlimited = voxcpm2_backend_is_gpu_unlimited(ctx->backend);
+    const bool allow_chunk_gpu = vox_env_bool_default_on("CRISPASR_VOXCPM2_VAE_CHUNK_GPU");
+    if (out_samples > 500000 && !core_cpu_backend::is_cpu(ctx->backend) && !is_gpu_unlimited) {
+        if (allow_chunk_gpu) {
+            if (ctx->verbosity >= 1)
+                fprintf(stderr,
+                        "voxcpm2: VAE output too long for single GPU dispatch "
+                        "(%lld samples, %d patches); using chunked GPU decode\n",
+                        (long long)out_samples, n_patches);
+            return vae_decode_chunked(ctx, patches);
+        }
         if (ctx->verbosity >= 1)
             fprintf(stderr,
                     "voxcpm2: VAE output too long for GPU dispatch "
@@ -4752,6 +4788,90 @@ static std::vector<float> vae_decode_graph(voxcpm2_context* ctx, const std::vect
 
     ggml_free(ctx0);
     return pcm;
+}
+
+// Chunked GPU VAE decode (#164) for GPUs constrained by Vulkan maxComputeWorkGroupCount (65535).
+// Splits long sequence into overlapping windows of <= 48 patches (<= 368,640 samples), runs
+// vae_decode_graph on each chunk on GPU, and linearly crossfades over the causal warmup overlap.
+static std::vector<float> vae_decode_chunked(voxcpm2_context* ctx, const std::vector<std::vector<float>>& patches) {
+    const int total_patches = (int)patches.size();
+    if (total_patches == 0) {
+        return {};
+    }
+    const int P = (int)ctx->hp.patch_frames; // 4
+    const int samples_per_patch = P * 1920;  // 7680 samples per patch
+
+    // 48 patches * 7680 = 368,640 samples (well within Vulkan limits < 500,000)
+    int chunk_patches = 48;
+    const char* env_cp = std::getenv("CRISPASR_VOXCPM2_VAE_CHUNK_PATCHES");
+    if (env_cp && env_cp[0]) {
+        int v = std::atoi(env_cp);
+        if (v >= 16) {
+            chunk_patches = v;
+        }
+    }
+    // Overlap of 8 patches (61,440 samples = 1.28 s) to warm up causal conv states
+    const int overlap_patches = 8;
+
+    if (total_patches <= chunk_patches) {
+        return vae_decode_graph(ctx, patches);
+    }
+
+    std::vector<float> pcm_out;
+    pcm_out.reserve((size_t)total_patches * samples_per_patch);
+
+    int start_p = 0;
+    while (start_p < total_patches) {
+        int end_p = std::min(total_patches, start_p + chunk_patches);
+        std::vector<std::vector<float>> chunk_patches_vec(patches.begin() + start_p, patches.begin() + end_p);
+
+        std::vector<float> pcm_chunk = vae_decode_graph(ctx, chunk_patches_vec);
+        const size_t expected_samples = (size_t)(end_p - start_p) * samples_per_patch;
+        if (pcm_chunk.size() != expected_samples) {
+            if (ctx->verbosity >= 1) {
+                fprintf(stderr, "voxcpm2: chunked VAE graph decode failed on range [%d, %d); falling back to CPU\n",
+                        start_p, end_p);
+            }
+            return vae_decode_cpu(ctx, patches);
+        }
+
+        if (start_p == 0) {
+            pcm_out = std::move(pcm_chunk);
+        } else {
+            // In the overlap region (first 8 patches of pcm_chunk):
+            // The first 4 patches allow the causal filters to warm up.
+            // Crossfade over 2 patches (samples [4*samples_per_patch, 6*samples_per_patch) in pcm_chunk),
+            // and discard the initial warmup patches of the chunk.
+            const size_t xfade_start_chunk = (size_t)4 * samples_per_patch;
+            const size_t xfade_len = (size_t)2 * samples_per_patch;
+            const size_t xfade_end_chunk = xfade_start_chunk + xfade_len;
+
+            const size_t xfade_start_out = (size_t)(start_p + 4) * samples_per_patch;
+
+            if (xfade_start_out + xfade_len <= pcm_out.size()) {
+                for (size_t k = 0; k < xfade_len; ++k) {
+                    const float w = (float)(k + 1) / (float)(xfade_len + 1);
+                    pcm_out[xfade_start_out + k] = (1.0f - w) * pcm_out[xfade_start_out + k] +
+                                                   w * pcm_chunk[xfade_start_chunk + k];
+                }
+                pcm_out.resize(xfade_start_out + xfade_len);
+                pcm_out.insert(pcm_out.end(), pcm_chunk.begin() + xfade_end_chunk, pcm_chunk.end());
+            } else {
+                pcm_out.insert(pcm_out.end(), pcm_chunk.begin() + (overlap_patches * samples_per_patch), pcm_chunk.end());
+            }
+        }
+
+        if (end_p >= total_patches) {
+            break;
+        }
+        start_p = end_p - overlap_patches;
+    }
+
+    const size_t target_size = (size_t)total_patches * samples_per_patch;
+    if (pcm_out.size() != target_size) {
+        pcm_out.resize(target_size, 0.0f);
+    }
+    return pcm_out;
 }
 
 // ---------------------------------------------------------------------------
@@ -5592,11 +5712,11 @@ static std::vector<float> vae_encode_graph(voxcpm2_context* ctx, const float* pc
     const int padded_n = ((n_samples + patch_len - 1) / patch_len) * patch_len;
 
     // Workgroup guard (#164): conv0 runs on the full padded length. Very long
-    // refs can overflow Vulkan/Metal dispatch limits; the encoder is a small
+    // refs can overflow Vulkan dispatch limits; the encoder is a small
     // slice of synthesis time, so fall back to CPU for pathological lengths.
-    const char* backend_name = ggml_backend_name(ctx->backend);
-    const bool is_cuda = backend_name && std::strncmp(backend_name, "CUDA", 4) == 0;
-    if (padded_n > 500000 && !core_cpu_backend::is_cpu(ctx->backend) && !is_cuda) {
+    // Metal (Apple Silicon) and CUDA have no 65535 limit.
+    const bool is_gpu_unlimited = voxcpm2_backend_is_gpu_unlimited(ctx->backend);
+    if (padded_n > 500000 && !core_cpu_backend::is_cpu(ctx->backend) && !is_gpu_unlimited) {
         if (ctx->verbosity >= 1)
             fprintf(stderr, "voxcpm2: VAE encode input too long for GPU dispatch (%d samples); using CPU\n", padded_n);
         return vae_encode_uncached(ctx, pcm, n_samples, out_T_patches);
@@ -8533,5 +8653,14 @@ std::vector<float> test_wn_reconstruct(const float* weight_g, const float* weigh
 }
 void test_snake1d(const float* alpha, const float* x_in, float* x_out, int C, int T) {
     snake1d(alpha, x_in, x_out, C, T);
+}
+bool test_is_gpu_unlimited_backend_name(const char* backend_name) {
+    if (!backend_name)
+        return false;
+    if (std::strncmp(backend_name, "CUDA", 4) == 0)
+        return true;
+    if (std::strncmp(backend_name, "MTL", 3) == 0 || std::strstr(backend_name, "Metal") != nullptr)
+        return true;
+    return false;
 }
 } // namespace voxcpm2_test
