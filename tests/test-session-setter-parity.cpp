@@ -123,3 +123,19 @@ TEST_CASE("the HTTP server exposes it and applies it before the raw fields", "[s
     REQUIRE(ent != std::string::npos);
     REQUIRE(sens < ent);
 }
+
+TEST_CASE("issue #574: set_autochunk reaches every wrapper", "[setter-parity]") {
+    for (const char* rel : kSurfaces) {
+        INFO("surface: " << rel);
+        const std::string src = slurp(rel);
+        REQUIRE(src.find("crispasr_session_set_autochunk") != std::string::npos);
+    }
+}
+
+TEST_CASE("issue #574: set_max_new_tokens_per_second reaches every wrapper", "[setter-parity]") {
+    for (const char* rel : kSurfaces) {
+        INFO("surface: " << rel);
+        const std::string src = slurp(rel);
+        REQUIRE(src.find("crispasr_session_set_max_new_tokens_per_second") != std::string::npos);
+    }
+}

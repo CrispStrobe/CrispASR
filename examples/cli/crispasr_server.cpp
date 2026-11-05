@@ -1985,6 +1985,11 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         rp.detect_language = form_bool(req, "detect_language", rp.detect_language);
         rp.lid_backend = form_string(req, "lid_backend", rp.lid_backend);
         rp.lid_model = form_string(req, "lid_model", rp.lid_model);
+        if (req_has_part(req, "autochunk") || req.has_param("autochunk")) {
+            rp.chunk_seconds_explicit = true;
+            if (!form_bool(req, "autochunk", true))
+                rp.chunk_seconds = 0;
+        }
         if (req_has_part(req, "chunk_seconds") || req.has_param("chunk_seconds"))
             rp.chunk_seconds_explicit = true;
         rp.chunk_seconds = form_int(req, "chunk_seconds", rp.chunk_seconds);
@@ -2096,6 +2101,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
     //   entropy_thold    (optional) — entropy threshold for decoder fail
     //   no_speech_thold  (optional) — no-speech probability threshold
     //   chunk_seconds    (optional) — max chunk duration for long audio
+    //   autochunk        (optional) — false to disable long-audio chunking
     // -----------------------------------------------------------------------
     svr.Post("/v1/audio/transcriptions", [&](const Request& req, Response& res) {
         if (!require_auth(req, res))
@@ -2208,6 +2214,11 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         rp.detect_language = form_bool(req, "detect_language", rp.detect_language);
         rp.lid_backend = form_string(req, "lid_backend", rp.lid_backend);
         rp.lid_model = form_string(req, "lid_model", rp.lid_model);
+        if (req_has_part(req, "autochunk") || req.has_param("autochunk")) {
+            rp.chunk_seconds_explicit = true;
+            if (!form_bool(req, "autochunk", true))
+                rp.chunk_seconds = 0;
+        }
         if (req_has_part(req, "chunk_seconds") || req.has_param("chunk_seconds"))
             rp.chunk_seconds_explicit = true;
         rp.chunk_seconds = form_int(req, "chunk_seconds", rp.chunk_seconds);

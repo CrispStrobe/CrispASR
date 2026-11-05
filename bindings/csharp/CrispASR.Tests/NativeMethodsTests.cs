@@ -147,6 +147,8 @@ namespace CrispASR.Tests
         [InlineData("crispasr_session_set_temperature")]
         [InlineData("crispasr_session_set_tts_seed")]
         [InlineData("crispasr_session_set_max_new_tokens")]
+        [InlineData("crispasr_session_set_autochunk")]
+        [InlineData("crispasr_session_set_max_new_tokens_per_second")]
         [InlineData("crispasr_session_set_frequency_penalty")]
         [InlineData("crispasr_session_set_tts_steps")]
         [InlineData("crispasr_session_set_tts_num_candidates")]

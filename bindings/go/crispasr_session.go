@@ -969,7 +969,7 @@ func goProgressCallback(processed C.int, total C.int, user C.uintptr_t) {
 }
 
 //export goSegmentCallback
-func goSegmentCallback(text *C.char, t0 C.long, t1 C.long, index C.int, user C.uintptr_t) {
+func goSegmentCallback(text *C.char, t0 C.int64_t, t1 C.int64_t, index C.int, user C.uintptr_t) {
 	if user == 0 {
 		return
 	}

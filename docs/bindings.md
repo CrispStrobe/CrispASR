@@ -65,6 +65,8 @@ invalid preset and must raise. Do not universally swallow this code.
 | `set_temperature(temp, seed)` | `set_temperature` / `set_temperature` / `SetTemperature` / `setTemperature` | ASR + TTS backends that sample; rc=-2 = no backend supports it |
 | `set_tts_seed(seed)` | `set_tts_seed` / `set_tts_seed` / `SetTTSSeed` / `setTtsSeed` | Chatterbox, vibevoice, qwen3-tts, orpheus; rc=-2 for others |
 | `set_max_new_tokens(n)` | `set_max_new_tokens` / `set_max_new_tokens` / `SetMaxNewTokens` / `setMaxNewTokens` | AR backends; ≤ 0 clears override |
+| `set_autochunk(enabled, chunk_seconds)` | `set_autochunk` / `set_autochunk` / `SetAutochunk` / `setAutochunk` | Auto-chunking controls for long audio (> 30s); enabled=false disables slicing |
+| `set_max_new_tokens_per_second(rate, minimum)` | `set_max_new_tokens_per_second` / `set_max_new_tokens_per_second` / `SetMaxNewTokensPerSecond` / `setMaxNewTokensPerSecond` | Dynamic token budget per piece: max(minimum, round(rate * piece_duration_seconds)) |
 | `set_frequency_penalty(f)` | `set_frequency_penalty` / `set_frequency_penalty` / `SetFrequencyPenalty` / `setFrequencyPenalty` | AR backends; ≤ 0 disables |
 | `set_tts_steps(n)` | `set_tts_steps` / `set_tts_steps` / `SetTTSSteps` / `setTtsSteps` | Chatterbox S3Gen CFM steps; vibevoice DPM-Solver++ steps; kugelaudio; tada FM steps; irodori flow-matching ODE steps |
 | `set_tts_num_candidates(n)` | `set_tts_num_candidates` / `set_tts_num_candidates` / `SetTTSNumCandidates` / `setTtsNumCandidates` | TADA flow-matching timing candidates ranked per token (default 4); rc=-2 for others |
