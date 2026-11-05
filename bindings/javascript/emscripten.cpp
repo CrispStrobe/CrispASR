@@ -670,6 +670,14 @@ EMSCRIPTEN_BINDINGS(whisper) {
                              binding_check_reentry();
                              return g_tts_session ? crispasr_session_set_max_new_tokens(g_tts_session, n) : -1;
                          }));
+    emscripten::function("sessionSetAutochunk", emscripten::optional_override([](bool enabled, int chunk_seconds) {
+                             binding_check_reentry();
+                             return g_tts_session ? crispasr_session_set_autochunk(g_tts_session, enabled ? 1 : 0, chunk_seconds) : -1;
+                         }));
+    emscripten::function("sessionSetMaxNewTokensPerSecond", emscripten::optional_override([](float rate, int minimum) {
+                             binding_check_reentry();
+                             return g_tts_session ? crispasr_session_set_max_new_tokens_per_second(g_tts_session, rate, minimum) : -1;
+                         }));
     emscripten::function("sessionSetFrequencyPenalty", emscripten::optional_override([](float p) {
                              binding_check_reentry();
                              return g_tts_session ? crispasr_session_set_frequency_penalty(g_tts_session, p) : -1;

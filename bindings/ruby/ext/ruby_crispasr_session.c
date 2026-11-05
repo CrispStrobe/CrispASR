@@ -74,6 +74,8 @@ extern int crispasr_session_set_translate(struct CrispasrSession* s, int enable)
 extern int crispasr_session_set_temperature(struct CrispasrSession* s, float temperature, unsigned long long seed);
 extern int crispasr_session_set_tts_seed(struct CrispasrSession* s, unsigned long long seed);
 extern int crispasr_session_set_max_new_tokens(struct CrispasrSession* s, int n);
+extern int crispasr_session_set_autochunk(struct CrispasrSession* s, int enabled, int chunk_seconds);
+extern int crispasr_session_set_max_new_tokens_per_second(struct CrispasrSession* s, float rate, int minimum);
 extern int crispasr_session_set_frequency_penalty(struct CrispasrSession* s, float penalty);
 extern int crispasr_session_set_tts_steps(struct CrispasrSession* s, int steps);
 extern int crispasr_session_set_tts_num_candidates(struct CrispasrSession* s, int n);
@@ -574,6 +576,22 @@ static VALUE rb_session_set_max_new_tokens(VALUE self, VALUE handle, VALUE n) {
     int rc = crispasr_session_set_max_new_tokens(s, NUM2INT(n));
     if (rc != 0)
         rb_raise(rb_eRuntimeError, "set_max_new_tokens failed (rc=%d)", rc);
+    return Qnil;
+}
+
+static VALUE rb_session_set_autochunk(VALUE self, VALUE handle, VALUE enabled, VALUE chunk_seconds) {
+    struct CrispasrSession* s = rb_extra_handle(handle);
+    int rc = crispasr_session_set_autochunk(s, RTEST(enabled) ? 1 : 0, NUM2INT(chunk_seconds));
+    if (rc != 0)
+        rb_raise(rb_eRuntimeError, "set_autochunk failed (rc=%d)", rc);
+    return Qnil;
+}
+
+static VALUE rb_session_set_max_new_tokens_per_second(VALUE self, VALUE handle, VALUE rate, VALUE minimum) {
+    struct CrispasrSession* s = rb_extra_handle(handle);
+    int rc = crispasr_session_set_max_new_tokens_per_second(s, (float)NUM2DBL(rate), NUM2INT(minimum));
+    if (rc != 0)
+        rb_raise(rb_eRuntimeError, "set_max_new_tokens_per_second failed (rc=%d)", rc);
     return Qnil;
 }
 
@@ -1854,6 +1872,8 @@ RB_CONTEXT_WRAPPER_2(rb_session_set_translate);
 RB_CONTEXT_WRAPPER_3(rb_session_set_temperature);
 RB_CONTEXT_WRAPPER_2(rb_session_set_tts_seed);
 RB_CONTEXT_WRAPPER_2(rb_session_set_max_new_tokens);
+RB_CONTEXT_WRAPPER_3(rb_session_set_autochunk);
+RB_CONTEXT_WRAPPER_3(rb_session_set_max_new_tokens_per_second);
 RB_CONTEXT_WRAPPER_2(rb_session_set_frequency_penalty);
 RB_CONTEXT_WRAPPER_2(rb_session_set_tts_steps);
 RB_CONTEXT_WRAPPER_2(rb_session_set_tts_num_candidates);
@@ -1980,6 +2000,8 @@ void init_ruby_crispasr_session(VALUE* mWhisper) {
     rb_define_singleton_method(mSession, "set_temperature", rb_context_guard_rb_session_set_temperature, 3);
     rb_define_singleton_method(mSession, "set_tts_seed", rb_context_guard_rb_session_set_tts_seed, 2);
     rb_define_singleton_method(mSession, "set_max_new_tokens", rb_context_guard_rb_session_set_max_new_tokens, 2);
+    rb_define_singleton_method(mSession, "set_autochunk", rb_context_guard_rb_session_set_autochunk, 3);
+    rb_define_singleton_method(mSession, "set_max_new_tokens_per_second", rb_context_guard_rb_session_set_max_new_tokens_per_second, 3);
     rb_define_singleton_method(mSession, "set_frequency_penalty", rb_context_guard_rb_session_set_frequency_penalty, 2);
     rb_define_singleton_method(mSession, "set_tts_steps", rb_context_guard_rb_session_set_tts_steps, 2);
     rb_define_singleton_method(mSession, "set_tts_num_candidates", rb_context_guard_rb_session_set_tts_num_candidates,

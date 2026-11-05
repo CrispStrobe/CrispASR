@@ -4384,6 +4384,30 @@ class CrispasrSession {
     if (rc != 0) throw Exception('setMaxNewTokens failed (rc=$rc)');
   }
 
+  /// Control session-level auto-chunking for long audio (> 30 s).
+  void setAutochunk(bool enabled, [int chunkSeconds = 0]) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_autochunk')) return;
+    final fn = _lib.lookupFunction<
+        Int32 Function(Pointer<Void>, Int32, Int32),
+        int Function(
+            Pointer<Void>, int, int)>('crispasr_session_set_autochunk');
+    final rc = fn(_handle, enabled ? 1 : 0, chunkSeconds);
+    if (rc != 0) throw Exception('setAutochunk failed (rc=$rc)');
+  }
+
+  /// Set a dynamic token budget proportional to piece audio length.
+  void setMaxNewTokensPerSecond(double rate, [int minimum = 16]) {
+    if (_closed) throw StateError('CrispasrSession is closed');
+    if (!_lib.providesSymbol('crispasr_session_set_max_new_tokens_per_second')) return;
+    final fn = _lib.lookupFunction<
+        Int32 Function(Pointer<Void>, Float, Int32),
+        int Function(
+            Pointer<Void>, double, int)>('crispasr_session_set_max_new_tokens_per_second');
+    final rc = fn(_handle, rate, minimum);
+    if (rc != 0) throw Exception('setMaxNewTokensPerSecond failed (rc=$rc)');
+  }
+
   /// Opt-in repeated-token penalty for autoregressive session backends.
   /// Pass <= 0 to disable.
   void setFrequencyPenalty(double penalty) {

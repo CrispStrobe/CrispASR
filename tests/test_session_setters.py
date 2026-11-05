@@ -142,6 +142,16 @@ _SETTER_SPECS = [
         [ctypes.c_void_p, ctypes.c_int],
         [None, 1],
     ),
+    (
+        "crispasr_session_set_autochunk",
+        [ctypes.c_void_p, ctypes.c_int, ctypes.c_int],
+        [None, 1, 30],
+    ),
+    (
+        "crispasr_session_set_max_new_tokens_per_second",
+        [ctypes.c_void_p, ctypes.c_float, ctypes.c_int],
+        [None, 10.0, 16],
+    ),
 ]
 
 # Python Session method names that must exist on the binding class.
@@ -150,6 +160,8 @@ _BINDING_METHODS = [
     "set_tts_seed",
     "set_tts_steps",
     "set_max_new_tokens",
+    "set_autochunk",
+    "set_max_new_tokens_per_second",
     "set_frequency_penalty",
     "set_top_p",
     "set_min_p",
@@ -256,6 +268,14 @@ class TestSetterSymbols(unittest.TestCase):
     def test_return_logits_null_returns_neg1(self):
         self.assertEqual(self._call_setter(*_SETTER_SPECS[19]), -1)
 
+    def test_autochunk_null_returns_neg1(self):
+        spec = next(x for x in _SETTER_SPECS if x[0] == "crispasr_session_set_autochunk")
+        self.assertEqual(self._call_setter(*spec), -1)
+
+    def test_max_new_tokens_per_second_null_returns_neg1(self):
+        spec = next(x for x in _SETTER_SPECS if x[0] == "crispasr_session_set_max_new_tokens_per_second")
+        self.assertEqual(self._call_setter(*spec), -1)
+
 
 class TestBindingMethods(unittest.TestCase):
     """The Python Session class must expose every setter as a callable method."""
@@ -309,6 +329,23 @@ class TestBindingMethods(unittest.TestCase):
                 params[name].default, inspect.Parameter.empty,
                 f"param {name} has no default",
             )
+
+    def test_set_autochunk_signature(self):
+        import inspect
+        sig = inspect.signature(self.Session.set_autochunk)
+        params = sig.parameters
+        self.assertIn("enabled", params)
+        self.assertIn("chunk_seconds", params)
+        self.assertEqual(params["enabled"].default, True)
+        self.assertEqual(params["chunk_seconds"].default, 0)
+
+    def test_set_max_new_tokens_per_second_signature(self):
+        import inspect
+        sig = inspect.signature(self.Session.set_max_new_tokens_per_second)
+        params = sig.parameters
+        self.assertIn("rate", params)
+        self.assertIn("minimum", params)
+        self.assertEqual(params["minimum"].default, 16)
 
 
 if __name__ == "__main__":

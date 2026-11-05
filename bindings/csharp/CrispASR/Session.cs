@@ -268,6 +268,14 @@ namespace CrispASR
         public void SetMaxNewTokens(int n)
             => Check(NativeMethods.crispasr_session_set_max_new_tokens(Handle, n), "set_max_new_tokens");
 
+        /// <summary>Control session-level auto-chunking for long audio (> 30 s).</summary>
+        public void SetAutochunk(bool enabled, int chunkSeconds = 0)
+            => Check(NativeMethods.crispasr_session_set_autochunk(Handle, enabled ? 1 : 0, chunkSeconds), "set_autochunk");
+
+        /// <summary>Set a dynamic token budget proportional to piece audio length.</summary>
+        public void SetMaxNewTokensPerSecond(float rate, int minimum = 16)
+            => Check(NativeMethods.crispasr_session_set_max_new_tokens_per_second(Handle, rate, minimum), "set_max_new_tokens_per_second");
+
         /// <summary>Repeated generated-token penalty for autoregressive backends.</summary>
         public void SetFrequencyPenalty(float penalty)
             => Check(NativeMethods.crispasr_session_set_frequency_penalty(Handle, penalty), "set_frequency_penalty");

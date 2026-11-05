@@ -78,6 +78,14 @@ TEST_CASE("session setter: set_max_new_tokens null-handle → -1", "[unit][sette
     REQUIRE(crispasr_session_set_max_new_tokens(nullptr, 256) == -1);
 }
 
+TEST_CASE("session setter: set_autochunk null-handle → -1", "[unit][setters]") {
+    REQUIRE(crispasr_session_set_autochunk(nullptr, 1, 30) == -1);
+}
+
+TEST_CASE("session setter: set_max_new_tokens_per_second null-handle → -1", "[unit][setters]") {
+    REQUIRE(crispasr_session_set_max_new_tokens_per_second(nullptr, 10.0f, 16) == -1);
+}
+
 TEST_CASE("session setter: set_max_speech_tokens null-handle → -1", "[unit][setters]") {
     REQUIRE(crispasr_session_set_max_speech_tokens(nullptr, 1000) == -1);
 }

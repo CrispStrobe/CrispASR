@@ -142,6 +142,12 @@ namespace CrispASR
         internal static extern int crispasr_session_set_max_new_tokens(IntPtr s, int n);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int crispasr_session_set_autochunk(IntPtr s, int enabled, int chunk_seconds);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+        internal static extern int crispasr_session_set_max_new_tokens_per_second(IntPtr s, float rate, int minimum);
+
+        [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
         internal static extern int crispasr_session_set_frequency_penalty(IntPtr s, float penalty);
 
         [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]

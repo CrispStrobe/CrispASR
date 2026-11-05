@@ -108,6 +108,8 @@ public final class CrispasrSession extends CrispasrSessionTasks implements AutoC
         int     crispasr_session_set_temperature(Pointer session, float temperature, long seed);
         int     crispasr_session_set_tts_seed(Pointer session, long seed);
         int     crispasr_session_set_max_new_tokens(Pointer session, int maxNewTokens);
+        int     crispasr_session_set_autochunk(Pointer session, int enabled, int chunkSeconds);
+        int     crispasr_session_set_max_new_tokens_per_second(Pointer session, float rate, int minimum);
         int     crispasr_session_set_frequency_penalty(Pointer session, float penalty);
         int     crispasr_session_set_tts_steps(Pointer session, int steps);
         int     crispasr_session_set_tts_num_candidates(Pointer session, int n);
@@ -499,6 +501,18 @@ public final class CrispasrSession extends CrispasrSessionTasks implements AutoC
     public void setMaxNewTokens(int maxNewTokens) {
         int rc = Lib.INSTANCE.crispasr_session_set_max_new_tokens(nativeHandle(), maxNewTokens);
         if (rc != 0) throw new IllegalStateException("set_max_new_tokens failed (rc=" + rc + ")");
+    }
+
+    /** Control session-level auto-chunking for long audio (> 30 s). */
+    public void setAutochunk(boolean enabled, int chunkSeconds) {
+        int rc = Lib.INSTANCE.crispasr_session_set_autochunk(nativeHandle(), enabled ? 1 : 0, chunkSeconds);
+        if (rc != 0) throw new IllegalStateException("set_autochunk failed (rc=" + rc + ")");
+    }
+
+    /** Set a dynamic token budget proportional to piece audio length. */
+    public void setMaxNewTokensPerSecond(float rate, int minimum) {
+        int rc = Lib.INSTANCE.crispasr_session_set_max_new_tokens_per_second(nativeHandle(), rate, minimum);
+        if (rc != 0) throw new IllegalStateException("set_max_new_tokens_per_second failed (rc=" + rc + ")");
     }
 
     /** Opt-in repeated generated-token penalty for autoregressive session backends. Pass <= 0 to disable. */

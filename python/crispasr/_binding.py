@@ -2607,6 +2607,44 @@ class Session(SessionExtras):
         if rc != 0:
             raise RuntimeError(f"set_max_new_tokens failed (rc={rc})")
 
+    def set_autochunk(self, enabled: bool = True, chunk_seconds: int = 0) -> None:
+        """Control session-level auto-chunking for long audio (> 30 s).
+
+        When enabled (the default), long audio is sliced at quiet points into chunks
+        of up to `chunk_seconds` (default 30 s) before transcribing.
+        Pass ``enabled=False`` to disable auto-chunking and pass audio to the model whole.
+        Pass ``chunk_seconds > 0`` to customize the chunk window.
+        """
+        if not hasattr(self._lib, "crispasr_session_set_autochunk"):
+            raise RuntimeError("crispasr_session_set_autochunk not present in this libcrispasr build")
+        self._lib.crispasr_session_set_autochunk.argtypes = [ctypes.c_void_p, ctypes.c_int, ctypes.c_int]
+        self._lib.crispasr_session_set_autochunk.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_autochunk(self._handle, 1 if enabled else 0, int(chunk_seconds))
+        if rc != 0:
+            raise RuntimeError(f"set_autochunk failed (rc={rc})")
+
+    def set_max_new_tokens_per_second(self, rate: float, minimum: int = 16) -> None:
+        """Set a dynamic token budget proportional to piece audio length.
+
+        When active (rate > 0.0), each audio piece gets a token limit of
+        ``max(minimum, round(rate * piece_duration_seconds))``. If a flat
+        ``set_max_new_tokens`` cap is also set, the piece budget is capped at that value.
+        Pass ``rate <= 0.0`` to disable dynamic per-piece token limits.
+        """
+        if not hasattr(self._lib, "crispasr_session_set_max_new_tokens_per_second"):
+            raise RuntimeError("crispasr_session_set_max_new_tokens_per_second not present in this libcrispasr build")
+        self._lib.crispasr_session_set_max_new_tokens_per_second.argtypes = [
+            ctypes.c_void_p,
+            ctypes.c_float,
+            ctypes.c_int,
+        ]
+        self._lib.crispasr_session_set_max_new_tokens_per_second.restype = ctypes.c_int
+        rc = self._lib.crispasr_session_set_max_new_tokens_per_second(
+            self._handle, float(rate), int(minimum)
+        )
+        if rc != 0:
+            raise RuntimeError(f"set_max_new_tokens_per_second failed (rc={rc})")
+
     def set_frequency_penalty(self, penalty: float) -> None:
         """Set an opt-in repeated generated-token penalty for AR backends.
 

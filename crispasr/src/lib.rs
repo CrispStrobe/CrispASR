@@ -2060,6 +2060,28 @@ impl Session {
         Ok(())
     }
 
+    /// Control session-level auto-chunking for long audio (> 30 s).
+    pub fn set_autochunk(&self, enabled: bool, chunk_seconds: i32) -> Result<(), String> {
+        let rc = unsafe {
+            crispasr_sys::crispasr_session_set_autochunk(self.handle, if enabled { 1 } else { 0 }, chunk_seconds)
+        };
+        if rc != 0 {
+            return Err(format!("set_autochunk failed (rc={})", rc));
+        }
+        Ok(())
+    }
+
+    /// Set a dynamic token budget proportional to piece audio length.
+    pub fn set_max_new_tokens_per_second(&self, rate: f32, minimum: i32) -> Result<(), String> {
+        let rc = unsafe {
+            crispasr_sys::crispasr_session_set_max_new_tokens_per_second(self.handle, rate, minimum)
+        };
+        if rc != 0 {
+            return Err(format!("set_max_new_tokens_per_second failed (rc={})", rc));
+        }
+        Ok(())
+    }
+
     /// Set an opt-in repeated generated-token penalty for autoregressive
     /// session backends. Pass `<= 0.0` to disable it.
     pub fn set_frequency_penalty(&self, penalty: f32) -> Result<(), String> {

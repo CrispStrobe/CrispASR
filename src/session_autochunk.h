@@ -8,6 +8,8 @@
 // model.
 #pragma once
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 
 namespace core_session {
@@ -53,6 +55,24 @@ inline int session_default_chunk_seconds(const std::string& backend, bool perbac
     if (perbackend_enabled && (backend == "moonshine" || backend == "moonshine-streaming"))
         return 20;
     return 30;
+}
+
+// Issue #574: Piece-proportional token budget for chunked / long-audio decode.
+// Each piece gets max(minimum, round(rate * duration_seconds)), optionally
+// capped by session_max_new_tokens if an explicit flat limit was set (> 0).
+// When rate <= 0, dynamic budget is disabled and session_max_new_tokens is returned.
+inline int compute_piece_max_tokens(float rate, int minimum, int n_samples, int sr, int session_max_new_tokens = 0) {
+    if (rate <= 0.0f)
+        return session_max_new_tokens;
+    if (sr <= 0 || n_samples <= 0)
+        return std::max(0, minimum);
+    const double secs = (double)n_samples / (double)sr;
+    int limit = (int)std::lround(secs * (double)rate);
+    if (limit < minimum)
+        limit = minimum;
+    if (session_max_new_tokens > 0 && limit > session_max_new_tokens)
+        limit = session_max_new_tokens;
+    return limit;
 }
 
 } // namespace core_session

@@ -1001,6 +1001,18 @@ int crispasr_session_set_max_new_tokens(crispasr_session* s, int n) {
     (void)n;
     return 0;
 }
+int crispasr_session_set_autochunk(crispasr_session* s, int en, int cs) {
+    (void)s;
+    (void)en;
+    (void)cs;
+    return 0;
+}
+int crispasr_session_set_max_new_tokens_per_second(crispasr_session* s, float r, int m) {
+    (void)s;
+    (void)r;
+    (void)m;
+    return 0;
+}
 int crispasr_session_set_frequency_penalty(crispasr_session* s, float p) {
     (void)s;
     (void)p;

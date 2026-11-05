@@ -838,6 +838,15 @@ CRISPASR_SESSION_API int crispasr_session_set_min_speech_tokens(crispasr_session
 CRISPASR_SESSION_API int crispasr_session_set_length_scale(crispasr_session* s, float scale);
 CRISPASR_SESSION_API int crispasr_session_set_best_of(crispasr_session* s, int n);
 CRISPASR_SESSION_API int crispasr_session_set_max_new_tokens(crispasr_session* s, int n);
+// Auto-chunking controls for long audio (issue #574).
+// enabled: 1 = enable, 0 = disable, < 0 = reset to default / env var.
+// chunk_seconds: > 0 sets chunk window in seconds; <= 0 resets to default (30 s).
+CRISPASR_SESSION_API int crispasr_session_set_autochunk(crispasr_session* s, int enabled, int chunk_seconds);
+// Piece-proportional token budget for chunked audio (issue #574).
+// rate > 0: each piece gets max(minimum, round(rate * piece_duration_seconds)).
+// If an explicit flat cap was set via crispasr_session_set_max_new_tokens, it acts as an upper ceiling.
+// rate <= 0 disables dynamic token budgets.
+CRISPASR_SESSION_API int crispasr_session_set_max_new_tokens_per_second(crispasr_session* s, float rate, int minimum);
 CRISPASR_SESSION_API int crispasr_session_set_frequency_penalty(crispasr_session* s, float penalty);
 CRISPASR_SESSION_API int crispasr_session_set_beam_size(crispasr_session* s, int n);
 CRISPASR_SESSION_API int crispasr_session_set_return_logits(crispasr_session* s, int enable);

@@ -68,3 +68,43 @@ TEST_CASE("per-backend window on: short-segment models chunk smaller", "[unit][s
     REQUIRE(session_default_chunk_seconds("nemotron", true) == 30);
     REQUIRE(session_default_chunk_seconds("", true) == 30);
 }
+
+TEST_CASE("piece-proportional token budget: disabled when rate <= 0", "[unit][session-autochunk]") {
+    using core_session::compute_piece_max_tokens;
+    REQUIRE(compute_piece_max_tokens(0.0f, 16, 10 * SR, SR, 256) == 256);
+    REQUIRE(compute_piece_max_tokens(-1.0f, 16, 10 * SR, SR, 100) == 100);
+    REQUIRE(compute_piece_max_tokens(0.0f, 16, 10 * SR, SR, 0) == 0);
+}
+
+TEST_CASE("piece-proportional token budget: scales with piece duration", "[unit][session-autochunk]") {
+    using core_session::compute_piece_max_tokens;
+    // 10 s @ 10 tokens/s = 100 tokens (> minimum of 16)
+    REQUIRE(compute_piece_max_tokens(10.0f, 16, 10 * SR, SR, 0) == 100);
+    // 30 s @ 10 tokens/s = 300 tokens
+    REQUIRE(compute_piece_max_tokens(10.0f, 16, 30 * SR, SR, 0) == 300);
+    // 5.5 s @ 10 tokens/s = 55 tokens
+    REQUIRE(compute_piece_max_tokens(10.0f, 16, (int)(5.5 * SR), SR, 0) == 55);
+}
+
+TEST_CASE("piece-proportional token budget: floors at minimum", "[unit][session-autochunk]") {
+    using core_session::compute_piece_max_tokens;
+    // 1 s @ 10 tokens/s = 10 tokens, floored at minimum 16
+    REQUIRE(compute_piece_max_tokens(10.0f, 16, 1 * SR, SR, 0) == 16);
+    // 0.5 s @ 10 tokens/s = 5 tokens, floored at minimum 16
+    REQUIRE(compute_piece_max_tokens(10.0f, 16, (int)(0.5 * SR), SR, 0) == 16);
+}
+
+TEST_CASE("piece-proportional token budget: caps at explicit session max_new_tokens", "[unit][session-autochunk]") {
+    using core_session::compute_piece_max_tokens;
+    // 30 s @ 10 tokens/s = 300 tokens, capped at explicit session cap of 200
+    REQUIRE(compute_piece_max_tokens(10.0f, 16, 30 * SR, SR, 200) == 200);
+    // 10 s @ 10 tokens/s = 100 tokens, below cap of 200 -> 100
+    REQUIRE(compute_piece_max_tokens(10.0f, 16, 10 * SR, SR, 200) == 100);
+}
+
+TEST_CASE("piece-proportional token budget: degenerate inputs", "[unit][session-autochunk]") {
+    using core_session::compute_piece_max_tokens;
+    REQUIRE(compute_piece_max_tokens(10.0f, 16, 0, SR, 0) == 16);
+    REQUIRE(compute_piece_max_tokens(10.0f, 16, 10 * SR, 0, 0) == 16);
+    REQUIRE(compute_piece_max_tokens(10.0f, -5, 0, SR, 0) == 0);
+}

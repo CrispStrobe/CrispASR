@@ -365,6 +365,32 @@ func (s *CrispasrSession) SetMaxNewTokens(maxNewTokens int) error {
 	return nil
 }
 
+// SetAutochunk controls session-level auto-chunking for long audio.
+func (s *CrispasrSession) SetAutochunk(enabled bool, chunkSeconds int) error {
+	s.nativeHandle()
+	s.nativeHandle()
+	cEnabled := C.int(0)
+	if enabled {
+		cEnabled = 1
+	}
+	rc := C.crispasr_session_set_autochunk(s.nativeHandle(), cEnabled, C.int(chunkSeconds))
+	if rc != 0 {
+		return errors.New("crispasr_session_set_autochunk failed")
+	}
+	return nil
+}
+
+// SetMaxNewTokensPerSecond sets a dynamic token budget proportional to piece audio length.
+func (s *CrispasrSession) SetMaxNewTokensPerSecond(rate float32, minimum int) error {
+	s.nativeHandle()
+	s.nativeHandle()
+	rc := C.crispasr_session_set_max_new_tokens_per_second(s.nativeHandle(), C.float(rate), C.int(minimum))
+	if rc != 0 {
+		return errors.New("crispasr_session_set_max_new_tokens_per_second failed")
+	}
+	return nil
+}
+
 // SetFrequencyPenalty sets an opt-in repeated generated-token penalty for
 // autoregressive session backends. Pass <= 0 to disable it.
 func (s *CrispasrSession) SetFrequencyPenalty(penalty float32) error {

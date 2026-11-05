@@ -1997,6 +1997,19 @@ struct crispasr_session {
     // one. Only effective when temperature > 0. Default 1 (no resampling).
     int best_of = 1;
     int max_new_tokens = 0;
+    // Issue #574: Dynamic token budget proportional to piece audio length.
+    // When > 0, each piece gets max(max_new_tokens_min, round(rate * piece_seconds)).
+    // If flat max_new_tokens is also set (> 0), piece budget is capped at max_new_tokens.
+    float max_new_tokens_per_second = 0.0f;
+    int max_new_tokens_min = 0;
+    // Issue #574: Session-level auto-chunking controls.
+    // autochunk_enabled: -1 = unset (use CRISPASR_SESSION_AUTOCHUNK or default true),
+    //                     0 = explicitly disabled,
+    //                     1 = explicitly enabled.
+    // autochunk_seconds:  0 = unset (use CRISPASR_SESSION_CHUNK_SECONDS or default 30),
+    //                    >0 = explicit chunk window in seconds.
+    int autochunk_enabled = -1;
+    int autochunk_seconds = 0;
     // #360: floor on generated audio length for the MOSS TTS backends, applied
     // at the synth-params site the way `language` is. -1 = leave the model's
     // own default (0 = no floor). Not a runtime setter because moss exposes
@@ -5736,6 +5749,7 @@ static std::string ca_iso_to_english_lang(const std::string& code) {
 // Internal single-pass transcribe (used by best-of-N wrapper below).
 static crispasr_session_result* transcribe_single(crispasr_session* s, const float* pcm, int n_samples,
                                                   const char* language);
+static void session_apply_max_new_tokens(crispasr_session* s, int n);
 
 // Long-audio auto-chunking for the session API (fix/session-long-audio).
 //
@@ -5759,19 +5773,35 @@ static crispasr_session_result* transcribe_autochunk(crispasr_session* s, const 
                                                      const char* language) {
     const int SR = 16000;
     bool enabled = true;
-    if (const char* e = getenv("CRISPASR_SESSION_AUTOCHUNK"))
+    if (s->autochunk_enabled >= 0) {
+        enabled = (s->autochunk_enabled != 0);
+    } else if (const char* e = getenv("CRISPASR_SESSION_AUTOCHUNK")) {
         enabled = atoi(e) != 0;
+    }
     bool perbackend = false;
     if (const char* e = getenv("CRISPASR_SESSION_PERBACKEND_CHUNK"))
         perbackend = atoi(e) != 0;
     int chunk_s = core_session::session_default_chunk_seconds(s->backend, perbackend);
-    if (const char* e = getenv("CRISPASR_SESSION_CHUNK_SECONDS"))
+    if (s->autochunk_seconds > 0) {
+        chunk_s = s->autochunk_seconds;
+    } else if (const char* e = getenv("CRISPASR_SESSION_CHUNK_SECONDS")) {
         chunk_s = std::max(5, atoi(e));
+    }
 
     const bool already_chunking = (s->parakeet_force_chunk_seconds >= 0);
     if (!core_session::session_autochunk_applicable(enabled, s->backend, n_samples, SR, chunk_s, s->return_logits,
-                                                    already_chunking))
+                                                    already_chunking)) {
+        if (s->max_new_tokens_per_second > 0.0f) {
+            const int saved_tokens = s->max_new_tokens;
+            session_apply_max_new_tokens(
+                s, core_session::compute_piece_max_tokens(
+                       s->max_new_tokens_per_second, s->max_new_tokens_min, n_samples, SR, saved_tokens));
+            crispasr_session_result* r = transcribe_single(s, pcm, n_samples, language);
+            session_apply_max_new_tokens(s, saved_tokens);
+            return r;
+        }
         return transcribe_single(s, pcm, n_samples, language);
+    }
 
     auto ranges =
         audio_chunking::split_at_energy_minima(pcm, (size_t)n_samples, (size_t)chunk_s * SR, (size_t)(5 * SR));
@@ -5779,15 +5809,34 @@ static crispasr_session_result* transcribe_autochunk(crispasr_session* s, const 
     // backends hallucinate on it). No-op for a single range.
     if (audio_chunking::speechless_gate_enabled())
         ranges = audio_chunking::drop_speechless_ranges(pcm, (size_t)n_samples, ranges, (size_t)(SR / 10));
-    if (ranges.size() == 1 && ranges[0].first == 0 && (int)ranges[0].second == n_samples)
+    if (ranges.size() == 1 && ranges[0].first == 0 && (int)ranges[0].second == n_samples) {
+        if (s->max_new_tokens_per_second > 0.0f) {
+            const int saved_tokens = s->max_new_tokens;
+            session_apply_max_new_tokens(
+                s, core_session::compute_piece_max_tokens(
+                       s->max_new_tokens_per_second, s->max_new_tokens_min, n_samples, SR, saved_tokens));
+            crispasr_session_result* r = transcribe_single(s, pcm, n_samples, language);
+            session_apply_max_new_tokens(s, saved_tokens);
+            return r;
+        }
         return transcribe_single(s, pcm, n_samples, language);
+    }
     if (ranges.empty()) // every slice was digital silence: nothing to transcribe
         return new crispasr_session_result();
 
     auto* merged = new crispasr_session_result();
     for (const auto& range : ranges) {
         const size_t b = range.first, e = range.second;
+        const int saved_tokens = s->max_new_tokens;
+        if (s->max_new_tokens_per_second > 0.0f) {
+            session_apply_max_new_tokens(
+                s, core_session::compute_piece_max_tokens(
+                       s->max_new_tokens_per_second, s->max_new_tokens_min, (int)(e - b), SR, saved_tokens));
+        }
         crispasr_session_result* part = transcribe_single(s, pcm + b, (int)(e - b), language);
+        if (s->max_new_tokens_per_second > 0.0f) {
+            session_apply_max_new_tokens(s, saved_tokens);
+        }
         if (!part)
             continue;
         if (merged->backend.empty())
@@ -6464,6 +6513,9 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
 
         if (s->audio_ctx > 0) {
             wparams.audio_ctx = s->audio_ctx;
+        }
+        if (s->max_new_tokens > 0) {
+            wparams.max_tokens = s->max_new_tokens;
         }
 
         // Set progress callback — writes to the module-level atomic so
@@ -14381,9 +14433,9 @@ CA_EXPORT int crispasr_session_set_best_of(crispasr_session* s, int n) {
     return 0;
 }
 
-CA_EXPORT int crispasr_session_set_max_new_tokens(crispasr_session* s, int n) {
+static void session_apply_max_new_tokens(crispasr_session* s, int n) {
     if (!s)
-        return -1;
+        return;
     s->max_new_tokens = n > 0 ? n : 0;
 #ifdef CA_HAVE_BT2_TTS
     if (s->bt2_ctx)
@@ -14409,6 +14461,28 @@ CA_EXPORT int crispasr_session_set_max_new_tokens(crispasr_session* s, int n) {
     if (s->arktts_ctx)
         arktts_set_max_new_tokens(s->arktts_ctx, s->max_new_tokens);
 #endif
+}
+
+CA_EXPORT int crispasr_session_set_max_new_tokens(crispasr_session* s, int n) {
+    if (!s)
+        return -1;
+    session_apply_max_new_tokens(s, n);
+    return 0;
+}
+
+CA_EXPORT int crispasr_session_set_autochunk(crispasr_session* s, int enabled, int chunk_seconds) {
+    if (!s)
+        return -1;
+    s->autochunk_enabled = enabled >= 0 ? (enabled != 0 ? 1 : 0) : -1;
+    s->autochunk_seconds = chunk_seconds > 0 ? chunk_seconds : 0;
+    return 0;
+}
+
+CA_EXPORT int crispasr_session_set_max_new_tokens_per_second(crispasr_session* s, float rate, int minimum) {
+    if (!s)
+        return -1;
+    s->max_new_tokens_per_second = rate > 0.0f ? rate : 0.0f;
+    s->max_new_tokens_min = minimum > 0 ? minimum : 0;
     return 0;
 }
 

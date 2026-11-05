@@ -816,6 +816,16 @@ extern "C" {
         s: *mut CrispasrSession,
         max_new_tokens: c_int,
     ) -> c_int;
+    pub fn crispasr_session_set_autochunk(
+        s: *mut CrispasrSession,
+        enabled: c_int,
+        chunk_seconds: c_int,
+    ) -> c_int;
+    pub fn crispasr_session_set_max_new_tokens_per_second(
+        s: *mut CrispasrSession,
+        rate: c_float,
+        minimum: c_int,
+    ) -> c_int;
     pub fn crispasr_session_set_frequency_penalty(
         s: *mut CrispasrSession,
         penalty: c_float,
