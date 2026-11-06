@@ -6029,7 +6029,10 @@ static qwen3_tts_capture::Metadata qwen3_tts_make_capture_metadata(const qwen3_t
                ctx->vp_active >= 0 && ctx->vp_active < (int)ctx->vp_names.size()) {
         metadata.voice = ctx->vp_names[ctx->vp_active];
     }
-    metadata.instruction = ctx->capture_instruction;
+    if (ctx->hp.tts_model_type == "custom_voice")
+        metadata.instruction = ctx->runtime_cv_style_instruct;
+    else if (ctx->hp.tts_model_type == "voice_design")
+        metadata.instruction = ctx->runtime_instruct;
     metadata.model_path = ctx->model_path;
     metadata.model_name = std::filesystem::path(ctx->model_path).filename().string();
     metadata.model_type = ctx->hp.tts_model_type;
@@ -6044,8 +6047,7 @@ static qwen3_tts_capture::Metadata qwen3_tts_make_capture_metadata(const qwen3_t
     if (const char* revision = crispasr_env::get("CRISPASR_QWEN3_TTS_CAPTURE_RUNTIME_REVISION"))
         metadata.runtime_revision = revision;
     const bool using_voice_pack = ctx->hp.tts_model_type == "base" && ctx->runtime_ref_codes.empty() &&
-                                  !ctx->xvec_only && ctx->vp_active >= 0 &&
-                                  ctx->vp_active < (int)ctx->vp_names.size();
+                                  !ctx->xvec_only && ctx->vp_active >= 0 && ctx->vp_active < (int)ctx->vp_names.size();
     metadata.reference_source_path = using_voice_pack ? ctx->voice_pack_path : ctx->voice_prompt_path;
     if (const char* hash = crispasr_env::get("CRISPASR_QWEN3_TTS_CAPTURE_REFERENCE_SHA256"))
         metadata.reference_source_sha256 = hash;
@@ -6058,7 +6060,7 @@ static qwen3_tts_capture::Metadata qwen3_tts_make_capture_metadata(const qwen3_t
     if (const char* hash = crispasr_env::get("CRISPASR_QWEN3_TTS_CAPTURE_CODEC_SHA256"))
         metadata.codec_sha256 = hash;
     metadata.seed = 42;
-    if (const char* seed = crispasr_env::get("CRISPASR_QWEN3_TTS_SEED"))
+    if (const char* seed = env_str("CRISPASR_QWEN3_TTS_SEED"))
         metadata.seed = (uint64_t)std::strtoull(seed, nullptr, 10);
     if (ctx->params.seed != 0)
         metadata.seed = ctx->params.seed;
@@ -6072,13 +6074,40 @@ static qwen3_tts_capture::Metadata qwen3_tts_make_capture_metadata(const qwen3_t
     return metadata;
 }
 
-static std::unique_ptr<qwen3_tts_capture::SampleCapture> qwen3_tts_begin_sample_capture(
-    const qwen3_tts_context* ctx, const char* text, const int32_t* reference_codes, size_t reference_code_count,
-    const float* speaker_embedding, size_t speaker_embedding_count, int codebook_count) noexcept {
+static std::unique_ptr<qwen3_tts_capture::SampleCapture> qwen3_tts_begin_sample_capture(const qwen3_tts_context* ctx,
+                                                                                        const char* text,
+                                                                                        const int32_t* reference_codes,
+                                                                                        size_t reference_code_count,
+                                                                                        int codebook_count) noexcept {
     try {
         if (!ctx || ctx->capture_suppressed || !qwen3_tts_capture::enabled())
             return nullptr;
         const auto metadata = qwen3_tts_make_capture_metadata(ctx, text);
+        // x-vector-only prefill ignores a previously loaded voice pack's codes.
+        if (ctx->xvec_only && ctx->runtime_ref_codes.empty() && ctx->runtime_spk_emb.size() == ctx->hp.d_model) {
+            reference_codes = nullptr;
+            reference_code_count = 0;
+        }
+        // Follow the same speaker selection as build_icl_prefill_embeds: a
+        // runtime vector overrides the active pack's speaker tensor.
+        std::vector<float> pack_speaker;
+        const float* speaker_embedding = nullptr;
+        size_t speaker_embedding_count = 0;
+        const size_t dimension = ctx->hp.d_model;
+        if (dimension && ctx->runtime_spk_emb.size() == dimension && ctx->hp.tts_model_type != "voice_design") {
+            speaker_embedding = ctx->runtime_spk_emb.data();
+            speaker_embedding_count = dimension;
+        } else if (dimension && ctx->hp.tts_model_type == "base" && ctx->vp_active >= 0 &&
+                   (size_t)ctx->vp_active < ctx->vp_names.size()) {
+            auto it = ctx->vp_tensors.find("voicepack.spk." + ctx->vp_names[ctx->vp_active] + ".embd");
+            if (it != ctx->vp_tensors.end() && it->second && it->second->type == GGML_TYPE_F32 &&
+                ggml_nelements(it->second) == (int64_t)dimension) {
+                pack_speaker.resize(dimension);
+                ggml_backend_tensor_get(it->second, pack_speaker.data(), 0, dimension * sizeof(float));
+                speaker_embedding = pack_speaker.data();
+                speaker_embedding_count = dimension;
+            }
+        }
         return qwen3_tts_capture::SampleCapture::begin_from_env(metadata, reference_codes, reference_code_count,
                                                                 speaker_embedding, speaker_embedding_count,
                                                                 codebook_count);
@@ -7877,11 +7906,10 @@ extern "C" float* qwen3_tts_synthesize(struct qwen3_tts_context* ctx, const char
     }
 
     const int T_gen = n_codes / n_q;
-    auto capture = qwen3_tts_begin_sample_capture(ctx, text, ref_codes.data(), ref_codes.size(),
-                                                   ctx->runtime_spk_emb.data(), ctx->runtime_spk_emb.size(), n_q);
+    auto capture = qwen3_tts_begin_sample_capture(ctx, text, ref_codes.data(), ref_codes.size(), n_q);
     if (capture) {
-        capture->write_generated_codes(codes, (size_t)n_codes, T_gen, ctx->last_stop_reason,
-                                       ctx->last_eos_token_id, ctx->last_max_frames);
+        capture->write_generated_codes(codes, (size_t)n_codes, T_gen, ctx->last_stop_reason, ctx->last_eos_token_id,
+                                       ctx->last_max_frames);
     }
 
     float* pcm = nullptr;
@@ -7919,9 +7947,9 @@ extern "C" float* qwen3_tts_synthesize(struct qwen3_tts_context* ctx, const char
         codes_for_decode.insert(codes_for_decode.end(), ref_codes.begin(), ref_codes.end());
         codes_for_decode.insert(codes_for_decode.end(), codes, codes + n_codes);
 
-        const size_t capture_call = capture
-            ? capture->record_decoder_call(codes_for_decode.data(), T_ref + T_gen, n_q, 0, T_ref, 0, 0, false)
-            : std::numeric_limits<size_t>::max();
+        const size_t capture_call =
+            capture ? capture->record_decoder_call(codes_for_decode.data(), T_ref + T_gen, n_q, 0, T_ref, 0, 0, false)
+                    : std::numeric_limits<size_t>::max();
         int n_pcm_full = 0;
         pcm = codec_decode_codes(ctx, codes_for_decode.data(), T_ref + T_gen, &n_pcm_full);
         if (!pcm || n_pcm_full <= 0) {
@@ -7947,9 +7975,8 @@ extern "C" float* qwen3_tts_synthesize(struct qwen3_tts_context* ctx, const char
         pcm = trimmed;
         n_pcm_output = n_pcm_trim;
     } else {
-        const size_t capture_call = capture
-            ? capture->record_decoder_call(codes, T_gen, n_q, 0, 0, 0, 0, false)
-            : std::numeric_limits<size_t>::max();
+        const size_t capture_call = capture ? capture->record_decoder_call(codes, T_gen, n_q, 0, 0, 0, 0, false)
+                                            : std::numeric_limits<size_t>::max();
         pcm = codec_decode_codes(ctx, codes, T_gen, &n_pcm_output);
         if (capture)
             capture->record_decoder_result(capture_call, pcm, n_pcm_output);
@@ -8026,10 +8053,10 @@ extern "C" float* qwen3_tts_synthesize_streaming(struct qwen3_tts_context* ctx, 
         try {
             std::vector<int32_t> capture_reference_codes;
             int capture_reference_frames = 0;
-            if (qwen3_tts_get_active_ref_codes(ctx, capture_reference_codes, capture_reference_frames)) {
-                capture = qwen3_tts_begin_sample_capture(
-                    ctx, text, capture_reference_codes.data(), capture_reference_codes.size(),
-                    ctx->runtime_spk_emb.data(), ctx->runtime_spk_emb.size(), n_q);
+            if ((ctx->xvec_only && ctx->runtime_ref_codes.empty() && ctx->runtime_spk_emb.size() == ctx->hp.d_model) ||
+                qwen3_tts_get_active_ref_codes(ctx, capture_reference_codes, capture_reference_frames)) {
+                capture = qwen3_tts_begin_sample_capture(ctx, text, capture_reference_codes.data(),
+                                                         capture_reference_codes.size(), n_q);
             }
         } catch (...) {
             fprintf(stderr, "qwen3_tts: capture reference collection failed; streaming continues\n");
@@ -8058,10 +8085,9 @@ extern "C" float* qwen3_tts_synthesize_streaming(struct qwen3_tts_context* ctx, 
         const int32_t* window_codes = all_codes.data() + (size_t)emit_lo * n_q;
 
         const int expected_discard = pre_roll_frames * frame_samples;
-        const size_t capture_call = capture
-            ? capture->record_decoder_call(window_codes, W, n_q, emit_lo, emit_lo, pre_roll_frames,
-                                           expected_discard, true)
-            : std::numeric_limits<size_t>::max();
+        const size_t capture_call = capture ? capture->record_decoder_call(window_codes, W, n_q, emit_lo, emit_lo,
+                                                                           pre_roll_frames, expected_discard, true)
+                                            : std::numeric_limits<size_t>::max();
         int n_pcm = 0;
         float* pcm = codec_decode_codes(ctx, window_codes, W, &n_pcm);
         if (!pcm || n_pcm <= 0) {

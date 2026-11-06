@@ -2,11 +2,13 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "qwen3_tts_capture.h"
+#include "../examples/json.hpp"
 
 #include <chrono>
 #include <filesystem>
 #include <fstream>
 #include <iterator>
+#include <locale>
 #include <string>
 #include <vector>
 
@@ -46,6 +48,28 @@ TEST_CASE("Qwen3 capture SHA-256 uses the standard byte digest", "[unit][qwen3-t
           "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 }
 
+TEST_CASE("Qwen3 capture JSON numbers ignore the process locale", "[unit][qwen3-tts][capture]") {
+    struct CommaPunctuation : std::numpunct<char> {
+        char do_decimal_point() const override { return ','; }
+        char do_thousands_sep() const override { return '.'; }
+        std::string do_grouping() const override { return "\3"; }
+    };
+    struct LocaleRestore {
+        std::locale original = std::locale();
+        ~LocaleRestore() { std::locale::global(original); }
+    } restore;
+    std::locale::global(std::locale(std::locale::classic(), new CommaPunctuation));
+    CHECK(qwen3_tts_capture::detail::json_float(1.5) == "1.5");
+    TempDirectory temp;
+    auto capture = qwen3_tts_capture::HttpResponseCapture::begin(temp.path, "locale", "pcm", 24000, 1.5f, false);
+    REQUIRE(capture);
+    capture->finish_buffered("audio/pcm", "x", 1);
+    const auto manifest = read_text(temp.path / "requests" / "locale" / "manifest.json");
+    const auto json = nlohmann::json::parse(manifest);
+    CHECK(json.at("sample_rate") == 24000);
+    CHECK(json.at("speed_requested") == 1.5);
+}
+
 TEST_CASE("Qwen3 sample capture stores exact little-endian generated and decoder codes", "[unit][qwen3-tts][capture]") {
     TempDirectory temp;
     qwen3_tts_capture::Metadata metadata;
@@ -74,8 +98,8 @@ TEST_CASE("Qwen3 sample capture stores exact little-endian generated and decoder
 
     const int32_t reference_codes[] = {1, 2, 3, 4};
     const float speaker_embedding[] = {0.25f, -0.5f, 0.75f};
-    auto capture = qwen3_tts_capture::SampleCapture::begin(
-        temp.path, metadata, reference_codes, 4, speaker_embedding, 3, 2);
+    auto capture =
+        qwen3_tts_capture::SampleCapture::begin(temp.path, metadata, reference_codes, 4, speaker_embedding, 3, 2);
     REQUIRE(capture);
     REQUIRE(capture->active());
 
@@ -98,7 +122,7 @@ TEST_CASE("Qwen3 sample capture stores exact little-endian generated and decoder
     CHECK((read_bytes(sample_dir / "reference_codes.i32le") ==
            std::vector<uint8_t>{1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0}));
     CHECK((read_bytes(sample_dir / "decoder_input_codes.i32le") ==
-           std::vector<uint8_t>{1, 0, 0, 0, 2, 0, 0, 0, 3, 0, 0, 0, 4, 0, 0, 0,
+           std::vector<uint8_t>{1,  0, 0, 0, 2,  0, 0, 0, 3,  0, 0, 0, 4,  0, 0, 0,
                                 10, 0, 0, 0, 11, 0, 0, 0, 12, 0, 0, 0, 13, 0, 0, 0}));
 
     const std::string manifest = read_text(sample_dir / "manifest.json");
@@ -174,6 +198,21 @@ TEST_CASE("Qwen3 sample capture rejects non-EOS generations as complete training
     CHECK(manifest.find("generation_stopped_without_eos") != std::string::npos);
 }
 
+TEST_CASE("Qwen3 capture cannot complete without every decoder result", "[unit][qwen3-tts][capture]") {
+    TempDirectory temp;
+    qwen3_tts_capture::Metadata metadata;
+    const int32_t codes[] = {1, 2};
+    const float pcm[] = {0.25f};
+    auto capture = qwen3_tts_capture::SampleCapture::begin(temp.path, metadata, nullptr, 0, nullptr, 0, 2);
+    REQUIRE(capture);
+    REQUIRE(capture->write_generated_codes(codes, 2, 1, 1, 2048, 10));
+    REQUIRE(capture->record_decoder_call(codes, 1, 2, 0, 0, 0, 0, false) != std::numeric_limits<size_t>::max());
+    CHECK_FALSE(capture->finish(pcm, 1, 24000, 2048, 10));
+    CHECK(
+        read_text(temp.path / "samples" / capture->sample_id() / "manifest.json").find("\"capture_complete\": false") !=
+        std::string::npos);
+}
+
 TEST_CASE("Qwen3 capture atomic writer never overwrites an existing file", "[unit][qwen3-tts][capture]") {
     TempDirectory temp;
     const auto path = temp.path / "immutable.txt";
@@ -191,8 +230,8 @@ TEST_CASE("Qwen3 capture atomic writer never overwrites an existing file", "[uni
 TEST_CASE("Qwen3 HTTP response capture hashes buffered bodies and refuses request-id overwrite",
           "[unit][qwen3-tts][capture]") {
     TempDirectory temp;
-    auto capture = qwen3_tts_capture::HttpResponseCapture::begin(
-        temp.path, "abcdef0123456789", "wav", 24000, 1.0f, false);
+    auto capture =
+        qwen3_tts_capture::HttpResponseCapture::begin(temp.path, "abcdef0123456789", "wav", 24000, 1.0f, false);
     REQUIRE(capture);
     const std::string body = "synthetic-wav-payload";
     capture->finish_buffered("audio/wav", body.data(), body.size());
@@ -203,16 +242,16 @@ TEST_CASE("Qwen3 HTTP response capture hashes buffered bodies and refuses reques
     CHECK(manifest.find("\"body_bytes\": " + std::to_string(body.size())) != std::string::npos);
     CHECK(manifest.find(qwen3_tts_capture::detail::sha256_bytes(body.data(), body.size())) != std::string::npos);
 
-    auto duplicate = qwen3_tts_capture::HttpResponseCapture::begin(
-        temp.path, "abcdef0123456789", "wav", 24000, 1.0f, false);
+    auto duplicate =
+        qwen3_tts_capture::HttpResponseCapture::begin(temp.path, "abcdef0123456789", "wav", 24000, 1.0f, false);
     CHECK_FALSE(duplicate);
     CHECK(read_text(manifest_path) == manifest);
 }
 
 TEST_CASE("Qwen3 HTTP streaming capture hashes each successful application chunk", "[unit][qwen3-tts][capture]") {
     TempDirectory temp;
-    auto capture = qwen3_tts_capture::HttpResponseCapture::begin(
-        temp.path, "fedcba9876543210", "pcm", 24000, 1.0f, true);
+    auto capture =
+        qwen3_tts_capture::HttpResponseCapture::begin(temp.path, "fedcba9876543210", "pcm", 24000, 1.0f, true);
     REQUIRE(capture);
     capture->record_chunk("first", 5);
     capture->record_chunk("second", 6);
@@ -229,8 +268,8 @@ TEST_CASE("Qwen3 HTTP streaming capture hashes each successful application chunk
 
 TEST_CASE("Qwen3 HTTP streaming capture marks a disconnected response incomplete", "[unit][qwen3-tts][capture]") {
     TempDirectory temp;
-    auto capture = qwen3_tts_capture::HttpResponseCapture::begin(
-        temp.path, "0011223344556677", "pcm", 24000, 1.0f, true);
+    auto capture =
+        qwen3_tts_capture::HttpResponseCapture::begin(temp.path, "0011223344556677", "pcm", 24000, 1.0f, true);
     REQUIRE(capture);
     capture->record_chunk("partial", 7);
     capture->finish("audio/pcm", false, "client_disconnected");
@@ -239,4 +278,14 @@ TEST_CASE("Qwen3 HTTP streaming capture marks a disconnected response incomplete
     const std::string manifest = read_text(manifest_path);
     CHECK(manifest.find("\"complete\": false") != std::string::npos);
     CHECK(manifest.find("client_disconnected") != std::string::npos);
+}
+
+TEST_CASE("Qwen3 streaming completion requires a terminal callback", "[unit][qwen3-tts][capture]") {
+    qwen3_tts_capture::StreamCompletion partial;
+    partial.observe(false);
+    CHECK_FALSE(partial.complete());
+    partial.observe(true);
+    CHECK(partial.complete());
+    partial.observe(false);
+    CHECK(partial.complete());
 }

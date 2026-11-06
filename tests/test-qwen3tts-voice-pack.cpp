@@ -5,6 +5,8 @@
 
 #include <chrono>
 #include <filesystem>
+#include <fstream>
+#include <iterator>
 #include <stdexcept>
 
 static int pack_checks = 0;
@@ -87,6 +89,66 @@ int main() {
         ctx->hp.d_model = 1024;
         check_pack(load("small.gguf") == 0);
         check_pack(ctx->vp_active == 0);
+        // Capture the actual pack vector, not merely runtime_spk_emb, which is
+        // empty for the ordinary baked-voice path.
+        ctx->hp.tts_model_type = "base";
+        check_pack(ctx->runtime_spk_emb.empty());
+#ifdef _WIN32
+        _putenv_s("CRISPASR_QWEN3_TTS_CAPTURE_DIR", folder.string().c_str());
+#else
+        setenv("CRISPASR_QWEN3_TTS_CAPTURE_DIR", folder.string().c_str(), 1);
+#endif
+        auto capture = qwen3_tts_begin_sample_capture(ctx.get(), "hello", nullptr, 0, 16);
+        check_pack(capture != nullptr);
+        const int32_t codes[16] = {};
+        const float pcm[] = {0.25f};
+        check_pack(capture->write_generated_codes(codes, 16, 1, 1, 2048, 10));
+        const size_t call = capture->record_decoder_call(codes, 1, 16, 0, 0, 0, 0, false);
+        capture->record_decoder_result(call, pcm, 1);
+        check_pack(capture->finish(pcm, 1, 24000, 2048, 10));
+        std::ifstream manifest(folder / "samples" / capture->sample_id() / "manifest.json");
+        const std::string contents((std::istreambuf_iterator<char>(manifest)), std::istreambuf_iterator<char>());
+        const std::vector<float> expected_speaker(1024, 0.0f);
+        check_pack(contents.find(qwen3_tts_capture::detail::sha256_f32le(expected_speaker.data(), 1024)) !=
+                   std::string::npos);
+        // A pack can remain loaded when an x-vector-only prompt is selected.
+        // Its codes are not part of the active prefill.
+        ctx->xvec_only = true;
+        ctx->runtime_spk_emb.assign(1024, 0.5f);
+        const int32_t stale_ref[16] = {};
+        auto xvec_capture = qwen3_tts_begin_sample_capture(ctx.get(), "hello", stale_ref, 16, 16);
+        check_pack(xvec_capture != nullptr);
+        check_pack(!std::filesystem::exists(folder / "samples" / xvec_capture->sample_id() / "reference_codes.i32le"));
+        check_pack(xvec_capture->write_generated_codes(codes, 16, 1, 1, 2048, 10));
+        const size_t xvec_call = xvec_capture->record_decoder_call(codes, 1, 16, 0, 0, 0, 0, false);
+        xvec_capture->record_decoder_result(xvec_call, pcm, 1);
+        check_pack(xvec_capture->finish(pcm, 1, 24000, 2048, 10));
+        std::ifstream xvec_file(folder / "samples" / xvec_capture->sample_id() / "manifest.json");
+        const std::string xvec_manifest((std::istreambuf_iterator<char>(xvec_file)), std::istreambuf_iterator<char>());
+        check_pack(xvec_manifest.find(qwen3_tts_capture::detail::sha256_f32le(ctx->runtime_spk_emb.data(), 1024)) !=
+                   std::string::npos);
+        ctx->hp.tts_model_type = "voice_design";
+        ctx->runtime_instruct = "direct API instruction";
+        check_pack(qwen3_tts_make_capture_metadata(ctx.get(), "hello").instruction == "direct API instruction");
+        ctx->hp.tts_model_type = "custom_voice";
+        ctx->runtime_cv_style_instruct = "direct API style";
+        check_pack(qwen3_tts_make_capture_metadata(ctx.get(), "hello").instruction == "direct API style");
+#ifndef _WIN32
+        // Generation treats an explicitly empty seed as absent and uses 42.
+        setenv("CRISPASR_QWEN3_TTS_SEED", "", 1);
+        ctx->params.seed = 0;
+        check_pack(qwen3_tts_make_capture_metadata(ctx.get(), "hello").seed == 42);
+        setenv("CRISPASR_QWEN3_TTS_SEED", "123", 1);
+        check_pack(qwen3_tts_make_capture_metadata(ctx.get(), "hello").seed == 123);
+        ctx->params.seed = 456;
+        check_pack(qwen3_tts_make_capture_metadata(ctx.get(), "hello").seed == 456);
+        unsetenv("CRISPASR_QWEN3_TTS_SEED");
+#endif
+#ifdef _WIN32
+        _putenv_s("CRISPASR_QWEN3_TTS_CAPTURE_DIR", "");
+#else
+        unsetenv("CRISPASR_QWEN3_TTS_CAPTURE_DIR");
+#endif
         ctx.reset();
         std::filesystem::remove_all(folder);
         printf("Qwen3 voice pack lifecycle: %d checks passed\n", pack_checks);

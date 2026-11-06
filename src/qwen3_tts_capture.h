@@ -20,6 +20,7 @@
 #include <fstream>
 #include <iomanip>
 #include <limits>
+#include <locale>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -105,13 +106,27 @@ inline std::string json_escape(const std::string& value) {
     std::ostringstream out;
     for (unsigned char c : value) {
         switch (c) {
-        case '"': out << "\\\""; break;
-        case '\\': out << "\\\\"; break;
-        case '\b': out << "\\b"; break;
-        case '\f': out << "\\f"; break;
-        case '\n': out << "\\n"; break;
-        case '\r': out << "\\r"; break;
-        case '\t': out << "\\t"; break;
+        case '"':
+            out << "\\\"";
+            break;
+        case '\\':
+            out << "\\\\";
+            break;
+        case '\b':
+            out << "\\b";
+            break;
+        case '\f':
+            out << "\\f";
+            break;
+        case '\n':
+            out << "\\n";
+            break;
+        case '\r':
+            out << "\\r";
+            break;
+        case '\t':
+            out << "\\t";
+            break;
         default:
             if (c < 0x20) {
                 static const char* hex = "0123456789abcdef";
@@ -136,6 +151,7 @@ inline std::string json_float(double value) {
     if (!std::isfinite(value))
         return "null";
     std::ostringstream out;
+    out.imbue(std::locale::classic());
     out << std::setprecision(10) << value;
     return out.str();
 }
@@ -153,6 +169,7 @@ inline std::string utc_timestamp() {
     char date[32]{};
     std::strftime(date, sizeof(date), "%Y-%m-%dT%H:%M:%S", &tm);
     std::ostringstream out;
+    out.imbue(std::locale::classic());
     out << date << "." << std::setw(3) << std::setfill('0') << millis << "Z";
     return out.str();
 }
@@ -172,9 +189,9 @@ inline std::string safe_component(const std::string& value) {
 }
 
 inline std::string make_id(const std::string& prefix) {
-    const auto ticks = std::chrono::duration_cast<std::chrono::microseconds>(
-                           std::chrono::system_clock::now().time_since_epoch())
-                           .count();
+    const auto ticks =
+        std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::system_clock::now().time_since_epoch())
+            .count();
     const auto sequence = file_counter().fetch_add(1, std::memory_order_relaxed);
     return safe_component(prefix) + "-" + std::to_string(ticks) + "-" + std::to_string(sequence);
 }
@@ -188,7 +205,9 @@ inline std::filesystem::path configured_root() noexcept {
         if (!root.is_absolute()) {
             static std::atomic<bool> warned{false};
             if (!warned.exchange(true))
-                std::fprintf(stderr, "qwen3_tts_capture: CRISPASR_QWEN3_TTS_CAPTURE_DIR must be an absolute path; capture disabled\n");
+                std::fprintf(
+                    stderr,
+                    "qwen3_tts_capture: CRISPASR_QWEN3_TTS_CAPTURE_DIR must be an absolute path; capture disabled\n");
             return {};
         }
         return root;
@@ -284,12 +303,18 @@ inline bool write_i32le_atomic(const std::filesystem::path& path, const int32_t*
 
 inline std::string stop_reason_name(int reason) {
     switch (reason) {
-    case 1: return "eos";
-    case 2: return "max_frames";
-    case 3: return "kv_full_without_eos";
-    case 4: return "stream_decoder_stop";
-    case 5: return "replay_input_exhausted";
-    default: return "unknown";
+    case 1:
+        return "eos";
+    case 2:
+        return "max_frames";
+    case 3:
+        return "kv_full_without_eos";
+    case 4:
+        return "stream_decoder_stop";
+    case 5:
+        return "replay_input_exhausted";
+    default:
+        return "unknown";
     }
 }
 
@@ -343,6 +368,16 @@ struct DecoderCall {
     bool windowed = false;
 };
 
+// A streaming backend must send a terminal callback to distinguish a complete
+// segment from a failure after emitting only a prefix.
+struct StreamCompletion {
+    void observe(bool is_final) noexcept { final_seen = final_seen || is_final; }
+    bool complete() const noexcept { return final_seen; }
+
+private:
+    bool final_seen = false;
+};
+
 class SampleCapture {
 public:
     static std::unique_ptr<SampleCapture> begin_from_env(const Metadata& metadata, const int32_t* reference_codes,
@@ -380,7 +415,8 @@ public:
                     break;
                 }
                 if (ec && ec != std::errc::file_exists) {
-                    std::fprintf(stderr, "qwen3_tts_capture: cannot create sample directory: %s\n", ec.message().c_str());
+                    std::fprintf(stderr, "qwen3_tts_capture: cannot create sample directory: %s\n",
+                                 ec.message().c_str());
                     return nullptr;
                 }
             }
@@ -456,8 +492,8 @@ public:
     size_t record_decoder_call(const int32_t* codes, int frame_count, int codebook_count, int frame_start,
                                int generated_frame_offset, int pre_roll_frames, int discard_samples,
                                bool windowed) noexcept {
-        if (!active_ || !codes || frame_count <= 0 || codebook_count != codebook_count_ ||
-            frame_start < 0 || generated_frame_offset < 0 || pre_roll_frames < 0 || discard_samples < 0) {
+        if (!active_ || !codes || frame_count <= 0 || codebook_count != codebook_count_ || frame_start < 0 ||
+            generated_frame_offset < 0 || pre_roll_frames < 0 || discard_samples < 0) {
             set_error("invalid decoder-input shape");
             return invalid_call();
         }
@@ -472,6 +508,7 @@ public:
                     return invalid_call();
                 }
                 std::ostringstream name;
+                name.imbue(std::locale::classic());
                 name << "decoder_windows/window_" << std::setw(4) << std::setfill('0') << decoder_calls_.size()
                      << ".i32le";
                 relative = name.str();
@@ -594,8 +631,14 @@ private:
     bool write_manifest() noexcept {
         try {
             const bool complete = error_.empty() && generated_codes_written_ && stop_reason_ == 1 &&
-                                  !decoder_calls_.empty() && !pcm_sha256_.empty() && pcm_sample_count_ > 0;
+                                  !decoder_calls_.empty() &&
+                                  std::all_of(decoder_calls_.begin(), decoder_calls_.end(),
+                                              [](const DecoderCall& call) {
+                                                  return call.decoded_samples > 0 && !call.decoded_pcm_sha256.empty();
+                                              }) &&
+                                  !pcm_sha256_.empty() && pcm_sample_count_ > 0;
             std::ostringstream out;
+            out.imbue(std::locale::classic());
             out << "{\n"
                 << "  \"schema\": \"crispasr.qwen3-tts.capture/1\",\n"
                 << "  \"capture_complete\": " << (complete ? "true" : "false") << ",\n"
@@ -618,7 +661,8 @@ private:
                 << "  \"codec\": {\"path\": " << detail::json_nullable_string(metadata_.codec_path)
                 << ", \"size_bytes\": " << codec_size_bytes_
                 << ", \"sha256\": " << detail::json_nullable_string(metadata_.codec_sha256) << "},\n"
-                << "  \"reference\": {\"source_path\": " << detail::json_nullable_string(metadata_.reference_source_path)
+                << "  \"reference\": {\"source_path\": "
+                << detail::json_nullable_string(metadata_.reference_source_path)
                 << ", \"source_size_bytes\": " << reference_source_size_bytes_
                 << ", \"source_sha256\": " << detail::json_nullable_string(reference_source_sha256_)
                 << ", \"transcript\": " << detail::json_nullable_string(metadata_.reference_text)
@@ -638,9 +682,9 @@ private:
                 << "  \"generated_codes\": {\"file\": \"generated_codes.i32le\", \"dtype\": \"int32_le\", "
                    "\"axis_order\": [\"frame\", \"codebook\"], \"shape\": ["
                 << generated_frame_count_ << ", " << codebook_count_ << "], \"codebook_count\": " << codebook_count_
-                << ", \"sha256\": "
-                << detail::json_nullable_string(generated_codes_sha256_) << ", \"eos_token_id\": "
-                << eos_token_id_ << ", \"eos_observed\": " << (stop_reason_ == 1 ? "true" : "false")
+                << ", \"sha256\": " << detail::json_nullable_string(generated_codes_sha256_)
+                << ", \"eos_token_id\": " << eos_token_id_
+                << ", \"eos_observed\": " << (stop_reason_ == 1 ? "true" : "false")
                 << ", \"stop_reason\": " << detail::json_string(detail::stop_reason_name(stop_reason_))
                 << ", \"max_frames\": " << max_frames_ << "},\n"
                 << "  \"decoder_calls\": [";
@@ -649,8 +693,8 @@ private:
                 if (i)
                     out << ",";
                 out << "\n    {\"file\": " << detail::json_string(call.file)
-                    << ", \"dtype\": \"int32_le\", \"axis_order\": [\"frame\", \"codebook\"]"
-                    << ", \"shape\": [" << call.frame_count << ", " << call.codebook_count << "]"
+                    << ", \"dtype\": \"int32_le\", \"axis_order\": [\"frame\", \"codebook\"]" << ", \"shape\": ["
+                    << call.frame_count << ", " << call.codebook_count << "]"
                     << ", \"codebook_count\": " << call.codebook_count
                     << ", \"windowed\": " << (call.windowed ? "true" : "false")
                     << ", \"frame_start\": " << call.frame_start
@@ -661,21 +705,20 @@ private:
                     << ", \"decoded_samples\": " << call.decoded_samples
                     << ", \"decoded_pcm_sha256\": " << detail::json_nullable_string(call.decoded_pcm_sha256)
                     << ", \"emitted_samples\": " << call.emitted_samples
-                    << ", \"emitted_pcm_sha256\": " << detail::json_nullable_string(call.emitted_pcm_sha256)
-                    << "}";
+                    << ", \"emitted_pcm_sha256\": " << detail::json_nullable_string(call.emitted_pcm_sha256) << "}";
             }
             if (!decoder_calls_.empty())
                 out << "\n  ";
             out << "],\n"
                 << "  \"decoded_pcm\": {\"dtype\": \"float32_le\", \"sample_rate\": " << sample_rate_
-                << ", \"channels\": 1, \"samples\": " << pcm_sample_count_
-                << ", \"duration_seconds\": "
+                << ", \"channels\": 1, \"samples\": " << pcm_sample_count_ << ", \"duration_seconds\": "
                 << detail::json_float(sample_rate_ > 0 ? (double)pcm_sample_count_ / sample_rate_ : 0.0)
                 << ", \"sha256\": " << detail::json_nullable_string(pcm_sha256_) << "},\n"
                 << "  \"http_request_manifest\": "
                 << (metadata_.request_id.empty()
                         ? "null"
-                        : detail::json_string("requests/" + detail::safe_component(metadata_.request_id) + "/manifest.json"))
+                        : detail::json_string("requests/" + detail::safe_component(metadata_.request_id) +
+                                              "/manifest.json"))
                 << ",\n"
                 << "  \"capture_error\": " << detail::json_nullable_string(error_) << "\n"
                 << "}\n";
@@ -728,16 +771,14 @@ private:
 class HttpResponseCapture {
 public:
     static std::shared_ptr<HttpResponseCapture> begin_from_env(const std::string& request_id,
-                                                               const std::string& response_format,
-                                                               int sample_rate, float speed,
-                                                               bool streaming) noexcept {
+                                                               const std::string& response_format, int sample_rate,
+                                                               float speed, bool streaming) noexcept {
         return begin(detail::configured_root(), request_id, response_format, sample_rate, speed, streaming);
     }
 
-    static std::shared_ptr<HttpResponseCapture> begin(const std::filesystem::path& root,
-                                                      const std::string& request_id,
-                                                      const std::string& response_format, int sample_rate,
-                                                      float speed, bool streaming) noexcept {
+    static std::shared_ptr<HttpResponseCapture> begin(const std::filesystem::path& root, const std::string& request_id,
+                                                      const std::string& response_format, int sample_rate, float speed,
+                                                      bool streaming) noexcept {
         try {
             if (root.empty() || !root.is_absolute() || request_id.empty())
                 return nullptr;
@@ -817,6 +858,7 @@ public:
             const std::string body_sha256 = detail::hex_digest(digest, sizeof(digest));
             const bool final_complete = complete && error_.empty();
             std::ostringstream out;
+            out.imbue(std::locale::classic());
             out << "{\n"
                 << "  \"schema\": \"crispasr.qwen3-tts.http-response/1\",\n"
                 << "  \"request_id\": " << detail::json_string(request_id_) << ",\n"
@@ -829,7 +871,8 @@ public:
                 << "  \"speed_requested\": " << detail::json_float(speed_) << ",\n"
                 << "  \"body_bytes\": " << total_bytes_ << ",\n"
                 << "  \"body_sha256\": " << detail::json_string(body_sha256) << ",\n"
-                << "  \"chunk_hash_scope\": \"application response-body payload after successful sink.write; excludes HTTP transfer framing\",\n"
+                << "  \"chunk_hash_scope\": \"application response-body payload after successful sink.write; excludes "
+                   "HTTP transfer framing\",\n"
                 << "  \"chunks\": [";
             for (size_t i = 0; i < chunks_.size(); ++i) {
                 if (i)
@@ -840,8 +883,8 @@ public:
             if (!chunks_.empty())
                 out << "\n  ";
             out << "],\n"
-                << "  \"capture_error\": "
-                << detail::json_nullable_string(!error_.empty() ? error_ : failure_reason) << "\n"
+                << "  \"capture_error\": " << detail::json_nullable_string(!error_.empty() ? error_ : failure_reason)
+                << "\n"
                 << "}\n";
             std::string error;
             if (!detail::write_text_atomic(directory_ / "manifest.json", out.str(), error))

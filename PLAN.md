@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### PR #576 capture audit — claimed by Codex (2026-11-06)
+
+- Source: `ad596e11aa81e82867b37ef372ddb5a27c189b54`. Audit opt-in Qwen3-TTS capture for accurate provenance, failure handling and cross-surface behavior; add model-free regression coverage and run CI before integration.
+
 ### Main CI repair — claimed by Codex (2026-11-06)
 
 - Source: `de3ff9cbc6ac0429f057b6598020cf75dde338d8`. Fix clang-format violations and the Breeze session control test harness missing the token-budget helper. Accept when the focused test and formatting check pass; verify hosted CI on the fix.

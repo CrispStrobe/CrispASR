@@ -3062,9 +3062,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                            "invalid_request_error", "response_format");
                 return;
             }
-            auto response_capture = qwen3_capture_enabled
-                ? qwen3_tts_capture::HttpResponseCapture::begin_from_env(request_id, response_format, sr_out, speed, true)
-                : nullptr;
+            auto response_capture = qwen3_capture_enabled ? qwen3_tts_capture::HttpResponseCapture::begin_from_env(
+                                                                request_id, response_format, sr_out, speed, true)
+                                                          : nullptr;
             if (qwen3_capture_enabled && !response_capture)
                 rp.tts_capture_request_id.clear();
 
@@ -3154,7 +3154,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             // they are produced. Captures by value the bits it needs so it
             // outlives the handler scope (the provider keeps `sq` alive).
             std::thread worker([&backend, &model_mutex, sentences, rp, apply_spoken_disclaimer, silence_s16,
-                                true_streaming, push_pcm, enqueue, sq, t0]() {
+                                true_streaming, push_pcm, enqueue, sq, t0, qwen3_capture_enabled]() {
                 auto is_cancelled = [&] {
                     std::lock_guard<std::mutex> lk(sq->m);
                     return sq->cancelled;
@@ -3192,9 +3192,19 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                         if (is_cancelled())
                             break;
                         if (true_streaming) {
-                            backend->synthesize_streaming(
-                                sentences[i], rp,
-                                [&](const float* pcm, int n_samples, bool /*is_final*/) { push_pcm(pcm, n_samples); });
+                            qwen3_tts_capture::StreamCompletion completion;
+                            backend->synthesize_streaming(sentences[i], rp,
+                                                          [&](const float* pcm, int n_samples, bool is_final) {
+                                                              completion.observe(is_final);
+                                                              push_pcm(pcm, n_samples);
+                                                          });
+                            // A failed Qwen decoder may return after emitting partial
+                            // audio without the terminal callback. Do not label its
+                            // response manifest as a complete stream.
+                            if (qwen3_capture_enabled && !completion.complete()) {
+                                std::lock_guard<std::mutex> lk(sq->m);
+                                sq->failed = true;
+                            }
                         } else {
                             std::vector<float> chunk = backend->synthesize(sentences[i], rp);
                             if (!chunk.empty())
@@ -3223,42 +3233,43 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             });
             worker.detach();
 
-            res.set_chunked_content_provider("audio/pcm", [sq, response_capture](size_t /*offset*/, httplib::DataSink& sink) -> bool {
-                std::unique_lock<std::mutex> lk(sq->m);
-                sq->cv.wait(lk, [&] { return !sq->q.empty() || sq->done || sq->cancelled; });
-                if (sq->q.empty() && (sq->done || sq->cancelled)) {
-                    const bool complete = sq->done && !sq->failed && !sq->cancelled;
-                    lk.unlock();
-                    if (response_capture)
-                        response_capture->finish("audio/pcm", complete, complete ? "" : "stream_incomplete");
-                    sink.done();
-                    return true;
-                }
-                std::string c = std::move(sq->q.front());
-                sq->q.pop_front();
-                lk.unlock();
-                sq->cv.notify_one(); // release the worker's backpressure wait
-                if (!sink.write(c.data(), c.size())) {
-                    // Client disconnected — tell the worker to stop producing.
-                    {
-                        std::lock_guard<std::mutex> lk2(sq->m);
-                        sq->cancelled = true;
+            res.set_chunked_content_provider(
+                "audio/pcm", [sq, response_capture](size_t /*offset*/, httplib::DataSink& sink) -> bool {
+                    std::unique_lock<std::mutex> lk(sq->m);
+                    sq->cv.wait(lk, [&] { return !sq->q.empty() || sq->done || sq->cancelled; });
+                    if (sq->q.empty() && (sq->done || sq->cancelled)) {
+                        const bool complete = sq->done && !sq->failed && !sq->cancelled;
+                        lk.unlock();
+                        if (response_capture)
+                            response_capture->finish("audio/pcm", complete, complete ? "" : "stream_incomplete");
+                        sink.done();
+                        return true;
                     }
-                    sq->cv.notify_all();
+                    std::string c = std::move(sq->q.front());
+                    sq->q.pop_front();
+                    lk.unlock();
+                    sq->cv.notify_one(); // release the worker's backpressure wait
+                    if (!sink.write(c.data(), c.size())) {
+                        // Client disconnected — tell the worker to stop producing.
+                        {
+                            std::lock_guard<std::mutex> lk2(sq->m);
+                            sq->cancelled = true;
+                        }
+                        sq->cv.notify_all();
+                        if (response_capture)
+                            response_capture->finish("audio/pcm", false, "client_disconnected");
+                        return false;
+                    }
                     if (response_capture)
-                        response_capture->finish("audio/pcm", false, "client_disconnected");
-                    return false;
-                }
-                if (response_capture)
-                    response_capture->record_chunk(c.data(), c.size());
-                return true;
-            });
+                        response_capture->record_chunk(c.data(), c.size());
+                    return true;
+                });
             return;
         }
 
-        auto response_capture = qwen3_capture_enabled
-            ? qwen3_tts_capture::HttpResponseCapture::begin_from_env(request_id, response_format, sr_out, speed, false)
-            : nullptr;
+        auto response_capture = qwen3_capture_enabled ? qwen3_tts_capture::HttpResponseCapture::begin_from_env(
+                                                            request_id, response_format, sr_out, speed, false)
+                                                      : nullptr;
         if (qwen3_capture_enabled && !response_capture)
             rp.tts_capture_request_id.clear();
 
