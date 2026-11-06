@@ -863,7 +863,10 @@ struct qwen3_tts_context {
     std::string voice_prompt_path;
     std::string capture_request_id;
     std::string capture_source_text;
+    std::string capture_voice;
+    std::string capture_instruction;
     float capture_speed = 1.0f;
+    bool capture_suppressed = false;
     int last_stop_reason = 6;
     int last_eos_token_id = -1;
     int last_max_frames = 0;
@@ -5980,18 +5983,34 @@ extern "C" void qwen3_tts_set_seed(struct qwen3_tts_context* ctx, uint64_t seed)
 // Per-request capture metadata is inert unless the operator enables the
 // absolute-path CRISPASR_QWEN3_TTS_CAPTURE_DIR environment variable.
 extern "C" void qwen3_tts_set_capture_metadata(struct qwen3_tts_context* ctx, const char* request_id,
-                                               const char* source_text, float speed) {
+                                               const char* source_text, const char* voice, const char* instruction,
+                                               float speed, int suppress_capture) {
     if (!ctx)
         return;
-    if (!qwen3_tts_capture::enabled()) {
+    try {
+        ctx->capture_suppressed = suppress_capture != 0;
+        if (ctx->capture_suppressed || !qwen3_tts_capture::enabled()) {
+            ctx->capture_request_id.clear();
+            ctx->capture_source_text.clear();
+            ctx->capture_voice.clear();
+            ctx->capture_instruction.clear();
+            ctx->capture_speed = 1.0f;
+            return;
+        }
+        ctx->capture_request_id = request_id ? request_id : "";
+        ctx->capture_source_text = source_text ? source_text : "";
+        ctx->capture_voice = voice ? voice : "";
+        ctx->capture_instruction = instruction ? instruction : "";
+        ctx->capture_speed = std::isfinite(speed) && speed > 0.0f ? speed : 1.0f;
+    } catch (...) {
+        ctx->capture_suppressed = true;
         ctx->capture_request_id.clear();
         ctx->capture_source_text.clear();
+        ctx->capture_voice.clear();
+        ctx->capture_instruction.clear();
         ctx->capture_speed = 1.0f;
-        return;
+        fprintf(stderr, "qwen3_tts: capture metadata unavailable; synthesis continues without capture\n");
     }
-    ctx->capture_request_id = request_id ? request_id : "";
-    ctx->capture_source_text = source_text ? source_text : "";
-    ctx->capture_speed = std::isfinite(speed) && speed > 0.0f ? speed : 1.0f;
 }
 
 static qwen3_tts_capture::Metadata qwen3_tts_make_capture_metadata(const qwen3_tts_context* ctx, const char* text) {
@@ -6001,6 +6020,8 @@ static qwen3_tts_capture::Metadata qwen3_tts_make_capture_metadata(const qwen3_t
     metadata.request_id = ctx->capture_request_id;
     metadata.model_input_text = text ? text : "";
     metadata.source_text = ctx->capture_source_text;
+    metadata.voice = ctx->capture_voice;
+    metadata.instruction = ctx->capture_instruction;
     metadata.model_path = ctx->model_path;
     metadata.model_name = std::filesystem::path(ctx->model_path).filename().string();
     metadata.model_type = ctx->hp.tts_model_type;
@@ -6014,7 +6035,9 @@ static qwen3_tts_capture::Metadata qwen3_tts_make_capture_metadata(const qwen3_t
         metadata.tokenizer_sha256 = hash;
     if (const char* revision = crispasr_env::get("CRISPASR_QWEN3_TTS_CAPTURE_RUNTIME_REVISION"))
         metadata.runtime_revision = revision;
-    metadata.reference_audio_path = ctx->voice_prompt_path;
+    metadata.reference_source_path = ctx->voice_prompt_path;
+    if (const char* hash = crispasr_env::get("CRISPASR_QWEN3_TTS_CAPTURE_REFERENCE_SHA256"))
+        metadata.reference_source_sha256 = hash;
     metadata.reference_text = ctx->runtime_ref_text;
     if (metadata.reference_text.empty() && ctx->vp_active >= 0 &&
         ctx->vp_active < (int)ctx->vp_ref_texts.size()) {
@@ -6024,11 +6047,38 @@ static qwen3_tts_capture::Metadata qwen3_tts_make_capture_metadata(const qwen3_t
         metadata.model_sha256 = hash;
     if (const char* hash = crispasr_env::get("CRISPASR_QWEN3_TTS_CAPTURE_CODEC_SHA256"))
         metadata.codec_sha256 = hash;
-    metadata.seed = ctx->params.seed;
+    metadata.seed = 42;
+    if (const char* seed = crispasr_env::get("CRISPASR_QWEN3_TTS_SEED"))
+        metadata.seed = (uint64_t)std::strtoull(seed, nullptr, 10);
+    if (ctx->params.seed != 0)
+        metadata.seed = ctx->params.seed;
     metadata.temperature = ctx->params.temperature;
+    metadata.temperature_effective = ctx->params.temperature > 0.0f ? ctx->params.temperature : 0.9f;
     metadata.speed = ctx->capture_speed;
+    metadata.greedy = crispasr_env::get("CRISPASR_QWEN3_TTS_GREEDY") != nullptr;
+    const char* skip_ref = crispasr_env::get("CRISPASR_QWEN3_TTS_SKIP_REF_DECODE");
+    metadata.skip_reference_decode = !skip_ref || skip_ref[0] != '0';
     metadata.language_id = ctx->language_id;
     return metadata;
+}
+
+static std::unique_ptr<qwen3_tts_capture::SampleCapture> qwen3_tts_begin_sample_capture(
+    const qwen3_tts_context* ctx, const char* text, const int32_t* reference_codes, size_t reference_code_count,
+    const float* speaker_embedding, size_t speaker_embedding_count, int codebook_count) noexcept {
+    try {
+        if (!ctx || ctx->capture_suppressed || !qwen3_tts_capture::enabled())
+            return nullptr;
+        const auto metadata = qwen3_tts_make_capture_metadata(ctx, text);
+        return qwen3_tts_capture::SampleCapture::begin_from_env(metadata, reference_codes, reference_code_count,
+                                                                speaker_embedding, speaker_embedding_count,
+                                                                codebook_count);
+    } catch (const std::exception& e) {
+        fprintf(stderr, "qwen3_tts: capture initialization failed: %s; synthesis continues\n", e.what());
+        return nullptr;
+    } catch (...) {
+        fprintf(stderr, "qwen3_tts: capture initialization failed; synthesis continues\\n");
+        return nullptr;
+    }
 }
 
 static void build_embd_caches(qwen3_tts_context* c) {
@@ -7815,15 +7865,11 @@ extern "C" float* qwen3_tts_synthesize(struct qwen3_tts_context* ctx, const char
     }
 
     const int T_gen = n_codes / n_q;
-    std::unique_ptr<qwen3_tts_capture::SampleCapture> capture;
-    if (qwen3_tts_capture::enabled()) {
-        capture = qwen3_tts_capture::SampleCapture::begin_from_env(
-            qwen3_tts_make_capture_metadata(ctx, text), ref_codes.data(), ref_codes.size(),
-            ctx->runtime_spk_emb.data(), ctx->runtime_spk_emb.size(), n_q);
-        if (capture) {
-            capture->write_generated_codes(codes, (size_t)n_codes, T_gen, ctx->last_stop_reason,
-                                           ctx->last_eos_token_id, ctx->last_max_frames);
-        }
+    auto capture = qwen3_tts_begin_sample_capture(ctx, text, ref_codes.data(), ref_codes.size(),
+                                                   ctx->runtime_spk_emb.data(), ctx->runtime_spk_emb.size(), n_q);
+    if (capture) {
+        capture->write_generated_codes(codes, (size_t)n_codes, T_gen, ctx->last_stop_reason,
+                                       ctx->last_eos_token_id, ctx->last_max_frames);
     }
 
     float* pcm = nullptr;
@@ -7866,8 +7912,6 @@ extern "C" float* qwen3_tts_synthesize(struct qwen3_tts_context* ctx, const char
             : std::numeric_limits<size_t>::max();
         int n_pcm_full = 0;
         pcm = codec_decode_codes(ctx, codes_for_decode.data(), T_ref + T_gen, &n_pcm_full);
-        if (capture)
-            capture->record_decoder_result(capture_call, pcm, n_pcm_full);
         if (!pcm || n_pcm_full <= 0) {
             free(codes);
             free(pcm);
@@ -7875,6 +7919,8 @@ extern "C" float* qwen3_tts_synthesize(struct qwen3_tts_context* ctx, const char
         }
 
         const int cut = (int)((double)T_ref / (double)std::max(T_ref + T_gen, 1) * n_pcm_full);
+        if (capture)
+            capture->record_decoder_result(capture_call, pcm, n_pcm_full, nullptr, 0, cut);
         const int n_pcm_trim = std::max(0, n_pcm_full - cut);
         float* trimmed = (float*)malloc((size_t)n_pcm_trim * sizeof(float));
         if (!trimmed) {
@@ -7964,13 +8010,18 @@ extern "C" float* qwen3_tts_synthesize_streaming(struct qwen3_tts_context* ctx, 
     const int n_groups = (int)hp.n_code_groups; // 16
     const int n_q = (int)ctx->codec.hp.n_q;
     std::unique_ptr<qwen3_tts_capture::SampleCapture> capture;
-    if (qwen3_tts_capture::enabled()) {
-        std::vector<int32_t> capture_reference_codes;
-        int capture_reference_frames = 0;
-        qwen3_tts_get_active_ref_codes(ctx, capture_reference_codes, capture_reference_frames);
-        capture = qwen3_tts_capture::SampleCapture::begin_from_env(
-            qwen3_tts_make_capture_metadata(ctx, text), capture_reference_codes.data(), capture_reference_codes.size(),
-            ctx->runtime_spk_emb.data(), ctx->runtime_spk_emb.size(), n_q);
+    if (!ctx->capture_suppressed && qwen3_tts_capture::enabled()) {
+        try {
+            std::vector<int32_t> capture_reference_codes;
+            int capture_reference_frames = 0;
+            if (qwen3_tts_get_active_ref_codes(ctx, capture_reference_codes, capture_reference_frames)) {
+                capture = qwen3_tts_begin_sample_capture(
+                    ctx, text, capture_reference_codes.data(), capture_reference_codes.size(),
+                    ctx->runtime_spk_emb.data(), ctx->runtime_spk_emb.size(), n_q);
+            }
+        } catch (...) {
+            fprintf(stderr, "qwen3_tts: capture reference collection failed; streaming continues\n");
+        }
     }
 
     // Streaming output state, shared with the per-frame emit hook below.
@@ -8059,16 +8110,16 @@ extern "C" float* qwen3_tts_synthesize_streaming(struct qwen3_tts_context* ctx, 
     if (!qwen3_tts_generate_codes_ar(ctx, text, all_codes, &frames, on_frame)) {
         return nullptr;
     }
-    if (emit_failed) {
-        return nullptr;
-    }
 
-    // The full generated sequence is retained independently of the decoder
-    // windows. Each window file above is the exact array passed to the codec.
+    // Preserve any tokens generated before a streaming codec-window failure.
+    // The non-EOS stop reason keeps this diagnostic sample ineligible for training.
     const int total_frames = (int)(all_codes.size() / n_groups);
     if (capture) {
         capture->write_generated_codes(all_codes.data(), all_codes.size(), total_frames, ctx->last_stop_reason,
                                        ctx->last_eos_token_id, ctx->last_max_frames);
+    }
+    if (emit_failed) {
+        return nullptr;
     }
     {
         const double tc = bench ? now_ms() : 0.0;

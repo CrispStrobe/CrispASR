@@ -93,28 +93,6 @@ inline std::string sha256_f32le(const float* values, size_t count) {
     return hex_digest(digest, sizeof(digest));
 }
 
-inline std::string sha256_file(const std::string& path) {
-    if (path.empty())
-        return {};
-    std::ifstream file(path, std::ios::binary);
-    if (!file)
-        return {};
-    crispasr::sha::Sha256 hash;
-    hash.init();
-    std::vector<uint8_t> buffer(64 * 1024);
-    while (file) {
-        file.read(reinterpret_cast<char*>(buffer.data()), static_cast<std::streamsize>(buffer.size()));
-        const auto n = file.gcount();
-        if (n > 0)
-            hash.update(buffer.data(), static_cast<size_t>(n));
-    }
-    if (file.bad())
-        return {};
-    uint8_t digest[32];
-    hash.final(digest);
-    return hex_digest(digest, sizeof(digest));
-}
-
 inline uintmax_t file_size(const std::string& path) {
     if (path.empty())
         return 0;
@@ -201,18 +179,23 @@ inline std::string make_id(const std::string& prefix) {
     return safe_component(prefix) + "-" + std::to_string(ticks) + "-" + std::to_string(sequence);
 }
 
-inline std::filesystem::path configured_root() {
-    const char* raw = std::getenv("CRISPASR_QWEN3_TTS_CAPTURE_DIR");
-    if (!raw || !*raw)
-        return {};
-    std::filesystem::path root(raw);
-    if (!root.is_absolute()) {
-        static std::atomic<bool> warned{false};
-        if (!warned.exchange(true))
-            std::fprintf(stderr, "qwen3_tts_capture: CRISPASR_QWEN3_TTS_CAPTURE_DIR must be an absolute path; capture disabled\n");
+inline std::filesystem::path configured_root() noexcept {
+    try {
+        const char* raw = std::getenv("CRISPASR_QWEN3_TTS_CAPTURE_DIR");
+        if (!raw || !*raw)
+            return {};
+        std::filesystem::path root(raw);
+        if (!root.is_absolute()) {
+            static std::atomic<bool> warned{false};
+            if (!warned.exchange(true))
+                std::fprintf(stderr, "qwen3_tts_capture: CRISPASR_QWEN3_TTS_CAPTURE_DIR must be an absolute path; capture disabled\n");
+            return {};
+        }
+        return root;
+    } catch (...) {
+        std::fprintf(stderr, "qwen3_tts_capture: failed to read capture directory; capture disabled\n");
         return {};
     }
-    return root;
 }
 
 inline bool write_atomic(const std::filesystem::path& path, const uint8_t* data, size_t size, std::string& error) {
@@ -312,7 +295,7 @@ inline std::string stop_reason_name(int reason) {
 
 } // namespace detail
 
-inline bool enabled() {
+inline bool enabled() noexcept {
     return !detail::configured_root().empty();
 }
 
@@ -320,6 +303,8 @@ struct Metadata {
     std::string request_id;
     std::string model_input_text;
     std::string source_text;
+    std::string voice;
+    std::string instruction;
     std::string model_path;
     std::string model_name;
     std::string model_type;
@@ -330,11 +315,15 @@ struct Metadata {
     std::string runtime_revision;
     std::string codec_path;
     std::string codec_sha256;
-    std::string reference_audio_path;
+    std::string reference_source_path;
+    std::string reference_source_sha256;
     std::string reference_text;
     uint64_t seed = 0;
     float temperature = 0.0f;
+    float temperature_effective = 0.9f;
     float speed = 1.0f;
+    bool greedy = false;
+    bool skip_reference_decode = true;
     int language_id = -1;
 };
 
@@ -401,7 +390,8 @@ public:
             }
             capture->model_size_bytes_ = detail::file_size(metadata.model_path);
             capture->codec_size_bytes_ = detail::file_size(metadata.codec_path);
-            capture->reference_audio_sha256_ = detail::sha256_file(metadata.reference_audio_path);
+            capture->reference_source_size_bytes_ = detail::file_size(metadata.reference_source_path);
+            capture->reference_source_sha256_ = metadata.reference_source_sha256;
             if (reference_code_count) {
                 capture->reference_frame_count_ = (int)(reference_code_count / (size_t)codebook_count);
                 capture->reference_codes_sha256_ = detail::sha256_i32le(reference_codes, reference_code_count);
@@ -434,25 +424,33 @@ public:
 
     bool write_generated_codes(const int32_t* codes, size_t code_count, int frame_count, int stop_reason,
                                int eos_token_id, int max_frames) noexcept {
-        if (!active_ || !codes || code_count == 0 || code_count % (size_t)codebook_count_ != 0 ||
-            frame_count != (int)(code_count / (size_t)codebook_count_)) {
-            set_error("invalid generated-code shape");
+        try {
+            if (!active_ || !codes || code_count == 0 || code_count % (size_t)codebook_count_ != 0 ||
+                frame_count != (int)(code_count / (size_t)codebook_count_)) {
+                set_error("invalid generated-code shape");
+                return false;
+            }
+            std::string error;
+            if (!detail::write_i32le_atomic(directory_ / "generated_codes.i32le", codes, code_count, error)) {
+                set_error(error);
+                return false;
+            }
+            generated_codes_sha256_ = detail::sha256_i32le(codes, code_count);
+            generated_frame_count_ = frame_count;
+            stop_reason_ = stop_reason;
+            eos_token_id_ = eos_token_id;
+            max_frames_ = max_frames;
+            generated_codes_written_ = true;
+            if (stop_reason_ != 1)
+                set_error("generation_stopped_without_eos");
+            return true;
+        } catch (const std::exception& e) {
+            set_error(e.what());
+            return false;
+        } catch (...) {
+            set_error("unknown generated-code capture failure");
             return false;
         }
-        std::string error;
-        if (!detail::write_i32le_atomic(directory_ / "generated_codes.i32le", codes, code_count, error)) {
-            set_error(error);
-            return false;
-        }
-        generated_codes_sha256_ = detail::sha256_i32le(codes, code_count);
-        generated_frame_count_ = frame_count;
-        stop_reason_ = stop_reason;
-        eos_token_id_ = eos_token_id;
-        max_frames_ = max_frames;
-        generated_codes_written_ = true;
-        if (stop_reason_ != 1)
-            set_error("generation_stopped_without_eos");
-        return true;
     }
 
     size_t record_decoder_call(const int32_t* codes, int frame_count, int codebook_count, int frame_start,
@@ -512,52 +510,85 @@ public:
     void record_decoder_result(size_t index, const float* decoded_pcm, int decoded_samples,
                                const float* emitted_pcm = nullptr, int emitted_samples = 0,
                                int actual_discard_samples = -1) noexcept {
-        if (!active_ || index >= decoder_calls_.size())
-            return;
-        if (actual_discard_samples >= 0)
-            decoder_calls_[index].discard_samples = actual_discard_samples;
-        if (decoded_pcm && decoded_samples > 0) {
-            decoder_calls_[index].decoded_samples = decoded_samples;
-            decoder_calls_[index].decoded_pcm_sha256 = detail::sha256_f32le(decoded_pcm, (size_t)decoded_samples);
-        }
-        if (emitted_pcm && emitted_samples > 0) {
-            decoder_calls_[index].emitted_samples = emitted_samples;
-            decoder_calls_[index].emitted_pcm_sha256 = detail::sha256_f32le(emitted_pcm, (size_t)emitted_samples);
+        try {
+            if (!active_ || index >= decoder_calls_.size())
+                return;
+            if (actual_discard_samples >= 0)
+                decoder_calls_[index].discard_samples = actual_discard_samples;
+            if (decoded_pcm && decoded_samples > 0) {
+                decoder_calls_[index].decoded_samples = decoded_samples;
+                decoder_calls_[index].decoded_pcm_sha256 = detail::sha256_f32le(decoded_pcm, (size_t)decoded_samples);
+            }
+            if (emitted_pcm && emitted_samples > 0) {
+                decoder_calls_[index].emitted_samples = emitted_samples;
+                decoder_calls_[index].emitted_pcm_sha256 = detail::sha256_f32le(emitted_pcm, (size_t)emitted_samples);
+            }
+        } catch (const std::exception& e) {
+            set_error(e.what());
+        } catch (...) {
+            set_error("unknown decoder-result capture failure");
         }
     }
 
     bool finish(const float* pcm, int sample_count, int sample_rate, int eos_token_id, int max_frames) noexcept {
-        if (!active_ || finished_)
+        try {
+            if (!active_ || finished_)
+                return false;
+            if (!pcm || sample_count <= 0 || sample_rate <= 0)
+                set_error("missing decoded PCM");
+            pcm_sample_count_ = sample_count > 0 ? sample_count : 0;
+            sample_rate_ = sample_rate;
+            if (pcm && sample_count > 0)
+                pcm_sha256_ = detail::sha256_f32le(pcm, (size_t)sample_count);
+            if (eos_token_id >= 0)
+                eos_token_id_ = eos_token_id;
+            if (max_frames > 0)
+                max_frames_ = max_frames;
+            finished_ = true;
+            return write_manifest();
+        } catch (const std::exception& e) {
+            set_error(e.what());
+            finished_ = true;
+            write_manifest();
             return false;
-        if (!pcm || sample_count <= 0 || sample_rate <= 0)
-            set_error("missing decoded PCM");
-        pcm_sample_count_ = sample_count > 0 ? sample_count : 0;
-        sample_rate_ = sample_rate;
-        if (pcm && sample_count > 0)
-            pcm_sha256_ = detail::sha256_f32le(pcm, (size_t)sample_count);
-        if (eos_token_id >= 0)
-            eos_token_id_ = eos_token_id;
-        if (max_frames > 0)
-            max_frames_ = max_frames;
-        finished_ = true;
-        return write_manifest();
+        } catch (...) {
+            set_error("unknown sample-finish capture failure");
+            finished_ = true;
+            write_manifest();
+            return false;
+        }
     }
 
     void fail(const std::string& reason) noexcept {
-        if (!active_ || finished_)
-            return;
-        set_error(reason.empty() ? "capture_failed" : reason);
-        finished_ = true;
-        write_manifest();
+        try {
+            if (!active_ || finished_)
+                return;
+            set_error(reason.empty() ? "capture_failed" : reason);
+            finished_ = true;
+            write_manifest();
+        } catch (...) {
+            finished_ = true;
+        }
     }
 
 private:
     SampleCapture() = default;
     static size_t invalid_call() { return std::numeric_limits<size_t>::max(); }
 
-    void set_error(const std::string& error) {
-        if (error_.empty())
-            error_ = error;
+    void set_error(const char* error) noexcept {
+        try {
+            if (error_.empty() && error)
+                error_ = error;
+        } catch (...) {
+        }
+    }
+
+    void set_error(const std::string& error) noexcept {
+        try {
+            if (error_.empty())
+                error_ = error;
+        } catch (...) {
+        }
     }
 
     bool write_manifest() noexcept {
@@ -572,7 +603,9 @@ private:
                 << "  \"request_id\": " << detail::json_nullable_string(metadata_.request_id) << ",\n"
                 << "  \"captured_at_utc\": " << detail::json_string(detail::utc_timestamp()) << ",\n"
                 << "  \"model_input_text\": " << detail::json_string(metadata_.model_input_text) << ",\n"
-                << "  \"paired_source_text\": " << detail::json_nullable_string(metadata_.source_text) << ",\n"
+                << "  \"request_source_text\": " << detail::json_nullable_string(metadata_.source_text) << ",\n"
+                << "  \"voice\": " << detail::json_nullable_string(metadata_.voice) << ",\n"
+                << "  \"instruction\": " << detail::json_nullable_string(metadata_.instruction) << ",\n"
                 << "  \"model\": {\"path\": " << detail::json_nullable_string(metadata_.model_path)
                 << ", \"name\": " << detail::json_nullable_string(metadata_.model_name)
                 << ", \"type\": " << detail::json_nullable_string(metadata_.model_type)
@@ -585,8 +618,9 @@ private:
                 << "  \"codec\": {\"path\": " << detail::json_nullable_string(metadata_.codec_path)
                 << ", \"size_bytes\": " << codec_size_bytes_
                 << ", \"sha256\": " << detail::json_nullable_string(metadata_.codec_sha256) << "},\n"
-                << "  \"reference\": {\"audio_path\": " << detail::json_nullable_string(metadata_.reference_audio_path)
-                << ", \"audio_sha256\": " << detail::json_nullable_string(reference_audio_sha256_)
+                << "  \"reference\": {\"source_path\": " << detail::json_nullable_string(metadata_.reference_source_path)
+                << ", \"source_size_bytes\": " << reference_source_size_bytes_
+                << ", \"source_sha256\": " << detail::json_nullable_string(reference_source_sha256_)
                 << ", \"transcript\": " << detail::json_nullable_string(metadata_.reference_text)
                 << ", \"codes_file\": " << detail::json_nullable_string(reference_codes_file_)
                 << ", \"codes_sha256\": " << detail::json_nullable_string(reference_codes_sha256_)
@@ -594,8 +628,11 @@ private:
                 << ", \"codebook_count\": " << codebook_count_
                 << ", \"speaker_embedding_sha256\": " << detail::json_nullable_string(speaker_embedding_sha256_)
                 << "},\n"
-                << "  \"sampling\": {\"seed\": " << metadata_.seed
-                << ", \"temperature\": " << detail::json_float(metadata_.temperature)
+                << "  \"sampling\": {\"seed_effective\": " << metadata_.seed
+                << ", \"temperature_requested\": " << detail::json_float(metadata_.temperature)
+                << ", \"temperature_effective\": " << detail::json_float(metadata_.temperature_effective)
+                << ", \"greedy\": " << (metadata_.greedy ? "true" : "false")
+                << ", \"skip_reference_decode\": " << (metadata_.skip_reference_decode ? "true" : "false")
                 << ", \"speed_requested\": " << detail::json_float(metadata_.speed)
                 << ", \"language_id\": " << metadata_.language_id << "},\n"
                 << "  \"generated_codes\": {\"file\": \"generated_codes.i32le\", \"dtype\": \"int32_le\", "
@@ -668,12 +705,13 @@ private:
     std::string generated_codes_sha256_;
     std::string reference_codes_file_;
     std::string reference_codes_sha256_;
-    std::string reference_audio_sha256_;
+    std::string reference_source_sha256_;
     std::string speaker_embedding_sha256_;
     std::string pcm_sha256_;
     std::vector<DecoderCall> decoder_calls_;
     uintmax_t model_size_bytes_ = 0;
     uintmax_t codec_size_bytes_ = 0;
+    uintmax_t reference_source_size_bytes_ = 0;
     int codebook_count_ = 0;
     int reference_frame_count_ = 0;
     int generated_frame_count_ = 0;
@@ -754,8 +792,11 @@ public:
             chunks_.push_back(std::move(chunk));
             total_bytes_ += size;
         } catch (...) {
-            if (error_.empty())
-                error_ = "failed to record HTTP response chunk";
+            try {
+                if (error_.empty())
+                    error_ = "failed to record HTTP response chunk";
+            } catch (...) {
+            }
         }
     }
 

@@ -325,7 +325,7 @@ void qwen3_tts_set_temperature(struct qwen3_tts_context* ctx, float temperature)
 void qwen3_tts_set_seed(struct qwen3_tts_context* ctx, uint64_t seed);
 // Attach per-request metadata for opt-in local codec capture. This does not affect synthesis.
 void qwen3_tts_set_capture_metadata(struct qwen3_tts_context* ctx, const char* request_id, const char* source_text,
-                                    float speed);
+                                    const char* voice, const char* instruction, float speed, int suppress_capture);
 
 // Compute the 128-mel log-mel spectrogram used by the speaker encoder
 // from 24 kHz mono audio. Returns malloc'd (T_mel × 128) row-major float32.

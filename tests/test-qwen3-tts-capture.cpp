@@ -52,6 +52,8 @@ TEST_CASE("Qwen3 sample capture stores exact little-endian generated and decoder
     metadata.request_id = "0123456789abcdef";
     metadata.model_input_text = "Резервное копирование начнётся шестого ноября.";
     metadata.source_text = "Резервное копирование начнётся 06.11.2026.";
+    metadata.voice = "menken-reference-voice";
+    metadata.instruction = "calm, measured delivery";
     metadata.model_path = "base-control-f16.gguf";
     metadata.model_name = "Qwen3-TTS 1.7B Base";
     metadata.model_type = "base";
@@ -63,6 +65,8 @@ TEST_CASE("Qwen3 sample capture stores exact little-endian generated and decoder
     metadata.reference_text = "reference transcript";
     metadata.seed = 4903;
     metadata.temperature = 0.65f;
+    metadata.temperature_effective = 0.65f;
+    metadata.skip_reference_decode = false;
     metadata.speed = 1.0f;
     metadata.language_id = 7;
 
@@ -83,7 +87,7 @@ TEST_CASE("Qwen3 sample capture stores exact little-endian generated and decoder
 
     const float decoder_pcm[] = {0.1f, 0.2f, 0.3f, 0.4f};
     const float output_pcm[] = {0.3f, 0.4f};
-    capture->record_decoder_result(call, decoder_pcm, 4, output_pcm, 2);
+    capture->record_decoder_result(call, decoder_pcm, 4, output_pcm, 2, 2);
     REQUIRE(capture->finish(output_pcm, 2, 24000, 2048, 100));
 
     const auto sample_dir = temp.path / "samples" / capture->sample_id();
@@ -101,8 +105,16 @@ TEST_CASE("Qwen3 sample capture stores exact little-endian generated and decoder
     CHECK(manifest.find("\"eos_observed\": true") != std::string::npos);
     CHECK(manifest.find("\"request_id\": \"0123456789abcdef\"") != std::string::npos);
     CHECK(manifest.find("06.11.2026") != std::string::npos);
+    CHECK(manifest.find("\"request_source_text\"") != std::string::npos);
+    CHECK(manifest.find("\"voice\": \"menken-reference-voice\"") != std::string::npos);
+    CHECK(manifest.find("\"instruction\": \"calm, measured delivery\"") != std::string::npos);
     CHECK(manifest.find("\"shape\": [2, 2]") != std::string::npos);
     CHECK(manifest.find("\"codebook_count\": 2") != std::string::npos);
+    CHECK(manifest.find("\"discard_samples\": 2") != std::string::npos);
+    CHECK(manifest.find("\"seed_effective\": 4903") != std::string::npos);
+    CHECK(manifest.find("\"temperature_requested\": ") != std::string::npos);
+    CHECK(manifest.find("\"temperature_effective\": ") != std::string::npos);
+    CHECK(manifest.find("\"skip_reference_decode\": false") != std::string::npos);
     CHECK(manifest.find("\"name\": \"Qwen3-TTS 1.7B Base\"") != std::string::npos);
     CHECK(manifest.find("\"tokenizer\": {\"id\": \"embedded-gguf-text-tokenizer\"") != std::string::npos);
     CHECK(manifest.find("test-runtime-revision") != std::string::npos);
@@ -114,14 +126,14 @@ TEST_CASE("Qwen3 sample capture records streaming decoder windows and actual pre
     qwen3_tts_capture::Metadata metadata;
     metadata.request_id = "window012345678";
     metadata.model_input_text = "streaming window";
-    const int32_t generated_codes[] = {20, 21, 22, 23};
-    const int32_t window_codes[] = {20, 21, 22, 23};
+    const int32_t generated_codes[] = {10, 11, 12, 13, 20, 21, 22, 23, 30, 31, 32, 33};
+    const int32_t window_codes[] = {30, 31, 32, 33};
     const float decoded_pcm[] = {0.1f, 0.2f, 0.3f, 0.4f};
     const float emitted_pcm[] = {0.3f, 0.4f};
 
     auto capture = qwen3_tts_capture::SampleCapture::begin(temp.path, metadata, nullptr, 0, nullptr, 0, 2);
     REQUIRE(capture);
-    REQUIRE(capture->write_generated_codes(generated_codes, 4, 2, 1, 2048, 64));
+    REQUIRE(capture->write_generated_codes(generated_codes, 12, 6, 1, 2048, 64));
     const size_t call = capture->record_decoder_call(window_codes, 2, 2, 4, 4, 1, 3, true);
     REQUIRE(call != std::numeric_limits<size_t>::max());
     capture->record_decoder_result(call, decoded_pcm, 4, emitted_pcm, 2, 2);
@@ -129,7 +141,7 @@ TEST_CASE("Qwen3 sample capture records streaming decoder windows and actual pre
 
     const auto sample_dir = temp.path / "samples" / capture->sample_id();
     CHECK((read_bytes(sample_dir / "decoder_windows" / "window_0000.i32le") ==
-           std::vector<uint8_t>{20, 0, 0, 0, 21, 0, 0, 0, 22, 0, 0, 0, 23, 0, 0, 0}));
+           std::vector<uint8_t>{30, 0, 0, 0, 31, 0, 0, 0, 32, 0, 0, 0, 33, 0, 0, 0}));
     const std::string manifest = read_text(sample_dir / "manifest.json");
     CHECK(manifest.find("\"windowed\": true") != std::string::npos);
     CHECK(manifest.find("\"frame_start\": 4") != std::string::npos);
@@ -156,6 +168,20 @@ TEST_CASE("Qwen3 sample capture rejects non-EOS generations as complete training
     const std::string manifest = read_text(sample_dir / "manifest.json");
     CHECK(manifest.find("\"capture_complete\": false") != std::string::npos);
     CHECK(manifest.find("generation_stopped_without_eos") != std::string::npos);
+}
+
+TEST_CASE("Qwen3 capture atomic writer never overwrites an existing file", "[unit][qwen3-tts][capture]") {
+    TempDirectory temp;
+    const auto path = temp.path / "immutable.txt";
+    const std::string first = "original capture";
+    const std::string second = "replacement capture";
+    std::string error;
+
+    REQUIRE(qwen3_tts_capture::detail::write_text_atomic(path, first, error));
+    error.clear();
+    CHECK_FALSE(qwen3_tts_capture::detail::write_text_atomic(path, second, error));
+    CHECK(read_text(path) == first);
+    CHECK_FALSE(error.empty());
 }
 
 TEST_CASE("Qwen3 HTTP response capture hashes buffered bodies and refuses request-id overwrite",

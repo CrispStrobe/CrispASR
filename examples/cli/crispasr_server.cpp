@@ -3179,7 +3179,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                     // off is_voice_clone alone, so streaming ignored an
                     // honoured "spoken_disclaimer": false entirely.)
                     if (apply_spoken_disclaimer) {
-                        const auto& disc = crispasr_tts_get_disclaimer(backend.get(), rp);
+                        whisper_params disclaimer_params = rp;
+                        disclaimer_params.tts_capture_suppress = true;
+                        const auto& disc = crispasr_tts_get_disclaimer(backend.get(), disclaimer_params);
                         if (!disc.empty()) {
                             push_pcm(disc.data(), (int)disc.size());
                             enqueue(std::string((const char*)silence_s16.data(), silence_s16.size() * sizeof(short)));
@@ -3227,9 +3229,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 if (sq->q.empty() && (sq->done || sq->cancelled)) {
                     const bool complete = sq->done && !sq->failed && !sq->cancelled;
                     lk.unlock();
-                    sink.done();
                     if (response_capture)
                         response_capture->finish("audio/pcm", complete, complete ? "" : "stream_incomplete");
+                    sink.done();
                     return true;
                 }
                 std::string c = std::move(sq->q.front());
@@ -3287,7 +3289,9 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         // opt-out lands here as apply_spoken_disclaimer=true (denied, not
         // refused) — the headers below tell the client which it got.
         if (apply_spoken_disclaimer) {
-            crispasr_tts_prepend_disclaimer(pcm, backend.get(), rp);
+            whisper_params disclaimer_params = rp;
+            disclaimer_params.tts_capture_suppress = true;
+            crispasr_tts_prepend_disclaimer(pcm, backend.get(), disclaimer_params);
         }
         set_marking_headers(res);
 
