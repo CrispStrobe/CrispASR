@@ -861,6 +861,8 @@ struct qwen3_tts_context {
     std::string model_path;
     std::string codec_path;
     std::string voice_prompt_path;
+    std::string voice_pack_path;
+    std::string active_speaker_name;
     std::string capture_request_id;
     std::string capture_source_text;
     std::string capture_voice;
@@ -6021,6 +6023,12 @@ static qwen3_tts_capture::Metadata qwen3_tts_make_capture_metadata(const qwen3_t
     metadata.model_input_text = text ? text : "";
     metadata.source_text = ctx->capture_source_text;
     metadata.voice = ctx->capture_voice;
+    if (ctx->hp.tts_model_type == "custom_voice" && !ctx->active_speaker_name.empty()) {
+        metadata.voice = ctx->active_speaker_name;
+    } else if (ctx->hp.tts_model_type == "base" && ctx->runtime_ref_codes.empty() && !ctx->xvec_only &&
+               ctx->vp_active >= 0 && ctx->vp_active < (int)ctx->vp_names.size()) {
+        metadata.voice = ctx->vp_names[ctx->vp_active];
+    }
     metadata.instruction = ctx->capture_instruction;
     metadata.model_path = ctx->model_path;
     metadata.model_name = std::filesystem::path(ctx->model_path).filename().string();
@@ -6035,12 +6043,14 @@ static qwen3_tts_capture::Metadata qwen3_tts_make_capture_metadata(const qwen3_t
         metadata.tokenizer_sha256 = hash;
     if (const char* revision = crispasr_env::get("CRISPASR_QWEN3_TTS_CAPTURE_RUNTIME_REVISION"))
         metadata.runtime_revision = revision;
-    metadata.reference_source_path = ctx->voice_prompt_path;
+    const bool using_voice_pack = ctx->hp.tts_model_type == "base" && ctx->runtime_ref_codes.empty() &&
+                                  !ctx->xvec_only && ctx->vp_active >= 0 &&
+                                  ctx->vp_active < (int)ctx->vp_names.size();
+    metadata.reference_source_path = using_voice_pack ? ctx->voice_pack_path : ctx->voice_prompt_path;
     if (const char* hash = crispasr_env::get("CRISPASR_QWEN3_TTS_CAPTURE_REFERENCE_SHA256"))
         metadata.reference_source_sha256 = hash;
     metadata.reference_text = ctx->runtime_ref_text;
-    if (metadata.reference_text.empty() && ctx->vp_active >= 0 &&
-        ctx->vp_active < (int)ctx->vp_ref_texts.size()) {
+    if (metadata.reference_text.empty() && using_voice_pack && ctx->vp_active < (int)ctx->vp_ref_texts.size()) {
         metadata.reference_text = ctx->vp_ref_texts[ctx->vp_active];
     }
     if (const char* hash = crispasr_env::get("CRISPASR_QWEN3_TTS_CAPTURE_MODEL_SHA256"))
@@ -6835,6 +6845,7 @@ extern "C" int qwen3_tts_load_voice_pack(struct qwen3_tts_context* ctx, const ch
     ctx->vp_tensors = std::move(wl.tensors);
     ctx->vp_ctx_w = wl.ctx;
     ctx->vp_buf_w = wl.buf;
+    ctx->voice_pack_path = path;
 
     if (ctx->params.verbosity >= 1) {
         fprintf(stderr, "qwen3_tts: loaded voice pack %s with %zu voices\n", path, ctx->vp_names.size());
@@ -6996,6 +7007,7 @@ extern "C" int qwen3_tts_set_speaker_by_name(struct qwen3_tts_context* ctx, cons
     const int d = (int)ctx->hp.d_model;
     ctx->runtime_spk_emb.assign(row, row + d);
     free(row);
+    ctx->active_speaker_name = ctx->hp.spk_names[idx];
 
     // Dialect override: if this speaker carries one and the active
     // synthesis language is auto OR Chinese, route to the dialect's
