@@ -432,3 +432,20 @@ must not accidentally delete those existing ONNX rows. CI additionally runs
 cross-platform builds, the unit tier, formatting/header guards, secret checks,
 and binding validation. Successful focused model tests do not establish those
 separate checks.
+
+## Issue #568: hosted Metal recheck (2026-11-06)
+
+[Run 42235998518](https://github.com/CrispStrobe/CrispASR/actions/runs/42235998518)
+compared CPU and the `Apple Paravirtual device` Metal backend at runtime source
+`f6b91a04e`, using the Q8_0 GGUF (SHA256
+`273e58a716224b38b722cd85000a8a533e2f2281ef5939cfced6bb513e713aa3`)
+and `samples/jfk.wav` converted to stereo 44.1 kHz. All three runs emitted
+non-silent vocals: CPU RMS 0.14198531, Metal shared decoder 0.14196415,
+and Metal per-stem decoder 0.14196595. The per-stem run explicitly set
+`CRISPASR_MINI_BS_SHARED_DECODER=0`; Metal was explicitly opted in.
+
+This did not reproduce the reported zero-vocals failure on this device and
+input. It does not establish that the original physical M1 configuration is
+fixed, nor does a single Q8 speech input meet the F16/Q8/Q4 and synthetic-band
+accuracy gates. Keep the default CPU fallback until those gates pass on the
+relevant hardware; retain the original issue for the unresolved cases.
