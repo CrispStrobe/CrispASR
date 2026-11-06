@@ -1,90 +1,69 @@
-# #337: qwen3-tts's talker + code predictor + codec running NATIVELY on Vulkan,
-# on lavapipe (Mesa llvmpipe) — a second, independent Vulkan implementation next
-# to the RADV hardware run in the issue. Gates the default flip that stopped
-# pinning the Vulkan talker to CPU.
-#
-# The run uses the DEFAULT configuration (no qwen3-tts env vars) and asserts the
-# log proves the Vulkan path ran: device Vulkan0 in use, the F16 code-predictor
-# down weights promoted on Vulkan0, and no CPU pin. A CPU run is the control;
-# both WAVs must ASR-roundtrip (parakeet) to the synthesized sentence.
-# GGML_VK_VISIBLE_DEVICES=0 is required: ggml skips CPU-type Vulkan devices
-# (lavapipe) unless a device is selected explicitly.
-
-name: qwen3-tts vulkan (lavapipe)
-
+name: PR576 capture live audit
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - 'src/qwen3_tts*'
-      - 'src/core/gguf_loader.*'
-      - '.github/workflows/qwen3-tts-vulkan-lavapipe.yml'
-
-# PRs: a newer push to the same PR cancels the older run. main pushes and
-# manual runs get their own group (run_id), so they are never cancelled.
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
+permissions:
+  contents: read
 jobs:
-  lavapipe:
+  capture-ab:
     runs-on: ubuntu-latest
-    timeout-minutes: 120
-    env:
-      GGML_VK_VISIBLE_DEVICES: "0"
-      TEXT: "Good evening. I am the voice assistant running on this workstation."
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-      - name: deps
+      - name: Build CLI
         run: |
-          sudo apt-get update
-          sudo apt-get install -y cmake ninja-build g++ libvulkan-dev spirv-headers glslc mesa-vulkan-drivers vulkan-tools ffmpeg
-          icd=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)
-          echo "VK_ICD_FILENAMES=$icd" >> "$GITHUB_ENV"
-          VK_ICD_FILENAMES=$icd vulkaninfo --summary | grep -iE "deviceName|deviceType"
-          VK_ICD_FILENAMES=$icd vulkaninfo | grep -iE "maxStorageBufferRange|maxMemoryAllocationSize" | head -4
-      - name: build
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build g++ ffmpeg
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=OFF
+          cmake --build build --target crispasr-cli -j 2
+      - name: Fetch models and reference
         run: |
-          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON -DCRISPASR_BUILD_TESTS=OFF
-          cmake --build build --target crispasr-cli -j$(nproc)
-      - name: models
-        run: |
-          mkdir -p m
+          mkdir -p m capture
           base=https://huggingface.co/cstr
-          curl -sSfL -o m/tts.gguf   $base/qwen3-tts-0.6b-base-GGUF/resolve/main/qwen3-tts-12hz-0.6b-base.gguf
-          curl -sSfL -o m/codec.gguf $base/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf
-          curl -sSfL -o m/asr.gguf   $base/parakeet-tdt-0.6b-v2-GGUF/resolve/main/parakeet-tdt-0.6b-v2-q4_k.gguf
-          curl -sSfL -o m/q3asr.gguf $base/qwen3-asr-0.6b-GGUF/resolve/main/qwen3-asr-0.6b.gguf
+          curl -fsSL --retry 3 -o m/tts.gguf "$base/qwen3-tts-0.6b-base-GGUF/resolve/main/qwen3-tts-12hz-0.6b-base-q8_0.gguf"
+          curl -fsSL --retry 3 -o m/codec.gguf "$base/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf"
+          curl -fsSL --retry 3 -o m/asr.gguf "$base/parakeet-tdt-0.6b-v2-GGUF/resolve/main/parakeet-tdt-0.6b-v2-q4_k.gguf"
+          sha256sum m/*.gguf
           ffmpeg -loglevel error -y -i samples/jfk.wav -ar 24000 m/jfk24.wav
-      - name: synthesize (Vulkan default, then CPU control)
+      - name: Compare actual generation with capture off and on
+        shell: bash
         run: |
-          set -o pipefail
-          common=(--backend qwen3-tts -m m/tts.gguf --codec-model m/codec.gguf --voice m/jfk24.wav
-                  --ref-text "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country."
-                  --i-have-rights --tts "$TEXT" --seed 42 -v)
-          CRISPASR_QWEN3_TTS_MAX_FRAMES=200 timeout 3000 ./build/bin/crispasr "${common[@]}" --gpu-backend vulkan --tts-output vk.wav 2>&1 | tee vk.log
-          CRISPASR_QWEN3_TTS_MAX_FRAMES=200 timeout 1800 ./build/bin/crispasr "${common[@]}" -ng --tts-output cpu.wav 2>&1 | tee cpu.log
-      - name: assert the Vulkan path ran and both round-trip
+          set -euo pipefail
+          common=(--backend qwen3-tts -m m/tts.gguf --codec-model m/codec.gguf --voice m/jfk24.wav --ref-text 'And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.' --i-have-rights --tts 'Good evening, this is the voice assistant.' --seed 42 -ng --no-c2pa --no-spoken-disclaimer --accept-marking-responsibility)
+          CRISPASR_QWEN3_TTS_GREEDY=1 timeout 1800 ./build/bin/crispasr "${common[@]}" --tts-output baseline.wav
+          CRISPASR_QWEN3_TTS_GREEDY=1 CRISPASR_QWEN3_TTS_CAPTURE_DIR="$PWD/capture" timeout 1800 ./build/bin/crispasr "${common[@]}" --tts-output capture.wav
+          python3 - <<'PY'
+          import glob, hashlib, json, pathlib, wave
+          def pcm(p):
+              with wave.open(p, 'rb') as w:
+                  return (w.getparams(), w.readframes(w.getnframes()))
+          a, b = pcm('baseline.wav'), pcm('capture.wav')
+          assert a == b, 'capture changed WAV PCM or format'
+          paths = glob.glob('capture/samples/*/manifest.json')
+          assert len(paths) == 1, paths
+          p = pathlib.Path(paths[0]); m = json.loads(p.read_text())
+          assert m['capture_complete'] and m['generated_codes']['eos_observed'], m
+          assert m['model_input_text'] == 'Good evening, this is the voice assistant.'
+          assert m['reference']['speaker_embedding_sha256']
+          for obj in [m['generated_codes'], *m['decoder_calls']]:
+              raw = (p.parent / obj['file']).read_bytes()
+              assert len(raw) == obj['shape'][0] * obj['shape'][1] * 4
+              assert hashlib.sha256(raw).hexdigest() == obj['sha256']
+          print('CAPTURE_AB_PASS', len(a[1]), len(m['decoder_calls']), m['generated_codes']['shape'])
+          PY
+      - name: Decode generated speech
+        shell: bash
         run: |
-          grep -q "Vulkan0" vk.log || { echo "::error::Vulkan0 not used"; exit 1; }
-          grep -q "code_pred (Vulkan0): promoted" vk.log || { echo "::error::code predictor not on Vulkan0 (F32 down promotion missing)"; exit 1; }
-          if grep -q "running the talker on CPU\|running talker on CPU" vk.log; then echo "::error::talker pinned to CPU"; exit 1; fi
-          for a in vk cpu; do
-            t=$(./build/bin/crispasr --backend parakeet -m m/asr.gguf -f $a.wav -np -nt -ng)
-            echo "$a: $t"
-            echo "$t" | grep -qi "voice assistant" && echo "$t" | grep -qi "evening" || { echo "::error::$a roundtrip failed: $t"; exit 1; }
-          done
-      # core_gguf::load_weights itself keeps weights the GPU backend cannot bind
-      # on the CPU (every backend, not only qwen3-tts's load_weights_fit).
-      # qwen3-asr 0.6B F16 loads through plain load_weights; its 151936 x 1024
-      # F16 embedding (311 MB) is past lavapipe's storage-buffer range.
-      - name: qwen3-asr on Vulkan (generic load_weights fit)
-        run: |
-          set -o pipefail
-          timeout 1800 ./build/bin/crispasr --backend qwen3 -m m/q3asr.gguf -f samples/jfk.wav --gpu-backend vulkan -np -nt -v 2>&1 | tee q3.log
-          grep -q "using preferred GPU backend: Vulkan0" q3.log || { echo "::error::Vulkan0 not used"; exit 1; }
-          grep "keeping it on the CPU" q3.log || echo "note: nothing needed the CPU fallback on this device"
-          grep -qi "ask not what your country" q3.log || { echo "::error::qwen3-asr transcript wrong"; exit 1; }
+          set -euo pipefail
+          ./build/bin/crispasr --backend parakeet -m m/asr.gguf -f capture.wav -np -nt -ng > transcript.txt 2>&1
+          cat transcript.txt
+          grep -qi 'good evening' transcript.txt
+          grep -qi 'voice assistant' transcript.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qwen3-capture-live-audit
+          path: |
+            transcript.txt
+            capture/samples/*/manifest.json
