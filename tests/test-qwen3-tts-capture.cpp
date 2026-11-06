@@ -62,6 +62,8 @@ TEST_CASE("Qwen3 sample capture stores exact little-endian generated and decoder
     metadata.tokenizer_sha256 = "test-tokenizer-sha256";
     metadata.runtime_revision = "test-runtime-revision";
     metadata.codec_path = "qwen3-tts-codec.gguf";
+    metadata.reference_source_path = "reference.wav";
+    metadata.reference_source_sha256 = "reference-source-sha256";
     metadata.reference_text = "reference transcript";
     metadata.seed = 4903;
     metadata.temperature = 0.65f;
@@ -107,6 +109,8 @@ TEST_CASE("Qwen3 sample capture stores exact little-endian generated and decoder
     CHECK(manifest.find("06.11.2026") != std::string::npos);
     CHECK(manifest.find("\"request_source_text\"") != std::string::npos);
     CHECK(manifest.find("\"voice\": \"menken-reference-voice\"") != std::string::npos);
+    CHECK(manifest.find("\"source_path\": \"reference.wav\"") != std::string::npos);
+    CHECK(manifest.find("\"source_sha256\": \"reference-source-sha256\"") != std::string::npos);
     CHECK(manifest.find("\"instruction\": \"calm, measured delivery\"") != std::string::npos);
     CHECK(manifest.find("\"shape\": [2, 2]") != std::string::npos);
     CHECK(manifest.find("\"codebook_count\": 2") != std::string::npos);
