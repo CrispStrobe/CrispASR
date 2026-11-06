@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Issue #579 model evaluation and release preparation — Codex (2026-11-06)
+
+- Source `b11617ea7d4a6808c0642ff1d0e8c606057d878f`. Evaluate Qwen3-ForcedAligner-Ultra against the existing aligner and RE-USE against its upstream implementation, using pinned checkpoints and independent reference/parity, meaningful unit and end-to-end tests, and hosted resources. Assess #577 and #568 against their documented architectural and physical-hardware gates. Retry the failed Pages deployment; prepare the next patch from the audited main tip, qualify the exact release source, and verify all publishers and release receipts before calling publication complete.
+
 ### Capture variants, issue #577 triage, and Metal #568 — Codex (2026-11-06)
 
 - Source `f6b91a04e2eca3420d30431275190e9adbbd4c93`. Exercise capture-enabled CustomVoice and VoiceDesign plus HTTP failure/disconnect; inspect #577 against actual code and upstream models; investigate #568 on real Apple Metal if available. Accept capture only with actual model output, manifest/hash checks and failure controls; preserve the Metal CPU fallback unless the existing accuracy gates are met. Issue #577 triage is documented; [hosted Metal comparison](https://github.com/CrispStrobe/CrispASR/actions/runs/42235998518) did not reproduce Q8 silence on a virtual Apple device, but physical M1 and full accuracy gates remain open. The [capture variant live audit](https://github.com/CrispStrobe/CrispASR/actions/runs/42236556427) passed CustomVoice, VoiceDesign, injected failure and actual disconnect on CPU; PR CI remains pending.
