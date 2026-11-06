@@ -4399,8 +4399,10 @@ class CrispasrSession {
   /// Set a dynamic token budget proportional to piece audio length.
   void setMaxNewTokensPerSecond(double rate, [int minimum = 16]) {
     if (_closed) throw StateError('CrispasrSession is closed');
-    if (!_lib.providesSymbol('crispasr_session_set_max_new_tokens_per_second'))
+    if (!_lib
+        .providesSymbol('crispasr_session_set_max_new_tokens_per_second')) {
       return;
+    }
     final fn = _lib.lookupFunction<
         Int32 Function(Pointer<Void>, Float, Int32),
         int Function(Pointer<Void>, double,
