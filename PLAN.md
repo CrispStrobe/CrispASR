@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Issue #579 Ultra local-head port — Codex (2026-11-06)
+
+- Source `fbde4c5f2c8c3a2d52dabf47ae9512aafb7fe61a`. Port the optional head only against the pinned upstream reference, beginning with the posterior-mean decoder and duration/overlap repair. The [CPU reference run](https://github.com/CrispStrobe/CrispASR/actions/runs/42313568853) stores 44 endpoint inputs and logits for a real 22-word clip. Require model-free edge controls and original-reference parity before integration; full feature extraction, head graph, hidden-state capture, CLI/C ABI and GPU acceptance remain separate gates.
+
 ### Issue #579 model evaluation and release preparation — Codex (2026-11-06)
 
 - Source `b11617ea7d4a6808c0642ff1d0e8c606057d878f`. Evaluate Qwen3-ForcedAligner-Ultra against the existing aligner and RE-USE against its upstream implementation, using pinned checkpoints and independent reference/parity, meaningful unit and end-to-end tests, and hosted resources. Assess #577 and #568 against their documented architectural and physical-hardware gates. Retry the failed Pages deployment; prepare the next patch from the audited main tip, qualify the exact release source, and verify all publishers and release receipts before calling publication complete.

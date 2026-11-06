@@ -6858,6 +6858,10 @@ if (Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES AND BUILD_SHARED_LIBS)
 endif()
 
 # Qwen3-TTS codec capture: model-free tests for exact token/response manifests.
+add_executable(test-qwen3-ultra-boundary test-qwen3-ultra-boundary.cpp)
+add_test(NAME qwen3-ultra-boundary-reference COMMAND test-qwen3-ultra-boundary)
+set_tests_properties(qwen3-ultra-boundary-reference PROPERTIES LABELS "unit;qwen3-asr;alignment")
+
 add_executable(test-qwen3-tts-capture test-qwen3-tts-capture.cpp)
 target_include_directories(test-qwen3-tts-capture PRIVATE
     ${PROJECT_SOURCE_DIR}/src
