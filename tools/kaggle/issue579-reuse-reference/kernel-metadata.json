@@ -1,0 +1,14 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-issue579-reuse-reference",
+  "title": "crispasr-issue579-reuse-reference",
+  "code_file": "reference.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": [],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

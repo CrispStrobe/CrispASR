@@ -1,67 +1,45 @@
-name: Metal cache test
-
+name: issue579 RE-USE CPU reference audit
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - ggml
-      - tests/test-metal-pipeline-cache.mm
-      - tests/CMakeLists.txt
-      - .github/workflows/metal-cache-test.yml
-  pull_request:
-    paths:
-      - ggml
-      - tests/test-metal-pipeline-cache.mm
-      - tests/CMakeLists.txt
-      - .github/workflows/metal-cache-test.yml
-
 permissions:
   contents: read
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
-  compile-and-test:
-    runs-on: macos-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shared: ['ON', 'OFF']
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v6
-        with:
-          submodules: recursive
-      - name: Record source and configure actual test target
+      - name: Install reference dependencies and test scan
         run: |
-          git rev-parse HEAD HEAD:ggml
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_SHARED_LIBS=${{ matrix.shared }} -DGGML_METAL=ON \
-            -DCRISPASR_BUILD_TESTS=ON -DCRISPASR_BUILD_SERVER=OFF
-      - name: Build Metal cache test
-        run: cmake --build build --target test-metal-pipeline-cache -j 3
-      - name: Run cache lifecycle checks (explicitly skipped without a GPU)
+          python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python3 -m pip install huggingface_hub safetensors einops soundfile scipy gguf
+          python3 tools/ci-heavy/issue579_reuse/test_scan.py
+      - name: Fetch pinned model
         run: |
-          # Catch 3.7.1 discovery splits semicolon-valued PROPERTIES: only
-          # the first label survives. Select this suite by its actual names.
-          ctest --test-dir build -R '^metal pipeline cache:' --show-only=json-v1 > build/metal-cache-discovery.json
           python3 - <<'PY'
-          import json
-          with open('build/metal-cache-discovery.json') as f:
-              tests = json.load(f)['tests']
-          assert len(tests) == 2, [t['name'] for t in tests]
-          print('METAL_CACHE_DISCOVERY_PASS:', [t['name'] for t in tests])
+          from huggingface_hub import snapshot_download
+          snapshot_download('nvidia/NVIDIA-NemotronLabs-RE-USE', revision='31f82f2efad1095034492f236e8dac9239ba713b', local_dir='reuse-model', allow_patterns=['*.json','*.py','*.safetensors','models/*','utils/*','noisy_audio/mic_test2.wav'])
           PY
-          ctest --test-dir build -R '^metal pipeline cache:' --no-tests=error \
-            --output-on-failure --timeout 60 --output-junit metal-cache.xml
+      - name: Compute CPU reference
+        run: python3 tools/ci-heavy/issue579_reuse/cpu_reference.py
+      - name: Build pinned audio.cpp and convert model
+        run: |
+          git clone --no-checkout https://github.com/0xShug0/audio.cpp.git audio.cpp
+          git -C audio.cpp checkout 04a587779625f334b666b26f2ec92827f4cbfad7
+          cmake -S audio.cpp -B audio.cpp/build -DCMAKE_BUILD_TYPE=Release -DAUDIOCPP_MODEL_SET=custom -DAUDIOCPP_MODELS=reuse -DENGINE_ENABLE_CUDA=OFF -DENGINE_ENABLE_METAL=OFF -DENGINE_ENABLE_VULKAN=OFF
+          cmake --build audio.cpp/build --target audiocpp_cli audiocpp_gguf -j 2
+          python3 audio.cpp/tests/reuse/convert_reuse_gguf.py --source reuse-model --output reuse.gguf --audiocpp-gguf audio.cpp/build/bin/audiocpp_gguf --log conversion.log
+      - name: Compare waveform without normalization
+        run: |
+          audio.cpp/build/bin/audiocpp_cli --task s2s --family reuse --model reuse.gguf --backend cpu --audio reuse-input.wav --out reuse-native.wav --out-format float32
+          python3 tools/ci-heavy/issue579_reuse/compare.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: metal-cache-${{ matrix.shared }}
+          name: reuse-cpu-reference
           path: |
-            build/metal-cache-discovery.json
-            build/metal-cache.xml
-            build/Testing/Temporary/LastTest.log
+            reuse-reference.wav
+            reuse-native.wav
+            reuse-stages.npz
+            conversion.log
+          if-no-files-found: ignore
