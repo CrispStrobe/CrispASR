@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 0.8.51
+
+* **Bindings:** session auto-chunking and duration-proportional token budgets (#574).
+* **Speech synthesis:** optional Qwen3-TTS codec capture and VoxCPM2 long-sentence VAE improvements (#576, #164).
+* **Fixes:** environment flags now recognize false, off, and no as disabled (#572).
+
 ## 0.8.50
 * **Separation:** native Mini-BS-RoFormer V2.5 (#562) and SCNet / SCNet-large
   (#566) source separation through CLI, server and Session.
