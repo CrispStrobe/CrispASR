@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Main CI repair — claimed by Codex (2026-11-06)
+
+- Source: `de3ff9cbc6ac0429f057b6598020cf75dde338d8`. Fix clang-format violations and the Breeze session control test harness missing the token-budget helper. Accept when the focused test and formatting check pass; verify hosted CI on the fix.
+
 **v0.8.50 is published and verified (2026-11-03).** Tag `v0.8.50` → `5c96e5521c6ab40ab53b91eeec54ced9c30562b5`. Lanes R1–R3 are COMPLETE (details below, kept as evidence). Open work: M1, S1, V1 and the holds. Main moved on after the tag (#573 CI job selection, docs); none of that needs a release.
 
 Each lane gives the start state, the exact steps, the acceptance and what to do on failure. Claim a lane by adding your owner name under it before starting. Never re-tag `v0.8.50`. Never re-upload under an existing PyPI version.

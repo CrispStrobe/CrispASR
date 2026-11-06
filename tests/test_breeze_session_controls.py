@@ -114,6 +114,7 @@ class BreezeSessionControls(unittest.TestCase):
         start = source.rfind('#endif\n', 0, branch) + len('#endif\n')
         end = source.index('#ifdef CA_HAVE_POCKET', branch)
         text = PREAMBLE + function(native, 'extern "C" void breeze_tts_2_set_max_new_tokens(')
+        text += '\n' + function(source, 'static void session_apply_max_new_tokens(crispasr_session* s, int n) {')
         for signature in ['CA_EXPORT int crispasr_session_set_temperature(',
                           'CA_EXPORT int crispasr_session_set_tts_seed(',
                           'CA_EXPORT int crispasr_session_set_max_new_tokens(']:
