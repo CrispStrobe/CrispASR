@@ -65,6 +65,7 @@
 #include "crispasr_tts_chunking.h"
 #include "crispasr_tts_disclaimer.h"
 #include "crispasr_consent_record.h"
+#include "../../src/qwen3_tts_capture.h"
 #include "crispasr_voice_clone_policy.h"
 #include "crispasr_voice_provenance.h"
 #include "core/crispasr_watermark.h"
@@ -2665,7 +2666,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         // handler emits carries it. Without it a [CONSENT] line and the response
         // it authorised are unlinkable on a server serving many requests.
         crispasr_consent::new_request_id();
-        res.set_header("X-Crispasr-Request-Id", crispasr_consent::request_correlation_id());
+        const std::string request_id = crispasr_consent::request_correlation_id();
+        res.set_header("X-Crispasr-Request-Id", request_id);
         if (!require_auth(req, res))
             return;
         if (!ready.load()) {
@@ -2679,6 +2681,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                            "(e.g. qwen3-tts, kokoro, vibevoice, orpheus) via POST /load");
             return;
         }
+
+        const bool qwen3_capture_enabled = backend_name == "qwen3-tts" && qwen3_tts_capture::enabled();
 
         nlohmann::json body;
         try {
@@ -2914,6 +2918,18 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         // when they're using gpt-4o-mini-tts and shouldn't see errors
         // when pointed at a base TTS server.
         whisper_params rp = params;
+        if (qwen3_capture_enabled) {
+            rp.tts_capture_request_id = request_id;
+            if (body.contains("capture_source_text") && body["capture_source_text"].is_string()) {
+                const std::string source_text = body["capture_source_text"].get<std::string>();
+                if (source_text.size() <= 65536) {
+                    rp.tts_capture_source_text = source_text;
+                } else {
+                    fprintf(stderr, "crispasr-server: ignored oversized capture_source_text metadata (%zu bytes)\n",
+                            source_text.size());
+                }
+            }
+        }
         if (!voice_name.empty()) {
             // Path-traversal guard: `voice` is resolved by the backend as a
             // filesystem path (bare name relative to --voice-dir, or a path).
@@ -3046,6 +3062,12 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                            "invalid_request_error", "response_format");
                 return;
             }
+            auto response_capture = qwen3_capture_enabled
+                ? qwen3_tts_capture::HttpResponseCapture::begin_from_env(request_id, response_format, sr_out, speed, true)
+                : nullptr;
+            if (qwen3_capture_enabled && !response_capture)
+                rp.tts_capture_request_id.clear();
+
             // Pre-compute 200ms silence gap between chunks
             const int silence_n = sr_out / 5;
             std::vector<short> silence_s16(silence_n, 0);
@@ -3199,12 +3221,15 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             });
             worker.detach();
 
-            res.set_chunked_content_provider("audio/pcm", [sq](size_t /*offset*/, httplib::DataSink& sink) -> bool {
+            res.set_chunked_content_provider("audio/pcm", [sq, response_capture](size_t /*offset*/, httplib::DataSink& sink) -> bool {
                 std::unique_lock<std::mutex> lk(sq->m);
                 sq->cv.wait(lk, [&] { return !sq->q.empty() || sq->done || sq->cancelled; });
                 if (sq->q.empty() && (sq->done || sq->cancelled)) {
+                    const bool complete = sq->done && !sq->failed && !sq->cancelled;
                     lk.unlock();
                     sink.done();
+                    if (response_capture)
+                        response_capture->finish("audio/pcm", complete, complete ? "" : "stream_incomplete");
                     return true;
                 }
                 std::string c = std::move(sq->q.front());
@@ -3213,15 +3238,27 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 sq->cv.notify_one(); // release the worker's backpressure wait
                 if (!sink.write(c.data(), c.size())) {
                     // Client disconnected — tell the worker to stop producing.
-                    std::lock_guard<std::mutex> lk2(sq->m);
-                    sq->cancelled = true;
+                    {
+                        std::lock_guard<std::mutex> lk2(sq->m);
+                        sq->cancelled = true;
+                    }
                     sq->cv.notify_all();
+                    if (response_capture)
+                        response_capture->finish("audio/pcm", false, "client_disconnected");
                     return false;
                 }
+                if (response_capture)
+                    response_capture->record_chunk(c.data(), c.size());
                 return true;
             });
             return;
         }
+
+        auto response_capture = qwen3_capture_enabled
+            ? qwen3_tts_capture::HttpResponseCapture::begin_from_env(request_id, response_format, sr_out, speed, false)
+            : nullptr;
+        if (qwen3_capture_enabled && !response_capture)
+            rp.tts_capture_request_id.clear();
 
         std::vector<std::vector<float>> chunks;
         chunks.reserve(sentences.size());
@@ -3297,6 +3334,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
 
         if (response_format == "f32") {
             std::string buf((const char*)pcm.data(), pcm.size() * sizeof(float));
+            if (response_capture)
+                response_capture->finish_buffered("application/octet-stream", buf.data(), buf.size());
             res.set_content(std::move(buf), "application/octet-stream");
         } else if (response_format == "pcm") {
             // OpenAI's pcm: signed 16-bit LE mono raw bytes, no header.
@@ -3305,6 +3344,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             // out-of-band. Use response_format=wav if the client needs
             // a self-describing container.
             std::string raw = crispasr_make_pcm_int16_le(pcm.data(), (int)pcm.size());
+            if (response_capture)
+                response_capture->finish_buffered("audio/pcm", raw.data(), raw.size());
             res.set_content(std::move(raw), "audio/pcm");
         } else if (response_format == "mp3") {
             std::string mp3 = crispasr_make_mp3(pcm.data(), (int)pcm.size(), sr_out);
@@ -3317,6 +3358,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             // branch, so every non-WAV response shipped without provenance.
             if (!params.tts_no_c2pa)
                 crispasr_c2pa_sign_auto(mp3, cmark.c2pa_mime, params.c2pa_cert, params.c2pa_key, params.cache_dir);
+            if (response_capture)
+                response_capture->finish_buffered("audio/mpeg", mp3.data(), mp3.size());
             res.set_content(std::move(mp3), "audio/mpeg");
         } else if (response_format == "aac") {
             std::string aac = crispasr_make_aac(pcm.data(), (int)pcm.size(), sr_out);
@@ -3324,6 +3367,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 json_error(res, 500, "AAC encoding failed", "encoding_failed");
                 return;
             }
+            if (response_capture)
+                response_capture->finish_buffered("audio/aac", aac.data(), aac.size());
             res.set_content(std::move(aac), "audio/aac");
         } else if (response_format == "opus") {
             const char* ct = "audio/ogg";
@@ -3332,6 +3377,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
                 json_error(res, 500, "Opus encoding failed", "encoding_failed");
                 return;
             }
+            if (response_capture)
+                response_capture->finish_buffered(ct, opus.data(), opus.size());
             res.set_content(std::move(opus), ct);
         } else {
             std::string wav = crispasr_make_wav_int16(pcm.data(), (int)pcm.size(), sr_out);
@@ -3339,6 +3386,8 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             // and --c2pa-cert / --c2pa-key are configured)
             if (!params.tts_no_c2pa) // --no-c2pa: attested opt-out of the manifest floor
                 crispasr_c2pa_sign_auto(wav, cmark.c2pa_mime, params.c2pa_cert, params.c2pa_key, params.cache_dir);
+            if (response_capture)
+                response_capture->finish_buffered("audio/wav", wav.data(), wav.size());
             res.set_content(std::move(wav), "audio/wav");
         }
     });

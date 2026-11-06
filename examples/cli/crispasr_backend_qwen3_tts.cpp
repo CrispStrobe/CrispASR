@@ -365,6 +365,8 @@ public:
             }
             last_voice_key_ = voice_key;
         }
+        qwen3_tts_set_capture_metadata(ctx_, params.tts_capture_request_id.c_str(),
+                                       params.tts_capture_source_text.c_str(), params.tts_speed);
         return true;
     }
 

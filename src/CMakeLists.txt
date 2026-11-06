@@ -1789,7 +1789,7 @@ endif()
 # ---------------------------------------------------------------------------
 add_library(qwen3_tts STATIC qwen3_tts.h qwen3_tts.cpp)
 set_target_properties(qwen3_tts PROPERTIES POSITION_INDEPENDENT_CODE ON)
-target_include_directories(qwen3_tts PUBLIC .)
+target_include_directories(qwen3_tts PUBLIC . PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../third_party/c2pa-audio/src)
 target_compile_features   (qwen3_tts PUBLIC cxx_std_17)
 target_link_libraries     (qwen3_tts PUBLIC crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
 if(NOT MSVC)
