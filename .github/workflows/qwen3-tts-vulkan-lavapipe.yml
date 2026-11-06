@@ -23,7 +23,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from huggingface_hub import snapshot_download
-          snapshot_download('17slever17/Qwen3-ForcedAligner-Ultra', revision='765dc1d714e4c80196782a5df5bfbcb3e1416736', local_dir='model', ignore_patterns=['local_head/*','companion/*','*.md','*.png'])
+          snapshot_download('17slever17/Qwen3-ForcedAligner-Ultra', revision='765dc1d714e4c80196782a5df5bfbcb3e1416736', local_dir='model', ignore_patterns=['*.md','*.png'])
           PY
           sha256sum model/model.safetensors
           python3 models/convert-qwen3-asr-to-gguf.py --input model --output qwen3-forced-aligner-ultra.gguf
@@ -33,6 +33,13 @@ jobs:
           OMP_NUM_THREADS: '2'
           MKL_NUM_THREADS: '2'
         run: python3 tools/ci-heavy/issue579_ultra_live.py
+      - name: Capture upstream optional local-head reference
+        env:
+          OMP_NUM_THREADS: '2'
+          MKL_NUM_THREADS: '2'
+        run: |
+          python3 -m pip install --no-deps model/companion/dist/qwen_fa_ultra-0.1.1-py3-none-any.whl
+          python3 tools/ci-heavy/issue579_ultra_local_reference.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -40,4 +47,6 @@ jobs:
           path: |
             reference.json
             actual.json
+            local-head-reference.json
+            local-head-stages.npz
           if-no-files-found: ignore
