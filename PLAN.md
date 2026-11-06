@@ -14,7 +14,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ### Capture variants, issue #577 triage, and Metal #568 — Codex (2026-11-06)
 
-- Source `f6b91a04e2eca3420d30431275190e9adbbd4c93`. Exercise capture-enabled CustomVoice and VoiceDesign plus HTTP failure/disconnect; inspect #577 against actual code and upstream models; investigate #568 on real Apple Metal if available. Accept capture only with actual model output, manifest/hash checks and failure controls; preserve the Metal CPU fallback unless the existing accuracy gates are met. Issue #577 triage is documented; [hosted Metal comparison](https://github.com/CrispStrobe/CrispASR/actions/runs/42235998518) did not reproduce Q8 silence on a virtual Apple device, but physical M1 and full accuracy gates remain open. Capture variant rerun and PR CI are pending.
+- Source `f6b91a04e2eca3420d30431275190e9adbbd4c93`. Exercise capture-enabled CustomVoice and VoiceDesign plus HTTP failure/disconnect; inspect #577 against actual code and upstream models; investigate #568 on real Apple Metal if available. Accept capture only with actual model output, manifest/hash checks and failure controls; preserve the Metal CPU fallback unless the existing accuracy gates are met. Issue #577 triage is documented; [hosted Metal comparison](https://github.com/CrispStrobe/CrispASR/actions/runs/42235998518) did not reproduce Q8 silence on a virtual Apple device, but physical M1 and full accuracy gates remain open. The [capture variant live audit](https://github.com/CrispStrobe/CrispASR/actions/runs/42236556427) passed CustomVoice, VoiceDesign, injected failure and actual disconnect on CPU; PR CI remains pending.
 
 ### PR #576 capture audit — Codex (2026-11-06)
 

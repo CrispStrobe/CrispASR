@@ -67,3 +67,10 @@ It checks buffered and streaming manifests and decoder arrays, transcribes each
 variant's audio, and exercises a streaming failure and client disconnect. The
 model-free `tests/test_qwen3_capture_live_audit.py` checks that its manifest
 validator rejects corrupted or misattributed captures.
+
+On 2026-11-06, [hosted audit 42236556427](https://github.com/CrispStrobe/CrispASR/actions/runs/42236556427)
+passed both variants with buffered and streaming PCM, transcription, an
+injected stream failure and an actual socket disconnect. The disconnect was
+recorded as incomplete with `response_capture_abandoned`; the HTTP library
+may release the provider before a subsequent write detects the disconnect.
+This run uses CPU Q8 models and does not establish GPU or all-model coverage.
