@@ -52,6 +52,50 @@ jobs:
               assert hashlib.sha256(raw).hexdigest() == obj['sha256']
           print('CAPTURE_AB_PASS', len(a[1]), len(m['decoder_calls']), m['generated_codes']['shape'])
           PY
+      - name: Exercise buffered and streaming HTTP capture
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p http-capture
+          CRISPASR_QWEN3_TTS_GREEDY=1 CRISPASR_QWEN3_TTS_CAPTURE_DIR="$PWD/http-capture" ./build/bin/crispasr --server --backend qwen3-tts-1.7b-base -m m/tts.gguf --codec-model m/codec.gguf --voice m/jfk24.wav --ref-text 'And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.' --i-have-rights --host 127.0.0.1 --port 18117 -ng > server.log 2>&1 &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || true' EXIT
+          python3 - <<'PY'
+          import hashlib, json, pathlib, time, urllib.request
+          base = 'http://127.0.0.1:18117'
+          for _ in range(180):
+              try:
+                  urllib.request.urlopen(base + '/health', timeout=1).read()
+                  break
+              except Exception:
+                  time.sleep(1)
+          else:
+              raise RuntimeError('server failed to start')
+          root = pathlib.Path('http-capture')
+          for stream in (False, True):
+              body = json.dumps({'input':'Good evening, this is the voice assistant.', 'capture_source_text':'original source text', 'response_format':'pcm', 'stream':stream, 'seed':42}).encode()
+              req = urllib.request.Request(base + '/v1/audio/speech', data=body, headers={'Content-Type':'application/json'})
+              with urllib.request.urlopen(req, timeout=1200) as response:
+                  request_id = response.headers['X-Crispasr-Request-Id']
+                  payload = response.read()
+              assert len(payload) > 1000
+              path = root / 'requests' / request_id / 'manifest.json'
+              for _ in range(100):
+                  if path.exists(): break
+                  time.sleep(.1)
+              response_manifest = json.loads(path.read_text())
+              assert response_manifest['complete'], response_manifest
+              assert response_manifest['body_bytes'] == len(payload)
+              assert response_manifest['body_sha256'] == hashlib.sha256(payload).hexdigest()
+              samples = [json.loads(p.read_text()) for p in (root / 'samples').glob('*/manifest.json')]
+              matches = [m for m in samples if m['request_id'] == request_id]
+              assert len(matches) == 1, matches
+              sample = matches[0]
+              assert sample['capture_complete'] and sample['request_source_text'] == 'original source text', sample
+              assert sample['http_request_manifest'] == f'requests/{request_id}/manifest.json'
+              assert all(call['windowed'] == stream for call in sample['decoder_calls'])
+              print('HTTP_CAPTURE_PASS', 'streaming' if stream else 'buffered', len(payload), len(sample['decoder_calls']))
+          PY
       - name: Decode generated speech
         shell: bash
         run: |
@@ -66,4 +110,5 @@ jobs:
           name: qwen3-capture-live-audit
           path: |
             transcript.txt
+            server.log
             capture/samples/*/manifest.json
