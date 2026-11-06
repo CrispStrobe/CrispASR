@@ -1,6 +1,6 @@
 {
   "name": "crispasr",
-  "version": "0.8.50",
+  "version": "0.8.51",
   "description": "CrispASR speech recognition",
   "main": "crispasr.js",
   "exports": {
