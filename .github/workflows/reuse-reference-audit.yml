@@ -1,0 +1,57 @@
+name: issue579 RE-USE CPU reference audit
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install reference dependencies and test scan
+        run: |
+          python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python3 -m pip install huggingface_hub safetensors einops soundfile scipy gguf
+          python3 tools/ci-heavy/issue579_reuse/test_scan.py
+      - name: Fetch pinned model
+        run: |
+          python3 - <<'PY'
+          from huggingface_hub import snapshot_download
+          snapshot_download('nvidia/NVIDIA-NemotronLabs-RE-USE', revision='31f82f2efad1095034492f236e8dac9239ba713b', local_dir='reuse-model', allow_patterns=['*.json','*.py','*.safetensors','models/*','utils/*','noisy_audio/mic_test2.wav'])
+          PY
+      - name: Compute CPU reference
+        run: python3 tools/ci-heavy/issue579_reuse/cpu_reference.py
+      - name: Build pinned audio.cpp and convert model
+        run: |
+          git clone --no-checkout https://github.com/0xShug0/audio.cpp.git audio.cpp
+          git -C audio.cpp checkout 04a587779625f334b666b26f2ec92827f4cbfad7
+          cmake -S audio.cpp -B audio.cpp/build -DCMAKE_BUILD_TYPE=Release -DAUDIOCPP_MODEL_SET=custom -DAUDIOCPP_MODELS=reuse -DENGINE_ENABLE_CUDA=OFF -DENGINE_ENABLE_METAL=OFF -DENGINE_ENABLE_VULKAN=OFF
+          cmake --build audio.cpp/build --target audiocpp_cli audiocpp_gguf -j 2
+          # The upstream converter pins the original RE-USE weights. Retarget its
+          # explicit digest guard to the pinned NemotronLabs checkpoint while
+          # preserving its full tensor-inventory and byte-exact checks.
+          python3 - <<'PYCODE'
+          from pathlib import Path
+          p = Path('audio.cpp/tests/reuse/convert_reuse_gguf.py')
+          s = p.read_text()
+          old = '87a4a970ce9aa79d5d92e71899ab034defcf13d93e5e4393ec0dc7db6d4ec048'
+          new = '06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1'
+          assert s.count(old) == 1
+          p.write_text(s.replace(old, new))
+          PYCODE
+          python3 audio.cpp/tests/reuse/convert_reuse_gguf.py --source reuse-model --output reuse.gguf --audiocpp-gguf audio.cpp/build/bin/audiocpp_gguf --log conversion.log
+      - name: Compare waveform without normalization
+        run: |
+          audio.cpp/build/bin/audiocpp_cli --task s2s --family reuse --model reuse.gguf --backend cpu --audio reuse-input.wav --out reuse-native.wav --out-format float32
+          python3 tools/ci-heavy/issue579_reuse/compare.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reuse-cpu-reference
+          path: |
+            reuse-reference.wav
+            reuse-native.wav
+            reuse-stages.npz
+            conversion.log
+          if-no-files-found: ignore
