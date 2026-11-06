@@ -726,8 +726,7 @@ private:
                 << ", \"speaker_embedding_sha256\": " << detail::json_nullable_string(speaker_embedding_sha256_)
                 << ", \"speaker_embedding_file\": " << detail::json_nullable_string(speaker_embedding_file_)
                 << ", \"speaker_embedding_shape\": " << speaker_shape_json
-                << ", \"speaker_embedding_size_bytes\": " << speaker_bytes
-                << "},\n"
+                << ", \"speaker_embedding_size_bytes\": " << speaker_bytes << "},\n"
                 << "  \"sampling\": {\"seed_effective\": " << metadata_.seed
                 << ", \"temperature_requested\": " << detail::json_float(metadata_.temperature)
                 << ", \"temperature_effective\": " << detail::json_float(metadata_.temperature_effective)

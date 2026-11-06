@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### PR #580 speaker export acceptance — Astra/Codex (2026-11-07)
+
+- Source `598b317113b2f5d8f7dc1ed3a7e7d61e041f21d6`. Separate follow-up branch: fix the confirmed format failure and strengthen model-free export failure/opt-in tests. Accept exact little-endian bytes, SHA, no-overwrite, incomplete-on-error and default-off behavior. No model execution, private voice artifacts or changes to the author's branch. Hardware and C++/HF tensor parity remain separate gates.
+
 ### Capture variants, issue #577 triage, and Metal #568 — Codex (2026-11-06)
 
 - Source `f6b91a04e2eca3420d30431275190e9adbbd4c93`. Exercise capture-enabled CustomVoice and VoiceDesign plus HTTP failure/disconnect; inspect #577 against actual code and upstream models; investigate #568 on real Apple Metal if available. Accept capture only with actual model output, manifest/hash checks and failure controls; preserve the Metal CPU fallback unless the existing accuracy gates are met. Issue #577 triage is documented; [hosted Metal comparison](https://github.com/CrispStrobe/CrispASR/actions/runs/42235998518) did not reproduce Q8 silence on a virtual Apple device, but physical M1 and full accuracy gates remain open. The [capture variant live audit](https://github.com/CrispStrobe/CrispASR/actions/runs/42236556427) passed CustomVoice, VoiceDesign, injected failure and actual disconnect on CPU; PR CI remains pending.
