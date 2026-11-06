@@ -286,6 +286,21 @@ TEST_CASE("Qwen3 HTTP streaming capture marks a disconnected response incomplete
     CHECK(manifest.find("client_disconnected") != std::string::npos);
 }
 
+TEST_CASE("Qwen3 abandoned HTTP stream records an incomplete response", "[unit][qwen3-tts][capture]") {
+    TempDirectory temp;
+    {
+        auto capture =
+            qwen3_tts_capture::HttpResponseCapture::begin(temp.path, "0011223344556677", "pcm", 24000, 1.0f, true);
+        REQUIRE(capture);
+        capture->record_chunk("partial", 7);
+    }
+    const auto manifest_path = temp.path / "requests" / "0011223344556677" / "manifest.json";
+    const std::string manifest = read_text(manifest_path);
+    CHECK(manifest.find("\"complete\": false") != std::string::npos);
+    CHECK(manifest.find("response_capture_abandoned") != std::string::npos);
+    CHECK(manifest.find(qwen3_tts_capture::detail::sha256_bytes("partial", 7)) != std::string::npos);
+}
+
 TEST_CASE("Qwen3 streaming completion requires a terminal callback", "[unit][qwen3-tts][capture]") {
     qwen3_tts_capture::StreamCompletion partial;
     partial.observe(false);

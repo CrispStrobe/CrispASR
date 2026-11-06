@@ -60,3 +60,10 @@ The selected voice identifier and any instruction text are recorded. Effective s
 ## No inference changes
 
 Capture does not change prompts, model weights, sampling, codec inputs, decoder outputs, audio resampling, watermarks, or response content. When the environment variable is unset, no capture directories or files are created. No model is loaded by the unit tests; tests use synthetic integer codes and PCM arrays only.
+
+The manually dispatched `Qwen capture variant live audit` workflow exercises
+capture-enabled CustomVoice and VoiceDesign HTTP requests with pinned models.
+It checks buffered and streaming manifests and decoder arrays, transcribes each
+variant's audio, and exercises a streaming failure and client disconnect. The
+model-free `tests/test_qwen3_capture_live_audit.py` checks that its manifest
+validator rejects corrupted or misattributed captures.
