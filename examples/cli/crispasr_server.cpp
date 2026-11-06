@@ -2682,7 +2682,11 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             return;
         }
 
-        const bool qwen3_capture_enabled = backend_name == "qwen3-tts" && qwen3_tts_capture::enabled();
+        bool qwen3_capture_enabled = false;
+        if (qwen3_tts_capture::enabled()) {
+            std::lock_guard<std::mutex> lock(model_mutex);
+            qwen3_capture_enabled = backend && qwen3_tts_capture::is_qwen_backend_name(backend->name());
+        }
 
         nlohmann::json body;
         try {

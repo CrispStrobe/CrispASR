@@ -25,7 +25,7 @@ The runtime does not hash model, codec, tokenizer or reference-source files on t
 
 ## HTTP source-text pairing
 
-When capture is enabled on the qwen3-tts backend, /v1/audio/speech accepts an optional capture_source_text string. This field is metadata only: it is not passed to the model and does not affect synthesis. It lets a caller record the original/raw request text alongside the exact text that was actually sent to Qwen as model_input_text. For multi-sentence requests, request_source_text is request-level metadata and may cover more than one captured sentence segment.
+When capture is enabled on a Qwen3-TTS backend, including Base, CustomVoice, and VoiceDesign, /v1/audio/speech accepts an optional capture_source_text string. This field is metadata only: it is not passed to the model and does not affect synthesis. It lets a caller record the original/raw request text alongside the exact text that was actually sent to Qwen as model_input_text. For multi-sentence requests, request_source_text is request-level metadata and may cover more than one captured sentence segment.
 
 Do not put credentials, secrets, or unrelated personal data in either speech input or capture_source_text. Authorization headers and other request headers are never copied into capture manifests.
 
@@ -52,7 +52,7 @@ The selected voice identifier and any instruction text are recorded. Effective s
 - Every generation gets a newly created sample directory. Existing files are never overwritten.
 - Every HTTP request gets a newly created request directory keyed by the existing request-correlation ID. A duplicate ID is rejected rather than overwritten.
 - Files are written to a temporary sibling and atomically linked into their final path without replacing an existing file.
-- manifest.json is written last. capture_complete is true only when generated codes, at least one decoder input, and decoded PCM metadata were all captured successfully.
+- manifest.json is written last. capture_complete is true only when generation reached EOS, generated codes, at least one decoder input, every decoder result, and decoded PCM metadata were all captured successfully.
 - Failed/abandoned captures produce an incomplete manifest or no manifest; they must not be used as training data.
 - A client disconnect produces an HTTP manifest with complete: false and the hash of the payload successfully written before disconnect.
 - Capture is separate from CRISPASR_QWEN3_TTS_DUMP_DIR; the diagnostic dump remains unchanged.

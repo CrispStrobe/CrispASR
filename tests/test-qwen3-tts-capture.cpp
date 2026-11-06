@@ -48,6 +48,12 @@ TEST_CASE("Qwen3 capture SHA-256 uses the standard byte digest", "[unit][qwen3-t
           "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
 }
 
+TEST_CASE("Qwen3 HTTP capture recognizes the canonical backend identity", "[unit][qwen3-tts][capture]") {
+    CHECK(qwen3_tts_capture::is_qwen_backend_name("qwen3-tts"));
+    CHECK_FALSE(qwen3_tts_capture::is_qwen_backend_name("qwen3"));
+    CHECK_FALSE(qwen3_tts_capture::is_qwen_backend_name(nullptr));
+}
+
 TEST_CASE("Qwen3 capture JSON numbers ignore the process locale", "[unit][qwen3-tts][capture]") {
     struct CommaPunctuation : std::numpunct<char> {
         char do_decimal_point() const override { return ','; }

@@ -324,6 +324,12 @@ inline bool enabled() noexcept {
     return !detail::configured_root().empty();
 }
 
+// The CLI factory maps every Qwen3-TTS alias to a backend whose name() is
+// canonical. Check the instantiated backend rather than the user-supplied alias.
+inline bool is_qwen_backend_name(const char* name) noexcept {
+    return name && std::strcmp(name, "qwen3-tts") == 0;
+}
+
 struct Metadata {
     std::string request_id;
     std::string model_input_text;
