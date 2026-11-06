@@ -37,10 +37,12 @@ jobs:
           curl -fsSL --retry 3 -o model.gguf https://huggingface.co/cstr/mini-bs-roformer-GGUF/resolve/main/mini-bs-roformer-q8_0.gguf
           shasum -a 256 model.gguf
           afconvert -f WAVE -d LEI16@44100 -c 2 samples/jfk.wav input.wav
-          mkdir cpu gpu
+          mkdir cpu gpu gpu_per
           ./build/bin/crispasr --separate -m model.gguf -f input.wav --sep-output-dir cpu --no-gpu -t 4 2>&1 | tee cpu.log
           CRISPASR_MINI_BS_ROFORMER_METAL=1 ./build/bin/crispasr --separate -m model.gguf -f input.wav --sep-output-dir gpu -t 4 2>&1 | tee gpu.log
+          CRISPASR_MINI_BS_ROFORMER_METAL=1 CRISPASR_MINI_BS_SHARED_DECODER=0 ./build/bin/crispasr --separate -m model.gguf -f input.wav --sep-output-dir gpu_per -t 4 2>&1 | tee gpu_per.log
           grep -E 'backend=(MTL|Metal)' gpu.log
+          grep -E 'decoder=per-stem' gpu_per.log
           python3 - <<'PY'
           import json, math, struct, wave
           def rms(path):
@@ -49,8 +51,9 @@ jobs:
                   assert w.getsampwidth()==2
               x=struct.unpack('<'+'h'*(len(data)//2),data)
               return math.sqrt(sum((v/32768)**2 for v in x)/len(x))
-          result={k:{s:rms(f'{k}/input_{s}.wav') for s in ('vocals','bass','drums','other')} for k in ('cpu','gpu')}
+          result={k:{s:rms(f'{k}/input_{s}.wav') for s in ('vocals','bass','drums','other')} for k in ('cpu','gpu','gpu_per')}
           result['ratio']=result['gpu']['vocals']/result['cpu']['vocals'] if result['cpu']['vocals'] else None
+          result['per_stem_ratio']=result['gpu_per']['vocals']/result['cpu']['vocals'] if result['cpu']['vocals'] else None
           print('ISSUE568_RMS',json.dumps(result))
           open('rms.json','w').write(json.dumps(result,indent=2))
           PY
@@ -61,5 +64,6 @@ jobs:
           path: |
             cpu.log
             gpu.log
+            gpu_per.log
             rms.json
           if-no-files-found: ignore
