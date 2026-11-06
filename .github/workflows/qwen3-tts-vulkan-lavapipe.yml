@@ -1,10 +1,10 @@
-name: PR576 capture live audit
+name: Qwen capture variant live audit
 on:
   workflow_dispatch:
 permissions:
   contents: read
 jobs:
-  capture-ab:
+  variant-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 90
     steps:
@@ -14,101 +14,27 @@ jobs:
       - name: Build CLI
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y cmake ninja-build g++ ffmpeg
+          sudo apt-get install -y cmake ninja-build g++
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=OFF
           cmake --build build --target crispasr-cli -j 2
-      - name: Fetch models and reference
+      - name: Fetch pinned models
         run: |
-          mkdir -p m capture
+          mkdir -p m
           base=https://huggingface.co/cstr
-          curl -fsSL --retry 3 -o m/tts.gguf "$base/qwen3-tts-0.6b-base-GGUF/resolve/main/qwen3-tts-12hz-0.6b-base-q8_0.gguf"
-          curl -fsSL --retry 3 -o m/codec.gguf "$base/qwen3-tts-tokenizer-12hz-GGUF/resolve/main/qwen3-tts-tokenizer-12hz.gguf"
-          curl -fsSL --retry 3 -o m/asr.gguf "$base/parakeet-tdt-0.6b-v2-GGUF/resolve/main/parakeet-tdt-0.6b-v2-q4_k.gguf"
+          curl -fsSL --retry 3 -o m/custom.gguf "$base/qwen3-tts-0.6b-customvoice-GGUF/resolve/29094dcb46f19b0898616aa9aeb876aa9aa6e086/qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf"
+          curl -fsSL --retry 3 -o m/design.gguf "$base/qwen3-tts-1.7b-voicedesign-GGUF/resolve/e3646df398d00b77f0e907a19a44f1a3723af14d/qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf"
+          curl -fsSL --retry 3 -o m/codec.gguf "$base/qwen3-tts-tokenizer-12hz-GGUF/resolve/344e279551177654762e5c7d39e217834325f222/qwen3-tts-tokenizer-12hz.gguf"
+          curl -fsSL --retry 3 -o m/asr.gguf "$base/parakeet-tdt-0.6b-v2-GGUF/resolve/8878172f3c45ba231fac8cfd4aff2542b13bc875/parakeet-tdt-0.6b-v2-q4_k.gguf"
           sha256sum m/*.gguf
-          ffmpeg -loglevel error -y -i samples/jfk.wav -ar 24000 m/jfk24.wav
-      - name: Compare actual generation with capture off and on
-        shell: bash
+      - name: Capture variants, failure and disconnect
         run: |
-          set -euo pipefail
-          common=(--backend qwen3-tts -m m/tts.gguf --codec-model m/codec.gguf --voice m/jfk24.wav --ref-text 'And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.' --i-have-rights --tts 'Good evening, this is the voice assistant.' --seed 42 -ng --no-c2pa --no-spoken-disclaimer --accept-marking-responsibility)
-          CRISPASR_QWEN3_TTS_GREEDY=1 timeout 1800 ./build/bin/crispasr "${common[@]}" --tts-output baseline.wav
-          CRISPASR_QWEN3_TTS_GREEDY=1 CRISPASR_QWEN3_TTS_CAPTURE_DIR="$PWD/capture" timeout 1800 ./build/bin/crispasr "${common[@]}" --tts-output capture.wav
-          python3 - <<'PY'
-          import glob, hashlib, json, pathlib, wave
-          def pcm(p):
-              with wave.open(p, 'rb') as w:
-                  return (w.getparams(), w.readframes(w.getnframes()))
-          a, b = pcm('baseline.wav'), pcm('capture.wav')
-          assert a == b, 'capture changed WAV PCM or format'
-          paths = glob.glob('capture/samples/*/manifest.json')
-          assert len(paths) == 1, paths
-          p = pathlib.Path(paths[0]); m = json.loads(p.read_text())
-          assert m['capture_complete'] and m['generated_codes']['eos_observed'], m
-          assert m['model_input_text'] == 'Good evening, this is the voice assistant.'
-          assert m['reference']['speaker_embedding_sha256']
-          for obj in [m['generated_codes'], *m['decoder_calls']]:
-              raw = (p.parent / obj['file']).read_bytes()
-              assert len(raw) == obj['shape'][0] * obj['shape'][1] * 4
-              assert hashlib.sha256(raw).hexdigest() == obj['sha256']
-          print('CAPTURE_AB_PASS', len(a[1]), len(m['decoder_calls']), m['generated_codes']['shape'])
-          PY
-      - name: Exercise buffered and streaming HTTP capture
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p http-capture
-          CRISPASR_QWEN3_TTS_GREEDY=1 CRISPASR_QWEN3_TTS_CAPTURE_DIR="$PWD/http-capture" ./build/bin/crispasr --server --backend qwen3-tts-1.7b-base -m m/tts.gguf --codec-model m/codec.gguf --voice m/jfk24.wav --ref-text 'And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.' --i-have-rights --host 127.0.0.1 --port 18117 -ng > server.log 2>&1 &
-          server=$!
-          trap 'kill "$server" 2>/dev/null || true' EXIT
-          python3 - <<'PY'
-          import hashlib, json, pathlib, time, urllib.request
-          base = 'http://127.0.0.1:18117'
-          for _ in range(180):
-              try:
-                  urllib.request.urlopen(base + '/health', timeout=1).read()
-                  break
-              except Exception:
-                  time.sleep(1)
-          else:
-              raise RuntimeError('server failed to start')
-          root = pathlib.Path('http-capture')
-          for stream in (False, True):
-              body = json.dumps({'input':'Good evening, this is the voice assistant.', 'capture_source_text':'original source text', 'response_format':'pcm', 'stream':stream, 'seed':42}).encode()
-              req = urllib.request.Request(base + '/v1/audio/speech', data=body, headers={'Content-Type':'application/json'})
-              with urllib.request.urlopen(req, timeout=1200) as response:
-                  request_id = response.headers['X-Crispasr-Request-Id']
-                  payload = response.read()
-              assert len(payload) > 1000
-              path = root / 'requests' / request_id / 'manifest.json'
-              for _ in range(100):
-                  if path.exists(): break
-                  time.sleep(.1)
-              response_manifest = json.loads(path.read_text())
-              assert response_manifest['complete'], response_manifest
-              assert response_manifest['body_bytes'] == len(payload)
-              assert response_manifest['body_sha256'] == hashlib.sha256(payload).hexdigest()
-              samples = [json.loads(p.read_text()) for p in (root / 'samples').glob('*/manifest.json')]
-              matches = [m for m in samples if m['request_id'] == request_id]
-              assert len(matches) == 1, matches
-              sample = matches[0]
-              assert sample['capture_complete'] and sample['request_source_text'] == 'original source text', sample
-              assert sample['http_request_manifest'] == f'requests/{request_id}/manifest.json'
-              assert all(call['windowed'] == stream for call in sample['decoder_calls'])
-              print('HTTP_CAPTURE_PASS', 'streaming' if stream else 'buffered', len(payload), len(sample['decoder_calls']))
-          PY
-      - name: Decode generated speech
-        shell: bash
-        run: |
-          set -euo pipefail
-          ./build/bin/crispasr --backend parakeet -m m/asr.gguf -f capture.wav -np -nt -ng > transcript.txt 2>&1
-          cat transcript.txt
-          grep -qi 'good evening' transcript.txt
-          grep -qi 'voice assistant' transcript.txt
+          python3 tools/ci-heavy/qwen3_capture_variants_live.py --cli build/bin/crispasr --codec m/codec.gguf --custom m/custom.gguf --design m/design.gguf --asr m/asr.gguf --output capture-results
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: qwen3-capture-live-audit
+          name: qwen3-capture-variants-live
           path: |
-            transcript.txt
-            server.log
-            capture/samples/*/manifest.json
+            capture-results/*/server.log
+            capture-results/*/requests/*/manifest.json
+            capture-results/*/samples/*/manifest.json
+          if-no-files-found: ignore
