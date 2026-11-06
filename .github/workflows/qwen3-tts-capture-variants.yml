@@ -1,0 +1,40 @@
+name: Qwen capture variant live audit
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  variant-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Build CLI
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y cmake ninja-build g++
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=OFF
+          cmake --build build --target crispasr-cli -j 2
+      - name: Fetch pinned models
+        run: |
+          mkdir -p m
+          base=https://huggingface.co/cstr
+          curl -fsSL --retry 3 -o m/custom.gguf "$base/qwen3-tts-0.6b-customvoice-GGUF/resolve/29094dcb46f19b0898616aa9aeb876aa9aa6e086/qwen3-tts-12hz-0.6b-customvoice-q8_0.gguf"
+          curl -fsSL --retry 3 -o m/design.gguf "$base/qwen3-tts-1.7b-voicedesign-GGUF/resolve/e3646df398d00b77f0e907a19a44f1a3723af14d/qwen3-tts-12hz-1.7b-voicedesign-q8_0.gguf"
+          curl -fsSL --retry 3 -o m/codec.gguf "$base/qwen3-tts-tokenizer-12hz-GGUF/resolve/344e279551177654762e5c7d39e217834325f222/qwen3-tts-tokenizer-12hz.gguf"
+          curl -fsSL --retry 3 -o m/asr.gguf "$base/parakeet-tdt-0.6b-v2-GGUF/resolve/8878172f3c45ba231fac8cfd4aff2542b13bc875/parakeet-tdt-0.6b-v2-q4_k.gguf"
+          sha256sum m/*.gguf
+      - name: Capture variants, failure and disconnect
+        run: |
+          python3 tools/ci-heavy/qwen3_capture_variants_live.py --cli build/bin/crispasr --codec m/codec.gguf --custom m/custom.gguf --design m/design.gguf --asr m/asr.gguf --output capture-results
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: qwen3-capture-variants-live
+          path: |
+            capture-results/*/server.log
+            capture-results/*/requests/*/manifest.json
+            capture-results/*/samples/*/manifest.json
+          if-no-files-found: ignore

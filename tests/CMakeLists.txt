@@ -6742,6 +6742,9 @@ endforeach()
 target_link_libraries(test-meanvc2-conditioning PRIVATE crispasr-cpu-blas)
 
 if(Python3_Interpreter_FOUND)
+    add_test(NAME qwen3-capture-live-audit-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_qwen3_capture_live_audit.py)
+    set_tests_properties(qwen3-capture-live-audit-controls PROPERTIES LABELS "unit;qwen3-tts;capture")
     add_test(NAME benchmark-mel-ab-controls
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_bench_mel_ab.py)
     set_tests_properties(benchmark-mel-ab-controls PROPERTIES LABELS "unit;performance-parity;benchmark")
