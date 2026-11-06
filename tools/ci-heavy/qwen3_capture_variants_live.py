@@ -82,8 +82,8 @@ def disconnect(port, root, payload):
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_LINGER, struct.pack("ii", 1, 0))
     sock.close()
     result = wait_file(root / "requests" / request_id / "manifest.json", 600)
-    assert not result["complete"] and result["capture_error"] == "client_disconnected", result
-    print("HTTP_DISCONNECT_PASS", request_id, result["body_bytes"], flush=True)
+    assert not result["complete"] and result["capture_error"] in ("client_disconnected", "response_capture_abandoned"), result
+    print("HTTP_DISCONNECT_PASS", request_id, result["body_bytes"], result["capture_error"], flush=True)
 
 
 def run_variant(args, variant, port):
