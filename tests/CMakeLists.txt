@@ -2553,8 +2553,13 @@ catch_discover_tests(test-qwen3tts-params
 )
 
 # Model-free #555 regression: actual public loader, prefill bounds, rollback.
+# This test includes qwen3_tts.cpp directly, so it also needs the codec SHA-256
+# submodule header used by the opt-in capture instrumentation.
 add_executable(test-qwen3tts-voice-pack test-qwen3tts-voice-pack.cpp)
-target_include_directories(test-qwen3tts-voice-pack PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_include_directories(test-qwen3tts-voice-pack PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/third_party/c2pa-audio/src
+)
 target_link_libraries(test-qwen3tts-voice-pack PRIVATE crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
 add_test(NAME qwen3tts-voice-pack-lifecycle COMMAND test-qwen3tts-voice-pack)
 set_tests_properties(qwen3tts-voice-pack-lifecycle PROPERTIES LABELS "unit;qwen3_tts")
