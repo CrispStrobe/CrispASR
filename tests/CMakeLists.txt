@@ -2553,8 +2553,13 @@ catch_discover_tests(test-qwen3tts-params
 )
 
 # Model-free #555 regression: actual public loader, prefill bounds, rollback.
+# This test includes qwen3_tts.cpp directly, so it also needs the codec SHA-256
+# submodule header used by the opt-in capture instrumentation.
 add_executable(test-qwen3tts-voice-pack test-qwen3tts-voice-pack.cpp)
-target_include_directories(test-qwen3tts-voice-pack PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_include_directories(test-qwen3tts-voice-pack PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/third_party/c2pa-audio/src
+)
 target_link_libraries(test-qwen3tts-voice-pack PRIVATE crispasr-core ggml ggml-base crispasr_link_ggml_cpu)
 add_test(NAME qwen3tts-voice-pack-lifecycle COMMAND test-qwen3tts-voice-pack)
 set_tests_properties(qwen3tts-voice-pack-lifecycle PROPERTIES LABELS "unit;qwen3_tts")
@@ -6848,3 +6853,15 @@ if (Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES AND BUILD_SHARED_LIBS)
     set_tests_properties(scnet-surface PROPERTIES
         LABELS "integration;scnet" SKIP_RETURN_CODE 77 TIMEOUT 3600)
 endif()
+
+# Qwen3-TTS codec capture: model-free tests for exact token/response manifests.
+add_executable(test-qwen3-tts-capture test-qwen3-tts-capture.cpp)
+target_include_directories(test-qwen3-tts-capture PRIVATE
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/third_party/c2pa-audio/src
+)
+target_link_libraries(test-qwen3-tts-capture PRIVATE Catch2::Catch2WithMain Threads::Threads)
+catch_discover_tests(test-qwen3-tts-capture
+    TEST_SPEC "[unit][qwen3-tts][capture]"
+    PROPERTIES LABELS "unit;tts;qwen3-tts;capture"
+)

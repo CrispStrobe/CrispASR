@@ -611,6 +611,12 @@ struct whisper_params {
     // this; only the server route reads it.
     float tts_speed = 1.0f;
 
+    // Opt-in Qwen3-TTS capture correlation and source-text pairing. These
+    // fields are populated only when CRISPASR_QWEN3_TTS_CAPTURE_DIR is enabled.
+    std::string tts_capture_request_id;
+    std::string tts_capture_source_text;
+    bool tts_capture_suppress = false;
+
     // Exact target duration in seconds for backends with native length control
     // (omnivoice; upstream OmniVoice `duration` parity). 0 = use the backend's
     // own estimate. CLI: --tts-duration; server: the `duration` body field.

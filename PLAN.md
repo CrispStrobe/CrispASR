@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### PR #576 capture audit — Codex (2026-11-06)
+
+- Source: `ad596e11aa81e82867b37ef372ddb5a27c189b54`. Audit opt-in Qwen3-TTS capture for accurate provenance, failure handling and cross-surface behavior. Model-free capture and voice-pack tests pass; hosted [capture A/B and buffered/streaming HTTP audit](https://github.com/CrispStrobe/CrispASR/actions/runs/42211681989) passes against `910c4f7ae`. CI remains the integration gate; the Metal workflow moves to `macos-latest` because GitHub rejected its `macos-14` runner configuration.
+
 ### Main CI repair — claimed by Codex (2026-11-06)
 
 - Source: `de3ff9cbc6ac0429f057b6598020cf75dde338d8`. Fix clang-format violations and the Breeze session control test harness missing the token-budget helper. Accept when the focused test and formatting check pass; verify hosted CI on the fix.
