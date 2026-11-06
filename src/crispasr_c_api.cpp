@@ -5793,9 +5793,9 @@ static crispasr_session_result* transcribe_autochunk(crispasr_session* s, const 
                                                     already_chunking)) {
         if (s->max_new_tokens_per_second > 0.0f) {
             const int saved_tokens = s->max_new_tokens;
-            session_apply_max_new_tokens(
-                s, core_session::compute_piece_max_tokens(
-                       s->max_new_tokens_per_second, s->max_new_tokens_min, n_samples, SR, saved_tokens));
+            session_apply_max_new_tokens(s, core_session::compute_piece_max_tokens(s->max_new_tokens_per_second,
+                                                                                   s->max_new_tokens_min, n_samples, SR,
+                                                                                   saved_tokens));
             crispasr_session_result* r = transcribe_single(s, pcm, n_samples, language);
             session_apply_max_new_tokens(s, saved_tokens);
             return r;
@@ -5812,9 +5812,9 @@ static crispasr_session_result* transcribe_autochunk(crispasr_session* s, const 
     if (ranges.size() == 1 && ranges[0].first == 0 && (int)ranges[0].second == n_samples) {
         if (s->max_new_tokens_per_second > 0.0f) {
             const int saved_tokens = s->max_new_tokens;
-            session_apply_max_new_tokens(
-                s, core_session::compute_piece_max_tokens(
-                       s->max_new_tokens_per_second, s->max_new_tokens_min, n_samples, SR, saved_tokens));
+            session_apply_max_new_tokens(s, core_session::compute_piece_max_tokens(s->max_new_tokens_per_second,
+                                                                                   s->max_new_tokens_min, n_samples, SR,
+                                                                                   saved_tokens));
             crispasr_session_result* r = transcribe_single(s, pcm, n_samples, language);
             session_apply_max_new_tokens(s, saved_tokens);
             return r;
@@ -5829,9 +5829,9 @@ static crispasr_session_result* transcribe_autochunk(crispasr_session* s, const 
         const size_t b = range.first, e = range.second;
         const int saved_tokens = s->max_new_tokens;
         if (s->max_new_tokens_per_second > 0.0f) {
-            session_apply_max_new_tokens(
-                s, core_session::compute_piece_max_tokens(
-                       s->max_new_tokens_per_second, s->max_new_tokens_min, (int)(e - b), SR, saved_tokens));
+            session_apply_max_new_tokens(s, core_session::compute_piece_max_tokens(s->max_new_tokens_per_second,
+                                                                                   s->max_new_tokens_min, (int)(e - b),
+                                                                                   SR, saved_tokens));
         }
         crispasr_session_result* part = transcribe_single(s, pcm + b, (int)(e - b), language);
         if (s->max_new_tokens_per_second > 0.0f) {
