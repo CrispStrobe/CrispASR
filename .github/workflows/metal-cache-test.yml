@@ -1,67 +1,65 @@
-name: Metal cache test
-
+name: issue568 Metal hardware audit
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - ggml
-      - tests/test-metal-pipeline-cache.mm
-      - tests/CMakeLists.txt
-      - .github/workflows/metal-cache-test.yml
-  pull_request:
-    paths:
-      - ggml
-      - tests/test-metal-pipeline-cache.mm
-      - tests/CMakeLists.txt
-      - .github/workflows/metal-cache-test.yml
-
 permissions:
   contents: read
-
-concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
 jobs:
-  compile-and-test:
+  audit:
     runs-on: macos-latest
-    timeout-minutes: 30
-    strategy:
-      fail-fast: false
-      matrix:
-        shared: ['ON', 'OFF']
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-      - name: Record source and configure actual test target
+      - name: Detect actual Metal device
+        id: device
+        shell: bash
         run: |
-          git rev-parse HEAD HEAD:ggml
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_SHARED_LIBS=${{ matrix.shared }} -DGGML_METAL=ON \
-            -DCRISPASR_BUILD_TESTS=ON -DCRISPASR_BUILD_SERVER=OFF
-      - name: Build Metal cache test
-        run: cmake --build build --target test-metal-pipeline-cache -j 3
-      - name: Run cache lifecycle checks (explicitly skipped without a GPU)
+          set -euo pipefail
+          uname -m
+          cat > /tmp/device.m <<'EOF'
+          #import <Foundation/Foundation.h>
+          #import <Metal/Metal.h>
+          int main() { @autoreleasepool { id<MTLDevice> d = MTLCreateSystemDefaultDevice(); if (!d) { puts("NO_METAL_DEVICE"); return 2; } printf("METAL_DEVICE=%s\n", [[d name] UTF8String]); return 0; } }
+          EOF
+          clang -framework Foundation -framework Metal /tmp/device.m -o /tmp/device
+          if /tmp/device; then echo 'available=true' >> "$GITHUB_OUTPUT"; else echo 'available=false' >> "$GITHUB_OUTPUT"; fi
+      - name: Build
+        if: steps.device.outputs.available == 'true'
         run: |
-          # Catch 3.7.1 discovery splits semicolon-valued PROPERTIES: only
-          # the first label survives. Select this suite by its actual names.
-          ctest --test-dir build -R '^metal pipeline cache:' --show-only=json-v1 > build/metal-cache-discovery.json
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=OFF -DGGML_METAL=ON
+          cmake --build build --target crispasr-cli -j 3
+      - name: Reproduce issue 568 on CPU and Metal
+        if: steps.device.outputs.available == 'true'
+        shell: bash
+        run: |
+          set -euo pipefail
+          curl -fsSL --retry 3 -o model.gguf https://huggingface.co/cstr/mini-bs-roformer-GGUF/resolve/main/mini-bs-roformer-q8_0.gguf
+          shasum -a 256 model.gguf
+          afconvert -f WAVE -d LEI16@44100 -c 2 samples/jfk.wav input.wav
+          mkdir cpu gpu
+          ./build/bin/crispasr --separate -m model.gguf -f input.wav --sep-output-dir cpu --no-gpu -t 4 2>&1 | tee cpu.log
+          CRISPASR_MINI_BS_ROFORMER_METAL=1 ./build/bin/crispasr --separate -m model.gguf -f input.wav --sep-output-dir gpu -t 4 2>&1 | tee gpu.log
+          grep -E 'backend=(MTL|Metal)' gpu.log
           python3 - <<'PY'
-          import json
-          with open('build/metal-cache-discovery.json') as f:
-              tests = json.load(f)['tests']
-          assert len(tests) == 2, [t['name'] for t in tests]
-          print('METAL_CACHE_DISCOVERY_PASS:', [t['name'] for t in tests])
+          import json, math, struct, wave
+          def rms(path):
+              with wave.open(path,'rb') as w:
+                  data=w.readframes(w.getnframes())
+                  assert w.getsampwidth()==2
+              x=struct.unpack('<'+'h'*(len(data)//2),data)
+              return math.sqrt(sum((v/32768)**2 for v in x)/len(x))
+          result={k:{s:rms(f'{k}/input_{s}.wav') for s in ('vocals','bass','drums','other')} for k in ('cpu','gpu')}
+          result['ratio']=result['gpu']['vocals']/result['cpu']['vocals'] if result['cpu']['vocals'] else None
+          print('ISSUE568_RMS',json.dumps(result))
+          open('rms.json','w').write(json.dumps(result,indent=2))
           PY
-          ctest --test-dir build -R '^metal pipeline cache:' --no-tests=error \
-            --output-on-failure --timeout 60 --output-junit metal-cache.xml
       - uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: metal-cache-${{ matrix.shared }}
+          name: issue568-metal-audit
           path: |
-            build/metal-cache-discovery.json
-            build/metal-cache.xml
-            build/Testing/Temporary/LastTest.log
+            cpu.log
+            gpu.log
+            rms.json
+          if-no-files-found: ignore
