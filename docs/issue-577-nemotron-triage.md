@@ -20,7 +20,7 @@ An [independent GGUF conversion](https://huggingface.co/AtomicChat/NVIDIA-Nemotr
 targets NeMo-Speech.cpp and provides a separate encoder and block-32 quantized
 decoders. Its authors report dimensions that do not fit the normal 256-value
 K-quant blocks. Its advertised files are therefore not evidence that the
-requested Q3_K and Q4_K variants exist or work in CrispASR. Other quantization
+requested Q3 and Q4 variants exist or work in CrispASR. Other quantization
 schemes, or a mixed representation, need conversion and quality validation.
 
 A viable implementation would first establish reference transcripts and
