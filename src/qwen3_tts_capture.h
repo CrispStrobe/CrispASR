@@ -688,6 +688,8 @@ private:
                                                   return call.decoded_samples > 0 && !call.decoded_pcm_sha256.empty();
                                               }) &&
                                   !pcm_sha256_.empty() && pcm_sample_count_ > 0;
+            const char* speaker_shape_json = speaker_embedding_file_.empty() ? "null" : "[2048]";
+            const size_t speaker_bytes = speaker_embedding_file_.empty() ? 0 : 8192;
             std::ostringstream out;
             out.imbue(std::locale::classic());
             out << "{\n"
@@ -723,9 +725,8 @@ private:
                 << ", \"codebook_count\": " << codebook_count_
                 << ", \"speaker_embedding_sha256\": " << detail::json_nullable_string(speaker_embedding_sha256_)
                 << ", \"speaker_embedding_file\": " << detail::json_nullable_string(speaker_embedding_file_)
-                << ", \"speaker_embedding_shape\": "
-                << (speaker_embedding_file_.empty() ? "null" : "[2048]")
-                << ", \"speaker_embedding_size_bytes\": " << (speaker_embedding_file_.empty() ? 0 : 8192)
+                << ", \"speaker_embedding_shape\": " << speaker_shape_json
+                << ", \"speaker_embedding_size_bytes\": " << speaker_bytes
                 << "},\n"
                 << "  \"sampling\": {\"seed_effective\": " << metadata_.seed
                 << ", \"temperature_requested\": " << detail::json_float(metadata_.temperature)
