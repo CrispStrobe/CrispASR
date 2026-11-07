@@ -293,3 +293,13 @@ that reference; unconditioned waveform relative RMS was 5.31e-7. The
 [receipt](historical/reuse-avx2-kaggle-1s-20261107.json) records every stage,
 input and model hashes. This is one excerpt, using the unfused CPU adapter;
 it does not establish fused CUDA, other hardware or speech-quality parity.
+
+
+The capture-only retry `issue579-reuse-fused-capture-v2` loaded the pinned
+built wheels with compatible isolated Transformers dependencies. It ran the
+original fused Mamba 2.2.4 model on a T4 and captured 72 tensors; the worker
+counted 120 calls each to the fused selective-scan and causal-convolution CUDA
+extensions. The [capture receipt](historical/reuse-fused-capture-20261107.json)
+records input, model and wheel hashes and dependency versions. The native
+cuFFT comparison against this capture is running as
+`issue579-reuse-cuda-fused-v1`; the capture alone is not a native parity pass.

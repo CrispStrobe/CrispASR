@@ -1,0 +1,383 @@
+{
+  "script_version": "fused-capture-only-v2",
+  "torch": "2.11.0+cu130",
+  "cuda": "13.0",
+  "device": "Tesla T4",
+  "mamba": "2.2.4",
+  "fused_kernel": true,
+  "extension_calls": {
+    "selective_scan_cuda.fwd": 120,
+    "causal_conv1d_cuda.causal_conv1d_fwd": 120
+  },
+  "input_sha256": "12e4f02454a088fedba2fb0876101d79211e8b1b6ae27c62968e501e4fe8f283",
+  "model_sha256": "06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1",
+  "stage_shapes": {
+    "raw_audio": [
+      1600
+    ],
+    "frontend_magnitude": [
+      21,
+      321
+    ],
+    "frontend_phase": [
+      21,
+      321
+    ],
+    "encoder_layer_0": [
+      64,
+      23,
+      323
+    ],
+    "encoder_layer_1": [
+      64,
+      23,
+      323
+    ],
+    "encoder_layer_2": [
+      64,
+      23,
+      323
+    ],
+    "encoder_layer_3": [
+      64,
+      23,
+      323
+    ],
+    "encoder_layer_4": [
+      64,
+      23,
+      323
+    ],
+    "encoder_layer_5": [
+      64,
+      6,
+      161
+    ],
+    "block_time_0": [
+      64,
+      6,
+      161
+    ],
+    "block_0": [
+      64,
+      6,
+      161
+    ],
+    "block_time_1": [
+      64,
+      6,
+      161
+    ],
+    "block_1": [
+      64,
+      6,
+      161
+    ],
+    "block_time_2": [
+      64,
+      6,
+      161
+    ],
+    "block_2": [
+      64,
+      6,
+      161
+    ],
+    "block_time_3": [
+      64,
+      6,
+      161
+    ],
+    "block_3": [
+      64,
+      6,
+      161
+    ],
+    "block_time_4": [
+      64,
+      6,
+      161
+    ],
+    "block_4": [
+      64,
+      6,
+      161
+    ],
+    "block_time_5": [
+      64,
+      6,
+      161
+    ],
+    "block_5": [
+      64,
+      6,
+      161
+    ],
+    "block_time_6": [
+      64,
+      6,
+      161
+    ],
+    "block_6": [
+      64,
+      6,
+      161
+    ],
+    "block_time_7": [
+      64,
+      6,
+      161
+    ],
+    "block_7": [
+      64,
+      6,
+      161
+    ],
+    "block_time_8": [
+      64,
+      6,
+      161
+    ],
+    "block_8": [
+      64,
+      6,
+      161
+    ],
+    "block_time_9": [
+      64,
+      6,
+      161
+    ],
+    "block_9": [
+      64,
+      6,
+      161
+    ],
+    "block_time_10": [
+      64,
+      6,
+      161
+    ],
+    "block_10": [
+      64,
+      6,
+      161
+    ],
+    "block_time_11": [
+      64,
+      6,
+      161
+    ],
+    "block_11": [
+      64,
+      6,
+      161
+    ],
+    "block_time_12": [
+      64,
+      6,
+      161
+    ],
+    "block_12": [
+      64,
+      6,
+      161
+    ],
+    "block_time_13": [
+      64,
+      6,
+      161
+    ],
+    "block_13": [
+      64,
+      6,
+      161
+    ],
+    "block_time_14": [
+      64,
+      6,
+      161
+    ],
+    "block_14": [
+      64,
+      6,
+      161
+    ],
+    "block_time_15": [
+      64,
+      6,
+      161
+    ],
+    "block_15": [
+      64,
+      6,
+      161
+    ],
+    "block_time_16": [
+      64,
+      6,
+      161
+    ],
+    "block_16": [
+      64,
+      6,
+      161
+    ],
+    "block_time_17": [
+      64,
+      6,
+      161
+    ],
+    "block_17": [
+      64,
+      6,
+      161
+    ],
+    "block_time_18": [
+      64,
+      6,
+      161
+    ],
+    "block_18": [
+      64,
+      6,
+      161
+    ],
+    "block_time_19": [
+      64,
+      6,
+      161
+    ],
+    "block_19": [
+      64,
+      6,
+      161
+    ],
+    "block_time_20": [
+      64,
+      6,
+      161
+    ],
+    "block_20": [
+      64,
+      6,
+      161
+    ],
+    "block_time_21": [
+      64,
+      6,
+      161
+    ],
+    "block_21": [
+      64,
+      6,
+      161
+    ],
+    "block_time_22": [
+      64,
+      6,
+      161
+    ],
+    "block_22": [
+      64,
+      6,
+      161
+    ],
+    "block_time_23": [
+      64,
+      6,
+      161
+    ],
+    "block_23": [
+      64,
+      6,
+      161
+    ],
+    "block_time_24": [
+      64,
+      6,
+      161
+    ],
+    "block_24": [
+      64,
+      6,
+      161
+    ],
+    "block_time_25": [
+      64,
+      6,
+      161
+    ],
+    "block_25": [
+      64,
+      6,
+      161
+    ],
+    "block_time_26": [
+      64,
+      6,
+      161
+    ],
+    "block_26": [
+      64,
+      6,
+      161
+    ],
+    "block_time_27": [
+      64,
+      6,
+      161
+    ],
+    "block_27": [
+      64,
+      6,
+      161
+    ],
+    "block_time_28": [
+      64,
+      6,
+      161
+    ],
+    "block_28": [
+      64,
+      6,
+      161
+    ],
+    "block_time_29": [
+      64,
+      6,
+      161
+    ],
+    "block_29": [
+      64,
+      6,
+      161
+    ],
+    "amplitude": [
+      21,
+      321
+    ],
+    "output_phase": [
+      21,
+      321
+    ],
+    "waveform": [
+      1600
+    ]
+  },
+  "stages_sha256": "e4566586ec9f0ee4c49fbde7437a7580360099d41a352ba16f4a185ca4cbfcf8",
+  "note": "Original source capture. Native parity acceptance remains a separate unchanged gate.",
+  "dependency_versions": {
+    "transformers": "4.46.3",
+    "tokenizers": "0.20.3",
+    "huggingface-hub": "0.26.2"
+  },
+  "reused_wheel_sha256": {
+    "causal_conv1d-1.5.0.post8-cp313-cp313-linux_x86_64.whl": "96ba07e982904fc13f6ef345d10b4f29d4a5f4350fe8ed1bcf2b2bd81d93eef6",
+    "mamba_ssm-2.2.4-cp313-cp313-linux_x86_64.whl": "91dd8763ba0139acb544942310d01d5fbf6b27da07b6697c746476496b95a67c"
+  },
+  "kernel_rebuilt": false,
+  "torch_reinstalled": false,
+  "run": "issue579-reuse-fused-capture-v2",
+  "scope": "Original fused Mamba 2.2.4 source capture, one 100 ms clip on T4. Native parity requires a separate comparison."
+}
