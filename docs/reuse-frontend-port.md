@@ -30,6 +30,12 @@ PReLU. All six synthetic stages are compared against independently generated
 PyTorch outputs. This does not yet load the checkpoint, validate actual-model
 encoder activations, or connect a dense encoder to a usable backend.
 
+`reuse-selective-scan-reference` covers the Mamba-1 recurrent scan in isolation
+against a small independent PyTorch fixture and a closed-form recurrence. It
+also rejects nonfinite values, invalid shapes and aliased output buffers. The
+scan still needs the projection/convolution layers, bidirectional time and
+frequency blocks, original-checkpoint intermediate parity and decoded audio.
+
 The in-progress F32 converter `models/convert-reuse-to-gguf.py` pins the NVIDIA
 checkpoint and config hashes, validates its model/frontend contract, and
 rejects malformed or nonfinite tensors. `reuse-converter-controls` covers
