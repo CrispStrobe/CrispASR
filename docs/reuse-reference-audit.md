@@ -265,3 +265,14 @@ stage, the GPU and source/model hashes. The reference uses the unfused Mamba
 CUDA path; the native model graph and inverse FFT remain CPU implementations.
 This is one short model input on a T4, not full GPU backend, fused-kernel,
 long-recording, other-device or speech-quality qualification.
+
+The original fused Mamba comparison is not yet complete. Kaggle compiler
+preflight `issue579-reuse-fused-source-v1` passed on a T4 with the installed
+PyTorch 2.11/CUDA 13 and pinned CCCL 2.8.2 headers. It checked the original
+Mamba 2.2.4 and causal-convolution C++ bindings and legacy CUB helpers. Only
+build configuration was adjusted for the GPU architecture and headers; the
+package and kernel source manifests remained unchanged. The
+[preflight receipt](historical/reuse-fused-preflight-20261107.json) records
+pins and checks. The full extension build and fused reference capture are
+running as `issue579-reuse-fused-source-v2`; preflight alone is not fused-model
+parity.

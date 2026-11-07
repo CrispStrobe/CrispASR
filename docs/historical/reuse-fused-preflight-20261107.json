@@ -1,0 +1,116 @@
+{
+  "scope": "Compiler-only CUDA 13 preflight; no fused extensions built or model run. Setup configuration adjusted for assigned GPU and pinned CCCL headers; pinned kernel and model source bytes remain unchanged.",
+  "run": "issue579-reuse-fused-source-v1",
+  "script_sha256": "9f399aa898792e5d8743b68dd360adb76116f713162f55b283cffa78d6931035",
+  "device": "Tesla T4",
+  "capability": [
+    7,
+    5
+  ],
+  "torch": "2.11.0+cu130",
+  "torch_cuda": "13.0",
+  "nvcc": "nvcc: NVIDIA (R) Cuda compiler driver\nCopyright (c) 2005-2025 NVIDIA Corporation\nBuilt on Wed_Aug_20_01:58:59_PM_PDT_2025\nCuda compilation tools, release 13.0, V13.0.88\nBuild cuda_13.0.r13.0/compiler.36424714_0\n",
+  "sources": {
+    "cccl": {
+      "repo": "NVIDIA/cccl",
+      "commit": "207d20fb6a4165fcd2551bcf2f04b8a5ea40829f",
+      "archive_sha256": "1e83eee7a84b1465613aab59ebe90469cbe08418df429229b5a782373cab0984"
+    },
+    "causal": {
+      "repo": "Dao-AILab/causal-conv1d",
+      "commit": "82867a9d2e6907cc0f637ac6aff318f696838548",
+      "archive_sha256": "dbea657c2783a79c9f30459de5670ffb92b6474e730002af97e7101859793d9b",
+      "setup_before_sha256": "a82a5a1e6d6ced6264a2287049d5e40dbd74455fbf8286eabd10ec73882049be",
+      "setup_after_sha256": "421d9fad84b55ded4d06f67b4eb64873c7106bca1abbcedddf5ff045aa683aa3",
+      "source_manifest": {
+        "csrc/causal_conv1d_bwd.cu": "aa1869e166f42dbbeb9979995bc49ed6a7bf0600bceb3fba1314123e12d8a851",
+        "csrc/causal_conv1d.cpp": "34dc77d0736d33cfcae05ca411310d4c799f55ab168be3023ba1d5087142c41d",
+        "csrc/causal_conv1d_fwd.cu": "a5247c4a09983490c306628db54db60cf81e757564a548ad5fcccdbd6c6bc49c",
+        "csrc/causal_conv1d.h": "f0852e16e0b20bda41b0185633512caf0bf9deaafa0f43fa73a3730c1574d9a9",
+        "csrc/causal_conv1d_common.h": "524d783f7470f85a2477be0a9b8a4fe729db5e87747aa341815bb56137c777dc",
+        "csrc/causal_conv1d_update.cu": "a4a78b9fcadb499f47c7caf1f8ae5440061986d1c14f8ccaa6f6ae8446c2f40a",
+        "csrc/static_switch.h": "9e587f9083d153fbe426476269ea9cf4471233bf3bcba28519d11248c7a52104",
+        "causal_conv1d/__init__.py": "5c741ba2da8feb8007634a0259559a9feee5afb8640a4a757fc1e913ff8a4298",
+        "causal_conv1d/causal_conv1d_varlen.py": "d72cb3150814f534dfb55ea39bba742e1a39e322565409b7c10212a94b3f113e",
+        "causal_conv1d/causal_conv1d_interface.py": "7286f93996561532dac8452de1e75bd44a31baf5acbb3ad4fd48b87fbc7fdc94"
+      },
+      "source_manifest_sha256": "cc1276bcad2be267885f53111ddeb155d83c878f126e22027cdef96123a41cea"
+    },
+    "mamba": {
+      "repo": "state-spaces/mamba",
+      "commit": "95d8aba8a8c75aedcaa6143713b11e745e7cd0d9",
+      "archive_sha256": "35daae647a49238cc78ccf8684d8e9e3854b5964684b870d1987c19dddd1599d",
+      "setup_before_sha256": "86373633789fde9e7d896654c10d2abd92dbab86ee8d85069c216c57c56571a5",
+      "setup_after_sha256": "4680260f517821b2947a8fe1f585e9ac8b1c5e1f72596fc24a324f7d8df23d0a",
+      "source_manifest": {
+        "csrc/selective_scan/selective_scan_bwd_kernel.cuh": "4aa885e6e06e2263fc995173a3088df85e9be49cfe18ef641d3c795eb191cb11",
+        "csrc/selective_scan/selective_scan_bwd_bf16_real.cu": "6c7c3d8fc74d46103f4cc05d273437f451945db5e92f0aba6c25dd7e8a4a59d1",
+        "csrc/selective_scan/selective_scan_bwd_fp16_real.cu": "ce5a8f9bb9e485be8ca70fec63b084f908598f6a1cdd47d754290f2057ee2f61",
+        "csrc/selective_scan/selective_scan.cpp": "c9cd8b171580a3440a757238aae597a02682d368bfc86e66012197fb35e8176f",
+        "csrc/selective_scan/selective_scan_bwd_fp32_complex.cu": "9462ad461cde1bded09a0ef236ae4b070ccb7aadae61e27b78a3dc6e1a5a033d",
+        "csrc/selective_scan/selective_scan.h": "fd82ff6ac520cc250ecae5fc01a948a7cba33e977dce2a6822064664759511a1",
+        "csrc/selective_scan/selective_scan_fwd_fp32.cu": "2ae10cb46816a25caa9711fd8b0aa9252763cda46f7f1765c11ca29bf57944b1",
+        "csrc/selective_scan/selective_scan_fwd_fp16.cu": "f5b32ea6a10c755032e469754adbfbb554fab562eede31d33d99f746f5991a8c",
+        "csrc/selective_scan/selective_scan_fwd_kernel.cuh": "581b84ccd91833a42aff5abbf354706c25e03ff13ada04129bc964ac8ca7889c",
+        "csrc/selective_scan/selective_scan_bwd_fp32_real.cu": "142e266e024f53f41c65f8f114fbc21b1d873a262a2e9743f9965ba069eda4e9",
+        "csrc/selective_scan/selective_scan_common.h": "e3efa8931564a7d724e1b35af877923aa7c348b8ac1aa15715a514130c531ed0",
+        "csrc/selective_scan/reverse_scan.cuh": "01e4c0960d7548d924be64850bef91cb4668a0b8d9dae732c20efa9430649326",
+        "csrc/selective_scan/selective_scan_fwd_bf16.cu": "a3b0256715f39866274d9c9ef7e9791d2b22c71a5efd451c384ad8211ad2d7b6",
+        "csrc/selective_scan/selective_scan_bwd_fp16_complex.cu": "cf749e40690f9c2131cfe9b23ac42da4446bc747e6fd8f1aed45124d2cd5b74b",
+        "csrc/selective_scan/uninitialized_copy.cuh": "00138cc4f97dfc0bfb9a8956d54560a5627c61ec0893eebb54cf1e59c3b3a3f8",
+        "csrc/selective_scan/selective_scan_bwd_bf16_complex.cu": "d3191c1308b455c4576938a656b26a9434bb35e06746077de0dcad262d92a6c9",
+        "csrc/selective_scan/static_switch.h": "1eb3ebf9f2f231be1bfad83ad15612031e24980336c0019f2d742bce599f704c",
+        "mamba_ssm/__init__.py": "35040319bf473eb1bb812b8d6cbeb69c52db402a7e1c6c22298e5e1eefc523bf",
+        "mamba_ssm/modules/ssd_minimal.py": "6442a9fe25a6792258df657392ab1fab4dd873ee777d9dd5783cc76030218e07",
+        "mamba_ssm/modules/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mamba_ssm/modules/mha.py": "4244dabb6871742c53b925fce0a5a061ad7072e46430264b70bc225977014bb8",
+        "mamba_ssm/modules/mamba2.py": "605e4439ff0baec8d8acaf4a191d9f0570eea9900065a065909124c472b08707",
+        "mamba_ssm/modules/mlp.py": "d3aa360ae67608d2582975f25ec9adc57613e442f2edefcd88e91363e6de5021",
+        "mamba_ssm/modules/mamba_simple.py": "a17e4c51b582dc0d4d690a649eba521cd0c1ee3dc8f0473a0967cdc9ec0874e3",
+        "mamba_ssm/modules/block.py": "b62e755195c277a027c5d9cc8d576a8ae4a1d1317143b91370b2f8ce683b4cc1",
+        "mamba_ssm/modules/mamba2_simple.py": "61149f49cf58cfaeeeef6476dfb25468ad0260760c1ab240fdae97ec93c170f5",
+        "mamba_ssm/utils/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mamba_ssm/utils/torch.py": "1c3132a1a747e914874e84b5f300ea80d0297faba6eb9256cb5ac4b3d6413c06",
+        "mamba_ssm/utils/hf.py": "aa6f3a349826612bf3b310d209ebe50546bf1b2be9bcee3d5959cabfa7d235f6",
+        "mamba_ssm/utils/generation.py": "d7d480653dc62ed04b74dd326f0ecde147f29f2bbd205230dec046a3d0cd32e1",
+        "mamba_ssm/models/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mamba_ssm/models/config_mamba.py": "2a72c1686f775b56547e39ca4406ba10148d12fd7a791c57ce2ba85126010fcd",
+        "mamba_ssm/models/mixer_seq_simple.py": "13409d7044e930ea3271e4b8ddceaf8155ec49b8e5ac299fba7bb0df6d80cb21",
+        "mamba_ssm/ops/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mamba_ssm/ops/selective_scan_interface.py": "c79f4432536402fe4d6c1026ccf8d5fc0aaa62b790e9a622295aee14ac45dbcc",
+        "mamba_ssm/distributed/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mamba_ssm/distributed/tensor_parallel.py": "e4569c4fda74a801f4ad560cc9a8b5c046cd3273a5855267ed6eccf38109d8e0",
+        "mamba_ssm/distributed/distributed_utils.py": "aa17326d15edb25b2cb95f4b61a432dfb85a3da3ed925338614303c7d52f9e74",
+        "mamba_ssm/ops/triton/layer_norm.py": "006fb18f7098fc244a318c899841ad4c1a6ea0f614dfe7a1feb4e2e38185235f",
+        "mamba_ssm/ops/triton/ssd_combined.py": "3717ba118605d9a5c9271d9195e2168c55b82242adcd46b143d3d9918f7c72ba",
+        "mamba_ssm/ops/triton/__init__.py": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+        "mamba_ssm/ops/triton/ssd_chunk_scan.py": "97349ae83e670029ab3b44da9487c306d4eef6957fbd4da538da0f56c8de9b20",
+        "mamba_ssm/ops/triton/selective_state_update.py": "b5162cb0c204e7226157839c16405f69a94620d4447f83fe8c58496285de2c69",
+        "mamba_ssm/ops/triton/ssd_state_passing.py": "615dc8c5a781db2b0fa34aa1fb848cc7c4355bbeed32fc39ec3361490e11e975",
+        "mamba_ssm/ops/triton/ssd_chunk_state.py": "c970c25ffcb5de3f0171dd035d73c0d59f62d711c0ebbc9a9c171c37194dc4be",
+        "mamba_ssm/ops/triton/ssd_bmm.py": "2db3c55dd50ac8be8945c5ae3a283e6d1234eb239caa4d96d1dff3fbca86a367",
+        "mamba_ssm/ops/triton/k_activations.py": "855725e832deac34fb5f1646d252fbb2d038e2d8fad14120f89092931b26147e",
+        "mamba_ssm/ops/triton/softplus.py": "addcf96f306dd2c9bf1c9ef9feda42381a6e55ad906dd92e220598fcfec7b508",
+        "mamba_ssm/ops/triton/layernorm_gated.py": "eb6252e247b90f1c8a75946efbc1a221e0c4da701b6757ddae49f3495cf7a42f"
+      },
+      "source_manifest_sha256": "6da7433597dcb69d7f4f81d4716c3dbabbe00c3cd5d75c31d25007500b14ca08"
+    }
+  },
+  "checks": [
+    {
+      "step": "cub-header-preflight",
+      "returncode": 0,
+      "elapsed_s": 7.28
+    },
+    {
+      "step": "causal-binding-preflight",
+      "returncode": 0,
+      "elapsed_s": 18.02
+    },
+    {
+      "step": "mamba-binding-preflight",
+      "returncode": 0,
+      "elapsed_s": 12.05
+    }
+  ]
+}
