@@ -26,6 +26,14 @@ class CompareControls(unittest.TestCase):
         with self.assertRaises(AssertionError):
             module.compare('scaled', x, 2 * x, 0.002)
 
+    def test_phase_branch_cut_is_not_treated_as_equal_model_input(self):
+        # These angles describe the same complex point, but the model reads
+        # raw phase values, so +pi and -pi must not pass the input gate.
+        reference = np.array([np.pi, 0.5], dtype=np.float32)
+        native = np.array([-np.pi, 0.5], dtype=np.float32)
+        with self.assertRaises(AssertionError):
+            module.compare('raw_phase', reference, native, 0.002)
+
     def test_nonfinite_shape_and_silence_rejected(self):
         x = np.array([0.2, -0.4, 0.7], dtype=np.float32)
         for invalid in (np.array([np.nan, 0, 0]), np.zeros(3), np.zeros(2)):
