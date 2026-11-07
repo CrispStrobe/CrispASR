@@ -1,11 +1,6 @@
 name: issue579 Ultra CPU parity
 on:
   workflow_dispatch:
-  # Weekly upstream-parity regression gate for the documented Ultra path
-  # (#579): the aligner runtime is shared with qwen3-forced-aligner, so a
-  # runtime change that breaks Ultra would otherwise go unnoticed.
-  schedule:
-    - cron: '10 5 * * 0'
 permissions:
   contents: read
 jobs:
