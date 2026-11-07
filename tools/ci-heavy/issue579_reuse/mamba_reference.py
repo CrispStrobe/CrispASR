@@ -19,18 +19,29 @@ dt_bias = values(inner, 9, 4, 32)
 a_log = values(inner * states, 5, 2, 16).reshape(inner, states)
 d = values(inner, 7, 3, 32)
 out_weight = values(model * inner, 11, 5, 64).reshape(model, inner)
-u, z = F.linear(x, in_weight).transpose(1, 2).chunk(2, dim=1)
-u = F.silu(F.conv1d(u, conv_weight, conv_bias, padding=kernel - 1, groups=inner)[..., :times])
-factors = F.linear(u.transpose(1, 2), x_weight)
-dt, b, c = torch.split(factors, (rank, states, states), dim=-1)
-delta = F.softplus(F.linear(dt, dt_weight, dt_bias)).transpose(1, 2)
-a = -torch.exp(a_log)
-state = torch.zeros(batch, inner, states)
-out = []
-for t in range(times):
-    state = torch.exp(delta[:, :, t, None] * a) * state + (delta[:, :, t] * u[:, :, t])[:, :, None] * b[:, t, None, :]
-    y = (state * c[:, t, None, :]).sum(-1) + d * u[:, :, t]
-    out.append(y * F.silu(z[:, :, t]))
-y = F.linear(torch.stack(out, dim=2).transpose(1, 2), out_weight)
+def forward(x):
+    u, z = F.linear(x, in_weight).transpose(1, 2).chunk(2, dim=1)
+    u = F.silu(F.conv1d(u, conv_weight, conv_bias, padding=kernel - 1, groups=inner)[..., :times])
+    factors = F.linear(u.transpose(1, 2), x_weight)
+    dt, b, c = torch.split(factors, (rank, states, states), dim=-1)
+    delta = F.softplus(F.linear(dt, dt_weight, dt_bias)).transpose(1, 2)
+    a = -torch.exp(a_log)
+    state = torch.zeros(batch, inner, states)
+    out = []
+    for t in range(times):
+        state = torch.exp(delta[:, :, t, None] * a) * state + (delta[:, :, t] * u[:, :, t])[:, :, None] * b[:, t, None, :]
+        y = (state * c[:, t, None, :]).sum(-1) + d * u[:, :, t]
+        out.append(y * F.silu(z[:, :, t]))
+    return F.linear(torch.stack(out, dim=2).transpose(1, 2), out_weight)
+
+y = forward(x)
 Path('tests/fixtures/reuse-mamba-f32le.bin').write_bytes(y.contiguous().numpy().astype('<f4').tobytes())
+backward = forward(x.flip(1)).flip(1)
+projection = values(model * 2 * model, 13, 6, 32).reshape(model, 2 * model)
+bias = values(model, 7, 3, 32)
+norm_weight = values(model, 5, 2, 32, 1)
+norm_bias = values(model, 9, 4, 64)
+bidir = F.layer_norm(F.linear(torch.cat((y + x, backward + x), dim=-1), projection, bias),
+                     (model,), norm_weight, norm_bias, eps=1e-5)
+Path('tests/fixtures/reuse-bimamba-f32le.bin').write_bytes(bidir.contiguous().numpy().astype('<f4').tobytes())
 print('REUSE_MAMBA_REFERENCE', list(y.shape))

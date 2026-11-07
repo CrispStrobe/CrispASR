@@ -6886,6 +6886,11 @@ add_test(NAME reuse-mamba-reference COMMAND test-reuse-mamba
     ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-mamba-f32le.bin)
 set_tests_properties(reuse-mamba-reference PROPERTIES LABELS "unit;reuse;audio")
 
+add_executable(test-reuse-bimamba test-reuse-bimamba.cpp)
+add_test(NAME reuse-bimamba-reference COMMAND test-reuse-bimamba
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-bimamba-f32le.bin)
+set_tests_properties(reuse-bimamba-reference PROPERTIES LABELS "unit;reuse;audio")
+
 add_executable(test-qwen3-tts-capture test-qwen3-tts-capture.cpp)
 target_include_directories(test-qwen3-tts-capture PRIVATE
     ${PROJECT_SOURCE_DIR}/src
