@@ -101,6 +101,10 @@ int main() {
             return 2;
     const auto saved_phase = trace.phase;
     std::vector<float> conditioned;
+    conditioned = {42};
+    if (reuse_reference_network::run(model, input, 8000, conditioned, nullptr, nullptr, nullptr) ||
+        conditioned != std::vector<float>{42})
+        return 12;
     if (!reuse_reference_network::run(model, input, 8000, conditioned, nullptr, &saved_phase) || conditioned != output)
         return 6;
     auto invalid_phase = saved_phase;

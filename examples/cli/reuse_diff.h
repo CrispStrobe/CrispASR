@@ -4,8 +4,10 @@
 #include "crispasr_diff.h"
 #include "core/ggml_cpu_backend.h"
 #include "core/reuse_reference_network.h"
+#include "reuse_frontend_profile.h"
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -43,6 +45,15 @@ inline bool compare(const crispasr_diff::Ref& ref, const std::string& name, cons
 }
 
 inline int run(const std::string& model_path, const std::string& ref_path) {
+    reuse_frontend_profile::Analyze frontend = nullptr;
+    const char* profile = nullptr;
+    if (!reuse_frontend_profile::select(std::getenv("CRISPASR_REUSE_FRONTEND"), frontend, profile))
+        return 2;
+#ifdef CRISPASR_REUSE_HAVE_MKL
+    if (std::string(profile) == "mkl")
+        std::printf("reuse: experimental CPU frontend mkl; %s; parity is reference-environment-specific\n",
+                    reuse_frontend_mkl::version().c_str());
+#endif
     crispasr_diff::Ref ref;
     if (!ref.load(ref_path))
         return 2;
@@ -57,7 +68,7 @@ inline int run(const std::string& model_path, const std::string& ref_path) {
         ref.get_f32("frontend_imaginary").first) {
         reuse_frontend::Spectrum spectrum;
         reuse_frontend::Diagnostics observations;
-        if (!reuse_frontend::analyze(samples, 16000, spectrum, &observations))
+        if (!frontend(samples, 16000, spectrum, &observations))
             return 2;
         diagnose(ref, "frontend_window", observations.window, {640});
         const std::vector<int64_t> shape = {static_cast<int64_t>(spectrum.bins), static_cast<int64_t>(spectrum.frames)};
@@ -77,14 +88,15 @@ inline int run(const std::string& model_path, const std::string& ref_path) {
         std::vector<float> output, reference_phase(phase.first, phase.first + phase.second);
         reuse_reference_network::Trace trace;
         if (!reuse_reference_network::run(model, samples, 16000, output, &trace,
-                                          conditioned ? &reference_phase : nullptr) ||
+                                          conditioned ? &reference_phase : nullptr, frontend) ||
             trace.encoder_layers.size() != 6 || trace.block_time.size() != 30 || trace.blocks.size() != 30)
             return 2;
-        const char* prefix = conditioned ? "conditioned/" : "native/";
+        const std::string prefix = std::string(profile) == "native" ? (conditioned ? "conditioned/" : "native/")
+                                                                    : (conditioned ? "mkl-conditioned/" : "mkl/");
         bool group = true;
         const auto check = [&](const std::string& name, const std::vector<float>& data,
                                const std::vector<int64_t>& shape, double tolerance = 0.002) {
-            group = compare(ref, name, data, shape, prefix, tolerance) && group;
+            group = compare(ref, name, data, shape, prefix.c_str(), tolerance) && group;
         };
         const int64_t frames = static_cast<int64_t>(1 + samples.size() / 80), bins = 321;
         check("frontend_magnitude", trace.magnitude, {bins, frames});

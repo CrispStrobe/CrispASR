@@ -5738,6 +5738,11 @@ if(Python3_Interpreter_FOUND)
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reuse_phase_stability.py)
     set_tests_properties(reuse-frontend-stability-controls reuse-reference-dumper-controls reuse-phase-stability-controls
         PROPERTIES LABELS "unit;reuse;audio" SKIP_RETURN_CODE 77)
+    if(NOT TARGET crispasr-reuse-mkl)
+        add_test(NAME reuse-mkl-dependency-controls
+            COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reuse_mkl_probe.py)
+        set_tests_properties(reuse-mkl-dependency-controls PROPERTIES LABELS "unit;reuse;audio")
+    endif()
     add_test(NAME omnivoice-acceptance-policy
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_omnivoice_acceptance_policy.py -v)
     set_tests_properties(omnivoice-acceptance-policy PROPERTIES LABELS "unit;tts;omnivoice")
@@ -6881,6 +6886,24 @@ add_test(NAME reuse-frontend-reference COMMAND test-reuse-frontend
     ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-stft-44100-reference-f32le.bin
     ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-istft-reference-f32le.bin)
 set_tests_properties(reuse-frontend-reference PROPERTIES LABELS "unit;reuse;audio")
+
+add_executable(test-reuse-frontend-profile test-reuse-frontend-profile.cpp)
+target_include_directories(test-reuse-frontend-profile PRIVATE ${PROJECT_SOURCE_DIR}/src)
+add_test(NAME reuse-frontend-profile-default COMMAND test-reuse-frontend-profile)
+set_tests_properties(reuse-frontend-profile-default PROPERTIES LABELS "unit;reuse;audio")
+if(TARGET crispasr-reuse-mkl)
+    add_executable(test-reuse-frontend-profile-mkl test-reuse-frontend-profile.cpp)
+    target_include_directories(test-reuse-frontend-profile-mkl PRIVATE ${CRISPASR_REUSE_MKL_INCLUDE_DIR})
+    target_link_libraries(test-reuse-frontend-profile-mkl PRIVATE crispasr-reuse-mkl)
+    add_test(NAME reuse-frontend-profile-mkl COMMAND test-reuse-frontend-profile-mkl)
+    set_tests_properties(reuse-frontend-profile-mkl PROPERTIES LABELS "unit;reuse;audio")
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME reuse-mkl-probe-controls
+            COMMAND ${CMAKE_COMMAND} -E env "REUSE_MKL_FRONTEND_PROBE=$<TARGET_FILE:reuse-frontend-mkl-probe>"
+                ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reuse_mkl_probe.py)
+        set_tests_properties(reuse-mkl-probe-controls PROPERTIES LABELS "unit;reuse;audio")
+    endif()
+endif()
 
 add_executable(test-reuse-dense-encoder test-reuse-dense-encoder.cpp)
 add_test(NAME reuse-dense-encoder-reference COMMAND test-reuse-dense-encoder

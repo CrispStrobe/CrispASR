@@ -13,13 +13,13 @@ struct Trace {
 };
 
 inline bool run(const reuse_model_loader::Model& model, const std::vector<float>& audio, int sample_rate,
-                std::vector<float>& output, Trace* trace = nullptr,
-                const std::vector<float>* phase_override = nullptr) {
+                std::vector<float>& output, Trace* trace = nullptr, const std::vector<float>* phase_override = nullptr,
+                decltype(&reuse_frontend::analyze) frontend = reuse_frontend::analyze) {
     if (model.encoder.size() != 6 || model.blocks.size() != 30)
         return false;
     try {
         reuse_frontend::Spectrum spectrum;
-        if (!reuse_frontend::analyze(audio, sample_rate, spectrum))
+        if (!frontend || !frontend(audio, sample_rate, spectrum, nullptr))
             return false;
         if (phase_override) {
             if (phase_override->size() != spectrum.phase.size() || !reuse_dense_encoder::finite(*phase_override))
