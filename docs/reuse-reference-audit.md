@@ -188,3 +188,19 @@ mismatches from 36 to 38 against local PyTorch and from 35 to 31 against Kaggle.
 This isolates a backend or environment effect between those PyTorch runs; it
 does not exclude separate effects from native window rounding. No window or
 phase convention change was accepted as a parity fix.
+
+An external oneMKL 2025 CPU frontend prototype independently generates the Hann
+window with high-accuracy vector cosine and runs the public DFTI real FFT. On
+the local x86-64 environment it matched the local PyTorch window and complex
+FFT byte-for-byte on one 100 ms and one one-second input; raw phase had no
+branch flips and differed by at most 2.39e-7. Replaying its phase with the
+native model's own magnitude passed all 71 existing native intermediate and
+waveform checks against the local 100 ms reference, including 9.93e-7 relative
+waveform RMS. The independently generated window produced the same bytes as
+the captured-window prototype used for that replay. It still disagreed with
+the Kaggle phase reference at 47 first-frame bins; its waveform was 1.49%
+different from that reference, above the 0.5% gate. The
+[receipt](historical/reuse-onemkl-prototype-20261107.json) records the full
+stage results. This is a pinned-profile result, not portable or fused-CUDA
+parity. The local profile loaded roughly 220 MiB of external MKL/OpenMP shared
+objects; none are bundled. An opt-in research integration is being evaluated.

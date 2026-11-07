@@ -1,0 +1,624 @@
+{
+  "scope": "Experimental external oneMKL CPU frontend profile. Single local x86-64 AVX512 host, two input durations; 100 ms native model replay using original native magnitude and candidate phase. Not an integrated backend or cross-environment parity result.",
+  "source_revision": "72203acc2",
+  "one_mkl": "2025.0.0 build 20241009",
+  "torch": "2.11.0+cu130 CPU",
+  "loaded_library_mib": 219.79188537597656,
+  "frontend": {
+    "note": "Independent VML_HA window generation; public oneMKL DFTI headers; no reference arrays consumed by executable. Same-host observations only.",
+    "cases": [
+      {
+        "case": "01s",
+        "samples": 1600,
+        "input_f32_sha256": "12e4f02454a088fedba2fb0876101d79211e8b1b6ae27c62968e501e4fe8f283",
+        "diagnostic_sha256": "91a8112fb37ea3cd5a389ab8b0d5cfe61fb33f357a10dc86058e85842f50f2e7",
+        "window_differing_values": 0,
+        "real_max_abs": 0.0,
+        "imaginary_max_abs": 0.0,
+        "phase_max_abs": 2.384185791015625e-07,
+        "phase_relative_rmse": 2.8984459101295768e-08,
+        "phase_branch_flips": 0
+      },
+      {
+        "case": "1s",
+        "samples": 16000,
+        "input_f32_sha256": "150e64693ab9ff7b3979cde7263ccf7863162efbc4141dd18f991c8fb85ca1a8",
+        "diagnostic_sha256": "a14b17eef07f6efd782b20fe2179966b88d4926fbafb05a8c0b448fc55601ec5",
+        "window_differing_values": 0,
+        "real_max_abs": 0.0,
+        "imaginary_max_abs": 0.0,
+        "phase_max_abs": 2.384185791015625e-07,
+        "phase_relative_rmse": 3.0270939226409396e-08,
+        "phase_branch_flips": 0
+      }
+    ],
+    "same_as_previously_tested_captured_window_candidate_01s": true,
+    "same_as_previously_tested_captured_window_candidate_1s": true,
+    "native_phase_replay_boundary_count": 71,
+    "native_phase_replay_failures": 0
+  },
+  "waveform_comparison": {
+    "local": {
+      "relative_rmse": 9.926856991899077e-07,
+      "norm_ratio": 0.9999998649372542,
+      "cosine": 0.9999999999995165,
+      "max_abs": 2.644956111907959e-07
+    },
+    "kaggle": {
+      "relative_rmse": 0.014863352475658837,
+      "norm_ratio": 1.0046846096668447,
+      "cosine": 0.999900977044353,
+      "max_abs": 0.00421992689371109
+    }
+  },
+  "stage_rows": [
+    {
+      "name": "prototype_MKL/frontend_magnitude",
+      "passed": true,
+      "relative_rms": 2.9897811e-07,
+      "max_abs": 1.7546117e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/frontend_phase",
+      "passed": true,
+      "relative_rms": 2.8984458e-08,
+      "max_abs": 2.3841858e-07,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/encoder_layer_0",
+      "passed": true,
+      "relative_rms": 2.7572707e-07,
+      "max_abs": 8.1956387e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/encoder_layer_1",
+      "passed": true,
+      "relative_rms": 1.2721617e-06,
+      "max_abs": 2.849102e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/encoder_layer_2",
+      "passed": true,
+      "relative_rms": 1.9427737e-06,
+      "max_abs": 3.606081e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/encoder_layer_3",
+      "passed": true,
+      "relative_rms": 2.6600746e-06,
+      "max_abs": 3.3557415e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/encoder_layer_4",
+      "passed": true,
+      "relative_rms": 1.9504637e-06,
+      "max_abs": 2.9906631e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/encoder_layer_5",
+      "passed": true,
+      "relative_rms": 1.6974687e-06,
+      "max_abs": 2.1338463e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_0",
+      "passed": true,
+      "relative_rms": 2.3957846e-06,
+      "max_abs": 2.5123358e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_0",
+      "passed": true,
+      "relative_rms": 2.6387045e-06,
+      "max_abs": 3.4034252e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 0.99999994
+    },
+    {
+      "name": "prototype_MKL/block_time_1",
+      "passed": true,
+      "relative_rms": 3.0116792e-06,
+      "max_abs": 3.8683414e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_1",
+      "passed": true,
+      "relative_rms": 3.1996635e-06,
+      "max_abs": 3.9875507e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 0.99999994
+    },
+    {
+      "name": "prototype_MKL/block_time_2",
+      "passed": true,
+      "relative_rms": 3.6698111e-06,
+      "max_abs": 4.273653e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 0.99999994
+    },
+    {
+      "name": "prototype_MKL/block_2",
+      "passed": true,
+      "relative_rms": 3.3944611e-06,
+      "max_abs": 6.1154366e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 0.99999994
+    },
+    {
+      "name": "prototype_MKL/block_time_3",
+      "passed": true,
+      "relative_rms": 3.6595143e-06,
+      "max_abs": 5.6862831e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_3",
+      "passed": true,
+      "relative_rms": 3.6211623e-06,
+      "max_abs": 5.7458878e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_4",
+      "passed": true,
+      "relative_rms": 4.0695309e-06,
+      "max_abs": 5.6505203e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_4",
+      "passed": true,
+      "relative_rms": 3.4737795e-06,
+      "max_abs": 5.5789948e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_5",
+      "passed": true,
+      "relative_rms": 3.9288566e-06,
+      "max_abs": 6.0290098e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 0.99999994
+    },
+    {
+      "name": "prototype_MKL/block_5",
+      "passed": true,
+      "relative_rms": 3.6200315e-06,
+      "max_abs": 5.5804849e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_6",
+      "passed": true,
+      "relative_rms": 3.6910053e-06,
+      "max_abs": 5.4776669e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_6",
+      "passed": true,
+      "relative_rms": 3.596869e-06,
+      "max_abs": 5.4776669e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_7",
+      "passed": true,
+      "relative_rms": 3.5512285e-06,
+      "max_abs": 5.1558018e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_7",
+      "passed": true,
+      "relative_rms": 3.3570793e-06,
+      "max_abs": 5.4061413e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_8",
+      "passed": true,
+      "relative_rms": 3.3844917e-06,
+      "max_abs": 5.0544739e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_8",
+      "passed": true,
+      "relative_rms": 3.3737601e-06,
+      "max_abs": 4.7504902e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_9",
+      "passed": true,
+      "relative_rms": 3.3688e-06,
+      "max_abs": 4.6014786e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_9",
+      "passed": true,
+      "relative_rms": 3.1623922e-06,
+      "max_abs": 4.5776367e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_10",
+      "passed": true,
+      "relative_rms": 3.2446246e-06,
+      "max_abs": 4.3034554e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_10",
+      "passed": true,
+      "relative_rms": 3.0471965e-06,
+      "max_abs": 4.0352345e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_11",
+      "passed": true,
+      "relative_rms": 3.2604389e-06,
+      "max_abs": 4.6551228e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_11",
+      "passed": true,
+      "relative_rms": 2.9744035e-06,
+      "max_abs": 4.5478344e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_time_12",
+      "passed": true,
+      "relative_rms": 3.2072855e-06,
+      "max_abs": 4.196167e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_12",
+      "passed": true,
+      "relative_rms": 2.8779903e-06,
+      "max_abs": 4.2200089e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_time_13",
+      "passed": true,
+      "relative_rms": 2.9607895e-06,
+      "max_abs": 4.0590763e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_13",
+      "passed": true,
+      "relative_rms": 3.0777942e-06,
+      "max_abs": 3.9696693e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_time_14",
+      "passed": true,
+      "relative_rms": 2.9835005e-06,
+      "max_abs": 4.2676926e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_14",
+      "passed": true,
+      "relative_rms": 2.8720476e-06,
+      "max_abs": 4.3153763e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_time_15",
+      "passed": true,
+      "relative_rms": 2.8568702e-06,
+      "max_abs": 3.4689903e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_15",
+      "passed": true,
+      "relative_rms": 2.909092e-06,
+      "max_abs": 3.7133694e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_time_16",
+      "passed": true,
+      "relative_rms": 2.9096479e-06,
+      "max_abs": 3.6627054e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_16",
+      "passed": true,
+      "relative_rms": 2.8261215e-06,
+      "max_abs": 4.0143728e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_17",
+      "passed": true,
+      "relative_rms": 2.8268564e-06,
+      "max_abs": 4.3004751e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_17",
+      "passed": true,
+      "relative_rms": 2.7097065e-06,
+      "max_abs": 4.1395426e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_time_18",
+      "passed": true,
+      "relative_rms": 2.7788426e-06,
+      "max_abs": 4.3272972e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_18",
+      "passed": true,
+      "relative_rms": 2.5702736e-06,
+      "max_abs": 4.0054321e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_19",
+      "passed": true,
+      "relative_rms": 2.6924492e-06,
+      "max_abs": 3.6627054e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_19",
+      "passed": true,
+      "relative_rms": 2.3724792e-06,
+      "max_abs": 3.3944845e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_20",
+      "passed": true,
+      "relative_rms": 2.4874232e-06,
+      "max_abs": 3.3020973e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_20",
+      "passed": true,
+      "relative_rms": 2.5479562e-06,
+      "max_abs": 3.400445e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_time_21",
+      "passed": true,
+      "relative_rms": 2.5112968e-06,
+      "max_abs": 3.3535063e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_21",
+      "passed": true,
+      "relative_rms": 2.5760996e-06,
+      "max_abs": 3.2067299e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_time_22",
+      "passed": true,
+      "relative_rms": 2.6653108e-06,
+      "max_abs": 3.4689903e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_22",
+      "passed": true,
+      "relative_rms": 2.6038376e-06,
+      "max_abs": 3.4332275e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_23",
+      "passed": true,
+      "relative_rms": 2.6287855e-06,
+      "max_abs": 3.4809113e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_23",
+      "passed": true,
+      "relative_rms": 2.6648356e-06,
+      "max_abs": 3.516674e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "prototype_MKL/block_time_24",
+      "passed": true,
+      "relative_rms": 2.6828827e-06,
+      "max_abs": 3.5405159e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_24",
+      "passed": true,
+      "relative_rms": 2.7240778e-06,
+      "max_abs": 3.7431717e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_25",
+      "passed": true,
+      "relative_rms": 2.6165669e-06,
+      "max_abs": 3.6001205e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_25",
+      "passed": true,
+      "relative_rms": 2.7664757e-06,
+      "max_abs": 3.6239624e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_26",
+      "passed": true,
+      "relative_rms": 2.8774475e-06,
+      "max_abs": 3.349781e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_26",
+      "passed": true,
+      "relative_rms": 2.6612149e-06,
+      "max_abs": 3.3199787e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_27",
+      "passed": true,
+      "relative_rms": 2.7646272e-06,
+      "max_abs": 3.2901764e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_27",
+      "passed": true,
+      "relative_rms": 2.7249416e-06,
+      "max_abs": 3.3736229e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 0.99999988
+    },
+    {
+      "name": "prototype_MKL/block_time_28",
+      "passed": true,
+      "relative_rms": 2.6498517e-06,
+      "max_abs": 3.9577484e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_28",
+      "passed": true,
+      "relative_rms": 2.7746523e-06,
+      "max_abs": 3.3736229e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_time_29",
+      "passed": true,
+      "relative_rms": 2.6892685e-06,
+      "max_abs": 3.4019351e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/block_29",
+      "passed": true,
+      "relative_rms": 2.2882757e-06,
+      "max_abs": 4.1484833e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 0.99999982
+    },
+    {
+      "name": "prototype_MKL/amplitude",
+      "passed": true,
+      "relative_rms": 3.4150887e-07,
+      "max_abs": 1.3709068e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 0.99999994
+    },
+    {
+      "name": "prototype_MKL/output_phase",
+      "passed": true,
+      "relative_rms": 6.8217309e-06,
+      "max_abs": 0.00058692694,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "prototype_MKL/waveform",
+      "passed": true,
+      "relative_rms": 9.9268573e-07,
+      "max_abs": 2.6449561e-07,
+      "min_cosine": 1.0,
+      "norm_ratio": 0.99999988
+    }
+  ]
+}
