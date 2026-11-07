@@ -91,15 +91,14 @@ Each lane gives the start state, the exact steps, the acceptance and what to do 
   3. Fix it in ggml-metal or in the graph.
 - **Accept:** Metal stems match CPU (vocals RMS within 1 %; SDR on the reporter's synthetic band within 0.5 dB of CPU) for F16/Q8_0/Q4_K. Then remove the CPU fallback, keep the env var as a kill switch, and close #568.
 
-### Lane S1 — SCNet follow-ups (review findings, not blockers)
+### Lane S1 — SCNet follow-ups (status 2026-11-07)
 
-SCNet is on main and in v0.8.50, as a squash of qualified candidate `7b6a88360` (hosted qualification 41520873570, plus the main re-run 41615896059). Docs: `docs/scnet.md`. Open review findings from PR #566, each needing its own small fix and test:
-1. The graph cache likely misses on almost every chunk, because the random per-chunk prefix changes the frame count. Measure the hit rate; if it is low, pad to a fixed frame count or key the cache by shape bucket.
-2. A very short input or tail block aborts the whole separation. Pad or skip short tails, and add a unit test with a 0.1 s input.
-3. The server returns 500 for more than two channels. Return 400 with a message, or downmix.
-4. `crispasr_set_gpu_device_pref` is process-wide. Scope it to the context, as the other backends do.
-5. The server has no input length cap. Add the same cap the other separation endpoints use.
-- **Accept per item:** a unit test or an actual CLI/server reproduction before and after; CI/Lint green. Do not touch the qualified numerics without re-running `scnet-qualification.yml` (dispatch-only, about 1 h, both sizes).
+SCNet is on main (v0.8.50+). Review findings from PR #566:
+1. **Open — graph cache hit rate.** The random per-chunk shift prefix changes the frame count, so the cached graph probably misses on most chunks. Measure it with an actual model (log cache hits in `src/scnet.cpp` graph reuse over a 60 s file). If it misses, bucket the shape (pad the prefix to a fixed frame count). Any numeric change requires a re-run of `scnet-qualification.yml`.
+2. **Fixed (untested on a real model).** `forward()` no longer aborts on inputs too short for the reflective STFT pad; it zero-extends to `FFT/2+1` samples and trims. Only inputs that previously threw take this path, so qualified results are unchanged. **To verify:** run the CLI `--separate` with an SCNet model on a 0.01 s stereo file, and on a file whose final segment is shorter than 2048 samples (with `--shifts 0`). Both must succeed with finite stems of the input length.
+3. **Not applicable.** The server always interleaves to 2 channels before `scnet_separate`, so the ">2 channels → 500" path cannot occur.
+4. **Won't fix here.** `crispasr_set_gpu_device_pref` is process-wide by design for every backend (Mini-BS-RoFormer does the same). Changing it is a codebase-wide refactor, not an SCNet bug.
+5. **Fixed.** The server separation endpoint (all separators) now returns 400 for empty audio, and 413 above `CRISPASR_SERVER_SEPARATE_MAX_SECONDS` (default 1800; 0 disables).
 
 ### Lane V1 — optional hosted checks for #569 / #570
 

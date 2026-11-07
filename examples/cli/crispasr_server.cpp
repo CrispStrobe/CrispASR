@@ -1787,6 +1787,25 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         const int n_channels = 2;
         const bool have_stereo = stereo.size() >= 2 && !stereo[0].empty();
         const int n_frames = have_stereo ? (int)stereo[0].size() : (int)mono.size();
+        if (n_frames <= 0) {
+            json_error(res, 400, "audio file contains no samples");
+            return;
+        }
+        // Bound the work a single request can queue behind the separation
+        // mutex (#566 review). CRISPASR_SERVER_SEPARATE_MAX_SECONDS overrides;
+        // 0 disables the cap.
+        {
+            double max_seconds = 1800.0;
+            if (const char* v = std::getenv("CRISPASR_SERVER_SEPARATE_MAX_SECONDS"))
+                max_seconds = std::atof(v);
+            const double seconds = (double)n_frames / (double)sep_ctx->sample_rate;
+            if (max_seconds > 0 && seconds > max_seconds) {
+                json_error(res, 413,
+                           "audio is " + std::to_string((int)seconds) + " s; the separation limit is " +
+                               std::to_string((int)max_seconds) + " s (CRISPASR_SERVER_SEPARATE_MAX_SECONDS)");
+                return;
+            }
+        }
         std::vector<float> pcm((size_t)n_frames * n_channels);
         for (int i = 0; i < n_frames; i++) {
             for (int c = 0; c < n_channels; c++) {
