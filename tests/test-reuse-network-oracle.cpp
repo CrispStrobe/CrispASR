@@ -27,6 +27,11 @@ int main(int argc, char** argv) {
     reuse_reference_network::Trace trace;
     if (!reuse_reference_network::run(model, audio, 8000, output, &trace) || output.size() != audio.size())
         return 5;
+    const auto shape_ok = [](const reuse_dense_encoder::Tensor& tensor) {
+        return tensor.channels == 64 && tensor.time == 6 && tensor.freq == 81;
+    };
+    if (!shape_ok(trace.encoder) || !shape_ok(trace.block0) || !shape_ok(trace.block14) || !shape_ok(trace.block29))
+        return 7;
     if (!write("reuse-network-actual.f32le", output) || !write("reuse-trace-encoder.f32le", trace.encoder.values) ||
         !write("reuse-trace-block0.f32le", trace.block0.values) ||
         !write("reuse-trace-block14.f32le", trace.block14.values) ||
