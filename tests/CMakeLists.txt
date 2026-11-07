@@ -6742,6 +6742,9 @@ endforeach()
 target_link_libraries(test-meanvc2-conditioning PRIVATE crispasr-cpu-blas)
 
 if(Python3_Interpreter_FOUND)
+    add_test(NAME reuse-converter-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reuse_converter.py)
+    set_tests_properties(reuse-converter-controls PROPERTIES LABELS "unit;reuse" SKIP_RETURN_CODE 77)
     add_test(NAME qwen3-capture-live-audit-controls
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_qwen3_capture_live_audit.py)
     set_tests_properties(qwen3-capture-live-audit-controls PROPERTIES LABELS "unit;qwen3-tts;capture")

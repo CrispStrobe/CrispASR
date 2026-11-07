@@ -17,3 +17,10 @@ bins with reference magnitude at or below 0.01, where phase is ill-conditioned. 
 unit test passed address and undefined-behavior sanitizers. It also checks
 invalid rates, short and nonfinite audio, and 44.1 kHz silence. This is bounded
 frontend evidence, not a claim of end-to-end speech enhancement or GPU parity.
+
+The in-progress F32 converter `models/convert-reuse-to-gguf.py` pins the NVIDIA
+checkpoint and config hashes, validates its model/frontend contract, and
+rejects malformed or nonfinite tensors. `reuse-converter-controls` covers
+synthetic F32 byte round-trips and invalid configs and tensors. The hosted
+original-checkpoint tensor-by-tensor audit is pending; no converted artifact is
+published or registered by this stage.
