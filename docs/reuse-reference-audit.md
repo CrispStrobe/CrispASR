@@ -211,8 +211,10 @@ integrated unconditioned run independently computed both magnitude and phase,
 and passed all 71 intermediate and waveform checks; all 71 conditioned checks
 also passed. Unconditioned waveform relative RMS was 6.60e-7. The
 [integrated receipt](historical/reuse-onemkl-integrated-01s-20261107.json)
-includes source and executable hashes and every stage. The one-second
-integrated run is in progress. The default research executable does not link
+includes source and executable hashes and every stage. The one-second integrated run also passed all 71 unconditioned and 71
+conditioned checks, with 6.72e-7 relative waveform RMS; the
+[receipt](historical/reuse-onemkl-integrated-1s-20261107.json) records all
+142 rows and input, model and executable hashes. The default research executable does not link
 MKL, and requesting an unavailable profile fails explicitly. Isolated SDK and
 default research CTests pass; a full product rebuild was not performed. The
 MKL profile remains experimental and does not resolve the Kaggle-reference
