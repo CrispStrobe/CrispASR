@@ -29,3 +29,20 @@ the initial attempt could not start because the weekly GPU quota was exhausted.
 Before adding a backend, compare a native CrispASR port with these stages and
 the upstream implementation, validate waveform and speech-quality gates on a
 representative corpus, and exercise its CLI, C ABI and bindings as applicable.
+
+## Native CPU port investigation
+
+A separate, experimental CrispASR CPU reference is under development. Its
+[original-checkpoint audit 42378662267](https://github.com/CrispStrobe/CrispASR/actions/runs/42378662267)
+passed isolated original-weight encoder, selective-scan and decoder comparisons,
+and validated the strict GGUF loader including malformed-file controls. The
+full 0.1-second public-audio comparison failed at the encoder output with
+3.61% relative error, exceeding the 0.2% stage gate; this is not a passing
+end-to-end result.
+
+A local comparison on the same excerpt found raw phase differences near the
++π/−π branch cut, particularly in the first reflected FFT frame. Although those
+angles represent nearly identical complex values, the model consumes the raw
+phase as an input, so complex-spectrum equivalence alone is insufficient. The
+native port remains experimental while the source of the difference and its
+impact on subsequent stages and waveform are investigated.
