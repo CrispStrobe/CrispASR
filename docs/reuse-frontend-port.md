@@ -26,6 +26,7 @@ short tail padding. Maximum sample error was 6.6e-9. Round trips at 16 kHz and
 The in-progress F32 converter `models/convert-reuse-to-gguf.py` pins the NVIDIA
 checkpoint and config hashes, validates its model/frontend contract, and
 rejects malformed or nonfinite tensors. `reuse-converter-controls` covers
-synthetic F32 byte round-trips and invalid configs and tensors. The hosted
-original-checkpoint tensor-by-tensor audit is pending; no converted artifact is
-published or registered by this stage.
+synthetic F32 byte round-trips and invalid configs and tensors. The
+[hosted original-checkpoint audit](https://github.com/CrispStrobe/CrispASR/actions/runs/42320524458)
+compared all 1,416 converted tensors byte-for-byte with the pinned source.
+No converted artifact is published or registered by this stage.
