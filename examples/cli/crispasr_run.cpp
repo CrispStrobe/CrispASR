@@ -2825,6 +2825,10 @@ int crispasr_run_backend(const whisper_params& params_in) {
     if (params.align_only) {
         // Resolve aligner model.
         std::string am = params.aligner_model;
+        if (!params.ultra_head.empty() && (am.empty() || am == "auto" || am == "default")) {
+            fprintf(stderr, "crispasr[align-only]: --ultra-head requires an explicit Qwen forced-aligner -am path.\n");
+            return 10;
+        }
         if (am.empty() || am == "auto" || am == "default") {
             am = crispasr_resolve_model_cli(am.empty() ? "auto" : am, "canary-ctc-aligner", params.no_prints,
                                             params.cache_dir, params.auto_download);

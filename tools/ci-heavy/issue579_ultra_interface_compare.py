@@ -13,6 +13,12 @@ base = 'qwen3-forced-aligner-ultra.gguf'
 head = 'ultra-local-head.gguf'
 reference = json.loads(Path('prior-reference/local-head-reference.json').read_text())
 expected = np.array([[word['start'], word['end']] for word in reference])
+invalid = subprocess.run(['build/bin/crispasr', '--align-only', '--ultra-head', head,
+                          '-f', 'samples/jfk.wav', '--ref-text', 'test'], capture_output=True, text=True, timeout=60)
+assert invalid.returncode != 0 and 'requires an explicit Qwen forced-aligner' in invalid.stderr
+invalid = subprocess.run(['build/bin/crispasr', '--ultra-head', head, '-f', 'samples/jfk.wav'],
+                         capture_output=True, text=True, timeout=60)
+assert invalid.returncode != 0 and '--ultra-head requires --align-only' in invalid.stderr
 subprocess.run(['build/bin/crispasr', '--align-only', '-am', base, '--ultra-head', head,
                 '-f', 'samples/jfk.wav', '--ref-text', TEXT, '--align-format', 'json',
                 '--align-output', 'ultra-cli.json', '-l', 'en', '-ng', '-t', '2'],
