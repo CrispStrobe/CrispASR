@@ -73,3 +73,25 @@ jobs:
           timeout 3600 build/bin/test-reuse-network-oracle reuse-native.gguf reuse-network-input.f32le
           python3 tools/ci-heavy/issue579_reuse/network_actual_reference.py --native-phase
           python3 tools/ci-heavy/issue579_reuse/network_compare.py
+      - name: Compare all RE-USE boundaries with crispasr-diff
+        if: ${{ !cancelled() }}
+        env:
+          OMP_NUM_THREADS: '2'
+          MKL_NUM_THREADS: '2'
+        run: |
+          python3 -m unittest discover -s tests -p test_reuse_reference_dumper.py
+          python3 - <<'PY'
+          import numpy as np, soundfile as sf
+          from scipy.signal import resample_poly
+          from math import gcd
+          x, rate = sf.read('reuse-model/noisy_audio/mic_test2.wav', dtype='float32', always_2d=True)
+          assert x.shape[1] == 1
+          g = gcd(rate, 16000)
+          x = resample_poly(x[:, 0], 16000 // g, rate // g)
+          width = 1600
+          start = max(range(0, len(x)-width+1, width//2), key=lambda i: float(np.sum(x[i:i+width] ** 2)))
+          sf.write('reuse-diff-input.wav', x[start:start+width], 16000, subtype='PCM_16')
+          PY
+          python3 tools/dump_reference.py --backend reuse --model-dir reuse-model --audio reuse-diff-input.wav --output reuse-ref.gguf
+          cmake --build build --target crispasr-diff -j 2
+          build/bin/crispasr-diff reuse reuse-native.gguf reuse-ref.gguf reuse-diff-input.wav
