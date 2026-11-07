@@ -6896,6 +6896,11 @@ add_test(NAME reuse-tf-mamba-reference COMMAND test-reuse-tf-mamba
     ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-tf-mamba-f32le.bin)
 set_tests_properties(reuse-tf-mamba-reference PROPERTIES LABELS "unit;reuse;audio")
 
+add_executable(test-reuse-decoder test-reuse-decoder.cpp)
+add_test(NAME reuse-decoder-reference COMMAND test-reuse-decoder
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-decoder-f32le.bin)
+set_tests_properties(reuse-decoder-reference PROPERTIES LABELS "unit;reuse;audio")
+
 add_executable(test-qwen3-tts-capture test-qwen3-tts-capture.cpp)
 target_include_directories(test-qwen3-tts-capture PRIVATE
     ${PROJECT_SOURCE_DIR}/src

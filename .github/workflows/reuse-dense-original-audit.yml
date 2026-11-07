@@ -37,3 +37,8 @@ jobs:
           "$RUNNER_TEMP/reuse-bimamba-oracle" reuse-bimamba-original-oracle.bin
           c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-reuse-tf-mamba-oracle.cpp -o "$RUNNER_TEMP/reuse-tf-mamba-oracle"
           "$RUNNER_TEMP/reuse-tf-mamba-oracle" reuse-tf-mamba-original-oracle.bin
+      - name: Compare original-weight magnitude and phase decoders
+        run: |
+          python3 tools/ci-heavy/issue579_reuse/decoder_actual_reference.py
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-reuse-decoder-oracle.cpp -o "$RUNNER_TEMP/reuse-decoder-oracle"
+          "$RUNNER_TEMP/reuse-decoder-oracle" reuse-decoder-original-oracle.bin
