@@ -40,7 +40,7 @@ with open('reuse-mamba-original-oracle.bin', 'wb') as out:
         assert np.isfinite(data).all()
         out.write(data.astype('<f4').tobytes())
 sys.path.insert(1, str(Path('reuse-model').resolve()))
-from models.mamba_block2_SEMamba import MambaBlock
+from models.mamba_block2_SEMamba import MambaBlock, TFMambaBlock
 mamba_ssm.selective_scan = original
 config = json.loads(Path('reuse-model/config.json').read_text())
 bimamba = MambaBlock(d_model=64, cfg=config).eval()
@@ -61,4 +61,25 @@ with open('reuse-bimamba-original-oracle.bin', 'wb') as out:
     for tensor in (bimamba.output_proj.weight, bimamba.output_proj.bias, bimamba.norm.weight,
                    bimamba.norm.bias, bidir):
         save(tensor)
+tf_block = TFMambaBlock(config).eval()
+prefix = 'TSMamba.0.'
+tf_block.load_state_dict({name.removeprefix(prefix): value for name, value in weights.items()
+                          if name.startswith(prefix)}, strict=True)
+tf_input = ((torch.arange(64 * 3 * 4, dtype=torch.int64) % 19 - 9).float() / 16).reshape(1, 64, 3, 4)
+tf_output = tf_block(tf_input)
+assert torch.isfinite(tf_output).all()
+with open('reuse-tf-mamba-original-oracle.bin', 'wb') as out:
+    def save_tf(tensor):
+        data = tensor.detach().float().contiguous().numpy()
+        assert np.isfinite(data).all()
+        out.write(data.astype('<f4').tobytes())
+    for direction in (tf_block.time_mamba, tf_block.freq_mamba):
+        for part in (direction.forward_blocks, direction.backward_blocks):
+            for tensor in (part.in_proj.weight, part.conv1d.weight, part.conv1d.bias, part.x_proj.weight,
+                           part.dt_proj.weight, part.dt_proj.bias, part.A_log, part.D, part.out_proj.weight):
+                save_tf(tensor)
+        for tensor in (direction.output_proj.weight, direction.output_proj.bias, direction.norm.weight,
+                       direction.norm.bias):
+            save_tf(tensor)
+    save_tf(tf_output)
 print('REUSE_ORIGINAL_SCAN_ORACLE', list(result.shape), flush=True)

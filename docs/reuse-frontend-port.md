@@ -40,8 +40,10 @@ intermediate parity and decoded audio remain open.
 
 `reuse-bimamba-reference` covers the bidirectional block's reverse pass,
 inner residuals, output projection and layer normalization using a synthetic
-PyTorch fixture. Time/frequency reshaping and the outer residuals are still
-required; none of these component tests establishes end-to-end model parity.
+PyTorch fixture. `reuse-tf-mamba-reference` also checks one time/frequency
+block's reshaping and outer residuals against a separate synthetic fixture.
+The 30-block graph, decoders and actual-checkpoint/end-to-end parity remain
+open; these tests do not establish model support.
 
 The in-progress F32 converter `models/convert-reuse-to-gguf.py` pins the NVIDIA
 checkpoint and config hashes, validates its model/frontend contract, and
