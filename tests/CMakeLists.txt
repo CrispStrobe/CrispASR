@@ -6745,6 +6745,9 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME qwen3-ultra-audit-controls
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_qwen3_ultra_audit.py)
     set_tests_properties(qwen3-ultra-audit-controls PROPERTIES LABELS "unit;qwen3-asr;alignment")
+    add_test(NAME reuse-converter-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reuse_converter.py)
+    set_tests_properties(reuse-converter-controls PROPERTIES LABELS "unit;reuse" SKIP_RETURN_CODE 77)
     add_test(NAME qwen3-capture-live-audit-controls
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_qwen3_capture_live_audit.py)
     set_tests_properties(qwen3-capture-live-audit-controls PROPERTIES LABELS "unit;qwen3-tts;capture")
@@ -6861,6 +6864,13 @@ if (Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES AND BUILD_SHARED_LIBS)
 endif()
 
 # Qwen3-TTS codec capture: model-free tests for exact token/response manifests.
+add_executable(test-reuse-frontend test-reuse-frontend.cpp)
+add_test(NAME reuse-frontend-reference COMMAND test-reuse-frontend
+    ${PROJECT_SOURCE_DIR}/samples/jfk.wav ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-stft-reference-f32le.bin
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-stft-44100-reference-f32le.bin
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-istft-reference-f32le.bin)
+set_tests_properties(reuse-frontend-reference PROPERTIES LABELS "unit;reuse;audio")
+
 add_executable(test-qwen3-tts-capture test-qwen3-tts-capture.cpp)
 target_include_directories(test-qwen3-tts-capture PRIVATE
     ${PROJECT_SOURCE_DIR}/src

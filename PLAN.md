@@ -24,6 +24,9 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   - Fix `06a620d59` moved every `macos-14` runner use to `macos-15`. Then a fresh `workflow_dispatch` of `release-python-wheels.yml` with `tag=v0.8.51` (run **42359206396**) rebuilt and published PyPI and the GPU index from one run, and the audit used that run.
   - Rule: if a matrix job is cancelled at 0 s with no steps, suspect a rejected runner label, not starvation.
 - Closed #574 with the release link.
+### Issue #579 RE-USE frontend port — Codex (2026-11-07)
+
+- Source `008a771c57fe285e86727c80e155d5376a9ee44b`. The mono frontend matches independent PyTorch STFT fixtures at 16 kHz and 44.1 kHz and passes sanitizer and invalid-input controls. No claim of backend or GPU support until conversion, model stages, waveform and CLI/C ABI checks pass.
 
 ### Issue #579 model evaluation and release preparation — Codex (2026-11-06)
 
