@@ -288,6 +288,21 @@ static std::vector<CrispasrAlignedWord> make_words(const std::vector<std::string
     return out;
 }
 
+TEST_CASE("align-only: Qwen3 forced-aligner dispatch by filename (#579 Ultra)", "[unit][align]") {
+    // Existing names keep their routing.
+    CHECK(crispasr_aligner_is_qwen3_forced_aligner("qwen3-forced-aligner-0.6b-q4_k.gguf"));
+    CHECK(crispasr_aligner_is_qwen3_forced_aligner("/models/Qwen3-FA-0.6B.gguf"));
+    // The documented Ultra conversion name and the upstream repo spelling.
+    CHECK(crispasr_aligner_is_qwen3_forced_aligner("qwen3-forced-aligner-ultra-f16.gguf"));
+    CHECK(crispasr_aligner_is_qwen3_forced_aligner("Qwen3-ForcedAligner-Ultra-F16.gguf"));
+    CHECK(crispasr_aligner_is_qwen3_forced_aligner("qwen3_forced_aligner_ultra.gguf"));
+    // CTC / wav2vec2 aligners must not be captured.
+    CHECK_FALSE(crispasr_aligner_is_qwen3_forced_aligner("canary-ctc-aligner-q4_k.gguf"));
+    CHECK_FALSE(crispasr_aligner_is_qwen3_forced_aligner("wav2vec2-base-960h-aligner.gguf"));
+    CHECK_FALSE(crispasr_aligner_is_qwen3_forced_aligner("qwen3-asr-0.6b-q4_k.gguf"));
+    CHECK_FALSE(crispasr_aligner_is_qwen3_forced_aligner(""));
+}
+
 TEST_CASE("align-only: group aligned words into segments", "[unit][align]") {
     SECTION("exact word counts") {
         std::vector<std::string> segs = {"Hello world", "This is a test"};

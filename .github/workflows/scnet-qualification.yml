@@ -162,6 +162,27 @@ jobs:
           --build-dir build-scnet --assets-dir scnet-assets
           --output-dir scnet-out/qualification-${{ matrix.variant }}
           --threads 2
+      - name: Short-input and short-tail separation controls (#566 review)
+        run: |
+          set -euo pipefail
+          mkdir -p scnet-out/short-controls
+          python - <<'PYTHON'
+          import math, struct, wave
+          def write(path, frames):
+              with wave.open(path, "wb") as w:
+                  w.setnchannels(2); w.setsampwidth(2); w.setframerate(44100)
+                  w.writeframes(b"".join(struct.pack("<hh", int(8000*math.sin(i*0.05)), int(8000*math.sin(i*0.031)))
+                                         for i in range(frames)))
+          write("scnet-out/short-controls/tiny.wav", 441)               # 0.01 s
+          write("scnet-out/short-controls/tail.wav", 44100 * 30 + 100)  # 10 s stride -> 100-sample final chunk
+          PYTHON
+          for name in tiny tail; do
+            frames=$(python -c "import wave;print(wave.open('scnet-out/short-controls/$name.wav').getnframes())")
+            build-scnet/bin/crispasr --separate -m scnet-assets/${{ matrix.variant }}-f16.gguf \
+              -f scnet-out/short-controls/$name.wav 2>&1 | tee scnet-out/short-controls/$name.log
+            n=$(grep -c "wrote .*(2 ch x $frames @ 44100 Hz)" scnet-out/short-controls/$name.log || true)
+            [ "$n" = 4 ] || { echo "expected 4 stems of $frames frames for $name, got $n"; exit 1; }
+          done
       - name: Package the exact accepted CPU models and provenance
         id: package_models
         if: success()
