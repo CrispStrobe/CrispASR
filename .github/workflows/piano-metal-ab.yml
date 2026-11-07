@@ -66,8 +66,8 @@ jobs:
           # number whose machine is not pinned is not comparable to the next
           # one. Both are Apple Silicon; the chip is printed below regardless,
           # because a number without its machine is worthless.
-          - { model: hft, os: macos-14, prefix: hft-transformer,   repo: cstr/hft-transformer-GGUF,   dump: hft-parity-dump, heads: "onset offset mpe velocity" }
-          - { model: oaf, os: macos-14, prefix: onsets-and-frames, repo: cstr/onsets-and-frames-GGUF, dump: oaf-parity-dump, heads: "onset offset frame activation velocity" }
+          - { model: hft, os: macos-15, prefix: hft-transformer,   repo: cstr/hft-transformer-GGUF,   dump: hft-parity-dump, heads: "onset offset mpe velocity" }
+          - { model: oaf, os: macos-15, prefix: onsets-and-frames, repo: cstr/onsets-and-frames-GGUF, dump: oaf-parity-dump, heads: "onset offset frame activation velocity" }
     runs-on: ${{ matrix.os }}
     name: ${{ matrix.model }} CPU-vs-Metal
     timeout-minutes: 180
