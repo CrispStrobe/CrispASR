@@ -58,7 +58,7 @@ jobs:
           gh run download 42313568853 -n issue579-ultra-parity -D prior-reference
           cp prior-reference/local-head-stages.npz .
           python3 tools/ci-heavy/issue579_ultra_head_oracle.py
-          build/bin/issue579-ultra-sidecar-oracle ultra-head-oracle.bin ultra-local-head.gguf
+          build/bin/issue579-ultra-sidecar-oracle ultra-head-oracle.bin ultra-local-head.gguf samples/jfk.wav
           build/bin/issue579-ultra-hidden-probe qwen3-forced-aligner-ultra.gguf samples/jfk.wav ultra-hidden.bin ultra-local-head.gguf ultra-refined.bin
           python3 tools/ci-heavy/issue579_ultra_hidden_compare.py
           python3 tools/ci-heavy/issue579_ultra_refined_compare.py
