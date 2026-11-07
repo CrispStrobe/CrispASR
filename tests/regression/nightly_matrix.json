@@ -33,6 +33,9 @@
   "bark-small",
   "csm-1b",
   "voxcpm2-tts-2b",
-  "index-echo-2b"
+  "index-echo-2b",
+  "qwen3-forced-aligner-0.6b-f16",
+  "qwen3-forced-aligner-ultra-f16",
+  "canary-ctc-aligner-q4_k"
  ]
 }

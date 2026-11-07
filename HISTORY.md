@@ -1,3 +1,14 @@
+## 2026-11-07 — Forced aligners join the nightly regression; Ultra GGUF published
+
+- **Aligner regression kind:** `tests/regression/manifest.json` gains `align_backends`, with `align_for()` and `compare_alignment()` in `run_one.py`. The nightly runs three entries:
+  - Qwen3-ForcedAligner-0.6B F16 and Ultra base F16, both compared with upstream `qwen-asr` word timestamps (exact locally, tolerance one 80 ms class);
+  - canary-ctc-aligner Q4_K, against a native capture.
+- **Selection:** `tools/regression_select.py` maps the aligner sources to these entries.
+- **Per-model schedule removed:** the weekly Ultra cron is dropped; the manual Ultra audit stays.
+- **Ultra published:** the F16 GGUF is published as `cstr/qwen3-forced-aligner-ultra-GGUF@992f8360` (Apache-2.0), with the registry name `qwen3-forced-aligner-ultra`.
+- **Dispatch fix:** the aligner dispatch also accepts the upstream `ForcedAligner` spelling, with a unit test.
+- **SCNet:** qualification 42371575575 passed with the new real-model short-input and short-tail controls (#566 review item 2 verified).
+
 ## 2026-11-07 — v0.8.51 published to PyPI and verified
 
 v0.8.51 (`008a771c5`) shipped:
