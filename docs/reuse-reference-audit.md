@@ -249,4 +249,19 @@ complex output was bit-identical and raw phase had no branch flips; it also
 matched the prior unfused CUDA reference phase within 2.39e-7. The
 [receipt](historical/reuse-cufft-fft-probe-20261107.json) does not validate
 native preprocessing, a native CUDA frontend, the full model or fused Mamba.
-A CUDA research profile and end-to-end comparison remain in progress.
+The independently computed CUDA research frontend and model comparison were
+subsequently tested as described below.
+
+
+The CUDA research profile at `1d889456a` independently generates the Hann
+window, prepares the input frames and computes magnitude and phase through
+cuFFT. Kaggle run `issue579-reuse-cuda-profile-v2` passed all six isolated
+CTest targets, including physical-GPU frontend tests at 400, 1600 and 16000
+samples. Its integrated 1600-sample native run passed all 71 unconditioned
+and 71 conditioned comparisons against the retained original CUDA stages;
+the unconditioned waveform relative RMS was 1.0843e-6. The
+[receipt](historical/reuse-cuda-integrated-20261107.json) records every
+stage, the GPU and source/model hashes. The reference uses the unfused Mamba
+CUDA path; the native model graph and inverse FFT remain CPU implementations.
+This is one short model input on a T4, not full GPU backend, fused-kernel,
+long-recording, other-device or speech-quality qualification.
