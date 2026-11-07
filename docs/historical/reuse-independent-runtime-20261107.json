@@ -1,0 +1,49 @@
+{
+  "audit": "independent-onnx-and-speechcpp-20261107",
+  "input_sha256": "12e4f02454a088fedba2fb0876101d79211e8b1b6ae27c62968e501e4fe8f283",
+  "input_samples": 1600,
+  "sample_rate": 16000,
+  "checkpoint_sha256": "06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1",
+  "onnx": {
+    "exporter_repository": "https://github.com/quangng2000/reuse-audio",
+    "exporter_revision": "1dafc11fc057d0453300a5d8863ec558e1d6387b",
+    "inspect_onnx_sha256": "d1b193849ffa4ceb25deddd8560dde3319cb9261e7f96dd7ef3cad9224ccfc15",
+    "method": "Same reference magnitude and phase for CPU ONNX Runtime and pinned original SEMamba with unfused CPU adapter.",
+    "stages": {
+      "enhanced_magnitude": {
+        "reference": "amplitude",
+        "relative_rmse": 2.8936754032452064e-07,
+        "max_abs": 1.1920928955078125e-06
+      },
+      "enhanced_phase": {
+        "reference": "output_phase",
+        "relative_rmse": 1.9691060121371542e-06,
+        "max_abs": 5.030632019042969e-05
+      },
+      "encoder": {
+        "reference": "encoder_layer_5",
+        "relative_rmse": 5.621415465572778e-07,
+        "max_abs": 3.203749656677246e-06
+      },
+      "block1": {
+        "reference": "block_0",
+        "relative_rmse": 6.911386961708355e-07,
+        "max_abs": 3.5762786865234375e-06
+      },
+      "block30": {
+        "reference": "block_29",
+        "relative_rmse": 1.140972410779788e-06,
+        "max_abs": 1.4781951904296875e-05
+      }
+    },
+    "waveform_relative_rmse": 1.0249112361251278e-06
+  },
+  "speech_cpp": {
+    "version": "0.10.1",
+    "cpu_zip_sha256": "3396d6b2ec38c2922ff0f24a760f7b45c4ac601788f53f03eb77134393bc768b",
+    "model_sha256": "827faf209c6988b9cfd07b08ee7f212a7b2eeb7870a25380df671d55338b3879",
+    "output": "16-bit PCM WAV",
+    "relative_rmse_vs_local_phase_reference": 0.026990197598934174,
+    "relative_rmse_vs_kaggle_phase_reference": 0.02961021289229393
+  }
+}

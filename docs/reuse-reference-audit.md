@@ -116,3 +116,19 @@ loads this same checkpoint. [RE-USE Audio](https://github.com/quangng2000/reuse-
 also supplies an ONNX Runtime Android implementation and independent export
 and reference checks for the pinned checkpoint. Their reported results are
 useful independent evidence, not proof of CrispASR parity.
+
+A later independent check exported the pinned weights with the
+[RE-USE Audio ONNX exporter](https://github.com/quangng2000/reuse-audio/tree/1dafc11fc057d0453300a5d8863ec558e1d6387b/tools/model-export)
+and ran its CPU graph on the exact same 16 kHz, 100 ms input spectra as the
+unfused Python reference. The encoder, first and last blocks, magnitude and
+phase outputs all agreed within 0.0002% relative RMS; the reconstructed
+waveform differed by 0.000103%. This checks an independently written whole
+network with shared spectra, not the STFT or NVIDIA's fused CUDA Mamba path.
+
+On that same short PCM input, the released speech.cpp 0.10.1 CPU binary with
+its separately converted pinned checkpoint produced 16-bit PCM differing by
+2.70% relative RMS from the local Python reference (2.96% versus the other
+CPU phase reference). Its developers also report much greater drift for an
+especially short 30 ms input. See the [receipt](historical/reuse-independent-runtime-20261107.json)
+for hashes, methods and stage metrics. A short-input difference does not
+establish the quality or error of either implementation on normal recordings.
