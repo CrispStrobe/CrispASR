@@ -8,16 +8,24 @@
 namespace reuse_reference_network {
 struct Trace {
     reuse_dense_encoder::Tensor encoder, block0, block14, block29;
+    std::vector<reuse_dense_encoder::Tensor> encoder_layers, block_time, blocks;
+    std::vector<float> magnitude, phase, amplitude, output_phase;
 };
 
 inline bool run(const reuse_model_loader::Model& model, const std::vector<float>& audio, int sample_rate,
-                std::vector<float>& output, Trace* trace = nullptr) {
+                std::vector<float>& output, Trace* trace = nullptr,
+                const std::vector<float>* phase_override = nullptr) {
     if (model.encoder.size() != 6 || model.blocks.size() != 30)
         return false;
     try {
         reuse_frontend::Spectrum spectrum;
         if (!reuse_frontend::analyze(audio, sample_rate, spectrum))
             return false;
+        if (phase_override) {
+            if (phase_override->size() != spectrum.phase.size() || !reuse_dense_encoder::finite(*phase_override))
+                return false;
+            spectrum.phase = *phase_override;
+        }
         size_t size = 0;
         if (!reuse_dense_encoder::product(spectrum.frames, spectrum.bins, size) || size > SIZE_MAX / 2)
             return false;
@@ -25,16 +33,23 @@ inline bool run(const reuse_model_loader::Model& model, const std::vector<float>
         std::copy(spectrum.magnitude.begin(), spectrum.magnitude.end(), input.values.begin());
         std::copy(spectrum.phase.begin(), spectrum.phase.end(), input.values.begin() + size);
         reuse_dense_encoder::Tensor state;
-        if (!reuse_dense_encoder::encode(input, model.encoder, state))
-            return false;
         Trace captured;
-        if (trace)
+        if (!reuse_dense_encoder::encode(input, model.encoder, state, trace ? &captured.encoder_layers : nullptr))
+            return false;
+        if (trace) {
             captured.encoder = state;
+            captured.magnitude = spectrum.magnitude;
+            captured.phase = spectrum.phase;
+        }
         for (size_t i = 0; i < model.blocks.size(); ++i) {
-            reuse_dense_encoder::Tensor next;
-            if (!reuse_tf_mamba::run(model.blocks[i], state, next))
+            reuse_dense_encoder::Tensor next, after_time;
+            if (!reuse_tf_mamba::run(model.blocks[i], state, next, trace ? &after_time : nullptr))
                 return false;
             state = std::move(next);
+            if (trace) {
+                captured.block_time.push_back(std::move(after_time));
+                captured.blocks.push_back(state);
+            }
             if (trace && i == 0)
                 captured.block0 = state;
             if (trace && i == 14)
@@ -67,8 +82,17 @@ inline bool run(const reuse_model_loader::Model& model, const std::vector<float>
         std::vector<float> result;
         if (!reuse_frontend::synthesize(spectrum, amp, re, im, audio.size(), result))
             return false;
-        if (trace)
+        if (trace) {
+            captured.amplitude.reserve(spectrum.frames * spectrum.bins);
+            captured.output_phase.reserve(spectrum.frames * spectrum.bins);
+            for (size_t t = 0; t < spectrum.frames; ++t)
+                for (size_t f = 0; f < spectrum.bins; ++f) {
+                    const size_t i = t * stride + f;
+                    captured.amplitude.push_back(amp[i]);
+                    captured.output_phase.push_back(std::atan2(im[i], re[i]));
+                }
             *trace = std::move(captured);
+        }
         output = std::move(result);
         return true;
     } catch (...) {

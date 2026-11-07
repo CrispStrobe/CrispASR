@@ -22,6 +22,19 @@ struct Spectrum {
     std::vector<float> phase;
 };
 
+// PyTorch's periodic Hann computes the angular step once in float before
+// multiplying the sample index. Rounding 2*pi*i before the division changes
+// window values and can change raw phase near the atan2 branch cut.
+inline std::vector<float> periodic_hann(int n_fft) {
+    if (n_fft <= 0)
+        return {};
+    std::vector<float> window(static_cast<size_t>(n_fft));
+    const float step = static_cast<float>(2.0 * std::acos(-1.0) / n_fft);
+    for (int i = 0; i < n_fft; ++i)
+        window[i] = 0.5f - 0.5f * std::cos(step * static_cast<float>(i));
+    return window;
+}
+
 // Mixed-radix complex FFT. Computing the transform in double reduces error for
 // non-power-of-two FFT sizes before matching the upstream float32 spectrum.
 inline void fft(std::vector<std::complex<double>>& data) {
@@ -74,10 +87,7 @@ inline bool analyze(const std::vector<float>& audio, int sample_rate, Spectrum& 
     result.magnitude.resize(frames * bins);
     result.phase.resize(frames * bins);
     std::vector<std::complex<double>> spectrum(static_cast<size_t>(n_fft));
-    std::vector<float> window(n_fft);
-    const float pi = std::acos(-1.0f);
-    for (int i = 0; i < n_fft; ++i)
-        window[i] = 0.5f - 0.5f * std::cos(2.0f * pi * i / n_fft);
+    const auto window = periodic_hann(n_fft);
     const int64_t length = static_cast<int64_t>(audio.size());
     for (size_t frame = 0; frame < frames; ++frame) {
         const int64_t first = static_cast<int64_t>(frame * hop) - n_fft / 2;
@@ -92,7 +102,11 @@ inline bool analyze(const std::vector<float>& audio, int sample_rate, Spectrum& 
         }
         fft(spectrum);
         for (size_t k = 0; k < bins; ++k) {
-            const float re = static_cast<float>(spectrum[k].real()), im = static_cast<float>(spectrum[k].imag());
+            const float re = static_cast<float>(spectrum[k].real());
+            // A real-to-complex FFT defines the DC and Nyquist imaginary parts
+            // as positive zero. Tiny roundoff in a complex FFT changes atan2
+            // from +pi to -pi when the endpoint real value is negative.
+            const float im = (k == 0 || k + 1 == bins) ? 0.0f : static_cast<float>(spectrum[k].imag());
             result.magnitude[frame * bins + k] = std::log1p(std::hypot(re, im));
             result.phase[frame * bins + k] = std::atan2(im, re);
         }
@@ -122,10 +136,7 @@ inline bool synthesize(const Spectrum& spec, const std::vector<float>& amplitude
             return false;
     std::vector<double> sum(reconstructed + spec.n_fft), envelope(sum.size());
     std::vector<std::complex<double>> spectrum(spec.n_fft);
-    std::vector<float> window(spec.n_fft);
-    const float pi = std::acos(-1.0f);
-    for (int i = 0; i < spec.n_fft; ++i)
-        window[i] = 0.5f - 0.5f * std::cos(2.0f * pi * i / spec.n_fft);
+    const auto window = periodic_hann(spec.n_fft);
     for (size_t frame = 0; frame < spec.frames; ++frame) {
         size_t zeros = 0;
         for (size_t bin = 0; bin < spec.bins; ++bin)
