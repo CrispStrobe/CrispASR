@@ -24,6 +24,9 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
   - Fix `06a620d59` moved every `macos-14` runner use to `macos-15`. Then a fresh `workflow_dispatch` of `release-python-wheels.yml` with `tag=v0.8.51` (run **42359206396**) rebuilt and published PyPI and the GPU index from one run, and the audit used that run.
   - Rule: if a matrix job is cancelled at 0 s with no steps, suspect a rejected runner label, not starvation.
 - Closed #574 with the release link.
+### Issue #579 Ultra local-head port — Codex (2026-11-06)
+
+- Source `fbde4c5f2c8c3a2d52dabf47ae9512aafb7fe61a`. Port the optional head only against the pinned upstream reference, beginning with the posterior-mean decoder and duration/overlap repair. The [CPU reference run](https://github.com/CrispStrobe/CrispASR/actions/runs/42313568853) stores 44 endpoint inputs and logits for a real 22-word clip. The CPU head graph, offset decoder, acoustic features and opt-in hidden-state capture match the captured CPU reference. The pinned sidecar converter round-trips all 28 arrays. [End-to-end CPU parity](https://github.com/CrispStrobe/CrispASR/actions/runs/42320992672) passed on one English clip; CLI/C ABI, broader coverage and GPU acceptance remain separate gates.
 
 ### Issue #579 model evaluation and release preparation — Codex (2026-11-06)
 

@@ -1,0 +1,16 @@
+name: Qwen Ultra local-head stage audit
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  controls:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Compile and test captured reference stages
+        run: |
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-qwen3-ultra-boundary.cpp -o "$RUNNER_TEMP/ultra-boundary"
+          "$RUNNER_TEMP/ultra-boundary"
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-qwen3-ultra-features.cpp -o "$RUNNER_TEMP/ultra-features"
+          "$RUNNER_TEMP/ultra-features" samples/jfk.wav tests/fixtures/qwen3-ultra-features-f32le.bin

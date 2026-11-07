@@ -6745,6 +6745,9 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME qwen3-ultra-audit-controls
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_qwen3_ultra_audit.py)
     set_tests_properties(qwen3-ultra-audit-controls PROPERTIES LABELS "unit;qwen3-asr;alignment")
+    add_test(NAME qwen3-ultra-head-converter-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_qwen3_ultra_head_converter.py)
+    set_tests_properties(qwen3-ultra-head-converter-controls PROPERTIES LABELS "unit;qwen3-asr;alignment" SKIP_RETURN_CODE 77)
     add_test(NAME qwen3-capture-live-audit-controls
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_qwen3_capture_live_audit.py)
     set_tests_properties(qwen3-capture-live-audit-controls PROPERTIES LABELS "unit;qwen3-tts;capture")
@@ -6861,6 +6864,33 @@ if (Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES AND BUILD_SHARED_LIBS)
 endif()
 
 # Qwen3-TTS codec capture: model-free tests for exact token/response manifests.
+add_executable(test-qwen3-ultra-sidecar-oracle test-qwen3-ultra-head-oracle.cpp)
+target_compile_definitions(test-qwen3-ultra-sidecar-oracle PRIVATE ULTRA_TEST_SIDECAR)
+target_link_libraries(test-qwen3-ultra-sidecar-oracle PRIVATE qwen3_asr)
+
+add_executable(test-qwen3-ultra-sidecar test-qwen3-ultra-sidecar.cpp)
+target_link_libraries(test-qwen3-ultra-sidecar PRIVATE qwen3_asr)
+add_test(NAME qwen3-ultra-sidecar-controls COMMAND test-qwen3-ultra-sidecar)
+set_tests_properties(qwen3-ultra-sidecar-controls PROPERTIES LABELS "unit;qwen3-asr;alignment")
+
+add_executable(test-qwen3-ultra-hidden test-qwen3-ultra-hidden.cpp)
+target_link_libraries(test-qwen3-ultra-hidden PRIVATE qwen3_asr)
+add_test(NAME qwen3-ultra-hidden-controls COMMAND test-qwen3-ultra-hidden)
+set_tests_properties(qwen3-ultra-hidden-controls PROPERTIES LABELS "unit;qwen3-asr;alignment")
+
+add_executable(test-qwen3-ultra-head test-qwen3-ultra-head.cpp)
+add_test(NAME qwen3-ultra-head-controls COMMAND test-qwen3-ultra-head)
+set_tests_properties(qwen3-ultra-head-controls PROPERTIES LABELS "unit;qwen3-asr;alignment")
+
+add_executable(test-qwen3-ultra-features test-qwen3-ultra-features.cpp)
+add_test(NAME qwen3-ultra-features-reference COMMAND test-qwen3-ultra-features
+    ${PROJECT_SOURCE_DIR}/samples/jfk.wav ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/qwen3-ultra-features-f32le.bin)
+set_tests_properties(qwen3-ultra-features-reference PROPERTIES LABELS "unit;qwen3-asr;alignment")
+
+add_executable(test-qwen3-ultra-boundary test-qwen3-ultra-boundary.cpp)
+add_test(NAME qwen3-ultra-boundary-reference COMMAND test-qwen3-ultra-boundary)
+set_tests_properties(qwen3-ultra-boundary-reference PROPERTIES LABELS "unit;qwen3-asr;alignment")
+
 add_executable(test-qwen3-tts-capture test-qwen3-tts-capture.cpp)
 target_include_directories(test-qwen3-tts-capture PRIVATE
     ${PROJECT_SOURCE_DIR}/src

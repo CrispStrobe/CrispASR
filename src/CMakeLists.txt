@@ -1322,6 +1322,8 @@ endif()
 add_library(qwen3_asr STATIC
             qwen3_asr.h
             qwen3_asr.cpp
+            core/qwen3_ultra_sidecar.h
+            core/qwen3_ultra_sidecar.cpp
             )
 target_include_directories(qwen3_asr PUBLIC . ../include)
 target_compile_features   (qwen3_asr PUBLIC cxx_std_17)
