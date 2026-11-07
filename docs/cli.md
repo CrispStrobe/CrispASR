@@ -37,6 +37,9 @@ The 10 patterns that cover most usage:
 # Auto-download + transcribe
 crispasr -m auto --backend parakeet -f audio.wav
 
+# Japanese Haas-ja transcription (see haas-ja.md for model variants)
+crispasr --backend haas -m auto -f japanese.wav
+
 # VAD + SRT + sentence-split (best subtitle output)
 crispasr -m parakeet.gguf -f long.wav --vad -osrt --split-on-punct
 
@@ -823,6 +826,8 @@ The implicit-enable line goes to stderr (suppressed under
 upstream tools like SubtitleEdit.
 
 ### Standalone alignment — `--align-only` (issue #217)
+
+For the separately distributed Ultra fine-tune, see the [Qwen3 Ultra aligner guide](qwen3-ultra-aligner.md) for conversion, tested scope and the optional-head limitation.
 
 Aligns pre-existing text against audio without running ASR first.
 Accepts plain text (via `--ref-text` or `--text-file file.txt`), an

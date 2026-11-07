@@ -1,3 +1,27 @@
+## 2026-11-07 — Forced aligners join the nightly regression; Ultra GGUF published
+
+- **Aligner regression kind:** `tests/regression/manifest.json` gains `align_backends`, with `align_for()` and `compare_alignment()` in `run_one.py`. The nightly runs three entries:
+  - Qwen3-ForcedAligner-0.6B F16 and Ultra base F16, both compared with upstream `qwen-asr` word timestamps (exact locally, tolerance one 80 ms class);
+  - canary-ctc-aligner Q4_K, against a native capture.
+- **Selection:** `tools/regression_select.py` maps the aligner sources to these entries.
+- **Per-model schedule removed:** the weekly Ultra cron is dropped; the manual Ultra audit stays.
+- **Ultra published:** the F16 GGUF is published as `cstr/qwen3-forced-aligner-ultra-GGUF@992f8360` (Apache-2.0), with the registry name `qwen3-forced-aligner-ultra`.
+- **Dispatch fix:** the aligner dispatch also accepts the upstream `ForcedAligner` spelling, with a unit test.
+- **SCNet:** qualification 42371575575 passed with the new real-model short-input and short-tail controls (#566 review item 2 verified).
+
+## 2026-11-07 — v0.8.51 published to PyPI and verified
+
+v0.8.51 (`008a771c5`) shipped:
+
+- the VoxCPM2 long-sentence VAE fix (#164);
+- the session auto-chunking and token-budget controls (#574);
+- opt-in Qwen3-TTS capture (#576);
+- off-value handling in `env_gate` (#572).
+
+PyPI publication was blocked because the wheel workflow's `macos-14` runner label is now rejected. `06a620d59` moved all `macos-14` uses to `macos-15`, and the wheel run was redispatched as 42359206396. Native audit 42334728938 and wheel audit 42360358086 are accepted.
+
+Also merged: PRs #582 (Qwen3-ForcedAligner-Ultra base audit) and #583 (RE-USE CPU reference audit), both #579 groundwork.
+
 ## 2026-11-03 — v0.8.50 published and verified
 
 Release 41675510092 (attempt 2 after a starved macOS job; 52 assets), wrappers 41675510012, Docker 41675510045. Native audit 41710437654 and wheel audit 41718388489 accepted. PyPI files came from wheel run 41706418193; a duplicate `workflow_run` wheel run (41710320363) rebuilt different bytes, so that run's cancelled GPU-index job was rerun and the audit pointed at it. Closed #562, #564, #569, #570; #568 open (Metal falls back to CPU).

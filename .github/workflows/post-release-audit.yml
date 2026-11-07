@@ -50,7 +50,7 @@ jobs:
             blas: 'ON'
             openmp: 'ON'
           - profile: macos-accelerate
-            os: macos-14
+            os: macos-15
             blas: 'ON'
             openmp: 'OFF'
           - profile: windows-msvc-openmp

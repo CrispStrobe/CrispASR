@@ -40,6 +40,7 @@ What happened 2026-11-02/03, so you don't redo it:
     A local cppcheck 2.17 does not reproduce every 2.7 finding.
   - **`src/core/backend_caps_table.h` is generated from the CLI's adapter caps.** Changing a backend's `capabilities()` needs the row updated, and CI's `gen-backend-caps-table.py --check` enforces it.
   - **Wheel runs:** a Release rerun that turns a failed run green fires a second `Release Python wheels` run. PyPI keeps the first run's bytes, so audit with the run whose `publish-pypi` uploaded (see PLAN lane R2).
+  - **Runner labels:** a job cancelled at 0 s with no steps means a rejected runner label (`macos-14`, Nov 2026). Change the label on main and redispatch; a rerun keeps the old workflow file.
   - **Release queue:** a tag push starts about 15 workflows. Cancelling the non-release ones speeds up Release, but **do not cancel "Publish Docker image"**, which is part of the release. Poll `gh` at most every 5 min; a 2-min multi-run loop hit the 5000/h API limit.
 - **Private details** (local paths, backups, credentials, storage) are in the gitignored local notes, never in this file.
 

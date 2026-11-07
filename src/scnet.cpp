@@ -1014,8 +1014,20 @@ Sources forward(scnet_context& model, const float* pcm, int samples, Captures* c
     if (((samples + padding) / HOP) % 2 == 0)
         padding += HOP;
     const int padded = samples + padding, frames = padded / HOP + 1, bins = FFT / 2 + 1;
-    if (padded <= FFT / 2)
-        throw std::runtime_error("SCNet raw input is too short for the original reflective STFT padding");
+    if (padded <= FFT / 2) {
+        // Too short for the original reflective STFT padding (a very short
+        // file or a short final segment). Zero-extend to the minimum length,
+        // run, and trim back, instead of aborting the whole separation
+        // (#566 review). Longer inputs never reach this branch, so qualified
+        // results are unchanged.
+        const int extended = FFT / 2 + 1;
+        std::vector<float> zero_padded(static_cast<size_t>(extended) * 2, 0.0f);
+        std::copy(pcm, pcm + static_cast<size_t>(samples) * 2, zero_padded.begin());
+        Sources out = forward(model, zero_padded.data(), extended, captures);
+        for (auto& source : out)
+            source.resize(static_cast<size_t>(samples) * 2);
+        return out;
+    }
     if (captures)
         put(captures, "raw_input_audio", {samples, 2, 1, 1},
             planar(std::vector<float>(pcm, pcm + size_t(samples) * 2)));

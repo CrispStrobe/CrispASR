@@ -57,6 +57,7 @@ Env:
 from __future__ import annotations
 
 import json
+import math
 import os
 import re
 import shutil
@@ -822,6 +823,77 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
     return 0 if (ok or advisory) else 1
 
 
+def compare_alignment(expected: list[dict], actual: list[dict], tolerance: float) -> tuple[bool, str, dict]:
+    """Compare word alignments: identical normalized words, every start/end
+    within ``tolerance`` seconds. Returns (ok, reason, stats)."""
+    def norm(word: str) -> str:
+        return re.sub(r"[^\w]", "", word.lower())
+
+    if not expected:
+        return False, "expected alignment is empty", {}
+    if len(expected) != len(actual):
+        return False, f"word count {len(actual)} != expected {len(expected)}", {}
+    got = [norm(str(w.get("word", ""))) for w in actual]
+    want = [norm(str(w["word"])) for w in expected]
+    if got != want:
+        first = next(i for i, (a, b) in enumerate(zip(got, want)) if a != b)
+        return False, f"word {first}: {got[first]!r} != expected {want[first]!r}", {}
+    errors = []
+    for a, b in zip(actual, expected):
+        for key in ("start", "end"):
+            try:
+                value = float(a[key])
+            except (KeyError, TypeError, ValueError):
+                return False, f"missing or non-numeric {key!r} for {a.get('word')!r}", {}
+            if not math.isfinite(value):
+                return False, f"non-finite {key} for {a.get('word')!r}", {}
+            errors.append(abs(value - float(b[key])))
+    stats = {"words": len(actual), "max_abs_s": max(errors), "mean_abs_s": sum(errors) / len(errors)}
+    if stats["max_abs_s"] > tolerance:
+        return False, f"max timestamp error {stats['max_abs_s']:.3f}s > {tolerance}s", stats
+    return True, "", stats
+
+
+def align_for(name: str, manifest: dict, work_dir: Path, crispasr_bin: Path) -> int:
+    """Run one forced-aligner regression (manifest.align_backends).
+
+    Downloads the pinned aligner GGUF, runs ``crispasr --align-only`` on the
+    entry's sample and reference text, and compares the JSON word alignment
+    with the pinned expected words (``expected_source`` records where they came
+    from, e.g. the upstream Python implementation). Returns failures (0/1).
+    """
+    entry = next((b for b in manifest.get("align_backends", []) if b["name"] == name), None)
+    if entry is None:
+        die(f"aligner '{name}' not in manifest.align_backends")
+    g = entry["gguf"]
+    print(f"\n[align] {name}  ({g['repo']}@{g['revision'][:8]}::{g['file']})")
+    print(f"  expected  {entry['expected_source']}")
+    # The Qwen3 forced-aligner path is selected by filename; keep the pinned name.
+    gguf = hf_download(g["repo"], g["file"], g["revision"], work_dir)
+    sample = REPO_ROOT / entry["sample"]
+    out_json = work_dir / f"align_{name}.json"
+    cmd = [str(crispasr_bin), "--align-only", "-am", str(gguf), "-f", str(sample),
+           "--ref-text", entry["ref_text"], "--align-format", "json", "--align-output", str(out_json),
+           "-ng", "-t", str(entry.get("threads", 2))] + list(entry.get("extra_args", []))
+    proc = _run_captured(cmd, check=False, timeout=int(entry.get("timeout_s", 900)), label="align")
+    if proc.returncode != 0 or not out_json.exists():
+        print(f"\033[31m  FAIL\033[0m  crispasr --align-only exited {proc.returncode}")
+        print((proc.stderr or "")[-2000:])
+        return 1
+    try:
+        actual = json.loads(out_json.read_text())
+    except ValueError as exc:
+        print(f"\033[31m  FAIL\033[0m  unreadable alignment JSON: {exc}")
+        return 1
+    ok, reason, stats = compare_alignment(entry["expected_words"], actual, float(entry["tolerance_s"]))
+    if ok:
+        print(f"\033[32m  PASS\033[0m  {stats['words']} words, max |dt| {stats['max_abs_s']:.3f}s "
+              f"(tol {entry['tolerance_s']}s)")
+        return 0
+    print(f"\033[31m  FAIL\033[0m  {reason}")
+    return 1
+
+
 def dry_run(manifest: dict, backend_filter: str | None = None) -> int:
     """HEAD-check every pinned HF object referenced by the manifest
     (or just one backend's entries). No downloads, no binary needed.
@@ -891,16 +963,19 @@ def dry_run(manifest: dict, backend_filter: str | None = None) -> int:
     failures = 0
     backends = manifest["backends"]
     tts_backends = manifest.get("tts_backends", [])
+    align_backends = manifest.get("align_backends", [])
     if backend_filter:
+        align_backends = [b for b in align_backends if b["name"] == backend_filter]
         filt_asr = [b for b in backends if b["name"] == backend_filter]
         filt_tts = [b for b in tts_backends if b["name"] == backend_filter]
-        if not filt_asr and not filt_tts:
+        if not filt_asr and not filt_tts and not align_backends:
             die(f"backend '{backend_filter}' not in manifest")
         backends = filt_asr
         tts_backends = filt_tts
 
     print(f"dry-run: fixtures {fx_repo}@{fx_rev[:8]} has {len(fx_files)} files")
-    print(f"dry-run: checking {len(backends)} ASR + {len(tts_backends)} TTS backend(s)")
+    print(f"dry-run: checking {len(backends)} ASR + {len(tts_backends)} TTS + "
+          f"{len(align_backends)} aligner backend(s)")
 
     for entry in backends:
         validate_exact_diff_transcript(entry)
@@ -1044,7 +1119,25 @@ def dry_run(manifest: dict, backend_filter: str | None = None) -> int:
             continue
         print(f"  \033[32mPASS\033[0m {name}  (TTS roundtrip via {asr_ref})")
 
-    total = len(backends) + len(tts_backends)
+    for entry in align_backends:
+        name = entry["name"]
+        missing = [k for k in ("gguf", "sample", "ref_text", "expected_words", "expected_source", "tolerance_s")
+                   if k not in entry]
+        if missing:
+            print(f"  \033[31mFAIL\033[0m {name}: align entry missing {missing}")
+            failures += 1
+            continue
+        if not (REPO_ROOT / entry["sample"]).exists():
+            print(f"  \033[31mFAIL\033[0m {name}: sample {entry['sample']} not in repo")
+            failures += 1
+            continue
+        if not _check_pinned_file("align gguf", name, entry["gguf"]["repo"],
+                                  entry["gguf"]["revision"], entry["gguf"]["file"]):
+            failures += 1
+            continue
+        print(f"  \033[32mPASS\033[0m {name}  (aligner vs {entry['expected_source']})")
+
+    total = len(backends) + len(tts_backends) + len(align_backends)
     if failures == 0:
         print(f"\n\033[32mOK\033[0m  dry-run: all {total} backend(s) "
               f"have their pinned artifacts on HF")
@@ -1098,10 +1191,12 @@ def main() -> int:
     asr_entry = next((b for b in manifest["backends"] if b["name"] == backend_name), None)
     tts_entry = next((b for b in manifest.get("tts_backends", [])
                       if b["name"] == backend_name), None) if asr_entry is None else None
+    align_entry = next((b for b in manifest.get("align_backends", [])
+                        if b["name"] == backend_name), None) if asr_entry is None and tts_entry is None else None
 
-    if asr_entry is None and tts_entry is None:
-        die(f"backend '{backend_name}' not in manifest.backends or "
-            f"manifest.tts_backends")
+    if asr_entry is None and tts_entry is None and align_entry is None:
+        die(f"backend '{backend_name}' not in manifest.backends, "
+            f"manifest.tts_backends or manifest.align_backends")
 
     # crispasr-diff is only needed for full ASR diff entries
     # (skip_diff=false). TTS roundtrip doesn't use it.
@@ -1119,7 +1214,9 @@ def main() -> int:
         diagnostics = os.environ.get("REGRESSION_DIAGNOSTICS_DIR")
         if diagnostics and Path(diagnostics).resolve().is_relative_to(work_root.resolve()):
             die("REGRESSION_DIAGNOSTICS_DIR must be outside WORK_DIR so cleanup preserves evidence")
-        if tts_entry is not None:
+        if align_entry is not None:
+            failures = align_for(backend_name, manifest, work_root, crispasr_bin)
+        elif tts_entry is not None:
             failures = tts_roundtrip_for(
                 backend_name, manifest, work_root, crispasr_bin)
         else:

@@ -470,6 +470,15 @@ std::vector<CrispasrAlignedWord> align_wav2vec2_ctc(const std::string& model_pat
 
 } // namespace
 
+// The Qwen3 forced-aligner path is chosen by filename. Upstream names the
+// Ultra checkpoint "Qwen3-ForcedAligner-Ultra" (no hyphen), so accept that
+// spelling too; a miss silently routes to the CTC aligner (#579).
+bool crispasr_aligner_is_qwen3_forced_aligner(const std::string& aligner_model) {
+    return path_contains_ci(aligner_model, "forced-aligner") || path_contains_ci(aligner_model, "forcedaligner") ||
+           path_contains_ci(aligner_model, "forced_aligner") || path_contains_ci(aligner_model, "qwen3-fa") ||
+           path_contains_ci(aligner_model, "qwen3-forced");
+}
+
 std::vector<std::string> crispasr_tokenise_align_words(const std::string& text) {
     return tokenise_words(text);
 }
@@ -709,9 +718,7 @@ static std::vector<CrispasrAlignedWord> align_words_impl(const std::string& alig
     if (aligner_model.empty() || transcript.empty() || !samples || n_samples <= 0 || chunk_seconds < 0)
         return out;
 
-    const bool is_qwen3_fa = path_contains_ci(aligner_model, "forced-aligner") ||
-                             path_contains_ci(aligner_model, "qwen3-fa") ||
-                             path_contains_ci(aligner_model, "qwen3-forced");
+    const bool is_qwen3_fa = crispasr_aligner_is_qwen3_forced_aligner(aligner_model);
 
     const bool is_wav2vec2 = !is_qwen3_fa && is_wav2vec2_aligner_model(aligner_model, gguf_architecture(aligner_model));
 

@@ -1,0 +1,43 @@
+name: issue579 Ultra CPU parity
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Build CLI
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=OFF
+          cmake --build build --target crispasr-cli -j 2
+      - name: Install reference dependencies
+        run: |
+          python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python3 -m pip install qwen-asr==0.0.6 gguf safetensors huggingface_hub
+      - name: Fetch pinned Ultra model and convert
+        run: |
+          python3 - <<'PY'
+          from huggingface_hub import snapshot_download
+          snapshot_download('17slever17/Qwen3-ForcedAligner-Ultra', revision='765dc1d714e4c80196782a5df5bfbcb3e1416736', local_dir='model', ignore_patterns=['local_head/*','companion/*','*.md','*.png'])
+          PY
+          sha256sum model/model.safetensors
+          python3 models/convert-qwen3-asr-to-gguf.py --input model --output qwen3-forced-aligner-ultra.gguf
+          sha256sum qwen3-forced-aligner-ultra.gguf
+      - name: Compare reference and CrispASR alignment
+        env:
+          OMP_NUM_THREADS: '2'
+          MKL_NUM_THREADS: '2'
+        run: python3 tools/ci-heavy/issue579_ultra_live.py
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: issue579-ultra-parity
+          path: |
+            reference.json
+            actual.json
+          if-no-files-found: ignore
