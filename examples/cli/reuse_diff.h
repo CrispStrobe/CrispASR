@@ -50,9 +50,11 @@ inline int run(const std::string& model_path, const std::string& ref_path) {
     if (!reuse_frontend_profile::select(std::getenv("CRISPASR_REUSE_FRONTEND"), frontend, profile))
         return 2;
 #ifdef CRISPASR_REUSE_HAVE_MKL
-    if (std::string(profile) == "mkl")
-        std::printf("reuse: experimental CPU frontend mkl; %s; parity is reference-environment-specific\n",
-                    reuse_frontend_mkl::version().c_str());
+    if (std::string(profile) != "native")
+        std::printf("reuse: experimental CPU frontend %s; loaded %s; MKL_ENABLE_INSTRUCTIONS=%s; "
+                    "parity requires reference-environment qualification\n",
+                    profile, reuse_frontend_mkl::version().c_str(),
+                    std::getenv("MKL_ENABLE_INSTRUCTIONS") ? std::getenv("MKL_ENABLE_INSTRUCTIONS") : "<unset>");
 #endif
     crispasr_diff::Ref ref;
     if (!ref.load(ref_path))
@@ -91,8 +93,9 @@ inline int run(const std::string& model_path, const std::string& ref_path) {
                                           conditioned ? &reference_phase : nullptr, frontend) ||
             trace.encoder_layers.size() != 6 || trace.block_time.size() != 30 || trace.blocks.size() != 30)
             return 2;
-        const std::string prefix = std::string(profile) == "native" ? (conditioned ? "conditioned/" : "native/")
-                                                                    : (conditioned ? "mkl-conditioned/" : "mkl/");
+        const std::string prefix = std::string(profile) == "native"
+                                       ? (conditioned ? "conditioned/" : "native/")
+                                       : std::string(profile) + (conditioned ? "-conditioned/" : "/");
         bool group = true;
         const auto check = [&](const std::string& name, const std::vector<float>& data,
                                const std::vector<int64_t>& shape, double tolerance = 0.002) {

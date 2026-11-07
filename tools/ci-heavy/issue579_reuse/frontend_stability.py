@@ -10,6 +10,8 @@ layout: window[640], then real, imaginary, log-magnitude, phase[frames,321].
 import argparse
 import hashlib
 import json
+import os
+import platform
 from pathlib import Path
 import wave
 
@@ -21,9 +23,12 @@ def metrics(actual, expected):
     if actual.shape != expected.shape or not actual.size or not np.isfinite(actual).all() or not np.isfinite(expected).all():
         raise ValueError('expected equal nonempty finite arrays')
     delta = actual.astype(np.float64) - expected
-    return {'differing': int(np.count_nonzero(actual != expected)),
-            'max_abs': float(np.max(np.abs(delta))),
-            'relative_rmse': float(np.linalg.norm(delta) / max(np.linalg.norm(expected.astype(np.float64)), 1e-30))}
+    result = {'differing': int(np.count_nonzero(actual != expected)),
+              'max_abs': float(np.max(np.abs(delta))),
+              'relative_rmse': float(np.linalg.norm(delta) / max(np.linalg.norm(expected.astype(np.float64)), 1e-30))}
+    if actual.dtype == expected.dtype == np.dtype('float32'):
+        result['bitwise_differing'] = int(np.count_nonzero(actual.view(np.uint32) != expected.view(np.uint32)))
+    return result
 
 
 def branches(actual, expected):
@@ -46,6 +51,36 @@ def validate(capture, audio):
         value = capture[name]
         if value.shape != shape or value.dtype != np.float32 or not np.isfinite(value).all():
             raise ValueError(f'invalid capture: {name}')
+    if ('real' in capture) != ('imaginary' in capture):
+        raise ValueError('capture real and imaginary must both be present')
+    if 'real' in capture:
+        first = np.stack((capture['real'][0], capture['imaginary'][0]), axis=-1)
+        if first.tobytes() != capture['first_complex'].tobytes():
+            raise ValueError('capture first_complex disagrees with full real/imaginary capture')
+
+
+def runtime_context(torch):
+    """Record public build/dispatch facts; never assume Torch's ISA is MKL's ISA."""
+    result = {'torch_build_config': torch.__config__.show(), 'machine': platform.machine(),
+              'mkl_available': bool(torch.backends.mkl.is_available()),
+              'num_threads': torch.get_num_threads(),
+              'dispatch_environment': {name: os.environ.get(name) for name in
+                                       ('MKL_ENABLE_INSTRUCTIONS', 'MKL_CBWR', 'MKL_NUM_THREADS',
+                                        'MKL_DYNAMIC', 'ATEN_CPU_CAPABILITY', 'OMP_NUM_THREADS')}}
+    try:
+        first_cpu = Path('/proc/cpuinfo').read_text().split('\n\n', 1)[0]
+        result['cpu'] = {key.strip(): value.strip() for line in first_cpu.splitlines()
+                         if ':' in line for key, value in [line.split(':', 1)]
+                         if key.strip() in ('vendor_id', 'model name', 'flags')}
+        libraries = set()
+        for line in Path('/proc/self/maps').read_text().splitlines():
+            name = Path(line.split()[-1]).name
+            if name.startswith(('libmkl_', 'libtorch_cpu', 'libiomp', 'libgomp')):
+                libraries.add(name)
+        result['mapped_math_libraries'] = sorted(libraries)
+    except OSError:
+        result['proc_metadata_available'] = False
+    return result
 
 
 def main():
@@ -78,6 +113,7 @@ def main():
     report = {'torch': str(torch.__version__), 'cpu_capability': torch.backends.cpu.get_cpu_capability(),
               'input_sha256': hashlib.sha256(audio.tobytes()).hexdigest(), 'samples': len(audio),
               'note': 'Diagnostic only. Raw phase remains a required model-input parity gate.'}
+    report.update(runtime_context(torch))
     if args.compare_npz:
         with np.load(args.compare_npz, allow_pickle=False) as saved:
             remote = {name: saved[name] for name in saved.files}
@@ -107,6 +143,9 @@ def main():
         report['native_vs_local_phase_branches'] = branches(phase, local['phase'])
         if args.compare_npz:
             report['native_vs_remote_phase_branches'] = branches(phase, remote['phase'])
+            for name, values in (('real', nr), ('imaginary', ni)):
+                if name in remote:
+                    report['native_vs_remote_' + name] = metrics(values, remote[name])
     args.report.write_text(json.dumps(report, indent=2) + '\n')
     print('REUSE_FRONTEND_STABILITY', json.dumps(report), flush=True)
 

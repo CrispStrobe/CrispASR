@@ -27,12 +27,22 @@ class FrontendStability(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 module.metrics(value, [1., 2.])
 
+    def test_signed_zero_is_visible_to_bitwise_metrics(self):
+        actual = np.array([0., -0.], np.float32)
+        expected = np.array([0., 0.], np.float32)
+        result = module.metrics(actual, expected)
+        self.assertEqual(result['differing'], 0)
+        self.assertEqual(result['bitwise_differing'], 1)
+
     def test_capture_rejects_changed_audio_invalid_shape_and_nonfinite(self):
         audio = np.ones(400, np.float32)
         capture = {'audio': audio.copy(), 'window': np.ones(640, np.float32),
                    'first_complex': np.ones((321, 2), np.float32),
                    **{name: np.ones((6, 321), np.float32) for name in ('phase', 'real', 'imaginary')}}
         module.validate(capture, audio)
+        inconsistent = {**capture, 'first_complex': -capture['first_complex']}
+        with self.assertRaisesRegex(ValueError, 'first_complex'):
+            module.validate(inconsistent, audio)
         for name, invalid in (('audio', -audio), ('window', np.ones(639, np.float32)),
                               ('phase', np.full((6, 321), np.nan, np.float32))):
             with self.subTest(name=name), self.assertRaises(ValueError):

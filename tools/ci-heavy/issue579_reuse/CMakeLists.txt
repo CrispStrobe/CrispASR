@@ -39,6 +39,7 @@ if(Python3_Interpreter_FOUND)
     if(TARGET reuse-frontend-mkl-probe)
         add_test(NAME reuse-mkl-probe-controls
             COMMAND ${CMAKE_COMMAND} -E env "REUSE_MKL_FRONTEND_PROBE=$<TARGET_FILE:reuse-frontend-mkl-probe>"
+                "REUSE_MKL_PROFILE_CONTROL=$<TARGET_FILE:reuse-profile-mkl>"
                 ${Python3_EXECUTABLE} "${REUSE_SOURCE_ROOT}/tests/test_reuse_mkl_probe.py")
     else()
         add_test(NAME reuse-mkl-dependency-controls

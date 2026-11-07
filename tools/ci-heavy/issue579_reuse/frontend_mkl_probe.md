@@ -59,13 +59,27 @@ phase, passed all 71 existing unconditioned intermediate/waveform gates on the
 This is a bounded CPU research profile, not a product backend qualification.
 
 The local and retained Kaggle Torch windows were already byte-identical, yet
-their FFTs chose opposite raw phase branches in 47 first-frame bins. This MKL
-profile reproduces the local reference, retaining those 47 differences from
-Kaggle. Its waveform differs from the Kaggle-phase original by about 1.49%,
-exceeding the unchanged 0.5% waveform gate. One waveform cannot meet both
-incompatible reference gates. An optional MKL implementation can qualify a
-pinned CPU reference profile; these results do not establish portable parity,
-GPU support, or a reason to replace the default frontend.
+their FFTs chose opposite raw phase branches in 47 first-frame bins. The CPU
+environment probe identified the difference: Kaggle's Intel Xeon executes MKL's
+AVX2 path, while the local Skylake host defaults to AVX512. Both Torch builds
+use MKL 2024.2. Limiting the standalone MKL 2025.0 process to AVX2 reproduces
+the retained Kaggle first-frame complex values exactly and removes all 47 raw
+phase branch differences. The unrestricted profile's waveform difference of
+about 1.49% remains a failed comparison with that AVX2 reference; the unchanged
+0.5% waveform gate must still decide model acceptance.
+
+An independent Kaggle capture of five 0.1-second excerpts from the public
+microphone recording confirms the AVX2 result across every frame: standalone
+MKL real and imaginary values match all captured float32 bits, including signed
+zeros. Raw phase has zero branch flips and maximum error 2.39e-7. The AVX512
+control produces 61, 73, 54, 63 and 65 branch flips on those same excerpts.
+Four additional local Torch AVX2 controls (silence, impulse, alternating samples,
+and a synthetic signal) also have exact complex values and no phase branch flips.
+These are bounded Intel x86 CPU observations, not a guarantee across oneMKL
+versions, CPU vendors, architectures, longer inputs, or GPU implementations.
+The retained official unfused CUDA capture still differs from the CPU AVX2
+capture in 51 raw phase branches on the 0.1-second input, all in frame zero.
+The AVX2 profile does not resolve that separate CPU/CUDA reference difference.
 
 The tested runtime mapped MKL/OpenMP shared objects totaling approximately
 220 MiB on disk; this is not a measurement of resident memory.
@@ -101,3 +115,32 @@ The SDK control also checks that the caller's local MKL thread setting survives
 both successful execution and rejected nonfinite input. All DFTI statuses are
 checked; errors fail the run without substituting another frontend or changing
 the existing comparison thresholds.
+
+For the explicit AVX2 research profile, start a fresh process with the ISA limit
+already set and the separate CNR dispatch control absent:
+
+```sh
+env -u MKL_CBWR MKL_ENABLE_INSTRUCTIONS=AVX2 CRISPASR_REUSE_FRONTEND=mkl-avx2 \
+  "$RUN_DIR/build/reuse-research-diff" model.gguf ref-avx2.gguf
+```
+
+`mkl-avx2` uses the same independent transform. Selection rejects a missing or
+different instruction limit, a nonempty `MKL_CBWR`, an unavailable SDK, or a
+host without detected AVX2 support before loading references or weights. It
+prints the loaded oneMKL version and requested limit, and labels its rows
+`mkl-avx2/`. It never changes the process environment or calls oneMKL's global
+instruction selector. Set the limit before the process starts; embedding code
+that previously changed MKL dispatch does not satisfy this contract. Intel's
+[instruction-selection documentation](https://www.intel.com/content/www/us/en/docs/onemkl/developer-reference-c/2025-1/mkl-enable-instructions.html)
+describes an ISA ceiling, so checking an environment string alone cannot prove
+the actual implementation dispatched. Qualify each target environment against
+the same raw complex/phase and unchanged model-output gates. The regular `mkl`
+profile retains the caller's normal dispatch and `native` remains the default.
+
+`frontend_stability.py` now records the Torch build configuration, CPU model and
+flags, dispatch environment, and mapped math-library basenames. It distinguishes
+bitwise float32 differences from numerical differences and verifies that a
+capture's first complex frame agrees with its full real/imaginary arrays. Signed
+zero matters: the AVX512 silence control contains 3,339 negative real zeros where
+AVX2 returns positive zero, producing different raw phases despite zero numerical
+complex error. Comparing only absolute complex error would hide that difference.

@@ -6,9 +6,17 @@
 #include <mkl.h>
 #endif
 
-int main() {
+int main(int argc, char** argv) {
     reuse_frontend_profile::Analyze selected = nullptr;
     const char* label = nullptr;
+    if (argc == 2 && std::strcmp(argv[1], "--select-avx2") == 0) {
+        if (!reuse_frontend_profile::select("mkl-avx2", selected, label))
+            return 2;
+        if (!selected || !label || std::strcmp(label, "mkl-avx2"))
+            return 8;
+        std::puts("REUSE_MKL_AVX2_PROFILE_SELECTED");
+        return 0;
+    }
     for (const char* name : {static_cast<const char*>(nullptr), "", "native"}) {
         if (!reuse_frontend_profile::select(name, selected, label) || selected != reuse_frontend::analyze ||
             std::strcmp(label, "native"))
@@ -44,6 +52,8 @@ int main() {
 #else
     if (available || selected || label)
         return 3;
+    if (reuse_frontend_profile::select("mkl-avx2", selected, label) || selected || label)
+        return 8;
     std::puts("RE-USE default selection and unavailable oneMKL rejection passed without an SDK");
 #endif
     return 0;

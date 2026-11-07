@@ -10,6 +10,40 @@ import unittest
 import wave
 
 PROBE = os.environ.get('REUSE_MKL_FRONTEND_PROBE')
+PROFILE = os.environ.get('REUSE_MKL_PROFILE_CONTROL')
+
+
+@unittest.skipUnless(PROFILE, 'optional oneMKL profile control is not configured')
+class Avx2StartupControls(unittest.TestCase):
+    def invoke(self, instructions=None, cbwr=None):
+        environment = os.environ.copy()
+        for name, value in (('MKL_ENABLE_INSTRUCTIONS', instructions), ('MKL_CBWR', cbwr)):
+            environment.pop(name, None)
+            if value is not None:
+                environment[name] = value
+        return subprocess.run([PROFILE, '--select-avx2'], env=environment,
+                              capture_output=True, text=True, timeout=30)
+
+    def test_profile_rejects_missing_or_conflicting_startup_instruction_limit(self):
+        for instructions in (None, '', 'AVX512', 'SSE4_2', 'avx2'):
+            with self.subTest(instructions=instructions):
+                result = self.invoke(instructions)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn('start the process with MKL_ENABLE_INSTRUCTIONS=AVX2', result.stderr)
+
+    def test_profile_rejects_a_second_dispatch_control(self):
+        for cbwr in ('COMPATIBLE', 'AVX512', 'AVX2'):
+            with self.subTest(cbwr=cbwr):
+                result = self.invoke('AVX2', cbwr)
+                self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+                self.assertIn('unset MKL_CBWR', result.stderr)
+
+    def test_profile_accepts_inherited_avx2_limit_on_supported_host(self):
+        result = self.invoke('AVX2')
+        if 'requires an x86 host with AVX2' in result.stderr:
+            self.skipTest('host lacks the required AVX2 instructions')
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn('REUSE_MKL_AVX2_PROFILE_SELECTED', result.stdout)
 
 
 @unittest.skipUnless(shutil.which('cmake'), 'cmake is unavailable')

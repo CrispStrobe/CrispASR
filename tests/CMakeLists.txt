@@ -6900,6 +6900,7 @@ if(TARGET crispasr-reuse-mkl)
     if(Python3_Interpreter_FOUND)
         add_test(NAME reuse-mkl-probe-controls
             COMMAND ${CMAKE_COMMAND} -E env "REUSE_MKL_FRONTEND_PROBE=$<TARGET_FILE:reuse-frontend-mkl-probe>"
+                "REUSE_MKL_PROFILE_CONTROL=$<TARGET_FILE:test-reuse-frontend-profile-mkl>"
                 ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reuse_mkl_probe.py)
         set_tests_properties(reuse-mkl-probe-controls PROPERTIES LABELS "unit;reuse;audio")
     endif()
