@@ -2509,7 +2509,7 @@ static int qwen3_asr_align_words_impl(struct qwen3_asr_context* ctx, const float
         float mx = row[0];
         // Ultra's local-head reference masks classes beyond the audio duration
         // before timestamp repair. The legacy aligner leaves them unchanged.
-        const int valid_classes = mask_to_audio ? std::min(H, n_samples / 1280 + 1) : H;
+        const int valid_classes = mask_to_audio ? qwen3_ultra_boundary::valid_timestamp_classes(n_samples, H) : H;
         for (int k = 1; k < valid_classes; k++) {
             if (row[k] > mx) {
                 mx = row[k];
@@ -2600,23 +2600,9 @@ extern "C" int qwen3_asr_align_words_ultra(struct qwen3_asr_context* ctx, const 
                 if (!qwen3_ultra_features::extract(audio, center, package.mean, package.stddev, features, false))
                     return -9;
                 std::array<float, qwen3_ultra_head::roles * qwen3_ultra_head::qwen_dim> context{};
-                const float mask[] = {1.0f, 1.0f, i > 0 ? 1.0f : 0.0f, i + 1 < n_words ? 1.0f : 0.0f};
-                for (int d = 0; d < qwen3_ultra_head::qwen_dim; ++d) {
-                    const size_t word = static_cast<size_t>(i) * 2 * qwen3_ultra_head::qwen_dim;
-                    context[d] = hidden[index * qwen3_ultra_head::qwen_dim + d];
-                    context[qwen3_ultra_head::qwen_dim + d] =
-                        (hidden[word + d] + hidden[word + qwen3_ultra_head::qwen_dim + d]) * 0.5f;
-                    if (i > 0)
-                        context[2 * qwen3_ultra_head::qwen_dim + d] =
-                            (hidden[word - 2 * qwen3_ultra_head::qwen_dim + d] +
-                             hidden[word - qwen3_ultra_head::qwen_dim + d]) *
-                            0.5f;
-                    if (i + 1 < n_words)
-                        context[3 * qwen3_ultra_head::qwen_dim + d] =
-                            (hidden[word + 2 * qwen3_ultra_head::qwen_dim + d] +
-                             hidden[word + 3 * qwen3_ultra_head::qwen_dim + d]) *
-                            0.5f;
-                }
+                std::array<float, qwen3_ultra_head::roles> mask{};
+                if (!qwen3_ultra_head::build_context(hidden.data(), hidden.size(), n_words, i, endpoint, context, mask))
+                    return -9;
                 std::array<float, qwen3_ultra_head::offsets> logits{};
                 if (!qwen3_ultra_head::run(package.weights, features[0].data(), context.data(), mask, endpoint,
                                            logits) ||

@@ -17,6 +17,10 @@ jobs:
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=OFF
           cmake --build build --target crispasr-cli issue579-ultra-hidden-probe issue579-ultra-sidecar-controls issue579-ultra-sidecar-oracle -j 2
           build/bin/issue579-ultra-hidden-probe
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-qwen3-ultra-boundary.cpp -o "$RUNNER_TEMP/ultra-boundary"
+          "$RUNNER_TEMP/ultra-boundary"
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-qwen3-ultra-head.cpp -o "$RUNNER_TEMP/ultra-head"
+          "$RUNNER_TEMP/ultra-head"
       - name: Install reference dependencies
         run: |
           python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
