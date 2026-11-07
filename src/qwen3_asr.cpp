@@ -2604,7 +2604,7 @@ extern "C" int qwen3_asr_align_words_ultra(struct qwen3_asr_context* ctx, const 
                 if (!qwen3_ultra_head::build_context(hidden.data(), hidden.size(), n_words, i, endpoint, context, mask))
                     return -9;
                 std::array<float, qwen3_ultra_head::offsets> logits{};
-                if (!qwen3_ultra_head::run(package.weights, features[0].data(), context.data(), mask, endpoint,
+                if (!qwen3_ultra_head::run(package.weights, features[0].data(), context.data(), mask.data(), endpoint,
                                            logits) ||
                     !qwen3_ultra_boundary::decode_offset(logits, corrections[index]))
                     return -9;
