@@ -1,7 +1,9 @@
 """Check sidecar conversion rejects malformed weights and preserves F32 bytes."""
 import importlib.util
+import gc
 from pathlib import Path
 import tempfile
+import subprocess
 import unittest
 import sys
 
@@ -32,6 +34,8 @@ class ConverterTest(unittest.TestCase):
             for name, expected in self.weights.items():
                 np.testing.assert_array_equal(actual[name].reshape(-1), expected.reshape(-1))
             np.testing.assert_array_equal(actual['normalizer.std'], np.ones(91, dtype=np.float32))
+            del actual
+            gc.collect()
 
     def test_rejects_missing_wrong_shape_and_nonfinite(self):
         name = 'audio.0.bias'
@@ -43,6 +47,23 @@ class ConverterTest(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     converter.validate(self.weights, self.norm)
                 self.weights[name] = original
+
+    def test_loader_negative_fixtures_are_constructed_as_intended(self):
+        root = Path(__file__).resolve().parents[1]
+        with tempfile.TemporaryDirectory() as temp:
+            subprocess.run([sys.executable, str(root / 'tools/ci-heavy/issue579_ultra_sidecar_fixtures.py'), temp],
+                           cwd=root, check=True)
+            directory = Path(temp)
+            for kind in ('valid', 'invalid', 'shape', 'nan', 'std'):
+                self.assertTrue((directory / f'synthetic-{kind}.gguf').is_file())
+            tensors = {t.name: t.data for t in gguf.GGUFReader(str(directory / 'synthetic-shape.gguf')).tensors}
+            self.assertEqual(tensors['audio.0.bias'].size, 127)
+            tensors = {t.name: t.data for t in gguf.GGUFReader(str(directory / 'synthetic-nan.gguf')).tensors}
+            self.assertTrue(np.isnan(tensors['audio.0.bias']).all())
+            tensors = {t.name: t.data for t in gguf.GGUFReader(str(directory / 'synthetic-std.gguf')).tensors}
+            self.assertTrue((tensors['normalizer.std'] == 0).all())
+            del tensors
+            gc.collect()
 
     def test_rejects_zero_or_nonfinite_normalizer(self):
         for value in (0.0, float('nan')):
