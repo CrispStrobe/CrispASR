@@ -118,6 +118,7 @@
 #include "tada_encoder.h"
 #include "tada_tts.h"
 #include "dots_tts.h"
+#include "reuse_diff.h"
 #include "supertonic_tts.h"
 #include "fireredtts3_tts.h"
 #include "t5_translate.h"
@@ -1816,6 +1817,9 @@ int main(int argc, char** argv) {
     const std::string model_path = argv[2];
     const std::string ref_path = argv[3];
     const std::string audio_path = argv[4];
+
+    if (backend_name == "reuse")
+        return reuse_diff::run(model_path, ref_path);
 
     // tiron (#295): decoded-output acceptance vs the reference transcript.
     if (backend_name == "tiron") {

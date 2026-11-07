@@ -63,6 +63,21 @@ static reuse_model_loader::Decoder decoder(bool phase) {
     return result;
 }
 int main() {
+    // Captured from torch.hann_window(320), including samples where changing
+    // the order of the float32 multiply/divide moves the value by 2 ULPs.
+    const auto window = reuse_frontend::periodic_hann(320);
+    if (window.size() != 320 || std::abs(window[211] - 0.769569159f) > 1e-7f ||
+        std::abs(window[218] - 0.709329724f) > 1e-7f)
+        return 9;
+    std::vector<float> negative_nyquist(200);
+    for (size_t i = 0; i < negative_nyquist.size(); ++i)
+        negative_nyquist[i] = i % 2 ? 1.0f : -1.0f;
+    reuse_frontend::Spectrum endpoint;
+    if (!reuse_frontend::analyze(negative_nyquist, 8000, endpoint))
+        return 10;
+    for (size_t t = 0; t < endpoint.frames; ++t)
+        if (std::abs(endpoint.phase[t * endpoint.bins + endpoint.bins - 1] - std::acos(-1.0f)) > 1e-6f)
+            return 11;
     reuse_model_loader::Model model;
     model.encoder.push_back(dense(2, 1, 1));
     for (size_t i = 1; i <= 4; ++i)
@@ -77,11 +92,26 @@ int main() {
     reuse_reference_network::Trace trace;
     if (!reuse_reference_network::run(model, input, 8000, output, &trace) || output.size() != input.size() ||
         trace.encoder.channels != 1 || trace.block0.values.empty() || trace.block14.values.empty() ||
-        trace.block29.values.empty())
+        trace.block29.values.empty() || trace.encoder_layers.size() != 6 || trace.block_time.size() != 30 ||
+        trace.blocks.size() != 30 || trace.phase.size() != trace.magnitude.size() ||
+        trace.amplitude.size() != trace.phase.size() || trace.output_phase.size() != trace.phase.size())
         return 1;
     for (float sample : output)
         if (sample != 0)
             return 2;
+    const auto saved_phase = trace.phase;
+    std::vector<float> conditioned;
+    if (!reuse_reference_network::run(model, input, 8000, conditioned, nullptr, &saved_phase) || conditioned != output)
+        return 6;
+    auto invalid_phase = saved_phase;
+    invalid_phase[0] = std::numeric_limits<float>::quiet_NaN();
+    conditioned = {42};
+    if (reuse_reference_network::run(model, input, 8000, conditioned, nullptr, &invalid_phase) ||
+        conditioned != std::vector<float>{42})
+        return 7;
+    invalid_phase.pop_back();
+    if (reuse_reference_network::run(model, input, 8000, conditioned, nullptr, &invalid_phase))
+        return 8;
     model.magnitude.first_bias = 0.5f;
     model.phase.second_bias = 1.0f;
     if (!reuse_reference_network::run(model, input, 8000, output) ||

@@ -10,7 +10,8 @@ struct Weights {
     reuse_bimamba::Weights time, frequency;
 };
 
-inline bool run(const Weights& w, const reuse_dense_encoder::Tensor& input, reuse_dense_encoder::Tensor& output) {
+inline bool run(const Weights& w, const reuse_dense_encoder::Tensor& input, reuse_dense_encoder::Tensor& output,
+                reuse_dense_encoder::Tensor* after_time = nullptr) {
     if (!reuse_dense_encoder::valid(input) || input.channels != w.time.forward.model ||
         input.channels != w.frequency.forward.model)
         return false;
@@ -42,6 +43,14 @@ inline bool run(const Weights& w, const reuse_dense_encoder::Tensor& input, reus
             }
     if (!reuse_dense_encoder::finite(result.values))
         return false;
+    if (after_time) {
+        reuse_dense_encoder::Tensor captured{channels, times, freqs, std::vector<float>(input.values.size())};
+        for (size_t c = 0; c < channels; ++c)
+            for (size_t t = 0; t < times; ++t)
+                for (size_t f = 0; f < freqs; ++f)
+                    captured.values[(c * times + t) * freqs + f] = freq_input[(t * freqs + f) * channels + c];
+        *after_time = std::move(captured);
+    }
     output = std::move(result);
     return true;
 }
