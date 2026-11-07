@@ -303,3 +303,12 @@ extensions. The [capture receipt](historical/reuse-fused-capture-20261107.json)
 records input, model and wheel hashes and dependency versions. The native
 cuFFT comparison against this capture is running as
 `issue579-reuse-cuda-fused-v1`; the capture alone is not a native parity pass.
+
+The subsequent native comparison `issue579-reuse-cuda-fused-v1` used that
+original fused capture. The independently computed cuFFT frontend and native
+CPU model graph passed all 71 unconditioned and 71 conditioned comparisons;
+unconditioned waveform relative RMS was 1.1407e-6. All six physical-GPU
+CTest targets passed. The [fused parity receipt](historical/reuse-cuda-fused-parity-20261107.json)
+records every stage and the original capture, model and payload hashes.
+This result is for one 100 ms clip on a T4; it does not qualify a full GPU
+model backend, long recordings, other devices or speech quality.
