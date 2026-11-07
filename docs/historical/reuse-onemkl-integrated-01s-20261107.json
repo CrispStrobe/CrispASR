@@ -1,0 +1,1200 @@
+{
+  "exit_code": 0,
+  "input_f32_sha256": "12e4f02454a088fedba2fb0876101d79211e8b1b6ae27c62968e501e4fe8f283",
+  "reference_sha256": "5ece5a806fbd4daf6633082a691facf216d28eaee1c3360803b8e4826760701b",
+  "log_sha256": "95597b3d7de8cf3d9b7905ceb01ae76b96c458ebca1093011fa07ad2e513151e",
+  "unconditioned_frontend": "independently generated VML_HA Hann + oneMKL DFTI real FFT; both magnitude and phase; no reference inputs",
+  "groups": {
+    "mkl": {
+      "passed": 71,
+      "frontend_phase": {
+        "stage": "frontend_phase",
+        "status": "PASS",
+        "rel_rms": 2.8984458e-08,
+        "max_abs": 2.3841858e-07,
+        "cos_min": 1.0,
+        "norm_ratio": 1.0
+      },
+      "waveform": {
+        "stage": "waveform",
+        "status": "PASS",
+        "rel_rms": 6.5987376e-07,
+        "max_abs": 1.6018748e-07,
+        "cos_min": 1.0,
+        "norm_ratio": 1.0
+      },
+      "rows": [
+        {
+          "stage": "frontend_magnitude",
+          "status": "PASS",
+          "rel_rms": 2.1997229e-08,
+          "max_abs": 2.3841858e-07,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "frontend_phase",
+          "status": "PASS",
+          "rel_rms": 2.8984458e-08,
+          "max_abs": 2.3841858e-07,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "encoder_layer_0",
+          "status": "PASS",
+          "rel_rms": 8.3539945e-08,
+          "max_abs": 7.1525574e-07,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "encoder_layer_1",
+          "status": "PASS",
+          "rel_rms": 5.9078263e-07,
+          "max_abs": 6.6757202e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "encoder_layer_2",
+          "status": "PASS",
+          "rel_rms": 9.5729854e-07,
+          "max_abs": 1.001358e-05,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "encoder_layer_3",
+          "status": "PASS",
+          "rel_rms": 1.6023877e-06,
+          "max_abs": 1.1205673e-05,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "encoder_layer_4",
+          "status": "PASS",
+          "rel_rms": 1.1326603e-06,
+          "max_abs": 1.9073486e-05,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "encoder_layer_5",
+          "status": "PASS",
+          "rel_rms": 6.3698826e-07,
+          "max_abs": 4.2915344e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_0",
+          "status": "PASS",
+          "rel_rms": 7.2627643e-07,
+          "max_abs": 5.0067902e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_0",
+          "status": "PASS",
+          "rel_rms": 7.6950295e-07,
+          "max_abs": 5.0067902e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999994
+        },
+        {
+          "stage": "block_time_1",
+          "status": "PASS",
+          "rel_rms": 8.6843181e-07,
+          "max_abs": 5.543232e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_1",
+          "status": "PASS",
+          "rel_rms": 8.925598e-07,
+          "max_abs": 5.8412552e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999994
+        },
+        {
+          "stage": "block_time_2",
+          "status": "PASS",
+          "rel_rms": 1.0074908e-06,
+          "max_abs": 6.1392784e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999994
+        },
+        {
+          "stage": "block_2",
+          "status": "PASS",
+          "rel_rms": 9.3233348e-07,
+          "max_abs": 6.5565109e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_3",
+          "status": "PASS",
+          "rel_rms": 9.9036242e-07,
+          "max_abs": 7.1525574e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_3",
+          "status": "PASS",
+          "rel_rms": 9.812095e-07,
+          "max_abs": 6.7949295e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_4",
+          "status": "PASS",
+          "rel_rms": 1.0884246e-06,
+          "max_abs": 6.4969063e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_4",
+          "status": "PASS",
+          "rel_rms": 9.4013581e-07,
+          "max_abs": 7.390976e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_5",
+          "status": "PASS",
+          "rel_rms": 1.062762e-06,
+          "max_abs": 6.7651272e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999994
+        },
+        {
+          "stage": "block_5",
+          "status": "PASS",
+          "rel_rms": 9.8986197e-07,
+          "max_abs": 6.6757202e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_6",
+          "status": "PASS",
+          "rel_rms": 1.0156706e-06,
+          "max_abs": 7.212162e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_6",
+          "status": "PASS",
+          "rel_rms": 1.0075881e-06,
+          "max_abs": 6.5565109e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_7",
+          "status": "PASS",
+          "rel_rms": 1.0119369e-06,
+          "max_abs": 1.3023615e-05,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_7",
+          "status": "PASS",
+          "rel_rms": 9.5919268e-07,
+          "max_abs": 1.0251999e-05,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_8",
+          "status": "PASS",
+          "rel_rms": 9.8478586e-07,
+          "max_abs": 9.059906e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999994
+        },
+        {
+          "stage": "block_8",
+          "status": "PASS",
+          "rel_rms": 9.8711359e-07,
+          "max_abs": 8.225441e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_9",
+          "status": "PASS",
+          "rel_rms": 9.9986289e-07,
+          "max_abs": 8.5830688e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_9",
+          "status": "PASS",
+          "rel_rms": 9.4404299e-07,
+          "max_abs": 8.225441e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999988
+        },
+        {
+          "stage": "block_time_10",
+          "status": "PASS",
+          "rel_rms": 9.7503482e-07,
+          "max_abs": 8.046627e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_10",
+          "status": "PASS",
+          "rel_rms": 9.2690493e-07,
+          "max_abs": 8.7022781e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_11",
+          "status": "PASS",
+          "rel_rms": 1.0017503e-06,
+          "max_abs": 9.2983246e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_11",
+          "status": "PASS",
+          "rel_rms": 9.1850842e-07,
+          "max_abs": 9.1791153e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_12",
+          "status": "PASS",
+          "rel_rms": 1.0008735e-06,
+          "max_abs": 8.5830688e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_12",
+          "status": "PASS",
+          "rel_rms": 8.9957018e-07,
+          "max_abs": 9.1791153e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_13",
+          "status": "PASS",
+          "rel_rms": 9.3373745e-07,
+          "max_abs": 8.9406967e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_13",
+          "status": "PASS",
+          "rel_rms": 9.8336875e-07,
+          "max_abs": 7.9870224e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_14",
+          "status": "PASS",
+          "rel_rms": 9.6685835e-07,
+          "max_abs": 8.1062317e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_14",
+          "status": "PASS",
+          "rel_rms": 9.3877816e-07,
+          "max_abs": 8.5532665e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_15",
+          "status": "PASS",
+          "rel_rms": 9.4458164e-07,
+          "max_abs": 7.8678131e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_15",
+          "status": "PASS",
+          "rel_rms": 9.6424685e-07,
+          "max_abs": 8.3148479e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_16",
+          "status": "PASS",
+          "rel_rms": 9.7516488e-07,
+          "max_abs": 8.136034e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_16",
+          "status": "PASS",
+          "rel_rms": 9.4746372e-07,
+          "max_abs": 9.3281269e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_17",
+          "status": "PASS",
+          "rel_rms": 9.6278529e-07,
+          "max_abs": 9.4920397e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_17",
+          "status": "PASS",
+          "rel_rms": 9.3473039e-07,
+          "max_abs": 8.6128712e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_18",
+          "status": "PASS",
+          "rel_rms": 9.6270105e-07,
+          "max_abs": 8.8810921e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_18",
+          "status": "PASS",
+          "rel_rms": 9.0143732e-07,
+          "max_abs": 8.4042549e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999988
+        },
+        {
+          "stage": "block_time_19",
+          "status": "PASS",
+          "rel_rms": 9.5452992e-07,
+          "max_abs": 7.6889992e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_19",
+          "status": "PASS",
+          "rel_rms": 8.5781676e-07,
+          "max_abs": 8.046627e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999988
+        },
+        {
+          "stage": "block_time_20",
+          "status": "PASS",
+          "rel_rms": 8.8607504e-07,
+          "max_abs": 7.212162e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_20",
+          "status": "PASS",
+          "rel_rms": 9.1234955e-07,
+          "max_abs": 7.0929527e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_21",
+          "status": "PASS",
+          "rel_rms": 9.0038844e-07,
+          "max_abs": 7.7858567e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_21",
+          "status": "PASS",
+          "rel_rms": 9.261226e-07,
+          "max_abs": 7.1525574e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_22",
+          "status": "PASS",
+          "rel_rms": 9.5658856e-07,
+          "max_abs": 6.1988831e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_22",
+          "status": "PASS",
+          "rel_rms": 9.3880334e-07,
+          "max_abs": 6.7949295e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_23",
+          "status": "PASS",
+          "rel_rms": 9.6701956e-07,
+          "max_abs": 6.5863132e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_23",
+          "status": "PASS",
+          "rel_rms": 9.8733574e-07,
+          "max_abs": 7.3611736e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_24",
+          "status": "PASS",
+          "rel_rms": 9.9682768e-07,
+          "max_abs": 6.8247318e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_24",
+          "status": "PASS",
+          "rel_rms": 1.0286634e-06,
+          "max_abs": 6.9737434e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_25",
+          "status": "PASS",
+          "rel_rms": 9.8009741e-07,
+          "max_abs": 6.5267086e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_25",
+          "status": "PASS",
+          "rel_rms": 1.0468141e-06,
+          "max_abs": 8.5234642e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_26",
+          "status": "PASS",
+          "rel_rms": 1.0940727e-06,
+          "max_abs": 7.390976e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_26",
+          "status": "PASS",
+          "rel_rms": 1.0399954e-06,
+          "max_abs": 6.6757202e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_27",
+          "status": "PASS",
+          "rel_rms": 1.097925e-06,
+          "max_abs": 8.8214874e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_27",
+          "status": "PASS",
+          "rel_rms": 1.1276419e-06,
+          "max_abs": 8.225441e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999988
+        },
+        {
+          "stage": "block_time_28",
+          "status": "PASS",
+          "rel_rms": 1.1032432e-06,
+          "max_abs": 7.9870224e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_28",
+          "status": "PASS",
+          "rel_rms": 1.1729713e-06,
+          "max_abs": 8.1062317e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_29",
+          "status": "PASS",
+          "rel_rms": 1.1740996e-06,
+          "max_abs": 9.2983246e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_29",
+          "status": "PASS",
+          "rel_rms": 1.0674476e-06,
+          "max_abs": 1.2397766e-05,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "amplitude",
+          "status": "PASS",
+          "rel_rms": 2.5768958e-07,
+          "max_abs": 1.3113022e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "output_phase",
+          "status": "PASS",
+          "rel_rms": 2.5290362e-06,
+          "max_abs": 0.00019216537,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "waveform",
+          "status": "PASS",
+          "rel_rms": 6.5987376e-07,
+          "max_abs": 1.6018748e-07,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        }
+      ]
+    },
+    "mkl-conditioned": {
+      "passed": 71,
+      "frontend_phase": {
+        "stage": "frontend_phase",
+        "status": "PASS",
+        "rel_rms": 0.0,
+        "max_abs": 0.0,
+        "cos_min": 1.0,
+        "norm_ratio": 1.0
+      },
+      "waveform": {
+        "stage": "waveform",
+        "status": "PASS",
+        "rel_rms": 7.1273058e-07,
+        "max_abs": 2.1234155e-07,
+        "cos_min": 1.0,
+        "norm_ratio": 0.99999988
+      },
+      "rows": [
+        {
+          "stage": "frontend_magnitude",
+          "status": "PASS",
+          "rel_rms": 2.1997229e-08,
+          "max_abs": 2.3841858e-07,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "frontend_phase",
+          "status": "PASS",
+          "rel_rms": 0.0,
+          "max_abs": 0.0,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "encoder_layer_0",
+          "status": "PASS",
+          "rel_rms": 7.9042415e-08,
+          "max_abs": 7.1525574e-07,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "encoder_layer_1",
+          "status": "PASS",
+          "rel_rms": 5.8951917e-07,
+          "max_abs": 6.6757202e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "encoder_layer_2",
+          "status": "PASS",
+          "rel_rms": 9.5650739e-07,
+          "max_abs": 9.5367432e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "encoder_layer_3",
+          "status": "PASS",
+          "rel_rms": 1.6017295e-06,
+          "max_abs": 1.1920929e-05,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "encoder_layer_4",
+          "status": "PASS",
+          "rel_rms": 1.1328406e-06,
+          "max_abs": 1.8119812e-05,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "encoder_layer_5",
+          "status": "PASS",
+          "rel_rms": 6.3773683e-07,
+          "max_abs": 4.2915344e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_0",
+          "status": "PASS",
+          "rel_rms": 7.2803181e-07,
+          "max_abs": 4.9471855e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_0",
+          "status": "PASS",
+          "rel_rms": 7.7359698e-07,
+          "max_abs": 5.0067902e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999994
+        },
+        {
+          "stage": "block_time_1",
+          "status": "PASS",
+          "rel_rms": 8.7382284e-07,
+          "max_abs": 5.5730343e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_1",
+          "status": "PASS",
+          "rel_rms": 8.9733163e-07,
+          "max_abs": 6.0498714e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999994
+        },
+        {
+          "stage": "block_time_2",
+          "status": "PASS",
+          "rel_rms": 1.0146963e-06,
+          "max_abs": 5.8412552e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999994
+        },
+        {
+          "stage": "block_2",
+          "status": "PASS",
+          "rel_rms": 9.3920761e-07,
+          "max_abs": 6.1392784e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_3",
+          "status": "PASS",
+          "rel_rms": 9.9750469e-07,
+          "max_abs": 6.7353249e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_3",
+          "status": "PASS",
+          "rel_rms": 9.8819362e-07,
+          "max_abs": 6.377697e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_4",
+          "status": "PASS",
+          "rel_rms": 1.0975853e-06,
+          "max_abs": 6.4373016e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_4",
+          "status": "PASS",
+          "rel_rms": 9.4882131e-07,
+          "max_abs": 7.4505806e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_5",
+          "status": "PASS",
+          "rel_rms": 1.0738249e-06,
+          "max_abs": 7.390976e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999994
+        },
+        {
+          "stage": "block_5",
+          "status": "PASS",
+          "rel_rms": 1.0014363e-06,
+          "max_abs": 6.3180923e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999994
+        },
+        {
+          "stage": "block_time_6",
+          "status": "PASS",
+          "rel_rms": 1.0253201e-06,
+          "max_abs": 6.3478947e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_6",
+          "status": "PASS",
+          "rel_rms": 1.0178837e-06,
+          "max_abs": 6.1988831e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_7",
+          "status": "PASS",
+          "rel_rms": 1.0199545e-06,
+          "max_abs": 9.1195107e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_7",
+          "status": "PASS",
+          "rel_rms": 9.6680424e-07,
+          "max_abs": 7.0333481e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_8",
+          "status": "PASS",
+          "rel_rms": 9.9302486e-07,
+          "max_abs": 7.390976e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999994
+        },
+        {
+          "stage": "block_8",
+          "status": "PASS",
+          "rel_rms": 9.9511647e-07,
+          "max_abs": 6.4969063e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_9",
+          "status": "PASS",
+          "rel_rms": 1.0076596e-06,
+          "max_abs": 7.0333481e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_9",
+          "status": "PASS",
+          "rel_rms": 9.5306797e-07,
+          "max_abs": 7.7486038e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999988
+        },
+        {
+          "stage": "block_time_10",
+          "status": "PASS",
+          "rel_rms": 9.8260955e-07,
+          "max_abs": 6.5565109e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_10",
+          "status": "PASS",
+          "rel_rms": 9.3446602e-07,
+          "max_abs": 7.1525574e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_11",
+          "status": "PASS",
+          "rel_rms": 1.0099677e-06,
+          "max_abs": 7.7486038e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_11",
+          "status": "PASS",
+          "rel_rms": 9.2552847e-07,
+          "max_abs": 7.7486038e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_12",
+          "status": "PASS",
+          "rel_rms": 1.0084167e-06,
+          "max_abs": 7.1525574e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_12",
+          "status": "PASS",
+          "rel_rms": 9.0811704e-07,
+          "max_abs": 7.8678131e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_13",
+          "status": "PASS",
+          "rel_rms": 9.4239738e-07,
+          "max_abs": 7.7486038e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_13",
+          "status": "PASS",
+          "rel_rms": 9.9086924e-07,
+          "max_abs": 7.0333481e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_14",
+          "status": "PASS",
+          "rel_rms": 9.7726593e-07,
+          "max_abs": 6.9141388e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_14",
+          "status": "PASS",
+          "rel_rms": 9.4917925e-07,
+          "max_abs": 7.2419643e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_15",
+          "status": "PASS",
+          "rel_rms": 9.5230178e-07,
+          "max_abs": 6.7949295e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_15",
+          "status": "PASS",
+          "rel_rms": 9.7230691e-07,
+          "max_abs": 7.3313713e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_16",
+          "status": "PASS",
+          "rel_rms": 9.8500141e-07,
+          "max_abs": 7.0631504e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_16",
+          "status": "PASS",
+          "rel_rms": 9.5608334e-07,
+          "max_abs": 8.3148479e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_17",
+          "status": "PASS",
+          "rel_rms": 9.7088537e-07,
+          "max_abs": 8.5383654e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_17",
+          "status": "PASS",
+          "rel_rms": 9.4146066e-07,
+          "max_abs": 7.8976154e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_18",
+          "status": "PASS",
+          "rel_rms": 9.701381e-07,
+          "max_abs": 8.2552433e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_18",
+          "status": "PASS",
+          "rel_rms": 9.055729e-07,
+          "max_abs": 7.6591969e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999988
+        },
+        {
+          "stage": "block_time_19",
+          "status": "PASS",
+          "rel_rms": 9.5901851e-07,
+          "max_abs": 7.1227551e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_19",
+          "status": "PASS",
+          "rel_rms": 8.602662e-07,
+          "max_abs": 7.4207783e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_20",
+          "status": "PASS",
+          "rel_rms": 8.9034643e-07,
+          "max_abs": 6.6161156e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_20",
+          "status": "PASS",
+          "rel_rms": 9.1736962e-07,
+          "max_abs": 6.2286854e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_21",
+          "status": "PASS",
+          "rel_rms": 9.0668368e-07,
+          "max_abs": 6.7949295e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_21",
+          "status": "PASS",
+          "rel_rms": 9.3369113e-07,
+          "max_abs": 5.6028366e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_22",
+          "status": "PASS",
+          "rel_rms": 9.6283281e-07,
+          "max_abs": 5.9008598e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_22",
+          "status": "PASS",
+          "rel_rms": 9.4465526e-07,
+          "max_abs": 5.8412552e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_23",
+          "status": "PASS",
+          "rel_rms": 9.7113366e-07,
+          "max_abs": 5.9008598e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_23",
+          "status": "PASS",
+          "rel_rms": 9.9231875e-07,
+          "max_abs": 6.5565109e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_24",
+          "status": "PASS",
+          "rel_rms": 1.0041575e-06,
+          "max_abs": 6.6757202e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_24",
+          "status": "PASS",
+          "rel_rms": 1.0344007e-06,
+          "max_abs": 6.377697e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_25",
+          "status": "PASS",
+          "rel_rms": 9.8971998e-07,
+          "max_abs": 6.9141388e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_25",
+          "status": "PASS",
+          "rel_rms": 1.0539314e-06,
+          "max_abs": 9.2387199e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_26",
+          "status": "PASS",
+          "rel_rms": 1.1011174e-06,
+          "max_abs": 8.4638596e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_26",
+          "status": "PASS",
+          "rel_rms": 1.0469738e-06,
+          "max_abs": 8.5830688e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_27",
+          "status": "PASS",
+          "rel_rms": 1.1052894e-06,
+          "max_abs": 1.0490417e-05,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_27",
+          "status": "PASS",
+          "rel_rms": 1.1407897e-06,
+          "max_abs": 8.1658363e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_time_28",
+          "status": "PASS",
+          "rel_rms": 1.1203365e-06,
+          "max_abs": 7.6293945e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "block_28",
+          "status": "PASS",
+          "rel_rms": 1.1919707e-06,
+          "max_abs": 9.1791153e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0000001
+        },
+        {
+          "stage": "block_time_29",
+          "status": "PASS",
+          "rel_rms": 1.2004116e-06,
+          "max_abs": 1.168251e-05,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0000001
+        },
+        {
+          "stage": "block_29",
+          "status": "PASS",
+          "rel_rms": 1.0858425e-06,
+          "max_abs": 1.9907951e-05,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "amplitude",
+          "status": "PASS",
+          "rel_rms": 2.7692533e-07,
+          "max_abs": 1.1324883e-06,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0000001
+        },
+        {
+          "stage": "output_phase",
+          "status": "PASS",
+          "rel_rms": 3.1101181e-06,
+          "max_abs": 0.00030112267,
+          "cos_min": 1.0,
+          "norm_ratio": 1.0
+        },
+        {
+          "stage": "waveform",
+          "status": "PASS",
+          "rel_rms": 7.1273058e-07,
+          "max_abs": 2.1234155e-07,
+          "cos_min": 1.0,
+          "norm_ratio": 0.99999988
+        }
+      ]
+    }
+  },
+  "source_file_sha256": {
+    "cmake/CrispasrReuseMkl.cmake": "4f55f3a7983fd0fe51df820de4585fc7d83d1fa395c9df2b9cccaa6c0426e9ab",
+    "examples/cli/reuse_frontend_profile.h": "fb3cd78f4ad14f41525e27391692314e06b39093a0ce0573cf3984ec78c3fb81",
+    "examples/cli/reuse_diff.h": "d307bdd95d26c274111d0bf7bdc2f4ae542a0a9255c30f1ee9f36bb4cc748b00",
+    "src/core/reuse_frontend_mkl.h": "d0b4b26cebf8c86742a1839793c6e9943fa3bcba03411de4da44dbcfd9f322ec",
+    "src/core/reuse_reference_network.h": "4668db5a050d733bc5eed1b914a53a65ff627ab3591b50fee27c3c89cc4072f2",
+    "tools/ci-heavy/issue579_reuse/frontend_mkl.cpp": "2444e9d9db477d2ae4901166ab826879bd2c20c6119fbc590974a34c658cd43e",
+    "tools/ci-heavy/issue579_reuse/frontend_mkl_probe.cpp": "e7380c39db67fb40175c645170c1983c2ebbff6a54fbc10deab7f9556a60fd00",
+    "tools/ci-heavy/issue579_reuse/diff_probe.cpp": "2f203ace3df9619d11307303847aa9045b706484a5ae27de2a7ea48832490fae",
+    "tools/ci-heavy/issue579_reuse/CMakeLists.txt": "f5901e1cbd39c426a723b0dc431aac3988c0ed038fc566efc55ac4c9d0b6ed98"
+  },
+  "model_sha256": "4621b396563157b3b4571a8402f56786093eea11cb411afc486fe74b06162dbc",
+  "executable_sha256": "4170c13e0f3f05a3f2bdc6bd71c1c577757fdb95afb70360c66a0e1094e19a95"
+}

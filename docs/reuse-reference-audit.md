@@ -204,3 +204,17 @@ different from that reference, above the 0.5% gate. The
 stage results. This is a pinned-profile result, not portable or fused-CUDA
 parity. The local profile loaded roughly 220 MiB of external MKL/OpenMP shared
 objects; none are bundled. An opt-in research integration is being evaluated.
+
+The experimental branch `work/issue579-reuse-decoder` now has an opt-in oneMKL
+research frontend at `4830b8e22`. On the same local 100 ms reference its
+integrated unconditioned run independently computed both magnitude and phase,
+and passed all 71 intermediate and waveform checks; all 71 conditioned checks
+also passed. Unconditioned waveform relative RMS was 6.60e-7. The
+[integrated receipt](historical/reuse-onemkl-integrated-01s-20261107.json)
+includes source and executable hashes and every stage. The one-second
+integrated run is in progress. The default research executable does not link
+MKL, and requesting an unavailable profile fails explicitly. Isolated SDK and
+default research CTests pass; a full product rebuild was not performed. The
+MKL profile remains experimental and does not resolve the Kaggle-reference
+phase discrepancy or establish GPU, long-recording, quality or fused-kernel
+parity.
