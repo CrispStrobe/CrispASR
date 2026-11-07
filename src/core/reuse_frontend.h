@@ -2,6 +2,7 @@
 
 // Pinned NVIDIA NemotronLabs RE-USE STFT frontend, isolated port stage.
 // This is not yet connected to a model runtime or a user-facing backend.
+#include <algorithm>
 #include <complex>
 #include <cmath>
 #include <cstdint>
@@ -95,6 +96,63 @@ inline bool analyze(const std::vector<float>& audio, int sample_rate, Spectrum& 
             result.magnitude[frame * bins + k] = std::log1p(std::hypot(re, im));
             result.phase[frame * bins + k] = std::atan2(im, re);
         }
+    }
+    output = std::move(result);
+    return true;
+}
+
+// Reconstruct the waveform from the three network heads. The network pads its
+// frequency dimension to an even number; only the original STFT bins count.
+inline bool synthesize(const Spectrum& spec, const std::vector<float>& amplitude, const std::vector<float>& real,
+                       const std::vector<float>& imaginary, size_t samples, std::vector<float>& output) {
+    if (spec.sample_rate < 8000 || spec.sample_rate > 48000 || spec.n_fft <= 0 || spec.n_fft % 2 || spec.hop <= 0 ||
+        spec.bins != static_cast<size_t>(spec.n_fft / 2 + 1) || spec.frames < 2)
+        return false;
+    const size_t padded_bins = spec.bins + spec.bins % 2;
+    if (spec.frames > std::numeric_limits<size_t>::max() / padded_bins ||
+        spec.frames - 1 > (std::numeric_limits<size_t>::max() - spec.n_fft) / spec.hop ||
+        amplitude.size() != spec.frames * padded_bins || real.size() != amplitude.size() ||
+        imaginary.size() != amplitude.size())
+        return false;
+    const size_t reconstructed = (spec.frames - 1) * static_cast<size_t>(spec.hop);
+    if (samples < reconstructed || samples - reconstructed >= static_cast<size_t>(spec.hop))
+        return false;
+    for (size_t i = 0; i < amplitude.size(); ++i)
+        if (!std::isfinite(amplitude[i]) || !std::isfinite(real[i]) || !std::isfinite(imaginary[i]))
+            return false;
+    std::vector<double> sum(reconstructed + spec.n_fft), envelope(sum.size());
+    std::vector<std::complex<double>> spectrum(spec.n_fft);
+    std::vector<float> window(spec.n_fft);
+    const float pi = std::acos(-1.0f);
+    for (int i = 0; i < spec.n_fft; ++i)
+        window[i] = 0.5f - 0.5f * std::cos(2.0f * pi * i / spec.n_fft);
+    for (size_t frame = 0; frame < spec.frames; ++frame) {
+        size_t zeros = 0;
+        for (size_t bin = 0; bin < spec.bins; ++bin)
+            zeros += amplitude[frame * padded_bins + bin] <= 0.0f;
+        for (size_t bin = 0; bin < spec.bins; ++bin) {
+            const size_t index = frame * padded_bins + bin;
+            const float magnitude = zeros * 2 > spec.bins ? 0.0f : std::expm1(std::max(0.0f, amplitude[index]));
+            if (!std::isfinite(magnitude))
+                return false;
+            const float phase = std::atan2(imaginary[index], real[index]);
+            spectrum[bin] = std::conj(std::complex<double>(magnitude * std::cos(phase), magnitude * std::sin(phase)));
+        }
+        for (size_t bin = spec.bins; bin < spectrum.size(); ++bin)
+            spectrum[bin] = std::conj(spectrum[spectrum.size() - bin]);
+        fft(spectrum);
+        for (int i = 0; i < spec.n_fft; ++i) {
+            const size_t index = frame * spec.hop + i;
+            sum[index] += spectrum[i].real() * window[i] / spec.n_fft;
+            envelope[index] += double(window[i]) * window[i];
+        }
+    }
+    std::vector<float> result(samples, 1e-8f);
+    for (size_t i = 0; i < reconstructed; ++i) {
+        const size_t index = i + spec.n_fft / 2;
+        if (envelope[index] <= 1e-11)
+            return false;
+        result[i] = static_cast<float>(sum[index] / envelope[index]);
     }
     output = std::move(result);
     return true;
