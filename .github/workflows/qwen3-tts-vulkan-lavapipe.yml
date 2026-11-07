@@ -3,6 +3,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 jobs:
   controls:
     runs-on: ubuntu-latest
@@ -14,3 +15,14 @@ jobs:
           "$RUNNER_TEMP/ultra-boundary"
           c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-qwen3-ultra-features.cpp -o "$RUNNER_TEMP/ultra-features"
           "$RUNNER_TEMP/ultra-features" samples/jfk.wav tests/fixtures/qwen3-ultra-features-f32le.bin
+      - name: Compare neural head against upstream logits
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 -m pip install numpy safetensors huggingface_hub
+          gh run download 42313568853 -n issue579-ultra-parity
+          python3 tools/ci-heavy/issue579_ultra_head_oracle.py
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-qwen3-ultra-head.cpp -o "$RUNNER_TEMP/ultra-head-controls"
+          "$RUNNER_TEMP/ultra-head-controls"
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-qwen3-ultra-head-oracle.cpp -o "$RUNNER_TEMP/ultra-head-oracle"
+          "$RUNNER_TEMP/ultra-head-oracle" ultra-head-oracle.bin
