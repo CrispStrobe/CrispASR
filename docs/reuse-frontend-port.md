@@ -23,6 +23,13 @@ with model-like amplitude and phase heads, including the silent-frame gate and
 short tail padding. Maximum sample error was 6.6e-9. Round trips at 16 kHz and
 44.1 kHz and invalid input controls are covered separately.
 
+`reuse-dense-encoder-reference` exercises a model-free CPU reference for the
+next boundary: input padding, the initial convolution, four dilated dense
+layers and the final strided convolution, including instance normalization and
+PReLU. All six synthetic stages are compared against independently generated
+PyTorch outputs. This does not yet load the checkpoint, validate actual-model
+encoder activations, or connect a dense encoder to a usable backend.
+
 The in-progress F32 converter `models/convert-reuse-to-gguf.py` pins the NVIDIA
 checkpoint and config hashes, validates its model/frontend contract, and
 rejects malformed or nonfinite tensors. `reuse-converter-controls` covers

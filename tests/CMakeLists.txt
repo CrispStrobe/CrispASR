@@ -6871,6 +6871,11 @@ add_test(NAME reuse-frontend-reference COMMAND test-reuse-frontend
     ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-istft-reference-f32le.bin)
 set_tests_properties(reuse-frontend-reference PROPERTIES LABELS "unit;reuse;audio")
 
+add_executable(test-reuse-dense-encoder test-reuse-dense-encoder.cpp)
+add_test(NAME reuse-dense-encoder-reference COMMAND test-reuse-dense-encoder
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-dense-encoder-f32le.bin)
+set_tests_properties(reuse-dense-encoder-reference PROPERTIES LABELS "unit;reuse;audio")
+
 add_executable(test-qwen3-tts-capture test-qwen3-tts-capture.cpp)
 target_include_directories(test-qwen3-tts-capture PRIVATE
     ${PROJECT_SOURCE_DIR}/src
