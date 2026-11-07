@@ -7,6 +7,10 @@
 using namespace qwen3_ultra_boundary;
 
 int main() {
+    if (valid_timestamp_classes(0, 5000) != 1 || valid_timestamp_classes(1279, 5000) != 1 ||
+        valid_timestamp_classes(1280, 5000) != 2 || valid_timestamp_classes(32000, 2) != 2 ||
+        valid_timestamp_classes(-1, 5000) != 0 || valid_timestamp_classes(1, 0) != 0)
+        return 13;
     std::array<float, 13> logits{};
     double offset = 0.0;
     if (!decode_offset(logits, offset) || std::abs(offset) > 1e-10)

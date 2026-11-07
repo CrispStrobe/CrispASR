@@ -84,12 +84,13 @@ inline void fft512(std::array<double, 512>& re, std::array<double, 512>& im) {
 }
 
 inline bool extract(const std::vector<float>& audio, double center_ms, const Normalizer& mean, const Normalizer& stddev,
-                    Features& output) {
+                    Features& output, bool validate_audio = true) {
     if (!std::isfinite(center_ms) || std::abs(center_ms) > 1.0e12)
         return false;
-    for (float x : audio)
-        if (!std::isfinite(x))
-            return false;
+    if (validate_audio)
+        for (float x : audio)
+            if (!std::isfinite(x))
+                return false;
     for (size_t i = 0; i < channels; ++i)
         if (!std::isfinite(mean[i]) || !std::isfinite(stddev[i]) || stddev[i] <= 0)
             return false;

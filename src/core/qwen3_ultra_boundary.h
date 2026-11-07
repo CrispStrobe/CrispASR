@@ -15,6 +15,13 @@ struct Interval {
     double end;
 };
 
+// Upstream masks classes after the audio end before timestamp repair.
+inline int valid_timestamp_classes(int n_samples, int class_count) {
+    if (n_samples < 0 || class_count <= 0)
+        return 0;
+    return std::min(class_count, n_samples / 1280 + 1);
+}
+
 inline bool decode_offset(const std::array<float, 13>& logits, double& offset) {
     for (float x : logits)
         if (!std::isfinite(x))

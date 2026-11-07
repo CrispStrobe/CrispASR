@@ -18,6 +18,27 @@ constexpr int frames = 41;
 constexpr int roles = 4;
 constexpr int offsets = 13;
 
+// Build the timestamp/current/previous/next roles expected by the upstream
+// head. Hidden states are [word, start/end, qwen_dim] in word-major order.
+inline bool build_context(const float* hidden, size_t hidden_count, int n_words, int word, int endpoint,
+                          std::array<float, roles * qwen_dim>& context, std::array<float, roles>& mask) {
+    if (!hidden || n_words <= 0 || word < 0 || word >= n_words || endpoint < 0 || endpoint > 1 ||
+        static_cast<size_t>(n_words) > hidden_count / qwen_dim / 2)
+        return false;
+    context.fill(0.0f);
+    mask = {1.0f, 1.0f, word > 0 ? 1.0f : 0.0f, word + 1 < n_words ? 1.0f : 0.0f};
+    const size_t base = static_cast<size_t>(word) * 2 * qwen_dim;
+    for (int d = 0; d < qwen_dim; ++d) {
+        context[d] = hidden[base + endpoint * qwen_dim + d];
+        context[qwen_dim + d] = (hidden[base + d] + hidden[base + qwen_dim + d]) * 0.5f;
+        if (word > 0)
+            context[2 * qwen_dim + d] = (hidden[base - 2 * qwen_dim + d] + hidden[base - qwen_dim + d]) * 0.5f;
+        if (word + 1 < n_words)
+            context[3 * qwen_dim + d] = (hidden[base + 2 * qwen_dim + d] + hidden[base + 3 * qwen_dim + d]) * 0.5f;
+    }
+    return true;
+}
+
 struct AttentionWeights {
     std::vector<float> in_weight, in_bias, out_weight, out_bias;
     bool valid() const {

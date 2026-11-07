@@ -37,6 +37,22 @@ static Weights zero_weights() {
 }
 
 int main() {
+    std::vector<float> hidden(3 * 2 * qwen_dim);
+    for (int i = 0; i < 6; ++i)
+        std::fill(hidden.begin() + i * qwen_dim, hidden.begin() + (i + 1) * qwen_dim, static_cast<float>(i));
+    std::array<float, roles * qwen_dim> role_context{};
+    std::array<float, roles> role_mask{};
+    if (!build_context(hidden.data(), hidden.size(), 3, 0, 1, role_context, role_mask) ||
+        role_mask != std::array<float, roles>{1, 1, 0, 1} || role_context[0] != 1 || role_context[qwen_dim] != 0.5f ||
+        role_context[2 * qwen_dim] != 0 || role_context[3 * qwen_dim] != 2.5f)
+        return 7;
+    if (!build_context(hidden.data(), hidden.size(), 3, 2, 0, role_context, role_mask) ||
+        role_mask != std::array<float, roles>{1, 1, 1, 0} || role_context[0] != 4 || role_context[qwen_dim] != 4.5f ||
+        role_context[2 * qwen_dim] != 2.5f || role_context[3 * qwen_dim] != 0)
+        return 8;
+    if (build_context(hidden.data(), hidden.size() - 1, 3, 0, 0, role_context, role_mask) ||
+        build_context(hidden.data(), hidden.size(), 3, 3, 0, role_context, role_mask))
+        return 9;
     auto w = zero_weights();
     std::array<float, frames * feature_dim> features{};
     std::array<float, roles * qwen_dim> context{};
