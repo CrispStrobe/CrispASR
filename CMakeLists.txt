@@ -550,3 +550,7 @@ option(CRISPASR_BUILD_CANN_LAYOUT_PROBE "Build the optional CANN weight-layout d
 if(CRISPASR_BUILD_CANN_LAYOUT_PROBE)
     add_subdirectory(tools/ci-heavy/cann-weight-layout)
 endif()
+
+# Validation-only hidden-state probe; this branch is not a product change.
+add_executable(issue579-ultra-hidden-probe tests/test-qwen3-ultra-hidden.cpp)
+target_link_libraries(issue579-ultra-hidden-probe PRIVATE qwen3_asr)

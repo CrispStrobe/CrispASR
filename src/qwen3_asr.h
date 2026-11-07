@@ -209,6 +209,14 @@ float* qwen3_asr_run_aligner(struct qwen3_asr_context* ctx, const float* inputs_
 int qwen3_asr_align_words(struct qwen3_asr_context* ctx, const float* samples, int n_samples, const char** words,
                           int n_words, int64_t* out_start_ms, int64_t* out_end_ms);
 
+// Diagnostic/porting API: additionally copy the final normalized hidden state
+// at each timestamp marker into `out_hidden`, in word/start/end order. The
+// buffer capacity is measured in float elements and must hold 2*n_words*d_model.
+// This opt-in path leaves the existing alignment API and its graph unchanged.
+int qwen3_asr_align_words_with_hidden(struct qwen3_asr_context* ctx, const float* samples, int n_samples,
+                                      const char** words, int n_words, int64_t* out_start_ms, int64_t* out_end_ms,
+                                      float* out_hidden, size_t hidden_capacity);
+
 #ifdef __cplusplus
 }
 #endif

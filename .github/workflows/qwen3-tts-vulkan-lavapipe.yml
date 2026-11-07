@@ -3,6 +3,7 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 jobs:
   audit:
     runs-on: ubuntu-latest
@@ -14,7 +15,8 @@ jobs:
       - name: Build CLI
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=OFF
-          cmake --build build --target crispasr-cli -j 2
+          cmake --build build --target crispasr-cli issue579-ultra-hidden-probe -j 2
+          build/bin/issue579-ultra-hidden-probe
       - name: Install reference dependencies
         run: |
           python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
@@ -40,6 +42,15 @@ jobs:
         run: |
           python3 -m pip install --no-deps model/companion/dist/qwen_fa_ultra-0.1.1-py3-none-any.whl
           python3 tools/ci-heavy/issue579_ultra_local_reference.py
+      - name: Compare opt-in hidden states with upstream
+        env:
+          GH_TOKEN: ${{ github.token }}
+          OMP_NUM_THREADS: '2'
+        run: |
+          gh run download 42313568853 -n issue579-ultra-parity -D prior-reference
+          cp prior-reference/local-head-stages.npz .
+          build/bin/issue579-ultra-hidden-probe qwen3-forced-aligner-ultra.gguf samples/jfk.wav ultra-hidden.bin
+          python3 tools/ci-heavy/issue579_ultra_hidden_compare.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -49,4 +60,5 @@ jobs:
             actual.json
             local-head-reference.json
             local-head-stages.npz
+            ultra-hidden.bin
           if-no-files-found: ignore
