@@ -14,16 +14,19 @@ int main(int argc, char** argv) {
         ggml_backend_free(backend);
         return 3;
     }
-    if (argc == 3) {
+    if (argc >= 3) {
         if (!qwen3_ultra_sidecar::load(argv[1], backend, package) || !package.weights.valid() ||
             package.mean[0] != 0.0f || package.stddev[0] != 1.0f || package.weights.audio0_weight[0] != 0.25f) {
             ggml_backend_free(backend);
             return 4;
         }
         package.mean[0] = 42.0f;
-        if (qwen3_ultra_sidecar::load(argv[2], backend, package) || package.mean[0] != 42.0f) {
-            ggml_backend_free(backend);
-            return 5;
+        for (int i = 2; i < argc; ++i) {
+            if (qwen3_ultra_sidecar::load(argv[i], backend, package) || package.mean[0] != 42.0f ||
+                package.weights.audio0_weight[0] != 0.25f) {
+                ggml_backend_free(backend);
+                return 5;
+            }
         }
     } else if (argc != 1) {
         ggml_backend_free(backend);

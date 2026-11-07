@@ -33,7 +33,7 @@ jobs:
           python3 models/convert-qwen3-ultra-head-to-gguf.py --input model/local_head --output ultra-local-head.gguf
           python3 tools/ci-heavy/issue579_ultra_sidecar_fixtures.py
           build/bin/issue579-ultra-sidecar-controls
-          build/bin/issue579-ultra-sidecar-controls synthetic-valid.gguf synthetic-invalid.gguf
+          build/bin/issue579-ultra-sidecar-controls synthetic-valid.gguf synthetic-invalid.gguf synthetic-shape.gguf synthetic-nan.gguf synthetic-std.gguf
       - name: Compare reference and CrispASR alignment
         env:
           OMP_NUM_THREADS: '2'

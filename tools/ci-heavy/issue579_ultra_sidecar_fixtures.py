@@ -16,3 +16,22 @@ w.write_header_to_file()
 w.write_kv_data_to_file()
 w.write_tensors_to_file()
 w.close()
+
+# Keep the correct architecture and all names, then corrupt one field at a
+# time so each loader guard is exercised independently.
+for kind in ('shape', 'nan', 'std'):
+    w = gguf.GGUFWriter(f'synthetic-{kind}.gguf', arch='qwen3_ultra_head')
+    w.add_string('qwen3_ultra_head.source_revision', converter.REVISION)
+    for name, shape in converter.SHAPES.items():
+        value = weights[name]
+        if kind == 'shape' and name == 'audio.0.bias':
+            value = np.zeros((127,), dtype=np.float32)
+        elif kind == 'nan' and name == 'audio.0.bias':
+            value = np.full(shape, np.nan, dtype=np.float32)
+        w.add_tensor(name, np.ascontiguousarray(value).reshape(shape or (1,)))
+    w.add_tensor('normalizer.mean', np.zeros(91, dtype=np.float32))
+    w.add_tensor('normalizer.std', np.zeros(91, dtype=np.float32) if kind == 'std' else np.ones(91, dtype=np.float32))
+    w.write_header_to_file()
+    w.write_kv_data_to_file()
+    w.write_tensors_to_file()
+    w.close()
