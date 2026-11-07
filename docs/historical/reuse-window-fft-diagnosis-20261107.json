@@ -1,0 +1,81 @@
+{
+  "scope": "One 1600-sample 16 kHz PCM speech excerpt; Torch CPU STFT on local and Kaggle CPU environments, plus native CPU frontend. Not a model parity or quality test.",
+  "source_revision": "f169cc3a3b4718739febffc67afd9c13dcbc67d6",
+  "remote_torch": "2.11.0+cpu",
+  "wav_sha256": "910496b04f0a6f5d8db8705a516b1bfcf91508bf688276504defd12676184a8d",
+  "audit": {
+    "torch": "2.11.0+cu130",
+    "cpu_capability": "AVX512",
+    "input_sha256": "12e4f02454a088fedba2fb0876101d79211e8b1b6ae27c62968e501e4fe8f283",
+    "samples": 1600,
+    "note": "Diagnostic only. Raw phase remains a required model-input parity gate.",
+    "local_vs_remote_window": {
+      "differing": 0,
+      "max_abs": 0.0,
+      "relative_rmse": 0.0
+    },
+    "local_vs_remote_phase_branches": {
+      "all": 47,
+      "first_frame": 47
+    },
+    "local_with_remote_window_vs_remote_phase_branches": {
+      "all": 47,
+      "first_frame": 47
+    },
+    "local_vs_remote_first_complex": {
+      "differing": 616,
+      "max_abs": 3.1177967230178183e-07,
+      "relative_rmse": 1.6213412748689884e-07
+    },
+    "native_vs_local_window": {
+      "differing": 27,
+      "max_abs": 5.960464477539063e-08,
+      "relative_rmse": 1.5269146719905077e-08
+    },
+    "same_window_float_multiply": {
+      "differing": 0,
+      "max_abs": 0.0,
+      "relative_rmse": 0.0
+    },
+    "native_vs_local_real": {
+      "differing": 6412,
+      "max_abs": 1.9073486328125e-06,
+      "relative_rmse": 1.2591749243685956e-07
+    },
+    "native_vs_local_imaginary": {
+      "differing": 6413,
+      "max_abs": 1.9073486328125e-06,
+      "relative_rmse": 1.3032885179538958e-07
+    },
+    "native_vs_local_phase_branches": {
+      "all": 36,
+      "first_frame": 36
+    },
+    "native_vs_remote_phase_branches": {
+      "all": 35,
+      "first_frame": 35
+    }
+  },
+  "exact_window_counterfactual": {
+    "native": {
+      "vs_local_torch": {
+        "all": 36,
+        "first_frame": 36
+      },
+      "vs_kaggle_torch": {
+        "all": 35,
+        "first_frame": 35
+      }
+    },
+    "exact-window-native": {
+      "vs_local_torch": {
+        "all": 38,
+        "first_frame": 38
+      },
+      "vs_kaggle_torch": {
+        "all": 31,
+        "first_frame": 31
+      }
+    }
+  }
+}

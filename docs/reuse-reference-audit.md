@@ -176,3 +176,15 @@ The overall run failed because intermediate comparisons remain required;
 conditioning is diagnostic. The [receipt](historical/reuse-one-second-diff-20261107.json)
 records every comparison. This is one sample, not a quality corpus or a fused
 CUDA reference.
+
+
+A [window and FFT investigation](historical/reuse-window-fft-diagnosis-20261107.json)
+replayed the 100 ms input on local and Kaggle CPU PyTorch 2.11 builds. Their
+Hann windows were byte-identical, yet 47 first-frame raw-phase bins differed
+by more than one radian; replaying the Kaggle window locally left the same 47
+flips. The native window differed in 27 of 640 float values. Replacing it
+with the exact PyTorch window in a diagnostic native FFT changed its branch
+mismatches from 36 to 38 against local PyTorch and from 35 to 31 against Kaggle.
+This isolates a backend or environment effect between those PyTorch runs; it
+does not exclude separate effects from native window rounding. No window or
+phase convention change was accepted as a parity fix.
