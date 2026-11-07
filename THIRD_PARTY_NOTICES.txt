@@ -860,3 +860,25 @@ SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 CUDA compiler/device code retains applicable NVIDIA rights under the SDK
 terms: https://docs.nvidia.com/cuda/archive/12.4.1/eula/index.html
+
+────────────────────────────────────────────────────────────────────────────────
+NVIDIA NemotronLabs RE-USE — MODEL MATERIALS AND REFERENCE
+(https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE)
+OpenMDW License Agreement v1.1
+────────────────────────────────────────────────────────────────────────────────
+
+The experimental RE-USE conversion and reference work targets NVIDIA's
+checkpoint and model source at revision
+31f82f2efad1095034492f236e8dac9239ba713b. The checkpoint is downloaded
+separately and is not included in this repository. NVIDIA's model materials,
+including its architecture and related software, carry OpenMDW-1.1; their
+license and original notices are retained at docs/reuse-model-notices/LICENSE.txt.
+CrispASR's root MIT license does not replace the terms on NVIDIA materials.
+
+The research reference loads NVIDIA's Python modules from the separately
+acquired model repository and uses a non-fused Mamba adapter. Mamba's upstream
+reference is Apache-2.0; NVIDIA's original third-party notice is included in
+the retained license file. No source from speech.cpp, audio.cpp, reuse-rs, or
+RE-USE Audio has been copied into this experimental implementation. The
+separate original and real-time RE-USE checkpoints use different licenses;
+their terms must not be inferred from the NemotronLabs checkpoint.
