@@ -871,6 +871,7 @@ def align_for(name: str, manifest: dict, work_dir: Path, crispasr_bin: Path) -> 
     # The Qwen3 forced-aligner path is selected by filename; keep the pinned name.
     gguf = hf_download(g["repo"], g["file"], g["revision"], work_dir)
     sample = REPO_ROOT / entry["sample"]
+    work_dir.mkdir(parents=True, exist_ok=True)
     out_json = work_dir / f"align_{name}.json"
     cmd = [str(crispasr_bin), "--align-only", "-am", str(gguf), "-f", str(sample),
            "--ref-text", entry["ref_text"], "--align-format", "json", "--align-output", str(out_json),
