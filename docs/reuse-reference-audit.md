@@ -220,3 +220,33 @@ default research CTests pass; a full product rebuild was not performed. The
 MKL profile remains experimental and does not resolve the Kaggle-reference
 phase discrepancy or establish GPU, long-recording, quality or fused-kernel
 parity.
+
+### CPU FFT dispatch and cross-machine parity
+
+The independent Kaggle CPU capture uses PyTorch 2.11 CPU with oneMKL 2024.2
+and AVX2 dispatch; the local machine normally dispatches AVX-512. On five
+100 ms excerpts from the same recording, independently computed oneMKL 2025
+AVX2 complex spectra matched Kaggle's float32 real and imaginary **bits**,
+including signed zeros, with no raw phase branch flips. The AVX-512 control
+flipped 54–73 branches per excerpt. The [five-clip receipt](historical/reuse-avx2-multi-fft-20261107.json)
+records the comparisons. This is a bounded x86 CPU result, not a guarantee for
+other versions, CPUs or recordings.
+
+The explicit `mkl-avx2` research profile at branch commit `3f43acce9` requires
+`MKL_ENABLE_INSTRUCTIONS=AVX2` at process startup, no `MKL_CBWR`, an external
+oneMKL SDK and an AVX2 host. It passed all 71 unconditioned and all 71
+conditioned comparisons against a separately generated Kaggle original-network
+CPU reference, with unconditioned waveform relative RMS 1.06e-6. See the
+[cross-machine receipt](historical/reuse-avx2-kaggle-integrated-20261107.json).
+The reference uses an unfused Mamba adapter. Environment variables set a
+oneMKL instruction ceiling; users must qualify actual dispatch and version,
+not assume an environment string alone guarantees identical results. The
+standard `native` and `mkl` profiles remain unchanged.
+
+A separate Kaggle T4 experiment used Torch-prepared GPU frames and the same
+window to compare public cuFFT with Torch's GPU STFT. On one 100 ms input,
+complex output was bit-identical and raw phase had no branch flips; it also
+matched the prior unfused CUDA reference phase within 2.39e-7. The
+[receipt](historical/reuse-cufft-fft-probe-20261107.json) does not validate
+native preprocessing, a native CUDA frontend, the full model or fused Mamba.
+A CUDA research profile and end-to-end comparison remain in progress.

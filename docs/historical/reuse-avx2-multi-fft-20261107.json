@@ -1,0 +1,652 @@
+{
+  "scope": "Five 100 ms excerpts from one recording; local external oneMKL 2025 AVX2 versus independent Kaggle PyTorch CPU oneMKL 2024.2 AVX2. Raw complex bit identity and raw phase checked, not fused CUDA or quality validation.",
+  "source_revision": "3f43acce9",
+  "kaggle_run": "issue579-reuse-fft-env-v2",
+  "kaggle_cpu_model": "Intel(R) Xeon(R) CPU @ 2.20GHz",
+  "kaggle_cpu_capability": "AVX2",
+  "kaggle_torch": "2.11.0+cpu",
+  "comparison": {
+    "torch": "2.11.0+cu130",
+    "environment": "AVX2",
+    "results": [
+      {
+        "case": "excerpt_0",
+        "input_sha256": "fb7186f17304dfbdf7d6343ae9877d558691773597bb11bd2b1c54627f922168",
+        "AVX2": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 1036,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            }
+          },
+          "vs_kaggle_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 1036,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            }
+          }
+        },
+        "AVX512": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 6140,
+              "max_abs": 5.960464477539063e-08,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 6117,
+              "max_abs": 4.780304152518511e-08,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 5399,
+              "max_abs": 6.2831854820251465,
+              "branch_flips": 61
+            }
+          },
+          "vs_kaggle_avx2": {
+            "real": {
+              "bitwise_differing": 6140,
+              "max_abs": 5.960464477539063e-08,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 6117,
+              "max_abs": 4.780304152518511e-08,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 5399,
+              "max_abs": 6.2831854820251465,
+              "branch_flips": 61
+            }
+          }
+        }
+      },
+      {
+        "case": "excerpt_1",
+        "input_sha256": "dbdf21a917a2d8fb584430b9b549c0d94056c8941d2a98acac782292447e7e5f",
+        "AVX2": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 1033,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            }
+          },
+          "vs_kaggle_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 1033,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            }
+          }
+        },
+        "AVX512": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 6335,
+              "max_abs": 1.9017606973648071e-06,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 6320,
+              "max_abs": 1.9073486328125e-06,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 5938,
+              "max_abs": 6.283185243606567,
+              "branch_flips": 73
+            }
+          },
+          "vs_kaggle_avx2": {
+            "real": {
+              "bitwise_differing": 6335,
+              "max_abs": 1.9017606973648071e-06,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 6320,
+              "max_abs": 1.9073486328125e-06,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 5938,
+              "max_abs": 6.283185243606567,
+              "branch_flips": 73
+            }
+          }
+        }
+      },
+      {
+        "case": "excerpt_2",
+        "input_sha256": "584f3746ec95e8adf4e04c54b3ecd79c8c07011b7c87c894fa59125510fea551",
+        "AVX2": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 1058,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            }
+          },
+          "vs_kaggle_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 1058,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            }
+          }
+        },
+        "AVX512": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 6308,
+              "max_abs": 9.5367431640625e-07,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 6326,
+              "max_abs": 9.5367431640625e-07,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 5860,
+              "max_abs": 6.283185243606567,
+              "branch_flips": 54
+            }
+          },
+          "vs_kaggle_avx2": {
+            "real": {
+              "bitwise_differing": 6308,
+              "max_abs": 9.5367431640625e-07,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 6326,
+              "max_abs": 9.5367431640625e-07,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 5860,
+              "max_abs": 6.283185243606567,
+              "branch_flips": 54
+            }
+          }
+        }
+      },
+      {
+        "case": "excerpt_3",
+        "input_sha256": "0a96b46d4b301be215318443bf6d9130e913b279670bf93ccb0f9edb05403ea0",
+        "AVX2": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 1061,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            }
+          },
+          "vs_kaggle_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 1061,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            }
+          }
+        },
+        "AVX512": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 6325,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 6307,
+              "max_abs": 1.7881393432617188e-07,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 5854,
+              "max_abs": 6.283185243606567,
+              "branch_flips": 63
+            }
+          },
+          "vs_kaggle_avx2": {
+            "real": {
+              "bitwise_differing": 6325,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 6307,
+              "max_abs": 1.7881393432617188e-07,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 5854,
+              "max_abs": 6.283185243606567,
+              "branch_flips": 63
+            }
+          }
+        }
+      },
+      {
+        "case": "excerpt_4",
+        "input_sha256": "720db94ade23882b571b33d8a7b80fc15398d9958cb1aefb395841e41037fd62",
+        "AVX2": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 1046,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            }
+          },
+          "vs_kaggle_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 1046,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            }
+          }
+        },
+        "AVX512": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 6406,
+              "max_abs": 1.1920928955078125e-07,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 6398,
+              "max_abs": 1.1920928955078125e-07,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 5994,
+              "max_abs": 6.283185243606567,
+              "branch_flips": 65
+            }
+          },
+          "vs_kaggle_avx2": {
+            "real": {
+              "bitwise_differing": 6406,
+              "max_abs": 1.1920928955078125e-07,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 6398,
+              "max_abs": 1.1920928955078125e-07,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 5994,
+              "max_abs": 6.283185243606567,
+              "branch_flips": 65
+            }
+          }
+        }
+      },
+      {
+        "case": "silence",
+        "input_sha256": "56a43ef88ddfcd0f56f7dd973312c0e73d62f59655c01d7b4e59aaa3be8b3fb6",
+        "AVX2": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            }
+          }
+        },
+        "AVX512": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 3339,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 3339,
+              "max_abs": 3.1415927410125732,
+              "branch_flips": 3339
+            }
+          }
+        }
+      },
+      {
+        "case": "impulse",
+        "input_sha256": "a0edc5eec715ad5d2f94ad7c11ce81cf2c9870d2eddf8d0ff66b4678b0d64015",
+        "AVX2": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 160,
+              "max_abs": 5.960464477539063e-08,
+              "branch_flips": 0
+            }
+          }
+        },
+        "AVX512": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 3170,
+              "max_abs": 5.960464477539063e-08,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 725,
+              "max_abs": 3.235217249653033e-08,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 3439,
+              "max_abs": 6.2831854820251465,
+              "branch_flips": 2871
+            }
+          }
+        }
+      },
+      {
+        "case": "alternating",
+        "input_sha256": "b71904bbf0aea2e63080cc0269bb34ce9dae856ba881a00fb4856f7fddefd369",
+        "AVX2": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 1029,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            }
+          }
+        },
+        "AVX512": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 6636,
+              "max_abs": 3.052995339203335e-06,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 6636,
+              "max_abs": 1.2224982697262021e-06,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 6636,
+              "max_abs": 6.086510896682739,
+              "branch_flips": 3885
+            }
+          }
+        }
+      },
+      {
+        "case": "synthetic",
+        "input_sha256": "ac802abbbe9b361f44913f71f1dbee4f69b85f408bd9be4ef115b18a77be8333",
+        "AVX2": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 0,
+              "max_abs": 0.0,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 1029,
+              "max_abs": 2.384185791015625e-07,
+              "branch_flips": 0
+            }
+          }
+        },
+        "AVX512": {
+          "window_vs_torch": {
+            "bitwise_differing": 0,
+            "max_abs": 0.0,
+            "branch_flips": 0
+          },
+          "vs_local_torch_avx2": {
+            "real": {
+              "bitwise_differing": 6649,
+              "max_abs": 3.814697265625e-06,
+              "branch_flips": 0
+            },
+            "imaginary": {
+              "bitwise_differing": 6626,
+              "max_abs": 3.814697265625e-06,
+              "branch_flips": 0
+            },
+            "phase": {
+              "bitwise_differing": 6553,
+              "max_abs": 6.283185243606567,
+              "branch_flips": 78
+            }
+          }
+        }
+      }
+    ]
+  }
+}

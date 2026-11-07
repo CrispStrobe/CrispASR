@@ -1,0 +1,24 @@
+{
+  "script_version": "v1",
+  "input_sha256": "12e4f02454a088fedba2fb0876101d79211e8b1b6ae27c62968e501e4fe8f283",
+  "torch": "2.11.0+cu130",
+  "cuda": "13.0",
+  "device": "Tesla T4",
+  "capability": [
+    7,
+    5
+  ],
+  "cufft_library": "libcufft.so.11",
+  "real_bit_differences": 0,
+  "imaginary_bit_differences": 0,
+  "phase_branch_flips": 0,
+  "phase_max_abs": 0.0,
+  "complex_max_abs": 0.0,
+  "scope": "Single 100 ms input; GPU Torch-prepared frames and original Hann window passed to direct cuFFT, compared with GPU Torch STFT. No native preprocessing, model inference or fused Mamba is tested.",
+  "run": "issue579-reuse-cufft-v1",
+  "vs_prior_official_unfused_cuda_capture": {
+    "audio_bytes_identical": true,
+    "phase_branch_flips": 0,
+    "phase_max_abs": 2.384185791015625e-07
+  }
+}
