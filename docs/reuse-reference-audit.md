@@ -159,3 +159,7 @@ Python network and CPU adapter. Relative RMS difference was 0.103%, below the
 investigative 0.5% threshold. The [independent-runtime receipt](historical/reuse-independent-runtime-20261107.json)
 includes the input hash. This is one normal-duration sample, and is not a fused
 CUDA comparison, a quality evaluation or a guarantee for other audio.
+
+The [independent port and license audit](reuse-port-audit.md) records pinned
+source licenses, model provenance, implementation differences and follow-up
+validation requirements.
