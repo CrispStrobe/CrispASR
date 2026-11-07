@@ -26,3 +26,8 @@ jobs:
           python3 tools/ci-heavy/issue579_reuse/dense_actual_reference.py
           c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-reuse-dense-oracle.cpp -o "$RUNNER_TEMP/reuse-dense-oracle"
           "$RUNNER_TEMP/reuse-dense-oracle" reuse-dense-original-oracle.bin
+      - name: Compare original-weight selective scan
+        run: |
+          python3 tools/ci-heavy/issue579_reuse/scan_actual_reference.py
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-reuse-scan-oracle.cpp -o "$RUNNER_TEMP/reuse-scan-oracle"
+          "$RUNNER_TEMP/reuse-scan-oracle" reuse-scan-original-oracle.bin
