@@ -9180,6 +9180,42 @@ struct crispasr_align_result {
     std::vector<CrispasrAlignedWord> words;
 };
 
+struct crispasr_ultra_align_result {
+    std::vector<CrispasrUltraAlignedWord> words;
+};
+
+CA_EXPORT crispasr_ultra_align_result* crispasr_align_words_ultra_abi(const char* aligner_model, const char* head_model,
+                                                                      const char* transcript, const float* samples,
+                                                                      int32_t n_samples, int32_t n_threads) {
+    if (!aligner_model || !head_model || !transcript || !samples || n_samples <= 0)
+        return nullptr;
+    try {
+        auto result = std::make_unique<crispasr_ultra_align_result>();
+        if (!crispasr_align_words_ultra(aligner_model, head_model, transcript, samples, n_samples, n_threads,
+                                        result->words))
+            return nullptr;
+        return result.release();
+    } catch (...) {
+        return nullptr;
+    }
+}
+
+CA_EXPORT int crispasr_ultra_align_result_n_words(const crispasr_ultra_align_result* r) {
+    return r ? static_cast<int>(r->words.size()) : 0;
+}
+CA_EXPORT const char* crispasr_ultra_align_result_word_text(const crispasr_ultra_align_result* r, int i) {
+    return r && i >= 0 && static_cast<size_t>(i) < r->words.size() ? r->words[i].text.c_str() : "";
+}
+CA_EXPORT double crispasr_ultra_align_result_word_start_ms(const crispasr_ultra_align_result* r, int i) {
+    return r && i >= 0 && static_cast<size_t>(i) < r->words.size() ? r->words[i].start_ms : 0.0;
+}
+CA_EXPORT double crispasr_ultra_align_result_word_end_ms(const crispasr_ultra_align_result* r, int i) {
+    return r && i >= 0 && static_cast<size_t>(i) < r->words.size() ? r->words[i].end_ms : 0.0;
+}
+CA_EXPORT void crispasr_ultra_align_result_free(crispasr_ultra_align_result* r) {
+    delete r;
+}
+
 CA_EXPORT crispasr_align_result* crispasr_align_words_abi(const char* aligner_model, const char* transcript,
                                                           const float* samples, int32_t n_samples, int64_t t_offset_cs,
                                                           int32_t n_threads) {

@@ -17,9 +17,10 @@ crispasr --align-only -am qwen3-forced-aligner-ultra-f16.gguf \
   -f audio.wav --ref-text 'Words to align' --align-format json
 ```
 
-This handles the base model only. The optional local boundary refinement head
-is not converted or executed. Do not infer 10 ms local-head precision from
-this mode, and do not use a separately downloaded local-head file with it.
+This command handles the base model only. For the experimental optional local
+boundary refinement head and its separate converter, see the
+[local-head guide](qwen3-ultra-local-head-port.md). Do not infer local-head
+precision from the base-only mode.
 There is no built-in Ultra auto-download entry.
 
 [Hosted CPU audit 42311362995](https://github.com/CrispStrobe/CrispASR/actions/runs/42311362995)

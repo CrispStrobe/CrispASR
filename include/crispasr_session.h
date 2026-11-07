@@ -36,6 +36,7 @@ typedef struct whisper_full_params whisper_full_params;
 
 struct crispasr_align_result;
 typedef struct crispasr_align_result crispasr_align_result;
+typedef struct crispasr_ultra_align_result crispasr_ultra_align_result;
 struct crispasr_diarize_opts_abi;
 typedef struct crispasr_diarize_opts_abi crispasr_diarize_opts_abi;
 struct crispasr_diarize_seg_abi;
@@ -351,6 +352,19 @@ CRISPASR_SESSION_API const char* crispasr_align_result_character_text(crispasr_a
 CRISPASR_SESSION_API int64_t crispasr_align_result_character_t0(crispasr_align_result* r, int word, int i);
 CRISPASR_SESSION_API int64_t crispasr_align_result_character_t1(crispasr_align_result* r, int word, int i);
 CRISPASR_SESSION_API void crispasr_align_result_free(crispasr_align_result* r);
+// Experimental Ultra alignment with a separately converted local-head GGUF.
+// Audio is mono 16 kHz, limited to 120 seconds; times are milliseconds.
+// A null result means invalid input, load failure or alignment failure.
+CRISPASR_SESSION_API crispasr_ultra_align_result* crispasr_align_words_ultra_abi(const char* aligner_model,
+                                                                                 const char* head_model,
+                                                                                 const char* transcript,
+                                                                                 const float* samples,
+                                                                                 int32_t n_samples, int32_t n_threads);
+CRISPASR_SESSION_API int crispasr_ultra_align_result_n_words(const crispasr_ultra_align_result* r);
+CRISPASR_SESSION_API const char* crispasr_ultra_align_result_word_text(const crispasr_ultra_align_result* r, int i);
+CRISPASR_SESSION_API double crispasr_ultra_align_result_word_start_ms(const crispasr_ultra_align_result* r, int i);
+CRISPASR_SESSION_API double crispasr_ultra_align_result_word_end_ms(const crispasr_ultra_align_result* r, int i);
+CRISPASR_SESSION_API void crispasr_ultra_align_result_free(crispasr_ultra_align_result* r);
 CRISPASR_SESSION_API int crispasr_cache_ensure_file_abi(const char* filename, const char* url, int32_t quiet,
                                                         const char* cache_dir_override, char* out_buf, int32_t out_cap);
 CRISPASR_SESSION_API int crispasr_cache_dir_abi(const char* cache_dir_override, char* out_buf, int32_t out_cap);

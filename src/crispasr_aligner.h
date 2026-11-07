@@ -135,5 +135,18 @@ std::vector<CrispasrAlignedWord> crispasr_align_words(const std::string& aligner
                                                       int n_threads, bool* out_load_failed = nullptr,
                                                       int chunk_seconds = 30);
 
+struct CrispasrUltraAlignedWord {
+    std::string text;
+    double start_ms = 0;
+    double end_ms = 0;
+};
+
+// Experimental single-clip Ultra path. Preserves sub-centisecond timing and
+// rejects clips over 120 seconds instead of returning partial alignment. On
+// failure returns false and leaves `output` unchanged.
+bool crispasr_align_words_ultra(const std::string& aligner_model, const std::string& head_model,
+                                const std::string& transcript, const float* samples, int n_samples, int n_threads,
+                                std::vector<CrispasrUltraAlignedWord>& output);
+
 /// Free the cached aligner model context (§176e). Call at shutdown.
 void crispasr_aligner_free_cache();

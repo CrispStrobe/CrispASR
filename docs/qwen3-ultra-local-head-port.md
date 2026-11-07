@@ -1,15 +1,33 @@
 # Qwen3 Ultra local-head port: CPU stages
 
-The optional local head is not yet available through the CrispASR CLI, session
-C ABI or language bindings. The experimental native path implements fixed-center
-features, a CPU neural head, hidden-state capture, timestamp repair, and a
-strictly pinned F32 sidecar converter/loader. On one English clip, the native
+The experimental local-head path implements fixed-center features, a CPU neural
+head, hidden-state capture, timestamp repair, and a strictly pinned F32 sidecar
+converter/loader. On one English clip, the native
 F16 aligner and CPU head matched the upstream full path in
 [run 42320992672](https://github.com/CrispStrobe/CrispASR/actions/runs/42320992672):
 the maximum and mean timing errors over 22 words were 0.00460 ms and 0.00078 ms.
-Public integration, broader audio/language coverage and GPU acceptance remain open.
-The existing generic aligner stores timestamps in centiseconds, so preserving
-the local head's precision requires an explicit product-interface design.
+Broader audio/language coverage and GPU acceptance remain open. The separate
+experimental CLI, C ABI and Python entrypoints below retain refined precision;
+the existing generic aligner continues to store centiseconds.
+
+## Experimental interface
+
+Convert the pinned base model as described in the [base guide](qwen3-ultra-aligner.md).
+Download `local_head/config.json`, `local_head/model.safetensors` and
+`local_head/normalizer.json` from the same pinned revision, then run:
+
+```sh
+python models/convert-qwen3-ultra-head-to-gguf.py --input ultra-model/local_head --output ultra-local-head.gguf
+crispasr --align-only -am qwen3-forced-aligner-ultra-f16.gguf --ultra-head ultra-local-head.gguf -f audio.wav --ref-text 'Words to align' --align-format json
+```
+
+For Python, `crispasr.align_words_ultra(base_path, head_path, text, pcm)` takes
+mono 16 kHz PCM and returns word times in seconds. The corresponding C ABI
+`crispasr_align_words_ultra_abi` returns an opaque result with millisecond
+accessors and must be freed with `crispasr_ultra_align_result_free`.
+Both paths reject audio longer than 120 seconds rather than returning partial
+results. Word-level JSON retains refined timing; subtitle output is rounded to
+milliseconds. The local head runs on CPU and no model is auto-downloaded.
 
 [Reference run 42313568853](https://github.com/CrispStrobe/CrispASR/actions/runs/42313568853)
 used the upstream `qwen_fa_ultra` 0.1.1 package and pinned Ultra revision

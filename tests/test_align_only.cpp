@@ -10,12 +10,14 @@
 #include <catch2/catch_test_macros.hpp>
 
 #include "crispasr_aligner.h"
+#include "crispasr_session.h"
 #include "core/qwen3_forced_aligner.h"
 
 #include <chrono>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <limits>
 #include <string>
 #include <vector>
 
@@ -42,6 +44,29 @@ TEST_CASE("align-only: crispasr_align_words null/empty safety", "[unit][align]")
 TEST_CASE("align-only: crispasr_aligner_free_cache does not crash when empty", "[unit][align]") {
     crispasr_aligner_free_cache(); // must not crash
     crispasr_aligner_free_cache(); // double-free safety
+}
+
+TEST_CASE("align-only: Ultra entry rejects invalid input without changing output", "[unit][align]") {
+    std::vector<CrispasrUltraAlignedWord> output{{"unchanged", 1.25, 2.75}};
+    float sample = 0.0f;
+    CHECK_FALSE(crispasr_align_words_ultra("", "head", "hello", &sample, 1, 1, output));
+    CHECK_FALSE(crispasr_align_words_ultra("forced-aligner.gguf", "", "hello", &sample, 1, 1, output));
+    CHECK_FALSE(crispasr_align_words_ultra("other.gguf", "head", "hello", &sample, 1, 1, output));
+    CHECK_FALSE(crispasr_align_words_ultra("forced-aligner.gguf", "head", "hello", nullptr, 1, 1, output));
+    CHECK_FALSE(
+        crispasr_align_words_ultra("forced-aligner.gguf", "head", "hello", &sample, 120 * 16000 + 1, 1, output));
+    sample = std::numeric_limits<float>::quiet_NaN();
+    CHECK_FALSE(crispasr_align_words_ultra("forced-aligner.gguf", "head", "hello", &sample, 1, 1, output));
+    REQUIRE(output.size() == 1);
+    CHECK(output[0].text == "unchanged");
+    CHECK(output[0].start_ms == 1.25);
+    CHECK(output[0].end_ms == 2.75);
+    CHECK(crispasr_align_words_ultra_abi(nullptr, nullptr, nullptr, nullptr, 0, 1) == nullptr);
+    CHECK(crispasr_ultra_align_result_n_words(nullptr) == 0);
+    CHECK(std::string(crispasr_ultra_align_result_word_text(nullptr, 0)).empty());
+    CHECK(crispasr_ultra_align_result_word_start_ms(nullptr, 0) == 0);
+    CHECK(crispasr_ultra_align_result_word_end_ms(nullptr, 0) == 0);
+    crispasr_ultra_align_result_free(nullptr);
 }
 
 TEST_CASE("align-only: each segment gets its own audio interval", "[unit][align][issue444]") {

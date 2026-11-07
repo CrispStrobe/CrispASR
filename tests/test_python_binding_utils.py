@@ -17,6 +17,47 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "python"))
 from crispasr import _binding
 
 
+def test_ultra_alignment_preserves_precision_and_frees_result(monkeypatch):
+    import numpy as np
+
+    class Function:
+        def __init__(self, fn):
+            self.fn = fn
+
+        def __call__(self, *args):
+            return self.fn(*args)
+
+    class Library:
+        def __init__(self):
+            self.freed = []
+            self.crispasr_align_words_ultra_abi = Function(lambda *args: 123)
+            self.crispasr_ultra_align_result_n_words = Function(lambda _: 1)
+            self.crispasr_ultra_align_result_word_text = Function(lambda _, i: "你好".encode())
+            self.crispasr_ultra_align_result_word_start_ms = Function(lambda _, i: 12.345)
+            self.crispasr_ultra_align_result_word_end_ms = Function(lambda _, i: 67.891)
+            self.crispasr_ultra_align_result_free = Function(self.freed.append)
+
+    lib = Library()
+    monkeypatch.setattr(_binding.ctypes, "CDLL", lambda _: lib)
+    words = _binding.align_words_ultra("forced-aligner.gguf", "head.gguf", "你好", np.zeros(8, dtype=np.float32),
+                                      lib_path="mock")
+    assert len(words) == 1 and words[0].text == "你好"
+    assert words[0].start == pytest.approx(0.012345)
+    assert words[0].end == pytest.approx(0.067891)
+    assert lib.freed == [123]
+
+
+def test_ultra_alignment_invalid_and_missing_abi(monkeypatch):
+    import numpy as np
+
+    audio = np.zeros(8, dtype=np.float32)
+    assert _binding.align_words_ultra("", "head", "hello", audio) == []
+    assert _binding.align_words_ultra("forced-aligner", "", "hello", audio) == []
+    monkeypatch.setattr(_binding.ctypes, "CDLL", lambda _: object())
+    with pytest.raises(RuntimeError, match="does not provide Ultra"):
+        _binding.align_words_ultra("forced-aligner", "head", "hello", audio, lib_path="mock")
+
+
 class TestFunctionSignatures:
     """Verify new standalone functions exist with correct signatures."""
 

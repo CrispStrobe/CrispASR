@@ -491,7 +491,8 @@ struct whisper_params {
     // Runs the CTC aligner (canary-ctc / wav2vec2 / qwen3-fa) without
     // requiring an ASR model or transcription step.
     bool align_only = false;
-    std::string text_file; // path to .txt or .srt (text extracted, timestamps stripped)
+    std::string ultra_head; // optional separately converted Ultra local-head GGUF
+    std::string text_file;  // path to .txt or .srt (text extracted, timestamps stripped)
     // Output granularity: "word" = one entry per aligned word; "segment" =
     // one entry per input SRT cue (or per non-empty .txt line), re-timed
     // from the word alignment; "auto" = segment for .srt input, word otherwise.

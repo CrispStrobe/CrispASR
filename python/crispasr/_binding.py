@@ -1261,6 +1261,63 @@ def align_words(
 # Microphone capture (PLAN #62d) — cross-platform live PCM via miniaudio.
 # ===========================================================================
 
+def align_words_ultra(
+    aligner_model: str,
+    head_model: str,
+    transcript: str,
+    pcm: np.ndarray,
+    *,
+    n_threads: int = 4,
+    lib_path: Optional[str] = None,
+) -> List[AlignedWord]:
+    """Experimental Qwen Ultra local-head alignment, with times in seconds.
+
+    Audio must be mono 16 kHz and at most 120 seconds. Both the converted
+    base model and its separately converted local-head GGUF are required.
+    Returns an empty list on invalid input or native alignment failure.
+    """
+    if not aligner_model or not head_model or not transcript or pcm is None or len(pcm) == 0:
+        return []
+    pcm_np = _mono_pcm(pcm)
+    if len(pcm_np) > 120 * 16000:
+        return []
+    lib = ctypes.CDLL(lib_path or _find_lib())
+    if not hasattr(lib, "crispasr_align_words_ultra_abi"):
+        raise RuntimeError("loaded CrispASR library does not provide Ultra local-head alignment")
+    lib.crispasr_align_words_ultra_abi.argtypes = [
+        ctypes.c_char_p, ctypes.c_char_p, ctypes.c_char_p,
+        ctypes.POINTER(ctypes.c_float), ctypes.c_int32, ctypes.c_int32,
+    ]
+    lib.crispasr_align_words_ultra_abi.restype = ctypes.c_void_p
+    for name, result, args in [
+        ("n_words", ctypes.c_int, [ctypes.c_void_p]),
+        ("word_text", ctypes.c_char_p, [ctypes.c_void_p, ctypes.c_int]),
+        ("word_start_ms", ctypes.c_double, [ctypes.c_void_p, ctypes.c_int]),
+        ("word_end_ms", ctypes.c_double, [ctypes.c_void_p, ctypes.c_int]),
+        ("free", None, [ctypes.c_void_p]),
+    ]:
+        fn = getattr(lib, "crispasr_ultra_align_result_" + name)
+        fn.restype, fn.argtypes = result, args
+    handle = lib.crispasr_align_words_ultra_abi(
+        aligner_model.encode("utf-8"), head_model.encode("utf-8"), transcript.encode("utf-8"),
+        pcm_np.ctypes.data_as(ctypes.POINTER(ctypes.c_float)), int(len(pcm_np)), int(n_threads),
+    )
+    if not handle:
+        return []
+    try:
+        words = []
+        for i in range(lib.crispasr_ultra_align_result_n_words(handle)):
+            raw = lib.crispasr_ultra_align_result_word_text(handle, i)
+            words.append(AlignedWord(
+                text=raw.decode("utf-8") if raw else "",
+                start=lib.crispasr_ultra_align_result_word_start_ms(handle, i) / 1000.0,
+                end=lib.crispasr_ultra_align_result_word_end_ms(handle, i) / 1000.0,
+            ))
+        return words
+    finally:
+        lib.crispasr_ultra_align_result_free(handle)
+
+
 class Mic:
     """Library-level microphone capture handle.
 

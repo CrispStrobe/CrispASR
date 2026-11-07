@@ -697,6 +697,8 @@ static bool whisper_params_parse_arg_streaming_tts(int argc, char** argv, int& i
         params.align_format = ARGV_NEXT;
     } else if (arg == "--align-only") {
         params.align_only = true;
+    } else if (arg == "--ultra-head") {
+        params.ultra_head = ARGV_NEXT;
     } else if (arg == "--align-granularity") {
         params.align_granularity = ARGV_NEXT;
     } else if (arg == "--text-file") {
@@ -1578,6 +1580,7 @@ static void whisper_print_usage(int /*argc*/, char** argv, const whisper_params&
             "                                                 --text-file - reads from stdin (auto-detects format);\n"
             "                                                 .json accepts CrispASR --output-json transcription\n"
             "                                                 -m/--backend, --vad, --max-len are unused here\n"
+            "             --ultra-head FNAME        optional Ultra local-head GGUF for --align-only\n"
             "             --align-granularity G     [auto   ] align-only output units: auto|word|segment\n"
             "                                                 (segment = re-timed input cues/segments;\n"
             "                                                 auto = segment for .srt/.json, word otherwise)\n");
@@ -2780,6 +2783,10 @@ int main(int argc, char** argv) {
 
     // Issue #217: --align-only is a standalone verb that needs only an aligner
     // model + audio + text — no ASR backend.
+    if (!params.ultra_head.empty() && !params.align_only) {
+        fprintf(stderr, "crispasr: --ultra-head requires --align-only\n");
+        return 1;
+    }
     if (params.align_only) {
         return crispasr_run_backend(params);
     }
