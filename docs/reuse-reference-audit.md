@@ -29,3 +29,42 @@ the initial attempt could not start because the weekly GPU quota was exhausted.
 Before adding a backend, compare a native CrispASR port with these stages and
 the upstream implementation, validate waveform and speech-quality gates on a
 representative corpus, and exercise its CLI, C ABI and bindings as applicable.
+
+## Native CPU port investigation
+
+A separate, experimental CrispASR CPU reference is under development. Its
+[original-checkpoint audit 42378662267](https://github.com/CrispStrobe/CrispASR/actions/runs/42378662267)
+passed isolated original-weight encoder, selective-scan and decoder comparisons,
+and validated the strict GGUF loader including malformed-file controls. The
+full 0.1-second public-audio comparison failed at the encoder output with
+3.61% relative error, exceeding the 0.2% stage gate; this is not a passing
+end-to-end result.
+
+A local comparison on the same excerpt found raw phase differences near the
++π/−π branch cut, particularly in the first reflected FFT frame. Although those
+angles represent nearly identical complex values, the model consumes the raw
+phase as an input, so complex-spectrum equivalence alone is insufficient. The
+native port remains experimental while the source of the difference and its
+impact on subsequent stages and waveform are investigated.
+
+The independent Kaggle CPU run `issue579-reuse-cpu-diff-v3` tested source
+`b6cd39102f5cfbd0aa30e727f0715dfc1f408c22` and ggml
+`1b972bb754aa5f83e2d872ccf37a335717f6658d` on a 0.1-second 16 kHz public
+speech excerpt. `crispasr-diff` compared the frontend, all six encoder
+boundaries, both temporal and frequency boundaries in all 30 blocks, decoder
+outputs and waveform. Native frontend magnitude passed, but native raw phase
+failed with 24.8% relative RMS; the resulting waveform failed with 1.03%
+relative RMS. All phase-conditioned stages passed, including the waveform at
+0.000186% relative RMS. Conditioning is diagnostic and does not make the
+native end-to-end comparison a pass. The pinned original model and source
+hashes were checked in the worker; the CPU kernel reported its failed gate.
+
+A follow-up CPU probe (`issue579-reuse-fft-cpu-v2`) compared the same
+byte-identical 1,600-sample input on Kaggle and the local reference worker.
+Both used PyTorch 2.11, but different builds and CPU environments. Their raw
+STFT phases differed by approximately 2π in 47 bins, all in the first
+reflected frame. The input SHA256 was
+`12e4f02454a088fedba2fb0876101d79211e8b1b6ae27c62968e501e4fe8f283`.
+This demonstrates that this upstream raw-phase boundary itself varies between
+these environments; it does not establish a portable native parity fix. The
+unconditioned original-model and waveform gates remain open.

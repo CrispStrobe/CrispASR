@@ -233,6 +233,102 @@ TEST_CASE("Qwen3 capture atomic writer never overwrites an existing file", "[uni
     CHECK_FALSE(error.empty());
 }
 
+TEST_CASE("Qwen3 Base Capture exports the exact 2048-float speaker vector only when opted in",
+          "[unit][qwen3-tts][capture]") {
+    TempDirectory temp;
+    qwen3_tts_capture::Metadata metadata;
+    metadata.model_type = "base";
+    std::vector<float> vector(2048);
+    for (size_t i = 0; i < vector.size(); ++i)
+        vector[i] = (static_cast<int>(i) - 1024) / 4096.0f;
+
+    // The standalone begin() call is hermetic; the production entrypoint
+    // requires CRISPASR_QWEN3_TTS_CAPTURE_SPEAKER_EMBEDDING=1.
+    auto capture = qwen3_tts_capture::SampleCapture::begin(temp.path, metadata, nullptr, 0, vector.data(),
+                                                           vector.size(), 16, true);
+    REQUIRE(capture);
+    const auto sample_dir = temp.path / "samples" / capture->sample_id();
+    const auto file_path = sample_dir / "speaker_embedding.f32le";
+    REQUIRE(std::filesystem::exists(file_path));
+    const auto bytes = read_bytes(file_path);
+    REQUIRE(bytes.size() == 8192);
+    // First value is -0.25f: IEEE754 0xbe800000, serialized LE.
+    CHECK((std::vector<uint8_t>(bytes.begin(), bytes.begin() + 4) == std::vector<uint8_t>{0x00, 0x00, 0x80, 0xbe}));
+    const std::string expected_hash = qwen3_tts_capture::detail::sha256_f32le(vector.data(), vector.size());
+    CHECK(qwen3_tts_capture::detail::sha256_bytes(bytes.data(), bytes.size()) == expected_hash);
+
+    int32_t codes[16]{};
+    const float pcm[] = {0.1f, 0.2f};
+    REQUIRE(capture->write_generated_codes(codes, 16, 1, 1, 2150, 10));
+    const size_t call = capture->record_decoder_call(codes, 1, 16, 0, 0, 0, 0, false);
+    REQUIRE(call != std::numeric_limits<size_t>::max());
+    capture->record_decoder_result(call, pcm, 2);
+    REQUIRE(capture->finish(pcm, 2, 24000, 2150, 10));
+    const auto manifest = nlohmann::json::parse(read_text(sample_dir / "manifest.json"));
+    const auto& ref = manifest.at("reference");
+    CHECK(ref.at("speaker_embedding_file") == "speaker_embedding.f32le");
+    CHECK(ref.at("speaker_embedding_shape") == nlohmann::json::array({2048}));
+    CHECK(ref.at("speaker_embedding_size_bytes") == 8192);
+    CHECK(ref.at("speaker_embedding_sha256") == expected_hash);
+
+    std::string error;
+    CHECK_FALSE(
+        qwen3_tts_capture::detail::write_f32le_atomic(file_path, vector.data(), vector.size(), expected_hash, error));
+    CHECK_FALSE(error.empty());
+    CHECK(read_bytes(file_path) == bytes);
+
+    // Same active runtime pointer without export permission: fingerprint only.
+    auto disabled =
+        qwen3_tts_capture::SampleCapture::begin(temp.path, metadata, nullptr, 0, vector.data(), vector.size(), 16);
+    REQUIRE(disabled);
+    CHECK_FALSE(std::filesystem::exists(temp.path / "samples" / disabled->sample_id() / "speaker_embedding.f32le"));
+
+    // Opt-in does not copy the embedding for CustomVoice or VoiceDesign.
+    metadata.model_type = "custom_voice";
+    auto non_base = qwen3_tts_capture::SampleCapture::begin(temp.path, metadata, nullptr, 0, vector.data(),
+                                                            vector.size(), 16, true);
+    REQUIRE(non_base);
+    CHECK_FALSE(std::filesystem::exists(temp.path / "samples" / non_base->sample_id() / "speaker_embedding.f32le"));
+}
+
+TEST_CASE("Qwen3 Base speaker export rejects missing, truncated and non-finite embeddings",
+          "[unit][qwen3-tts][capture]") {
+    TempDirectory temp;
+    qwen3_tts_capture::Metadata metadata;
+    metadata.model_type = "base";
+    std::vector<float> vector(2048, 0.125f);
+    for (int variant = 0; variant < 7; ++variant) {
+        vector.assign(2049, 0.125f);
+        if (variant == 2)
+            vector[17] = std::numeric_limits<float>::quiet_NaN();
+        if (variant == 3)
+            vector[17] = std::numeric_limits<float>::infinity();
+        if (variant == 4)
+            vector[17] = -std::numeric_limits<float>::infinity();
+        const float* pointer = variant == 0 ? nullptr : vector.data();
+        // The 0.6B Base speaker embedding has 1024 elements; this export
+        // deliberately supports the 1.7B model's 2048-element contract.
+        const size_t count =
+            variant == 0 ? 0 : (variant == 1 ? 2047 : (variant == 5 ? 2049 : (variant == 6 ? 1024 : 2048)));
+        auto capture =
+            qwen3_tts_capture::SampleCapture::begin(temp.path, metadata, nullptr, 0, pointer, count, 16, true);
+        REQUIRE(capture);
+        const auto sample_dir = temp.path / "samples" / capture->sample_id();
+        CHECK_FALSE(std::filesystem::exists(sample_dir / "speaker_embedding.f32le"));
+        // A successful synthesis must still leave this capture incomplete.
+        int32_t codes[16]{};
+        const float pcm[] = {0.0f};
+        REQUIRE(capture->write_generated_codes(codes, 16, 1, 1, 2150, 10));
+        const size_t call = capture->record_decoder_call(codes, 1, 16, 0, 0, 0, 0, false);
+        capture->record_decoder_result(call, pcm, 1);
+        CHECK_FALSE(capture->finish(pcm, 1, 24000, 2150, 10));
+        const auto manifest = nlohmann::json::parse(read_text(sample_dir / "manifest.json"));
+        CHECK_FALSE(manifest.at("capture_complete").get<bool>());
+        CHECK(manifest.at("reference").at("speaker_embedding_file").is_null());
+        CHECK_FALSE(manifest.at("capture_error").is_null());
+    }
+}
+
 TEST_CASE("Qwen3 HTTP response capture hashes buffered bodies and refuses request-id overwrite",
           "[unit][qwen3-tts][capture]") {
     TempDirectory temp;
@@ -309,4 +405,65 @@ TEST_CASE("Qwen3 streaming completion requires a terminal callback", "[unit][qwe
     CHECK(partial.complete());
     partial.observe(false);
     CHECK(partial.complete());
+}
+
+TEST_CASE("Qwen3 speaker writer rejects a wrong digest and write failure", "[unit][qwen3-tts][capture]") {
+    TempDirectory temp;
+    std::vector<float> vector(2048, 0.25f);
+    std::string error;
+    const auto file = temp.path / "speaker_embedding.f32le";
+    CHECK_FALSE(qwen3_tts_capture::detail::write_f32le_atomic(file, vector.data(), vector.size(), "wrong", error));
+    CHECK_FALSE(std::filesystem::exists(file));
+    CHECK_FALSE(error.empty());
+    error.clear();
+    CHECK_FALSE(qwen3_tts_capture::detail::write_f32le_atomic(
+        temp.path / "missing" / "speaker_embedding.f32le", vector.data(), vector.size(),
+        qwen3_tts_capture::detail::sha256_f32le(vector.data(), vector.size()), error));
+    CHECK_FALSE(error.empty());
+}
+
+TEST_CASE("Qwen3 speaker export env requires literal opt-in and an absolute capture root",
+          "[unit][qwen3-tts][capture]") {
+    struct ScopedEnv {
+        std::string key;
+        std::string old;
+        bool had;
+        ScopedEnv(const char* name) : key(name), had(std::getenv(name) != nullptr) {
+            if (had)
+                old = std::getenv(name);
+        }
+        void set(const char* value) {
+#ifdef _WIN32
+            _putenv_s(key.c_str(), value ? value : "");
+#else
+            if (value)
+                setenv(key.c_str(), value, 1);
+            else
+                unsetenv(key.c_str());
+#endif
+        }
+        ~ScopedEnv() { set(had ? old.c_str() : nullptr); }
+    } flag("CRISPASR_QWEN3_TTS_CAPTURE_SPEAKER_EMBEDDING"), root("CRISPASR_QWEN3_TTS_CAPTURE_DIR");
+    for (const char* value : {"", "0", "true", "yes", "01", "1 "}) {
+        flag.set(value);
+        CHECK_FALSE(qwen3_tts_capture::detail::export_speaker_embedding_enabled());
+    }
+    flag.set("1");
+    REQUIRE(qwen3_tts_capture::detail::export_speaker_embedding_enabled());
+    qwen3_tts_capture::Metadata m;
+    m.model_type = "base";
+    std::vector<float> vector(2048, 0.125f);
+    root.set(nullptr);
+    CHECK_FALSE(qwen3_tts_capture::SampleCapture::begin_from_env(m, nullptr, 0, vector.data(), vector.size(), 16));
+    TempDirectory temp;
+    root.set(temp.path.string().c_str());
+    auto cap = qwen3_tts_capture::SampleCapture::begin_from_env(m, nullptr, 0, vector.data(), vector.size(), 16);
+    REQUIRE(cap);
+    CHECK(std::filesystem::exists(temp.path / "samples" / cap->sample_id() / "speaker_embedding.f32le"));
+    for (const char* type : {"custom_voice", "voice_design"}) {
+        m.model_type = type;
+        auto other = qwen3_tts_capture::SampleCapture::begin_from_env(m, nullptr, 0, vector.data(), vector.size(), 16);
+        REQUIRE(other);
+        CHECK_FALSE(std::filesystem::exists(temp.path / "samples" / other->sample_id() / "speaker_embedding.f32le"));
+    }
 }

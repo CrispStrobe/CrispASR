@@ -51,6 +51,7 @@
 #include "crispasr_marking_policy.h"
 #include "crispasr_tts_disclaimer.h"
 #include "crispasr_voice_provenance.h"
+#include "crispasr_voice_reference.h"
 #include "crispasr_watermark_dispatch.h"
 
 #include <algorithm>
@@ -576,7 +577,12 @@ static void wyoming_handle_connection(socket_t fd) {
             if (!synth_text.empty()) {
                 std::lock_guard<std::mutex> lock(*g_mutex);
                 tts_rate = g_backend->tts_sample_rate();
-                pcmf32 = g_backend->synthesize(synth_text, rp);
+                // #584: synthesise from the clone reference a bare voice-dir name
+                // resolves to (path + <name>.txt transcript) — the file the gate
+                // above hashed. A copy, so the records below keep the name.
+                whisper_params sp = rp;
+                crispasr_voice::apply_voice_dir_reference(*g_backend, sp);
+                pcmf32 = g_backend->synthesize(synth_text, sp);
 
                 // Art. 50(4): audible AI disclosure, prepended in the NEUTRAL
                 // voice. Not opt-out-able here — see the file header.

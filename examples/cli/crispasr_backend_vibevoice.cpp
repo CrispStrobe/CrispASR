@@ -115,6 +115,9 @@ public:
 
     const char* name() const override { return backend_name_.c_str(); }
 
+    // Own --voice-dir resolution (prefers <name>.gguf, then per-language sibling packs); skip the shared #584 step.
+    bool resolves_voice_dir_itself() const override { return true; }
+
     uint32_t capabilities() const override {
         // ASR mode produces segments → framework -am + --diarize work.
         // CAP_PUNCTUATION_NATIVE: VibeVoice-ASR is an LLM decoder — its Content

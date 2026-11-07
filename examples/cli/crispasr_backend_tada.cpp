@@ -103,6 +103,9 @@ public:
 
     const char* name() const override { return "tada"; }
 
+    // Own --voice-dir resolution (its .wav clone is opt-in (CRISPASR_TADA_WAV_CLONE)); skip the shared #584 step.
+    bool resolves_voice_dir_itself() const override { return true; }
+
     uint32_t capabilities() const override { return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_VOICE_CLONING; }
 
     std::vector<crispasr_segment> transcribe(const float*, int, int64_t, const whisper_params&) override {

@@ -322,6 +322,17 @@ public:
     // override this, or its clones ship unattested and undisclosed.
     virtual std::string voice_bank_path() const { return {}; }
 
+    // True when this adapter resolves a bare `--voice` name against
+    // --voice-dir ITSELF, with a policy the shared step cannot reproduce
+    // (pocket-tts prefers a .safetensors embedding, qwen3-tts a .wav over a
+    // .gguf, tada's .wav clone is opt-in, vibevoice picks per-language packs).
+    //
+    // Every other CAP_VOICE_CLONING backend gets the shared resolution in
+    // crispasr_voice_reference.h before dispatch: `{"voice": "lanyan"}` with
+    // <voice-dir>/lanyan.wav (+ lanyan.txt) reaches it exactly as
+    // `--voice <voice-dir>/lanyan.wav --ref-text "..."` would. #584.
+    virtual bool resolves_voice_dir_itself() const { return false; }
+
     // Sample rate of `synthesize()` output PCM. Defaults to 24 kHz since most
     // TTS backends (kokoro, qwen3-tts, vibevoice, chatterbox, orpheus, indextts)
     // produce 24 kHz. Backends that emit a different rate (e.g. voxcpm2-tts at

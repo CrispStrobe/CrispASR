@@ -68,6 +68,7 @@
 #include "../../src/qwen3_tts_capture.h"
 #include "crispasr_voice_clone_policy.h"
 #include "crispasr_voice_provenance.h"
+#include "crispasr_voice_reference.h"
 #include "core/crispasr_watermark.h"
 #include "core/omnivoice_instruct.h" // #13273: validate `instructions` at the edge
 #include "crispasr_watermark_dispatch.h"
@@ -2929,11 +2930,10 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         }
 
         // Per-request param overrides — copy then mutate. The voice
-        // string is passed through verbatim; the backend adapter owns
-        // the interpretation (speaker name, preset, path, or bare name
-        // relative to --voice-dir). rp.tts_voice_dir already carries
-        // the server's configured dir for adapters that want to do
-        // bare-name resolution.
+        // string is passed through verbatim unless it names a recording in
+        // --voice-dir (resolved below, #584); otherwise the backend adapter
+        // owns the interpretation (speaker name, preset, bank entry, or its
+        // own bare-name policy via rp.tts_voice_dir).
         //
         // `instructions` maps to params.tts_instruct (qwen3-tts
         // VoiceDesign). Non-VoiceDesign backends silently ignore it;
@@ -2969,6 +2969,12 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         }
         if (!ref_text.empty())
             rp.tts_ref_text = ref_text;
+        // #584: resolve a bare name naming <voice-dir>/<name>.wav into the clone
+        // reference (path + <name>.txt transcript) here, once, so every cloning
+        // backend gets what `--voice <path>` gives it — the same file the
+        // consent gate above resolved and hashed. Adapters with their own
+        // voice-dir policy opt out (resolves_voice_dir_itself()).
+        crispasr_voice::apply_voice_dir_reference(*backend, rp);
         rp.tts_pad_silence_ms = tts_pad_silence_ms;
         if (!instructions.empty())
             rp.tts_instruct = instructions;
