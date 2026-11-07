@@ -1,0 +1,170 @@
+{
+  "input_sha256": "12e4f02454a088fedba2fb0876101d79211e8b1b6ae27c62968e501e4fe8f283",
+  "model_sha256": "06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1",
+  "device": "Tesla T4",
+  "capability": [
+    7,
+    5
+  ],
+  "torch": "2.11.0+cu130",
+  "mamba": "2.2.4-official-unfused",
+  "stages": 72,
+  "comparison": {
+    "encoder_layer_0": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0
+    },
+    "encoder_layer_1": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0
+    },
+    "encoder_layer_2": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0
+    },
+    "encoder_layer_3": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0
+    },
+    "encoder_layer_4": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0
+    },
+    "encoder_layer_5": {
+      "relative_rmse": 0.0,
+      "max_abs": 0.0
+    },
+    "block_0": {
+      "relative_rmse": 1.0548255335232678e-07,
+      "max_abs": 8.344650268554688e-07
+    },
+    "block_1": {
+      "relative_rmse": 1.721618335773793e-07,
+      "max_abs": 1.430511474609375e-06
+    },
+    "block_2": {
+      "relative_rmse": 2.0446536815070565e-07,
+      "max_abs": 1.9073486328125e-06
+    },
+    "block_3": {
+      "relative_rmse": 2.3517777593957963e-07,
+      "max_abs": 1.7285346984863281e-06
+    },
+    "block_4": {
+      "relative_rmse": 2.483193273648624e-07,
+      "max_abs": 1.5497207641601562e-06
+    },
+    "block_5": {
+      "relative_rmse": 2.7893477179201876e-07,
+      "max_abs": 1.4901161193847656e-06
+    },
+    "block_6": {
+      "relative_rmse": 3.000822929799319e-07,
+      "max_abs": 3.337860107421875e-06
+    },
+    "block_7": {
+      "relative_rmse": 2.9782428274773223e-07,
+      "max_abs": 3.3974647521972656e-06
+    },
+    "block_8": {
+      "relative_rmse": 3.2407788344537815e-07,
+      "max_abs": 3.933906555175781e-06
+    },
+    "block_9": {
+      "relative_rmse": 3.286191414435406e-07,
+      "max_abs": 4.410743713378906e-06
+    },
+    "block_10": {
+      "relative_rmse": 3.3184543646378544e-07,
+      "max_abs": 4.0531158447265625e-06
+    },
+    "block_11": {
+      "relative_rmse": 3.3662237524737406e-07,
+      "max_abs": 3.159046173095703e-06
+    },
+    "block_12": {
+      "relative_rmse": 3.3848186147146047e-07,
+      "max_abs": 2.6226043701171875e-06
+    },
+    "block_13": {
+      "relative_rmse": 3.7589338396002895e-07,
+      "max_abs": 2.1457672119140625e-06
+    },
+    "block_14": {
+      "relative_rmse": 3.694654343636035e-07,
+      "max_abs": 2.4437904357910156e-06
+    },
+    "block_15": {
+      "relative_rmse": 3.8884255335470836e-07,
+      "max_abs": 2.1457672119140625e-06
+    },
+    "block_16": {
+      "relative_rmse": 3.906073243044551e-07,
+      "max_abs": 2.6226043701171875e-06
+    },
+    "block_17": {
+      "relative_rmse": 4.0476574513015425e-07,
+      "max_abs": 2.473592758178711e-06
+    },
+    "block_18": {
+      "relative_rmse": 4.0236546904474875e-07,
+      "max_abs": 2.5033950805664062e-06
+    },
+    "block_19": {
+      "relative_rmse": 3.928336258709025e-07,
+      "max_abs": 2.5033950805664062e-06
+    },
+    "block_20": {
+      "relative_rmse": 4.1926223466654554e-07,
+      "max_abs": 2.2649765014648438e-06
+    },
+    "block_21": {
+      "relative_rmse": 4.2840404568125797e-07,
+      "max_abs": 2.5033950805664062e-06
+    },
+    "block_22": {
+      "relative_rmse": 4.4183322796894273e-07,
+      "max_abs": 2.384185791015625e-06
+    },
+    "block_23": {
+      "relative_rmse": 4.780362057168474e-07,
+      "max_abs": 2.6226043701171875e-06
+    },
+    "block_24": {
+      "relative_rmse": 5.051170525622751e-07,
+      "max_abs": 2.9802322387695312e-06
+    },
+    "block_25": {
+      "relative_rmse": 5.256084538536824e-07,
+      "max_abs": 3.337860107421875e-06
+    },
+    "block_26": {
+      "relative_rmse": 5.3266866324068e-07,
+      "max_abs": 3.1739473342895508e-06
+    },
+    "block_27": {
+      "relative_rmse": 6.303785984983342e-07,
+      "max_abs": 5.066394805908203e-06
+    },
+    "block_28": {
+      "relative_rmse": 6.868016155502745e-07,
+      "max_abs": 6.079673767089844e-06
+    },
+    "block_29": {
+      "relative_rmse": 6.430383704141085e-07,
+      "max_abs": 6.9141387939453125e-06
+    },
+    "amplitude": {
+      "relative_rmse": 2.1365926801586243e-07,
+      "max_abs": 1.1920928955078125e-06
+    }
+  },
+  "fused_kernel": false,
+  "audit": "issue579-official-gpu-v2",
+  "method": "Pinned NVIDIA SEMamba source, original Mamba v2.2.4 forward with upstream selective_scan_ref and convolution fallback, on CUDA; compare adapter on the same GPU spectra.",
+  "mamba_git_commit": "95d8aba8a8c75aedcaa6143713b11e745e7cd0d9",
+  "mamba_simple_sha256": "a17e4c51b582dc0d4d690a649eba521cd0c1ee3dc8f0473a0967cdc9ec0874e3",
+  "selective_scan_interface_sha256": "c79f4432536402fe4d6c1026ccf8d5fc0aaa62b790e9a622295aee14ac45dbcc",
+  "waveform_relative_rmse_cpu_adapter_vs_gpu_reference": 0.01869848743081093,
+  "waveform_relative_rmse_speechcpp_pcm16_vs_gpu_reference": 0.020411796867847443
+}

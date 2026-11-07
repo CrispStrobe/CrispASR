@@ -132,3 +132,16 @@ CPU phase reference). Its developers also report much greater drift for an
 especially short 30 ms input. See the [receipt](historical/reuse-independent-runtime-20261107.json)
 for hashes, methods and stage metrics. A short-input difference does not
 establish the quality or error of either implementation on normal recordings.
+
+To check the adapter against the Mamba blueprint itself, Kaggle run
+`issue579-official-gpu-v2` used the pinned NVIDIA SEMamba and checkpoint with
+[Mamba v2.2.4's original forward and `selective_scan_ref`](https://github.com/state-spaces/mamba/tree/v2.2.4/mamba_ssm),
+executed as PyTorch CUDA operations on a Tesla T4. It forced the **unfused**
+reference and convolution fallback because the fused extensions were unavailable.
+With the same GPU spectra, our adapter agreed at all six encoder layers, all
+30 block outputs, and magnitude output; the worst relative RMS was 0.000069%.
+This is evidence for the adapter and network math, not validation of Mamba's
+fused CUDA kernels. On the 100 ms input, the full unconditioned CPU-adapter
+waveform differed from this GPU reference by 1.87%, and speech.cpp's 16-bit
+output by 2.04%. The [receipt](historical/reuse-official-unfused-gpu-20261107.json)
+records source hashes and all 37 adapter comparison results.
