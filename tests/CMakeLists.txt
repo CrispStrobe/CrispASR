@@ -6901,6 +6901,16 @@ add_test(NAME reuse-decoder-reference COMMAND test-reuse-decoder
     ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-decoder-f32le.bin)
 set_tests_properties(reuse-decoder-reference PROPERTIES LABELS "unit;reuse;audio")
 
+add_executable(test-reuse-inventory test-reuse-inventory.cpp)
+add_test(NAME reuse-inventory-reference COMMAND test-reuse-inventory
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-inventory.json)
+set_tests_properties(reuse-inventory-reference PROPERTIES LABELS "unit;reuse;audio")
+
+add_executable(test-reuse-model-loader test-reuse-model-loader.cpp)
+target_link_libraries(test-reuse-model-loader PRIVATE crispasr-lib crispasr_link_ggml_cpu)
+add_test(NAME reuse-model-loader-controls COMMAND test-reuse-model-loader)
+set_tests_properties(reuse-model-loader-controls PROPERTIES LABELS "unit;reuse;audio")
+
 add_executable(test-qwen3-tts-capture test-qwen3-tts-capture.cpp)
 target_include_directories(test-qwen3-tts-capture PRIVATE
     ${PROJECT_SOURCE_DIR}/src

@@ -147,6 +147,8 @@ add_library(crispasr-lib
             # and by the C-ABI `crispasr_align_words_abi`. Both canary-ctc
             # and qwen3-forced-aligner paths route through one call.
             crispasr_aligner.cpp
+            # Experimental strict loader for RE-USE reference components.
+            core/reuse_model_loader.cpp
             # Built-in G2P phonemizers (EN/DE/FR/ES/RU) live in crispasr-core
             # (phonemizer.cpp), NOT here and no longer in kokoro — #435 needs
             # them from zonos too, and any backend that links crispasr-core now
