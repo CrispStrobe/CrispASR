@@ -42,8 +42,17 @@ intermediate parity and decoded audio remain open.
 inner residuals, output projection and layer normalization using a synthetic
 PyTorch fixture. `reuse-tf-mamba-reference` also checks one time/frequency
 block's reshaping and outer residuals against a separate synthetic fixture.
-The 30-block graph and actual-checkpoint/end-to-end parity remain open;
-these tests do not establish model support.
+An isolated CPU reference composes all 30 blocks with the encoder and decoders;
+its model-free test checks both silent and non-silent output plus invalid-model
+controls. Actual-checkpoint intermediate and waveform parity remain open; these
+tests do not establish model support.
+
+The hosted original-checkpoint audit is prepared to compare the encoder,
+blocks 0, 14 and 29, and raw output waveform on a short excerpt of the
+checkpoint's public microphone fixture. Its comparison checks amplitude as
+well as cosine and relative error; a separate model-free test rejects
+scale-only errors, silence, nonfinite values and wrong output lengths. Until
+that audit passes, the full reference composition remains unqualified.
 
 `reuse-decoder-reference` covers the decoder's dense stack, subpixel frequency
 and time upsampling, and magnitude and phase output projections against a

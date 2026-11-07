@@ -5727,6 +5727,9 @@ if(Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES)
     set_tests_properties(granite-quant-policy PROPERTIES LABELS "unit;gh;granite;regression-552" TIMEOUT 120)
 endif()
 if(Python3_Interpreter_FOUND)
+    add_test(NAME reuse-network-compare-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reuse_network_compare.py)
+    set_tests_properties(reuse-network-compare-controls PROPERTIES LABELS "unit;reuse;audio" SKIP_RETURN_CODE 77)
     add_test(NAME omnivoice-acceptance-policy
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_omnivoice_acceptance_policy.py -v)
     set_tests_properties(omnivoice-acceptance-policy PROPERTIES LABELS "unit;tts;omnivoice")
@@ -6910,6 +6913,14 @@ add_executable(test-reuse-model-loader test-reuse-model-loader.cpp)
 target_link_libraries(test-reuse-model-loader PRIVATE crispasr-lib crispasr_link_ggml_cpu)
 add_test(NAME reuse-model-loader-controls COMMAND test-reuse-model-loader)
 set_tests_properties(reuse-model-loader-controls PROPERTIES LABELS "unit;reuse;audio")
+
+add_executable(test-reuse-reference-network test-reuse-reference-network.cpp)
+target_link_libraries(test-reuse-reference-network PRIVATE crispasr-lib crispasr_link_ggml_cpu)
+add_test(NAME reuse-reference-network-controls COMMAND test-reuse-reference-network)
+set_tests_properties(reuse-reference-network-controls PROPERTIES LABELS "unit;reuse;audio")
+
+add_executable(test-reuse-network-oracle test-reuse-network-oracle.cpp)
+target_link_libraries(test-reuse-network-oracle PRIVATE crispasr-lib crispasr_link_ggml_cpu)
 
 add_executable(test-qwen3-tts-capture test-qwen3-tts-capture.cpp)
 target_include_directories(test-qwen3-tts-capture PRIVATE
