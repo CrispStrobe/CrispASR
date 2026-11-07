@@ -18,11 +18,18 @@ def compare(name, expected, actual, limit):
     return {'relative_rmse':relative, 'cosine':cosine, 'norm_ratio':ratio}
 
 def main():
+    failures = []
+    def check(name, expected, actual, limit):
+        try:
+            compare(name, expected, actual, limit)
+        except AssertionError:
+            failures.append(name)
     with np.load('reuse-network-reference-stages.npz') as reference_stages:
-        for name in ('encoder', 'block0', 'block14', 'block29'):
-            compare(name, reference_stages[name], np.fromfile('reuse-trace-' + name + '.f32le', dtype='<f4'), 0.002)
-    compare('waveform', np.fromfile('reuse-network-expected.f32le', dtype='<f4'),
-            np.fromfile('reuse-network-actual.f32le', dtype='<f4'), 0.005)
+        for name in ('frontend_magnitude', 'frontend_phase', 'encoder', 'block0', 'block14', 'block29'):
+            check(name, reference_stages[name], np.fromfile('reuse-trace-' + name + '.f32le', dtype='<f4'), 0.002)
+    check('waveform', np.fromfile('reuse-network-expected.f32le', dtype='<f4'),
+          np.fromfile('reuse-network-actual.f32le', dtype='<f4'), 0.005)
+    assert not failures, 'Parity failed for: ' + ', '.join(failures)
 
 if __name__ == '__main__':
     main()

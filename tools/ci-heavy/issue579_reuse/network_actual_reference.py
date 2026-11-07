@@ -42,6 +42,8 @@ for index in (0, 14, 29):
     model.TSMamba[index].register_forward_hook(hook('block' + str(index)))
 t = torch.from_numpy(waveform[None])
 mag, phase, _ = mag_phase_stft(t, 320, 40, 320, 'relu_log1p', addeps=False)
+stages['frontend_magnitude'] = mag[0].T.contiguous().numpy()
+stages['frontend_phase'] = phase[0].T.contiguous().numpy()
 amplitude, phase, _ = model(mag, phase)
 zero_fraction = (torch.expm1(torch.relu(amplitude)) == 0).sum(1) / amplitude.shape[1]
 amplitude[:, :, (zero_fraction > 0.5)[0]] = 0
