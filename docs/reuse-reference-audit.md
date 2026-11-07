@@ -58,3 +58,13 @@ relative RMS. All phase-conditioned stages passed, including the waveform at
 0.000186% relative RMS. Conditioning is diagnostic and does not make the
 native end-to-end comparison a pass. The pinned original model and source
 hashes were checked in the worker; the CPU kernel reported its failed gate.
+
+A follow-up CPU probe (`issue579-reuse-fft-cpu-v2`) compared the same
+byte-identical 1,600-sample input on Kaggle and the local reference worker.
+Both used PyTorch 2.11, but different builds and CPU environments. Their raw
+STFT phases differed by approximately 2π in 47 bins, all in the first
+reflected frame. The input SHA256 was
+`12e4f02454a088fedba2fb0876101d79211e8b1b6ae27c62968e501e4fe8f283`.
+This demonstrates that this upstream raw-phase boundary itself varies between
+these environments; it does not establish a portable native parity fix. The
+unconditioned original-model and waveform gates remain open.
