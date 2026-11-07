@@ -319,3 +319,11 @@ also completed on a T4, with 120 calls to each original fused extension.
 The [receipt](historical/reuse-fused-capture-1s-20261107.json) records input,
 model and output-stage hashes. The native comparison is running as
 `issue579-reuse-cuda-fused-1s-v1`; the capture itself is not a parity pass.
+
+The one-second native follow-up `issue579-reuse-cuda-fused-1s-v1` also passed
+all 71 unconditioned and 71 conditioned checks against the original fused
+CUDA capture. Unconditioned waveform relative RMS was 6.5531e-7, and all six
+physical-GPU CTest targets passed. The [one-second fused receipt](historical/reuse-cuda-fused-1s-parity-20261107.json)
+records every stage and the capture, model and payload hashes. It covers one
+one-second clip on a T4, not long recordings, other devices, a GPU model graph
+or speech quality.

@@ -1,0 +1,1165 @@
+{
+  "source": "1d889456a",
+  "payload_sha256": "ed35a30829d13d69fe3c97985e45109b26b47a58916185d702350bf4b7ed4744",
+  "model_sha256": "06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1",
+  "reference_npz_sha256": "c3a8bb1141a06fcbcdda954f6420453d52ec34c23befc8e60a4f0e5ab24f70d4",
+  "reference_gguf_sha256": "3e0ed102942cd385359c54fa9842e016f716701c9a9e9f26878e753f2e830b56",
+  "gpu": "Tesla T4",
+  "capability": [
+    7,
+    5
+  ],
+  "torch": "2.11.0+cu130",
+  "cuda": "13.0",
+  "diff_exit_code": 0,
+  "pass": true,
+  "fused_mamba": true,
+  "scope": "One one-second native cuFFT frontend and CPU model comparison against original fused CUDA Mamba stages on Tesla T4. This does not qualify a full GPU model backend, long recordings, other devices or speech quality.",
+  "run": "issue579-reuse-cuda-fused-1s-v1",
+  "capture_run": "issue579-reuse-fused-capture-1s-v1",
+  "ctest_targets_passed": 6,
+  "physical_gpu_frontend_test_samples": [
+    400,
+    1600,
+    16000
+  ],
+  "log_sha256": "fe8f8bd256d7f7bd200bff2404cacfaf4e4f54283a9bad8e1ae958908c96d0e6",
+  "rows": [
+    {
+      "name": "cufft/frontend_magnitude",
+      "passed": true,
+      "relative_rms": 2.8184388e-08,
+      "max_abs": 2.3841858e-07,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/frontend_phase",
+      "passed": true,
+      "relative_rms": 3.1745007e-08,
+      "max_abs": 2.3841858e-07,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/encoder_layer_0",
+      "passed": true,
+      "relative_rms": 9.7702738e-08,
+      "max_abs": 1.9073486e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/encoder_layer_1",
+      "passed": true,
+      "relative_rms": 2.7840673e-07,
+      "max_abs": 4.7683716e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/encoder_layer_2",
+      "passed": true,
+      "relative_rms": 4.4418684e-07,
+      "max_abs": 5.4240227e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/encoder_layer_3",
+      "passed": true,
+      "relative_rms": 7.0038442e-07,
+      "max_abs": 4.7683716e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 0.99999994
+    },
+    {
+      "name": "cufft/encoder_layer_4",
+      "passed": true,
+      "relative_rms": 4.5581197e-07,
+      "max_abs": 5.8412552e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/encoder_layer_5",
+      "passed": true,
+      "relative_rms": 3.1262314e-07,
+      "max_abs": 2.3841858e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_0",
+      "passed": true,
+      "relative_rms": 3.880493e-07,
+      "max_abs": 2.3841858e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_0",
+      "passed": true,
+      "relative_rms": 5.1085021e-07,
+      "max_abs": 2.9802322e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_1",
+      "passed": true,
+      "relative_rms": 5.8612324e-07,
+      "max_abs": 1.7523766e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_1",
+      "passed": true,
+      "relative_rms": 6.2432338e-07,
+      "max_abs": 1.2874603e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_2",
+      "passed": true,
+      "relative_rms": 7.0510481e-07,
+      "max_abs": 1.4543533e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_2",
+      "passed": true,
+      "relative_rms": 6.8360004e-07,
+      "max_abs": 1.2874603e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_3",
+      "passed": true,
+      "relative_rms": 7.2853697e-07,
+      "max_abs": 1.2397766e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_3",
+      "passed": true,
+      "relative_rms": 7.2955669e-07,
+      "max_abs": 1.2874603e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_4",
+      "passed": true,
+      "relative_rms": 7.8776435e-07,
+      "max_abs": 1.2636185e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_4",
+      "passed": true,
+      "relative_rms": 7.0687435e-07,
+      "max_abs": 1.180172e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_5",
+      "passed": true,
+      "relative_rms": 7.9346694e-07,
+      "max_abs": 1.1086464e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_5",
+      "passed": true,
+      "relative_rms": 7.732047e-07,
+      "max_abs": 1.001358e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_6",
+      "passed": true,
+      "relative_rms": 7.713752e-07,
+      "max_abs": 1.0490417e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_6",
+      "passed": true,
+      "relative_rms": 7.8301423e-07,
+      "max_abs": 9.7751617e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_7",
+      "passed": true,
+      "relative_rms": 7.5075394e-07,
+      "max_abs": 1.013279e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_7",
+      "passed": true,
+      "relative_rms": 7.3711811e-07,
+      "max_abs": 1.0490417e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_8",
+      "passed": true,
+      "relative_rms": 7.7475931e-07,
+      "max_abs": 8.7618828e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_8",
+      "passed": true,
+      "relative_rms": 7.837005e-07,
+      "max_abs": 9.5367432e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_9",
+      "passed": true,
+      "relative_rms": 7.8117e-07,
+      "max_abs": 9.1791153e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_9",
+      "passed": true,
+      "relative_rms": 7.4664871e-07,
+      "max_abs": 8.7618828e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_10",
+      "passed": true,
+      "relative_rms": 7.8835507e-07,
+      "max_abs": 8.4042549e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_10",
+      "passed": true,
+      "relative_rms": 7.7958111e-07,
+      "max_abs": 8.5234642e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_11",
+      "passed": true,
+      "relative_rms": 8.1828841e-07,
+      "max_abs": 8.2850456e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_11",
+      "passed": true,
+      "relative_rms": 7.6302342e-07,
+      "max_abs": 8.5234642e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_12",
+      "passed": true,
+      "relative_rms": 8.3066823e-07,
+      "max_abs": 7.7337027e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_12",
+      "passed": true,
+      "relative_rms": 7.8736929e-07,
+      "max_abs": 6.3180923e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_13",
+      "passed": true,
+      "relative_rms": 8.276495e-07,
+      "max_abs": 6.2584877e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_13",
+      "passed": true,
+      "relative_rms": 8.7578724e-07,
+      "max_abs": 5.543232e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_14",
+      "passed": true,
+      "relative_rms": 8.2462731e-07,
+      "max_abs": 5.8412552e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_14",
+      "passed": true,
+      "relative_rms": 8.2487719e-07,
+      "max_abs": 5.4836273e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_15",
+      "passed": true,
+      "relative_rms": 8.2110824e-07,
+      "max_abs": 5.4240227e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_15",
+      "passed": true,
+      "relative_rms": 8.6564586e-07,
+      "max_abs": 5.2005053e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_16",
+      "passed": true,
+      "relative_rms": 8.5755528e-07,
+      "max_abs": 5.5134296e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_16",
+      "passed": true,
+      "relative_rms": 8.6489376e-07,
+      "max_abs": 5.543232e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_17",
+      "passed": true,
+      "relative_rms": 8.6860524e-07,
+      "max_abs": 5.6028366e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_17",
+      "passed": true,
+      "relative_rms": 8.6904856e-07,
+      "max_abs": 6.1988831e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_18",
+      "passed": true,
+      "relative_rms": 8.8398207e-07,
+      "max_abs": 6.4373016e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_18",
+      "passed": true,
+      "relative_rms": 8.6388519e-07,
+      "max_abs": 5.9008598e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_19",
+      "passed": true,
+      "relative_rms": 9.0293844e-07,
+      "max_abs": 5.6624413e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_19",
+      "passed": true,
+      "relative_rms": 8.228659e-07,
+      "max_abs": 5.9604645e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_20",
+      "passed": true,
+      "relative_rms": 8.5389428e-07,
+      "max_abs": 5.0067902e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_20",
+      "passed": true,
+      "relative_rms": 8.769814e-07,
+      "max_abs": 4.8875809e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_21",
+      "passed": true,
+      "relative_rms": 8.7025285e-07,
+      "max_abs": 5.1259995e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_21",
+      "passed": true,
+      "relative_rms": 8.8116207e-07,
+      "max_abs": 6.1690807e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_22",
+      "passed": true,
+      "relative_rms": 9.1860312e-07,
+      "max_abs": 5.543232e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_22",
+      "passed": true,
+      "relative_rms": 9.1980547e-07,
+      "max_abs": 7.2717667e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_23",
+      "passed": true,
+      "relative_rms": 9.3304675e-07,
+      "max_abs": 6.4969063e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_23",
+      "passed": true,
+      "relative_rms": 9.3845273e-07,
+      "max_abs": 6.7353249e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_24",
+      "passed": true,
+      "relative_rms": 9.7724228e-07,
+      "max_abs": 6.1690807e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_24",
+      "passed": true,
+      "relative_rms": 9.9288127e-07,
+      "max_abs": 5.7220459e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_25",
+      "passed": true,
+      "relative_rms": 9.3850656e-07,
+      "max_abs": 7.1525574e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_25",
+      "passed": true,
+      "relative_rms": 9.941507e-07,
+      "max_abs": 7.8380108e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_26",
+      "passed": true,
+      "relative_rms": 1.0425243e-06,
+      "max_abs": 6.7651272e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_26",
+      "passed": true,
+      "relative_rms": 9.8599116e-07,
+      "max_abs": 9.4175339e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_27",
+      "passed": true,
+      "relative_rms": 1.029071e-06,
+      "max_abs": 1.347065e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_27",
+      "passed": true,
+      "relative_rms": 1.0782427e-06,
+      "max_abs": 1.4305115e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/block_time_28",
+      "passed": true,
+      "relative_rms": 1.0336631e-06,
+      "max_abs": 1.7166138e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_28",
+      "passed": true,
+      "relative_rms": 1.1636325e-06,
+      "max_abs": 1.9073486e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_time_29",
+      "passed": true,
+      "relative_rms": 1.1566508e-06,
+      "max_abs": 1.335144e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/block_29",
+      "passed": true,
+      "relative_rms": 1.0198759e-06,
+      "max_abs": 2.592802e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft/amplitude",
+      "passed": true,
+      "relative_rms": 3.1348088e-07,
+      "max_abs": 1.7881393e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft/output_phase",
+      "passed": true,
+      "relative_rms": 1.8389657e-06,
+      "max_abs": 0.00037616491,
+      "min_cosine": 1.0,
+      "norm_ratio": 0.99999994
+    },
+    {
+      "name": "cufft/waveform",
+      "passed": true,
+      "relative_rms": 6.553106e-07,
+      "max_abs": 2.6728958e-07,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/frontend_magnitude",
+      "passed": true,
+      "relative_rms": 2.8184388e-08,
+      "max_abs": 2.3841858e-07,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/frontend_phase",
+      "passed": true,
+      "relative_rms": 0.0,
+      "max_abs": 0.0,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/encoder_layer_0",
+      "passed": true,
+      "relative_rms": 9.3003337e-08,
+      "max_abs": 1.9073486e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/encoder_layer_1",
+      "passed": true,
+      "relative_rms": 2.7403698e-07,
+      "max_abs": 4.7683716e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/encoder_layer_2",
+      "passed": true,
+      "relative_rms": 4.4037404e-07,
+      "max_abs": 4.7683716e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/encoder_layer_3",
+      "passed": true,
+      "relative_rms": 6.9445019e-07,
+      "max_abs": 4.6491623e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 0.99999994
+    },
+    {
+      "name": "cufft-conditioned/encoder_layer_4",
+      "passed": true,
+      "relative_rms": 4.5156671e-07,
+      "max_abs": 5.8412552e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/encoder_layer_5",
+      "passed": true,
+      "relative_rms": 3.1042413e-07,
+      "max_abs": 2.3841858e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_0",
+      "passed": true,
+      "relative_rms": 3.8613027e-07,
+      "max_abs": 2.3841858e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_0",
+      "passed": true,
+      "relative_rms": 5.0872359e-07,
+      "max_abs": 3.3378601e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_1",
+      "passed": true,
+      "relative_rms": 5.8509914e-07,
+      "max_abs": 1.9669533e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_1",
+      "passed": true,
+      "relative_rms": 6.2312859e-07,
+      "max_abs": 1.4424324e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_2",
+      "passed": true,
+      "relative_rms": 7.0365144e-07,
+      "max_abs": 1.6212463e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_2",
+      "passed": true,
+      "relative_rms": 6.8222585e-07,
+      "max_abs": 1.4305115e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_3",
+      "passed": true,
+      "relative_rms": 7.2702738e-07,
+      "max_abs": 1.4305115e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_3",
+      "passed": true,
+      "relative_rms": 7.2761941e-07,
+      "max_abs": 1.4781952e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_4",
+      "passed": true,
+      "relative_rms": 7.8652658e-07,
+      "max_abs": 1.502037e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_4",
+      "passed": true,
+      "relative_rms": 7.0599577e-07,
+      "max_abs": 1.3589859e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_5",
+      "passed": true,
+      "relative_rms": 7.9192608e-07,
+      "max_abs": 1.2874603e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_5",
+      "passed": true,
+      "relative_rms": 7.7194204e-07,
+      "max_abs": 1.168251e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_6",
+      "passed": true,
+      "relative_rms": 7.6947703e-07,
+      "max_abs": 1.2159348e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_6",
+      "passed": true,
+      "relative_rms": 7.8125834e-07,
+      "max_abs": 1.0728836e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_7",
+      "passed": true,
+      "relative_rms": 7.4903784e-07,
+      "max_abs": 1.1324883e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_7",
+      "passed": true,
+      "relative_rms": 7.3575774e-07,
+      "max_abs": 1.1563301e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_8",
+      "passed": true,
+      "relative_rms": 7.7297216e-07,
+      "max_abs": 9.9539757e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_8",
+      "passed": true,
+      "relative_rms": 7.8214094e-07,
+      "max_abs": 1.0609627e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_9",
+      "passed": true,
+      "relative_rms": 7.7923551e-07,
+      "max_abs": 1.0073185e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_9",
+      "passed": true,
+      "relative_rms": 7.452378e-07,
+      "max_abs": 9.7155571e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_10",
+      "passed": true,
+      "relative_rms": 7.8696854e-07,
+      "max_abs": 9.1195107e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_10",
+      "passed": true,
+      "relative_rms": 7.7745773e-07,
+      "max_abs": 8.8810921e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_11",
+      "passed": true,
+      "relative_rms": 8.158529e-07,
+      "max_abs": 8.4042549e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_11",
+      "passed": true,
+      "relative_rms": 7.6043864e-07,
+      "max_abs": 8.6426735e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_12",
+      "passed": true,
+      "relative_rms": 8.2771408e-07,
+      "max_abs": 7.8976154e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_12",
+      "passed": true,
+      "relative_rms": 7.8491928e-07,
+      "max_abs": 6.7949295e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_13",
+      "passed": true,
+      "relative_rms": 8.2465311e-07,
+      "max_abs": 6.7949295e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_13",
+      "passed": true,
+      "relative_rms": 8.7140677e-07,
+      "max_abs": 6.3180923e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_14",
+      "passed": true,
+      "relative_rms": 8.1953834e-07,
+      "max_abs": 6.4373016e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_14",
+      "passed": true,
+      "relative_rms": 8.1896985e-07,
+      "max_abs": 6.1988831e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_15",
+      "passed": true,
+      "relative_rms": 8.1509199e-07,
+      "max_abs": 6.2584877e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_15",
+      "passed": true,
+      "relative_rms": 8.5912905e-07,
+      "max_abs": 6.377697e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_16",
+      "passed": true,
+      "relative_rms": 8.5084469e-07,
+      "max_abs": 6.5863132e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_16",
+      "passed": true,
+      "relative_rms": 8.5872517e-07,
+      "max_abs": 6.3180923e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_17",
+      "passed": true,
+      "relative_rms": 8.6319483e-07,
+      "max_abs": 6.7353249e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_17",
+      "passed": true,
+      "relative_rms": 8.6315032e-07,
+      "max_abs": 6.6757202e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_18",
+      "passed": true,
+      "relative_rms": 8.7664068e-07,
+      "max_abs": 6.2584877e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_18",
+      "passed": true,
+      "relative_rms": 8.5652658e-07,
+      "max_abs": 6.1988831e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_19",
+      "passed": true,
+      "relative_rms": 8.953071e-07,
+      "max_abs": 6.0796738e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_19",
+      "passed": true,
+      "relative_rms": 8.1569613e-07,
+      "max_abs": 5.9604645e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_20",
+      "passed": true,
+      "relative_rms": 8.4706369e-07,
+      "max_abs": 5.6922436e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_20",
+      "passed": true,
+      "relative_rms": 8.71483e-07,
+      "max_abs": 5.9604645e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_21",
+      "passed": true,
+      "relative_rms": 8.6505526e-07,
+      "max_abs": 5.9604645e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_21",
+      "passed": true,
+      "relative_rms": 8.7563183e-07,
+      "max_abs": 5.9008598e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_22",
+      "passed": true,
+      "relative_rms": 9.1249598e-07,
+      "max_abs": 5.6922436e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_22",
+      "passed": true,
+      "relative_rms": 9.1231345e-07,
+      "max_abs": 7.212162e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_23",
+      "passed": true,
+      "relative_rms": 9.2631848e-07,
+      "max_abs": 5.915761e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_23",
+      "passed": true,
+      "relative_rms": 9.2846324e-07,
+      "max_abs": 6.28829e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_24",
+      "passed": true,
+      "relative_rms": 9.6759368e-07,
+      "max_abs": 6.28829e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_24",
+      "passed": true,
+      "relative_rms": 9.8489113e-07,
+      "max_abs": 6.0796738e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_25",
+      "passed": true,
+      "relative_rms": 9.3233518e-07,
+      "max_abs": 6.1988831e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_25",
+      "passed": true,
+      "relative_rms": 9.8597184e-07,
+      "max_abs": 7.8678131e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_26",
+      "passed": true,
+      "relative_rms": 1.0362158e-06,
+      "max_abs": 7.390976e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_26",
+      "passed": true,
+      "relative_rms": 9.8414932e-07,
+      "max_abs": 7.6368451e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_27",
+      "passed": true,
+      "relative_rms": 1.02731e-06,
+      "max_abs": 8.9406967e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_27",
+      "passed": true,
+      "relative_rms": 1.0686055e-06,
+      "max_abs": 1.2397766e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/block_time_28",
+      "passed": true,
+      "relative_rms": 1.0210805e-06,
+      "max_abs": 1.4066696e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_28",
+      "passed": true,
+      "relative_rms": 1.1366033e-06,
+      "max_abs": 1.4781952e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_time_29",
+      "passed": true,
+      "relative_rms": 1.1292717e-06,
+      "max_abs": 1.1920929e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/block_29",
+      "passed": true,
+      "relative_rms": 9.9961301e-07,
+      "max_abs": 1.9431114e-05,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    },
+    {
+      "name": "cufft-conditioned/amplitude",
+      "passed": true,
+      "relative_rms": 3.1786905e-07,
+      "max_abs": 1.6689301e-06,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0000001
+    },
+    {
+      "name": "cufft-conditioned/output_phase",
+      "passed": true,
+      "relative_rms": 1.6425954e-06,
+      "max_abs": 0.00025683641,
+      "min_cosine": 1.0,
+      "norm_ratio": 0.99999994
+    },
+    {
+      "name": "cufft-conditioned/waveform",
+      "passed": true,
+      "relative_rms": 7.2274651e-07,
+      "max_abs": 3.3155084e-07,
+      "min_cosine": 1.0,
+      "norm_ratio": 1.0
+    }
+  ]
+}
