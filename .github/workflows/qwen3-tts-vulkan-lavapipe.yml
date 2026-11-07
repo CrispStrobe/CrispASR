@@ -1,28 +1,35 @@
-name: Qwen Ultra local-head stage audit
+name: Qwen Ultra sidecar reference audit
 on:
   workflow_dispatch:
 permissions:
   contents: read
   actions: read
 jobs:
-  controls:
+  audit:
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v6
-      - name: Compile and test captured reference stages
-        run: |
-          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-qwen3-ultra-boundary.cpp -o "$RUNNER_TEMP/ultra-boundary"
-          "$RUNNER_TEMP/ultra-boundary"
-          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-qwen3-ultra-features.cpp -o "$RUNNER_TEMP/ultra-features"
-          "$RUNNER_TEMP/ultra-features" samples/jfk.wav tests/fixtures/qwen3-ultra-features-f32le.bin
-      - name: Compare neural head against upstream logits
+        with:
+          submodules: recursive
+      - name: Prepare reference and model-free fixtures
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          python3 -m pip install numpy safetensors huggingface_hub
+          python3 -m pip install numpy safetensors huggingface_hub gguf
+          python3 tests/test_qwen3_ultra_head_converter.py
           gh run download 42313568853 -n issue579-ultra-parity
           python3 tools/ci-heavy/issue579_ultra_head_oracle.py
-          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-qwen3-ultra-head.cpp -o "$RUNNER_TEMP/ultra-head-controls"
-          "$RUNNER_TEMP/ultra-head-controls"
-          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-qwen3-ultra-head-oracle.cpp -o "$RUNNER_TEMP/ultra-head-oracle"
-          "$RUNNER_TEMP/ultra-head-oracle" ultra-head-oracle.bin
+          python3 tools/ci-heavy/issue579_ultra_sidecar_fixtures.py
+          python3 - <<'PY'
+          from huggingface_hub import snapshot_download
+          snapshot_download('17slever17/Qwen3-ForcedAligner-Ultra', revision='765dc1d714e4c80196782a5df5bfbcb3e1416736', local_dir='head-model', allow_patterns=['local_head/config.json','local_head/model.safetensors','local_head/normalizer.json'])
+          PY
+          python3 models/convert-qwen3-ultra-head-to-gguf.py --input head-model/local_head --output ultra-local-head.gguf
+      - name: Build loader and test sidecars
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=OFF
+          cmake --build build --target issue579-ultra-sidecar-controls issue579-ultra-sidecar-oracle -j 2
+          build/bin/issue579-ultra-sidecar-controls
+          build/bin/issue579-ultra-sidecar-controls synthetic-valid.gguf synthetic-invalid.gguf
+          build/bin/issue579-ultra-sidecar-oracle ultra-head-oracle.bin ultra-local-head.gguf

@@ -550,3 +550,10 @@ option(CRISPASR_BUILD_CANN_LAYOUT_PROBE "Build the optional CANN weight-layout d
 if(CRISPASR_BUILD_CANN_LAYOUT_PROBE)
     add_subdirectory(tools/ci-heavy/cann-weight-layout)
 endif()
+
+# Validation-only sidecar probes; this branch is not a product change.
+add_executable(issue579-ultra-sidecar-controls tests/test-qwen3-ultra-sidecar.cpp)
+target_link_libraries(issue579-ultra-sidecar-controls PRIVATE qwen3_asr)
+add_executable(issue579-ultra-sidecar-oracle tests/test-qwen3-ultra-head-oracle.cpp)
+target_compile_definitions(issue579-ultra-sidecar-oracle PRIVATE ULTRA_TEST_SIDECAR)
+target_link_libraries(issue579-ultra-sidecar-oracle PRIVATE qwen3_asr)

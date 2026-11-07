@@ -36,7 +36,7 @@ with open('ultra-head-oracle.bin', 'wb') as out:
         value = weights[name]
         assert value.shape == shape and np.isfinite(value).all(), name
         out.write(np.asarray(value, dtype='<f4').tobytes())
-    for i in (0, 1):
+    for i in range(44):
         for name in ('features', 'context', 'context_mask', 'endpoints', 'boundary_logits'):
             out.write(np.asarray(stages[name][i], dtype='<f4').tobytes())
 print('HEAD_ORACLE_PREPARED', Path('ultra-head-oracle.bin').stat().st_size, flush=True)
