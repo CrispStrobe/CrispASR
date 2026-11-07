@@ -2582,6 +2582,10 @@ int main(int argc, char** argv) {
         whisper_print_usage(argc, argv, params, stderr);
         return 1;
     }
+    if (!params.ultra_head.empty() && !params.align_only) {
+        fprintf(stderr, "crispasr: --ultra-head requires --align-only\n");
+        return 1;
+    }
 
     // Argument validation belongs before dispatch. This check used to sit after
     // every crispasr_run_backend() early return, so it only ever ran on the
@@ -2783,10 +2787,6 @@ int main(int argc, char** argv) {
 
     // Issue #217: --align-only is a standalone verb that needs only an aligner
     // model + audio + text — no ASR backend.
-    if (!params.ultra_head.empty() && !params.align_only) {
-        fprintf(stderr, "crispasr: --ultra-head requires --align-only\n");
-        return 1;
-    }
     if (params.align_only) {
         return crispasr_run_backend(params);
     }
