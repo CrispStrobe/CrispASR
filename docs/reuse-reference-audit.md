@@ -312,3 +312,10 @@ CTest targets passed. The [fused parity receipt](historical/reuse-cuda-fused-par
 records every stage and the original capture, model and payload hashes.
 This result is for one 100 ms clip on a T4; it does not qualify a full GPU
 model backend, long recordings, other devices or speech quality.
+
+
+The one-second original fused capture `issue579-reuse-fused-capture-1s-v1`
+also completed on a T4, with 120 calls to each original fused extension.
+The [receipt](historical/reuse-fused-capture-1s-20261107.json) records input,
+model and output-stage hashes. The native comparison is running as
+`issue579-reuse-cuda-fused-1s-v1`; the capture itself is not a parity pass.
