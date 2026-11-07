@@ -88,3 +88,12 @@ Unconditioned waveform relative RMS was 1.0843e-6. That original reference
 used Mamba's unfused CUDA reference, not its fused kernel. These are bounded
 frontend and one-clip model results, not qualification of a full GPU backend,
 other hardware, longer recordings or speech quality.
+
+Kaggle run `issue579-reuse-cuda-fused-v1` repeated the physical GPU tests and
+compared this independently computed frontend and native CPU model graph with
+an original **fused** Mamba 2.2.4 CUDA capture of the same 100 ms input. All
+71 unconditioned and 71 conditioned checks passed; unconditioned waveform
+relative RMS was 1.1407e-6. The original capture recorded 120 calls to each
+fused selective-scan and causal-convolution extension. This qualifies one clip
+on the tested T4, not long recordings, other devices, a GPU model graph or
+speech quality.
