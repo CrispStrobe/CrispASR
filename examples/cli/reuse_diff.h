@@ -10,6 +10,21 @@
 #include <vector>
 
 namespace reuse_diff {
+// These observations localize frontend arithmetic; the existing raw phase and
+// model comparisons below remain the acceptance gates, including at branch cuts.
+inline void diagnose(const crispasr_diff::Ref& ref, const char* name, const std::vector<float>& values,
+                     const std::vector<int64_t>& shape) {
+    if (!ref.get_f32(name).first)
+        return; // Older archives have the complete original acceptance stages.
+    if (ref.shape(name) != shape) {
+        std::fprintf(stderr, "diagnostic/%s: shape mismatch\n", name);
+        return;
+    }
+    const auto report = ref.compare(name, values.data(), values.size(), crispasr_diff::Ref::COS_FIRST_DIM);
+    std::printf("diagnostic/%-22s DIAGNOSTIC rms=%.8g max_abs=%.8g cos_min=%.8g norm_ratio=%.8g\n", name, report.rms,
+                report.max_abs, report.cos_min, report.norm_ratio);
+}
+
 inline bool compare(const crispasr_diff::Ref& ref, const std::string& name, const std::vector<float>& values,
                     const std::vector<int64_t>& expected_shape, const char* prefix, double tolerance) {
     const auto shape = ref.shape(name);
@@ -38,6 +53,17 @@ inline int run(const std::string& model_path, const std::string& ref_path) {
         return 2;
     }
     std::vector<float> samples(audio.first, audio.first + audio.second);
+    if (ref.get_f32("frontend_window").first || ref.get_f32("frontend_real").first ||
+        ref.get_f32("frontend_imaginary").first) {
+        reuse_frontend::Spectrum spectrum;
+        reuse_frontend::Diagnostics observations;
+        if (!reuse_frontend::analyze(samples, 16000, spectrum, &observations))
+            return 2;
+        diagnose(ref, "frontend_window", observations.window, {640});
+        const std::vector<int64_t> shape = {static_cast<int64_t>(spectrum.bins), static_cast<int64_t>(spectrum.frames)};
+        diagnose(ref, "frontend_real", observations.real, shape);
+        diagnose(ref, "frontend_imaginary", observations.imaginary, shape);
+    }
     auto* backend = core_cpu_backend::init();
     if (!backend)
         return 2;

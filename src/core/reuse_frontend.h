@@ -22,6 +22,14 @@ struct Spectrum {
     std::vector<float> phase;
 };
 
+// Optional observations before log-magnitude/atan2. These never replace the raw
+// phase fed to the model: equivalent complex values can have different phases.
+struct Diagnostics {
+    std::vector<float> window;
+    std::vector<float> real;
+    std::vector<float> imaginary;
+};
+
 // PyTorch's periodic Hann computes the angular step once in float before
 // multiplying the sample index. Rounding 2*pi*i before the division changes
 // window values and can change raw phase near the atan2 branch cut.
@@ -62,7 +70,8 @@ inline void fft(std::vector<std::complex<double>>& data) {
     }
 }
 
-inline bool analyze(const std::vector<float>& audio, int sample_rate, Spectrum& output) {
+inline bool analyze(const std::vector<float>& audio, int sample_rate, Spectrum& output,
+                    Diagnostics* diagnostics = nullptr) {
     if (sample_rate < 8000 || sample_rate > 48000 || audio.size() > static_cast<size_t>(INT64_MAX / 2))
         return false;
     for (float sample : audio)
@@ -88,6 +97,12 @@ inline bool analyze(const std::vector<float>& audio, int sample_rate, Spectrum& 
     result.phase.resize(frames * bins);
     std::vector<std::complex<double>> spectrum(static_cast<size_t>(n_fft));
     const auto window = periodic_hann(n_fft);
+    Diagnostics observed;
+    if (diagnostics) {
+        observed.window = window;
+        observed.real.resize(frames * bins);
+        observed.imaginary.resize(frames * bins);
+    }
     const int64_t length = static_cast<int64_t>(audio.size());
     for (size_t frame = 0; frame < frames; ++frame) {
         const int64_t first = static_cast<int64_t>(frame * hop) - n_fft / 2;
@@ -107,11 +122,17 @@ inline bool analyze(const std::vector<float>& audio, int sample_rate, Spectrum& 
             // as positive zero. Tiny roundoff in a complex FFT changes atan2
             // from +pi to -pi when the endpoint real value is negative.
             const float im = (k == 0 || k + 1 == bins) ? 0.0f : static_cast<float>(spectrum[k].imag());
+            if (diagnostics) {
+                observed.real[frame * bins + k] = re;
+                observed.imaginary[frame * bins + k] = im;
+            }
             result.magnitude[frame * bins + k] = std::log1p(std::hypot(re, im));
             result.phase[frame * bins + k] = std::atan2(im, re);
         }
     }
     output = std::move(result);
+    if (diagnostics)
+        *diagnostics = std::move(observed);
     return true;
 }
 

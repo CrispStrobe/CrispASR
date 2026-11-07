@@ -5730,6 +5730,14 @@ if(Python3_Interpreter_FOUND)
     add_test(NAME reuse-network-compare-controls
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reuse_network_compare.py)
     set_tests_properties(reuse-network-compare-controls PROPERTIES LABELS "unit;reuse;audio" SKIP_RETURN_CODE 77)
+    add_test(NAME reuse-frontend-stability-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reuse_frontend_stability.py)
+    add_test(NAME reuse-reference-dumper-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reuse_reference_dumper.py)
+    add_test(NAME reuse-phase-stability-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reuse_phase_stability.py)
+    set_tests_properties(reuse-frontend-stability-controls reuse-reference-dumper-controls reuse-phase-stability-controls
+        PROPERTIES LABELS "unit;reuse;audio" SKIP_RETURN_CODE 77)
     add_test(NAME omnivoice-acceptance-policy
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_omnivoice_acceptance_policy.py -v)
     set_tests_properties(omnivoice-acceptance-policy PROPERTIES LABELS "unit;tts;omnivoice")

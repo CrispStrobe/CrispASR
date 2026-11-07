@@ -28,3 +28,12 @@ the conditioned run is diagnostic and cannot substitute for frontend parity.
 The gate checks raw relative RMS, per-row cosine and amplitude ratio, and reports
 maximum error. This matters because +π and −π describe the same
 complex value but are different inputs to this model.
+
+New reference archives also capture the exact upstream Hann window and the
+STFT's real and imaginary values. Optional `diagnostic/` rows compare these
+before phase calculation; they do not replace or relax the existing gates.
+Older reference archives remain usable and simply omit those rows. For a
+cross-environment first-frame investigation, run
+`tools/ci-heavy/issue579_reuse/frontend_stability.py --help`: it captures
+byte-checked input, window and spectrum, and can replay a second environment's
+window. Its output is diagnostic and never declares model parity.

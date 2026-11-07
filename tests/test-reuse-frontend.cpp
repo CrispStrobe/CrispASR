@@ -6,6 +6,37 @@
 #include <cstring>
 #include <limits>
 
+static bool test_raw_endpoint_phase() {
+    // Independent real-DFT invariant: DC and even-N Nyquist have +0 imaginary
+    // part. A negative real coefficient must therefore give raw +pi, not -pi.
+    // Wrapped phase comparisons cannot detect this model-input regression.
+    const float pi = static_cast<float>(std::acos(-1.0));
+    for (bool alternating : {false, true}) {
+        for (float sign : {-1.0f, 1.0f}) {
+            std::vector<float> audio(1600);
+            for (size_t i = 0; i < audio.size(); ++i)
+                audio[i] = sign * 0.25f * (alternating && i % 2 ? -1.0f : 1.0f);
+            reuse_frontend::Spectrum observed, plain;
+            reuse_frontend::Diagnostics diagnostics;
+            if (!reuse_frontend::analyze(audio, 16000, observed, &diagnostics) ||
+                !reuse_frontend::analyze(audio, 16000, plain) || observed.phase != plain.phase ||
+                observed.magnitude != plain.magnitude || diagnostics.window.size() != 640 ||
+                diagnostics.real.size() != observed.phase.size() ||
+                diagnostics.imaginary.size() != observed.phase.size())
+                return false;
+            const size_t bin = alternating ? observed.bins - 1 : 0;
+            for (size_t frame = 0; frame < observed.frames; ++frame) {
+                const size_t index = frame * observed.bins + bin;
+                if (observed.phase[index] != (sign < 0 ? pi : 0.0f) || diagnostics.imaginary[index] != 0.0f ||
+                    std::signbit(diagnostics.imaginary[index]) || diagnostics.real[index] * sign <= 1.0f)
+                    return false;
+            }
+        }
+    }
+    std::puts("RE-USE raw DC/Nyquist phase: 84 exact branch and diagnostic invariants passed");
+    return true;
+}
+
 static bool compare_reference(const std::vector<float>& audio, int rate, const char* fixture_path, int expected_fft,
                               int expected_hop) {
     reuse_frontend::Spectrum out;
@@ -143,6 +174,8 @@ static bool test_synthesis_reference(const char* path) {
 int main(int argc, char** argv) {
     if (argc != 5)
         return 1;
+    if (!test_raw_endpoint_phase())
+        return 12;
     if (!test_synthesis_reference(argv[4]))
         return 11;
     std::vector<float> audio;

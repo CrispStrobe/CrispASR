@@ -2,7 +2,10 @@
 import importlib.util
 from pathlib import Path
 import unittest
-import numpy as np
+try:
+    import numpy as np
+except ImportError:
+    raise SystemExit(77)
 
 path = Path(__file__).resolve().parents[1] / 'tools/ci-heavy/issue579_reuse/phase_stability.py'
 spec = importlib.util.spec_from_file_location('reuse_phase_stability', path)

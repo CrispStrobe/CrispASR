@@ -11,9 +11,31 @@ import sys
 import numpy as np
 
 DEFAULT_STAGES = (['raw_audio', 'frontend_magnitude', 'frontend_phase'] +
+                  ['frontend_window', 'frontend_real', 'frontend_imaginary'] +
                   [f'encoder_layer_{i}' for i in range(6)] +
                   [name for i in range(30) for name in (f'block_time_{i}', f'block_{i}')] +
                   ['amplitude', 'output_phase', 'waveform'])
+
+
+def capture_frontend(torch, mag_phase_stft, audio, captures):
+    """Observe the original STFT call, including its actual generated window.
+
+    Reconstructing complex values from phase would lose signed zeros and the
+    small imaginary residuals that determine which side of atan2's cut wins.
+    The observer calls the original function once and returns its exact result.
+    """
+    from unittest.mock import patch
+    original = torch.stft
+
+    def observe(*args, **kwargs):
+        result = original(*args, **kwargs)
+        captures['frontend_window'] = kwargs['window'].detach().float().cpu().numpy().copy()
+        captures['frontend_real'] = result[0].real.T.detach().float().cpu().contiguous().numpy().copy()
+        captures['frontend_imaginary'] = result[0].imag.T.detach().float().cpu().contiguous().numpy().copy()
+        return result
+
+    with patch.object(torch, 'stft', observe):
+        return mag_phase_stft(torch.from_numpy(audio[None]), 640, 80, 640, 'relu_log1p', addeps=False)
 
 
 def _check_file(path, expected):
@@ -80,7 +102,10 @@ def dump(model_dir, audio, stages, **_kwargs):
     for i, block in enumerate(model.TSMamba):
         block.freq_mamba.register_forward_pre_hook(time_hook(i))
         block.register_forward_hook(hook(f'block_{i}'))
-    mag, phase, _ = mag_phase_stft(torch.from_numpy(audio[None]), 640, 80, 640, 'relu_log1p', addeps=False)
+    if any(name in stages for name in ('frontend_window', 'frontend_real', 'frontend_imaginary')):
+        mag, phase, _ = capture_frontend(torch, mag_phase_stft, audio, captures)
+    else:
+        mag, phase, _ = mag_phase_stft(torch.from_numpy(audio[None]), 640, 80, 640, 'relu_log1p', addeps=False)
     captures['frontend_magnitude'] = mag[0].T.contiguous().numpy().copy()
     captures['frontend_phase'] = phase[0].T.contiguous().numpy().copy()
     amp, output_phase, _ = model(mag, phase)
