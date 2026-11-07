@@ -1,4 +1,4 @@
-name: issue579 RE-USE STFT reference
+name: issue579 RE-USE frontend and converter audit
 on:
   workflow_dispatch:
 permissions:
@@ -6,13 +6,41 @@ permissions:
 jobs:
   reference:
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
-      - name: Install CPU PyTorch
-        run: python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-      - name: Capture reference features
-        run: python3 tools/ci-heavy/issue579_reuse/stft_reference.py
+      - name: Install CPU dependencies
+        run: |
+          python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
+          python3 -m pip install numpy gguf safetensors huggingface_hub
+      - name: Compare frontend to PyTorch
+        run: |
+          python3 tools/ci-heavy/issue579_reuse/stft_reference.py
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-reuse-frontend.cpp -o "$RUNNER_TEMP/reuse-frontend"
+          "$RUNNER_TEMP/reuse-frontend" samples/jfk.wav reuse-stft-reference-f32le.bin reuse-stft-44100-reference-f32le.bin
+      - name: Check converter against the original checkpoint
+        run: |
+          python3 tests/test_reuse_converter.py
+          python3 - <<'PY'
+          from huggingface_hub import snapshot_download
+          snapshot_download('nvidia/NVIDIA-NemotronLabs-RE-USE', revision='31f82f2efad1095034492f236e8dac9239ba713b', local_dir='model', allow_patterns=['config.json','model.safetensors'])
+          PY
+          python3 models/convert-reuse-to-gguf.py --input model --output reuse-native.gguf
+          python3 - <<'PY'
+          import gguf, numpy as np
+          from safetensors import safe_open
+          with safe_open('model/model.safetensors', framework='numpy') as s:
+              actual = {t.name:t.data for t in gguf.GGUFReader('reuse-native.gguf').tensors}
+              assert set(actual) == set(s.keys()) and len(actual) == 1416
+              for name in s.keys():
+                  assert np.array_equal(actual[name].reshape(-1).view(np.uint8), s.get_tensor(name).reshape(-1).view(np.uint8)), name
+          print('REUSE_CONVERTER_BYTE_PARITY_PASS', len(actual))
+          PY
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: reuse-stft-reference
-          path: reuse-stft-reference-f32le.bin
+          path: |
+            reuse-stft-reference-f32le.bin
+            reuse-stft-44100-reference-f32le.bin
+          if-no-files-found: ignore
