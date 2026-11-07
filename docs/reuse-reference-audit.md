@@ -211,11 +211,11 @@ integrated unconditioned run independently computed both magnitude and phase,
 and passed all 71 intermediate and waveform checks; all 71 conditioned checks
 also passed. Unconditioned waveform relative RMS was 6.60e-7. The
 [integrated receipt](historical/reuse-onemkl-integrated-01s-20261107.json)
-includes source and executable hashes and every stage. The one-second integrated run also passed all 71 unconditioned and 71
-conditioned checks, with 6.72e-7 relative waveform RMS; the
+includes source and executable hashes and every stage. The one-second
+integrated run also passed all 71 unconditioned and 71 conditioned checks, with 6.72e-7 relative waveform RMS; the
 [receipt](historical/reuse-onemkl-integrated-1s-20261107.json) records all
-142 rows and input, model and executable hashes. The default research executable does not link
-MKL, and requesting an unavailable profile fails explicitly. Isolated SDK and
+142 rows and input, model and executable hashes. The default research
+executable does not link MKL, and requesting an unavailable profile fails explicitly. Isolated SDK and
 default research CTests pass; a full product rebuild was not performed. The
 MKL profile remains experimental and does not resolve the Kaggle-reference
 phase discrepancy or establish GPU, long-recording, quality or fused-kernel
@@ -266,25 +266,22 @@ CUDA path; the native model graph and inverse FFT remain CPU implementations.
 This is one short model input on a T4, not full GPU backend, fused-kernel,
 long-recording, other-device or speech-quality qualification.
 
-The original fused Mamba comparison is not yet complete. Kaggle compiler
-preflight `issue579-reuse-fused-source-v1` passed on a T4 with the installed
+For the original fused Mamba comparison, Kaggle compiler preflight `issue579-reuse-fused-source-v1` passed on a T4 with the installed
 PyTorch 2.11/CUDA 13 and pinned CCCL 2.8.2 headers. It checked the original
 Mamba 2.2.4 and causal-convolution C++ bindings and legacy CUB helpers. Only
 build configuration was adjusted for the GPU architecture and headers; the
 package and kernel source manifests remained unchanged. The
 [preflight receipt](historical/reuse-fused-preflight-20261107.json) records
-pins and checks. The full extension build and fused reference capture are
-running as `issue579-reuse-fused-source-v2`; preflight alone is not fused-model
-parity.
+pins and checks. The subsequent build and capture are documented below;
+preflight alone does not establish fused-model parity.
 
 The pinned original Mamba and causal-convolution CUDA extensions subsequently
 built successfully in `issue579-reuse-fused-source-v2`, with their package and
 kernel source manifests unchanged. The attempted model capture stopped before
 inference because Kaggle's current Transformers package lacks an import used
 by Mamba 2.2.4. The [build receipt](historical/reuse-fused-build-20261107.json)
-records the wheel hashes and failure. The wheels are retained for a capture-only
-retry with compatible Transformers dependencies; this build is not yet fused
-model parity.
+records the wheel hashes and failure. A capture-only retry with compatible
+Transformers dependencies is documented below.
 
 The one-second follow-up `issue579-reuse-original-stages-v2` independently
 captured the original network on Kaggle CPU. The local `mkl-avx2` research
@@ -301,8 +298,8 @@ original fused Mamba 2.2.4 model on a T4 and captured 72 tensors; the worker
 counted 120 calls each to the fused selective-scan and causal-convolution CUDA
 extensions. The [capture receipt](historical/reuse-fused-capture-20261107.json)
 records input, model and wheel hashes and dependency versions. The native
-cuFFT comparison against this capture is running as
-`issue579-reuse-cuda-fused-v1`; the capture alone is not a native parity pass.
+cuFFT comparison against this capture is documented below; the capture alone
+is not a native parity pass.
 
 The subsequent native comparison `issue579-reuse-cuda-fused-v1` used that
 original fused capture. The independently computed cuFFT frontend and native
@@ -317,8 +314,8 @@ model backend, long recordings, other devices or speech quality.
 The one-second original fused capture `issue579-reuse-fused-capture-1s-v1`
 also completed on a T4, with 120 calls to each original fused extension.
 The [receipt](historical/reuse-fused-capture-1s-20261107.json) records input,
-model and output-stage hashes. The native comparison is running as
-`issue579-reuse-cuda-fused-1s-v1`; the capture itself is not a parity pass.
+model and output-stage hashes. The native comparison is documented below;
+the capture itself is not a parity pass.
 
 The one-second native follow-up `issue579-reuse-cuda-fused-1s-v1` also passed
 all 71 unconditioned and 71 conditioned checks against the original fused
