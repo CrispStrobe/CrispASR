@@ -94,3 +94,25 @@ A/B and candidate check from an NPZ containing `audio`, `local_phase`, and
 `kaggle_phase`; the caller must establish that both phase arrays came from the
 same audio. It checks the pinned source hashes and reports the input hash,
 the compatibility bound and waveform errors. The candidate is diagnostic only.
+
+### Scope correction and independent implementations
+
+The 0.5% waveform threshold above was selected for this investigation; it is
+not an NVIDIA specification. The five 100 ms excerpts all come from one
+recording. The incompatibility shown is between those particular short-clip
+references under that threshold, not a proof that a portable RE-USE runtime is
+impossible or that longer audio has the same error. The upstream script runs
+CUDA and the CPU audit substitutes a non-fused Mamba adapter. The adapter uses
+the pinned upstream SEMamba and STFT modules and exact checkpoint, but is not a
+direct run of NVIDIA's fused CUDA Mamba kernels. Default whole-file and
+five-second overlapping chunked inference still need direct qualification.
+
+Independent implementations include [speech.cpp](https://github.com/nyosegawa/speech.cpp/blob/main/docs/models/semamba.md),
+whose authors report comparisons against original CUDA reference dumps;
+[audio.cpp](https://huggingface.co/audio-cpp/RE-USE-GGUF), which publishes a
+conversion of the same revision and waveform comparisons; and
+[reuse-rs](https://github.com/altunenes/re-use-rs), whose offline Rust path
+loads this same checkpoint. [RE-USE Audio](https://github.com/quangng2000/reuse-audio)
+also supplies an ONNX Runtime Android implementation and independent export
+and reference checks for the pinned checkpoint. Their reported results are
+useful independent evidence, not proof of CrispASR parity.
