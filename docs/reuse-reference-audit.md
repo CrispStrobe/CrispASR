@@ -145,3 +145,10 @@ fused CUDA kernels. On the 100 ms input, the full unconditioned CPU-adapter
 waveform differed from this GPU reference by 1.87%, and speech.cpp's 16-bit
 output by 2.04%. The [receipt](historical/reuse-official-unfused-gpu-20261107.json)
 records source hashes and all 37 adapter comparison results.
+
+The 72-stage unfused CUDA capture was also converted into a reference archive
+and compared to CrispASR with `crispasr-diff`. All 71 conditioned comparisons
+passed, with a 0.000147% relative waveform difference. The unconditioned
+native run still failed, with 2.10% waveform error on this same 100 ms input.
+The GPU capture remains unfused and the test remains a short-clip diagnostic;
+neither result establishes fused-kernel parity or general speech quality.

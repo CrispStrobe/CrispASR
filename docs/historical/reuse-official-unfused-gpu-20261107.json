@@ -166,5 +166,13 @@
   "mamba_simple_sha256": "a17e4c51b582dc0d4d690a649eba521cd0c1ee3dc8f0473a0967cdc9ec0874e3",
   "selective_scan_interface_sha256": "c79f4432536402fe4d6c1026ccf8d5fc0aaa62b790e9a622295aee14ac45dbcc",
   "waveform_relative_rmse_cpu_adapter_vs_gpu_reference": 0.01869848743081093,
-  "waveform_relative_rmse_speechcpp_pcm16_vs_gpu_reference": 0.020411796867847443
+  "waveform_relative_rmse_speechcpp_pcm16_vs_gpu_reference": 0.020411796867847443,
+  "crispasr_diff": {
+    "conditioned_pass": 71,
+    "conditioned_fail": 0,
+    "native_fail": 70,
+    "conditioned_waveform_relative_rmse": 1.4666867e-06,
+    "native_waveform_relative_rmse": 0.020983923,
+    "method": "Native CPU reference compared against upstream unfused CUDA captures, with exact source phase in the separate conditioned diagnostic."
+  }
 }
