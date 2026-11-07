@@ -27,7 +27,8 @@ mono 16 kHz PCM and returns word times in seconds. The corresponding C ABI
 accessors and must be freed with `crispasr_ultra_align_result_free`.
 Both paths reject audio longer than 120 seconds rather than returning partial
 results. Word-level JSON retains refined timing; subtitle output is rounded to
-milliseconds. The local head runs on CPU and no model is auto-downloaded.
+milliseconds. The local head runs on CPU and is not auto-downloaded. The base
+model is available through the [model registry](qwen3-ultra-aligner.md).
 
 [Reference run 42313568853](https://github.com/CrispStrobe/CrispASR/actions/runs/42313568853)
 used the upstream `qwen_fa_ultra` 0.1.1 package and pinned Ultra revision
