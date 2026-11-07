@@ -1,0 +1,59 @@
+{
+  "audit": "issue579-reuse-multi-phase-v1",
+  "model": "nvidia/NVIDIA-NemotronLabs-RE-USE",
+  "revision": "31f82f2efad1095034492f236e8dac9239ba713b",
+  "model_sha256": "06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1",
+  "source_audio": "noisy_audio/mic_test2.wav",
+  "local_pytorch": "2.11.0+cu130 (CPU)",
+  "kaggle_pytorch": "2.11.0+cpu",
+  "method": "Same public PCM; compare CPU STFT phases and run both through the same original CPU model with the independently audited selective-scan adapter.",
+  "sample_rate": 16000,
+  "samples_per_excerpt": 1600,
+  "results": [
+    {
+      "start_sample": 16000,
+      "input_sha256": "fb7186f17304dfbdf7d6343ae9877d558691773597bb11bd2b1c54627f922168",
+      "first_frame_flips": 61,
+      "other_frame_flips": 0,
+      "waveform_relative_rmse": 0.01194142084568739,
+      "waveform_norm_ratio": 0.9993009158851794,
+      "could_both_pass_0_5_percent": false
+    },
+    {
+      "start_sample": 32000,
+      "input_sha256": "dbdf21a917a2d8fb584430b9b549c0d94056c8941d2a98acac782292447e7e5f",
+      "first_frame_flips": 73,
+      "other_frame_flips": 0,
+      "waveform_relative_rmse": 0.03107755072414875,
+      "waveform_norm_ratio": 1.0007625355353778,
+      "could_both_pass_0_5_percent": false
+    },
+    {
+      "start_sample": 48000,
+      "input_sha256": "584f3746ec95e8adf4e04c54b3ecd79c8c07011b7c87c894fa59125510fea551",
+      "first_frame_flips": 54,
+      "other_frame_flips": 0,
+      "waveform_relative_rmse": 0.01737263798713684,
+      "waveform_norm_ratio": 1.0015727420289369,
+      "could_both_pass_0_5_percent": false
+    },
+    {
+      "start_sample": 64000,
+      "input_sha256": "0a96b46d4b301be215318443bf6d9130e913b279670bf93ccb0f9edb05403ea0",
+      "first_frame_flips": 63,
+      "other_frame_flips": 0,
+      "waveform_relative_rmse": 0.03785061463713646,
+      "waveform_norm_ratio": 0.989443227267523,
+      "could_both_pass_0_5_percent": false
+    },
+    {
+      "start_sample": 80000,
+      "input_sha256": "720db94ade23882b571b33d8a7b80fc15398d9958cb1aefb395841e41037fd62",
+      "first_frame_flips": 65,
+      "other_frame_flips": 0,
+      "waveform_relative_rmse": 0.01941460371017456,
+      "waveform_norm_ratio": 1.0049942236728726,
+      "could_both_pass_0_5_percent": false
+    }
+  ]
+}

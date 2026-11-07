@@ -79,3 +79,18 @@ measured locally: it changed the original waveforms by 6.66% and 7.35%,
 respectively, on this excerpt. That candidate is rejected; it is not a change
 to the reference or a passing parity result. Broader audio and hardware work
 is needed before choosing any production behavior.
+
+The Kaggle CPU follow-up `issue579-reuse-multi-phase-v1` repeated the A/B on
+five separate 0.1-second excerpts from the same public recording. Each had
+54–73 first-frame branch flips and no flips in later frames. Feeding both phase
+variants through the same pinned original CPU model gave 1.19–3.79% relative
+waveform differences; none of the five pairs can both satisfy the 0.5% gate
+against a single output. The [receipt](historical/reuse-phase-multi-20261107.json)
+records input hashes and each result. These are five excerpts from one
+recording, not a representative quality corpus.
+
+`tools/ci-heavy/issue579_reuse/phase_stability.py` reproduces the single-pair
+A/B and candidate check from an NPZ containing `audio`, `local_phase`, and
+`kaggle_phase`; the caller must establish that both phase arrays came from the
+same audio. It checks the pinned source hashes and reports the input hash,
+the compatibility bound and waveform errors. The candidate is diagnostic only.
