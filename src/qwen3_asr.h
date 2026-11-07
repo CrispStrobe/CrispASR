@@ -217,6 +217,14 @@ int qwen3_asr_align_words_with_hidden(struct qwen3_asr_context* ctx, const float
                                       const char** words, int n_words, int64_t* out_start_ms, int64_t* out_end_ms,
                                       float* out_hidden, size_t hidden_capacity);
 
+// Experimental isolated Ultra base+local-head path. The caller supplies the
+// separately converted F32 head sidecar and output arrays of n_words doubles;
+// times are milliseconds. The normal aligner is unchanged. This is not yet
+// wired into CLI, the session C ABI, or language bindings.
+int qwen3_asr_align_words_ultra(struct qwen3_asr_context* ctx, const float* samples, int n_samples, const char** words,
+                                int n_words, const char* head_gguf, double* out_start_ms, double* out_end_ms);
+
+
 #ifdef __cplusplus
 }
 #endif

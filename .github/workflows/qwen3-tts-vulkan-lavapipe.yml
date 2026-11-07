@@ -15,7 +15,7 @@ jobs:
       - name: Build CLI
         run: |
           cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=OFF
-          cmake --build build --target crispasr-cli issue579-ultra-hidden-probe -j 2
+          cmake --build build --target crispasr-cli issue579-ultra-hidden-probe issue579-ultra-sidecar-controls issue579-ultra-sidecar-oracle -j 2
           build/bin/issue579-ultra-hidden-probe
       - name: Install reference dependencies
         run: |
@@ -30,6 +30,10 @@ jobs:
           sha256sum model/model.safetensors
           python3 models/convert-qwen3-asr-to-gguf.py --input model --output qwen3-forced-aligner-ultra.gguf
           sha256sum qwen3-forced-aligner-ultra.gguf
+          python3 models/convert-qwen3-ultra-head-to-gguf.py --input model/local_head --output ultra-local-head.gguf
+          python3 tools/ci-heavy/issue579_ultra_sidecar_fixtures.py
+          build/bin/issue579-ultra-sidecar-controls
+          build/bin/issue579-ultra-sidecar-controls synthetic-valid.gguf synthetic-invalid.gguf
       - name: Compare reference and CrispASR alignment
         env:
           OMP_NUM_THREADS: '2'
@@ -49,8 +53,11 @@ jobs:
         run: |
           gh run download 42313568853 -n issue579-ultra-parity -D prior-reference
           cp prior-reference/local-head-stages.npz .
-          build/bin/issue579-ultra-hidden-probe qwen3-forced-aligner-ultra.gguf samples/jfk.wav ultra-hidden.bin
+          python3 tools/ci-heavy/issue579_ultra_head_oracle.py
+          build/bin/issue579-ultra-sidecar-oracle ultra-head-oracle.bin ultra-local-head.gguf
+          build/bin/issue579-ultra-hidden-probe qwen3-forced-aligner-ultra.gguf samples/jfk.wav ultra-hidden.bin ultra-local-head.gguf ultra-refined.bin
           python3 tools/ci-heavy/issue579_ultra_hidden_compare.py
+          python3 tools/ci-heavy/issue579_ultra_refined_compare.py
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -61,4 +68,5 @@ jobs:
             local-head-reference.json
             local-head-stages.npz
             ultra-hidden.bin
+            ultra-refined.bin
           if-no-files-found: ignore

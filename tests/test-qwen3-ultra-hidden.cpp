@@ -10,13 +10,14 @@ int main(int argc, char** argv) {
     int64_t start = 0, end = 0;
     float hidden = 0;
     if (qwen3_asr_align_words_with_hidden(nullptr, nullptr, 0, one, 1, &start, &end, &hidden, 1) != -1 ||
-        qwen3_asr_align_words_with_hidden(nullptr, nullptr, 0, one, 1, &start, &end, nullptr, 0) != -1)
+        qwen3_asr_align_words_with_hidden(nullptr, nullptr, 0, one, 1, &start, &end, nullptr, 0) != -1 ||
+        qwen3_asr_align_words_ultra(nullptr, nullptr, 0, one, 1, nullptr, nullptr, nullptr) != -1)
         return 1;
     if (argc == 1) {
         std::puts("Ultra hidden-state input controls passed");
         return 0;
     }
-    if (argc != 4)
+    if (argc != 4 && argc != 6)
         return 2;
     std::vector<float> audio;
     int sample_rate = 0;
@@ -43,7 +44,28 @@ int main(int argc, char** argv) {
     const int capture_rc =
         qwen3_asr_align_words_with_hidden(ctx, audio.data(), static_cast<int>(audio.size()), words, count,
                                           capture_start.data(), capture_end.data(), states.data(), states.size());
+    std::vector<double> refined_start(count), refined_end(count);
+    int ultra_rc = 0;
+    if (argc == 6)
+        ultra_rc = qwen3_asr_align_words_ultra(ctx, audio.data(), static_cast<int>(audio.size()), words, count, argv[4],
+                                               refined_start.data(), refined_end.data());
     qwen3_asr_free(ctx);
+    if (ultra_rc != 0)
+        return 8;
+    if (argc == 6) {
+        FILE* refined = std::fopen(argv[5], "wb");
+        if (!refined)
+            return 9;
+        for (int i = 0; i < count; ++i) {
+            if (std::fwrite(&refined_start[i], sizeof(double), 1, refined) != 1 ||
+                std::fwrite(&refined_end[i], sizeof(double), 1, refined) != 1) {
+                std::fclose(refined);
+                return 10;
+            }
+        }
+        std::fclose(refined);
+        std::printf("ULTRA_REFINED_CAPTURE_PASS %d words\n", count);
+    }
     if (small_rc != -1 || base_rc != 0 || capture_rc != 0 || base_start != capture_start || base_end != capture_end)
         return 5;
     FILE* output = std::fopen(argv[3], "wb");

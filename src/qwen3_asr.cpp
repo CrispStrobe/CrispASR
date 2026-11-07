@@ -15,6 +15,8 @@
 #include "qwen3_asr.h"
 #include "core/quant_bcast.h"
 #include "core/crispasr_env.h"
+#include "core/qwen3_ultra_boundary.h"
+#include "core/qwen3_ultra_sidecar.h"
 #include "../crisp_audio/include/crisp_audio.h"
 #include "crispasr_imatrix.h"
 
@@ -2372,7 +2374,7 @@ static float* qwen3_asr_run_aligner_capture(struct qwen3_asr_context* ctx, const
 
 static int qwen3_asr_align_words_impl(struct qwen3_asr_context* ctx, const float* samples, int n_samples,
                                       const char** words, int n_words, int64_t* out_start_ms, int64_t* out_end_ms,
-                                      float* out_hidden, size_t hidden_capacity) {
+                                      float* out_hidden, size_t hidden_capacity, bool mask_to_audio) {
     if (!ctx || !samples || n_samples <= 0 || !words || n_words <= 0 || !out_start_ms || !out_end_ms)
         return -1;
     const size_t hidden_dim = ctx->model.hparams.llm_d_model;
@@ -2505,7 +2507,10 @@ static int qwen3_asr_align_words_impl(struct qwen3_asr_context* ctx, const float
         const float* row = logits + (size_t)t * H;
         int best = 0;
         float mx = row[0];
-        for (int k = 1; k < H; k++) {
+        // Ultra's local-head reference masks classes beyond the audio duration
+        // before timestamp repair. The legacy aligner leaves them unchanged.
+        const int valid_classes = mask_to_audio ? std::min(H, n_samples / 1280 + 1) : H;
+        for (int k = 1; k < valid_classes; k++) {
             if (row[k] > mx) {
                 mx = row[k];
                 best = k;
@@ -2547,7 +2552,8 @@ static int qwen3_asr_align_words_impl(struct qwen3_asr_context* ctx, const float
 
 extern "C" int qwen3_asr_align_words(struct qwen3_asr_context* ctx, const float* samples, int n_samples,
                                      const char** words, int n_words, int64_t* out_start_ms, int64_t* out_end_ms) {
-    return qwen3_asr_align_words_impl(ctx, samples, n_samples, words, n_words, out_start_ms, out_end_ms, nullptr, 0);
+    return qwen3_asr_align_words_impl(ctx, samples, n_samples, words, n_words, out_start_ms, out_end_ms, nullptr, 0,
+                                      false);
 }
 
 extern "C" int qwen3_asr_align_words_with_hidden(struct qwen3_asr_context* ctx, const float* samples, int n_samples,
@@ -2556,7 +2562,79 @@ extern "C" int qwen3_asr_align_words_with_hidden(struct qwen3_asr_context* ctx, 
     if (!out_hidden)
         return -1;
     return qwen3_asr_align_words_impl(ctx, samples, n_samples, words, n_words, out_start_ms, out_end_ms, out_hidden,
-                                      hidden_capacity);
+                                      hidden_capacity, false);
+}
+
+extern "C" int qwen3_asr_align_words_ultra(struct qwen3_asr_context* ctx, const float* samples, int n_samples,
+                                           const char** words, int n_words, const char* head_gguf, double* out_start_ms,
+                                           double* out_end_ms) {
+    if (!ctx || !samples || n_samples <= 0 || !words || n_words <= 0 || n_words > 8192 || !head_gguf || !out_start_ms ||
+        !out_end_ms || ctx->model.hparams.llm_d_model != qwen3_ultra_head::qwen_dim)
+        return -1;
+    for (int i = 0; i < n_samples; ++i)
+        if (!std::isfinite(samples[i]))
+            return -1;
+    for (int i = 0; i < n_words; ++i)
+        if (!words[i] || !*words[i])
+            return -1;
+    try {
+        qwen3_ultra_sidecar::Package package;
+        if (!qwen3_ultra_sidecar::load(head_gguf, ctx->backend_cpu ? ctx->backend_cpu : ctx->backend, package))
+            return -8;
+        const size_t endpoints = static_cast<size_t>(n_words) * 2;
+        std::vector<int64_t> start(n_words), end(n_words);
+        std::vector<float> hidden(endpoints * qwen3_ultra_head::qwen_dim);
+        const int rc = qwen3_asr_align_words_impl(ctx, samples, n_samples, words, n_words, start.data(), end.data(),
+                                                  hidden.data(), hidden.size(), true);
+        if (rc != 0)
+            return rc;
+        std::vector<float> audio(samples, samples + n_samples);
+        std::vector<qwen3_ultra_boundary::Interval> coarse(n_words);
+        std::vector<double> corrections(endpoints);
+        for (int i = 0; i < n_words; ++i) {
+            coarse[i] = {static_cast<double>(start[i]), static_cast<double>(end[i])};
+            for (int endpoint = 0; endpoint < 2; ++endpoint) {
+                const size_t index = static_cast<size_t>(i) * 2 + endpoint;
+                qwen3_ultra_features::Features features{};
+                const double center = endpoint == 0 ? coarse[i].start : coarse[i].end;
+                if (!qwen3_ultra_features::extract(audio, center, package.mean, package.stddev, features, false))
+                    return -9;
+                std::array<float, qwen3_ultra_head::roles * qwen3_ultra_head::qwen_dim> context{};
+                const float mask[] = {1.0f, 1.0f, i > 0 ? 1.0f : 0.0f, i + 1 < n_words ? 1.0f : 0.0f};
+                for (int d = 0; d < qwen3_ultra_head::qwen_dim; ++d) {
+                    const size_t word = static_cast<size_t>(i) * 2 * qwen3_ultra_head::qwen_dim;
+                    context[d] = hidden[index * qwen3_ultra_head::qwen_dim + d];
+                    context[qwen3_ultra_head::qwen_dim + d] =
+                        (hidden[word + d] + hidden[word + qwen3_ultra_head::qwen_dim + d]) * 0.5f;
+                    if (i > 0)
+                        context[2 * qwen3_ultra_head::qwen_dim + d] =
+                            (hidden[word - 2 * qwen3_ultra_head::qwen_dim + d] +
+                             hidden[word - qwen3_ultra_head::qwen_dim + d]) *
+                            0.5f;
+                    if (i + 1 < n_words)
+                        context[3 * qwen3_ultra_head::qwen_dim + d] =
+                            (hidden[word + 2 * qwen3_ultra_head::qwen_dim + d] +
+                             hidden[word + 3 * qwen3_ultra_head::qwen_dim + d]) *
+                            0.5f;
+                }
+                std::array<float, qwen3_ultra_head::offsets> logits{};
+                if (!qwen3_ultra_head::run(package.weights, features[0].data(), context.data(), mask, endpoint,
+                                           logits) ||
+                    !qwen3_ultra_boundary::decode_offset(logits, corrections[index]))
+                    return -9;
+            }
+        }
+        std::vector<qwen3_ultra_boundary::Interval> refined;
+        if (!qwen3_ultra_boundary::repair(coarse, corrections, static_cast<double>(n_samples) / 16.0, refined))
+            return -9;
+        for (int i = 0; i < n_words; ++i) {
+            out_start_ms[i] = refined[i].start;
+            out_end_ms[i] = refined[i].end;
+        }
+        return 0;
+    } catch (...) {
+        return -9;
+    }
 }
 
 // One full-T forward pass for the Qwen3-ForcedAligner. Same KV-cached
