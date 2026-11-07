@@ -21,6 +21,13 @@ class ReferenceContract(unittest.TestCase):
         for name in ('raw_audio', 'frontend_magnitude', 'frontend_phase', 'amplitude', 'output_phase', 'waveform'):
             self.assertIn(name, stages)
 
+    def test_one_second_and_cap_preserve_exact_samples(self):
+        audio = np.arange(24000, dtype=np.float32) / 24000
+        result = module.prepare_audio(audio)
+        self.assertEqual(result.shape, (16000,))
+        np.testing.assert_array_equal(result, audio[:16000])
+        np.testing.assert_array_equal(module.prepare_audio(audio[:1600]), audio[:1600])
+
     def test_invalid_audio_and_unknown_stage_fail_before_loading_model(self):
         for audio in (np.zeros(320, np.float32), np.zeros(401, np.float32), np.full(400, np.nan, np.float32), np.zeros((400, 2), np.float32)):
             with self.subTest(length=len(audio)), self.assertRaises(ValueError):

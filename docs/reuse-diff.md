@@ -3,8 +3,9 @@
 The RE-USE CPU implementation is experimental and is not a CLI or session
 backend. To diagnose it against the pinned original checkpoint, create a
 16 kHz, mono, 16-bit PCM WAV with at least 400 samples and a length divisible
-by 80. The reference dumper uses at most the first 1,600 samples, so select a
-short, non-silent speech excerpt deliberately.
+by 80. The reference dumper uses at most the first 16,000 samples, so select a
+short, non-silent speech excerpt deliberately. One-second comparisons are
+substantially slower and create larger reference archives.
 
 ```sh
 python tools/dump_reference.py --backend reuse --model-dir /path/to/pinned-model \
@@ -24,6 +25,6 @@ the two decoder outputs, and the reconstructed waveform. The `native/` rows
 use the native frontend. The `conditioned/` rows repeat the forward pass with
 reference phase values, isolating later model stages. Both groups must pass;
 the conditioned run is diagnostic and cannot substitute for frontend parity.
-The gate checks raw relative RMS and amplitude ratio as well as reporting
-cosine and maximum error. This matters because +π and −π describe the same
+The gate checks raw relative RMS, per-row cosine and amplitude ratio, and reports
+maximum error. This matters because +π and −π describe the same
 complex value but are different inputs to this model.

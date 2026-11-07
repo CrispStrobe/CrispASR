@@ -19,7 +19,7 @@ inline bool compare(const crispasr_diff::Ref& ref, const std::string& name, cons
     }
     const auto report = ref.compare(name, values.data(), values.size(), crispasr_diff::Ref::COS_FIRST_DIM);
     const double relative = report.rms_ref > 1e-12f ? report.rms / report.rms_ref : report.rms;
-    const bool pass = report.found && report.n_nonfinite == 0 && std::isfinite(relative) && relative <= tolerance &&
+    const bool pass = report.is_pass(0.999f) && std::isfinite(relative) && relative <= tolerance &&
                       std::isfinite(report.norm_ratio) &&
                       (report.rms_ref <= 1e-12f || (report.norm_ratio >= 0.98f && report.norm_ratio <= 1.02f));
     std::printf("%s%-22s %s rel_rms=%.8g max_abs=%.8g cos_min=%.8g norm_ratio=%.8g\n", prefix, name.c_str(),
@@ -33,7 +33,7 @@ inline int run(const std::string& model_path, const std::string& ref_path) {
         return 2;
     const auto audio = ref.get_f32("raw_audio");
     const auto phase = ref.get_f32("frontend_phase");
-    if (!audio.first || audio.second <= 320 || audio.second > 1600 || audio.second % 80 || !phase.first) {
+    if (!audio.first || audio.second <= 320 || audio.second > 16000 || audio.second % 80 || !phase.first) {
         std::fprintf(stderr, "reuse: missing/invalid bounded raw_audio or frontend_phase reference\n");
         return 2;
     }

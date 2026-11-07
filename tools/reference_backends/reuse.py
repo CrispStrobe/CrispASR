@@ -25,16 +25,22 @@ def _check_file(path, expected):
         raise ValueError(f'Unexpected pinned RE-USE source digest for {path.name}')
 
 
+def prepare_audio(audio):
+    """Return a bounded 16 kHz diagnostic input without silently padding it."""
+    audio = np.asarray(audio, dtype=np.float32)
+    if audio.ndim != 1:
+        raise ValueError('RE-USE reference requires mono audio')
+    audio = np.ascontiguousarray(audio[:16000])
+    if len(audio) <= 320 or len(audio) % 80 or not np.isfinite(audio).all():
+        raise ValueError('RE-USE reference requires finite 16 kHz mono audio longer than 320 samples and a multiple of the 80-sample hop')
+    return audio
+
+
 def dump(model_dir, audio, stages, **_kwargs):
     unknown = set(stages) - set(DEFAULT_STAGES)
     if unknown:
         raise ValueError(f'Unknown RE-USE reference stages: {sorted(unknown)}')
-    audio = np.asarray(audio, dtype=np.float32)
-    if audio.ndim != 1:
-        raise ValueError('RE-USE reference requires mono audio')
-    audio = np.ascontiguousarray(audio[:1600])
-    if len(audio) <= 320 or len(audio) % 80 or not np.isfinite(audio).all():
-        raise ValueError('RE-USE reference requires finite 16 kHz mono audio longer than 320 samples and a multiple of the 80-sample hop')
+    audio = prepare_audio(audio)
     import torch
     from safetensors.torch import load_file
 
