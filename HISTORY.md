@@ -1,3 +1,16 @@
+## 2026-11-07 — v0.8.51 published to PyPI and verified
+
+v0.8.51 (`008a771c5`) shipped:
+
+- the VoxCPM2 long-sentence VAE fix (#164);
+- the session auto-chunking and token-budget controls (#574);
+- opt-in Qwen3-TTS capture (#576);
+- off-value handling in `env_gate` (#572).
+
+PyPI publication was blocked because the wheel workflow's `macos-14` runner label is now rejected. `06a620d59` moved all `macos-14` uses to `macos-15`, and the wheel run was redispatched as 42359206396. Native audit 42334728938 and wheel audit 42360358086 are accepted.
+
+Also merged: PRs #582 (Qwen3-ForcedAligner-Ultra base audit) and #583 (RE-USE CPU reference audit), both #579 groundwork.
+
 ## 2026-11-03 — v0.8.50 published and verified
 
 Release 41675510092 (attempt 2 after a starved macOS job; 52 assets), wrappers 41675510012, Docker 41675510045. Native audit 41710437654 and wheel audit 41718388489 accepted. PyPI files came from wheel run 41706418193; a duplicate `workflow_run` wheel run (41710320363) rebuilt different bytes, so that run's cancelled GPU-index job was rerun and the audit pointed at it. Closed #562, #564, #569, #570; #568 open (Metal falls back to CPU).

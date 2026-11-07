@@ -1,16 +1,25 @@
 # CrispASR — Current work plan
 
-Updated 2026-11-03. Start with [the maintainer handoff](docs/maintenance-handoff.md).
+Updated 2026-11-07. Start with [the maintainer handoff](docs/maintenance-handoff.md).
 It contains the completed work, exact evidence, bounded next actions and blockers
 needed by a fresh agent; no earlier chat is required. Follow `AGENTS.md` and its
 mandatory maintainer-guide instructions before implementation.
 
-**v0.8.50 is tagged; its publication is in progress (lanes R1–R3 below). SCNet, Mini-BS-RoFormer, #564 and #567–#570 are on main and in the tag.** Claim work by adding owner,
+**v0.8.51 is published and verified (2026-11-07); v0.8.50 too (lanes R1–R3 complete). Open work: the lanes under NOW (M1 #568 Metal, S1 SCNet follow-ups, V1 optional checks, #577/#579 model work) and the holds.** Claim work by adding owner,
 source SHA, missing behavior, acceptance gates and next action under "NOW"
 before starting. The full scope of each task (exact runs, inputs, commands and
 acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-tasks--fully-scoped).
 
 ## NOW — open lanes, fully scoped (2026-11-03)
+
+### v0.8.51 publication — COMPLETE (2026-11-07)
+
+- Tag `v0.8.51` → `008a771c57fe285e86727c80e155d5376a9ee44b`. Release **42318289402** (58 assets), wrappers 42318289418 and Docker 42318289400 succeeded. Native audit **42334728938** and wheel audit **42360358086** are accepted. Receipts: [native](docs/historical/release-v0851-native-audit-2026-11-07.json), [wheel](docs/historical/release-v0851-wheel-audit-2026-11-07.json).
+- **What blocked PyPI, and the lesson:** the first wheel run, 42334706334, built 10 of 11 wheels and published the GPU index. Its `macos-arm64` job was cancelled at 0 s on both attempts, because GitHub now rejects the `macos-14` runner label. With that wheel missing, `publish-pypi` was skipped, so PyPI stayed at 0.8.50.
+  - A rerun cannot help, because it reuses the workflow file from the original commit.
+  - Fix `06a620d59` moved every `macos-14` runner use to `macos-15`. Then a fresh `workflow_dispatch` of `release-python-wheels.yml` with `tag=v0.8.51` (run **42359206396**) rebuilt and published PyPI and the GPU index from one run, and the audit used that run.
+  - Rule: if a matrix job is cancelled at 0 s with no steps, suspect a rejected runner label, not starvation.
+- Closed #574 with the release link.
 
 ### Issue #579 model evaluation and release preparation — Codex (2026-11-06)
 
