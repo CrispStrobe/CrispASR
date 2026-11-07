@@ -15,6 +15,11 @@ int main(int argc, char** argv) {
     if (!input.read(reinterpret_cast<char*>(audio.data()), audio.size() * sizeof(float)) ||
         input.peek() != std::char_traits<char>::eof())
         return 2;
+    reuse_frontend::Spectrum spectrum;
+    if (!reuse_frontend::analyze(audio, 8000, spectrum) ||
+        !write("reuse-trace-frontend_magnitude.f32le", spectrum.magnitude) ||
+        !write("reuse-trace-frontend_phase.f32le", spectrum.phase))
+        return 8;
     auto* backend = core_cpu_backend::init();
     if (!backend)
         return 3;
