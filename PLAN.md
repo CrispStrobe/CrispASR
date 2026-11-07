@@ -15,6 +15,9 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 ### Issue #579 model evaluation and release preparation — Codex (2026-11-06)
 
 - Source `b11617ea7d4a6808c0642ff1d0e8c606057d878f`. Evaluate Qwen3-ForcedAligner-Ultra against the existing aligner and RE-USE against its upstream implementation, using pinned checkpoints and independent reference/parity, meaningful unit and end-to-end tests, and hosted resources. Assess #577 and #568 against their documented architectural and physical-hardware gates. Retry the failed Pages deployment; prepare the next patch from the audited main tip, qualify the exact release source, and verify all publishers and release receipts before calling publication complete.
+### Issue #579 Ultra aligner parity — Codex (2026-11-06)
+
+- Source `b11617ea7d4a6808c0642ff1d0e8c606057d878f`. Validate the base Ultra checkpoint through the existing Qwen3 forced-aligner conversion and runtime against the pinned upstream Python implementation, document the reproducible scope and retain comparator controls. The optional local head and broader language/quantization qualification remain separate gates.
 
 ### Capture variants, issue #577 triage, and Metal #568 — Codex (2026-11-06)
 

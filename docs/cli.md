@@ -824,6 +824,8 @@ upstream tools like SubtitleEdit.
 
 ### Standalone alignment — `--align-only` (issue #217)
 
+For the separately distributed Ultra fine-tune, see the [Qwen3 Ultra aligner guide](qwen3-ultra-aligner.md) for conversion, tested scope and the optional-head limitation.
+
 Aligns pre-existing text against audio without running ASR first.
 Accepts plain text (via `--ref-text` or `--text-file file.txt`), an
 unaligned `.srt` file, or a CrispASR `--output-json` transcription
