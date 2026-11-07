@@ -31,3 +31,27 @@ bounded CPU and GPU tests, language/timestamp coverage and end-to-end speech
 quality. Quantized variants need independent accuracy and memory measurements.
 This work and the large model downloads require suitable remote resources; no
 claim of 30B support or of Q3/Q4 quality follows from the Haas support.
+
+## Resource and quantization feasibility (2026-11-07)
+
+The [NVIDIA checkpoint inventory](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B/tree/c17667641642c4265ff2b7037dd101b7d4567634)
+lists a 67,496,013,734-byte safetensors file. This is a storage requirement,
+not an inference-memory measurement. NVIDIA's published BF16 example targets
+an 80 GB H100; actual memory depends on the runtime and workload.
+
+The separate [AtomicChat GGUF inventory](https://huggingface.co/AtomicChat/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B-GGUF/tree/dbd06c5cad7a2f33c8e06be2fb3ef814dbd9aa59)
+lists a 1,670,410,080-byte F16 encoder plus distinct decoder files, including
+IQ4_NL (19,678,656,672 bytes), Q8_0 (35,004,643,232 bytes) and Q2_0_M
+(13,572,208,800 bytes). Encoder plus Q2_0_M is about 15.24 GB on disk before
+runtime buffers, caches and operating-system overhead. IQ4_NL is a four-bit
+alternative, not a Q4_K measurement; the inventory does not list Q3. The
+publisher's accuracy and hardware statements are their results for their own
+runtime and datasets, not CrispASR measurements.
+
+The current maintainer host cannot load the full model locally. A useful next
+experiment needs a suitably sized remote machine: pin the upstream model and a
+fixed multilingual ASR/translation corpus, capture reference transcripts and
+stage outputs, then compare a runnable quantized baseline with matched decode
+settings. Record peak memory, latency, WER/CER and translation quality, and
+compare Q3 only if a valid Q3 artifact can actually be constructed. Do not
+claim support from file availability or extrapolate quality from bit width.
