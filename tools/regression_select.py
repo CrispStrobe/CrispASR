@@ -30,6 +30,9 @@ ALIASES = {
     "bark": ["bark_tts"], "csm": ["csm_tts"], "speecht5": ["speecht5_tts"], "piper": ["piper_tts"],
     "pocket-tts": ["pocket_tts"], "mini-omni2": ["mini_omni2"], "firered-asr": ["firered_asr"],
     "glm-asr": ["glm_asr"], "kyutai-stt": ["kyutai_stt"], "granite": ["granite_speech"],
+    # Forced aligners (manifest.align_backends): runtime + shared aligner dispatch.
+    "qwen3-forced-aligner": ["qwen3_asr", "crispasr_aligner", "core/qwen3_forced_aligner", "align"],
+    "canary-ctc-aligner": ["canary_ctc", "crispasr_aligner", "align"],
 }
 # Model-specific importers/reference readers do not share the runtime's stem.
 MODEL_SOURCES = {
@@ -82,6 +85,8 @@ def manifest_ids():
     ids = {e["name"]: e["backend_id"] for e in m["backends"]}
     for e in m.get("tts_backends", []):
         ids[e["name"]] = e.get("backend_id") or e.get("tts_backend") or e["name"]
+    for e in m.get("align_backends", []):
+        ids[e["name"]] = e.get("backend_id") or e["name"]
     return ids
 
 
@@ -91,9 +96,9 @@ def stems_for(backend_id):
 
 
 def changed_entries(before, after):
-    """Return names whose complete ASR/TTS manifest entry changed."""
+    """Return names whose complete ASR/TTS/aligner manifest entry changed."""
     def entries(manifest):
-        return {e["name"]: e for group in ("backends", "tts_backends")
+        return {e["name"]: e for group in ("backends", "tts_backends", "align_backends")
                 for e in manifest.get(group, [])}
     old, new = entries(before), entries(after)
     return {name for name in old.keys() | new.keys() if old.get(name) != new.get(name)}

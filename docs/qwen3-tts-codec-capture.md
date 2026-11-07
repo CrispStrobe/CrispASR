@@ -45,7 +45,45 @@ The capture root contains:
 
 Code arrays are signed 32-bit little-endian integers, row-major [frames, codebook]. The manifest records the shape and SHA256. The capture stores the complete generated code sequence and the exact code array passed to each codec-decoder invocation. Streaming window records include the frame offset, pre-roll, and discarded sample count so each decoder input can be reconstructed and audited.
 
-The selected voice identifier and any instruction text are recorded. Effective seed, configured and effective temperature, greedy sampling, reference-decode policy, and language ID are included so a captured result has enough inference metadata to be interpreted. The reference source itself (audio WAV or voice-pack file) and the speaker-embedding vector are not copied; their paths and available fingerprints are recorded. The reference-code sequence is stored when present; the speaker embedding is represented by a SHA256 fingerprint. The decoded PCM is not copied; its float32-LE SHA256, sample rate, channel count, sample count, and duration are recorded. The HTTP response manifest records the hash of the final response body after server-side processing, encoding, and optional C2PA signing. For streaming, the body hash covers application payload bytes successfully passed to sink.write; it excludes HTTP chunk framing.
+The selected voice identifier and any instruction text are recorded. Effective seed, configured and effective temperature, greedy sampling, reference-decode policy, and language ID are included so a captured result has enough inference metadata to be interpreted. By default the reference source (audio WAV or voice-pack file) and speaker-embedding vector are not copied; paths and available fingerprints are recorded. The reference-code sequence is stored when present; the speaker embedding is represented by a SHA256 fingerprint unless the Base-only private export below is separately enabled. The decoded PCM is not copied; its float32-LE SHA256, sample rate, channel count, sample count, and duration are recorded. The HTTP response manifest records the hash of the final response body after server-side processing, encoding, and optional C2PA signing. For streaming, the body hash covers application payload bytes successfully passed to sink.write; it excludes HTTP chunk framing.
+
+## Private Base speaker-embedding export (separate opt-in)
+
+The regular Capture records the SHA256 of the **actual** speaker-embedding pointer
+received from the already-running Qwen3-TTS context. The C++ getter need not
+be exported from a DLL or called from Python. To preserve the **exact**
+2048-element float32 vector for the experimental Base-ICL Trainer, set
+`CRISPASR_QWEN3_TTS_CAPTURE_SPEAKER_EMBEDDING=1` **before starting the isolated
+Capture process**, in addition to the required capture directory. Any other
+value, or an unset variable, disables vector export. The 2048-value contract
+targets the 1.7B Base model. The 0.6B Base model has a 1024-value speaker
+embedding: requesting export for that model marks the capture incomplete and
+writes no embedding file. With export disabled, its existing hash-only capture
+is unchanged. CustomVoice and VoiceDesign behavior is unchanged.
+
+On an opted-in 1.7B Base request with a valid embedding, Capture writes
+`samples/<generation-id>/speaker_embedding.f32le` (8192 bytes, 2048 little-endian
+float32 values). It serializes the already-owned runtime pointer **once**;
+there is no second speaker inference, and nothing changes the synthesis graph
+or exported DLL symbols. The `reference` manifest gains
+`speaker_embedding_file`, `speaker_embedding_shape` and
+`speaker_embedding_size_bytes`; the pre-existing
+`speaker_embedding_sha256` must match the exact file bytes. When export is
+disabled, the file and shape are null and size is zero.
+
+Writing uses the existing atomic, no-overwrite hard-link writer. When export
+is explicitly requested but the pointer is missing, the shape is not [2048],
+a value is non-finite, the SHA differs, or the write fails, the sample is
+marked `capture_complete=false`. **Synthesis still proceeds**, but that
+capture must not enter a training corpus. No source/reference WAV, private
+embeddings or generated training examples belong in Git or hosted CI artifacts.
+
+The speaker embedding can identify a voice. Export only with the relevant
+rights and consent, into a locally protected private directory with restrictive
+ACLs, and securely remove it when no longer required. This opt-in **does not**
+constitute user consent or authorize any GPU experiment, model reload, or
+training. Previously prepared DLLs still need an independently reviewed rebuild
+for this feature; setting the variable on an old binary will not enable it.
 
 ## Completeness and overwrite rules
 

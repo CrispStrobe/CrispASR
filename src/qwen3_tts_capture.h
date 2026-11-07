@@ -217,6 +217,13 @@ inline std::filesystem::path configured_root() noexcept {
     }
 }
 
+// The speaker vector is potentially identifiable voice data. Export only after
+// a separate, explicit opt-in; capture itself remains controlled by CAPTURE_DIR.
+inline bool export_speaker_embedding_enabled() noexcept {
+    const char* value = std::getenv("CRISPASR_QWEN3_TTS_CAPTURE_SPEAKER_EMBEDDING");
+    return value && std::strcmp(value, "1") == 0;
+}
+
 inline bool write_atomic(const std::filesystem::path& path, const uint8_t* data, size_t size, std::string& error) {
     if (!data && size) {
         error = "null capture data";
@@ -297,6 +304,36 @@ inline bool write_i32le_atomic(const std::filesystem::path& path, const int32_t*
         bytes[i * 4 + 1] = static_cast<uint8_t>(value >> 8);
         bytes[i * 4 + 2] = static_cast<uint8_t>(value >> 16);
         bytes[i * 4 + 3] = static_cast<uint8_t>(value >> 24);
+    }
+    return write_atomic(path, bytes.data(), bytes.size(), error);
+}
+
+// Preserve the exact bits of the runtime's speaker embedding, not a second
+// inference/recomputed speaker representation. The SHA must match the existing
+// canonical little-endian fingerprint before the private file is committed.
+inline bool write_f32le_atomic(const std::filesystem::path& path, const float* values, size_t count,
+                               const std::string& expected_sha256, std::string& error) {
+    static_assert(sizeof(float) == 4, "float32 required");
+    if (!values || count != 2048) {
+        error = "speaker embedding export requires exactly 2048 float32 values";
+        return false;
+    }
+    std::vector<uint8_t> bytes(count * 4);
+    for (size_t i = 0; i < count; ++i) {
+        if (!std::isfinite(values[i])) {
+            error = "speaker embedding export contains non-finite value";
+            return false;
+        }
+        uint32_t bits = 0;
+        std::memcpy(&bits, values + i, sizeof(bits));
+        bytes[i * 4] = static_cast<uint8_t>(bits);
+        bytes[i * 4 + 1] = static_cast<uint8_t>(bits >> 8);
+        bytes[i * 4 + 2] = static_cast<uint8_t>(bits >> 16);
+        bytes[i * 4 + 3] = static_cast<uint8_t>(bits >> 24);
+    }
+    if (detail::sha256_bytes(bytes.data(), bytes.size()) != expected_sha256) {
+        error = "speaker embedding bytes disagree with the capture fingerprint";
+        return false;
     }
     return write_atomic(path, bytes.data(), bytes.size(), error);
 }
@@ -390,13 +427,13 @@ public:
                                                          size_t reference_code_count, const float* speaker_embedding,
                                                          size_t speaker_embedding_count, int codebook_count) noexcept {
         return begin(detail::configured_root(), metadata, reference_codes, reference_code_count, speaker_embedding,
-                     speaker_embedding_count, codebook_count);
+                     speaker_embedding_count, codebook_count, detail::export_speaker_embedding_enabled());
     }
 
     static std::unique_ptr<SampleCapture> begin(const std::filesystem::path& root, const Metadata& metadata,
                                                 const int32_t* reference_codes, size_t reference_code_count,
                                                 const float* speaker_embedding, size_t speaker_embedding_count,
-                                                int codebook_count) noexcept {
+                                                int codebook_count, bool export_speaker_embedding = false) noexcept {
         try {
             if (root.empty() || !root.is_absolute() || codebook_count <= 0 ||
                 (reference_code_count && (!reference_codes || reference_code_count % (size_t)codebook_count != 0))) {
@@ -446,6 +483,14 @@ public:
             }
             if (speaker_embedding && speaker_embedding_count)
                 capture->speaker_embedding_sha256_ = detail::sha256_f32le(speaker_embedding, speaker_embedding_count);
+            if (export_speaker_embedding && metadata.model_type == "base") {
+                std::string error;
+                if (!detail::write_f32le_atomic(capture->directory_ / "speaker_embedding.f32le", speaker_embedding,
+                                                speaker_embedding_count, capture->speaker_embedding_sha256_, error))
+                    capture->set_error(error);
+                else
+                    capture->speaker_embedding_file_ = "speaker_embedding.f32le";
+            }
             return capture;
         } catch (const std::exception& e) {
             std::fprintf(stderr, "qwen3_tts_capture: begin failed: %s\n", e.what());
@@ -643,6 +688,8 @@ private:
                                                   return call.decoded_samples > 0 && !call.decoded_pcm_sha256.empty();
                                               }) &&
                                   !pcm_sha256_.empty() && pcm_sample_count_ > 0;
+            const char* speaker_shape_json = speaker_embedding_file_.empty() ? "null" : "[2048]";
+            const size_t speaker_bytes = speaker_embedding_file_.empty() ? 0 : 8192;
             std::ostringstream out;
             out.imbue(std::locale::classic());
             out << "{\n"
@@ -677,7 +724,9 @@ private:
                 << ", \"codes_shape\": [" << reference_frame_count_ << ", " << codebook_count_ << "]"
                 << ", \"codebook_count\": " << codebook_count_
                 << ", \"speaker_embedding_sha256\": " << detail::json_nullable_string(speaker_embedding_sha256_)
-                << "},\n"
+                << ", \"speaker_embedding_file\": " << detail::json_nullable_string(speaker_embedding_file_)
+                << ", \"speaker_embedding_shape\": " << speaker_shape_json
+                << ", \"speaker_embedding_size_bytes\": " << speaker_bytes << "},\n"
                 << "  \"sampling\": {\"seed_effective\": " << metadata_.seed
                 << ", \"temperature_requested\": " << detail::json_float(metadata_.temperature)
                 << ", \"temperature_effective\": " << detail::json_float(metadata_.temperature_effective)
@@ -756,6 +805,7 @@ private:
     std::string reference_codes_sha256_;
     std::string reference_source_sha256_;
     std::string speaker_embedding_sha256_;
+    std::string speaker_embedding_file_;
     std::string pcm_sha256_;
     std::vector<DecoderCall> decoder_calls_;
     uintmax_t model_size_bytes_ = 0;
