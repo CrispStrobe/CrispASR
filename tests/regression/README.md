@@ -30,6 +30,18 @@ reference still reports 4.55% WER as an accuracy advisory. Weights and decoder
 are unchanged. [Retained controls](../../docs/historical/data2vec-avx512-controls-2026-10-28.json).
 The previous target was a native Q4 capture from July, not the Python reference.
 
+## Forced aligners (`align_backends`)
+
+Each aligner entry runs `crispasr --align-only -am <pinned GGUF> -f <sample> --ref-text <ref_text> --align-format json`. It then compares the word list with `expected_words`. The normalized words must be identical, and every start/end must fall within `tolerance_s`. `expected_source` records where the expected words came from. Prefer an upstream reference over a native capture.
+
+| Entry | Expected words from | Tolerance |
+|---|---|---|
+| `qwen3-forced-aligner-0.6b-f16` | upstream `qwen-asr`, `Qwen/Qwen3-ForcedAligner-0.6B` F32 | 0.081 s (one 80 ms class) |
+| `qwen3-forced-aligner-ultra-f16` | upstream `qwen-asr`, Ultra base `765dc1d7` F32 | 0.081 s |
+| `canary-ctc-aligner-q4_k` | native capture (no NeMo reference yet) | 0.081 s |
+
+Add an aligner by appending an entry, then listing its name in `nightly_matrix.json`. If its sources don't start with the backend id, map them in `ALIASES` in `tools/regression_select.py`. `test_driver_smoke.py` validates the schema, and `test_regression_select.py` checks that aligner sources select these entries.
+
 ## Why pin everything
 
 Two failure modes the regression infra protects against:

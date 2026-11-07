@@ -27,6 +27,16 @@ TEST_CASE("registry: lookup unknown backend returns false", "[unit][registry]") 
     REQUIRE_FALSE(found);
 }
 
+TEST_CASE("registry: Qwen3 Ultra aligner resolves the pinned F16 and keeps the aligner filename", "[unit][registry]") {
+    CrispasrRegistryEntry entry;
+    REQUIRE(crispasr_registry_lookup("qwen3-forced-aligner-ultra", entry));
+    REQUIRE(entry.filename == "qwen3-forced-aligner-ultra-f16.gguf");
+    REQUIRE(entry.url == "https://huggingface.co/cstr/qwen3-forced-aligner-ultra-GGUF/resolve/"
+                         "992f8360e1e99cc5dae6bb162c530cd927e14a30/qwen3-forced-aligner-ultra-f16.gguf");
+    // The aligner dispatch keys on "forced-aligner" in the filename.
+    REQUIRE(entry.filename.find("forced-aligner") != std::string::npos);
+}
+
 TEST_CASE("registry: Nemotron defaults only to the pinned qualified F16", "[unit][registry][nemotron]") {
     CrispasrRegistryEntry entry;
     REQUIRE(crispasr_registry_lookup("nemotron", entry));

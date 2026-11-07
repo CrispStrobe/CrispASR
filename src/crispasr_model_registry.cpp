@@ -1403,6 +1403,13 @@ constexpr Entry k_registry[] = {
     {"qwen3-fa", "qwen3-forced-aligner-0.6b-q4_k.gguf",
      "https://huggingface.co/cstr/qwen3-forced-aligner-0.6b-GGUF/resolve/main/qwen3-forced-aligner-0.6b-q4_k.gguf",
      "~500 MB", nullptr, nullptr},
+    // Qwen3-ForcedAligner-Ultra base (17slever17, Apache-2.0, #579): same
+    // architecture, F16 only. Base model only — the optional local boundary
+    // head is not converted. Matches upstream on JFK; nightly regression entry
+    // qwen3-forced-aligner-ultra-f16.
+    {"qwen3-forced-aligner-ultra", "qwen3-forced-aligner-ultra-f16.gguf",
+     "https://huggingface.co/cstr/qwen3-forced-aligner-ultra-GGUF/resolve/992f8360e1e99cc5dae6bb162c530cd927e14a30/qwen3-forced-aligner-ultra-f16.gguf",
+     "~1.8 GB", nullptr, nullptr},
     // M2M-100 (facebook/m2m100_418M, MIT) — multilingual text-to-text
     // translation. 100 source/target languages via SentencePiece + lang
     // codes prefix. Encoder-decoder transformer with cross-attention
