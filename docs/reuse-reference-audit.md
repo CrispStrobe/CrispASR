@@ -68,3 +68,14 @@ reflected frame. The input SHA256 was
 This demonstrates that this upstream raw-phase boundary itself varies between
 these environments; it does not establish a portable native parity fix. The
 unconditioned original-model and waveform gates remain open.
+
+The two captured phases were then fed through the same pinned original model
+and the same input on both the local CPU and Kaggle CPU (`issue579-reuse-phase-ab-v1`).
+Both A/B runs measured a 1.48% relative waveform difference between the two
+upstream phase inputs. With a 0.5% relative waveform gate, the triangle
+inequality rules out a single output passing against both references. A
+first-frame candidate that maps values near either ±π branch to +π was also
+measured locally: it changed the original waveforms by 6.66% and 7.35%,
+respectively, on this excerpt. That candidate is rejected; it is not a change
+to the reference or a passing parity result. Broader audio and hardware work
+is needed before choosing any production behavior.
