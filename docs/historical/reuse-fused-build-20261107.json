@@ -1,0 +1,55 @@
+{
+  "scope": "Pinned original Mamba and causal-convolution CUDA extensions built with build-only architecture/header changes, preserving package and kernel source. Fused model capture failed at dependency import before inference; this is not fused parity.",
+  "run": "issue579-reuse-fused-source-v2",
+  "script_sha256": "623e06e6ca07843832dfea0cea54ae6ad2707bce50726ea78dcd8f9febbff586",
+  "torch": "2.11.0+cu130",
+  "torch_cuda": "13.0",
+  "device": "Tesla T4",
+  "capability": [
+    7,
+    5
+  ],
+  "source_manifests_unchanged_after_build": true,
+  "wheels_sha256": {
+    "mamba_ssm-2.2.4-cp313-cp313-linux_x86_64.whl": "91dd8763ba0139acb544942310d01d5fbf6b27da07b6697c746476496b95a67c",
+    "causal_conv1d-1.5.0.post8-cp313-cp313-linux_x86_64.whl": "96ba07e982904fc13f6ef345d10b4f29d4a5f4350fe8ed1bcf2b2bd81d93eef6"
+  },
+  "failure": "Kaggle Transformers lacks GreedySearchDecoderOnlyOutput required by Mamba 2.2.4; original-fused-capture exited before model inference.",
+  "progress": [
+    {
+      "step": "cub-header-preflight",
+      "returncode": 0,
+      "elapsed_s": 6.08
+    },
+    {
+      "step": "causal-binding-preflight",
+      "returncode": 0,
+      "elapsed_s": 16.16
+    },
+    {
+      "step": "mamba-binding-preflight",
+      "returncode": 0,
+      "elapsed_s": 12.76
+    },
+    {
+      "step": "causal-wheel-build",
+      "returncode": 0,
+      "elapsed_s": 249.64
+    },
+    {
+      "step": "mamba-wheel-build",
+      "returncode": 0,
+      "elapsed_s": 867.06
+    },
+    {
+      "step": "isolated-wheel-install",
+      "returncode": 0,
+      "elapsed_s": 1.12
+    },
+    {
+      "step": "original-fused-capture",
+      "returncode": 1,
+      "elapsed_s": 17.46
+    }
+  ]
+}

@@ -276,3 +276,12 @@ package and kernel source manifests remained unchanged. The
 pins and checks. The full extension build and fused reference capture are
 running as `issue579-reuse-fused-source-v2`; preflight alone is not fused-model
 parity.
+
+The pinned original Mamba and causal-convolution CUDA extensions subsequently
+built successfully in `issue579-reuse-fused-source-v2`, with their package and
+kernel source manifests unchanged. The attempted model capture stopped before
+inference because Kaggle's current Transformers package lacks an import used
+by Mamba 2.2.4. The [build receipt](historical/reuse-fused-build-20261107.json)
+records the wheel hashes and failure. The wheels are retained for a capture-only
+retry with compatible Transformers dependencies; this build is not yet fused
+model parity.
