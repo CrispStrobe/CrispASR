@@ -1,8 +1,12 @@
 #include "../src/core/qwen3_ultra_head.h"
+#include "../src/core/qwen3_ultra_boundary.h"
+#include "../src/core/qwen3_ultra_features.h"
+#include "../src/core/wav_reader.h"
+#include "qwen3_ultra_boundary_fixture.h"
+#include "qwen3_ultra_normalizer_fixture.h"
 #ifdef ULTRA_TEST_SIDECAR
 #include "../src/core/qwen3_ultra_sidecar.h"
 #include "../src/core/ggml_cpu_backend.h"
-#include "qwen3_ultra_normalizer_fixture.h"
 #endif
 #include <array>
 #include <cmath>
@@ -22,12 +26,18 @@ static bool read_attention(std::ifstream& in, AttentionWeights& w) {
 }
 int main(int argc, char** argv) {
 #ifdef ULTRA_TEST_SIDECAR
-    if (argc != 3)
+    if (argc != 3 && argc != 4)
         return 1;
+    const char* wav = argc == 4 ? argv[3] : nullptr;
 #else
-    if (argc != 2)
+    if (argc != 2 && argc != 3)
         return 1;
+    const char* wav = argc == 3 ? argv[2] : nullptr;
 #endif
+    std::vector<float> audio;
+    int rate = 0;
+    if (wav && (!crispasr::core::read_wav_mono_pcm16(wav, audio, rate) || rate != 16000))
+        return 10;
     std::ifstream in(argv[1], std::ios::binary);
     Weights w;
     if (!read(in, w.audio0_weight, dim * feature_dim * 5) || !read(in, w.audio0_bias, dim) ||
@@ -69,19 +79,54 @@ int main(int argc, char** argv) {
     w = std::move(package.weights);
 #endif
     float max_error = 0.0f;
+    float max_feature_error = 0.0f;
+    std::vector<double> decoded;
     for (int i = 0; i < 44; ++i) {
         std::vector<float> features, context, mask, endpoint, expected;
         if (!read(in, features, frames * feature_dim) || !read(in, context, roles * qwen_dim) ||
             !read(in, mask, roles) || !read(in, endpoint, 1) || !read(in, expected, offsets))
             return 3;
+        if (wav) {
+            qwen3_ultra_features::Features extracted{};
+            if (!qwen3_ultra_features::extract(audio, kIntervals[i / 2][i % 2], k_mean, k_std, extracted))
+                return 11;
+            size_t index = 0;
+            for (const auto& frame : extracted)
+                for (float value : frame) {
+                    max_feature_error = std::max(max_feature_error, std::abs(value - features[index]));
+                    features[index++] = value;
+                }
+        }
         std::array<float, offsets> actual{};
         if (!run(w, features.data(), context.data(), mask.data(), static_cast<int>(endpoint[0]), actual))
             return 4;
         for (int j = 0; j < offsets; ++j)
             max_error = std::max(max_error, std::abs(actual[j] - expected[j]));
+        if (wav) {
+            double offset = 0;
+            if (!qwen3_ultra_boundary::decode_offset(actual, offset))
+                return 12;
+            decoded.push_back(offset);
+        }
     }
     if (in.peek() != std::char_traits<char>::eof())
         return 5;
     std::printf("Ultra head original-model logits: max absolute error %.9g\n", max_error);
+    if (wav) {
+        std::vector<qwen3_ultra_boundary::Interval> coarse, refined;
+        for (const auto& row : kIntervals)
+            coarse.push_back({row[0], row[1]});
+        if (!qwen3_ultra_boundary::repair(coarse, decoded, 11000.0, refined))
+            return 13;
+        double max_timing_error = 0;
+        for (size_t i = 0; i < refined.size(); ++i) {
+            max_timing_error = std::max(max_timing_error, std::abs(refined[i].start - kIntervals[i][2]));
+            max_timing_error = std::max(max_timing_error, std::abs(refined[i].end - kIntervals[i][3]));
+        }
+        std::printf("Ultra combined reference: feature error %.9g, timing error %.9g ms\n", max_feature_error,
+                    max_timing_error);
+        if (max_feature_error > 0.0002f || max_timing_error > 0.002)
+            return 14;
+    }
     return max_error <= 0.002f ? 0 : 6;
 }
