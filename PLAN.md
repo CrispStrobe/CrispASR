@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Issue #579 RE-USE frontend — Codex (2026-11-07)
+
+- Source `008a771c57fe285e86727c80e155d5376a9ee44b`. Capture a pinned upstream PyTorch STFT reference and validate the frontend's padding, window, magnitude and phase against it before implementing the model graph. End-to-end backend and GPU validation remain separate gates.
+
 ### Issue #579 model evaluation and release preparation — Codex (2026-11-06)
 
 - Source `b11617ea7d4a6808c0642ff1d0e8c606057d878f`. Evaluate Qwen3-ForcedAligner-Ultra against the existing aligner and RE-USE against its upstream implementation, using pinned checkpoints and independent reference/parity, meaningful unit and end-to-end tests, and hosted resources. Assess #577 and #568 against their documented architectural and physical-hardware gates. Retry the failed Pages deployment; prepare the next patch from the audited main tip, qualify the exact release source, and verify all publishers and release receipts before calling publication complete.
