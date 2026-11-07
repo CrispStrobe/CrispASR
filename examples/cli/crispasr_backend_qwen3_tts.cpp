@@ -106,6 +106,9 @@ public:
 
     const char* name() const override { return "qwen3-tts"; }
 
+    // Own --voice-dir resolution (prefers <name>.wav over <name>.gguf, and only in Base mode); skip the shared #584 step.
+    bool resolves_voice_dir_itself() const override { return true; }
+
     uint32_t capabilities() const override {
         // #329: CAP_SRC_TGT_LANGUAGE — the talker's prefill carries an explicit
         // codec_language_id, so `-tl`/`--target-lang` picks the OUTPUT language

@@ -352,7 +352,7 @@ curl http://localhost:8080/v1/audio/speech \
 |---|---|---|
 | `input` | (required) | Text to synthesize. Capped at `--tts-max-input-chars` (default 4096); set to 0 to disable the cap. Long input is automatically split on sentence boundaries before synthesis (see [long-form chunking](#long-form-chunking-for-v1audiospeech) below). |
 | `model` | (ignored) | Read but not validated — we serve whatever was loaded via `-m` or `POST /load`. Surfaced in the synth log line. |
-| `voice` | server's `--voice` | Passed through verbatim to the backend's `params.tts_voice`. Each backend interprets it on its own terms — qwen3-tts CustomVoice as a speaker name (`vivian`, `ryan`); qwen3-tts Base as a path or (with `--voice-dir`) a bare name resolving to `<voice-dir>/<name>.{wav,gguf}`; orpheus as a preset (`tara`, `leah`); tada as a `tada-ref-*.gguf` path/name. For **tada the voice is switched per request without a restart** (#201): naming a different reference reloads it; `default`/`auto`/omitted keeps the currently-loaded voice. A `.wav` reference is cloned on the fly (needs `ref_text` + the encoder/aligner GGUFs) when the server runs with `CRISPASR_TADA_WAV_CLONE=1` — otherwise convert it to a `tada-ref.gguf` first. |
+| `voice` | server's `--voice` | Passed to the backend's `params.tts_voice`. A bare name naming `<voice-dir>/<name>.wav` reaches every voice-cloning backend as that recording plus `<name>.txt` as `ref_text` (#584, see [Voice file conventions](#voice-file-conventions)); otherwise it is passed through verbatim and each backend interprets it on its own terms — qwen3-tts CustomVoice as a speaker name (`vivian`, `ryan`); qwen3-tts Base as a path or (with `--voice-dir`) a bare name resolving to `<voice-dir>/<name>.{wav,gguf}`; orpheus as a preset (`tara`, `leah`); tada as a `tada-ref-*.gguf` path/name. For **tada the voice is switched per request without a restart** (#201): naming a different reference reloads it; `default`/`auto`/omitted keeps the currently-loaded voice. A `.wav` reference is cloned on the fly (needs `ref_text` + the encoder/aligner GGUFs) when the server runs with `CRISPASR_TADA_WAV_CLONE=1` — otherwise convert it to a `tada-ref.gguf` first. |
 | `instructions` | empty | Voice-direction prose for backends that support it (qwen3-tts VoiceDesign). Silently ignored on other backends so OpenAI clients targeting `gpt-4o-mini-tts` don't see 4xx errors. |
 | `seed` | `0` | RNG seed for sampling. `0` = non-deterministic. Same-seed + same-text produces bit-identical audio on all sampling-capable TTS backends (qwen3-tts, chatterbox, vibevoice, orpheus). |
 | `temperature` | server's `--temperature` | Sampling temperature for AR TTS backends. `0` = greedy; backends apply their own default (e.g. 0.8 for qwen3-tts) when the global default of 0.0 is unchanged. |
@@ -481,8 +481,19 @@ The `.txt` companion is auto-loaded as `tts_ref_text` if the request
 doesn't carry one. Path traversal in the name (`..`, `/`, `\\`, NUL) is
 rejected before the filesystem is touched.
 
-Other backends (kokoro, vibevoice, orpheus) interpret `voice` according
-to their own conventions — see `docs/tts.md` for per-backend specifics.
+Every other voice-cloning backend (cosyvoice3, chatterbox, f5-tts,
+omnivoice, voxcpm2, zonos, indextts, …) gets the same treatment from one
+shared step before dispatch (#584): a bare name that resolves to
+`<voice-dir>/<name>.wav` is handed to the backend as that path, with
+`<name>.txt` as `ref_text` when the request carries none — exactly what
+`--voice <voice-dir>/<name>.wav --ref-text "…"` does on the CLI, and the same
+file the consent gate hashes. If `<name>.gguf` also exists the name is left
+for the backend (a `.gguf` profile wins, as in the consent gate), and a name
+with no file in `--voice-dir` stays a preset/bank name. pocket-tts, tada and
+vibevoice keep their own documented resolution.
+
+Preset-only backends (kokoro, orpheus) interpret `voice` according to their
+own conventions — see `docs/tts.md` for per-backend specifics.
 
 ### Long-form chunking for /v1/audio/speech
 

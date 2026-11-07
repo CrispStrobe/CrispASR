@@ -4193,6 +4193,29 @@ catch_discover_tests(test-speaker-identity
     PROPERTIES LABELS "unit"
 )
 
+# ─── test-voice-dir-reference — #584: a bare --voice-dir name reaches every
+# cloning backend as <voice-dir>/<name>.wav + <name>.txt, the same clone
+# reference `--voice <path> --ref-text` gives it, and the same file the consent
+# gate hashed. Temp files + a fake backend; no model.
+add_executable(test-voice-dir-reference test-voice-dir-reference.cpp)
+target_include_directories(test-voice-dir-reference PRIVATE
+    ${PROJECT_SOURCE_DIR}/include
+    ${PROJECT_SOURCE_DIR}/examples
+    ${PROJECT_SOURCE_DIR}/examples/cli
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/ggml/include
+)
+target_link_libraries(test-voice-dir-reference PRIVATE
+    Catch2::Catch2WithMain
+    crispasr-lib
+    common
+    ggml
+)
+catch_discover_tests(test-voice-dir-reference
+    TEST_SPEC "[unit]"
+    PROPERTIES LABELS "unit"
+)
+
 # ─── test-speaker-identity-gguf — the speaker-identity stamp survives a real
 # GGUF round trip. test-speaker-identity is pure and cannot notice a read path
 # that is never reached; this writes an actual metadata-only GGUF, hands it to

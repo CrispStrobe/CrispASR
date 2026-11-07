@@ -87,6 +87,9 @@ public:
 
     const char* name() const override { return "pocket-tts"; }
 
+    // Own --voice-dir resolution (prefers a .safetensors embedding over a .wav); skip the shared #584 step.
+    bool resolves_voice_dir_itself() const override { return true; }
+
     uint32_t capabilities() const override { return CAP_TTS | CAP_AUTO_DOWNLOAD | CAP_TEMPERATURE | CAP_VOICE_CLONING; }
 
     int tts_sample_rate() const override { return 24000; }

@@ -67,6 +67,7 @@
 #include "crispasr_consent_record.h"
 #include "crispasr_voice_clone_policy.h"
 #include "crispasr_voice_provenance.h"
+#include "crispasr_voice_reference.h"
 #include "core/crispasr_watermark.h"
 #include "crispasr_watermark_dispatch.h"
 #include "crispasr_watermark_stats.h"
@@ -3544,6 +3545,13 @@ int crispasr_run_backend(const whisper_params& params_in) {
     }
 
     warn_unsupported(*backend, params);
+
+    // #584: a bare --voice naming <voice-dir>/<name>.wav becomes that clone
+    // reference (+ <name>.txt as --ref-text) before init and the consent gate,
+    // for cloning backends that do not resolve voice-dir names themselves.
+    if (!params.tts_text.empty() && crispasr_voice::apply_voice_dir_reference(*backend, params) && params.verbose)
+        fprintf(stderr, "crispasr[verbose]: --voice resolved to clone reference '%s'%s\n", params.tts_voice.c_str(),
+                params.tts_ref_text.empty() ? "" : " (+ transcript)");
 
     // A monolingual backend can only ever emit sole_language(); asking it for a
     // different one is not a warning, it is a request it cannot satisfy. Before
