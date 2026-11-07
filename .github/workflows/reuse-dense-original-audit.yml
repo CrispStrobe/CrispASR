@@ -35,3 +35,5 @@ jobs:
           "$RUNNER_TEMP/reuse-mamba-oracle" reuse-mamba-original-oracle.bin
           c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-reuse-bimamba-oracle.cpp -o "$RUNNER_TEMP/reuse-bimamba-oracle"
           "$RUNNER_TEMP/reuse-bimamba-oracle" reuse-bimamba-original-oracle.bin
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-reuse-tf-mamba-oracle.cpp -o "$RUNNER_TEMP/reuse-tf-mamba-oracle"
+          "$RUNNER_TEMP/reuse-tf-mamba-oracle" reuse-tf-mamba-original-oracle.bin
