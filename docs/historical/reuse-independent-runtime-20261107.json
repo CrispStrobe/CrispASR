@@ -44,6 +44,18 @@
     "model_sha256": "827faf209c6988b9cfd07b08ee7f212a7b2eeb7870a25380df671d55338b3879",
     "output": "16-bit PCM WAV",
     "relative_rmse_vs_local_phase_reference": 0.026990197598934174,
-    "relative_rmse_vs_kaggle_phase_reference": 0.02961021289229393
+    "relative_rmse_vs_kaggle_phase_reference": 0.02961021289229393,
+    "one_second": {
+      "samples": 16000,
+      "input_pcm_sha256": "150e64693ab9ff7b3979cde7263ccf7863162efbc4141dd18f991c8fb85ca1a8",
+      "relative_rmse": 0.001026745586720795,
+      "max_abs": 0.0005072355270385742,
+      "cosine": 0.9999993172760222,
+      "python_rms": 0.062395792454481125,
+      "speechcpp_rms": 0.06239103898406029,
+      "speechcpp_output": "PCM16",
+      "source_start_sample": 24000,
+      "reference": "Pinned NVIDIA SEMamba and checkpoint with unfused CPU Mamba adapter"
+    }
   }
 }

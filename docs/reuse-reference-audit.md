@@ -152,3 +152,10 @@ passed, with a 0.000147% relative waveform difference. The unconditioned
 native run still failed, with 2.10% waveform error on this same 100 ms input.
 The GPU capture remains unfused and the test remains a short-clip diagnostic;
 neither result establishes fused-kernel parity or general speech quality.
+
+A follow-up ran speech.cpp 0.10.1 on a one-second, 16 kHz PCM excerpt from
+the same public recording and compared its 16-bit output with the pinned
+Python network and CPU adapter. Relative RMS difference was 0.103%, below the
+investigative 0.5% threshold. The [independent-runtime receipt](historical/reuse-independent-runtime-20261107.json)
+includes the input hash. This is one normal-duration sample, and is not a fused
+CUDA comparison, a quality evaluation or a guarantee for other audio.
