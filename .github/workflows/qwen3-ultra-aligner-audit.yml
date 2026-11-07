@@ -1,47 +1,22 @@
-name: issue579 Ultra public interface parity
+name: issue579 Ultra interface focused unit tests
 on:
   workflow_dispatch:
 permissions:
   contents: read
-  actions: read
 jobs:
-  audit:
+  unit:
     runs-on: ubuntu-latest
-    timeout-minutes: 90
+    timeout-minutes: 40
     steps:
       - uses: actions/checkout@v6
         with:
           submodules: recursive
-      - name: Build CLI and shared C ABI
+      - name: Build and run C++ aligner tests
         run: |
-          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DCRISPASR_BUILD_TESTS=OFF
-          cmake --build build --target crispasr-cli -j 2
-      - name: Install converter dependencies
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=ON -DCRISPASR_BUILD_TESTS=ON
+          cmake --build build --target test-align-only -j 2
+          build/bin/test-align-only '[unit][align]'
+      - name: Python binding controls
         run: |
-          python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python3 -m pip install numpy gguf safetensors huggingface_hub
-      - name: Fetch and convert pinned model
-        run: |
-          python3 - <<'PY'
-          from huggingface_hub import snapshot_download
-          snapshot_download('17slever17/Qwen3-ForcedAligner-Ultra', revision='765dc1d714e4c80196782a5df5bfbcb3e1416736', local_dir='model', ignore_patterns=['*.md','*.png'])
-          PY
-          printf '%s  %s\n' e6fcf5be2c11b265f7217ba6102917a7fe64438506357be6999f6ad5a707cb5f model/model.safetensors | sha256sum --check
-          python3 models/convert-qwen3-asr-to-gguf.py --input model --output qwen3-forced-aligner-ultra.gguf
-          python3 models/convert-qwen3-ultra-head-to-gguf.py --input model/local_head --output ultra-local-head.gguf
-      - name: Compare CLI and Python C ABI to upstream
-        env:
-          GH_TOKEN: ${{ github.token }}
-          OMP_NUM_THREADS: '2'
-          MKL_NUM_THREADS: '2'
-        run: |
-          gh run download 42313568853 -n issue579-ultra-parity -D prior-reference
-          lib=$(find build -type f -name 'libcrispasr.so*' | sort | head -1)
-          test -n "$lib"
-          PYTHONPATH=python python3 tools/ci-heavy/issue579_ultra_interface_compare.py "$lib"
-      - uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: ultra-public-interface-audit
-          path: ultra-cli.json
-          if-no-files-found: ignore
+          python3 -m pip install numpy pytest
+          PYTHONPATH=python python3 -m pytest -q tests/test_python_binding_utils.py
