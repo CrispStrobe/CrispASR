@@ -46,3 +46,15 @@ angles represent nearly identical complex values, the model consumes the raw
 phase as an input, so complex-spectrum equivalence alone is insufficient. The
 native port remains experimental while the source of the difference and its
 impact on subsequent stages and waveform are investigated.
+
+The independent Kaggle CPU run `issue579-reuse-cpu-diff-v3` tested source
+`b6cd39102f5cfbd0aa30e727f0715dfc1f408c22` and ggml
+`1b972bb754aa5f83e2d872ccf37a335717f6658d` on a 0.1-second 16 kHz public
+speech excerpt. `crispasr-diff` compared the frontend, all six encoder
+boundaries, both temporal and frequency boundaries in all 30 blocks, decoder
+outputs and waveform. Native frontend magnitude passed, but native raw phase
+failed with 24.8% relative RMS; the resulting waveform failed with 1.03%
+relative RMS. All phase-conditioned stages passed, including the waveform at
+0.000186% relative RMS. Conditioning is diagnostic and does not make the
+native end-to-end comparison a pass. The pinned original model and source
+hashes were checked in the worker; the CPU kernel reported its failed gate.
