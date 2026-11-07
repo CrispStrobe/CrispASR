@@ -3,9 +3,13 @@
 The optional local head is not yet available through the CrispASR CLI, session
 C ABI or language bindings. The experimental native path implements fixed-center
 features, a CPU neural head, hidden-state capture, timestamp repair, and a
-strictly pinned F32 sidecar converter/loader. End-to-end CPU parity is being
-checked in [run 42319319711](https://github.com/CrispStrobe/CrispASR/actions/runs/42319319711);
-its result, public integration and GPU acceptance remain open.
+strictly pinned F32 sidecar converter/loader. On one English clip, the native
+F16 aligner and CPU head matched the upstream full path in
+[run 42320992672](https://github.com/CrispStrobe/CrispASR/actions/runs/42320992672):
+the maximum and mean timing errors over 22 words were 0.00460 ms and 0.00078 ms.
+Public integration, broader audio/language coverage and GPU acceptance remain open.
+The existing generic aligner stores timestamps in centiseconds, so preserving
+the local head's precision requires an explicit product-interface design.
 
 [Reference run 42313568853](https://github.com/CrispStrobe/CrispASR/actions/runs/42313568853)
 used the upstream `qwen_fa_ultra` 0.1.1 package and pinned Ultra revision
@@ -32,6 +36,9 @@ using the pinned 1.6 MB local-head checkpoint (SHA256
 The maximum absolute error across 572 logits was 0.00000287 on the local CPU.
 The separate oracle test downloads that checkpoint and is not a model-free test.
 The implementation is a CPU reference, not a GPU or product integration.
+The combined component test also reconstructs all 44 feature windows from the
+audio, runs the head on captured upstream context and repairs the 22 intervals;
+its local maximum timing difference was 0.000013 ms.
 
 `models/convert-qwen3-ultra-head-to-gguf.py` validates the exact source
 revision's configuration, normalizer and model hashes before writing an F32
