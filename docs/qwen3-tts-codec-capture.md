@@ -55,10 +55,13 @@ be exported from a DLL or called from Python. To preserve the **exact**
 2048-element float32 vector for the experimental Base-ICL Trainer, set
 `CRISPASR_QWEN3_TTS_CAPTURE_SPEAKER_EMBEDDING=1` **before starting the isolated
 Capture process**, in addition to the required capture directory. Any other
-value, or an unset variable, disables vector export. The switch only applies
-when `model_type=base`. CustomVoice and VoiceDesign behavior is unchanged.
+value, or an unset variable, disables vector export. The 2048-value contract
+targets the 1.7B Base model. The 0.6B Base model has a 1024-value speaker
+embedding: requesting export for that model marks the capture incomplete and
+writes no embedding file. With export disabled, its existing hash-only capture
+is unchanged. CustomVoice and VoiceDesign behavior is unchanged.
 
-On an opted-in Base request, Capture writes
+On an opted-in 1.7B Base request with a valid embedding, Capture writes
 `samples/<generation-id>/speaker_embedding.f32le` (8192 bytes, 2048 little-endian
 float32 values). It serializes the already-owned runtime pointer **once**;
 there is no second speaker inference, and nothing changes the synthesis graph

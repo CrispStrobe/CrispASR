@@ -297,7 +297,7 @@ TEST_CASE("Qwen3 Base speaker export rejects missing, truncated and non-finite e
     qwen3_tts_capture::Metadata metadata;
     metadata.model_type = "base";
     std::vector<float> vector(2048, 0.125f);
-    for (int variant = 0; variant < 6; ++variant) {
+    for (int variant = 0; variant < 7; ++variant) {
         vector.assign(2049, 0.125f);
         if (variant == 2)
             vector[17] = std::numeric_limits<float>::quiet_NaN();
@@ -306,7 +306,10 @@ TEST_CASE("Qwen3 Base speaker export rejects missing, truncated and non-finite e
         if (variant == 4)
             vector[17] = -std::numeric_limits<float>::infinity();
         const float* pointer = variant == 0 ? nullptr : vector.data();
-        const size_t count = variant == 0 ? 0 : (variant == 1 ? 2047 : (variant == 5 ? 2049 : 2048));
+        // The 0.6B Base speaker embedding has 1024 elements; this export
+        // deliberately supports the 1.7B model's 2048-element contract.
+        const size_t count =
+            variant == 0 ? 0 : (variant == 1 ? 2047 : (variant == 5 ? 2049 : (variant == 6 ? 1024 : 2048)));
         auto capture =
             qwen3_tts_capture::SampleCapture::begin(temp.path, metadata, nullptr, 0, pointer, count, 16, true);
         REQUIRE(capture);
