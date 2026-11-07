@@ -14,7 +14,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ### Issue #579 Ultra local-head port — Codex (2026-11-06)
 
-- Source `fbde4c5f2c8c3a2d52dabf47ae9512aafb7fe61a`. Port the optional head only against the pinned upstream reference, beginning with the posterior-mean decoder and duration/overlap repair. The [CPU reference run](https://github.com/CrispStrobe/CrispASR/actions/runs/42313568853) stores 44 endpoint inputs and logits for a real 22-word clip. Require model-free edge controls and original-reference parity before integration; full feature extraction, head graph, hidden-state capture, CLI/C ABI and GPU acceptance remain separate gates.
+- Source `fbde4c5f2c8c3a2d52dabf47ae9512aafb7fe61a`. Port the optional head only against the pinned upstream reference, beginning with the posterior-mean decoder and duration/overlap repair. The [CPU reference run](https://github.com/CrispStrobe/CrispASR/actions/runs/42313568853) stores 44 endpoint inputs and logits for a real 22-word clip. The offset decoder and acoustic feature extraction pass edge controls and the captured CPU reference; head graph, hidden-state capture, CLI/C ABI and GPU acceptance remain separate gates.
 
 ### Issue #579 model evaluation and release preparation — Codex (2026-11-06)
 
