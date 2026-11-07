@@ -11,8 +11,9 @@ The 16 kHz input is the first 1,600 samples of `samples/jfk.wav`; the 44.1 kHz
 input is a deterministic synthetic signal, exercising a 1,764-point FFT.
 The two fixtures contain only float32 magnitude and phase arrays.
 
-On the local CPU, the 16 kHz maximum magnitude and meaningful-bin phase errors
-were 5.97e-8 and 1.91e-6; at 44.1 kHz they were 5.37e-7 and 2.0e-5. The same
+On the local CPU, the 16 kHz maximum magnitude and phase errors were 5.97e-8
+and 1.91e-6; at 44.1 kHz they were 5.37e-7 and 2.0e-5. Phase error excludes
+bins with reference magnitude at or below 0.01, where phase is ill-conditioned. The same
 unit test passed address and undefined-behavior sanitizers. It also checks
 invalid rates, short and nonfinite audio, and 44.1 kHz silence. This is bounded
 frontend evidence, not a claim of end-to-end speech enhancement or GPU parity.
