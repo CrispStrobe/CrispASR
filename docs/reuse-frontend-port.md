@@ -42,8 +42,13 @@ intermediate parity and decoded audio remain open.
 inner residuals, output projection and layer normalization using a synthetic
 PyTorch fixture. `reuse-tf-mamba-reference` also checks one time/frequency
 block's reshaping and outer residuals against a separate synthetic fixture.
-The 30-block graph, decoders and actual-checkpoint/end-to-end parity remain
-open; these tests do not establish model support.
+The 30-block graph and actual-checkpoint/end-to-end parity remain open;
+these tests do not establish model support.
+
+`reuse-decoder-reference` covers the decoder's dense stack, subpixel frequency
+and time upsampling, and magnitude and phase output projections against a
+synthetic PyTorch fixture. The original-checkpoint decoder audit and the full
+waveform path remain separate acceptance gates.
 
 The in-progress F32 converter `models/convert-reuse-to-gguf.py` pins the NVIDIA
 checkpoint and config hashes, validates its model/frontend contract, and
