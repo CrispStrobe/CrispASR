@@ -50,6 +50,14 @@ and time upsampling, and magnitude and phase output projections against a
 synthetic PyTorch fixture. The original-checkpoint decoder audit and the full
 waveform path remain separate acceptance gates.
 
+`reuse-inventory-reference` checks all 1,416 tensor names and original-order
+shapes against metadata from the pinned NVIDIA safetensors header. The fixture
+contains shapes only, not weights. A future GGUF loader must also enforce F32
+and reverse dimensions for GGML. The experimental `reuse_model_loader` applies
+those checks before reading weights, verifies finite values, and assembles the
+reference components. Its original-checkpoint loader audit is still a required
+gate; it is not connected to the CLI or session ABI.
+
 The in-progress F32 converter `models/convert-reuse-to-gguf.py` pins the NVIDIA
 checkpoint and config hashes, validates its model/frontend contract, and
 rejects malformed or nonfinite tensors. `reuse-converter-controls` covers
