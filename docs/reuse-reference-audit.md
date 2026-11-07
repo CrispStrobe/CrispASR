@@ -163,3 +163,16 @@ CUDA comparison, a quality evaluation or a guarantee for other audio.
 The [independent port and license audit](reuse-port-audit.md) records pinned
 source licenses, model provenance, implementation differences and follow-up
 validation requirements.
+
+
+The one-second Kaggle CPU follow-up `issue579-reuse-cpu-diff-v4` ran the
+experimental source at `f169cc3a3b4718739febffc67afd9c13dcbc67d6` against
+the pinned original network with its unfused CPU Mamba adapter. Native
+frontend magnitude passed, but raw phase failed (8.48% relative RMS, with a
+maximum difference of 2π), and intermediate gates failed. The native waveform
+passed the investigative 0.5% gate at 0.0702% relative RMS. All 71
+phase-conditioned comparisons passed, with 0.0000735% relative waveform error.
+The overall run failed because intermediate comparisons remain required;
+conditioning is diagnostic. The [receipt](historical/reuse-one-second-diff-20261107.json)
+records every comparison. This is one sample, not a quality corpus or a fused
+CUDA reference.
