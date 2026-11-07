@@ -32,4 +32,10 @@ mamba_ssm.selective_scan = capture
 hidden = ((torch.arange(2 * 3 * 64, dtype=torch.int64) % 31 - 15).float() / 32).reshape(2, 3, 64)
 result = block(hidden)
 assert torch.isfinite(result).all()
+with open('reuse-mamba-original-oracle.bin', 'wb') as out:
+    for tensor in (block.in_proj.weight, block.conv1d.weight, block.conv1d.bias, block.x_proj.weight,
+                   block.dt_proj.weight, block.dt_proj.bias, block.A_log, block.D, block.out_proj.weight, result):
+        data = tensor.detach().float().contiguous().numpy()
+        assert np.isfinite(data).all()
+        out.write(data.astype('<f4').tobytes())
 print('REUSE_ORIGINAL_SCAN_ORACLE', list(result.shape), flush=True)

@@ -6881,6 +6881,11 @@ add_test(NAME reuse-selective-scan-reference COMMAND test-reuse-scan
     ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-scan-f32le.bin)
 set_tests_properties(reuse-selective-scan-reference PROPERTIES LABELS "unit;reuse;audio")
 
+add_executable(test-reuse-mamba test-reuse-mamba.cpp)
+add_test(NAME reuse-mamba-reference COMMAND test-reuse-mamba
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-mamba-f32le.bin)
+set_tests_properties(reuse-mamba-reference PROPERTIES LABELS "unit;reuse;audio")
+
 add_executable(test-qwen3-tts-capture test-qwen3-tts-capture.cpp)
 target_include_directories(test-qwen3-tts-capture PRIVATE
     ${PROJECT_SOURCE_DIR}/src
