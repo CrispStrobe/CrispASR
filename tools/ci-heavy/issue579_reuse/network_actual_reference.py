@@ -44,12 +44,18 @@ t = torch.from_numpy(waveform[None])
 mag, phase, _ = mag_phase_stft(t, 320, 40, 320, 'relu_log1p', addeps=False)
 stages['frontend_magnitude'] = mag[0].T.contiguous().numpy()
 stages['frontend_phase'] = phase[0].T.contiguous().numpy()
+conditioned = '--native-phase' in sys.argv
+if conditioned:
+    native = np.fromfile('reuse-trace-frontend_phase.f32le', dtype='<f4')
+    assert native.size == phase.numel() and np.isfinite(native).all()
+    phase = torch.from_numpy(native.reshape(phase.shape[2], phase.shape[1]).T.copy())[None]
 amplitude, phase, _ = model(mag, phase)
 zero_fraction = (torch.expm1(torch.relu(amplitude)) == 0).sum(1) / amplitude.shape[1]
 amplitude[:, :, (zero_fraction > 0.5)[0]] = 0
 result = mag_phase_istft(amplitude, phase, 320, 40, 320, 'relu_log1p').numpy()[0]
 assert len(result) == length and np.isfinite(result).all() and np.linalg.norm(result) > 1e-6
-result.astype('<f4').tofile('reuse-network-expected.f32le')
-np.savez_compressed('reuse-network-reference-stages.npz', **stages)
+prefix = 'reuse-network-conditioned' if conditioned else 'reuse-network'
+result.astype('<f4').tofile(prefix + '-expected.f32le')
+np.savez_compressed(prefix + '-reference-stages.npz', **stages)
 print('REUSE_NETWORK_REFERENCE', json.dumps({'samples':length, 'start_sample':start,
-      'output_rms':float(np.sqrt(np.mean(result ** 2))), 'stages':{k:list(v.shape) for k,v in stages.items()}}), flush=True)
+      'conditioned_on_native_phase':conditioned, 'output_rms':float(np.sqrt(np.mean(result ** 2))), 'stages':{k:list(v.shape) for k,v in stages.items()}}), flush=True)

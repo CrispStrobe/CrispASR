@@ -29,6 +29,12 @@ def main():
             check(name, reference_stages[name], np.fromfile('reuse-trace-' + name + '.f32le', dtype='<f4'), 0.002)
     check('waveform', np.fromfile('reuse-network-expected.f32le', dtype='<f4'),
           np.fromfile('reuse-network-actual.f32le', dtype='<f4'), 0.005)
+    with np.load('reuse-network-conditioned-reference-stages.npz') as conditioned:
+        for name in ('encoder', 'block0', 'block14', 'block29'):
+            check('conditioned_' + name, conditioned[name],
+                  np.fromfile('reuse-trace-' + name + '.f32le', dtype='<f4'), 0.002)
+    check('conditioned_waveform', np.fromfile('reuse-network-conditioned-expected.f32le', dtype='<f4'),
+          np.fromfile('reuse-network-actual.f32le', dtype='<f4'), 0.005)
     assert not failures, 'Parity failed for: ' + ', '.join(failures)
 
 if __name__ == '__main__':
