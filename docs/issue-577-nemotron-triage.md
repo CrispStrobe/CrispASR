@@ -48,6 +48,15 @@ alternative, not a Q4_K measurement; the inventory does not list Q3. The
 publisher's accuracy and hardware statements are their results for their own
 runtime and datasets, not CrispASR measurements.
 
+AtomicChat reports a 2,200-utterance comparison against its BF16 decoder: for
+its published decoders of 15.55 GB and larger, English, German, French and
+Spanish word error differed by at most 0.18 percentage points on its tested
+sets. Its smaller Q2_0_M variant showed a 1.53-point Chinese character-error
+increase, with a reported paired-bootstrap 95% interval of 0.85–2.22 points.
+The publisher measured Q2_0_M peak memory at 15.6 GiB on an A100; it explicitly
+did not measure this on a 16 GB card. These are third-party NeMo-Speech.cpp
+measurements, not Q3 results or CrispASR qualification.
+
 The [pinned NVIDIA configuration](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B/blob/c17667641642c4265ff2b7037dd101b7d4567634/config.json)
 specifies a 2,688-wide language-model hidden state and 1,856-wide expert
 intermediate state; neither is divisible by 256. That rules out naively applying
