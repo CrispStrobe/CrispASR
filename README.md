@@ -134,6 +134,7 @@ otherwise fetch a small extra model.) Both halves now work — swap in your own
 |---|---|
 | Clone a voice from a recording | [docs/tts.md](docs/tts.md) — and read [the consent rules](docs/eu-ai-act.md) first; cloning requires `--i-have-rights` |
 | Pick a better ASR model | [Which backend should I pick?](#which-backend-should-i-pick) |
+| Transcribe Japanese with Haas-ja | [Haas-ja usage and models](docs/haas-ja.md) |
 | Transcribe with word timestamps, SRT/VTT | [docs/cli.md](docs/cli.md) |
 | Live mic / streaming | [docs/streaming.md](docs/streaming.md) |
 | Run it as an HTTP server | [docs/server.md](docs/server.md) |
@@ -178,7 +179,7 @@ from the GGUF metadata. Jump to the [TTS table](#text-to-speech-models) for the 
 | **parakeet** | [`nvidia/parakeet-tdt_ctc-110m`](https://huggingface.co/cstr/parakeet-tdt_ctc-110m-GGUF) | 17L FastConformer + TDT+CTC hybrid; smallest variant, auto-CTC decode | en | CC-BY-4.0 |
 | **parakeet** | [`nvidia/parakeet-tdt_ctc-1.1b`](https://huggingface.co/cstr/parakeet-tdt_ctc-1.1b-GGUF) | 42L FastConformer + TDT+CTC hybrid; largest, mixed-case + punct | en | CC-BY-4.0 |
 | **parakeet** | [`nvidia/parakeet-tdt_ctc-0.6b-ja`](https://huggingface.co/cstr/parakeet-tdt-0.6b-ja-GGUF) | FastConformer-TDT-CTC, xscaling, 80 mels | Japanese | CC-BY-4.0 |
-| **haas** | [`third-intelligence/Haas-ja-v1.0`](https://huggingface.co/cstr/Haas-ja-v1.0-GGUF) (`--backend haas -m auto`) | FastConformer + Kimi Delta Attention predictor + TDT | Japanese | Apache-2.0 |
+| **haas** | [`third-intelligence/Haas-ja-v1.0`](https://huggingface.co/cstr/Haas-ja-v1.0-GGUF) (`--backend haas -m auto`; [usage and model variants](docs/haas-ja.md)) | FastConformer + Kimi Delta Attention predictor + TDT | Japanese | Apache-2.0 |
 | **reazonspeech** | [`reazon-research/reazonspeech-nemo-v2`](https://huggingface.co/cstr/reazonspeech-nemo-v2-GGUF) | FastConformer-RNNT, local attn (w=256), 80 mels, 619M params | Japanese | Apache-2.0 |
 | **fastconformer-ctc** | [`nvidia/parakeet-ctc-0.6b`](https://huggingface.co/cstr/parakeet-ctc-0.6b-GGUF) | 24L FastConformer + CTC, 80 mels (same arch as fc-ctc-xlarge) | en | CC-BY-4.0 |
 | **fastconformer-ctc** | [`nvidia/parakeet-ctc-1.1b`](https://huggingface.co/cstr/parakeet-ctc-1.1b-GGUF) | 42L FastConformer + CTC, 80 mels | en | CC-BY-4.0 |

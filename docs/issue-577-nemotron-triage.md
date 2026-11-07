@@ -6,7 +6,8 @@ Status as of 2026-11-06, checked against the code at `f6b91a04e` and the
 Haas-ja-v1.0 already dispatches through the `haas` alias to the Parakeet
 backend. The model registry provides F16, Q8 and Q4 auto-download entries;
 `tests/test_haas_dispatch.py` and `tests/test-registry.cpp` cover dispatch and
-registration. It shipped in v0.8.50. The README model table now lists it.
+registration. It shipped in v0.8.50. See the [Haas usage guide](haas-ja.md)
+for commands, model variants and the scope of the dispatch tests.
 
 The requested NVIDIA Nemotron-3.5-Transcribe-30B-A4B is a separate backend
 project, not a new quantization of the existing 0.6B streaming Nemotron

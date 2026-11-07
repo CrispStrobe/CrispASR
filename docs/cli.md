@@ -37,6 +37,9 @@ The 10 patterns that cover most usage:
 # Auto-download + transcribe
 crispasr -m auto --backend parakeet -f audio.wav
 
+# Japanese Haas-ja transcription (see haas-ja.md for model variants)
+crispasr --backend haas -m auto -f japanese.wav
+
 # VAD + SRT + sentence-split (best subtitle output)
 crispasr -m parakeet.gguf -f long.wav --vad -osrt --split-on-punct
 
