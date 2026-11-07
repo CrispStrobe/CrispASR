@@ -285,3 +285,11 @@ by Mamba 2.2.4. The [build receipt](historical/reuse-fused-build-20261107.json)
 records the wheel hashes and failure. The wheels are retained for a capture-only
 retry with compatible Transformers dependencies; this build is not yet fused
 model parity.
+
+The one-second follow-up `issue579-reuse-original-stages-v2` independently
+captured the original network on Kaggle CPU. The local `mkl-avx2` research
+profile passed all 71 unconditioned and 71 conditioned comparisons against
+that reference; unconditioned waveform relative RMS was 5.31e-7. The
+[receipt](historical/reuse-avx2-kaggle-1s-20261107.json) records every stage,
+input and model hashes. This is one excerpt, using the unfused CPU adapter;
+it does not establish fused CUDA, other hardware or speech-quality parity.
