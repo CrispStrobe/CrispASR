@@ -48,6 +48,13 @@ alternative, not a Q4_K measurement; the inventory does not list Q3. The
 publisher's accuracy and hardware statements are their results for their own
 runtime and datasets, not CrispASR measurements.
 
+The [pinned NVIDIA configuration](https://huggingface.co/nvidia/NVIDIA-Nemotron-3.5-Transcribe-30B-A4B/blob/c17667641642c4265ff2b7037dd101b7d4567634/config.json)
+specifies a 2,688-wide language-model hidden state and 1,856-wide expert
+intermediate state; neither is divisible by 256. That rules out naively applying
+256-element block quantization along those dimensions. A converter would need
+to inspect each actual tensor layout and choose a compatible representation;
+the config alone does not establish that a complete Q3 or Q4 conversion works.
+
 The current maintainer host cannot load the full model locally. A useful next
 experiment needs a suitably sized remote machine: pin the upstream model and a
 fixed multilingual ASR/translation corpus, capture reference transcripts and
