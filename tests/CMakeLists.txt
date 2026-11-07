@@ -6858,6 +6858,12 @@ if (Python3_Interpreter_FOUND AND CRISPASR_BUILD_EXAMPLES AND BUILD_SHARED_LIBS)
 endif()
 
 # Qwen3-TTS codec capture: model-free tests for exact token/response manifests.
+add_executable(test-reuse-frontend test-reuse-frontend.cpp)
+add_test(NAME reuse-frontend-reference COMMAND test-reuse-frontend
+    ${PROJECT_SOURCE_DIR}/samples/jfk.wav ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-stft-reference-f32le.bin
+    ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-stft-44100-reference-f32le.bin)
+set_tests_properties(reuse-frontend-reference PROPERTIES LABELS "unit;reuse;audio")
+
 add_executable(test-qwen3-tts-capture test-qwen3-tts-capture.cpp)
 target_include_directories(test-qwen3-tts-capture PRIVATE
     ${PROJECT_SOURCE_DIR}/src
