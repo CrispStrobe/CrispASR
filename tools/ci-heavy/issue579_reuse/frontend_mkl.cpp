@@ -28,21 +28,9 @@ struct Plan {
     Plan& operator=(const Plan&) = delete;
 };
 
-Analysis transform(const std::vector<float>& audio, Window mode, bool batch) {
+std::vector<float> periodic_window(Window mode) {
     ThreadScope threads;
-    if (audio.size() < 400 || audio.size() > 16000 || audio.size() % hop)
-        throw std::runtime_error("expected 400..16000 samples, divisible by 80");
-    for (float sample : audio)
-        if (!std::isfinite(sample))
-            throw std::runtime_error("nonfinite audio");
-    const size_t frames = 1 + audio.size() / hop, count = frames * bins;
-    Analysis result;
-    result.window.resize(fft_size);
-    result.real.resize(count);
-    result.imaginary.resize(count);
-    result.magnitude.resize(count);
-    result.phase.resize(count);
-    std::vector<float> angles(fft_size), cosine(fft_size), input(frames * fft_size), output(2 * count);
+    std::vector<float> angles(fft_size), cosine(fft_size), window(fft_size);
     const float step = static_cast<float>(2.0 * std::acos(-1.0) / fft_size);
     for (int i = 0; i < fft_size; ++i)
         angles[i] = step * static_cast<float>(i);
@@ -56,7 +44,25 @@ Analysis transform(const std::vector<float>& audio, Window mode, bool batch) {
         vmsCos(fft_size, angles.data(), cosine.data(), accuracy);
     }
     for (int i = 0; i < fft_size; ++i)
-        result.window[i] = 0.5f - 0.5f * cosine[i];
+        window[i] = 0.5f - 0.5f * cosine[i];
+    return window;
+}
+
+Analysis transform(const std::vector<float>& audio, Window mode, bool batch) {
+    ThreadScope threads;
+    if (audio.size() < 400 || audio.size() > 16000 || audio.size() % hop)
+        throw std::runtime_error("expected 400..16000 samples, divisible by 80");
+    for (float sample : audio)
+        if (!std::isfinite(sample))
+            throw std::runtime_error("nonfinite audio");
+    const size_t frames = 1 + audio.size() / hop, count = frames * bins;
+    Analysis result;
+    result.window = periodic_window(mode);
+    result.real.resize(count);
+    result.imaginary.resize(count);
+    result.magnitude.resize(count);
+    result.phase.resize(count);
+    std::vector<float> input(frames * fft_size), output(2 * count);
     for (size_t frame = 0; frame < frames; ++frame) {
         for (int i = 0; i < fft_size; ++i) {
             int64_t index = static_cast<int64_t>(frame * hop) + i - fft_size / 2;

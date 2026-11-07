@@ -9,6 +9,7 @@ set(GGML_OPENMP OFF CACHE BOOL "" FORCE)
 set(GGML_BACKEND_DL OFF CACHE BOOL "" FORCE)
 add_subdirectory("${CRISPASR_REUSE_GGML_SOURCE_DIR}" ggml)
 include("${REUSE_SOURCE_ROOT}/cmake/CrispasrReuseMkl.cmake")
+include("${REUSE_SOURCE_ROOT}/cmake/CrispasrReuseCuda.cmake")
 
 add_executable(reuse-research-diff diff_probe.cpp
     "${REUSE_SOURCE_ROOT}/src/core/gguf_loader.cpp"
@@ -19,6 +20,9 @@ target_include_directories(reuse-research-diff PRIVATE "${REUSE_SOURCE_ROOT}/src
 target_link_libraries(reuse-research-diff PRIVATE ggml ggml-cpu)
 if(TARGET crispasr-reuse-mkl)
     target_link_libraries(reuse-research-diff PRIVATE crispasr-reuse-mkl)
+endif()
+if(TARGET crispasr-reuse-cuda)
+    target_link_libraries(reuse-research-diff PRIVATE crispasr-reuse-cuda)
 endif()
 
 enable_testing()
@@ -34,8 +38,23 @@ if(TARGET crispasr-reuse-mkl)
     target_link_libraries(reuse-profile-mkl PRIVATE crispasr-reuse-mkl)
     add_test(NAME reuse-profile-mkl COMMAND reuse-profile-mkl)
 endif()
+if(TARGET crispasr-reuse-cuda)
+    add_executable(reuse-profile-cuda "${REUSE_SOURCE_ROOT}/tests/test-reuse-frontend-profile.cpp")
+    target_include_directories(reuse-profile-cuda PRIVATE "${CRISPASR_REUSE_MKL_INCLUDE_DIR}")
+    target_link_libraries(reuse-profile-cuda PRIVATE crispasr-reuse-cuda)
+    add_test(NAME reuse-profile-cuda COMMAND reuse-profile-cuda)
+endif()
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
+    if(TARGET reuse-frontend-cuda-probe)
+        add_test(NAME reuse-cuda-probe-controls
+            COMMAND ${CMAKE_COMMAND} -E env "REUSE_CUDA_FRONTEND_PROBE=$<TARGET_FILE:reuse-frontend-cuda-probe>"
+                "REUSE_CUDA_PROFILE_CONTROL=$<TARGET_FILE:reuse-profile-cuda>"
+                ${Python3_EXECUTABLE} "${REUSE_SOURCE_ROOT}/tests/test_reuse_cuda_frontend.py")
+    else()
+        add_test(NAME reuse-cuda-dependency-controls
+            COMMAND ${Python3_EXECUTABLE} "${REUSE_SOURCE_ROOT}/tests/test_reuse_cuda_frontend.py")
+    endif()
     if(TARGET reuse-frontend-mkl-probe)
         add_test(NAME reuse-mkl-probe-controls
             COMMAND ${CMAKE_COMMAND} -E env "REUSE_MKL_FRONTEND_PROBE=$<TARGET_FILE:reuse-frontend-mkl-probe>"

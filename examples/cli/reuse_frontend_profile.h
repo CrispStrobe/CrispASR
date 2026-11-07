@@ -4,6 +4,9 @@
 #ifdef CRISPASR_REUSE_HAVE_MKL
 #include "core/reuse_frontend_mkl.h"
 #endif
+#ifdef CRISPASR_REUSE_HAVE_CUDA_FRONTEND
+#include "core/reuse_frontend_cuda.h"
+#endif
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -41,9 +44,26 @@ inline bool select(const char* requested, Analyze& analyze, const char*& label) 
         label = "native";
         return true;
     }
+    if (std::strcmp(requested, "cufft") == 0) {
+#ifdef CRISPASR_REUSE_HAVE_CUDA_FRONTEND
+        std::string reason;
+        if (!reuse_frontend_cuda::available(reason)) {
+            std::fprintf(stderr, "reuse: cuFFT frontend unavailable: %s\n", reason.c_str());
+            return false;
+        }
+        analyze = reuse_frontend_cuda::analyze;
+        label = "cufft";
+        return true;
+#else
+        std::fprintf(stderr, "reuse: cuFFT frontend unavailable; configure CRISPASR_REUSE_CUDA_FRONTEND=ON and "
+                             "CRISPASR_REUSE_MKL_FRONTEND=ON with external CUDA/oneMKL SDKs\n");
+        return false;
+#endif
+    }
     const bool avx2 = std::strcmp(requested, "mkl-avx2") == 0;
     if (std::strcmp(requested, "mkl") != 0 && !avx2) {
-        std::fprintf(stderr, "reuse: unknown CRISPASR_REUSE_FRONTEND profile '%s'; choose native, mkl or mkl-avx2\n",
+        std::fprintf(stderr,
+                     "reuse: unknown CRISPASR_REUSE_FRONTEND profile '%s'; choose native, mkl, mkl-avx2 or cufft\n",
                      requested);
         return false;
     }

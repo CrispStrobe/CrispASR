@@ -50,11 +50,22 @@ inline int run(const std::string& model_path, const std::string& ref_path) {
     if (!reuse_frontend_profile::select(std::getenv("CRISPASR_REUSE_FRONTEND"), frontend, profile))
         return 2;
 #ifdef CRISPASR_REUSE_HAVE_MKL
-    if (std::string(profile) != "native")
+    if (std::string(profile) == "mkl" || std::string(profile) == "mkl-avx2")
         std::printf("reuse: experimental CPU frontend %s; loaded %s; MKL_ENABLE_INSTRUCTIONS=%s; "
                     "parity requires reference-environment qualification\n",
                     profile, reuse_frontend_mkl::version().c_str(),
                     std::getenv("MKL_ENABLE_INSTRUCTIONS") ? std::getenv("MKL_ENABLE_INSTRUCTIONS") : "<unset>");
+#endif
+#ifdef CRISPASR_REUSE_HAVE_CUDA_FRONTEND
+    if (std::string(profile) == "cufft") {
+        try {
+            std::printf("reuse: experimental cuFFT frontend; %s; GPU FFT only, model graph remains CPU\n",
+                        reuse_frontend_cuda::version().c_str());
+        } catch (const std::exception& error) {
+            std::fprintf(stderr, "reuse: cuFFT runtime identity failed: %s\n", error.what());
+            return 2;
+        }
+    }
 #endif
     crispasr_diff::Ref ref;
     if (!ref.load(ref_path))

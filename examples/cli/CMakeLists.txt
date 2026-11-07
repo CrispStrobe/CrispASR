@@ -313,6 +313,9 @@ install(TARGETS crispasr-diff RUNTIME BUNDLE DESTINATION bin)
 if(TARGET crispasr-reuse-mkl)
     target_link_libraries(crispasr-diff PRIVATE crispasr-reuse-mkl)
 endif()
+if(TARGET crispasr-reuse-cuda)
+    target_link_libraries(crispasr-diff PRIVATE crispasr-reuse-cuda)
+endif()
 
 # ---------------------------------------------------------------------------
 # crispasr-lid — standalone text language identification.

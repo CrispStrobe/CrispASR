@@ -6906,6 +6906,25 @@ if(TARGET crispasr-reuse-mkl)
     endif()
 endif()
 
+if(TARGET crispasr-reuse-cuda)
+    add_executable(test-reuse-frontend-profile-cuda test-reuse-frontend-profile.cpp)
+    target_include_directories(test-reuse-frontend-profile-cuda PRIVATE ${CRISPASR_REUSE_MKL_INCLUDE_DIR})
+    target_link_libraries(test-reuse-frontend-profile-cuda PRIVATE crispasr-reuse-cuda)
+    add_test(NAME reuse-frontend-profile-cuda COMMAND test-reuse-frontend-profile-cuda)
+    set_tests_properties(reuse-frontend-profile-cuda PROPERTIES LABELS "unit;reuse;audio")
+    if(Python3_Interpreter_FOUND)
+        add_test(NAME reuse-cuda-probe-controls
+            COMMAND ${CMAKE_COMMAND} -E env "REUSE_CUDA_FRONTEND_PROBE=$<TARGET_FILE:reuse-frontend-cuda-probe>"
+                "REUSE_CUDA_PROFILE_CONTROL=$<TARGET_FILE:test-reuse-frontend-profile-cuda>"
+                ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reuse_cuda_frontend.py)
+        set_tests_properties(reuse-cuda-probe-controls PROPERTIES LABELS "unit;reuse;audio" TIMEOUT 180)
+    endif()
+elseif(Python3_Interpreter_FOUND)
+    add_test(NAME reuse-cuda-dependency-controls
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test_reuse_cuda_frontend.py)
+    set_tests_properties(reuse-cuda-dependency-controls PROPERTIES LABELS "unit;reuse;audio")
+endif()
+
 add_executable(test-reuse-dense-encoder test-reuse-dense-encoder.cpp)
 add_test(NAME reuse-dense-encoder-reference COMMAND test-reuse-dense-encoder
     ${CMAKE_CURRENT_SOURCE_DIR}/fixtures/reuse-dense-encoder-f32le.bin)

@@ -12,6 +12,8 @@ struct Analysis {
 };
 Analysis transform(const std::vector<float>& audio, Window mode = Window::HighAccuracy, bool batch = true);
 std::string version();
+// Independent CPU Hann generation, shared with the optional cuFFT frontend.
+std::vector<float> periodic_window(Window mode = Window::HighAccuracy);
 bool analyze(const std::vector<float>& audio, int sample_rate, reuse_frontend::Spectrum& output,
              reuse_frontend::Diagnostics* diagnostics = nullptr);
 } // namespace reuse_frontend_mkl

@@ -17,6 +17,18 @@ int main(int argc, char** argv) {
         std::puts("REUSE_MKL_AVX2_PROFILE_SELECTED");
         return 0;
     }
+    if (argc == 2 && std::strcmp(argv[1], "--select-cufft") == 0) {
+        if (!reuse_frontend_profile::select("cufft", selected, label))
+            return 2;
+#ifdef CRISPASR_REUSE_HAVE_CUDA_FRONTEND
+        if (selected != reuse_frontend_cuda::analyze || !label || std::strcmp(label, "cufft"))
+            return 9;
+        std::puts("REUSE_CUFFT_PROFILE_SELECTED");
+        return 0;
+#else
+        return 9;
+#endif
+    }
     for (const char* name : {static_cast<const char*>(nullptr), "", "native"}) {
         if (!reuse_frontend_profile::select(name, selected, label) || selected != reuse_frontend::analyze ||
             std::strcmp(label, "native"))
@@ -24,6 +36,10 @@ int main(int argc, char** argv) {
     }
     if (reuse_frontend_profile::select("invented", selected, label) || selected || label)
         return 2;
+#ifndef CRISPASR_REUSE_HAVE_CUDA_FRONTEND
+    if (reuse_frontend_profile::select("cufft", selected, label) || selected || label)
+        return 9;
+#endif
     const bool available = reuse_frontend_profile::select("mkl", selected, label);
 #ifdef CRISPASR_REUSE_HAVE_MKL
     if (!available || selected != reuse_frontend_mkl::analyze || std::strcmp(label, "mkl"))

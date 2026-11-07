@@ -136,6 +136,7 @@ option(CRISPASR_BUILD_EXAMPLES "crispasr: build examples"       ${CRISPASR_STAND
 option(CRISPASR_BUILD_SERVER   "crispasr: build server example" ${CRISPASR_STANDALONE})
 option(CRISPASR_BUILD_SCNET_PROBE "Build isolated SCNet parity/benchmark tools" OFF)
 include(cmake/CrispasrReuseMkl.cmake)
+include(cmake/CrispasrReuseCuda.cmake)
 # The opt-in probe includes a shared validation library even in static builds.
 # Enable PIC before creating ggml and backend targets so its static dependencies
 # can be linked into that library on ELF platforms.
