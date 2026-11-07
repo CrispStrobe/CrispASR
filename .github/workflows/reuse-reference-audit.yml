@@ -71,4 +71,5 @@ jobs:
         run: |
           python3 tools/ci-heavy/issue579_reuse/network_actual_reference.py
           timeout 3600 build/bin/test-reuse-network-oracle reuse-native.gguf reuse-network-input.f32le
+          python3 tools/ci-heavy/issue579_reuse/network_actual_reference.py --native-phase
           python3 tools/ci-heavy/issue579_reuse/network_compare.py
