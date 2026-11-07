@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Capture original-weight Mamba scan inputs using the CPU reference adapter."""
 import sys
+import json
 from pathlib import Path
 import numpy as np
 import torch
@@ -38,4 +39,26 @@ with open('reuse-mamba-original-oracle.bin', 'wb') as out:
         data = tensor.detach().float().contiguous().numpy()
         assert np.isfinite(data).all()
         out.write(data.astype('<f4').tobytes())
+sys.path.insert(1, str(Path('reuse-model').resolve()))
+from models.mamba_block2_SEMamba import MambaBlock
+mamba_ssm.selective_scan = original
+config = json.loads(Path('reuse-model/config.json').read_text())
+bimamba = MambaBlock(d_model=64, cfg=config).eval()
+prefix = 'TSMamba.0.time_mamba.'
+bimamba.load_state_dict({name.removeprefix(prefix): value for name, value in weights.items()
+                         if name.startswith(prefix)}, strict=True)
+bidir = bimamba(hidden)
+assert torch.isfinite(bidir).all()
+with open('reuse-bimamba-original-oracle.bin', 'wb') as out:
+    def save(tensor):
+        data = tensor.detach().float().contiguous().numpy()
+        assert np.isfinite(data).all()
+        out.write(data.astype('<f4').tobytes())
+    for part in (bimamba.forward_blocks, bimamba.backward_blocks):
+        for tensor in (part.in_proj.weight, part.conv1d.weight, part.conv1d.bias, part.x_proj.weight,
+                       part.dt_proj.weight, part.dt_proj.bias, part.A_log, part.D, part.out_proj.weight):
+            save(tensor)
+    for tensor in (bimamba.output_proj.weight, bimamba.output_proj.bias, bimamba.norm.weight,
+                   bimamba.norm.bias, bidir):
+        save(tensor)
 print('REUSE_ORIGINAL_SCAN_ORACLE', list(result.shape), flush=True)
