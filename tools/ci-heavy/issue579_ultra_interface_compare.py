@@ -24,6 +24,14 @@ subprocess.run(['build/bin/crispasr', '--align-only', '-am', base, '--ultra-head
                 '--align-output', 'ultra-cli.json', '-l', 'en', '-ng', '-t', '2'],
                check=True, timeout=900)
 cli = json.loads(Path('ultra-cli.json').read_text())
+subprocess.run(['build/bin/crispasr', '--align-only', '-am', base, '--ultra-head', head,
+                '-f', 'samples/jfk.wav', '--ref-text', TEXT, '--align-format', 'json',
+                '--align-granularity', 'segment', '--align-output', 'ultra-segment.json',
+                '-l', 'en', '-ng', '-t', '2'], check=True, timeout=900)
+segments = json.loads(Path('ultra-segment.json').read_text())
+assert len(segments) == 1 and segments[0]['words'] == cli
+assert abs(segments[0]['start'] - cli[0]['start']) <= 0.0005
+assert abs(segments[0]['end'] - cli[-1]['end']) <= 0.0005
 with wave.open('samples/jfk.wav', 'rb') as audio:
     assert audio.getnchannels() == 1 and audio.getsampwidth() == 2 and audio.getframerate() == 16000
     pcm = np.frombuffer(audio.readframes(audio.getnframes()), dtype='<i2').astype(np.float32) / 32768.0
