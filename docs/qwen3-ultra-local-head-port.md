@@ -1,16 +1,18 @@
 # Qwen3 Ultra local-head port: post-processing stage
 
-The optional local head is not yet available in CrispASR. This first port
-stage implements its fixed-center acoustic features, posterior-mean offset decoder,
-and interval repair;
-it is not wired into the aligner. Hidden-state capture, head inference, converter support and end-to-end acceptance remain open.
+The optional local head is not yet available in CrispASR. These port stages
+implement its fixed-center acoustic features, CPU neural head, posterior-mean
+offset decoder, and interval repair; they are not wired into the aligner.
+Hidden-state capture, converter support, product integration and end-to-end
+acceptance remain open.
 
 [Reference run 42313568853](https://github.com/CrispStrobe/CrispASR/actions/runs/42313568853)
 used the upstream `qwen_fa_ultra` 0.1.1 package and pinned Ultra revision
 `765dc1d714e4c80196782a5df5bfbcb3e1416736` on `samples/jfk.wav`. It captured
 44 endpoint feature tensors, contexts, masks, logits and the final timings for
-22 words. The checked-in synthetic test fixture contains only the captured
-logits and times; it does not include the model weights, audio or hidden states.
+22 words. The checked-in fixtures contain captured logits, timings, selected
+normalized features and the normalizer; they do not include neural-head weights,
+audio or hidden states.
 
 `qwen3-ultra-boundary-reference` checks the C++ stage against all 22 upstream
 word intervals to 0.002 ms, plus analytic controls for uniform and extreme
@@ -22,3 +24,10 @@ four captured endpoints against the same upstream run. It also tests silence,
 invalid inputs and an analytic FFT impulse. NumPy computes its FFT in double
 precision; the equivalent C++ stage does the same before converting magnitudes
 to float, because a float FFT produced appreciable error in log-spectrum bands.
+
+The CPU head stage was also compared against all 44 captured endpoint logits
+using the pinned 1.6 MB local-head checkpoint (SHA256
+`50a70d6ed969446770fb9dc1063f5f4e6e4c86eac05fd3efb637492407d0e2ac`).
+The maximum absolute error across 572 logits was 0.00000287 on the local CPU.
+The separate oracle test downloads that checkpoint and is not a model-free test.
+The implementation is a CPU reference, not a GPU or product integration.
