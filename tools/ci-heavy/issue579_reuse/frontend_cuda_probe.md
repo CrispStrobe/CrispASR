@@ -78,3 +78,13 @@ unconditioned 71-stage comparison against the original CUDA capture. CPU AVX2
 references have different raw phases; the chosen FFT environment must match
 the intended original reference. Other SDK versions, GPUs and inputs require
 qualification rather than an assumption of portable bitwise equality.
+
+The Kaggle T4 run `issue579-reuse-cuda-profile-v2` tested source `1d889456a`
+with physical GPU controls at 400, 1600 and 16000 samples; all six isolated
+CTest targets passed. The integrated 1600-sample run independently generated
+its window, magnitude and phase and passed all 71 unconditioned and 71
+conditioned `crispasr-diff` checks against the retained original CUDA capture.
+Unconditioned waveform relative RMS was 1.0843e-6. That original reference
+used Mamba's unfused CUDA reference, not its fused kernel. These are bounded
+frontend and one-clip model results, not qualification of a full GPU backend,
+other hardware, longer recordings or speech quality.
