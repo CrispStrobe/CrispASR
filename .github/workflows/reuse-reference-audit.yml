@@ -17,7 +17,7 @@ jobs:
         run: |
           python3 - <<'PY'
           from huggingface_hub import snapshot_download
-          snapshot_download('nvidia/NVIDIA-NemotronLabs-RE-USE', revision='31f82f2efad1095034492f236e8dac9239ba713b', local_dir='reuse-model', allow_patterns=['config.json','model.safetensors','models/codec_module_time_d4.py'])
+          snapshot_download('nvidia/NVIDIA-NemotronLabs-RE-USE', revision='31f82f2efad1095034492f236e8dac9239ba713b', local_dir='reuse-model', allow_patterns=['config.json','model.safetensors','models/codec_module_time_d4.py','models/mamba_block2_SEMamba.py'])
           PY
           printf '%s  %s\n' '06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1' reuse-model/model.safetensors | sha256sum --check
           printf '%s  %s\n' 'e69986483774f01893d2727503addc49ef201d19e6e1a266b8d4e971e28c478d' reuse-model/config.json | sha256sum --check
@@ -33,3 +33,7 @@ jobs:
           "$RUNNER_TEMP/reuse-scan-oracle" reuse-scan-original-oracle.bin
           c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-reuse-mamba-oracle.cpp -o "$RUNNER_TEMP/reuse-mamba-oracle"
           "$RUNNER_TEMP/reuse-mamba-oracle" reuse-mamba-original-oracle.bin
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-reuse-bimamba-oracle.cpp -o "$RUNNER_TEMP/reuse-bimamba-oracle"
+          "$RUNNER_TEMP/reuse-bimamba-oracle" reuse-bimamba-original-oracle.bin
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-reuse-tf-mamba-oracle.cpp -o "$RUNNER_TEMP/reuse-tf-mamba-oracle"
+          "$RUNNER_TEMP/reuse-tf-mamba-oracle" reuse-tf-mamba-original-oracle.bin
