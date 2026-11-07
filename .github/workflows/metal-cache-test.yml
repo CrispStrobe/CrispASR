@@ -17,7 +17,7 @@ jobs:
         run: |
           python3 tools/ci-heavy/issue579_reuse/stft_reference.py
           c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-reuse-frontend.cpp -o "$RUNNER_TEMP/reuse-frontend"
-          "$RUNNER_TEMP/reuse-frontend" samples/jfk.wav reuse-stft-reference-f32le.bin reuse-stft-44100-reference-f32le.bin
+          "$RUNNER_TEMP/reuse-frontend" samples/jfk.wav reuse-stft-reference-f32le.bin reuse-stft-44100-reference-f32le.bin reuse-istft-reference-f32le.bin
       - name: Check converter against the original checkpoint
         run: |
           python3 tests/test_reuse_converter.py
