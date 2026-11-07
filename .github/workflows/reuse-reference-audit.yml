@@ -6,21 +6,36 @@ permissions:
 jobs:
   audit:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v6
+        with:
+          submodules: recursive
       - name: Install CPU reference dependencies
         run: |
           python3 -m pip install torch --index-url https://download.pytorch.org/whl/cpu
-          python3 -m pip install numpy safetensors einops huggingface_hub
+          python3 -m pip install numpy safetensors einops huggingface_hub gguf scipy soundfile
       - name: Fetch pinned original checkpoint
         run: |
           python3 - <<'PY'
           from huggingface_hub import snapshot_download
-          snapshot_download('nvidia/NVIDIA-NemotronLabs-RE-USE', revision='31f82f2efad1095034492f236e8dac9239ba713b', local_dir='reuse-model', allow_patterns=['config.json','model.safetensors','models/codec_module_time_d4.py','models/mamba_block2_SEMamba.py'])
+          snapshot_download('nvidia/NVIDIA-NemotronLabs-RE-USE', revision='31f82f2efad1095034492f236e8dac9239ba713b', local_dir='reuse-model', allow_patterns=['config.json','model.safetensors','models/*.py','noisy_audio/mic_test2.wav'])
           PY
           printf '%s  %s\n' '06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1' reuse-model/model.safetensors | sha256sum --check
           printf '%s  %s\n' 'e69986483774f01893d2727503addc49ef201d19e6e1a266b8d4e971e28c478d' reuse-model/config.json | sha256sum --check
+          python3 - <<'PY'
+          import json
+          from safetensors import safe_open
+          expected = json.load(open('tests/fixtures/reuse-inventory.json'))
+          with safe_open('reuse-model/model.safetensors', framework='numpy') as model:
+              assert set(model.keys()) == set(expected)
+              for name in model.keys():
+                  tensor = model.get_slice(name)
+                  assert tensor.get_shape() == expected[name] and tensor.get_dtype() == 'F32', name
+          print('REUSE_PINNED_INVENTORY_PASS', len(expected))
+          PY
+          c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-reuse-inventory.cpp -o "$RUNNER_TEMP/reuse-inventory"
+          "$RUNNER_TEMP/reuse-inventory" tests/fixtures/reuse-inventory.json
       - name: Compare every encoder boundary
         run: |
           python3 tools/ci-heavy/issue579_reuse/dense_actual_reference.py
@@ -42,3 +57,18 @@ jobs:
           python3 tools/ci-heavy/issue579_reuse/decoder_actual_reference.py
           c++ -std=c++17 -O2 -Wall -Wextra -Werror tests/test-reuse-decoder-oracle.cpp -o "$RUNNER_TEMP/reuse-decoder-oracle"
           "$RUNNER_TEMP/reuse-decoder-oracle" reuse-decoder-original-oracle.bin
+      - name: Verify strict GGUF loader with original checkpoint
+        run: |
+          python3 models/convert-reuse-to-gguf.py --input reuse-model --output reuse-native.gguf
+          python3 tools/ci-heavy/issue579_reuse/model_loader_fixtures.py
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCRISPASR_BUILD_TESTS=ON
+          cmake --build build --target test-reuse-model-loader test-reuse-network-oracle -j 2
+          build/bin/test-reuse-model-loader reuse-bad-arch.gguf reuse-missing.gguf reuse-bad-shape.gguf reuse-bad-dtype.gguf reuse-native.gguf reuse-loader-probe.bin
+      - name: Compare full CPU reference on a short public audio excerpt
+        env:
+          OMP_NUM_THREADS: '2'
+          MKL_NUM_THREADS: '2'
+        run: |
+          python3 tools/ci-heavy/issue579_reuse/network_actual_reference.py
+          timeout 3600 build/bin/test-reuse-network-oracle reuse-native.gguf reuse-network-input.f32le
+          python3 tools/ci-heavy/issue579_reuse/network_compare.py
