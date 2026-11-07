@@ -795,6 +795,87 @@ class TtsBackendsSchemaTests(unittest.TestCase):
             f"tts_backends names collide with asr backend names: {overlap}")
 
 
+class AlignBackendsTests(unittest.TestCase):
+    """manifest.align_backends schema + the alignment comparator + align_for routing."""
+
+    WORDS = [{"word": "And", "start": 0.32, "end": 0.56}, {"word": "so", "start": 0.64, "end": 0.96}]
+
+    def test_manifest_align_entries_are_complete(self):
+        manifest = json.loads((HERE / "manifest.json").read_text())
+        entries = manifest.get("align_backends", [])
+        self.assertGreaterEqual(len(entries), 3)
+        names = [e["name"] for e in entries]
+        self.assertEqual(len(names), len(set(names)))
+        for e in entries:
+            for key in ("name", "backend_id", "gguf", "sample", "ref_text", "expected_words",
+                        "expected_source", "tolerance_s"):
+                self.assertIn(key, e, f"{e.get('name')}: missing {key}")
+            self.assertEqual(len(e["gguf"]["revision"]), 40, e["name"])
+            self.assertTrue((HERE.parent.parent / e["sample"]).exists(), e["sample"])
+            self.assertGreater(e["tolerance_s"], 0)
+            self.assertLess(e["tolerance_s"], 0.2)
+            ends = [w["end"] for w in e["expected_words"]]
+            self.assertTrue(all(w["start"] <= w["end"] for w in e["expected_words"]), e["name"])
+            self.assertEqual(ends, sorted(ends), e["name"])
+            if e["backend_id"] == "qwen3-forced-aligner":
+                # Filename-based dispatch: the pinned file must select the Qwen path.
+                self.assertIn("forced-aligner", e["gguf"]["file"].lower())
+
+    def test_compare_accepts_exact_and_within_tolerance(self):
+        ok, _, stats = run_one.compare_alignment(self.WORDS, self.WORDS, 0.081)
+        self.assertTrue(ok)
+        self.assertEqual(stats["max_abs_s"], 0.0)
+        shifted = [dict(w, start=w["start"] + 0.08) for w in self.WORDS]
+        self.assertTrue(run_one.compare_alignment(self.WORDS, shifted, 0.081)[0])
+        # Punctuation/case differences in the word text are normalized away.
+        self.assertTrue(run_one.compare_alignment(self.WORDS, [dict(self.WORDS[0], word="and,"), self.WORDS[1]],
+                                                  0.081)[0])
+
+    def test_compare_rejects_drift_words_counts_and_bad_values(self):
+        late = [dict(w, end=w["end"] + 0.2) for w in self.WORDS]
+        self.assertFalse(run_one.compare_alignment(self.WORDS, late, 0.081)[0])
+        self.assertFalse(run_one.compare_alignment(self.WORDS, self.WORDS[:1], 0.081)[0])
+        self.assertFalse(run_one.compare_alignment(self.WORDS, [self.WORDS[0], dict(self.WORDS[1], word="no")],
+                                                   0.081)[0])
+        self.assertFalse(run_one.compare_alignment(self.WORDS, [self.WORDS[0], dict(self.WORDS[1], start=float("nan"))],
+                                                   0.081)[0])
+        self.assertFalse(run_one.compare_alignment(self.WORDS, [self.WORDS[0], {"word": "so"}], 0.081)[0])
+        self.assertFalse(run_one.compare_alignment([], [], 0.081)[0])
+
+    def test_align_for_runs_cli_and_gates_on_output(self):
+        import tempfile
+        entry = {"name": "probe-aligner", "backend_id": "qwen3-forced-aligner",
+                 "gguf": {"repo": "r", "revision": "0" * 40, "file": "x-forced-aligner.gguf"},
+                 "sample": "samples/jfk.wav", "ref_text": "And so", "expected_words": self.WORDS,
+                 "expected_source": "unit", "tolerance_s": 0.081}
+        manifest = {"backends": [], "align_backends": [entry]}
+        for produced, expected_failures in ((self.WORDS, 0), ([dict(w, start=w["start"] + 1) for w in self.WORDS], 1)):
+            with tempfile.TemporaryDirectory() as tmp:
+                work = Path(tmp)
+
+                def fake_run(argv, **_):
+                    self.assertIn("--align-only", argv)
+                    self.assertEqual(argv[argv.index("-am") + 1], "x-forced-aligner.gguf")
+                    Path(argv[argv.index("--align-output") + 1]).write_text(json.dumps(produced))
+                    return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+                with mock.patch.object(run_one, "hf_download", return_value=Path("x-forced-aligner.gguf")), \
+                        mock.patch.object(run_one, "_run_captured", side_effect=fake_run):
+                    self.assertEqual(run_one.align_for("probe-aligner", manifest, work, Path("crispasr")),
+                                     expected_failures)
+
+    def test_align_for_fails_when_cli_fails(self):
+        import tempfile
+        entry = {"name": "p", "gguf": {"repo": "r", "revision": "0" * 40, "file": "f.gguf"},
+                 "sample": "samples/jfk.wav", "ref_text": "x", "expected_words": self.WORDS,
+                 "expected_source": "unit", "tolerance_s": 0.081}
+        with tempfile.TemporaryDirectory() as tmp, \
+                mock.patch.object(run_one, "hf_download", return_value=Path("f.gguf")), \
+                mock.patch.object(run_one, "_run_captured",
+                                  return_value=SimpleNamespace(returncode=3, stdout="", stderr="boom")):
+            self.assertEqual(run_one.align_for("p", {"align_backends": [entry]}, Path(tmp), Path("crispasr")), 1)
+
+
 class TranscriptToleranceTests(unittest.TestCase):
     """CER/WER metric for the optional transcript_tolerance field.
 

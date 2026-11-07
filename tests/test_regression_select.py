@@ -83,6 +83,15 @@ class TestRegressionSelect(unittest.TestCase):
         self.assertEqual([n for n in NIGHTLY if n not in ids], [])
         self.assertEqual(len(NIGHTLY), len(set(NIGHTLY)))
 
+    def test_aligner_sources_select_aligner_entries(self):
+        aligners = ["qwen3-forced-aligner-0.6b-f16", "qwen3-forced-aligner-ultra-f16", "canary-ctc-aligner-q4_k"]
+        picked = rs.select(["src/crispasr_aligner.cpp"], NIGHTLY)
+        self.assertTrue(set(aligners) <= set(picked), picked)
+        qwen = rs.select(["src/core/qwen3_forced_aligner.h"], NIGHTLY)
+        self.assertIn("qwen3-forced-aligner-ultra-f16", qwen)
+        self.assertNotIn("canary-ctc-aligner-q4_k", qwen)
+        self.assertIn("canary-ctc-aligner-q4_k", rs.select(["src/canary_ctc.cpp"], NIGHTLY))
+
     def test_core_is_subset_of_nightly(self):
         self.assertEqual([n for n in rs.CORE if n not in NIGHTLY], [])
 
