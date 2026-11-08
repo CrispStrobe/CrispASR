@@ -46,8 +46,9 @@ Three things that trip people up here:
   **driver** matters.
 - **No GPU is not a problem.** The plain CPU builds are the normal case, and the
   CUDA builds fall back to CPU when no NVIDIA driver is present (since v0.8.30).
-  The `-hip` and `-vulkan` builds are the exception: they *require* their driver
-  and do not fall back.
+  The `-vulkan` build is the exception: it *requires* the Vulkan driver and does
+  not fall back. The `-hip` build falls back to CPU since #586; its GPU path needs
+  ROCm 6.x with hipBLAS.
 
 Full asset matrix, including the split CUDA-DLL downloads:
 [install.md](install.md#windows-cpu-which-zip-380).

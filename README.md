@@ -37,7 +37,7 @@ live transcription + TTS + language detection, auto-deployed from `hf-space/`.
 - [**Start here**](#start-here) — new to CrispASR? Two commands to your first working audio, no repo clone needed
 - [Supported backends](#supported-backends) — [ASR](#asr-backends) + [TTS](#text-to-speech-models) + [translation](#translation) + [post-processing](#post-processing-models) + [music & audio analysis](#music--audio-analysis)
 - [Feature matrix](#feature-matrix)
-- [Install & build](#install--build) — quick install (full guide in [docs/install.md](docs/install.md)); **[which prebuilt Linux tarball to download](docs/install.md#prebuilt-linux-tarballs--which-one-to-download-355)** — the `-hip` / `-vulkan` builds require the matching GPU driver and do **not** fall back to CPU (the `-cuda` tarballs do, since v0.8.30)
+- [Install & build](#install--build) — quick install (full guide in [docs/install.md](docs/install.md)); **[which prebuilt Linux tarball to download](docs/install.md#prebuilt-linux-tarballs--which-one-to-download-355)** — the `-vulkan` build requires the Vulkan driver and does **not** fall back to CPU (the `-cuda` tarballs do since v0.8.30, the `-hip` tarball since #586)
 - [Quick start — ASR](#quick-start)
 - [Troubleshooting](docs/troubleshooting.md) — it printed the banner and stopped, reading the exit code, `--no-gpu` bisect, which Windows zip
 - [**Text-to-Speech (TTS)**](docs/tts.md) — 52 engines: Kokoro, Qwen3-TTS, VibeVoice, dots.tts, Orpheus, Chatterbox, IndexTTS, Irodori, VoxCPM2, CosyVoice3, CSM, Dia, Zonos, Bark, Piper, MeloTTS, and more
@@ -82,9 +82,9 @@ and unzip it:
 | **macOS, Intel** | `crispasr-macos-x86_64.tar.gz` | CPU + Accelerate; requires AVX2/FMA/F16C (Haswell or newer). Older Intel Mac → `crispasr-macos-x86_64-cpu-legacy.tar.gz` |
 | **Linux** | `crispasr-linux-x86_64.tar.gz` | `…-cuda.tar.gz` / `…-vulkan.tar.gz` for GPU |
 
-Prefer to build it yourself? See [Install & build](#install--build). The `-hip`
-and `-vulkan` builds require the matching driver and do **not** fall back to CPU;
-the Linux `-cuda` tarballs do fall back.
+Prefer to build it yourself? See [Install & build](#install--build). The `-vulkan`
+build requires the Vulkan driver and does **not** fall back to CPU; the Linux
+`-cuda` and `-hip` tarballs do fall back.
 
 Check it runs — this should print a version banner and exit:
 
