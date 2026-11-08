@@ -1368,6 +1368,10 @@ All three optimisation gates are output-equivalent: the per-stage diff reports
 - `CRISPASR_QWEN3_TTS_TALKER_SCHED`
 - `CRISPASR_QWEN3_TTS_VULKAN_CPU=1` — run the talker on CPU when the GPU backend is
   Vulkan (the pre-#337-fix default). The talker runs natively on Vulkan otherwise.
+  Add `CRISPASR_QWEN3_TTS_CODEC_GPU=1` (or `CRISPASR_QWEN3_TTS_CODEC_VULKAN=1`) to
+  keep only the codec (decoder and reference encoder) on Vulkan. That split suits a
+  shared iGPU, where the autoregressive talker competes with the compositor but the
+  codec still runs several times faster on the GPU (#585). `CODEC_CPU=1` wins.
 - `CRISPASR_QWEN3_TTS_VULKAN_NATIVE` — legacy: native is now the default; `=0` still
   requests the CPU pin.
 - `CRISPASR_QWEN3_TTS_DUMP_LOGITS=<dir>` — write the raw per-frame talker

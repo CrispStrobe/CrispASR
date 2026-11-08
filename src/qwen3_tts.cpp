@@ -671,6 +671,9 @@ struct qwen3_tts_context {
 
     ggml_backend_t backend = nullptr;
     ggml_backend_t backend_cpu = nullptr;
+    // #585 split mode: talker + code predictor on CPU, codec (decoder and
+    // reference encoder) on this GPU backend. nullptr unless requested.
+    ggml_backend_t backend_codec = nullptr;
     ggml_backend_sched_t sched = nullptr;
     ggml_backend_sched_t cp_sched = nullptr;
     bool cp_sched_reserved = false;
@@ -899,7 +902,15 @@ struct qwen3_tts_context {
     std::string runtime_cv_style_instruct;
 };
 
+// The device that holds the codec weights when the codec runs on a GPU.
+static ggml_backend_t qwen3_tts_codec_device(const qwen3_tts_context* c) {
+    return c->backend_codec ? c->backend_codec : c->backend;
+}
+
 static bool qwen3_tts_codec_use_gpu_by_default(const qwen3_tts_context* c) {
+    if (c && c->backend_codec) {
+        return true; // explicitly requested split (#585)
+    }
     if (!c || !c->backend || c->backend == c->backend_cpu) {
         return false;
     }
@@ -956,7 +967,17 @@ static void qwen3_tts_route_off_vulkan(qwen3_tts_context* c, int verbosity) {
     if (verbosity >= 1) {
         fprintf(stderr, "qwen3_tts: CRISPASR_QWEN3_TTS_VULKAN_CPU=1 - running the talker on CPU\n");
     }
-    ggml_backend_free(c->backend);
+    if (qwen3_tts_hip_policy::vulkan_codec_stays_on_gpu(crispasr_env::get("CRISPASR_QWEN3_TTS_CODEC_GPU"),
+                                                        crispasr_env::get("CRISPASR_QWEN3_TTS_CODEC_VULKAN"),
+                                                        crispasr_env::get("CRISPASR_QWEN3_TTS_CODEC_CPU"))) {
+        c->backend_codec = c->backend;
+        if (verbosity >= 1) {
+            fprintf(stderr, "qwen3_tts: codec stays on %s (talker + code predictor on CPU)\n",
+                    ggml_backend_name(c->backend_codec));
+        }
+    } else {
+        ggml_backend_free(c->backend);
+    }
     c->backend = c->backend_cpu;
 }
 
@@ -4268,6 +4289,12 @@ static ggml_cgraph* build_graph_codec_decode(qwen3_tts_context* c, int T, bool k
 
 // Forward declaration — defined after the SEANet implementation section.
 static bool load_cenc(qwen3_tts_context* c);
+// The codec encoder weights live with the codec; in split mode (#585) they
+// are on backend_codec, which the main (CPU-only) scheduler cannot reach.
+static ggml_backend_sched_t codec_pick_sched(qwen3_tts_context* c);
+static ggml_backend_sched_t cenc_sched(qwen3_tts_context* c) {
+    return c->backend_codec ? codec_pick_sched(c) : c->sched;
+}
 
 // ---------------------------------------------------------------------------
 // Load codec GGUF into g3t_codec.
@@ -4308,7 +4335,7 @@ static bool load_codec(qwen3_tts_context* c, const char* path) {
     const bool force_cpu = crispasr_env::get("CRISPASR_QWEN3_TTS_CODEC_CPU") != nullptr;
     const bool default_gpu = qwen3_tts_codec_use_gpu_by_default(c);
     const bool codec_gpu = force_metal || force_gpu || (!force_cpu && default_gpu);
-    ggml_backend_t weight_backend = codec_gpu ? c->backend : c->backend_cpu;
+    ggml_backend_t weight_backend = codec_gpu ? qwen3_tts_codec_device(c) : c->backend_cpu;
     if (c->params.verbosity >= 1) {
         const bool hip_safety_fallback = qwen3_tts_hip_policy::codec_must_use_cpu(
             ggml_backend_name(c->backend), crispasr_env::get("CRISPASR_QWEN3_TTS_HIP_CODEC_NATIVE") != nullptr);
@@ -4595,9 +4622,12 @@ static ggml_backend_sched_t codec_pick_sched(qwen3_tts_context* c) {
         // Dedicated GPU scheduler — isolates codec memory pool from talker/main
         // to prevent VRAM fragmentation across repeated Python interop cycles.
         if (!c->codec_sched_gpu) {
-            ggml_backend_t backends[2] = {c->backend, c->backend_cpu};
-            int n_be = (c->backend && c->backend != c->backend_cpu) ? 2 : 1;
-            c->codec_sched_gpu = ggml_backend_sched_new(backends, nullptr, n_be, 8192, false, false);
+            ggml_backend_t dev = qwen3_tts_codec_device(c);
+            ggml_backend_t backends[2] = {dev, c->backend_cpu};
+            int n_be = (dev && dev != c->backend_cpu) ? 2 : 1;
+            // 16384 like the main scheduler: in split mode the reference
+            // encoder graphs run here too (#585).
+            c->codec_sched_gpu = ggml_backend_sched_new(backends, nullptr, n_be, 16384, false, false);
         }
         return c->codec_sched_gpu;
     }
@@ -5200,13 +5230,13 @@ static bool run_cenc_chunked(qwen3_tts_context* c, const float* audio, int n_sam
     std::vector<float> seanet_buf((size_t)512 * T_enc);
     {
         ggml_cgraph* gf = build_cenc_seanet_only_graph(c, n_samples);
-        ggml_backend_sched_reset(c->sched);
-        if (!ggml_backend_sched_alloc_graph(c->sched, gf)) {
+        ggml_backend_sched_reset(cenc_sched(c));
+        if (!ggml_backend_sched_alloc_graph(cenc_sched(c), gf)) {
             fprintf(stderr, "qwen3_tts: cenc: seanet alloc failed\n");
             return false;
         }
         ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "pcm_input"), audio, 0, (size_t)n_samples * sizeof(float));
-        if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
+        if (ggml_backend_sched_graph_compute(cenc_sched(c), gf) != GGML_STATUS_SUCCESS) {
             fprintf(stderr, "qwen3_tts: cenc: seanet compute failed\n");
             return false;
         }
@@ -5226,8 +5256,8 @@ static bool run_cenc_chunked(qwen3_tts_context* c, const float* audio, int n_sam
             const int chunk_T = ctx_T + new_T;
 
             ggml_cgraph* gf = build_cenc_xfmr_chunk_graph(c, chunk_T);
-            ggml_backend_sched_reset(c->sched);
-            if (!ggml_backend_sched_alloc_graph(c->sched, gf)) {
+            ggml_backend_sched_reset(cenc_sched(c));
+            if (!ggml_backend_sched_alloc_graph(cenc_sched(c), gf)) {
                 fprintf(stderr, "qwen3_tts: cenc: xfmr chunk alloc failed (chunk_T=%d)\n", chunk_T);
                 return false;
             }
@@ -5261,7 +5291,7 @@ static bool run_cenc_chunked(qwen3_tts_context* c, const float* audio, int n_sam
                 ggml_backend_tensor_set(mask_t, mask.data(), 0, mask.size() * sizeof(ggml_fp16_t));
             }
 
-            if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
+            if (ggml_backend_sched_graph_compute(cenc_sched(c), gf) != GGML_STATUS_SUCCESS) {
                 fprintf(stderr, "qwen3_tts: cenc: xfmr chunk compute failed (chunk_T=%d start=%d)\n", chunk_T,
                         result_start);
                 return false;
@@ -5285,14 +5315,14 @@ static bool run_cenc_chunked(qwen3_tts_context* c, const float* audio, int n_sam
     // ── Phase 3: Downsample + RVQ ──
     {
         ggml_cgraph* gf = build_cenc_downsample_graph(c, T_enc);
-        ggml_backend_sched_reset(c->sched);
-        if (!ggml_backend_sched_alloc_graph(c->sched, gf)) {
+        ggml_backend_sched_reset(cenc_sched(c));
+        if (!ggml_backend_sched_alloc_graph(cenc_sched(c), gf)) {
             fprintf(stderr, "qwen3_tts: cenc: downsample alloc failed\n");
             return false;
         }
         ggml_backend_tensor_set(ggml_graph_get_tensor(gf, "cenc_ds_in"), xfmr_out.data(), 0,
                                 xfmr_out.size() * sizeof(float));
-        if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
+        if (ggml_backend_sched_graph_compute(cenc_sched(c), gf) != GGML_STATUS_SUCCESS) {
             fprintf(stderr, "qwen3_tts: cenc: downsample compute failed\n");
             return false;
         }
@@ -5480,8 +5510,8 @@ static bool run_cenc(qwen3_tts_context* c, const float* audio, int n_samples, st
 
     // Build and execute the SEANet+transformer+downsample graph
     ggml_cgraph* gf = build_cenc_graph(c, n_samples);
-    ggml_backend_sched_reset(c->sched);
-    if (!ggml_backend_sched_alloc_graph(c->sched, gf)) {
+    ggml_backend_sched_reset(cenc_sched(c));
+    if (!ggml_backend_sched_alloc_graph(cenc_sched(c), gf)) {
         fprintf(stderr, "qwen3_tts: cenc: graph alloc failed\n");
         return false;
     }
@@ -5497,7 +5527,7 @@ static bool run_cenc(qwen3_tts_context* c, const float* audio, int n_samples, st
             ggml_backend_tensor_set(mask_t, mask.data(), 0, mask.size() * sizeof(ggml_fp16_t));
         }
     }
-    if (ggml_backend_sched_graph_compute(c->sched, gf) != GGML_STATUS_SUCCESS) {
+    if (ggml_backend_sched_graph_compute(cenc_sched(c), gf) != GGML_STATUS_SUCCESS) {
         fprintf(stderr, "qwen3_tts: cenc: compute failed\n");
         return false;
     }
@@ -8338,6 +8368,9 @@ extern "C" void qwen3_tts_free(struct qwen3_tts_context* ctx) {
     }
     if (ctx->backend && ctx->backend != ctx->backend_cpu) {
         ggml_backend_free(ctx->backend);
+    }
+    if (ctx->backend_codec && ctx->backend_codec != ctx->backend && ctx->backend_codec != ctx->backend_cpu) {
+        ggml_backend_free(ctx->backend_codec);
     }
     if (ctx->backend_cpu) {
         ggml_backend_free(ctx->backend_cpu);

@@ -1,0 +1,15 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-qwen3-tts-codec-split",
+  "title": "CrispASR qwen3-tts codec split",
+  "code_file": "qwen3_tts_codec_split.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_internet": "true",
+  "dataset_sources": [
+    "${KAGGLE_ACCOUNT}/crispasr-hf-token"
+  ],
+  "competition_sources": [],
+  "kernel_sources": []
+}

@@ -60,4 +60,17 @@ inline bool vulkan_talker_on_cpu(const char* vulkan_cpu, const char* vulkan_nati
     return false;
 }
 
+// #585: with the talker pinned to CPU (vulkan_talker_on_cpu), keep the Vulkan
+// device for the codec alone when asked. On a shared iGPU the autoregressive
+// talker loses to the compositor while the codec still runs 4-6x faster on
+// the GPU. `codec_gpu` is CRISPASR_QWEN3_TTS_CODEC_GPU, `codec_vulkan` is
+// CRISPASR_QWEN3_TTS_CODEC_VULKAN, `codec_cpu` is CRISPASR_QWEN3_TTS_CODEC_CPU
+// (which wins, as it does everywhere else).
+inline bool vulkan_codec_stays_on_gpu(const char* codec_gpu, const char* codec_vulkan, const char* codec_cpu) {
+    auto on = [](const char* v) { return v && v[0] && v[0] != '0'; };
+    if (on(codec_cpu))
+        return false;
+    return on(codec_gpu) || on(codec_vulkan);
+}
+
 } // namespace qwen3_tts_hip_policy

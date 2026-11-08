@@ -96,6 +96,15 @@ TEST_CASE("qwen3_tts Vulkan talker runs natively unless asked (#337)", "[unit][q
     REQUIRE(vulkan_talker_on_cpu("1", "1"));           // the CPU request wins
 }
 
+TEST_CASE("qwen3_tts codec can stay on Vulkan with the talker on CPU (#585)", "[unit][qwen3_tts][hip]") {
+    using namespace qwen3_tts_hip_policy;
+    REQUIRE_FALSE(vulkan_codec_stays_on_gpu(nullptr, nullptr, nullptr)); // VULKAN_CPU=1 alone: all CPU
+    REQUIRE(vulkan_codec_stays_on_gpu("1", nullptr, nullptr));           // CODEC_GPU=1 is honoured now
+    REQUIRE(vulkan_codec_stays_on_gpu(nullptr, "1", nullptr));           // CODEC_VULKAN=1 alias
+    REQUIRE_FALSE(vulkan_codec_stays_on_gpu("0", "0", nullptr));
+    REQUIRE_FALSE(vulkan_codec_stays_on_gpu("1", "1", "1")); // CODEC_CPU=1 wins
+}
+
 TEST_CASE("Qwen3 Base packs require model-sized F32 speakers and I32 codec frames (#555)", "[unit][qwen3_tts]") {
     ggml_init_params params = {8 * ggml_tensor_overhead(), nullptr, true};
     ggml_context* ctx = ggml_init(params);
