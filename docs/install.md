@@ -18,6 +18,7 @@ The GitHub releases carry several Linux x86-64 tarballs.
 | `crispasr-linux-x86_64-cuda.tar.gz` | NVIDIA GPU (CUDA 12) | **yes** — runs on CPU if CUDA libs are absent |
 | `crispasr-linux-x86_64-cuda13.tar.gz` | NVIDIA GPU (CUDA 13) | **yes** — runs on CPU if CUDA libs are absent |
 | `crispasr-linux-x86_64-hip.tar.gz` | AMD GPU (ROCm 6.3+ with hipBLAS) | **yes** — runs on CPU if ROCm libs are absent (since #586) |
+| `crispasr-linux-x86_64-hip7.tar.gz` | AMD GPU (**ROCm 7.x** with hipBLAS; Arch and other rolling distros) | **yes** — same as above (since v0.8.53) |
 | `crispasr-linux-x86_64-vulkan.tar.gz` | Vulkan GPU | **no** |
 
 Since v0.8.30 the CUDA tarballs use dynamic backend loading
@@ -53,8 +54,10 @@ the host (or injected into the container via `--gpus` / `runtime: nvidia`).
 The HIP tarball is built the same way since #586: `ggml-hip.so` is a
 `dlopen`-ed module, so the binary always starts. GPU use needs ROCm 6.x
 with hipBLAS and rocBLAS installed (`libhipblas.so.2`, e.g. the `hipblas`
-package next to the ROCm runtime). If `ggml-hip.so` cannot load — no ROCm,
-no hipBLAS, or ROCm 7, whose hipBLAS is `libhipblas.so.3` — crispasr runs on
+package next to the ROCm runtime). **On ROCm 7 (hipBLAS `libhipblas.so.3`) use
+`crispasr-linux-x86_64-hip7.tar.gz`** instead: ROCm 7 renamed its library
+sonames, so the ROCm 6 module cannot load there. If `ggml-hip.so` cannot load —
+no ROCm, no hipBLAS, or the wrong ROCm major for the tarball — crispasr runs on
 the CPU; `ldd ggml-hip.so` (or `libggml-hip.so`) in the extracted folder shows
 which library is missing. Before #586 the same situation aborted at startup
 with `error while loading shared libraries: libhipblas.so.2`.

@@ -196,6 +196,7 @@ class TestReleaseWorkflow(unittest.TestCase):
             "build-linux-x86_64-cuda",
             "build-linux-x86_64-cuda13",
             "build-linux-x86_64-hip",
+            "build-linux-x86_64-hip7",
             "build-libs-linux-x86_64-hip",
             "build-linux-x86_64-vulkan",
             "build-libs-windows-x86_64-vulkan",

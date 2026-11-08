@@ -655,6 +655,122 @@ jobs:
           files: release/crispasr-linux-x86_64-hip.tar.gz
           fail_on_unmatched_files: true
 
+  # ── Linux x86_64 CLI — HIP/ROCm variant ─────────────────────────────────────
+  # ROCm 7 twin of build-linux-x86_64-hip (#586). ROCm 7 renamed the
+  # math-library sonames (libhipblas.so.2 -> .so.3, librocblas.so.4 -> .5),
+  # so a module linked against ROCm 6 cannot load on a ROCm 7 host (Arch and
+  # other rolling distros). ggml-hip.so is dlopen'd, so this tarball differs
+  # from the ROCm 6 one only in that module. Built in the 7.2 image, which
+  # also matches 7.0-7.2 hosts.
+  build-linux-x86_64-hip7:
+    if: ${{ !inputs.only || inputs.only == 'build-linux-x86_64-hip7' }}
+    runs-on: ubuntu-22.04
+    container:
+      image: rocm/dev-ubuntu-22.04:7.2
+    steps:
+      - name: Install git
+        run: apt-get update -y && apt-get install -y git
+
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          ref: ${{ inputs.tag || github.sha }}
+
+      - name: Install deps
+        # The slim rocm/dev image ships the HIP compiler + runtime but NOT the
+        # math libraries; GGML_HIP needs hipBLAS/rocBLAS (and their cmake config
+        # files) or `find_package(hipblas)` fails at configure time (#196).
+        run: apt-get install -y cmake g++ patchelf hipblas-dev rocblas-dev
+
+      - name: Build
+        run: |
+          # #586: GGML_BACKEND_DL, as in the ROCm 6 leg: ggml-hip.so is
+          # dlopen'd and the CPU backend runs if it cannot load.
+          # hipcc as CMAKE_CXX_COMPILER (ggml calls it legacy) links
+          # libamdhip64 into every binary, the CLI included. Compile the host
+          # code with g++ and give HIP its own language compiler instead, so
+          # only ggml-hip.so needs ROCm.
+          export HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -R)"
+          cmake -S . -B build -DCRISPASR_C2PA_FETCH=ON \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_BACKEND_DL=ON \
+            -DGGML_HIP=ON \
+            -DGGML_NATIVE=OFF -DGGML_CPU_ALL_VARIANTS=ON \
+            -DCMAKE_PREFIX_PATH=/opt/rocm \
+            -DGPU_TARGETS="gfx906;gfx908;gfx90a;gfx1030;gfx1035;gfx1100;gfx1101;gfx1102;gfx1201" \
+            -DCRISPASR_BUILD_TESTS=OFF \
+            -DCRISPASR_BUILD_EXAMPLES=ON \
+            -DCRISPASR_BUILD_SERVER=OFF \
+            -DCRISPASR_OPUS_FETCH=ON
+          cmake --build build --target crispasr-cli crispasr-quantize -j $(nproc)
+
+      - name: Package
+        run: |
+          mkdir -p release/crispasr-linux-x86_64-hip7
+          cp build/bin/crispasr release/crispasr-linux-x86_64-hip7/
+          cp build/bin/crispasr-quantize release/crispasr-linux-x86_64-hip7/
+          # #586: ship the dlopen'd backend modules (ggml-hip.so and the
+          # libggml-cpu-<variant>.so set) next to the binary, as the CUDA legs do.
+          for so in build/bin/libggml*.so* build/bin/libcrispasr*.so*; do
+            [ -f "$so" ] && cp -P "$so" release/crispasr-linux-x86_64-hip7/
+          done
+          test -f release/crispasr-linux-x86_64-hip7/libggml-cpu-x64.so || {
+            echo "::error::libggml-cpu-x64.so (baseline CPU variant) missing from the HIP package (#405)"; exit 1; }
+          ls release/crispasr-linux-x86_64-hip7/ | grep -q 'ggml-hip' || {
+            echo "::error::ggml-hip backend module missing from the HIP package (#586)"; exit 1; }
+          # This tarball exists for ROCm 7: its module must want hipBLAS .so.3.
+          for so in release/crispasr-linux-x86_64-hip7/libggml-hip.so*; do
+            [ -f "$so" ] || continue
+            readelf -d "$so" | grep -q 'NEEDED.*libhipblas\.so\.3' || {
+              echo "::error::$so is not linked against ROCm 7 hipBLAS (libhipblas.so.3)"; exit 1; }
+          done
+          # The CLI itself must not link ROCm any more, or #586 is back.
+          if readelf -d release/crispasr-linux-x86_64-hip7/crispasr | grep -E 'NEEDED.*(hipblas|rocblas|amdhip)'; then
+            echo "::error::crispasr links ROCm directly; a host without hipBLAS cannot start it (#586)"; exit 1; fi
+          bash scripts/bundle-c2pa.sh release/crispasr-linux-x86_64-hip7 || true
+          # Self-contained: rewrite RUNPATH to $ORIGIN (v0.8.25 shipped a leaked
+          # /home/runner/... path, and crispasr-quantize had no $ORIGIN at all, so it
+          # could not find its own bundled libc2pa_c.so) and copy in the non-system
+          # dependency closure — libopenblas AND libgomp, per CrispASR #296.
+          # ROCm's own libraries are the user's, not ours: resolving the closure
+          # honestly pulled in 2.2 GB of the build image's ROCm install
+          # (librocsolver.so.0 is 1.65 GB) for a tarball that had been 97 MB, and
+          # all of it is transitive — only libhipblas.so.3 and libomp.so are in
+          # our binaries' DT_NEEDED. libamdhip64 has never been bundled, so the
+          # archive already required a ROCm install; EXTRA_RPATH makes it findable
+          # through our own RUNPATH instead of relying on the user having done the
+          # /etc/ld.so.conf.d post-install step.
+          CRISPASR_BUNDLE_HOST_DIRS=/opt/rocm \
+          CRISPASR_BUNDLE_EXTRA_RPATH=/opt/rocm/lib:/opt/rocm/lib/llvm/lib \
+            bash scripts/bundle-linux-runtime.sh release/crispasr-linux-x86_64-hip7
+          # Then assert it: any DT_NEEDED that is neither bundled nor base-system
+          # means the loader dies before main() and the process exits 127 silently.
+          python3 scripts/check-bundled-deps.py release/crispasr-linux-x86_64-hip7 \
+            --allow 'libamdhip64.so.*' --allow 'librocblas.so.*' --allow 'libhsa*.so.*' \
+            --allow 'libhipblas.so.*' --allow 'libomp.so*'
+          # Ship the licence text with the binaries. Every Windows, Android and
+          # libcrispasr artifact already did; no CLI tarball did, and these bundle
+          # third-party shared libraries (libgomp, and libomp on HIP) whose terms
+          # require the notice to travel with them.
+          cp LICENSE release/crispasr-linux-x86_64-hip7/
+          cp THIRD_PARTY_NOTICES.txt release/crispasr-linux-x86_64-hip7/
+          cd release && tar czf crispasr-linux-x86_64-hip7.tar.gz crispasr-linux-x86_64-hip7/
+          ls -lh crispasr-linux-x86_64-hip7.tar.gz
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: crispasr-linux-x86_64-hip7
+          path: release/crispasr-linux-x86_64-hip7.tar.gz
+
+      - name: Attach crispasr-linux-x86_64-hip7.tar.gz to release
+        if: inputs.tag != '' || startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.tag || github.ref_name }}
+          files: release/crispasr-linux-x86_64-hip7.tar.gz
+          fail_on_unmatched_files: true
+
   # ── Linux x86_64 shared libs — HIP/ROCm variant ──────────────────────────────
   # Mirrors build-linux-x86_64-hip as a shared-lib tarball for downstream
   # FFI consumers (Rust crispasr-sys, Dart, Python ctypes) that need AMD GPU

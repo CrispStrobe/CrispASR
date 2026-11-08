@@ -367,6 +367,8 @@ def require_native_asset_set(baseline_names, actual_names, version):
     if linux_gpu_wheels_expected(version):
         expected.update({"libcrispasr-linux-x86_64-vulkan.tar.gz",
                          "libcrispasr-linux-arm64-cuda.tar.gz"})
+    if hip7_tarball_expected(version):
+        expected.add("crispasr-linux-x86_64-hip7.tar.gz")
     actual = {name for name in actual_names if not name.endswith(".whl")}
     if actual != expected:
         raise ValueError(f"Native asset set mismatch: missing={sorted(expected - actual)}, "
@@ -537,6 +539,14 @@ LINUX_GPU_WHEEL_ASSETS = {
     "gpu-wheel-linux-arm64-cuda": "libcrispasr-linux-arm64-cuda.tar.gz",
 }
 GPU_INDEX_FLAVORS = ("cuda", "vulkan", "hip")
+
+
+# #586: the ROCm 7 CLI tarball first ships with 0.8.53.
+HIP7_TARBALL_SINCE = (0, 8, 53)
+
+
+def hip7_tarball_expected(version):
+    return tuple(int(part) for part in version.split(".")[:3]) >= HIP7_TARBALL_SINCE
 
 
 def linux_gpu_wheels_expected(version):
