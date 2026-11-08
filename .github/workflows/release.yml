@@ -576,6 +576,11 @@ jobs:
           # host without ROCm 6's hipBLAS (no hipblas package, or ROCm 7's
           # libhipblas.so.3) died in the loader before main(). Now ggml-hip.so
           # is dlopen'd: if it cannot load, the CPU backend runs instead.
+          # hipcc as CMAKE_CXX_COMPILER (ggml calls it legacy) links
+          # libamdhip64 into every binary, the CLI included. Compile the host
+          # code with g++ and give HIP its own language compiler instead, so
+          # only ggml-hip.so needs ROCm.
+          export HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -R)"
           cmake -S . -B build -DCRISPASR_C2PA_FETCH=ON \
             -DCMAKE_BUILD_TYPE=Release \
             -DBUILD_SHARED_LIBS=ON \
@@ -583,9 +588,7 @@ jobs:
             -DGGML_HIP=ON \
             -DGGML_NATIVE=OFF -DGGML_CPU_ALL_VARIANTS=ON \
             -DCMAKE_PREFIX_PATH=/opt/rocm \
-            -DCMAKE_C_COMPILER=hipcc \
-            -DCMAKE_CXX_COMPILER=hipcc \
-            -DAMDGPU_TARGETS="gfx906;gfx908;gfx90a;gfx1030;gfx1035;gfx1100;gfx1101;gfx1102;gfx1201" \
+            -DGPU_TARGETS="gfx906;gfx908;gfx90a;gfx1030;gfx1035;gfx1100;gfx1101;gfx1102;gfx1201" \
             -DCRISPASR_BUILD_TESTS=OFF \
             -DCRISPASR_BUILD_EXAMPLES=ON \
             -DCRISPASR_BUILD_SERVER=OFF \
