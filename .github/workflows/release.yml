@@ -571,11 +571,17 @@ jobs:
 
       - name: Build
         run: |
+          # #586: build with GGML_BACKEND_DL like the CUDA legs (§355). The
+          # static build put libhipblas.so.2 in the binary's DT_NEEDED, so a
+          # host without ROCm 6's hipBLAS (no hipblas package, or ROCm 7's
+          # libhipblas.so.3) died in the loader before main(). Now ggml-hip.so
+          # is dlopen'd: if it cannot load, the CPU backend runs instead.
           cmake -S . -B build -DCRISPASR_C2PA_FETCH=ON \
             -DCMAKE_BUILD_TYPE=Release \
-            -DBUILD_SHARED_LIBS=OFF \
+            -DBUILD_SHARED_LIBS=ON \
+            -DGGML_BACKEND_DL=ON \
             -DGGML_HIP=ON \
-            -DGGML_NATIVE=OFF -DGGML_AVX2=ON -DGGML_FMA=ON -DGGML_F16C=ON \
+            -DGGML_NATIVE=OFF -DGGML_CPU_ALL_VARIANTS=ON \
             -DCMAKE_PREFIX_PATH=/opt/rocm \
             -DCMAKE_C_COMPILER=hipcc \
             -DCMAKE_CXX_COMPILER=hipcc \
@@ -591,6 +597,18 @@ jobs:
           mkdir -p release/crispasr-linux-x86_64-hip
           cp build/bin/crispasr release/crispasr-linux-x86_64-hip/
           cp build/bin/crispasr-quantize release/crispasr-linux-x86_64-hip/
+          # #586: ship the dlopen'd backend modules (ggml-hip.so and the
+          # libggml-cpu-<variant>.so set) next to the binary, as the CUDA legs do.
+          for so in build/bin/libggml*.so* build/bin/libcrispasr*.so*; do
+            [ -f "$so" ] && cp -P "$so" release/crispasr-linux-x86_64-hip/
+          done
+          test -f release/crispasr-linux-x86_64-hip/libggml-cpu-x64.so || {
+            echo "::error::libggml-cpu-x64.so (baseline CPU variant) missing from the HIP package (#405)"; exit 1; }
+          ls release/crispasr-linux-x86_64-hip/ | grep -q 'ggml-hip' || {
+            echo "::error::ggml-hip backend module missing from the HIP package (#586)"; exit 1; }
+          # The CLI itself must not link ROCm any more, or #586 is back.
+          if readelf -d release/crispasr-linux-x86_64-hip/crispasr | grep -E 'NEEDED.*(hipblas|rocblas|amdhip)'; then
+            echo "::error::crispasr links ROCm directly; a host without hipBLAS cannot start it (#586)"; exit 1; fi
           bash scripts/bundle-c2pa.sh release/crispasr-linux-x86_64-hip || true
           # Self-contained: rewrite RUNPATH to $ORIGIN (v0.8.25 shipped a leaked
           # /home/runner/... path, and crispasr-quantize had no $ORIGIN at all, so it
