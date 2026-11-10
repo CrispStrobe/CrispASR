@@ -1,0 +1,135 @@
+# Extended per-backend regression: every manifest entry that is NOT in the
+# nightly list (tests/regression/extended_matrix.json). These were previously
+# routed to a Kaggle full sweep that no longer runs, so nothing exercised them.
+#
+#   weekly (Sun 06:00 UTC) - always runs the full extended list
+#   daily  (13:00 UTC)     - runs only if the repository's Actions queue is
+#                            idle (no queued runs, no Regression nightly in
+#                            progress), so it never delays push/PR CI
+#   workflow_dispatch      - full list, or a comma-separated subset
+#
+# Same driver as the nightly (tests/regression/run_one.py); see regression.yml.
+name: Regression (extended)
+
+on:
+  schedule:
+    - cron: '0 6 * * 0'     # weekly, unconditional
+    - cron: '0 13 * * 1-6'  # daily, only when the queue is idle
+  workflow_dispatch:
+    inputs:
+      backends:
+        description: 'Comma-separated subset of extended_matrix.json (empty = all)'
+        type: string
+        default: ''
+      force:
+        description: 'Run even if the Actions queue is busy'
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: regression-extended-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  select:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      matrix: ${{ steps.pick.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v6
+      - id: pick
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT: ${{ github.event_name }}
+          CRON: ${{ github.event.schedule }}
+          FORCE: ${{ inputs.force }}
+          SUBSET: ${{ inputs.backends }}
+        run: |
+          gated=false
+          if [ "$EVENT" = schedule ] && [ "$CRON" != '0 6 * * 0' ]; then gated=true; fi
+          if [ "$EVENT" = workflow_dispatch ] && [ "$FORCE" != true ]; then gated=true; fi
+          if [ "$gated" = true ]; then
+            queued=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs?status=queued&per_page=1" --jq .total_count)
+            nightly=$(gh run list -R "$GITHUB_REPOSITORY" --workflow regression.yml \
+                        --status in_progress --limit 5 --json databaseId --jq length)
+            echo "queued runs: $queued; nightly regression in progress: $nightly"
+            if [ "$queued" != 0 ] || [ "$nightly" != 0 ]; then
+              echo 'Actions queue busy - skipping this daily extended sweep'
+              echo 'matrix=[]' >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          m=$(python3 - <<'PY'
+          import json, os
+          man = json.load(open('tests/regression/manifest.json'))
+          names = {e['name'] for e in man['backends'] + man['tts_backends']}
+          nightly = set(json.load(open('tests/regression/nightly_matrix.json'))['nightly'])
+          ext = json.load(open('tests/regression/extended_matrix.json'))['extended']
+          bad = [n for n in ext if n not in names or n in nightly]
+          assert not bad, f'extended entries missing from manifest or duplicated in nightly: {bad}'
+          want = [s.strip() for s in os.environ.get('SUBSET', '').split(',') if s.strip()]
+          unknown = [s for s in want if s not in ext]
+          assert not unknown, f'not in extended_matrix.json: {unknown}'
+          print(json.dumps(want or ext))
+          PY
+          )
+          echo "matrix=$m" >> "$GITHUB_OUTPUT"
+          echo "selected: $m"
+
+  regression:
+    needs: select
+    if: needs.select.outputs.matrix != '[]' && needs.select.outputs.matrix != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 4
+      matrix:
+        backend: ${{ fromJSON(needs.select.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - name: Free runner disk for multi-GB models
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL || true
+          df -h /
+      - name: Install build + runtime deps
+        run: |
+          bash tools/ci-apt.sh update
+          bash tools/ci-apt.sh install -y cmake g++ ninja-build libopenblas-dev jq \
+              libespeak-ng-dev espeak-ng pkg-config
+          python -m pip install --upgrade pip
+          pip install huggingface_hub numpy gguf
+      - name: Configure + build crispasr-cli and crispasr-diff
+        run: |
+          cmake -S . -B build-regression -G Ninja \
+              -DCMAKE_BUILD_TYPE=Release \
+              -DCRISPASR_BUILD_TESTS=OFF \
+              -DCRISPASR_BUILD_EXAMPLES=ON \
+              -DCRISPASR_BUILD_SERVER=OFF
+          cmake --build build-regression --target crispasr-cli crispasr-diff -j"$(nproc)"
+      - name: Run regression for ${{ matrix.backend }}
+        env:
+          BUILD_DIR: build-regression
+          WORK_DIR: ${{ runner.temp }}/regression-${{ matrix.backend }}
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+          HUGGING_FACE_HUB_TOKEN: ${{ secrets.HF_TOKEN }}
+          HF_HUB_ENABLE_HF_TRANSFER: "0"
+          HF_HUB_DOWNLOAD_TIMEOUT: "120"
+        run: |
+          mkdir -p "$WORK_DIR"
+          free -m
+          tests/regression/run_one.py "${{ matrix.backend }}"
+      - name: Free disk
+        if: always()
+        run: |
+          rm -rf "${{ runner.temp }}/regression-${{ matrix.backend }}" 2>/dev/null || true
+          df -h /
