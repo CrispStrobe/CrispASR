@@ -352,12 +352,18 @@ def run_lid(entry: dict, manifest: dict, lid_gguf: Path, sample: Path,
                           "-f", str(sample), "-dl", "--lid-backend", entry["lid_backend"],
                           "--lid-model", str(lid_gguf)],
                          check=True, timeout=600, label="lid-audio")
-    found = re.findall(r"LID -> language = '([^']*)' \(([^,]*),", proc.stderr)
+    # Two status formats: the LID module's own "crispasr[lid]: detected 'xx'
+    # (p=..) via <backend>" and the run loop's "LID -> language = 'xx' (<src>, p=..)".
+    found = [(m.group(1), m.group(2)) for m in
+             re.finditer(r"crispasr\[lid\]: detected '([^']*)' \(p=[^)]*\) via (\S+)", proc.stderr)]
+    found += re.findall(r"LID -> language = '([^']*)' \(([^,]*),", proc.stderr)
     if not found:
-        die(f"no 'LID -> language' line from --lid-backend {entry['lid_backend']}; "
+        die(f"no LID result line from --lid-backend {entry['lid_backend']}; "
             f"stderr tail: ...{proc.stderr[-400:]}")
-    label, source = found[-1]
+    label, source = found[0]
     print(f"  lid source: {source}")
+    if entry["lid_backend"] not in source:
+        die(f"LID label came from {source!r}, not --lid-backend {entry['lid_backend']}")
     return label
 
 
