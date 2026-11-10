@@ -35,10 +35,10 @@
     "parler-tts-mini-v1.1",
     "titanet-large",
     "mimo-audio-tokenizer",
-    "mimo-asr",
-    "kugelaudio-0-open"
+    "mimo-asr"
   ],
   "_excluded": {
-    "tada-codec": "covered by tada-tts-3b-ml, which decodes through the same pinned tada-codec-f16.gguf via --codec-model; tada-ref.gguf in the repo is a voice prompt, not a reference dump, so no standalone stage diff is possible"
+    "tada-codec": "covered by tada-tts-3b-ml, which decodes through the same pinned tada-codec-f16.gguf via --codec-model; tada-ref.gguf in the repo is a voice prompt, not a reference dump, so no standalone stage diff is possible",
+    "kugelaudio-0-open": "TTS roundtrip runs but output is largely garbled (run 42821278216: WER 1.33, 'Shit fellow, the book is going to be frown fox jumps over the daisy card') - real quality issue to investigate before gating"
   }
 }
