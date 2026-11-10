@@ -6,10 +6,6 @@
     "parakeet-tdt_ctc-1.1b",
     "parakeet-rnnt-1.1b",
     "voxtral-mini-3b-2507",
-    "mimo-asr",
-    "mimo-audio-tokenizer",
-    "lid-cld3-f16",
-    "titanet-large",
     "gemma4-e2b-it",
     "funasr-mlt-nano",
     "granite-4.1-plus",
@@ -38,5 +34,11 @@
     "zonos-v0.1-transformer",
     "indextts-1.5",
     "chatterbox-turbo-s3gen"
-  ]
+  ],
+  "_excluded": {
+    "mimo-asr": "needs the --codec-model mimo-tokenizer companion, which run_one.py does not pass (exit 13)",
+    "mimo-audio-tokenizer": "outputs RVQ codes, not a transcript; run_one.py has no codes-hash check",
+    "lid-cld3-f16": "text LID fed via LID_TEXT; run_one.py does not set it (exit 3)",
+    "titanet-large": "outputs a speaker embedding; run_one.py has no embedding check (exit 3)"
+  }
 }
