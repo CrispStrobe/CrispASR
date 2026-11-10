@@ -309,6 +309,57 @@ _DIFF_LINE = re.compile(
 )
 
 
+
+def run_lid(entry: dict, manifest: dict, lid_gguf: Path, sample: Path,
+            work_dir: Path, crispasr_bin: Path) -> str:
+    """Return the language label a LID model assigns, for `lid_mode` entries.
+
+    LID models emit a label, not a transcript, so plain `crispasr -m lid.gguf`
+    cannot drive them (it exits 3). Two modes:
+
+    * ``text``  - text LID (CLD3 / fastText): ``crispasr-lid -m gguf --text
+      <lid_text>``; first field of the first output line.
+    * ``audio`` - audio LID (silero / ecapa / firered): run the pinned host ASR
+      entry ``lid_host_asr`` with ``-dl --lid-backend <lid_backend> --lid-model
+      gguf`` and parse the ``LID -> language = 'xx'`` status line, so the label
+      comes from the model under test, never from the host ASR.
+    """
+    import re
+    mode = entry["lid_mode"]
+    if mode == "text":
+        lid_bin = crispasr_bin.parent / "crispasr-lid"
+        if not lid_bin.exists():
+            die(f"crispasr-lid binary not found at {lid_bin}; build target crispasr-lid")
+        proc = _run_captured([str(lid_bin), "-m", str(lid_gguf), "--text", entry["lid_text"],
+                              "--quiet"], check=True, timeout=120, label="lid-text")
+        lines = [ln.split() for ln in proc.stdout.splitlines() if ln.strip()]
+        if not lines:
+            die(f"crispasr-lid produced no output; stderr tail: ...{proc.stderr[-400:]}")
+        return lines[0][0]
+    if mode != "audio":
+        die(f"unknown lid_mode {mode!r}")
+    host = next((b for b in manifest["backends"] if b["name"] == entry["lid_host_asr"]), None)
+    if host is None:
+        die(f"lid_host_asr={entry['lid_host_asr']!r} not in manifest.backends")
+    host_gguf = hf_download(host["gguf"]["repo"], host["gguf"]["file"],
+                            host["gguf"]["revision"], work_dir)
+    for companion in host["gguf"].get("companion_files", []):
+        c_local = hf_download(host["gguf"]["repo"], companion, host["gguf"]["revision"], work_dir)
+        dest = host_gguf.parent / Path(companion).name
+        if not dest.exists():
+            shutil.copy2(c_local, dest)
+    proc = _run_captured([str(crispasr_bin), "--backend", host["backend_id"], "-m", str(host_gguf),
+                          "-f", str(sample), "-dl", "--lid-backend", entry["lid_backend"],
+                          "--lid-model", str(lid_gguf)],
+                         check=True, timeout=600, label="lid-audio")
+    found = re.findall(r"LID -> language = '([^']*)' \(([^,]*),", proc.stderr)
+    if not found:
+        die(f"no 'LID -> language' line from --lid-backend {entry['lid_backend']}; "
+            f"stderr tail: ...{proc.stderr[-400:]}")
+    label, source = found[-1]
+    print(f"  lid source: {source}")
+    return label
+
 def parse_diff_stdout(stdout: str) -> dict[str, float]:
     """Parse a crispasr-diff stdout blob into {stage_name: cos_min}.
 
@@ -562,10 +613,14 @@ def regression_for(name: str, manifest: dict, work_dir: Path,
             raise ValueError("Transcript provenance requires an independent reference dump")
         verify_transcript_reference(entry, ref_local, sample, work_dir)
 
-    # ----- 1. Transcript -----
-    print(f"\n[transcript] {name}")
-    actual = run_transcript(crispasr_bin, gguf_local, sample,
-                            srt=entry.get("transcript_format") == "srt")
+    # ----- 1. Transcript (or language-ID label for `lid_mode` entries) -----
+    if entry.get("lid_mode"):
+        print(f"\n[lid] {name}")
+        actual = run_lid(entry, manifest, gguf_local, sample, work_dir, crispasr_bin)
+    else:
+        print(f"\n[transcript] {name}")
+        actual = run_transcript(crispasr_bin, gguf_local, sample,
+                                srt=entry.get("transcript_format") == "srt")
     # WER-normalised gate, shared with the Kaggle suite; see transcript_gate.
     ok, lines = transcript_gate(entry, actual)
     for ln in lines:
@@ -751,12 +806,13 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
         syn_cmd += ["--codec-model", str(codec_local)]
     syn_cmd += list(entry.get("tts_extra_args", []))
     try:
-        proc = _run_captured(syn_cmd, check=False, timeout=300, label="tts-synth")
+        tts_timeout = int(entry.get("tts_timeout_s", 300))
+        proc = _run_captured(syn_cmd, check=False, timeout=tts_timeout, label="tts-synth")
     except subprocess.TimeoutExpired:
         _preserve_tts_wav(name, out_wav)
         if advisory:
-            return advisory_skip("TTS synth timed out after 300 s")
-        die(f"{name}: TTS synth timed out after 300 s")
+            return advisory_skip(f"TTS synth timed out after {tts_timeout} s")
+        die(f"{name}: TTS synth timed out after {tts_timeout} s")
     if proc.returncode != 0:
         _preserve_tts_wav(name, out_wav)
         if advisory:

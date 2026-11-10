@@ -482,7 +482,10 @@
       "sample": "samples/jfk.wav",
       "_sample_note": "Audio arg is ignored by the lid-cld3 backend; the LID_TEXT env var carries the actual input. samples/jfk.wav is a placeholder so the existing rebake harness doesn't need a special-case for text-LID backends.",
       "expected_transcript": "en",
-      "expected_transcript_source": "captured 2026-06-15 VPS — LID output on JFK audio/text (expected: en)"
+      "expected_transcript_source": "captured 2026-06-15 VPS — LID output on JFK audio/text (expected: en)",
+      "lid_mode": "text",
+      "lid_text": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "_lid_note": "Text LID via crispasr-lid --text lid_text; gates the top-1 label."
     },
     {
       "name": "titanet-large",
@@ -895,7 +898,11 @@
       "sample": "samples/jfk.wav",
       "expected_transcript": "en",
       "expected_transcript_source": "captured 2026-06-15 VPS — LID output on JFK audio/text (expected: en)",
-      "skip_diff": true
+      "skip_diff": true,
+      "lid_mode": "audio",
+      "lid_backend": "firered",
+      "lid_host_asr": "moonshine-tiny",
+      "_lid_note": "Audio LID: run_one.py runs the pinned moonshine-tiny host with -dl --lid-backend firered --lid-model <this gguf> and gates the 'LID -> language' label (moonshine has no native LID, so the label comes from this model)."
     },
     {
       "name": "silero-lid-lang95",
@@ -909,7 +916,11 @@
       "sample": "samples/jfk.wav",
       "expected_transcript": "en",
       "expected_transcript_source": "captured 2026-06-15 VPS — LID output on JFK audio/text (expected: en)",
-      "skip_diff": true
+      "skip_diff": true,
+      "lid_mode": "audio",
+      "lid_backend": "silero",
+      "lid_host_asr": "moonshine-tiny",
+      "_lid_note": "Audio LID: run_one.py runs the pinned moonshine-tiny host with -dl --lid-backend silero --lid-model <this gguf> and gates the 'LID -> language' label (moonshine has no native LID, so the label comes from this model)."
     },
     {
       "name": "fasttext-lid176",
@@ -925,7 +936,10 @@
       "expected_transcript_source": "captured 2026-06-15 VPS — LID output on JFK audio/text (expected: en)",
       "skip_diff": true,
       "source_model": "facebook/fasttext-language-identification",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "lid_mode": "text",
+      "lid_text": "And so my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
+      "_lid_note": "Text LID via crispasr-lid --text lid_text; gates the top-1 label."
     },
     {
       "name": "ecapa-lid-107",
@@ -941,7 +955,11 @@
       "expected_transcript_source": "captured 2026-06-15 VPS — LID output on JFK audio/text (expected: en)",
       "skip_diff": true,
       "source_model": "speechbrain/lang-id-voxlingua107-ecapa",
-      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from."
+      "source_model_note": "Added 2026-09-07 to unblock the Kaggle rebake, which refused every entry with 'manifest entry has no source_model'. Taken from this model's own published GGUF card in hf_readmes/ where one exists, otherwise HEADed against the HF API before being written — a fuzzy card match had produced granite-speech-4.1-2b -> granite-speech-3.2-8b, which is wrong and was caught by printing which card each id came from.",
+      "lid_mode": "audio",
+      "lid_backend": "ecapa",
+      "lid_host_asr": "moonshine-tiny",
+      "_lid_note": "Audio LID: run_one.py runs the pinned moonshine-tiny host with -dl --lid-backend ecapa --lid-model <this gguf> and gates the 'LID -> language' label (moonshine has no native LID, so the label comes from this model)."
     },
     {
       "name": "moss-audio-4b-instruct",
@@ -1276,7 +1294,16 @@
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.15,
       "wer_max_note": "F5-TTS DiT flow-matching. Needs reference audio for voice cloning; without --voice uses built-in default.",
-      "voice_preset": "default"
+      "voice": {
+        "repo": "cstr/crispasr-regression-fixtures",
+        "revision": "98ba026354b6c4e6aed93550208e9c6f95e83df7",
+        "file": "pocket-tts/ref_voice_kokoro_af_heart.wav"
+      },
+      "voice_note": "Synthetic kokoro af_heart reference (not a real person), shared with pocket-tts-en; --i-have-rights satisfied synthetically.",
+      "tts_extra_args": [
+        "--i-have-rights"
+      ],
+      "tts_timeout_s": 1200
     },
     {
       "name": "parler-tts-mini-v1.1",
@@ -1291,7 +1318,7 @@
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.2,
       "wer_max_note": "Parler TTS Mini v1.1 (~900M). T5 encoder + DAC decoder. Prompt-conditioned voice via --instruct.",
-      "voice_preset": "default"
+      "no_voice": true
     },
     {
       "name": "dia-1.6b",
@@ -1307,7 +1334,13 @@
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.2,
       "wer_max_note": "Dia 1.6B dialogue TTS with CFG. 20% WER headroom for stochastic decode.",
-      "voice_preset": "default"
+      "voice_preset": "default",
+      "codec": {
+        "repo": "cstr/dia-1.6b-GGUF",
+        "revision": "3233fbcb32be47761d2e736857b6d1a075b9ba7e",
+        "file": "dac-44khz.gguf"
+      },
+      "tts_timeout_s": 900
     },
     {
       "name": "cosyvoice3-0.5b",
@@ -1329,7 +1362,16 @@
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
       "wer_max_note": "CosyVoice3 needs five companion GGUFs beside the LLM (flow/hift/campplus/s3tok/voices); without them init fails with 'no flow GGUF found'.",
-      "voice_preset": "default"
+      "voice": {
+        "repo": "cstr/crispasr-regression-fixtures",
+        "revision": "98ba026354b6c4e6aed93550208e9c6f95e83df7",
+        "file": "pocket-tts/ref_voice_kokoro_af_heart.wav"
+      },
+      "voice_note": "Synthetic kokoro af_heart reference (not a real person), shared with pocket-tts-en; --i-have-rights satisfied synthetically.",
+      "tts_extra_args": [
+        "--i-have-rights"
+      ],
+      "tts_timeout_s": 900
     },
     {
       "name": "fastpitch-en",
@@ -1359,7 +1401,7 @@
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
       "wer_max_note": "Initial placeholder — melotts roundtrip WER not yet measured.",
-      "voice_preset": "default"
+      "no_voice": true
     },
     {
       "name": "orpheus-3b-0.1-ft",
@@ -1374,7 +1416,13 @@
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
       "wer_max_note": "Initial placeholder — orpheus roundtrip WER not yet measured.",
-      "voice_preset": "default"
+      "voice_preset": "tara",
+      "codec": {
+        "repo": "cstr/snac-24khz-GGUF",
+        "revision": "23441bacb71a70ad8962262e1ad7fae482d3c296",
+        "file": "snac-24khz.gguf"
+      },
+      "tts_timeout_s": 900
     },
     {
       "name": "outetts-0.3-1b",
@@ -1383,14 +1431,18 @@
         "repo": "cstr/outetts-0.3-1b-GGUF",
         "revision": "fdd6560ab48bb197ad4a2b92d2a1fd93ac115f05",
         "file": "outetts-0.3-1b-q4_k.gguf",
-        "approx_size_mb": 801,
-        "_companion_note": "Also needs wavtokenizer-decoder-f16.gguf"
+        "approx_size_mb": 801
       },
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
       "wer_max_note": "Initial placeholder — outetts roundtrip WER not yet measured.",
-      "voice_preset": "default"
+      "voice_preset": "default",
+      "codec": {
+        "repo": "cstr/outetts-0.3-1b-GGUF",
+        "revision": "fdd6560ab48bb197ad4a2b92d2a1fd93ac115f05",
+        "file": "wavtokenizer-decoder-f16.gguf"
+      }
     },
     {
       "name": "tada-tts-3b-ml",
@@ -1405,7 +1457,13 @@
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
       "wer_max_note": "Initial placeholder — tada-tts roundtrip WER not yet measured.",
-      "voice_preset": "default"
+      "voice_preset": "default",
+      "codec": {
+        "repo": "cstr/tada-tts-3b-ml-GGUF",
+        "revision": "b41c671e7fdcb69888b61273ea5ca840c88183b5",
+        "file": "tada-codec-f16.gguf"
+      },
+      "tts_timeout_s": 900
     },
     {
       "name": "tada-codec",
@@ -1437,7 +1495,13 @@
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
       "wer_max_note": "Initial placeholder — zonos roundtrip WER not yet measured.",
-      "voice_preset": "default"
+      "voice_preset": "default",
+      "codec": {
+        "repo": "cstr/dac-44khz-GGUF",
+        "revision": "2a20efd49e6596e1885a248dae9e112af2dd8ba7",
+        "file": "dac-44khz-f16.gguf"
+      },
+      "tts_timeout_s": 900
     },
     {
       "name": "voxcpm2-tts-2b",
@@ -1470,7 +1534,16 @@
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
       "wer_max_note": "IndexTTS-1.5 GPT + BigVGAN. Needs reference WAV for voice cloning.",
-      "voice_preset": "default"
+      "voice": {
+        "repo": "cstr/crispasr-regression-fixtures",
+        "revision": "98ba026354b6c4e6aed93550208e9c6f95e83df7",
+        "file": "pocket-tts/ref_voice_kokoro_af_heart.wav"
+      },
+      "voice_note": "Synthetic kokoro af_heart reference (not a real person), shared with pocket-tts-en; --i-have-rights satisfied synthetically.",
+      "tts_extra_args": [
+        "--i-have-rights"
+      ],
+      "tts_timeout_s": 900
     },
     {
       "name": "chatterbox-turbo-s3gen",
@@ -1478,15 +1551,20 @@
       "gguf": {
         "repo": "cstr/chatterbox-turbo-GGUF",
         "revision": "1c7e7f8886aed773fb12970edf4d4f65a67d4b85",
-        "file": "chatterbox-turbo-s3gen-f16-regen.gguf",
-        "approx_size_mb": 627,
-        "_companion_note": "Also needs chatterbox-turbo-t3 model (auto-located)."
+        "file": "chatterbox-turbo-t3-q8_0.gguf",
+        "approx_size_mb": 980
       },
       "tts_phrase": "The quick brown fox jumps over the lazy dog",
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
       "wer_max_note": "ChatterboxTurbo meanflow TTS. Uses built-in voice.",
-      "voice_preset": "default"
+      "codec": {
+        "repo": "cstr/chatterbox-turbo-GGUF",
+        "revision": "1c7e7f8886aed773fb12970edf4d4f65a67d4b85",
+        "file": "chatterbox-turbo-s3gen-f16-regen.gguf"
+      },
+      "no_voice": true,
+      "_model_note": "-m is the T3 model; the regenerated s3gen is passed via --codec-model (previously -m pointed at s3gen and T3 load failed)."
     }
   ],
   "align_backends_note": "Forced aligners run `crispasr --align-only` on the pinned GGUF and compare the JSON word alignment with expected_words: identical normalized words, every start/end within tolerance_s. expected_source names where the expected words came from; an upstream reference is preferred over a native capture. Qwen3 timestamps are 80 ms classes, so 0.081 s allows one class of cross-CPU drift.",
