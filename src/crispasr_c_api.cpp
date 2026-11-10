@@ -7095,7 +7095,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         // (default true).
         const std::string src = lang_set ? lang : (!s->source_language.empty() ? s->source_language : "en");
         const std::string tgt = !s->target_language.empty() ? s->target_language : src;
-        if (s->beam_size > 1)
+        if (s->beam_size_explicit)
             canary_set_beam_size(s->canary_ctx, s->beam_size);
         canary_set_max_new_tokens(s->canary_ctx, s->max_new_tokens); // #292
         // Same routing as the CLI adapter: canary_transcribe_streamed follows
@@ -7133,7 +7133,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
 #endif
 #ifdef CA_HAVE_CANARY_QWEN
     if (s->backend == "canary-qwen" && s->canary_qwen_ctx) {
-        if (s->beam_size > 1)
+        if (s->beam_size_explicit)
             canary_qwen_set_beam_size(s->canary_qwen_ctx, s->beam_size);
         canary_qwen_set_max_new_tokens(s->canary_qwen_ctx, s->max_new_tokens); // #292
         canary_qwen_result* cqr = canary_qwen_transcribe_ex(s->canary_qwen_ctx, pcm, n_samples);
@@ -7538,7 +7538,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         const std::string src = lang_set ? lang : (!s->source_language.empty() ? s->source_language : "en");
         cohere_set_max_new_tokens(s->cohere_ctx, s->max_new_tokens);
         cohere_set_frequency_penalty(s->cohere_ctx, s->frequency_penalty);
-        if (s->beam_size > 1)
+        if (s->beam_size_explicit)
             cohere_set_beam_size(s->cohere_ctx, s->beam_size);
         cohere_result* cr = cohere_transcribe_ex(s->cohere_ctx, pcm, n_samples, src.c_str(), 0);
         if (!cr) {
@@ -8133,7 +8133,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
     if ((s->backend == "glm-asr" || s->backend == "glmasr" || s->backend == "glm" || s->backend == "glm_asr") &&
         s->glmasr_ctx) {
         // PLAN §90: session beam_size → glm-asr's per-context setter.
-        if (s->beam_size > 1) {
+        if (s->beam_size_explicit) {
             glm_asr_set_beam_size((glm_asr_context*)s->glmasr_ctx, s->beam_size);
         }
         // ask > language instruction > default (mirrors crispasr_backend_glm_asr.cpp).
@@ -8201,7 +8201,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         // per-context setter so session-API consumers (CrisperWeaver's
         // worker pool, Rust/Node bindings) get the same beam search
         // the CLI does. 1 = greedy = no-op at the backend level.
-        if (s->beam_size > 1) {
+        if (s->beam_size_explicit) {
             kyutai_stt_set_beam_size((kyutai_stt_context*)s->kyutai_ctx, s->beam_size);
         }
         // Forward the caller's PCM rate so kyutai skips 16k→24k resample
@@ -8244,7 +8244,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
 #ifdef CA_HAVE_FIRERED
     if ((s->backend == "firered-asr" || s->backend == "firered") && s->firered_ctx) {
         // PLAN §90: session beam_size → firered's per-context setter.
-        if (s->beam_size > 1) {
+        if (s->beam_size_explicit) {
             firered_asr_set_beam_size((firered_asr_context*)s->firered_ctx, s->beam_size);
         }
         firered_asr_result* fr =
@@ -8325,7 +8325,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
 #ifdef CA_HAVE_MOONSHINE
     if (s->backend == "moonshine" && s->moonshine_ctx) {
         // PLAN §90: session beam_size → moonshine's per-context setter.
-        if (s->beam_size > 1) {
+        if (s->beam_size_explicit) {
             moonshine_set_beam_size((moonshine_context*)s->moonshine_ctx, s->beam_size);
         }
         // #292: forward the session's max_new_tokens (0 keeps the 194 default).
@@ -8359,7 +8359,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         // PLAN §90: session beam_size → omniasr's per-context setter.
         // Effective only on the LLM variant (CTC has no beam path);
         // the CTC fall-through below silently ignores the setting.
-        if (s->beam_size > 1) {
+        if (s->beam_size_explicit) {
             omniasr_set_beam_size((omniasr_context*)s->omniasr_ctx, s->beam_size);
         }
         // LLM variant produces per-token probs; CTC variant returns nullptr
@@ -8431,7 +8431,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
 #endif
 #ifdef CA_HAVE_FUNASR
         if (!text && s->backend == "funasr" && s->funasr_ctx) {
-            if (s->beam_size > 1)
+            if (s->beam_size_explicit)
                 funasr_set_beam_size(s->funasr_ctx, s->beam_size);
             if (!s->source_language.empty())
                 funasr_set_language(s->funasr_ctx, s->source_language.c_str());
@@ -8468,6 +8468,8 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         if (!text && s->backend == "sensevoice" && s->sensevoice_ctx) {
             if (s->beam_size > 1)
                 sensevoice_set_beam_size(s->sensevoice_ctx, s->beam_size, /*gamma=*/2.3f);
+            else if (s->beam_size_explicit)
+                sensevoice_set_beam_size(s->sensevoice_ctx, 1, /*gamma=*/0.0f);
             const char* lang = s->source_language.empty() ? nullptr : s->source_language.c_str();
             text = sensevoice_transcribe(s->sensevoice_ctx, pcm, n_samples, lang, /*use_itn=*/true);
             need_free = true;
@@ -8488,7 +8490,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
         }
 #endif
         if (!text && s->backend == "moonshine-streaming" && s->moonshine_streaming_ctx) {
-            if (s->beam_size > 1)
+            if (s->beam_size_explicit)
                 moonshine_streaming_set_beam_size((moonshine_streaming_context*)s->moonshine_streaming_ctx,
                                                   s->beam_size);
             moonshine_streaming_result* msr = moonshine_streaming_transcribe_with_probs(
@@ -8517,7 +8519,7 @@ static crispasr_session_result* transcribe_single(crispasr_session* s, const flo
 #endif
 #ifdef CA_HAVE_GEMMA4_E2B
         if (!text && s->backend == "gemma4-e2b" && s->gemma4_e2b_ctx) {
-            if (s->beam_size > 1)
+            if (s->beam_size_explicit)
                 gemma4_e2b_set_beam_size((gemma4_e2b_context*)s->gemma4_e2b_ctx, s->beam_size);
             gemma4_e2b_set_ask((gemma4_e2b_context*)s->gemma4_e2b_ctx, s->ask.empty() ? nullptr : s->ask.c_str());
             const std::string src = lang_set ? lang : (!s->source_language.empty() ? s->source_language : "");
@@ -11689,7 +11691,7 @@ CA_EXPORT char* crispasr_session_translate_text(crispasr_session* s, const char*
 #endif
 #ifdef CA_HAVE_T5_TRANSLATE
     if (s->t5_translate_ctx) {
-        if (s->beam_size > 1)
+        if (s->beam_size_explicit)
             t5_translate_set_beam_size(s->t5_translate_ctx, s->beam_size);
         // MADLAD-400 picks the target language from a "<2xx> " tag
         // prepended to the source (t5_translate expects the caller to do
