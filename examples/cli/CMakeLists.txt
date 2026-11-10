@@ -361,6 +361,19 @@ target_link_libraries(mimo-tokenizer-smoke PRIVATE
     ${CMAKE_THREAD_LIBS_INIT}
 )
 
+# crispasr-model-probe — JSON dump of non-text model outputs (titanet speaker
+# embedding, MiMo tokenizer RVQ codes) for tests/regression/run_one.py `probe`.
+# ---------------------------------------------------------------------------
+add_executable(crispasr-model-probe crispasr_model_probe.cpp)
+target_link_libraries(crispasr-model-probe PRIVATE
+    common
+    crispasr-lib
+    mimo_tokenizer
+    titanet
+    ${FFMPEG_LIBRARIES}
+    ${CMAKE_THREAD_LIBS_INIT}
+)
+
 # 4B MossTTSLocal (#249) — P5-lite runtime smoke test (generate_codes end-to-end).
 if (TARGET moss_tts_local)
     add_executable(moss-tts-local-smoke moss_tts_local_smoke.cpp)

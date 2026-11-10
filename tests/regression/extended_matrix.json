@@ -32,13 +32,13 @@
     "f5-tts-v1-base",
     "indextts-1.5",
     "tada-tts-3b-ml",
-    "parler-tts-mini-v1.1"
+    "parler-tts-mini-v1.1",
+    "titanet-large",
+    "mimo-audio-tokenizer",
+    "mimo-asr",
+    "kugelaudio-0-open"
   ],
   "_excluded": {
-    "mimo-asr": "needs the --codec-model mimo-tokenizer companion, which run_one.py does not pass (exit 13)",
-    "mimo-audio-tokenizer": "outputs RVQ codes, not a transcript; run_one.py has no codes-hash check",
-    "titanet-large": "outputs a speaker embedding; run_one.py has no embedding check (exit 3)",
-    "kugelaudio-0-open": "TTS-only; manifest pins a stub sentence instead of a TTS roundtrip entry",
-    "tada-codec": "advisory entry (codec, not TTS): it can never fail, so it adds no signal; covered via tada-tts-3b-ml's --codec-model"
+    "tada-codec": "covered by tada-tts-3b-ml, which decodes through the same pinned tada-codec-f16.gguf via --codec-model; tada-ref.gguf in the repo is a voice prompt, not a reference dump, so no standalone stage diff is possible"
   }
 }

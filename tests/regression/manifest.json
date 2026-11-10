@@ -447,7 +447,16 @@
       },
       "sample": "samples/jfk.wav",
       "expected_transcript": "ANd so, my fellow Americans, ask not what your country can do for you.. ASk what you can do for your country..",
-      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU ($KAGGLE_ACCOUNT) with --codec-model mimo-tokenizer-q4_k"
+      "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU ($KAGGLE_ACCOUNT) with --codec-model mimo-tokenizer-q4_k",
+      "asr_extra_files": [
+        {
+          "repo": "cstr/mimo-tokenizer-GGUF",
+          "revision": "fa380f4c49a8e8c62c02c00d0da5e263fc5b0dcf",
+          "file": "mimo-tokenizer-q4_k.gguf",
+          "arg": "--codec-model"
+        }
+      ],
+      "_asr_extra_files_note": "The expected transcript was captured with --codec-model mimo-tokenizer-q4_k; without it the CLI exits 13 (tokenizer not found)."
     },
     {
       "name": "mimo-audio-tokenizer",
@@ -464,7 +473,10 @@
       },
       "sample": "samples/jfk.wav",
       "expected_transcript": "RVQ codes output — regression by codes-hash, not transcript",
-      "expected_transcript_source": "tokenizer outputs 8-channel RVQ codes; transcript field N/A"
+      "expected_transcript_source": "tokenizer outputs 8-channel RVQ codes; transcript field N/A",
+      "probe": "codes",
+      "probe_match_min": 0.99,
+      "_probe_note": "crispasr-model-probe codes prints the 8-channel RVQ codes for the sample; gate exact-match fraction >= probe_match_min vs the pinned code file."
     },
     {
       "name": "lid-cld3-f16",
@@ -503,7 +515,10 @@
       "sample": "samples/jfk.wav",
       "_sample_note": "Single speaker utterance for embedding capture; the per-speaker 192-D vector is what gets dumped.",
       "expected_transcript": "192-dim speaker embedding (regression by L2 norm + cosine)",
-      "expected_transcript_source": "titanet outputs embeddings, not transcripts — regression uses embedding similarity"
+      "expected_transcript_source": "titanet outputs embeddings, not transcripts — regression uses embedding similarity",
+      "probe": "embedding",
+      "probe_cos_min": 0.999,
+      "_probe_note": "crispasr-model-probe embedding prints the 192-d TitaNet embedding of the sample; gate cosine >= probe_cos_min and |norm ratio-1| <= 1% vs probe_expected_embedding (captured on the GH ubuntu-latest CPU runner)."
     },
     {
       "name": "wav2vec2-xlsr-en",
@@ -973,20 +988,6 @@
       "sample": "samples/jfk.wav",
       "expected_transcript": "And so, my fellow Americans, ask not what your country can do for you, ask what you can do for your country.",
       "expected_transcript_source": "captured 2026-06-15 Kaggle T4 GPU ($KAGGLE_ACCOUNT) on samples/jfk.wav",
-      "skip_diff": true
-    },
-    {
-      "name": "kugelaudio-0-open",
-      "backend_id": "kugelaudio",
-      "gguf": {
-        "repo": "cstr/kugelaudio-0-open-GGUF",
-        "revision": "f3796df6f2ab4c690f01da696a29aa7bd96a9739",
-        "file": "kugelaudio-0-open-q4_k.gguf",
-        "approx_size_mb": 5445
-      },
-      "sample": "samples/jfk.wav",
-      "expected_transcript": "TTS/audio-understanding backend — not a direct ASR transcriber; use --tts or --prompt for audio QA",
-      "expected_transcript_source": "kugelaudio outputs a TTS-only message when invoked with -f; audio understanding needs --prompt",
       "skip_diff": true
     },
     {
@@ -1565,6 +1566,22 @@
       },
       "no_voice": true,
       "_model_note": "-m is the T3 model; the regenerated s3gen is passed via --codec-model (previously -m pointed at s3gen and T3 load failed)."
+    },
+    {
+      "name": "kugelaudio-0-open",
+      "backend_id": "kugelaudio",
+      "gguf": {
+        "repo": "cstr/kugelaudio-0-open-GGUF",
+        "revision": "f3796df6f2ab4c690f01da696a29aa7bd96a9739",
+        "file": "kugelaudio-0-open-q4_k.gguf",
+        "approx_size_mb": 5445
+      },
+      "tts_phrase": "The quick brown fox jumps over the lazy dog",
+      "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
+      "wer_max": 0.3,
+      "wer_max_note": "KugelAudio-0-open TTS roundtrip; was a stub ASR entry pinning a placeholder sentence.",
+      "no_voice": true,
+      "tts_timeout_s": 1800
     }
   ],
   "align_backends_note": "Forced aligners run `crispasr --align-only` on the pinned GGUF and compare the JSON word alignment with expected_words: identical normalized words, every start/end within tolerance_s. expected_source names where the expected words came from; an upstream reference is preferred over a native capture. Qwen3 timestamps are 80 ms classes, so 0.081 s allows one class of cross-CPU drift.",

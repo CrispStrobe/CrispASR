@@ -30,7 +30,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: regression-extended-${{ github.ref }}
+  group: regression-extended-${{ github.event_name == 'workflow_dispatch' && github.run_id || github.ref }}
   cancel-in-progress: false
 
 jobs:
@@ -108,14 +108,14 @@ jobs:
               libespeak-ng-dev espeak-ng pkg-config
           python -m pip install --upgrade pip
           pip install huggingface_hub numpy gguf
-      - name: Configure + build crispasr-cli, crispasr-diff and crispasr-lid
+      - name: Configure + build crispasr-cli, crispasr-diff, crispasr-lid and crispasr-model-probe
         run: |
           cmake -S . -B build-regression -G Ninja \
               -DCMAKE_BUILD_TYPE=Release \
               -DCRISPASR_BUILD_TESTS=OFF \
               -DCRISPASR_BUILD_EXAMPLES=ON \
               -DCRISPASR_BUILD_SERVER=OFF
-          cmake --build build-regression --target crispasr-cli crispasr-diff crispasr-lid -j"$(nproc)"
+          cmake --build build-regression --target crispasr-cli crispasr-diff crispasr-lid crispasr-model-probe -j"$(nproc)"
       - name: Run regression for ${{ matrix.backend }}
         env:
           BUILD_DIR: build-regression
