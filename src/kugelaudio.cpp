@@ -1270,23 +1270,13 @@ extern "C" float* kugelaudio_synthesize(struct kugelaudio_context* ctx, const ch
 
     bool has_voice = (ctx->n_voice_frames > 0 && !ctx->voice_acoustic_mean.empty());
 
-    // VibeVoice zero-tensor fallback (#248): when no voice GGUF is loaded,
-    // synthesize a 1-frame neutral embedding from an all-zeros VAE latent
-    // run through the acoustic_connector. The connector's bias terms +
-    // RMSNorm produce a non-trivial "default speaker" that the LM can
-    // condition on. Upstream VibeVoice does the same
-    // (modeling_vibevoice.py:~281, forward_speech_features zero-tensor path).
-    // Quality is lower than a real voice reference but produces intelligible
-    // speech instead of noise.
-    if (!has_voice) {
-        if (ctx->params.verbosity >= 1) {
-            fprintf(stderr, "kugelaudio: no voice loaded — using zero-tensor neutral fallback.\n"
-                            "  For better quality, pass --voice <voice.gguf>.\n");
-        }
-        int vae_dim = hp.vae_dim_acoustic;
-        ctx->voice_acoustic_mean.assign((size_t)vae_dim, 0.0f);
-        ctx->n_voice_frames = 1;
-        has_voice = true;
+    // No voice loaded: the upstream processor (kugelaudio_processor.py __call__)
+    // then omits the whole " Voice input:" section and the model picks its own
+    // speaker. An earlier zero-latent "neutral voice" frame (#248) has no
+    // upstream counterpart and conditions the LM on a fake speech frame.
+    if (!has_voice && ctx->params.verbosity >= 1) {
+        fprintf(stderr, "kugelaudio: no voice loaded — synthesizing without a voice prompt (upstream behaviour).\n"
+                        "  For a specific speaker, pass --voice <voice.gguf>.\n");
     }
 
     // Voice input section: " Voice input:\n Speaker 0:" + [VAE placeholders] + "\n"
@@ -1296,7 +1286,17 @@ extern "C" float* kugelaudio_synthesize(struct kugelaudio_context* ctx, const ch
         // The VAE placeholder tokens will be replaced with voice embeddings after tokenization
     }
 
-    std::string text_section = " Text input:\n Speaker 0: " + std::string(text) + "\n Speech output:\n";
+    // kugelaudio_processor.py: text.strip(), prefixed with "Speaker 0: " unless
+    // it already names a speaker.
+    std::string body(text);
+    {
+        const char* ws = " \t\r\n";
+        size_t b = body.find_first_not_of(ws), e = body.find_last_not_of(ws);
+        body = (b == std::string::npos) ? std::string() : body.substr(b, e - b + 1);
+    }
+    if (body.rfind("Speaker", 0) != 0)
+        body = "Speaker 0: " + body;
+    std::string text_section = " Text input:\n " + body + "\n Speech output:\n";
     std::string full_prompt = system_prompt + voice_section;
 
     // Tokenize the text parts
@@ -1342,6 +1342,14 @@ extern "C" float* kugelaudio_synthesize(struct kugelaudio_context* ctx, const ch
         ctx->kv_max_ctx = max_ctx;
     }
     ctx->kv_n_used = 0;
+    // Negative (CFG) stream: [speech_start] + every fed-back acoustic embedding,
+    // so it never needs more than max_new_tokens + 1 positions.
+    const bool use_cfg = ctx->params.cfg_scale != 1.0f;
+    if (use_cfg && !ctx->kv_neg_ctx) {
+        if (!alloc_kv_cache(ctx, ctx->params.max_new_tokens + 64, ctx->kv_neg_ctx, ctx->kv_neg_buf, ctx->kv_neg_k,
+                            ctx->kv_neg_v))
+            return nullptr;
+    }
 
     // ── 3. Embed prompt tokens ─────────────────────────────────────────
     ggml_tensor* tok_emb_w = G("model.language_model.embed_tokens.weight");
@@ -1393,9 +1401,14 @@ extern "C" float* kugelaudio_synthesize(struct kugelaudio_context* ctx, const ch
     if (has_voice && voice_token_start >= 0) {
         // Scale voice latents: (acoustic_mean + bias) * scaling
         int vae_dim = hp.vae_dim_acoustic;
+        // Upstream _process_speech_inputs samples the voice distribution:
+        // acoustic_mean + fix_std * randn, fix_std = acoustic_tokenizer.fix_std (0.5).
+        const float voice_fix_std = 0.5f;
         std::vector<float> scaled_voice(ctx->n_voice_frames * vae_dim);
+        crispasr::core::fill_gaussian_noise(scaled_voice.data(), (int)scaled_voice.size(), ctx->rng);
         for (int i = 0; i < ctx->n_voice_frames * vae_dim; i++) {
-            scaled_voice[i] = (ctx->voice_acoustic_mean[i] + hp.speech_bias_factor) * hp.speech_scaling_factor;
+            float a = ctx->voice_acoustic_mean[i] + voice_fix_std * scaled_voice[i];
+            scaled_voice[i] = (a + hp.speech_bias_factor) * hp.speech_scaling_factor;
         }
 
         // Run acoustic connector on each voice frame
@@ -1530,12 +1543,39 @@ extern "C" float* kugelaudio_synthesize(struct kugelaudio_context* ctx, const ch
     ctx->kv_n_used = n_prompt;
 
     // ── Generate tokens ────────────────────────────────────────────────
-    std::vector<std::vector<float>> audio_chunks;
     int max_tokens = ctx->params.max_new_tokens;
     int tts_steps = ctx->params.tts_steps;
-    float cfg_scale = ctx->params.cfg_scale;
-    (void)cfg_scale; // TODO: implement CFG with negative path
+    const float cfg_scale = ctx->params.cfg_scale;
     bool finished = false;
+    std::vector<float> all_latents; // unscaled acoustic latents, decoded once at the end
+
+    // Negative (unconditional) stream for classifier-free guidance, as in upstream
+    // KugelAudioForConditionalGenerationInference.generate(): it starts from the
+    // single speech_start token and is fed the same acoustic embeddings as the
+    // positive stream; its last hidden state at each diffusion step is the
+    // unconditional condition for the prediction head.
+    int neg_n_used = 0;
+    std::vector<float> neg_next_embed;
+    auto reset_neg_stream = [&]() -> bool {
+        neg_n_used = 0;
+        const int32_t ss = hp.speech_start_id;
+        return run_embed_lookup(&ss, 1, neg_next_embed);
+    };
+    auto run_neg_step = [&](std::vector<float>& neg_hidden) -> bool {
+        std::swap(ctx->kv_k, ctx->kv_neg_k);
+        std::swap(ctx->kv_v, ctx->kv_neg_v);
+        std::vector<float> neg_logits;
+        bool ok = run_lm_step(neg_next_embed.data(), 1, neg_n_used, neg_logits, &neg_hidden);
+        std::swap(ctx->kv_k, ctx->kv_neg_k);
+        std::swap(ctx->kv_v, ctx->kv_neg_v);
+        if (ok)
+            neg_n_used++;
+        return ok;
+    };
+    if (use_cfg && !reset_neg_stream()) {
+        fprintf(stderr, "kugelaudio: negative-path embedding failed\n");
+        return nullptr;
+    }
 
     for (int step = 0; step < max_tokens && !finished; step++) {
         int next_token = constrained_argmax(logits);
@@ -1548,8 +1588,19 @@ extern "C" float* kugelaudio_synthesize(struct kugelaudio_context* ctx, const ch
             break;
         }
 
+        if (next_token == hp.speech_start_id && use_cfg) {
+            // Upstream refreshes the negative cache back to just speech_start.
+            if (!reset_neg_stream())
+                break;
+        }
+
         if (next_token == hp.speech_diffusion_id) {
             KUGELAUDIO_TRACE("kugelaudio: diffusion path\n");
+            std::vector<float> neg_condition;
+            if (use_cfg && !run_neg_step(neg_condition)) {
+                fprintf(stderr, "kugelaudio: negative LM step failed\n");
+                break;
+            }
             // ── Run diffusion → decode → audio chunk ───────────────
             // Condition = last hidden state from LM
 
@@ -1572,19 +1623,24 @@ extern "C" float* kugelaudio_synthesize(struct kugelaudio_context* ctx, const ch
                 std::vector<float> t_sin(256);
                 compute_sinusoidal_embed(t_val, t_sin.data(), 256);
 
-                // Run prediction head
-                ggml_cgraph* pred_gf = build_pred_head_graph(ctx, 1);
+                // Run prediction head: [cond, uncond] as a batch of 2 under CFG
+                const int n_pred = use_cfg ? 2 : 1;
+                ggml_cgraph* pred_gf = build_pred_head_graph(ctx, n_pred);
                 if (!ggml_gallocr_alloc_graph(ctx->galloc, pred_gf)) {
                     fprintf(stderr, "kugelaudio: pred head alloc failed at step %d\n", si);
                     break;
                 }
 
-                ggml_backend_tensor_set(ggml_graph_get_tensor(pred_gf, "pred_noisy"), speech.data(), 0,
-                                        vae_dim * sizeof(float));
+                for (int b = 0; b < n_pred; b++)
+                    ggml_backend_tensor_set(ggml_graph_get_tensor(pred_gf, "pred_noisy"), speech.data(),
+                                            (size_t)b * vae_dim * sizeof(float), vae_dim * sizeof(float));
                 ggml_backend_tensor_set(ggml_graph_get_tensor(pred_gf, "pred_t_sin"), t_sin.data(), 0,
                                         256 * sizeof(float));
                 ggml_backend_tensor_set(ggml_graph_get_tensor(pred_gf, "pred_condition"), hidden_state.data(), 0,
                                         hp.d_lm * sizeof(float));
+                if (use_cfg)
+                    ggml_backend_tensor_set(ggml_graph_get_tensor(pred_gf, "pred_condition"), neg_condition.data(),
+                                            (size_t)hp.d_lm * sizeof(float), hp.d_lm * sizeof(float));
 
                 KUGELAUDIO_TRACE("kugelaudio: diff step %d pred compute...\n", si);
                 if (ggml_backend_graph_compute(ctx->backend, pred_gf) != GGML_STATUS_SUCCESS) {
@@ -1593,9 +1649,14 @@ extern "C" float* kugelaudio_synthesize(struct kugelaudio_context* ctx, const ch
                 }
                 KUGELAUDIO_TRACE("kugelaudio: diff step %d pred OK\n", si);
 
-                std::vector<float> v_pred(vae_dim);
-                ggml_backend_tensor_get(ggml_graph_get_tensor(pred_gf, "pred_output"), v_pred.data(), 0,
-                                        vae_dim * sizeof(float));
+                std::vector<float> v_both((size_t)vae_dim * n_pred);
+                ggml_backend_tensor_get(ggml_graph_get_tensor(pred_gf, "pred_output"), v_both.data(), 0,
+                                        v_both.size() * sizeof(float));
+                // CFG: v = uncond + cfg_scale * (cond - uncond)
+                std::vector<float> v_pred(v_both.begin(), v_both.begin() + vae_dim);
+                if (use_cfg)
+                    for (int i = 0; i < vae_dim; i++)
+                        v_pred[i] = v_both[vae_dim + i] + cfg_scale * (v_both[i] - v_both[vae_dim + i]);
 
                 // v-prediction → x0
                 int t_idx = sched.timesteps[si];
@@ -1620,45 +1681,17 @@ extern "C" float* kugelaudio_synthesize(struct kugelaudio_context* ctx, const ch
                 x0_prev = x0_cur;
             }
 
-            // Unscale latent: z_raw = z / scaling - bias
-            for (int i = 0; i < vae_dim; i++) {
-                speech[i] = speech[i] / hp.speech_scaling_factor - hp.speech_bias_factor;
-            }
-
-            // Run acoustic decoder
-            KUGELAUDIO_TRACE("kugelaudio: building VAE decoder graph...\n");
-            ggml_cgraph* dec_gf = build_vae_decoder_graph(ctx, 1);
-            KUGELAUDIO_TRACE("kugelaudio: VAE decoder graph built OK\n");
-            // The VAE decoder uses ggml_pad (causal-conv left-pad), which the
-            // Metal backend does not support — so this graph alone runs through
-            // ggml_backend_sched (which falls back to CPU for PAD), NOT the direct
-            // gallocr path used by the LM/diffusion graphs. The VAE has no §206
-            // weight-less-first-op issue (its first op is a conv), so the sched's
-            // cross-backend copies here are the safe, mid-graph kind.
-            ggml_backend_sched_reset(ctx->sched);
-            if (!ggml_backend_sched_alloc_graph(ctx->sched, dec_gf)) {
-                fprintf(stderr, "kugelaudio: decoder alloc failed\n");
-                break;
-            }
-            ggml_backend_tensor_set(ggml_graph_get_tensor(dec_gf, "dec_latent"), speech.data(), 0,
-                                    vae_dim * sizeof(float));
-            if (ggml_backend_sched_graph_compute(ctx->sched, dec_gf) != GGML_STATUS_SUCCESS) {
-                fprintf(stderr, "kugelaudio: decoder compute failed\n");
-                break;
-            }
-
-            ggml_tensor* audio_out = ggml_graph_get_tensor(dec_gf, "dec_audio");
-            int n_audio = (int)ggml_nelements(audio_out);
-            std::vector<float> chunk(n_audio);
-            ggml_backend_tensor_get(audio_out, chunk.data(), 0, n_audio * sizeof(float));
-            audio_chunks.push_back(std::move(chunk));
+            // Keep the latent; the acoustic decoder runs once over the whole
+            // sequence after generation. Its convolutions are all causal, so one
+            // full-sequence pass equals upstream's per-frame decode with the
+            // streaming conv cache. Decoding each frame alone (as before) zero-pads
+            // every frame's left context and garbles the audio.
+            all_latents.insert(all_latents.end(), speech.begin(), speech.end());
 
             // Feed back: acoustic_connector(latent) → embedding for next token
             // Scale latent back for connector
-            std::vector<float> scaled_latent(vae_dim);
-            for (int i = 0; i < vae_dim; i++) {
-                scaled_latent[i] = (speech[i] + hp.speech_bias_factor) * hp.speech_scaling_factor;
-            }
+            // The connector takes the latent as sampled (still in scaled space).
+            const std::vector<float>& scaled_latent = speech;
 
             // Run acoustic connector: FC1 → RMSNorm → FC2
             // Build a small graph for the connector
@@ -1697,6 +1730,8 @@ extern "C" float* kugelaudio_synthesize(struct kugelaudio_context* ctx, const ch
                                         hp.d_lm * sizeof(float));
 
                 // Run LM with the connector output as next token embedding
+                if (use_cfg)
+                    neg_next_embed = next_embed; // fed to the negative stream at the next diffusion step
                 if (!run_lm_step(next_embed.data(), 1, ctx->kv_n_used, logits, &hidden_state)) {
                     fprintf(stderr, "kugelaudio: LM step failed after diffusion\n");
                     break;
@@ -1719,25 +1754,40 @@ extern "C" float* kugelaudio_synthesize(struct kugelaudio_context* ctx, const ch
         }
     }
 
-    // ── 5. Concatenate audio chunks ────────────────────────────────────
-    if (audio_chunks.empty()) {
+    // ── 5. Decode all latents through the causal acoustic decoder ──────
+    if (all_latents.empty()) {
         fprintf(stderr, "kugelaudio: no audio generated\n");
         return nullptr;
     }
+    const int vae_dim = hp.vae_dim_acoustic;
+    const int n_frames = (int)(all_latents.size() / vae_dim);
+    // Unscale: z_raw = z / scaling - bias
+    for (float& v : all_latents)
+        v = v / hp.speech_scaling_factor - hp.speech_bias_factor;
 
-    int total_samples = 0;
-    for (const auto& c : audio_chunks)
-        total_samples += (int)c.size();
-
-    float* output = (float*)malloc(total_samples * sizeof(float));
+    // The VAE decoder uses ggml_pad (causal-conv left-pad), which the Metal
+    // backend does not support — so this graph runs through ggml_backend_sched
+    // (which falls back to CPU for PAD), NOT the direct gallocr path used by the
+    // LM/diffusion graphs. Its first op is a conv, so there is no §206
+    // weight-less-first-op issue.
+    ggml_cgraph* dec_gf = build_vae_decoder_graph(ctx, n_frames);
+    ggml_backend_sched_reset(ctx->sched);
+    if (!ggml_backend_sched_alloc_graph(ctx->sched, dec_gf)) {
+        fprintf(stderr, "kugelaudio: decoder alloc failed\n");
+        return nullptr;
+    }
+    ggml_backend_tensor_set(ggml_graph_get_tensor(dec_gf, "dec_latent"), all_latents.data(), 0,
+                            all_latents.size() * sizeof(float));
+    if (ggml_backend_sched_graph_compute(ctx->sched, dec_gf) != GGML_STATUS_SUCCESS) {
+        fprintf(stderr, "kugelaudio: decoder compute failed\n");
+        return nullptr;
+    }
+    ggml_tensor* audio_out = ggml_graph_get_tensor(dec_gf, "dec_audio");
+    const int total_samples = (int)ggml_nelements(audio_out);
+    float* output = (float*)malloc((size_t)total_samples * sizeof(float));
     if (!output)
         return nullptr;
-
-    int offset = 0;
-    for (const auto& c : audio_chunks) {
-        memcpy(output + offset, c.data(), c.size() * sizeof(float));
-        offset += (int)c.size();
-    }
+    ggml_backend_tensor_get(audio_out, output, 0, (size_t)total_samples * sizeof(float));
 
     // Normalize to prevent clipping
     float max_val = 0.0f;
