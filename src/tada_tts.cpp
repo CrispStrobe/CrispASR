@@ -2647,6 +2647,16 @@ float* tada_synthesize(struct tada_context* ctx, const char* text, int* out_n_sa
         return nullptr;
     *out_n_samples = 0;
 
+    // Upstream TadaForCausalLM.generate() takes a mandatory `prompt`
+    // (EncoderOutput of a reference clip); there is no unprompted mode. Without
+    // one the talker has no acoustic context and emits near-silence, which used
+    // to "succeed" and hand back an empty-sounding WAV.
+    if (ctx->n_prompt <= 0) {
+        fprintf(stderr, "tada: no voice prompt loaded - TADA cannot synthesize without one. Load a tada-ref*.gguf "
+                        "(--voice, or place tada-ref.gguf next to the model) or build one with --make-ref.\n");
+        return nullptr;
+    }
+
     const auto& hp = ctx->hp;
     const int ad = (int)hp.acoustic_dim;
     const int lat = (int)hp.fm_latent;

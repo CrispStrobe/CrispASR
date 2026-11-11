@@ -89,11 +89,11 @@ static std::string discover_prompt(const std::string& model_path, const std::str
     return "";
 }
 
-static std::string tada_lang_ref_url(const std::string& backend, const std::string& lang) {
+static std::string tada_ref_url(const std::string& backend, const std::string& ref_name) {
     const std::string base = (backend == "tada-1b" || backend == "tada-tts-1b")
                                  ? "https://huggingface.co/cstr/tada-tts-1b-GGUF/resolve/main/"
                                  : "https://huggingface.co/cstr/tada-tts-3b-ml-GGUF/resolve/main/";
-    return base + "tada-ref-" + lang + ".gguf";
+    return base + ref_name;
 }
 
 class TadaBackend : public CrispasrBackend {
@@ -245,22 +245,26 @@ public:
             // file; this fallback finds refs that landed in the shared cache dir
             // (e.g. from a previous --auto-download run) and downloads missing ones.
             if (prompt_path.empty()) {
+                // English (and unknown languages) use the repo's default
+                // tada-ref.gguf; TADA cannot synthesize without a prompt.
                 const std::string lang = tada_prompt_lang_suffix(p.language);
-                if (!lang.empty()) {
-                    const std::string ref_name = "tada-ref-" + lang + ".gguf";
+                {
+                    const std::string ref_name = lang.empty() ? "tada-ref.gguf" : "tada-ref-" + lang + ".gguf";
                     const std::string cached = crispasr_cache::dir(p.cache_dir) + "/" + ref_name;
                     if (crispasr_cache::file_present(cached)) {
                         prompt_path = cached;
                     } else if (p.auto_download) {
                         prompt_path = crispasr_managed_download(
-                            ref_name, tada_lang_ref_url(p.backend, lang),
-                            "CC-BY-4.0 (FLEURS voice reference; see https://huggingface.co/datasets/google/fleurs)",
+                            ref_name, tada_ref_url(p.backend, ref_name),
+                            lang.empty() ? "public domain (JFK sample clip; the repo's default voice reference)"
+                                         : "CC-BY-4.0 (FLEURS voice reference; see "
+                                           "https://huggingface.co/datasets/google/fleurs)",
                             p.no_prints, "crispasr[tada]", p.cache_dir, p.accept_license);
                     } else if (!p.no_prints) {
                         fprintf(stderr,
                                 "crispasr[tada]: no voice reference for language '%s' found. "
-                                "Add --auto-download to fetch it, or pass --voice tada-ref-%s.gguf.\n",
-                                p.language.c_str(), lang.c_str());
+                                "Add --auto-download to fetch it, or pass --voice %s.\n",
+                                p.language.c_str(), ref_name.c_str());
                     }
                 }
             }
