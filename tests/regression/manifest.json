@@ -1314,7 +1314,7 @@
       "backend_id": "parler-tts",
       "gguf": {
         "repo": "cstr/parler-tts-mini-v1.1-GGUF",
-        "revision": "28d560d8d3a9a0ac0e603322094d306bdd5b573e",
+        "revision": "6dca98a243dd8464c819491504544957be1d9e17",
         "file": "parler-tts-mini-v1.1-q8_0.gguf",
         "approx_size_mb": 1000
       },
@@ -1461,7 +1461,12 @@
       "roundtrip_asr_backend": "parakeet-tdt-0.6b-en",
       "wer_max": 0.3,
       "wer_max_note": "Initial placeholder — tada-tts roundtrip WER not yet measured.",
-      "voice_preset": "default",
+      "voice": {
+        "repo": "cstr/tada-tts-3b-ml-GGUF",
+        "revision": "b41c671e7fdcb69888b61273ea5ca840c88183b5",
+        "file": "tada-ref.gguf"
+      },
+      "voice_note": "Was `voice_preset: default`, which the tada CLI treats as 'discover a ref next to the model'; the harness downloads only the model, so none was found and TADA ran with NO prompt (upstream generate() has no unprompted mode) -> near-silence, empty transcript, WER 1.0 (run 42820528553). Pin the repo's default JFK tada-ref.gguf. tada_synthesize now refuses to run without a prompt.",
       "codec": {
         "repo": "cstr/tada-tts-3b-ml-GGUF",
         "revision": "b41c671e7fdcb69888b61273ea5ca840c88183b5",

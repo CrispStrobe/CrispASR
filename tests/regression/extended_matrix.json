@@ -32,13 +32,13 @@
     "indextts-1.5",
     "titanet-large",
     "mimo-audio-tokenizer",
-    "mimo-asr"
+    "mimo-asr",
+    "kugelaudio-0-open",
+    "tada-tts-3b-ml",
+    "parler-tts-mini-v1.1"
   ],
   "_excluded": {
     "tada-codec": "covered by tada-tts-3b-ml, which decodes through the same pinned tada-codec-f16.gguf via --codec-model; tada-ref.gguf in the repo is a voice prompt, not a reference dump, so no standalone stage diff is possible",
-    "kugelaudio-0-open": "TTS roundtrip runs but output is largely garbled (run 42821278216: WER 1.33, 'Shit fellow, the book is going to be frown fox jumps over the daisy card') - real quality issue to investigate before gating",
-    "f5-tts-v1-base": "synthesis of one sentence exceeds 1200 s on the 4-vCPU GH runner (run 42820528553) - CPU performance issue, not a correctness verdict",
-    "tada-tts-3b-ml": "synthesis succeeds with the pinned tada-codec via --codec-model but the roundtrip transcript is empty (WER 1.0, run 42820528553) - real output problem to investigate",
-    "parler-tts-mini-v1.1": "roundtrip garbled with or without --voice (no_voice: 'a quick brown fuck star of a little lane dog', WER 0.78 vs max 0.2, run 42820528553) - real quality problem to investigate"
+    "f5-tts-v1-base": "synthesis of one sentence exceeds 1200 s on the 4-vCPU GH runner (run 42820528553) - CPU performance issue, not a correctness verdict"
   }
 }
