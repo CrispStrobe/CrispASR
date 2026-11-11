@@ -73,7 +73,10 @@ def dump(*, model_dir: Path, audio: np.ndarray, stages: Set[str],
     tokenizer = AutoTokenizer.from_pretrained(str(model_dir))
     decoder = model.decoder
 
-    desc_ids = tokenizer(desc, return_tensors="pt").input_ids
+    # Parler v1.1 uses two tokenizers (model card): the description goes
+    # through the text encoder's own (flan-t5) tokenizer, not the prompt one.
+    desc_tokenizer = AutoTokenizer.from_pretrained(model.config.text_encoder._name_or_path)
+    desc_ids = desc_tokenizer(desc, return_tensors="pt").input_ids
     prompt_ids = tokenizer(text, return_tensors="pt").input_ids
     num_cb = decoder.config.num_codebooks
     bos = decoder.config.bos_token_id

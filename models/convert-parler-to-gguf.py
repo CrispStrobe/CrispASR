@@ -544,44 +544,30 @@ def load_tokenizer_vocab(model_dir: Path) -> tuple[list[str], list[float], bool]
 def load_description_tokenizer(model_dir: Path) -> tuple[list[str], list[float]]:
     """Load the description tokenizer (T5 sentencepiece) vocab + scores.
 
-    Parler v1.1 uses two tokenizers:
-    - Main tokenizer (unigram, from LLaMA) for text prompts
-    - Description tokenizer (T5 sentencepiece) for voice descriptions
+    Parler v1.1 uses two tokenizers (model card: "here we use two tokenizers"):
+    - the repo tokenizer (LLaMA-2 BPE) for the text prompt
+    - AutoTokenizer.from_pretrained(config.text_encoder._name_or_path)
+      (google/flan-t5-large, a sentencepiece unigram model) for the
+      description fed to the T5 encoder.
 
-    We embed both in the GGUF. The description tokenizer is used by the
-    T5 encoder.
+    The repo does not ship the T5 tokenizer, so fetch its spiece.model from
+    the text encoder's own repo. Pieces keep the U+2581 prefix (core_spm
+    expects it) and their unigram log-prob scores.
     """
-    # Look for the description tokenizer in various places
-    desc_tok_json = model_dir / "description_tokenizer" / "tokenizer.json"
-    if not desc_tok_json.exists():
-        # Might be stored alongside main tokenizer with a prefix
-        desc_tok_json = model_dir / "tokenizer.json"
-        # In this case, the main tokenizer IS the description tokenizer
-        # for older models
-
-    # For the T5 encoder, we load the sentencepiece model directly
-    # Try spm first
     spm_path = model_dir / "description_tokenizer" / "spiece.model"
     if not spm_path.exists():
-        spm_path = model_dir / "spiece.model"
-
-    # Fall back to tokenizer.json
-    if desc_tok_json.exists():
-        with open(desc_tok_json, encoding="utf-8") as f:
-            tok = json.load(f)
-        model = tok.get("model", {})
-        vocab_items = model.get("vocab", [])
-        tokens = []
-        scores = []
-        for item in vocab_items:
-            if isinstance(item, list) and len(item) == 2:
-                token, score = item
-                token = token.replace("\u2581", " ")
-                tokens.append(token)
-                scores.append(float(score))
-        return tokens, scores
-
-    return [], []
+        cfg = json.loads((model_dir / "config.json").read_text(encoding="utf-8"))
+        enc_repo = cfg.get("text_encoder", {}).get("_name_or_path")
+        if not enc_repo:
+            return [], []
+        from huggingface_hub import hf_hub_download
+        spm_path = Path(hf_hub_download(enc_repo, "spiece.model"))
+    import sentencepiece as spm_mod
+    sp = spm_mod.SentencePieceProcessor()
+    sp.Load(str(spm_path))
+    tokens = [sp.IdToPiece(i) for i in range(sp.GetPieceSize())]
+    scores = [float(sp.GetScore(i)) for i in range(sp.GetPieceSize())]
+    return tokens, scores
 
 
 # ---------------------------------------------------------------------------
@@ -704,18 +690,12 @@ def main():
 
     # ----- Description tokenizer (T5) -----
     print("Loading description tokenizer...", file=sys.stderr)
-    desc_tok_dir = model_dir / "description_tokenizer"
-    if desc_tok_dir.exists():
-        desc_tokens, desc_scores = load_description_tokenizer(desc_tok_dir)
-        if desc_tokens:
-            # Store as separate arrays with desc_ prefix
-            writer.add_array("parler.desc_tokenizer.tokens",
-                             desc_tokens)
-            writer.add_array("parler.desc_tokenizer.scores",
-                             np.array(desc_scores, dtype=np.float32))
-            print(f"  description tokenizer: {len(desc_tokens)} tokens", file=sys.stderr)
-    else:
-        print("  no separate description tokenizer found", file=sys.stderr)
+    desc_tokens, desc_scores = load_description_tokenizer(model_dir)
+    if not desc_tokens:
+        sys.exit("ERROR: no description (T5) tokenizer found; the T5 encoder cannot be fed correctly")
+    writer.add_array("parler.desc_tokenizer.tokens", desc_tokens)
+    writer.add_array("parler.desc_tokenizer.scores", np.array(desc_scores, dtype=np.float32))
+    print(f"  description tokenizer: {len(desc_tokens)} tokens", file=sys.stderr)
 
     # ----- Tensors -----
 

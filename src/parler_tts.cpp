@@ -503,6 +503,7 @@ static void load_metadata(parler_tts_context* c, gguf_context* g) {
             for (int i = 0; i < n; i++) {
                 c->desc_tokenizer.id_to_token[i] = gguf_get_arr_str(g, tidx, i);
                 c->desc_tokenizer.token_to_id[c->desc_tokenizer.id_to_token[i]] = i;
+                c->desc_tokenizer.spm_vocab[c->desc_tokenizer.id_to_token[i]] = i;
             }
         }
         int sidx = gguf_find_key(g, "parler.desc_tokenizer.scores");
@@ -513,7 +514,7 @@ static void load_metadata(parler_tts_context* c, gguf_context* g) {
             for (int i = 0; i < n; i++)
                 c->desc_tokenizer.scores[i] = sp[i];
         }
-        // T5 EOS is typically 1 for flan-t5
+        // flan-t5 sentencepiece: pad=0, eos=1, unk=2, no BOS
         c->desc_tokenizer.eos_id = 1;
         c->desc_tokenizer.unk_id = 2;
     }
@@ -943,11 +944,9 @@ int parler_tts_set_description(struct parler_tts_context* ctx, const char* descr
     if (ctx->params.verbosity >= 1)
         fprintf(stderr, "parler_tts: encoding description: '%s'\n", description);
 
-    // Tokenize the description.
-    // The model uses a LLaMA BPE tokenizer (sentencepiece .model). The GGUF
-    // currently stores the BPE vocab from tokenizer.json which our unigram Viterbi
-    // tokenizer can't handle correctly. Override via PARLER_DESC_IDS env var
-    // (comma-separated ints) for diff-testing.
+    // Tokenize the description with the T5 (flan-t5) tokenizer stored under
+    // parler.desc_tokenizer.*. CRISPASR_PARLER_DESC_IDS (comma-separated ints)
+    // overrides the ids for diff-testing.
     std::vector<int> desc_ids;
     const char* override_ids = crispasr_env::get("CRISPASR_PARLER_DESC_IDS");
     if (override_ids && override_ids[0]) {
@@ -962,8 +961,25 @@ int parler_tts_set_description(struct parler_tts_context* ctx, const char* descr
             pos = next + 1;
         }
         fprintf(stderr, "parler_tts: using PARLER_DESC_IDS override (%zu tokens)\n", desc_ids.size());
+    } else if (!ctx->desc_tokenizer.spm_vocab.empty() && !ctx->desc_tokenizer.scores.empty()) {
+        // Upstream feeds the description through the TEXT ENCODER's tokenizer
+        // (AutoTokenizer(config.text_encoder._name_or_path) = flan-t5, a
+        // sentencepiece unigram model): pieces + </s>, no BOS. The prompt
+        // tokenizer below is only for the transcript.
+        core_spm::Config cfg;
+        cfg.unk_id = ctx->desc_tokenizer.unk_id;
+        std::vector<int32_t> ids32 =
+            core_spm::tokenize(description, ctx->desc_tokenizer.spm_vocab, ctx->desc_tokenizer.scores, cfg, true);
+        for (int32_t id : ids32)
+            desc_ids.push_back((int)id);
+        desc_ids.push_back(ctx->desc_tokenizer.eos_id);
     } else if (!ctx->prompt_tokenizer.spm_vocab.empty() && !ctx->prompt_tokenizer.scores.empty()) {
-        // Use sentencepiece tokenizer (BPE or Viterbi unigram, same tokenizer for desc + prompt)
+        // Legacy GGUF without parler.desc_tokenizer.*: the prompt (LLaMA) ids
+        // are NOT what the T5 encoder was trained on, so speech comes out
+        // garbled. Re-convert with models/convert-parler-to-gguf.py.
+        fprintf(stderr, "parler_tts: WARNING: GGUF has no T5 description tokenizer (parler.desc_tokenizer.*); "
+                        "the description is tokenized with the prompt tokenizer, which does not match the "
+                        "T5 encoder - re-convert the model\n");
         fprintf(stderr, "parler_tts: using core_spm %s tokenizer (vocab=%zu, scores=%zu)\n",
                 ctx->tokenizer_is_bpe ? "BPE" : "unigram", ctx->prompt_tokenizer.spm_vocab.size(),
                 ctx->prompt_tokenizer.scores.size());
