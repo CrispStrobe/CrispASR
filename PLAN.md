@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Selected extended regression on Kaggle — Codex (2026-11-12)
+
+- Source `853f04f09ebf8b0b574c79c0b95126eabdf7a2d9`. Run the selected TADA, Parler and KugelAudio manifest entries on Kaggle against the pinned source while the existing Actions run is queued. Require an explicit result for each entry and preserve advisory versus gating outcomes. Record the run evidence and investigate failures.
+
 ### Server request context #588 — Codex (2026-11-12)
 
 - Source `30d03c393`; integrated fix `317703f95`. Unsupported streaming requests bypassed the ignored-context warning. A shared once-only warning now covers buffered and streaming dispatch; 12 source-compiled controls cover defaults, both endpoints, per-request and concurrent isolation, capability declarations and warnings. The two streaming warning cases failed before the fix. Reporter-corpus language behavior and full HTTP/model validation remain open.
