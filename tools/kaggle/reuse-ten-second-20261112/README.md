@@ -1,7 +1,7 @@
-This is an unsubmitted Kaggle research candidate based on `7b4f0935a`.
+This Kaggle research candidate is based on `7b4f0935a`; version 1 is running.
 Runtime source is frozen to `a5a46b6c5b616b7556d3bfa27335d33a95c74794`, which
 includes the explicit `chunked(..., max_window_samples=80000)` interface.
-That source must be remotely available before submission. Do not use a moving
+That source must be remotely available when submitting. Do not use a moving
 branch in its place.
 The uploaded script hashes itself and records its runtime source SHA, submodule
 SHAs, dependency versions, oneMKL library hash, upstream Python source hashes,
@@ -61,5 +61,5 @@ manifest and rehash recovered bytes before treating them as preserved evidence.
 Model-free local controls: `python tests/test_reuse_ten_second_kernel.py -q`.
 The kernel additionally runs existing reference, retention, chunking, quality,
 comparison and oneMKL controls on the frozen worker source. No run or model
-result is implied by those local tests. Submission and publication remain for
-the coordinating maintainer after source freeze and review.
+result is implied by those local tests. A submitted run requires separate
+artifact recovery and result review before any qualification claim.

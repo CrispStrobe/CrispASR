@@ -114,3 +114,9 @@ oneMKL frontend still rejected inputs over 16,000 samples. See the
 On one synthetic-noise JFK speech proxy, the CPU reference increased SNR from
 5.00 dB to 13.62 dB and STOI from 0.577 to 0.691. These are narrow objective
 diagnostics, not a listening test or native-model qualification.
+
+After fixing the oneMKL input bound, the [five-second retry receipt](historical/reuse-full-window-v2-20261112.json)
+records all 71 unconditioned and 71 conditioned stages passing on the same
+speech proxy. Its native waveform differs from the CPU reference by 6.16e-7
+relative RMS. The separately run non-fused T4 Python reference is a cross-device
+observation, not qualification of a native GPU or fused model backend.

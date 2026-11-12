@@ -1,0 +1,64 @@
+{
+  "source_commit": "7b4f0935ab287f128315a0898e72fb97e9c2a977",
+  "sample_rate": 16000,
+  "samples": 80000,
+  "source_audio_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "model_sha256": "06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1",
+  "model_gguf_sha256": "4621b396563157b3b4571a8402f56786093eea11cb411afc486fe74b06162dbc",
+  "numpy_version": "2.1.3",
+  "torch_version": "2.11.0+cu130",
+  "input_noisy_wav_sha256": "33d1e61c42d7808cd6ae9f2760ad99813264f90cdb6b64f744c2b3855a4e3e9b",
+  "input_proxy_wav_sha256": "94ab7d4777f77f41103dd806d781007ef74e89b4c51fba0e5ec5a30e80097d99",
+  "noise_seed": 579,
+  "reference_sha256": "a24332352d64aaaf092bfc942eff9d2fa44bef6e71479adb35a6e9408c9015cf",
+  "reference_artifact": {
+    "name": "full-window-reference.gguf",
+    "sha256": "a24332352d64aaaf092bfc942eff9d2fa44bef6e71479adb35a6e9408c9015cf",
+    "bytes": 1054097472
+  },
+  "pass_rows": 142,
+  "fail_rows": 0,
+  "exit_code": 0,
+  "gpu_name": "Tesla T4",
+  "gpu_reference_vs_cpu_wave_rel_rms": 0.00026169815100729465,
+  "gpu_reference_vs_cpu_phase_rel_rms": 0.04136226698756218,
+  "scope": "Five-second full-window diagnostic, scalar native model and AVX2 oneMKL frontend; CUDA comparison uses the original model with the audited non-fused adapter. Not fused GPU parity, streaming or a product backend.",
+  "native_vs_reference_rel_rms": 6.163672310321999e-07,
+  "date": "2026-11-12",
+  "kernel": "crispasr-reuse-full-window-20261112",
+  "kernel_version": 2,
+  "quality": {
+    "input-noisy.wav": {
+      "snr_db": 4.999999997052795,
+      "si_sdr_db": 5.00892385919558,
+      "stoi": 0.5773091303199077
+    },
+    "output-reference-whole.wav": {
+      "snr_db": 13.618899695802348,
+      "si_sdr_db": 15.461103235115807,
+      "stoi": 0.6906206657521794
+    },
+    "output-native-whole.wav": {
+      "snr_db": 13.618898014915848,
+      "si_sdr_db": 15.4611035165942,
+      "stoi": 0.6906206384652721
+    },
+    "output-reference-gpu-unfused.wav": {
+      "snr_db": 13.618239811588175,
+      "si_sdr_db": 15.459853678052262,
+      "stoi": 0.6906208509278273
+    }
+  },
+  "stage_validation": "Retrieved log independently checked for 71 unique PASS stages in each of the unconditioned and conditioned groups.",
+  "artifact_sha256": {
+    "full-window-result.json": "e560f921c767b4252280d7313c34a99f07a70ecafd8df7e4d410da9cebd2eb1a",
+    "full-diff.log": "bdf105b72c431512ff34dc375d9104b54a767d89239df4d20dc1f377dfa56b86",
+    "quality.json": "e681e2675da28be40de510f3485df128d7d86bf15f62eacaef272817a77f6520",
+    "input-noisy.wav": "33d1e61c42d7808cd6ae9f2760ad99813264f90cdb6b64f744c2b3855a4e3e9b",
+    "input-proxy.wav": "94ab7d4777f77f41103dd806d781007ef74e89b4c51fba0e5ec5a30e80097d99",
+    "output-native-whole.wav": "d1db3ddbbfecf3796551333e9782207409f2e589aafdba49148a06c86765c0f8",
+    "output-reference-whole.wav": "dab0af6e4e6e6ff770765ec177d796246bcc929016f7ca310b335bb3a87ebad2",
+    "output-reference-gpu-unfused.wav": "7369f774ed58c1b7cea47718ca134f696a81a4ddffd8163904ad2479bd5a6d8c"
+  },
+  "reference_recovery": "Downloaded via a streamed output URL; recovered byte count and SHA-256 match the worker manifest."
+}
