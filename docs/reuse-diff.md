@@ -93,6 +93,13 @@ detection and session-open controls. The
 asset and source hashes. This is a released-library control, not execution of
 a newly built candidate library.
 
+A separate CPU shared-library build of source `529e073f8` subsequently passed the
+same real-GGUF, Whisper metadata and null controls. Its unchanged architecture-map
+tests passed 630 assertions across seven cases, plus 11 alternate-mapping
+assertions across two cases. The [rebuilt-candidate receipt](historical/reuse-c-abi-candidate-20261112.json)
+pins source, library, model and log hashes. This qualifies the research-model
+rejection boundary; RE-USE product inference and representative quality remain open.
+
 For aligned five-second qualification artifacts, `quality_metrics.py` reports
 SNR, scale-invariant SDR and STOI for the noisy input, whole Python reference,
 chunked Python reference and chunked native output. Install `soundfile` and

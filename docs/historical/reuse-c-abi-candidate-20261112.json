@@ -1,0 +1,100 @@
+{
+  "date": "2026-11-12",
+  "result": "pass",
+  "source_commit": "529e073f8c9c99b688be5823e1be78443d50763e",
+  "scope": "Newly rebuilt Linux CPU shared library rejects the real pinned RE-USE research GGUF through C ABI detection and session opening. This is not a RE-USE product backend, inference, quality, GPU or release-package qualification.",
+  "submodule_commits": {
+    "ggml": "1b972bb754aa5f83e2d872ccf37a335717f6658d",
+    "third_party/c2pa-audio": "e40329b83f16f67bb5ddc7bb13ae18de0a9376fc"
+  },
+  "source_sha256": {
+    "CMakeLists.txt": "db9c5abd1f14d86a4619ecf32950ae79a6b89372f8461f06ad93834f7fec64fb",
+    "src/CMakeLists.txt": "5b7bdb68d65fdfd0620cb3ee4168a9d9b82d52b11eb8b6e320292fc62bae28df",
+    "src/crispasr_c_api.cpp": "5269d69a91776d7750312b7e6a8a9c76a4c2535e51319538a573fa43bcfbd2a0",
+    "src/core/arch_backend_map.h": "a874ebb71a37e72c26baf1f4469ce18668ee1a8848eba260744f26da7842ac9b",
+    "tests/test-arch-backend-map.cpp": "18097a6fc47c03bc9f9dc56299e20102335f265d4db48af9e5e53f79810265f0",
+    "tools/ci-heavy/issue579_reuse/c_abi_boundary.py": "64fd5cdcbeae4c0a0e78f668299f27a83a70b275285bb1043b4235effd45a36f"
+  },
+  "build": {
+    "type": "Release",
+    "shared": true,
+    "max_jobs": 2,
+    "compiler": "GCC 13.3.0",
+    "cmake": "3.28.3",
+    "ggml_native": false,
+    "ggml_blas": false,
+    "ggml_cuda": false,
+    "ggml_metal": false,
+    "ggml_vulkan": false,
+    "examples": false,
+    "server": false,
+    "cmake_tests": false,
+    "exit_code": 0,
+    "completed_steps": 533,
+    "production_source_edits": false,
+    "initial_attempt": "Interrupted at 70/533 before explicit CPU authorization; resumed same configured build to completion."
+  },
+  "c_abi_controls": {
+    "library_sha256": "9aba542da8f663e894ab43ce5177b86bed604abfa0b7682bfc4d4f61e08952d7",
+    "model_sha256": "4621b396563157b3b4571a8402f56786093eea11cb411afc486fe74b06162dbc",
+    "reuse_detection_and_open_rejections": 3,
+    "whisper_detection_control": "pass",
+    "null_argument_control": "pass"
+  },
+  "architecture_map_suite": {
+    "result": "pass",
+    "assertions": 630,
+    "test_cases": 7,
+    "filter": "[arch-map]"
+  },
+  "architecture_alternates_suite": {
+    "result": "pass",
+    "assertions": 11,
+    "test_cases": 2,
+    "filter": "[backend-map]"
+  },
+  "test_build": {
+    "source": "tests/test-arch-backend-map.cpp",
+    "source_unchanged": true,
+    "test_binary_sha256": "c65db59ae8a10be5bc47f0cf42a5261deecd956ab10f9db1986c0536f7c82006",
+    "catch2_version": "3.7.1",
+    "catch2_source_commit": "fa43b77429ba76c462b1898d6cd2f2d7a9416b14",
+    "catch2_library_sha256": "f2cfe28020e71b2fe91b304272aacdce1636c40c20d15020b3d1ba17638d5bac",
+    "catch2_main_library_sha256": "fa15faa5eca71244e1ff29753e49d5fd720d6d983e2ec5e9df8bce72a0ffff65",
+    "harness_note": "Compiled unchanged candidate test source directly against new candidate libraries and existing Catch2 framework. Linker --wrap=tmpnam redirects only temporary fixture filenames into task storage; canonical test assertions and production code unchanged.",
+    "temporary_path_wrapper_sha256": "7188832a1563e71e784eac35bfcebe90aeee5ee9078b192afe784b2164cf2afc"
+  },
+  "linkage": {
+    "exported_symbols": [
+      "crispasr_detect_backend_from_gguf",
+      "crispasr_session_open"
+    ],
+    "all_crispasr_and_ggml_libraries_resolve_to_new_candidate_build": true,
+    "library_hash_unchanged_after_tests": true
+  },
+  "controls_driver_exit_code": 0,
+  "artifact_root": "CRISPASR_STORAGE/crispasr/reuse-abi-candidate-20261112",
+  "library_archive": {
+    "name": "candidate-shared-libraries.tar.gz",
+    "sha256": "2cd43d4485c46aab6f1b9ed1482c74b587253457b368a68fed52e6125b9cfc99"
+  },
+  "artifact_sha256": {
+    "configure.log": "cfe125176fd818d33490edfd12bfcb82177dad04a812e1809db67d554da0872a",
+    "build.log": "569dc687bfba8071fff45f5ced98c40633d4678c3d76243911723f7a3eb3e940",
+    "build-resume.log": "51dc0df096feaffec599f09e5d292287e72921edfb4b0cd24417f00884c224e0",
+    "c-abi-controls.log": "18b62f796008fe838547d01cd2b162bcbc82a97bd0ab966489c60ecfc095fcad",
+    "c-abi-controls.json": "8effa9f17469e602700b1cfcaea9bd853c586139b590be49500dce223203d54b",
+    "architecture-map.log": "61a5b82799a6f5fb9cd03dac032e84b6904ee40b45ae16eebc0b8889d7089c42",
+    "architecture-alternates.log": "45cbca34594345636b3891ae493b93ab1596636d50305ce272abad61210c032d",
+    "test-compile.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "library-ldd.txt": "b33487b941ff9b411a1cdbb5efeff97e7a9625f9ff067ee575e4b83f16e342d5",
+    "test-ldd.txt": "7c11f18d9e66e9fc616a222c0f79116c804409a1a3632b8fc2ab7ce7a6cc5f21",
+    "library-symbols.txt": "3c3ff07b923d197234051e07e98a823099f9310d39f74aa56843373b1e50e109",
+    "run-controls.sh": "4cca7afc026ec8590f2cb8f415c43b62e5a553319a61b0ba453b545542995124"
+  },
+  "remaining_gates": [
+    "Representative audio and speech-quality evaluation",
+    "Production RE-USE backend/API implementation",
+    "Release-package and broader platform/device qualification"
+  ]
+}
