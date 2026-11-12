@@ -76,11 +76,11 @@ class ReferenceContract(unittest.TestCase):
                      'frontend_imaginary', 'amplitude', 'output_phase', 'waveform'):
             self.assertIn(name, stages)
 
-    def test_one_second_and_cap_preserve_exact_samples(self):
+    def test_bounded_audio_is_exact_and_oversized_input_is_rejected(self):
         audio = np.arange(24000, dtype=np.float32) / 24000
-        result = module.prepare_audio(audio)
-        self.assertEqual(result.shape, (16000,))
-        np.testing.assert_array_equal(result, audio[:16000])
+        with self.assertRaisesRegex(ValueError, "16000"):
+            module.prepare_audio(audio)
+        np.testing.assert_array_equal(module.prepare_audio(audio[:16000]), audio[:16000])
         np.testing.assert_array_equal(module.prepare_audio(audio[:1600]), audio[:1600])
 
     def test_invalid_audio_and_unknown_stage_fail_before_loading_model(self):

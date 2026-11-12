@@ -52,6 +52,17 @@ int main(int argc, char** argv) {
     nonfinite[0] = std::numeric_limits<float>::quiet_NaN();
     if (check("rows", nonfinite, {2, 2}))
         return 10;
+    const std::string wave_path = std::string(argv[1]) + ".wave";
+    if (!reuse_diff::write_waveform(wave_path.c_str(), rows))
+        return 11;
+    FILE* wave = std::fopen(wave_path.c_str(), "rb");
+    std::vector<float> readback(rows.size());
+    if (!wave || std::fread(readback.data(), sizeof(float), readback.size(), wave) != rows.size())
+        return 12;
+    std::fclose(wave);
+    std::remove(wave_path.c_str());
+    if (readback != rows || reuse_diff::write_waveform((wave_path + "/invalid").c_str(), rows))
+        return 13;
     std::puts("RE-USE actual diff gate: identity and six independent rejection controls passed");
     return 0;
 }

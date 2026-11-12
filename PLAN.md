@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### RE-USE long-audio qualification — Codex (2026-11-12)
+
+- Source `799ab5769`; compare bounded original-model stage captures against the research diff across overlapping segments, test transition and tail handling, and assess a reproducible speech-plus-noise case against its clean input. Keep the research interface separate from the unimplemented product API; document the limits and preserve all stage gates. Use Kaggle for model execution and avoid new CI runs.
+
 ### Selected extended regression on Kaggle — Codex (2026-11-12)
 
 - Source `853f04f09ebf8b0b574c79c0b95126eabdf7a2d9`. Ran the selected TADA, Parler and KugelAudio manifest entries on Kaggle against the pinned source because the existing Actions run was queued. Kaggle `crispasr-selected-regression-20261112` version 1 passed all three non-advisory CPU TTS-to-ASR roundtrips: Parler WER 0.1111 (limit 0.2), TADA 0.1111 (limit 0.3), and KugelAudio 0.0000 (limit 0.3). See the [run receipt](docs/historical/selected-tts-regression-20261112.json). This is one text input per backend, not broader voice, language or GPU qualification.

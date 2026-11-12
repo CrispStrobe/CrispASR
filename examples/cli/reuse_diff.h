@@ -44,7 +44,16 @@ inline bool compare(const crispasr_diff::Ref& ref, const std::string& name, cons
     return pass;
 }
 
-inline int run(const std::string& model_path, const std::string& ref_path) {
+// Raw native float32 output is an optional research artifact, never a product API.
+inline bool write_waveform(const char* path, const std::vector<float>& waveform) {
+    FILE* file = std::fopen(path, "wb");
+    if (!file)
+        return false;
+    const bool written = std::fwrite(waveform.data(), sizeof(float), waveform.size(), file) == waveform.size();
+    return std::fclose(file) == 0 && written;
+}
+
+inline int run(const std::string& model_path, const std::string& ref_path, const char* waveform_path = nullptr) {
     reuse_frontend_profile::Analyze frontend = nullptr;
     const char* profile = nullptr;
     if (!reuse_frontend_profile::select(std::getenv("CRISPASR_REUSE_FRONTEND"), frontend, profile))
@@ -97,6 +106,7 @@ inline int run(const std::string& model_path, const std::string& ref_path) {
     if (!loaded)
         return 2;
     bool passed = true;
+    std::vector<float> native_waveform;
     for (bool conditioned : {false, true}) {
         std::vector<float> output, reference_phase(phase.first, phase.first + phase.second);
         reuse_reference_network::Trace trace;
@@ -131,7 +141,13 @@ inline int run(const std::string& model_path, const std::string& ref_path) {
         check("amplitude", trace.amplitude, {bins, frames});
         check("output_phase", trace.output_phase, {bins, frames});
         check("waveform", output, {static_cast<int64_t>(samples.size())}, 0.005);
+        if (!conditioned && waveform_path)
+            native_waveform = output;
         passed = group && passed;
+    }
+    if (passed && waveform_path && !write_waveform(waveform_path, native_waveform)) {
+        std::fprintf(stderr, "reuse: failed to write native waveform output\n");
+        return 2;
     }
     return passed ? 0 : 1;
 }

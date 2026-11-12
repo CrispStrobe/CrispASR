@@ -52,7 +52,9 @@ def prepare_audio(audio):
     audio = np.asarray(audio, dtype=np.float32)
     if audio.ndim != 1:
         raise ValueError('RE-USE reference requires mono audio')
-    audio = np.ascontiguousarray(audio[:16000])
+    if len(audio) > 16000:
+        raise ValueError("RE-USE reference input exceeds the 16000-sample diagnostic limit; select an explicit window")
+    audio = np.ascontiguousarray(audio)
     if len(audio) <= 320 or len(audio) % 80 or not np.isfinite(audio).all():
         raise ValueError('RE-USE reference requires finite 16 kHz mono audio longer than 320 samples and a multiple of the 80-sample hop')
     return audio

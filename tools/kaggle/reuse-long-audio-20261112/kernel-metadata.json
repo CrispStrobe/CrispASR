@@ -1,0 +1,13 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-reuse-long-audio-20261112",
+  "title": "crispasr-reuse-long-audio-20261112",
+  "code_file": "qualification.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "true",
+  "enable_internet": "true",
+  "dataset_sources": ["${KAGGLE_ACCOUNT}/crispasr-reuse-pinned-model-20261107", "${KAGGLE_ACCOUNT}/crispasr-hf-token"],
+  "competition_sources": [],
+  "kernel_sources": []
+}

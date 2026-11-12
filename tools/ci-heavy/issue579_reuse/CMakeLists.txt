@@ -81,7 +81,7 @@ if(TARGET crispasr-reuse-cuda)
 endif()
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
-    foreach(control converter network_compare frontend_stability reference_dumper phase_stability)
+    foreach(control converter network_compare frontend_stability reference_dumper phase_stability chunked)
         add_test(NAME reuse-${control}-controls COMMAND ${Python3_EXECUTABLE}
             "${REUSE_SOURCE_ROOT}/tests/test_reuse_${control}.py")
         set_tests_properties(reuse-${control}-controls PROPERTIES

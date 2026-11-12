@@ -5,7 +5,7 @@ CLI, server or session backend. Its standalone build shares CrispASR's existing
 comparison machinery without linking the reference loader into `libcrispasr`.
 See the [reconciliation record](reuse-reconciliation-20261112.md). To diagnose it against the pinned original checkpoint, create a
 16 kHz, mono, 16-bit PCM WAV with at least 400 samples and a length divisible
-by 80. The reference dumper uses at most the first 16,000 samples, so select a
+by 80. The reference dumper rejects inputs over 16,000 samples; select each
 short, non-silent speech excerpt deliberately. One-second comparisons are
 substantially slower and create larger reference archives.
 
@@ -20,6 +20,8 @@ ctest --test-dir "$BUILD_DIR" --output-on-failure
 python tools/dump_reference.py --backend reuse --model-dir /path/to/pinned-model \
   --audio excerpt.wav --output reuse-ref.gguf
 "$BUILD_DIR/reuse-research-diff" reuse-f32.gguf reuse-ref.gguf
+# Optional: write unconditioned native-endian float32 waveform after both gates pass.
+"$BUILD_DIR/reuse-research-diff" reuse-f32.gguf reuse-ref.gguf native-waveform.f32
 ```
 
 The dumper checks the pinned checkpoint and configuration hashes and uses the
@@ -47,3 +49,8 @@ cross-environment first-frame investigation, run
 `tools/ci-heavy/issue579_reuse/frontend_stability.py --help`: it captures
 byte-checked input, window and spectrum, and can replay a second environment's
 window. Its output is diagnostic and never declares model parity.
+
+`tools/ci-heavy/issue579_reuse/chunked.py` is a research-only bounded
+overlap-add diagnostic. It pads a short or partial final window and returns the
+original length. Its one-second windows are chosen to fit the comparator; they
+do not establish an NVIDIA-equivalent long-audio or streaming policy.
