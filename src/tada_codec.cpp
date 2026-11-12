@@ -159,14 +159,68 @@ struct tada_codec_context {
 
 // ──────────────────────── weight loading ────────────────────────────
 
+static std::vector<float> wn_read_f32(ggml_tensor* t) {
+    const int64_t n = ggml_nelements(t);
+    std::vector<float> out((size_t)n);
+    if (t->type == GGML_TYPE_F32) {
+        ggml_backend_tensor_get(t, out.data(), 0, (size_t)n * sizeof(float));
+    } else {
+        GGML_ASSERT(t->type == GGML_TYPE_F16);
+        std::vector<ggml_fp16_t> h((size_t)n);
+        ggml_backend_tensor_get(t, h.data(), 0, (size_t)n * sizeof(ggml_fp16_t));
+        ggml_fp16_to_fp32_row(h.data(), out.data(), n);
+    }
+    return out;
+}
+
+// v <- g * v / ||v||, norm over each ne[2] slice (torch weight_norm, dim=0).
+static void materialize_weight_norm(ggml_tensor* v, ggml_tensor* g) {
+    const int64_t n_out = v->ne[2];
+    const int64_t slice = v->ne[0] * v->ne[1];
+    GGML_ASSERT(ggml_nelements(g) == n_out && ggml_nelements(v) == n_out * slice);
+    std::vector<float> vf = wn_read_f32(v);
+    const std::vector<float> gf = wn_read_f32(g);
+    for (int64_t o = 0; o < n_out; o++) {
+        float* p = vf.data() + o * slice;
+        double ss = 0.0;
+        for (int64_t i = 0; i < slice; i++)
+            ss += (double)p[i] * p[i];
+        const float scale = ss > 0.0 ? (float)(gf[(size_t)o] / std::sqrt(ss)) : 0.0f;
+        for (int64_t i = 0; i < slice; i++)
+            p[i] *= scale;
+    }
+    if (v->type == GGML_TYPE_F32) {
+        ggml_backend_tensor_set(v, vf.data(), 0, vf.size() * sizeof(float));
+    } else {
+        std::vector<ggml_fp16_t> h(vf.size());
+        ggml_fp32_to_fp16_row(vf.data(), h.data(), (int64_t)vf.size());
+        ggml_backend_tensor_set(v, h.data(), 0, h.size() * sizeof(ggml_fp16_t));
+    }
+}
+
 static void bind_wn(tada_codec_context* c, wn_conv& wn, const char* prefix) {
     char key[256];
     // Try materialized weight first, fall back to raw direction tensor
     snprintf(key, sizeof(key), "%s.weight", prefix);
     wn.w = core_gguf::try_get(c->tensors, key);
     if (!wn.w) {
+        // Un-materialized torch weight_norm: original0 = g (magnitude), original1
+        // = v (direction). The effective weight is g * v / ||v||, with the norm
+        // taken per slice of PyTorch dim 0 (= ggml ne[2], the outermost axis,
+        // for both Conv1d and ConvTranspose1d). Using v alone (as this code did)
+        // feeds unscaled directions through every DAC conv - older
+        // tada-codec-f16.gguf uploads (e.g. cstr/tada-tts-3b-ml-GGUF@b41c671e)
+        // then decode to babble ("Hehehehehehe"). Fold g in place at load.
         snprintf(key, sizeof(key), "%s.parametrizations.weight.original1", prefix);
         wn.w = core_gguf::try_get(c->tensors, key);
+        snprintf(key, sizeof(key), "%s.parametrizations.weight.original0", prefix);
+        ggml_tensor* g = core_gguf::try_get(c->tensors, key);
+        if (wn.w && g) {
+            materialize_weight_norm(wn.w, g);
+        } else if (wn.w) {
+            fprintf(stderr, "tada-codec: %s has weight_norm direction but no magnitude (original0)\n", prefix);
+            wn.w = nullptr;
+        }
     }
     snprintf(key, sizeof(key), "%s.bias", prefix);
     wn.b = core_gguf::try_get(c->tensors, key);
