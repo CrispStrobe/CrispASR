@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### RE-USE final-window fused diagnosis — Codex (2026-11-12)
+
+- Base `529e073f8`; prepare an exact globally scaled ten-second input and its final five-second window for an original fused CUDA versus audited non-fused adapter comparison with retained CPU intermediates. Reuse verified wheels and the existing reference archive; require the original T4/CPython/Torch ABI. GPU quota is exhausted until the reported 2026-11-14 refresh, so no model result is claimed. A one-second crop alone does not preserve the failing context.
+
 ### Kaggle output streamed recovery — Codex (2026-11-12)
 
 - Base `529e073f8`; `tools/kaggle/recover_output.py` recovers an exact latest-session output with bounded-memory streaming, explicit byte/hash verification and atomic publication. Its 19 model-free controls cover paginated selection, failure preservation and redacted errors. A live manifest download passed byte and hash verification. The unsupported SDK version selector returned HTTP 404 and was removed; usage and trust requirements are in the Kaggle README.
