@@ -63,6 +63,7 @@ struct crispasr_session {
     moss_diarize_context* moss_diarize_ctx = reinterpret_cast<moss_diarize_context*>(1);
     parakeet_context* parakeet_ctx = nullptr;
     int max_new_tokens = 512, beam_size = 1;
+    bool beam_size_explicit = false;
     float frequency_penalty = 0, temperature = 0, top_p = -1.0f;
     int do_sample = -1, top_k = -1;
     uint64_t seed = 0;
