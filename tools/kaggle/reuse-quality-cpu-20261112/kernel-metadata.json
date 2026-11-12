@@ -1,0 +1,17 @@
+{
+  "id": "${KAGGLE_ACCOUNT}/crispasr-reuse-quality-cpu-20261112",
+  "title": "CrispASR RE-USE Quality CPU 20261112",
+  "code_file": "quality_cpu.py",
+  "language": "python",
+  "kernel_type": "script",
+  "is_private": "true",
+  "enable_gpu": "false",
+  "enable_internet": "false",
+  "dataset_sources": [
+    "${KAGGLE_ACCOUNT}/crispasr-reuse-pinned-model-20261107",
+    "ayoubakanoun/librispeechtest"
+  ],
+  "competition_sources": [],
+  "kernel_sources": [],
+  "model_sources": []
+}

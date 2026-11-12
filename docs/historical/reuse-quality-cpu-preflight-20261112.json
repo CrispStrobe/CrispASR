@@ -1,0 +1,78 @@
+{
+  "script_version": "reuse-quality-cpu-20261112-v1",
+  "script_sha256": "5a0351df1d48a363e2694b7b28d94d645fb77e22e9d9e181317598336b61c945",
+  "status": "inputs-and-metric-controls-pass",
+  "cases": [],
+  "scope": "Original graph + audited CPU non-fused Mamba adapter. New corpus quality only; stage fingerprints are not native parity or a perceptual acceptance gate.",
+  "dataset": "ayoubakanoun/librispeechtest",
+  "attribution": "LibriSpeech test-clean, OpenSLR 12, CC BY 4.0, https://www.openslr.org/12",
+  "model_source": "nvidia/RE-USE pinned model dataset",
+  "sample_rate": 16000,
+  "window_samples": 80000,
+  "wall_budget_seconds": 7200,
+  "estoi_normalization_seed": 579,
+  "bundle": {
+    "mamba_ssm.py": "93203e8896d503703ee2026d258f1027bcd4b3132eb394409392ce7016dec835",
+    "kaggle_harness.py": "ae2f378ef132fe4d366e0809f94d817a08f5ebc759f62c2ca753e25b12148283"
+  },
+  "dependencies": {
+    "numpy": "2.2.6",
+    "scipy": "1.17.1",
+    "soundfile": "0.13.1",
+    "torch": "2.11.0+cu130",
+    "safetensors.torch": "not exposed",
+    "einops": "0.8.2",
+    "huggingface_hub": "1.22.0"
+  },
+  "stoi_available": true,
+  "cuda_available": false,
+  "adapter_scope": "Audited Python non-fused selective scan, CPU only",
+  "model_files": {
+    "config.json": "e69986483774f01893d2727503addc49ef201d19e6e1a266b8d4e971e28c478d",
+    "model.safetensors": "06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1",
+    "models/codec_module_time_d4.py": "02bd1d478f36a9b38dce7d44368805298f42798ea239304580f1ccffafe766a0",
+    "models/generator_SEMamba_time_d4.py": "beebaf2d9ab7b83c101f46246ae7a7a8a2d2f57b6683025d3712c64c1b7d6817",
+    "models/mamba_block2_SEMamba.py": "97397af2d7e0f5e6530aa8c4a45b4f0f0030b4b56d8c9922a9b0bc25f8b5962e",
+    "models/stfts.py": "b82383c1ec7d7e9fe9bca1f93b3c0afe9609e191c38efc16f705e7145198d835"
+  },
+  "official_openslr_test_clean_archive_md5": "32fa31d27d2e1cad72775fee3f4849a9",
+  "official_flac_sha256": {
+    "121/121726/121-121726-0000.flac": "81378fdb3e648b43efb1cb8c4f87da3fc9cfbe19c5dda97e9e7361c4a2470d2f",
+    "237/126133/237-126133-0000.flac": "25466538df82602d1e597b0cb016e4dd0ce11031cb8994a4289d1c07170878ee",
+    "61/70968/61-70968-0005.flac": "1022f303c108707548ff8738b7d7f512403b8fa443b9664bab94f740ef412183",
+    "260/123286/260-123286-0000.flac": "d654a43d06f0e8b586b525e8ec83d6e3c0dc83c3f4742f8e25fd291db77248b3"
+  },
+  "corpus_metadata": {
+    "SPEAKERS.TXT": "3350f093382f8baa1d589c9f5a5cee8ec3705e656f521d6eafbaa31a5fcd8f76",
+    "LICENSE.TXT": "908b0b565ae9bf61b7b41447cb0b83564f320375723bcc884ec30e5537a0d5dc",
+    "README.TXT": "596ea41ecf75d10a0393f086d863d46d1a0b0afd6670717c352b8a46f42650bf"
+  },
+  "corpus_license_text": "LibriSpeech (c) 2014 by Vassil Panayotov\n\nLibriSpeech ASR corpus is licensed under a\nCreative Commons Attribution 4.0 International License.\n\nSee <http://creativecommons.org/licenses/by/4.0/>.\n",
+  "selection_policy": "First two female + first two male numeric speaker IDs; first lexicographic utterance at least 5s per speaker; first 5s crop, no padding or normalization.",
+  "selected": [
+    {
+      "speaker": 121,
+      "sex": "F",
+      "path": "test-clean/121/121726/121-121726-0000.flac",
+      "source_sha256": "81378fdb3e648b43efb1cb8c4f87da3fc9cfbe19c5dda97e9e7361c4a2470d2f"
+    },
+    {
+      "speaker": 237,
+      "sex": "F",
+      "path": "test-clean/237/126133/237-126133-0000.flac",
+      "source_sha256": "25466538df82602d1e597b0cb016e4dd0ce11031cb8994a4289d1c07170878ee"
+    },
+    {
+      "speaker": 61,
+      "sex": "M",
+      "path": "test-clean/61/70968/61-70968-0005.flac",
+      "source_sha256": "1022f303c108707548ff8738b7d7f512403b8fa443b9664bab94f740ef412183"
+    },
+    {
+      "speaker": 260,
+      "sex": "M",
+      "path": "test-clean/260/123286/260-123286-0000.flac",
+      "source_sha256": "d654a43d06f0e8b586b525e8ec83d6e3c0dc83c3f4742f8e25fd291db77248b3"
+    }
+  ]
+}
