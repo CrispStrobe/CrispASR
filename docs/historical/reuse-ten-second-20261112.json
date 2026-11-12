@@ -162,6 +162,11 @@
     ],
     "final_five_seconds_fraction_of_total_squared_error": 0.9122,
     "interval_9_to_9_5_seconds": "Only the final window contributes; its raw waveform and stitched output match exactly.",
-    "interpretation": "Degradation is present in the final Python reference window before stitching; comparison with the original fused implementation on the same full window and broader quality evaluation remain open."
+    "interpretation": "Degradation is present in the final Python reference window before stitching; comparison with the original fused implementation on the same full window and broader quality evaluation remain open.",
+    "pinned_upstream_float32_hann_stitch_vs_recorded": {
+      "max_abs": 5.960464477539063e-08,
+      "relative_rms": 4.007929632621199e-08,
+      "scope": "Reconstructed on the same three saved Python waveforms with the pinned upstream periodic Hann, clamping, starts and float32 accumulation; aligned 10-second input only."
+    }
   }
 }

@@ -77,6 +77,23 @@ class ChunkedTests(unittest.TestCase):
         self.assertAlmostEqual(float(out[100000]), 1.5, places=6)
         self.assertEqual(out[-1], 2)
 
+    def test_aligned_overlap_matches_upstream_float32_weighting(self):
+        # Pinned inference_chunk.py uses periodic Hann, clamping and float32
+        # accumulation. Distinct waveforms exercise the complete overlaps.
+        rng = np.random.default_rng(579)
+        windows = [rng.standard_normal(16000).astype(np.float32) for _ in range(3)]
+        actual, starts = module.chunked(np.zeros(32000, np.float32),
+                                        lambda block, index, start: windows[index])
+        self.assertEqual(starts, [0, 8000, 16000])
+        phase = np.arange(16000, dtype=np.float32) * np.float32(2 * np.pi / 16000)
+        weights = np.maximum(np.float32(0.5) * (np.float32(1) - np.cos(phase)), np.float32(1e-7))
+        total = np.zeros(32000, np.float32)
+        norm = np.zeros(32000, np.float32)
+        for start, waveform in zip(starts, windows):
+            total[start:start + 16000] += waveform * weights
+            norm[start:start + 16000] += weights
+        np.testing.assert_allclose(actual, total / norm, atol=1e-6, rtol=1e-6)
+
     def test_opt_in_limit_preserves_default_policy_and_large_window_needs_opt_in(self):
         x = np.random.default_rng(579).standard_normal(200037).astype(np.float32)
         def enhance(block, index, start):
