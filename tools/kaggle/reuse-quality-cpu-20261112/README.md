@@ -162,3 +162,39 @@ python tools/kaggle/reuse-quality-cpu-20261112/word_error_rate.py \
   --reference "$CLEAN_ASR_TRANSCRIPT" --hypothesis "$CONDITION_ASR_TRANSCRIPT"
 python tests/test_reuse_word_error_rate.py -v
 ```
+
+`asr_proxy_runner.py` is an optional sequential research runner for a completed
+four-speaker/16-case output. It is prepared independently of the Kaggle script.
+Supply an ASR binary/model and their expected SHA-256 values; the runner checks
+those pins, records dynamically resolved library hashes, and verifies runtime
+bytes again after completion. It accepts only complete predetermined cases
+whose input/output WAV hashes agree with their receipts. Use the independent
+artifact verifier first; this runner does not replace its stage/corpus checks.
+
+```
+python tools/kaggle/reuse-quality-cpu-20261112/asr_proxy_runner.py \
+  --artifacts "$REUSE_QUALITY_ARTIFACTS" --binary "$ASR_BINARY" \
+  --model "$WHISPER_TINY_EN_MODEL" --binary-sha256 "$ASR_BINARY_SHA256" \
+  --model-sha256 "$ASR_MODEL_SHA256" --output-dir "$ASR_PROXY_OUTPUT" \
+  --threads 2 --timeout 180
+```
+
+It first recognizes each clean speaker reference, then each case's noisy/clean
+input and enhanced output, with explicit CPU/English/no-timestamp text-output
+flags. Content-identical audio may reuse a completed transcript through an
+explicit mapping. Each clean-condition input is always recognized afresh,
+checked against the clean reference's audio, and required to produce the exact
+same transcript bytes; a mismatch is reported as ASR nondeterminism. No clean
+identity result is inferred from deduplication. Empty condition transcripts
+remain measurable as deletions against the nonempty clean-ASR reference.
+
+Each invocation records flags, timeout, exit code/status, input file/audio
+hashes, raw stdout/stderr and transcript hashes. Public report commands use
+portable aliases; raw log files may retain local execution paths. Each completed
+case is checkpointed before the next starts. Later nonzero exit, timeout, missing
+transcript or runtime change produces a failed report while preserving earlier
+case/invocation receipts and transcript files; temporary process directories are
+removed. Use a fresh output directory for a new run. This optional proxy measures
+ASR disagreement with the same-speaker clean-ASR output, not human-reference WER,
+intelligibility or product quality. No real ASR/model execution is part of its
+model-free controls: `python tests/test_reuse_asr_proxy_runner.py -v`.
