@@ -133,3 +133,28 @@ produce a nonpassing verdict and nonzero exit; a stale passing verdict is
 replaced on failure. NumPy, SciPy, SoundFile and pystoi are required; no model
 runtime is imported. Model-free verifier controls:
 `python tests/test_reuse_quality_verifier.py -v`.
+
+A separate historical Whisper tiny.en CPU proxy compares the saved whole/tail
+transcripts against ASR of the matching clean proxy, rather than a human
+transcription. The [receipt](../../../docs/historical/reuse-whisper-tiny-asr-proxy-20261112.json)
+records raw artifact hashes, sanitized stdout, exact token/error mappings and
+binary/model/resolved-library hashes. Whole-clip disagreement changes from
+4/22 words (18.18%) for noisy speech to 2/22 (9.09%) for enhanced speech; on the
+last five seconds it changes from 1/15 (6.67%) to 2/15 (13.33%). These mixed
+results are one recognizer's transcript agreement on one proxy. They establish
+neither human-ground-truth WER nor intelligibility or broad quality acceptance.
+The ASR binary reports historical version 0.8.43/revision 369029c9; those strings
+do not independently establish a clean source identity.
+
+`word_error_rate.py` provides reusable model-free tokenization and unit-cost
+edit alignment for any caller-selected transcript reference. Normalization
+uses Unicode NFKC, casefolding and letter/digit runs, with punctuation as word
+boundaries; it preserves `f` in `F-not` and the difference between `american`
+and `americans`. Empty references produce null WER with explicit edit counts.
+For example, compare each speaker's clean-ASR transcript against each condition:
+
+```
+python tools/kaggle/reuse-quality-cpu-20261112/word_error_rate.py \
+  --reference "$CLEAN_ASR_TRANSCRIPT" --hypothesis "$CONDITION_ASR_TRANSCRIPT"
+python tests/test_reuse_word_error_rate.py -v
+```

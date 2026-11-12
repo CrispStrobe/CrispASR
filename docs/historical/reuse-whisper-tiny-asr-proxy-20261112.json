@@ -1,0 +1,340 @@
+{
+  "scope": "One historical ten-second JFK proxy and its last five seconds. Whisper tiny.en transcript agreement with the clean-proxy ASR output; not human-ground-truth WER, an intelligibility assessment, broader quality acceptance or a product test.",
+  "runtime": {
+    "binary": "crispasr",
+    "model": "ggml-tiny.en.bin",
+    "sha256": {
+      "crispasr": "cc82d15e78a50262b3071cd436addf25f80bef7051a32d5e38fa1db8a44b6076",
+      "ggml-tiny.en.bin": "921e4cf8686fdd993dcd081a5da5b6c365bfde1162e72b08d75ac75289920b1f",
+      "ld-linux-x86-64.so.2": "c20a2dc8917c755f02b94049356320fe1f62ac7d9f8994731f807d9df39302da",
+      "libc.so.6": "3a15d66867d83762c7f2f1e37359cb8f6c5743edb369c65285cb0b1c4f7498bf",
+      "libcrispasr.so.1": "14820c72aa73b6a6d96b296d189654914abbf721c67ae6b0a49182d022a23a18",
+      "libgcc_s.so.1": "d93224d2b0dab4247598be683adca02f5cf00586f99c187579cd7e92058fb7cb",
+      "libgfortran.so.5": "342618ccfebe840446e4ef2b7893f4161b2084845e570f42d68a70bfde58a58d",
+      "libggml-base.so.0": "4eb267af228d9c2a1f46160d989d9316505c51b5c9344c3cfbd797c0ea7ac2b9",
+      "libggml-cpu.so.0": "22ecdd81002d0a0554a259f7c7576a89d7b86a59700d23b7c18be4878d6290a3",
+      "libggml.so.0": "22a376ceab42bfeb318f4b9c40472ab2d96d72b3b9c5b5a64ab74444758416d1",
+      "libgomp.so.1": "135f3c8f006d2fe5e68e51281c7974cb991a03de3bfb3593d68d174dfcf854d1",
+      "libm.so.6": "fce00b6f25f459cf4ae0b7fae4257909a1a8a86f9149e7c029a5d617baf1ccd0",
+      "libopenblas.so.0": "bfc7492adbf84a8f567720a9e1fae2afc18f3d817da233e7f4d453683485308e",
+      "libopencore-amrnb.so.0": "1a16409b03785025901abd70ba9574dbe4c9250575915f77c56c60b81ca21f4a",
+      "libopencore-amrwb.so.0": "e6d832bde4172c4e7d0170b5e9df09d851da161a71f0acbf489ab13fd8fde939",
+      "libsentencepiece.so.0": "a80984e38c70bcfabec6974f1a9bcacb2f46d7c5b6a3d70637b8ae7d4cff4d58",
+      "libstdc++.so.6": "1fd75fe70354a416d75aef22bcae68c47bd25d20e2d0568c30b1a9838cf62f11"
+    },
+    "reported_version": "0.8.43",
+    "reported_git_revision": "369029c9",
+    "ggml_backend": "cpu",
+    "runtime_version_file_sha256": "7d09f54f7e89b43b94ce95d865708af936972a596007fef11f34cfdbc3508663",
+    "execution_hash_manifest_sha256": "3c4641e3de95a17cb5669500e4eb7dc5d80284b2c45d5388c36d667a25b33732",
+    "source_provenance": "Version/revision are historical binary-reported build information, not independently proven clean-source identity. Current binary/model hashes match the execution manifest. Dynamically resolved libraries were hashed read-only during this audit; no dependency manifest was retained at command execution."
+  },
+  "execution": {
+    "command": [
+      "${ASR_BINARY}",
+      "-m",
+      "${WHISPER_TINY_EN_MODEL}",
+      "-ng",
+      "-t",
+      "2",
+      "-l",
+      "en",
+      "-nt",
+      "-np",
+      "-otxt",
+      "-of",
+      "${ASR_PROXY_OUTPUT_PREFIX}",
+      "[tail only: -ot 5000 -d 5000]",
+      "${INPUT_WAV}"
+    ],
+    "timeout_seconds_per_command": 180,
+    "all_six_exit_codes": [
+      0,
+      0,
+      0,
+      0,
+      0,
+      0
+    ],
+    "exit_status_evidence": "Parent recorded successful completion only after each of six commands returned zero; independent readback checked all saved stdout/transcript pairs."
+  },
+  "normalization": {
+    "unicode": "NFKC then casefold",
+    "tokens": "Unicode letter/digit runs; all punctuation, hyphens, underscores and apostrophes separate tokens",
+    "rewrites": "No stemming, contraction/number expansion, or correction of ASR errors. F-not -> [f, not], F-what -> [f, what]; american and americans differ.",
+    "edit_costs": "Unit substitution, deletion and insertion; alignment ties prefer substitution, then deletion, then insertion.",
+    "denominator": "Number of normalized words in the same-range clean-proxy ASR transcript; not a human transcription."
+  },
+  "inputs": {
+    "input-proxy": {
+      "file": "input-proxy.wav",
+      "sha256": "647049cb5676aab5f9c469c0f28938b8b585b43c1b6564308222aa48ee593fb0",
+      "samples": 160000,
+      "sample_rate": 16000,
+      "channels": 1
+    },
+    "input-noisy": {
+      "file": "input-noisy.wav",
+      "sha256": "78e407ecadaa876d17fc8ba5abb65ad23a86b7d5d42e6bd22042c5c01ad703a2",
+      "samples": 160000,
+      "sample_rate": 16000,
+      "channels": 1
+    },
+    "output-reference-chunked": {
+      "file": "output-reference-chunked.wav",
+      "sha256": "5f9737012a2d8560625d83de5bffde25c5424287c87981ee3be5169860b71ff2",
+      "samples": 160000,
+      "sample_rate": 16000,
+      "channels": 1
+    }
+  },
+  "cases": [
+    {
+      "label": "input-proxy-whole",
+      "input": "input-proxy",
+      "range_samples": [
+        0,
+        160000
+      ],
+      "reference_transcript": "input-proxy-whole.txt",
+      "transcript_sha256": "5c605b4d6ec3fc1aa0cbf70911c54455cbe5d70aaea94d15920e3b6309a3473b",
+      "stdout_sha256": "6fa700963a3939cbd04b83fd10b944985cb6adb1bb8aa0811ec5a481956ccd6e",
+      "stdout_sanitized": "\n And so my fellow Americans ask not what your country can do for you. Ask what you can do for your country.output_txt: saving output to '${ASR_PROXY_ARTIFACTS}/input-proxy-whole.txt'\n",
+      "stdout_transcript_match": true,
+      "normalized_reference": "and so my fellow americans ask not what your country can do for you ask what you can do for your country",
+      "normalized_hypothesis": "and so my fellow americans ask not what your country can do for you ask what you can do for your country",
+      "correct": 22,
+      "substitutions": 0,
+      "deletions": 0,
+      "insertions": 0,
+      "reference_words": 22,
+      "hypothesis_words": 22,
+      "edits": 0,
+      "wer": 0.0,
+      "errors": []
+    },
+    {
+      "label": "input-noisy-whole",
+      "input": "input-noisy",
+      "range_samples": [
+        0,
+        160000
+      ],
+      "reference_transcript": "input-proxy-whole.txt",
+      "transcript_sha256": "94db37583361316da66836796d7a29b0a963cbb6f7e69165dde5d65f11a62e94",
+      "stdout_sha256": "709e174fee7abae0093739251e305a7b8e4339fec037fc054b46045c9af4e13e",
+      "stdout_sanitized": "\n And so my fellow American F-not What your country can do for you F-what you can do for youroutput_txt: saving output to '${ASR_PROXY_ARTIFACTS}/input-noisy-whole.txt'\n",
+      "stdout_transcript_match": true,
+      "normalized_reference": "and so my fellow americans ask not what your country can do for you ask what you can do for your country",
+      "normalized_hypothesis": "and so my fellow american f not what your country can do for you f what you can do for your",
+      "correct": 18,
+      "substitutions": 3,
+      "deletions": 1,
+      "insertions": 0,
+      "reference_words": 22,
+      "hypothesis_words": 21,
+      "edits": 4,
+      "wer": 0.18181818181818182,
+      "errors": [
+        {
+          "operation": "substitute",
+          "reference_index": 4,
+          "hypothesis_index": 4,
+          "reference": "americans",
+          "hypothesis": "american"
+        },
+        {
+          "operation": "substitute",
+          "reference_index": 5,
+          "hypothesis_index": 5,
+          "reference": "ask",
+          "hypothesis": "f"
+        },
+        {
+          "operation": "substitute",
+          "reference_index": 14,
+          "hypothesis_index": 14,
+          "reference": "ask",
+          "hypothesis": "f"
+        },
+        {
+          "operation": "delete",
+          "reference_index": 21,
+          "hypothesis_index": null,
+          "reference": "country",
+          "hypothesis": null
+        }
+      ]
+    },
+    {
+      "label": "output-reference-chunked-whole",
+      "input": "output-reference-chunked",
+      "range_samples": [
+        0,
+        160000
+      ],
+      "reference_transcript": "input-proxy-whole.txt",
+      "transcript_sha256": "63b653ec26b57e2823236881d778f42e76c5ea8dd0189b50e589ca486d4d21a4",
+      "stdout_sha256": "4bbfae86d4183a592e017547fd657b6b86af3c161e52524acb44c0904e9c6bc8",
+      "stdout_sanitized": "\n And so my fellow American, ask not what your country can do for you, ask what you can do for youroutput_txt: saving output to '${ASR_PROXY_ARTIFACTS}/output-reference-chunked-whole.txt'\n",
+      "stdout_transcript_match": true,
+      "normalized_reference": "and so my fellow americans ask not what your country can do for you ask what you can do for your country",
+      "normalized_hypothesis": "and so my fellow american ask not what your country can do for you ask what you can do for your",
+      "correct": 20,
+      "substitutions": 1,
+      "deletions": 1,
+      "insertions": 0,
+      "reference_words": 22,
+      "hypothesis_words": 21,
+      "edits": 2,
+      "wer": 0.09090909090909091,
+      "errors": [
+        {
+          "operation": "substitute",
+          "reference_index": 4,
+          "hypothesis_index": 4,
+          "reference": "americans",
+          "hypothesis": "american"
+        },
+        {
+          "operation": "delete",
+          "reference_index": 21,
+          "hypothesis_index": null,
+          "reference": "country",
+          "hypothesis": null
+        }
+      ]
+    },
+    {
+      "label": "input-proxy-tail",
+      "input": "input-proxy",
+      "range_samples": [
+        80000,
+        160000
+      ],
+      "reference_transcript": "input-proxy-tail.txt",
+      "transcript_sha256": "1ff7ab969788e9afbaee32b4805dc2e2fe3b9645e1fe12a82aef2b741e5ca7b8",
+      "stdout_sha256": "730b81c5d975c9a898a6e274be549723e1ab82cf5f7bfec5d23ea430b3842469",
+      "stdout_sanitized": "\n What your country can do for you ask what you can do for your countryoutput_txt: saving output to '${ASR_PROXY_ARTIFACTS}/input-proxy-tail.txt'\n",
+      "stdout_transcript_match": true,
+      "normalized_reference": "what your country can do for you ask what you can do for your country",
+      "normalized_hypothesis": "what your country can do for you ask what you can do for your country",
+      "correct": 15,
+      "substitutions": 0,
+      "deletions": 0,
+      "insertions": 0,
+      "reference_words": 15,
+      "hypothesis_words": 15,
+      "edits": 0,
+      "wer": 0.0,
+      "errors": []
+    },
+    {
+      "label": "input-noisy-tail",
+      "input": "input-noisy",
+      "range_samples": [
+        80000,
+        160000
+      ],
+      "reference_transcript": "input-proxy-tail.txt",
+      "transcript_sha256": "36a1d709443631cd1021d3c78bf3e3ef38fdc44a5f7acc5a663da889c29706fd",
+      "stdout_sha256": "496f1147a751beb5d764da83763b316cee485c119061157a7f958d626421f01f",
+      "stdout_sanitized": "\n What your country can do for you. Have what you can do for your country.output_txt: saving output to '${ASR_PROXY_ARTIFACTS}/input-noisy-tail.txt'\n",
+      "stdout_transcript_match": true,
+      "normalized_reference": "what your country can do for you ask what you can do for your country",
+      "normalized_hypothesis": "what your country can do for you have what you can do for your country",
+      "correct": 14,
+      "substitutions": 1,
+      "deletions": 0,
+      "insertions": 0,
+      "reference_words": 15,
+      "hypothesis_words": 15,
+      "edits": 1,
+      "wer": 0.06666666666666667,
+      "errors": [
+        {
+          "operation": "substitute",
+          "reference_index": 7,
+          "hypothesis_index": 7,
+          "reference": "ask",
+          "hypothesis": "have"
+        }
+      ]
+    },
+    {
+      "label": "output-reference-chunked-tail",
+      "input": "output-reference-chunked",
+      "range_samples": [
+        80000,
+        160000
+      ],
+      "reference_transcript": "input-proxy-tail.txt",
+      "transcript_sha256": "f280f62f467fa70e75d3af849a951fc7e522da7485b595f5ab01c8311ae03220",
+      "stdout_sha256": "458a0d4d67a56cd056044bf4883f4133a57d2dca68b028eb4be716c200fb58fa",
+      "stdout_sanitized": "\n What your country can do for you? Ask what you send you for your country.output_txt: saving output to '${ASR_PROXY_ARTIFACTS}/output-reference-chunked-tail.txt'\n",
+      "stdout_transcript_match": true,
+      "normalized_reference": "what your country can do for you ask what you can do for your country",
+      "normalized_hypothesis": "what your country can do for you ask what you send you for your country",
+      "correct": 13,
+      "substitutions": 2,
+      "deletions": 0,
+      "insertions": 0,
+      "reference_words": 15,
+      "hypothesis_words": 15,
+      "edits": 2,
+      "wer": 0.13333333333333333,
+      "errors": [
+        {
+          "operation": "substitute",
+          "reference_index": 10,
+          "hypothesis_index": 10,
+          "reference": "can",
+          "hypothesis": "send"
+        },
+        {
+          "operation": "substitute",
+          "reference_index": 11,
+          "hypothesis_index": 11,
+          "reference": "do",
+          "hypothesis": "you"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "whole": {
+      "input-proxy": {
+        "edits": 0,
+        "reference_words": 22,
+        "wer": 0.0
+      },
+      "input-noisy": {
+        "edits": 4,
+        "reference_words": 22,
+        "wer": 0.18181818181818182
+      },
+      "output-reference-chunked": {
+        "edits": 2,
+        "reference_words": 22,
+        "wer": 0.09090909090909091
+      }
+    },
+    "tail": {
+      "input-proxy": {
+        "edits": 0,
+        "reference_words": 15,
+        "wer": 0.0
+      },
+      "input-noisy": {
+        "edits": 1,
+        "reference_words": 15,
+        "wer": 0.06666666666666667
+      },
+      "output-reference-chunked": {
+        "edits": 2,
+        "reference_words": 15,
+        "wer": 0.13333333333333333
+      }
+    }
+  }
+}
