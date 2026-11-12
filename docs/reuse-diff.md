@@ -61,13 +61,26 @@ ends its final window at the end of the recording. The shorter diagnostic
 windows and padding rules must be evaluated separately before product use.
 
 The `reuse` GGUF architecture is intentionally not registered as a product
-backend. A source-compiled C ABI detection control rejected the pinned real
-RE-USE GGUF and accepted a Whisper metadata fixture; this checks the detector
-body, not a packaged product library. The shared C ABI test also includes the
-`reuse` rejection case, which still needs execution through a built library.
+backend. The published v0.8.51 Linux shared library rejected the pinned real RE-USE
+GGUF through both C ABI detection and session opening in three repeated cycles;
+a Whisper metadata positive control and a null-argument control passed. The
+relevant detector and session-open function bodies and shared architecture and
+Parakeet schema tables are byte-identical to this candidate. The
+[interface receipt](historical/reuse-c-abi-boundary-20261112.json) records the
+asset and source hashes. This is a released-library control, not execution of
+a newly built candidate library. The shared C ABI unit suite also covers the
+RE-USE rejection cases.
 
 For aligned five-second qualification artifacts, `quality_metrics.py` reports
 SNR, scale-invariant SDR and STOI for the noisy input, whole Python reference,
 chunked Python reference and chunked native output. Install `soundfile` and
 `pystoi` before running it. Treat the provided speech-plus-synthetic-noise case
 as a diagnostic, not a listening test or a representative quality benchmark.
+
+To reproduce the released-library interface control after verifying and
+extracting the pinned v0.8.51 Linux library archive:
+
+```sh
+LD_LIBRARY_PATH="$RELEASE_LIB_DIR" python tools/ci-heavy/issue579_reuse/c_abi_boundary.py \
+  --library "$RELEASE_LIB_DIR/libcrispasr.so.0.8.51" --model reuse-f32.gguf
+```

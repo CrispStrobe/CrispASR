@@ -14,7 +14,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ### RE-USE long-audio qualification — Codex (2026-11-12)
 
-- Source `799ab5769`; compare bounded original-model stage captures against the research diff across overlapping segments, test transition and tail handling, and assess a reproducible speech-plus-noise case against its clean input. Keep the research interface separate from the unimplemented product API; document the limits and preserve all stage gates. Use Kaggle for model execution and avoid new CI runs.
+- Source `799ab5769`; compare bounded original-model stage captures against the research diff across overlapping segments, test transition and tail handling, and assess a reproducible speech-plus-noise case against its clean input. Keep the research interface separate from the unimplemented product API; document the limits and preserve all stage gates. Kaggle `crispasr-reuse-long-audio-20261112` version 1 runs source `29311c9b6`: the first window passed 71 unconditioned and 71 conditioned stages; the remaining windows and quality results are pending. No product support claim follows from this in-progress run.
 
 ### Selected extended regression on Kaggle — Codex (2026-11-12)
 

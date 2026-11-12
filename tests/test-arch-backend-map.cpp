@@ -24,6 +24,7 @@
 #include <vector>
 
 #include "core/arch_backend_map.h"
+#include "crispasr_session.h"
 
 #include "gguf.h"
 
@@ -354,6 +355,13 @@ static std::string write_stub_gguf(const std::string& arch) {
     gguf_free(ctx);
     REQUIRE(ok);
     return path;
+}
+
+TEST_CASE("RE-USE research GGUF is not opened as a product session", "[unit][arch-map]") {
+    const std::string path = write_stub_gguf("reuse");
+    crispasr_session* session = crispasr_session_open(path.c_str(), 1);
+    std::remove(path.c_str());
+    REQUIRE(session == nullptr);
 }
 
 TEST_CASE("crispasr_detect_backend_from_gguf reads the shared table", "[unit][arch-map]") {

@@ -1,0 +1,17 @@
+{
+  "library_sha256": "56a5b80ea397c676ba0340fc24ec5df646598a48c9d95561b223c677af734539",
+  "model_sha256": "4621b396563157b3b4571a8402f56786093eea11cb411afc486fe74b06162dbc",
+  "reuse_detection_and_open_rejections": 3,
+  "whisper_detection_control": "pass",
+  "null_argument_control": "pass",
+  "date": "2026-11-12",
+  "release_tag": "v0.8.51",
+  "release_source_commit": "008a771c57fe285e86727c80e155d5376a9ee44b",
+  "candidate_base": "799ab57691727d52e6fcc9ad1235eccc7bd23b1b",
+  "release_asset": "libcrispasr-linux-x86_64.tar.gz",
+  "release_asset_sha256": "0d443d106dce5ff70fc6f03c11f0e11e023d88c95ba41b8aea8bc3c6804a8b73",
+  "detector_body_sha256": "19460c27a082c3ea099e58272ba86c51d547cb44ca87ef3283cfc669abf851ae",
+  "session_open_body_sha256": "8cb3be45d3939db8e1105daec49acbcc7f0c67104eecab656ff3b69c2b94b52c",
+  "source_equivalence": "Detector and session-open function bodies plus shared architecture and Parakeet GGUF header files match candidate source exactly.",
+  "scope": "Published Linux shared library, real pinned RE-USE research GGUF, three detection/open cycles, Whisper metadata and null controls. Not a rebuilt candidate binary and not a RE-USE product backend."
+}
