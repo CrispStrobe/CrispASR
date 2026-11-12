@@ -1,6 +1,7 @@
 {
-  "script_version": "reuse-quality-cpu-20261112-v1",
-  "script_sha256": "5a0351df1d48a363e2694b7b28d94d645fb77e22e9d9e181317598336b61c945",
+  "script_version": "reuse-quality-cpu-20261112-v2",
+  "script_sha256": "e5bb069a930745389e180d393dcbfd00d8903c8ec49ec3011505a1936c0e13e9",
+  "bundled_source_revision": "69b11562aa7b3a174add9a6767098d4eeae680d8",
   "status": "inputs-and-metric-controls-pass",
   "cases": [],
   "scope": "Original graph + audited CPU non-fused Mamba adapter. New corpus quality only; stage fingerprints are not native parity or a perceptual acceptance gate.",
@@ -74,5 +75,10 @@
       "path": "test-clean/260/123286/260-123286-0000.flac",
       "source_sha256": "d654a43d06f0e8b586b525e8ec83d6e3c0dc83c3f4742f8e25fd291db77248b3"
     }
-  ]
+  ],
+  "validation": {
+    "model_free_tests_passed": 8,
+    "model_execution": false,
+    "official_and_live_kaggle_selected_flacs_independently_match": true
+  }
 }
