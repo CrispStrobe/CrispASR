@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Server request context #588 — Codex (2026-11-12)
+
+- Source `30d03c393`; integrated fix `317703f95`. Unsupported streaming requests bypassed the ignored-context warning. A shared once-only warning now covers buffered and streaming dispatch; 12 source-compiled controls cover defaults, both endpoints, per-request and concurrent isolation, capability declarations and warnings. The two streaming warning cases failed before the fix. Reporter-corpus language behavior and full HTTP/model validation remain open.
+
 ### Extended regression coverage outcome — Codex (2026-11-12)
 
 - Source `30d03c393`. A queue-deferred scheduled extended run currently appears successful while testing no backends. Add a visible, machine-readable outcome that distinguishes deferred, executed and failed coverage without turning intentional deferral into a failed regression; test outcome selection and inspect current-source subset run [43228397799](https://github.com/CrispStrobe/CrispASR/actions/runs/43228397799), currently queued at `30d03c393`. Preserve the weekly and queue-aware scheduling policy.
