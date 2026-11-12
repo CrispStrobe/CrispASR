@@ -44,7 +44,9 @@ reference-input parity evidence; this job establishes no additional native,
 fused CUDA or GPU-backend parity.
 
 The single uploaded `code_file` contains exact compressed, SHA-verified copies
-of the CPU adapter and progress harness. The model and corpus arrive through
+of the CPU adapter and progress harness. Their exact bytes also match current
+source revision `69b11562aa7b3a174add9a6767098d4eeae680d8`, which is
+recorded in each run report. The model and corpus arrive through
 `dataset_sources`; the job performs no clone, pip install, download or upload.
 No secrets dataset is attached. Metadata explicitly disables GPU and internet.
 Dependencies, metric controls, corpus selection and every pinned model/source
@@ -76,3 +78,16 @@ are pinned from the independently downloaded official OpenSLR archive (verified
 MD5 `32fa31d27d2e1cad72775fee3f4849a9`); all four must match on the Kaggle mount
 before the model is initialized. The frozen selection is 121-121726-0000,
 237-126133-0000, 61-70968-0005 and 260-123286-0000.
+
+Model-free controls (no model initialization or inference):
+
+```
+python tests/test_reuse_quality_cpu.py -v
+```
+
+These exercise deterministic selection and tamper rejection, exact noise SNR,
+pink-noise determinism, stage shape/finite/completeness checks, FLOAT waveform
+roundtrips, and interruption during aggregate checkpoint replacement.
+All four selected files were also downloaded individually from the live Kaggle
+mirror and independently matched the official SHA-256 values before submission.
+The worker repeats these checks against its actual mounted bytes.
