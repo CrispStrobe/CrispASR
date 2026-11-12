@@ -11,16 +11,19 @@ try:
     import gguf
     import numpy as np
 except ImportError as error:
-    print(f'optional RE-USE CLI fixture dependency unavailable: {error}', file=sys.stderr)
-    raise SystemExit(77)
+    fixture_import_error = error
+else:
+    fixture_import_error = None
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--normal-executable', required=True, type=Path)
-parser.add_argument('--long-executable', required=True, type=Path)
-arguments, unittest_arguments = parser.parse_known_args()
+arguments = None
 
 
 class CliBoundsTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        if arguments is None or fixture_import_error is not None:
+            raise unittest.SkipTest('standalone executable paths and optional fixture dependencies required')
+
     def test_real_entrypoints_enforce_independent_sample_bounds(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -56,4 +59,11 @@ class CliBoundsTests(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    if fixture_import_error is not None:
+        print(f'optional RE-USE CLI fixture dependency unavailable: {fixture_import_error}', file=sys.stderr)
+        raise SystemExit(77)
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--normal-executable', required=True, type=Path)
+    parser.add_argument('--long-executable', required=True, type=Path)
+    arguments, unittest_arguments = parser.parse_known_args()
     unittest.main(argv=[sys.argv[0], *unittest_arguments])
