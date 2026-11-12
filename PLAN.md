@@ -14,7 +14,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ### Selected extended regression on Kaggle — Codex (2026-11-12)
 
-- Source `853f04f09ebf8b0b574c79c0b95126eabdf7a2d9`. Run the selected TADA, Parler and KugelAudio manifest entries on Kaggle against the pinned source while the existing Actions run is queued. Require an explicit result for each entry and preserve advisory versus gating outcomes. Record the run evidence and investigate failures.
+- Source `853f04f09ebf8b0b574c79c0b95126eabdf7a2d9`. Run the selected TADA, Parler and KugelAudio manifest entries on Kaggle against the pinned source while the existing Actions run is queued. The submitted `crispasr-selected-regression-20261112` version 1 is running; require an explicit result for each entry and preserve advisory versus gating outcomes. Record the run evidence and investigate failures.
 
 ### Server request context #588 — Codex (2026-11-12)
 
@@ -22,7 +22,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ### Extended regression coverage outcome — Codex (2026-11-12)
 
-- Source `30d03c393`. A queue-deferred scheduled extended run currently appears successful while testing no backends. Add a visible, machine-readable outcome that distinguishes deferred, executed and failed coverage without turning intentional deferral into a failed regression; test outcome selection and inspect current-source subset run [43228397799](https://github.com/CrispStrobe/CrispASR/actions/runs/43228397799), currently queued at `30d03c393`. Preserve the weekly and queue-aware scheduling policy.
+- Source `30d03c393`. A queue-deferred scheduled extended run currently appears successful while testing no backends. Add a visible, machine-readable outcome that distinguishes deferred, executed and failed coverage without turning intentional deferral into a failed regression; test outcome selection and inspect current-source subset run [43228397799](https://github.com/CrispStrobe/CrispASR/actions/runs/43228397799), at `30d03c393`. The run was canceled before model execution after the newer-source Kaggle subset was submitted; it did not provide model coverage. Preserve the weekly and queue-aware scheduling policy.
 
 ### RE-USE research reconciliation (2026-11-12)
 
