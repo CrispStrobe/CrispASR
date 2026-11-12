@@ -166,5 +166,10 @@
       "reference_chunked_vs_whole_max_abs": 0.009750843048095703,
       "native_vs_chunked_reference_max_abs": 1.4901161193847656e-08
     }
-  ]
+  ],
+  "published_stage_measurements": {
+    "file": "reuse-chunked-five-second-stages-20261112.json",
+    "sha256": "2909c7af8995769633164ad569b0f333bbe7293a39143cb0d5e4619555a03494",
+    "rows": 1278
+  }
 }
