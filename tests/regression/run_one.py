@@ -694,6 +694,9 @@ def regression_for(name: str, manifest: dict, work_dir: Path,
     for extra in entry.get("asr_extra_files", []):
         local = hf_download(extra["repo"], extra["file"], extra["revision"], work_dir)
         extra_args += [extra["arg"], str(local)]
+    # `cli_extra_args`: fixed CLI flags (e.g. an explicit --backend where
+    # GGUF auto-detection picks the wrong runtime).
+    extra_args += list(entry.get("cli_extra_args", []))
     if entry.get("lid_mode"):
         print(f"\n[lid] {name}")
         actual = run_lid(entry, manifest, gguf_local, sample, work_dir, crispasr_bin)
