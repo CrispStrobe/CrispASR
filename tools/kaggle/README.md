@@ -191,3 +191,41 @@ CI's expectations. When something legitimate changes upstream:
 needs to change** — i.e. you're editing `crispasr-regression.py`.
 For everything else (new backends in the manifest, new C++ commits,
 new GGUFs in HF), the running notebook pulls them at runtime.
+
+## Recovering a large output artifact
+
+`recover_output.py` avoids the Kaggle SDK output downloader's `response.content`
+buffer. It lists output metadata through the authenticated SDK, selects one exact
+`file_name` across all pages, and streams only that artifact in 1 MiB chunks.
+Install `kaggle` (including `kagglesdk`) and `requests` in your own environment.
+Export `KAGGLE_ACCOUNT` (or `KAGGLE_USERNAME`) and credentials privately.
+`KAGGLE_TOKEN` maps to `KAGGLE_API_TOKEN` when the latter is unset; native Kaggle
+SDK authentication configuration also works. Account names and signed URLs are
+not printed.
+
+```bash
+python tools/kaggle/recover_output.py kernel-slug \
+  --artifact results/reference.tar \
+  --destination "$ARTIFACT_DIR/reference.tar" \
+  --expected-bytes "$EXPECTED_BYTES" --sha256 "$EXPECTED_SHA256"
+```
+
+Supply the byte count and SHA-256 from a trusted producer receipt, not from the
+failed placeholder or the download response. The optional `--version LABEL`
+selects a Kaggle version; otherwise metadata describes the latest session. Use
+the full output name including directories, not a basename or regular expression.
+The destination parent must already exist on storage with sufficient free space
+for a complete temporary copy. A unique sibling `.part` file is flushed and
+verified before atomic replacement, including when replacing a zero-byte
+placeholder. Errors and interruptions discard the temporary copy and preserve
+the destination. A hard process kill can leave an untrusted `.part` file; remove
+it before retrying. No extraction or resume is performed. HTTP responses must
+be 200 with identity encoding; redirects, partial content and inconsistent
+Content-Length are rejected. Filesystems must support atomic same-directory
+replacement.
+
+Model-free mocked controls (no network, credentials or weights):
+
+```bash
+python -m unittest discover -s tests -p test_kaggle_output_recovery.py -v
+```

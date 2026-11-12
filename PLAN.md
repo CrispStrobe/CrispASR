@@ -12,6 +12,10 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### Kaggle output streamed recovery — Codex (2026-11-12)
+
+- Base `529e073f8`; recover one exact output artifact with bounded-memory streaming, explicit byte/hash verification and atomic publication. Implemented `tools/kaggle/recover_output.py`: 18 mocked model-free tests pass, covering exact paginated selection, bounded streaming, destination preservation, temporary-file cleanup and redacted errors. Usage and trust requirements are documented in the Kaggle README. Local isolated work only; no push or hosted jobs.
+
 ### RE-USE ten-second candidate — Codex (2026-11-12)
 
 - Base `7b4f0935a`; Kaggle kernel `crispasr-reuse-ten-second-20261112` version 1 runs frozen source `a5a46b6c5b616b7556d3bfa27335d33a95c74794`. It evaluates three 5 s windows with 2.5 s overlap on 10 s of speech proxy plus seeded noise, preserving hashed reference archives before the 71 unconditioned and 71 conditioned comparisons per window. The first two windows passed; the third and stitched quality results remain pending. No product-support or general model-quality claim follows.
