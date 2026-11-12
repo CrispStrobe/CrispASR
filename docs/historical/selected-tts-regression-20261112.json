@@ -1,0 +1,48 @@
+{
+  "date": "2026-11-12",
+  "runner": "Kaggle CPU build and inference",
+  "kernel": "crispasr-selected-regression-20261112",
+  "kernel_version": 1,
+  "source_commit": "853f04f09ebf8b0b574c79c0b95126eabdf7a2d9",
+  "submitted_script_commit": "17731ce94",
+  "submitted_script_sha256": "62963aaff0a57c73ed563e56cbeb1abe25832bcd385da990067387e5a75a5a07",
+  "raw_log_sha256": "1a08ead9dc45bd073ca4e3805354597f66441e7d372cbbfeaa98808b62b1edc3",
+  "mode": "validate-tts",
+  "reference_asr": "parakeet-tdt-0.6b-en",
+  "expected_text": "The quick brown fox jumps over the lazy dog",
+  "results": [
+    {
+      "backend": "parler-tts-mini-v1.1",
+      "pass": true,
+      "advisory": false,
+      "wer": 0.1111,
+      "wer_max": 0.2,
+      "elapsed_seconds": 93.43,
+      "transcript": "the quick brown fox jumps off the lazy dog"
+    },
+    {
+      "backend": "tada-tts-3b-ml",
+      "pass": true,
+      "advisory": false,
+      "wer": 0.1111,
+      "wer_max": 0.3,
+      "elapsed_seconds": 63.7,
+      "transcript": "The quick brown fox jumps over the lazy dogs."
+    },
+    {
+      "backend": "kugelaudio-0-open",
+      "pass": true,
+      "advisory": false,
+      "wer": 0.0,
+      "wer_max": 0.3,
+      "elapsed_seconds": 77.67,
+      "transcript": "The quick brown fox jumps over the lazy dog."
+    }
+  ],
+  "scope": "One manifest-selected text-to-speech to ASR roundtrip per backend. CPU only; not broader voice, language, GPU, speed or perceptual-quality qualification.",
+  "superseded_github_run": {
+    "id": 43228397799,
+    "source_commit": "30d03c393",
+    "status": "cancelled before model jobs executed"
+  }
+}
