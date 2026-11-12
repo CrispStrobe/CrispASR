@@ -92,6 +92,7 @@ import numpy as np
 #   1. tools/reference_backends/<name>.py  with dump() + DEFAULT_STAGES
 #   2. one line here.
 REGISTERED_BACKENDS: Dict[str, str] = {
+    "reuse": "reference_backends.reuse",
     "openvoice2": "reference_backends.openvoice2",
     "dia": "reference_backends.dia_tts_reference",
     "index-echo": "reference_backends.index_echo",

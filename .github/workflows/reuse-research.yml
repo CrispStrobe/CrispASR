@@ -1,0 +1,60 @@
+name: RE-USE model-free research controls
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/reuse-research.yml'
+      - 'cmake/CrispasrReuse*.cmake'
+      - 'src/core/reuse*'
+      - 'examples/cli/reuse*'
+      - 'models/convert-reuse-to-gguf.py'
+      - 'tools/ci-heavy/issue579_reuse/**'
+      - 'tools/reference_backends/reuse.py'
+      - 'tools/dump_reference.py'
+      - 'tests/test-reuse*'
+      - 'tests/test_reuse*'
+      - 'tests/fixtures/reuse*'
+  pull_request:
+    paths:
+      - '.github/workflows/reuse-research.yml'
+      - 'cmake/CrispasrReuse*.cmake'
+      - 'src/core/reuse*'
+      - 'examples/cli/reuse*'
+      - 'models/convert-reuse-to-gguf.py'
+      - 'tools/ci-heavy/issue579_reuse/**'
+      - 'tools/reference_backends/reuse.py'
+      - 'tools/dump_reference.py'
+      - 'tests/test-reuse*'
+      - 'tests/test_reuse*'
+      - 'tests/fixtures/reuse*'
+permissions:
+  contents: read
+jobs:
+  research:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Install model-free dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ninja-build ccache
+          python -m pip install numpy safetensors gguf
+      - name: Build isolated CPU research tools
+        run: |
+          cmake -S tools/ci-heavy/issue579_reuse -B build-reuse -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_C_COMPILER_LAUNCHER=ccache \
+            -DCMAKE_CXX_COMPILER_LAUNCHER=ccache
+          cmake --build build-reuse -j2
+      - name: Run fixtures and rejection controls
+        run: ctest --test-dir build-reuse --output-on-failure --timeout 120
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: reuse-research-test-log
+          path: build-reuse/Testing/Temporary/LastTest.log

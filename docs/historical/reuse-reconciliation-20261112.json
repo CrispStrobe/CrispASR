@@ -1,0 +1,1861 @@
+{
+  "schema_version": 1,
+  "date": "2026-11-12",
+  "scope": "Research-only reconciliation; no production backend or API registration; no new quality/general GPU acceptance claim.",
+  "main_base": "30d03c393f0dc22a7ac7efd77775d1befad34627",
+  "frozen_research_source": "2abc00b297c2ddbff2431c7d05aa2453ddd4e41c",
+  "ggml_revision": "1b972bb754aa5f83e2d872ccf37a335717f6658d",
+  "imported_byte_exact": [
+    {
+      "path": "cmake/CrispasrReuseCuda.cmake",
+      "source_sha256": "08ec64e34a6c49134b91bd81c6b3555ecd9ee91ad8f23ed9a727cff7388f5660",
+      "candidate_sha256": "08ec64e34a6c49134b91bd81c6b3555ecd9ee91ad8f23ed9a727cff7388f5660"
+    },
+    {
+      "path": "cmake/CrispasrReuseMkl.cmake",
+      "source_sha256": "4f55f3a7983fd0fe51df820de4585fc7d83d1fa395c9df2b9cccaa6c0426e9ab",
+      "candidate_sha256": "4f55f3a7983fd0fe51df820de4585fc7d83d1fa395c9df2b9cccaa6c0426e9ab"
+    },
+    {
+      "path": "examples/cli/reuse_diff.h",
+      "source_sha256": "ff19b8f104b1e91b6a5929776d7343afee41bae8190a1abbad6a460666905364",
+      "candidate_sha256": "ff19b8f104b1e91b6a5929776d7343afee41bae8190a1abbad6a460666905364"
+    },
+    {
+      "path": "examples/cli/reuse_frontend_profile.h",
+      "source_sha256": "c24b3aacdf00513dd357bdea90b35ed26fefe3b0a93b03edc34aad09b5b08c91",
+      "candidate_sha256": "c24b3aacdf00513dd357bdea90b35ed26fefe3b0a93b03edc34aad09b5b08c91"
+    },
+    {
+      "path": "models/convert-reuse-to-gguf.py",
+      "source_sha256": "baf2ed6b70306d51432f1363a48fbdb1e3c89a2df6149d131352c9059e08cd22",
+      "candidate_sha256": "baf2ed6b70306d51432f1363a48fbdb1e3c89a2df6149d131352c9059e08cd22"
+    },
+    {
+      "path": "src/core/reuse_bimamba.h",
+      "source_sha256": "858b6b01795290a3c34e22b0d4be0ac7b8faf45ef47f1eba3a8ef46bd3d781ef",
+      "candidate_sha256": "858b6b01795290a3c34e22b0d4be0ac7b8faf45ef47f1eba3a8ef46bd3d781ef"
+    },
+    {
+      "path": "src/core/reuse_decoder.h",
+      "source_sha256": "56722aa4c79ff3f348a9fa5d3f5e78d0805e56141a3af4596b9df785eb693b40",
+      "candidate_sha256": "56722aa4c79ff3f348a9fa5d3f5e78d0805e56141a3af4596b9df785eb693b40"
+    },
+    {
+      "path": "src/core/reuse_dense_encoder.h",
+      "source_sha256": "6112caa3c2446858fe5f7b87c5129ba6721f9cddabd7ec1fc2f92e4e3ea0b1b9",
+      "candidate_sha256": "6112caa3c2446858fe5f7b87c5129ba6721f9cddabd7ec1fc2f92e4e3ea0b1b9"
+    },
+    {
+      "path": "src/core/reuse_frontend.h",
+      "source_sha256": "848b971c6d73f97d2176f0f707b2292b5c0bc3c925777819bf2d99c0b95be4d7",
+      "candidate_sha256": "848b971c6d73f97d2176f0f707b2292b5c0bc3c925777819bf2d99c0b95be4d7"
+    },
+    {
+      "path": "src/core/reuse_frontend_cuda.h",
+      "source_sha256": "c0bf5fac81b6f64f8c307fa3e9036877aa9ffc340464e31b04ef28d5fe73c98e",
+      "candidate_sha256": "c0bf5fac81b6f64f8c307fa3e9036877aa9ffc340464e31b04ef28d5fe73c98e"
+    },
+    {
+      "path": "src/core/reuse_frontend_mkl.h",
+      "source_sha256": "7ed1b02908e90296e0c1ba8e97d471adeb8479cc28571d4ab28e446ccce7c8db",
+      "candidate_sha256": "7ed1b02908e90296e0c1ba8e97d471adeb8479cc28571d4ab28e446ccce7c8db"
+    },
+    {
+      "path": "src/core/reuse_mamba.h",
+      "source_sha256": "ed03e58d11ce63a3ff56cd9ca2c5280577cd9f1074a97009f148a82f992d8b34",
+      "candidate_sha256": "ed03e58d11ce63a3ff56cd9ca2c5280577cd9f1074a97009f148a82f992d8b34"
+    },
+    {
+      "path": "src/core/reuse_model_inventory.h",
+      "source_sha256": "c2b517a7d19e6c9e6ba815cd61c7a3c551489245585428f69b921ac7a6df9c3c",
+      "candidate_sha256": "c2b517a7d19e6c9e6ba815cd61c7a3c551489245585428f69b921ac7a6df9c3c"
+    },
+    {
+      "path": "src/core/reuse_model_loader.cpp",
+      "source_sha256": "1b716fab8d2e2c3c6f218302c26a951d7e5be1e6d611f651504d9db203e48254",
+      "candidate_sha256": "1b716fab8d2e2c3c6f218302c26a951d7e5be1e6d611f651504d9db203e48254"
+    },
+    {
+      "path": "src/core/reuse_model_loader.h",
+      "source_sha256": "1f8161aa72da2261800e4fd41dfaeacc6e8b7bc08b78bb13fe860ce0cd6b09cb",
+      "candidate_sha256": "1f8161aa72da2261800e4fd41dfaeacc6e8b7bc08b78bb13fe860ce0cd6b09cb"
+    },
+    {
+      "path": "src/core/reuse_reference_network.h",
+      "source_sha256": "4668db5a050d733bc5eed1b914a53a65ff627ab3591b50fee27c3c89cc4072f2",
+      "candidate_sha256": "4668db5a050d733bc5eed1b914a53a65ff627ab3591b50fee27c3c89cc4072f2"
+    },
+    {
+      "path": "src/core/reuse_selective_scan.h",
+      "source_sha256": "aa8c15013938b823661e09c0083559677fba309f117af229c09ada283181a0b0",
+      "candidate_sha256": "aa8c15013938b823661e09c0083559677fba309f117af229c09ada283181a0b0"
+    },
+    {
+      "path": "src/core/reuse_tf_mamba.h",
+      "source_sha256": "12f2a3bf145aaf17ec844cf79d63c5fcfef34f7f44bf512ede20c4446646714a",
+      "candidate_sha256": "12f2a3bf145aaf17ec844cf79d63c5fcfef34f7f44bf512ede20c4446646714a"
+    },
+    {
+      "path": "tests/fixtures/reuse-bimamba-f32le.bin",
+      "source_sha256": "7e0d910ee3756eb46a636877192a3ca8cc2f08cd80eea7b9ea6a44c3db5e569c",
+      "candidate_sha256": "7e0d910ee3756eb46a636877192a3ca8cc2f08cd80eea7b9ea6a44c3db5e569c"
+    },
+    {
+      "path": "tests/fixtures/reuse-decoder-f32le.bin",
+      "source_sha256": "e8af399ccb4189880f5654f5f837dd4cbe22ec774488bb57d811ec0d3c4b1443",
+      "candidate_sha256": "e8af399ccb4189880f5654f5f837dd4cbe22ec774488bb57d811ec0d3c4b1443"
+    },
+    {
+      "path": "tests/fixtures/reuse-dense-encoder-f32le.bin",
+      "source_sha256": "d348912088442cbe608d3930fdff842adf330064e63bd61c8d18b88df2889779",
+      "candidate_sha256": "d348912088442cbe608d3930fdff842adf330064e63bd61c8d18b88df2889779"
+    },
+    {
+      "path": "tests/fixtures/reuse-inventory.json",
+      "source_sha256": "62d0d8a6a571a5f92fc62fc27361c3883dd3940bd7d9a4ce42d5aeb09ab5947a",
+      "candidate_sha256": "62d0d8a6a571a5f92fc62fc27361c3883dd3940bd7d9a4ce42d5aeb09ab5947a"
+    },
+    {
+      "path": "tests/fixtures/reuse-istft-reference-f32le.bin",
+      "source_sha256": "bde5679c84fc74c926bf3ff686f71e90771fdb47893be3c11f2e2df0fe9a746a",
+      "candidate_sha256": "bde5679c84fc74c926bf3ff686f71e90771fdb47893be3c11f2e2df0fe9a746a"
+    },
+    {
+      "path": "tests/fixtures/reuse-mamba-f32le.bin",
+      "source_sha256": "e4d0fc40302ba1d2d94c3799cf935519336d5d37410b8233b6edcf65c664d320",
+      "candidate_sha256": "e4d0fc40302ba1d2d94c3799cf935519336d5d37410b8233b6edcf65c664d320"
+    },
+    {
+      "path": "tests/fixtures/reuse-scan-f32le.bin",
+      "source_sha256": "89c4b6c51d3a129660fb23313673bb62901daccbc64cca4acca897f421586835",
+      "candidate_sha256": "89c4b6c51d3a129660fb23313673bb62901daccbc64cca4acca897f421586835"
+    },
+    {
+      "path": "tests/fixtures/reuse-stft-44100-reference-f32le.bin",
+      "source_sha256": "c614672549e8700a001d431db83f2758f9fa0db78f539acf23338794b67a629c",
+      "candidate_sha256": "c614672549e8700a001d431db83f2758f9fa0db78f539acf23338794b67a629c"
+    },
+    {
+      "path": "tests/fixtures/reuse-stft-reference-f32le.bin",
+      "source_sha256": "df55a0d62e08c62521b692b7c98cc8c6cb0ee0ee68a368623d4576f28b75cb95",
+      "candidate_sha256": "df55a0d62e08c62521b692b7c98cc8c6cb0ee0ee68a368623d4576f28b75cb95"
+    },
+    {
+      "path": "tests/fixtures/reuse-tf-mamba-f32le.bin",
+      "source_sha256": "e5c103b15a953608fd248dcf0bcb33a3248896e0df1984771a713fe375ce8289",
+      "candidate_sha256": "e5c103b15a953608fd248dcf0bcb33a3248896e0df1984771a713fe375ce8289"
+    },
+    {
+      "path": "tests/test-reuse-bimamba-oracle.cpp",
+      "source_sha256": "a2ece79151b17e77e822f21c4776bd5b8f56345f5fe2afefe7309d7efe77c4b8",
+      "candidate_sha256": "a2ece79151b17e77e822f21c4776bd5b8f56345f5fe2afefe7309d7efe77c4b8"
+    },
+    {
+      "path": "tests/test-reuse-bimamba.cpp",
+      "source_sha256": "61d8972cc088cfd8593a4ceedc4f8216475a64ca9f964927539694bbb9463649",
+      "candidate_sha256": "61d8972cc088cfd8593a4ceedc4f8216475a64ca9f964927539694bbb9463649"
+    },
+    {
+      "path": "tests/test-reuse-decoder-oracle.cpp",
+      "source_sha256": "6e62d71e5e303d108955cc268fcc8b97eb91b185143e12507c1de9b1a20b5a60",
+      "candidate_sha256": "6e62d71e5e303d108955cc268fcc8b97eb91b185143e12507c1de9b1a20b5a60"
+    },
+    {
+      "path": "tests/test-reuse-decoder.cpp",
+      "source_sha256": "a03ed56089943e7d3a52e82c3a1e8238b7e153dec45cfd1c91e5415c1d06a840",
+      "candidate_sha256": "a03ed56089943e7d3a52e82c3a1e8238b7e153dec45cfd1c91e5415c1d06a840"
+    },
+    {
+      "path": "tests/test-reuse-dense-encoder.cpp",
+      "source_sha256": "3d29d7a1e7b941e86e15aced1999aee55c2e313026cbaecac7aaacd5975d7ae5",
+      "candidate_sha256": "3d29d7a1e7b941e86e15aced1999aee55c2e313026cbaecac7aaacd5975d7ae5"
+    },
+    {
+      "path": "tests/test-reuse-dense-oracle.cpp",
+      "source_sha256": "5560293eb69a32ed2ea50a32537f7f07d2c76e1f9e1c54167b844983d9ec5a3b",
+      "candidate_sha256": "5560293eb69a32ed2ea50a32537f7f07d2c76e1f9e1c54167b844983d9ec5a3b"
+    },
+    {
+      "path": "tests/test-reuse-frontend-profile.cpp",
+      "source_sha256": "9bdce08dc5bd356e1418151d5a51c8919fb929ec375cdc1e0e10fc1b2d2e9795",
+      "candidate_sha256": "9bdce08dc5bd356e1418151d5a51c8919fb929ec375cdc1e0e10fc1b2d2e9795"
+    },
+    {
+      "path": "tests/test-reuse-frontend.cpp",
+      "source_sha256": "402811a73b82efbe661c69222b4c9d9933b38ae858fdd939798a50ddac4d0879",
+      "candidate_sha256": "402811a73b82efbe661c69222b4c9d9933b38ae858fdd939798a50ddac4d0879"
+    },
+    {
+      "path": "tests/test-reuse-inventory.cpp",
+      "source_sha256": "d921d9ed157cd2fd7e3030644a2f395fa0f5974a8980923d67d280bdaf20b6f0",
+      "candidate_sha256": "d921d9ed157cd2fd7e3030644a2f395fa0f5974a8980923d67d280bdaf20b6f0"
+    },
+    {
+      "path": "tests/test-reuse-mamba-oracle.cpp",
+      "source_sha256": "21a1f8f3fee2a7047b95c3efd4bdb64687a6eba04e1c5201878329424e1f1ee4",
+      "candidate_sha256": "21a1f8f3fee2a7047b95c3efd4bdb64687a6eba04e1c5201878329424e1f1ee4"
+    },
+    {
+      "path": "tests/test-reuse-mamba.cpp",
+      "source_sha256": "5354491f8646d4e9445d19cffb2015f1cf118d036da8d56b4dbdd49adf70dd18",
+      "candidate_sha256": "5354491f8646d4e9445d19cffb2015f1cf118d036da8d56b4dbdd49adf70dd18"
+    },
+    {
+      "path": "tests/test-reuse-model-loader.cpp",
+      "source_sha256": "fa2aa1e583989441584796eabf9a9c13949fa253f1e5be8e69cc2eb7671449a1",
+      "candidate_sha256": "fa2aa1e583989441584796eabf9a9c13949fa253f1e5be8e69cc2eb7671449a1"
+    },
+    {
+      "path": "tests/test-reuse-network-oracle.cpp",
+      "source_sha256": "4b4c3740f4440785c3fa07c1aac8ea42d623fd6abd3626fc144a0ef740eee92e",
+      "candidate_sha256": "4b4c3740f4440785c3fa07c1aac8ea42d623fd6abd3626fc144a0ef740eee92e"
+    },
+    {
+      "path": "tests/test-reuse-reference-network.cpp",
+      "source_sha256": "4050046e66d223af45cbb0ee850549c87530145357d23f7ddcf8fd2975b30259",
+      "candidate_sha256": "4050046e66d223af45cbb0ee850549c87530145357d23f7ddcf8fd2975b30259"
+    },
+    {
+      "path": "tests/test-reuse-scan-oracle.cpp",
+      "source_sha256": "38b68706c8e41200d994e3de2084a0c9d176bfe607c0e242067de25ab322a46d",
+      "candidate_sha256": "38b68706c8e41200d994e3de2084a0c9d176bfe607c0e242067de25ab322a46d"
+    },
+    {
+      "path": "tests/test-reuse-scan.cpp",
+      "source_sha256": "4489b3a4bee15d0c43abae01c32fdf490fb9d6e866c5a9dc4fccdd1e3119232c",
+      "candidate_sha256": "4489b3a4bee15d0c43abae01c32fdf490fb9d6e866c5a9dc4fccdd1e3119232c"
+    },
+    {
+      "path": "tests/test-reuse-tf-mamba-oracle.cpp",
+      "source_sha256": "33ff17a159f294b19f6deaf16840f732984c8950c56e5b50b8ed7664c6d40f48",
+      "candidate_sha256": "33ff17a159f294b19f6deaf16840f732984c8950c56e5b50b8ed7664c6d40f48"
+    },
+    {
+      "path": "tests/test-reuse-tf-mamba.cpp",
+      "source_sha256": "5a7e802f45fea08be94297fa3559567ba99c3feffd28bcb8b2bffb18242868fa",
+      "candidate_sha256": "5a7e802f45fea08be94297fa3559567ba99c3feffd28bcb8b2bffb18242868fa"
+    },
+    {
+      "path": "tests/test_reuse_converter.py",
+      "source_sha256": "804353e6cf9ed208902569077dddee8d7e938e1e3d6b20e78434d5ee5bd6292b",
+      "candidate_sha256": "804353e6cf9ed208902569077dddee8d7e938e1e3d6b20e78434d5ee5bd6292b"
+    },
+    {
+      "path": "tests/test_reuse_cuda_frontend.py",
+      "source_sha256": "8cdc1bb57b63af88a0918dcaae451017b49351655df7c82a4065525363c27729",
+      "candidate_sha256": "8cdc1bb57b63af88a0918dcaae451017b49351655df7c82a4065525363c27729"
+    },
+    {
+      "path": "tests/test_reuse_frontend_stability.py",
+      "source_sha256": "f77b808e8f8756f053781220063f96ffc623f142716490645d225fc03aa28651",
+      "candidate_sha256": "f77b808e8f8756f053781220063f96ffc623f142716490645d225fc03aa28651"
+    },
+    {
+      "path": "tests/test_reuse_mkl_probe.py",
+      "source_sha256": "c0b4c815f249228dd1a9d13d85c15415f6069430064c988da6f60b41743185e7",
+      "candidate_sha256": "c0b4c815f249228dd1a9d13d85c15415f6069430064c988da6f60b41743185e7"
+    },
+    {
+      "path": "tests/test_reuse_network_compare.py",
+      "source_sha256": "ed3cbcad030a12119559f5cf6fe5761c49d43dd638e94003c5890c59bf9ea550",
+      "candidate_sha256": "ed3cbcad030a12119559f5cf6fe5761c49d43dd638e94003c5890c59bf9ea550"
+    },
+    {
+      "path": "tests/test_reuse_reference_dumper.py",
+      "source_sha256": "2a561f79f91e73905281935a3b55941caff469ac678633336b8d31667c042660",
+      "candidate_sha256": "2a561f79f91e73905281935a3b55941caff469ac678633336b8d31667c042660"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/decoder_actual_reference.py",
+      "source_sha256": "ba79cabfa1cca647a59ae08352c010e83453f5863d6a40439c50641f92e4aa54",
+      "candidate_sha256": "ba79cabfa1cca647a59ae08352c010e83453f5863d6a40439c50641f92e4aa54"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/decoder_reference.py",
+      "source_sha256": "d3236476971d32eb4830cf74aa83e8989765a452349ec8d4edea9b3437d90404",
+      "candidate_sha256": "d3236476971d32eb4830cf74aa83e8989765a452349ec8d4edea9b3437d90404"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/dense_actual_reference.py",
+      "source_sha256": "17d8b629f19287931be7216ca5680559c8ad4786b4218a5ed68abb8c390f8e33",
+      "candidate_sha256": "17d8b629f19287931be7216ca5680559c8ad4786b4218a5ed68abb8c390f8e33"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/dense_reference.py",
+      "source_sha256": "84f014178ccebcf5c5a9b25403ccb98368c7dc0a24de565719a36fc4583f3a5f",
+      "candidate_sha256": "84f014178ccebcf5c5a9b25403ccb98368c7dc0a24de565719a36fc4583f3a5f"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/frontend_cuda.cpp",
+      "source_sha256": "4605a42e2087f9cdceaa2c36a10aaff3abe0530541d6f47613dcb73bdc7b6bff",
+      "candidate_sha256": "4605a42e2087f9cdceaa2c36a10aaff3abe0530541d6f47613dcb73bdc7b6bff"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/frontend_cuda_probe.cpp",
+      "source_sha256": "902868f1cfc7c1da78efa29fec3230507cb2b18c45b8851ebad679afeb0022ac",
+      "candidate_sha256": "902868f1cfc7c1da78efa29fec3230507cb2b18c45b8851ebad679afeb0022ac"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/frontend_mkl.cpp",
+      "source_sha256": "5f0fa6525ed3d582916b56397555f52d671061d9002075fe27f783f7627f9113",
+      "candidate_sha256": "5f0fa6525ed3d582916b56397555f52d671061d9002075fe27f783f7627f9113"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/frontend_mkl_probe.cpp",
+      "source_sha256": "e7380c39db67fb40175c645170c1983c2ebbff6a54fbc10deab7f9556a60fd00",
+      "candidate_sha256": "e7380c39db67fb40175c645170c1983c2ebbff6a54fbc10deab7f9556a60fd00"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/frontend_stability.py",
+      "source_sha256": "4dc64a1e22362dde36ebea13b5eaa23ece0b34d90ef94028c0fa5e5e85effb8c",
+      "candidate_sha256": "4dc64a1e22362dde36ebea13b5eaa23ece0b34d90ef94028c0fa5e5e85effb8c"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/mamba_reference.py",
+      "source_sha256": "f6302c65841113a944cf4a74a7845c13559dc83f655315dbee599ddcd93ae766",
+      "candidate_sha256": "f6302c65841113a944cf4a74a7845c13559dc83f655315dbee599ddcd93ae766"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/model_loader_fixtures.py",
+      "source_sha256": "fccd028f068db7579f4d8bb1ad38ee93ac245f7430ab177a0f46c83f74e87079",
+      "candidate_sha256": "fccd028f068db7579f4d8bb1ad38ee93ac245f7430ab177a0f46c83f74e87079"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/network_actual_reference.py",
+      "source_sha256": "2667310811adc47e930b6c31572b5c71f8f91d347fcd8c0d8a97d94f31cfa288",
+      "candidate_sha256": "2667310811adc47e930b6c31572b5c71f8f91d347fcd8c0d8a97d94f31cfa288"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/network_compare.py",
+      "source_sha256": "d65353ace4dfe3d6f6a59c58817ea747383da260a5d0952be2dbe2ada8be456d",
+      "candidate_sha256": "d65353ace4dfe3d6f6a59c58817ea747383da260a5d0952be2dbe2ada8be456d"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/scan_actual_reference.py",
+      "source_sha256": "b467ea9ef5362a8cea6856cb1c8cbba56331dc0c9dd14edc3af6bb39c9e9a9eb",
+      "candidate_sha256": "b467ea9ef5362a8cea6856cb1c8cbba56331dc0c9dd14edc3af6bb39c9e9a9eb"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/scan_reference.py",
+      "source_sha256": "efc49e2cbbbfaf8e7a746f9197f9b3f32ac39407839e56a73a70da881b1bf405",
+      "candidate_sha256": "efc49e2cbbbfaf8e7a746f9197f9b3f32ac39407839e56a73a70da881b1bf405"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/stft_reference.py",
+      "source_sha256": "d704ee51a72ff7a417c4a9fd6d8f3401ef0abaaf5869f25ec90c9d3716064c83",
+      "candidate_sha256": "d704ee51a72ff7a417c4a9fd6d8f3401ef0abaaf5869f25ec90c9d3716064c83"
+    },
+    {
+      "path": "tools/reference_backends/reuse.py",
+      "source_sha256": "d8ae4d05822c363f1c2e811726d60832d2ec849ddbe2d6a4082a31f20ac6d640",
+      "candidate_sha256": "d8ae4d05822c363f1c2e811726d60832d2ec849ddbe2d6a4082a31f20ac6d640"
+    }
+  ],
+  "adapted_imports": [
+    {
+      "path": ".github/workflows/reuse-dense-original-audit.yml",
+      "source_sha256": "e4a849d79ffc626073ef82f593da19e9def736869a4feb92e0c8d32bf1103a03",
+      "candidate_sha256": "47f32b15103a620e94787833d991ef4c030d6fb91cb2c0ea4823aed3c126057e"
+    },
+    {
+      "path": "docs/reuse-diff.md",
+      "source_sha256": "8c349d71783a4ed58b4bba97ff3e5759b74313e6a831909451341da68278016f",
+      "candidate_sha256": "7d7013ad6d58de997eb00a377ca01640b90cf41e728ac66ee49c044b7aa8b60d"
+    },
+    {
+      "path": "docs/reuse-frontend-port.md",
+      "source_sha256": "1224ddb41e1be121a00364df656f4136f1fa2b576fadf5e425de777207474460",
+      "candidate_sha256": "67ec8b823287c7e7a6a3f7b39e7e2c96307ad620c381291675ec137a0f5559d5"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/CMakeLists.txt",
+      "source_sha256": "29ccb3c36e00a24140e9c07664135ca6d0f953a3a7c17455831e85975f69ac39",
+      "candidate_sha256": "0b5e623e0fc0405a52e33c235b6548df36112b6f037440a4922a69f4f30ce170"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/diff_probe.cpp",
+      "source_sha256": "2f203ace3df9619d11307303847aa9045b706484a5ae27de2a7ea48832490fae",
+      "candidate_sha256": "21af76f5ca57a0108daf7e894ee63f332468ba924f5a7789470a3b929b441750"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/frontend_cuda_probe.md",
+      "source_sha256": "feb17b20e3c3f8a60f9af0b15153929140f53b2b794a56c25e86affe52d16449",
+      "candidate_sha256": "677bfdf6ccb15b2359838db9d5854495ff08bb390d38ef008c589385ee640b5f"
+    },
+    {
+      "path": "tools/ci-heavy/issue579_reuse/frontend_mkl_probe.md",
+      "source_sha256": "2b16136c6b980ef381fafc3bbd8038c09fc366d7c8878cd8d5d29bf359c1aace",
+      "candidate_sha256": "0672870fbe73079b2601e679c8d6dbc70ddd7d7c5d77d375b8d4efce0afbdf56"
+    }
+  ],
+  "preserved_historical_receipts": [
+    {
+      "path": "docs/historical/reuse-avx2-kaggle-1s-20261107.json",
+      "sha256": "d10b8fe2e8b510f24901f22ad3affaf992de21a52cb8ddefffc146e42c57d185"
+    },
+    {
+      "path": "docs/historical/reuse-avx2-kaggle-integrated-20261107.json",
+      "sha256": "69d6b39b78545bea181c2618a2baa122f9eeaaa55d9b34d301ea19d134232ed7"
+    },
+    {
+      "path": "docs/historical/reuse-avx2-multi-fft-20261107.json",
+      "sha256": "c89140759d4ca64fd6a0f14656b272f9739a8051c6ff2d0779c855b28ebe1585"
+    },
+    {
+      "path": "docs/historical/reuse-cuda-fused-1s-parity-20261107.json",
+      "sha256": "9f9db67abd931aaa810bd8f50cee76f63a4e0388c979b0ec063591c58462757c"
+    },
+    {
+      "path": "docs/historical/reuse-cuda-fused-parity-20261107.json",
+      "sha256": "9364e3cecbaa511b4ebe487533a1f39e71679f9eee34e023273a772cc959840e"
+    },
+    {
+      "path": "docs/historical/reuse-cuda-integrated-20261107.json",
+      "sha256": "820854fafd4645822cc550cb75c6523953b93c2c21d016befa2d0ea6706a0aba"
+    },
+    {
+      "path": "docs/historical/reuse-cufft-fft-probe-20261107.json",
+      "sha256": "37961d488efd62e7e1e454104518dccefe61e37f003b0f422df31606f0cbe146"
+    },
+    {
+      "path": "docs/historical/reuse-fused-build-20261107.json",
+      "sha256": "3510135ebe56df97a9cd8fe533401b650217feff2ff6de6af6fc5f2838798fe5"
+    },
+    {
+      "path": "docs/historical/reuse-fused-capture-1s-20261107.json",
+      "sha256": "e5f1c4a49e1279ef5e02f1a7036146903cd4c46cce0ce8b7a2423a16c5bd74b3"
+    },
+    {
+      "path": "docs/historical/reuse-fused-capture-20261107.json",
+      "sha256": "b7c44eb971015a4a5289214955e82e877ef1fde31ac0accd4b41a70e7e4e6ca2"
+    },
+    {
+      "path": "docs/historical/reuse-fused-preflight-20261107.json",
+      "sha256": "02a2bcbcff5e38e27c4faf60f317e71456f2ebe1ea6ad19091def31d2b10ec20"
+    },
+    {
+      "path": "docs/historical/reuse-independent-runtime-20261107.json",
+      "sha256": "0587b688be1ceeb50a3ef460e45cdeb02de7a1d27d81441225a08add712fb229"
+    },
+    {
+      "path": "docs/historical/reuse-official-unfused-gpu-20261107.json",
+      "sha256": "0c9d80212da177432b1f9c55970ad2b0bc23b0607d92e8efa45054237542f730"
+    },
+    {
+      "path": "docs/historical/reuse-one-second-diff-20261107.json",
+      "sha256": "e5efc06010445c33e83b04bf9ca9c0ffb0d24f6797a4d5d5dfd14c9cd7a9018e"
+    },
+    {
+      "path": "docs/historical/reuse-onemkl-integrated-01s-20261107.json",
+      "sha256": "9ccfe246038aeab179711967258346febbac7c1d68238a9388290185ca928eb9"
+    },
+    {
+      "path": "docs/historical/reuse-onemkl-integrated-1s-20261107.json",
+      "sha256": "0f53180b570910b25c65099deb99ebadc5947b061be91e7154537f441e2fcb66"
+    },
+    {
+      "path": "docs/historical/reuse-onemkl-prototype-20261107.json",
+      "sha256": "a957b38789a9e239f7f60a847da91e200c42aae03e00511c08d9381613a25c20"
+    },
+    {
+      "path": "docs/historical/reuse-phase-multi-20261107.json",
+      "sha256": "304e915ebdc9ba8f6cd2152b1a607dead8fbd51cc734eb1a5d322037e87b0195"
+    },
+    {
+      "path": "docs/historical/reuse-window-fft-diagnosis-20261107.json",
+      "sha256": "3f5239ee5f4036554b803543ccb6f5a9ca23dad1d7e2747d8db58a5fd65ab5d4"
+    }
+  ],
+  "unchanged_production_files": [
+    {
+      "path": "CMakeLists.txt",
+      "sha256": "db9c5abd1f14d86a4619ecf32950ae79a6b89372f8461f06ad93834f7fec64fb"
+    },
+    {
+      "path": "src/CMakeLists.txt",
+      "sha256": "5b7bdb68d65fdfd0620cb3ee4168a9d9b82d52b11eb8b6e320292fc62bae28df"
+    },
+    {
+      "path": "examples/cli/CMakeLists.txt",
+      "sha256": "dae2335f3cac5dc66a036d15c1ce9a53959a0676103e024b706f59693fe619b5"
+    },
+    {
+      "path": "tests/CMakeLists.txt",
+      "sha256": "18aacf8c66869c64dd5b8a5c0df64a1536b2aa230e9cb1761d435e73eb514e39"
+    },
+    {
+      "path": "examples/cli/crispasr_diff_main.cpp",
+      "sha256": "68834a9cebc36bd7dd78ab8ee3a446ebfa4c98e66d17952f70a19c5ea5b57192"
+    },
+    {
+      "path": "src/crispasr_c_api.cpp",
+      "sha256": "5269d69a91776d7750312b7e6a8a9c76a4c2535e51319538a573fa43bcfbd2a0"
+    },
+    {
+      "path": "src/crispasr_model_registry.cpp",
+      "sha256": "b685305dcf8d83c564497ca27895da0c409467ddb497bcf8619bbabb9dd64c44"
+    },
+    {
+      "path": "include/crispasr_session.h",
+      "sha256": "2756c8c122ac562c37eb9cfc1b6e6fe0de9f36819495d2073c2a4d69f4f33ee0"
+    }
+  ],
+  "validation": {
+    "state": "passed",
+    "default_cpu": {
+      "build_exit_code": 0,
+      "initial_ctest": {
+        "passed": 18,
+        "failed": 0,
+        "log_sha256": "34064078a918769b42a7c5bcc9fabdc2de5007489a4b9412859bcbdd4cbfc73c"
+      },
+      "added_real_gguf_gate": {
+        "passed": 1,
+        "failed": 0,
+        "log_sha256": "6a3711887230ceb1960fa7e74c6fc69f5aa386f775fc0d7858ceb4e39bad782b"
+      },
+      "unique_ctest_tests_passed": 19,
+      "build_log_sha256": "037af93bb3a14ecdc17c08f7b7415226fbb24466019ec025d7ed0ae6b1fab55e"
+    },
+    "optional_mkl": {
+      "build_exit_code": 0,
+      "focused_ctest": {
+        "passed": 3,
+        "failed": 0,
+        "log_sha256": "ebc22134591879517411f1f72127268f2080e9fe06b40eab86b99f45065b8a43"
+      },
+      "sdk_version": "Intel(R) oneAPI Math Kernel Library Version 2025.0-Product Build 20241009 for Intel(R) 64 architecture applications",
+      "sdk_files": [
+        {
+          "name": "mkl.h",
+          "sha256": "434329beb14dfaeb108112d5e9a314a39bb0c857a71e8b28846cfdd84193fcf3",
+          "bytes": 1904
+        },
+        {
+          "name": "mkl_dfti.h",
+          "sha256": "84a1d619ac02f0baa156e5a70b1f00d89834572f3a280fcd4ecf35101428b6cb",
+          "bytes": 10480
+        },
+        {
+          "name": "mkl_vml_functions.h",
+          "sha256": "01c478d4250d65219e14b1c755a0bf6caf1cfce440d1dd1fbf1dcbece73e547f",
+          "bytes": 965318
+        },
+        {
+          "name": "mkl_version.h",
+          "sha256": "a945a9bee4a1221cc1e509a51b72ea604102d6aa91b11bfcc515915e1a9a1646",
+          "bytes": 1225
+        },
+        {
+          "name": "libmkl_avx2.so.2",
+          "sha256": "43305a994bdeb35fdca9e71b08ca2521bfadaee608c3ab76a8e8c3cd70d2619e",
+          "bytes": 44812464
+        },
+        {
+          "name": "libmkl_avx512.so.2",
+          "sha256": "3dd9229791a2b61a37eda6fd2aa8bc02586e7150254bc4bd2a339671ba5e43ae",
+          "bytes": 64680128
+        },
+        {
+          "name": "libmkl_blacs_intelmpi_ilp64.so.2",
+          "sha256": "605ec03d90295e7534c61b0dacb2c24968dcaeb175b2bc4bf3ba2b984a234abd",
+          "bytes": 565736
+        },
+        {
+          "name": "libmkl_blacs_intelmpi_lp64.so.2",
+          "sha256": "29bc7e3f41b610bb42269e94b20ab6438121e1034287f411236c50f4bcb2fd6f",
+          "bytes": 297776
+        },
+        {
+          "name": "libmkl_blacs_openmpi_ilp64.so.2",
+          "sha256": "58a8a244721d949824141d16f294617b8475788ef16560ecf4c0d714996e5004",
+          "bytes": 574272
+        },
+        {
+          "name": "libmkl_blacs_openmpi_lp64.so.2",
+          "sha256": "897caebb34abd98941d94ea757daaa89a3fd2d8c1cdbb2e51675d30f1099de24",
+          "bytes": 298120
+        },
+        {
+          "name": "libmkl_cdft_core.so.2",
+          "sha256": "28f7b0e9e4af039e6887c173638c72f23cd2504ec68676adf5c20c530a877ae3",
+          "bytes": 195040
+        },
+        {
+          "name": "libmkl_core.so.2",
+          "sha256": "0a05271b0d6e596eeea2914cb5abb2c15504909fc9685736b68928e75f8d0ac0",
+          "bytes": 70777008
+        },
+        {
+          "name": "libmkl_def.so.2",
+          "sha256": "6ae7a4f243f04409539417cb0173ee0c5622f7f6a411033b64f968f7091aa62b",
+          "bytes": 39939328
+        },
+        {
+          "name": "libmkl_gf_ilp64.so.2",
+          "sha256": "08b2ed951d4ec34ff57e6cfddf498e98a3653d1d65c950f6f20ffa8693e7c67f",
+          "bytes": 14420792
+        },
+        {
+          "name": "libmkl_gf_lp64.so.2",
+          "sha256": "a379a134944ff69374305fdffcd68acdbafd119506baacb885aab40f957bce7c",
+          "bytes": 16233672
+        },
+        {
+          "name": "libmkl_gnu_thread.so.2",
+          "sha256": "2acba466c3b498a5d4af935786432e09229e1a1e03ea4d503be31bcaabc4b911",
+          "bytes": 27975416
+        },
+        {
+          "name": "libmkl_intel_ilp64.so.2",
+          "sha256": "997c77a3df6db15b4598241f3c72129d9f002f264cf2c9bcc1f4c2d20d47db9d",
+          "bytes": 17341320
+        },
+        {
+          "name": "libmkl_intel_lp64.so.2",
+          "sha256": "8c5570dc0adb19c4bbe5f22e9ae86fd0da3ba9f52a17b2d004364c1b05d5bf75",
+          "bytes": 19166360
+        },
+        {
+          "name": "libmkl_intel_thread.so.2",
+          "sha256": "ae235f8c9e8026a620d5c1a73ae1ee652f03a50d9c7fe834414e09b515c01297",
+          "bytes": 39298576
+        },
+        {
+          "name": "libmkl_mc3.so.2",
+          "sha256": "0ff726a27d80a2e4deb13f8a31553f40a321e00e983f048573d29fb94b2b7bb0",
+          "bytes": 46453984
+        },
+        {
+          "name": "libmkl_rt.so.2",
+          "sha256": "0299785d92b925d22352da44d8028a1ade6e9cd0558840d17ae82bf1abe5f9b8",
+          "bytes": 18058448
+        },
+        {
+          "name": "libmkl_scalapack_ilp64.so.2",
+          "sha256": "d106785b199dcc7b5e88d711df37587cb97375c9a9a403bab9e9274409d11f98",
+          "bytes": 7688072
+        },
+        {
+          "name": "libmkl_scalapack_lp64.so.2",
+          "sha256": "05877e39723ce9e10ab68020f6d82287320e7b87ee701c1d3faa19da16f2958f",
+          "bytes": 7683072
+        },
+        {
+          "name": "libmkl_sequential.so.2",
+          "sha256": "96705e7b21c38d543b2bfe3301a2e90edaa764c14a7d09cf4a20aa043679d9db",
+          "bytes": 23986520
+        },
+        {
+          "name": "libmkl_tbb_thread.so.2",
+          "sha256": "4865befa4012d86ca8699fb01ac5f47f59ecf7dcfd2b768e8257ddc89cfc7a53",
+          "bytes": 34073592
+        },
+        {
+          "name": "libmkl_vml_avx2.so.2",
+          "sha256": "439d145bf2da1e90ae1f97289db56ac4ac138a127ea60179328db0a5d66d1a90",
+          "bytes": 15603424
+        },
+        {
+          "name": "libmkl_vml_avx512.so.2",
+          "sha256": "53663900fd168dde4a6cfe9f01add28fd85e452dc4f99786330a76ad27880f1a",
+          "bytes": 16229240
+        },
+        {
+          "name": "libmkl_vml_cmpt.so.2",
+          "sha256": "f65b3a2f34444b2f65625bbca371b5bbc23cbe7c94ec25c65352fcf589677543",
+          "bytes": 8169520
+        },
+        {
+          "name": "libmkl_vml_def.so.2",
+          "sha256": "34346ab770467aef8fd0eb9d2ebf93717e98072c229b6fef13073b7b2cfd7340",
+          "bytes": 9526552
+        },
+        {
+          "name": "libmkl_vml_mc3.so.2",
+          "sha256": "69139ff7bea367e982cc20e22009778e6d455ab77956e974624e52e946698cb5",
+          "bytes": 13357896
+        }
+      ]
+    },
+    "original_reference_replay": {
+      "exit_code": 0,
+      "scope": "One existing 100 ms 16 kHz microphone excerpt; scalar CPU network, experimental AVX2 oneMKL frontend; not a new reference capture, quality evaluation or GPU model test.",
+      "reference_run": "issue579-reuse-original-stages-v1",
+      "profile": "mkl-avx2",
+      "environment": {
+        "MKL_ENABLE_INSTRUCTIONS": "AVX2",
+        "MKL_CBWR": "unset",
+        "CRISPASR_REUSE_FRONTEND": "mkl-avx2"
+      },
+      "model_gguf": {
+        "sha256": "4621b396563157b3b4571a8402f56786093eea11cb411afc486fe74b06162dbc",
+        "bytes": 38549088
+      },
+      "reference_gguf": {
+        "sha256": "fb4f56e0883cce67b6777d9ce2c9cf6f7aba6ef48bf8163cfd0b4137032e3624",
+        "bytes": 24719584
+      },
+      "executable_sha256": "f6b989ce2938c5684f28cae862cb8ee3c994660e3aadc9df485a0848311714db",
+      "log_sha256": "68614eb6475854d431bbfe25a390faa6dbf441c60ee5ee67e1bb77e9c2cec778",
+      "groups": {
+        "mkl-avx2": [
+          {
+            "stage": "frontend_magnitude",
+            "status": "PASS",
+            "relative_rms": 2.4049802e-08,
+            "max_abs": 2.3841858e-07,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "frontend_phase",
+            "status": "PASS",
+            "relative_rms": 2.9651101e-08,
+            "max_abs": 2.3841858e-07,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "encoder_layer_0",
+            "status": "PASS",
+            "relative_rms": 8.5465111e-08,
+            "max_abs": 7.1525574e-07,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "encoder_layer_1",
+            "status": "PASS",
+            "relative_rms": 4.0179407e-07,
+            "max_abs": 5.7220459e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "encoder_layer_2",
+            "status": "PASS",
+            "relative_rms": 5.571564e-07,
+            "max_abs": 6.0200691e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "encoder_layer_3",
+            "status": "PASS",
+            "relative_rms": 8.2788534e-07,
+            "max_abs": 5.4836273e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "encoder_layer_4",
+            "status": "PASS",
+            "relative_rms": 5.4112309e-07,
+            "max_abs": 5.7220459e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "encoder_layer_5",
+            "status": "PASS",
+            "relative_rms": 3.9208931e-07,
+            "max_abs": 3.0994415e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_0",
+            "status": "PASS",
+            "relative_rms": 4.7901136e-07,
+            "max_abs": 3.0994415e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_0",
+            "status": "PASS",
+            "relative_rms": 5.3179798e-07,
+            "max_abs": 4.1425228e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_1",
+            "status": "PASS",
+            "relative_rms": 6.2187411e-07,
+            "max_abs": 4.529953e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_1",
+            "status": "PASS",
+            "relative_rms": 6.4854112e-07,
+            "max_abs": 4.9471855e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_2",
+            "status": "PASS",
+            "relative_rms": 7.3794735e-07,
+            "max_abs": 4.9471855e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0000001
+          },
+          {
+            "stage": "block_2",
+            "status": "PASS",
+            "relative_rms": 6.9452852e-07,
+            "max_abs": 5.543232e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_3",
+            "status": "PASS",
+            "relative_rms": 7.5039753e-07,
+            "max_abs": 5.6922436e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_3",
+            "status": "PASS",
+            "relative_rms": 7.4861816e-07,
+            "max_abs": 5.6028366e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_4",
+            "status": "PASS",
+            "relative_rms": 8.421195e-07,
+            "max_abs": 7.0035458e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_4",
+            "status": "PASS",
+            "relative_rms": 7.3582987e-07,
+            "max_abs": 5.4836273e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_5",
+            "status": "PASS",
+            "relative_rms": 8.362311e-07,
+            "max_abs": 5.543232e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_5",
+            "status": "PASS",
+            "relative_rms": 7.8890179e-07,
+            "max_abs": 5.4836273e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_6",
+            "status": "PASS",
+            "relative_rms": 8.1723971e-07,
+            "max_abs": 8.5830688e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_6",
+            "status": "PASS",
+            "relative_rms": 8.1332178e-07,
+            "max_abs": 7.6293945e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_7",
+            "status": "PASS",
+            "relative_rms": 8.1616344e-07,
+            "max_abs": 7.8976154e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_7",
+            "status": "PASS",
+            "relative_rms": 7.72048e-07,
+            "max_abs": 7.4803829e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_8",
+            "status": "PASS",
+            "relative_rms": 7.9474609e-07,
+            "max_abs": 6.4969063e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_8",
+            "status": "PASS",
+            "relative_rms": 7.9813395e-07,
+            "max_abs": 5.7220459e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_9",
+            "status": "PASS",
+            "relative_rms": 8.1673272e-07,
+            "max_abs": 6.4373016e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_9",
+            "status": "PASS",
+            "relative_rms": 7.7423124e-07,
+            "max_abs": 6.4373016e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_10",
+            "status": "PASS",
+            "relative_rms": 8.0154052e-07,
+            "max_abs": 6.0796738e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_10",
+            "status": "PASS",
+            "relative_rms": 7.6501834e-07,
+            "max_abs": 5.4836273e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_time_11",
+            "status": "PASS",
+            "relative_rms": 8.2947111e-07,
+            "max_abs": 5.0067902e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_11",
+            "status": "PASS",
+            "relative_rms": 7.6628277e-07,
+            "max_abs": 5.2452087e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_time_12",
+            "status": "PASS",
+            "relative_rms": 8.356289e-07,
+            "max_abs": 4.1723251e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999994
+          },
+          {
+            "stage": "block_12",
+            "status": "PASS",
+            "relative_rms": 7.5455898e-07,
+            "max_abs": 4.4107437e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_13",
+            "status": "PASS",
+            "relative_rms": 7.8700339e-07,
+            "max_abs": 4.2915344e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_13",
+            "status": "PASS",
+            "relative_rms": 8.2825875e-07,
+            "max_abs": 4.529953e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_14",
+            "status": "PASS",
+            "relative_rms": 8.1751858e-07,
+            "max_abs": 4.6491623e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_14",
+            "status": "PASS",
+            "relative_rms": 8.0154774e-07,
+            "max_abs": 5.3048134e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_15",
+            "status": "PASS",
+            "relative_rms": 8.0616297e-07,
+            "max_abs": 5.4836273e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_15",
+            "status": "PASS",
+            "relative_rms": 8.2669192e-07,
+            "max_abs": 5.0067902e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_16",
+            "status": "PASS",
+            "relative_rms": 8.4458071e-07,
+            "max_abs": 4.9173832e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_16",
+            "status": "PASS",
+            "relative_rms": 8.2503988e-07,
+            "max_abs": 4.6789646e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_17",
+            "status": "PASS",
+            "relative_rms": 8.4246352e-07,
+            "max_abs": 4.6491623e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_17",
+            "status": "PASS",
+            "relative_rms": 8.2124768e-07,
+            "max_abs": 4.7981739e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_18",
+            "status": "PASS",
+            "relative_rms": 8.4892912e-07,
+            "max_abs": 5.3048134e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_18",
+            "status": "PASS",
+            "relative_rms": 7.9400019e-07,
+            "max_abs": 4.9471855e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_19",
+            "status": "PASS",
+            "relative_rms": 8.4473902e-07,
+            "max_abs": 4.529953e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_19",
+            "status": "PASS",
+            "relative_rms": 7.5492829e-07,
+            "max_abs": 4.8875809e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_20",
+            "status": "PASS",
+            "relative_rms": 7.7885062e-07,
+            "max_abs": 3.9339066e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_20",
+            "status": "PASS",
+            "relative_rms": 8.0651557e-07,
+            "max_abs": 4.1723251e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_21",
+            "status": "PASS",
+            "relative_rms": 8.0170128e-07,
+            "max_abs": 4.529953e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_21",
+            "status": "PASS",
+            "relative_rms": 8.2546603e-07,
+            "max_abs": 4.8875809e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_22",
+            "status": "PASS",
+            "relative_rms": 8.5510544e-07,
+            "max_abs": 4.6491623e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999994
+          },
+          {
+            "stage": "block_22",
+            "status": "PASS",
+            "relative_rms": 8.3915592e-07,
+            "max_abs": 4.8875809e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_23",
+            "status": "PASS",
+            "relative_rms": 8.7058424e-07,
+            "max_abs": 5.543232e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_23",
+            "status": "PASS",
+            "relative_rms": 8.925287e-07,
+            "max_abs": 7.1227551e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_24",
+            "status": "PASS",
+            "relative_rms": 9.0048229e-07,
+            "max_abs": 5.8710575e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_24",
+            "status": "PASS",
+            "relative_rms": 9.3371955e-07,
+            "max_abs": 5.1259995e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_25",
+            "status": "PASS",
+            "relative_rms": 8.9322538e-07,
+            "max_abs": 5.7518482e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_25",
+            "status": "PASS",
+            "relative_rms": 9.5274794e-07,
+            "max_abs": 6.4373016e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_26",
+            "status": "PASS",
+            "relative_rms": 9.9364888e-07,
+            "max_abs": 6.6757202e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_26",
+            "status": "PASS",
+            "relative_rms": 9.7656368e-07,
+            "max_abs": 7.2717667e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_27",
+            "status": "PASS",
+            "relative_rms": 1.0342636e-06,
+            "max_abs": 8.5830688e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_27",
+            "status": "PASS",
+            "relative_rms": 1.1035354e-06,
+            "max_abs": 9.6559525e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_28",
+            "status": "PASS",
+            "relative_rms": 1.1030115e-06,
+            "max_abs": 8.4042549e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_28",
+            "status": "PASS",
+            "relative_rms": 1.1812433e-06,
+            "max_abs": 9.059906e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_time_29",
+            "status": "PASS",
+            "relative_rms": 1.2141703e-06,
+            "max_abs": 1.001358e-05,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_29",
+            "status": "PASS",
+            "relative_rms": 1.0919692e-06,
+            "max_abs": 1.3113022e-05,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "amplitude",
+            "status": "PASS",
+            "relative_rms": 2.6482255e-07,
+            "max_abs": 9.5367432e-07,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999994
+          },
+          {
+            "stage": "output_phase",
+            "status": "PASS",
+            "relative_rms": 2.8572299e-06,
+            "max_abs": 0.0002001822,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999994
+          },
+          {
+            "stage": "waveform",
+            "status": "PASS",
+            "relative_rms": 1.0561246e-06,
+            "max_abs": 3.1664968e-07,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          }
+        ],
+        "mkl-avx2-conditioned": [
+          {
+            "stage": "frontend_magnitude",
+            "status": "PASS",
+            "relative_rms": 2.4049802e-08,
+            "max_abs": 2.3841858e-07,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "frontend_phase",
+            "status": "PASS",
+            "relative_rms": 0.0,
+            "max_abs": 0.0,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "encoder_layer_0",
+            "status": "PASS",
+            "relative_rms": 8.0994603e-08,
+            "max_abs": 7.1525574e-07,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "encoder_layer_1",
+            "status": "PASS",
+            "relative_rms": 4.0003673e-07,
+            "max_abs": 5.7220459e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "encoder_layer_2",
+            "status": "PASS",
+            "relative_rms": 5.5555415e-07,
+            "max_abs": 6.0200691e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "encoder_layer_3",
+            "status": "PASS",
+            "relative_rms": 8.2468648e-07,
+            "max_abs": 5.1558018e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "encoder_layer_4",
+            "status": "PASS",
+            "relative_rms": 5.388801e-07,
+            "max_abs": 5.7220459e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "encoder_layer_5",
+            "status": "PASS",
+            "relative_rms": 3.9130501e-07,
+            "max_abs": 4.0531158e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_0",
+            "status": "PASS",
+            "relative_rms": 4.7738479e-07,
+            "max_abs": 3.8146973e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_0",
+            "status": "PASS",
+            "relative_rms": 5.3060228e-07,
+            "max_abs": 4.1425228e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_1",
+            "status": "PASS",
+            "relative_rms": 6.2167413e-07,
+            "max_abs": 4.4703484e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_1",
+            "status": "PASS",
+            "relative_rms": 6.4736946e-07,
+            "max_abs": 4.8279762e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_2",
+            "status": "PASS",
+            "relative_rms": 7.3918972e-07,
+            "max_abs": 4.8875809e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0000001
+          },
+          {
+            "stage": "block_2",
+            "status": "PASS",
+            "relative_rms": 6.9713781e-07,
+            "max_abs": 5.4240227e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_3",
+            "status": "PASS",
+            "relative_rms": 7.5140383e-07,
+            "max_abs": 5.6028366e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_3",
+            "status": "PASS",
+            "relative_rms": 7.485317e-07,
+            "max_abs": 5.6028366e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_4",
+            "status": "PASS",
+            "relative_rms": 8.4320646e-07,
+            "max_abs": 6.9439411e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_4",
+            "status": "PASS",
+            "relative_rms": 7.3739358e-07,
+            "max_abs": 6.0796738e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_5",
+            "status": "PASS",
+            "relative_rms": 8.3701411e-07,
+            "max_abs": 5.7816505e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_5",
+            "status": "PASS",
+            "relative_rms": 7.9021709e-07,
+            "max_abs": 5.364418e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_6",
+            "status": "PASS",
+            "relative_rms": 8.1904915e-07,
+            "max_abs": 7.6889992e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_6",
+            "status": "PASS",
+            "relative_rms": 8.1339499e-07,
+            "max_abs": 6.6757202e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_7",
+            "status": "PASS",
+            "relative_rms": 8.1686369e-07,
+            "max_abs": 6.6161156e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_7",
+            "status": "PASS",
+            "relative_rms": 7.7522191e-07,
+            "max_abs": 6.1988831e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_8",
+            "status": "PASS",
+            "relative_rms": 7.9896404e-07,
+            "max_abs": 4.8279762e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_8",
+            "status": "PASS",
+            "relative_rms": 8.0272304e-07,
+            "max_abs": 4.7087669e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_9",
+            "status": "PASS",
+            "relative_rms": 8.1865028e-07,
+            "max_abs": 5.7220459e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_9",
+            "status": "PASS",
+            "relative_rms": 7.7450437e-07,
+            "max_abs": 5.4836273e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_10",
+            "status": "PASS",
+            "relative_rms": 8.0136238e-07,
+            "max_abs": 5.1259995e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_10",
+            "status": "PASS",
+            "relative_rms": 7.6333663e-07,
+            "max_abs": 5.1856041e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_time_11",
+            "status": "PASS",
+            "relative_rms": 8.2676786e-07,
+            "max_abs": 4.8279762e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999994
+          },
+          {
+            "stage": "block_11",
+            "status": "PASS",
+            "relative_rms": 7.6171642e-07,
+            "max_abs": 4.4107437e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_time_12",
+            "status": "PASS",
+            "relative_rms": 8.3030068e-07,
+            "max_abs": 4.440546e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999994
+          },
+          {
+            "stage": "block_12",
+            "status": "PASS",
+            "relative_rms": 7.4829711e-07,
+            "max_abs": 4.7683716e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_time_13",
+            "status": "PASS",
+            "relative_rms": 7.7907265e-07,
+            "max_abs": 4.7087669e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_13",
+            "status": "PASS",
+            "relative_rms": 8.195027e-07,
+            "max_abs": 4.6491623e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999994
+          },
+          {
+            "stage": "block_time_14",
+            "status": "PASS",
+            "relative_rms": 8.057296e-07,
+            "max_abs": 5.1558018e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_14",
+            "status": "PASS",
+            "relative_rms": 7.8650771e-07,
+            "max_abs": 5.3048134e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_15",
+            "status": "PASS",
+            "relative_rms": 7.9007737e-07,
+            "max_abs": 4.4703484e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_15",
+            "status": "PASS",
+            "relative_rms": 8.0757087e-07,
+            "max_abs": 4.529953e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_16",
+            "status": "PASS",
+            "relative_rms": 8.2244003e-07,
+            "max_abs": 4.8279762e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_16",
+            "status": "PASS",
+            "relative_rms": 8.0326498e-07,
+            "max_abs": 4.5895576e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_17",
+            "status": "PASS",
+            "relative_rms": 8.2482563e-07,
+            "max_abs": 4.6491623e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_17",
+            "status": "PASS",
+            "relative_rms": 8.0429595e-07,
+            "max_abs": 4.4107437e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_18",
+            "status": "PASS",
+            "relative_rms": 8.3444741e-07,
+            "max_abs": 4.7981739e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_18",
+            "status": "PASS",
+            "relative_rms": 7.8063925e-07,
+            "max_abs": 4.7683716e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_19",
+            "status": "PASS",
+            "relative_rms": 8.2959468e-07,
+            "max_abs": 5.0067902e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_19",
+            "status": "PASS",
+            "relative_rms": 7.4454204e-07,
+            "max_abs": 4.7683716e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_20",
+            "status": "PASS",
+            "relative_rms": 7.6771886e-07,
+            "max_abs": 4.7683716e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_20",
+            "status": "PASS",
+            "relative_rms": 7.9274406e-07,
+            "max_abs": 4.2915344e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999994
+          },
+          {
+            "stage": "block_time_21",
+            "status": "PASS",
+            "relative_rms": 7.8726379e-07,
+            "max_abs": 4.9471855e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_21",
+            "status": "PASS",
+            "relative_rms": 8.1387236e-07,
+            "max_abs": 5.0067902e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_time_22",
+            "status": "PASS",
+            "relative_rms": 8.440806e-07,
+            "max_abs": 4.2915344e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999994
+          },
+          {
+            "stage": "block_22",
+            "status": "PASS",
+            "relative_rms": 8.316058e-07,
+            "max_abs": 4.4107437e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_23",
+            "status": "PASS",
+            "relative_rms": 8.6354771e-07,
+            "max_abs": 5.364418e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_23",
+            "status": "PASS",
+            "relative_rms": 8.8472717e-07,
+            "max_abs": 6.377697e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_24",
+            "status": "PASS",
+            "relative_rms": 8.940998e-07,
+            "max_abs": 5.9604645e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_24",
+            "status": "PASS",
+            "relative_rms": 9.2402104e-07,
+            "max_abs": 4.8875809e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_25",
+            "status": "PASS",
+            "relative_rms": 8.8022506e-07,
+            "max_abs": 5.364418e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_25",
+            "status": "PASS",
+            "relative_rms": 9.3562954e-07,
+            "max_abs": 5.9604645e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_26",
+            "status": "PASS",
+            "relative_rms": 9.7260749e-07,
+            "max_abs": 4.8577785e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_26",
+            "status": "PASS",
+            "relative_rms": 9.4044719e-07,
+            "max_abs": 6.1988831e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_27",
+            "status": "PASS",
+            "relative_rms": 9.9786791e-07,
+            "max_abs": 8.3446503e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_27",
+            "status": "PASS",
+            "relative_rms": 1.0418671e-06,
+            "max_abs": 8.7022781e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_time_28",
+            "status": "PASS",
+            "relative_rms": 1.0313511e-06,
+            "max_abs": 8.5234642e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_28",
+            "status": "PASS",
+            "relative_rms": 1.0988698e-06,
+            "max_abs": 8.225441e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "block_time_29",
+            "status": "PASS",
+            "relative_rms": 1.1097338e-06,
+            "max_abs": 1.013279e-05,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999988
+          },
+          {
+            "stage": "block_29",
+            "status": "PASS",
+            "relative_rms": 1.0373338e-06,
+            "max_abs": 1.4543533e-05,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          },
+          {
+            "stage": "amplitude",
+            "status": "PASS",
+            "relative_rms": 2.6615257e-07,
+            "max_abs": 1.3113022e-06,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999994
+          },
+          {
+            "stage": "output_phase",
+            "status": "PASS",
+            "relative_rms": 2.4944854e-06,
+            "max_abs": 0.00014449656,
+            "cos_min": 1.0,
+            "norm_ratio": 0.99999994
+          },
+          {
+            "stage": "waveform",
+            "status": "PASS",
+            "relative_rms": 1.0460008e-06,
+            "max_abs": 3.2782555e-07,
+            "cos_min": 1.0,
+            "norm_ratio": 1.0
+          }
+        ]
+      }
+    },
+    "format": "clang-format 18 passed all 39 candidate C++ files",
+    "workflow_validation": "actionlint passed both research workflows; workflow run-block check passed 582 bash steps",
+    "python_syntax": "AST parsing passed imported research tools and controls",
+    "secret_privacy": {
+      "passed": 5,
+      "skipped": 0,
+      "exit_code": 0,
+      "log_sha256": "b6716fd8ba9bffadcd4ac4459deec770df72782eb70e9854a187227ea781c655"
+    }
+  },
+  "limitations": [
+    "Historical 19 RE-USE receipts remain byte-exact; candidate replay does not broaden their audio/device/quality scope.",
+    "No new physical CUDA or Metal execution.",
+    "No full production build or product surface test: production CMake, registry, runtime and API files unchanged.",
+    "Original-weight oracle executables built; original-checkpoint audit workflow not dispatched."
+  ]
+}

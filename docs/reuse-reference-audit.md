@@ -1,5 +1,9 @@
 # Issue #579: NemotronLabs RE-USE reference audit
 
+The [research reconciliation](reuse-reconciliation-20261112.md) makes the frozen
+reference tools available through an isolated build. It preserves the historical
+evidence below and adds no product backend. See [build and diff commands](reuse-diff.md).
+
 This is reference work for a future CrispASR backend, not a claim that RE-USE
 is currently supported by CrispASR. The requested [NVIDIA checkpoint](https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE)
 is pinned to `31f82f2efad1095034492f236e8dac9239ba713b`; its `model.safetensors`
