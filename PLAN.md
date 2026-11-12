@@ -14,7 +14,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ### Kaggle output streamed recovery — Codex (2026-11-12)
 
-- Base `529e073f8`; recover one exact output artifact with bounded-memory streaming, explicit byte/hash verification and atomic publication. Implemented `tools/kaggle/recover_output.py`: 18 mocked model-free tests pass, covering exact paginated selection, bounded streaming, destination preservation, temporary-file cleanup and redacted errors. Usage and trust requirements are documented in the Kaggle README. Local isolated work only; no push or hosted jobs.
+- Base `529e073f8`; recover one exact output artifact with bounded-memory streaming, explicit byte/hash verification and atomic publication. Implemented `tools/kaggle/recover_output.py`: 18 mocked model-free tests pass, covering exact paginated selection, bounded streaming, destination preservation, temporary-file cleanup and redacted errors. A live download of the five-second reference manifest passed byte and hash verification. Usage and trust requirements are documented in the Kaggle README.
 
 ### RE-USE ten-second candidate — Codex (2026-11-12)
 
