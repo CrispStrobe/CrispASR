@@ -1,8 +1,8 @@
 name: CI
 
 # What runs when (docs/contributing.md, "CI: what runs when"):
-#   - docs-only changes (*.md, docs/** except JSON receipts, hf_readmes/**)
-#     do not start this workflow at all;
+#   - main docs/ and lanes/ changes do not start this workflow, except for
+#     two historical JSON fixtures read by unit tests; PR coverage stays broader;
 #   - every other change runs the `changes` job plus the cheap Linux tier:
 #     linux-x86_64 (CPU build + smoke) and linux-unit (the unit tier);
 #   - native changes (C/C++/ObjC/CUDA/Metal/shader sources, any CMake file,
@@ -21,7 +21,10 @@ on:
       - '**'
       - '!**.md'
       - '!docs/**'
-      - 'docs/**.json'        # receipts some unit tests read
+      - '!lanes/**'
+      # These two JSON receipts are inputs to model-free tests.
+      - 'docs/historical/data2vec-avx512-controls-2026-10-28.json'
+      - 'docs/historical/musa-sdk52-2026-10-26.json'
       - '!hf_readmes/**'
       - '!LICENSE'
       - '!AUTHORS'
@@ -40,9 +43,8 @@ on:
 # manual runs get their own group (run_id), so they are never cancelled.
 # Literal `ci-yml` prefix: build.yml is also named "CI" (see its note).
 concurrency:
-  group: ci-yml-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && (github.event_name == 'push' || github.event_name == 'pull_request') }}
 jobs:
   # Path gate for the expensive legs below. Fail-open: dispatch, a new or
   # force-pushed base, or any error answers native=true.
@@ -218,6 +220,9 @@ jobs:
       # packaging scripts. Without it that test SKIPs, and a skip is
       # indistinguishable from a pass in the summary — which is how the release
       # packaging went unobserved in the first place.
+      - name: Check main CI path filter controls
+        run: python3 tests/test_ci_main_path_filters.py
+
       - name: Install dependencies
         run: bash tools/ci-apt.sh update && bash tools/ci-apt.sh install -y cmake ninja-build g++ libopenblas-dev patchelf
 

@@ -24,9 +24,8 @@ permissions:
   actions: read
 
 concurrency:
-  group: index-echo-9b-large-regression
-  cancel-in-progress: false
-
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && (github.event_name == 'push' || github.event_name == 'pull_request') }}
 jobs:
   validate:
     uses: ./.github/workflows/heavy-cpu.yml

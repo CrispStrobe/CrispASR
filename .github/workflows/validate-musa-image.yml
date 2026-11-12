@@ -7,9 +7,8 @@ permissions:
   contents: read
 
 concurrency:
-  group: musa-s5000-validation
-  cancel-in-progress: false
-
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && (github.event_name == 'push' || github.event_name == 'pull_request') }}
 jobs:
   validate:
     runs-on: [self-hosted, linux, x64, musa-s5000]
