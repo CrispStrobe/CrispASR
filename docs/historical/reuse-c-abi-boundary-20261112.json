@@ -13,5 +13,12 @@
   "detector_body_sha256": "19460c27a082c3ea099e58272ba86c51d547cb44ca87ef3283cfc669abf851ae",
   "session_open_body_sha256": "8cb3be45d3939db8e1105daec49acbcc7f0c67104eecab656ff3b69c2b94b52c",
   "source_equivalence": "Detector and session-open function bodies plus shared architecture and Parakeet GGUF header files match candidate source exactly.",
-  "scope": "Published Linux shared library, real pinned RE-USE research GGUF, three detection/open cycles, Whisper metadata and null controls. Not a rebuilt candidate binary and not a RE-USE product backend."
+  "scope": "Published Linux shared library, real pinned RE-USE research GGUF, three detection/open cycles, Whisper metadata and null controls. Not a rebuilt candidate binary and not a RE-USE product backend.",
+  "architecture_map_suite": {
+    "cases": 7,
+    "assertions": 630,
+    "result": "pass",
+    "library": "published v0.8.51 Linux shared library",
+    "test_source": "candidate test-arch-backend-map.cpp including RE-USE detection and session-open rejection"
+  }
 }

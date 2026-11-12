@@ -65,11 +65,12 @@ backend. The published v0.8.51 Linux shared library rejected the pinned real RE-
 GGUF through both C ABI detection and session opening in three repeated cycles;
 a Whisper metadata positive control and a null-argument control passed. The
 relevant detector and session-open function bodies and shared architecture and
-Parakeet schema tables are byte-identical to this candidate. The
+Parakeet schema tables are byte-identical to this candidate. The shared architecture-map and C ABI unit suite also passed against this
+released library: 630 assertions across seven cases, including the added RE-USE
+detection and session-open controls. The
 [interface receipt](historical/reuse-c-abi-boundary-20261112.json) records the
 asset and source hashes. This is a released-library control, not execution of
-a newly built candidate library. The shared C ABI unit suite also covers the
-RE-USE rejection cases.
+a newly built candidate library.
 
 For aligned five-second qualification artifacts, `quality_metrics.py` reports
 SNR, scale-invariant SDR and STOI for the noisy input, whole Python reference,
