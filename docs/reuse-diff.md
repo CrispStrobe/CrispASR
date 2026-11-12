@@ -62,6 +62,16 @@ uses five-second windows and 50% overlap; its
 ends its final window at the end of the recording. The shorter diagnostic
 windows and padding rules must be evaluated separately before product use.
 
+On one five-second speech proxy with seeded synthetic noise, nine one-second
+windows with 50% overlap each passed all 71 unconditioned and 71 conditioned
+native stage checks. The stitched native and Python outputs differed by
+5.3e-7 relative RMS, while the stitched and whole-recording Python outputs
+differed by 0.111 relative RMS. Whole versus chunked reference SI-SDR was
+15.46 versus 13.67 dB and STOI was 0.691 versus 0.683 on that sample. These
+are diagnostic observations, not a quality threshold or streaming-equivalence
+claim. See the [run receipt](historical/reuse-chunked-five-second-20261112.json);
+its per-window reference GGUF archives were not retained.
+
 The `reuse` GGUF architecture is intentionally not registered as a product
 backend. The published v0.8.51 Linux shared library rejected the pinned real RE-USE
 GGUF through both C ABI detection and session opening in three repeated cycles;

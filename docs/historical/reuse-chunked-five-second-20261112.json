@@ -1,0 +1,170 @@
+{
+  "source_commit": "29311c9b6de10c9cf27f70eddd27ef2c7b4404da",
+  "sample_rate": 16000,
+  "samples": 80000,
+  "input_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "model_sha256": "06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1",
+  "noise_seed": 579,
+  "input_snr_db": 4.999999997052789,
+  "whole_reference_snr_db": 13.618899695802346,
+  "chunked_reference_snr_db": 13.043278029182215,
+  "native_chunked_snr_db": 13.043279201918562,
+  "native_vs_reference_chunk_rel_rms": 5.303115244714718e-07,
+  "whole_vs_chunk_rel_rms": 0.11123209446668625,
+  "seam_max_abs_error_vs_whole": 0.08066229522228241,
+  "windows": [
+    {
+      "index": 0,
+      "start_sample": 0,
+      "pass_rows": 142,
+      "fail_rows": 0,
+      "exit_code": 0
+    },
+    {
+      "index": 1,
+      "start_sample": 8000,
+      "pass_rows": 142,
+      "fail_rows": 0,
+      "exit_code": 0
+    },
+    {
+      "index": 2,
+      "start_sample": 16000,
+      "pass_rows": 142,
+      "fail_rows": 0,
+      "exit_code": 0
+    },
+    {
+      "index": 3,
+      "start_sample": 24000,
+      "pass_rows": 142,
+      "fail_rows": 0,
+      "exit_code": 0
+    },
+    {
+      "index": 4,
+      "start_sample": 32000,
+      "pass_rows": 142,
+      "fail_rows": 0,
+      "exit_code": 0
+    },
+    {
+      "index": 5,
+      "start_sample": 40000,
+      "pass_rows": 142,
+      "fail_rows": 0,
+      "exit_code": 0
+    },
+    {
+      "index": 6,
+      "start_sample": 48000,
+      "pass_rows": 142,
+      "fail_rows": 0,
+      "exit_code": 0
+    },
+    {
+      "index": 7,
+      "start_sample": 56000,
+      "pass_rows": 142,
+      "fail_rows": 0,
+      "exit_code": 0
+    },
+    {
+      "index": 8,
+      "start_sample": 64000,
+      "pass_rows": 142,
+      "fail_rows": 0,
+      "exit_code": 0
+    }
+  ],
+  "scope": "One 5 s speech-proxy recording with deterministic synthetic noise; reference and stage-gated native quality. Not a production chunking policy or a broad quality benchmark.",
+  "date": "2026-11-12",
+  "kernel": "crispasr-reuse-long-audio-20261112",
+  "kernel_version": 1,
+  "window_samples": 16000,
+  "hop_samples": 8000,
+  "quality": {
+    "input": {
+      "snr_db": 4.999999997052795,
+      "si_sdr_db": 5.00892385919558,
+      "stoi": 0.5773091303199077
+    },
+    "reference_whole": {
+      "snr_db": 13.618899695802348,
+      "si_sdr_db": 15.461103235115807,
+      "stoi": 0.6906206657521794
+    },
+    "reference_chunked": {
+      "snr_db": 13.043278029182218,
+      "si_sdr_db": 13.66534692059953,
+      "stoi": 0.6828292983115652
+    },
+    "native_chunked": {
+      "snr_db": 13.043279201918565,
+      "si_sdr_db": 13.665347408444706,
+      "stoi": 0.6828293039580956
+    }
+  },
+  "stage_validation": "All nine retrieved logs independently checked for 71 unique PASS stages in each of the unconditioned and conditioned groups.",
+  "reference_archives": "Per-window GGUF reference archives were deleted by the worker and were not retained; the stage logs and waveform outputs were recovered.",
+  "artifacts": {
+    "long-audio-result.json": "6595eb54bc16c8c59a5f1173561a22090dad6feded03a1107beedfe255b03fa3",
+    "quality.json": "e2b94aa30cf261e3b70a5d09fbdf3c2b48840dff48c504e10efad52753b9c27d",
+    "input-proxy.wav": "aeeed1425f6711df167292d294be333d05c461c80092b39e15fc6769a684a0a0",
+    "input-noisy.wav": "7106054f3121c428365d79583fba6f968b8943108952f57ee8ecba848f5de76b",
+    "output-reference-whole.wav": "76b97ac7e4dcbfbe0efd400d1291c557a21d91597008de48f53f152f5f0c6a40",
+    "output-reference-chunked.wav": "dc9e01fc43e345592451dcd8ed15dca1f4cbf66c093b26ecc06e039b9aa8acab",
+    "output-native-chunked.wav": "d821aa703cfea86ad811114ccd1562f8cc34a249b2100659ea727e0716dc26b2",
+    "window-0-diff.log": "8c602935e8f3cd9b48c143d051234f9276dfddeff6adc000f39c70f158eb0c53",
+    "window-1-diff.log": "417ef6c0c055ee745796db59ddcdc6eb5cfeaf12bf737c9abfb06f8d60d3db76",
+    "window-2-diff.log": "c43300472d92e83807da282cc4552dab94634db0973924273f4d4006229b1941",
+    "window-3-diff.log": "fcab6b040588f3cd30529b7ac5cdbee138e30c83e53f7acb75a143e73bfc3732",
+    "window-4-diff.log": "2edc5f27f18e7fe228e84b54d05a27e2f71014ca9992242d853dd826e17143aa",
+    "window-5-diff.log": "f10d3c0eb8fd17ae1696bf0741b044bf22d4999833326534add7ced2899a2991",
+    "window-6-diff.log": "f8008920d9e8cf98f4da80c468cc2defeb0277e90abba121f43f73773dfdca43",
+    "window-7-diff.log": "1ca0f20faecf84d07f0519f166cc9d4bae878a9efe19ff0de25dc4b443ac5365",
+    "window-8-diff.log": "56890ca7dd71a34c03166d02b627052ad5fe6656e65a833ab7c9eaa7224aab8e"
+  },
+  "seams_10ms_each_side": [
+    {
+      "sample": 8000,
+      "reference_chunked_vs_whole_max_abs": 0.01975136622786522,
+      "native_vs_chunked_reference_max_abs": 7.450580596923828e-08
+    },
+    {
+      "sample": 16000,
+      "reference_chunked_vs_whole_max_abs": 0.02142203599214554,
+      "native_vs_chunked_reference_max_abs": 5.6184944696724415e-08
+    },
+    {
+      "sample": 24000,
+      "reference_chunked_vs_whole_max_abs": 0.03570133447647095,
+      "native_vs_chunked_reference_max_abs": 2.980232238769531e-07
+    },
+    {
+      "sample": 32000,
+      "reference_chunked_vs_whole_max_abs": 0.011177964508533478,
+      "native_vs_chunked_reference_max_abs": 7.82310962677002e-08
+    },
+    {
+      "sample": 40000,
+      "reference_chunked_vs_whole_max_abs": 0.004393633455038071,
+      "native_vs_chunked_reference_max_abs": 6.28642737865448e-09
+    },
+    {
+      "sample": 48000,
+      "reference_chunked_vs_whole_max_abs": 0.00032310912501998246,
+      "native_vs_chunked_reference_max_abs": 5.784386303275824e-10
+    },
+    {
+      "sample": 56000,
+      "reference_chunked_vs_whole_max_abs": 0.08066229522228241,
+      "native_vs_chunked_reference_max_abs": 2.682209014892578e-07
+    },
+    {
+      "sample": 64000,
+      "reference_chunked_vs_whole_max_abs": 0.009750843048095703,
+      "native_vs_chunked_reference_max_abs": 1.4901161193847656e-08
+    }
+  ]
+}
