@@ -1,0 +1,290 @@
+{
+  "estoi_normalization_seed": 579,
+  "input_hashes": {
+    "input-proxy.wav": "647049cb5676aab5f9c469c0f28938b8b585b43c1b6564308222aa48ee593fb0",
+    "input-noisy.wav": "78e407ecadaa876d17fc8ba5abb65ad23a86b7d5d42e6bd22042c5c01ad703a2",
+    "output-reference-chunked.wav": "5f9737012a2d8560625d83de5bffde25c5424287c87981ee3be5169860b71ff2"
+  },
+  "scope": "Saved waveform audit; one JFK speech proxy, no new model runs or independent voices",
+  "segments": [
+    {
+      "start": 0,
+      "end": 160000,
+      "input": {
+        "snr_db": 4.999999999764002,
+        "si_sdr_db": 5.001899264417026,
+        "gain_projection": 1.000208733666996,
+        "rms_ratio": 1.147451790668017,
+        "stoi": 0.6311224327244249,
+        "estoi": 0.4560748054542995,
+        "spectral_convergence": 0.5275923259357077
+      },
+      "output": {
+        "snr_db": 5.081550320966367,
+        "si_sdr_db": 3.482318430450993,
+        "gain_projection": 0.6682007806022118,
+        "rms_ratio": 0.8042056343182404,
+        "stoi": 0.7152504357951753,
+        "estoi": 0.5427999558812518,
+        "spectral_convergence": 0.266672342161962
+      }
+    },
+    {
+      "start": 0,
+      "end": 80000,
+      "input": {
+        "snr_db": 5.965022344921135,
+        "si_sdr_db": 5.973040076105423,
+        "gain_projection": 1.0008886145341074,
+        "rms_ratio": 1.1202668339088293,
+        "stoi": 0.5961769617571347,
+        "estoi": 0.43379738823907604,
+        "spectral_convergence": 0.47379963669355757
+      },
+      "output": {
+        "snr_db": 13.59758259212853,
+        "si_sdr_db": 15.45652511348596,
+        "gain_projection": 0.847606189765652,
+        "rms_ratio": 0.8595860907009658,
+        "stoi": 0.7022243282281563,
+        "estoi": 0.5316851447605706,
+        "spectral_convergence": 0.17965198873184557
+      }
+    },
+    {
+      "start": 80000,
+      "end": 160000,
+      "input": {
+        "snr_db": 3.758538073923641,
+        "si_sdr_db": 3.750550255336605,
+        "gain_projection": 0.9990795196281287,
+        "rms_ratio": 1.1912293566071108,
+        "stoi": 0.7190939474362655,
+        "estoi": 0.5140905836597439,
+        "spectral_convergence": 0.6064354528819214
+      },
+      "output": {
+        "snr_db": 1.2308006009154708,
+        "si_sdr_db": -4.1522739590830495,
+        "gain_projection": 0.3702528716569886,
+        "rms_ratio": 0.7026538530243923,
+        "stoi": 0.7951314855825232,
+        "estoi": 0.6138791164708115,
+        "spectral_convergence": 0.36826067377489763
+      }
+    },
+    {
+      "start": 0,
+      "end": 40000,
+      "input": {
+        "snr_db": 7.495596133189752,
+        "si_sdr_db": 7.491702486713654,
+        "gain_projection": 0.9994305035145771,
+        "rms_ratio": 1.0848369128020428,
+        "stoi": 0.7553930600689968,
+        "estoi": 0.6002813233534656,
+        "spectral_convergence": 0.3939993752769036
+      },
+      "output": {
+        "snr_db": 14.591209849865916,
+        "si_sdr_db": 16.54750445813715,
+        "gain_projection": 0.8652140568494915,
+        "rms_ratio": 0.8747411052259136,
+        "stoi": 0.8786751923621571,
+        "estoi": 0.7496034779008562,
+        "spectral_convergence": 0.1611996949974307
+      }
+    },
+    {
+      "start": 40000,
+      "end": 80000,
+      "input": {
+        "snr_db": 3.5436119625939395,
+        "si_sdr_db": 3.583263960870233,
+        "gain_projection": 1.0045517206020014,
+        "rms_ratio": 1.2047090442608068,
+        "stoi": 0.5167890272225264,
+        "estoi": 0.3205898019849521,
+        "spectral_convergence": 0.6312093989934017
+      },
+      "output": {
+        "snr_db": 11.796594255162482,
+        "si_sdr_db": 13.712215302068369,
+        "gain_projection": 0.8033590373432058,
+        "rms_ratio": 0.8202677921978728,
+        "stoi": 0.6290454524129523,
+        "estoi": 0.3986842262658484,
+        "spectral_convergence": 0.219050739603328
+      }
+    },
+    {
+      "start": 80000,
+      "end": 120000,
+      "input": {
+        "snr_db": 4.424999764678815,
+        "si_sdr_db": 4.408126254913281,
+        "gain_projection": 0.9980534067706377,
+        "rms_ratio": 1.1649465637603178,
+        "stoi": 0.7732358990588606,
+        "estoi": 0.5719878887717673,
+        "spectral_convergence": 0.5597839396520154
+      },
+      "output": {
+        "snr_db": 0.8892816063022926,
+        "si_sdr_db": -5.20996158754306,
+        "gain_projection": 0.3351663609193359,
+        "rms_ratio": 0.6965427065888591,
+        "stoi": 0.8588910130613927,
+        "estoi": 0.696056892482562,
+        "spectral_convergence": 0.35837186745275595
+      }
+    },
+    {
+      "start": 120000,
+      "end": 160000,
+      "input": {
+        "snr_db": 2.9696694432185615,
+        "si_sdr_db": 2.974188842357427,
+        "gain_projection": 1.0005168211539852,
+        "rms_ratio": 1.2270830308634557,
+        "stoi": 0.6737364475850278,
+        "estoi": 0.4635372027240692,
+        "spectral_convergence": 0.6658341626551763
+      },
+      "output": {
+        "snr_db": 1.7591474316277702,
+        "si_sdr_db": -2.730599240047205,
+        "gain_projection": 0.41937840216030836,
+        "rms_ratio": 0.7111219867369717,
+        "stoi": 0.7168968129138718,
+        "estoi": 0.5387854311862077,
+        "spectral_convergence": 0.381565497543301
+      }
+    }
+  ],
+  "windows": [
+    {
+      "index": 0,
+      "start": 0,
+      "input": {
+        "snr_db": 5.965022344921135,
+        "si_sdr_db": 5.973040076105423,
+        "gain_projection": 1.0008886145341074,
+        "rms_ratio": 1.1202668339088293,
+        "stoi": 0.5961769617571347,
+        "estoi": 0.43379738823907604,
+        "spectral_convergence": 0.47379963669355757
+      },
+      "output": {
+        "snr_db": 14.188575242131536,
+        "si_sdr_db": 15.97102910811278,
+        "gain_projection": 0.8607771693912774,
+        "rms_ratio": 0.871592453449976,
+        "stoi": 0.6973512180898387,
+        "estoi": 0.5288820718611701,
+        "spectral_convergence": 0.16838263693118316
+      },
+      "raw_input_matches": true,
+      "raw_audio_sha256": "6a5b296e425e03983ea309889f36b54abc8234846a2f1d27c754ff71144c32e3",
+      "waveform_sha256": "b4a2d4792267c658e00daf10be84b6d699e4927097f58f27ff4e8046329c9343"
+    },
+    {
+      "index": 1,
+      "start": 40000,
+      "input": {
+        "snr_db": 4.008223341562046,
+        "si_sdr_db": 4.016587268009951,
+        "gain_projection": 1.000962222063181,
+        "rms_ratio": 1.1829110198481425,
+        "stoi": 0.5942466338389818,
+        "estoi": 0.4158347252557316,
+        "spectral_convergence": 0.5927479413146828
+      },
+      "output": {
+        "snr_db": 7.917087946501588,
+        "si_sdr_db": 8.100806051072592,
+        "gain_projection": 0.7117235840802298,
+        "rms_ratio": 0.7648472184567972,
+        "stoi": 0.6834103985561378,
+        "estoi": 0.5001591289517726,
+        "spectral_convergence": 0.27593480073498133
+      },
+      "raw_input_matches": true,
+      "raw_audio_sha256": "f22f11d23ed0ab066d9a5c4eaaf275027a7fe9a357576465d838f22debd74586",
+      "waveform_sha256": "044b3fbf801f082f8cf3d508edb6fb35f5d64c73f2618761121c89a90f6b82de"
+    },
+    {
+      "index": 2,
+      "start": 80000,
+      "input": {
+        "snr_db": 3.758538073923641,
+        "si_sdr_db": 3.750550255336605,
+        "gain_projection": 0.9990795196281287,
+        "rms_ratio": 1.1912293566071108,
+        "stoi": 0.7190939474362655,
+        "estoi": 0.5140905836597439,
+        "spectral_convergence": 0.6064354528819214
+      },
+      "output": {
+        "snr_db": 0.6070190566656428,
+        "si_sdr_db": -6.1413641292010155,
+        "gain_projection": 0.3084666149111574,
+        "rms_ratio": 0.6974885701012914,
+        "stoi": 0.7815095953691245,
+        "estoi": 0.5918890491645376,
+        "spectral_convergence": 0.3836920562977311
+      },
+      "raw_input_matches": true,
+      "raw_audio_sha256": "4143c5cff09bc5b07437d027fcadc6c3b7cf1366f6856a86b4be99b990308469",
+      "waveform_sha256": "4fde68fb0af3a49ce6bb91c6e2927e1f8feae242c4a02ab6dd2e3d74d83afd2c"
+    }
+  ],
+  "overlaps": [
+    {
+      "left_index": 0,
+      "right_index": 1,
+      "relative_disagreement": 0.16656303867175637,
+      "left": {
+        "snr_db": 13.316087657492012,
+        "si_sdr_db": 14.784500941335693,
+        "gain_projection": 0.8496276484464633,
+        "rms_ratio": 0.863629473222895,
+        "stoi": 0.6126909292880368,
+        "estoi": 0.3941734600816343,
+        "spectral_convergence": 0.1849253813241103
+      },
+      "right": {
+        "snr_db": 9.88598390910514,
+        "si_sdr_db": 11.331978506877324,
+        "gain_projection": 0.7531919522704125,
+        "rms_ratio": 0.7804127025029186,
+        "stoi": 0.6219523179859698,
+        "estoi": 0.3899367345999722,
+        "spectral_convergence": 0.2546910540997023
+      }
+    },
+    {
+      "left_index": 1,
+      "right_index": 2,
+      "relative_disagreement": 0.6991662297002655,
+      "left": {
+        "snr_db": 6.793050181070046,
+        "si_sdr_db": 6.3871679100037015,
+        "gain_projection": 0.6781173267441911,
+        "rms_ratio": 0.751996518113677,
+        "stoi": 0.8831579625283845,
+        "estoi": 0.7282418468544666,
+        "spectral_convergence": 0.29220264356524983
+      },
+      "right": {
+        "snr_db": -0.061545581786904724,
+        "si_sdr_db": -9.028524829588392,
+        "gain_projection": 0.22925099344164623,
+        "rms_ratio": 0.687585822680116,
+        "stoi": 0.8290569208850608,
+        "estoi": 0.6479332844368881,
+        "spectral_convergence": 0.38512505558184196
+      }
+    }
+  ]
+}
