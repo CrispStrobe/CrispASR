@@ -93,6 +93,12 @@ if(TARGET crispasr-reuse-cuda)
 endif()
 find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
+    add_test(NAME reuse-cli-bounds-controls COMMAND ${Python3_EXECUTABLE}
+        "${REUSE_SOURCE_ROOT}/tests/test_reuse_cli_bounds.py"
+        --normal-executable "$<TARGET_FILE:reuse-research-diff>"
+        --long-executable "$<TARGET_FILE:reuse-long-diff>")
+    set_tests_properties(reuse-cli-bounds-controls PROPERTIES
+        LABELS "unit;reuse;research" SKIP_RETURN_CODE 77 TIMEOUT 60)
     foreach(control converter network_compare frontend_stability reference_dumper reference_retention phase_stability chunked quality_metrics)
         add_test(NAME reuse-${control}-controls COMMAND ${Python3_EXECUTABLE}
             "${REUSE_SOURCE_ROOT}/tests/test_reuse_${control}.py")

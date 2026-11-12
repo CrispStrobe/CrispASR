@@ -52,8 +52,10 @@ window. Its output is diagnostic and never declares model parity.
 
 `tools/ci-heavy/issue579_reuse/chunked.py` is a research-only bounded
 overlap-add diagnostic. It pads a short or partial final window and returns the
-original length. Its one-second windows are chosen to fit the comparator; they
-do not establish an NVIDIA-equivalent long-audio or streaming policy. The pinned
+original length. The default one-second window fits the standard comparator.
+To experiment with five-second windows, explicitly pass `window_samples=80000`,
+`hop_samples=40000` and `max_window_samples=80000`; the callback must support
+that length. These settings do not establish a production or streaming policy. The pinned
 [NVIDIA example](https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE/blob/31f82f2efad1095034492f236e8dac9239ba713b/inference_chunk.sh)
 uses five-second windows and 50% overlap; its
 [implementation](https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE/blob/31f82f2efad1095034492f236e8dac9239ba713b/inference_chunk.py)
