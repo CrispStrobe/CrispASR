@@ -91,3 +91,45 @@ roundtrips, and interruption during aggregate checkpoint replacement.
 All four selected files were also downloaded individually from the live Kaggle
 mirror and independently matched the official SHA-256 values before submission.
 The worker repeats these checks against its actual mounted bytes.
+
+The saved-waveform auditor is import-safe, validates explicit shapes/rates and
+matching raw input windows, and atomically replaces extracted WAVs and JSON.
+Its optional prior receipt enforces the three complete input-file hashes.
+Zero/constant references are rejected; zero-projection estimates have null
+SI-SDR. Seeded STOI/ESTOI leaves the caller's NumPy RNG unchanged.
+Model-free auditor controls: `python tests/test_reuse_saved_waveform_audit.py -v`.
+
+The submitted Kaggle **version 1** runs script **v2**. Kaggle normalized the title
+to actual slug `crispasr-re-use-quality-cpu-20261112`, which differs from the
+metadata's requested slug. Use this actual slug for status, terminal logs and
+output recovery; do not repush the running kernel.
+
+After terminal completion, `verify_completed.py` independently validates all
+16 case receipts and their aggregate, source/corpus pins, exact noise recipe,
+FLOAT WAV/file hashes, raw/output tensor hashes and all 72 stage fingerprint
+structures. It recomputes SNR/SI-SDR and seeded STOI/ESTOI and groups results by
+speaker and noise condition. Original intermediate arrays are not retained;
+their fingerprint structure and magnitude invariants cannot establish native
+parity. Verification of artifacts does not impose a speech-quality threshold.
+
+Save a normalized terminal receipt from the read-only Kaggle API and retrieved
+uploaded source: `kernel_slug`, integer `version`, actual `status` and
+`script_sha256`. The verifier requires the actual slug above, version 1,
+terminal `COMPLETE`, and uploaded script SHA-256
+`e5bb069a930745389e180d393dcbfd00d8903c8ec49ec3011505a1936c0e13e9`.
+It also requires the independently verified official LibriSpeech root and
+compares every clean crop against its pinned original FLAC:
+
+```
+python tools/kaggle/reuse-quality-cpu-20261112/verify_completed.py \
+  --artifacts "$REUSE_QUALITY_ARTIFACTS" \
+  --official-corpus "$REUSE_OFFICIAL_LIBRISPEECH" \
+  --terminal-receipt "$REUSE_QUALITY_TERMINAL_RECEIPT" \
+  --output "$REUSE_QUALITY_VERIFICATION"
+```
+
+Partial/error states, missing cases, tampered hashes or inconsistent metrics
+produce a nonpassing verdict and nonzero exit; a stale passing verdict is
+replaced on failure. NumPy, SciPy, SoundFile and pystoi are required; no model
+runtime is imported. Model-free verifier controls:
+`python tests/test_reuse_quality_verifier.py -v`.
