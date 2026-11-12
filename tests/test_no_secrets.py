@@ -31,6 +31,24 @@ ALLOW = {
 }
 
 
+# Public LibriSpeech test-clean corpus mirror (OpenSLR 12, CC BY 4.0).
+# This exact ref is allowed only in dataset_sources, never as a kernel/model ID.
+PUBLIC_KAGGLE_DATASETS = frozenset({'ayoubakanoun/librispeechtest'})
+
+
+def literal_kaggle_metadata_refs(metadata):
+    bad = []
+    for field in ('id', 'dataset_sources', 'kernel_sources', 'model_sources'):
+        refs = [metadata.get(field, '')] if field == 'id' else metadata.get(field) or []
+        for ref in refs:
+            if not ref or ref.startswith('${KAGGLE_ACCOUNT}/'):
+                continue
+            if field == 'dataset_sources' and ref in PUBLIC_KAGGLE_DATASETS:
+                continue
+            bad.append(ref)
+    return bad
+
+
 def scan(root: Path):
     files = subprocess.run(["git", "ls-files", "-z"], cwd=root, capture_output=True, check=True).stdout.split(b"\0")
     hits = []
@@ -75,12 +93,26 @@ class NoSecretsTest(unittest.TestCase):
         # The Kaggle account comes from the KAGGLE_ACCOUNT secret, rendered at push
         # time by tools/kaggle/kpush.py - never a literal owner in the repo.
         import json
+        public = 'ayoubakanoun/librispeechtest'
+        self.assertEqual(literal_kaggle_metadata_refs({'dataset_sources': [public]}), [])
+        self.assertEqual(literal_kaggle_metadata_refs({
+            'id': '${KAGGLE_ACCOUNT}/quality',
+            'dataset_sources': ['${KAGGLE_ACCOUNT}/pinned-model', public],
+            'kernel_sources': ['${KAGGLE_ACCOUNT}/reference'],
+            'model_sources': ['${KAGGLE_ACCOUNT}/model'],
+        }), [])
+        for ref in (public + '/extra', public + '-other', 'other-owner/librispeechtest',
+                    'ayoubakanoun/other-dataset', 'literal-private-owner/pinned-model'):
+            with self.subTest(rejected_dataset=ref):
+                self.assertEqual(literal_kaggle_metadata_refs({'dataset_sources': [ref]}), [ref])
+        for field in ('id', 'kernel_sources', 'model_sources'):
+            with self.subTest(rejected_field=field):
+                value = public if field == 'id' else [public]
+                self.assertEqual(literal_kaggle_metadata_refs({field: value}), [public])
         bad = []
         for f in sorted(ROOT.glob("tools/kaggle/**/kernel-metadata.json")):
             m = json.loads(f.read_text())
-            refs = [m.get("id", "")] + [x for k in ("dataset_sources", "kernel_sources", "model_sources")
-                                        for x in (m.get(k) or [])]
-            bad += [f"{f.relative_to(ROOT)}: {r}" for r in refs if r and not r.startswith("${KAGGLE_ACCOUNT}/")]
+            bad += [f"{f.relative_to(ROOT)}: {r}" for r in literal_kaggle_metadata_refs(m)]
         self.assertEqual(bad, [], "literal Kaggle owners in kernel metadata:\n" + "\n".join(bad))
 
     def test_kaggle_account_name_not_committed(self):
