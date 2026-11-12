@@ -971,7 +971,7 @@ affected by. No test or check was removed; only the triggers were narrowed.
 
 | Change | What runs |
 |---|---|
-| Docs only (`*.md`, `docs/**` except JSON receipts, `hf_readmes/**`) | Secret scan; Lint's doc-anchor and generated-file checks when the Lint path filter matches (README, LEARNINGS, `docs/**.md`, release notes). No builds. |
+| Docs and evidence only (`*.md`, `docs/**`, `lanes/**`, `hf_readmes/**`) | Secret scan; Lint's doc-anchor and generated-file checks when its filter matches. On main, general CI excludes ordinary docs and lanes, but still runs for the two historical JSON fixtures read by tests; targeted receipt workflows keep their own filters. PRs retain the broader JSON-receipt CI trigger. |
 | Python, tools or Python tests only | CI's cheap Linux tier (`linux-x86_64` build plus `linux-unit`), plus any workflow whose path filter names the file (Regression, binding contracts and so on). |
 | Native code: C/C++/ObjC/CUDA/Metal/shaders, any CMake file, `src/`, `include/`, `examples/`, `ggml`, `glint/`, `third_party/`, `crisp_*/` | Everything above, plus CI's macOS, Windows, iOS, Android, Vulkan, `GGML_BACKEND_DL` and audio sanitizer/fuzz/FetchContent jobs, Lint's clang-format/clang-tidy, WASM and Ruby, and Lint Deep (cppcheck) for `src/`, `examples/cli/`, `crisp_audio/` and `include/`. |
 | `ggml` bump | All of the above plus `build.yml`, the Metal cache test and the Vulkan scheduler replay. |
