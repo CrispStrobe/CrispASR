@@ -12,6 +12,11 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ## NOW — open lanes, fully scoped (2026-11-03)
 
+### RE-USE CPU corpus quality and deferred fused check — Codex (2026-11-12)
+
+- The offline CPU kernel `crispasr-re-use-quality-cpu-20261112` version 1 is running a 16-case, four-speaker LibriSpeech test-clean matrix. Its committed script is at research source `8145ad0cb8b13faebf082cf08799cb5311618414`, SHA-256 `e5bb069a930745389e180d393dcbfd00d8903c8ec49ec3011505a1936c0e13e9`; no corpus result or new native parity is claimed until its terminal artifacts are verified. Inputs are pinned against the official OpenSLR archive. Retrieve the actual hyphenated kernel slug, verify all case and stage records and compute missing STOI/ESTOI from saved waveforms.
+- The exact final-window original fused GPU diagnostic remains unexecuted. A single guarded local scheduler attempt is queued for 2026-11-14 00:05 UTC, subject to quota, authenticated account, source, producer and duplicate checks; it requires the host and scheduler to remain available and can refuse safely. Recover and review the terminal result before making any model or parity claim.
+
 ### Kaggle output streamed recovery — Codex (2026-11-12)
 
 - Base `529e073f8`; `tools/kaggle/recover_output.py` recovers an exact latest-session output with bounded-memory streaming, explicit byte/hash verification and atomic publication. Its 19 model-free controls cover paginated selection, failure preservation and redacted errors. A live manifest download passed byte and hash verification. The unsupported SDK version selector returned HTTP 404 and was removed; usage and trust requirements are in the Kaggle README.
