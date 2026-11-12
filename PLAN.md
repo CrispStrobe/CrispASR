@@ -14,7 +14,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ### RE-USE final-window fused diagnosis — Codex (2026-11-12)
 
-- Base `529e073f8`; prepare an exact globally scaled ten-second input and its final five-second window for an original fused CUDA versus audited non-fused adapter comparison with retained CPU intermediates. Reuse verified wheels and the existing reference archive; require the original T4/CPython/Torch ABI. GPU quota is exhausted until the reported 2026-11-14 refresh, so no model result is claimed. A one-second crop alone does not preserve the failing context.
+- Base `529e073f8`; prepare an exact globally scaled ten-second input and its final five-second window for an original fused CUDA versus audited non-fused adapter comparison with retained CPU intermediates. Reuse verified wheels and the existing reference archive; require the original T4/CPython/Torch ABI. The user reports GPU unavailable until the 2026-11-14 refresh, so no model result is claimed. An earlier quota reading omitted the SDK duration's day component; use `total_seconds()` on the structured response. A one-second crop alone does not preserve the failing context.
 
 ### Kaggle output streamed recovery — Codex (2026-11-12)
 

@@ -54,11 +54,12 @@ preparing this directory. Execution prerequisites are available quota, a compati
 the exact archive attachment and the pinned ABI. Execution is already authorized;
 this preparation task does not launch it.
 
-Read-only operator preflight on 2026-11-12 found no local `nvidia-smi` and
-Kaggle GPU quota exhausted: used 67474.119 s, reserved 0 s, total allowed
-21600 s; refresh `2026-11-14T00:00:00Z`. The live quota response, rather than
-the historical nominal weekly allowance, controls submission readiness.
-Do not try another account or repeated accelerator draws.
+Read-only operator preflight on 2026-11-12 found no local `nvidia-smi`. The user
+reported GPU unavailable until the `2026-11-14T00:00:00Z` refresh. An earlier
+SDK display was misread: its text representation omitted the day component of
+the allowance; the structured duration's `total_seconds()` retains it. Check
+the live structured quota and session availability after the refresh. Do not
+try another account or repeated accelerator draws.
 
 The v2 candidate checks live RSS of the parent plus all descendants every five
 seconds, limits it to 10 GiB, limits output to 8 GiB and preserves 2 GiB free on
