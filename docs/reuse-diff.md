@@ -85,6 +85,13 @@ found strong context sensitivity: on the same 5–7.5-second speech region,
 the middle and final reference windows score 6.39 and −9.03 dB SI-SDR,
 respectively. Both estimates concern the same single speech proxy.
 
+An independent [CPU corpus receipt](historical/reuse-quality-cpu-20261112.json)
+records 16 cases from four LibriSpeech test-clean speakers. SI-SDR improved on
+all 12 synthetic-noise cases; clean inputs were also altered. These are short
+read-speech diagnostics, not a listening test or a native-parity result. The
+separate 72 [reference fingerprints per case](historical/reuse-quality-cpu-stage-fingerprints-20261112.json)
+record intermediate magnitudes and hashes but do not compare native stages.
+
 The `reuse` GGUF architecture is intentionally not registered as a product
 backend. The published v0.8.51 Linux shared library rejected the pinned real RE-USE
 GGUF through both C ABI detection and session opening in three repeated cycles;

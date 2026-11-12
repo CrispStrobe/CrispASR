@@ -1,0 +1,873 @@
+{
+  "date": "2026-11-12",
+  "terminal": {
+    "kernel_slug": "crispasr-re-use-quality-cpu-20261112",
+    "version": 1,
+    "status": "COMPLETE",
+    "script_sha256": "e5bb069a930745389e180d393dcbfd00d8903c8ec49ec3011505a1936c0e13e9"
+  },
+  "scope": "Four read-English LibriSpeech test-clean speakers, one five-second crop each, clean and synthetic white/pink noise. CPU original graph with audited non-fused Mamba; no new native parity, fused CUDA, perceptual or production claim.",
+  "input_attribution": "LibriSpeech test-clean, OpenSLR 12, CC BY 4.0, https://www.openslr.org/12",
+  "official_openslr_test_clean_archive_md5": "32fa31d27d2e1cad72775fee3f4849a9",
+  "official_flac_sha256": {
+    "121/121726/121-121726-0000.flac": "81378fdb3e648b43efb1cb8c4f87da3fc9cfbe19c5dda97e9e7361c4a2470d2f",
+    "237/126133/237-126133-0000.flac": "25466538df82602d1e597b0cb016e4dd0ce11031cb8994a4289d1c07170878ee",
+    "61/70968/61-70968-0005.flac": "1022f303c108707548ff8738b7d7f512403b8fa443b9664bab94f740ef412183",
+    "260/123286/260-123286-0000.flac": "d654a43d06f0e8b586b525e8ec83d6e3c0dc83c3f4742f8e25fd291db77248b3"
+  },
+  "model_files": {
+    "config.json": "e69986483774f01893d2727503addc49ef201d19e6e1a266b8d4e971e28c478d",
+    "model.safetensors": "06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1",
+    "models/codec_module_time_d4.py": "02bd1d478f36a9b38dce7d44368805298f42798ea239304580f1ccffafe766a0",
+    "models/generator_SEMamba_time_d4.py": "beebaf2d9ab7b83c101f46246ae7a7a8a2d2f57b6683025d3712c64c1b7d6817",
+    "models/mamba_block2_SEMamba.py": "97397af2d7e0f5e6530aa8c4a45b4f0f0030b4b56d8c9922a9b0bc25f8b5962e",
+    "models/stfts.py": "b82383c1ec7d7e9fe9bca1f93b3c0afe9609e191c38efc16f705e7145198d835"
+  },
+  "bundled_source_revision": "69b11562aa7b3a174add9a6767098d4eeae680d8",
+  "bundle": {
+    "mamba_ssm.py": "93203e8896d503703ee2026d258f1027bcd4b3132eb394409392ce7016dec835",
+    "kaggle_harness.py": "ae2f378ef132fe4d366e0809f94d817a08f5ebc759f62c2ca753e25b12148283"
+  },
+  "dependencies": {
+    "numpy": "2.1.3",
+    "scipy": "1.16.3",
+    "soundfile": "0.14.0",
+    "torch": "2.11.0+cpu",
+    "safetensors.torch": "not exposed",
+    "einops": "0.8.2",
+    "huggingface_hub": "1.33.0"
+  },
+  "cuda_available": false,
+  "elapsed_seconds": 1772.724949807,
+  "worker_stoi_available": false,
+  "independent_verdict": {
+    "conclusive": true,
+    "terminal_receipt_checked": true,
+    "speakers": {
+      "121": {
+        "case_ids": [
+          "speaker-121-clean",
+          "speaker-121-white-0db",
+          "speaker-121-white-10db",
+          "speaker-121-pink-5db"
+        ],
+        "metrics": {
+          "snr_db": {
+            "valid_pairs": 4,
+            "mean_input": 84.90024783432354,
+            "mean_output": 18.07084581211419,
+            "mean_delta": -66.82940202220934
+          },
+          "si_sdr_db": {
+            "valid_pairs": 4,
+            "mean_input": 84.8891884056285,
+            "mean_output": 18.477606209565266,
+            "mean_delta": -66.41158219606322
+          },
+          "stoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.9163344971333829,
+            "mean_output": 0.9759689072426235,
+            "mean_delta": 0.059634410109240754
+          },
+          "estoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.8028509099866817,
+            "mean_output": 0.949154541807065,
+            "mean_delta": 0.14630363182038322
+          },
+          "spectral_convergence": {
+            "valid_pairs": 4,
+            "mean_input": 0.44736705178947145,
+            "mean_output": 0.1061124534993674,
+            "mean_delta": -0.34125459829010407
+          }
+        }
+      },
+      "237": {
+        "case_ids": [
+          "speaker-237-clean",
+          "speaker-237-white-0db",
+          "speaker-237-white-10db",
+          "speaker-237-pink-5db"
+        ],
+        "metrics": {
+          "snr_db": {
+            "valid_pairs": 4,
+            "mean_input": 83.42190067222846,
+            "mean_output": 18.04744697005395,
+            "mean_delta": -65.3744537021745
+          },
+          "si_sdr_db": {
+            "valid_pairs": 4,
+            "mean_input": 83.41701975308045,
+            "mean_output": 19.04838109540436,
+            "mean_delta": -64.36863865767609
+          },
+          "stoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.9122526177644903,
+            "mean_output": 0.9804954403005173,
+            "mean_delta": 0.06824282253602701
+          },
+          "estoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.7513286807742654,
+            "mean_output": 0.931169812133054,
+            "mean_delta": 0.17984113135878865
+          },
+          "spectral_convergence": {
+            "valid_pairs": 4,
+            "mean_input": 0.45417507934705664,
+            "mean_output": 0.10266782408799402,
+            "mean_delta": -0.35150725525906257
+          }
+        }
+      },
+      "61": {
+        "case_ids": [
+          "speaker-61-clean",
+          "speaker-61-white-0db",
+          "speaker-61-white-10db",
+          "speaker-61-pink-5db"
+        ],
+        "metrics": {
+          "snr_db": {
+            "valid_pairs": 4,
+            "mean_input": 83.75222575108354,
+            "mean_output": 11.959167996424984,
+            "mean_delta": -71.79305775465856
+          },
+          "si_sdr_db": {
+            "valid_pairs": 4,
+            "mean_input": 83.7453691164638,
+            "mean_output": 11.71623813028404,
+            "mean_delta": -72.02913098617977
+          },
+          "stoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.8359256129544467,
+            "mean_output": 0.9108419426911751,
+            "mean_delta": 0.07491632973672846
+          },
+          "estoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.6713297805522858,
+            "mean_output": 0.8199735866006941,
+            "mean_delta": 0.1486438060484082
+          },
+          "spectral_convergence": {
+            "valid_pairs": 4,
+            "mean_input": 0.42658668683916134,
+            "mean_output": 0.21846863380990106,
+            "mean_delta": -0.20811805302926029
+          }
+        }
+      },
+      "260": {
+        "case_ids": [
+          "speaker-260-clean",
+          "speaker-260-white-0db",
+          "speaker-260-white-10db",
+          "speaker-260-pink-5db"
+        ],
+        "metrics": {
+          "snr_db": {
+            "valid_pairs": 4,
+            "mean_input": 84.80576884550814,
+            "mean_output": 18.21493003854947,
+            "mean_delta": -66.59083880695867
+          },
+          "si_sdr_db": {
+            "valid_pairs": 4,
+            "mean_input": 84.8215360427499,
+            "mean_output": 18.627218388329723,
+            "mean_delta": -66.19431765442017
+          },
+          "stoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.8801105246597426,
+            "mean_output": 0.9538156416281032,
+            "mean_delta": 0.07370511696836057
+          },
+          "estoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.6427797337202519,
+            "mean_output": 0.8436050864096701,
+            "mean_delta": 0.20082535268941834
+          },
+          "spectral_convergence": {
+            "valid_pairs": 4,
+            "mean_input": 0.4601077839591029,
+            "mean_output": 0.10287969897649943,
+            "mean_delta": -0.3572280849826035
+          }
+        }
+      }
+    },
+    "conditions": {
+      "clean": {
+        "case_ids": [
+          "speaker-121-clean",
+          "speaker-237-clean",
+          "speaker-61-clean",
+          "speaker-260-clean"
+        ],
+        "metrics": {
+          "snr_db": {
+            "valid_pairs": 4,
+            "mean_input": 321.88014310181745,
+            "mean_output": 23.060677881009294,
+            "mean_delta": -298.8194652208081
+          },
+          "si_sdr_db": {
+            "valid_pairs": 4,
+            "mean_input": 321.8794231623478,
+            "mean_output": 24.985887002728767,
+            "mean_delta": -296.89353615961903
+          },
+          "stoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.9999999999999998,
+            "mean_output": 0.9948889531219411,
+            "mean_delta": -0.0051110468780585505
+          },
+          "estoi": {
+            "valid_pairs": 4,
+            "mean_input": 1.0,
+            "mean_output": 0.9904344301945658,
+            "mean_delta": -0.009565569805434326
+          },
+          "spectral_convergence": {
+            "valid_pairs": 4,
+            "mean_input": 0.0,
+            "mean_output": 0.07068327568769209,
+            "mean_delta": 0.07068327568769209
+          }
+        }
+      },
+      "white-0db": {
+        "case_ids": [
+          "speaker-121-white-0db",
+          "speaker-237-white-0db",
+          "speaker-61-white-0db",
+          "speaker-260-white-0db"
+        ],
+        "metrics": {
+          "snr_db": {
+            "valid_pairs": 4,
+            "mean_input": 2.5866469035884053e-10,
+            "mean_output": 11.715151741931066,
+            "mean_delta": 11.715151741672402
+          },
+          "si_sdr_db": {
+            "valid_pairs": 4,
+            "mean_input": -0.0027984933399786225,
+            "mean_output": 11.502024850862188,
+            "mean_delta": 11.504823344202165
+          },
+          "stoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.7642819802279683,
+            "mean_output": 0.9124576861575971,
+            "mean_delta": 0.14817570592962884
+          },
+          "estoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.4841818218685036,
+            "mean_output": 0.793416638169256,
+            "mean_delta": 0.3092348163007523
+          },
+          "spectral_convergence": {
+            "valid_pairs": 4,
+            "mean_input": 0.9285307122179209,
+            "mean_output": 0.19700249897551764,
+            "mean_delta": -0.7315282132424031
+          }
+        }
+      },
+      "white-10db": {
+        "case_ids": [
+          "speaker-121-white-10db",
+          "speaker-237-white-10db",
+          "speaker-61-white-10db",
+          "speaker-260-white-10db"
+        ],
+        "metrics": {
+          "snr_db": {
+            "valid_pairs": 4,
+            "mean_input": 10.00000000116019,
+            "mean_output": 16.768133037727395,
+            "mean_delta": 6.768133036567204
+          },
+          "si_sdr_db": {
+            "valid_pairs": 4,
+            "mean_input": 9.998670419417174,
+            "mean_output": 16.740897159471395,
+            "mean_delta": 6.742226740054221
+          },
+          "stoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.9113249880750461,
+            "mean_output": 0.961626062635302,
+            "mean_delta": 0.050301074560255815
+          },
+          "estoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.7347252460888163,
+            "mean_output": 0.8927836751909723,
+            "mean_delta": 0.15805842910215603
+          },
+          "spectral_convergence": {
+            "valid_pairs": 4,
+            "mean_input": 0.27837102118418733,
+            "mean_output": 0.11128358543547857,
+            "mean_delta": -0.1670874357487087
+          }
+        }
+      },
+      "pink-5db": {
+        "case_ids": [
+          "speaker-121-pink-5db",
+          "speaker-237-pink-5db",
+          "speaker-61-pink-5db",
+          "speaker-260-pink-5db"
+        ],
+        "metrics": {
+          "snr_db": {
+            "valid_pairs": 4,
+            "mean_input": 4.999999999907416,
+            "mean_output": 14.74842815647483,
+            "mean_delta": 9.748428156567414
+          },
+          "si_sdr_db": {
+            "valid_pairs": 4,
+            "mean_input": 4.997818229497671,
+            "mean_output": 14.640634810521043,
+            "mean_delta": 9.642816581023371
+          },
+          "stoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.8690162842090482,
+            "mean_output": 0.9521492299475789,
+            "mean_delta": 0.0831329457385307
+          },
+          "estoi": {
+            "valid_pairs": 4,
+            "mean_input": 0.6493820370761649,
+            "mean_output": 0.8672682833956892,
+            "mean_delta": 0.21788624631952444
+          },
+          "spectral_convergence": {
+            "valid_pairs": 4,
+            "mean_input": 0.5813348685326843,
+            "mean_output": 0.15115925027507363,
+            "mean_delta": -0.43017561825761064
+          }
+        }
+      }
+    },
+    "verified_cases": 16,
+    "kernel_slug": "crispasr-re-use-quality-cpu-20261112",
+    "kernel_version": 1,
+    "script_sha256": "e5bb069a930745389e180d393dcbfd00d8903c8ec49ec3011505a1936c0e13e9",
+    "official_clean_crop_comparison": true,
+    "local_stoi_available": true,
+    "cases": [
+      {
+        "case_id": "speaker-121-clean",
+        "speaker": 121,
+        "condition": "clean",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 324.6009913315355,
+            "si_sdr_db": 324.6009912448853,
+            "rms_ratio": 1.0,
+            "spectral_convergence": 0.0,
+            "stoi": 1.0,
+            "estoi": 1.0,
+            "projection_gain": 1.0,
+            "peak_abs": 0.484344482421875,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 26.449529383072385,
+            "si_sdr_db": 28.48948875369477,
+            "rms_ratio": 0.9701220744561913,
+            "spectral_convergence": 0.03711446239986032,
+            "stoi": 0.9996559305706189,
+            "estoi": 0.9994326915138185,
+            "projection_gain": 0.9694359687404168,
+            "peak_abs": 0.473758339881897,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-121-white-0db",
+        "speaker": 121,
+        "condition": "white-0db",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 6.272516222116214e-10,
+            "si_sdr_db": -0.02163392162746641,
+            "rms_ratio": 1.4124512702539487,
+            "spectral_convergence": 0.921617611547719,
+            "stoi": 0.811780996069622,
+            "estoi": 0.5976106357513302,
+            "projection_gain": 0.9975092395823215,
+            "peak_abs": 0.5825415253639221,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 11.84301278670281,
+            "si_sdr_db": 11.582883679111603,
+            "rms_ratio": 0.9452456758855793,
+            "spectral_convergence": 0.18895819800034494,
+            "stoi": 0.9421165129381965,
+            "estoi": 0.8903029406383994,
+            "projection_gain": 0.9140356612115382,
+            "peak_abs": 0.6171850562095642,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-121-white-10db",
+        "speaker": 121,
+        "condition": "white-10db",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 10.000000004470191,
+            "si_sdr_db": 9.993183426829921,
+            "rms_ratio": 1.048057603672702,
+            "spectral_convergence": 0.2744637828384865,
+            "stoi": 0.9483391358995639,
+            "estoi": 0.8536738198523043,
+            "projection_gain": 0.9992123526789851,
+            "peak_abs": 0.48862001299858093,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 17.68427909772791,
+            "si_sdr_db": 17.616178633999322,
+            "rms_ratio": 0.9864414416202465,
+            "spectral_convergence": 0.09148200468932512,
+            "stoi": 0.9848579092937332,
+            "estoi": 0.9633802673448877,
+            "projection_gain": 0.978011403229493,
+            "peak_abs": 0.4692729711532593,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-121-pink-5db",
+        "speaker": 121,
+        "condition": "pink-5db",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 5.000000000661188,
+            "si_sdr_db": 4.984212872426268,
+            "rms_ratio": 1.1456812375615946,
+            "spectral_convergence": 0.5933868127716805,
+            "stoi": 0.9052178565643455,
+            "estoi": 0.7601191843430922,
+            "projection_gain": 0.9981788660296538,
+            "peak_abs": 0.5565783381462097,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 16.30656198095365,
+            "si_sdr_db": 16.221873771455368,
+            "rms_ratio": 0.9785050001708308,
+            "spectral_convergence": 0.10689514890793925,
+            "stoi": 0.9772452761679458,
+            "estoi": 0.943502267731154,
+            "projection_gain": 0.9670325847247156,
+            "peak_abs": 0.471311092376709,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-237-clean",
+        "speaker": 237,
+        "condition": "clean",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 318.6876026866695,
+            "si_sdr_db": 318.6875682814172,
+            "rms_ratio": 1.0,
+            "spectral_convergence": 0.0,
+            "stoi": 0.9999999999999998,
+            "estoi": 1.0000000000000002,
+            "projection_gain": 1.0,
+            "peak_abs": 0.292236328125,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 24.165281456685573,
+            "si_sdr_db": 28.232005018137464,
+            "rms_ratio": 0.9509569130722572,
+            "spectral_convergence": 0.054926354482633916,
+            "stoi": 0.9996155708213238,
+            "estoi": 0.9991637115655051,
+            "projection_gain": 0.9502438617336327,
+            "peak_abs": 0.2844836711883545,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-237-white-0db",
+        "speaker": 237,
+        "condition": "white-0db",
+        "independent_metrics": {
+          "input": {
+            "snr_db": -4.156883015534199e-10,
+            "si_sdr_db": -0.01579925066073525,
+            "rms_ratio": 1.4129321284882237,
+            "spectral_convergence": 0.9359711887088797,
+            "stoi": 0.8070366914328377,
+            "estoi": 0.535671416208226,
+            "projection_gain": 0.9981782006702412,
+            "peak_abs": 0.30069980025291443,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 13.078978203822007,
+            "si_sdr_db": 13.039888011711673,
+            "rms_ratio": 0.9324525544604054,
+            "spectral_convergence": 0.16350791105496174,
+            "stoi": 0.9591352344252394,
+            "estoi": 0.8677809637329813,
+            "projection_gain": 0.9101308636031922,
+            "peak_abs": 0.2752433717250824,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-237-white-10db",
+        "speaker": 237,
+        "condition": "white-10db",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 10.000000003979807,
+            "si_sdr_db": 9.9950337183334,
+            "rms_ratio": 1.0482625480061862,
+            "spectral_convergence": 0.2806120696016753,
+            "stoi": 0.946076870349116,
+            "estoi": 0.8043396185634265,
+            "projection_gain": 0.9994238963253269,
+            "peak_abs": 0.29304999113082886,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 18.485127488488512,
+            "si_sdr_db": 18.44460991642858,
+            "rms_ratio": 1.001150766990748,
+            "spectral_convergence": 0.0825251607922719,
+            "stoi": 0.9864835514598662,
+            "estoi": 0.9476238817357353,
+            "projection_gain": 0.9940676834490088,
+            "peak_abs": 0.2986200153827667,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-237-pink-5db",
+        "speaker": 237,
+        "condition": "pink-5db",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 4.999999998680246,
+            "si_sdr_db": 5.001276263231933,
+            "rms_ratio": 1.1474011972182003,
+            "spectral_convergence": 0.6001170590776714,
+            "stoi": 0.8958969092760076,
+            "estoi": 0.6653036883254089,
+            "projection_gain": 1.0001508718275443,
+            "peak_abs": 0.2911592125892639,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 16.460400731219703,
+            "si_sdr_db": 16.477021435339715,
+            "rms_ratio": 0.9654176335048806,
+            "spectral_convergence": 0.10971187002210851,
+            "stoi": 0.9767474044956398,
+            "estoi": 0.9101106914979945,
+            "projection_gain": 0.9547342320931351,
+            "peak_abs": 0.28527072072029114,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-61-clean",
+        "speaker": 61,
+        "condition": "clean",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 320.0089030015939,
+            "si_sdr_db": 320.00605830720235,
+            "rms_ratio": 1.0,
+            "spectral_convergence": 0.0,
+            "stoi": 0.9999999999999991,
+            "estoi": 0.9999999999999999,
+            "projection_gain": 1.0,
+            "peak_abs": 0.259735107421875,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 15.062999529529833,
+            "si_sdr_db": 15.15515278921989,
+            "rms_ratio": 0.9460955820393924,
+            "spectral_convergence": 0.15458305251802365,
+            "stoi": 0.98059018552307,
+            "estoi": 0.9641479721827352,
+            "projection_gain": 0.9321344704327533,
+            "peak_abs": 0.24663309752941132,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-61-white-0db",
+        "speaker": 61,
+        "condition": "white-0db",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 1.168307798086293e-09,
+            "si_sdr_db": -0.007297599885438985,
+            "rms_ratio": 1.4138351245491718,
+            "spectral_convergence": 0.9054404479614955,
+            "stoi": 0.680949957029907,
+            "estoi": 0.41518951167110424,
+            "projection_gain": 0.9994869567273615,
+            "peak_abs": 0.2941703796386719,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 9.348420125285049,
+            "si_sdr_db": 8.868009286045668,
+            "rms_ratio": 0.9071547048489293,
+            "spectral_convergence": 0.26358424593476076,
+            "stoi": 0.8423706267201159,
+            "estoi": 0.6987008540197335,
+            "projection_gain": 0.8537015435093411,
+            "peak_abs": 0.23336370289325714,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-61-white-10db",
+        "speaker": 61,
+        "condition": "white-10db",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 9.99999999983277,
+            "si_sdr_db": 9.995750483620014,
+            "rms_ratio": 1.0486474914401855,
+            "spectral_convergence": 0.26791986918590566,
+            "stoi": 0.8550879719811527,
+            "estoi": 0.6732410962464879,
+            "projection_gain": 0.9998377619744165,
+            "peak_abs": 0.2611696720123291,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 12.861114788307184,
+            "si_sdr_db": 12.638674026748056,
+            "rms_ratio": 0.9760352852812523,
+            "spectral_convergence": 0.18317253739019437,
+            "stoi": 0.9166535172427075,
+            "estoi": 0.8217581364357377,
+            "projection_gain": 0.9506989845175791,
+            "peak_abs": 0.2498725801706314,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-61-pink-5db",
+        "speaker": 61,
+        "condition": "pink-5db",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 5.000000001739199,
+            "si_sdr_db": 4.986965274918297,
+            "rms_ratio": 1.1462460394319693,
+            "spectral_convergence": 0.5329864302092443,
+            "stoi": 0.807664522806728,
+            "estoi": 0.5968885142915512,
+            "projection_gain": 0.9988253393408641,
+            "peak_abs": 0.2743082344532013,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 10.564137542577871,
+            "si_sdr_db": 10.203116419122548,
+            "rms_ratio": 0.9432356927866443,
+            "spectral_convergence": 0.2725346993966255,
+            "stoi": 0.9037534412788073,
+            "estoi": 0.7952873837645698,
+            "projection_gain": 0.90150856689162,
+            "peak_abs": 0.23561811447143555,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-260-clean",
+        "speaker": 260,
+        "condition": "clean",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 324.2230753874708,
+            "si_sdr_db": 324.2230748158863,
+            "rms_ratio": 1.0,
+            "spectral_convergence": 0.0,
+            "stoi": 1.0,
+            "estoi": 1.0,
+            "projection_gain": 1.0,
+            "peak_abs": 0.468109130859375,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 26.564901154749393,
+            "si_sdr_db": 28.066901449862932,
+            "rms_ratio": 0.9737790236782887,
+            "spectral_convergence": 0.036109233350250444,
+            "stoi": 0.9996941255727521,
+            "estoi": 0.998993345516204,
+            "projection_gain": 0.9730200039440123,
+            "peak_abs": 0.46958646178245544,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-260-white-0db",
+        "speaker": 260,
+        "condition": "white-0db",
+        "independent_metrics": {
+          "input": {
+            "snr_db": -3.4521235730913226e-10,
+            "si_sdr_db": 0.033536798813726156,
+            "rms_ratio": 1.4169340029161985,
+            "spectral_convergence": 0.951093600653589,
+            "stoi": 0.7573602763795065,
+            "estoi": 0.3882557238433542,
+            "projection_gain": 1.0038524912673492,
+            "peak_abs": 0.5517464876174927,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 12.590195851914402,
+            "si_sdr_db": 12.517318426579806,
+            "rms_ratio": 0.9279667133182051,
+            "spectral_convergence": 0.17195964091200308,
+            "stoi": 0.9062083705468368,
+            "estoi": 0.7168817942859096,
+            "projection_gain": 0.9030219739404888,
+            "peak_abs": 0.43815767765045166,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-260-white-10db",
+        "speaker": 260,
+        "condition": "white-10db",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 9.999999996357992,
+            "si_sdr_db": 10.010714048885362,
+            "rms_ratio": 1.0499693220120887,
+            "spectral_convergence": 0.2904883631106817,
+            "stoi": 0.895795974070352,
+            "estoi": 0.6076464496930463,
+            "projection_gain": 1.0012182650956571,
+            "peak_abs": 0.48957034945487976,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 18.042010776385972,
+            "si_sdr_db": 18.26412606070962,
+            "rms_ratio": 1.0242717519845024,
+            "spectral_convergence": 0.08795463887012296,
+            "stoi": 0.958509272544901,
+            "estoi": 0.8383724152475284,
+            "projection_gain": 1.0167183171832677,
+            "peak_abs": 0.49009156227111816,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      },
+      {
+        "case_id": "speaker-260-pink-5db",
+        "speaker": 260,
+        "condition": "pink-5db",
+        "independent_metrics": {
+          "input": {
+            "snr_db": 4.999999998549033,
+            "si_sdr_db": 5.018818507414183,
+            "rms_ratio": 1.1491522567200392,
+            "spectral_convergence": 0.598849172072141,
+            "stoi": 0.8672858481891118,
+            "estoi": 0.5752167613446069,
+            "projection_gain": 1.0021615717855812,
+            "peak_abs": 0.5222859978675842,
+            "fraction_abs_gt_one": 0.0
+          },
+          "output": {
+            "snr_db": 15.6626123711481,
+            "si_sdr_db": 15.660527616166537,
+            "rms_ratio": 1.0132196322688356,
+            "spectral_convergence": 0.11549528277362126,
+            "stoi": 0.9508507978479228,
+            "estoi": 0.8201727905890387,
+            "projection_gain": 0.9997325499050232,
+            "peak_abs": 0.5042264461517334,
+            "fraction_abs_gt_one": 0.0
+          }
+        }
+      }
+    ],
+    "scope": "File hashes, exact input recipe, raw/output fingerprints, stage fingerprint structure and independent waveform metrics verified. Intermediate arrays were not retained, so their fingerprints do not establish native parity."
+  },
+  "clean_metric_note": "The clean input SNR/SI-SDR uses a numerical floor for zero error; its large input value is not a meaningful finite quality score.",
+  "stage_fingerprints": {
+    "file": "reuse-quality-cpu-stage-fingerprints-20261112.json",
+    "sha256": "ad1eff4ea630c3d090b2daaafffe9fdae0136b5ebf93ebfd091a52ec12b927bd",
+    "cases": 16,
+    "stages_per_case": 72,
+    "intermediates_retained": false
+  },
+  "artifact_sha256": {
+    "quality-report.json": "13f61fa5b5dc694e257628cbc3ff3cbec64d686b4bb226949c8bd2ea40e848fd",
+    "independent-verdict.json": "5f50a4c2f2c3472c1c5fcd724356548723008c41ed46ae9c2678908346ba9d24",
+    "terminal-receipt.json": "b9cdcd6ac94afd48689e63110cf7d064331910f2148cbd0f5525e141743a1ff0",
+    "speaker-121-clean.json": "77c9061eabeef320b928f6365b9732ea9bdd0196fc232c33febe915414a55e33",
+    "speaker-121-white-0db.json": "559f10f42570484e2a412d14f8ee9ef199ce4c37a6857d392a51e990aa287240",
+    "speaker-121-white-10db.json": "7c82db3b2ca6f5d0ebdc23b9acee21bf8ab10bdaeca6ce5810fb5587866b555f",
+    "speaker-121-pink-5db.json": "71073761b8f1361ed8a5be945a8b40db2552ff0030a5c4d399a6fe66322a1ee2",
+    "speaker-237-clean.json": "609d3e12c82917a625f0407cf4c1a4e07413e1a3c548da25066079d29fad03d4",
+    "speaker-237-white-0db.json": "ad56606fd2e9cd6ba02aadb7f08d5e05e5818d2b64a1c1299ebb9701dafed93a",
+    "speaker-237-white-10db.json": "aba52c506f0ab863c9e50482ea2aa811a112b1b89452b354d44d33321fa43f98",
+    "speaker-237-pink-5db.json": "4dbbeb2ef89d7153824dea8383cafbd2cb835d4295be0b99b82560c391fefbd7",
+    "speaker-61-clean.json": "7cc7a023fee577764832cb256be5146c92e17e6bf633dc144e22dbe6fc3ff948",
+    "speaker-61-white-0db.json": "07e08a9568585d28858333b767b0d27b2885df1c491fb6b418672a8558f3a049",
+    "speaker-61-white-10db.json": "d765b8f9efa2080fa4c2adaf47ffdc71001400170fc5cff7885bf1843aea0765",
+    "speaker-61-pink-5db.json": "7e8111992f0f0b6347afa5288cf4b36d6365746e0b239a9a479e23c0d8335054",
+    "speaker-260-clean.json": "9425b9bec624cb0b7db2b43aac91db2e188f3148f63f44545ea3cf6385a6f346",
+    "speaker-260-white-0db.json": "e426c8f2442c3f2ad8e4288f1c1a7d086000feb19b723e6cdfb89dcc380b545e",
+    "speaker-260-white-10db.json": "b3e4a18eb2fe5fec12314dca267930cc6a2f0a84e0138a185b4629f43868269f",
+    "speaker-260-pink-5db.json": "ee3948048014e7cb7d5cb4eb23e00a21b7e2459a29a1f20f4f36c4e62f33c006"
+  }
+}

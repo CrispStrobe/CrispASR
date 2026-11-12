@@ -23,7 +23,7 @@ python tools/kaggle/reuse-quality-cpu-20261112/audit_saved_waveforms.py \
   --input-dir "$REUSE_TEN_SECOND_ARTIFACTS" --output-dir "$REUSE_QUALITY_OUTPUT"
 ```
 
-`quality_cpu.py` prepares the next, broader evaluation: LibriSpeech test-clean,
+`quality_cpu.py` runs a bounded evaluation: LibriSpeech test-clean,
 two female and two male speakers, one explicit five-second crop per speaker,
 with clean speech, white noise at 0/10 dB, and synthetic pink noise at 5 dB.
 Speaker and utterance selection is deterministic and independent of the model
@@ -67,9 +67,13 @@ python tools/kaggle/reuse-quality-cpu-20261112/quality_cpu.py --preflight-only
 deterministic corpus selection, then exits before model initialization.
 `REUSE_QUALITY_INPUT` may point to a local fixture mount for that read-only check.
 
-This preparation is not a completed broader evaluation. Read the submitted
-kernel's own `quality-report.json`, its exact script hash, all case receipts and
-terminal status before reporting results.
+Version 1 completed and all 16 cases were independently verified. On the 12
+synthetic-noise cases SI-SDR improved in every case; condition mean improvements
+were 11.50 dB for white 0 dB, 6.74 dB for white 10 dB, and 9.64 dB for pink
+5 dB. Clean inputs were also changed by enhancement. The [verified receipt](../../../docs/historical/reuse-quality-cpu-20261112.json)
+contains per-case measurements and provenance. This is four read-speech
+speakers with synthetic noise; it does not resolve the JFK-proxy result or
+establish listening quality, native parity or product readiness.
 
 LibriSpeech attribution: Panayotov et al., [OpenSLR 12](https://www.openslr.org/12),
 CC BY 4.0. The attached Kaggle mirror is `ayoubakanoun/librispeechtest`; retain
