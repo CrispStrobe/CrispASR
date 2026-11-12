@@ -54,3 +54,9 @@ window. Its output is diagnostic and never declares model parity.
 overlap-add diagnostic. It pads a short or partial final window and returns the
 original length. Its one-second windows are chosen to fit the comparator; they
 do not establish an NVIDIA-equivalent long-audio or streaming policy.
+
+The `reuse` GGUF architecture is intentionally not registered as a product
+backend. A source-compiled C ABI detection control rejected the pinned real
+RE-USE GGUF and accepted a Whisper metadata fixture; this checks the detector
+body, not a packaged product library. The shared C ABI test also includes the
+`reuse` rejection case, which still needs execution through a built library.
