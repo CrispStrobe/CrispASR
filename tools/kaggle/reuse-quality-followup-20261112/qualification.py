@@ -3,7 +3,10 @@
 No compilation: reuse the source-audited extensions from the accepted fused run.
 Separate subprocesses keep the research adapter out of the fused import graph.
 """
+import contextlib
 import hashlib
+import io
+import importlib.metadata
 import json
 import os
 import re
@@ -11,12 +14,14 @@ import shutil
 from pathlib import Path
 import subprocess
 import sys
+import threading
+import signal
 import urllib.request
 
 SOURCE_REVISION = '529e073f8c9c99b688be5823e1be78443d50763e'
 MODEL_REVISION = '31f82f2efad1095034492f236e8dac9239ba713b'
 WHEEL_REVISION = '5d53593a148d2ae5e99667a3f04a04d4fddc2107'
-SCRIPT_VERSION = 'reuse-quality-followup-20261112-v1'
+SCRIPT_VERSION = 'reuse-quality-followup-20261112-v2'
 ROOT = Path('/kaggle/temp/reuse-quality-followup-20261112')
 OUT = Path('/kaggle/working')
 ARCHIVE_HASH = '25da6651db2ea3ceb7910daec5ff7968db83aa29b56732f1f0f7114b2763cb02'
@@ -123,9 +128,13 @@ def capture(site, arm):
         raise RuntimeError('original fused extensions did not execute the expected 120 calls')
     if float(np.linalg.norm(stages['waveform'])) <= 1e-6:
         raise RuntimeError('original fused output is silent')
-    np.savez_compressed(OUT / f'{arm}-stages.npz', **stages)
+    capture_path = OUT/f'{arm}-stages.npz'
+    partial = capture_path.with_suffix('.npz.partial')
+    with partial.open('wb') as stream:
+        np.savez_compressed(stream, **stages)
+    partial.replace(capture_path)
     report = {'script_version': SCRIPT_VERSION, 'torch': str(torch.__version__), 'cuda': torch.version.cuda,
-              'device': torch.cuda.get_device_name(), 'mamba': getattr(mamba_ssm, '__version__', 'audited-adapter'), 'fused_kernel': arm == 'fused', 'arm': arm, 'mamba_module': str(mamba_ssm.__file__),
+              'device': torch.cuda.get_device_name(), 'mamba': getattr(mamba_ssm, '__version__', 'audited-adapter'), 'fused_kernel': arm == 'fused', 'arm': arm, 'mamba_module': 'SOURCE/adapter/mamba_ssm.py' if arm == 'adapter' else 'ISOLATED_SITE/mamba_ssm',
               'extension_calls': calls, 'input_sha256': WINDOW_HASH, 'model_sha256': MODEL_HASH,
               'stage_shapes': {name: list(value.shape) for name, value in stages.items()},
               'stage_metadata': {name: {'shape': list(value.shape), 'dtype': str(value.dtype),
@@ -151,7 +160,100 @@ def write_json(name, value):
     temporary.replace(target)
 
 
+MAX_TREE_RSS_KIB = 10 * 1024 * 1024
+MAX_OUTPUT_BYTES = 8 * 1024**3
+MIN_FREE_BYTES = 2 * 1024**3
+
+
+class BudgetExceeded(RuntimeError):
+    pass
+
+
+def process_tree(proc_root=Path('/proc'), root_pid=None):
+    """Current RSS including live descendants; completed-process peaks are not RSS."""
+    root_pid = os.getpid() if root_pid is None else root_pid
+    entries = {}
+    for path in proc_root.iterdir():
+        if not path.name.isdigit():
+            continue
+        try:
+            fields = dict(line.split(':', 1) for line in (path/'status').read_text().splitlines() if ':' in line)
+            entries[int(path.name)] = (int(fields['PPid']), int(fields.get('VmRSS', '0 kB').split()[0]))
+        except (OSError, KeyError, ValueError):
+            continue  # An exiting child can disappear while /proc is scanned.
+    if root_pid not in entries:
+        raise RuntimeError('resident-memory process tree unavailable')
+    selected = {root_pid}
+    while True:
+        expanded = selected | {pid for pid, (parent, _) in entries.items() if parent in selected}
+        if expanded == selected:
+            return {pid: entries[pid][1] for pid in selected}
+        selected = expanded
+
+
+def check_budget(root=ROOT, out=OUT, proc_root=Path('/proc'), root_pid=None):
+    rss = sum(process_tree(proc_root, root_pid).values())
+    output_bytes = 0
+    for path in out.rglob('*'):
+        try:
+            if path.is_file():
+                output_bytes += path.stat().st_size
+        except FileNotFoundError:
+            continue  # Capture atomically renamed during this snapshot.
+    free = min(shutil.disk_usage(root).free, shutil.disk_usage(out).free)
+    snapshot = {'tree_rss_kib': rss, 'output_bytes': output_bytes, 'free_bytes': free}
+    if rss > MAX_TREE_RSS_KIB:
+        raise BudgetExceeded('live_tree_rss_limit')
+    if output_bytes > MAX_OUTPUT_BYTES:
+        raise BudgetExceeded('output_size_limit')
+    if free < MIN_FREE_BYTES:
+        raise BudgetExceeded('free_disk_reserve')
+    return snapshot
+
+
+def failure_receipt(error):
+    # External exceptions may carry signed download URLs, token mount paths or
+    # command arguments. Persist a class and fixed message, never their text.
+    receipt = {'conclusive': False, 'type': type(error).__name__,
+               'reason': 'operation_failed; inspect retained stage and resource receipts'}
+    if isinstance(error, BudgetExceeded):
+        receipt['reason'] = str(error) if str(error) in {
+            'live_tree_rss_limit', 'output_size_limit', 'free_disk_reserve'} else 'resource_limit'
+    return receipt
+
+
+def start_budget_guard():
+    stop = threading.Event()
+    write_json('resource-latest.json', check_budget())
+    def watch():
+        while not stop.wait(5):
+            try:
+                write_json('resource-latest.json', check_budget())
+            except Exception as error:
+                # Only tiny receipts are written on resource failure. Existing
+                # source references, complete captures and partial captures stay.
+                write_json('budget-failure.json', failure_receipt(error))
+                for pid in process_tree():
+                    if pid != os.getpid():
+                        try:
+                            os.kill(pid, signal.SIGKILL)
+                        except ProcessLookupError:
+                            pass
+                os._exit(2)
+    threading.Thread(target=watch, daemon=True, name='reuse-budget').start()
+    return stop
+
+
+def quiet_call(function, *args, **kwargs):
+    # Auth/dataset helpers can print account-bearing mount paths. Their return
+    # values remain usable while incidental diagnostic strings stay private.
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        return function(*args, **kwargs)
+
+
 def run(args, **kwargs):
+    kwargs.setdefault('stdout', subprocess.PIPE)
+    kwargs.setdefault('stderr', subprocess.STDOUT)
     return subprocess.run(list(map(str, args)), check=True, **kwargs)
 
 
@@ -230,7 +332,9 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True)
     os.environ.update(OMP_NUM_THREADS='2', MKL_NUM_THREADS='2', OPENBLAS_NUM_THREADS='1',
                       USE_TF='0', USE_FLAX='0', PYTHONNOUSERSITE='1',
-                      PYTHONDONTWRITEBYTECODE='1', TMPDIR=str(ROOT), HF_HOME=str(ROOT/'hf-cache'))
+                      PYTHONDONTWRITEBYTECODE='1', HF_HUB_DISABLE_PROGRESS_BARS='1',
+                      TMPDIR=str(ROOT), HF_HOME=str(ROOT/'hf-cache'))
+    budget_stop = start_budget_guard()
     import torch
     gpu = {'torch': str(torch.__version__), 'cuda': torch.version.cuda,
            'python': sys.version, 'cxx11_abi': bool(torch._C._GLIBCXX_USE_CXX11_ABI),
@@ -254,7 +358,7 @@ def main():
     import kaggle_harness as kh
     kh.init_progress(progress_path=OUT/'progress.jsonl')
     kh.step('reuse.quality.start', source=SOURCE_REVISION, script_version=SCRIPT_VERSION)
-    token = kh.resolve_hf_token(require=True)
+    token = quiet_call(kh.resolve_hf_token, require=True)
     from huggingface_hub import hf_hub_download, snapshot_download
     matches = [p for p in Path('/kaggle/input').rglob('window-2-reference.gguf') if p.is_file()]
     unique = {str(p.resolve()): p for p in matches}
@@ -282,7 +386,7 @@ def main():
                'log_sha256': digest(native_log), 'rows': observed, 'reexecuted': False})
     # Model source always comes from the exact original upstream revision.
     modeldir = ROOT/'upstream'
-    snapshot_download('nvidia/NVIDIA-NemotronLabs-RE-USE', revision=MODEL_REVISION,
+    quiet_call(snapshot_download, 'nvidia/NVIDIA-NemotronLabs-RE-USE', revision=MODEL_REVISION,
                       allow_patterns=['*.py', 'config.json'], local_dir=modeldir, token=token)
     candidates = {str(p.resolve()): p for p in Path('/kaggle/input').rglob('model.safetensors')}
     valid = [p for p in candidates.values() if digest(p) == MODEL_HASH]
@@ -304,14 +408,14 @@ def main():
     dependencies.mkdir()
     wheels = []
     for filename, expected in EXPECTED_WHEELS.items():
-        path = Path(hf_hub_download('cstr/crispasr-ccache', repo_type='dataset', revision=WHEEL_REVISION,
+        path = Path(quiet_call(hf_hub_download, 'cstr/crispasr-ccache', repo_type='dataset', revision=WHEEL_REVISION,
                                   filename='reuse-fused-20261107/'+filename, local_dir=dependencies, token=token))
         if digest(path) != expected:
             raise ValueError('fused wheel digest mismatch')
         wheels.append(path)
     proof = {}
     for filename in ['mamba-wheel-checkpoint.json', 'source-provenance.json']:
-        path = Path(hf_hub_download('cstr/crispasr-ccache', repo_type='dataset', revision=WHEEL_REVISION,
+        path = Path(quiet_call(hf_hub_download, 'cstr/crispasr-ccache', repo_type='dataset', revision=WHEEL_REVISION,
                                   filename='reuse-fused-20261107/'+filename, local_dir=dependencies, token=token))
         proof[filename] = json.loads(path.read_text())
     checkpoint = proof['mamba-wheel-checkpoint.json']
@@ -342,17 +446,20 @@ def main():
                'upstream_sources': {str(p.relative_to(modeldir)): digest(p) for p in sorted(modeldir.rglob('*.py'))},
                'adapter_sha256': digest(source/'tools/ci-heavy/issue579_reuse/mamba_ssm.py'),
                'dependency_wheels': DEPENDENCIES, 'extension_wheels': EXPECTED_WHEELS, 'gpu': gpu,
-               'dependencies': subprocess.check_output([sys.executable, '-m', 'pip', 'freeze'], text=True)})
+               'dependencies': {dist.metadata['Name']: dist.version for dist in importlib.metadata.distributions() if dist.metadata['Name']}})
     # No native build: existing archive and its 142 native rows are preserved.
     # Heartbeats still cover both GPU captures so slow stages remain observable.
     for arm in ('fused', 'adapter'):
+        write_json('resource-latest.json', check_budget())
         with kh.build_heartbeat(f'reuse.quality.{arm}', interval_s=30):
             run([sys.executable, __file__, '--capture', site, arm], timeout=1800,
                 env={**os.environ, 'PYTHONPATH': str(site)})
         kh.step('reuse.quality.capture.retained', arm=arm, sha256=digest(OUT/f'{arm}-stages.npz'))
     compare_results(archive, clean, noisy)
     write_json('artifact-manifest.json', {p.name: {'sha256': digest(p), 'bytes': p.stat().st_size}
-               for p in OUT.iterdir() if p.is_file() and p.name not in ('artifact-manifest.json','progress.jsonl')})
+               for p in OUT.iterdir() if p.is_file() and p.name not in ('artifact-manifest.json','progress.jsonl','resource-latest.json')})
+    write_json('resource-latest.json', check_budget())
+    budget_stop.set()
     kh.step('reuse.quality.done')
 
 
@@ -364,5 +471,6 @@ if __name__ == '__main__':
             main()
     except Exception as error:
         if OUT.is_dir():
-            write_json('quality-followup-failure.json', {'conclusive': False, 'error': str(error), 'type': type(error).__name__})
-        raise
+            write_json('quality-followup-failure.json', failure_receipt(error))
+        print('REUSE_QUALITY_FAILURE', type(error).__name__, flush=True)
+        raise SystemExit(1) from None

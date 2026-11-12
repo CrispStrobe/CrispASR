@@ -50,11 +50,22 @@ are bounded diagnostics, not listening-test evidence.
 
 Local checks: `python tests/test_reuse_quality_followup.py -v`.
 No GitHub workflow changes, push, CI dispatch or Kaggle submission are part of
-preparing this directory. Authorize execution separately after checking quota,
-GPU availability, archive attachment and the pinned ABI.
+preparing this directory. Execution prerequisites are available quota, a compatible GPU draw,
+the exact archive attachment and the pinned ABI. Execution is already authorized;
+this preparation task does not launch it.
 
 Read-only operator preflight on 2026-11-12 found no local `nvidia-smi` and
 Kaggle GPU quota exhausted: used 67474.119 s, reserved 0 s, total allowed
 21600 s; refresh `2026-11-14T00:00:00Z`. The live quota response, rather than
 the historical nominal weekly allowance, controls submission readiness.
 Do not try another account or repeated accelerator draws.
+
+The v2 candidate checks live RSS of the parent plus all descendants every five
+seconds, limits it to 10 GiB, limits output to 8 GiB and preserves 2 GiB free on
+both scratch/output filesystems. It writes resource receipts before either
+capture and continuously during inference. A breached budget records a bounded
+failure receipt and terminates live descendants; existing references, complete
+captures and partial captures are retained. Captures become final atomically.
+Auth/download helper chatter and subprocess output are suppressed; exception
+receipts contain only exception classes and fixed reason codes, avoiding signed
+URLs or account-bearing mount paths in progress/error artifacts.
