@@ -22,7 +22,7 @@ acceptance) is in [the handoff, "Open tasks"](docs/maintenance-handoff.md#open-t
 
 ### Deferred RE-USE GPU diagnostic launcher — Codex (2026-11-12)
 
-- Prepare a one-shot launcher for committed candidate `8c2503d21` after 2026-11-14 00:00 UTC. Implemented exact source/artifact pins, stable completed producer, private authenticated account, structured quota including reservations and a persistent duplicate-attempt claim. All 14 model-free guard tests pass, including the live SDK's naive UTC refresh datetime and stale-reset refusal. Immutable candidate and cached evidence hashes, plus read-only live producer/target metadata checks, pass. Operator review and scheduling remain; no schedule or GPU submission during preparation.
+- Prepared a one-shot launcher for committed candidate `8c2503d21` after 2026-11-14 00:00 UTC. Exact source/artifact pins, stable completed producer, private account, structured quota including reservations and a persistent duplicate-attempt claim are checked before submission. All 14 model-free controls and read-only producer/target metadata checks pass. A local `atd` job is queued for 2026-11-14 00:05 UTC; it performs one guarded attempt and may refuse if prerequisite checks fail. No GPU submission or model result is claimed yet. Execution requires this machine and `atd` to remain available.
 
 ### Kaggle output streamed recovery — Codex (2026-11-12)
 
