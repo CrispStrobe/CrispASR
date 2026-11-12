@@ -52,6 +52,7 @@ import torch
 from safetensors.torch import load_file
 from dump_reference import write_gguf_archive
 from reference_backends import reuse
+from retain_reference import retain_reference
 
 torch.set_num_threads(2)
 torch.set_grad_enabled(False)
@@ -71,9 +72,12 @@ run(['cmake', '-S', source/'tools/ci-heavy/issue579_reuse', '-B', build, '-G', '
      '-DCMAKE_BUILD_TYPE=Release', '-DCRISPASR_REUSE_MKL_FRONTEND=ON',
      f'-DCRISPASR_REUSE_MKL_INCLUDE_DIR={header.parent}', f'-DCRISPASR_REUSE_MKL_LIBRARY={lib}'])
 with kh.build_heartbeat('reuse.full.build', interval_s=30):
-    run(['cmake', '--build', build, '--target', 'reuse-long-diff', 'reuse-diff-controls', '-j2'])
+    run(['cmake', '--build', build, '--target', 'reuse-long-diff', 'reuse-diff-controls',
+         'reuse-frontend-mkl-probe', 'reuse-profile-mkl', '-j2'])
 run(['ctest', '--test-dir', build, '-R', '^reuse-diff-controls$', '--output-on-failure'])
+run(['ctest', '--test-dir', build, '-R', '^reuse-mkl-probe-controls$', '--output-on-failure'])
 run([sys.executable, source/'tests/test_reuse_reference_dumper.py', '-q'])
+run([sys.executable, source/'tests/test_reuse_reference_retention.py', '-q'])
 
 # Identical seed and input construction to the independent chunk experiment.
 clean, rate = sf.read(source/'samples/jfk.wav', dtype='float32', always_2d=True)
@@ -123,7 +127,11 @@ write_gguf_archive(captures, {'backend':'reuse'}, reference)
 del captures
 gc.collect()
 sf.write(out/'output-reference-whole.wav', reference_wave, 16000, subtype='FLOAT')
-kh.step('reuse.full.reference.done', reference_sha256=sha(reference))
+reference_artifact = retain_reference(reference, out/'full-window-reference.gguf')
+reference = out/reference_artifact['name']
+(out/'reference-artifact.json').write_text(json.dumps(reference_artifact, indent=2)+'\n')
+kh.step('reuse.full.reference.done', reference_sha256=reference_artifact['sha256'],
+        reference_artifact=reference_artifact['name'])
 native = root/'native.f32'
 with kh.build_heartbeat('reuse.full.diff', interval_s=30):
     proc = subprocess.run([str(build/'reuse-long-diff'), str(model_gguf), str(reference), str(native)],
@@ -134,7 +142,12 @@ passed = sum(' PASS ' in line for line in lines)
 failed = sum(' FAIL ' in line for line in lines)
 report = {'source_commit':revision, 'sample_rate':rate, 'samples':len(noisy),
           'source_audio_sha256':sha(source/'samples/jfk.wav'), 'model_sha256':sha(model/'model.safetensors'),
-          'noise_seed':579, 'reference_sha256':sha(reference), 'pass_rows':passed, 'fail_rows':failed,
+          'model_gguf_sha256':sha(model_gguf),
+          'numpy_version':np.__version__, 'torch_version':torch.__version__,
+          'input_noisy_wav_sha256':sha(out/'input-noisy.wav'),
+          'input_proxy_wav_sha256':sha(out/'input-proxy.wav'),
+          'noise_seed':579, 'reference_sha256':reference_artifact['sha256'],
+          'reference_artifact':reference_artifact, 'pass_rows':passed, 'fail_rows':failed,
           'exit_code':proc.returncode, 'gpu_name':gpu_name,
           'gpu_reference_vs_cpu_wave_rel_rms':float(np.linalg.norm(gpu_wave-reference_wave)/max(np.linalg.norm(reference_wave),1e-30)),
           'gpu_reference_vs_cpu_phase_rel_rms':float(np.linalg.norm(gpu_phase-cpu_phase)/max(np.linalg.norm(cpu_phase),1e-30)),

@@ -50,8 +50,8 @@ std::vector<float> periodic_window(Window mode) {
 
 Analysis transform(const std::vector<float>& audio, Window mode, bool batch) {
     ThreadScope threads;
-    if (audio.size() < 400 || audio.size() > 16000 || audio.size() % hop)
-        throw std::runtime_error("expected 400..16000 samples, divisible by 80");
+    if (audio.size() < 400 || audio.size() > 80000 || audio.size() % hop)
+        throw std::runtime_error("expected 400..80000 samples, divisible by 80");
     for (float sample : audio)
         if (!std::isfinite(sample))
             throw std::runtime_error("nonfinite audio");

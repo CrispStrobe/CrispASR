@@ -112,10 +112,26 @@ class MklFrontendProbe(unittest.TestCase):
             self.assertEqual(outputs[0], outputs[1])
             self.assertEqual(outputs[0], outputs[2])
 
+    def test_five_second_batch_and_single_layouts_preserve_complete_spectrum(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            self.audio(root / 'audio.wav', samples=80000)
+            outputs = []
+            for layout in ('batch', 'single'):
+                target = root / f'capture-{layout}.f32'
+                result = self.invoke(root / 'audio.wav', target, 'ha', layout)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                payload = target.read_bytes()
+                self.assertEqual(len(payload), 4 * (640 + 4 * 1001 * 321))
+                values = struct.unpack('<' + 'f' * (len(payload) // 4), payload)
+                self.assertTrue(all(math.isfinite(value) for value in values))
+                outputs.append(payload)
+            self.assertEqual(outputs[0], outputs[1])
+
     def test_invalid_input_does_not_create_capture(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
-            cases = ({'samples': 320}, {'samples': 401}, {'rate': 8000}, {'channels': 2})
+            cases = ({'samples': 320}, {'samples': 401}, {'samples': 80080}, {'rate': 8000}, {'channels': 2})
             for index, options in enumerate(cases):
                 with self.subTest(options=options):
                     source, target = root / f'bad-{index}.wav', root / f'bad-{index}.f32'

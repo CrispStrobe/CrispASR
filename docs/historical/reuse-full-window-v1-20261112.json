@@ -1,0 +1,50 @@
+{
+  "date": "2026-11-12",
+  "kernel": "crispasr-reuse-full-window-20261112",
+  "kernel_version": 1,
+  "source_commit": "8a514f3349f55e6f9a6a72ad18a69b550375f0bd",
+  "source_audio_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "model_sha256": "06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1",
+  "sample_rate": 16000,
+  "samples": 80000,
+  "noise_seed": 579,
+  "reference_archive_sha256": "a24332352d64aaaf092bfc942eff9d2fa44bef6e71479adb35a6e9408c9015cf",
+  "native_comparison": {
+    "exit_code": 2,
+    "pass_rows": 0,
+    "fail_rows": 0,
+    "outcome": "not executed: experimental oneMKL frontend rejected input longer than 16000 samples"
+  },
+  "cpu_gpu_reference": {
+    "gpu": "Tesla T4",
+    "adapter": "audited non-fused PyTorch equations",
+    "waveform_relative_rms": 0.00026169815100729465,
+    "phase_relative_rms": 0.04136226698756218
+  },
+  "quality": {
+    "input": {
+      "snr_db": 4.999999997052795,
+      "si_sdr_db": 5.00892385919558,
+      "stoi": 0.5773091303199077
+    },
+    "cpu_reference": {
+      "snr_db": 13.618899695802348,
+      "si_sdr_db": 15.461103235115807,
+      "stoi": 0.6906206657521794
+    },
+    "gpu_unfused_reference": {
+      "snr_db": 13.618239811588175,
+      "si_sdr_db": 15.459853678052262,
+      "stoi": 0.6906208509278273
+    }
+  },
+  "artifact_sha256": {
+    "run.log": "1caf5a1f7dcedb59ac615b273affdf168ce779797353eedde11b24fcd7f35c18",
+    "full-diff.log": "3de4ee96c915f88ccd635737292ed2e28c8a85595ed44cde99a5aa11e11439ab",
+    "input-noisy.wav": "630a55796aef9b7471a11d8326124fdd68f95b9ef847d0aa4d07a5481ab2b18b",
+    "input-proxy.wav": "fbc60b8f4873e530887048264e6f8e0fd859845baae5330a941c4c9258eaea8e",
+    "output-reference-whole.wav": "1f0dcc04b571a0927cb65edbe3014bc2cb88fc29929795f3b41ebb6e6745a4aa",
+    "output-reference-gpu-unfused.wav": "c61213338b04d1374251120e6a88bd0145c33f9b3e14842c0e263fb0ecad097d"
+  },
+  "scope": "Single five-second repository speech proxy plus deterministic synthetic noise. Quality is diagnostic; CPU/GPU reference differences are not fused-kernel or native-GPU parity. No native five-second model stages ran."
+}

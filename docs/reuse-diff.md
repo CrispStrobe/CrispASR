@@ -92,3 +92,13 @@ at 16 kHz). The standard executable and reference dumper remain limited to
 16,000 samples by default; the Python adapter requires an explicit
 `max_samples=80000` for this diagnostic. This larger bound is experimental and
 has not been established as a production memory, quality or interface policy.
+The experimental cuFFT frontend still rejects inputs over one second; the
+five-second retry uses the explicitly qualified AVX2 oneMKL frontend.
+
+The first five-second full-window attempt captured CPU and non-fused CUDA
+Python references but the native comparator produced zero stage rows: the
+oneMKL frontend still rejected inputs over 16,000 samples. See the
+[failed-run and reference-quality receipt](historical/reuse-full-window-v1-20261112.json).
+On one synthetic-noise JFK speech proxy, the CPU reference increased SNR from
+5.00 dB to 13.62 dB and STOI from 0.577 to 0.691. These are narrow objective
+diagnostics, not a listening test or native-model qualification.
