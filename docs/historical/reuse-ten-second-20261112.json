@@ -1,0 +1,167 @@
+{
+  "conclusive": true,
+  "source_revision": "a5a46b6c5b616b7556d3bfa27335d33a95c74794",
+  "script_version": "reuse-ten-second-20261112-v1",
+  "samples": 160000,
+  "sample_rate": 16000,
+  "noise_seed": 579,
+  "noise_target_snr_db": 5,
+  "window_samples": 80000,
+  "hop_samples": 40000,
+  "starts": [
+    0,
+    40000,
+    80000
+  ],
+  "windows": [
+    {
+      "index": 0,
+      "start_sample": 0,
+      "exit_code": 0,
+      "reference_sha256": "40673c5f9fac4c1a4147370565595bdbbbcba402124ab8227468e114ad53c4b9",
+      "unconditioned": 71,
+      "conditioned": 71,
+      "gpu_vs_cpu_reference_rel_rms": 0.0001388893142575398
+    },
+    {
+      "index": 1,
+      "start_sample": 40000,
+      "exit_code": 0,
+      "reference_sha256": "988470f291ba71578e50411fde240c2d1c38e0e82ca610e597610559e935dc68",
+      "unconditioned": 71,
+      "conditioned": 71,
+      "gpu_vs_cpu_reference_rel_rms": 0.0005642780452035367
+    },
+    {
+      "index": 2,
+      "start_sample": 80000,
+      "exit_code": 0,
+      "reference_sha256": "25da6651db2ea3ceb7910daec5ff7968db83aa29b56732f1f0f7114b2763cb02",
+      "unconditioned": 71,
+      "conditioned": 71,
+      "gpu_vs_cpu_reference_rel_rms": 0.0007570103625766933
+    }
+  ],
+  "quality": {
+    "input": {
+      "snr_db": 4.999999999764002,
+      "si_sdr_db": 5.001899264417026,
+      "stoi": 0.6311224327244249
+    },
+    "reference-chunked": {
+      "snr_db": 5.081550320966367,
+      "si_sdr_db": 3.482318430450993,
+      "stoi": 0.7152504357951753
+    },
+    "native-chunked": {
+      "snr_db": 5.081550187559324,
+      "si_sdr_db": 3.4823182327940376,
+      "stoi": 0.7152504535393241
+    },
+    "reference-gpu-unfused-chunked": {
+      "snr_db": 5.080939631193062,
+      "si_sdr_db": 3.4814072698237757,
+      "stoi": 0.7152373028761005
+    }
+  },
+  "native_vs_reference_rel_rms": 8.538332849639119e-07,
+  "seams": [
+    {
+      "sample": 40000,
+      "native_reference_max_abs_error_10ms": 1.5006662579253316e-10
+    },
+    {
+      "sample": 80000,
+      "native_reference_max_abs_error_10ms": 2.255546860396862e-10
+    }
+  ],
+  "scope": "One ten-second speech proxy plus synthetic noise; research interface only; no production, perceptual-quality, fused CUDA or native GPU-backend claim.",
+  "date": "2026-11-12",
+  "kernel": "crispasr-reuse-ten-second-20261112",
+  "kernel_version": 1,
+  "model_sha256": "06badaf4029b297f97f7fe48d62990b48d5482608210df577354e0d4e0ed70e1",
+  "model_revision": "31f82f2efad1095034492f236e8dac9239ba713b",
+  "source_audio_sha256": "59dfb9a4acb36fe2a2affc14bacbee2920ff435cb13cc314a08c13f66ba7860e",
+  "script_sha256": "f92b77b2a79aa8748d0824d3ba4066b4ca3da03a9c7e0836797b462dd3bca7e4",
+  "gpu": {
+    "available": true,
+    "torch": "2.11.0+cu130",
+    "name": "Tesla T4",
+    "capability": [
+      7,
+      5
+    ]
+  },
+  "reference_archives": [
+    {
+      "name": "window-0-reference.gguf",
+      "index": 0,
+      "start_sample": 0,
+      "samples": 80000,
+      "bytes": 1054097472,
+      "sha256": "40673c5f9fac4c1a4147370565595bdbbbcba402124ab8227468e114ad53c4b9"
+    },
+    {
+      "name": "window-1-reference.gguf",
+      "index": 1,
+      "start_sample": 40000,
+      "samples": 80000,
+      "bytes": 1054097472,
+      "sha256": "988470f291ba71578e50411fde240c2d1c38e0e82ca610e597610559e935dc68"
+    },
+    {
+      "name": "window-2-reference.gguf",
+      "index": 2,
+      "start_sample": 80000,
+      "samples": 80000,
+      "bytes": 1054097472,
+      "sha256": "25da6651db2ea3ceb7910daec5ff7968db83aa29b56732f1f0f7114b2763cb02"
+    }
+  ],
+  "reference_recovery": "All three archives were streamed, and byte counts and SHA-256 values matched the saved manifest.",
+  "stage_validation": "All three retrieved logs independently checked for 71 unique PASS stages in each of the unconditioned and conditioned groups.",
+  "published_stage_measurements": {
+    "file": "reuse-ten-second-stages-20261112.json",
+    "rows": 426,
+    "sha256": "832d69b6ae21df81befbf84f0fbcdad52bda488c71e8ac27fbece540a34d588a"
+  },
+  "artifact_sha256": {
+    "ten-second-result.json": "ec3dfddb8cbdec4bb0742b327af233b12eb3ea97bf0aca42c0ae27963cda60b5",
+    "reference-manifest.json": "2bd8acf4d3758a15834350c990b2bc4ebb4f63e09ab7146eb80a8d61589f15e1",
+    "provenance.json": "43999afeaf04cb25d8febd4830ecf29d6b6f113a1d98d313bcfcd1f1711e2949",
+    "input-proxy.wav": "647049cb5676aab5f9c469c0f28938b8b585b43c1b6564308222aa48ee593fb0",
+    "input-noisy.wav": "78e407ecadaa876d17fc8ba5abb65ad23a86b7d5d42e6bd22042c5c01ad703a2",
+    "output-reference-chunked.wav": "5f9737012a2d8560625d83de5bffde25c5424287c87981ee3be5169860b71ff2",
+    "output-native-chunked.wav": "d4560429194817d7165b17c0f4d9d2937257fe4b3e095f77434806341509b39a",
+    "output-reference-gpu-unfused-chunked.wav": "57626a7d74554dd1f7f4a9880e63f668e0897e1380c79dc847e969a16105cdbf",
+    "window-0-diff.log": "e57b9a7b3e47e0eec05034bff2f1a12ed436f25e32d723e21f6b19a29b780c77",
+    "window-1-diff.log": "616323b040351b1eacdfaa8afcf073c14062066072d90355400148fb47968183",
+    "window-2-diff.log": "cd3f56d4d782c0a667cf62364866349613e983f7962cc0b2949bd9a1651e1d50"
+  },
+  "quality_observation": "For this one noisy speech proxy, native and reference agree closely but output SI-SDR decreases while STOI increases. This does not establish acceptable perceptual quality; further original fused-reference and corpus evaluation is required.",
+  "window_quality_diagnosis": {
+    "scope": "Aligned metrics on the same single clean-speech proxy; Python reference windows use the audited non-fused adapter.",
+    "archived_raw_audio_matches_noisy_windows": "exact",
+    "independently_reconstructed_stitch_max_abs_difference": 0.0,
+    "windows": [
+      {
+        "index": 0,
+        "snr_db": 14.1886,
+        "si_sdr_db": 15.971
+      },
+      {
+        "index": 1,
+        "snr_db": 7.9171,
+        "si_sdr_db": 8.1008
+      },
+      {
+        "index": 2,
+        "snr_db": 0.607,
+        "si_sdr_db": -6.1414
+      }
+    ],
+    "final_five_seconds_fraction_of_total_squared_error": 0.9122,
+    "interval_9_to_9_5_seconds": "Only the final window contributes; its raw waveform and stitched output match exactly.",
+    "interpretation": "Degradation is present in the final Python reference window before stitching; comparison with the original fused implementation on the same full window and broader quality evaluation remain open."
+  }
+}

@@ -1,4 +1,4 @@
-This Kaggle research candidate is based on `7b4f0935a`; version 1 is running.
+This Kaggle research candidate is based on `7b4f0935a`; version 1 completed.
 Runtime source is frozen to `a5a46b6c5b616b7556d3bfa27335d33a95c74794`, which
 includes the explicit `chunked(..., max_window_samples=80000)` interface.
 That source must be remotely available when submitting. Do not use a moving
@@ -61,5 +61,7 @@ manifest and rehash recovered bytes before treating them as preserved evidence.
 Model-free local controls: `python tests/test_reuse_ten_second_kernel.py -q`.
 The kernel additionally runs existing reference, retention, chunking, quality,
 comparison and oneMKL controls on the frozen worker source. No run or model
-result is implied by those local tests. A submitted run requires separate
-artifact recovery and result review before any qualification claim.
+result is implied by those local tests. The completed run's [receipt](../../../docs/historical/reuse-ten-second-20261112.json)
+records all stage comparisons and a significant quality regression on the
+latter portion of its single speech proxy. Fused upstream comparison and
+broader quality evaluation remain open.

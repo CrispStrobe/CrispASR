@@ -72,6 +72,15 @@ are diagnostic observations, not a quality threshold or streaming-equivalence
 claim. See the [run receipt](historical/reuse-chunked-five-second-20261112.json);
 its per-window reference GGUF archives were not retained.
 
+The [ten-second run](historical/reuse-ten-second-20261112.json) passed all 142
+stage checks in each of three overlapping five-second windows and recovered
+the three reference archives. The native stitched waveform differs from the
+CPU reference by 8.54e-7 relative RMS. On this one noisy speech proxy, however,
+SI-SDR decreases from 5.00 to 3.48 dB while STOI increases from 0.631 to 0.715.
+The bulk of the error occurs in the latter five seconds. This is a quality
+concern requiring upstream fused-reference and broader corpus investigation,
+not evidence that a product or streaming implementation is ready.
+
 The `reuse` GGUF architecture is intentionally not registered as a product
 backend. The published v0.8.51 Linux shared library rejected the pinned real RE-USE
 GGUF through both C ABI detection and session opening in three repeated cycles;
