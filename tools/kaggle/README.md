@@ -250,7 +250,10 @@ It refuses outside **2026-11-14 00:00 through 2026-11-15 00:00 UTC**, regardless
 of currently available quota. The authenticated username must equal the one
 private configured account. Structured SDK quota durations use `.total_seconds()`:
 SDK representations can drop `timedelta` days (`1 day + 21600 s` is 30 hours,
-not 6). Allowed minus used minus reserved must be at least 4500 seconds, and
+not 6). The reviewed SDK datetime serializer strips the API's trailing `Z`,
+so its naive quota refresh datetime is explicitly restored to UTC in the SDK
+adapter; the quota guard itself rejects unqualified naive timestamps. Allowed
+minus used minus reserved must be at least 4500 seconds, and
 the weekly quota window must have advanced past the November 14 refresh.
 Missing/malformed data, stale quota, API failures and uncertain states refuse.
 Only the reviewed Kaggle 2.2.2 / kagglesdk 0.1.37 adapter versions are accepted;

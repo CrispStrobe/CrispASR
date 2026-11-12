@@ -173,8 +173,17 @@ class KaggleRemote:
         gpu = response.gpu_quota
         values = [gpu.total_time_allowed, gpu.time_used, gpu.time_reserved]
         require(all(isinstance(value, timedelta) for value in values), "unexpected GPU quota schema")
+        refresh = response.quota_refresh_time
+        require(isinstance(refresh, datetime), "unexpected quota refresh schema")
+        # Reviewed SDK DateTimeSerializer strips the API's trailing Z before
+        # datetime.fromisoformat. Restore UTC only at this known SDK boundary.
+        if refresh.tzinfo is None:
+            refresh = refresh.replace(tzinfo=timezone.utc)
+        else:
+            require(refresh.utcoffset() is not None, "uncertain quota refresh timezone")
+            refresh = refresh.astimezone(timezone.utc)
         return dict(zip(("allowed", "used", "reserved"), (value.total_seconds() for value in values)),
-                    refresh=response.quota_refresh_time)
+                    refresh=refresh)
 
     def snapshot(self, owner):
         from kagglesdk.kernels.types.kernels_api_service import ApiGetKernelRequest

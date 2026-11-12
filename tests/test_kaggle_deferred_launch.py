@@ -143,6 +143,25 @@ class AdapterTests(unittest.TestCase):
         self.assertEqual(quota['allowed']-quota['used']-quota['reserved'], 39371)
         launcher.quota_guard(quota, NOW)
 
+    def test_exact_live_naive_sdk_refresh_restores_utc_and_stale_reset_still_refuses(self):
+        remote = launcher.KaggleRemote()
+        remote.api = Mock()
+        response = SimpleNamespace(
+            gpu_quota=SimpleNamespace(total_time_allowed=timedelta(days=1, seconds=21600),
+                                      time_used=timedelta(seconds=68629), time_reserved=timedelta(0)),
+            quota_refresh_time=datetime(2026, 11, 14, 0, 0, 0))
+        remote.api.quota_view.return_value = response
+        quota = remote.quota()
+        self.assertEqual(quota['refresh'], datetime(2026, 11, 14, tzinfo=timezone.utc))
+        self.assertIs(quota['refresh'].tzinfo, timezone.utc)
+        with self.assertRaisesRegex(launcher.Refusal, 'has not refreshed'):
+            launcher.quota_guard(quota, NOW)
+        response.quota_refresh_time = datetime(2026, 11, 21, 0, 0, 0)
+        launcher.quota_guard(remote.quota(), NOW)
+        # Unknown callers cannot pass ambiguous naive timestamps to the guard.
+        with self.assertRaisesRegex(launcher.Refusal, 'uncertain quota refresh time'):
+            launcher.quota_guard({**QUOTA, 'refresh': datetime(2026, 11, 21)}, NOW)
+
     def test_unreviewed_sdk_refuses_before_authentication(self):
         with patch.object(launcher, 'package_version', return_value='new-version'), \
              patch.object(launcher, 'authenticated_api') as authenticate:
