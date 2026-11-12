@@ -143,7 +143,8 @@ def die(msg: str, code: int = 1) -> "NoReturn":
     sys.exit(code)
 
 
-def hf_download(repo: str, file_in_repo: str, revision: str, dest_dir: Path) -> Path:
+def hf_download(repo: str, file_in_repo: str, revision: str, dest_dir: Path,
+                repo_type: str = "model") -> Path:
     """Download one file from HF at a pinned revision; return its local path.
 
     Honours `HF_HOME` / `HUGGINGFACE_HUB_CACHE` from the environment if
@@ -170,6 +171,7 @@ def hf_download(repo: str, file_in_repo: str, revision: str, dest_dir: Path) -> 
                 filename=file_in_repo,
                 revision=revision,
                 cache_dir=cache_dir,
+                repo_type=repo_type,
             )
             return Path(local)
         except Exception as e:
@@ -662,6 +664,11 @@ def regression_for(name: str, manifest: dict, work_dir: Path,
             manifest["fixtures"]["revision"],
             work_dir,
         )
+    elif "sample_hf" in entry:
+        # A sample pinned in its own repo/revision (e.g. a FLEURS clip added to
+        # the fixtures repo after fixtures.revision), so the shared pin stays put.
+        s = entry["sample_hf"]
+        sample = hf_download(s["repo"], s["file"], s["revision"], work_dir, repo_type=s.get("repo_type", "model"))
     else:
         sample = REPO_ROOT / entry["sample"]
         if not sample.exists():
@@ -742,6 +749,567 @@ def regression_for(name: str, manifest: dict, work_dir: Path,
               f"(ungated: not in diff_thresholds / advisory_stages)")
 
     return failures
+
+# ---------------------------------------------------------------------------
+# Task backends (manifest.task_backends): models whose output is not a plain
+# transcript — translation, source separation, music analysis, speech-to-speech,
+# diarization, watermark detection. Every task is gated against a ground truth
+# that exists independently of the model under test: a reference translation,
+# the clean sources a mixture was built from, or the note/beat/chord grid a
+# synthetic input was rendered from. Native-capture pins are used only where no
+# such truth exists (none of the kinds below need one).
+# ---------------------------------------------------------------------------
+
+# Standard-tuning open-string MIDI notes, low E to high E (TabCNN string order).
+_GUITAR_OPEN_MIDI = (40, 45, 50, 55, 59, 64)
+_PITCH_CLASSES = {"C": 0, "C#": 1, "Db": 1, "D": 2, "D#": 3, "Eb": 3, "E": 4, "F": 5, "F#": 6,
+                  "Gb": 6, "G": 7, "G#": 8, "Ab": 8, "A": 9, "A#": 10, "Bb": 10, "B": 11}
+
+
+def _midi_hz(midi: float) -> float:
+    return 440.0 * 2.0 ** ((midi - 69.0) / 12.0)
+
+
+def _write_wav(path: Path, x, sr: int) -> None:
+    import numpy as np
+    import wave
+    pcm = np.clip(np.asarray(x, dtype=np.float64), -1.0, 1.0)
+    with wave.open(str(path), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(sr)
+        w.writeframes((pcm * 32767.0).round().astype("<i2").tobytes())
+
+
+def _read_wav(path: Path):
+    """Return (mono float64 samples, sample rate) for a PCM16/PCM32/float WAV."""
+    import numpy as np
+    import wave
+    try:
+        with wave.open(str(path), "rb") as w:
+            sr, ch, sw, n = w.getframerate(), w.getnchannels(), w.getsampwidth(), w.getnframes()
+            raw = w.readframes(n)
+        if sw == 2:
+            x = np.frombuffer(raw, "<i2").astype(np.float64) / 32768.0
+        elif sw == 4:
+            x = np.frombuffer(raw, "<i4").astype(np.float64) / 2147483648.0
+        else:
+            raise ValueError(f"unsupported sample width {sw}")
+    except wave.Error:
+        # WAVE_FORMAT_IEEE_FLOAT — parse the chunks by hand.
+        import struct
+        data = path.read_bytes()
+        pos, fmt, payload = 12, None, None
+        while pos + 8 <= len(data):
+            cid, size = data[pos:pos + 4], struct.unpack("<I", data[pos + 4:pos + 8])[0]
+            if cid == b"fmt ":
+                fmt = struct.unpack("<HHIIHH", data[pos + 8:pos + 24])
+            elif cid == b"data":
+                payload = data[pos + 8:pos + 8 + size]
+            pos += 8 + size + (size & 1)
+        if fmt is None or payload is None or fmt[0] != 3 or fmt[5] != 32:
+            raise ValueError(f"unreadable WAV {path}")
+        ch, sr = fmt[1], fmt[2]
+        x = np.frombuffer(payload, "<f4").astype(np.float64)
+    if ch > 1:
+        x = x.reshape(-1, ch).mean(axis=1)
+    return x, sr
+
+
+def _resample(x, sr_in: int, sr_out: int):
+    import numpy as np
+    if sr_in == sr_out:
+        return x
+    n_out = int(round(len(x) * sr_out / sr_in))
+    return np.interp(np.arange(n_out) * (sr_in / sr_out), np.arange(len(x)), x)
+
+
+def _render_notes(notes: list, sr: int, timbre: str, total_s: float):
+    """Render [[onset_s, dur_s, midi], ...] to a mono signal.
+
+    ``piano``: 8 decaying harmonics with a short attack (struck-string-like).
+    ``pluck``: Karplus-Strong plucked string (guitar-like), deterministic seed.
+    """
+    import numpy as np
+    out = np.zeros(int(total_s * sr) + 1)
+    rng = np.random.default_rng(1234)
+    for onset, dur, midi in notes:
+        f0 = _midi_hz(midi)
+        n = int(dur * sr)
+        t = np.arange(n) / sr
+        if timbre == "pluck":
+            period = max(2, int(round(sr / f0)))
+            buf = rng.uniform(-1, 1, period)
+            y = np.empty(n)
+            for i in range(n):
+                y[i] = buf[i % period]
+                buf[i % period] = 0.996 * 0.5 * (buf[i % period] + buf[(i + 1) % period])
+            y *= np.minimum(1.0, (n - np.arange(n)) / (0.02 * sr))  # release
+        else:
+            y = sum((0.6 ** (k - 1)) * np.sin(2 * np.pi * k * f0 * t) * np.exp(-t * (1.5 + 0.7 * k))
+                    for k in range(1, 9) if k * f0 < sr / 2)
+            y *= np.minimum(1.0, t / 0.005) * np.minimum(1.0, (dur - t) / 0.03)
+        s = int(onset * sr)
+        out[s:s + n] += y[: len(out) - s]
+    return out
+
+
+def _render_clicks(bpm: float, total_s: float, sr: int, beats_per_bar: int = 4):
+    """Kick on every beat (louder on the downbeat) plus hi-hat eighths."""
+    import numpy as np
+    out = np.zeros(int(total_s * sr) + 1)
+    period = 60.0 / bpm
+    rng = np.random.default_rng(99)
+    t = np.arange(int(0.25 * sr)) / sr
+    kick = np.sin(2 * np.pi * (50 + 120 * np.exp(-t * 30)) * t) * np.exp(-t * 18)
+    hat = rng.uniform(-1, 1, int(0.04 * sr)) * np.exp(-np.arange(int(0.04 * sr)) / (0.006 * sr))
+    i = 0
+    while i * period / 2 < total_s - 0.3:
+        s = int(i * period / 2 * sr)
+        if i % 2 == 0:
+            amp = 1.0 if (i // 2) % beats_per_bar == 0 else 0.7
+            out[s:s + len(kick)] += amp * kick[: len(out) - s]
+        out[s:s + len(hat)] += 0.15 * hat[: len(out) - s]
+        i += 1
+    return out
+
+
+def _chord_notes(chords: list, block_s: float) -> list:
+    """[[root, quality], ...] -> note list: root-position triad plus bass octave."""
+    notes = []
+    for i, (root, quality) in enumerate(chords):
+        r = 48 + _PITCH_CLASSES[root]
+        third = 3 if quality == "min" else 4
+        for m in (r - 12, r, r + third, r + 7, r + 12):
+            notes.append([i * block_s, block_s, m])
+    return notes
+
+
+def _synth_input(spec: dict, work_dir: Path, manifest: dict) -> tuple[Path, dict]:
+    """Render a deterministic synthetic input; return (wav, ground truth)."""
+    import numpy as np
+    kind = spec["kind"]
+    sr = int(spec.get("sr", 22050))
+    path = work_dir / f"synth_{kind}.wav"
+    truth: dict = {}
+    if kind in ("notes", "pluck"):
+        notes = spec["notes"]
+        total = max(o + d for o, d, _ in notes) + 0.5
+        x = _render_notes(notes, sr, "pluck" if kind == "pluck" else "piano", total)
+        truth["notes"] = notes
+    elif kind == "chords":
+        notes = _chord_notes(spec["chords"], float(spec["block_s"]))
+        total = len(spec["chords"]) * float(spec["block_s"])
+        x = _render_notes(notes, sr, "piano", total)
+        # Re-strike each block every second so the chord keeps sounding.
+        for rep in np.arange(1.0, float(spec["block_s"]) - 0.2, 1.0):
+            x += _render_notes([[o + rep, d - rep, m] for o, d, m in notes], sr, "piano", total)[: len(x)]
+        truth["chords"] = spec["chords"]
+    elif kind == "clicks":
+        x = _render_clicks(float(spec["bpm"]), float(spec["duration_s"]), sr)
+    elif kind == "speech_music":
+        speech, ssr = _read_wav(REPO_ROOT / spec["speech_sample"])
+        speech = _resample(speech, ssr, sr)
+        total = len(speech) / sr
+        music = _render_notes(_chord_notes(spec["chords"], total / len(spec["chords"])), sr, "piano", total)
+        music += 0.8 * _render_clicks(float(spec.get("bpm", 100)), total, sr)
+        music = music[: len(speech)]
+        speech_rms = np.sqrt(np.mean(speech ** 2))
+        music *= speech_rms / np.sqrt(np.mean(music ** 2)) * 10 ** (-float(spec["snr_db"]) / 20)
+        x = speech + music
+        peak = np.max(np.abs(x)) / 0.9
+        truth["speech"], truth["music"], truth["sr"] = speech / peak, music / peak, sr
+        x = x / peak
+    else:
+        die(f"unknown synth kind {kind!r}")
+    x = x / max(1e-9, np.max(np.abs(x))) * 0.8 if kind != "speech_music" else x
+    _write_wav(path, x, sr)
+    return path, truth
+
+
+def _si_sdr(est, ref) -> float:
+    import numpy as np
+    n = min(len(est), len(ref))
+    est, ref = est[:n] - np.mean(est[:n]), ref[:n] - np.mean(ref[:n])
+    proj = np.dot(est, ref) / (np.dot(ref, ref) + 1e-12) * ref
+    noise = est - proj
+    return float(10 * np.log10((np.dot(proj, proj) + 1e-12) / (np.dot(noise, noise) + 1e-12)))
+
+
+def _json_stdout(proc: subprocess.CompletedProcess) -> dict:
+    text = proc.stdout
+    start = text.find("{")
+    if start < 0:
+        raise ValueError(f"no JSON on stdout; stderr tail: ...{proc.stderr[-400:]}")
+    return json.loads(text[start:])
+
+
+def _report(ok: bool, line: str) -> int:
+    print(f"\033[{32 if ok else 31}m  {'PASS' if ok else 'FAIL'}\033[0m  {line}")
+    return int(not ok)
+
+
+def _check_pitch(entry: dict, out: dict, truth: dict) -> int:
+    import numpy as np
+    frames = out["frames"]
+    if not frames:
+        return _report(False, "no pitch frames")
+    keys = frames[0].keys()
+    tkey = "time_ms" if "time_ms" in keys else "time"
+    fkey = "f0_hz" if "f0_hz" in keys else "f0"
+    pkey = next((k for k in keys if "prob" in k or "conf" in k), None)
+    scale = 1e-3 if tkey == "time_ms" else 1.0
+    tol, fails = float(entry["cents_tol"]), 0
+    for onset, dur, midi in truth["notes"]:
+        lo, hi = onset + 0.15 * dur, onset + 0.85 * dur
+        seg = [f for f in frames if lo <= f[tkey] * scale <= hi]
+        voiced = [f for f in seg if pkey is None or f[pkey] >= float(entry.get("voiced_min", 0.5))]
+        if len(voiced) < 0.6 * max(1, len(seg)) or not voiced:
+            fails += _report(False, f"note {midi}: only {len(voiced)}/{len(seg)} frames voiced")
+            continue
+        med = float(np.median([f[fkey] for f in voiced]))
+        cents = 1200 * np.log2(max(med, 1e-3) / _midi_hz(midi))
+        fails += _report(abs(cents) <= tol, f"note {midi} ({_midi_hz(midi):.1f} Hz): median f0 {med:.2f} Hz, "
+                                            f"{cents:+.1f} cents (tol {tol}), {len(voiced)}/{len(seg)} voiced")
+    return fails
+
+
+def _check_beats(entry: dict, out: dict, spec: dict) -> int:
+    import numpy as np
+    beats = [b["time"] for b in out["beats"]]
+    period = 60.0 / float(spec["bpm"])
+    truth = np.arange(0.0, float(spec["duration_s"]) - 0.3, period)
+    tol = float(entry.get("beat_tol_s", 0.07))
+    hit = sum(1 for t in truth if beats and min(abs(b - t) for b in beats) <= tol)
+    prec = sum(1 for b in beats if min(abs(b - t) for t in truth) <= tol) / max(1, len(beats))
+    rec = hit / len(truth)
+    f1 = 2 * prec * rec / max(1e-9, prec + rec)
+    tempo = float(out.get("tempo_bpm", 0.0))
+    fails = _report(f1 >= float(entry["beat_f1_min"]),
+                    f"beat F1={f1:.3f} (P={prec:.3f} R={rec:.3f}, {len(beats)} beats vs {len(truth)} true, "
+                    f"tol {tol}s; min {entry['beat_f1_min']})")
+    fails += _report(abs(tempo - float(spec["bpm"])) <= float(entry.get("tempo_tol_bpm", 3.0)),
+                     f"tempo {tempo:.2f} BPM vs {spec['bpm']}")
+    return fails
+
+
+def _parse_chord(label: str) -> tuple[int, str] | None:
+    """'C', 'C:maj', 'A:min', 'Am', 'F#:min7' -> (pitch class, 'maj'|'min'); None for N/X."""
+    m = re.match(r"^([A-G][#b]?)(?::?(.*))?$", label.strip())
+    if not m:
+        return None
+    rest = (m.group(2) or "").lower()
+    quality = "min" if rest.startswith("min") or (rest.startswith("m") and not rest.startswith("maj")) else "maj"
+    return _PITCH_CLASSES[m.group(1)], quality
+
+
+def _check_chords(entry: dict, out: dict, spec: dict) -> int:
+    block = float(spec["block_s"])
+    correct, lines = 0, []
+    for i, (root, quality) in enumerate(spec["chords"]):
+        lo, hi = i * block + 0.25 * block, (i + 1) * block - 0.25 * block
+        weight: dict = {}
+        for c in out["chords"]:
+            ov = min(hi, c["end_ms"] / 1000) - max(lo, c["start_ms"] / 1000)
+            if ov > 0:
+                weight[c["chord"]] = weight.get(c["chord"], 0.0) + ov
+        top = max(weight, key=weight.get) if weight else "<none>"
+        ok = _parse_chord(top) == (_PITCH_CLASSES[root], quality)
+        correct += ok
+        lines.append(f"{root}:{quality}->{top}{'' if ok else ' (WRONG)'}")
+    frac = correct / len(spec["chords"])
+    return _report(frac >= float(entry["chord_acc_min"]),
+                   f"chord accuracy {correct}/{len(spec['chords'])} (min {entry['chord_acc_min']}): "
+                   + ", ".join(lines))
+
+
+def _check_piano(entry: dict, out: dict, truth: dict) -> int:
+    notes = out["notes"]
+    tol = float(entry.get("onset_tol_s", 0.1))
+    used, hit = set(), 0
+    for onset, _, midi in truth["notes"]:
+        j = next((k for k, n in enumerate(notes) if k not in used and n["midi"] == midi
+                  and abs(n["onset"] - onset) <= tol), None)
+        if j is not None:
+            used.add(j)
+            hit += 1
+    prec, rec = hit / max(1, len(notes)), hit / len(truth["notes"])
+    f1 = 2 * prec * rec / max(1e-9, prec + rec)
+    got = " ".join(f"{n['midi']}@{n['onset']:.2f}" for n in notes[:24])
+    # Recall is the primary gate (every rendered note must be found at its exact
+    # pitch and onset); precision has its own, lower floor because the additive
+    # synthetic timbre legitimately excites some harmonic/re-onset detections,
+    # while note spam or a pitch-shifted transcription still fails it.
+    ok = rec >= float(entry["note_recall_min"]) and prec >= float(entry["note_precision_min"])
+    return _report(ok, f"note recall={rec:.3f} (min {entry['note_recall_min']}) precision={prec:.3f} "
+                       f"(min {entry['note_precision_min']}) F1={f1:.3f}; {len(notes)} detected vs "
+                       f"{len(truth['notes'])} true; onset tol {tol}s; got: {got}")
+
+
+def _check_tab(entry: dict, out: dict, truth: dict) -> int:
+    frames, silent = out["frames"], out.get("silent_class")
+    good = total = 0
+    for onset, dur, midi in truth["notes"]:
+        for f in frames:
+            if onset + 0.1 * dur <= f["time"] <= onset + 0.7 * dur:
+                total += 1
+                # Each string is {"fret": n, "logp": x}; fret -1 (or the silent
+                # class) means the string is not sounding.
+                frets = [fr["fret"] if isinstance(fr, dict) else fr for fr in f["frets"]]
+                pitches = {_GUITAR_OPEN_MIDI[s] + fr for s, fr in enumerate(frets)
+                           if fr is not None and fr != silent and fr >= 0}
+                good += midi in pitches
+    frac = good / max(1, total)
+    return _report(frac >= float(entry["frame_acc_min"]),
+                   f"frames sounding the true pitch {good}/{total} = {frac:.3f} (min {entry['frame_acc_min']})")
+
+
+def _check_separation(entry: dict, stems: dict, truth: dict) -> int:
+    import numpy as np
+    speech_name = entry["speech_stem"]
+    if speech_name not in stems:
+        return _report(False, f"speech stem {speech_name!r} not produced (got {sorted(stems)})")
+    sr = truth["sr"]
+    est = _resample(stems[speech_name][0], stems[speech_name][1], sr)
+    mix_sdr = _si_sdr(truth["speech"] + truth["music"], truth["speech"])
+    sdr = _si_sdr(est, truth["speech"])
+    rms_ratio = float(np.sqrt(np.mean(est[: len(truth['speech'])] ** 2)) /
+                      np.sqrt(np.mean(truth["speech"] ** 2)))
+    fails = _report(sdr >= float(entry["si_sdr_min_db"]) and sdr - mix_sdr >= float(entry["si_sdr_gain_min_db"]),
+                    f"{speech_name}: SI-SDR vs clean speech {sdr:.2f} dB (min {entry['si_sdr_min_db']}), "
+                    f"mixture {mix_sdr:.2f} dB, gain {sdr - mix_sdr:+.2f} dB (min {entry['si_sdr_gain_min_db']})")
+    fails += _report(0.5 <= rms_ratio <= 2.0, f"{speech_name}: RMS ratio vs clean speech {rms_ratio:.3f} (0.5..2.0)")
+    return fails
+
+
+def _entry_input(entry: dict, manifest: dict, work_dir: Path) -> tuple[Path, dict]:
+    if "synth" in entry:
+        return _synth_input(entry["synth"], work_dir, manifest)
+    if "fixture_sample_path" in entry:
+        return hf_download(manifest["fixtures"]["repo"], entry["fixture_sample_path"],
+                           manifest["fixtures"]["revision"], work_dir), {}
+    if "sample_hf" in entry:
+        s = entry["sample_hf"]
+        return hf_download(s["repo"], s["file"], s["revision"], work_dir, repo_type=s.get("repo_type", "model")), {}
+    sample = REPO_ROOT / entry["sample"]
+    if not sample.exists():
+        die(f"sample missing: {sample}")
+    return sample, {}
+
+
+def _asr_text(manifest: dict, asr_name: str, wav: Path, work_dir: Path, crispasr_bin: Path,
+              label: str) -> str:
+    asr = next((b for b in manifest["backends"] if b["name"] == asr_name), None)
+    if asr is None:
+        die(f"ASR entry {asr_name!r} not in manifest.backends")
+    g = hf_download(asr["gguf"]["repo"], asr["gguf"]["file"], asr["gguf"]["revision"], work_dir)
+    for companion in asr["gguf"].get("companion_files", []):
+        c = hf_download(asr["gguf"]["repo"], companion, asr["gguf"]["revision"], work_dir)
+        if not (g.parent / Path(companion).name).exists():
+            shutil.copy2(c, g.parent / Path(companion).name)
+    proc = _run_captured([str(crispasr_bin), "--backend", asr["backend_id"], "-m", str(g), "-f", str(wav),
+                          "--no-prints"] + list(asr.get("roundtrip_extra_args", [])),
+                         check=True, timeout=600, label=label)
+    lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+    return " ".join(lines)
+
+
+def task_for(name: str, manifest: dict, work_dir: Path, crispasr_bin: Path, diff_bin: Path) -> int:
+    """Run one manifest.task_backends entry. Returns the number of failures."""
+    entry = next((b for b in manifest.get("task_backends", []) if b["name"] == name), None)
+    if entry is None:
+        die(f"task backend '{name}' not in manifest.task_backends")
+    task = entry["task"]
+    g = entry["gguf"]
+    gguf = hf_download(g["repo"], g["file"], g["revision"], work_dir)
+    for companion in g.get("companion_files", []):
+        c = hf_download(g["repo"], companion, g["revision"], work_dir)
+        if not (gguf.parent / Path(companion).name).exists():
+            shutil.copy2(c, gguf.parent / Path(companion).name)
+    extra = list(entry.get("cli_extra_args", []))
+    timeout = int(entry.get("timeout_s", 900))
+    work_dir.mkdir(parents=True, exist_ok=True)
+    print(f"\n[task:{task}] {name}  ({g['repo']}@{g['revision'][:8]}::{g['file']})")
+
+    if task == "translate":
+        fails = 0
+        for i, case in enumerate(entry["cases"]):
+            proc = _run_captured([str(crispasr_bin), "-m", str(gguf), "--text", case["text"],
+                                  "-sl", case["sl"], "-tl", case["tl"], "--no-prints"] + extra,
+                                 check=True, timeout=timeout, label=f"translate-{i}")
+            lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+            actual = lines[-1] if lines else ""
+            ok, out = transcript_gate({"expected_transcript": case["expected"],
+                                       "transcript_tolerance": entry["transcript_tolerance"]}, actual)
+            print(f"  {case['sl']}->{case['tl']}: {case['text']!r}")
+            for ln in out:
+                print(ln)
+            fails += int(not ok)
+        return fails
+
+    if task == "diff":
+        sample, _ = _entry_input(entry, manifest, work_dir)
+        ref = hf_download(manifest["fixtures"]["repo"], entry["fixture_ref_path"],
+                          manifest["fixtures"]["revision"], work_dir)
+        stages = run_diff(diff_bin, entry["backend_id"], gguf, ref, sample)
+        passes, fails_, missing, extras = evaluate_stage_thresholds(stages, entry["diff_thresholds"],
+                                                                    **stage_gate_kwargs(entry))
+        for st in missing:
+            print(f"\033[31m  FAIL\033[0m {st}  (required stage not captured by diff harness)")
+        for st, v, th in passes:
+            print(f"\033[32m  PASS\033[0m {st:24s} cos_min={v:.6f}  threshold={th}")
+        for st, v, th in fails_:
+            print(f"\033[31m  FAIL\033[0m {st:24s} cos_min={v:.6f}  threshold={th}")
+        for st, v in extras:
+            print(f"\033[33m  INFO\033[0m {st} cos_min={v:.6f} (ungated)")
+        n = len(passes) + len(fails_)
+        if n == 0:
+            print("\033[31m  FAIL\033[0m  no gated stage was compared")
+            return 1
+        print(f"  {n} gated stage(s) compared")
+        return len(fails_) + len(missing)
+
+    sample, truth = _entry_input(entry, manifest, work_dir)
+    verb = {"pitch": ["--pitch", "--pitch-format", "json"], "beats": ["--beats", "--beats-format", "json"],
+            "chords": ["--chords", "--chords-format", "json"], "piano": ["--piano", "--piano-format", "json"],
+            "tab": ["--tab", "--tab-format", "json"]}
+    if task in verb:
+        proc = _run_captured([str(crispasr_bin)] + verb[task] + ["-m", str(gguf), "-f", str(sample)] + extra,
+                             check=True, timeout=timeout, label=task)
+        out = _json_stdout(proc)
+        if task == "pitch":
+            return _check_pitch(entry, out, truth)
+        if task == "beats":
+            return _check_beats(entry, out, entry["synth"])
+        if task == "chords":
+            return _check_chords(entry, out, entry["synth"])
+        if task == "piano":
+            return _check_piano(entry, out, truth)
+        return _check_tab(entry, out, truth)
+
+    if task == "separate":
+        out_dir = work_dir / "stems"
+        out_dir.mkdir(exist_ok=True)
+        _run_captured([str(crispasr_bin), "--separate", "-m", str(gguf), "-f", str(sample),
+                       "--sep-output-dir", str(out_dir)] + extra, check=True, timeout=timeout, label="separate")
+        prefix = sample.stem + "_"
+        stems = {p.stem[len(prefix):]: _read_wav(p) for p in sorted(out_dir.glob(prefix + "*.wav"))}
+        print(f"  stems: {sorted(stems)}")
+        return _check_separation(entry, stems, truth)
+
+    if task == "s2s_asr":
+        out_wav = work_dir / f"s2s_{name}.wav"
+        proc = _run_captured([str(crispasr_bin), "-m", str(gguf), "-f", str(sample), "--s2s",
+                              "--s2s-output", str(out_wav), "--no-prints"] + extra,
+                             check=False, timeout=timeout, label="s2s")
+        if proc.returncode != 0 or not out_wav.is_file() or out_wav.stat().st_size < 1000:
+            return _report(False, f"s2s produced no audio (rc={proc.returncode}); "
+                                  f"stderr tail: ...{proc.stderr[-300:]}")
+        x, sr = _read_wav(out_wav)
+        print(f"  s2s output {len(x) / sr:.2f} s @ {sr} Hz")
+        actual = strip_ai_disclaimer(_asr_text(manifest, entry["roundtrip_asr_backend"], out_wav, work_dir,
+                                               crispasr_bin, "s2s-asr"))
+        ok, out = transcript_gate(entry, actual)
+        for ln in out:
+            print(ln)
+        return int(not ok)
+
+    if task == "diarize":
+        host = next(b for b in manifest["backends"] if b["name"] == entry["host_asr"])
+        hg = hf_download(host["gguf"]["repo"], host["gguf"]["file"], host["gguf"]["revision"], work_dir)
+        # Two real speakers back to back: the first sample, then the second.
+        a, sra = _read_wav(sample)
+        b, srb = _entry_input(entry["second_speaker"], manifest, work_dir)[0], None
+        b, srb = _read_wav(b)
+        import numpy as np
+        b = _resample(b, srb, sra)
+        gap = np.zeros(int(0.5 * sra))
+        two = work_dir / "two_speakers.wav"
+        _write_wav(two, np.concatenate([a, gap, b]), sra)
+        boundary = (len(a) + len(gap) / 2) / sra
+        prefix = work_dir / "diar"
+        _run_captured([str(crispasr_bin), "--backend", host["backend_id"], "-m", str(hg), "-f", str(two),
+                       "--diarize", "--diarize-method", entry["diarize_method"], "--diarize-embedder", str(gguf),
+                       "-ojf", "-of", str(prefix), "--no-prints"] + extra,
+                      check=True, timeout=timeout, label="diarize")
+        data = json.loads(prefix.with_suffix(".json").read_text())
+        segs = data.get("transcription") or data.get("segments") or []
+        labelled = []
+        for s in segs:
+            spk = s.get("speaker")
+            if spk is None:
+                continue
+            off = s.get("offsets") or {}
+            t0 = (off.get("from", 0) / 1000.0) if off else float(s.get("start", 0))
+            t1 = (off.get("to", 0) / 1000.0) if off else float(s.get("end", 0))
+            labelled.append((t0, t1, str(spk)))
+        if not labelled:
+            return _report(False, f"no speaker-labelled segments in {prefix.with_suffix('.json').name}")
+        first = {sp for t0, t1, sp in labelled if t1 <= boundary + 0.3}
+        second = {sp for t0, t1, sp in labelled if t0 >= boundary - 0.3}
+        print("  segments: " + "; ".join(f"{t0:.2f}-{t1:.2f} {sp}" for t0, t1, sp in labelled))
+        ok = len(first) == 1 and len(second) == 1 and first != second
+        return _report(ok, f"speakers before boundary {boundary:.2f}s: {sorted(first)}, after: {sorted(second)} "
+                           "(want exactly one each, different)")
+
+    if task == "watermark":
+        fails = 0
+        tts = next(b for b in manifest["tts_backends"] if b["name"] == entry["marking_tts"])
+        tg = hf_download(tts["gguf"]["repo"], tts["gguf"]["file"], tts["gguf"]["revision"], work_dir)
+        voice = hf_download(tts["voice"]["repo"], tts["voice"]["file"], tts["voice"]["revision"], work_dir)
+        marked = work_dir / "marked.wav"
+        _run_captured([str(crispasr_bin), "-m", str(tg), "--voice", str(voice), "--tts", entry["tts_phrase"],
+                       "--tts-output", str(marked), "--seed", "1234", "--watermark-model", str(gguf),
+                       "--no-prints"], check=True, timeout=timeout, label="watermark-embed")
+        for label, wav, want in (("marked TTS", marked, True), ("unmarked sample", sample, False)):
+            proc = _run_captured([str(crispasr_bin), "--detect-watermark", str(wav), "--watermark-model", str(gguf)],
+                                 check=True, timeout=timeout, label=f"watermark-detect-{int(want)}")
+            m = re.search(r"Watermark confidence: ([0-9.]+)", proc.stdout)
+            detector = re.search(r"Detector: (.*)", proc.stdout)
+            if not m or not detector or "AudioSeal" not in detector.group(1):
+                fails += _report(False, f"{label}: no AudioSeal confidence line; stdout: {proc.stdout[-300:]!r}")
+                continue
+            conf = float(m.group(1))
+            ok = conf >= float(entry["marked_min"]) if want else conf <= float(entry["unmarked_max"])
+            fails += _report(ok, f"{label}: AudioSeal confidence {conf:.4f} "
+                                 f"({'>= ' + str(entry['marked_min']) if want else '<= ' + str(entry['unmarked_max'])})")
+        return fails
+
+    if task == "truecase":
+        # The host ASR emits lowercase text; the truecaser must restore the
+        # reference casing. Gate on case accuracy over the words the ASR got
+        # right (case-insensitively), and require a real gain over the
+        # uncased baseline so a no-op truecaser cannot pass.
+        import difflib
+        host = next(b for b in manifest["backends"] if b["name"] == entry["host_asr"])
+        hg = hf_download(host["gguf"]["repo"], host["gguf"]["file"], host["gguf"]["revision"], work_dir)
+        for companion in host["gguf"].get("companion_files", []):
+            c = hf_download(host["gguf"]["repo"], companion, host["gguf"]["revision"], work_dir)
+            if not (hg.parent / Path(companion).name).exists():
+                shutil.copy2(c, hg.parent / Path(companion).name)
+        ref = re.sub(r"[^\w\s]", " ", entry["expected_transcript"]).split()
+
+        def case_acc(text: str) -> tuple[float, int]:
+            got = re.sub(r"[^\w\s]", " ", text).split()
+            sm = difflib.SequenceMatcher(a=[w.lower() for w in ref], b=[w.lower() for w in got], autojunk=False)
+            pairs = [(ref[i + k], got[j + k]) for i, j, n in sm.get_matching_blocks() for k in range(n)]
+            return sum(a == b for a, b in pairs) / max(1, len(pairs)), len(pairs)
+
+        texts = {}
+        for label, args in (("baseline", []), ("truecased", ["--truecase-model", str(gguf)])):
+            proc = _run_captured([str(crispasr_bin), "--backend", host["backend_id"], "-m", str(hg), "-f",
+                                  str(sample), "--no-prints"] + args + extra,
+                                 check=True, timeout=timeout, label=f"truecase-{label}")
+            texts[label] = " ".join(ln.strip() for ln in proc.stdout.splitlines() if ln.strip())
+        base, nb = case_acc(texts["baseline"])
+        acc, na = case_acc(texts["truecased"])
+        print(f"    baseline:  {texts['baseline']!r}")
+        print(f"    truecased: {texts['truecased']!r}")
+        ok = na >= 0.6 * len(ref) and acc >= float(entry["case_acc_min"]) and acc - base >= float(entry["case_gain_min"])
+        return _report(ok, f"case accuracy {acc:.3f} over {na} aligned words (min {entry['case_acc_min']}); "
+                           f"uncased baseline {base:.3f} over {nb}; gain {acc - base:+.3f} (min {entry['case_gain_min']})")
+
+    die(f"unknown task {task!r}")
 
 
 def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
@@ -825,6 +1393,19 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
         if not dest.exists():
             shutil.copy2(c_local, dest)
 
+    # `extra_files`: pinned files from OTHER repos (a shared codec / vocoder /
+    # voice bank). With `arg` the path is passed as `<arg> <path>`; without it
+    # the file is placed next to the TTS GGUF where the backend looks for it.
+    extra_file_args: list[str] = []
+    for extra in entry.get("extra_files", []):
+        local = hf_download(extra["repo"], extra["file"], extra["revision"], work_dir)
+        if extra.get("arg"):
+            extra_file_args += [extra["arg"], str(local)]
+        else:
+            dest = gguf_local.parent / Path(extra["file"]).name
+            if not dest.exists():
+                shutil.copy2(local, dest)
+
     # `no_voice: true` — the TTS model has no voice-cloning / speaker input
     # (e.g. pocket-tts-english-NOVC). Synthesize with its baked default speaker
     # and pass NO --voice. Forcing a `--voice <name>` on such a model resolves to
@@ -875,6 +1456,7 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
     # `--codec-model` for backends with a separate tokenizer GGUF.
     if codec_local is not None:
         syn_cmd += ["--codec-model", str(codec_local)]
+    syn_cmd += extra_file_args
     syn_cmd += list(entry.get("tts_extra_args", []))
     try:
         tts_timeout = int(entry.get("tts_timeout_s", 300))
@@ -926,7 +1508,15 @@ def tts_roundtrip_for(name: str, manifest: dict, work_dir: Path,
 
     # ---- 5. WER ----
     wer_max = float(entry["wer_max"])
-    _, wer = compute_transcript_metrics(tts_phrase, transcript)
+    cer, wer = compute_transcript_metrics(tts_phrase, transcript)
+    if " " not in tts_phrase.strip():
+        # CJK phrase: whitespace-split WER is one token (0 or 1), so gate on a
+        # punctuation-insensitive CER instead; `cer_max` is then required.
+        p_chars = [c for c in tts_phrase if c.isalnum()]
+        t_chars = [c for c in transcript if c.isalnum()]
+        cer = _levenshtein(p_chars, t_chars) / max(1, len(p_chars))
+        wer, wer_max = cer, float(entry["cer_max"])
+        print(f"  (CJK phrase: gating character error rate, cer_max {wer_max})")
     ok = wer <= wer_max
     if not ok or os.environ.get("REGRESSION_KEEP_TTS_WAV") == "1":
         _preserve_tts_wav(name, out_wav)
@@ -1092,11 +1682,13 @@ def dry_run(manifest: dict, backend_filter: str | None = None) -> int:
     backends = manifest["backends"]
     tts_backends = manifest.get("tts_backends", [])
     align_backends = manifest.get("align_backends", [])
+    task_backends = manifest.get("task_backends", [])
     if backend_filter:
         align_backends = [b for b in align_backends if b["name"] == backend_filter]
+        task_backends = [b for b in task_backends if b["name"] == backend_filter]
         filt_asr = [b for b in backends if b["name"] == backend_filter]
         filt_tts = [b for b in tts_backends if b["name"] == backend_filter]
-        if not filt_asr and not filt_tts and not align_backends:
+        if not filt_asr and not filt_tts and not align_backends and not task_backends:
             die(f"backend '{backend_filter}' not in manifest")
         backends = filt_asr
         tts_backends = filt_tts
@@ -1168,6 +1760,18 @@ def dry_run(manifest: dict, backend_filter: str | None = None) -> int:
                 failures += 1
                 continue
 
+        if "sample_hf" in entry:
+            sp = entry["sample_hf"]
+            try:
+                sp_ok = api.file_exists(repo_id=sp["repo"], repo_type=sp.get("repo_type", "model"),
+                                        revision=sp["revision"], filename=sp["file"])
+            except HfHubHTTPError:
+                sp_ok = False
+            if not sp_ok:
+                print(f"  \033[31mFAIL\033[0m {name}: sample {sp['repo']}@{sp['revision'][:8]}::{sp['file']} not found")
+                failures += 1
+                continue
+
         # Fixture audio.wav (new-style) — same membership check.
         if "fixture_sample_path" in entry:
             sp = entry["fixture_sample_path"]
@@ -1227,6 +1831,8 @@ def dry_run(manifest: dict, backend_filter: str | None = None) -> int:
             c = entry["codec"]
             all_ok &= _check_pinned_file(
                 "codec gguf", name, c["repo"], c["revision"], c["file"])
+        for extra in entry.get("extra_files", []) if all_ok else []:
+            all_ok &= _check_pinned_file("extra file", name, extra["repo"], extra["revision"], extra["file"])
         # Optional companion files in the same repo as the TTS GGUF.
         if all_ok:
             for cf in entry["gguf"].get("companion_files", []):
@@ -1265,7 +1871,36 @@ def dry_run(manifest: dict, backend_filter: str | None = None) -> int:
             continue
         print(f"  \033[32mPASS\033[0m {name}  (aligner vs {entry['expected_source']})")
 
-    total = len(backends) + len(tts_backends) + len(align_backends)
+    for entry in task_backends:
+        name = entry["name"]
+        g = entry["gguf"]
+        ok = _check_pinned_file("task gguf", name, g["repo"], g["revision"], g["file"])
+        for cf in g.get("companion_files", []):
+            ok = ok and _check_pinned_file("companion", name, g["repo"], g["revision"], cf)
+        for key in ("sample_hf",):
+            if ok and key in entry:
+                sp = entry[key]
+                try:
+                    ok = api.file_exists(repo_id=sp["repo"], repo_type=sp.get("repo_type", "model"),
+                                         revision=sp["revision"], filename=sp["file"])
+                except HfHubHTTPError:
+                    ok = False
+                if not ok:
+                    print(f"  \033[31mFAIL\033[0m {name}: sample {sp['repo']}::{sp['file']} not found")
+        if ok and entry["task"] == "diff":
+            for path in (entry["fixture_ref_path"], entry.get("fixture_sample_path")):
+                if path and path not in fx_files:
+                    print(f"  \033[31mFAIL\033[0m {name}: fixture {path!r} not in {fx_repo}@{fx_rev[:8]}")
+                    ok = False
+        if ok and "sample" in entry and not (REPO_ROOT / entry["sample"]).exists():
+            print(f"  \033[31mFAIL\033[0m {name}: sample {entry['sample']} not in repo")
+            ok = False
+        if not ok:
+            failures += 1
+            continue
+        print(f"  \033[32mPASS\033[0m {name}  (task {entry['task']})")
+
+    total = len(backends) + len(tts_backends) + len(align_backends) + len(task_backends)
     if failures == 0:
         print(f"\n\033[32mOK\033[0m  dry-run: all {total} backend(s) "
               f"have their pinned artifacts on HF")
@@ -1321,10 +1956,14 @@ def main() -> int:
                       if b["name"] == backend_name), None) if asr_entry is None else None
     align_entry = next((b for b in manifest.get("align_backends", [])
                         if b["name"] == backend_name), None) if asr_entry is None and tts_entry is None else None
+    task_entry = next((b for b in manifest.get("task_backends", []) if b["name"] == backend_name), None) \
+        if asr_entry is None and tts_entry is None and align_entry is None else None
 
-    if asr_entry is None and tts_entry is None and align_entry is None:
-        die(f"backend '{backend_name}' not in manifest.backends, "
-            f"manifest.tts_backends or manifest.align_backends")
+    if asr_entry is None and tts_entry is None and align_entry is None and task_entry is None:
+        die(f"backend '{backend_name}' not in manifest.backends, manifest.tts_backends, "
+            f"manifest.align_backends or manifest.task_backends")
+    if task_entry is not None and task_entry["task"] == "diff" and not diff_bin.exists():
+        die(f"crispasr-diff binary not found at {diff_bin} (needed by task=diff)")
 
     # crispasr-diff is only needed for full ASR diff entries
     # (skip_diff=false). TTS roundtrip doesn't use it.
@@ -1342,7 +1981,9 @@ def main() -> int:
         diagnostics = os.environ.get("REGRESSION_DIAGNOSTICS_DIR")
         if diagnostics and Path(diagnostics).resolve().is_relative_to(work_root.resolve()):
             die("REGRESSION_DIAGNOSTICS_DIR must be outside WORK_DIR so cleanup preserves evidence")
-        if align_entry is not None:
+        if task_entry is not None:
+            failures = task_for(backend_name, manifest, work_root, crispasr_bin, diff_bin)
+        elif align_entry is not None:
             failures = align_for(backend_name, manifest, work_root, crispasr_bin)
         elif tts_entry is not None:
             failures = tts_roundtrip_for(

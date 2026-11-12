@@ -69,7 +69,7 @@ jobs:
           m=$(python3 - <<'PY'
           import json, os
           man = json.load(open('tests/regression/manifest.json'))
-          names = {e['name'] for e in man['backends'] + man['tts_backends']}
+          names = {e['name'] for g in ('backends', 'tts_backends', 'align_backends', 'task_backends') for e in man.get(g, [])}
           nightly = set(json.load(open('tests/regression/nightly_matrix.json'))['nightly'])
           ext = json.load(open('tests/regression/extended_matrix.json'))['extended']
           bad = [n for n in ext if n not in names or n in nightly]

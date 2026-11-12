@@ -85,8 +85,9 @@ def manifest_ids():
     ids = {e["name"]: e["backend_id"] for e in m["backends"]}
     for e in m.get("tts_backends", []):
         ids[e["name"]] = e.get("backend_id") or e.get("tts_backend") or e["name"]
-    for e in m.get("align_backends", []):
-        ids[e["name"]] = e.get("backend_id") or e["name"]
+    for group in ("align_backends", "task_backends"):
+        for e in m.get(group, []):
+            ids[e["name"]] = e.get("backend_id") or e["name"]
     return ids
 
 
@@ -98,7 +99,7 @@ def stems_for(backend_id):
 def changed_entries(before, after):
     """Return names whose complete ASR/TTS/aligner manifest entry changed."""
     def entries(manifest):
-        return {e["name"]: e for group in ("backends", "tts_backends", "align_backends")
+        return {e["name"]: e for group in ("backends", "tts_backends", "align_backends", "task_backends")
                 for e in manifest.get(group, [])}
     old, new = entries(before), entries(after)
     return {name for name in old.keys() | new.keys() if old.get(name) != new.get(name)}
