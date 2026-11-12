@@ -99,7 +99,7 @@ if(Python3_Interpreter_FOUND)
         --long-executable "$<TARGET_FILE:reuse-long-diff>")
     set_tests_properties(reuse-cli-bounds-controls PROPERTIES
         LABELS "unit;reuse;research" SKIP_RETURN_CODE 77 TIMEOUT 60)
-    foreach(control converter network_compare frontend_stability reference_dumper reference_retention phase_stability chunked quality_metrics)
+    foreach(control converter network_compare frontend_stability reference_dumper reference_retention phase_stability chunked quality_metrics ten_second_kernel)
         add_test(NAME reuse-${control}-controls COMMAND ${Python3_EXECUTABLE}
             "${REUSE_SOURCE_ROOT}/tests/test_reuse_${control}.py")
         set_tests_properties(reuse-${control}-controls PROPERTIES
