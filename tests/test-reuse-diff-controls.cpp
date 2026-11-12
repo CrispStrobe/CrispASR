@@ -28,6 +28,15 @@ int main(int argc, char** argv) {
     ggml_free(tensors);
     if (!written)
         return 3;
+    // A failed gate must not publish a native waveform artifact.
+    const std::string rejected_path = std::string(argv[1]) + ".rejected";
+    if (reuse_diff::run("missing-model.gguf", argv[1], rejected_path.c_str()) != 2)
+        return 14;
+    if (FILE* rejected = std::fopen(rejected_path.c_str(), "rb")) {
+        std::fclose(rejected);
+        std::remove(rejected_path.c_str());
+        return 15;
+    }
     crispasr_diff::Ref ref;
     const bool loaded = ref.load(argv[1]);
     std::remove(argv[1]);

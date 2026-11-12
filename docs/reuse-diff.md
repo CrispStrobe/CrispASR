@@ -53,10 +53,21 @@ window. Its output is diagnostic and never declares model parity.
 `tools/ci-heavy/issue579_reuse/chunked.py` is a research-only bounded
 overlap-add diagnostic. It pads a short or partial final window and returns the
 original length. Its one-second windows are chosen to fit the comparator; they
-do not establish an NVIDIA-equivalent long-audio or streaming policy.
+do not establish an NVIDIA-equivalent long-audio or streaming policy. The pinned
+[NVIDIA example](https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE/blob/31f82f2efad1095034492f236e8dac9239ba713b/inference_chunk.sh)
+uses five-second windows and 50% overlap; its
+[implementation](https://huggingface.co/nvidia/NVIDIA-NemotronLabs-RE-USE/blob/31f82f2efad1095034492f236e8dac9239ba713b/inference_chunk.py)
+ends its final window at the end of the recording. The shorter diagnostic
+windows and padding rules must be evaluated separately before product use.
 
 The `reuse` GGUF architecture is intentionally not registered as a product
 backend. A source-compiled C ABI detection control rejected the pinned real
 RE-USE GGUF and accepted a Whisper metadata fixture; this checks the detector
 body, not a packaged product library. The shared C ABI test also includes the
 `reuse` rejection case, which still needs execution through a built library.
+
+For aligned five-second qualification artifacts, `quality_metrics.py` reports
+SNR, scale-invariant SDR and STOI for the noisy input, whole Python reference,
+chunked Python reference and chunked native output. Install `soundfile` and
+`pystoi` before running it. Treat the provided speech-plus-synthetic-noise case
+as a diagnostic, not a listening test or a representative quality benchmark.

@@ -1,5 +1,6 @@
 """Model-free transition, padding and input controls for RE-USE research chunks."""
 import importlib.util
+import math
 from pathlib import Path
 import unittest
 try:
@@ -23,6 +24,17 @@ class ChunkedTests(unittest.TestCase):
                 self.assertEqual(len(starts), len(set(starts)))
                 self.assertEqual(starts[0], 0)
                 self.assertTrue(all(s % 80 == 0 for s in starts))
+
+    def test_hop_aligned_long_plan_matches_pinned_upstream_end_anchoring(self):
+        # NVIDIA's inference_chunk.py calculates ceil((n - chunk) / hop) + 1
+        # and anchors the final window at n - chunk. Compare the diagnostic
+        # plan at its smaller 1 s window size; this is not model-output parity.
+        for n in (16000, 16080, 23920, 24000, 24080, 32000, 40160, 80000):
+            with self.subTest(n=n):
+                count = max(1, math.ceil((n - 16000) / 8000) + 1)
+                expected = [i * 8000 for i in range(count - 1)] + [n - 16000]
+                _, starts = module.chunked(np.ones(n, np.float32), lambda b, i, s: b)
+                self.assertEqual(starts, expected)
 
     def test_boundary_impulses_and_padding_are_not_dropped(self):
         x = np.zeros(32127, np.float32)
