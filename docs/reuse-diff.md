@@ -80,6 +80,10 @@ SI-SDR decreases from 5.00 to 3.48 dB while STOI increases from 0.631 to 0.715.
 The bulk of the error occurs in the latter five seconds. This is a quality
 concern requiring upstream fused-reference and broader corpus investigation,
 not evidence that a product or streaming implementation is ready.
+An independent [saved-window audit](historical/reuse-saved-waveform-quality-20261112.json)
+found strong context sensitivity: on the same 5–7.5-second speech region,
+the middle and final reference windows score 6.39 and −9.03 dB SI-SDR,
+respectively. Both estimates concern the same single speech proxy.
 
 The `reuse` GGUF architecture is intentionally not registered as a product
 backend. The published v0.8.51 Linux shared library rejected the pinned real RE-USE
