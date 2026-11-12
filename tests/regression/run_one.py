@@ -99,7 +99,10 @@ def _bounded_output(value: str | bytes | None) -> dict:
 def _run_captured(argv: list[str], *, check: bool, timeout: int, label: str) -> subprocess.CompletedProcess:
     """Run an unchanged CLI argv; persist bounded output when requested."""
     try:
-        proc = subprocess.run(argv, capture_output=True, text=True, check=check, timeout=timeout)
+        # errors="replace": a backend may print partial multi-byte UTF-8 (e.g.
+        # a streamed CJK token) on stderr; that must not crash the driver.
+        proc = subprocess.run(argv, capture_output=True, text=True, errors="replace", check=check,
+                              timeout=timeout)
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
         diag = _diagnostics_dir()
         if diag is not None:
