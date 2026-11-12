@@ -46,6 +46,7 @@ public:
     ~Qwen3Backend() override { Qwen3Backend::shutdown(); }
 
     const char* name() const override { return "qwen3"; }
+    bool honours_context() const override { return context_enabled_; }
 
     uint32_t capabilities() const override {
         // CAP_LANGUAGE_DETECT intentionally NOT declared. The transcribe

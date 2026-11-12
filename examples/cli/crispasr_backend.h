@@ -366,6 +366,10 @@ public:
     // user didn't explicitly set --chunk-seconds or --vad. Backends whose
     // encoder degenerates on arbitrary-length chunks (e.g. parakeet-ja)
     // override this to get silence-bounded segments that match training.
+    // True when transcribe() reads params.context (ASR biasing text). Lets the
+    // server warn instead of silently dropping a per-request `context` (#588).
+    virtual bool honours_context() const { return false; }
+
     virtual bool prefers_vad() const { return false; }
 
     // Maximum VAD slice duration (seconds) the backend can decode reliably

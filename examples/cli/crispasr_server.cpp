@@ -612,6 +612,16 @@ static transcription_result do_transcribe(const form_part& audio_file, CrispasrB
 
     result.duration_s = (double)pcmf32.size() / 16000.0;
 
+    // #588: `context` only biases backends that read params.context (Qwen3-ASR,
+    // VibeVoice). Warn once instead of silently dropping it elsewhere.
+    if (!rp.context.empty() && !backend->honours_context()) {
+        static std::atomic<bool> warned{false};
+        if (!warned.exchange(true))
+            fprintf(stderr,
+                    "crispasr-server: warning: backend '%s' ignores 'context' (only Qwen3-ASR and VibeVoice read it)\n",
+                    backend->name());
+    }
+
     const bool want_auto_lang = rp.detect_language || rp.language == "auto";
     const bool has_native_lid = (backend->capabilities() & CAP_LANGUAGE_DETECT) != 0;
     const bool lid_disabled = rp.lid_backend == "off" || rp.lid_backend == "none";
@@ -1963,6 +1973,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         rp.vad_max_speech_duration_s = form_float(req, "vad_max_speech_duration_s", rp.vad_max_speech_duration_s);
         rp.vad_speech_pad_ms = form_int(req, "vad_speech_pad_ms", rp.vad_speech_pad_ms);
         rp.hotwords = form_string(req, "hotwords", rp.hotwords);
+        rp.context = form_string(req, "context", rp.context); // #588: per-request ASR context
         rp.hotwords_boost = form_float(req, "hotwords_boost", rp.hotwords_boost);
         rp.temperature = form_float(req, "temperature", rp.temperature);
         rp.seed = form_u64(req, "seed", rp.seed);
@@ -2197,6 +2208,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
         rp.vad_max_speech_duration_s = form_float(req, "vad_max_speech_duration_s", rp.vad_max_speech_duration_s);
         rp.vad_speech_pad_ms = form_int(req, "vad_speech_pad_ms", rp.vad_speech_pad_ms);
         rp.hotwords = form_string(req, "hotwords", rp.hotwords);
+        rp.context = form_string(req, "context", rp.context); // #588: per-request ASR context
         rp.hotwords_boost = form_float(req, "hotwords_boost", rp.hotwords_boost);
         rp.suppress_regex = form_string(req, "suppress_regex", rp.suppress_regex);
         rp.suppress_nst = form_bool(req, "suppress_nst", rp.suppress_nst);
