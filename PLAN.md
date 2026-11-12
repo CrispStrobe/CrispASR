@@ -1,3 +1,7 @@
+## NOW — CPU quality audit (2026-11-12)
+
+Claimed/completed preparation: independent saved-waveform analysis found same-region context disagreement (SI-SDR 6.39 vs −9.03 dB on 5–7.5 s); offline CPU multi-speaker harness prepared with 71-stage fingerprints plus raw input. Local metric/dependency controls pass. Broader 16-case corpus run pending; no native/GPU model jobs or pushes. See tools/kaggle/reuse-quality-cpu-20261112/README.md.
+
 # CrispASR — Current work plan
 
 Updated 2026-11-07. Start with [the maintainer handoff](docs/maintenance-handoff.md).
