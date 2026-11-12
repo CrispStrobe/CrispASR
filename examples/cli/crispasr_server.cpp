@@ -542,6 +542,16 @@ struct progress_scope {
     progress_scope(const progress_scope&) = delete;
     progress_scope& operator=(const progress_scope&) = delete;
 };
+static void warn_ignored_asr_context(const CrispasrBackend* backend, const whisper_params& params) {
+    if (!params.context.empty() && !backend->honours_context()) {
+        static std::atomic<bool> warned{false};
+        if (!warned.exchange(true))
+            fprintf(stderr,
+                    "crispasr-server: warning: backend '%s' ignores 'context' (only Qwen3-ASR and VibeVoice read it)\n",
+                    backend->name());
+    }
+}
+
 static transcription_result do_transcribe(const form_part& audio_file, CrispasrBackend* backend,
                                           std::mutex& model_mutex, whisper_params rp, bool need_timestamps,
                                           fireredpunc_context* punc_ctx = nullptr, pcs_context* pcs_ctx = nullptr,
@@ -614,13 +624,7 @@ static transcription_result do_transcribe(const form_part& audio_file, CrispasrB
 
     // #588: `context` only biases backends that read params.context (Qwen3-ASR,
     // VibeVoice). Warn once instead of silently dropping it elsewhere.
-    if (!rp.context.empty() && !backend->honours_context()) {
-        static std::atomic<bool> warned{false};
-        if (!warned.exchange(true))
-            fprintf(stderr,
-                    "crispasr-server: warning: backend '%s' ignores 'context' (only Qwen3-ASR and VibeVoice read it)\n",
-                    backend->name());
-    }
+    warn_ignored_asr_context(backend, rp);
 
     const bool want_auto_lang = rp.detect_language || rp.language == "auto";
     const bool has_native_lid = (backend->capabilities() & CAP_LANGUAGE_DETECT) != 0;
@@ -2340,6 +2344,7 @@ int crispasr_run_server(whisper_params& params, const std::string& host, int por
             res.set_chunked_content_provider(
                 "text/event-stream", [pcmf32, rp, &backend, &model_mutex](size_t /*offset*/, httplib::DataSink& sink) {
                     std::lock_guard<std::mutex> lock(model_mutex);
+                    warn_ignored_asr_context(backend.get(), rp);
                     std::string last_sent_text;
 
                     backend->transcribe_streaming(

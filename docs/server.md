@@ -93,7 +93,7 @@ curl http://localhost:8080/v1/audio/transcriptions \
 | `model` | Ignored (uses the loaded model) |
 | `language` | ISO-639-1 code (default: server's `-l` setting) |
 | `prompt` | Whisper-style initial prompt (decoder prefix). Does **not** set Qwen3-ASR context |
-| `context` | ASR context / biasing text for Qwen3-ASR and VibeVoice (overrides the server's `--context` for this request; e.g. `English` steers Qwen3's language choice without translating). Other backends ignore it and log a warning |
+| `context` | ASR context / biasing text for Qwen3-ASR and VibeVoice (overrides the server's `--context` for this request; e.g. `English` steers Qwen3's language choice without translating). Missing or empty values keep the server default. Other backends ignore it and log a warning once, including streaming requests |
 | `response_format` | `json` (default), `verbose_json`, `diarized_json`, `text`, `srt`, `vtt` |
 | `temperature` | Sampling temperature (default: 0.0) |
 | `seed` | RNG seed for sampling (`0` = non-deterministic) |

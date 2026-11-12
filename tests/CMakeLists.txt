@@ -6840,6 +6840,10 @@ set_property(DIRECTORY APPEND PROPERTY TEST_INCLUDE_FILES
 # These source-compiled controls use GCC/Clang flags. MSVC receives the full
 # production build and model surface test when weights are explicitly supplied.
 if (Python3_Interpreter_FOUND AND NOT MSVC)
+    add_test(NAME server-context
+        COMMAND ${Python3_EXECUTABLE} -B ${CMAKE_CURRENT_SOURCE_DIR}/test-server-context.py -v)
+    set_tests_properties(server-context PROPERTIES
+        LABELS "unit;server;context" TIMEOUT 120 ENVIRONMENT "CXX=${CMAKE_CXX_COMPILER}")
     add_test(NAME scnet-math
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/test-scnet-math.py -v)
     set_tests_properties(scnet-math PROPERTIES
