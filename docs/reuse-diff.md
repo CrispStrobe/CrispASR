@@ -85,3 +85,10 @@ extracting the pinned v0.8.51 Linux library archive:
 LD_LIBRARY_PATH="$RELEASE_LIB_DIR" python tools/ci-heavy/issue579_reuse/c_abi_boundary.py \
   --library "$RELEASE_LIB_DIR/libcrispasr.so.0.8.51" --model reuse-f32.gguf
 ```
+
+For a resource-intensive whole-window investigation, the separate
+`reuse-long-diff` research executable admits up to 80,000 samples (five seconds
+at 16 kHz). The standard executable and reference dumper remain limited to
+16,000 samples by default; the Python adapter requires an explicit
+`max_samples=80000` for this diagnostic. This larger bound is experimental and
+has not been established as a production memory, quality or interface policy.

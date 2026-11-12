@@ -53,7 +53,16 @@ inline bool write_waveform(const char* path, const std::vector<float>& waveform)
     return std::fclose(file) == 0 && written;
 }
 
-inline int run(const std::string& model_path, const std::string& ref_path, const char* waveform_path = nullptr) {
+inline bool valid_sample_limit(size_t limit) {
+    return limit >= 400 && limit <= 80000 && limit % 80 == 0;
+}
+
+inline int run(const std::string& model_path, const std::string& ref_path, const char* waveform_path = nullptr,
+               size_t max_samples = 16000) {
+    if (!valid_sample_limit(max_samples)) {
+        std::fprintf(stderr, "reuse: invalid diagnostic sample limit\n");
+        return 2;
+    }
     reuse_frontend_profile::Analyze frontend = nullptr;
     const char* profile = nullptr;
     if (!reuse_frontend_profile::select(std::getenv("CRISPASR_REUSE_FRONTEND"), frontend, profile))
@@ -81,7 +90,7 @@ inline int run(const std::string& model_path, const std::string& ref_path, const
         return 2;
     const auto audio = ref.get_f32("raw_audio");
     const auto phase = ref.get_f32("frontend_phase");
-    if (!audio.first || audio.second <= 320 || audio.second > 16000 || audio.second % 80 || !phase.first) {
+    if (!audio.first || audio.second <= 320 || audio.second > max_samples || audio.second % 80 || !phase.first) {
         std::fprintf(stderr, "reuse: missing/invalid bounded raw_audio or frontend_phase reference\n");
         return 2;
     }

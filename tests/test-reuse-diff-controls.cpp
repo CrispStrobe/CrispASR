@@ -8,6 +8,10 @@
 int main(int argc, char** argv) {
     if (argc != 2)
         return 1;
+    if (!reuse_diff::valid_sample_limit(16000) || !reuse_diff::valid_sample_limit(80000) ||
+        reuse_diff::valid_sample_limit(0) || reuse_diff::valid_sample_limit(16001) ||
+        reuse_diff::valid_sample_limit(80080))
+        return 16;
     ggml_init_params params = {16 * ggml_tensor_overhead() + 4096, nullptr, false};
     ggml_context* tensors = ggml_init(params);
     gguf_context* archive = gguf_init_empty();

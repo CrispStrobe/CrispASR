@@ -32,6 +32,18 @@ if(TARGET crispasr-reuse-cuda)
 endif()
 
 enable_testing()
+# Explicit five-second research comparator; default comparator remains 1 s.
+add_executable(reuse-long-diff long_diff_probe.cpp
+    "${REUSE_SOURCE_ROOT}/examples/cli/crispasr_diff.cpp")
+target_include_directories(reuse-long-diff PRIVATE "${REUSE_SOURCE_ROOT}/examples/cli")
+target_link_libraries(reuse-long-diff PRIVATE reuse-research-loader)
+if(TARGET crispasr-reuse-mkl)
+    target_link_libraries(reuse-long-diff PRIVATE crispasr-reuse-mkl)
+endif()
+if(TARGET crispasr-reuse-cuda)
+    target_link_libraries(reuse-long-diff PRIVATE crispasr-reuse-cuda)
+endif()
+
 add_executable(reuse-diff-controls "${REUSE_SOURCE_ROOT}/tests/test-reuse-diff-controls.cpp"
     "${REUSE_SOURCE_ROOT}/examples/cli/crispasr_diff.cpp")
 target_link_libraries(reuse-diff-controls PRIVATE reuse-research-loader)

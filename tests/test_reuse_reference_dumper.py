@@ -83,6 +83,15 @@ class ReferenceContract(unittest.TestCase):
         np.testing.assert_array_equal(module.prepare_audio(audio[:16000]), audio[:16000])
         np.testing.assert_array_equal(module.prepare_audio(audio[:1600]), audio[:1600])
 
+    def test_explicit_five_second_bound_preserves_every_sample(self):
+        audio = np.arange(80000, dtype=np.float32) / 80000
+        np.testing.assert_array_equal(module.prepare_audio(audio, max_samples=80000), audio)
+        with self.assertRaises(ValueError):
+            module.prepare_audio(np.zeros(80080, np.float32), max_samples=80000)
+        for bad in (0, 16001, 80080, -80):
+            with self.subTest(limit=bad), self.assertRaises(ValueError):
+                module.prepare_audio(audio[:400], max_samples=bad)
+
     def test_invalid_audio_and_unknown_stage_fail_before_loading_model(self):
         for audio in (np.zeros(320, np.float32), np.zeros(401, np.float32), np.full(400, np.nan, np.float32), np.zeros((400, 2), np.float32)):
             with self.subTest(length=len(audio)), self.assertRaises(ValueError):

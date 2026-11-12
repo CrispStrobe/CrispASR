@@ -47,24 +47,26 @@ def _check_file(path, expected):
         raise ValueError(f'Unexpected pinned RE-USE source digest for {path.name}')
 
 
-def prepare_audio(audio):
-    """Return a bounded 16 kHz diagnostic input without silently padding it."""
+def prepare_audio(audio, max_samples=16000):
+    """Validate a bounded 16 kHz diagnostic input without padding or truncation."""
+    if type(max_samples) is not int or max_samples < 400 or max_samples > 80000 or max_samples % 80:
+        raise ValueError("RE-USE diagnostic limit must be an 80-sample multiple from 400 to 80000")
     audio = np.asarray(audio, dtype=np.float32)
     if audio.ndim != 1:
         raise ValueError('RE-USE reference requires mono audio')
-    if len(audio) > 16000:
-        raise ValueError("RE-USE reference input exceeds the 16000-sample diagnostic limit; select an explicit window")
+    if len(audio) > max_samples:
+        raise ValueError(f"RE-USE reference input exceeds the {max_samples}-sample diagnostic limit; select an explicit window")
     audio = np.ascontiguousarray(audio)
     if len(audio) <= 320 or len(audio) % 80 or not np.isfinite(audio).all():
         raise ValueError('RE-USE reference requires finite 16 kHz mono audio longer than 320 samples and a multiple of the 80-sample hop')
     return audio
 
 
-def dump(model_dir, audio, stages, **_kwargs):
+def dump(model_dir, audio, stages, max_samples=16000, **_kwargs):
     unknown = set(stages) - set(DEFAULT_STAGES)
     if unknown:
         raise ValueError(f'Unknown RE-USE reference stages: {sorted(unknown)}')
-    audio = prepare_audio(audio)
+    audio = prepare_audio(audio, max_samples=max_samples)
     import torch
     from safetensors.torch import load_file
 
