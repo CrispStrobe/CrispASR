@@ -56,6 +56,10 @@ on:
 # macOS matrices for nothing. A perf workflow that runs when nobody asked is
 # both expensive (macOS minutes bill at 10x) and noisy.
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && (github.event_name == 'push' || github.event_name == 'pull_request') }}
+
 jobs:
   ab:
     strategy:

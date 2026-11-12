@@ -116,9 +116,8 @@ permissions:
 # is cancelled (the nightly no longer needs an event-scoped group for that).
 # `select` still diffs a push against the newest SUCCESSFUL main push run.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && (github.event_name == 'push' || github.event_name == 'pull_request') }}
 jobs:
   # Tier 0: schema + parser smoke test. Runs in <2 seconds with no
   # binary, no model, no network — so the per-backend matrix below

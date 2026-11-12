@@ -201,9 +201,8 @@ on:
 # is ever cancelled -- the nightly floor above no longer needs a separate
 # event-scoped group to survive the next push.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && (github.event_name == 'push' || github.event_name == 'pull_request') }}
 jobs:
   # Per-job path gate. The workflow-level filter above decides whether Lint
   # starts; this decides which of its jobs a change can actually affect, so a

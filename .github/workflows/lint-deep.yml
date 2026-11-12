@@ -34,8 +34,7 @@ on:
 # backstop covers whatever the coalescing skipped.
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: false
-
+  cancel-in-progress: ${{ github.ref_type != 'tag' && (github.event_name == 'push' || github.event_name == 'pull_request') }}
 jobs:
   # Nightly backstop only: skip when cppcheck already passed on this exact
   # commit (a push run on the same main tip). The tree is identical, so a

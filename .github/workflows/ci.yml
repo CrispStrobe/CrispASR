@@ -43,9 +43,8 @@ on:
 # manual runs get their own group (run_id), so they are never cancelled.
 # Literal `ci-yml` prefix: build.yml is also named "CI" (see its note).
 concurrency:
-  group: ci-yml-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
-
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type != 'tag' && (github.event_name == 'push' || github.event_name == 'pull_request') }}
 jobs:
   # Path gate for the expensive legs below. Fail-open: dispatch, a new or
   # force-pushed base, or any error answers native=true.
